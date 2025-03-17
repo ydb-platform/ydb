@@ -2,6 +2,8 @@
 #include "mkql_computation_node_holders.h"
 #include "mkql_block_builder.h"
 #include "mkql_block_reader.h"
+#include "mkql_block_trimmer.h"
+
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
@@ -655,7 +657,53 @@ protected:
         }
     }
 
-    void DoTestBlockPacking(ui64 offset, ui64 len, bool legacyStruct) {
+    struct TBlockTestArgs {
+        ui64 Offset = 0;
+        ui64 Len = 0;
+        bool LegacyStruct = false;
+        bool TrimBlock = false;
+
+        TString ToString() const {
+            return TStringBuilder() << "Offset: " << Offset << ", Len: " << Len << ", LegacyStruct: " << LegacyStruct << ", TrimBlock: " << TrimBlock;
+        }
+    };
+
+    class IArgsDispatcher : public TThrRefBase {
+    public:
+        using TPtr = TIntrusivePtr<IArgsDispatcher>;
+
+        virtual ui64 GetSize() const = 0;
+        virtual void Set(ui64 index) = 0;
+    };
+
+    template <typename TValue>
+    class TArgsDispatcher : public IArgsDispatcher {
+    public:
+        TArgsDispatcher(TValue& dst, const std::vector<TValue>& choices)
+            : Dst(dst)
+            , Choices(choices)
+        {
+            UNIT_ASSERT_C(!choices.empty(), "Choices should not be empty");
+        }
+
+        ui64 GetSize() const {
+            return Choices.size();
+        }
+
+        void Set(ui64 index) {
+            UNIT_ASSERT_LE_C(index + 1, Choices.size(), "Invalid args dispatcher index");
+            Dst = Choices[index];
+        }
+
+    private:
+        TValue& Dst;
+        const std::vector<TValue> Choices;
+    };
+
+    void DoTestBlockPacking(const TBlockTestArgs& args) {
+        bool legacyStruct = args.LegacyStruct;
+        ui64 offset = args.Offset;
+        ui64 len = args.Len;
         if constexpr (Transport) {
             auto strType = PgmBuilder.NewDataType(NUdf::TDataType<char*>::Id);
             auto ui32Type = PgmBuilder.NewDataType(NUdf::TDataType<ui32>::Id);
@@ -749,6 +797,19 @@ protected:
                     }
                 }
             }
+            if (args.TrimBlock) {
+                for (ui32 index = 0; index < datums.size(); ++index) {
+                    auto& datum = datums[index];
+                    if (!datum.is_array()) {
+                        continue;
+                    }
+
+                    const TType* columnType = legacyStruct ? static_cast<const TStructType*>(rowType)->GetMemberType(index)
+                                                           : static_cast<const TMultiType*>(rowType)->GetElementType(index);
+                    const auto trimmer = MakeBlockTrimmer(NMiniKQL::TTypeInfoHelper(), static_cast<const TBlockType*>(columnType)->GetItemType(), ArrowPool_);
+                    datum = trimmer->Trim(datum.array());
+                }
+            }
             TUnboxedValueVector columns;
             for (auto& datum : datums) {
                 columns.emplace_back(HolderFactory.CreateArrowBlock(std::move(datum)));
@@ -829,21 +890,34 @@ protected:
         }
     }
 
+    void TestBlockPackingCases(TBlockTestArgs& args, std::vector<typename IArgsDispatcher::TPtr> dispatchers = {}) {
+        ui64 numberCases = 1;
+        for (const auto& dispatcher : dispatchers) {
+            numberCases *= dispatcher->GetSize();
+        }
+        for (ui64 i = 0; i < numberCases; ++i) {
+            ui64 caseId = i;
+            for (const auto& dispatcher : dispatchers) {
+                dispatcher->Set(caseId % dispatcher->GetSize());
+                caseId /= dispatcher->GetSize();
+            }
+            Cerr << "Run block packing test case: " << args.ToString() << "\n";
+            DoTestBlockPacking(args);
+        }
+    }
+
     void TestBlockPacking() {
-        DoTestBlockPacking(0, 1000, false);
+        TBlockTestArgs args;
+        TestBlockPackingCases(args, {
+            MakeIntrusive<TArgsDispatcher<TBlockTestArgs>>(args, std::vector<TBlockTestArgs>{
+                {.Offset = 0, .Len = 1000},
+                {.Offset = 19, .Len = 623}
+            }),
+            MakeIntrusive<TArgsDispatcher<bool>>(args.LegacyStruct, std::vector<bool>{false, true}),
+            MakeIntrusive<TArgsDispatcher<bool>>(args.TrimBlock, std::vector<bool>{false, true})
+        });
     }
 
-    void TestBlockPackingSliced() {
-        DoTestBlockPacking(19, 623, false);
-    }
-
-    void TestLegacyBlockPacking() {
-        DoTestBlockPacking(0, 1000, true);
-    }
-
-    void TestLegacyBlockPackingSliced() {
-        DoTestBlockPacking(19, 623, true);
-    }
 private:
     TIntrusivePtr<NMiniKQL::IFunctionRegistry> FunctionRegistry;
     TIntrusivePtr<IRandomProvider> RandomProvider;
@@ -921,9 +995,6 @@ class TMiniKQLComputationNodeTransportPackTest: public TMiniKQLComputationNodePa
         UNIT_TEST(TestRopeSplit);
         UNIT_TEST(TestIncrementalPacking);
         UNIT_TEST(TestBlockPacking);
-        UNIT_TEST(TestBlockPackingSliced);
-        UNIT_TEST(TestLegacyBlockPacking);
-        UNIT_TEST(TestLegacyBlockPackingSliced);
     UNIT_TEST_SUITE_END();
 };
 
@@ -949,9 +1020,6 @@ class TMiniKQLComputationNodeTransportFastPackTest: public TMiniKQLComputationNo
         UNIT_TEST(TestRopeSplit);
         UNIT_TEST(TestIncrementalPacking);
         UNIT_TEST(TestBlockPacking);
-        UNIT_TEST(TestBlockPackingSliced);
-        UNIT_TEST(TestLegacyBlockPacking);
-        UNIT_TEST(TestLegacyBlockPackingSliced);
     UNIT_TEST_SUITE_END();
 };
 

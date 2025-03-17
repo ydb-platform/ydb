@@ -1,6 +1,6 @@
 #include "common/iam.h"
 
-#include <ydb-cpp-sdk/client/iam_private/iam.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam_private/iam.h>
 
 #include <ydb/public/api/client/yc_private/iam/iam_token_service.pb.h>
 #include <ydb/public/api/client/yc_private/iam/iam_token_service.grpc.pb.h>

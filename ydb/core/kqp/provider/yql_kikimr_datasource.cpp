@@ -16,7 +16,7 @@
 #include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/fq/libs/result_formatter/result_formatter.h>
 
-#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <util/generic/is_in.h>
 

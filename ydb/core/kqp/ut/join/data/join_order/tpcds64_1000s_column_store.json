@@ -3,33 +3,51 @@
   "args":
     [
       {
-        "op_name":"InnerJoin (Grace)",
+        "op_name":"HashShuffle",
         "args":
           [
             {
-              "op_name":"InnerJoin (Grace)",
+              "op_name":"HashShuffle",
               "args":
                 [
                   {
-                    "op_name":"TableFullScan",
-                    "table":"test\/ds\/catalog_sales"
-                  },
-                  {
-                    "op_name":"TableFullScan",
-                    "table":"test\/ds\/catalog_returns"
-                  }
-                ]
-            },
-            {
-              "op_name":"InnerJoin (MapJoin)",
-              "args":
-                [
-                  {
-                    "op_name":"InnerJoin (MapJoin)",
+                    "op_name":"InnerJoin (Grace)",
                     "args":
                       [
                         {
-                          "op_name":"InnerJoin (MapJoin)",
+                          "op_name":"HashShuffle",
+                          "args":
+                            [
+                              {
+                                "op_name":"HashShuffle",
+                                "args":
+                                  [
+                                    {
+                                      "op_name":"InnerJoin (Grace)",
+                                      "args":
+                                        [
+                                          {
+                                            "op_name":"TableFullScan",
+                                            "table":"test\/ds\/catalog_sales"
+                                          },
+                                          {
+                                            "op_name":"HashShuffle",
+                                            "args":
+                                              [
+                                                {
+                                                  "op_name":"TableFullScan",
+                                                  "table":"test\/ds\/catalog_returns"
+                                                }
+                                              ]
+                                          }
+                                        ]
+                                    }
+                                  ]
+                              }
+                            ]
+                        },
+                        {
+                          "op_name":"HashShuffle",
                           "args":
                             [
                               {
@@ -41,37 +59,29 @@
                                       "args":
                                         [
                                           {
-                                            "op_name":"InnerJoin (Grace)",
+                                            "op_name":"InnerJoin (MapJoin)",
                                             "args":
                                               [
                                                 {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"test\/ds\/customer_address"
-                                                },
-                                                {
-                                                  "op_name":"InnerJoin (Grace)",
+                                                  "op_name":"InnerJoin (MapJoin)",
                                                   "args":
                                                     [
-                                                      {
-                                                        "op_name":"TableFullScan",
-                                                        "table":"test\/ds\/customer_demographics"
-                                                      },
                                                       {
                                                         "op_name":"InnerJoin (MapJoin)",
                                                         "args":
                                                           [
                                                             {
-                                                              "op_name":"InnerJoin (MapJoin)",
+                                                              "op_name":"InnerJoin (Grace)",
                                                               "args":
                                                                 [
                                                                   {
-                                                                    "op_name":"InnerJoin (Grace)",
+                                                                    "op_name":"TableFullScan",
+                                                                    "table":"test\/ds\/customer_address"
+                                                                  },
+                                                                  {
+                                                                    "op_name":"HashShuffle",
                                                                     "args":
                                                                       [
-                                                                        {
-                                                                          "op_name":"TableFullScan",
-                                                                          "table":"test\/ds\/customer"
-                                                                        },
                                                                         {
                                                                           "op_name":"InnerJoin (Grace)",
                                                                           "args":
@@ -81,34 +91,104 @@
                                                                                 "table":"test\/ds\/customer_demographics"
                                                                               },
                                                                               {
-                                                                                "op_name":"InnerJoin (Grace)",
+                                                                                "op_name":"HashShuffle",
                                                                                 "args":
                                                                                   [
                                                                                     {
-                                                                                      "op_name":"TableFullScan",
-                                                                                      "table":"test\/ds\/customer_address"
-                                                                                    },
-                                                                                    {
-                                                                                      "op_name":"InnerJoin (Grace)",
+                                                                                      "op_name":"InnerJoin (MapJoin)",
                                                                                       "args":
                                                                                         [
-                                                                                          {
-                                                                                            "op_name":"TableFullScan",
-                                                                                            "table":"test\/ds\/store_returns"
-                                                                                          },
                                                                                           {
                                                                                             "op_name":"InnerJoin (MapJoin)",
                                                                                             "args":
                                                                                               [
                                                                                                 {
-                                                                                                  "op_name":"TableFullScan",
-                                                                                                  "table":"test\/ds\/store_sales"
+                                                                                                  "op_name":"InnerJoin (Grace)",
+                                                                                                  "args":
+                                                                                                    [
+                                                                                                      {
+                                                                                                        "op_name":"TableFullScan",
+                                                                                                        "table":"test\/ds\/customer"
+                                                                                                      },
+                                                                                                      {
+                                                                                                        "op_name":"HashShuffle",
+                                                                                                        "args":
+                                                                                                          [
+                                                                                                            {
+                                                                                                              "op_name":"InnerJoin (Grace)",
+                                                                                                              "args":
+                                                                                                                [
+                                                                                                                  {
+                                                                                                                    "op_name":"TableFullScan",
+                                                                                                                    "table":"test\/ds\/customer_demographics"
+                                                                                                                  },
+                                                                                                                  {
+                                                                                                                    "op_name":"HashShuffle",
+                                                                                                                    "args":
+                                                                                                                      [
+                                                                                                                        {
+                                                                                                                          "op_name":"InnerJoin (Grace)",
+                                                                                                                          "args":
+                                                                                                                            [
+                                                                                                                              {
+                                                                                                                                "op_name":"TableFullScan",
+                                                                                                                                "table":"test\/ds\/customer_address"
+                                                                                                                              },
+                                                                                                                              {
+                                                                                                                                "op_name":"HashShuffle",
+                                                                                                                                "args":
+                                                                                                                                  [
+                                                                                                                                    {
+                                                                                                                                      "op_name":"InnerJoin (Grace)",
+                                                                                                                                      "args":
+                                                                                                                                        [
+                                                                                                                                          {
+                                                                                                                                            "op_name":"TableFullScan",
+                                                                                                                                            "table":"test\/ds\/store_returns"
+                                                                                                                                          },
+                                                                                                                                          {
+                                                                                                                                            "op_name":"HashShuffle",
+                                                                                                                                            "args":
+                                                                                                                                              [
+                                                                                                                                                {
+                                                                                                                                                  "op_name":"InnerJoin (MapJoin)",
+                                                                                                                                                  "args":
+                                                                                                                                                    [
+                                                                                                                                                      {
+                                                                                                                                                        "op_name":"TableFullScan",
+                                                                                                                                                        "table":"test\/ds\/store_sales"
+                                                                                                                                                      },
+                                                                                                                                                      {
+                                                                                                                                                        "op_name":"TableFullScan",
+                                                                                                                                                        "table":"test\/ds\/item"
+                                                                                                                                                      }
+                                                                                                                                                    ]
+                                                                                                                                                }
+                                                                                                                                              ]
+                                                                                                                                          }
+                                                                                                                                        ]
+                                                                                                                                    }
+                                                                                                                                  ]
+                                                                                                                              }
+                                                                                                                            ]
+                                                                                                                        }
+                                                                                                                      ]
+                                                                                                                  }
+                                                                                                                ]
+                                                                                                            }
+                                                                                                          ]
+                                                                                                      }
+                                                                                                    ]
                                                                                                 },
                                                                                                 {
                                                                                                   "op_name":"TableFullScan",
-                                                                                                  "table":"test\/ds\/item"
+                                                                                                  "table":"test\/ds\/date_dim"
                                                                                                 }
                                                                                               ]
+                                                                                          },
+                                                                                          {
+                                                                                            "op_name":"TableFullScan",
+                                                                                            "table":"test\/ds\/store"
                                                                                           }
                                                                                         ]
                                                                                     }
@@ -117,68 +197,60 @@
                                                                             ]
                                                                         }
                                                                       ]
-                                                                  },
-                                                                  {
-                                                                    "op_name":"TableFullScan",
-                                                                    "table":"test\/ds\/date_dim"
                                                                   }
                                                                 ]
                                                             },
                                                             {
                                                               "op_name":"TableFullScan",
-                                                              "table":"test\/ds\/store"
+                                                              "table":"test\/ds\/date_dim"
                                                             }
                                                           ]
+                                                      },
+                                                      {
+                                                        "op_name":"TableFullScan",
+                                                        "table":"test\/ds\/date_dim"
                                                       }
                                                     ]
+                                                },
+                                                {
+                                                  "op_name":"TableFullScan",
+                                                  "table":"test\/ds\/promotion"
                                                 }
                                               ]
                                           },
                                           {
-                                            "op_name":"TableFullScan",
-                                            "table":"test\/ds\/date_dim"
+                                            "op_name":"InnerJoin (MapJoin)",
+                                            "args":
+                                              [
+                                                {
+                                                  "op_name":"TableFullScan",
+                                                  "table":"test\/ds\/household_demographics"
+                                                },
+                                                {
+                                                  "op_name":"TableFullScan",
+                                                  "table":"test\/ds\/income_band"
+                                                }
+                                              ]
                                           }
                                         ]
                                     },
                                     {
-                                      "op_name":"TableFullScan",
-                                      "table":"test\/ds\/date_dim"
+                                      "op_name":"InnerJoin (MapJoin)",
+                                      "args":
+                                        [
+                                          {
+                                            "op_name":"TableFullScan",
+                                            "table":"test\/ds\/household_demographics"
+                                          },
+                                          {
+                                            "op_name":"TableFullScan",
+                                            "table":"test\/ds\/income_band"
+                                          }
+                                        ]
                                     }
                                   ]
-                              },
-                              {
-                                "op_name":"TableFullScan",
-                                "table":"test\/ds\/promotion"
                               }
                             ]
-                        },
-                        {
-                          "op_name":"InnerJoin (MapJoin)",
-                          "args":
-                            [
-                              {
-                                "op_name":"TableFullScan",
-                                "table":"test\/ds\/household_demographics"
-                              },
-                              {
-                                "op_name":"TableFullScan",
-                                "table":"test\/ds\/income_band"
-                              }
-                            ]
-                        }
-                      ]
-                  },
-                  {
-                    "op_name":"InnerJoin (MapJoin)",
-                    "args":
-                      [
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"test\/ds\/household_demographics"
-                        },
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"test\/ds\/income_band"
                         }
                       ]
                   }
@@ -187,33 +259,51 @@
           ]
       },
       {
-        "op_name":"InnerJoin (Grace)",
+        "op_name":"HashShuffle",
         "args":
           [
             {
-              "op_name":"InnerJoin (Grace)",
+              "op_name":"HashShuffle",
               "args":
                 [
                   {
-                    "op_name":"TableFullScan",
-                    "table":"test\/ds\/catalog_sales"
-                  },
-                  {
-                    "op_name":"TableFullScan",
-                    "table":"test\/ds\/catalog_returns"
-                  }
-                ]
-            },
-            {
-              "op_name":"InnerJoin (MapJoin)",
-              "args":
-                [
-                  {
-                    "op_name":"InnerJoin (MapJoin)",
+                    "op_name":"InnerJoin (Grace)",
                     "args":
                       [
                         {
-                          "op_name":"InnerJoin (MapJoin)",
+                          "op_name":"HashShuffle",
+                          "args":
+                            [
+                              {
+                                "op_name":"HashShuffle",
+                                "args":
+                                  [
+                                    {
+                                      "op_name":"InnerJoin (Grace)",
+                                      "args":
+                                        [
+                                          {
+                                            "op_name":"TableFullScan",
+                                            "table":"test\/ds\/catalog_sales"
+                                          },
+                                          {
+                                            "op_name":"HashShuffle",
+                                            "args":
+                                              [
+                                                {
+                                                  "op_name":"TableFullScan",
+                                                  "table":"test\/ds\/catalog_returns"
+                                                }
+                                              ]
+                                          }
+                                        ]
+                                    }
+                                  ]
+                              }
+                            ]
+                        },
+                        {
+                          "op_name":"HashShuffle",
                           "args":
                             [
                               {
@@ -225,37 +315,29 @@
                                       "args":
                                         [
                                           {
-                                            "op_name":"InnerJoin (Grace)",
+                                            "op_name":"InnerJoin (MapJoin)",
                                             "args":
                                               [
                                                 {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"test\/ds\/customer_address"
-                                                },
-                                                {
-                                                  "op_name":"InnerJoin (Grace)",
+                                                  "op_name":"InnerJoin (MapJoin)",
                                                   "args":
                                                     [
-                                                      {
-                                                        "op_name":"TableFullScan",
-                                                        "table":"test\/ds\/customer_demographics"
-                                                      },
                                                       {
                                                         "op_name":"InnerJoin (MapJoin)",
                                                         "args":
                                                           [
                                                             {
-                                                              "op_name":"InnerJoin (MapJoin)",
+                                                              "op_name":"InnerJoin (Grace)",
                                                               "args":
                                                                 [
                                                                   {
-                                                                    "op_name":"InnerJoin (Grace)",
+                                                                    "op_name":"TableFullScan",
+                                                                    "table":"test\/ds\/customer_address"
+                                                                  },
+                                                                  {
+                                                                    "op_name":"HashShuffle",
                                                                     "args":
                                                                       [
-                                                                        {
-                                                                          "op_name":"TableFullScan",
-                                                                          "table":"test\/ds\/customer"
-                                                                        },
                                                                         {
                                                                           "op_name":"InnerJoin (Grace)",
                                                                           "args":
@@ -265,34 +347,104 @@
                                                                                 "table":"test\/ds\/customer_demographics"
                                                                               },
                                                                               {
-                                                                                "op_name":"InnerJoin (Grace)",
+                                                                                "op_name":"HashShuffle",
                                                                                 "args":
                                                                                   [
                                                                                     {
-                                                                                      "op_name":"TableFullScan",
-                                                                                      "table":"test\/ds\/customer_address"
-                                                                                    },
-                                                                                    {
-                                                                                      "op_name":"InnerJoin (Grace)",
+                                                                                      "op_name":"InnerJoin (MapJoin)",
                                                                                       "args":
                                                                                         [
-                                                                                          {
-                                                                                            "op_name":"TableFullScan",
-                                                                                            "table":"test\/ds\/store_returns"
-                                                                                          },
                                                                                           {
                                                                                             "op_name":"InnerJoin (MapJoin)",
                                                                                             "args":
                                                                                               [
                                                                                                 {
-                                                                                                  "op_name":"TableFullScan",
-                                                                                                  "table":"test\/ds\/store_sales"
+                                                                                                  "op_name":"InnerJoin (Grace)",
+                                                                                                  "args":
+                                                                                                    [
+                                                                                                      {
+                                                                                                        "op_name":"TableFullScan",
+                                                                                                        "table":"test\/ds\/customer"
+                                                                                                      },
+                                                                                                      {
+                                                                                                        "op_name":"HashShuffle",
+                                                                                                        "args":
+                                                                                                          [
+                                                                                                            {
+                                                                                                              "op_name":"InnerJoin (Grace)",
+                                                                                                              "args":
+                                                                                                                [
+                                                                                                                  {
+                                                                                                                    "op_name":"TableFullScan",
+                                                                                                                    "table":"test\/ds\/customer_demographics"
+                                                                                                                  },
+                                                                                                                  {
+                                                                                                                    "op_name":"HashShuffle",
+                                                                                                                    "args":
+                                                                                                                      [
+                                                                                                                        {
+                                                                                                                          "op_name":"InnerJoin (Grace)",
+                                                                                                                          "args":
+                                                                                                                            [
+                                                                                                                              {
+                                                                                                                                "op_name":"TableFullScan",
+                                                                                                                                "table":"test\/ds\/customer_address"
+                                                                                                                              },
+                                                                                                                              {
+                                                                                                                                "op_name":"HashShuffle",
+                                                                                                                                "args":
+                                                                                                                                  [
+                                                                                                                                    {
+                                                                                                                                      "op_name":"InnerJoin (Grace)",
+                                                                                                                                      "args":
+                                                                                                                                        [
+                                                                                                                                          {
+                                                                                                                                            "op_name":"TableFullScan",
+                                                                                                                                            "table":"test\/ds\/store_returns"
+                                                                                                                                          },
+                                                                                                                                          {
+                                                                                                                                            "op_name":"HashShuffle",
+                                                                                                                                            "args":
+                                                                                                                                              [
+                                                                                                                                                {
+                                                                                                                                                  "op_name":"InnerJoin (MapJoin)",
+                                                                                                                                                  "args":
+                                                                                                                                                    [
+                                                                                                                                                      {
+                                                                                                                                                        "op_name":"TableFullScan",
+                                                                                                                                                        "table":"test\/ds\/store_sales"
+                                                                                                                                                      },
+                                                                                                                                                      {
+                                                                                                                                                        "op_name":"TableFullScan",
+                                                                                                                                                        "table":"test\/ds\/item"
+                                                                                                                                                      }
+                                                                                                                                                    ]
+                                                                                                                                                }
+                                                                                                                                              ]
+                                                                                                                                          }
+                                                                                                                                        ]
+                                                                                                                                    }
+                                                                                                                                  ]
+                                                                                                                              }
+                                                                                                                            ]
+                                                                                                                        }
+                                                                                                                      ]
+                                                                                                                  }
+                                                                                                                ]
+                                                                                                            }
+                                                                                                          ]
+                                                                                                      }
+                                                                                                    ]
                                                                                                 },
                                                                                                 {
                                                                                                   "op_name":"TableFullScan",
-                                                                                                  "table":"test\/ds\/item"
+                                                                                                  "table":"test\/ds\/date_dim"
                                                                                                 }
                                                                                               ]
+                                                                                          },
+                                                                                          {
+                                                                                            "op_name":"TableFullScan",
+                                                                                            "table":"test\/ds\/store"
                                                                                           }
                                                                                         ]
                                                                                     }
@@ -301,68 +453,60 @@
                                                                             ]
                                                                         }
                                                                       ]
-                                                                  },
-                                                                  {
-                                                                    "op_name":"TableFullScan",
-                                                                    "table":"test\/ds\/date_dim"
                                                                   }
                                                                 ]
                                                             },
                                                             {
                                                               "op_name":"TableFullScan",
-                                                              "table":"test\/ds\/store"
+                                                              "table":"test\/ds\/date_dim"
                                                             }
                                                           ]
+                                                      },
+                                                      {
+                                                        "op_name":"TableFullScan",
+                                                        "table":"test\/ds\/date_dim"
                                                       }
                                                     ]
+                                                },
+                                                {
+                                                  "op_name":"TableFullScan",
+                                                  "table":"test\/ds\/promotion"
                                                 }
                                               ]
                                           },
                                           {
-                                            "op_name":"TableFullScan",
-                                            "table":"test\/ds\/date_dim"
+                                            "op_name":"InnerJoin (MapJoin)",
+                                            "args":
+                                              [
+                                                {
+                                                  "op_name":"TableFullScan",
+                                                  "table":"test\/ds\/household_demographics"
+                                                },
+                                                {
+                                                  "op_name":"TableFullScan",
+                                                  "table":"test\/ds\/income_band"
+                                                }
+                                              ]
                                           }
                                         ]
                                     },
                                     {
-                                      "op_name":"TableFullScan",
-                                      "table":"test\/ds\/date_dim"
+                                      "op_name":"InnerJoin (MapJoin)",
+                                      "args":
+                                        [
+                                          {
+                                            "op_name":"TableFullScan",
+                                            "table":"test\/ds\/household_demographics"
+                                          },
+                                          {
+                                            "op_name":"TableFullScan",
+                                            "table":"test\/ds\/income_band"
+                                          }
+                                        ]
                                     }
                                   ]
-                              },
-                              {
-                                "op_name":"TableFullScan",
-                                "table":"test\/ds\/promotion"
                               }
                             ]
-                        },
-                        {
-                          "op_name":"InnerJoin (MapJoin)",
-                          "args":
-                            [
-                              {
-                                "op_name":"TableFullScan",
-                                "table":"test\/ds\/household_demographics"
-                              },
-                              {
-                                "op_name":"TableFullScan",
-                                "table":"test\/ds\/income_band"
-                              }
-                            ]
-                        }
-                      ]
-                  },
-                  {
-                    "op_name":"InnerJoin (MapJoin)",
-                    "args":
-                      [
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"test\/ds\/household_demographics"
-                        },
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"test\/ds\/income_band"
                         }
                       ]
                   }

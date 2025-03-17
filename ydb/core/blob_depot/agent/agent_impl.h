@@ -5,8 +5,6 @@
 
 #include <ydb/core/protos/blob_depot_config.pb.h>
 
-#include <ydb/core/wrappers/abstract.h>
-
 namespace NKikimr::NBlobDepot {
 
 #define ENUMERATE_INCOMING_EVENTS(XX) \
@@ -360,10 +358,11 @@ namespace NKikimr::NBlobDepot {
         NKikimrBlobStorage::TPDiskSpaceColor::E SpaceColor = {};
         float ApproximateFreeSpaceShare = 0.0f;
 
-        NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
         std::optional<NKikimrBlobDepot::TS3BackendSettings> S3BackendSettings;
         TActorId S3WrapperId;
         TString S3BasePath;
+
+        void InitS3(const TString& name);
 
         void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev);
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr ev);
@@ -407,6 +406,9 @@ namespace NKikimr::NBlobDepot {
             std::shared_ptr<TEvBlobStorage::TExecutionRelay> ExecutionRelay;
             ui32 BlockChecksRemain = 3;
 
+            struct TLifetimeToken {};
+            std::shared_ptr<TLifetimeToken> LifetimeToken;
+
             static constexpr TDuration WatchdogDuration = TDuration::Seconds(10);
 
         public:
@@ -426,9 +428,15 @@ namespace NKikimr::NBlobDepot {
             virtual void OnRead(ui64 /*tag*/, TReadOutcome&& /*outcome*/) {}
             virtual void OnIdAllocated(bool /*success*/) {}
             virtual void OnDestroy(bool /*success*/) {}
+            virtual void OnPutS3ObjectResponse(std::optional<TString>&& /*error*/) { Y_ABORT(); }
 
             NKikimrProto::EReplyStatus CheckBlockForTablet(ui64 tabletId, std::optional<ui32> generation,
                 ui32 *blockedGeneration = nullptr);
+
+            using TFinishCallback = std::function<void(std::optional<TString>, const char*)>;
+            void IssueReadS3(const TString& key, ui32 offset, ui32 len, TFinishCallback finish, ui64 readId);
+
+            TActorId IssueWriteS3(TString&& key, TRope&& buffer, TLogoBlobID id);
 
         protected: // reading logic
             struct TReadContext;

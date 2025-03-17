@@ -35,13 +35,13 @@ class TPartGroupBtreeIndexIter : public IPartGroupIndexIter {
         {
         }
 
-        bool IsLastPos() const noexcept {
+        bool IsLastPos() const {
             Y_ABORT_UNLESS(Node);
             Y_ABORT_UNLESS(Pos);
             return *Pos == Node->GetKeysCount();
         }
 
-        bool IsFirstPos() const noexcept {
+        bool IsFirstPos() const {
             Y_ABORT_UNLESS(Node);
             Y_ABORT_UNLESS(Pos);
             return *Pos == 0;
@@ -57,7 +57,7 @@ class TPartGroupBtreeIndexIter : public IPartGroupIndexIter {
             return TBtreeIndexNode::Has(RowId, state.BeginRowId, state.EndRowId);
         }
 
-        TRecIdx Do(const TNodeState& state) const noexcept {
+        TRecIdx Do(const TNodeState& state) const {
             return state.Node->Seek(RowId, state.Pos);
         }
 
@@ -72,11 +72,11 @@ class TPartGroupBtreeIndexIter : public IPartGroupIndexIter {
             , KeyDefaults(keyDefaults)
         {}
 
-        bool BelongsTo(const TNodeState& state) const noexcept {
+        bool BelongsTo(const TNodeState& state) const {
             return TBtreeIndexNode::Has(Seek, Key, state.BeginKey, state.EndKey, KeyDefaults);
         }
 
-        TRecIdx Do(const TNodeState& state) const noexcept {
+        TRecIdx Do(const TNodeState& state) const {
             return state.Node->Seek(Seek, Key, Columns, KeyDefaults);
         }
 
@@ -94,11 +94,11 @@ class TPartGroupBtreeIndexIter : public IPartGroupIndexIter {
             , KeyDefaults(keyDefaults)
         {}
 
-        bool BelongsTo(const TNodeState& state) const noexcept {
+        bool BelongsTo(const TNodeState& state) const {
             return TBtreeIndexNode::HasReverse(Seek, Key, state.BeginKey, state.EndKey, KeyDefaults);
         }
 
-        TRecIdx Do(const TNodeState& state) const noexcept {
+        TRecIdx Do(const TNodeState& state) const {
             return state.Node->SeekReverse(Seek, Key, Columns, KeyDefaults);
         }
 

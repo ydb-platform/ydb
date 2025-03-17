@@ -17,10 +17,10 @@ namespace NTest {
         IModel(TIntrusiveConstPtr<TRowScheme> scheme) : Scheme(scheme) { }
 
         virtual ~IModel() = default;
-        virtual TRow Make(ui64 seq, bool hole) noexcept = 0;
-        virtual ui64 Base(const TRow &row) const noexcept = 0;
+        virtual TRow Make(ui64 seq, bool hole) = 0;
+        virtual ui64 Base(const TRow &row) const = 0;
         virtual void Check(TArrayRef<const ui64>) const = 0;
-        virtual void Describe(IOutputStream&) const noexcept = 0;
+        virtual void Describe(IOutputStream&) const = 0;
 
         const TIntrusiveConstPtr<TRowScheme> Scheme;
     };
@@ -54,7 +54,7 @@ namespace NTest {
             }
         }
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "Mass{"
@@ -62,7 +62,7 @@ namespace NTest {
                 << " rows, " << Heap->Used() << "b}";
         }
 
-        const TRow* SnapBy(const TRow &row, bool next, bool hole) const noexcept
+        const TRow* SnapBy(const TRow &row, bool next, bool hole) const
         {
             auto it = Model->Base(row);
 

@@ -34,7 +34,7 @@ namespace NBoot {
         }
 
     private: /* IStep, boot logic DSL actor interface   */
-        void Start() noexcept override
+        void Start() override
         {
             GrabSnapFromDeps();
 
@@ -49,7 +49,7 @@ namespace NBoot {
             }
         }
 
-        void HandleStep(TIntrusivePtr<IStep> step) noexcept override
+        void HandleStep(TIntrusivePtr<IStep> step) override
         {
             auto *load = step->ConsumeAs<TLoadBlobs>(Pending);
 
@@ -57,7 +57,7 @@ namespace NBoot {
         }
 
     private:
-        void Apply(const NPageCollection::TLargeGlobId &snap, TArrayRef<const char> body) noexcept
+        void Apply(const NPageCollection::TLargeGlobId &snap, TArrayRef<const char> body)
         {
             if (EIdx::SnapLz4 == TCookie(snap.Lead.Cookie()).Index()) {
                 Decode(snap, Codec->Decode(body));
@@ -68,7 +68,7 @@ namespace NBoot {
             ProcessSnap(snap), ProcessDeps(), Env->Finish(this);
         }
 
-        void Decode(const NPageCollection::TLargeGlobId &snap, TArrayRef<const char> body) noexcept
+        void Decode(const NPageCollection::TLargeGlobId &snap, TArrayRef<const char> body)
         {
             bool ok = ParseFromStringNoSizeLimit(Proto, body);
             Y_VERIFY_S(ok, "Failed to parse snapshot " << snap.Lead);
@@ -94,7 +94,7 @@ namespace NBoot {
                 NTable::TAbi().Check(abi->GetTail(), abi->GetHead(), "snap");
         }
 
-        void ProcessSnap(const NPageCollection::TLargeGlobId &snap) noexcept
+        void ProcessSnap(const NPageCollection::TLargeGlobId &snap)
         {
             Back->Snap = snap;
             Back->Serial = Proto.GetSerial();
@@ -137,7 +137,7 @@ namespace NBoot {
             ReadWaste();
         }
 
-        void ReadAlterLog() noexcept
+        void ReadAlterLog()
         {
             TVector<TLogoBlobID> blobs;
 
@@ -161,7 +161,7 @@ namespace NBoot {
             }
         }
 
-        void ReadRedoSnap() noexcept
+        void ReadRedoSnap()
         {
             /* Merge of two lists with redo log records preferring records with
                 embedded bodies. Later merge will be dropped and replaced with
@@ -197,7 +197,7 @@ namespace NBoot {
             }
         }
 
-        void ReadGcSnap() noexcept
+        void ReadGcSnap()
         {
             if (auto *logic = Logic->Result().GcLogic.Get()) {
                 const auto &lead = Back->Snap.Lead;
@@ -229,7 +229,7 @@ namespace NBoot {
             }
         }
 
-        void ReadWaste() const noexcept
+        void ReadWaste() const
         {
             if (auto *waste = Back->Waste.Get()) {
                 if (Proto.HasWaste()) {
@@ -249,7 +249,7 @@ namespace NBoot {
             }
         }
 
-        void GrabSnapFromDeps() noexcept
+        void GrabSnapFromDeps()
         {
             auto *entry = (Deps && Deps->Entries) ? &Deps->Entries[0] : nullptr;
 
@@ -276,7 +276,7 @@ namespace NBoot {
             }
         }
 
-        void ProcessDeps() noexcept
+        void ProcessDeps()
         {
             if (Deps) {
                 for (auto &entry : Deps->Entries) {

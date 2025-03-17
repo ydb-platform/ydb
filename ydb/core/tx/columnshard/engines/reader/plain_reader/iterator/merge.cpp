@@ -40,7 +40,7 @@ void TBaseMergeTask::PrepareResultBatch() {
         ResultBatch = NArrow::TColumnOperator().VerifyIfAbsent().Extract(ResultBatch, Context->GetProgramInputColumns()->GetColumnNamesVector());
         AFL_VERIFY((ui32)ResultBatch->num_columns() == Context->GetProgramInputColumns()->GetColumnNamesVector().size());
         auto accessors = std::make_shared<NArrow::NAccessor::TAccessorsCollection>(ResultBatch, *Context->GetCommonContext()->GetResolver());
-        Context->GetReadMetadata()->GetProgram().ApplyProgram(accessors).Validate();
+        Context->GetReadMetadata()->GetProgram().ApplyProgram(accessors, std::make_shared<NArrow::NSSA::TFakeDataSource>()).Validate();
         if (accessors->GetRecordsCountOptional().value_or(0) == 0) {
             ResultBatch = nullptr;
         } else {

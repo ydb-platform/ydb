@@ -1,6 +1,6 @@
 #include "write_session.h"
 
-#include <src/client/topic/common/log_lazy.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/log_lazy.h>
 
 namespace NYdb::inline Dev::NTopic {
 

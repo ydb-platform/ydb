@@ -93,7 +93,7 @@ namespace NFake {
             Send(eh->Sender, ev, 0, eh->Cookie);
         }
 
-        void ReportUsage() const noexcept
+        void ReportUsage() const
         {
             if (auto logl = Logger->Log(ELnLev::Info)) {
 

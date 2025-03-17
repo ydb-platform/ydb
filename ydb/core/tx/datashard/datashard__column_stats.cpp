@@ -20,11 +20,11 @@ public:
         , StartKey(std::move(startKey))
     {}
 
-    void Describe(IOutputStream& o) const noexcept override {
+    void Describe(IOutputStream& o) const override {
         o << "StatisticsScan";
     }
 
-    IScan::TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override {
+    IScan::TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) override {
         Driver = driver;
         Scheme = std::move(scheme);
 
@@ -37,13 +37,13 @@ public:
         return {EScan::Feed, {}};
     }
 
-    EScan Seek(TLead& lead, ui64) noexcept override {
+    EScan Seek(TLead& lead, ui64) override {
         lead.To(Scheme->Tags(), StartKey.GetCells(), ESeek::Lower);
 
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept override {
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) override {
         Y_UNUSED(key);
         auto rowCells = *row;
         for (size_t i = 0; i < rowCells.size(); ++i) {
@@ -53,11 +53,11 @@ public:
         return EScan::Feed;
     }
 
-    EScan Exhausted() noexcept override {
+    EScan Exhausted() override {
         return EScan::Final;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override {
+    TAutoPtr<IDestructable> Finish(EAbort abort) override {
         auto response = std::make_unique<NStat::TEvStatistics::TEvStatisticsResponse>();
         auto& record = response->Record;
         record.SetShardTabletId(ShardTabletId);

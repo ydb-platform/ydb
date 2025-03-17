@@ -21,7 +21,7 @@ namespace NTable {
         virtual ~TCompactionParams() = default;
 
         // Used to log compaction parameters
-        virtual void Describe(IOutputStream& out) const noexcept;
+        virtual void Describe(IOutputStream& out) const;
 
     public:
         ui32 Table = Max<ui32>();

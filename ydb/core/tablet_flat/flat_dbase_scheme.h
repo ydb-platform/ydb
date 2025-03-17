@@ -137,7 +137,7 @@ public:
         return Tables.empty();
     }
 
-    const TRoom* DefaultRoomFor(ui32 id) const noexcept
+    const TRoom* DefaultRoomFor(ui32 id) const
     {
         if (auto *table = GetTableInfo(id))
             return table->Rooms.FindPtr(DefaultRoom);
@@ -145,7 +145,7 @@ public:
         return nullptr;
     }
 
-    const TFamily* DefaultFamilyFor(ui32 id) const noexcept
+    const TFamily* DefaultFamilyFor(ui32 id) const
     {
         if (auto *table = GetTableInfo(id))
             return table->Families.FindPtr(TColumn::LeaderFamily);
@@ -153,7 +153,7 @@ public:
         return nullptr;
     }
 
-    ECompactionStrategy CompactionStrategyFor(ui32 id) const noexcept
+    ECompactionStrategy CompactionStrategyFor(ui32 id) const
     {
         if (auto *table = GetTableInfo(id)) {
             auto strategy = table->CompactionPolicy->CompactionStrategy;

@@ -94,6 +94,15 @@ TYqlRunTool::TYqlRunTool()
         opts.AddLongOption("validate-result-format", "Check that result-format can parse Result").NoArgument().SetFlag(&GetRunOptions().ValidateResultFormat);
     });
 
+    GetRunOptions().AddOptHandler([this](const NLastGetopt::TOptsParseResult& res) {
+        Y_UNUSED(res);
+
+        if (GetRunOptions().GatewaysConfig) {
+            auto ytConfig = GetRunOptions().GatewaysConfig->GetYt();
+            FillClusterMapping(ytConfig, TString{YtProviderName});
+        }
+    });
+
     GetRunOptions().SetSupportedGateways({TString{YtProviderName}});
     GetRunOptions().GatewayTypes.emplace(YtProviderName);
     AddClusterMapping(TString{"plato"}, TString{YtProviderName});

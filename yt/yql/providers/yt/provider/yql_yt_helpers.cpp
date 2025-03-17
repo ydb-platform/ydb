@@ -1,5 +1,4 @@
 #include "yql_yt_helpers.h"
-#include "yql_yt_provider_impl.h"
 #include "yql_yt_op_settings.h"
 #include "yql_yt_op_hash.h"
 #include "yql_yt_optimize.h"
@@ -51,7 +50,9 @@ void ScanWorlds(const TExprNode::TPtr& node, TSyncMap& syncList) {
     });
 }
 
-bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TString* usedCluster, bool supportsDq, TNodeSet& visited) {
+bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TString* usedCluster, bool supportsDq,
+    ERuntimeClusterSelectionMode mode, TNodeSet& visited)
+{
     if (!visited.insert(&lambdaBody).second) {
         return true;
     }
@@ -63,14 +64,14 @@ bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TSt
     if (auto maybeLength = TMaybeNode<TYtLength>(&lambdaBody)) {
         if (auto maybeRead = maybeLength.Input().Maybe<TYtReadTable>()) {
             auto read = maybeRead.Cast();
-            if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{read.DataSource().Cluster().Value()})) {
+            if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{read.DataSource().Cluster().Value()}, mode)) {
                 return false;
             }
             syncList.emplace(read.Ptr(), syncList.size());
         }
         if (auto maybeOutput = maybeLength.Input().Maybe<TYtOutput>()) {
             auto output = maybeOutput.Cast();
-            if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{GetOutputOp(output).DataSink().Cluster().Value()})) {
+            if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{GetOutputOp(output).DataSink().Cluster().Value()}, mode)) {
                 return false;
             }
             syncList.emplace(output.Operation().Ptr(), syncList.size());
@@ -81,14 +82,14 @@ bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TSt
     if (auto maybeContent = TMaybeNode<TYtTableContent>(&lambdaBody)) {
         if (auto maybeRead = maybeContent.Input().Maybe<TYtReadTable>()) {
             auto read = maybeRead.Cast();
-            if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{read.DataSource().Cluster().Value()})) {
+            if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{read.DataSource().Cluster().Value()}, mode)) {
                return false;
             }
             syncList.emplace(read.Ptr(), syncList.size());
         }
         if (auto maybeOutput = maybeContent.Input().Maybe<TYtOutput>()) {
             auto output = maybeOutput.Cast();
-            if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{GetOutputOp(output).DataSink().Cluster().Value()})) {
+            if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{GetOutputOp(output).DataSink().Cluster().Value()}, mode)) {
                 return false;
             }
             syncList.emplace(output.Operation().Ptr(), syncList.size());
@@ -102,14 +103,14 @@ bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TSt
         }
         if (auto maybeRead = maybeDqRead.Input().Maybe<TYtReadTable>()) {
             auto read = maybeRead.Cast();
-            if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{read.DataSource().Cluster().Value()})) {
+            if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{read.DataSource().Cluster().Value()}, mode)) {
                 return false;
             }
             syncList.emplace(read.Ptr(), syncList.size());
         }
         else if (auto maybeOutput = maybeDqRead.Input().Maybe<TYtOutput>()) {
             auto output = maybeOutput.Cast();
-            if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{GetOutputOp(output).DataSink().Cluster().Value()})) {
+            if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{GetOutputOp(output).DataSink().Cluster().Value()}, mode)) {
                 return false;
             }
             syncList.emplace(output.Operation().Ptr(), syncList.size());
@@ -142,14 +143,14 @@ bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TSt
 
     if (auto maybeRead = TMaybeNode<TCoRight>(&lambdaBody).Input().Maybe<TYtReadTable>()) {
         auto read = maybeRead.Cast();
-        if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{read.DataSource().Cluster().Value()})) {
+        if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{read.DataSource().Cluster().Value()}, mode)) {
             return false;
         }
         syncList.emplace(read.Ptr(), syncList.size());
         return true;
     } else if (auto out = TMaybeNode<TYtOutput>(&lambdaBody)) {
         auto op = GetOutputOp(out.Cast());
-        if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{op.DataSink().Cluster().Value()})) {
+        if (usedCluster && !UpdateUsedCluster(*usedCluster, TString{op.DataSink().Cluster().Value()}, mode)) {
             return false;
         }
         syncList.emplace(out.Cast().Operation().Ptr(), syncList.size());
@@ -159,7 +160,7 @@ bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TSt
     if (auto right = TMaybeNode<TCoRight>(&lambdaBody).Input()) {
         if (auto maybeCons = right.Maybe<TCoCons>()) {
             syncList.emplace(maybeCons.Cast().World().Ptr(), syncList.size());
-            return IsYtIsolatedLambdaImpl(maybeCons.Cast().Input().Ref(), syncList, usedCluster, supportsDq, visited);
+            return IsYtIsolatedLambdaImpl(maybeCons.Cast().Input().Ref(), syncList, usedCluster, supportsDq, mode, visited);
         }
 
         if (right.Cast().Raw()->IsCallable("PgReadTable!")) {
@@ -178,7 +179,7 @@ bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TSt
     }
 
     for (auto& child : lambdaBody.Children()) {
-        if (!IsYtIsolatedLambdaImpl(*child, syncList, usedCluster, supportsDq, visited)) {
+        if (!IsYtIsolatedLambdaImpl(*child, syncList, usedCluster, supportsDq, mode, visited)) {
             return false;
         }
     }
@@ -186,29 +187,32 @@ bool IsYtIsolatedLambdaImpl(const TExprNode& lambdaBody, TSyncMap& syncList, TSt
     return true;
 }
 
-IGraphTransformer::TStatus EstimateDataSize(TVector<ui64>& result, TSet<TString>& requestedColumns,
-    const TString& cluster, const TVector<TYtPathInfo::TPtr>& paths,
+IGraphTransformer::TStatus EstimateDataSize(IYtGateway::TPathStatResult& result, TSet<TString>& requestedColumns,
+    const TVector<TYtPathInfo::TPtr>& paths,
     const TMaybe<TVector<TString>>& columns, const TYtState& state, TExprContext& ctx, bool sync)
 {
-    result.clear();
-    result.resize(paths.size(), 0);
+    result = IYtGateway::TPathStatResult{};
+    result.DataSize.resize(paths.size(), 0);
+    result.Extended.resize(paths.size());
     requestedColumns.clear();
 
     const bool useColumnarStat = GetJoinCollectColumnarStatisticsMode(*state.Configuration) != EJoinCollectColumnarStatisticsMode::Disable
         && !state.Types->UseTableMetaFromGraph;
 
-    TVector<size_t> reqMap;
     TVector<IYtGateway::TPathStatReq> pathStatReqs;
+    THashMap<TString, TVector<size_t>> reqMapByCluster;
+    TMap<TString, TVector<IYtGateway::TPathStatReq>> pathStatReqsByCluster;
+    THashMap<TString, ui64> totalChunkCountByCluster;
     for (size_t i: xrange(paths.size())) {
         const TYtPathInfo::TPtr& pathInfo = paths[i];
         YQL_ENSURE(pathInfo->Table->Stat);
-        result[i] = pathInfo->Table->Stat->DataSize;
+        result.DataSize[i] = pathInfo->Table->Stat->DataSize;
         if (pathInfo->Ranges) {
             if (auto usedRows = pathInfo->Ranges->GetUsedRows(pathInfo->Table->Stat->RecordsCount)) {
                 if (usedRows.GetRef() && pathInfo->Table->Stat->RecordsCount) {
-                    result[i] *= double(usedRows.GetRef()) / double(pathInfo->Table->Stat->RecordsCount);
+                    result.DataSize[i] *= double(usedRows.GetRef()) / double(pathInfo->Table->Stat->RecordsCount);
                 } else {
-                    result[i] = 0;
+                    result.DataSize[i] = 0;
                 }
             }
         }
@@ -219,53 +223,84 @@ IGraphTransformer::TStatus EstimateDataSize(TVector<ui64>& result, TSet<TString>
                 overrideColumns = columns;
             }
 
-            auto ytPath = BuildYtPathForStatRequest(cluster, *pathInfo, overrideColumns, state, ctx);
+            auto ytPath = BuildYtPathForStatRequest(*pathInfo, overrideColumns, state, ctx);
             if (!ytPath) {
                 return IGraphTransformer::TStatus::Error;
             }
 
             if (ytPath->Columns_) {
-                pathStatReqs.push_back(
+                const TString cluster = pathInfo->Table->Cluster;
+                YQL_ENSURE(cluster);
+                pathStatReqsByCluster[cluster].push_back(
                     IYtGateway::TPathStatReq()
                         .Path(*ytPath)
                         .IsTemp(pathInfo->Table->IsTemp)
                         .IsAnonymous(pathInfo->Table->IsAnonymous)
                         .Epoch(pathInfo->Table->Epoch.GetOrElse(0))
                 );
-                reqMap.push_back(i);
+                reqMapByCluster[cluster].push_back(i);
+                totalChunkCountByCluster[cluster] += pathInfo->Table->Stat->ChunkCount;
             }
         }
     }
 
-    if (!pathStatReqs.empty()) {
-        for (auto& req : pathStatReqs) {
-            YQL_ENSURE(req.Path().Columns_);
-            requestedColumns.insert(req.Path().Columns_->Parts_.begin(), req.Path().Columns_->Parts_.end());
+    if (!pathStatReqsByCluster.empty()) {
+        const TMaybe<ui64> maxChunkCountExtendedStats = state.Configuration->ExtendedStatsMaxChunkCount.Get();
+        TMap<TString, IYtGateway::TPathStatResult> pathStatsByCluster;
+        TMap<TString, NThreading::TFuture<IYtGateway::TPathStatResult>> futuresByCluster;
+        THashSet<TString> extendedStatsRequested;
+        IGraphTransformer::TStatus resultStatus = IGraphTransformer::TStatus::Ok;
+        for (const auto& [cluster, reqs] : pathStatReqsByCluster) {
+            for (auto& req : reqs) {
+                YQL_ENSURE(req.Path().Columns_);
+                requestedColumns.insert(req.Path().Columns_->Parts_.begin(), req.Path().Columns_->Parts_.end());
+            }
+            const bool requestExtendedStats = !sync && maxChunkCountExtendedStats &&
+                (*maxChunkCountExtendedStats == 0 || totalChunkCountByCluster[cluster] <= *maxChunkCountExtendedStats);
+            IYtGateway::TPathStatOptions pathStatOptions =
+                IYtGateway::TPathStatOptions(state.SessionId)
+                    .Cluster(cluster)
+                    .Paths(reqs)
+                    .Config(state.Configuration->Snapshot())
+                    .Extended(requestExtendedStats);
+            if (requestExtendedStats) {
+                extendedStatsRequested.insert(cluster);
+            }
+            if (sync) {
+                futuresByCluster[cluster] = state.Gateway->PathStat(std::move(pathStatOptions));
+            } else {
+                auto& pathStats = pathStatsByCluster[cluster];
+                pathStats = state.Gateway->TryPathStat(std::move(pathStatOptions));
+                if (!pathStats.Success()) {
+                    resultStatus = resultStatus.Combine(IGraphTransformer::TStatus::Repeat);
+                }
+            }
         }
 
-        IYtGateway::TPathStatResult pathStats;
-        IYtGateway::TPathStatOptions pathStatOptions =
-            IYtGateway::TPathStatOptions(state.SessionId)
-                .Cluster(cluster)
-                .Paths(pathStatReqs)
-                .Config(state.Configuration->Snapshot());
-        if (sync) {
-            auto future = state.Gateway->PathStat(std::move(pathStatOptions));
+        for (auto& [cluster, future] : futuresByCluster) {
+            auto& pathStats = pathStatsByCluster[cluster];
             pathStats = future.GetValueSync();
             pathStats.ReportIssues(ctx.IssueManager);
             if (!pathStats.Success()) {
-                return IGraphTransformer::TStatus::Error;
-            }
-        } else {
-            pathStats = state.Gateway->TryPathStat(std::move(pathStatOptions));
-            if (!pathStats.Success()) {
-                return IGraphTransformer::TStatus::Repeat;
+                resultStatus = resultStatus.Combine(IGraphTransformer::TStatus::Error);
             }
         }
 
-        YQL_ENSURE(pathStats.DataSize.size() == reqMap.size());
-        for (size_t i: xrange(pathStats.DataSize.size())) {
-            result[reqMap[i]] = pathStats.DataSize[i];
+        if (resultStatus != IGraphTransformer::TStatus::Ok) {
+            return resultStatus;
+        }
+
+        for (auto& [cluster, pathStats] : pathStatsByCluster) {
+            auto it = reqMapByCluster.find(cluster);
+            YQL_ENSURE(it != reqMapByCluster.end());
+            YQL_ENSURE(pathStats.DataSize.size() == it->second.size());
+            YQL_ENSURE(!extendedStatsRequested.contains(cluster) || pathStats.Extended.size() == it->second.size());
+            for (size_t i: xrange(pathStats.DataSize.size())) {
+                result.DataSize[it->second[i]] = pathStats.DataSize[i];
+                if (extendedStatsRequested.contains(cluster)) {
+                    result.Extended[it->second[i]] = pathStats.Extended[i];
+                }
+            }
         }
     }
 
@@ -312,33 +347,51 @@ bool NeedCalc(NNodes::TExprBase node) {
     return !node.Maybe<TCoDataCtor>();
 }
 
+bool IsYtIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, bool supportsDq) {
+    TNodeSet visited;
+    return IsYtIsolatedLambdaImpl(lambdaBody, syncList, nullptr, supportsDq, ERuntimeClusterSelectionMode::Disable, visited);
+}
+
 } // unnamed
 
-bool UpdateUsedCluster(TString& usedCluster, const TString& newCluster) {
-    if (!usedCluster) {
-        usedCluster = newCluster;
-    } else if (usedCluster != newCluster) {
-        return false;
+bool UpdateUsedCluster(TString& usedCluster, const TString& newCluster, ERuntimeClusterSelectionMode mode) {
+    YQL_ENSURE(newCluster);
+    switch (mode) {
+        case NYql::ERuntimeClusterSelectionMode::Disable: {
+            if (!usedCluster) {
+                usedCluster = newCluster;
+            } else if (usedCluster != newCluster) {
+                return false;
+            }
+            break;
+        }
+        case NYql::ERuntimeClusterSelectionMode::Auto: {
+            if (!usedCluster) {
+                usedCluster = newCluster;
+            } else if (usedCluster != newCluster) {
+                usedCluster = "$runtime";
+            }
+            break;
+        }
+        case NYql::ERuntimeClusterSelectionMode::Force: {
+            usedCluster = "$runtime";
+            break;
+        }
     }
     return true;
 }
 
-bool IsYtIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, bool supportsDq) {
+bool IsYtIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, TString& usedCluster, bool supportsDq, ERuntimeClusterSelectionMode mode) {
     TNodeSet visited;
-    return IsYtIsolatedLambdaImpl(lambdaBody, syncList, nullptr, supportsDq, visited);
-}
-
-bool IsYtIsolatedLambda(const TExprNode& lambdaBody, TSyncMap& syncList, TString& usedCluster, bool supportsDq) {
-    TNodeSet visited;
-    return IsYtIsolatedLambdaImpl(lambdaBody, syncList, &usedCluster, supportsDq, visited);
+    return IsYtIsolatedLambdaImpl(lambdaBody, syncList, &usedCluster, supportsDq, mode, visited);
 }
 
 bool IsYtCompleteIsolatedLambda(const TExprNode& lambda, TSyncMap& syncList, bool supportsDq) {
     return lambda.IsComplete() && IsYtIsolatedLambda(lambda, syncList, supportsDq);
 }
 
-bool IsYtCompleteIsolatedLambda(const TExprNode& lambda, TSyncMap& syncList, TString& usedCluster, bool supportsDq) {
-    return lambda.IsComplete() && IsYtIsolatedLambda(lambda, syncList, usedCluster, supportsDq);
+bool IsYtCompleteIsolatedLambda(const TExprNode& lambda, TSyncMap& syncList, TString& usedCluster, bool supportsDq, ERuntimeClusterSelectionMode mode) {
+    return lambda.IsComplete() && IsYtIsolatedLambda(lambda, syncList, usedCluster, supportsDq, mode);
 }
 
 TExprNode::TPtr YtCleanupWorld(const TExprNode::TPtr& input, TExprContext& ctx, TYtState::TPtr state) {
@@ -1076,7 +1129,9 @@ IGraphTransformer::TStatus UpdateTableMeta(const TExprNode::TPtr& tableNode, TEx
     return IGraphTransformer::TStatus::Ok;
 }
 
-TExprNode::TPtr ValidateAndUpdateTablesMeta(const TExprNode::TPtr& input, TStringBuf cluster, const TYtTablesData::TPtr& tablesData, bool updateRowSpecType, TExprContext& ctx) {
+TExprNode::TPtr ValidateAndUpdateTablesMeta(const TExprNode::TPtr& input, TStringBuf cluster, const TYtTablesData::TPtr& tablesData,
+    bool updateRowSpecType, ERuntimeClusterSelectionMode selectionMode, TExprContext& ctx)
+{
     TNodeSet tables;
     VisitExpr(input, [&](const TExprNode::TPtr& node) {
         if (auto maybeTable = TMaybeNode<TYtTable>(node)) {
@@ -1093,7 +1148,7 @@ TExprNode::TPtr ValidateAndUpdateTablesMeta(const TExprNode::TPtr& input, TStrin
     if (!tables.empty()) {
         bool valid = true;
         for (auto table: tables) {
-            if (cluster != table->Child(TYtTable::idx_Cluster)->Content()) {
+            if (selectionMode == ERuntimeClusterSelectionMode::Disable && cluster != table->Child(TYtTable::idx_Cluster)->Content()) {
                 ctx.AddError(TIssue(ctx.GetPosition(table->Child(TYtTable::idx_Cluster)->Pos()), TStringBuilder()
                     << "Table " << TString{table->Child(TYtTable::idx_Name)->Content()}.Quote()
                     << " cluster doesn't match DataSource/DataSink cluster: "
@@ -1814,7 +1869,7 @@ bool IsOutputUsedMultipleTimes(const TExprNode& op, const TParentsMap& parentsMa
     return node == nullptr;
 }
 
-TMaybe<NYT::TRichYPath> BuildYtPathForStatRequest(const TString& cluster, const TYtPathInfo& pathInfo,
+TMaybe<NYT::TRichYPath> BuildYtPathForStatRequest(const TYtPathInfo& pathInfo,
     const TMaybe<TVector<TString>>& overrideColumns, const TYtState& state, TExprContext& ctx)
 {
     auto ytPath = NYT::TRichYPath(pathInfo.Table->Name);
@@ -1825,6 +1880,8 @@ TMaybe<NYT::TRichYPath> BuildYtPathForStatRequest(const TString& cluster, const 
 
     if (ytPath.Columns_ && dynamic_cast<TYtTableInfo*>(pathInfo.Table.Get()) && pathInfo.Table->IsAnonymous
         && !TYtTableInfo::HasSubstAnonymousLabel(pathInfo.Table->FromNode.Cast())) {
+        const TString cluster = pathInfo.Table->Cluster;
+        YQL_ENSURE(cluster);
         TString realTableName = state.AnonymousLabels.Value(std::make_pair(cluster, pathInfo.Table->Name), TString());
         if (!realTableName) {
             TPositionHandle pos;
@@ -1840,7 +1897,7 @@ TMaybe<NYT::TRichYPath> BuildYtPathForStatRequest(const TString& cluster, const 
     return ytPath;
 }
 
-TMaybe<TVector<ui64>> EstimateDataSize(const TString& cluster, const TVector<TYtPathInfo::TPtr>& paths,
+TMaybe<TVector<ui64>> EstimateDataSize(const TVector<TYtPathInfo::TPtr>& paths,
     const TMaybe<TVector<TString>>& columns, const TYtState& state, TExprContext& ctx)
 {
     TVector<ui64> result;
@@ -1848,20 +1905,21 @@ TMaybe<TVector<ui64>> EstimateDataSize(const TString& cluster, const TVector<TYt
 
     bool sync = true;
 
-    auto status = EstimateDataSize(result, requestedColumns, cluster, paths, columns, state, ctx, sync);
+    IYtGateway::TPathStatResult res;
+    auto status = EstimateDataSize(res, requestedColumns, paths, columns, state, ctx, sync);
     if (status != IGraphTransformer::TStatus::Ok) {
         return {};
     }
 
-    return result;
+    return res.DataSize;
 }
 
-IGraphTransformer::TStatus TryEstimateDataSize(TVector<ui64>& result, TSet<TString>& requestedColumns,
-    const TString& cluster, const TVector<TYtPathInfo::TPtr>& paths,
+IGraphTransformer::TStatus TryEstimateDataSize(IYtGateway::TPathStatResult& result, TSet<TString>& requestedColumns,
+    const TVector<TYtPathInfo::TPtr>& paths,
     const TMaybe<TVector<TString>>& columns, const TYtState& state, TExprContext& ctx)
 {
     bool sync = false;
-    return EstimateDataSize(result, requestedColumns, cluster, paths, columns, state, ctx, sync);
+    return EstimateDataSize(result, requestedColumns, paths, columns, state, ctx, sync);
 }
 
 TYtSection UpdateInputFields(TYtSection section, TExprBase fields, TExprContext& ctx) {

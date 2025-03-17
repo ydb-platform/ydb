@@ -245,7 +245,7 @@ namespace NActors {
 
     class IActorOps : TNonCopyable {
     public:
-        virtual void Describe(IOutputStream&) const noexcept = 0;
+        virtual void Describe(IOutputStream&) const = 0;
         virtual bool Send(const TActorId& recipient, IEventBase*, IEventHandle::TEventFlags flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const noexcept = 0;
 
         /**
@@ -345,6 +345,23 @@ namespace NActors {
         void OnDequeueEvent();
         double GetUsage(ui64 time);
         void DoActorInit() { LastUsageTimestamp = GetCycleCountFast(); }
+    };
+
+    /**
+     * Optional interface for actors with exception handling
+     */
+    class IActorExceptionHandler {
+    protected:
+        ~IActorExceptionHandler() = default;
+
+    public:
+        /**
+         * Called when actor's event handler throws an std::exception subclass
+         *
+         * The implementation is supposed to return true for handled exceptions
+         * and false to rethrow (which will likely result in a process crash).
+         */
+        virtual bool OnUnhandledException(const std::exception&) = 0;
     };
 
     class IActor
@@ -547,16 +564,7 @@ namespace NActors {
             return SelfActorId;
         }
 
-        void Receive(TAutoPtr<IEventHandle>& ev) {
-#ifndef NDEBUG
-            if (ev->Flags & IEventHandle::FlagDebugTrackReceive) {
-                YaDebugBreak();
-            }
-#endif
-            ++HandledEvents;
-            LastReceiveTimestamp = TActivationContext::Monotonic();
-            (this->*StateFunc_)(ev);
-        }
+        void Receive(TAutoPtr<IEventHandle>& ev);
 
         TActorContext ActorContext() const {
             return TActivationContext::ActorContextFor(SelfId());
@@ -565,7 +573,7 @@ namespace NActors {
     protected:
         void SetEnoughCpu(bool isEnough);
 
-        void Describe(IOutputStream&) const noexcept override;
+        void Describe(IOutputStream&) const override;
         bool Send(TAutoPtr<IEventHandle> ev) const noexcept;
         bool Send(const TActorId& recipient, IEventBase* ev, TEventFlags flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const noexcept final;
         bool Send(const TActorId& recipient, THolder<IEventBase> ev, TEventFlags flags = 0, ui64 cookie = 0, NWilson::TTraceId traceId = {}) const{

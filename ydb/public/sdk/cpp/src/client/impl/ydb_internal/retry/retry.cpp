@@ -1,11 +1,11 @@
 #include "retry.h"
 
-#include <ydb-cpp-sdk/client/retry/retry.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/retry/retry.h>
 
 #include <util/random/random.h>
 #include <util/string/subst.h>
 
-#include <src/client/common_client/impl/iface.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/iface.h>
 
 #include <cmath>
 

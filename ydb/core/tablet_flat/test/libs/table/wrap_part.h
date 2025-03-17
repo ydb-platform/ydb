@@ -73,19 +73,19 @@ namespace NTest {
             return Remap_;
         }
 
-        void Make(IPages *env) noexcept
+        void Make(IPages *env)
         {
             Ready = EReady::Gone;
             Iter = MakeHolder<TRunIter>(Run, Remap_.Tags, Scheme->Keys, env);
         }
 
-        EReady Seek(TRawVals key_, ESeek seek) noexcept
+        EReady Seek(TRawVals key_, ESeek seek)
         {
             const TCelled key(key_, *Scheme->Keys, false);
             return Seek(key, seek);
         }
 
-        EReady Seek(const TCells key, ESeek seek) noexcept
+        EReady Seek(const TCells key, ESeek seek)
         {
             if constexpr (Direction == EDirection::Reverse) {
                 Ready = Iter->SeekReverse(key, seek);
@@ -101,7 +101,7 @@ namespace NTest {
             return Ready;
         }
 
-        EReady SkipToRowVersion(TRowVersion rowVersion) noexcept
+        EReady SkipToRowVersion(TRowVersion rowVersion)
         {
             TIteratorStats stats;
             Ready = Iter->SkipToRowVersion(rowVersion, stats, /* committed */ nullptr, /* observer */ nullptr,
@@ -115,7 +115,7 @@ namespace NTest {
             return Ready;
         }
 
-        TRowVersion GetRowVersion() const noexcept
+        TRowVersion GetRowVersion() const
         {
             Y_ABORT_UNLESS(Ready == EReady::Data);
 
@@ -126,7 +126,7 @@ namespace NTest {
             StopKey = TOwnedCellVec::Make(key);
         }
 
-        EReady Next() noexcept
+        EReady Next()
         {
             if (std::exchange(NoBlobs, false)) {
                 Ready = RollUp();
@@ -138,7 +138,7 @@ namespace NTest {
             return Ready;
         }
 
-        const TRowState& Apply() noexcept
+        const TRowState& Apply()
         {
             Y_ABORT_UNLESS(Ready == EReady::Data, "Row state isn't ready");
 
@@ -180,7 +180,7 @@ namespace NTest {
         const bool Defaults = true;
 
     private:
-        EReady DoIterNext() noexcept
+        EReady DoIterNext()
         {
             if constexpr (Direction == EDirection::Reverse) {
                 return Iter->Prev();

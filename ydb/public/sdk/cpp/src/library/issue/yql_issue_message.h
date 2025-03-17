@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb-cpp-sdk/library/issue/yql_issue.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/issue/yql_issue.h>
 
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 

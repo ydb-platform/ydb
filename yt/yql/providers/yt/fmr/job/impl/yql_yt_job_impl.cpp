@@ -4,6 +4,7 @@
 
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_job_impl.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_output_stream.h>
+#include <yt/yql/providers/yt/fmr/job/impl/yql_yt_raw_table_reader.h>
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
 #include <yt/yql/providers/yt/fmr/table_data_service/interface/table_data_service.h>
 #include <yt/yql/providers/yt/fmr/yt_service/interface/yql_yt_yt_service.h>
@@ -15,8 +16,8 @@ namespace NYql::NFmr {
 class TFmrJob: public IFmrJob {
 public:
 
-    TFmrJob(ITableDataService::TPtr tableDataService, IYtService::TPtr ytService, std::shared_ptr<std::atomic<bool>> cancelFlag)
-        : TableDataService_(tableDataService), YtService_(ytService), CancelFlag_(cancelFlag)
+    TFmrJob(ITableDataService::TPtr tableDataService, IYtService::TPtr ytService, std::shared_ptr<std::atomic<bool>> cancelFlag, const TFmrJobSettings& settings)
+        : TableDataService_(tableDataService), YtService_(ytService), CancelFlag_(cancelFlag), Settings_(settings)
     {
     }
 
@@ -57,60 +58,68 @@ public:
     }
 
     virtual std::variant<TError, TStatistics> Upload(const TUploadTaskParams& params, const TClusterConnection& clusterConnection) override {
-        const auto ytTable = params.Output;
-        const auto cluster = params.Output.Cluster;
-        const auto path = params.Output.Path;
-        const auto tableId = params.Input.TableId;
+        try {
+            const auto ytTable = params.Output;
+            const auto cluster = params.Output.Cluster;
+            const auto path = params.Output.Path;
+            const auto tableId = params.Input.TableId;
+            const auto tableRanges = params.Input.TableRanges;
 
-        YQL_CLOG(DEBUG, FastMapReduce) << "Uploading " << cluster << '.' << path;
+            YQL_CLOG(DEBUG, FastMapReduce) << "Uploading " << cluster << '.' << path;
 
-        TMaybe<TString> getResult = TableDataService_->Get(tableId).GetValueSync();
-
-        if (!getResult) {
-            YQL_CLOG(ERROR, FastMapReduce) << "Table " << tableId << " not found";
-            return TError("Table not found");
-        }
-
-        TString tableContent = getResult.GetRef();
-        TStringInput inputStream(tableContent);
-
-        YtService_->Upload(ytTable, inputStream, clusterConnection);
-
-        return TStatistics();
-    }
-
-    virtual std::variant<TError, TStatistics> Merge(const TMergeTaskParams& params, const TClusterConnection& clusterConnection) override {
-        // расширить таск парамс. добавить туда мету
-        const auto inputs = params.Input;
-        const auto output = params.Output;
-
-        YQL_CLOG(DEBUG, FastMapReduce) << "Merging " << inputs.size() << " inputs";
-
-        TFmrOutputStream outputStream(output.TableId, output.PartId, TableDataService_);
-
-        ui32 totalRowsCount = 0;
-
-        for (const auto& inputTableRef : inputs) {
-            if (CancelFlag_->load()) {
-                return TError("Canceled");
-            }
-            ui64 rowsCount = 0; // TMP Todo get rows count from input stats
-            auto res = GetTableInputStream(inputTableRef, rowsCount, clusterConnection);
-            totalRowsCount += rowsCount;
-
+            auto res = GetFmrTableStream(params.Input);
             auto err = std::get_if<TError>(&res);
             if (err) {
                 return *err;
             }
             auto inputStream = std::get_if<THolder<IInputStream>>(&res);
-            TransferData(inputStream->get(), &outputStream);
+
+            // How to raise if not found
+
+            YtService_->Upload(ytTable, *inputStream->get(), clusterConnection);
+
+            return TStatistics();
+        } catch (...) {
+            return TError(CurrentExceptionMessage());
         }
-        outputStream.Flush();
+    }
 
-        TTableStats stats = outputStream.GetStats();
-        stats.Rows = totalRowsCount;
+    virtual std::variant<TError, TStatistics> Merge(const TMergeTaskParams& params, const TClusterConnection& clusterConnection) override {
+        // расширить таск парамс. добавить туда мету
+        try {
+            const auto inputs = params.Input;
+            const auto output = params.Output;
 
-        return TStatistics({{output, stats}});
+            YQL_CLOG(DEBUG, FastMapReduce) << "Merging " << inputs.size() << " inputs";
+
+            TFmrOutputStream outputStream(output.TableId, output.PartId, TableDataService_);
+
+            ui32 totalRowsCount = 0;
+
+            for (const auto& inputTableRef : inputs) {
+                if (CancelFlag_->load()) {
+                    return TError("Canceled");
+                }
+                ui64 rowsCount = 0; // TMP Todo get rows count from input stats
+                auto res = GetTableInputStream(inputTableRef, rowsCount, clusterConnection);
+                totalRowsCount += rowsCount;
+
+                auto err = std::get_if<TError>(&res);
+                if (err) {
+                    return *err;
+                }
+                auto inputStream = std::get_if<THolder<IInputStream>>(&res);
+                TransferData(inputStream->get(), &outputStream);
+            }
+            outputStream.Flush();
+
+            TTableStats stats = outputStream.GetStats();
+            stats.Rows = totalRowsCount;
+
+            return TStatistics({{output, stats}});
+        } catch (...) {
+            return TError(CurrentExceptionMessage());
+        }
     }
 
 private:
@@ -141,33 +150,40 @@ private:
     }
 
     std::variant<THolder<IInputStream>, TError> GetFmrTableStream(const TFmrTableInputRef& fmrTable) {
-        auto res = TableDataService_->Get(fmrTable.TableId).GetValueSync();
-        if (!res) {
-            return TError("Table not found");
-        }
-        auto tableContent = *res;
-        TStringStream stream;
-        stream << tableContent;
-        return MakeHolder<TStringStream>(stream);
+
+        auto settings = TFmrRawTableReaderSettings(Settings_.ReadAheadChunks);
+        return MakeHolder<TFmrRawTableReader>(TFmrRawTableReader(
+            fmrTable.TableId,
+            fmrTable.TableRanges,
+            TableDataService_,
+            settings
+        ));
     }
 
 private:
     ITableDataService::TPtr TableDataService_;
     IYtService::TPtr YtService_;
     std::shared_ptr<std::atomic<bool>> CancelFlag_;
+    const TFmrJobSettings Settings_;
 };
 
-IFmrJob::TPtr MakeFmrJob(ITableDataService::TPtr tableDataService, IYtService::TPtr ytService, std::shared_ptr<std::atomic<bool>> cancelFlag) {
-    return MakeIntrusive<TFmrJob>(tableDataService, ytService, cancelFlag);
+IFmrJob::TPtr MakeFmrJob(
+    ITableDataService::TPtr tableDataService,
+    IYtService::TPtr ytService,
+    std::shared_ptr<std::atomic<bool>> cancelFlag,
+    const TFmrJobSettings& settings
+) {
+    return MakeIntrusive<TFmrJob>(tableDataService, ytService, cancelFlag, settings);
 }
 
 TJobResult RunJob(
     TTask::TPtr task,
     ITableDataService::TPtr tableDataService,
     IYtService::TPtr ytService,
-    std::shared_ptr<std::atomic<bool>> cancelFlag
+    std::shared_ptr<std::atomic<bool>> cancelFlag,
+    const TFmrJobSettings& settings
 ) {
-    IFmrJob::TPtr job = MakeFmrJob(tableDataService, ytService, cancelFlag);
+    IFmrJob::TPtr job = MakeFmrJob(tableDataService, ytService, cancelFlag, settings);
 
     auto processTask = [job, task] (auto&& taskParams) {
         using T = std::decay_t<decltype(taskParams)>;

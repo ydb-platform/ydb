@@ -35,7 +35,7 @@ namespace NBoot {
         }
 
     private: /* IStep, boot logic DSL actor interface   */
-        void Start() noexcept override
+        void Start() override
         {
             PageCollections.resize(LargeGlobIds.size());
 
@@ -50,7 +50,7 @@ namespace NBoot {
             TryLoad();
         }
 
-        bool HandleBio(NSharedCache::TEvResult &msg) noexcept override
+        bool HandleBio(NSharedCache::TEvResult &msg) override
         {
             Y_ABORT_UNLESS(Loader, "PageCollections loader got un unexpected pages fetch");
 
@@ -70,7 +70,7 @@ namespace NBoot {
             return msg.Status == NKikimrProto::OK;
         }
 
-        void HandleStep(TIntrusivePtr<IStep> step) noexcept override
+        void HandleStep(TIntrusivePtr<IStep> step) override
         {
             auto *load = step->ConsumeAs<TLoadBlobs>(LeftMetas);
 

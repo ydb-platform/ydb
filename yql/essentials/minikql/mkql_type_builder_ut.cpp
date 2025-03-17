@@ -352,5 +352,92 @@ private:
 
 UNIT_TEST_SUITE_REGISTRATION(TMiniKQLTypeBuilderTest);
 
+Y_UNIT_TEST_SUITE(TLogProviderTest) {
+    struct TLogMessage {
+        TString Component;
+        NUdf::ELogLevel Level;
+        TString Message;
+    };
+
+    struct TLogProviderSetup
+    {
+        TLogProviderSetup(bool withoutLog = false)
+            : Alloc(__LOCATION__)
+            , Env(Alloc)
+            , TypeInfoHelper(new TTypeInfoHelper())
+            , LogProvider(NUdf::MakeLogProvider(
+                [this](const NUdf::TStringRef& component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
+                    Messages.push_back({TString(component), level, TString(message)});
+                }))
+            , FunctionTypeInfoBuilder(Env, TypeInfoHelper, "module", nullptr, {}, nullptr, withoutLog ? nullptr : LogProvider.Get())
+        {}
+
+        TScopedAlloc Alloc;
+        TTypeEnvironment Env;
+        NUdf::ITypeInfoHelper::TPtr TypeInfoHelper;
+        TVector<TLogMessage> Messages;
+        NUdf::TUniquePtr<NUdf::ILogProvider> LogProvider;
+        TFunctionTypeInfoBuilder FunctionTypeInfoBuilder;
+    };
+
+    Y_UNIT_TEST(WithoutProvider) {
+        TLogProviderSetup setup(true);
+        auto logger = setup.FunctionTypeInfoBuilder.MakeLogger(true);
+        auto comp = logger->RegisterComponent("foo");
+        logger->Log(comp, NUdf::ELogLevel::Trace, "hello");
+        UNIT_ASSERT_VALUES_EQUAL(setup.Messages.size(), 0);
+    }
+
+    Y_UNIT_TEST(Simple) {
+        TLogProviderSetup setup;
+        auto logger = setup.FunctionTypeInfoBuilder.MakeLogger(true);
+        auto comp = logger->RegisterComponent("foo");
+        logger->Log(comp, NUdf::ELogLevel::Trace, "hello");
+        UNIT_ASSERT_VALUES_EQUAL(setup.Messages.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(setup.Messages[0].Component, "module.foo");
+        UNIT_ASSERT_VALUES_EQUAL(setup.Messages[0].Level, NUdf::ELogLevel::Trace);
+        UNIT_ASSERT_VALUES_EQUAL(setup.Messages[0].Message, "hello");
+    }
+
+    Y_UNIT_TEST(WrongComponent) {
+        TLogProviderSetup setup;
+        auto logger = setup.FunctionTypeInfoBuilder.MakeLogger(true);
+        logger->Log(0, NUdf::ELogLevel::Trace, "hello");
+        UNIT_ASSERT_VALUES_EQUAL(setup.Messages.size(), 0);
+    }
+
+    Y_UNIT_TEST(DisabledByDefaultLevel) {
+        TLogProviderSetup setup;
+        auto logger = setup.FunctionTypeInfoBuilder.MakeLogger(true);
+        auto comp = logger->RegisterComponent("foo");
+        logger->SetDefaultLevel(NUdf::ELogLevel::Debug);
+        logger->Log(comp, NUdf::ELogLevel::Trace, "hello");
+        UNIT_ASSERT_VALUES_EQUAL(setup.Messages.size(), 0);
+        logger->Log(comp, NUdf::ELogLevel::Debug, "hello");
+        UNIT_ASSERT_VALUES_EQUAL(setup.Messages.size(), 1);
+    }
+
+    Y_UNIT_TEST(DisabledByComponentLevel) {
+        TLogProviderSetup setup;
+        auto logger = setup.FunctionTypeInfoBuilder.MakeLogger(true);
+        auto comp1 = logger->RegisterComponent("foo");
+        auto comp2 = logger->RegisterComponent("bar");
+        logger->SetComponentLevel(comp1, NUdf::ELogLevel::Info);
+        logger->SetComponentLevel(comp2, NUdf::ELogLevel::Debug);
+        logger->Log(comp1, NUdf::ELogLevel::Trace, "hello");
+        UNIT_ASSERT_VALUES_EQUAL(setup.Messages.size(), 0);
+        logger->Log(comp1, NUdf::ELogLevel::Debug, "hello");
+        UNIT_ASSERT_VALUES_EQUAL(setup.Messages.size(), 0);
+        logger->Log(comp1, NUdf::ELogLevel::Info, "hello");
+        UNIT_ASSERT_VALUES_EQUAL(setup.Messages.size(), 1);
+        logger->Log(comp2, NUdf::ELogLevel::Trace, "hello");
+        UNIT_ASSERT_VALUES_EQUAL(setup.Messages.size(), 1);
+        logger->Log(comp2, NUdf::ELogLevel::Debug, "hello");
+        UNIT_ASSERT_VALUES_EQUAL(setup.Messages.size(), 2);
+        logger->Log(comp2, NUdf::ELogLevel::Info, "hello");
+        UNIT_ASSERT_VALUES_EQUAL(setup.Messages.size(), 3);
+    }
+}
+
 }
 }

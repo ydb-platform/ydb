@@ -44,7 +44,7 @@ namespace NTable {
             }
         }
 
-        TResult Place(ui32 table, TTag, TArrayRef<const char> data) noexcept override
+        TResult Place(ui32 table, TTag, TArrayRef<const char> data) override
         {
             Y_ABORT_UNLESS(Lookup(table) && data.size() >= Family->Large);
 
@@ -61,7 +61,7 @@ namespace NTable {
             return ref;
         }
 
-        bool Lookup(ui32 table) noexcept
+        bool Lookup(ui32 table)
         {
             if (std::exchange(Table, table) != table) {
                 Family = Scheme.DefaultFamilyFor(Table);

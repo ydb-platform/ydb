@@ -2,7 +2,7 @@
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/threading/future/core/future.h>
-#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/library/yql/providers/solomon/proto/dq_solomon_shard.pb.h>
 
 namespace NYql::NSo {

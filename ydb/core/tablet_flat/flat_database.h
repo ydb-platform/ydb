@@ -82,58 +82,58 @@ public:
     };
 
     TDatabase(const TDatabase&) = delete;
-    TDatabase(TDatabaseImpl *databaseImpl = nullptr) noexcept;
+    TDatabase(TDatabaseImpl *databaseImpl = nullptr);
     ~TDatabase();
 
-    void SetTableObserver(ui32 table, TIntrusivePtr<ITableObserver> ptr) noexcept;
+    void SetTableObserver(ui32 table, TIntrusivePtr<ITableObserver> ptr);
 
     /**
      * Returns durable monotonic change counter for a table (or a database when
      * table = Max<ui32>() by default).
      */
-    TChangeCounter Head(ui32 table = Max<ui32>()) const noexcept;
+    TChangeCounter Head(ui32 table = Max<ui32>()) const;
 
     /*_ Call Next() before accessing each row including the 1st row. */
 
-    TAutoPtr<TTableIter> Iterate(ui32 table, TRawVals key, TTagsRef tags, ELookup) const noexcept;
+    TAutoPtr<TTableIter> Iterate(ui32 table, TRawVals key, TTagsRef tags, ELookup) const;
     TAutoPtr<TTableIter> IterateExact(ui32 table, TRawVals key, TTagsRef tags,
             TRowVersion snapshot = TRowVersion::Max(),
             const ITransactionMapPtr& visible = nullptr,
-            const ITransactionObserverPtr& observer = nullptr) const noexcept;
+            const ITransactionObserverPtr& observer = nullptr) const;
     TAutoPtr<TTableIter> IterateRange(ui32 table, const TKeyRange& range, TTagsRef tags,
             TRowVersion snapshot = TRowVersion::Max(),
             const ITransactionMapPtr& visible = nullptr,
-            const ITransactionObserverPtr& observer = nullptr) const noexcept;
+            const ITransactionObserverPtr& observer = nullptr) const;
     TAutoPtr<TTableReverseIter> IterateRangeReverse(ui32 table, const TKeyRange& range, TTagsRef tags,
             TRowVersion snapshot = TRowVersion::Max(),
             const ITransactionMapPtr& visible = nullptr,
-            const ITransactionObserverPtr& observer = nullptr) const noexcept;
+            const ITransactionObserverPtr& observer = nullptr) const;
 
     template<class TIteratorType>
     TAutoPtr<TIteratorType> IterateRangeGeneric(ui32 table, const TKeyRange& range, TTagsRef tags,
             TRowVersion snapshot = TRowVersion::Max(),
             const ITransactionMapPtr& visible = nullptr,
-            const ITransactionObserverPtr& observer = nullptr) const noexcept;
+            const ITransactionObserverPtr& observer = nullptr) const;
 
     // NOTE: the row refeneces data in some internal buffers that get invalidated on the next Select() or Commit() call
     EReady Select(ui32 table, TRawVals key, TTagsRef tags, TRowState& row,
                   ui64 readFlags = 0, TRowVersion snapshot = TRowVersion::Max(),
                   const ITransactionMapPtr& visible = nullptr,
-                  const ITransactionObserverPtr& observer = nullptr) const noexcept;
+                  const ITransactionObserverPtr& observer = nullptr) const;
 
     EReady Select(ui32 table, TRawVals key, TTagsRef tags, TRowState& row, TSelectStats& stats,
                   ui64 readFlags = 0, TRowVersion snapshot = TRowVersion::Max(),
                   const ITransactionMapPtr& visible = nullptr,
-                  const ITransactionObserverPtr& observer = nullptr) const noexcept;
+                  const ITransactionObserverPtr& observer = nullptr) const;
 
     TSelectRowVersionResult SelectRowVersion(
             ui32 table, TRawVals key, ui64 readFlags = 0,
             const ITransactionMapPtr& visible = nullptr,
-            const ITransactionObserverPtr& observer = nullptr) const noexcept;
+            const ITransactionObserverPtr& observer = nullptr) const;
     TSelectRowVersionResult SelectRowVersion(
             ui32 table, TArrayRef<const TCell> key, ui64 readFlags = 0,
             const ITransactionMapPtr& visible = nullptr,
-            const ITransactionObserverPtr& observer = nullptr) const noexcept;
+            const ITransactionObserverPtr& observer = nullptr) const;
 
     bool Precharge(ui32 table, TRawVals minKey, TRawVals maxKey,
                         TTagsRef tags, ui64 readFlags, ui64 itemsLimit, ui64 bytesLimit,
@@ -205,7 +205,7 @@ public:
 
     const TScheme& GetScheme() const noexcept;
 
-    TIntrusiveConstPtr<TRowScheme> GetRowScheme(ui32 table) const noexcept;
+    TIntrusiveConstPtr<TRowScheme> GetRowScheme(ui32 table) const;
 
     TPartView GetPartView(ui32 table, const TLogoBlobID &bundle) const;
     TVector<TPartView> GetTableParts(ui32 table) const;
@@ -301,11 +301,11 @@ public:
     }
 
 private:
-    TTable* Require(ui32 tableId) const noexcept;
-    TTable* RequireForUpdate(ui32 tableId) const noexcept;
+    TTable* Require(ui32 tableId) const;
+    TTable* RequireForUpdate(ui32 tableId) const;
 
-    void CheckReadAllowed(ui32 table) const noexcept;
-    void CheckPrechargeAllowed(ui32 table, TRawVals minKey, TRawVals maxKey) const noexcept;
+    void CheckReadAllowed(ui32 table) const;
+    void CheckPrechargeAllowed(ui32 table, TRawVals minKey, TRawVals maxKey) const;
 
 private:
     const THolder<TDatabaseImpl> DatabaseImpl;

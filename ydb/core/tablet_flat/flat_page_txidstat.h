@@ -90,7 +90,7 @@ namespace NPage {
             return !Stats.empty();
         }
 
-        TSharedData Finish() const noexcept {
+        TSharedData Finish() const {
             if (Stats.empty()) {
                 return { };
             }

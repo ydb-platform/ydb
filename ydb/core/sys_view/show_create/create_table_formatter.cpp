@@ -128,13 +128,13 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
             break;
         }
         case NYdb::EPrimitiveType::Int64: {
-            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Int64, NUdf::TUnboxedValuePod(parser.GetInt64()));
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Int64, NUdf::TUnboxedValuePod(static_cast<i64>(parser.GetInt64())));
             Y_ENSURE(str.HasValue());
             Stream << TString(str.AsStringRef());
             break;
         }
         case NYdb::EPrimitiveType::Uint64: {
-            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Uint64, NUdf::TUnboxedValuePod(parser.GetUint64()));
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Uint64, NUdf::TUnboxedValuePod(static_cast<ui64>(parser.GetUint64())));
             Y_ENSURE(str.HasValue());
             Stream << TString(str.AsStringRef());
             break;
@@ -175,7 +175,7 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
         }
         case NYdb::EPrimitiveType::Interval: {
             Stream << "INTERVAL(";
-            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Interval, NUdf::TUnboxedValuePod(parser.GetInterval()));
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Interval, NUdf::TUnboxedValuePod(static_cast<i64>(parser.GetInterval())));
             Y_ENSURE(str.HasValue());
             EscapeString(TString(str.AsStringRef()));
             Stream << ")";
@@ -191,7 +191,7 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
         }
         case NYdb::EPrimitiveType::Datetime64: {
             Stream << "DATETIME64(";
-            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Datetime64, NUdf::TUnboxedValuePod(parser.GetDatetime64()));
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Datetime64, NUdf::TUnboxedValuePod(static_cast<i64>(parser.GetDatetime64())));
             Y_ENSURE(str.HasValue());
             EscapeString(TString(str.AsStringRef()));
             Stream << ")";
@@ -199,7 +199,7 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
         }
         case NYdb::EPrimitiveType::Timestamp64: {
             Stream << "TIMESTAMP64(";
-            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Timestamp64, NUdf::TUnboxedValuePod(parser.GetTimestamp64()));
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Timestamp64, NUdf::TUnboxedValuePod(static_cast<i64>(parser.GetTimestamp64())));
             Y_ENSURE(str.HasValue());
             EscapeString(TString(str.AsStringRef()));
             Stream << ")";
@@ -207,7 +207,7 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
         }
         case NYdb::EPrimitiveType::Interval64: {
             Stream << "INTERVAL64(";
-            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Interval64, NUdf::TUnboxedValuePod(parser.GetInterval64()));
+            const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Interval64, NUdf::TUnboxedValuePod(static_cast<i64>(parser.GetInterval64())));
             Y_ENSURE(str.HasValue());
             EscapeString(TString(str.AsStringRef()));
             Stream << ")";

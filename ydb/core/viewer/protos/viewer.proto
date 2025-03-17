@@ -837,3 +837,29 @@ message TFeatureFlagsConfig {
     repeated TDatabase Databases = 2;
 }
 
+message TTopicDataResponse {
+    message TMessage {
+        uint64 Offset = 1;
+        uint64 CreateTimestamp = 2;
+        uint64 WriteTimestamp = 3;
+        uint64 TimestampDiff = 4;
+        string Message = 5;
+        uint32 StorageSize = 6;
+        uint32 OriginalSize = 7;
+        uint32 Codec = 8;
+        string ProducerId = 9;
+        uint64 SeqNo = 10;
+
+        message TMetadataItem {
+            string Key = 1;
+            string Value = 2;
+        }
+        repeated TMetadataItem MessageMetadata = 11;
+    }
+
+    uint64 StartOffset = 1;
+    uint64 EndOffset = 2;
+    repeated TMessage Messages = 3;
+    bool Truncated = 4;
+}
+

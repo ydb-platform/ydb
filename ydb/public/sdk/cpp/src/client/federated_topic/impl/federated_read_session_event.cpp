@@ -1,5 +1,5 @@
-#include <ydb-cpp-sdk/client/federated_topic/federated_topic.h>
-#include <src/client/topic/impl/read_session.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/read_session.h>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Printable specializations

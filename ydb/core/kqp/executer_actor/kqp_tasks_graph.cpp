@@ -1083,59 +1083,6 @@ void FillTaskMeta(const TStageInfo& stageInfo, const TTask& task, NYql::NDqProto
 
                 olapProgram->SetParametersSchema(schema);
                 olapProgram->SetParameters(parameters);
-
-                class TResolverTable: public NArrow::NSSA::IColumnResolver {
-                private:
-                    const TTableConstInfo& TableInfo;
-                public:
-                    TResolverTable(const TTableConstInfo& tableInfo)
-                        : TableInfo(tableInfo) {
-
-                    }
-
-                    virtual TString GetColumnName(ui32 id, bool required = true) const override {
-                        for (auto&& i : TableInfo.Columns) {
-                            if (i.second.Id == id) {
-                                return i.first;
-                            }
-                        }
-                        AFL_ENSURE(!required)("id", id);
-                        return "";
-                    }
-                    virtual std::optional<ui32> GetColumnIdOptional(const TString& name) const override {
-                        auto it = TableInfo.Columns.find(name);
-                        if (it == TableInfo.Columns.end()) {
-                            return std::nullopt;
-                        } else {
-                            return it->second.Id;
-                        }
-                    }
-                    virtual NArrow::NSSA::TColumnInfo GetDefaultColumn() const override {
-                        AFL_ENSURE(false);
-                        return NArrow::NSSA::TColumnInfo::Generated(0, "");
-                    }
-                };
-
-                if (!!stageInfo.Meta.ColumnTableInfoPtr) {
-                    std::shared_ptr<NSchemeShard::TOlapSchema> olapSchema = std::make_shared<NSchemeShard::TOlapSchema>();
-                    olapSchema->ParseFromLocalDB(stageInfo.Meta.ColumnTableInfoPtr->Description.GetSchema());
-                    if (olapSchema->GetIndexes().GetIndexes().size()) {
-                        NOlap::TProgramContainer container;
-                        TResolverTable resolver(*tableInfo);
-                        container.Init(resolver, *olapProgram).Ensure();
-                        auto data = NOlap::NIndexes::NRequest::TDataForIndexesCheckers::Build(container);
-                        if (data) {
-                            for (auto&& [indexId, i] : olapSchema->GetIndexes().GetIndexes()) {
-                                AFL_ENSURE(!!i.GetIndexMeta());
-                                i.GetIndexMeta()->FillIndexCheckers(data, *olapSchema);
-                            }
-                            auto checker = data->GetCoverChecker();
-                            if (!!checker) {
-                                checker.SerializeToProto(*olapProgram->MutableIndexChecker());
-                            }
-                        }
-                    }
-                }
             } else {
                 YQL_ENSURE(task.Meta.ReadInfo.OlapProgram.Program.empty());
             }

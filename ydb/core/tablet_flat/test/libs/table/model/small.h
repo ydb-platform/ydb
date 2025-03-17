@@ -21,7 +21,7 @@ namespace NTest {
 
         }
 
-        TRow Make(ui64 seq, bool hole) noexcept override
+        TRow Make(ui64 seq, bool hole) override
         {
             TSchemedCookRow row(*Scheme);
 
@@ -30,12 +30,12 @@ namespace NTest {
             return *row;
         }
 
-        void Describe(IOutputStream &out) const noexcept override
+        void Describe(IOutputStream &out) const override
         {
             out << "Model2Cols";
         }
 
-        ui64 Base(const TRow &row) const noexcept override
+        ui64 Base(const TRow &row) const override
         {
             auto *up = row.Get(NTable::TTag(1));
 

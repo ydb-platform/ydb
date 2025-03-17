@@ -104,9 +104,6 @@ public:
             ctx.Send(subscriber, event.Release(), 0, 0);
         }
 
-        auto result = std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(owner.TabletID(), TxInfo.TxKind, TxInfo.TxId, NKikimrTxColumnShard::SUCCESS);
-        result->Record.SetStep(TxInfo.PlanStep);
-        ctx.Send(TxInfo.Source, result.release(), 0, TxInfo.Cookie);
         return true;
     }
 

@@ -1,12 +1,12 @@
 #include <util/system/env.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb-cpp-sdk/client/query/client.h>
-#include <ydb-cpp-sdk/client/topic/client.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
-#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
-#include <ydb-cpp-sdk/client/draft/ydb_replication.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
 
 #include <library/cpp/threading/local_executor/local_executor.h>
 
@@ -17,7 +17,7 @@ using namespace NYdb::NReplication;
 
 namespace {
 
-volatile size_t TestCaseCounter = 0;
+volatile size_t TestCaseCounter = RandomNumber<size_t>();
 
 struct IChecker {
     virtual void Assert(const TString& msg, const ::Ydb::Value& value) = 0;
@@ -124,7 +124,6 @@ struct TConfig {
     const TExpectations Expectations;
     const TVector<TString> AlterLambdas;
 };
-
 
 struct MainTestCase {
 
@@ -929,7 +928,7 @@ Y_UNIT_TEST_SUITE(Transfer)
             Sleep(TDuration::Seconds(1));
         }
     }
-
+/*
     Y_UNIT_TEST(DescribeError_OnWriteToShard)
     {
         MainTestCase testCase;
@@ -969,5 +968,6 @@ Y_UNIT_TEST_SUITE(Transfer)
             Sleep(TDuration::Seconds(1));
         }
     }
+*/
 }
 

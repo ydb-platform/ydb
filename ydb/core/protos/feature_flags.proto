@@ -199,5 +199,6 @@ message TFeatureFlags {
     optional bool EnableShowCreate = 173 [default = false];
     optional bool EnableChangefeedsExport = 174 [default = false];
     optional bool EnableKafkaNativeBalancing = 175 [default = false];
-    optional bool EnableKafkaTransactions = 176 [default = false];
+    optional bool EnableTabletRestartOnUnhandledExceptions = 176 [default = true];
+    optional bool EnableKafkaTransactions = 177 [default = false];
 }

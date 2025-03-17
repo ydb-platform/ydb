@@ -3,7 +3,7 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/event_local.h>
 
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 namespace NDbPool {
 

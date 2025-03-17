@@ -1,4 +1,4 @@
-#include <ydb-cpp-sdk/library/string_utils/helpers/helpers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/string_utils/helpers/helpers.h>
 
 #include <algorithm>
 #include <cctype>

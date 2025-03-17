@@ -288,7 +288,7 @@ TAutoPtr<TSubset> TTable::PartSwitchSubset(TEpoch head, TArrayRef<const TLogoBlo
     return subset;
 }
 
-TAutoPtr<TSubset> TTable::Subset(TEpoch head) const noexcept
+TAutoPtr<TSubset> TTable::Subset(TEpoch head) const
 {
     head = Min(head, Epoch);
 
@@ -327,7 +327,7 @@ TAutoPtr<TSubset> TTable::Subset(TEpoch head) const noexcept
     return subset;
 }
 
-bool TTable::HasBorrowed(ui64 selfTabletId) const noexcept
+bool TTable::HasBorrowed(ui64 selfTabletId) const
 {
     for (const auto &it : TxStatus)
         if (it.second->Label.TabletID() != selfTabletId)
@@ -344,7 +344,7 @@ bool TTable::HasBorrowed(ui64 selfTabletId) const noexcept
     return false;
 }
 
-TAutoPtr<TSubset> TTable::ScanSnapshot(TRowVersion snapshot) noexcept
+TAutoPtr<TSubset> TTable::ScanSnapshot(TRowVersion snapshot)
 {
     if (RollbackState) {
         Y_ABORT_UNLESS(Epoch == RollbackState->Epoch &&
@@ -382,7 +382,7 @@ TAutoPtr<TSubset> TTable::ScanSnapshot(TRowVersion snapshot) noexcept
     return subset;
 }
 
-TAutoPtr<TSubset> TTable::Unwrap() noexcept
+TAutoPtr<TSubset> TTable::Unwrap()
 {
     Snapshot();
 
@@ -395,7 +395,7 @@ TAutoPtr<TSubset> TTable::Unwrap() noexcept
     return subset;
 }
 
-TBundleSlicesMap TTable::LookupSlices(TArrayRef<const TLogoBlobID> bundles) const noexcept
+TBundleSlicesMap TTable::LookupSlices(TArrayRef<const TLogoBlobID> bundles) const
 {
     TBundleSlicesMap slices;
     for (const TLogoBlobID &bundle : bundles) {
@@ -407,7 +407,7 @@ TBundleSlicesMap TTable::LookupSlices(TArrayRef<const TLogoBlobID> bundles) cons
     return slices;
 }
 
-void TTable::ReplaceSlices(TBundleSlicesMap slices) noexcept
+void TTable::ReplaceSlices(TBundleSlicesMap slices)
 {
     Y_ABORT_UNLESS(!RollbackState, "Cannot perform this in a transaction");
 
@@ -428,7 +428,7 @@ void TTable::ReplaceSlices(TBundleSlicesMap slices) noexcept
 void TTable::Replace(
     const TSubset& subset,
     TArrayRef<const TPartView> newParts,
-    TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>> newTxStatus) noexcept
+    TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>> newTxStatus)
 {
     Y_ABORT_UNLESS(!RollbackState, "Cannot perform this in a transaction");
 
@@ -653,7 +653,7 @@ void TTable::Replace(
     }
 }
 
-void TTable::Merge(TPartView partView) noexcept
+void TTable::Merge(TPartView partView)
 {
     Y_ABORT_UNLESS(!RollbackState, "Cannot perform this in a transaction");
 
@@ -687,7 +687,7 @@ void TTable::Merge(TPartView partView) noexcept
     ErasedKeysCache.Reset();
 }
 
-void TTable::Merge(TIntrusiveConstPtr<TColdPart> part) noexcept
+void TTable::Merge(TIntrusiveConstPtr<TColdPart> part)
 {
     Y_ABORT_UNLESS(!RollbackState, "Cannot perform this in a transaction");
 
@@ -719,7 +719,7 @@ void TTable::Merge(TIntrusiveConstPtr<TColdPart> part) noexcept
     ErasedKeysCache.Reset();
 }
 
-void TTable::Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept
+void TTable::Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus)
 {
     Y_ABORT_UNLESS(!RollbackState, "Cannot perform this in a transaction");
 
@@ -770,12 +770,12 @@ void TTable::Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus) noexcept
     // eventuality, so doesn't need to be invalidated.
 }
 
-void TTable::MergeDone() noexcept
+void TTable::MergeDone()
 {
     // nothing
 }
 
-const TLevels& TTable::GetLevels() const noexcept
+const TLevels& TTable::GetLevels() const
 {
     if (!Levels) {
         Y_ABORT_UNLESS(ColdParts.empty(), "Cannot construct Levels with cold parts");
@@ -799,7 +799,7 @@ const TLevels& TTable::GetLevels() const noexcept
     return *Levels;
 }
 
-ui64 TTable::GetSearchHeight() const noexcept
+ui64 TTable::GetSearchHeight() const
 {
     if (!ColdParts.empty())
         return 0;
@@ -811,7 +811,7 @@ ui64 TTable::GetSearchHeight() const noexcept
     return height;
 }
 
-TVector<TIntrusiveConstPtr<TMemTable>> TTable::GetMemTables() const noexcept
+TVector<TIntrusiveConstPtr<TMemTable>> TTable::GetMemTables() const
 {
     Y_ABORT_UNLESS(!RollbackState, "Cannot perform this in a transaction");
 
@@ -823,7 +823,7 @@ TVector<TIntrusiveConstPtr<TMemTable>> TTable::GetMemTables() const noexcept
     return vec;
 }
 
-TEpoch TTable::Snapshot() noexcept
+TEpoch TTable::Snapshot()
 {
     if (Mutable) {
         Annexed = Mutable->GetBlobs()->Tail();
@@ -1202,7 +1202,7 @@ TMemTable& TTable::MemTable()
 TAutoPtr<TTableIter> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, ESeek seek,
         TRowVersion snapshot,
         const ITransactionMapPtr& visible,
-        const ITransactionObserverPtr& observer) const noexcept
+        const ITransactionObserverPtr& observer) const
 {
     Y_ABORT_UNLESS(ColdParts.empty(), "Cannot iterate with cold parts");
 
@@ -1254,7 +1254,7 @@ TAutoPtr<TTableIter> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, 
 TAutoPtr<TTableReverseIter> TTable::IterateReverse(TRawVals key_, TTagsRef tags, IPages* env, ESeek seek,
         TRowVersion snapshot,
         const ITransactionMapPtr& visible,
-        const ITransactionObserverPtr& observer) const noexcept
+        const ITransactionObserverPtr& observer) const
 {
     Y_ABORT_UNLESS(ColdParts.empty(), "Cannot iterate with cold parts");
 
@@ -1308,7 +1308,7 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
                       TDeque<TPartIter>& tempIterators,
                       TSelectStats& stats,
                       const ITransactionMapPtr& visible,
-                      const ITransactionObserverPtr& observer) const noexcept
+                      const ITransactionObserverPtr& observer) const
 {
     Y_ABORT_UNLESS(ColdParts.empty(), "Cannot select with cold parts");
     Y_ABORT_UNLESS(key_.size() == Scheme->Keys->Types.size());
@@ -1425,7 +1425,7 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
 TSelectRowVersionResult TTable::SelectRowVersion(
         TRawVals key_, IPages* env, ui64 readFlags,
         const ITransactionMapPtr& visible,
-        const ITransactionObserverPtr& observer) const noexcept
+        const ITransactionObserverPtr& observer) const
 {
     const TCelled key(key_, *Scheme->Keys, true);
 
@@ -1435,7 +1435,7 @@ TSelectRowVersionResult TTable::SelectRowVersion(
 TSelectRowVersionResult TTable::SelectRowVersion(
         TArrayRef<const TCell> key_, IPages* env, ui64 readFlags,
         const ITransactionMapPtr& visible,
-        const ITransactionObserverPtr& observer) const noexcept
+        const ITransactionObserverPtr& observer) const
 {
     const TCelled key(key_, *Scheme->Keys, true);
 
@@ -1445,7 +1445,7 @@ TSelectRowVersionResult TTable::SelectRowVersion(
 TSelectRowVersionResult TTable::SelectRowVersion(
         const TCelled& key, IPages* env, ui64 readFlags,
         const ITransactionMapPtr& visible,
-        const ITransactionObserverPtr& observer) const noexcept
+        const ITransactionObserverPtr& observer) const
 {
     Y_ABORT_UNLESS(ColdParts.empty(), "Cannot select with cold parts");
 
@@ -1581,7 +1581,7 @@ TCompactionStats TTable::GetCompactionStats() const
     };
 }
 
-void TTable::SetTableObserver(TIntrusivePtr<ITableObserver> ptr) noexcept
+void TTable::SetTableObserver(TIntrusivePtr<ITableObserver> ptr)
 {
     TableObserver = std::move(ptr);
 }

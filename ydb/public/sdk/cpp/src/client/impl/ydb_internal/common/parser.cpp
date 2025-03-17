@@ -1,6 +1,6 @@
 #include "parser.h"
 
-#include <ydb-cpp-sdk/client/types/exceptions/exceptions.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
 
 namespace NYdb::inline Dev {
 

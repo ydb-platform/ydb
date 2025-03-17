@@ -155,7 +155,7 @@ protected:
     }
 
     template <typename TAddRow>
-    EScan FeedImpl(TArrayRef<const TCell> key, const TRow& /*row*/, TAddRow&& addRow) noexcept {
+    EScan FeedImpl(TArrayRef<const TCell> key, const TRow& /*row*/, TAddRow&& addRow) {
         LOG_T("Feed key " << DebugPrintPoint(KeyTypes, key, *AppData()->TypeRegistry) << " " << Debug());
 
         addRow();
@@ -182,7 +182,7 @@ public:
 
     ~TBuildScanUpload() override = default;
 
-    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept override {
+    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) override {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
 
         LOG_D("Prepare " << Debug());
@@ -192,7 +192,7 @@ public:
         return {EScan::Feed, {}};
     }
 
-    EScan Seek(TLead& lead, ui64 seq) noexcept override {
+    EScan Seek(TLead& lead, ui64 seq) override {
         LOG_T("Seek no " << seq << " " << Debug());
         if (seq) {
             if (!WriteBuf.IsEmpty()) {
@@ -229,7 +229,7 @@ public:
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override {
+    TAutoPtr<IDestructable> Finish(EAbort abort) override {
         if (Uploader) {
             this->Send(Uploader, new TEvents::TEvPoisonPill);
             Uploader = {};
@@ -268,7 +268,7 @@ public:
         NYql::IssuesToMessage(UploadStatus.Issues, msg.MutableIssues());
     }
 
-    void Describe(IOutputStream& out) const noexcept override {
+    void Describe(IOutputStream& out) const override {
         out << Debug();
     }
 
@@ -281,7 +281,7 @@ public:
                                 << UploadStatus.ToString();
     }
 
-    EScan PageFault() noexcept override {
+    EScan PageFault() override {
         LOG_T("Page fault"
               << " ReadBuf empty: " << ReadBuf.IsEmpty()
               << " WriteBuf empty: " << WriteBuf.IsEmpty()
@@ -420,7 +420,7 @@ public:
         UploadMode = NTxProxy::EUploadRowsMode::WriteToTableShadow;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final {
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) final {
         return FeedImpl(key, row, [&] {
             const auto rowCells = *row;
 
@@ -457,7 +457,7 @@ public:
         ValueSerialized = TSerializedCellVec::Serialize(cells);
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final {
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) final {
         return FeedImpl(key, row, [&] {
             TSerializedCellVec pk(key);
             auto pkTarget = pk;

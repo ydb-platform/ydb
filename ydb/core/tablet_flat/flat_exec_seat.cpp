@@ -3,7 +3,7 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
-    void TSeat::Complete(const TActorContext& ctx, bool isRW) noexcept {
+    void TSeat::Complete(const TActorContext& ctx, bool isRW) {
         if (Y_UNLIKELY(IsTerminated())) {
             Y_ABORT_UNLESS(!isRW, "Terminating a read-write transaction");
             Self->Terminate(TerminationReason, ctx);

@@ -80,11 +80,11 @@ public:
         Send(MakeSharedPageCacheId(), new NSharedCache::TEvUnregister);
     }
 
-    TResult Locate(const TMemTable*, ui64, ui32) noexcept override {
+    TResult Locate(const TMemTable*, ui64, ui32) override {
         Y_ABORT("IPages::Locate(TMemTable*, ...) shouldn't be used here");
     }
 
-    TResult Locate(const TPart*, ui64, ELargeObj) noexcept override {
+    TResult Locate(const TPart*, ui64, ELargeObj) override {
         Y_ABORT("IPages::Locate(TPart*, ...) shouldn't be used here");
     }
 
@@ -175,6 +175,14 @@ private:
             << (ev->PartOwners.size() > 1 || ev->PartOwners.size() == 1 && *ev->PartOwners.begin() != TabletId ? ", with borrowed parts" : "")
             << (ev->HasSchemaChanges ? ", with schema changes" : "")
             << ", LoadedSize " << PagesSize << ", " << NFmt::Do(*Spent));
+        
+        if (const auto& stats = ev->Stats; stats.DataSize.Size > 10_MB && stats.RowCount > 100
+            && Min(stats.RowCountHistogram.size(), stats.DataSizeHistogram.size()) < HistogramBucketsCount / 2)
+        {
+            LOG_ERROR_S(GetActorContext(), NKikimrServices::TABLET_STATS_BUILDER, "Stats at datashard " << TabletId << ", for tableId " << TableId
+                << " don't have enough keys: "
+                << ev->Stats.ToString());
+        }
 
         Send(ReplyTo, ev.Release());
 

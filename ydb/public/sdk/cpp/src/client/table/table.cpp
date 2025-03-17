@@ -1,30 +1,30 @@
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <src/client/impl/ydb_internal/scheme_helpers/helpers.h>
-#include <src/client/impl/ydb_internal/table_helpers/helpers.h>
-#include <src/client/impl/ydb_internal/make_request/make.h>
-#include <src/client/impl/ydb_internal/retry/retry.h>
-#include <src/client/impl/ydb_internal/retry/retry_async.h>
-#include <src/client/impl/ydb_internal/retry/retry_sync.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/scheme_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/table_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/retry/retry.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/retry/retry_async.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/retry/retry_sync.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
-#include <src/client/impl/ydb_stats/stats.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
-#include <ydb-cpp-sdk/client/value/value.h>
-#include <src/client/table/impl/client_session.h>
-#include <src/client/table/impl/data_query.h>
-#include <src/client/table/impl/request_migrator.h>
-#include <src/client/table/impl/table_client.h>
-#include <src/client/table/impl/transaction.h>
-#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_stats/stats.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/src/client/table/impl/client_session.h>
+#include <ydb/public/sdk/cpp/src/client/table/impl/data_query.h>
+#include <ydb/public/sdk/cpp/src/client/table/impl/request_migrator.h>
+#include <ydb/public/sdk/cpp/src/client/table/impl/table_client.h>
+#include <ydb/public/sdk/cpp/src/client/table/impl/transaction.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 #include <google/protobuf/util/time_util.h>
 
 #include <library/cpp/cache/cache.h>
-#include <ydb-cpp-sdk/library/string_utils/misc/misc.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/string_utils/misc/misc.h>
 
 #include <util/generic/overloaded.h>
 #include <util/random/random.h>

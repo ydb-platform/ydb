@@ -1,7 +1,7 @@
 #include "ydb_node_config.h"
 #include <util/system/fs.h>
 #include <util/folder/dirut.h>
-#include <ydb-cpp-sdk/client/config/config.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/config/config.h>
 
 namespace NYdb::NConsoleClient::NNodeConfig {
 

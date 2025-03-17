@@ -150,7 +150,7 @@ namespace NPage {
          */
         TIter LookupKey(
                 TCells key, const TPartScheme::TGroupInfo &group,
-                const ESeek seek, const TKeyCellDefaults *keyDefaults) const noexcept
+                const ESeek seek, const TKeyCellDefaults *keyDefaults) const
         {
             if (!key) {
                 // Special treatment for an empty key
@@ -194,7 +194,7 @@ namespace NPage {
          */
         TIter LookupKeyReverse(
                 TCells key, const TPartScheme::TGroupInfo &group,
-                const ESeek seek, const TKeyCellDefaults *keyDefaults) const noexcept
+                const ESeek seek, const TKeyCellDefaults *keyDefaults) const
         {
             if (!key) {
                 // Special treatment for an empty key

@@ -14,7 +14,7 @@
 
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 namespace NYql {
 

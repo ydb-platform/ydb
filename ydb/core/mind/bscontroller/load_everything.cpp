@@ -104,6 +104,9 @@ public:
                     Self->StorageYamlConfigVersion = NYamlConfig::GetStorageMetadata(*Self->StorageYamlConfig).Version.value_or(0);
                     Self->StorageYamlConfigHash = NYaml::GetConfigHash(*Self->StorageYamlConfig);
                 }
+                if (state.HaveValue<T::ExpectedStorageYamlConfigVersion>()) {
+                    Self->ExpectedStorageYamlConfigVersion = state.GetValue<T::ExpectedStorageYamlConfigVersion>();
+                }
                 if (state.HaveValue<T::ShredState>()) {
                     Self->ShredState.OnLoad(state.GetValue<T::ShredState>());
                 }

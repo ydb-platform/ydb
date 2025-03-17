@@ -1,10 +1,9 @@
-#include "checker.h"
 #include "header.h"
 #include "meta.h"
 
 #include <ydb/core/formats/arrow/hash/calcer.h>
 #include <ydb/core/tx/columnshard/engines/protos/index.pb.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom/checker.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom/bits_storage.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
@@ -89,15 +88,15 @@ public:
         auto it = CountByHash.find(hashBase);
         if (it == CountByHash.end()) {
             it = CountByHash.emplace(hashBase, 0).first;
-        } else {
-            it->second += hitsCount;
         }
+        it->second += hitsCount;
     }
 
     [[nodiscard]] TFiltersBuilder Finalize(const ui32 hashesCount, const ui32 hitsLimit) {
         std::map<ui32, std::vector<ui64>> hashesBySize;
         for (auto&& i : CountByHash) {
             hashesBySize[i.second].emplace_back(i.first);
+            AFL_VERIFY(i.second);
         }
         TFiltersBuilder result;
         ui32 currentCount = 0;
@@ -181,27 +180,6 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*r
     return result;
 }
 
-void TIndexMeta::DoFillIndexCheckers(
-    const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& /*schema*/) const {
-    for (auto&& branch : info->GetBranches()) {
-        for (auto&& i : branch->GetEquals()) {
-            if (i.first.GetColumnId() != GetColumnId()) {
-                continue;
-            }
-            ui64 hashBase = 0;
-            if (!GetDataExtractor()->CheckForIndex(i.first, hashBase)) {
-                continue;
-            }
-            std::set<ui64> hashes;
-            for (ui64 hashSeed = 0; hashSeed < HashesCount; ++hashSeed) {
-                const ui64 hash = NArrow::NHash::TXX64::CalcForScalar(i.second, hashSeed);
-                hashes.emplace(hash);
-            }
-            branch->MutableIndexes().emplace_back(std::make_shared<TBloomFilterChecker>(GetIndexId(), hashBase, std::move(hashes)));
-        }
-    }
-}
-
 TConclusion<std::shared_ptr<IIndexHeader>> TIndexMeta::DoBuildHeader(const TChunkOriginalData& data) const {
     if (!data.HasData()) {
         return std::shared_ptr<IIndexHeader>();
@@ -215,6 +193,30 @@ TConclusion<std::shared_ptr<IIndexHeader>> TIndexMeta::DoBuildHeader(const TChun
         return TConclusionStatus::Fail("cannot parse proto in header");
     }
     return std::make_shared<TCompositeBloomHeader>(std::move(proto), IIndexHeader::ReadHeaderSize(data.GetDataVerified(), true).DetachResult());
+}
+
+bool TIndexMeta::DoCheckValue(
+    const TString& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value, const EOperation op) const {
+    AFL_VERIFY(!!category);
+    AFL_VERIFY(op == EOperation::Equals)("op", op);
+    if (data.empty()) {
+        return false;
+    }
+    TFixStringBitsStorage bits(data);
+    for (ui64 hashSeed = 0; hashSeed < HashesCount; ++hashSeed) {
+        const ui64 hash = NArrow::NHash::TXX64::CalcForScalar(value, hashSeed);
+        if (!bits.Get(hash % bits.GetSizeBits())) {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::optional<ui64> TIndexMeta::DoCalcCategory(const TString& subColumnName) const {
+    ui64 result;
+    const NRequest::TOriginalDataAddress addr(Max<ui32>(), subColumnName);
+    AFL_VERIFY(GetDataExtractor()->CheckForIndex(addr, result));
+    return result;
 }
 
 }   // namespace NKikimr::NOlap::NIndexes::NCategoriesBloom

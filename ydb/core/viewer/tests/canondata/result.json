@@ -4943,5 +4943,75 @@
     },
     "test.test_wait_for_cluster_ready": {
         "wait_good": true
+    },
+    "test.test_topic_data": {
+        "response_read": {
+            "Messages": [
+                {
+                    "Codec": 0, "StorageSize": 9, "SeqNo": 1, "Message": "bWVzc2FnZS0w", "OriginalSize": 9, "Offset": 0
+                },
+                {
+                    "Codec": 0, "StorageSize": 9, "SeqNo": 2, "Message": "bWVzc2FnZS0x", "OriginalSize": 9, "Offset": 1
+                },
+                {
+                    "Codec": 0, "StorageSize": 9, "SeqNo": 3, "Message": "bWVzc2FnZS0y", "OriginalSize": 9, "Offset": 2
+                },
+                {
+                    "Codec": 0, "StorageSize": 9, "SeqNo": 4, "Message": "bWVzc2FnZS0z", "OriginalSize": 9, "Offset": 3
+                },
+                {
+                    "Codec": 0, "StorageSize": 9, "SeqNo": 5, "Message": "bWVzc2FnZS00", "OriginalSize": 9, "Offset": 4
+                }
+            ],
+            "StartOffset": 0,
+            "EndOffset": 21,
+            "Truncated": true
+        },
+        "response_metadata": {
+            "Messages": [
+                {
+                    "Codec": 1, "StorageSize": 37, "SeqNo": 11,
+                    "MessageMetadata": [
+                        {"Value": "value1", "Key": "key1"},
+                        {"Value": "value2", "Key": "key2"}],
+                    "Message": "bWVzc2FnZV93aXRoX21ldGE=", "OriginalSize": 17, "Offset": 10
+                }
+            ],
+            "StartOffset": 0,
+            "EndOffset": 21,
+            "Truncated": true
+        },
+        "response_compressed": {
+            "Messages": [
+                {
+                    "Codec": 1, "StorageSize": 38, "SeqNo": 12, "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTA=", "OriginalSize": 20, "Offset": 11
+                },
+                {
+                    "Codec": 1, "StorageSize": 38, "SeqNo": 13, "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTE=", "OriginalSize": 20, "Offset": 12
+                },
+                {
+                    "Codec": 1, "StorageSize": 38, "SeqNo": 14, "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTI=", "OriginalSize": 20, "Offset": 13
+                },
+                {
+                    "Codec": 1, "StorageSize": 38, "SeqNo": 15, "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTM=", "OriginalSize": 20, "Offset": 14
+                },
+                {
+                    "Codec": 1, "StorageSize": 38, "SeqNo": 16, "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTQ=", "OriginalSize": 20, "Offset": 15
+                }
+            ],
+            "StartOffset": 0,
+            "EndOffset": 21,
+            "Truncated": true
+        },
+        "response_not_truncated": {
+            "Messages": [
+                {
+                    "Codec": 1, "StorageSize": 38, "SeqNo": 21, "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTk=",  "OriginalSize": 20, "Offset": 20
+                }
+            ],
+            "StartOffset": 0,
+            "EndOffset": 21,
+            "Truncated": false
+        }
     }
 }

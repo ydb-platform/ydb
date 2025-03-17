@@ -32,17 +32,17 @@ namespace NTable {
             {
             }
 
-            TResult Locate(const TMemTable*, ui64, ui32) noexcept override
+            TResult Locate(const TMemTable*, ui64, ui32) override
             {
                 Y_ABORT("IPages::Locate(TMemTable*, ...) shouldn't be used here");
             }
 
-            TResult Locate(const TPart*, ui64, ELargeObj) noexcept override
+            TResult Locate(const TPart*, ui64, ELargeObj) override
             {
                 Y_ABORT("IPages::Locate(TPart*, ...) shouldn't be used here");
             }
 
-            void ProvidePart(const TPart* part) noexcept
+            void ProvidePart(const TPart* part)
             {
                 Y_ABORT_IF(Part);
                 Part = part;
@@ -73,7 +73,7 @@ namespace NTable {
                 }
             }
 
-            void EnsureNoNeedPages() const noexcept
+            void EnsureNoNeedPages() const
             {
                 Y_ABORT_UNLESS(!NeedPages);
             }
@@ -89,7 +89,7 @@ namespace NTable {
                 }
             }
 
-            void Save(ui32 cookie, NSharedCache::TEvResult::TLoaded&& loaded) noexcept
+            void Save(ui32 cookie, NSharedCache::TEvResult::TLoaded&& loaded)
             {
                 if (cookie == 0 && NeedPages.erase(loaded.PageId)) {
                     auto pageType = Cache->GetPageType(loaded.PageId);
@@ -100,7 +100,7 @@ namespace NTable {
             }
 
         private:
-            void AddSavedPage(TPageId pageId, NSharedCache::TSharedPageRef page) noexcept
+            void AddSavedPage(TPageId pageId, NSharedCache::TSharedPageRef page)
             {
                 SavedPages[pageId] = NSharedCache::TPinnedPageRef(page).GetData();
                 SavedPagesRefs.emplace_back(std::move(page));
@@ -178,7 +178,7 @@ namespace NTable {
             return { };
         }
 
-        void Save(ui64 cookie, TArrayRef<NSharedCache::TEvResult::TLoaded>) noexcept;
+        void Save(ui64 cookie, TArrayRef<NSharedCache::TEvResult::TLoaded>);
 
         constexpr static bool NeedIn(EPage page) noexcept
         {
@@ -190,7 +190,7 @@ namespace NTable {
                 || page == EPage::TxIdStats;
         }
 
-        TPartView Result() noexcept
+        TPartView Result()
         {
             Y_ABORT_UNLESS(Stage == EStage::Result);
             Y_ABORT_UNLESS(PartView, "Result may only be grabbed once");
@@ -242,7 +242,7 @@ namespace NTable {
                 (FlatGroupIndexes || BTreeGroupIndexes);
         }
 
-        void ParseMeta(TArrayRef<const char> plain) noexcept
+        void ParseMeta(TArrayRef<const char> plain)
         {
             TMemoryInput stream(plain.data(), plain.size());
             bool parsed = Root.ParseFromArcadiaStream(&stream);
@@ -250,11 +250,11 @@ namespace NTable {
             Y_ABORT_UNLESS(Root.HasEpoch(), "TPart meta has no epoch info");
         }
 
-        void StageParseMeta() noexcept;
-        TAutoPtr<NPageCollection::TFetch> StageCreatePartView(bool preloadIndex) noexcept;
-        TAutoPtr<NPageCollection::TFetch> StageSliceBounds() noexcept;
-        void StageDeltas() noexcept;
-        TAutoPtr<NPageCollection::TFetch> StagePreloadData() noexcept;
+        void StageParseMeta();
+        TAutoPtr<NPageCollection::TFetch> StageCreatePartView(bool preloadIndex);
+        TAutoPtr<NPageCollection::TFetch> StageSliceBounds();
+        void StageDeltas();
+        TAutoPtr<NPageCollection::TFetch> StagePreloadData();
 
     private:
         TVector<TIntrusivePtr<TCache>> Packs;

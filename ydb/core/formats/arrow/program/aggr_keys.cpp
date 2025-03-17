@@ -1,5 +1,6 @@
 #include "aggr_keys.h"
 #include "collection.h"
+#include "execution.h"
 
 #include <util/string/join.h>
 
@@ -66,8 +67,8 @@ CH::AggFunctionId TWithKeysAggregationOption::GetHouseFunction(const EAggregate 
     return CH::AggFunctionId::AGG_UNSPECIFIED;
 }
 
-TConclusionStatus TWithKeysAggregationProcessor::DoExecute(
-    const std::shared_ptr<TAccessorsCollection>& resources, const TProcessorContext& /*context*/) const {
+TConclusion<IResourceProcessor::EExecutionResult> TWithKeysAggregationProcessor::DoExecute(
+    const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     CH::GroupByOptions funcOpts;
     funcOpts.assigns.reserve(AggregationKeys.size() + Aggregations.size());
     funcOpts.has_nullable_key = false;
@@ -77,8 +78,8 @@ TConclusionStatus TWithKeysAggregationProcessor::DoExecute(
     std::set<ui32> fieldsUsage;
     for (auto& key : AggregationKeys) {
         AFL_VERIFY(fieldsUsage.emplace(key.GetColumnId()).second);
-        batch.emplace_back(resources->GetArrayVerified(key.GetColumnId()));
-        fields.emplace_back(resources->GetFieldVerified(key.GetColumnId()));
+        batch.emplace_back(context.GetResources()->GetArrayVerified(key.GetColumnId()));
+        fields.emplace_back(context.GetResources()->GetFieldVerified(key.GetColumnId()));
         funcOpts.assigns.emplace_back(CH::GroupByOptions::Assign{ .result_column = ::ToString(key.GetColumnId()) });
 
         if (!funcOpts.has_nullable_key) {
@@ -106,8 +107,8 @@ TConclusionStatus TWithKeysAggregationProcessor::DoExecute(
         funcOpts.assigns.emplace_back(gbAssign);
         for (auto&& i : aggr.GetInputs()) {
             if (fieldsUsage.emplace(i.GetColumnId()).second) {
-                batch.emplace_back(resources->GetArrayVerified(i.GetColumnId()));
-                fields.emplace_back(resources->GetFieldVerified(i.GetColumnId()));
+                batch.emplace_back(context.GetResources()->GetArrayVerified(i.GetColumnId()));
+                fields.emplace_back(context.GetResources()->GetFieldVerified(i.GetColumnId()));
             }
         }
     }
@@ -119,7 +120,7 @@ TConclusionStatus TWithKeysAggregationProcessor::DoExecute(
         return TConclusionStatus::Fail(gbRes.status().ToString());
     }
     auto gbBatch = (*gbRes).record_batch();
-    resources->Remove(AggregationKeys);
+    context.GetResources()->Remove(AggregationKeys);
 
     for (auto& assign : funcOpts.assigns) {
         auto column = gbBatch->GetColumnByName(assign.result_column);
@@ -127,12 +128,12 @@ TConclusionStatus TWithKeysAggregationProcessor::DoExecute(
             return TConclusionStatus::Fail("No expected column in GROUP BY result.");
         }
         if (auto columnId = TryFromString<ui32>(assign.result_column)) {
-            resources->AddVerified(*columnId, column, false);
+            context.GetResources()->AddVerified(*columnId, column, false);
         } else {
             return TConclusionStatus::Fail("Incorrect column id from name: " + assign.result_column);
         }
     }
-    return TConclusionStatus::Success();
+    return IResourceProcessor::EExecutionResult::Success;
 }
 
 TConclusion<std::shared_ptr<TWithKeysAggregationProcessor>> TWithKeysAggregationProcessor::TBuilder::Finish() {

@@ -124,6 +124,10 @@ struct TColumnShardHashV1 {
 
     template <typename TValue>
     void Update(const TValue& uv, size_t keyIdx) {
+        if (!uv.HasValue()) {
+            return;
+        }
+
         switch (KeyColumnTypes[keyIdx]) {
             case NYql::NProto::Bool: {
                 auto value = uv.template Get<bool>();

@@ -39,7 +39,7 @@ namespace NBloom {
             HashCount = Min(ui64(Max<ui16>()), ui64(ceil(-log2err)));
         }
 
-        ui64 Bits(ui64 rows) const noexcept
+        ui64 Bits(ui64 rows) const
         {
             Y_ABORT_UNLESS(!(rows >> 54),
                 "Too many rows, probably an invalid value passed");

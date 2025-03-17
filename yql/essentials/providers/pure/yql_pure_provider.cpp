@@ -131,14 +131,20 @@ public:
             GetPgFactory()
         });
 
+        NUdf::TUniquePtr<NUdf::ILogProvider> logProvider = NUdf::MakeLogProvider(
+            [](const NUdf::TStringRef& component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
+                Cerr << Now() << " " << component << " [" << level << "] " << message << "\n";
+            }
+        );
+
         TComputationPatternOpts patternOpts(alloc.Ref(), env, compFactory, State_->FunctionRegistry,
             State_->Types->ValidateMode, NUdf::EValidatePolicy::Exception, State_->Types->OptLLVM.GetOrElse(TString()),
-            EGraphPerProcess::Multi);
+            EGraphPerProcess::Multi, nullptr, nullptr, nullptr, logProvider.Get());
 
         auto pattern = MakeComputationPattern(explorer, root, {}, patternOpts);
         const TComputationOptsFull computeOpts(nullptr, alloc.Ref(), env,
             *State_->Types->RandomProvider, *State_->Types->TimeProvider,
-            NUdf::EValidatePolicy::Exception, nullptr, nullptr);
+            NUdf::EValidatePolicy::Exception, nullptr, nullptr, logProvider.Get());
         auto graph = pattern->Clone(computeOpts);
         const TBindTerminator bind(graph->GetTerminator());
         graph->Prepare();

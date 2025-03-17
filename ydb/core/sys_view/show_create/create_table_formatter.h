@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 

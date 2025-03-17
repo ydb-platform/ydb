@@ -4,6 +4,8 @@ import random
 
 import logging
 import time
+from ydb.tests.olap.scenario.helpers.scenario_tests_helper import ScenarioTestHelper
+from ydb.tests.olap.scenario.conftest import BaseTestSet
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import TestContext
 import yatest.common
 
@@ -71,7 +73,7 @@ class YdbWorkloadLog:
             pass
 
 
-class TestLogScenario(object):
+class TestLogScenario(BaseTestSet):
     class InsertMode(Enum):
         BULK_UPSERT = 1
         INSERT = 2
@@ -123,8 +125,10 @@ class TestLogScenario(object):
         logging.info(f'check insert: {current_count} {prev_count}')
         assert current_count != prev_count
 
-    def test(self, ctx: TestContext):
+    def scenario_test(self, ctx: TestContext):
         """As per https://github.com/ydb-platform/ydb/issues/13530"""
+        sth = ScenarioTestHelper(ctx)
+        assert False
 
         wait_time: int = int(get_external_param("wait_minutes", "3")) * 60
         self.table_name: str = "log"

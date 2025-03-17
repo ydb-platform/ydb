@@ -1,5 +1,4 @@
 from ydb.tests.stress.oltp_workload.workload import cleanup_type_name
-from ydb.tests.sql.lib.test_base import TestBase
 
 ttl_types = {
     "Date": "CAST('30{:02}-01-01' AS Date)",
@@ -67,32 +66,31 @@ pk_types = {
     "Datetime64": "CAST('20{:02}-10-02T11:00:00Z' AS Datetime64)",
     "Timestamp64": "CAST(169624{:02}00000000 AS Timestamp64)",
     "Interval64": "CAST({} AS Interval64)"
-    }
+}
 non_pk_types = {
     "Float": "CAST('{}.1' AS Float)",
     "Double": "CAST('{}.2' AS Double)",
     "Json": "CAST('{{\"another_key\":{}}}' AS Json)",
     "JsonDocument": "CAST('{{\"another_doc_key\":{}}}' AS JsonDocument)",
     "Yson": "CAST('[{}]' AS Yson)"
-    }
+}
 index_unique = ["", "UNIQUE"]
 index_sync = ["SYNC", "ASYNC"]
 
-class TestCreateTables(TestBase):
-    def create_table(self, table_name:str, ttl: str, index, index_unique: str, index_sync: str) -> str:
+
+class TestCreateTables():
+    def create_table(self, ttl: str, index: dict[str, str], unique: str, sync: str) -> str:
         return f"""
-            CREATE TABLE {table_name}(
-                    pk Uint64,
+            CREATE TABLE IF NOT EXISTS {self.table_name} (
                     {", ".join(["pk_" + cleanup_type_name(type_name) + " " + type_name for type_name in pk_types.keys()])},
                     {", ".join(["col_" + cleanup_type_name(type_name) + " " + type_name for type_name in pk_types.keys()])},
                     {", ".join(["col_" + cleanup_type_name(type_name) + " " + type_name for type_name in non_pk_types.keys()])},
                     {", ".join(["col_index_" + cleanup_type_name(type_name) + " " + type_name for type_name in index.keys()])},
-                    ttl_{ttl} {cleanup_type_name(ttl)},
+                    ttl_{cleanup_type_name(ttl)} {ttl},
                     PRIMARY KEY(
                     {", ".join(["pk_" + cleanup_type_name(type_name) for type_name in pk_types.keys()])}),
-                    {", ".join([f"index idx_{cleanup_type_name(type_name)} GLOBAL {index_unique} {index_sync} ON (col_index_{cleanup_type_name(type_name)})" for type_name in index.keys()])},
-                    ) with (
-                    TTL = Interval("PT0S") ON ttl_{ttl}
-                )
+                    {", ".join([f"INDEX idx_{cleanup_type_name(type_name)} GLOBAL {unique} {sync} ON (col_index_{cleanup_type_name(type_name)})" for type_name in index.keys()])},
+                    ) WITH (
+                    TTL = Interval("PT0S") ON ttl_{cleanup_type_name(ttl)}
+                );
         """
-        

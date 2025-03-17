@@ -269,6 +269,7 @@ public:
         TString ErasureSpecies;
         std::vector<const NKikimrSysView::TVSlotEntry*> VSlots;
         ui32 Generation;
+        bool LayoutCorrect = true;
     };
 
     struct TSelfCheckResult {
@@ -1575,6 +1576,7 @@ public:
             auto& groupState = GroupState[groupId];
             groupState.ErasureSpecies = group.GetInfo().GetErasureSpeciesV2();
             groupState.Generation = group.GetInfo().GetGeneration();
+            groupState.LayoutCorrect = group.GetInfo().GetLayoutCorrect();
             StoragePoolState[poolId].Groups.emplace(groupId);
         }
         for (const auto& vSlot : VSlots->Get()->Record.GetEntries()) {
@@ -2349,6 +2351,7 @@ public:
 
     class TGroupChecker {
         TString ErasureSpecies;
+        bool LayoutCorrect;
         int FailedDisks = 0;
         std::array<int, Ydb::Monitoring::StatusFlag::Status_ARRAYSIZE> DisksColors = {};
         TStackVec<std::pair<ui32, int>> FailedRealms;
@@ -2365,7 +2368,10 @@ public:
         }
 
     public:
-        TGroupChecker(const TString& erasure) : ErasureSpecies(erasure) {}
+        TGroupChecker(const TString& erasure, const bool layoutCorrect = true)
+            : ErasureSpecies(erasure)
+            , LayoutCorrect(layoutCorrect)
+        {}
 
         void AddVDiskStatus(Ydb::Monitoring::StatusFlag::Status status, ui32 realm) {
             ++DisksColors[status];
@@ -2384,6 +2390,9 @@ public:
 
         void ReportStatus(TSelfCheckContext& context) const {
             context.OverallStatus = Ydb::Monitoring::StatusFlag::GREEN;
+            if (!LayoutCorrect) {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Group layout is incorrect", ETags::GroupState);
+            }
             if (ErasureSpecies == NONE) {
                 if (FailedDisks > 0) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", ETags::GroupState, {ETags::VDiskState});
@@ -2733,7 +2742,7 @@ public:
             return;
         }
 
-        TGroupChecker checker(itGroup->second.ErasureSpecies);
+        TGroupChecker checker(itGroup->second.ErasureSpecies, itGroup->second.LayoutCorrect);
         const auto& slots = itGroup->second.VSlots;
         for (const auto* slot : slots) {
             const auto& slotInfo = slot->GetInfo();

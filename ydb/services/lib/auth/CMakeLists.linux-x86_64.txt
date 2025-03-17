@@ -12,6 +12,19 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(sharding)
-add_subdirectory(actors)
-add_subdirectory(auth)
+add_library(services-lib-auth)
+
+
+target_link_libraries(services-lib-auth PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  ydb-library-aclib
+  ydb-core-base
+  core-tx-scheme_cache
+)
+
+target_sources(services-lib-auth PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/services/lib/auth/auth_helpers.cpp
+)
+

@@ -21,6 +21,7 @@ target_compile_options(ydb-core-viewer-ut PRIVATE
 
 target_include_directories(ydb-core-viewer-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp
 )
 
 target_link_libraries(ydb-core-viewer-ut PUBLIC
@@ -33,6 +34,7 @@ target_link_libraries(ydb-core-viewer-ut PUBLIC
   cpp-http-misc
   cpp-http-simple
   core-testlib-default
+  persqueue_public-ut-ut_utils
 )
 
 target_allocator(ydb-core-viewer-ut
@@ -53,6 +55,8 @@ target_link_options(ydb-core-viewer-ut PRIVATE
 
 target_sources(ydb-core-viewer-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/viewer_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/topic_data_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/ut/ut_utils.cpp
 )
 
 

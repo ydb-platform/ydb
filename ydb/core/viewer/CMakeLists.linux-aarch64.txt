@@ -71,6 +71,7 @@ target_link_libraries(ydb-core-viewer PUBLIC
   api-grpc
   cpp-adapters-issue
   src-client-types
+  services-lib-auth
   contrib-libs-yaml-cpp
 )
 
@@ -87,6 +88,7 @@ target_sources(ydb-core-viewer PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/json_handlers_pq.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/json_pipe_req.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/json_wb_req.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/viewer/viewer_topic_data.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/viewer_request.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/viewer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/viewer/wb_aggregate.cpp
@@ -220,6 +222,7 @@ target_link_libraries(ydb-core-viewer.global PUBLIC
   api-grpc
   cpp-adapters-issue
   src-client-types
+  services-lib-auth
   contrib-libs-yaml-cpp
 )
 

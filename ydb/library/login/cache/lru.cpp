@@ -29,10 +29,8 @@ std::pair<TLruCache::TIterator, bool> TLruCache::Insert(const TKey& key, bool va
         return std::make_pair(Data.end(), false);
     }
 
-    if (IsOverflow()) {
-        const auto item = Data.back();
-        Data.pop_back();
-        Index.erase(item.first);
+    while (IsOverflow()) {
+        Evict();
     }
 
     Data.push_front(std::make_pair(key, value));
@@ -59,6 +57,19 @@ bool TLruCache::IsOverflow() const {
 
 void TLruCache::Promote(const TIterator it) {
     Data.splice(Data.begin(), Data, it);
+}
+
+void TLruCache::Evict() {
+    const auto item = Data.back();
+    Data.pop_back();
+    Index.erase(item.first);
+}
+
+void TLruCache::Resize(size_t capacity) {
+    Capacity = capacity;
+    while (Index.size() > Capacity) {
+        Evict();
+    }
 }
 
 } // NLogin

@@ -511,6 +511,8 @@ public:
         const ::NKikimrProto::TAuthConfig& config,
         const TActorContext &ctx);
 
+    void ConfigureLoginCache(bool isCacheUsed, const TActorContext &ctx);
+
     void StartStopCompactionQueues();
 
     void WaitForTableProfiles(ui64 importId, ui32 itemIdx);

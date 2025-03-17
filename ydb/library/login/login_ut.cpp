@@ -693,7 +693,7 @@ Y_UNIT_TEST_SUITE(Login) {
     }
 
     Y_UNIT_TEST(CheckThatCacheDoesNotHoldOldPassword) {
-        TLoginProvider provider;
+        TLoginProvider provider(TPasswordComplexity(), TAccountLockout::TInitializer(), {.IsCacheUsed = true});
         provider.RotateKeys();
 
         {

@@ -4530,7 +4530,7 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
         .CanContainUsername = AppData()->AuthConfig.GetPasswordComplexity().GetCanContainUsername()
     }), {.AttemptThreshold = AppData()->AuthConfig.GetAccountLockout().GetAttemptThreshold(),
          .AttemptResetDuration = AppData()->AuthConfig.GetAccountLockout().GetAttemptResetDuration()
-    })
+    }, {.IsCacheUsed = AppData()->FeatureFlags.GetEnableLoginCache()})
 {
     TabletCountersPtr.Reset(new TProtobufTabletCounters<
                             ESimpleCounters_descriptor,
@@ -7267,6 +7267,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
     if (appConfig.HasAuthConfig()) {
         ConfigureLoginProvider(appConfig.GetAuthConfig(), ctx);
         ConfigureAccountLockout(appConfig.GetAuthConfig(), ctx);
+        ConfigureLoginCache(appConfig.GetFeatureFlags().GetEnableLoginCache(), ctx);
     }
 
     if (IsSchemeShardConfigured()) {
@@ -7513,6 +7514,19 @@ void TSchemeShard::ConfigureAccountLockout(
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                  "AccountLockout configured: AttemptThreshold# " << accountLockoutInitializer.AttemptThreshold
                  << ", AttemptResetDuration# " << accountLockoutInitializer.AttemptResetDuration);
+}
+
+void TSchemeShard::ConfigureLoginCache(bool isCacheUsed, const TActorContext &ctx) {
+    NLogin::TLoginProvider::TCacheSettings cacheSettings {
+        .IsCacheUsed = isCacheUsed
+    };
+
+    LoginProvider.UpdateCacheSettings(cacheSettings);
+
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "Login cache configured: isCacheUsed# " << cacheSettings.IsCacheUsed
+        << ", SuccessPasswordsCacheCapacity# " << cacheSettings.SuccessPasswordsCacheCapacity
+        << ", WrongPasswordsCacheCapacity# " << cacheSettings.WrongPasswordsCacheCapacity);
 }
 
 void TSchemeShard::StartStopCompactionQueues() {

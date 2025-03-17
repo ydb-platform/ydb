@@ -30,6 +30,9 @@ public:
     static constexpr const char* EXTERNAL_AUTH_CLAIM_NAME = "external_authentication";
     static constexpr auto MAX_TOKEN_EXPIRE_TIME = std::chrono::hours(12);
 
+    static constexpr size_t SUCCESS_PASSWORDS_CACHE_CAPACITY = 20;
+    static constexpr size_t WRONG_PASSWORDS_CACHE_CAPACITY = 20;
+
     struct TBasicRequest {};
 
     struct TBasicResponse {
@@ -171,6 +174,12 @@ public:
         std::chrono::system_clock::time_point LastSuccessfulLogin;
     };
 
+    struct TCacheSettings {
+        bool IsCacheUsed = false;
+        size_t SuccessPasswordsCacheCapacity = SUCCESS_PASSWORDS_CACHE_CAPACITY;
+        size_t WrongPasswordsCacheCapacity = WRONG_PASSWORDS_CACHE_CAPACITY;
+    };
+
     // our current audience (database name)
     TString Audience;
 
@@ -207,10 +216,11 @@ public:
 
     void UpdatePasswordCheckParameters(const TPasswordComplexity& passwordComplexity);
     void UpdateAccountLockout(const TAccountLockout::TInitializer& accountLockoutInitializer);
+    void UpdateCacheSettings(const TCacheSettings& settings);
 
     TLoginProvider();
     TLoginProvider(const TAccountLockout::TInitializer& accountLockoutInitializer);
-    TLoginProvider(const TPasswordComplexity& passwordComplexity, const TAccountLockout::TInitializer& accountLockoutInitializer);
+    TLoginProvider(const TPasswordComplexity& passwordComplexity, const TAccountLockout::TInitializer& accountLockoutInitializer, const TCacheSettings& cacheSettings);
     ~TLoginProvider();
 
     std::vector<TString> GetGroupsMembership(const TString& member);

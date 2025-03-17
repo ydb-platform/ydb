@@ -19,16 +19,15 @@
 namespace NLogin {
 
 struct TLoginProvider::TImpl {
-    static constexpr size_t SUCCESS_PASSWORDS_CACHE_CAPACITY = 20;
-    static constexpr size_t WRONG_PASSWORDS_CACHE_CAPACITY = 20;
-
     THolder<NArgonish::IArgon2Base> ArgonHasher;
     TLruCache SuccessPasswordsCache;
     TLruCache WrongPasswordsCache;
+    bool IsCacheUsed = false;
 
-    TImpl()
-        : SuccessPasswordsCache(SUCCESS_PASSWORDS_CACHE_CAPACITY)
-        , WrongPasswordsCache(WRONG_PASSWORDS_CACHE_CAPACITY)
+    TImpl(const TLoginProvider::TCacheSettings& cacheSettings)
+        : SuccessPasswordsCache(cacheSettings.SuccessPasswordsCacheCapacity)
+        , WrongPasswordsCache(cacheSettings.WrongPasswordsCacheCapacity)
+        , IsCacheUsed(cacheSettings.IsCacheUsed)
     {
         ArgonHasher = Default<NArgonish::TArgon2Factory>().Create(
             NArgonish::EArgon2Type::Argon2id, // Mixed version of Argon2
@@ -41,20 +40,22 @@ struct TLoginProvider::TImpl {
     TString GenerateHash(const TString& password);
     bool VerifyHash(const TString& password, const TString& hash);
     bool VerifyHashWithCache(const TLruCache::TKey& key);
+
+    void UpdateCacheSettings(const TLoginProvider::TCacheSettings& cacheSettings);
 };
 
 TLoginProvider::TLoginProvider()
-    : Impl(new TImpl())
+    : Impl(new TImpl({.IsCacheUsed = false}))
     , PasswordChecker(TPasswordComplexity())
     , AccountLockout()
 {}
 
 TLoginProvider::TLoginProvider(const TAccountLockout::TInitializer& accountLockoutInitializer)
-    : TLoginProvider(TPasswordComplexity(), accountLockoutInitializer)
+    : TLoginProvider(TPasswordComplexity(), accountLockoutInitializer, {.IsCacheUsed = false})
 {}
 
-TLoginProvider::TLoginProvider(const TPasswordComplexity& passwordComplexity, const TAccountLockout::TInitializer& accountLockoutInitializer)
-    : Impl(new TImpl())
+TLoginProvider::TLoginProvider(const TPasswordComplexity& passwordComplexity, const TAccountLockout::TInitializer& accountLockoutInitializer, const TCacheSettings& cacheSettings)
+    : Impl(new TImpl(cacheSettings))
     , PasswordChecker(passwordComplexity)
     , AccountLockout(accountLockoutInitializer)
 {}
@@ -742,6 +743,10 @@ bool TLoginProvider::TImpl::VerifyHash(const TString& password, const TString& p
 }
 
 bool TLoginProvider::TImpl::VerifyHashWithCache(const TLruCache::TKey& key) {
+    if (!IsCacheUsed) {
+        return VerifyHash(key.Password, key.Hash);
+    }
+
     const auto successCacheIt = SuccessPasswordsCache.Find(key);
     if (successCacheIt != SuccessPasswordsCache.End()) {
         return true;
@@ -759,6 +764,12 @@ bool TLoginProvider::TImpl::VerifyHashWithCache(const TLruCache::TKey& key) {
         WrongPasswordsCache.Insert(key, false);
     }
     return isSuccessVerifying;
+}
+
+void TLoginProvider::TImpl::UpdateCacheSettings(const TCacheSettings& cacheSettings) {
+    SuccessPasswordsCache.Resize(cacheSettings.SuccessPasswordsCacheCapacity);
+    WrongPasswordsCache.Resize(cacheSettings.WrongPasswordsCacheCapacity);
+    IsCacheUsed = cacheSettings.IsCacheUsed;
 }
 
 NLoginProto::TSecurityState TLoginProvider::GetSecurityState() const {
@@ -848,6 +859,10 @@ void TLoginProvider::UpdatePasswordCheckParameters(const TPasswordComplexity& pa
 
 void TLoginProvider::UpdateAccountLockout(const TAccountLockout::TInitializer& accountLockoutInitializer) {
     AccountLockout.Update(accountLockoutInitializer);
+}
+
+void TLoginProvider::UpdateCacheSettings(const TCacheSettings& settings) {
+    Impl->UpdateCacheSettings(settings);
 }
 
 }

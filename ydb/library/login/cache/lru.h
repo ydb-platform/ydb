@@ -39,10 +39,12 @@ public:
     std::size_t Size() const;
     TIterator End();
     void Clear();
+    void Resize(size_t capacity);
 
 private:
     bool IsOverflow() const;
     void Promote(const TIterator it);
+    void Evict();
 
 private:
     std::size_t Capacity = 0;

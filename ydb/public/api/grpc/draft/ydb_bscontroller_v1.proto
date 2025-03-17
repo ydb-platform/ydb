@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package Ydb.BsController.V1;
+option java_package = "com.yandex.ydb.bscontroller.v1";
+
+import "ydb/public/api/protos/draft/ydb_bscontroller.proto";
+
+service BsControllerService {
+    rpc Describe(BsController.DescribeRequest) returns (BsController.DescribeResponse);
+}

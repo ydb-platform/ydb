@@ -885,6 +885,9 @@ struct TEvBlobStorage {
         EvControllerScrubStartQuantum               = 0x1003180e,
         EvControllerUpdateSystemViews               = 0x10031815,
 
+        EvControllerDescribeRequest                 = 0x10031900,   
+        EvControllerDescribeResponse                = 0x10031901,   
+
         // proxy - node controller interface
         EvConfigureProxy = EvPut + 13 * 512,
         EvProxyConfigurationRequest, // DEPRECATED
@@ -2504,6 +2507,8 @@ struct TEvBlobStorage {
     struct TEvControllerProposeGroupKey;
     struct TEvControllerSelectGroupsResult;
     struct TEvControllerNodeReport;
+    struct TEvControllerDescribeRequest;
+    struct TEvControllerDescribeResponse;
     struct TEvControllerConfigRequest;
     struct TEvControllerConfigResponse;
     struct TEvControllerScrubQueryStartQuantum;

@@ -1,0 +1,57 @@
+syntax = "proto3";
+option cc_enable_arenas = true;
+
+package Ydb.BsController;
+option java_package = "com.yandex.ydb.bscontroller";
+
+import "ydb/public/api/protos/ydb_issue_message.proto";
+import "ydb/public/api/protos/ydb_value.proto";
+import "ydb/public/api/protos/ydb_status_codes.proto";
+
+message VDiskId {
+    uint32 group_id = 1;
+    uint32 group_generation = 2;
+    uint32 ring = 3;
+    uint32 domain = 4;
+    uint32 vdisk = 5;
+}
+
+message PDiskId {
+    uint32 node_id = 1;
+    uint32 pdisk_id = 2;
+}
+
+message DescribeRequest {
+    message TargetWrapper {
+        oneof Target {
+            VDiskId vdisk_id = 1;
+            PDiskId pdisk_id = 2;
+            uint32 group_id = 3;
+        }
+    }
+
+    repeated TargetWrapper targets = 1;
+}
+
+message DescribeResponse {
+    message VDiskResponse {
+        string result = 1;
+    }
+    message PDiskResponse {
+        string result = 1;
+    }
+    message GroupResponse {
+        string result = 1;
+    }
+    message ResponseWrapper {
+        oneof Response {
+            VDiskResponse vdisk_response = 1;
+            PDiskResponse pdisk_response = 2;
+            GroupResponse group_response = 3;
+        }
+    }
+
+    StatusIds.StatusCode status = 1;
+    repeated Ydb.Issue.IssueMessage issues = 2;
+    repeated ResponseWrapper results = 3;
+}

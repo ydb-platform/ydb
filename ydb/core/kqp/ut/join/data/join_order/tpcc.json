@@ -3,6 +3,7 @@
   "args":
     [
       {
+<<<<<<< HEAD
         "op_name":"InnerJoin (MapJoin)",
         "args":
           [
@@ -15,6 +16,14 @@
               "table":"test\/tpcc\/order_line"
             }
           ]
+=======
+        "op_name":"TableRangeScan",
+        "table":"test\/tpcc\/order_line"
+      },
+      {
+        "op_name":"TableRangeScan",
+        "table":"test\/tpcc\/stock"
+>>>>>>> 3268d7aed52 ([KQP] fix canonization)
       }
     ]
 }

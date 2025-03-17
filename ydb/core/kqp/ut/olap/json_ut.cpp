@@ -73,16 +73,18 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         std::optional<ui64> ExpectIndexSkip;
         std::optional<ui64> ExpectIndexNoData;
         std::optional<ui64> ExpectIndexApprove;
-        ui64 IndexSkipStart = 0;
-        ui64 IndexNoDataStart = 0;
-        ui64 IndexApproveStart = 0;
 
         virtual TConclusionStatus DoExecute(TKikimrRunner& kikimr) override {
             auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
             AFL_VERIFY(controller);
-            IndexSkipStart = controller->GetIndexesSkippingOnSelect().Val();
-            IndexApproveStart = controller->GetIndexesApprovedOnSelect().Val();
-            IndexNoDataStart = controller->GetIndexesSkippedNoData().Val();
+            const i64 indexSkipStart = controller->GetIndexesSkippingOnSelect().Val();
+            const i64 indexApproveStart = controller->GetIndexesApprovedOnSelect().Val();
+            const i64 indexNoDataStart = controller->GetIndexesSkippedNoData().Val();
+
+            const i64 headerSkipStart = controller->GetHeadersSkippingOnSelect().Val();
+            const i64 headerApproveStart = controller->GetHeadersApprovedOnSelect().Val();
+            const i64 headerNoDataStart = controller->GetHeadersSkippedNoData().Val();
+
             Cerr << "EXECUTE: " << Command << Endl;
             auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
             auto it = kikimr.GetQueryClient().StreamExecuteQuery(Command, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -93,21 +95,26 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
                 Cerr << "OUTPUT: " << output << Endl;
                 CompareYson(output, Compare);
             }
-            const ui32 skip = controller->GetIndexesSkippingOnSelect().Val() - IndexSkipStart;
-            const ui32 noData = controller->GetIndexesSkippedNoData().Val() - IndexNoDataStart;
-            const ui32 approves = controller->GetIndexesApprovedOnSelect().Val() - IndexApproveStart;
-            Cerr << noData << "/" << skip << "/" << approves << Endl;
+            const ui32 iSkip = controller->GetIndexesSkippingOnSelect().Val() - indexSkipStart;
+            const ui32 iNoData = controller->GetIndexesSkippedNoData().Val() - indexNoDataStart;
+            const ui32 iApproves = controller->GetIndexesApprovedOnSelect().Val() - indexApproveStart;
+            Cerr << "INDEX:" << iNoData << "/" << iSkip << "/" << iApproves << Endl;
+
+            const ui32 hSkip = controller->GetHeadersSkippingOnSelect().Val() - headerSkipStart;
+            const ui32 hNoData = controller->GetHeadersSkippedNoData().Val() - headerNoDataStart;
+            const ui32 hApproves = controller->GetHeadersApprovedOnSelect().Val() - headerApproveStart;
+            Cerr << "HEADER:" << hNoData << "/" << hSkip << "/" << hApproves << Endl;
             if (ExpectIndexSkip) {
-                AFL_VERIFY(skip == *ExpectIndexSkip)("expect", ExpectIndexSkip)("real", skip)(
-                                     "current", controller->GetIndexesSkippingOnSelect().Val())("pred", IndexSkipStart);
+                AFL_VERIFY(iSkip + hSkip == *ExpectIndexSkip)("expect", ExpectIndexSkip)("ireal", iSkip)("hreal", hSkip)(
+                                     "current", controller->GetIndexesSkippingOnSelect().Val())("pred", indexSkipStart);
             }
             if (ExpectIndexNoData) {
-                AFL_VERIFY(noData == *ExpectIndexNoData)("expect", ExpectIndexNoData)("real", noData)(
-                                       "current", controller->GetIndexesSkippedNoData().Val())("pred", IndexNoDataStart);
+                AFL_VERIFY(iNoData == *ExpectIndexNoData)("expect", ExpectIndexNoData)("real", iNoData)(
+                                       "current", controller->GetIndexesSkippedNoData().Val())("pred", indexNoDataStart);
             }
             if (ExpectIndexApprove) {
-                AFL_VERIFY(approves == *ExpectIndexApprove)("expect", ExpectIndexApprove)("real", approves)(
-                                         "current", controller->GetIndexesApprovedOnSelect().Val())("pred", IndexApproveStart);
+                AFL_VERIFY(iApproves == *ExpectIndexApprove)("expect", ExpectIndexApprove)("real", iApproves)(
+                                         "current", controller->GetIndexesApprovedOnSelect().Val())("pred", indexApproveStart);
             }
             return TConclusionStatus::Success();
         }

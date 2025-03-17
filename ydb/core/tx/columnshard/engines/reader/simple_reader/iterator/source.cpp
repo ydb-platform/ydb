@@ -278,6 +278,7 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckHeader(
             NCommon::TFetchingResultContext fetchContext(*GetStageData().GetTable(), *GetStageData().GetIndexes(), source);
             fetcher->OnDataCollected(fetchContext);
         } else {
+            NYDBTest::TControllers::GetColumnShardController()->OnHeaderSelectProcessed({});
             return result;
         }
     }
@@ -295,7 +296,7 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckHeader(
             AFL_VERIFY(false);
         }
         result.Add(isAllowed, arrData->GetRecordsCount());
-        NYDBTest::TControllers::GetColumnShardController()->OnIndexSelectProcessed(isAllowed);
+        NYDBTest::TControllers::GetColumnShardController()->OnHeaderSelectProcessed(isAllowed);
         if (isAllowed) {
             GetContext()->GetCommonContext()->GetCounters().OnAcceptedByHeader(source->GetRecordsCount());
         } else {

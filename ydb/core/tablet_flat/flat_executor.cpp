@@ -656,8 +656,16 @@ void TExecutor::ActivateWaitingTransactions(const TVector<TIntrusivePtr<NPageCol
                 if (seat->Cancelled) {
                     FinishCancellation(seat, false);
                     cancelled = true;
+                    if (auto logl = Logger->Log(ELnLev::Debug)) {
+                        logl
+                            << NFmt::Do(*this) << " " << NFmt::Do(*seat) << " cancelled";
+                    }
                 } else {
                     EnqueueActivation(seat, activate);
+                    if (auto logl = Logger->Log(ELnLev::Debug)) {
+                        logl
+                            << NFmt::Do(*this) << " " << NFmt::Do(*seat) << " activated";
+                    }
                 }
             }
         }
@@ -2128,7 +2136,7 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
 
         if (auto logl = Logger->Log(ELnLev::Dbg03)) {
             logl
-                << NFmt::Do(*this) << " requests PageCollection " << pageCollectionInfo->PageCollection->Label()
+                << NFmt::Do(*this) << " " << NFmt::Do(*seat) << " requests PageCollection " << pageCollectionInfo->PageCollection->Label()
                 << " " << pages.size() << " pages: [";
             for (auto i : xrange(pages.size())) {
                 if (i != 0) logl << ", ";
@@ -2902,8 +2910,12 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
     case EPageCollectionRequest::InMemPages:
         {
             TPrivatePageCache::TInfo *collectionInfo = PrivatePageCache->Info(msg->Origin->Label());
-            if (!collectionInfo) // collection could be outdated
+            if (!collectionInfo) {
+                if (auto logl = Logger->Log(ELnLev::Debug)) {
+                    logl << NFmt::Do(*this) << " ignore outdated result " << NFmt::Do(*ev->Get());
+                }
                 return;
+            }
 
             if (msg->Status != NKikimrProto::OK) { // collection is still active but we got bs error. no choice then die
                 if (auto logl = Logger->Log(ELnLev::Error)) {

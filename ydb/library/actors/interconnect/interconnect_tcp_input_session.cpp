@@ -551,14 +551,14 @@ namespace NActors {
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
 
-                    auto size = *reinterpret_cast<const ui16*>(ptr);
+                    const ui16 size = ReadUnaligned<ui16>(ptr);
                     if (!size) {
                         LOG_CRIT_IC_SESSION("ICIS03", "XDC empty payload");
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
 
                     if (!Params.Encryption) {
-                        const ui32 checksumExpected = *reinterpret_cast<const ui32*>(ptr + sizeof(ui16));
+                        const ui32 checksumExpected = ReadUnaligned<ui32>(ptr + sizeof(ui16));
                         XdcChecksumQ.emplace_back(size, checksumExpected);
                     }
 

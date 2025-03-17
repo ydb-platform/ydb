@@ -442,6 +442,10 @@ namespace NKikimr::NStorage {
                 if (const auto& error = UpdateConfigComposite(ProposedStorageConfig, *NewYaml, record.GetYAML())) {
                     return FinishWithError(TResult::ERROR, TStringBuilder() << "failed to update config yaml: " << *error);
                 }
+                const auto& replaceConfig = Event->Get()->Record.GetReplaceStorageConfig();
+                if (replaceConfig.GetDryRun()) {
+                    return Finish(Sender, SelfId(), PrepareResult(TResult::DRY_RUN_SUCCESS, std::nullopt).release(), 0, Cookie);
+                }
                 return StartProposition(&ProposedStorageConfig);
         }
     }

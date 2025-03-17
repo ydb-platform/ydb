@@ -566,7 +566,6 @@ protected:
         }
 
         if (BufferActorId && Request.LocksOp == ELocksOp::Rollback) {
-            YQL_ENSURE(Request.Transactions.empty());
             static_cast<TDerived*>(this)->Finalize();
             return;
         }

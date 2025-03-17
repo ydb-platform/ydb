@@ -543,7 +543,13 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         TChainTester(65).Test();
     }
 
-    std::pair<TString, std::vector<NYdb::TResultSet>> ExecuteJoinOrderTestGenericQueryWithStats(const TString& queryPath, const TString& statsPath, bool useStreamLookupJoin, bool useColumnStore, bool useCBO = true) {
+    std::pair<TString, std::vector<NYdb::TResultSet>> ExecuteJoinOrderTestGenericQueryWithStats(
+        const TString& queryPath,
+        const TString& statsPath,
+        bool useStreamLookupJoin,
+        bool useColumnStore,
+        bool useCBO = true
+    ) {
         auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), useCBO, useColumnStore);
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
         auto db = kikimr.GetQueryClient();
@@ -676,38 +682,6 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
 
     Y_UNIT_TEST_TWIN(TPCHRandomJoinViewJustWorks, ColumnStore) {
         ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch_random_join_view_just_works.sql", "stats/tpch1000s.json", false, ColumnStore);
-    }
-
-    Y_UNIT_TEST_TWIN(TPCH3, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch3.sql", "stats/tpch1000s.json", false, ColumnStore);
-    }
-
-    Y_UNIT_TEST_TWIN(TPCH5, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch5.sql", "stats/tpch1000s.json", false, ColumnStore);
-    }
-
-    Y_UNIT_TEST_TWIN(TPCH8, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch8.sql", "stats/tpch100s.json", false, ColumnStore);
-    }
-
-    Y_UNIT_TEST_TWIN(TPCH10, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch10.sql", "stats/tpch1000s.json", false, ColumnStore);
-    }
-
-    Y_UNIT_TEST_TWIN(TPCH11, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch11.sql", "stats/tpch1000s.json", false, ColumnStore);
-    }
-
-    Y_UNIT_TEST_TWIN(TPCH20, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch20.sql", "stats/tpch1000s.json", false, true);
-    }
-
-    Y_UNIT_TEST_TWIN(TPCH21, ColumnStore) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch21.sql", "stats/tpch1000s.json", false, ColumnStore);
-    }
-
-    Y_UNIT_TEST(TPCH22) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch22.sql", "stats/tpch100s.json", false, true);
     }
 
     Y_UNIT_TEST_TWIN(TPCDS16, ColumnStore) {
@@ -915,61 +889,34 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         UNIT_ASSERT_C(joinOrder.find(R"(["T","U"])") != TString::npos, joinOrder);
     }
 
-    void CanonizedJoinOrderTest(const TString& queryPath, const TString& statsPath, TString correctJoinOrderPath, bool useStreamLookupJoin, bool useColumnStore
+    void CanonizedJoinOrderTest(
+        const TString& queryPath, const TString& statsPath, TString correctJoinOrderPath, bool useStreamLookupJoin, bool useColumnStore
     ) {
-        auto kikimr = GetKikimrWithJoinSettings(useStreamLookupJoin, GetStatic(statsPath), true, useColumnStore);
-        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableViews(true);
-        auto db = kikimr.GetQueryClient();
-        auto result = db.GetSession().GetValueSync();
-        NStatusHelpers::ThrowOnError(result);
-        auto session = result.GetSession();
+        auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats(queryPath, statsPath, useStreamLookupJoin, useColumnStore);
 
-
-        CreateSampleTable(session, useColumnStore);
-
-        /* join with parameters */
-        {
-            const TString query = GetStatic(queryPath);
-
-            auto result =
-                session.ExecuteQuery(
-                    query,
-                    NYdb::NQuery::TTxControl::NoTx(),
-                    NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain)
-                ).ExtractValueSync();
-
-            result.GetIssues().PrintTo(Cerr);
-            for (const auto& issue: result.GetIssues()) {
-                for (const auto& subissue: issue.GetSubIssues()) {
-                    UNIT_ASSERT_C(!(8000 <= subissue->IssueCode && subissue->IssueCode < 9000), "CBO didn't work for this query!");
-                }
-            }
-            PrintPlan(TString{*result.GetStats()->GetPlan()});
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-
-            if (useStreamLookupJoin) {
-                return;
-            }
-
-            if (useColumnStore) {
-                correctJoinOrderPath = correctJoinOrderPath.substr(0, correctJoinOrderPath.find(".json")) + "_column_store.json";
-            }
-
-            auto currentJoinOrder = GetPrettyJSON(GetDetailedJoinOrder(TString{*result.GetStats()->GetPlan()}));
-
-            /* to canonize the tests use --test-param CANONIZE_JOIN_ORDER_TESTS=TRUE */
-            TString canonize = GetTestParam("CANONIZE_JOIN_ORDER_TESTS"); canonize.to_lower();
-            if (canonize.equal("true")) {
-                Cerr << "--------------------CANONIZING THE TESTS--------------------";
-                TOFStream stream(SRC_("data/" + correctJoinOrderPath));
-                stream << currentJoinOrder << Endl;
-            }
-
-            TString ref = GetStatic(correctJoinOrderPath);
-            Cout << "actual\n" << GetJoinOrder(TString{*result.GetStats()->GetPlan()}).GetStringRobust() << Endl;
-            Cout << "expected\n" << GetJoinOrderFromDetailedJoinOrder(ref).GetStringRobust() << Endl;
-            UNIT_ASSERT(JoinOrderAndAlgosMatch(TString{*result.GetStats()->GetPlan()}, ref));
+        if (useStreamLookupJoin) {
+            return;
         }
+
+        if (useColumnStore) {
+            correctJoinOrderPath = correctJoinOrderPath.substr(0, correctJoinOrderPath.find(".json")) + "_column_store.json";
+        }
+
+        auto currentJoinOrder = GetPrettyJSON(GetDetailedJoinOrder(plan, TGetPlanParams{.IncludeShuffles = true})).append("\n");
+
+        /* to canonize the tests use --test-param CANONIZE_JOIN_ORDER_TESTS=TRUE */
+        TString canonize = GetTestParam("CANONIZE_JOIN_ORDER_TESTS"); canonize.to_lower();
+        if (canonize.equal("true")) {
+            Cerr << "--------------------CANONIZING THE TESTS--------------------";
+            TOFStream stream(SRC_("data/" + correctJoinOrderPath));
+            stream << currentJoinOrder;
+            stream.Finish();
+        }
+
+        TString ref = GetStatic(correctJoinOrderPath);
+        Cout << "actual\n" << GetJoinOrder(plan).GetStringRobust() << Endl;
+        Cout << "expected\n" << GetJoinOrderFromDetailedJoinOrder(ref).GetStringRobust() << Endl;
+        UNIT_ASSERT(currentJoinOrder == ref);
     }
 
     Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCH2, ColumnStore) {
@@ -978,9 +925,57 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
+    Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCH3, ColumnStore) {
+        CanonizedJoinOrderTest(
+            "queries/tpch3.sql", "stats/tpch1000s.json", "join_order/tpch3_1000s.json", false, ColumnStore
+        );
+    }
+
+    Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCH5, ColumnStore) {
+        CanonizedJoinOrderTest(
+            "queries/tpch5.sql", "stats/tpch1000s.json", "join_order/tpch5_1000s.json", false, ColumnStore
+        );
+    }
+
+    Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCH8, ColumnStore) {
+        CanonizedJoinOrderTest(
+            "queries/tpch8.sql", "stats/tpch1000s.json", "join_order/tpch8_1000s.json", false, ColumnStore
+        );
+    }
+
     Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCH9, ColumnStore) {
         CanonizedJoinOrderTest(
             "queries/tpch9.sql", "stats/tpch1000s.json", "join_order/tpch9_1000s.json", false, ColumnStore
+        );
+    }
+
+    Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCH10, ColumnStore) {
+        CanonizedJoinOrderTest(
+            "queries/tpch10.sql", "stats/tpch1000s.json", "join_order/tpch10_1000s.json", false, ColumnStore
+        );
+    }
+
+    Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCH11, ColumnStore) {
+        CanonizedJoinOrderTest(
+            "queries/tpch11.sql", "stats/tpch1000s.json", "join_order/tpch11_1000s.json", false, ColumnStore
+        );
+    }
+
+    Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCH20, ColumnStore) {
+        CanonizedJoinOrderTest(
+            "queries/tpch20.sql", "stats/tpch1000s.json", "join_order/tpch20_1000s.json", false, ColumnStore
+        );
+    }
+
+    Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCH21, ColumnStore) {
+        CanonizedJoinOrderTest(
+            "queries/tpch21.sql", "stats/tpch1000s.json", "join_order/tpch21_1000s.json", false, ColumnStore
+        );
+    }
+
+    Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCH22, ColumnStore) {
+        CanonizedJoinOrderTest(
+            "queries/tpch22.sql", "stats/tpch1000s.json", "join_order/tpch22_1000s.json", false, ColumnStore
         );
     }
 

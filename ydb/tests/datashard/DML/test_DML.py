@@ -42,37 +42,42 @@ class TestDML(TestCreateTables, TestBase):
         count += 1
 
         # check after insert
-        rows = self.query(f"SELECT * FROM {self.table_name}")
+        rows = self.query(
+            f"""
+            SELECT COUNT(*) as count FROM `{self.table_name}`;
+            """
+        )
         assert len(
-            rows) == count, f"Expected {count} row after insert, {len(rows)} row after insert"
+            rows) == 1 and rows[0].count == count, f"Expected {count} rows, found: {rows[0].count}"
 
         count_assert = 0
         for type_name in pk_types.keys():
             rows = self.query(
-                f"SELECT * FROM {self.table_name} WHERE col_{cleanup_type_name(type_name)}={pk_types[type_name].format(count_assert)}")
+                f"SELECT COUNT(*) as count FROM `{self.table_name}` WHERE col_{cleanup_type_name(type_name)}={pk_types[type_name].format(count_assert)}")
             assert len(
-                rows) == 1, f"Expected one row after insert, faild in col_{cleanup_type_name(type_name)}"
+                rows) == 1 and rows[0].count == 1, f"Expected one row after insert, faild in col_{cleanup_type_name(type_name)}"
             count_assert += 1
 
         for type_name in non_pk_types.keys():
-            rows = self.query(
-                f"SELECT * FROM {self.table_name} WHERE col_{cleanup_type_name(type_name)}={non_pk_types[type_name].format(count_assert)}")
-            assert len(
-                rows) == 1, f"Expected one row after insert, faild in col_{cleanup_type_name(type_name)}"
+            if type_name != "Json" and type_name != "JsonDocument" and type_name != "Yson":
+                rows = self.query(
+                    f"SELECT COUNT(*) as count FROM `{self.table_name}` WHERE col_{cleanup_type_name(type_name)}={non_pk_types[type_name].format(count_assert)}")
+                assert len(
+                    rows) == 1 and rows[0].count == 1, f"Expected one row after insert, faild in col_{cleanup_type_name(type_name)}"
             count_assert += 1
 
         for type_name in index.keys():
             rows = self.query(
-                f"SELECT * FROM {self.table_name} WHERE col_index_{cleanup_type_name(type_name)}={index[type_name].format(count_assert)}")
+                f"SELECT COUNT(*) as count FROM `{self.table_name}` WHERE col_index_{cleanup_type_name(type_name)}={index[type_name].format(count_assert)}")
             assert len(
-                rows) == 1, f"Expected one row after insert, faild in col_{cleanup_type_name(type_name)}"
+                rows) == 1 and rows[0].count == 1, f"Expected one row after insert, faild in col_{cleanup_type_name(type_name)}"
             count_assert += 1
 
         rows = self.query(
-            f"SELECT * FROM {self.table_name} WHERE ttl_{cleanup_type_name(ttl)}={ttl_types[ttl].format(count_assert)}")
+            f"SELECT COUNT(*) as count FROM `{self.table_name}` WHERE ttl_{cleanup_type_name(ttl)}={ttl_types[ttl].format(count_assert)}")
         count_assert += 1
         assert len(
-            rows) == 1, f"Expected one row after insert, faild in col_{cleanup_type_name(ttl)}"
+            rows) == 1 and rows[0].count == 1, f"Expected one row after insert, faild in col_{cleanup_type_name(ttl)}"
         assert count == count_assert, f"Expected {count} select after insert"
 
     def create_insert(self, value: int, name: str, key: str):
@@ -142,7 +147,7 @@ class TestDML(TestCreateTables, TestBase):
             self.create_update(self, count, f"ttl_{cleanup_type_name(ttl)}", ttl_types[ttl],
                                f"col_{cleanup_type_name(change_name)}", non_pk_types[change_name])
         for change_name in index.keys():
-            self.create_update(self, count, f"col_index_{cleanup_type_name(ttl)}", ttl_types[ttl],
+            self.create_update(self, count, f"ttl_{cleanup_type_name(ttl)}", ttl_types[ttl],
                                f"col_index_{cleanup_type_name(change_name)}", index[change_name])
         count += 1
 

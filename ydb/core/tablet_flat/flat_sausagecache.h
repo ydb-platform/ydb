@@ -39,7 +39,6 @@ public:
         enum ELoadState {
             LoadStateNo,
             LoadStateLoaded,
-            LoadStateRequested,
         };
 
         ui32 LoadState : 2;
@@ -163,8 +162,6 @@ public:
     TInfo* Info(TLogoBlobID id);
 
     const TStats& GetStats() const { return Stats; }
-
-    std::pair<ui32, ui64> Request(TVector<ui32> &pages, TInfo *info); // blocks to load, bytes to load
 
     const TSharedData* Lookup(TPageId pageId, TInfo *collection);
 

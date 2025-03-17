@@ -174,37 +174,6 @@ void TPrivatePageCache::Unpin(TPage *page, TPrivatePageCachePinPad *pad) {
     }
 }
 
-std::pair<ui32, ui64> TPrivatePageCache::Request(TVector<TPageId> &pages, TInfo *info) {
-    ui32 blocksToRequest = 0;
-    ui64 bytesToRequest = 0;
-
-    auto it = pages.begin();
-    auto end = pages.end();
-
-    while (it != end) {
-        TPage *page = info->EnsurePage(*it);
-        switch (page->LoadState) {
-        case TPage::LoadStateNo:
-            page->LoadState = TPage::LoadStateRequested;
-            bytesToRequest += page->Size;
-
-            ++blocksToRequest;
-            ++it;
-            break;
-        case TPage::LoadStateLoaded:
-            Y_ABORT("must not request already loaded pages");
-        case TPage::LoadStateRequested:
-            // TODO: request always
-            --end;
-            if (end != it)
-                *it = *end;
-            break;
-        }
-    }
-    pages.erase(end, pages.end());
-    return std::make_pair(blocksToRequest, bytesToRequest);
-}
-
 void TPrivatePageCache::TryLoad(TPage *page) {
     if (page->LoadState == TPage::LoadStateLoaded) {
         return;

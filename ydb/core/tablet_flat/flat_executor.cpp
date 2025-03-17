@@ -659,8 +659,6 @@ void TExecutor::ActivateWaitingTransactions(const TVector<TIntrusivePtr<NPageCol
                 } else {
                     EnqueueActivation(seat, activate);
                 }
-            } else {
-                Y_Fail("Unexpected wait pad triggered");
             }
         }
         if (cancelled && activate) {
@@ -2033,7 +2031,6 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
 
     ui32 touchedPages = 0;
     ui32 newPinnedPages = 0;
-    ui32 loadPages = 0;
     ui64 prevTouched = seat->MemoryTouched;
 
     PrivatePageCache->PinTouches(seat->Pinned, touchedPages, newPinnedPages, seat->MemoryTouched);
@@ -2044,6 +2041,7 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
     prevTouched = seat->MemoryTouched;
 
     PrivatePageCache->PinToLoad(seat->Pinned, newPinnedPages, seat->MemoryTouched);
+    ui64 loadBytes = seat->MemoryTouched - prevTouched;
     TransactionPagesMemory += seat->MemoryTouched - prevTouched;
 
     if (seat->AttachedMemory)
@@ -2122,42 +2120,34 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
     auto waitPad = MakeIntrusive<TTransactionWaitPad>(seat);
     TransactionWaitPads[waitPad.Get()] = waitPad;
 
-    ui32 waitPages = 0;
-    ui64 loadBytes = 0;
+    ui32 loadPages = 0;
     auto toLoad = PrivatePageCache->GetToLoad();
-    for (auto &xpair : toLoad) {
-        TPrivatePageCache::TInfo *pageCollectionInfo = xpair.first;
-        TVector<NTable::TPageId> &pages = xpair.second;
-        waitPages += pages.size();
+    for (auto &[pageCollectionInfo, pages] : toLoad) {
+        Y_DEBUG_ABORT_UNLESS(pages);
+        loadPages += pages.size();
 
-        const std::pair<ui32, ui64> toLoad = PrivatePageCache->Request(pages, pageCollectionInfo);
-        if (toLoad.first) {
-            if (auto logl = Logger->Log(ELnLev::Dbg03)) {
-                logl
-                    << NFmt::Do(*this) << " requests PageCollection " << pageCollectionInfo->PageCollection->Label()
-                    << " " << toLoad.second << " bytes, " << toLoad.first << " pages: [";
-                for (auto i : xrange(pages.size())) {
-                    if (i != 0) logl << ", ";
-                    logl << pages[i] << " " << ui32(pageCollectionInfo->GetPageType(pages[i]));
-                }
-                logl << "]";
+        if (auto logl = Logger->Log(ELnLev::Dbg03)) {
+            logl
+                << NFmt::Do(*this) << " requests PageCollection " << pageCollectionInfo->PageCollection->Label()
+                << " " << pages.size() << " pages: [";
+            for (auto i : xrange(pages.size())) {
+                if (i != 0) logl << ", ";
+                logl << pages[i] << " " << ui32(pageCollectionInfo->GetPageType(pages[i]));
             }
-
-            auto *req = new NPageCollection::TFetch(0, pageCollectionInfo->PageCollection, std::move(pages));
-            req->TraceId = waitPad->GetWaitingTraceId();
-            req->WaitPad = waitPad; // TODO: deal with one tx multiple fetches
-
-            loadPages += toLoad.first;
-            loadBytes += toLoad.second;
-            RequestFromSharedCache(req, NBlockIO::EPriority::Fast, EPageCollectionRequest::Cache);
+            logl << "]";
         }
+
+        auto *req = new NPageCollection::TFetch(0, pageCollectionInfo->PageCollection, std::move(pages));
+        req->TraceId = waitPad->GetWaitingTraceId();
+        req->WaitPad = waitPad; // TODO: deal with one tx multiple fetches
+
+        RequestFromSharedCache(req, NBlockIO::EPriority::Fast, EPageCollectionRequest::Cache);
     }
 
     if (auto logl = Logger->Log(ELnLev::Debug)) {
         logl
             << NFmt::Do(*this) << " " << NFmt::Do(*seat) << " postponed"
-            << ", " << loadBytes << "b, pages "
-            << "{" << waitPages << " wait, " << loadPages << " load}"
+            << ", loading " << loadPages << " pages, " << loadBytes << " bytes"
             << ", freshly touched " << newPinnedPages << " pages";
     }
 

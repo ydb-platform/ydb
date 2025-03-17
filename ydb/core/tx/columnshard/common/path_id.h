@@ -76,6 +76,7 @@ struct TUnifiedPathId {
         Validate();
         return !!InternalPathId;
     }
+    auto operator<=>(const TUnifiedPathId&) const = default;
 };
 
 

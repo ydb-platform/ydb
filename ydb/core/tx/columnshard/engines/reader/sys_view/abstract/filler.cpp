@@ -23,7 +23,8 @@ NKikimr::TConclusionStatus TMetadataFromStore::DoFillMetadata(const NColumnShard
         auto pathInfos = logsIndex->GetTables(fromPathId, toPathId);
         for (auto&& pathInfo : pathInfos) {
             if (pathIds.emplace(pathInfo->GetPathId()).second) {
-                metadata->IndexGranules.emplace_back(BuildGranuleView(*pathInfo, metadata->IsDescSorted(), metadata->GetRequestSnapshot()));
+                const auto localPathId = shard->GetTablesManager().GetTableLocalPathIdVerified(pathInfo->GetPathId());
+                metadata->IndexGranules.emplace_back(BuildGranuleView(*pathInfo, localPathId, metadata->IsDescSorted(), metadata->GetRequestSnapshot()));
             }
         }
     }
@@ -52,7 +53,8 @@ NKikimr::TConclusionStatus TMetadataFromTable::DoFillMetadata(const NColumnShard
             if (!pathInfo) {
                 continue;
             }
-            metadata->IndexGranules.emplace_back(BuildGranuleView(*pathInfo, metadata->IsDescSorted(), metadata->GetRequestSnapshot()));
+            const auto localPathId = shard->GetTablesManager().GetTableLocalPathIdVerified(pathInfo->GetPathId());
+            metadata->IndexGranules.emplace_back(BuildGranuleView(*pathInfo, localPathId, metadata->IsDescSorted(), metadata->GetRequestSnapshot()));
             break;
         }
     }

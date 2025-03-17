@@ -7,6 +7,7 @@ PEERDIR(
     ydb/core/tx/columnshard/engines/reader/sys_view/constructor
     ydb/core/tx/columnshard/engines/reader/sys_view/granules
     ydb/core/tx/columnshard/engines/reader/sys_view/optimizer
+    ydb/core/tx/columnshard/engines/reader/sys_view/tables
 )
 
 SRCS(

@@ -270,6 +270,12 @@ public:
         return Tables.size();
     }
 
+    NColumnShard::TLocalPathId GetTableLocalPathIdVerified(const NColumnShard::TInternalPathId pathId) const {
+        const auto* t = Tables.FindPtr(pathId);
+        AFL_VERIFY(t);
+        return t->GetLocalPathId();
+    }
+
     template<typename F> 
     void ForEachPathId(F&& f) const {
         for (const auto& [pathId, _]: Tables) {

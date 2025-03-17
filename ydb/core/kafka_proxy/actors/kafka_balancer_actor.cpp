@@ -21,8 +21,10 @@ void TKafkaBalancerActor::Bootstrap(const NActors::TActorContext& ctx) {
         SendResponseFail(ctx, EKafkaErrors::MEMBER_ID_REQUIRED, TStringBuilder() << "Empty MemberId.");
         return;
     }
-
-    Kqp->SendInitTablesRequest(ctx);
+    
+    Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant());
+    Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant());
+    
     Become(&TKafkaBalancerActor::StateWork);
 }
 

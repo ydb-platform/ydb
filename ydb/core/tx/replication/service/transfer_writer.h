@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/base/defs.h>
+#include <ydb/core/protos/replication.pb.h>
 
 #include <util/generic/string.h>
 
@@ -11,6 +12,6 @@ namespace NKikimr {
 namespace NKikimr::NReplication::NService {
 
 IActor* CreateTransferWriter(const TString& transformLambda, const TPathId& tablePathId,
-    const TActorId& compileServiceId, TDuration flushInterval, ui64 batchSizeBytes);
+    const TActorId& compileServiceId, const NKikimrReplication::TBatchingSettings& batchingSettings);
 
 }

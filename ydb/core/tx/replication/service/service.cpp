@@ -429,10 +429,9 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             tablePathId = TPathId::FromProto(writerSettings.GetPathId()),
             transformLambda = writerSettings.GetTransformLambda(),
             compilationService = *CompilationService,
-            flushInterval = TDuration::MilliSeconds(writerSettings.GetFlushIntervalMilliSeconds()),
-            batchSizeBytes = writerSettings.GetBatchSizeBytes()
+            batchingSettings = writerSettings.GetBatching()
         ]() {
-            return CreateTransferWriter(transformLambda, tablePathId, compilationService, flushInterval, batchSizeBytes);
+            return CreateTransferWriter(transformLambda, tablePathId, compilationService, batchingSettings);
         };
     }
 

@@ -21,7 +21,6 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
     const TString& srcStreamPath,
     const TString& srcStreamConsumerName,
     const TPathId& dstPathId,
-    const ui64 flushIntervalMilliSeconds,
-    const ui64 batchSizeBytes);
+    const NKikimrReplication::TBatchingSettings& batchingSettings);
 
 }

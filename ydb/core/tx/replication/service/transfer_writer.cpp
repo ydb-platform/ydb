@@ -789,13 +789,12 @@ public:
             const TString& transformLambda,
             const TPathId& tablePathId,
             const TActorId& compileServiceId,
-            const TDuration flushInterval,
-            const ui64 batchSizeBytes)
+            const NKikimrReplication::TBatchingSettings& batchingSettings)
         : TransformLambda(transformLambda)
         , TablePathId(tablePathId)
         , CompileServiceId(compileServiceId)
-        , FlushInterval(flushInterval)
-        , BatchSizeBytes(batchSizeBytes)
+        , FlushInterval(TDuration::MilliSeconds(batchingSettings.GetFlushIntervalMilliSeconds()))
+        , BatchSizeBytes(batchingSettings.GetBatchSizeBytes())
     {}
 
 private:
@@ -829,9 +828,9 @@ private:
 }; // TTransferWriter
 
 IActor* CreateTransferWriter(const TString& transformLambda, const TPathId& tablePathId,
-        const TActorId& compileServiceId, TDuration flushInterval, ui64 batchSizeBytes)
+        const TActorId& compileServiceId, const NKikimrReplication::TBatchingSettings& batchingSettings)
 {
-    return new TTransferWriter(transformLambda, tablePathId, compileServiceId, flushInterval, batchSizeBytes);
+    return new TTransferWriter(transformLambda, tablePathId, compileServiceId, batchingSettings);
 }
 
 }

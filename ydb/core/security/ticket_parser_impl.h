@@ -1741,16 +1741,12 @@ protected:
     void SetError(const TString& key, TTokenRecord& record, const TEvTicketParser::TError& error) {
         record.Error = error;
         TInstant now = TlsActivationContext->Now();
-        TStringBuilder errorLogMessage;
-        if (error.HasLogMessage()) {
-            errorLogMessage << " (" << error.LogMessage << ")";
-        }
         if (record.Error.Retryable) {
             record.ExpireTime = GetExpireTime(record, now);
             record.SetErrorRefreshTime(this, now);
             CounterTicketsErrorsRetryable->Inc();
             BLOG_D("Ticket " << record.GetMaskedTicket() << " ("
-                        << record.PeerName << ") has now retryable error message '" << error.Message << errorLogMessage << "'");
+                        << record.PeerName << ") has now retryable error message '" << error.Message << "'");
             if (record.RefreshRetryableErrorImmediately) {
                 record.RefreshRetryableErrorImmediately = false;
                 GetDerived()->CanRefreshTicket(key, record);
@@ -1763,7 +1759,7 @@ protected:
             record.SetOkRefreshTime(this, now);
             CounterTicketsErrorsPermanent->Inc();
             BLOG_D("Ticket " << record.GetMaskedTicket() << " ("
-                        << record.PeerName << ") has now permanent error message '" << error.Message << errorLogMessage << "'");
+                        << record.PeerName << ") has now permanent error message '" << error.Message << "'");
         }
         CounterTicketsErrors->Inc();
         record.IsLowAccessServiceRequestPriority = true;
@@ -1845,7 +1841,7 @@ protected:
 
     template <typename TTokenRecord>
     bool CanRefreshLoginTicket(const TTokenRecord& record) {
-        return record.TokenType == TDerived::ETokenType::Login && record.Error.Retryable;
+        return record.TokenType == TDerived::ETokenType::Login && record.Error.empty();
     }
 
     template <typename TTokenRecord>
@@ -1866,34 +1862,30 @@ protected:
 
     template <typename TTokenRecord>
     bool RefreshLoginTicket(const TString& key, TTokenRecord& record) {
-        if (record.Error.empty()) {
-            GetDerived()->ResetTokenRecord(record);
-            const TString userSID = record.GetToken()->GetUserSID();
-            if (record.IsExternalAuthEnabled()) {
-                return RefreshTicketViaExternalAuthProvider(key, record);
-            }
-            const TString& database = Config.GetDomainLoginOnly() ? DomainName : record.Database;
-            auto itLoginProvider = LoginProviders.find(database);
-            if (itLoginProvider == LoginProviders.end()) {
-                return false;
-            }
-            NLogin::TLoginProvider& loginProvider(itLoginProvider->second);
-            if (loginProvider.CheckUserExists(userSID)) {
-                const std::vector<TString> providerGroups = loginProvider.GetGroupsMembership(userSID);
-                const TVector<NACLib::TSID> groups(providerGroups.begin(), providerGroups.end());
-                SetToken(key, record, new NACLib::TUserToken({
-                                        .OriginalUserToken = record.Ticket,
-                                        .UserSID = userSID,
-                                        .GroupSIDs = groups,
-                                        .AuthType = record.GetAuthType()
-                                    }));
-            } else {
-                SetError(key, record, {.Message = "User not found", .Retryable = false});
-            }
-            return true;
-        }
         GetDerived()->ResetTokenRecord(record);
-        return CanInitLoginToken(key, record);
+        const TString userSID = record.GetToken()->GetUserSID();
+        if (record.IsExternalAuthEnabled()) {
+            return RefreshTicketViaExternalAuthProvider(key, record);
+        }
+        const TString& database = Config.GetDomainLoginOnly() ? DomainName : record.Database;
+        auto itLoginProvider = LoginProviders.find(database);
+        if (itLoginProvider == LoginProviders.end()) {
+            return false;
+        }
+        NLogin::TLoginProvider& loginProvider(itLoginProvider->second);
+        if (loginProvider.CheckUserExists(userSID)) {
+            const std::vector<TString> providerGroups = loginProvider.GetGroupsMembership(userSID);
+            const TVector<NACLib::TSID> groups(providerGroups.begin(), providerGroups.end());
+            SetToken(key, record, new NACLib::TUserToken({
+                                    .OriginalUserToken = record.Ticket,
+                                    .UserSID = userSID,
+                                    .GroupSIDs = groups,
+                                    .AuthType = record.GetAuthType()
+                                }));
+        } else {
+            SetError(key, record, {.Message = "User not found", .Retryable = false});
+        }
+        return true;
     }
 
     template <typename TTokenRecord>

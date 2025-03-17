@@ -38,7 +38,7 @@ public:
 
     MOCK_METHOD(IConnectionPtr, GetConnection, (), (override));
 
-    MOCK_METHOD(std::optional<TStringBuf>, GetClusterName, (bool fetchIfNull), (override));
+    MOCK_METHOD(std::optional<std::string>, GetClusterName, (bool fetchIfNull), (override));
 
     MOCK_METHOD(TFuture<ITransactionPtr>, StartTransaction, (
         NTransactionClient::ETransactionType type,

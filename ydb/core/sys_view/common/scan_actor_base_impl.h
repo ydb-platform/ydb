@@ -255,6 +255,9 @@ private:
         AllowedByLimiter = true;
 
         if (TableId.SysViewInfo == ShowCreateName) {
+            LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
+                "Scan prepared, actor: " << TBase::SelfId());
+
             ProceedToScan();
             return;
         }

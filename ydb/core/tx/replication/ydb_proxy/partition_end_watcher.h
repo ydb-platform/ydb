@@ -2,7 +2,7 @@
 
 #include "ydb_proxy.h"
 
-#include <ydb/library/yverify_stream/yverify_stream.h>
+#include <util/generic/maybe.h>
 
 namespace NKikimr::NReplication {
 
@@ -54,6 +54,7 @@ private:
     ui64 PendingCommittedOffset = 0;
     ui64 CommittedOffset = 0;
     TMaybe<TReadSessionEvent::TEndPartitionSessionEvent> EndPartitionSessionEvent;
+
 }; // TPartitionEndWatcher
 
 }

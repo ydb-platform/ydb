@@ -607,7 +607,11 @@ public:
         for (const auto& colMeta : RequestedColumnsMeta) {
             const auto type = getTypeFromColMeta(colMeta);
             auto* col = resultSet->Addcolumns();
-            *col->mutable_type() = NYdb::TProtoAccessor::GetProto(type);
+            if (colMeta.IsNotNullColumn || colMeta.Type.GetTypeId() == NScheme::NTypeIds::Pg) {
+                *col->mutable_type() = NYdb::TProtoAccessor::GetProto(type);
+            } else {
+                *col->mutable_type()->mutable_optional_type()->mutable_item() = NYdb::TProtoAccessor::GetProto(type);
+            }
             *col->mutable_name() = colMeta.Name;
         }
 
@@ -648,7 +652,15 @@ public:
                         break;
                     }
                     default: {
-                        ProtoValueFromCell(vb, colMeta.Type, cell);
+                        if (colMeta.IsNotNullColumn) {
+                            ProtoValueFromCell(vb, colMeta.Type, cell);
+                        } else if (cell.IsNull()) {
+                            vb.EmptyOptional((NYdb::EPrimitiveType)colMeta.Type.GetTypeId());
+                        } else {
+                            vb.BeginOptional();
+                            ProtoValueFromCell(vb, colMeta.Type, cell);
+                            vb.EndOptional();
+                        }
                         break;
                     }
                     }
@@ -744,6 +756,7 @@ private:
             , Name(colInfo.Name)
             , Type(colInfo.PType)
             , PTypeMod(colInfo.PTypeMod)
+            , IsNotNullColumn(colInfo.IsNotNullColumn)
         {
         }
 
@@ -751,6 +764,7 @@ private:
         TString Name;
         NScheme::TTypeInfo Type;
         TString PTypeMod;
+        bool IsNotNullColumn;
     };
     TVector<TColumnMeta> RequestedColumnsMeta;
 

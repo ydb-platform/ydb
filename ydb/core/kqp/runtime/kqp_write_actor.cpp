@@ -1630,7 +1630,12 @@ public:
         : SessionActorId(settings.SessionActorId)
         , MessageSettings(GetWriteActorSettings())
         , TxManager(settings.TxManager)
-        , Alloc(std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(__LOCATION__))
+        , Alloc(std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(
+                __LOCATION__,
+                NKikimr::TAlignedPagePoolCounters(),
+                true,
+                false
+            ))
         , TypeEnv(*Alloc)
         , Counters(settings.Counters)
         , TxProxyMon(settings.TxProxyMon)
@@ -1639,7 +1644,6 @@ public:
             "BufferWriteActorState::Writing", NWilson::EFlags::AUTO_END)
     {
         State = EState::WRITING;
-        Alloc->Release();
         Counters->BufferActorsCount->Inc();
     }
 
@@ -2828,6 +2832,7 @@ public:
         : LogPrefix(TStringBuilder() << "TxId: " << args.TxId << ", task: " << args.TaskId << ". ")
         , Settings(std::move(settings))
         , MessageSettings(GetWriteActorSettings())
+        , Alloc(args.Alloc)
         , OutputIndex(args.OutputIndex)
         , Callbacks(args.Callback)
         , Counters(counters)
@@ -2946,6 +2951,7 @@ private:
 
         CA_LOG_D("Send data=" << DataSize << ", closed=" << Closed << ", bufferActorId=" << BufferActorId);
         AFL_ENSURE(Send(BufferActorId, ev.release()));
+        DecreaseTrackedMemory(DataSize);
     }
 
     void CommitState(const NYql::NDqProto::TCheckpoint&) final {};
@@ -2974,6 +2980,7 @@ private:
         Closed |= finished;
         Batcher->AddData(data);
         DataSize += size;
+        IncreaseTrackedMemory(size);
 
         CA_LOG_D("Add data: " << size << " / " << DataSize);
         if (Closed || GetFreeSpace() <= 0) {
@@ -3001,9 +3008,20 @@ private:
         TActorBootstrapped<TKqpForwardWriteActor>::PassAway();
     }
 
+    void IncreaseTrackedMemory(i64 size) {
+        TGuard guard(*Alloc);
+        Alloc->Ref().OffloadAlloc(size);
+    }
+
+    void DecreaseTrackedMemory(i64 size) {
+        TGuard guard(*Alloc);
+        Alloc->Ref().OffloadFree(size);
+    }
+
     TString LogPrefix;
     const NKikimrKqp::TKqpTableSinkSettings Settings;
     TWriteActorSettings MessageSettings;
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     const ui64 OutputIndex;
     NYql::NDq::TDqAsyncStats EgressStats;
     NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks * Callbacks = nullptr;

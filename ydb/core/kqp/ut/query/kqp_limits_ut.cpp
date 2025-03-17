@@ -87,9 +87,13 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         )", NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
-        UNIT_ASSERT(!to_lower(TString{result.GetIssues().ToString()}).Contains("query result"));
+        UNIT_ASSERT_C(
+            !to_lower(TString{result.GetIssues().ToString()}).Contains("query result"),
+            result.GetIssues().ToString());
         if (useSink) {
-            UNIT_ASSERT(result.GetIssues().ToString().contains("Stream write queries aren't allowed"));
+            UNIT_ASSERT_C(
+                result.GetIssues().ToString().contains("Stream write queries aren't allowed"),
+                result.GetIssues().ToString());
         }
     }
 

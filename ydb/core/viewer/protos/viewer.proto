@@ -844,7 +844,7 @@ message TTopicDataResponse {
         uint64 WriteTimestamp = 3;
         uint64 TimestampDiff = 4;
         string Message = 5;
-        uint32 Size = 6;
+        uint32 StorageSize = 6;
         uint32 OriginalSize = 7;
         uint32 Codec = 8;
         string ProducerId = 9;

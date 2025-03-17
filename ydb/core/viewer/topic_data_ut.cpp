@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
                 const auto& jsonMap = item.GetMap();
                 CheckMapValue(jsonMap, "Offset", i);
                 CheckMapValue(jsonMap, "SeqNo", i + 1);
-                CheckMapValue(jsonMap, "Size", 35);
+                CheckMapValue(jsonMap, "StorageSize", 35);
                 CheckMapValue(jsonMap, "OriginalSize", 112);
                 CheckMapValue(jsonMap, "Codec", 1);
                 if (producer1.empty()) {
@@ -163,7 +163,7 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
                 const auto& jsonMap = item.GetMap();
                 CheckMapValue(jsonMap, "Offset", 20 + i);
                 CheckMapValue(jsonMap, "SeqNo", i + 1);
-                CheckMapValue(jsonMap, "Size", 112);
+                CheckMapValue(jsonMap, "StorageSize", 112);
                 CheckMapValue(jsonMap, "OriginalSize", 112);
                 CheckMapValue(jsonMap, "Codec", 0);
                 if (producer2.empty()) {

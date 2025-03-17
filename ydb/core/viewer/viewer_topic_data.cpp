@@ -167,7 +167,7 @@ void TTopicData::FillProtoResponse(ui64 maxSingleMessageSize, ui64 maxTotalSize)
             diff = 0;
         }
         messageProto->SetTimestampDiff(diff);
-        messageProto->SetSize(dataChunk.GetData().size());
+        messageProto->SetStorageSize(dataChunk.GetData().size());
 
         if (dataChunk.HasCodec() && dataChunk.GetCodec() != NPersQueueCommon::RAW) {
             const NYdb::NTopic::ICodec* codec = GetCodec(static_cast<NPersQueueCommon::ECodec>(dataChunk.GetCodec()));

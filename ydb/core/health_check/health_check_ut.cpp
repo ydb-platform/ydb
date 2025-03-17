@@ -446,6 +446,15 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         UNIT_ASSERT_VALUES_EQUAL(issueVdiscCount, issueVdiscNumber);
     }
 
+    bool HasTabletIssue(const Ydb::Monitoring::SelfCheckResult& result) {
+       for (const auto& issue_log : result.issue_log()) {
+            if (issue_log.level() == 4 && issue_log.type() == "TABLET") {
+                return true;
+            }
+        }
+        return false;
+    }
+
     void ListingTest(int const groupNumber, int const vdiscPerGroupNumber, bool const isMergeRecords = false) {
         auto result = RequestHc(groupNumber, vdiscPerGroupNumber, isMergeRecords);
         CheckHcResult(result, groupNumber, vdiscPerGroupNumber, isMergeRecords);
@@ -865,6 +874,15 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         }
     }
 
+    void AddBadServerlessTablet(TEvHive::TEvResponseHiveInfo::TPtr* ev) {
+        auto &record = (*ev)->Get()->Record;
+        auto* tablet = record.MutableTablets()->Add();
+        tablet->SetTabletID(1);
+        tablet->MutableObjectDomain()->SetSchemeShard(SERVERLESS_DOMAIN_KEY.OwnerId);
+        tablet->MutableObjectDomain()->SetPathId(SERVERLESS_DOMAIN_KEY.LocalPathId);
+        tablet->SetRestartsPerPeriod(500);
+    }
+
     Y_UNIT_TEST(SpecificServerless) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
@@ -1162,6 +1180,102 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
             }
         }
         UNIT_ASSERT(!databaseFoundInResult);
+    }
+
+    Y_UNIT_TEST(ServerlessBadTablets) {
+        TPortManager tp;
+        ui16 port = tp.GetPort(2134);
+        ui16 grpcPort = tp.GetPort(2135);
+        auto settings = TServerSettings(port)
+                .SetNodeCount(1)
+                .SetDynamicNodeCount(1)
+                .SetUseRealThreads(false)
+                .SetDomainName("Root");
+        TServer server(settings);
+        server.EnableGRpc(grpcPort);
+        TClient client(settings);
+        TTestActorRuntime& runtime = *server.GetRuntime();
+
+        auto &dynamicNameserviceConfig = runtime.GetAppData().DynamicNameserviceConfig;
+        dynamicNameserviceConfig->MaxStaticNodeId = runtime.GetNodeId(server.StaticNodes() - 1);
+        dynamicNameserviceConfig->MinDynamicNodeId = runtime.GetNodeId(server.StaticNodes());
+        dynamicNameserviceConfig->MaxDynamicNodeId = runtime.GetNodeId(server.StaticNodes() + server.DynamicNodes() - 1);
+
+        ui32 sharedDynNodeId = runtime.GetNodeId(1);
+
+        bool firstConsoleResponse = true;
+        auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                 case NConsole::TEvConsole::EvListTenantsResponse: {
+                    auto *x = reinterpret_cast<NConsole::TEvConsole::TEvListTenantsResponse::TPtr*>(&ev);
+                    AddPathsToListTenantsResponse(x, { "/Root/serverless", "/Root/shared" });
+                    break;
+                }
+                case NConsole::TEvConsole::EvGetTenantStatusResponse: {
+                    auto *x = reinterpret_cast<NConsole::TEvConsole::TEvGetTenantStatusResponse::TPtr*>(&ev);
+                    if (!firstConsoleResponse) {
+                        ChangeGetTenantStatusResponse(x, "/Root/serverless");
+                    } else {
+                        firstConsoleResponse = false;
+                        ChangeGetTenantStatusResponse(x, "/Root/shared");
+                    }
+                    break;
+                }
+                case TEvTxProxySchemeCache::EvNavigateKeySetResult: {
+                    auto *x = reinterpret_cast<TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr*>(&ev);
+                    ChangeNavigateKeyResultServerless(x, NKikimrSubDomains::EServerlessComputeResourcesModeShared, runtime);
+                    break;
+                }
+                case TEvHive::EvResponseHiveNodeStats: {
+                    auto *x = reinterpret_cast<TEvHive::TEvResponseHiveNodeStats::TPtr*>(&ev);
+                    ChangeResponseHiveNodeStats(x, sharedDynNodeId);
+                    break;
+                }
+                case TEvHive::EvResponseHiveInfo: {
+                    auto *x = reinterpret_cast<TEvHive::TEvResponseHiveInfo::TPtr*>(&ev);
+                    AddBadServerlessTablet(x);
+                    break;
+                }
+                case TEvSchemeShard::EvDescribeSchemeResult: {
+                    auto *x = reinterpret_cast<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr*>(&ev);
+                    ChangeDescribeSchemeResultServerless(x);
+                    break;
+                }
+                case TEvBlobStorage::EvControllerConfigResponse: {
+                    auto *x = reinterpret_cast<TEvBlobStorage::TEvControllerConfigResponse::TPtr*>(&ev);
+                    AddGroupVSlotInControllerConfigResponseWithStaticGroup(x, NKikimrBlobStorage::TGroupStatus::FULL, TVDisks(1));
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetVSlotsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetVSlotsResponse::TPtr*>(&ev);
+                    AddVSlotsToSysViewResponse(x, 1, TVDisks(1));
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetGroupsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetGroupsResponse::TPtr*>(&ev);
+                    AddGroupsToSysViewResponse(x);
+                    break;
+                }
+                case NSysView::TEvSysView::EvGetStoragePoolsResponse: {
+                    auto* x = reinterpret_cast<NSysView::TEvSysView::TEvGetStoragePoolsResponse::TPtr*>(&ev);
+                    AddStoragePoolsToSysViewResponse(x);
+                    break;
+                }
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        runtime.SetObserverFunc(observerFunc);
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        TAutoPtr<IEventHandle> handle;
+
+        auto *request = new NHealthCheck::TEvSelfCheckRequest;
+        request->Request.set_return_verbose_status(true);
+        runtime.Send(new IEventHandle(NHealthCheck::MakeHealthCheckID(), sender, request, 0));
+        const auto result = runtime.GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
+        Ctest << result.ShortDebugString();
+        UNIT_ASSERT(HasTabletIssue(result));
     }
 
     Y_UNIT_TEST(DontIgnoreServerlessWithExclusiveNodesWhenNotSpecific) {
@@ -1859,15 +1973,6 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         ShardsQuotaTest(105, 0, 0, Ydb::Monitoring::StatusFlag::GREEN);
     }
 
-    bool HasDeadTabletIssue(const Ydb::Monitoring::SelfCheckResult& result) {
-       for (const auto& issue_log : result.issue_log()) {
-            if (issue_log.level() == 4 && issue_log.type() == "TABLET") {
-                return true;
-            }
-        }
-        return false;
-    }
-
     Y_UNIT_TEST(TestTabletIsDead) {
         TPortManager tp;
         ui16 port = tp.GetPort(2134);
@@ -1895,7 +2000,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto result = runtime->GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
         Cerr << result.ShortDebugString();
 
-        UNIT_ASSERT(HasDeadTabletIssue(result));
+        UNIT_ASSERT(HasTabletIssue(result));
     }
 
     Y_UNIT_TEST(TestBootingTabletIsNotDead) {
@@ -1926,7 +2031,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto result = runtime->GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
         Cerr << result.ShortDebugString();
 
-        UNIT_ASSERT(!HasDeadTabletIssue(result));
+        UNIT_ASSERT(!HasTabletIssue(result));
     }
 
     Y_UNIT_TEST(TestReBootingTabletIsDead) {
@@ -1960,7 +2065,7 @@ Y_UNIT_TEST_SUITE(THealthCheckTest) {
         auto result = runtime->GrabEdgeEvent<NHealthCheck::TEvSelfCheckResult>(handle)->Result;
         Cerr << result.ShortDebugString();
 
-        UNIT_ASSERT(HasDeadTabletIssue(result));
+        UNIT_ASSERT(HasTabletIssue(result));
     }
 
     void SendHealthCheckConfigUpdate(TTestActorRuntime &runtime, const TActorId& sender, const NKikimrConfig::THealthCheckConfig &cfg) {

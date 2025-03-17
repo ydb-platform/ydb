@@ -2684,7 +2684,7 @@ void TPartition::EndChangePartitionConfig(NKikimrPQ::TPQTabletConfig&& config,
 
 TString TPartition::GetKeyConfig() const
 {
-    return Sprintf("_config_%u", Partition.InternalPartitionId);
+    return Sprintf("_config_%u", Partition.OriginalPartitionId);
 }
 
 void TPartition::ChangePlanStepAndTxId(ui64 step, ui64 txId)

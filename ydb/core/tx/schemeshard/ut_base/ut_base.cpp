@@ -11793,11 +11793,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         TString newOwner = "user1";
 
         TApplyIfUnit applyIfUnit;
-        applyIfUnit.AllowedPathTypes = std::vector<NKikimrSchemeOp::EPathType>();
-        applyIfUnit.AllowedPathTypes.value().push_back(NKikimrSchemeOp::EPathTypeSubDomain);
-        applyIfUnit.AllowedPathTypes.value().push_back(NKikimrSchemeOp::EPathTypeExtSubDomain);
-
+        applyIfUnit.PathTypes = {NKikimrSchemeOp::EPathTypeSubDomain, NKikimrSchemeOp::EPathTypeExtSubDomain};
         TApplyIf applyIf = {applyIfUnit};
+
+        auto checkOwner = [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            const auto& self = record.GetPathDescription().GetSelf();
+            UNIT_ASSERT_EQUAL(self.GetOwner(), newOwner);
+        };
 
         {
             TestCreateSubDomain(runtime, ++txId, "/MyRoot", R"(
@@ -11805,15 +11807,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             )");
 
             {
-                AsyncModifyACL(runtime, ++txId, "/MyRoot", "Subdomain", TString(), newOwner, applyIf);
-                TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
-                env.TestWaitNotification(runtime, txId);
-
-                auto checkOwner = [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-                    const auto& self = record.GetPathDescription().GetSelf();
-                    UNIT_ASSERT_EQUAL(self.GetOwner(), newOwner);
-                };
-
+                TestModifyACL(runtime, ++txId, "/MyRoot", "Subdomain", TString(), newOwner, NKikimrScheme::StatusSuccess, applyIf);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Subdomain"), {checkOwner});
             }
         }
@@ -11824,16 +11818,32 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             )");
 
             {
-                AsyncModifyACL(runtime, ++txId, "/MyRoot", "Extsubdomain", TString(), newOwner, applyIf);
-                TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
-                env.TestWaitNotification(runtime, txId);
-
-                auto checkOwner = [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
-                    const auto& self = record.GetPathDescription().GetSelf();
-                    UNIT_ASSERT_EQUAL(self.GetOwner(), newOwner);
-                };
-
+                TestModifyACL(runtime, ++txId, "/MyRoot", "Extsubdomain", TString(), newOwner, NKikimrScheme::StatusSuccess, applyIf);
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/Extsubdomain"), {checkOwner});
+            }
+        }
+
+        { // last case didnt create external subdomain
+            TestCreateExtSubDomain(runtime, ++txId,  "/MyRoot", R"(
+                Name: "Extsubdomain2"
+            )");
+
+            TestAlterExtSubDomain(runtime, ++txId, "/MyRoot", R"(
+                Name: "Extsubdomain2"
+                PlanResolution: 50
+                Coordinators: 1
+                Mediators: 1
+                TimeCastBucketsPerMediator: 2
+                ExternalSchemeShard: true
+                StoragePools {
+                    Name: "/dc-1/users/tenant-1:hdd"
+                    Kind: "hdd"
+                }
+            )");
+
+            {
+                TestModifyACL(runtime, ++txId, "/MyRoot", "Extsubdomain2", TString(), newOwner, NKikimrScheme::StatusSuccess, applyIf);
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/Extsubdomain2"), {checkOwner});
             }
         }
 
@@ -11846,13 +11856,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             )");
 
             {
-                AsyncModifyACL(runtime, ++txId, "/MyRoot", "Table", TString(), newOwner, applyIf);
-                TestModificationResult(runtime, txId, NKikimrScheme::StatusPreconditionFailed);
-                env.TestWaitNotification(runtime, txId);
-
-                AsyncModifyACL(runtime, ++txId, "/MyRoot", "Table", TString(), newOwner);
-                TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
-                env.TestWaitNotification(runtime, txId);
+                TestModifyACL(runtime, ++txId, "/MyRoot", "Table", TString(), newOwner, NKikimrScheme::StatusPreconditionFailed, applyIf);
+                TestModifyACL(runtime, ++txId, "/MyRoot", "Table", TString(), newOwner, NKikimrScheme::StatusSuccess);
             }
         }
     }

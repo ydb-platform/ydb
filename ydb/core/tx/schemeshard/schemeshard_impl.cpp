@@ -1256,7 +1256,7 @@ TString TSchemeShard::PathToString(TPathElement::TPtr item) {
     return path.PathString();
 }
 
-bool TSchemeShard::CheckApplyIf(const NKikimrSchemeOp::TModifyScheme &scheme, TString &errStr) {
+bool TSchemeShard::CheckApplyIf(const NKikimrSchemeOp::TModifyScheme& scheme, TString& errStr, std::optional<TPathElement::EPathType> pathType) {
     const auto& conditions = scheme.GetApplyIf();
 
     for (const auto& item: conditions) {
@@ -1371,49 +1371,22 @@ bool TSchemeShard::CheckApplyIf(const NKikimrSchemeOp::TModifyScheme &scheme, TS
             }
         }
 
-        if (!item.GetAllowedPathTypes().empty()) {
-            if (scheme.HasModifyACL()) {
-                const auto& parDir = scheme.GetWorkingDir();
-                const auto& name = scheme.GetModifyACL().GetName();
-                const auto path = TPath::Resolve(parDir, this).Dive(name);
-
-                bool allowed = false;
-
-                for (const auto& type : item.GetAllowedPathTypes()) {
-                    switch (type) {
-                        case NKikimrSchemeOp::EPathType::EPathTypeSubDomain : {
-                            const auto checkSubDomain = path.Check();
-                            checkSubDomain.IsSubDomain();
-                            allowed |= !!checkSubDomain;
-                            break;
-                        }
-
-                        case NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain : {
-                            const auto checkExtSubDomain = path.Check();
-                            checkExtSubDomain.IsExternalSubDomain();
-                            allowed |= !!checkExtSubDomain;
-                            break;
-                        }
-
-                        default: {
-                            break;
-                        }
-                    }
-                }
-
-                if (!allowed) {
-                    errStr = TStringBuilder()
-                        << "fail in ApplyIf section:"
-                        << " path is not database";
-
-                    return false;
-                }
-            } else {
+        if (!item.GetPathTypes().empty()) {
+            if (!pathType.has_value()) {
                 errStr = TStringBuilder()
                     << "fail in ApplyIf section:"
-                    << " Tx message has field AllowedPathTypes, but transaction's type is not `ModifyACL`;"
-                    << " probably, it is bug in the YDB's code;"
-                    << " if you see this message, please contact with us";
+                    << " argument `pathType` is undefined,"
+                    << " but ApplyIf has non-empty field `PathTypes.`";
+
+                return false;
+            }
+
+            const auto& pathTypes = item.GetPathTypes();
+            bool allowed = (std::find(pathTypes.begin(), pathTypes.end(), pathType) != pathTypes.end());
+            if (!allowed) {
+                errStr = TStringBuilder()
+                    << "fail in ApplyIf section:"
+                    << " path is not database";
 
                 return false;
             }

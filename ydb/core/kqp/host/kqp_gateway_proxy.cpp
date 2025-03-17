@@ -647,8 +647,8 @@ public:
             schemeTx.MutableModifyACL()->SetName(basename);
 
             auto condition = schemeTx.AddApplyIf();
-            condition->AddAllowedPathTypes(NKikimrSchemeOp::EPathType::EPathTypeSubDomain);
-            condition->AddAllowedPathTypes(NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain);
+            condition->AddPathTypes(NKikimrSchemeOp::EPathType::EPathTypeSubDomain);
+            condition->AddPathTypes(NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain);
 
             auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
             auto& phyTx = *phyQuery.AddTransactions();

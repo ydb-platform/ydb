@@ -2820,7 +2820,6 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TActorId SchemeQueryExecutor;
         int NextIndexIdx = 0;
         TString Issue;
-        int ViewCreationRetries = 0;
 
         TItem() = default;
 
@@ -2851,6 +2850,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     EState State = EState::Invalid;
     TString Issue;
     TVector<TItem> Items;
+    int WaitingViews = 0;
 
     TSet<TActorId> Subscribers;
 

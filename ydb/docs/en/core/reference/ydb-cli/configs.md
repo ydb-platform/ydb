@@ -25,6 +25,12 @@
 {{ ydb-cli }} admin config resolve -f dynconfig.yaml --label tenant=/Root/test --label canary=true
 # Generate the final configuration for dynconfig.yaml for labels from node 1003
 {{ ydb-cli }} admin config resolve -f dynconfig.yaml --node-id 1003
+# Generate dynamic configuration file, based on static configuration on cluster
+{{ ydb-cli }} admin cluster config genereate
+# Initialize directory with configuration, using path to configuration file
+{{ ydb-cli }} admin node config init --config-dir <путь до директории> --from-config <путь до файла конфигурации>
+# Initialize directory with configuration, using configuration from the cluster
+{{ ydb-cli }} admin node config init --config-dir <путь до директории> --seed-node <эндпоинт узла кластера>
 # Fetch all temporary configurations of the cluster
 {{ ydb-cli }} admin volatile-config fetch --all --output-directory <dir>
 # Fetch the temporary configuration with id 1 from the cluster

@@ -196,8 +196,7 @@ private:
     TActorId NetClassifierUpdaterId;
 
     // For handshake with BSController/distconf
-    TActorId CurrentSenderId;
-    TActorId CurrentPipeServerId;
+    std::array<std::tuple<TActorId, TActorId>, 2> ConfigClients; // distconf -> SenderId, PipeServerId
 };
 
 } // namespace NKikimr::NConsole

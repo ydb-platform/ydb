@@ -10,21 +10,27 @@
 
 ```bash
 # Применить конфигурацию dynconfig.yaml на кластер
-{{ ydb-cli }} admin config replace -f dynconfig.yaml
+{{ ydb-cli }} admin cluster config replace -f dynconfig.yaml
 # Проверить возможно ли применить конфигурацию dynconfig.yaml на кластер (проверить все валидаторы, совпадение версий и кластера)
-{{ ydb-cli }} admin config replace -f dynconfig.yaml --dry-run
+{{ ydb-cli }} admin cluster config replace -f dynconfig.yaml --dry-run
 # Применить конфигурацию dynconfig.yaml на кластер игнорирую проверку версий и кластера (версия и кластер всё равно будут перезаписаны на корректные)
-{{ ydb-cli }} admin config replace -f dynconfig.yaml --force
+{{ ydb-cli }} admin cluster config replace -f dynconfig.yaml --force
 # Получить основную конфигурацию кластера
-{{ ydb-cli }} admin config fetch
+{{ ydb-cli }} admin cluster config fetch
 # Получить все текущие конфигурационные файлы кластера
-{{ ydb-cli }} admin config fetch --all
+{{ ydb-cli }} admin cluster config fetch --all
 # Сгенерировать все возможные конечные конфигурации для dynconfig.yaml
-{{ ydb-cli }} admin config resolve --all -f dynconfig.yaml
+{{ ydb-cli }} admin cluster config resolve --all -f dynconfig.yaml
 # Сгенерировать конечную конфигурацию для dynconfig.yaml при лейблах tenant=/Root/test и canary=true
-{{ ydb-cli }} admin config resolve -f dynconfig.yaml --label tenant=/Root/test --label canary=true
+{{ ydb-cli }} admin cluster config resolve -f dynconfig.yaml --label tenant=/Root/test --label canary=true
 # Сгенерировать конечную конфигурацию для dynconfig.yaml для лейблов с узла 1003
-{{ ydb-cli }} admin config resolve -f dynconfig.yaml --node-id 1003
+{{ ydb-cli }} admin cluster config resolve -f dynconfig.yaml --node-id 100
+# Сгенерировать файл динамической конфигурации на основе статической конфигурации на кластере
+{{ ydb-cli }} admin cluster config genereate
+# Инициализировать директорию с конфигурацией, используя путь до конфигурационного файла
+{{ ydb-cli }} admin node config init --config-dir <путь до директории> --from-config <путь до файла конфигурации>
+# Инициализировать директорию с конфигурацией, используя конфигурацию на кластере
+{{ ydb-cli }} admin node config init --config-dir <путь до директории> --seed-node <эндпоинт узла кластера>
 # Получить все временные конфигурации кластера
 {{ ydb-cli }} admin volatile-config fetch --all --output-directory <dir>
 # Получить временную конфигурацию с id 1 с кластера
@@ -43,17 +49,17 @@
 
 ```bash
 # Получить конфигурацию кластера
-{{ ydb-cli }} admin config fetch > dynconfig.yaml
+{{ ydb-cli }} admin cluster config fetch > dynconfig.yaml
 # Отредактировать конфигурацию вашим любимым редактором
 vim dynconfig.yaml
 # Применить конфигурацию dynconfig.yaml на кластер
-{{ ydb-cli }} admin config replace -f dynconfig.yaml
+{{ ydb-cli }} admin cluster config replace -f dynconfig.yaml
 ```
 
 аналогично в одну строчку:
 
 ```bash
-{{ ydb-cli }} admin config fetch | yq '.config.actor_system_config.scheduler.resolution = 128' | {{ ydb-cli }} admin config replace -f -
+{{ ydb-cli }} admin cluster config fetch | yq '.config.actor_system_config.scheduler.resolution = 128' | {{ ydb-cli }} admin cluster config replace -f -
 ```
 
 вывод команды:
@@ -65,7 +71,7 @@ OK
 ### Посмотреть конфигурацию для определённого набора лейблов
 
 ```bash
-{{ ydb-cli }} admin config resolve --remote --label tenant=/Root/db1 --label canary=true
+{{ ydb-cli }} admin cluster config resolve --remote --label tenant=/Root/db1 --label canary=true
 ```
 
 вывод команды:
@@ -86,7 +92,7 @@ config:
 ### Посмотреть конфигурацию для определённого узла
 
 ```bash
-{{ ydb-cli }} admin config resolve --remote --node-id <node_id>
+{{ ydb-cli }} admin cluster config resolve --remote --node-id <node_id>
 ```
 
 вывод команды:
@@ -107,7 +113,7 @@ config:
 ### Сохранить все конфигурации локально
 
 ```bash
-{{ ydb-cli }} admin config fetch --all --output-directory <configs_dir>
+{{ ydb-cli }} admin cluster config fetch --all --output-directory <configs_dir>
 ls <configs_dir>
 ```
 
@@ -120,7 +126,7 @@ dynconfig.yaml volatile_1.yaml volatile_3.yaml
 ### Посмотреть все конфигурации локально
 
 ```bash
-{{ ydb-cli }} admin config fetch --all
+{{ ydb-cli }} admin cluster config fetch --all
 ```
 
 вывод команды:
@@ -158,7 +164,7 @@ selectors:
 ### Посмотреть конечную конфигурацию для определённого узла из сохраненной локально исходной конфигурации
 
 ```bash
-{{ ydb-cli }} admin config resolve -k <configs_dir> --node-id <node_id>
+{{ ydb-cli }} admin cluster config resolve -k <configs_dir> --node-id <node_id>
 ```
 
 вывод команды:

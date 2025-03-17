@@ -1893,6 +1893,10 @@ message TSchemeShardConfig {
 
     // number of shards per table
     optional uint32 MaxCdcInitialScanShardsInFlight = 5 [default = 32];
+
+    // number of shards per table
+    // 0 means default - NKikimrIndexBuilder.TIndexBuildSettings.max_shards_in_flight
+    optional uint32 MaxRestoreBuildIndexShardsInFlight = 6 [default = 1000];
 }
 
 message TCompactionConfig {

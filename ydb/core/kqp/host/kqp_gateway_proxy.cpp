@@ -2659,14 +2659,14 @@ public:
             auto& op = *tx.MutableAlterReplication();
             op.SetName(pathPair.second);
             if (!settings.TranformLambda.empty()) {
-                op.SetTransferTransformLambda(settings.TranformLambda);
+                op.MutableAlterTransfer()->SetTransformLambda(settings.TranformLambda);
             }
             if (auto& batching = settings.Settings.Batching) {
                 if (batching->FlushInterval) {
-                    op.SetTransferFlushIntervalMilliSeconds(batching->FlushInterval.MilliSeconds());
+                    op.MutableAlterTransfer()->SetFlushIntervalMilliSeconds(batching->FlushInterval.MilliSeconds());
                 }
                 if (batching->BatchSizeBytes) {
-                    op.SetTransferBatchSizeBytes(batching->BatchSizeBytes);
+                    op.MutableAlterTransfer()->SetBatchSizeBytes(batching->BatchSizeBytes);
                 }
             }
 

@@ -368,7 +368,7 @@ public:
             return result;
         }
 
-        if (!op.HasConfig() && !op.HasState() && !op.HasTransferTransformLambda()) {
+        if (!op.HasConfig() && !op.HasState() && !op.HasAlterTransfer()) {
             result->SetError(NKikimrScheme::StatusInvalidParameter, "Empty alter");
             return result;
         }
@@ -449,27 +449,29 @@ public:
             return true;
         };
 
-        if (op.HasTransferTransformLambda()) {
-            if (!transferSetter("TransformLambda", [&](NKikimrReplication::TReplicationConfig::TTransferSpecific::TTarget& target) -> void {
-                target.SetTransformLambda(op.GetTransferTransformLambda());
-            })) {
-                return result;
+        if (op.HasAlterTransfer()) {
+            if (op.GetAlterTransfer().HasTransformLambda()) {
+                if (!transferSetter("TransformLambda", [&](NKikimrReplication::TReplicationConfig::TTransferSpecific::TTarget& target) -> void {
+                    target.SetTransformLambda(op.GetAlterTransfer().GetTransformLambda());
+                })) {
+                    return result;
+                }
             }
-        }
 
-        if (op.HasTransferFlushIntervalMilliSeconds()) {
-            if (!transferSetter("FlushInterval", [&](NKikimrReplication::TReplicationConfig::TTransferSpecific::TTarget& target) -> void {
-                target.SetFlushIntervalMilliSeconds(op.GetTransferFlushIntervalMilliSeconds());
-            })) {
-                return result;
+            if (op.GetAlterTransfer().HasFlushIntervalMilliSeconds()) {
+                if (!transferSetter("FlushInterval", [&](NKikimrReplication::TReplicationConfig::TTransferSpecific::TTarget& target) -> void {
+                    target.SetFlushIntervalMilliSeconds(op.GetAlterTransfer().GetFlushIntervalMilliSeconds());
+                })) {
+                    return result;
+                }
             }
-        }
 
-        if (op.HasTransferBatchSizeBytes()) {
-            if (!transferSetter("BatchSize", [&](NKikimrReplication::TReplicationConfig::TTransferSpecific::TTarget& target) -> void {
-                target.SetBatchSizeBytes(op.GetTransferBatchSizeBytes());
-            })) {
-                return result;
+            if (op.GetAlterTransfer().HasBatchSizeBytes()) {
+                if (!transferSetter("BatchSize", [&](NKikimrReplication::TReplicationConfig::TTransferSpecific::TTarget& target) -> void {
+                    target.SetBatchSizeBytes(op.GetAlterTransfer().GetBatchSizeBytes());
+                })) {
+                    return result;
+                }
             }
         }
 

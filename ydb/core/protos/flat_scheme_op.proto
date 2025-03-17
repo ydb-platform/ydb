@@ -1493,9 +1493,14 @@ message TReplicationDescription {
     optional uint64 Version = 4;
     optional uint64 ControllerId = 5; // replication controller's tablet id
     optional NKikimrReplication.TReplicationState State = 6;
-    optional string TransferTransformLambda = 7;
-    optional uint64 TransferFlushIntervalMilliSeconds = 8 [default = 60000];
-    optional uint64 TransferBatchSizeBytes = 9 [default = 8388608];
+
+    message TAlterTransfer {
+        optional string TransformLambda = 1;
+        optional uint64 FlushIntervalMilliSeconds = 2 [default = 60000];
+        optional uint64 BatchSizeBytes = 3 [default = 8388608];
+    }
+
+    optional TAlterTransfer AlterTransfer = 10;
 }
 
 message TBlobDepotDescription {

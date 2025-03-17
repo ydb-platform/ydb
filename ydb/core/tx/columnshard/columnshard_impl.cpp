@@ -986,21 +986,17 @@ void TColumnShard::SetupMetadata() {
     }
 }
 
-bool TColumnShard::SetupTtl(const THashMap<ui64, NOlap::TTiering>& pathTtls) {
+bool TColumnShard::SetupTtl() {
     if (!AppDataVerified().ColumnShardConfig.GetTTLEnabled() ||
         !NYDBTest::TControllers::GetColumnShardController()->IsBackgroundEnabled(NYDBTest::ICSController::EBackground::TTL)) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_ttl")("reason", "disabled");
         return false;
     }
     Counters.GetCSCounters().OnSetupTtl();
-    THashMap<ui64, NOlap::TTiering> eviction = pathTtls;
-    for (auto&& i : eviction) {
-        ACFL_DEBUG("background", "ttl")("path", i.first)("info", i.second.GetDebugString());
-    }
 
     const ui64 memoryUsageLimit = HasAppData() ? AppDataVerified().ColumnShardConfig.GetTieringsMemoryLimit() : ((ui64)512 * 1024 * 1024);
     std::vector<std::shared_ptr<NOlap::TTTLColumnEngineChanges>> indexChanges =
-        TablesManager.MutablePrimaryIndex().StartTtl(eviction, DataLocksManager, memoryUsageLimit);
+        TablesManager.MutablePrimaryIndex().StartTtl({}, DataLocksManager, memoryUsageLimit);
 
     if (indexChanges.empty()) {
         ACFL_DEBUG("background", "ttl")("skip_reason", "no_changes");

@@ -48,7 +48,7 @@ class TTableHistogramBuilderBtreeIndex {
         {
         }
 
-        TString ToString() const {
+        TString ToString(const TKeyCellDefaults &keyDefaults) const {
             return TStringBuilder() 
                 << "Part: " << Part->Label.ToString()
                 << " PageId: " << PageId
@@ -57,8 +57,8 @@ class TTableHistogramBuilderBtreeIndex {
                 << " EndRowId: " << EndRowId
                 << " BeginDataSize: " << BeginDataSize
                 << " EndDataSize: " << EndDataSize
-                << " BeginKey: " << BeginKey.Count()
-                << " EndKey: " << EndKey.Count()
+                << " BeginKey: " << NFmt::Do(BeginKey, keyDefaults)
+                << " EndKey: " << NFmt::Do(EndKey, keyDefaults)
                 << " State: " << (ui32)State;
         }
 
@@ -130,15 +130,17 @@ class TTableHistogramBuilderBtreeIndex {
     };
 
     struct TEvent {
-        TCellsIterable Key;
-        bool IsBegin;
         TNodeState* Node;
+        bool IsBegin;
 
-        TString ToString() const {
+        TString ToString(const TKeyCellDefaults &keyDefaults) const {
             return TStringBuilder()
-                << Node->ToString()
-                << " IsBegin: " << IsBegin
-                << " Key: " << Key.Count();
+                << "IsBegin: " << IsBegin
+                << " " << Node->ToString(keyDefaults);
+        }
+
+        const TCellsIterable& GetKey() const {
+            return IsBegin ? Node->BeginKey : Node->EndKey;
         }
     };
 
@@ -149,7 +151,7 @@ class TTableHistogramBuilderBtreeIndex {
             return Compare(a, b) > 0;
         }
 
-        i8 Compare(const TEvent& a, const TEvent& b) const {
+        int Compare(const TEvent& a, const TEvent& b) const {
             // events go in order:
             // - Key = {}, IsBegin = true
             // - ...
@@ -161,13 +163,16 @@ class TTableHistogramBuilderBtreeIndex {
             // - ...
             // - Key = {}, IsBegin = false
 
-            if (a.Key && b.Key) { // compare by keys
-                auto cmp = CompareKeys(a.Key, b.Key, KeyDefaults);
+            // end goes before begin in order to 
+            // close previous node before open the next one
+
+            if (a.GetKey() && b.GetKey()) { // compare by keys
+                auto cmp = CompareKeys(a.GetKey(), b.GetKey(), KeyDefaults);
                 if (cmp != 0) {
                     return cmp;
                 }
                 // keys are the same, compare by begin flag, end events first:
-                return Compare(a.IsBegin ? 1 : -1, b.IsBegin ? 1 : -1);
+                return Compare(a.IsBegin ? +1 : -1, b.IsBegin ? +1 : -1);
             }
 
             // category = -1 for Key = { }, IsBegin = true
@@ -177,14 +182,14 @@ class TTableHistogramBuilderBtreeIndex {
         }
 
     private:
-        static i8 GetCategory(const TEvent& a) {
-            if (a.Key) {
+        static int GetCategory(const TEvent& a) {
+            if (a.GetKey()) {
                 return 0;
             }
             return a.IsBegin ? -1 : +1;
         }
 
-        static i8 Compare(i8 a, i8 b) {
+        static int Compare(int a, int b) {
             if (a < b) return -1;
             if (a > b) return +1;
             return 0;
@@ -226,6 +231,9 @@ public:
 
         for (auto index : xrange(Subset.Flatten.size())) {
             auto& part = Subset.Flatten[index];
+            if (part.Slices) {
+                LOG_BUILD_STATS("slicing part " << part->Label << ": " << NFmt::Do(*part.Slices, KeyDefaults));
+            }
             auto& meta = part->IndexPages.GetBTree({});
             TCellsIterable beginKey = EmptyKey;
             if (part.Slices && part.Slices->front().FirstKey.GetCells()) {
@@ -235,7 +243,7 @@ public:
             if (part.Slices && part.Slices->back().LastKey.GetCells()) {
                 endKey = MakeCellsIterableKey(part.Part.Get(), part.Slices->back().LastKey);
             }
-            LoadedStateNodes.emplace_back(part.Part.Get(), meta.GetPageId(), meta.LevelCount, 0, meta.GetRowCount(), 0, meta.GetDataSize(), beginKey, endKey);
+            LoadedStateNodes.emplace_back(part.Part.Get(), meta.GetPageId(), meta.LevelCount, 0, meta.GetRowCount(), 0, meta.GetTotalDataSize(), beginKey, endKey);
             ready &= SlicePart(*part.Slices, LoadedStateNodes.back());
         }
 
@@ -261,13 +269,13 @@ private:
         
         if (it == slices.end() || node.EndRowId <= it->BeginRowId() || it->EndRowId() <= node.BeginRowId) {
             // skip the node
-            LOG_BUILD_STATS("slicing node " << node.ToString() << " => skip");
+            LOG_BUILD_STATS("slicing node " << node.ToString(KeyDefaults) << " => skip");
             return true;
         }
 
         if (it->BeginRowId() <= node.BeginRowId && node.EndRowId <= it->EndRowId()) {
             // take the node
-            LOG_BUILD_STATS("slicing node " << node.ToString() << " => take");
+            LOG_BUILD_STATS("slicing node " << node.ToString(KeyDefaults) << " => take");
             AddFutureEvents(node);
             return true;
         }
@@ -278,17 +286,20 @@ private:
             // can't split, decide by node.EndRowId - 1
             // TODO: decide by non-empty slice and node intersection, but this requires size calculation changes too
             if (it->Has(node.EndRowId - 1)) {
-                LOG_BUILD_STATS("slicing node " << node.ToString() << " => take root");
+                LOG_BUILD_STATS("slicing node " << node.ToString(KeyDefaults) << " => take leaf");
+                // the slice may start after node begin, shift the node begin to make it more sensible
+                node.BeginRowId = it->BeginRowId();
+                node.BeginKey = MakeCellsIterableKey(node.Part, it->FirstKey);
                 AddFutureEvents(node);
             } else {
-                LOG_BUILD_STATS("slicing node " << node.ToString() << " => skip root");
+                LOG_BUILD_STATS("slicing node " << node.ToString(KeyDefaults) << " => skip leaf");
             }
             return true;
         }
 
         bool ready = true;
 
-        LOG_BUILD_STATS("slicing node " << node.ToString() << " => split");
+        LOG_BUILD_STATS("slicing node " << node.ToString(KeyDefaults) << " => split");
         const auto addNode = [&](TNodeState& child) {
             ready &= SlicePart(slices, child);
         };
@@ -341,10 +352,10 @@ private:
                 << " openedSortedByRowCount: " << openedSortedByRowCount.size()
                 << " openedSortedByDataSize: " << openedSortedByDataSize.size()
                 << " FutureEvents: " << FutureEvents.size()
-                << " currentKeyPointer: " << currentKeyPointer.ToString());
+                << " currentKeyPointer: " << currentKeyPointer.ToString(KeyDefaults));
 
             auto processEvent = [&](const TEvent& event) {
-                LOG_BUILD_STATS("processing event " << event.ToString());
+                LOG_BUILD_STATS("processing event " << event.ToString(KeyDefaults));
                 Y_DEBUG_ABORT_UNLESS(NodeEventKeyGreater.Compare(event, currentKeyPointer) <= 0, "Can't process future events");
                 if (event.IsBegin) {
                     if (event.Node->Open(openedRowCount, openedDataSize)) {
@@ -370,7 +381,7 @@ private:
                 // TODO: skip all closed nodes and don't process them here
                 // TODO: don't compare each node key and replace it with parentNode.Seek(currentKeyPointer)
                 auto cmp = NodeEventKeyGreater.Compare(event, currentKeyPointer);
-                LOG_BUILD_STATS("adding event " << (i32)cmp << " " << event.ToString());
+                LOG_BUILD_STATS("adding event " << (i32)cmp << " " << event.ToString(KeyDefaults));
                 if (cmp <= 0) { // event happened
                     processEvent(event);
                     if (cmp == 0) {
@@ -381,8 +392,8 @@ private:
                 }
             };
             const auto addNode = [&](TNodeState& node) {
-                addEvent(TEvent{node.BeginKey, true, &node});
-                addEvent(TEvent{node.EndKey, false, &node});
+                addEvent(TEvent{&node, true});
+                addEvent(TEvent{&node, false});
             };
 
             // may safely skip current key pointer and go further only if at the next iteration
@@ -395,7 +406,7 @@ private:
                 openedSortedByRowCount.pop();
 
                 LOG_BUILD_STATS("loading node by row count trigger"
-                    << node->ToString()
+                    << node->ToString(KeyDefaults)
                     << " closedRowCount: " << closedRowCount
                     << " openedRowCount: " << openedRowCount
                     << " nextHistogramRowCount: " << nextHistogramRowCount);
@@ -413,7 +424,7 @@ private:
                 openedSortedByDataSize.pop();
 
                 LOG_BUILD_STATS("loading node by data size trigger"
-                    << node->ToString()
+                    << node->ToString(KeyDefaults)
                     << " closedDataSize: " << closedDataSize
                     << " openedDataSize: " << openedDataSize
                     << " nextHistogramDataSize: " << nextHistogramDataSize);
@@ -439,7 +450,7 @@ private:
                 << " openedSortedByRowCount: " << openedSortedByRowCount.size()
                 << " openedSortedByDataSize: " << openedSortedByDataSize.size()
                 << " FutureEvents: " << FutureEvents.size()
-                << " currentKeyPointer: " << currentKeyPointer.ToString());
+                << " currentKeyPointer: " << currentKeyPointer.ToString(KeyDefaults));
 
             // add current key pointer to a histogram if we either:
             // - failed to split opened nodes and may exceed a next histogram bucket value (plus its gaps)
@@ -449,7 +460,7 @@ private:
             // - minus size of all nodes that start at current key pointer
             // - plus half of size of all ohter opened nodes (as they exact position is unknown)
             // also check that current key pointer value is > then last presented value in a histogram
-            if (currentKeyPointer.Key) {
+            if (currentKeyPointer.GetKey()) {
                 if (nextHistogramRowCount != Max<ui64>()) {
                     if (closedRowCount + openedRowCount > nextHistogramRowCount + RowCountResolutionGap || closedRowCount > nextHistogramRowCount - RowCountResolutionGap) {
                         ui64 currentKeyRowCountOpens = 0;
@@ -461,7 +472,7 @@ private:
                         Y_ABORT_UNLESS(currentKeyRowCountOpens <= openedRowCount);
                         ui64 currentKeyPointerRowCount = closedRowCount + (openedRowCount - currentKeyRowCountOpens) / 2;
                         if ((stats.RowCountHistogram.empty() ? 0 : stats.RowCountHistogram.back().Value) < currentKeyPointerRowCount && currentKeyPointerRowCount < stats.RowCount) {
-                            AddKey(stats.RowCountHistogram, currentKeyPointer.Key, currentKeyPointerRowCount);
+                            AddKey(stats.RowCountHistogram, currentKeyPointer.GetKey(), currentKeyPointerRowCount);
                             nextHistogramRowCount = Max(currentKeyPointerRowCount + 1, nextHistogramRowCount + RowCountResolution);
                             if (nextHistogramRowCount + RowCountResolutionGap > stats.RowCount) {
                                 nextHistogramRowCount = Max<ui64>();
@@ -480,7 +491,7 @@ private:
                         Y_ABORT_UNLESS(currentKeyDataSizeOpens <= openedDataSize);
                         ui64 currentKeyPointerDataSize = closedDataSize + (openedDataSize - currentKeyDataSizeOpens) / 2;
                         if ((stats.DataSizeHistogram.empty() ? 0 : stats.DataSizeHistogram.back().Value) < currentKeyPointerDataSize && currentKeyPointerDataSize < stats.DataSize.Size) {
-                            AddKey(stats.DataSizeHistogram, currentKeyPointer.Key, currentKeyPointerDataSize);
+                            AddKey(stats.DataSizeHistogram, currentKeyPointer.GetKey(), currentKeyPointerDataSize);
                             nextHistogramDataSize = Max(currentKeyPointerDataSize + 1, nextHistogramDataSize + DataSizeResolution);
                             if (nextHistogramDataSize + DataSizeResolutionGap > stats.DataSize.Size) {
                                 nextHistogramDataSize = Max<ui64>();
@@ -507,7 +518,7 @@ private:
         return true;
     }
 
-    void AddKey(THistogram& histogram, TCellsIterable& key, ui64 value) {
+    void AddKey(THistogram& histogram, const TCellsIterable& key, ui64 value) {
         TVector<TCell> keyCells;
 
         // add columns that are present in the part:
@@ -555,8 +566,14 @@ private:
     }
 
     void AddFutureEvents(TNodeState& node) {
-        FutureEvents.push(TEvent{node.BeginKey, true, &node});
-        FutureEvents.push(TEvent{node.EndKey, false, &node});
+        auto cmp = NodeEventKeyGreater.Compare(TEvent{&node, true}, TEvent{&node, false});
+        LOG_BUILD_STATS("adding node future events " << (i32)cmp << " " << node.ToString(KeyDefaults));
+        if (node.GetRowCount() > 1) {
+            Y_DEBUG_ABORT_UNLESS(cmp < 0);
+        }
+
+        FutureEvents.push(TEvent{&node, true});
+        FutureEvents.push(TEvent{&node, false});
     }
     
 private:

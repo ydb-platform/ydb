@@ -133,6 +133,7 @@ namespace NTable {
         }
 
         void Describe(IOutputStream& out) const;
+        void Describe(IOutputStream& out, const TKeyCellDefaults& keyDefaults) const;
 
         /**
          * Returns true if first row of a is less than first row of b
@@ -327,6 +328,8 @@ namespace NTable {
         }
 
         void Describe(IOutputStream& out) const;
+
+        void Describe(IOutputStream& out, const TKeyCellDefaults& keyDefaults) const;
 
         /**
          * Validate slices are correct, crash otherwise

@@ -826,27 +826,25 @@ void AppendTxStats(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx
 class TInterestingOrderingsFSMBuilder {
 public:
     TInterestingOrderingsFSMBuilder(TKqpOptimizeContext& kqpCtx)
-        : KqpCtx(kqpCtx)
+        : InterstingOrderingsCollector(kqpCtx)
     {}
 
 public:
     TOrderingsStateMachine Build(const TExprNode::TPtr& node) {
-        InterestingOrderingsCollector collector;
-        VisitExpr(node, [&collector](const TExprNode::TPtr& node){
-            return collector.Collect(node);
+        VisitExpr(node, [this](const TExprNode::TPtr& node){
+            return this->InterstingOrderingsCollector.Collect(node);
         });
 
-        auto& fdStorage = collector.FDStorage;
+        auto& fdStorage = InterstingOrderingsCollector.FDStorage;
         return TOrderingsStateMachine(fdStorage.FDs, fdStorage.InterestingOrderings);
     }
 
 private:
-    TKqpOptimizeContext& KqpCtx;
-
-private:
     class InterestingOrderingsCollector {
     public:
-        InterestingOrderingsCollector()
+        InterestingOrderingsCollector(TKqpOptimizeContext& kqpCtx)
+            : KqpCtx(kqpCtx)
+        {}
 
         bool Collect(const TExprNode::TPtr& node) {
             bool matched = true;
@@ -864,6 +862,7 @@ private:
 
     public:
         TFDStorage FDStorage;
+        TKqpOptimizeContext& KqpCtx;
 
     private:
         void CollectEquiJoin(const TCoEquiJoin& equiJoin) {
@@ -908,6 +907,9 @@ private:
 
         }
     };
+
+private:
+    InterestingOrderingsCollector InterstingOrderingsCollector;
 };
 
 /**

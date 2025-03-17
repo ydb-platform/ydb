@@ -1,6 +1,6 @@
 # View backup and restoration
 
-This article explains the backup and restoration behavior of [views](../../../concepts/datamodel/view.md) in {{ ydb-short-name }}.
+This article explains how [views](../../../concepts/datamodel/view.md) are backed up and restored in {{ ydb-short-name }}.
 
 ## Backup file organization
 
@@ -16,7 +16,7 @@ However, the formats used to backup views and tables differ:
 | Table       | scheme.pb                        | Protobuf `CreateTableRequest` message |
 | View        | create_view.sql                  | Plain-text `CREATE VIEW` SQL statement |
 
-Thus, during restoration, tables are restored from the protobuf representation (`scheme.pb`), whereas views are restored by executing the `create_view.sql` statements.
+So tables are restored from the protobuf representation (`scheme.pb`), and views are restored by executing the `create_view.sql` statements.
 
 ## View query rewrite
 
@@ -43,29 +43,29 @@ ydb --database /my_database --endpoint <endpoint> tools dump --path . --output .
 
 3. Later, the user creates a new database, for instance: `target_db`.
 
-4. When the user restores the database from the previously created backup:
+4. The user restores the database from the previously created backup:
 
-```bash
-ydb --database /target_db --endpoint <endpoint> tools restore --path . --input ./my_backup
-```
+    ```bash
+    ydb --database /target_db --endpoint <endpoint> tools restore --path . --input ./my_backup
+    ```
 
-the {{ ydb-short-name }} CLI automatically rewrites the query stored in the `create_view.sql` file to reference the `/target_db/my_table` table instead of the original `/my_database/my_table`.
+    The {{ ydb-short-name }} CLI automatically rewrites the query stored in the `create_view.sql` file to reference the `/target_db/my_table` table instead of the original `/my_database/my_table`.
 
 ### Query rewriting rules
 
-The query rewriting follows these rules:
+Queries are modified according to the following rules:
 
 - The original object reference path is split as follows:
 
-```text
-original_reference_path = backup_root + reference_path_relative_to_backup_root
-```
+    ```text
+    original_reference_path = backup_root + reference_path_relative_to_backup_root
+    ```
 
 - Upon restoration, each reference path is rewritten to target an object with the same relative location under the restore root:
 
-```text
-reference_path_after_restoration = restore_root + reference_path_relative_to_backup_root
-```
+    ```text
+    reference_path_after_restoration = restore_root + reference_path_relative_to_backup_root
+    ```
 
 This ensures that after restoration, the references within the view correctly point to the intended tables or objects in the new environment.
 
@@ -81,15 +81,15 @@ Provided that `TablePathPrefix` is a subpath of the backup root, it is sufficien
 
 1. The original `TablePathPrefix` is split into the combination:
 
-```text
-original_table_path_prefix = backup_root + table_path_prefix_relative_to_backup_root
-```
+    ```text
+    original_table_path_prefix = backup_root + table_path_prefix_relative_to_backup_root
+    ```
 
 2. The restored `TablePathPrefix` is constructed as follows:
 
-```text
-table_path_prefix_after_restoration = restore_root + table_path_prefix_relative_to_backup_root
-```
+    ```text
+    table_path_prefix_after_restoration = restore_root + table_path_prefix_relative_to_backup_root
+    ```
 
 An important consideration is that the `TablePathPrefix` pragma is never actually empty or unset. If a user doesn't explicitly specify a value for it, the system automatically assigns a default value equal to the database root. Therefore, if the original view implicitly used the database root as its `TablePathPrefix`, but the restoration occurs at a location different from the target database root, the restoration process automatically injects an explicit pragma `TablePathPrefix` directive into the view restoration query. This can be observed by inspecting the restored view's query definition using the command:
 
@@ -103,37 +103,37 @@ Consider the following scenario:
 
 1. The original view was created without an explicit table path prefix:
 
-```sql
-CREATE VIEW my_view WITH security_invoker = TRUE AS
-SELECT * FROM my_table;
-```
+    ```sql
+    CREATE VIEW my_view WITH security_invoker = TRUE AS
+    SELECT * FROM my_table;
+    ```
 
-2. A backup was generated with:
+2. A backup was generated with the following command:
 
-```bash
-ydb --database /my_database --endpoint <endpoint> tools dump --path . --output ./my_backup
-```
+    ```bash
+    ydb --database /my_database --endpoint <endpoint> tools dump --path . --output ./my_backup
+    ```
 
 3. The backup was restored into the same database, but into a different subfolder:
 
-```bash
-ydb --database /my_database --endpoint <endpoint> tools restore --path ./restore/point --input ./my_backup
-```
+    ```bash
+    ydb --database /my_database --endpoint <endpoint> tools restore --path ./restore/point --input ./my_backup
+    ```
 
 4. As a consequence, the view definition has been built to reference the `/my_database/restore/point/my_table` instead of the originally referenced `/my_database/my_table`.
 
-5. Confirming this, the restored view query text obtained via:
+5. To confirm the query modification, get the restored view query text with the following command:
 
-```bash
-ydb scheme describe restore/point/my_view
-```
+    ```bash
+    ydb scheme describe restore/point/my_view
+    ```
 
-will show the following `TablePathPrefix` pragma:
+    Command output includes the following `TablePathPrefix` pragma:
 
-```text
-<view> my_view
+    ```text
+    <view> my_view
 
-Query text:
-PRAGMA TablePathPrefix = '/my_database/restore/point';
-SELECT * FROM my_table
-```
+    Query text:
+    PRAGMA TablePathPrefix = '/my_database/restore/point';
+    SELECT * FROM my_table
+    ```

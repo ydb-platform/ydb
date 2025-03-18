@@ -12,7 +12,6 @@ public:
 class TCommandNodeConfigInit : public TYdbCommand {
 public:
     TCommandNodeConfigInit();
-    void PropagateFlags(const TCommandFlags& flags) override;
     void Config(TConfig& config) override;
     int Run(TConfig& config) override;
     bool SaveConfig(const TString& config, const TString& configName, const TString& configDirPath);

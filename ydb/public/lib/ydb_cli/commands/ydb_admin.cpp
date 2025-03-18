@@ -37,8 +37,8 @@ public:
     }
 };
 
-TCommandDatabaseDump::TCommandDatabaseDump() 
-    : TYdbReadOnlyCommand("dump", {}, "Dump database into local directory") 
+TCommandDatabaseDump::TCommandDatabaseDump()
+    : TYdbReadOnlyCommand("dump", {}, "Dump database into local directory")
 {}
 
 void TCommandDatabaseDump::Config(TConfig& config) {
@@ -66,8 +66,8 @@ int TCommandDatabaseDump::Run(TConfig& config) {
     return EXIT_SUCCESS;
 }
 
-TCommandDatabaseRestore::TCommandDatabaseRestore() 
-    : TYdbCommand("restore", {}, "Restore database from local dump") 
+TCommandDatabaseRestore::TCommandDatabaseRestore()
+    : TYdbCommand("restore", {}, "Restore database from local dump")
 {}
 
 void TCommandDatabaseRestore::Config(TConfig& config) {
@@ -135,7 +135,7 @@ void TCommandAdmin::Config(TConfig& config) {
     stream << Endl << Endl
         << colors.BoldColor() << "Description" << colors.OldColor() << ": " << Description << Endl << Endl
         << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
-    RenderCommandsDescription(stream, colors);
+    RenderCommandDescription(stream, config.HelpCommandVerbosiltyLevel > 1, colors);
     stream << Endl;
     PrintParentOptions(stream, config, colors);
     config.Opts->SetCmdLineDescr(stream.Str());

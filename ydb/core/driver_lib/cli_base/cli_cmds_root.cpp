@@ -18,7 +18,7 @@ TClientCommandRootKikimrBase::TClientCommandRootKikimrBase(const TString& name)
 
 void TClientCommandRootKikimrBase::Config(TConfig& config) {
     TClientCommandRootBase::Config(config);
-    NLastGetopt::TOpts& opts = *config.Opts;
+    NLastGetopt::TOpts& opts = config.Opts->GetOpts();
     opts.AddLongOption('d', "dump", "Dump requests to error log").NoArgument().Hidden().SetFlag(&DumpRequests);
 
     TStringBuilder tokenHelp;
@@ -58,7 +58,7 @@ void TClientCommandRootKikimrBase::Config(TConfig& config) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     stream << " -s <[protocol://]host[:port]> [options] <subcommand>" << Endl << Endl
         << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
-    RenderCommandsDescription(stream, colors);
+    RenderCommandDescription(stream, config.HelpCommandVerbosiltyLevel > 1, colors);
     opts.SetCmdLineDescr(stream.Str());
 }
 

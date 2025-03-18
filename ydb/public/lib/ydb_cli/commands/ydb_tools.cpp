@@ -52,7 +52,7 @@ void TCommandDump::Config(TConfig& config) {
         .DefaultValue(".").StoreResult(&Path);
     config.Opts->AddLongOption("exclude", "Pattern(s) (PCRE) for paths excluded from dump."
             " Option can be used several times - one for each pattern.")
-        .RequiredArgument("STRING").Handler1T<TString>([this](const TString& arg) {
+        .RequiredArgument("STRING").Handler([this](const TString& arg) {
             ExclusionPatterns.emplace_back(TRegExMatch(arg));
         });
     config.Opts->AddLongOption('o', "output", "[Required] Path in a local filesystem to a directory to place dump into."
@@ -148,7 +148,7 @@ void TCommandRestore::Config(TConfig& config) {
 
     config.Opts->AddLongOption("restore-indexes", "Whether to restore indexes or not.")
         .DefaultValue(defaults.RestoreIndexes_).StoreResult(&RestoreIndexes);
-    
+
     config.Opts->AddLongOption("restore-acl", "Whether to restore ACL and owner or not.")
         .DefaultValue(defaults.RestoreACL_).StoreResult(&RestoreACL);
 
@@ -163,40 +163,40 @@ void TCommandRestore::Config(TConfig& config) {
 
     config.Opts->AddLongOption("bandwidth", "Limit data upload bandwidth, bytes per second (example: 2MiB).")
         .DefaultValue("no limit")
-        .Handler1T<TString>([this](const TString& arg) {
+        .Handler([this](const TString& arg) {
             UploadBandwidth = (arg == "no limit") ? "0" : arg;
         })
         .Hidden();
 
     config.Opts->AddLongOption("rps", "Limit requests per second (example: 100).")
         .DefaultValue("no limit")
-        .Handler1T<TString>([this](const TString& arg) {
+        .Handler([this](const TString& arg) {
             UploadRps = (arg == "no limit") ? "0" : arg;
         });
 
     config.Opts->AddLongOption("upload-batch-rows", "Limit upload batch size in rows (example: 1K)."
             " Not applicable in ImportData mode.")
         .DefaultValue("no limit")
-        .Handler1T<TString>([this](const TString& arg) {
+        .Handler([this](const TString& arg) {
             RowsPerRequest = (arg == "no limit") ? "0" : arg;
         });
 
     config.Opts->AddLongOption("upload-batch-rus", "Limit upload batch size in request units (example: 100)."
             " Not applicable in ImportData mode.")
         .DefaultValue("no limit")
-        .Handler1T<TString>([this](const TString& arg) {
+        .Handler([this](const TString& arg) {
             RequestUnitsPerRequest = (arg == "no limit") ? "0" : arg;
         });
 
     config.Opts->AddLongOption("upload-batch-bytes", "Limit upload batch size in bytes (example: 1MiB).")
         .DefaultValue("auto")
-        .Handler1T<TString>([this](const TString& arg) {
+        .Handler([this](const TString& arg) {
             BytesPerRequest = (arg == "auto") ? "0" : arg;
         });
 
     config.Opts->AddLongOption("in-flight", "Limit in-flight request count.")
         .DefaultValue("auto")
-        .Handler1T<TString>([this](const TString& arg) {
+        .Handler([this](const TString& arg) {
             InFlight = (arg == "auto") ? 0 : FromString<ui32>(arg);
         });
 

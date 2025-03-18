@@ -221,11 +221,7 @@ namespace NKikimr::NStorage {
         }
         if (request.GetSkipConsoleValidation() || !NewYaml) {
             if (request.GetDryRun()) {
-                if (auto error = ValidateConfigUpdate(*Self->StorageConfig, ProposedStorageConfig)) {
-                    STLOG(PRI_DEBUG, BS_NODE, NWDC78, "Config update validation failed", (SelfId, SelfId()),
-                        (Error, *error), (Config, ProposedStorageConfig));
-                    return FinishWithError(TResult::ERROR, TStringBuilder() << "Config update validation failed: " << *error);
-                }
+                CheckConfigUpdate(*Self->StorageConfig, ProposedStorageConfig);
                 return Finish(Sender, SelfId(), PrepareResult(TResult::DRY_RUN_SUCCESS, std::nullopt).release(), 0, Cookie);
             } else {
                 StartProposition(&ProposedStorageConfig);
@@ -449,11 +445,7 @@ namespace NKikimr::NStorage {
                 }
                 const auto& replaceConfig = Event->Get()->Record.GetReplaceStorageConfig();
                 if (replaceConfig.GetDryRun()) {
-                    if (auto error = ValidateConfigUpdate(*Self->StorageConfig, ProposedStorageConfig)) {
-                        STLOG(PRI_DEBUG, BS_NODE, NWDC78, "Config update validation failed", (SelfId, SelfId()),
-                            (Error, *error), (Config, ProposedStorageConfig));
-                        return FinishWithError(TResult::ERROR, TStringBuilder() << "Config update validation failed: " << *error);
-                    }
+                    CheckConfigUpdate(*Self->StorageConfig, ProposedStorageConfig);
                     return Finish(Sender, SelfId(), PrepareResult(TResult::DRY_RUN_SUCCESS, std::nullopt).release(), 0, Cookie);
                 }
                 return StartProposition(&ProposedStorageConfig);

@@ -235,6 +235,11 @@ namespace NOps {
                 TActivationContext::Send(ev.Release());
             }
 
+            void PassAway() override {
+                Send(MakeSharedPageCacheId(), new NSharedCache::TEvUnregister);
+                TActorBootstrapped::PassAway();
+            }
+
         private:
             TActorId Owner;
             TIntrusiveConstPtr<TColdPartStore> Part;

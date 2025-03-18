@@ -298,10 +298,9 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
 
     // Disable TTL
     lastTtlFinishedCount = csControllerGuard->GetTTLFinishedCounter().Val();
-    auto ok = ProposeSchemaTx(runtime, sender,
+    minPlanStep = ProposeSchemaTx(runtime, sender,
                          TTestSchema::AlterTableTxBody(tableId, 3, TTestSchema::TTableSpecials()),
                          ++txId);
-    UNIT_ASSERT(ok);
     UNIT_ASSERT(!!minPlanStep);
     planStep = *minPlanStep;
     if (spec.HasTiers()) {

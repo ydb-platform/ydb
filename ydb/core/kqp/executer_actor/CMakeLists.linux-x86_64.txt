@@ -33,7 +33,6 @@ target_link_libraries(core-kqp-executer_actor PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  library-actors-core
   cpp-containers-absl_flat_hash
   ydb-core-actorlib_impl
   ydb-core-base
@@ -43,20 +42,22 @@ target_link_libraries(core-kqp-executer_actor PUBLIC
   core-kqp-compute_actor
   kqp-executer_actor-shards_resolver
   core-kqp-federated_query
+  kqp-gateway-local_rpc
   core-kqp-query_compiler
   core-kqp-rm_service
   core-kqp-topics
-  kqp-gateway-local_rpc
   ydb-core-protos
+  core-sys_view-common
   tx-long_tx_service-public
   ydb-core-ydb_convert
-  services-metadata-abstract
+  library-actors-core
   ydb-library-mkql_proto
   library-mkql_proto-protos
   dq-actors-compute
   yql-dq-runtime
   yql-dq-tasks
   providers-common-http_gateway
+  services-metadata-abstract
   tools-enum_parser-enum_serialization_runtime
 )
 

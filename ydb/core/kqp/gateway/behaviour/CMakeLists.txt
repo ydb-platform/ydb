@@ -12,9 +12,9 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(tablestore)
-add_subdirectory(table)
 add_subdirectory(external_data_source)
 add_subdirectory(resource_pool)
 add_subdirectory(resource_pool_classifier)
+add_subdirectory(table)
+add_subdirectory(tablestore)
 add_subdirectory(view)

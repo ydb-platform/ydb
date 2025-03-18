@@ -95,6 +95,7 @@ public:
         , DataFetchers(fetchers)
         , Cursor(cursor)
         , Guard(Source->GetContext()->GetCommonContext()->GetCounters().GetFetchBlobsGuard()) {
+        FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("scf"));
     }
 };
 

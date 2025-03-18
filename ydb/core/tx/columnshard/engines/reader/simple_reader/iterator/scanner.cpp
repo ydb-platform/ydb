@@ -10,6 +10,8 @@ namespace NKikimr::NOlap::NReader::NSimple {
 
 void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::shared_ptr<arrow::Table>&& tableExt, const ui32 startIndex,
     const ui32 recordsCount, TPlainReadData& reader) {
+    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("f"));
+    AFL_DEBUG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG)("event_log", source->GetEventsReport())("count", FetchingSources.size());
     source->MutableResultRecordsCount() += tableExt ? tableExt->num_rows() : 0;
     if (!tableExt || !tableExt->num_rows()) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("empty_source", source->DebugJson().GetStringRobust());
@@ -130,6 +132,7 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
     bool changed = false;
     if (!Context->GetCommonContext()->GetReadMetadata()->HasLimit()) {
         while (SortedSources.size() && SourcesInFlightCount.Val() < InFlightLimit && Context->IsActive()) {
+            FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, SortedSources.front()->AddEvent("f"));
             SortedSources.front()->StartProcessing(SortedSources.front());
             FetchingSources.emplace_back(SortedSources.front());
             SourcesInFlightCount.Inc();
@@ -144,6 +147,7 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
         ui32 inFlightCountLocal = GetInFlightIntervalsCount();
         AFL_VERIFY(IntervalsInFlightCount == inFlightCountLocal)("count_global", IntervalsInFlightCount)("count_local", inFlightCountLocal);
         while (SortedSources.size() && inFlightCountLocal < InFlightLimit && Context->IsActive()) {
+            FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, SortedSources.front()->AddEvent("f"));
             SortedSources.front()->StartProcessing(SortedSources.front());
             FetchingSources.emplace_back(SortedSources.front());
             SourcesInFlightCount.Inc();

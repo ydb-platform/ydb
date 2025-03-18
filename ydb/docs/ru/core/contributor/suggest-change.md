@@ -362,8 +362,7 @@ git push
 * обновить описание вашего изменения (например, если вы хотите дополнить его ссылкой на документацию);
 * после мержа изменения в текущий релиз перенести описание из блока Unreleased в блок нужной версии.
 
-В `main` файл CHANGELOG.md с историей изменений хранится [в корне](https://github.com/ydb-platform/ydb/blob/main/CHANGELOG.md).
-Чтобы открыть CHANGELOG.md в stable-ветке, выберите её из списка веток. Например, в `stable-25-1` файл CHANGELOG.md также хранится [в корне](https://github.com/ydb-platform/ydb/blob/stable-25-1/CHANGELOG.md).
+В `main` файл CHANGELOG.md хранится [в корне](https://github.com/ydb-platform/ydb/blob/main/CHANGELOG.md). Чтобы открыть CHANGELOG.md в stable-ветке, выберите её из списка веток.
 В `main` CHANGELOG.md содержит изменения для всех выпущенных версий и изменения, которые попадут в следующий релиз. В `stable-*` — изменения, которые были в `main` на момент ответвления, а также изменения, которые были домержены.
 
 #### Как изменить сообщение в CHANGELOG.md

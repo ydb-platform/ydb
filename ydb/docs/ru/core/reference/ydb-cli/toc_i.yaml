@@ -113,6 +113,8 @@ items:
       href: commands/config-info.md
     - name: Вывод версии YDB CLI
       href: version.md
+    - name: Проверка состояния кластера
+      href: commands/monitoring-healthcheck.md 
   - name: Нагрузочное тестирование
     items:
     - name: Обзор

@@ -31,6 +31,8 @@ To enable anonymous authentication, use `false` in the `enforce_user_token_requi
 
 ## Authenticating by username and password {#static-credentials}
 
+Authentication by username and password is available only to [internal users](../concepts/glossary.md#access-user). External users are either authenticated using a third-party server or come with an auth token.
+
 This access type implies that each database user has a username and password.
 Only digits and lowercase Latin letters can be used in usernames. [Password complexity requirements](#password-complexity) can be configured.
 

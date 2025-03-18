@@ -2,9 +2,9 @@
 
 {{ ydb-short-name }} supports various user authentication methods. The configuration for authentication providers is specified in the `auth_config` section.
 
-## Configuring internal {{ ydb-short-name }} user authentication {#local-auth-config}
+## Configuring internal {{ ydb-short-name }} user authentication {#internal-auth-config}
 
-Internal {{ ydb-short-name }} users are added directly to a {{ ydb-short-name }} database without using third-party directory services. For more information about this authentication method, see [{#T}](../../security/authentication.md#static-credentials). To configure authentication by user name and password, define the following parameters in the `auth_config` section.
+For more information about authentication of [internal {{ ydb-short-name }} users](../../concepts/glossary.md#access-user), see [{#T}](../../security/authentication.md#static-credentials). To configure authentication by user name and password, define the following parameters in the `auth_config` section:
 
 #|
 || Parameter | Description ||
@@ -23,7 +23,7 @@ Default value: `true`
 
 Valid values:
 
-- `true` – internal users are added only to the root database.
+- `true` – internal users are added only to the [root database](../../concepts/glossary.md#root-database).
 - `false` – internal users are added to the root and to tenant databases.
 
 Default value: `true`
@@ -68,7 +68,7 @@ Default value: `1h`
 
 ### Configuring password complexity requirements {#password-complexity}
 
-{{ ydb-short-name }} allows users authenticate by login and password. For more information, see [authentication by login and password](../../security/authentication.md#static-credentials). To enhance security in {{ ydb-short-name }}, configure complexity requirements for user passwords in the `password_complexity` subsection inside the `auth_config` section.
+{{ ydb-short-name }} allows internal users authenticate by login and password. For more information, see [authentication by login and password](../../security/authentication.md#static-credentials). To enhance security in {{ ydb-short-name }}, configure complexity requirements for the passwords of [internal users](../../concepts/glossary.md#access-user) in the `password_complexity` subsection inside the `auth_config` section.
 
 Example of the `password_complexity` section:
 
@@ -127,64 +127,6 @@ Default value: `false`
     ||
 |#
 
-## Configuring third-party IAM authentication {#iam-auth-config}
-
-{{ ydb-short-name }} supports Yandex Identity and Access Management (IAM) used in Yandex Cloud for user authentication. To configure IAM authentication, define the following parameters:
-
-#|
-|| Parameter | Description ||
-|| use_access_service
-| Indicates whether to allow IAM AccessService authentication.
-
-Default value: `false`
-    ||
-|| access_service_endpoint
-| Specifies an IAM AccessService address, to which {{ ydb-short-name }} sends requests.
-
-Default value: `as.private-api.cloud.yandex.net:4286`
-    ||
-|| user_account_service_endpoint
-| Specifies an IAM AccessService address, to which {{ ydb-short-name }} sends requests to access user accounts.
-
-Default value: `api-adapter.private-api.cloud.yandex.net:8443`
-    ||
-|| service_account_service_endpoint
-| Specifies an IAM AccessService address, to which {{ ydb-short-name }} sends requests to access service accounts.
-
-Default value: `api-adapter.private-api.cloud.yandex.net:8443`
-    ||
-|| use_access_service_tls
-| Indicates whether to use TLS connections between {{ ydb-short-name }} and IAM AccessService сервером.
-
-Default value: `true`
-    ||
-|| access_service_domain
-| Specifies an identifier appended to the username to distinguish AccessService directory users from those authenticated using other providers.
-
-Default value: `as`
-    ||
-|| path_to_root_ca
-| Specifies the path to the certification authority's certificate file.
-
-Default value: `/etc/ssl/certs/YandexInternalRootCA.pem`
-    ||
-|| access_service_grpc_keep_alive_time_ms
-| Specifies the period of time, in milliseconds, after which a keepalive ping is sent on the transport to IAM AccessService.
-
-Default value: `10000`
-    ||
-|| access_service_grpc_keep_alive_timeout_ms
-| Specifies the amount of time, in milliseconds, that {{ ydb-short-name }} waits for the acknowledgement of the keepalive ping from IAM AccessService. If {{ ydb-short-name }} does not receive an acknowledgment within this time, it will close the connection.
-
-Default value: `1000`
-    ||
-|| use_access_service_api_key
-| Indicates whether to use API keys. The API key is a secret key only used for simplified authorization of service accounts with the Yandex Cloud API. Use API keys if requesting an IAM token automatically is not an option.
-
-Default value: `false`
-    ||
-|#
-
 ## Configuring LDAP authentication {#ldap-auth-config}
 
 One of the user authentication methods in {{ ydb-short-name }} is using an LDAP directory. For more details, see [Interacting with the LDAP directory](../../security/authentication.md#ldap-auth-provider). To configure LDAP authentication, define the `ldap_authentication` section inside the `auth_config` section.
@@ -235,6 +177,54 @@ auth_config:
 | `requested_group_attribute` | Specifies the attribute used for reverse group membership. The default is `memberOf`. |
 | `extended_settings.enable_nested_groups_search` | Indicates whether to perform a request to retrieve the full hierarchy of groups to which the user's direct groups belong. |
 | `host` | Specifies the hostname of the LDAP server. This parameter is deprecated and should be replaced with the `hosts` parameter. |
+
+## Configuring third-party IAM authentication {#iam-auth-config}
+
+{{ ydb-short-name }} supports Yandex Identity and Access Management (IAM) used in Yandex Cloud for user authentication. To configure IAM authentication, define the following parameters:
+
+#|
+|| Parameter | Description ||
+|| use_access_service
+| Indicates whether to allow authentication in Yandex Cloud using IAM AccessService.
+
+Default value: `false`
+    ||
+|| access_service_endpoint
+| Specifies an IAM AccessService address, to which {{ ydb-short-name }} sends requests.
+
+Default value: `as.private-api.cloud.yandex.net:4286`
+    ||
+|| use_access_service_tls
+| Indicates whether to use TLS connections between {{ ydb-short-name }} and AccessService.
+
+Default value: `true`
+    ||
+|| access_service_domain
+| Specifies an identifier appended to the username in [SID](../../concepts/glossary.md#access-sid) to distinguish Yandex Cloud IAM users from those authenticated using other providers.
+
+Default value: `as` ("access service")
+    ||
+|| path_to_root_ca
+| Specifies the path to the certification authority's certificate file that is used to interact with AccessService.
+
+Default value: `/etc/ssl/certs/YandexInternalRootCA.pem`
+    ||
+|| access_service_grpc_keep_alive_time_ms
+| Specifies the period of time, in milliseconds, after which a keepalive ping is sent on the transport to IAM AccessService.
+
+Default value: `10000`
+    ||
+|| access_service_grpc_keep_alive_timeout_ms
+| Specifies the amount of time, in milliseconds, that {{ ydb-short-name }} waits for the acknowledgement of the keepalive ping from IAM AccessService. If {{ ydb-short-name }} does not receive an acknowledgment within this time, it will close the connection.
+
+Default value: `1000`
+    ||
+|| use_access_service_api_key
+| Indicates whether to use IAM API keys. The API key is a secret key created in Yandex Cloud IAM for simplified authorization of service accounts with the Yandex Cloud API. Use API keys if requesting an IAM token automatically is not an option.
+
+Default value: `false`
+    ||
+|#
 
 ## Configuring token life cycle
 

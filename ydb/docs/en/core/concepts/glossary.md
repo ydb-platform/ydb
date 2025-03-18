@@ -18,6 +18,10 @@ Like in most database management systems, a **database** in {{ ydb-short-name }}
 
 Another essential characteristic of {{ ydb-short-name }} databases is that they typically have dedicated compute resources allocated to them. Hence, creating an additional database is usually done externally by [DevOps engineers](../devops/index.md) or automation rather than via a SQL query.
 
+#### Root database {#root-database}
+
+A **root database** is a system database created for {{ ydb-short-name }} tasks in the root of the cluster scheme. This database contains such service data as users, access levels and access rights, tenant databases, etc.
+
 ### Node {#node}
 
 A {{ ydb-short-name }} **node** is a server process running an executable called `ydbd`. A physical server or virtual machine can run multiple {{ ydb-short-name }} nodes, which is common. Thus, in the context of {{ ydb-short-name }}, nodes are **not** synonymous with hosts.

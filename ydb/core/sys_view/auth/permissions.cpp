@@ -1,7 +1,6 @@
 #include "auth_scan_base.h"
 #include "permissions.h"
 
-
 #include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/schema.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>

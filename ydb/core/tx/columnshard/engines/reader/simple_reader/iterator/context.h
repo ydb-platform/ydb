@@ -39,6 +39,8 @@ public:
     ~TSpecialReadContext() {
         NActors::TActivationContext::AsActorContext().Send(DuplicatesManager, new NActors::TEvents::TEvPoison());
     }
+
+    void RegisterDuplicatesManager(const std::deque<std::shared_ptr<IDataSource>>& sources);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

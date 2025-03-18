@@ -105,9 +105,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
 }
 
 TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
-    : TBase(commonContext)
-    , DuplicatesManager(NActors::TActivationContext::Register(
-          new TDuplicateFilterConstructor(commonContext->GetReadMetadataPtrVerifiedAs<TReadMetadata>()->SelectInfo->Portions))) {
+    : TBase(commonContext) {
 }
 
 TString TSpecialReadContext::ProfileDebugString() const {
@@ -123,6 +121,11 @@ TString TSpecialReadContext::ProfileDebugString() const {
         }
     }
     return sb;
+}
+
+void TSpecialReadContext::RegisterDuplicatesManager(const std::deque<std::shared_ptr<IDataSource>>& sources) {
+    AFL_VERIFY(!DuplicatesManager);
+    DuplicatesManager = NActors::TActivationContext::Register(new TDuplicateFilterConstructor(sources));
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

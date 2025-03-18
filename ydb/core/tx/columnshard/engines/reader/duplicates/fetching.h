@@ -49,14 +49,6 @@ private:
     THashMap<ui32, std::shared_ptr<NCommon::IKernelFetchLogic>> DataFetchers;
     std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard> ResourcesGuard;
 
-    TColumnsAssembleTask(const std::shared_ptr<TColumnFetchingContext>& context,
-        THashMap<ui32, std::shared_ptr<NCommon::IKernelFetchLogic>>&& dataFetchers,
-        const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard)
-        : Context(context)
-        , DataFetchers(std::move(dataFetchers))
-        , ResourcesGuard(resourcesGuard) {
-    }
-
 private:
     virtual TConclusionStatus DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) override {
         NArrow::NAccessor::TAccessorsCollection accessorsResult;
@@ -74,6 +66,15 @@ private:
     }
     virtual TString GetTaskClassIdentifier() const override {
         return "TDuplicateFilterConstructor::TColumnsAssembleTask";
+    }
+
+public:
+    TColumnsAssembleTask(const std::shared_ptr<TColumnFetchingContext>& context,
+        THashMap<ui32, std::shared_ptr<NCommon::IKernelFetchLogic>>&& dataFetchers,
+        const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& resourcesGuard)
+        : Context(context)
+        , DataFetchers(std::move(dataFetchers))
+        , ResourcesGuard(resourcesGuard) {
     }
 };
 

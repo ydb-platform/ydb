@@ -764,11 +764,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Unregister"
             << " owner " << ev->Sender);
 
-        DropFromQueue(ScanRequests, ev->Sender, ctx);
-        DropFromQueue(AsyncRequests, ev->Sender, ctx);
-
-        RequestFromQueue(AsyncRequests);
-        RequestFromQueue(ScanRequests);
+        DropRequestsFromQueues(ev->Sender);
 
         auto ownerIt = CollectionsOwners.find(ev->Sender);
         if (ownerIt != CollectionsOwners.end()) {
@@ -796,7 +792,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         auto &collection = collectionIt->second;
 
-        DropRequestsFor(ev->Sender, pageCollectionId);
+        DropRequestsFromQueues(ev->Sender, pageCollectionId);
 
         if (collection.Owners.erase(ev->Sender)) {
             auto ownerIt = CollectionsOwners.find(ev->Sender);
@@ -1044,7 +1040,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
 
         for (TActorId owner : collection.Owners) {
-            DropRequestsFor(owner, pageCollectionId);
+            DropRequestsFromQueues(owner, pageCollectionId);
         }
 
         if (!collection.Owners && !haveValidPages) {
@@ -1053,37 +1049,69 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
     }
 
-    void DropRequestsFor(TActorId owner, const TLogoBlobID &pageCollectionId) {
-        DropFromQueue(ScanRequests, owner, pageCollectionId);
-        DropFromQueue(AsyncRequests, owner, pageCollectionId);
+    void RequestFromQueues() {
+        RequestFromQueue(AsyncRequests);
+        RequestFromQueue(ScanRequests);
     }
 
-    void DropFromQueue(TRequestQueue &queue, TActorId ownerId, const TLogoBlobID &pageCollectionId) {
-        auto ownerIt = queue.Requests.find(ownerId);
-        if (ownerIt == queue.Requests.end())
+    void DropRequestsFromQueues(TActorId owner) {
+        DropRequestsFromQueue(ScanRequests, owner);
+        DropRequestsFromQueue(AsyncRequests, owner);
+
+        RequestFromQueues();
+    }
+
+    void DropRequestsFromQueue(TRequestQueue &queue, TActorId ownerId) {
+        auto it = queue.Requests.find(ownerId);
+        if (it == queue.Requests.end()) {
             return;
+        }
+
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Drop requests from queue"
+            << " owner " << ownerId
+            << " page collections " << it->second.Index.size());
+
+        for (const auto& r : it->second.Listed) {
+            Y_ABORT_UNLESS(!r.Request->Sender, "All dropping requests should be responded first");
+        }
+
+        queue.Requests.erase(it);
+    }
+
+    void DropRequestsFromQueues(TActorId owner, const TLogoBlobID &pageCollectionId) {
+        DropRequestsFromQueue(ScanRequests, owner, pageCollectionId);
+        DropRequestsFromQueue(AsyncRequests, owner, pageCollectionId);
+
+        RequestFromQueues();
+    }
+
+    void DropRequestsFromQueue(TRequestQueue &queue, TActorId ownerId, const TLogoBlobID &pageCollectionId) {
+        auto ownerIt = queue.Requests.find(ownerId);
+        if (ownerIt == queue.Requests.end()) {
+            return;
+        }
+
         auto &reqsByOwner = ownerIt->second;
         auto reqsIt = reqsByOwner.Index.find(pageCollectionId);
-        if (reqsIt == reqsByOwner.Index.end())
+        if (reqsIt == reqsByOwner.Index.end()) {
             return;
+        }
+
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Drop requests from queue"
+            << " owner " << ownerId
+            << " page collection " << pageCollectionId);
 
         if (reqsByOwner.Index.size() == 1) {
+            for (const auto& r : reqsByOwner.Listed) {
+                Y_ABORT_UNLESS(!r.Request->Sender, "All dropping requests should be responded first");
+            }
             queue.Requests.erase(ownerIt);
         } else {
-            for (auto &x : reqsIt->second)
+            for (auto &x : reqsIt->second) {
+                Y_ABORT_UNLESS(!x.Request->Sender, "All dropping requests should be responded first");
                 x.Unlink();
+            }
             reqsByOwner.Index.erase(reqsIt);
-        }
-    }
-
-    void DropFromQueue(TRequestQueue &queue, TActorId ownerId, const TActorContext& ctx) {
-        auto it = queue.Requests.find(ownerId);
-        if (it != queue.Requests.end()) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Drop queues"
-                << " owner " << ownerId
-                << " page collections " << it->second.Index.size());
-
-            queue.Requests.erase(it);
         }
     }
 

@@ -2,52 +2,14 @@ import yatest.common
 import os
 import time
 import logging
-import boto3
-import requests
-from library.recipes import common as recipes_common
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.util import LogLevels
+from ydb.tests.olap.common.s3_client import S3Mock, S3Client
 from ydb.tests.olap.common.ydb_client import YdbClient
 
 logger = logging.getLogger(__name__)
-
-
-class S3Client:
-    def __init__(self, endpoint, region, key_id, key_secret):
-        self.endpoint = endpoint
-        self.region = region
-        self.key_id = key_id
-        self.key_secret = key_secret
-
-        session = boto3.session.Session()
-        self.s3 = session.resource(
-            service_name="s3",
-            aws_access_key_id=key_id,
-            aws_secret_access_key=key_secret,
-            region_name=region,
-            endpoint_url=endpoint
-        )
-        self.client = session.client(
-            service_name="s3",
-            aws_access_key_id=key_id,
-            aws_secret_access_key=key_secret,
-            region_name=region,
-            endpoint_url=endpoint
-        )
-
-    def create_bucket(self, name: str):
-        self.client.create_bucket(Bucket=name)
-
-    def get_bucket_stat(self, bucket_name: str) -> (int, int):
-        bucket = self.s3.Bucket(bucket_name)
-        count = 0
-        size = 0
-        for obj in bucket.objects.all():
-            count += 1
-            size += obj.size
-        return (count, size)
 
 
 class TllTieringTestBase(object):
@@ -58,7 +20,7 @@ class TllTieringTestBase(object):
 
     @classmethod
     def teardown_class(cls):
-        recipes_common.stop_daemon(cls.s3_pid)
+        cls.s3_mock.stop()
         cls.ydb_client.stop()
         cls.cluster.stop()
 
@@ -93,31 +55,11 @@ class TllTieringTestBase(object):
 
     @classmethod
     def _setup_s3(cls):
-        s3_pid_file = "s3.pid"
-        moto_server_path = os.environ["MOTO_SERVER_PATH"]
+        cls.s3_mock = S3Mock(yatest.common.binary_path(os.environ["MOTO_SERVER_PATH"]))
+        cls.s3_mock.start()
 
-        port_manager = yatest.common.network.PortManager()
-        port = port_manager.get_port()
-        endpoint = f"http://localhost:{port}"
-        command = [yatest.common.binary_path(moto_server_path), "s3", "--port", str(port)]
-
-        def is_s3_ready():
-            try:
-                response = requests.get(endpoint)
-                response.raise_for_status()
-                return True
-            except requests.RequestException as err:
-                logging.debug(err)
-                return False
-
-        recipes_common.start_daemon(
-            command=command, environment=None, is_alive_check=is_s3_ready, pid_file_name=s3_pid_file
-        )
-
-        with open(s3_pid_file, 'r') as f:
-            cls.s3_pid = int(f.read())
-
-        cls.s3_client = S3Client(endpoint, "us-east-1", "fake_key_id", "fake_key_secret")
+        cls.s3_pid = cls.s3_mock.s3_pid
+        cls.s3_client = S3Client(endpoint=cls.s3_mock.endpoint)
 
     @staticmethod
     def wait_for(condition_func, timeout_seconds):

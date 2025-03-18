@@ -48,6 +48,27 @@ public:
     }
 
 private:
+
+    void HandleLimiter(TEvSysView::TEvGetScanLimiterResult::TPtr& ev) override {
+        ScanLimiter = ev->Get()->ScanLimiter;
+
+        if (!ScanLimiter->Inc()) {
+            FailState = LIMITER_FAILED;
+            if (AckReceived) {
+                ReplyLimiterFailedAndDie();
+            }
+            return;
+        }
+
+        AllowedByLimiter = true;
+
+        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
+            "Scan prepared, actor: " << TBase::SelfId());
+
+        ProceedToScan();
+        return;
+    }
+
     void StartScan() {
         if (!AppData()->FeatureFlags.GetEnableShowCreate()) {
             ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,

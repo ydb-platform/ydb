@@ -1,6 +1,5 @@
 #pragma once
 
-#include "schema.h"
 #include "utils.h"
 
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
@@ -212,12 +211,12 @@ protected:
         return true;
     }
 
-private:
-    virtual void ProceedToScan() = 0;
-
     void ReplyLimiterFailedAndDie() {
         ReplyErrorAndDie(Ydb::StatusIds::OVERLOADED, "System view: concurrent scans limit exceeded");
     }
+
+private:
+    virtual void ProceedToScan() = 0;
 
     void ReplyNavigateFailedAndDie() {
         ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, "System view: navigate failed");
@@ -241,7 +240,7 @@ private:
         }
     }
 
-    void HandleLimiter(TEvSysView::TEvGetScanLimiterResult::TPtr& ev) {
+    virtual void HandleLimiter(TEvSysView::TEvGetScanLimiterResult::TPtr& ev) {
         ScanLimiter = ev->Get()->ScanLimiter;
 
         if (!ScanLimiter->Inc()) {
@@ -253,14 +252,6 @@ private:
         }
 
         AllowedByLimiter = true;
-
-        if (TableId.SysViewInfo == ShowCreateName) {
-            LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-                "Scan prepared, actor: " << TBase::SelfId());
-
-            ProceedToScan();
-            return;
-        }
 
         using TNavigate = NSchemeCache::TSchemeCacheNavigate;
 
@@ -392,15 +383,14 @@ protected:
     bool BatchRequestInFlight = false;
     bool DoPipeCacheUnlink = false;
 
-private:
+    TIntrusivePtr<TScanLimiter> ScanLimiter;
+    bool AllowedByLimiter = false;
+
     enum EFailState {
         OK,
         LIMITER_FAILED,
         NAVIGATE_FAILED
     } FailState = OK;
-
-    TIntrusivePtr<TScanLimiter> ScanLimiter;
-    bool AllowedByLimiter = false;
 };
 
 

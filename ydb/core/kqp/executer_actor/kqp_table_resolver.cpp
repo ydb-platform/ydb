@@ -35,7 +35,7 @@ public:
         , UserToken(userToken)
         , Transactions(transactions)
         , TasksGraph(tasksGraph)
-        , ShowCreateResolver(NSysView::CreateShowCreateResolver()) {}
+        , SystemViewRewrittenResolver(NSysView::CreateSystemViewRewrittenResolver()) {}
 
     void Bootstrap() {
         ResolveKeys();
@@ -173,7 +173,7 @@ private:
 
                     stageInfo.Meta.ShardKey = ExtractKey(stageInfo.Meta.TableId, stageInfo.Meta.TableConstInfo, operation);
 
-                    if (ShowCreateResolver->IsSystemView(stageInfo.Meta.TableId.SysViewInfo)) {
+                    if (SystemViewRewrittenResolver->IsSystemView(stageInfo.Meta.TableId.SysViewInfo)) {
                         continue;
                     }
 
@@ -281,7 +281,7 @@ private:
     TMaybe<ui32> GotUnexpectedEvent;
     TDuration CpuTime;
 
-    THolder<NSysView::ISystemViewResolver> ShowCreateResolver;
+    THolder<NSysView::ISystemViewResolver> SystemViewRewrittenResolver;
 };
 
 } // anonymous namespace

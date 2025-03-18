@@ -769,7 +769,7 @@ public:
 
 ISystemViewResolver* CreateSystemViewResolver();
 
-ISystemViewResolver* CreateShowCreateResolver();
+ISystemViewResolver* CreateSystemViewRewrittenResolver();
 
 } // NSysView
 } // NKikimr

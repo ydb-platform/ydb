@@ -316,17 +316,17 @@ private:
     THashMap<TString, TSchema> ColumnTableSystemViews;
 };
 
-class TShowCreateResolver : public ISystemViewResolver {
+class TSystemViewRewrittenResolver : public ISystemViewResolver {
 public:
 
-    TShowCreateResolver() {
-        TSchemaFiller<Schema::ShowCreate>::Fill(ShowCreateView);
+    TSystemViewRewrittenResolver() {
+        TSchemaFiller<Schema::ShowCreate>::Fill(SystemViews[ShowCreateName]);
     }
 
     bool IsSystemViewPath(const TVector<TString>& path, TSystemViewPath& sysViewPath) const override final {
         if (MaybeSystemViewPath(path)) {
             auto maybeSystemViewName = path.back();
-            if (maybeSystemViewName != ShowCreateName) {
+            if (SystemViews.contains(maybeSystemViewName)) {
                 return false;
             }
             TVector<TString> realPath(path.begin(), path.end() - 2);
@@ -339,10 +339,8 @@ public:
 
     TMaybe<TSchema> GetSystemViewSchema(const TStringBuf viewName, ETarget target) const override final {
         Y_UNUSED(target);
-        if (viewName != ShowCreateName) {
-            return Nothing();
-        }
-        return ShowCreateView;
+        const TSchema* view = SystemViews.FindPtr(viewName);
+        return view ? TMaybe<TSchema>(*view) : Nothing();
     }
 
     TVector<TString> GetSystemViewNames(ETarget target) const override {
@@ -351,19 +349,19 @@ public:
     }
 
     bool IsSystemView(const TStringBuf viewName) const override final {
-        return viewName == ShowCreateName;
+        return SystemViews.contains(viewName);
     }
 
 private:
-    TSchema ShowCreateView;
+    THashMap<TString, TSchema> SystemViews;
 };
 
 ISystemViewResolver* CreateSystemViewResolver() {
     return new TSystemViewResolver();
 }
 
-ISystemViewResolver* CreateShowCreateResolver() {
-    return new TShowCreateResolver();
+ISystemViewResolver* CreateSystemViewRewrittenResolver() {
+    return new TSystemViewRewrittenResolver();
 }
 
 } // NSysView

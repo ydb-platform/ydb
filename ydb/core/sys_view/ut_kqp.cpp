@@ -2582,7 +2582,7 @@ WITH (
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 31);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 30);
 
             THashSet<TString> names;
             for (const auto& child : children) {

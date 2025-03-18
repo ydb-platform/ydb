@@ -102,14 +102,14 @@ public:
 
 private:
     TStatus HandleKiRead(TKiReadBase node, TExprContext& ctx) override {
-        bool showCreateTableRewritten = false;
+        bool sysViewRewritten = false;
         TExprBase currentNode(node);
         if (auto maybeReadTable = currentNode.Maybe<TKiReadTable>()) {
             auto readTable = maybeReadTable.Cast();
             for (auto setting : readTable.Settings()) {
                 auto name = setting.Name().Value();
-                if (name == "showCreateTableRewritten") {
-                    showCreateTableRewritten = true;
+                if (name == "sysViewRewritten") {
+                    sysViewRewritten = true;
                 }
             }
         }
@@ -120,18 +120,18 @@ private:
             return TStatus::Error;
         }
 
-        return HandleKey(cluster, key, showCreateTableRewritten);
+        return HandleKey(cluster, key, sysViewRewritten);
     }
 
     TStatus HandleRead(TExprBase node, TExprContext& ctx) override {
-        bool showCreateTableRewritten = false;
+        bool sysViewRewritten = false;
         if (auto maybeRead = node.Maybe<TCoRead>()) {
             auto read = maybeRead.Cast();
             for (auto arg : read.FreeArgs()) {
                 if (auto maybeTuple = arg.Maybe<TCoNameValueTuple>()) {
                     auto tuple = maybeTuple.Cast();
-                    if (tuple.Ref().Child(0)->Content() == "showCreateTableRewritten") {
-                        showCreateTableRewritten = true;
+                    if (tuple.Ref().Child(0)->Content() == "sysViewRewritten") {
+                        sysViewRewritten = true;
                     }
                 }
             }
@@ -143,7 +143,7 @@ private:
             return TStatus::Error;
         }
 
-        return HandleKey(cluster, key, showCreateTableRewritten);
+        return HandleKey(cluster, key, sysViewRewritten);
     }
 
     TStatus HandleLength(TExprBase node, TExprContext& ctx) override {
@@ -159,12 +159,12 @@ private:
     }
 
 private:
-    TStatus HandleKey(const TStringBuf& cluster, const TKikimrKey& key, bool showCreate = false) {
+    TStatus HandleKey(const TStringBuf& cluster, const TKikimrKey& key, bool sysViewRewritten = false) {
         switch (key.GetKeyType()) {
             case TKikimrKey::Type::Table:
             case TKikimrKey::Type::TableScheme: {
                 auto& table = SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(),
-                    key.GetTablePath(), ETableType::Table, showCreate);
+                    key.GetTablePath(), ETableType::Table, sysViewRewritten);
 
                 if (key.GetKeyType() == TKikimrKey::Type::TableScheme) {
                     table.RequireStats();
@@ -263,7 +263,7 @@ public:
                             .WithAuthInfo(table.GetNeedAuthInfo())
                             .WithExternalSourceFactory(ExternalSourceFactory)
                             .WithReadAttributes(readAttrs ? std::move(*readAttrs) : THashMap<TString, TString>{})
-                            .WithShowCreate(table.GetShowCreate())
+                            .WithSysViewRewritten(table.GetSysViewRewritten())
             );
 
             futures.push_back(future.Apply([result, queryType]

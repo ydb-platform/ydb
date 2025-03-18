@@ -573,15 +573,17 @@ void TKqpTableMetadataLoader::OnLoadedTableMetadata(TTableMetadataResult& loadTa
     }
 }
 
-NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> TKqpTableMetadataLoader::LoadShowCreateMetadata(
-    const NSysView::ISystemViewResolver::TSystemViewPath& showCreatePath, const TString& cluster, const TString& table
+NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> TKqpTableMetadataLoader::LoadSysViewRewrittenMetadata(
+    const NSysView::ISystemViewResolver::TSystemViewPath& sysViewPath, const TString& cluster, const TString& table
 ) {
     TNavigate::TEntry entry;
 
-    auto schema = ShowCreateResolver->GetSystemViewSchema(showCreatePath.ViewName, NSysView::ISystemViewResolver::ETarget::Domain);
+    auto schema = SystemViewRewrittenResolver->GetSystemViewSchema(sysViewPath.ViewName, NSysView::ISystemViewResolver::ETarget::Domain);
     entry.Kind = TNavigate::KindTable;
     entry.Columns = std::move(schema->Columns);
-    entry.TableId = TTableId(TSysTables::SysSchemeShard, 0, showCreatePath.ViewName);
+    entry.TableId = TTableId(TSysTables::SysSchemeShard, 0, sysViewPath.ViewName);
+
+    Y_ENSURE(false);
 
     auto result = GetTableMetadataResult(entry, cluster, table);
 
@@ -598,9 +600,9 @@ NThreading::TFuture<TTableMetadataResult> TKqpTableMetadataLoader::LoadTableMeta
     try {
         NThreading::TFuture<TTableMetadataResult> tableMetaFuture;
 
-        NSysView::ISystemViewResolver::TSystemViewPath showCreatePath;
-        if (settings.ShowCreate_ && ShowCreateResolver->IsSystemViewPath(SplitPath(table), showCreatePath)) {
-            tableMetaFuture = LoadShowCreateMetadata(showCreatePath, cluster, table);
+        NSysView::ISystemViewResolver::TSystemViewPath sysViewPath;
+        if (settings.SysViewRewritten_ && SystemViewRewrittenResolver->IsSystemViewPath(SplitPath(table), sysViewPath)) {
+            tableMetaFuture = LoadSysViewRewrittenMetadata(sysViewPath, cluster, table);
         } else {
             tableMetaFuture = LoadTableMetadataCache(cluster, table, settings, database, userToken);
         }

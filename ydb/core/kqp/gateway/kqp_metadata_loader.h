@@ -31,7 +31,7 @@ public:
         , ActorSystem(actorSystem)
         , Config(config)
         , TempTablesState(std::move(tempTablesState))
-        , ShowCreateResolver(NSysView::CreateShowCreateResolver())
+        , SystemViewRewrittenResolver(NSysView::CreateSystemViewRewrittenResolver())
     {}
 
     NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadTableMetadata(
@@ -64,8 +64,8 @@ private:
 
     void OnLoadedTableMetadata(NYql::IKikimrGateway::TTableMetadataResult& loadTableMetadataResult);
 
-    NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadShowCreateMetadata(
-        const NSysView::ISystemViewResolver::TSystemViewPath& showCreatePath, const TString& cluster, const TString& table
+    NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> LoadSysViewRewrittenMetadata(
+        const NSysView::ISystemViewResolver::TSystemViewPath& sysViewPath, const TString& cluster, const TString& table
     );
 
     const TString Cluster;
@@ -75,7 +75,7 @@ private:
     TActorSystem* ActorSystem;
     NYql::TKikimrConfiguration::TPtr Config;
     TKqpTempTablesState::TConstPtr TempTablesState;
-    THolder<NSysView::ISystemViewResolver> ShowCreateResolver;
+    THolder<NSysView::ISystemViewResolver> SystemViewRewrittenResolver;
 };
 
 } // namespace NKikimr::NKqp

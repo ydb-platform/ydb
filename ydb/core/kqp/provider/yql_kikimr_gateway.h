@@ -1092,8 +1092,8 @@ public:
             return *this;
         }
 
-        TLoadTableMetadataSettings& WithShowCreate(bool enable) {
-            ShowCreate_ = enable;
+        TLoadTableMetadataSettings& WithSysViewRewritten(bool enable) {
+            SysViewRewritten_ = enable;
             return *this;
         }
 
@@ -1103,7 +1103,7 @@ public:
         bool WithPrivateTables_ = false;
         bool WithExternalDatasources_ = false;
         bool RequestAuthInfo_ = true;
-        bool ShowCreate_ = false;
+        bool SysViewRewritten_ = false;
     };
 
     class IKqpTableMetadataLoader : public std::enable_shared_from_this<IKqpTableMetadataLoader> {

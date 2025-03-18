@@ -173,7 +173,7 @@ const TKikimrTableDescription* TKikimrTablesData::EnsureTableExists(const TStrin
 }
 
 TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster, const TString& database,
-        const TString& table, ETableType tableType, bool showCreate) {
+        const TString& table, ETableType tableType, bool sysViewRewritten) {
     auto tablePath = table;
     if (TempTablesState) {
         auto tempTableInfoIt = TempTablesState->FindInfo(table, true);
@@ -193,7 +193,7 @@ TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster
         }
         desc.SetTableType(tableType);
 
-        desc.SetShowCreate(showCreate);
+        desc.SetSysViewRewritten(sysViewRewritten);
 
         return desc;
     }

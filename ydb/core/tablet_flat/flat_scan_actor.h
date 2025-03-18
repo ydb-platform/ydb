@@ -82,7 +82,6 @@ namespace NOps {
             enum EEv {
                 EvLoadBlob = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
                 EvBlobLoaded,
-                EvLoadPages,
                 EvPartLoaded,
                 EvPartFailed,
             };

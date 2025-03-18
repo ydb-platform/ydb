@@ -886,7 +886,6 @@ private:
 
         stageProto.SetProgramAst(KqpExprToPrettyString(stage.Program(), ctx));
 
-        auto stageSettings = NDq::TDqStageSettings::Parse(stage);
         stageProto.SetStageGuid(stageSettings.Id);
         stageProto.SetIsSinglePartition(NDq::TDqStageSettings::EPartitionMode::Single == stageSettings.PartitionMode);
         stageProto.SetAllowWithSpilling(Config->EnableSpilling);

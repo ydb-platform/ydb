@@ -1770,7 +1770,7 @@ protected:
                     *TlsActivationContext,
                     NKikimrServices::KQP_EXECUTER,
                     "Stage with scan " << "[" << stageInfo.Id.TxId << ":" << stageInfo.Id.StageId << "]"
-                    << " has keys: " << columnShardHashV1Params.KeyTypesToString();
+                    << " has keys: " << columnShardHashV1Params.KeyTypesToString() << " and task count: " << stageInternalTaskId;
                 );
             } else {
                 ui32 metaId = 0;

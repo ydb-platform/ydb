@@ -17,14 +17,14 @@ namespace NYql::NConnector {
     /// Connection Factory which always returns an exact connection
     ///
     template<typename T>
-    class SingleConnectionFactory final : public IConnectionFactory<T> {
+    class TSingleConnectionFactory final : public IConnectionFactory<T> {
     public:
-        SingleConnectionFactory(std::shared_ptr<NYdbGrpc::TGRpcClientLow> Client, const NYdbGrpc::TGRpcClientConfig & GrpcConfig )
+        TSingleConnectionFactory(std::shared_ptr<NYdbGrpc::TGRpcClientLow> Client, const NYdbGrpc::TGRpcClientConfig & GrpcConfig )
             : GrpcConnection_(Client->CreateGRpcServiceConnection<T>(GrpcConfig))
         {
         }
 
-        SingleConnectionFactory(
+        TSingleConnectionFactory(
             std::shared_ptr<NYdbGrpc::TGRpcClientLow> Client,
             const NYdbGrpc::TGRpcClientConfig & GrpcConfig,
             const NYdbGrpc::TTcpKeepAliveSettings & KeepAlive
@@ -46,9 +46,9 @@ namespace NYql::NConnector {
     /// Connection Factory which returns a new connection on each Create
     ///
     template<typename T>
-    class NewOnEachRequestConnectionFactory final: public IConnectionFactory<T> {
+    class TNewOnEachRequestConnectionFactory final: public IConnectionFactory<T> {
     public:
-        NewOnEachRequestConnectionFactory(
+        TNewOnEachRequestConnectionFactory(
             std::shared_ptr<NYdbGrpc::TGRpcClientLow> Client,
             const NYdbGrpc::TGRpcClientConfig & GrpcConfig
         )
@@ -57,7 +57,7 @@ namespace NYql::NConnector {
         {
         }
 
-        NewOnEachRequestConnectionFactory(
+        TNewOnEachRequestConnectionFactory(
             std::shared_ptr<NYdbGrpc::TGRpcClientLow> Client,
             const NYdbGrpc::TGRpcClientConfig & GrpcConfig,
             const NYdbGrpc::TTcpKeepAliveSettings & KeepAlive
@@ -158,12 +158,7 @@ namespace NYql::NConnector {
             // TODO: 
             // 1. Add config parameter to TGenericConnectorConfig to choose factory 
             // 2. Add support for multiple connector's config 
-            
-            // Old way of working - Single Connection
-            // ConnectionFactory_ = std::make_unique<SingleConnectionFactory<NApi::Connector>>(
-            //     GrpcClient_, grpcConfig, keepAlive);
-
-            ConnectionFactory_ = std::make_unique<NewOnEachRequestConnectionFactory<NApi::Connector>>(
+            ConnectionFactory_ = std::make_unique<TNewOnEachRequestConnectionFactory<NApi::Connector>>(
                 GrpcClient_, grpcConfig, keepAlive);
         }
 
@@ -190,7 +185,7 @@ namespace NYql::NConnector {
         }
 
         virtual TListSplitsStreamIteratorAsyncResult ListSplits(const NApi::TListSplitsRequest& request, TDuration timeout = {}) override {
-            // The request can holds many selects, but we make assumption that all of then go to one connector.
+            // The request can hold many selects, but we make assumption that all of them go to the same connector.
             // Do we need to check that all parameters in a request are set ? 
             auto kind = request.Getselects().at(0).data_source_instance().kind();
 
@@ -199,7 +194,7 @@ namespace NYql::NConnector {
         }
 
         virtual TReadSplitsStreamIteratorAsyncResult ReadSplits(const NApi::TReadSplitsRequest& request, TDuration timeout = {}) override {
-            // The request can holds many splits, but we make assumption that all of then go to one connector.
+            // The request can hold many splits, but we make assumption that all of them go to the same connector.
              // Do we need to check that all parameters in a request are set ? 
             auto kind = request.Getsplits().at(0).select().data_source_instance().kind();
 
@@ -213,27 +208,42 @@ namespace NYql::NConnector {
             return ConnectionFactory_->Create();
         }
 
+        /// 
+        /// @brief Make async request to a connector with a streaming response in a Future.
+        /// 
+        /// @tparam TmplRequest         Type of a request, e.g.: "NApi::TListSplitsRequest"
+        /// @tparam TmplResponse        Type of a data in a Response Stream, e.g.: "NApi::TListSplitsResponse" 
+        /// @tparam TmplRpcCallback     Definition of a callback on the "NApi::Connector::Stub" that takes "TmplRequest" as an input arg and  
+        ///                             returns "NYdbGrpc::TStreamRequestReadProcessor" with "TmplResponse" as stream's data
+        ///
+        /// @param[in] kind             Datasource's kind, it is a key to choose which connector will be queried 
+        /// @param[in] request          Request's data 
+        /// @param[in] rpc              Method on a Stub which will be executed 
+        /// @param[in] timeour          How long to wait a response 
+        ///
+        /// @return                     Future that provides with a streaming response 
+        ///
         template <
-            typename I,
-            typename O,
-            typename F = typename NYdbGrpc::TStreamRequestReadProcessor<NApi::Connector::Stub, I, O>::TAsyncRequest
+            typename TmplRequest,
+            typename TmplResponse,
+            typename TmplRpcCallback = typename NYdbGrpc::TStreamRequestReadProcessor<NApi::Connector::Stub, TmplRequest, TmplResponse>::TAsyncRequest
         >
-        TIteratorAsyncResult<IStreamIterator<O>> ServerSideStreamingCall(
-            const NYql::EGenericDataSourceKind & kind, const I & request, F rpc, TDuration timeout = {}) {
-            auto promise = NThreading::NewPromise<TIteratorResult<IStreamIterator<O>>>();
+        TIteratorAsyncResult<IStreamIterator<TmplResponse>> ServerSideStreamingCall(
+            const NYql::EGenericDataSourceKind & kind, const TmplRequest & request, TmplRpcCallback rpc, TDuration timeout = {}) {
+            auto promise = NThreading::NewPromise<TIteratorResult<IStreamIterator<TmplResponse>>>();
 
-            auto callback = [promise]( NYdbGrpc::TGrpcStatus && status, NYdbGrpc::IStreamRequestReadProcessor<O>::TPtr streamProcessor) mutable {
+            auto callback = [promise](NYdbGrpc::TGrpcStatus && status, NYdbGrpc::IStreamRequestReadProcessor<TmplResponse>::TPtr streamProcessor) mutable {
                 if (!streamProcessor) {
                     promise.SetValue({std::move(status), nullptr});
                     return;
                 } 
                 
-                auto processor = std::make_shared<TStreamer<O>>(std::move(streamProcessor));
-                auto iterator = std::make_shared<TStreamIteratorImpl<O>>(processor);
+                auto processor = std::make_shared<TStreamer<TmplResponse>>(std::move(streamProcessor));
+                auto iterator = std::make_shared<TStreamIteratorImpl<TmplResponse>>(processor);
                 promise.SetValue({std::move(status), std::move(iterator)});
             };
 
-            GetConnection(kind)->DoStreamRequest<I, O>(
+            GetConnection(kind)->DoStreamRequest<TmplRequest, TmplResponse>(
                 std::move(request),
                 std::move(callback),
                 rpc,

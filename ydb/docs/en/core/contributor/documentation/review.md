@@ -67,3 +67,8 @@ The **primary reviewer** and/or **final reviewer** may choose to follow the inst
 ### Technical design review
 
 Documentation review is not a technical design review. Documentation is typically written for mostly completed features, so significant changes to product behavior are rarely possible at this stage. However, the **primary reviewer** and/or **final reviewer** may highlight any inconsistencies, odd behaviors, or usability concerns. It is the **author**'s responsibility to address them immediately if possible or consider them for future iterations of the feature being described.
+
+## See also
+
+- [GitHub documentation)(https://docs.github.com/en)
+- [Git documentation](https://git-scm.com/doc)

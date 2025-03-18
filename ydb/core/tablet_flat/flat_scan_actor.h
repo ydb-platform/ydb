@@ -107,14 +107,6 @@ namespace NOps {
                 { }
             };
 
-            struct TEvLoadPages : public TEventLocal<TEvLoadPages, EvLoadPages> {
-                TAutoPtr<NPageCollection::TFetch> Request;
-
-                TEvLoadPages(TAutoPtr<NPageCollection::TFetch> request)
-                    : Request(std::move(request))
-                { }
-            };
-
             struct TEvPartLoaded : public TEventLocal<TEvPartLoaded, EvPartLoaded> {
                 TPartView Part;
 
@@ -135,9 +127,10 @@ namespace NOps {
     private:
         class TColdPartLoader : public ::NActors::TActorBootstrapped<TColdPartLoader> {
         public:
-            TColdPartLoader(TActorId owner, TIntrusiveConstPtr<TColdPartStore> part)
+            TColdPartLoader(TActorId owner, TIntrusiveConstPtr<TColdPartStore> part, EPriority readPriority)
                 : Owner(owner)
                 , Part(std::move(part))
+                , ReadPriority(readPriority)
             { }
 
             void Bootstrap() {
@@ -195,7 +188,7 @@ namespace NOps {
 
             void RunLoader() {
                 for (auto req : Loader->Run({.PreloadIndex = false, .PreloadData = false})) {
-                    Send(Owner, new TEvPrivate::TEvLoadPages(std::move(req)));
+                    Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(ReadPriority, req));
                     ++ReadsLeft;
                 }
 
@@ -243,6 +236,7 @@ namespace NOps {
         private:
             TActorId Owner;
             TIntrusiveConstPtr<TColdPartStore> Part;
+            EPriority ReadPriority;
             TVector<TIntrusivePtr<TPrivatePageCache::TInfo>> PageCollections;
             TVector<NPageCollection::TLargeGlobIdRestoreState> PageCollectionLoaders;
             size_t PageCollectionsLeft = 0;
@@ -317,7 +311,7 @@ namespace NOps {
                 // Create a loader for this new part
                 TIntrusiveConstPtr<TColdPartStore> partStore = dynamic_cast<TColdPartStore*>(const_cast<TColdPart*>(part.Get()));
                 Y_VERIFY_S(partStore, "Cannot load unsupported part " << NFmt::Do(*part));
-                ColdPartLoaders[label] = RegisterWithSameMailbox(new TColdPartLoader(SelfId(), std::move(partStore)));
+                ColdPartLoaders[label] = RegisterWithSameMailbox(new TColdPartLoader(SelfId(), std::move(partStore), Args.ReadPrio));
             }
 
             // Return empty TPartView to signal loader is still in progress
@@ -370,7 +364,6 @@ namespace NOps {
             hFunc(TEvContinue, Handle);
             hFunc(TEvPrivate::TEvLoadBlob, Handle);
             hFunc(TEvBlobStorage::TEvGetResult, Handle);
-            hFunc(TEvPrivate::TEvLoadPages, Handle);
             hFunc(NBlockIO::TEvStat, Handle);
             hFunc(TEvPrivate::TEvPartLoaded, Handle);
             hFunc(TEvPrivate::TEvPartFailed, Handle);
@@ -569,16 +562,6 @@ namespace NOps {
                 BlobQueueRequests.pop_front();
                 ++BlobQueueRequestsOffset;
             }
-        }
-
-        void Handle(TEvPrivate::TEvLoadPages::TPtr& ev)
-        {
-            auto* msg = ev->Get();
-
-            TActorIdentity(ev->Sender).Send(
-                MakeSharedPageCacheId(),
-                new NSharedCache::TEvRequest(Args.ReadPrio, std::move(msg->Request)),
-                ev->Flags, ev->Cookie);
         }
 
         void Handle(NBlockIO::TEvStat::TPtr& ev)

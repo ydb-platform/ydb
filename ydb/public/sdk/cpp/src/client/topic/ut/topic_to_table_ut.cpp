@@ -3258,16 +3258,10 @@ Y_UNIT_TEST_F(Transactions_Conflict_On_SeqNo, TFixture)
 
 Y_UNIT_TEST_F(The_Transaction_Starts_On_One_Version_And_Ends_On_The_Other, TFixture)
 {
+    // In the test, we check the compatibility between versions `24-4-2` and `24-4-*/25-1-*`. To do this, the data
+    // obtained on the `24-4-2` version is loaded into the PQ tablets.
+
     CreateTopic("topic_A", TEST_CONSUMER, 2);
-
-    auto session = CreateTableSession();
-    auto tx = BeginTx(session);
-
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, TString(100, 'x'), &tx, 0);
-    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, TString(100, 'x'), &tx, 1);
-
-    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_1);
-    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_2);
 
     PQTabletPrepareFromResource("topic_A", 0, "topic_A_partition_0_v24-4-2.dat");
     PQTabletPrepareFromResource("topic_A", 1, "topic_A_partition_1_v24-4-2.dat");

@@ -13,16 +13,17 @@ TDistributor::TDistributor(const TConfig& config, const TString& conveyorName, T
 
 void TDistributor::Bootstrap() {
     AddProcess(0);
-    const ui32 workersCount = Config.GetWorkersCountForConveyor(NKqp::TStagePredictor::GetUsableThreads());
-    AFL_NOTICE(NKikimrServices::TX_CONVEYOR)("name", ConveyorName)("action", "conveyor_registered")("config", Config.DebugString())("actor_id", SelfId());
-    for (ui32 i = 0; i < workersCount; ++i) {
+    WorkersCount = Config.GetWorkersCountForConveyor(NKqp::TStagePredictor::GetUsableThreads());
+    AFL_NOTICE(NKikimrServices::TX_CONVEYOR)("name", ConveyorName)("action", "conveyor_registered")("config", Config.DebugString())("actor_id", SelfId())("count", WorkersCount);
+    for (ui32 i = 0; i < WorkersCount; ++i) {
         const double usage = Config.GetWorkerCPUUsage(i);
-        Workers.emplace_back(Register(new TWorker(ConveyorName, usage, SelfId())));
+        Workers.emplace_back(Register(new TWorker(ConveyorName, usage, SelfId(), Counters.SendFwdHistogram, Counters.SendFwdDuration)));
         if (usage < 1) {
             AFL_VERIFY(!SlowWorkerId);
             SlowWorkerId = Workers.back();
         }
     }
+    AFL_VERIFY(Workers.size())("name", ConveyorName)("action", "conveyor_registered")("config", Config.DebugString())("actor_id", SelfId())("count", WorkersCount);
     Counters.AvailableWorkersCount->Set(Workers.size());
     Counters.WorkersCountLimit->Set(Workers.size());
     Counters.WaitingQueueSizeLimit->Set(Config.GetQueueSizeLimit());
@@ -31,24 +32,45 @@ void TDistributor::Bootstrap() {
 
 void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) {
     auto* ev = evExt->Get();
+    AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "result")("sender", evExt->Sender)
+        ("queue", ProcessesOrdered.size())("workers", Workers.size())("count", ev->GetProcessIds().size())("d", ev->GetInstants().back() - ev->GetInstants().front());
     for (ui32 idx = 0; idx < ev->GetProcessIds().size(); ++idx) {
-        const TDuration dExecution = ev->GetInstants()[idx + 1] - ev->GetInstants()[idx];
-        Counters.ExecuteHistogram->Collect(dExecution.MicroSeconds());
         AddCPUTime(ev->GetProcessIds()[idx], ev->GetInstants()[idx + 1] - std::max(LastAddProcessInstant, ev->GetInstants()[idx]));
     }
+    const TDuration dExecution = ev->GetInstants().back() - ev->GetInstants().front();
+    Counters.ExecuteHistogram->Collect(dExecution.MicroSeconds());
+    Counters.ExecuteDuration->Add(dExecution.MicroSeconds());
+
+    const TMonotonic now = TMonotonic::Now();
+    const TDuration dBackSend = now - ev->GetConstructInstant();
+    const TDuration dForwardSend = ev->GetForwardSendDuration();
+
+    const TDuration predictedDurationPerTask = std::max<TDuration>(dExecution / ev->GetProcessIds().size(), TDuration::MicroSeconds(10));
+    const double alpha = 0.1;
+    const ui32 countTheory = (dBackSend + dForwardSend).GetValue() / (alpha * predictedDurationPerTask.GetValue());
+    const ui32 countPredicted = std::max<ui32>(1, std::min<ui32>(WaitingTasksCount.Val() / WorkersCount, countTheory));
+    AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "prediction")("alpha", alpha)
+        ("send_forward", dForwardSend)("send_back", dBackSend)("count", ev->GetProcessIds().size())("exec", dExecution)("theory_predicted", countTheory)
+        ("real_count", countPredicted);
+
+    Counters.SendBackHistogram->Collect(dBackSend.MicroSeconds());
+    Counters.SendBackDuration->Add(dBackSend.MicroSeconds());
     Counters.SolutionsRate->Add(ev->GetProcessIds().size());
+
     if (ProcessesOrdered.size()) {
         std::vector<TWorkerTask> tasks;
-        const TMonotonic now = TMonotonic::Now();
-        while (ProcessesOrdered.size() && (!tasks.size() || tasks.size() < WaitingTasksCount.Val() * 0.02)) {
+        while (ProcessesOrdered.size() && tasks.size() < countPredicted) {
             auto task = PopTask();
             Counters.WaitingHistogram->Collect((now - task.GetCreateInstant()).MicroSeconds());
             task.OnBeforeStart();
             tasks.emplace_back(std::move(task));
         }
         Counters.PackHistogram->Collect(tasks.size());
+        AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "to_execute")("id", evExt->Sender)("queue", WaitingTasksCount.Val())("count", tasks.size());
         Send(evExt->Sender, new TEvInternal::TEvNewTask(std::move(tasks)));
     } else {
+        AFL_VERIFY(!WaitingTasksCount.Val());
+        AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "return_worker")("id", evExt->Sender);
         Workers.emplace_back(evExt->Sender);
     }
     Counters.WaitingQueueSize->Set(WaitingTasksCount.Val());
@@ -86,8 +108,10 @@ void TDistributor::HandleMain(TEvExecution::TEvNewTask::TPtr& ev) {
     if (itSignal == Signals.end()) {
         itSignal = Signals.emplace(taskClass, std::make_shared<TTaskSignals>("Conveyor/" + ConveyorName, taskClass)).first;
     }
+    Counters.ReceiveTaskHistogram->Collect((TMonotonic::Now() - ev->Get()->GetConstructInstant()).MicroSeconds());
 
     TWorkerTask wTask(ev->Get()->GetTask(), itSignal->second, processId);
+    AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "add_task")("proc", processId)("workers", Workers.size())("queue", WaitingTasksCount.Val());
 
     if (Workers.size()) {
         Counters.WaitingHistogram->Collect(0);

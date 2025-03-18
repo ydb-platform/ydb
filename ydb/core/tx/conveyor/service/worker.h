@@ -52,6 +52,7 @@ struct TEvInternal {
     class TEvNewTask: public NActors::TEventLocal<TEvNewTask, EvNewTask> {
     private:
         std::vector<TWorkerTask> Tasks;
+        YDB_READONLY(TMonotonic, ConstructInstant, TMonotonic::Now());
     public:
         TEvNewTask() = default;
 
@@ -68,11 +69,14 @@ struct TEvInternal {
         public NActors::TEventLocal<TEvTaskProcessedResult, EvTaskProcessedResult> {
     private:
         using TBase = TConclusion<ITask::TPtr>;
+        YDB_READONLY_DEF(TDuration, ForwardSendDuration);
         YDB_READONLY_DEF(std::vector<TMonotonic>, Instants);
         YDB_READONLY_DEF(std::vector<ui64>, ProcessIds);
+        YDB_READONLY(TMonotonic, ConstructInstant, TMonotonic::Now());
     public:
-        TEvTaskProcessedResult(std::vector<TMonotonic>&& instants, std::vector<ui64>&& processIds)
-            : Instants(std::move(instants))
+        TEvTaskProcessedResult(std::vector<TMonotonic>&& instants, std::vector<ui64>&& processIds, const TDuration forwardSendDuration)
+            : ForwardSendDuration(forwardSendDuration)
+            , Instants(std::move(instants))
             , ProcessIds(std::move(processIds)) {
             AFL_VERIFY(ProcessIds.size());
             AFL_VERIFY(Instants.size() == ProcessIds.size() + 1);
@@ -85,9 +89,12 @@ private:
     using TBase = NActors::TActorBootstrapped<TWorker>;
     const double CPUUsage = 1;
     bool WaitWakeUp = false;
+    std::optional<TDuration> ForwardDuration;
     const NActors::TActorId DistributorId;
     std::vector<TMonotonic> Instants;
     std::vector<ui64> ProcessIds;
+    const ::NMonitoring::THistogramPtr SendFwdHistogram;
+    const ::NMonitoring::TDynamicCounters::TCounterPtr SendFwdDuration;
     void ExecuteTask(std::vector<TWorkerTask>&& workerTasks);
     void HandleMain(TEvInternal::TEvNewTask::TPtr& ev);
     void HandleMain(NActors::TEvents::TEvWakeup::TPtr& ev);
@@ -107,10 +114,12 @@ public:
         Become(&TWorker::StateMain);
     }
 
-    TWorker(const TString& conveyorName, const double cpuUsage, const NActors::TActorId& distributorId)
+    TWorker(const TString& conveyorName, const double cpuUsage, const NActors::TActorId& distributorId, const ::NMonitoring::THistogramPtr sendFwdHistogram, const ::NMonitoring::TDynamicCounters::TCounterPtr sendFwdDuration)
         : TBase("CONVEYOR::" + conveyorName + "::WORKER")
         , CPUUsage(cpuUsage)
-        , DistributorId(distributorId) {
+        , DistributorId(distributorId)
+        , SendFwdHistogram(sendFwdHistogram)
+        , SendFwdDuration(sendFwdDuration) {
         AFL_VERIFY(0 < CPUUsage);
         AFL_VERIFY(CPUUsage <= 1);
     }

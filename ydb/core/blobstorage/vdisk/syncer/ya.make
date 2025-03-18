@@ -10,6 +10,7 @@ PEERDIR(
     ydb/core/blobstorage/vdisk/anubis_osiris
     ydb/core/blobstorage/vdisk/common
     ydb/core/blobstorage/vdisk/hulldb/base
+    ydb/core/control/lib
     ydb/core/driver_lib/version
 )
 

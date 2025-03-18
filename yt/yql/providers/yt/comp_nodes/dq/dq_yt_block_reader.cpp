@@ -286,7 +286,7 @@ public:
         , std::shared_ptr<std::vector<TType*>> columnTypes
         , std::shared_ptr<std::vector<std::shared_ptr<arrow::DataType>>> arrowTypes
         , arrow::MemoryPool& pool, const NUdf::IPgBuilder* pgBuilder
-        , bool isNative, NKikimr::NMiniKQL::IStatsRegistry* jobStats)
+        , ui64 nativeYtTypeFlags, NKikimr::NMiniKQL::IStatsRegistry* jobStats)
         : Consumer_(consumer)
         , ColumnTypes_(columnTypes)
         , JobStats_(jobStats)
@@ -294,7 +294,7 @@ public:
     {
         ColumnConverters_.reserve(columnTypes->size());
         for (size_t i = 0; i < columnTypes->size(); ++i) {
-            ColumnConverters_.emplace_back(MakeYtColumnConverter(columnTypes->at(i), pgBuilder, pool, isNative));
+            ColumnConverters_.emplace_back(MakeYtColumnConverter(columnTypes->at(i), pgBuilder, pool, nativeYtTypeFlags));
         }
     }
 
@@ -371,8 +371,7 @@ public:
         LocalListeners_.reserve(Inputs_.size());
         for (size_t i = 0; i < Inputs_.size(); ++i) {
             auto& decoder = Settings_->Specs->Inputs[Settings_->OriginalIndexes[i]];
-            bool native = decoder->NativeYtTypeFlags;
-            LocalListeners_.emplace_back(std::make_shared<TLocalListener>(Listener_, Settings_->ColumnNameMapping, ptr, types, *Settings_->Pool, Settings_->PgBuilder, native, jobStats));
+            LocalListeners_.emplace_back(std::make_shared<TLocalListener>(Listener_, Settings_->ColumnNameMapping, ptr, types, *Settings_->Pool, Settings_->PgBuilder, decoder->NativeYtTypeFlags, jobStats));
             LocalListeners_.back()->Init(LocalListeners_.back());
         }
         BlockBuilder_.Init(ptr, *Settings_->Pool, Settings_->PgBuilder);

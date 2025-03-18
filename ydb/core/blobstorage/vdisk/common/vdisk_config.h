@@ -258,6 +258,9 @@ namespace NKikimr {
         TControlWrapper ThrottlingMinLogChunkCount;
         TControlWrapper ThrottlingMaxLogChunkCount;
 
+        ///////////// SYNC SETTINGS //////////////////
+        TControlWrapper MaxInProgressSyncCount;
+
         ///////////// FEATURE FLAGS ////////////////////////
         NKikimrConfig::TFeatureFlags FeatureFlags;
 

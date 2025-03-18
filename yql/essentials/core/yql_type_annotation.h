@@ -94,6 +94,13 @@ public:
         QContext = qContext;
     }
 
+    void SetClusterMapping(const THashMap<TString, TString>& clusterMapping) {
+        ClusterMapping = clusterMapping;
+    }
+    void SetSqlFlags(const THashSet<TString>& flags) {
+        SqlFlags = flags;
+    }
+
     void RegisterPackage(const TString& package) override;
     bool SetPackageDefaultVersion(const TString& package, ui32 version) override;
     const TExportTable* GetModule(const TString& module) const override;
@@ -129,8 +136,8 @@ private:
     THashMap<TString, ui32> PackageVersions;
     THashMap<TString, THashMap<int, TLibraryCohesion>> Libs;
     TModulesTable Modules;
-    const THashMap<TString, TString> ClusterMapping;
-    const THashSet<TString> SqlFlags;
+    THashMap<TString, TString> ClusterMapping;
+    THashSet<TString> SqlFlags;
     const bool OptimizeLibraries;
     THolder<TExprContext::TFreezeGuard> FreezeGuard;
     TString FileAliasPrefix;

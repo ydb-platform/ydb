@@ -4,6 +4,7 @@ SRCS(
     background_controller.cpp
     blob.cpp
     blob_cache.cpp
+    columnshard.cpp
     columnshard__init.cpp
     columnshard__notify_tx_completion.cpp
     columnshard__plan_step.cpp
@@ -12,19 +13,19 @@ SRCS(
     columnshard__propose_transaction.cpp
     columnshard__scan.cpp
     columnshard__statistics.cpp
-    columnshard_subdomain_path_id.cpp
+    columnshard__store_table_path.cpp
     columnshard__write.cpp
     columnshard__write_index.cpp
-    columnshard.cpp
     columnshard_impl.cpp
     columnshard_private_events.cpp
     columnshard_schema.cpp
+    columnshard_subdomain_path_id.cpp
     columnshard_view.cpp
     counters.cpp
     defs.cpp
     inflight_request_tracker.cpp
-    write_actor.cpp
     tables_manager.cpp
+    write_actor.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(columnshard.h)

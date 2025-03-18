@@ -237,16 +237,25 @@ void TTablesManager::DropPreset(const ui32 presetId, const NOlap::TSnapshot& ver
 }
 
 void TTablesManager::RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db) {
-    Y_ABORT_UNLESS(!HasTable(table.GetPathId()));
+    const ui64 pathId = table.GetPathId();
+    Y_ABORT_UNLESS(!HasTable(pathId));
     Y_ABORT_UNLESS(table.IsEmpty());
 
-    Schema::SaveTableInfo(db, table.GetPathId());
-    const ui64 pathId = table.GetPathId();
+    Schema::SaveTableInfo(db, pathId);
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("method", "RegisterTable")("path_id", pathId);
     AFL_VERIFY(Tables.emplace(pathId, std::move(table)).second)("path_id", pathId)("size", Tables.size());
     if (PrimaryIndex) {
         PrimaryIndex->RegisterTable(pathId);
     }
+}
+
+void TTablesManager::UpdateTable(TTableInfo&& table, NIceDb::TNiceDb& db) {
+    const ui64 pathId = table.GetPathId();
+    Y_ABORT_UNLESS(HasTable(pathId));
+    const auto& path = table.GetPath();
+    Schema::SaveTableInfo(db, pathId, path);
+    Tables[pathId] = std::move(table);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("method", "UpdateTable")("path_id", pathId)("path", path);
 }
 
 bool TTablesManager::RegisterSchemaPreset(const TSchemaPreset& schemaPreset, NIceDb::TNiceDb& db) {

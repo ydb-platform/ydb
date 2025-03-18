@@ -1530,7 +1530,7 @@ protected:
         meta.Reads->emplace_back(std::move(readInfo));
     }
 
-    ui32 GetScanTasksPerNode(TStageInfo& stageInfo, const bool isOlapScan, const ui64 /*nodeId*/) const {
+    ui32 GetScanTasksPerNode(TStageInfo& stageInfo, const bool isOlapScan, const ui64 /*nodeId*/, bool enableShuffleElimination = false) const {
         ui32 result = 0;
         if (isOlapScan) {
             if (AggregationSettings.HasCSScanThreadsPerNode()) {
@@ -1549,7 +1549,11 @@ protected:
                 result = std::max(result, AggregationSettings.GetDSBaseJoinScanThreads());
             }
         }
-        return Max<ui32>(1, result);
+        result = Max<ui32>(1, result);
+        if (enableShuffleElimination) {
+            result *= 2;
+        }
+        return result;
     }
 
     TTask& AssignScanTaskToShard(
@@ -1703,7 +1707,7 @@ protected:
                 for (auto&& pair : nodeShards) {
                     const auto nodeId = pair.first;
                     auto& shardsInfo = pair.second;
-                    std::size_t maxTasksPerNode = std::min<std::size_t>(shardsInfo.size(), 2 * GetScanTasksPerNode(stageInfo, isOlapScan, nodeId));
+                    std::size_t maxTasksPerNode = std::min<std::size_t>(shardsInfo.size(), GetScanTasksPerNode(stageInfo, isOlapScan, nodeId, enableShuffleElimination));
                     std::vector<TTaskMeta> metas(maxTasksPerNode, TTaskMeta());
                     {
                         for (std::size_t i = 0; i < shardsInfo.size(); ++i) {

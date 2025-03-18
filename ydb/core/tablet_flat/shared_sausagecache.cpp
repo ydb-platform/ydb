@@ -979,21 +979,36 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         collection.Expectants.erase(expectantIt);
     }
 
-    void SendReadyBlocks(TRequest &wa) {
+    void SendReadyBlocks(TRequest &request) {
         /* Do not hold my NPageCollection::IPageCollection, leave std::move(wa.PageCollection) */
 
         TAutoPtr<NSharedCache::TEvResult> result =
-            new NSharedCache::TEvResult(std::move(wa.PageCollection), wa.RequestCookie, NKikimrProto::OK);
-        result->Loaded = std::move(wa.ReadyPages);
-        result->WaitPad = std::move(wa.WaitPad);
+            new NSharedCache::TEvResult(std::move(request.PageCollection), request.RequestCookie, NKikimrProto::OK);
+        result->Loaded = std::move(request.ReadyPages);
+        result->WaitPad = std::move(request.WaitPad);
 
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Sending page collection " << result->Origin->Label()
-            << " owner " << wa.Source
-            << " class " << wa.Priority
+            << " owner " << request.Source
+            << " class " << request.Priority
             << " pages " << result->Loaded);
 
-        Send(wa.Source, result.Release(), 0, wa.EventCookie);
-        wa.Source = TActorId();
+        Send(request.Source, result.Release(), 0, request.EventCookie);
+        request.Source = TActorId();
+        StatBioReqs += 1;
+    }
+
+    void SendError(TRequest &request, NKikimrProto::EReplyStatus error) {
+        TAutoPtr<NSharedCache::TEvResult> result =
+            new NSharedCache::TEvResult(std::move(request.PageCollection), request.RequestCookie, error);
+        result->WaitPad = std::move(request.WaitPad);
+
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Sending page collection " << result->Origin->Label()
+            << " owner " << request.Source
+            << " class " << request.Priority
+            << " error " << error);
+
+        Send(request.Source, result.Release(), 0, request.EventCookie);
+        request.Source = TActorId();
         StatBioReqs += 1;
     }
 
@@ -1009,9 +1024,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 auto &x = xpair.first;
                 if (!x->Source)
                     continue;
-
-                Send(x->Source, new NSharedCache::TEvResult(std::move(x->PageCollection), x->RequestCookie, blobStorageError), 0, x->EventCookie);
-                x->Source = TActorId();
+                SendError(*x, blobStorageError);
             }
         }
         collection.Expectants.clear();

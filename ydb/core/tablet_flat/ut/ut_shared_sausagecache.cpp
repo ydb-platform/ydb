@@ -1205,7 +1205,7 @@ Y_UNIT_TEST(Two_Transactions_One_Key) {
     env.SendAsync(new NFake::TEvExecute{ new TTxReadRows({33}, retried1, completed1) });
     env.SendAsync(new NFake::TEvExecute{ new TTxReadRows({33}, retried2, completed2) });
 
-    env.Env.WaitFor("blocked TEvRequest 1", [&]{ return block.size() == 1; }, TDuration::Seconds(10));
+    env.Env.WaitFor("blocked TEvRequest 1", [&]{ return block.size() == 2; }, TDuration::Seconds(10));
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried1, (TVector<ui32>{1}));
     UNIT_ASSERT_VALUES_EQUAL(retried2, (TVector<ui32>{1}));
@@ -1214,31 +1214,31 @@ Y_UNIT_TEST(Two_Transactions_One_Key) {
     UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 0);
 
     block.Unblock();
-    env.Env.WaitFor("blocked TEvRequest 2", [&]{ return block.size() == 1; }, TDuration::Seconds(10));
+    env.Env.WaitFor("blocked TEvRequest 2", [&]{ return block.size() == 2; }, TDuration::Seconds(10));
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried1, (TVector<ui32>{1, 1}));
     UNIT_ASSERT_VALUES_EQUAL(retried2, (TVector<ui32>{1, 1}));
     UNIT_ASSERT_VALUES_EQUAL(completed1, false);
     UNIT_ASSERT_VALUES_EQUAL(completed2, false);
-    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 2);
 
     block.Unblock();
-    env.Env.WaitFor("blocked TEvRequest 3", [&]{ return block.size() == 1; }, TDuration::Seconds(10));
+    env.Env.WaitFor("blocked TEvRequest 3", [&]{ return block.size() == 2; }, TDuration::Seconds(10));
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried1, (TVector<ui32>{1, 1, 1}));
     UNIT_ASSERT_VALUES_EQUAL(retried2, (TVector<ui32>{1, 1, 1}));
     UNIT_ASSERT_VALUES_EQUAL(completed1, false);
     UNIT_ASSERT_VALUES_EQUAL(completed2, false);
-    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 2);
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 4);
 
     block.Unblock();
-    env.Env.WaitFor("blocked TEvRequest 3", [&]{ return block.size() == 1; }, TDuration::Seconds(10));
+    env.Env.WaitFor("blocked TEvRequest 3", [&]{ return block.size() == 2; }, TDuration::Seconds(10));
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried1, (TVector<ui32>{1, 1, 1, 1}));
     UNIT_ASSERT_VALUES_EQUAL(retried2, (TVector<ui32>{1, 1, 1, 1}));
     UNIT_ASSERT_VALUES_EQUAL(completed1, false);
     UNIT_ASSERT_VALUES_EQUAL(completed2, false);
-    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 6);
 
     block.Unblock();
     env.Env.WaitFor("blocked TEvRequest 4", [&]{ return completed1 && completed2; }, TDuration::Seconds(10));
@@ -1246,7 +1246,7 @@ Y_UNIT_TEST(Two_Transactions_One_Key) {
     UNIT_ASSERT(block.empty());
     UNIT_ASSERT_VALUES_EQUAL(retried1, (TVector<ui32>{1, 1, 1, 1, 1}));
     UNIT_ASSERT_VALUES_EQUAL(retried2, (TVector<ui32>{1, 1, 1, 1, 1}));
-    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 4);
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 8);
 }
 
 Y_UNIT_TEST(Two_Transactions_Two_Keys) {
@@ -1265,7 +1265,7 @@ Y_UNIT_TEST(Two_Transactions_Two_Keys) {
     env.SendAsync(new NFake::TEvExecute{ new TTxReadRows({66}, retried2, completed2) });
 
     // b-tree index root is common page:
-    env.Env.WaitFor("blocked TEvRequest 1", [&]{ return block.size() == 1; }, TDuration::Seconds(10));
+    env.Env.WaitFor("blocked TEvRequest 1", [&]{ return block.size() == 2; }, TDuration::Seconds(10));
     LogCounters(counters);
     UNIT_ASSERT_VALUES_EQUAL(retried1, (TVector<ui32>{1}));
     UNIT_ASSERT_VALUES_EQUAL(retried2, (TVector<ui32>{1}));
@@ -1280,7 +1280,7 @@ Y_UNIT_TEST(Two_Transactions_Two_Keys) {
     UNIT_ASSERT_VALUES_EQUAL(retried2, (TVector<ui32>{1, 1}));
     UNIT_ASSERT_VALUES_EQUAL(completed1, false);
     UNIT_ASSERT_VALUES_EQUAL(completed2, false);
-    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 1);
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 2);
 
     block.Unblock();
     env.Env.WaitFor("blocked TEvRequest 3", [&]{ return block.size() == 2; }, TDuration::Seconds(10));
@@ -1289,7 +1289,7 @@ Y_UNIT_TEST(Two_Transactions_Two_Keys) {
     UNIT_ASSERT_VALUES_EQUAL(retried2, (TVector<ui32>{1, 1, 1}));
     UNIT_ASSERT_VALUES_EQUAL(completed1, false);
     UNIT_ASSERT_VALUES_EQUAL(completed2, false);
-    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 4);
 
     block.Unblock();
     env.Env.WaitFor("blocked TEvRequest 3", [&]{ return block.size() == 2; }, TDuration::Seconds(10));
@@ -1298,7 +1298,7 @@ Y_UNIT_TEST(Two_Transactions_Two_Keys) {
     UNIT_ASSERT_VALUES_EQUAL(retried2, (TVector<ui32>{1, 1, 1, 1}));
     UNIT_ASSERT_VALUES_EQUAL(completed1, false);
     UNIT_ASSERT_VALUES_EQUAL(completed2, false);
-    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 5);
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 6);
 
     block.Unblock();
     env.Env.WaitFor("blocked TEvRequest 4", [&]{ return completed1 && completed2; }, TDuration::Seconds(10));
@@ -1306,7 +1306,7 @@ Y_UNIT_TEST(Two_Transactions_Two_Keys) {
     UNIT_ASSERT(block.empty());
     UNIT_ASSERT_VALUES_EQUAL(retried1, (TVector<ui32>{1, 1, 1, 1, 1}));
     UNIT_ASSERT_VALUES_EQUAL(retried2, (TVector<ui32>{1, 1, 1, 1, 1}));
-    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 7);
+    UNIT_ASSERT_VALUES_EQUAL(counters->CacheMissPages->Val(), 8);
 }
 
 Y_UNIT_TEST(Compaction) {

@@ -281,7 +281,7 @@ struct TPendingPartSwitch {
 
 enum class EPageCollectionRequest : ui64 {
     Undefined = 0,
-    Cache = 1,
+    Transaction = 1,
     InMemPages,
     PendingInit,
     BootLogic,
@@ -529,7 +529,8 @@ class TExecutor
     void EnqueueActivation(TSeat* seat, bool activate);
     void PlanTransactionActivation();
     void MakeLogSnapshot();
-    void ActivateWaitingTransactions(const TVector<TIntrusivePtr<NPageCollection::TPagesWaitPad>>& waitPads);
+    void LogWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad);
+    void ActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad);
     void AddCachesOfBundle(const NTable::TPartView &partView);
     void AddSingleCache(const TIntrusivePtr<TPrivatePageCache::TInfo> &info);
     void DropCachesOfBundle(const NTable::TPart &part);

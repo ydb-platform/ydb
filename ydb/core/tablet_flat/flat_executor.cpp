@@ -642,37 +642,43 @@ void TExecutor::PlanTransactionActivation() {
     }
 }
 
-void TExecutor::ActivateWaitingTransactions(const TVector<TIntrusivePtr<NPageCollection::TPagesWaitPad>>& waitPads) {
-    if (waitPads) {
-        bool activate = CanExecuteTransaction();
-        bool cancelled = false;
-        for (auto& waitPad : waitPads) {
-            if (auto it = TransactionWaitPads.find(waitPad.Get()); it != TransactionWaitPads.end()) {
-                it->second->WaitingSpan.EndOk();
-                TSeat* seat = it->second->Seat;
-                Y_ABORT_UNLESS(seat->State == ESeatState::Waiting);
-                seat->State = ESeatState::None;
-                TransactionWaitPads.erase(it);
-                if (seat->Cancelled) {
-                    FinishCancellation(seat, false);
-                    cancelled = true;
-                    if (auto logl = Logger->Log(ELnLev::Debug)) {
-                        logl
-                            << NFmt::Do(*this) << " " << NFmt::Do(*seat) << " cancelled";
-                    }
-                } else {
-                    EnqueueActivation(seat, activate);
-                    if (auto logl = Logger->Log(ELnLev::Debug)) {
-                        logl
-                            << NFmt::Do(*this) << " " << NFmt::Do(*seat) << " activated";
-                    }
-                }
+void TExecutor::LogWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad) {
+    if (auto it = TransactionWaitPads.find(waitPad.Get()); it != TransactionWaitPads.end()) {
+        TSeat* seat = it->second->Seat;
+        if (auto logl = Logger->Log(ELnLev::Debug)) {
+            logl
+                << NFmt::Do(*this) << " " << NFmt::Do(*seat) << " still waiting " << waitPad->RefCount() - 2 << " requests";
+        }
+    }
+}
+
+void TExecutor::ActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad) {
+    bool activate = CanExecuteTransaction();
+    bool cancelled = false;
+    if (auto it = TransactionWaitPads.find(waitPad.Get()); it != TransactionWaitPads.end()) {
+        it->second->WaitingSpan.EndOk();
+        TSeat* seat = it->second->Seat;
+        Y_ABORT_UNLESS(seat->State == ESeatState::Waiting);
+        seat->State = ESeatState::None;
+        TransactionWaitPads.erase(it);
+        if (seat->Cancelled) {
+            FinishCancellation(seat, false);
+            cancelled = true;
+            if (auto logl = Logger->Log(ELnLev::Debug)) {
+                logl
+                    << NFmt::Do(*this) << " " << NFmt::Do(*seat) << " cancelled";
+            }
+        } else {
+            EnqueueActivation(seat, activate);
+            if (auto logl = Logger->Log(ELnLev::Debug)) {
+                logl
+                    << NFmt::Do(*this) << " " << NFmt::Do(*seat) << " activated";
             }
         }
-        if (cancelled && activate) {
-            PlanTransactionActivation();
-            MaybeRelaxRejectProbability();
-        }
+    }
+    if (cancelled && activate) {
+        PlanTransactionActivation();
+        MaybeRelaxRejectProbability();
     }
 }
 
@@ -731,7 +737,7 @@ void TExecutor::DropSingleCache(const TLogoBlobID &label)
     StickyPagesMemory -= stickySize;
 
     // auto toActivate = PrivatePageCache->ForgetPageCollection(pageCollection);
-    // ActivateWaitingTransactions(toActivate);
+    // ActivateWaitingTransaction(toActivate);
     if (!PrivatePageCache->Info(label))
         Send(MakeSharedPageCacheId(), new NSharedCache::TEvInvalidate(label));
 
@@ -2136,20 +2142,19 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
 
         if (auto logl = Logger->Log(ELnLev::Dbg03)) {
             logl
-                << NFmt::Do(*this) << " " << NFmt::Do(*seat) << " requests PageCollection " << pageCollectionInfo->PageCollection->Label()
-                << " " << pages.size() << " pages: [";
-            for (auto i : xrange(pages.size())) {
-                if (i != 0) logl << ", ";
-                logl << pages[i] << " " << ui32(pageCollectionInfo->GetPageType(pages[i]));
+                << NFmt::Do(*this) << " " << NFmt::Do(*seat) << " request page collection " << pageCollectionInfo->PageCollection->Label()
+                << " pages [ ";
+            for (auto pageId : pages) {
+                logl << pageId << " ";
             }
             logl << "]";
         }
 
         auto *req = new NPageCollection::TFetch(0, pageCollectionInfo->PageCollection, std::move(pages));
         req->TraceId = waitPad->GetWaitingTraceId();
-        req->WaitPad = waitPad; // TODO: deal with one tx multiple fetches
+        req->WaitPad = waitPad;
 
-        RequestFromSharedCache(req, NBlockIO::EPriority::Fast, EPageCollectionRequest::Cache);
+        RequestFromSharedCache(req, NBlockIO::EPriority::Fast, EPageCollectionRequest::Transaction);
     }
 
     if (auto logl = Logger->Log(ELnLev::Debug)) {
@@ -2906,7 +2911,7 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
     }
 
     switch (auto requestType = EPageCollectionRequest(ev->Cookie)) {
-    case EPageCollectionRequest::Cache:
+    case EPageCollectionRequest::Transaction:
     case EPageCollectionRequest::InMemPages:
         {
             TPrivatePageCache::TInfo *collectionInfo = PrivatePageCache->Info(msg->Origin->Label());
@@ -2936,7 +2941,11 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
                 PrivatePageCache->ProvideBlock(std::move(loaded), collectionInfo);
             }
             Y_ABORT_UNLESS(msg->WaitPad);
-            ActivateWaitingTransactions({std::move(msg->WaitPad)});
+            if (msg->WaitPad->RefCount() <= 2) { // one ref here, one in TransactionWaitPads
+                ActivateWaitingTransaction(std::move(msg->WaitPad));
+            } else {
+                LogWaitingTransaction(std::move(msg->WaitPad));
+            }
         }
         return;
 

@@ -1,6 +1,7 @@
 from timeit import default_timer as timer
 import numpy as np
 
+
 class TimeHistogram:
     def __init__(self, name):
         self.results = []

@@ -611,18 +611,6 @@ namespace NActors {
 #define AFL_ALERT(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_ALERT, component)
 #define AFL_EMERG(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_EMERG, component)
 
-#define FOR_PRIORITY_LOG(component, priority, action) if (!(IS_LOG_PRIORITY_ENABLED(priority, component))) ;else {action;};
-
-#define FOR_TRACE_LOG(component, action) FOR_PRIORITY_LOG(component, NActors::NLog::PRI_TRACE, action);
-#define FOR_DEBUG_LOG(component, action) FOR_PRIORITY_LOG(component, NActors::NLog::PRI_DEBUG, action);
-#define FOR_INFO_LOG(component, action) FOR_PRIORITY_LOG(component, NActors::NLog::PRI_INFO, action);
-#define FOR_NOTICE_LOG(component, action) FOR_PRIORITY_LOG(component, NActors::NLog::PRI_NOTICE, action);
-#define FOR_WARN_LOG(component, action) FOR_PRIORITY_LOG(component, NActors::NLog::PRI_WARN, action);
-#define FOR_ERROR_LOG(component, action) FOR_PRIORITY_LOG(component, NActors::NLog::PRI_ERROR, action);
-#define FOR_CRIT_LOG(component, action) FOR_PRIORITY_LOG(component, NActors::NLog::PRI_CRIT, action);
-#define FOR_ALERT_LOG(component, action) FOR_PRIORITY_LOG(component, NActors::NLog::PRI_ALERT, action);
-#define FOR_EMERG_LOG(component, action) FOR_PRIORITY_LOG(component, NActors::NLog::PRI_EMERG, action);
-
 #define DETECT_LOG_MACRO(_1, _2, NAME, ...) NAME
 
 #define BASE_CFL_TRACE2(k, v) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_TRACE, ::NActors::TLogContextGuard::GetCurrentComponent())(k, v)

@@ -17,6 +17,8 @@
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 
+#include <ydb/util/evlog/log.h>
+
 #include <util/string/join.h>
 
 namespace NKikimr::NOlap {
@@ -37,7 +39,7 @@ private:
     std::optional<TMonotonic> CurrentNodeStart;
 
     std::optional<TFetchingScriptCursor> CursorStep;
-    
+
 public:
     void OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals) {
         if (!CurrentProgramNodeId) {
@@ -145,26 +147,14 @@ private:
     virtual TConclusion<bool> DoStartFetchImpl(
         const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<IKernelFetchLogic>>& fetchersExt) = 0;
 
-    virtual TConclusion<bool> DoStartFetch(
-        const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>& fetchersExt) override final;
+    virtual TConclusion<bool> DoStartFetch(const NArrow::NSSA::TProcessorContext& context,
+        const std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>& fetchersExt) override final;
 
     virtual bool DoStartFetchingColumns(
         const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) = 0;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) = 0;
 
-    class TEvent {
-    private:
-        YDB_READONLY_DEF(TString, Text);
-        YDB_READONLY(TMonotonic, Instant, TMonotonic::Now());
-
-    public:
-        TEvent(const TString& text)
-            : Text(text)
-        {
-
-        }
-    };
-    std::deque<TEvent> Events;
+    NEvLog::TLogsThread Events;
 
 protected:
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
@@ -173,20 +163,11 @@ protected:
 
 public:
     void AddEvent(const TString& evDescription) {
-        Events.emplace_back(evDescription);
+        Events.AddEvent(evDescription);
     }
 
     TString GetEventsReport() const {
-        if (Events.empty()) {
-            return "";
-        }
-        const TMonotonic start = Events.front().GetInstant();
-        TStringBuilder sb;
-        sb << start << ":";
-        for (auto&& i : Events) {
-            sb << "{" << i.GetText() << ":" << i.GetInstant() - start << "};";
-        }
-        return sb;
+        return Events.DebugString();
     }
 
     TExecutionContext& MutableExecutionContext() {

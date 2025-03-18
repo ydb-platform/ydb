@@ -37,10 +37,9 @@ public:
     }
 };
 
-class IKernelFetchLogic {
+class IKernelFetchLogic: public NArrow::NSSA::IFetchLogic {
 private:
-    YDB_READONLY(ui32, EntityId, 0);
-
+    using TBase = NArrow::NSSA::IFetchLogic;
     virtual void DoStart(TReadActionsCollection& nextRead, TFetchingResultContext& context) = 0;
     virtual void DoOnDataReceived(TReadActionsCollection& nextRead, NBlobOperations::NRead::TCompositeReadBlobs& blobs) = 0;
     virtual void DoOnDataCollected(TFetchingResultContext& context) = 0;
@@ -52,7 +51,7 @@ public:
     virtual ~IKernelFetchLogic() = default;
 
     IKernelFetchLogic(const ui32 entityId, const std::shared_ptr<IStoragesManager>& storagesManager)
-        : EntityId(entityId)
+        : TBase(entityId)
         , StoragesManager(storagesManager) {
         AFL_VERIFY(StoragesManager);
     }

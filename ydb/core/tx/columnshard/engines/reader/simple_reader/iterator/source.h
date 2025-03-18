@@ -185,12 +185,33 @@ public:
         };
     };
 
-    class TCompareFinishForScanSequence {
+    class TCompareKeyForScanSequence {
+    private:
+        const TReplaceKeyAdapter Key;
+        const ui32 SourceId;
+
     public:
-        bool operator()(const std::shared_ptr<IDataSource>& l, const std::shared_ptr<IDataSource>& r) const {
-            const std::partial_ordering compareResult = l->GetFinish().Compare(r->GetFinish());
+        TCompareKeyForScanSequence(const TReplaceKeyAdapter& key, const ui32 sourceId)
+            : Key(key)
+            , SourceId(sourceId) {
+        }
+
+        static TCompareKeyForScanSequence FromStart(const std::shared_ptr<IDataSource>& src) {
+            return TCompareKeyForScanSequence(src->GetStart(), src->GetSourceId());
+        }
+
+        static TCompareKeyForScanSequence FromFinish(const std::shared_ptr<IDataSource>& src) {
+            return TCompareKeyForScanSequence(src->GetFinish(), src->GetSourceId());
+        }
+
+        static TCompareKeyForScanSequence BorderStart(const std::shared_ptr<IDataSource>& src) {
+            return TCompareKeyForScanSequence(src->GetStart(), 0);
+        }
+
+        bool operator<(const TCompareKeyForScanSequence& item) const {
+            const std::partial_ordering compareResult = Key.Compare(item.Key);
             if (compareResult == std::partial_ordering::equivalent) {
-                return l->GetSourceId() < r->GetSourceId();
+                return SourceId < item.SourceId;
             } else {
                 return compareResult == std::partial_ordering::less;
             }
@@ -274,16 +295,20 @@ private:
     std::shared_ptr<NIndexes::TSkipIndex> SelectOptimalIndex(
         const std::vector<std::shared_ptr<NIndexes::TSkipIndex>>& indexes, const NArrow::NSSA::EIndexCheckOperation op) const;
 
-    virtual TConclusion<bool> DoStartFetchIndex(const NArrow::NSSA::TProcessorContext& context, const TFetchIndexContext& fetchContext) override;
+    virtual TConclusion<bool> DoStartFetchImpl(
+        const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& fetchersExt) override;
+
+    virtual TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> DoStartFetchIndex(
+        const NArrow::NSSA::TProcessorContext& context, const TFetchIndexContext& fetchContext) override;
     virtual TConclusion<NArrow::TColumnFilter> DoCheckIndex(const NArrow::NSSA::TProcessorContext& context,
-        const TFetchIndexContext& fetchContext,
-        const std::shared_ptr<arrow::Scalar>& value) override;
-    virtual TConclusion<bool> DoStartFetchHeader(const NArrow::NSSA::TProcessorContext& context, const TFetchHeaderContext& fetchContext) override;
-    virtual TConclusion<NArrow::TColumnFilter> DoCheckHeader(const NArrow::NSSA::TProcessorContext& context,
-        const TFetchHeaderContext& fetchContext) override;
+        const TCheckIndexContext& fetchContext, const std::shared_ptr<arrow::Scalar>& value) override;
+    virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchHeader(
+        const NArrow::NSSA::TProcessorContext& context, const TFetchHeaderContext& fetchContext) override;
+    virtual TConclusion<NArrow::TColumnFilter> DoCheckHeader(
+        const NArrow::NSSA::TProcessorContext& context, const TCheckHeaderContext& fetchContext) override;
     virtual void DoAssembleAccessor(const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override;
-    virtual TConclusion<bool> DoStartFetchData(
-        const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override;
+    virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(
+        const NArrow::NSSA::TProcessorContext& context, const TDataAddress& addr) override;
 
     virtual NJson::TJsonValue DoDebugJson() const override {
         NJson::TJsonValue result = NJson::JSON_MAP;

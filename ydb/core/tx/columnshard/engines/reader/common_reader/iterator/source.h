@@ -113,7 +113,7 @@ public:
     }
 };
 
-class IDataSource: public ICursorEntity, public NArrow::NSSA::IDataSource {
+class IDataSource: public ICursorEntity, public NArrow::NSSA::IDataSource, public NColumnShard::TMonitoringObjectsCounter<IDataSource> {
 private:
     YDB_READONLY(ui64, SourceId, 0);
     YDB_READONLY(ui32, SourceIdx, 0);
@@ -142,9 +142,29 @@ private:
     virtual void DoBuildStageResult(const std::shared_ptr<IDataSource>& sourcePtr) = 0;
     virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) = 0;
 
+    virtual TConclusion<bool> DoStartFetchImpl(
+        const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<IKernelFetchLogic>>& fetchersExt) = 0;
+
+    virtual TConclusion<bool> DoStartFetch(
+        const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>& fetchersExt) override final;
+
     virtual bool DoStartFetchingColumns(
         const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) = 0;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) = 0;
+
+    class TEvent {
+    private:
+        YDB_READONLY_DEF(TString, Text);
+        YDB_READONLY(TMonotonic, Instant, TMonotonic::Now());
+
+    public:
+        TEvent(const TString& text)
+            : Text(text)
+        {
+
+        }
+    };
+    std::deque<TEvent> Events;
 
 protected:
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
@@ -152,6 +172,23 @@ protected:
     std::unique_ptr<TFetchedResult> StageResult;
 
 public:
+    void AddEvent(const TString& evDescription) {
+        Events.emplace_back(evDescription);
+    }
+
+    TString GetEventsReport() const {
+        if (Events.empty()) {
+            return "";
+        }
+        const TMonotonic start = Events.front().GetInstant();
+        TStringBuilder sb;
+        sb << start << ":";
+        for (auto&& i : Events) {
+            sb << "{" << i.GetText() << ":" << i.GetInstant() - start << "};";
+        }
+        return sb;
+    }
+
     TExecutionContext& MutableExecutionContext() {
         return ExecutionContext;
     }

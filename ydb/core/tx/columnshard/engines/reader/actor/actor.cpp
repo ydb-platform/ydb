@@ -354,8 +354,6 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch) {
         Result->AvailablePacks = ScanIterator->GetAvailableResultsCount();
     }
     TDuration totalElapsedTime = TDuration::Seconds(GetElapsedTicksAsSeconds());
-    // Result->TotalTime = totalElapsedTime - LastReportedElapsedTime;
-    // TODO: Result->CpuTime = ...
     LastReportedElapsedTime = totalElapsedTime;
 
     PageFaults = 0;

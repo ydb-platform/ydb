@@ -6,8 +6,11 @@
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
+#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
+#include <ydb/core/tx/limiter/grouped_memory/service/process.h>
 #include <ydb/core/wrappers/fake_storage.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -70,16 +73,18 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         std::optional<ui64> ExpectIndexSkip;
         std::optional<ui64> ExpectIndexNoData;
         std::optional<ui64> ExpectIndexApprove;
-        ui64 IndexSkipStart = 0;
-        ui64 IndexNoDataStart = 0;
-        ui64 IndexApproveStart = 0;
 
         virtual TConclusionStatus DoExecute(TKikimrRunner& kikimr) override {
             auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
             AFL_VERIFY(controller);
-            IndexSkipStart = controller->GetIndexesSkippingOnSelect().Val();
-            IndexApproveStart = controller->GetIndexesApprovedOnSelect().Val();
-            IndexNoDataStart = controller->GetIndexesSkippedNoData().Val();
+            const i64 indexSkipStart = controller->GetIndexesSkippingOnSelect().Val();
+            const i64 indexApproveStart = controller->GetIndexesApprovedOnSelect().Val();
+            const i64 indexNoDataStart = controller->GetIndexesSkippedNoData().Val();
+
+            const i64 headerSkipStart = controller->GetHeadersSkippingOnSelect().Val();
+            const i64 headerApproveStart = controller->GetHeadersApprovedOnSelect().Val();
+            const i64 headerNoDataStart = controller->GetHeadersSkippedNoData().Val();
+
             Cerr << "EXECUTE: " << Command << Endl;
             auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
             auto it = kikimr.GetQueryClient().StreamExecuteQuery(Command, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -90,23 +95,26 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
                 Cerr << "OUTPUT: " << output << Endl;
                 CompareYson(output, Compare);
             }
-            const ui32 skip = controller->GetIndexesSkippingOnSelect().Val() - IndexSkipStart;
-            const ui32 noData = controller->GetIndexesSkippedNoData().Val() - IndexNoDataStart;
-            const ui32 approves = controller->GetIndexesApprovedOnSelect().Val() - IndexApproveStart;
-            Cerr << noData << "/" << skip << "/" << approves << Endl;
+            const ui32 iSkip = controller->GetIndexesSkippingOnSelect().Val() - indexSkipStart;
+            const ui32 iNoData = controller->GetIndexesSkippedNoData().Val() - indexNoDataStart;
+            const ui32 iApproves = controller->GetIndexesApprovedOnSelect().Val() - indexApproveStart;
+            Cerr << "INDEX:" << iNoData << "/" << iSkip << "/" << iApproves << Endl;
+
+            const ui32 hSkip = controller->GetHeadersSkippingOnSelect().Val() - headerSkipStart;
+            const ui32 hNoData = controller->GetHeadersSkippedNoData().Val() - headerNoDataStart;
+            const ui32 hApproves = controller->GetHeadersApprovedOnSelect().Val() - headerApproveStart;
+            Cerr << "HEADER:" << hNoData << "/" << hSkip << "/" << hApproves << Endl;
             if (ExpectIndexSkip) {
-                AFL_VERIFY(skip == *ExpectIndexSkip)("expect", ExpectIndexSkip)("real", skip)(
-                                     "current", controller->GetIndexesSkippingOnSelect().Val())(
-                                     "pred", IndexSkipStart);
+                AFL_VERIFY(iSkip + hSkip == *ExpectIndexSkip)("expect", ExpectIndexSkip)("ireal", iSkip)("hreal", hSkip)(
+                                     "current", controller->GetIndexesSkippingOnSelect().Val())("pred", indexSkipStart);
             }
             if (ExpectIndexNoData) {
-                AFL_VERIFY(noData == *ExpectIndexNoData)("expect", ExpectIndexNoData)("real", noData)(
-                                       "current", controller->GetIndexesSkippedNoData().Val())(
-                                       "pred", IndexNoDataStart);
+                AFL_VERIFY(iNoData == *ExpectIndexNoData)("expect", ExpectIndexNoData)("real", iNoData)(
+                                       "current", controller->GetIndexesSkippedNoData().Val())("pred", indexNoDataStart);
             }
             if (ExpectIndexApprove) {
-                AFL_VERIFY(approves == *ExpectIndexApprove)("expect", ExpectIndexApprove)("real", approves)(
-                                         "current", controller->GetIndexesApprovedOnSelect().Val())("pred", IndexApproveStart);
+                AFL_VERIFY(iApproves == *ExpectIndexApprove)("expect", ExpectIndexApprove)("real", iApproves)(
+                                         "current", controller->GetIndexesApprovedOnSelect().Val())("pred", indexApproveStart);
             }
             return TConclusionStatus::Success();
         }
@@ -256,6 +264,10 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             for (auto&& i : Commands) {
                 i->Execute(kikimr);
             }
+            AFL_VERIFY(NColumnShard::TMonitoringObjectsCounter<NOlap::NGroupedMemoryManager::TProcessMemoryScope>::GetCounter().Val() == 0)("count",
+                           NColumnShard::TMonitoringObjectsCounter<NOlap::NGroupedMemoryManager::TProcessMemoryScope>::GetCounter().Val());
+            AFL_VERIFY(NColumnShard::TMonitoringObjectsCounter<NOlap::NReader::NCommon::IDataSource>::GetCounter().Val() == 0)(
+                           "count", NColumnShard::TMonitoringObjectsCounter<NOlap::NReader::NCommon::IDataSource>::GetCounter().Val());
         }
     };
 
@@ -501,6 +513,35 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             ------
             READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
             EXPECTED: [[1u;["{\"a\":\"a1\",\"b\":\"b1\",\"c\":\"c1\"}"]];[2u;["{\"a\":\"a2\"}"]];[3u;["{\"b\":\"b3\",\"d\":\"d3\"}"]];[4u;["{\"a\":\"a4\",\"b\":\"b4asdsasdaa\"}"]]]
+            
+        )";
+        TScriptVariator(script).Execute();
+    }
+
+    Y_UNIT_TEST(OrFilterVariants) {
+        TString script = R"(
+            SCHEMA:            
+            CREATE TABLE `/Root/ColumnTable` (
+                Col1 Uint64 NOT NULL,
+                Col2 JsonDocument,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$1|2|10$$);
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
+                      `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+            ------
+            DATA:
+            REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a" : "a1", "b" : "b1", "c" : "c1"}')), (2u, JsonDocument('{"a" : "a2"}')),
+                                                                    (3u, JsonDocument('{"b" : "b3", "d" : "d3"}')), (4u, JsonDocument('{"b" : "b4asdsasdaa", "a" : "a4"}'))
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE (JSON_VALUE(Col2, "$.b") = "b3" AND JSON_VALUE(Col2, "$.d") = "d3") OR (JSON_VALUE(Col2, "$.b") = "b1" AND JSON_VALUE(Col2, "$.c") = "c1") ORDER BY Col1;
+            EXPECTED: [[1u;["{\"a\":\"a1\",\"b\":\"b1\",\"c\":\"c1\"}"]];[3u;["{\"b\":\"b3\",\"d\":\"d3\"}"]]]
             
         )";
         TScriptVariator(script).Execute();

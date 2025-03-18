@@ -33,7 +33,8 @@ TConclusion<bool> TStreamLogicProcessor::OnInputReady(
     AFL_VERIFY(!context.GetResources()->HasMarker(FinishMarker));
     const auto accResult = context.GetResources()->GetAccessorOptional(GetOutputColumnIdOnce());
 
-    if (auto isMonoValue = accInput->CheckOneValueAccessor(monoValue)) {
+    const auto isMonoValue = accInput->CheckOneValueAccessor(monoValue);
+    if (isMonoValue && *isMonoValue) {
         const auto isFalseConclusion = ScalarIsFalse(monoValue);
         if (isFalseConclusion.IsFail()) {
             return isFalseConclusion;

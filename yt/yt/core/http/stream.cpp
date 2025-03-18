@@ -260,7 +260,7 @@ THttpInput::THttpInput(
     , Config_(std::move(config))
     , ReadInvoker_(std::move(readInvoker))
     , MemoryUsageTracker_(std::move(memoryUsageTracker))
-    , InputBuffer_(TSharedMutableRef::Allocate<THttpParserTag>(Config_->ReadBufferSize))
+    , InputBuffer_(TSharedMutableRef::Allocate<THttpParserTag>(Config_->ReadBufferSize, {.InitializeStorage = false}))
     , Parser_(messageType == EMessageType::Request ? HTTP_REQUEST : HTTP_RESPONSE)
     , StartByteCount_(Connection_->GetReadByteCount())
     , StartStatistics_(Connection_->GetReadStatistics())

@@ -91,26 +91,24 @@ private:
     }
 
     void Handle(NMetadata::NProvider::TEvRefreshSubscriberData::TPtr& ev) {
-        using TExtractor = std::function<TCell(const NKqp::TResourcePoolClassifierConfig&, TVector<TBuffer>&)>;
+        using TExtractor = std::function<TCell(const NKqp::TResourcePoolClassifierConfig&)>;
         using TSchema = Schema::ResourcePoolClassifiers;
 
         struct TExtractorsMap : public THashMap<NTable::TTag, TExtractor> {
             TExtractorsMap() {
-                insert({TSchema::Name::ColumnId, [] (const NKqp::TResourcePoolClassifierConfig& config, TVector<TBuffer>&) {
+                insert({TSchema::Name::ColumnId, [] (const NKqp::TResourcePoolClassifierConfig& config) {
                     return TCell(config.GetName().data(), config.GetName().size());
                 }});
-                insert({TSchema::Rank::ColumnId, [] (const NKqp::TResourcePoolClassifierConfig& config, TVector<TBuffer>&) {
+                insert({TSchema::Rank::ColumnId, [] (const NKqp::TResourcePoolClassifierConfig& config) {
                     return TCell::Make<i64>(config.GetRank());
                 }});
-                insert({TSchema::Config::ColumnId, [] (const NKqp::TResourcePoolClassifierConfig& config, TVector<TBuffer>& holder) {
-                    TStringStream str;
-                    NJson::WriteJson(&str, &config.GetConfigJson(), NJson::TJsonWriterConfig{});
-                    const auto maybeBinaryJson = NBinaryJson::SerializeToBinaryJson(str.Str());
-                    if (std::holds_alternative<TString>(maybeBinaryJson)) {
-                        ythrow yexception() << "Can't serialize binary json value: " << std::get<TString>(maybeBinaryJson);
-                    }
-                    holder.emplace_back(std::move(std::get<NBinaryJson::TBinaryJson>(maybeBinaryJson)));
-                    return TCell(holder.back().Data(), holder.back().Size());
+                insert({TSchema::MemberName::ColumnId, [] (const NKqp::TResourcePoolClassifierConfig& config) {
+                    const auto& memberName = config.GetConfigJson()["member_name"].GetString();
+                    return TCell(memberName.data(), memberName.size());
+                }});
+                insert({TSchema::ResourcePool::ColumnId, [] (const NKqp::TResourcePoolClassifierConfig& config) {
+                    const auto& memberName = config.GetConfigJson()["resource_pool"].GetString();
+                    return TCell(memberName.data(), memberName.size());
                 }});
             }
         };
@@ -132,13 +130,12 @@ private:
                 continue;
             }
             TVector<TCell> cells;
-            TVector<TBuffer> holder;
             for (auto column : Columns) {
                 auto extractor = extractors.find(column.Tag);
                 if (extractor == extractors.end()) {
                     cells.push_back(TCell());
                 } else {
-                    cells.push_back(extractor->second(config, holder));
+                    cells.push_back(extractor->second(config));
                 }
             }
             TArrayRef<const TCell> ref(cells);

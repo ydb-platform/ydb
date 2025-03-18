@@ -382,8 +382,9 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
         }
     }
 
-    Y_UNIT_TEST(InsertDuplicates) {
+    Y_UNIT_TEST_TWIN(InsertDuplicates, UseSink) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -404,13 +405,14 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
             UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const auto& issue) {
-                return issue.GetMessage().contains("Duplicated keys found.");
+                return issue.GetMessage().contains(UseSink ? "Duplicate keys have been found." : "Duplicated keys found.");
             }));
         }
     }
 
-    Y_UNIT_TEST(InsertExistingKey) {
+    Y_UNIT_TEST_TWIN(InsertExistingKey, UseSink) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
         auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
@@ -430,7 +432,7 @@ Y_UNIT_TEST_SUITE(KqpImmediateEffects) {
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
             UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_CONSTRAINT_VIOLATION, [](const auto& issue) {
-                return issue.GetMessage().contains("Conflict with existing key.");
+                return issue.GetMessage().contains(UseSink ? "Duplicate keys have been found." : "Conflict with existing key.");
             }));
         }
     }

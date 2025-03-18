@@ -16,9 +16,6 @@
 #include <ydb/library/yql/providers/solomon/solomon_accessor/client/solomon_accessor_client.h>
 
 #include <util/string/builder.h>
-#include <util/string/join.h>
-#include <util/string/strip.h>
-#include <util/string/split.h>
 
 namespace NYql {
 
@@ -77,15 +74,6 @@ void FillScheme(const TTypeAnnotationNode& itemType, NSo::NProto::TDqSolomonShar
             YQL_ENSURE(false, "Invalid data type for monitoring sink: " << dataType.Name);
         }
     }
-}
-
-std::vector<TString> ParseKnownLabelNames(const TString& selectors) {
-    std::vector<TString> result;
-    auto selectorValues = StringSplitter(selectors.substr(1, selectors.size() - 2)).Split(',').SkipEmpty().ToList<TString>();
-    for (const auto& value : selectorValues) {
-        result.push_back(StripString(value.substr(0, value.find('='))));
-    }
-    return std::move(result);
 }
 
 class TSolomonDqIntegration: public TDqIntegrationBase {
@@ -151,7 +139,7 @@ public:
                         return {};
                     }
                     if (!TInstant::TryParseIso8601(value, from)) {
-                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), "couldn't parse `from`, use Iso8601 format"));
+                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), "couldn't parse `from`, use Iso8601 format: 2025-03-12T14:40:39Z"));
                         return {};
                     }
                     continue;
@@ -162,7 +150,7 @@ public:
                         return {};
                     }
                     if (!TInstant::TryParseIso8601(value, to)) {
-                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), "couldn't parse `to`, use Iso8601 format"));
+                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), "couldn't parse `to`, use Iso8601 format: 2025-03-12T14:40:39Z"));
                         return {};
                     }
                     continue;
@@ -243,7 +231,7 @@ public:
 
             if (downsamplingDisabled.has_value() && *downsamplingDisabled) {
                 if (downsamplingAggregation || downsamplingFill || downsamplingGridSec) {
-                    ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Pos()), "downsampling.disabled must be false if downsampling.aggregation, downsampling.fill or downsamplig.grid_interval are specified"));
+                    ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Pos()), "downsampling.disabled must be false if downsampling.aggregation, downsampling.fill or downsamplig.grid_interval is specified"));
                     return {};
                 }
             } else {
@@ -276,8 +264,9 @@ public:
                     .RowType(soReadObject.RowType())
                     .SystemColumns(soReadObject.SystemColumns())
                     .LabelNames(soReadObject.LabelNames())
-                    .From<TCoAtom>().Build(from.ToIsoStringLocalUpToSeconds())
-                    .To<TCoAtom>().Build(to.ToIsoStringLocalUpToSeconds())
+                    .RequiredLabelNames(soReadObject.RequiredLabelNames())
+                    .From<TCoAtom>().Build(from.ToStringUpToSeconds())
+                    .To<TCoAtom>().Build(to.ToStringUpToSeconds())
                     .Selectors<TCoAtom>().Build(selectors)
                     .Program<TCoAtom>().Build(program)
                     .DownsamplingDisabled<TCoBool>().Literal().Build(*downsamplingDisabled ? "true" : "false").Build()
@@ -358,6 +347,11 @@ public:
             source.AddLabelNames(columnAsString);
         }
 
+        for (const auto& c : settings.RequiredLabelNames()) {
+            const auto& labelAsString = c.StringValue();
+            source.AddRequiredLabelNames(labelAsString);
+        }
+
         auto& solomonSettings = State_->Configuration;
 
         auto metricsQueuePageSize = solomonSettings->MetricsQueuePageSize.Get().OrElse(5000);
@@ -378,23 +372,6 @@ public:
         if (!selectors.empty()) {
             auto providerFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, State_->Configuration->Tokens.at(cluster));
             auto credentialsProvider = providerFactory->CreateProvider();
-            
-            const auto solomonClient = NSo::ISolomonAccessorClient::Make(source, credentialsProvider);
-            auto future = solomonClient->GetLabelNames(selectors);
-            future.Wait();
-
-            auto labelNamesValue = future.GetValue();
-
-            if (labelNamesValue.Status != NSo::EStatus::STATUS_OK) {
-                throw yexception() << labelNamesValue.Error;
-            }
-
-            for (const auto& labelName : future.GetValue().Result.Labels) {
-                source.AddRequiredLabelNames(labelName);
-            }
-            for (const auto& labelName : ParseKnownLabelNames(selectors)) {
-                source.AddRequiredLabelNames(labelName);
-            }
             
             NDq::TDqSolomonReadParams readParams{ .Source = source };
 

@@ -15,7 +15,7 @@ public:
     virtual ~ISolomonAccessorClient() = default;
 
     static TPtr Make(
-        const NYql::NSo::NProto::TDqSolomonSource& source,
+        NYql::NSo::NProto::TDqSolomonSource source,
         std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider);
     
 public:

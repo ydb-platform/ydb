@@ -39,7 +39,7 @@ struct TEvSolomonProvider {
         
         TEvAck() = default;
         explicit TEvAck(const NDqProto::TMessageTransportMeta& transportMeta) {
-            Record.MutableTransportMeta()->CopyFrom(transportMeta);
+            *Record.MutableTransportMeta() = transportMeta;
         }
     };
 

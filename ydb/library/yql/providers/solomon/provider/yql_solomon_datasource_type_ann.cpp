@@ -34,7 +34,7 @@ public:
     }
 
     TStatus HandleSoSourceSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-        if (!EnsureArgsCount(*input, 14, ctx)) {
+        if (!EnsureArgsCount(*input, 15, ctx)) {
             return TStatus::Error;
         }
 
@@ -64,6 +64,11 @@ public:
 
         auto& labelNames = *input->Child(TSoSourceSettings::idx_LabelNames);
         if (!EnsureTupleOfAtoms(labelNames, ctx)) {
+            return TStatus::Error;
+        }
+
+        auto& requiredLabelNames = *input->Child(TSoSourceSettings::idx_RequiredLabelNames);
+        if (!EnsureTupleOfAtoms(requiredLabelNames, ctx)) {
             return TStatus::Error;
         }
         

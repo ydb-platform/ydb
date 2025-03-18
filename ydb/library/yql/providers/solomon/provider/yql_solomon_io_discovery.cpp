@@ -166,6 +166,7 @@ public:
                         .Object(soObject)
                         .SystemColumns(systemColumnsNode)
                         .LabelNames(labelNamesNode)
+                        .RequiredLabelNames().Build()
                         .RowType(rowTypeNode)
                         .ColumnOrder(std::move(userSchema.back()))
                       .Done().Ptr()
@@ -175,6 +176,7 @@ public:
                         .Object(soObject)
                         .SystemColumns(systemColumnsNode)
                         .LabelNames(labelNamesNode)
+                        .RequiredLabelNames().Build()
                         .RowType(rowTypeNode)
                       .Done().Ptr();
             }

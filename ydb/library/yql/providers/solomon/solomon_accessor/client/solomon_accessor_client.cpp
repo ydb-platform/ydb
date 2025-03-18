@@ -12,14 +12,17 @@
 #include <ydb/library/yql/providers/solomon/solomon_accessor/grpc/data_service.pb.h>
 #include <ydb/library/yql/providers/solomon/solomon_accessor/grpc/data_service.grpc.pb.h>
 
+#include <util/string/join.h>
+#include <util/string/strip.h>
+#include <util/string/split.h>
+
 namespace NYql::NSo {
 
 using namespace yandex::monitoring::api::v3;
 
 namespace {
 
-Downsampling::GapFilling ParseGapFilling(const TString& fill)
-{
+Downsampling::GapFilling ParseGapFilling(const TString& fill) {
     if (fill == "NULL"sv) {
         return Downsampling::GAP_FILLING_NULL;
     }
@@ -32,8 +35,7 @@ Downsampling::GapFilling ParseGapFilling(const TString& fill)
     return Downsampling::GAP_FILLING_UNSPECIFIED;
 }
 
-Downsampling::GridAggregation ParseGridAggregation(const TString& aggregation)
-{
+Downsampling::GridAggregation ParseGridAggregation(const TString& aggregation) {
     if (aggregation == "MAX"sv) {
         return Downsampling::GRID_AGGREGATION_MAX;
     }
@@ -55,8 +57,7 @@ Downsampling::GridAggregation ParseGridAggregation(const TString& aggregation)
     return Downsampling::GRID_AGGREGATION_UNSPECIFIED;
 }
 
-TString MetricTypeToString(MetricType type)
-{
+TString MetricTypeToString(MetricType type) {
     switch (type) {
         case MetricType::DGAUGE:
             return "DGAUGE";
@@ -71,8 +72,17 @@ TString MetricTypeToString(MetricType type)
     }
 }
 
-TGetLabelsResponse ProcessGetLabelsResponse(NYql::IHTTPGateway::TResult&& response)
-{
+std::vector<TString> ParseKnownLabelNames(const TString& selectors) {
+    auto selectorValues = StringSplitter(selectors.substr(1, selectors.size() - 2)).Split(',').SkipEmpty().ToList<TString>();
+    std::vector<TString> result;
+    result.reserve(selectorValues.size());
+    for (const auto& value : selectorValues) {
+        result.push_back(StripString(value.substr(0, value.find('='))));
+    }
+    return result;
+}
+
+TGetLabelsResponse ProcessGetLabelsResponse(NYql::IHTTPGateway::TResult&& response, std::vector<TString>&& knownLabelNames) {
     TGetLabelsResult result;
 
     if (response.CurlResponseCode != CURLE_OK) {
@@ -103,12 +113,14 @@ TGetLabelsResponse ProcessGetLabelsResponse(NYql::IHTTPGateway::TResult&& respon
             result.Labels.push_back(name.GetString());
         }
     }
+    for (const auto& name : knownLabelNames) {
+        result.Labels.push_back(name);
+    }
 
     return TGetLabelsResponse(std::move(result));
 }
 
-TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& response)
-{
+TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& response) {
     TListMetricsResult result;
 
     if (response.CurlResponseCode != CURLE_OK) {
@@ -153,8 +165,7 @@ TListMetricsResponse ProcessListMetricsResponse(NYql::IHTTPGateway::TResult&& re
     return TListMetricsResponse(std::move(result));
 }
 
-TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResult&& response, size_t expectedSize)
-{
+TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResult&& response, size_t expectedSize) {
     TGetPointsCountResult result;
 
     if (response.CurlResponseCode != CURLE_OK) {
@@ -191,8 +202,7 @@ TGetPointsCountResponse ProcessGetPointsCountResponse(NYql::IHTTPGateway::TResul
     return TGetPointsCountResponse(std::move(result));
 }
 
-TGetDataResponse ProcessGetDataResponse(NYdbGrpc::TGrpcStatus&& status, ReadResponse&& response)
-{
+TGetDataResponse ProcessGetDataResponse(NYdbGrpc::TGrpcStatus&& status, ReadResponse&& response) {
     TGetDataResult result;
 
     if (!status.Ok()) {
@@ -226,20 +236,18 @@ TGetDataResponse ProcessGetDataResponse(NYdbGrpc::TGrpcStatus&& status, ReadResp
     return TGetDataResponse(std::move(result));
 }
 
-class TSolomonAccessorClient : public ISolomonAccessorClient, public std::enable_shared_from_this<TSolomonAccessorClient>
-{
+class TSolomonAccessorClient : public ISolomonAccessorClient, public std::enable_shared_from_this<TSolomonAccessorClient> {
 public:
     TSolomonAccessorClient(
         const TString& defaultReplica,
         const ui64 defaultGrpcPort,
-        const NYql::NSo::NProto::TDqSolomonSource& settings,
-        std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider
-        )
+        NYql::NSo::NProto::TDqSolomonSource&& settings,
+        std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider)
         : DefaultReplica(defaultReplica)
         , DefaultGrpcPort(defaultGrpcPort)
-        , Settings(settings)
-        , CredentialsProvider(credentialsProvider)
-    {
+        , Settings(std::move(settings))
+        , CredentialsProvider(credentialsProvider) {
+
         HttpConfig.SetMaxInFlightCount(HttpMaxInflight);
         HttpGateway = IHTTPGateway::Make(&HttpConfig);
 
@@ -250,19 +258,16 @@ public:
         GrpcConnection = GrpcClient->CreateGRpcServiceConnection<DataService>(GrpcConfig);
     }
 
-    ~TSolomonAccessorClient() override
-    {
+    ~TSolomonAccessorClient() override {
         GrpcClient->Stop();
     }
 
 public:
-    NThreading::TFuture<TGetLabelsResponse> GetLabelNames(const TString& selectors) const override final
-    {
+    NThreading::TFuture<TGetLabelsResponse> GetLabelNames(const TString& selectors) const override final {
         auto resultPromise = NThreading::NewPromise<TGetLabelsResponse>();
         
-        auto cb = [resultPromise](NYql::IHTTPGateway::TResult&& result) mutable
-        {
-            resultPromise.SetValue(ProcessGetLabelsResponse(std::move(result)));
+        auto cb = [resultPromise, selectors](NYql::IHTTPGateway::TResult&& result) mutable {
+            resultPromise.SetValue(ProcessGetLabelsResponse(std::move(result), ParseKnownLabelNames(selectors)));
         };
 
         DoHttpRequest(
@@ -273,12 +278,10 @@ public:
         return resultPromise.GetFuture();
     }
 
-    NThreading::TFuture<TListMetricsResponse> ListMetrics(const TString& selectors, int pageSize, int page) const override final
-    {
+    NThreading::TFuture<TListMetricsResponse> ListMetrics(const TString& selectors, int pageSize, int page) const override final {
         auto resultPromise = NThreading::NewPromise<TListMetricsResponse>();
         
-        auto cb = [resultPromise](NYql::IHTTPGateway::TResult&& result) mutable
-        {
+        auto cb = [resultPromise](NYql::IHTTPGateway::TResult&& result) mutable {
             resultPromise.SetValue(ProcessListMetricsResponse(std::move(result)));
         };
 
@@ -290,16 +293,14 @@ public:
         return resultPromise.GetFuture();
     }
 
-    NThreading::TFuture<TGetPointsCountResponse> GetPointsCount(const std::vector<TMetric>& metrics) const override final
-    {
+    NThreading::TFuture<TGetPointsCountResponse> GetPointsCount(const std::vector<TMetric>& metrics) const override final {
         auto requestUrl = BuildGetPointsCountUrl();
         auto requestBody = BuildGetPointsCountBody(metrics);
 
         auto resultPromise = NThreading::NewPromise<TGetPointsCountResponse>();
 
-        auto cb = [resultPromise, extectedSize = metrics.size()](NYql::IHTTPGateway::TResult&& response) mutable 
-        {
-            resultPromise.SetValue(ProcessGetPointsCountResponse(std::move(response), extectedSize));
+        auto cb = [resultPromise, expectedSize = metrics.size()](NYql::IHTTPGateway::TResult&& response) mutable {
+            resultPromise.SetValue(ProcessGetPointsCountResponse(std::move(response), expectedSize));
         };
 
         DoHttpRequest(
@@ -311,13 +312,11 @@ public:
         return resultPromise.GetFuture();
     }
 
-    NThreading::TFuture<TGetDataResponse> GetData(TMetric metric, TInstant from, TInstant to) const override final
-    {
+    NThreading::TFuture<TGetDataResponse> GetData(TMetric metric, TInstant from, TInstant to) const override final {
         return GetData(BuildSelectorsProgram(metric), from, to);
     }
 
-    NThreading::TFuture<TGetDataResponse> GetData(TString selectors, TInstant from, TInstant to) const override final
-    {
+    NThreading::TFuture<TGetDataResponse> GetData(TString selectors, TInstant from, TInstant to) const override final {
         const auto request = BuildGetDataRequest(selectors, from, to);
 
         NYdbGrpc::TCallMeta callMeta;
@@ -335,8 +334,7 @@ public:
         }
         
         // hold context until reply
-        auto cb = [resultPromise, context](NYdbGrpc::TGrpcStatus&& status, ReadResponse&& result) mutable
-        {
+        auto cb = [resultPromise, context](NYdbGrpc::TGrpcStatus&& status, ReadResponse&& result) mutable {
             resultPromise.SetValue(ProcessGetDataResponse(std::move(status), std::move(result)));
         };
 
@@ -352,8 +350,7 @@ public:
     }
 
 private:
-    std::optional<TString> GetAuthInfo() const
-    {
+    std::optional<TString> GetAuthInfo() const {
         if (!Settings.GetUseSsl()) {
             return {};
         }
@@ -370,19 +367,16 @@ private:
         }
     }
 
-    TString GetHttpSolomonEndpoint() const
-    {
+    TString GetHttpSolomonEndpoint() const {
         return (Settings.GetUseSsl() ? "https://" : "http://") + Settings.GetEndpoint();
     }
 
-    TString GetGrpcSolomonEndpoint() const
-    {
+    TString GetGrpcSolomonEndpoint() const {
         return TStringBuilder() << Settings.GetEndpoint() << ":" << DefaultGrpcPort;
     }
 
-    template <typename Callback>
-    void DoHttpRequest(Callback&& callback, TString&& url, TString&& body = "") const
-    {
+    template <typename TCallback>
+    void DoHttpRequest(TCallback&& callback, TString&& url, TString&& body = "") const {
         IHTTPGateway::THeaders headers;
         if (auto authInfo = GetAuthInfo()) {
             headers.Fields.emplace_back(TStringBuilder{} << "Authorization: " << *authInfo);
@@ -392,8 +386,7 @@ private:
         headers.Fields.emplace_back("Content-Type: application/json;charset=UTF-8");
 
         auto retryPolicy = IHTTPGateway::TRetryPolicy::GetExponentialBackoffPolicy(
-            [](CURLcode, long httpCode)
-            {
+            [](CURLcode, long httpCode) {
                 if (httpCode == 429 /*RESOURCE_EXHAUSTED*/) {
                     return ERetryErrorClass::ShortRetry;
                 }
@@ -426,8 +419,7 @@ private:
         }
     }
 
-    TString BuildGetLabelsUrl(const TString& selectors) const
-    {
+    TString BuildGetLabelsUrl(const TString& selectors) const {
         TUrlBuilder builder(GetHttpSolomonEndpoint());
 
         builder.AddPathComponent("api");
@@ -439,14 +431,11 @@ private:
 
         builder.AddUrlParam("selectors", selectors);
         builder.AddUrlParam("forceCluster", DefaultReplica);
-        builder.AddUrlParam("from", TInstant::Seconds(Settings.GetFrom()).ToIsoStringLocalUpToSeconds());
-        builder.AddUrlParam("to", TInstant::Seconds(Settings.GetTo()).ToIsoStringLocalUpToSeconds());
 
         return builder.Build();
     }
 
-    TString BuildListMetricsUrl(const TString& selectors, int pageSize, int page) const
-    {
+    TString BuildListMetricsUrl(const TString& selectors, int pageSize, int page) const {
         TUrlBuilder builder(GetHttpSolomonEndpoint());
 
         builder.AddPathComponent("api");
@@ -465,8 +454,7 @@ private:
         return builder.Build();
     }
 
-    TString BuildGetPointsCountUrl() const
-    {
+    TString BuildGetPointsCountUrl() const {
         TUrlBuilder builder(GetHttpSolomonEndpoint());
 
         builder.AddPathComponent("api");
@@ -479,16 +467,14 @@ private:
         return builder.Build();
     }
 
-    TString BuildGetPointsCountBody(const std::vector<TMetric>& metrics) const
-    {
+    TString BuildGetPointsCountBody(const std::vector<TMetric>& metrics) const {
         std::vector<TString> selectors;
         selectors.reserve(metrics.size());
         std::transform(
             metrics.begin(),
             metrics.end(),
             std::back_inserter(selectors),
-            [this](const TMetric& metric) -> TString 
-            {
+            [this](const TMetric& metric) -> TString {
                 return TStringBuilder() << "count(" << BuildSelectorsProgram(metric) << ")";
             }
         );
@@ -514,8 +500,7 @@ private:
         return w.Str();
     }
 
-    ReadRequest BuildGetDataRequest(const TString& selectors, TInstant from, TInstant to) const
-    {
+    ReadRequest BuildGetDataRequest(const TString& selectors, TInstant from, TInstant to) const {
         ReadRequest request;
 
         request.mutable_container()->set_project_id(Settings.GetProject());
@@ -540,16 +525,14 @@ private:
         return request;
     }
 
-    TString BuildSelectorsProgram(const TMetric& metric) const
-    {
+    TString BuildSelectorsProgram(const TMetric& metric) const {
         std::vector<TString> mappedValues;
         mappedValues.reserve(Settings.GetRequiredLabelNames().size());
         std::transform(
             Settings.GetRequiredLabelNames().begin(),
             Settings.GetRequiredLabelNames().end(),
             std::back_inserter(mappedValues),
-            [&labels = metric.Labels](const TString& labelName) -> TString 
-            {
+            [&labels = metric.Labels](const TString& labelName) -> TString {
                 if (labels.find(labelName) == labels.end()) {
                     return TStringBuilder() << labelName << "=\"-\"";
                 }
@@ -566,7 +549,7 @@ private:
     const ui64 ListSizeLimit = 1ull << 20;
     const ui64 HttpMaxInflight = 200;
     const ui64 GrpcMaxInflight = 2000;
-    const NYql::NSo::NProto::TDqSolomonSource& Settings;
+    const NYql::NSo::NProto::TDqSolomonSource Settings;
     const std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider;
 
     THttpGatewayConfig HttpConfig;
@@ -580,9 +563,8 @@ private:
 
 ISolomonAccessorClient::TPtr
 ISolomonAccessorClient::Make(
-    const NYql::NSo::NProto::TDqSolomonSource& source,
-    std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider)
-{
+    NYql::NSo::NProto::TDqSolomonSource source,
+    std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider) {
     const auto& settings = source.settings();
 
     TString defaultReplica = "sas";
@@ -595,7 +577,7 @@ ISolomonAccessorClient::Make(
         defaultGrpcPort = FromString<ui64>(it->second);
     }
 
-    return std::make_shared<TSolomonAccessorClient>(defaultReplica, defaultGrpcPort, source, credentialsProvider);
+    return std::make_shared<TSolomonAccessorClient>(defaultReplica, defaultGrpcPort, std::move(source), credentialsProvider);
 }
 
 } // namespace NYql::NSo

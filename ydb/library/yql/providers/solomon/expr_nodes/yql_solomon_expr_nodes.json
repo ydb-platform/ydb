@@ -54,14 +54,15 @@
                 {"Index": 3, "Name": "RowType", "Type": "TExprBase"},
                 {"Index": 4, "Name": "SystemColumns", "Type": "TCoAtomList"},
                 {"Index": 5, "Name": "LabelNames", "Type": "TCoAtomList"},
-                {"Index": 6, "Name": "From", "Type": "TCoAtom"},
-                {"Index": 7, "Name": "To", "Type": "TCoAtom"},
-                {"Index": 8, "Name": "Selectors", "Type": "TCoAtom"},
-                {"Index": 9, "Name": "Program", "Type": "TCoAtom"},
-                {"Index": 10, "Name": "DownsamplingDisabled", "Type": "TCoBool"},
-                {"Index": 11, "Name": "DownsamplingAggregation", "Type": "TCoAtom"},
-                {"Index": 12, "Name": "DownsamplingFill", "Type": "TCoAtom"},
-                {"Index": 13, "Name": "DownsamplingGridSec", "Type": "TCoUint32"}
+                {"Index": 6, "Name": "RequiredLabelNames", "Type": "TCoAtomList"},
+                {"Index": 7, "Name": "From", "Type": "TCoAtom"},
+                {"Index": 8, "Name": "To", "Type": "TCoAtom"},
+                {"Index": 9, "Name": "Selectors", "Type": "TCoAtom"},
+                {"Index": 10, "Name": "Program", "Type": "TCoAtom"},
+                {"Index": 11, "Name": "DownsamplingDisabled", "Type": "TCoBool"},
+                {"Index": 12, "Name": "DownsamplingAggregation", "Type": "TCoAtom"},
+                {"Index": 13, "Name": "DownsamplingFill", "Type": "TCoAtom"},
+                {"Index": 14, "Name": "DownsamplingGridSec", "Type": "TCoUint32"}
             ]
         },
         {
@@ -83,8 +84,9 @@
                 {"Index": 2, "Name": "Object", "Type": "TSoObject"},
                 {"Index": 3, "Name": "SystemColumns", "Type": "TCoAtomList"},
                 {"Index": 4, "Name": "LabelNames", "Type": "TCoAtomList"},
-                {"Index": 5, "Name": "RowType", "Type": "TExprBase"},
-                {"Index": 6, "Name": "ColumnOrder", "Type": "TExprBase", "Optional": true}
+                {"Index": 5, "Name": "RequiredLabelNames", "Type": "TCoAtomList"},
+                {"Index": 6, "Name": "RowType", "Type": "TExprBase"},
+                {"Index": 7, "Name": "ColumnOrder", "Type": "TExprBase", "Optional": true}
             ]
         },
         {

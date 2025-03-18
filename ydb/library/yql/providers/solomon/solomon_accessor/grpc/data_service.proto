@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package yandex.monitoring.api.v3;
 
-import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "google/rpc/status.proto";
 
@@ -13,7 +12,6 @@ service DataService {
     // Retrieves metric data based on multi-query input.
     rpc Read(ReadRequest) returns (ReadResponse) {
     }
-
 }
 
 message Container {

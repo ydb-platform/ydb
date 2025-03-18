@@ -49,7 +49,7 @@ public:
         struct TEvNextListingChunkReceived : public NActors::TEventLocal<TEvNextListingChunkReceived, EvNextListingChunkReceived> {
             NSo::TListMetricsResponse Response;
             TEvNextListingChunkReceived(NSo::TListMetricsResponse&& response)
-                : Response(std::move(response)) {};
+                : Response(std::move(response)) {}
         };
 
         struct TEvRoundRobinStageTimeout : public NActors::TEventLocal<TEvRoundRobinStageTimeout, EvRoundRobinStageTimeout> {
@@ -145,10 +145,9 @@ public:
 
 private:
     void HandleUpdateConsumersCount(TEvSolomonProvider::TEvUpdateConsumersCount::TPtr& ev) {
-        if (!UpdatedConsumers.contains(ev->Sender)) {
+        if (const auto [it, inserted] = UpdatedConsumers.emplace(ev->Sender); inserted) {
             LOG_D("TDqSolomonMetricsQueueActor",
                 "HandleUpdateConsumersCount Reducing ConsumersCount by " << ev->Get()->Record.GetConsumersCountDelta() << ", recieved from " << ev->Sender);
-            UpdatedConsumers.insert(ev->Sender);
             ConsumersCount -= ev->Get()->Record.GetConsumersCountDelta();
         }
         Send(ev->Sender, new TEvSolomonProvider::TEvAck(ev->Get()->Record.GetTransportMeta()));
@@ -360,6 +359,7 @@ private:
     void SendMetrics(const NActors::TActorId& consumer, const NDqProto::TMessageTransportMeta& transportMeta) {
         YQL_ENSURE(!MaybeIssues.Defined());
         std::vector<NSo::MetricQueue::TMetric> result;
+        result.reserve(std::min(BatchCountLimit, Metrics.size()));
         while (!Metrics.empty() && result.size() < BatchCountLimit) {
             result.push_back(Metrics.back());
             Metrics.pop_back();

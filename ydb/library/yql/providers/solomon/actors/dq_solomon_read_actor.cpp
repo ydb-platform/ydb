@@ -68,7 +68,7 @@ namespace {
 
 class TDqSolomonReadActor : public NActors::TActorBootstrapped<TDqSolomonReadActor>, public IDqComputeActorAsyncInput {
 private:
-    struct MetricTimeRange {
+    struct TMetricTimeRange {
         NSo::TMetric Metric;
         TInstant From;
         TInstant To;
@@ -397,6 +397,7 @@ private:
 
     void RequestPointsCount() {
         std::vector<NSo::TMetric> requestMetrics;
+        requestMetrics.reserve(std::min(MetricsPerPointsCountQuery, ListedMetrics.size()));
         while (!ListedMetrics.empty() && requestMetrics.size() < MetricsPerPointsCountQuery) {
             requestMetrics.push_back(ListedMetrics.back());
             ListedMetrics.pop_back();
@@ -478,6 +479,7 @@ private:
 
     std::vector<std::pair<TInstant, TInstant>> SplitTimeIntervalIntoRanges(TInstant from, TInstant to, ui64 pointsCount) const {
         std::vector<std::pair<TInstant, TInstant>> result;
+        result.reserve(pointsCount / MaxPointsPerOneMetric);
 
         auto rangeDuration = (to - from);
         for (ui64 i = 0; i < pointsCount; i += MaxPointsPerOneMetric) {
@@ -512,7 +514,7 @@ private:
     bool IsConfirmedMetricsQueueFinish = false;
 
     std::deque<NSo::TMetric> ListedMetrics;
-    std::deque<MetricTimeRange> MetricsWithTimeRange;
+    std::deque<TMetricTimeRange> MetricsWithTimeRange;
     std::deque<NSo::TTimeseries> MetricsData;
     size_t ListedMetricsCount = 0;
     size_t CompletedMetricsCount = 0;

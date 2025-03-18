@@ -3,6 +3,7 @@
 #include "udf_string_ref.h"
 #include "udf_ptr.h"
 #include <library/cpp/deprecated/enum_codegen/enum_codegen.h>
+#include <util/generic/maybe.h>
 #include <util/stream/output.h>
 
 #include <functional>
@@ -28,6 +29,7 @@ inline bool IsLogLevelAllowed(ELogLevel message, ELogLevel threshold) {
 }
 
 TStringBuf LevelToString(ELogLevel level);
+TMaybe<ELogLevel> TryLevelFromString(TStringBuf str);
 
 using TLogComponentId = ui32;
 
@@ -56,7 +58,7 @@ UDF_ASSERT_TYPE_SIZE(ILogProvider, 8);
 TLoggerPtr MakeNullLogger();
 TLoggerPtr MakeSynchronizedLogger(const TLoggerPtr& inner);
 using TLogProviderFunc = std::function<void(const TStringRef&, ELogLevel, const TStringRef&)>;
-TUniquePtr<ILogProvider> MakeLogProvider(TLogProviderFunc func);
+TUniquePtr<ILogProvider> MakeLogProvider(TLogProviderFunc func, TMaybe<ELogLevel> filter = Nothing());
 
 } // namspace NUdf
 } // namspace NYql

@@ -71,13 +71,13 @@ struct TRequest : public TSimpleRefCount<TRequest> {
 };
 
 // pending request, index in ready blocks for page
-using TPendingRequestsRequests = TDeque<std::pair<TIntrusivePtr<TRequest>, ui32>>;
+using TPendingRequests = TDeque<std::pair<TIntrusivePtr<TRequest>, ui32>>;
 
 struct TCollection {
     TLogoBlobID Id;
     TSet<TActorId> Owners;
     TPageMap<TIntrusivePtr<TPage>> PageMap;
-    TMap<TPageId, TPendingRequestsRequests> PendingRequests;
+    TMap<TPageId, TPendingRequests> PendingRequests;
     TDeque<TPageId> DroppedPages;
 };
 

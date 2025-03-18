@@ -36,6 +36,7 @@ message TPersQueuePartitionRequest {
         optional uint64 PartitionSessionId = 16;
         optional int64 LastOffset = 17;
 
+        optional uint64 SizeEstimate = 18;
     }
 
     message TCmdPublishDirectRead {

@@ -73,7 +73,7 @@ For each view in the database, there is a same-named directory in the file struc
 | Object Type | Backup File                      | Format |
 |-------------|----------------------------------|--------|
 | Table       | scheme.pb                        | [Text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) `CreateTableRequest` message |
-| View        | create_view.sql                  | Plain-text [`CREATE VIEW`](../../../../yql/reference/syntax/create-view.md) YQL statement |
+| View        | create_view.sql                  | Plain-text [CREATE VIEW](../../../../yql/reference/syntax/create-view.md) YQL statement |
 
 ## Checksums {#checksums}
 

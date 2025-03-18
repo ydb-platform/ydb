@@ -1,5 +1,5 @@
 items:
-- name: File structure of data export
+- name: File structure of an export
   href: file-structure.md
 - name: Exporting data to the file system
   href: tools-dump.md

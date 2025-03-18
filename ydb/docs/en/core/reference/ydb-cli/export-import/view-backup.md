@@ -1,6 +1,9 @@
 # Backup and restoration of views
 
-This article explains how [views](../../../concepts/datamodel/view.md) are backed up and restored in {{ ydb-short-name }}. The [view query rewriting](#view-query-rewrite) described here is relevant for both local backups (see [ydb tools dump](./_includes/tools_dump.md) and [ydb tools restore](./_includes/tools_restore.md) commands) and S3 backups (see [ydb export s3](./_includes/s3_export.md) and [ydb import s3](./_includes/s3_import.md) commands).
+This article explains how [views](../../../concepts/datamodel/view.md) are backed up and restored in {{ ydb-short-name }}. The [view query rewriting](#view-query-rewrite) described here is relevant for both:
+
+- local backups (see [ydb tools dump](./_includes/tools_dump.md) and [ydb tools restore](./_includes/tools_restore.md) commands)
+- and S3 backups (see [ydb export s3](./_includes/s3_export.md) and [ydb import s3](./_includes/s3_import.md) commands)
 
 ## View query rewrite
 
@@ -8,9 +11,9 @@ Views are backed up as [CREATE VIEW](../../../yql/reference/syntax/create-view.m
 
 ### Object reference paths
 
-Views can reference tables or other views using path-based references, which may be absolute or relative. Absolute paths start with the '/' symbol. Relative paths are prepended with the [TablePathPrefix](../../../yql/reference/syntax/pragma#table-path-prefix) pragma value to get an absolute path to the referenced object.
+Views can reference tables or other views using path-based references, which may be absolute or relative. Absolute paths start with the `'/'` symbol. Relative paths are prepended with the [TablePathPrefix](../../../yql/reference/syntax/pragma#table-path-prefix) pragma value to get an absolute path to the referenced object.
 
-{% note warning %}
+{% note info %}
 
 An important consideration is that the `TablePathPrefix` pragma is never actually empty or unset. If a user doesn't explicitly specify a value for it, the system automatically assigns a default value equal to the database root.
 

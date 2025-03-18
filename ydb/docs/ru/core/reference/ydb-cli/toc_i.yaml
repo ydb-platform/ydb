@@ -137,4 +137,4 @@ items:
     href: configs.md
     include:
       mode: link
-      path: configuration/toc_p.yaml
+      path: commands/configuration/toc_p.yaml

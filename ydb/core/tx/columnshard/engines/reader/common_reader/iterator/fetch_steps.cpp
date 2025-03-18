@@ -72,7 +72,7 @@ TAllocateMemoryStep::TFetchingStepAllocation::TFetchingStepAllocation(
 void TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocationImpossible(const TString& errorMessage) {
     auto sourcePtr = Source.lock();
     if (sourcePtr) {
-        FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, data->AddEvent("fail_malloc"));
+        FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, sourcePtr->AddEvent("fail_malloc"));
         sourcePtr->GetContext()->GetCommonContext()->AbortWithError(
             "cannot allocate memory for step " + Step.GetName() + ": '" + errorMessage + "'");
     }

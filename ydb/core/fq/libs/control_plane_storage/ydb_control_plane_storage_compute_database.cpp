@@ -7,6 +7,7 @@
 
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
+#include <ydb/library/protobuf_printer/security_printer.h>
 
 namespace NFq {
 
@@ -24,7 +25,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateDatab
 
     CPS_LOG_T(MakeLogPrefix(scope, "internal", request.id())
         << "CreateDatabaseRequest: "
-        << request.DebugString());
+        << SecureDebugString(request));
 
     TSqlQueryBuilder queryBuilder(YdbConnection->TablePathPrefix, "ModifyDatabase");
     queryBuilder.AddString("scope", scope);

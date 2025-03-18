@@ -8,6 +8,8 @@
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
 
+#include <ydb/library/protobuf_printer/security_printer.h>
+
 namespace NFq {
 
 namespace {
@@ -95,13 +97,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateConne
     CPS_LOG_T(MakeLogPrefix(scope, user, connectionId)
         << "CreateConnectionRequest: "
         << NKikimr::MaskTicket(token) << " "
-        << request.DebugString());
+        << SecureDebugString(request));
 
     if (const auto& issues = ValidateRequest(ev)) {
         CPS_LOG_D(MakeLogPrefix(scope, user, connectionId)
             << "CreateConnectionRequest, validation failed: "
             << NKikimr::MaskTicket(token) << " "
-            << request.DebugString()
+            << SecureDebugString(request)
             << " error: " << issues.ToString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvCreateConnectionResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
@@ -223,14 +225,14 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListConnect
     CPS_LOG_T(MakeLogPrefix(scope, user)
         << "ListConnectionsRequest: "
         << NKikimr::MaskTicket(token) << " "
-        << request.DebugString());
+        << SecureDebugString(request));
 
     NYql::TIssues issues = ValidateEvent(ev);
     if (issues) {
         CPS_LOG_D(MakeLogPrefix(scope, user)
             << "ListConnectionsRequest, validation failed: "
             << NKikimr::MaskTicket(token) << " "
-            << request.DebugString()
+            << SecureDebugString(request)
             << " error: " << issues.ToString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvListConnectionsResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
@@ -357,14 +359,14 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeCon
     CPS_LOG_T(MakeLogPrefix(scope, user, connectionId)
         << "DescribeConnectionRequest: "
         << NKikimr::MaskTicket(token) << " "
-        << request.DebugString());
+        << SecureDebugString(request));
 
     NYql::TIssues issues = ValidateEvent(ev);
     if (issues) {
         CPS_LOG_D(MakeLogPrefix(scope, user, connectionId)
             << "DescribeConnectionRequest, validation failed: "
             << NKikimr::MaskTicket(token)<< " "
-            << request.DebugString()
+            << SecureDebugString(request)
             << " error: " << issues.ToString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvDescribeConnectionResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
@@ -451,14 +453,14 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyConne
     CPS_LOG_T(MakeLogPrefix(scope, user, connectionId)
         << "ModifyConnectionRequest: "
         << NKikimr::MaskTicket(token)
-        << " " << request.DebugString());
+        << " " << SecureDebugString(request));
 
     NYql::TIssues issues = ValidateConnection(ev, false);
     if (issues) {
         CPS_LOG_D(MakeLogPrefix(scope, user, connectionId)
             << "ModifyConnectionRequest, validation failed: "
             << NKikimr::MaskTicket(token) << " "
-            << request.DebugString()
+            << SecureDebugString(request)
             << " error: " << issues.ToString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvModifyConnectionResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
@@ -648,14 +650,14 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteConne
     CPS_LOG_T(MakeLogPrefix(scope, user, connectionId)
         << "DeleteConnectionRequest: "
         << NKikimr::MaskTicket(token) << " "
-        << request.DebugString());
+        << SecureDebugString(request));
 
     NYql::TIssues issues = ValidateEvent(ev);
     if (issues) {
         CPS_LOG_D(MakeLogPrefix(scope, user, connectionId)
             << "DeleteConnectionRequest, validation failed: "
             << NKikimr::MaskTicket(token) << " "
-            << request.DebugString()
+            << SecureDebugString(request)
             << " error: " << issues.ToString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvDeleteConnectionResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);

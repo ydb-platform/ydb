@@ -61,26 +61,27 @@ private:
         static void BuildHashesImpl(
             const ui8* data, const ui32 dataSize, const std::optional<NRequest::TLikePart::EOperation> op, TActor& actor) {
             TBuffer fakeString;
+            fakeString.Reserve(CharsCount * 2);
             if (!op || op == NRequest::TLikePart::EOperation::StartsWith || op == NRequest::TLikePart::EOperation::Equals) {
-                for (ui32 c = 1; c <= CharsCount; ++c) {
-                    fakeString.Clear();
-                    fakeString.Fill('\0', CharsCount - c);
-                    fakeString.Append((const char*)data, std::min((ui32)c, dataSize));
-                    if (fakeString.size() < CharsCount) {
-                        fakeString.Fill('\0', CharsCount - fakeString.size());
-                    }
+                fakeString.Clear();
+                fakeString.Fill('\0', CharsCount - 1);
+                fakeString.Append((const char*)data, std::min(CharsCount - 1, dataSize));
+                for (ui32 c = 0; c + CharsCount <= fakeString.Size(); ++c) {
                     THashesCountSelector<HashesCount, CharsCount>::BuildHashes((const ui8*)fakeString.data(), actor);
                 }
             }
-            ui32 c = 0;
-            for (; c + CharsCount <= dataSize; ++c) {
+            for (ui32 c = 0; c + CharsCount <= dataSize; ++c) {
                 THashesCountSelector<HashesCount, CharsCount>::BuildHashes(data + c, actor);
             }
             if (!op || op == NRequest::TLikePart::EOperation::EndsWith || op == NRequest::TLikePart::EOperation::Equals) {
-                for (; c < dataSize; ++c) {
-                    fakeString.Clear();
-                    fakeString.Append((const char*)data + c, dataSize - c);
-                    fakeString.Fill('\0', CharsCount - fakeString.size());
+                fakeString.Clear();
+                if (dataSize < CharsCount) {
+                    fakeString.Append((const char*)data, dataSize);
+                } else {
+                    fakeString.Append((const char*)data + dataSize - CharsCount + 1, CharsCount - 1);
+                }
+                fakeString.Fill('\0', CharsCount - 1);
+                for (ui32 c = 0; c + CharsCount <= fakeString.Size(); ++c) {
                     THashesCountSelector<HashesCount, CharsCount>::BuildHashes((const ui8*)fakeString.data(), actor);
                 }
             }

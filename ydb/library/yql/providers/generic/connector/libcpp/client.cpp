@@ -23,6 +23,7 @@ namespace NYql::NConnector {
             : GrpcConnection_(Client->CreateGRpcServiceConnection<T>(GrpcConfig))
         {
         }
+
         SingleConnectionFactory(
             std::shared_ptr<NYdbGrpc::TGRpcClientLow> Client,
             const NYdbGrpc::TGRpcClientConfig & GrpcConfig,
@@ -53,8 +54,6 @@ namespace NYql::NConnector {
         )
             : Client_(Client)
             , GrpcConfig_(GrpcConfig)
-            , KeepAlive_({})
-            , KeepAliveIsSet_(false)
         {
         }
 
@@ -66,7 +65,6 @@ namespace NYql::NConnector {
             : Client_(Client)
             , GrpcConfig_(GrpcConfig)
             , KeepAlive_(KeepAlive)
-            , KeepAliveIsSet_(true)
         {
         }
 
@@ -79,8 +77,8 @@ namespace NYql::NConnector {
         /// Hence the call Create()->DoRequest(...) is absolutely legitimate.
         ///
         std::shared_ptr<NYdbGrpc::TServiceConnection<T>> Create() override {
-            auto r = KeepAliveIsSet_ ?
-                Client_->CreateGRpcServiceConnection<T>(GrpcConfig_, KeepAlive_)
+            auto r = KeepAlive_ ?
+                Client_->CreateGRpcServiceConnection<T>(GrpcConfig_, *KeepAlive_)
                 : Client_->CreateGRpcServiceConnection<T>(GrpcConfig_);
 
             return std::move(r);
@@ -89,8 +87,7 @@ namespace NYql::NConnector {
     private:
         std::shared_ptr<NYdbGrpc::TGRpcClientLow> Client_;
         const NYdbGrpc::TGRpcClientConfig GrpcConfig_;
-        const NYdbGrpc::TTcpKeepAliveSettings KeepAlive_;
-        const bool KeepAliveIsSet_;
+        const std::optional<NYdbGrpc::TTcpKeepAliveSettings> KeepAlive_;
     };
 
     ///
@@ -221,7 +218,8 @@ namespace NYql::NConnector {
             typename O,
             typename F = typename NYdbGrpc::TStreamRequestReadProcessor<NApi::Connector::Stub, I, O>::TAsyncRequest
         >
-        TIteratorAsyncResult<IStreamIterator<O>> ServerSideStreamingCall(const NYql::EGenericDataSourceKind & kind, const I & request, F rpc, TDuration timeout = {}) {
+        TIteratorAsyncResult<IStreamIterator<O>> ServerSideStreamingCall(
+            const NYql::EGenericDataSourceKind & kind, const I & request, F rpc, TDuration timeout = {}) {
             auto promise = NThreading::NewPromise<TIteratorResult<IStreamIterator<O>>>();
 
             auto callback = [promise]( NYdbGrpc::TGrpcStatus && status, NYdbGrpc::IStreamRequestReadProcessor<O>::TPtr streamProcessor) mutable {

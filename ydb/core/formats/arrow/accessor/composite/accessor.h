@@ -61,6 +61,25 @@ public:
         , Chunks(std::move(chunks)) {
     }
 
+    virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const override {
+        std::optional<std::shared_ptr<arrow::Scalar>> result;
+        for (auto&& i : Chunks) {
+            std::shared_ptr<arrow::Scalar> valLocal;
+            auto res = i->CheckOneValueAccessor(valLocal);
+            if (!res || !*res) {
+                return res;
+            }
+            if (!result) {
+                result = valLocal;
+            } else if (!NArrow::ScalarCompareNullable(result, valLocal)) {
+                return false;
+            }
+        }
+        AFL_VERIFY(!!result);
+        value = *result;
+        return true;
+    }
+
     virtual bool HasSubColumnData(const TString& subColumnName) const override {
         for (auto&& i : Chunks) {
             if (!i->HasSubColumnData(subColumnName)) {

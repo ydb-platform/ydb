@@ -4,6 +4,7 @@
 #include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/core/formats/arrow/accessor/composite/accessor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
+#include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
 #include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/data_sharing/protos/data.pb.h>
@@ -801,13 +802,7 @@ TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> TPortionDataAcces
     const TColumnLoader& loader) const {
     if (DefaultRowsCount) {
         Y_ABORT_UNLESS(!Data);
-        if (NeedCache) {
-            return std::make_shared<NArrow::NAccessor::TTrivialArray>(
-                NArrow::TThreadSimpleArraysCache::Get(loader.GetField()->type(), DefaultValue, DefaultRowsCount));
-        } else {
-            return std::make_shared<NArrow::NAccessor::TTrivialArray>(
-                NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(*DefaultValue, DefaultRowsCount)));
-        }
+        return std::make_shared<NArrow::NAccessor::TSparsedArray>(DefaultValue, loader.GetField()->type(), DefaultRowsCount);
     } else {
         AFL_VERIFY(ExpectedRowsCount);
         return loader.ApplyConclusion(Data, *ExpectedRowsCount).AddMessageInfo(::ToString(loader.GetAccessorConstructor()->GetType()));

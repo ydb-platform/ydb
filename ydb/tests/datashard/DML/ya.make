@@ -1,7 +1,8 @@
 PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
-SIZE(MEDIUM)
+SIZE(LARGE)
+TAG(ya:fat)
 
 TEST_SRCS(
     test_DML.py

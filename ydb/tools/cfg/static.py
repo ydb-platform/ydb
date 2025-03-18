@@ -557,7 +557,12 @@ class StaticConfigGenerator(object):
         if "hive_config" in normalized_config["domains_config"]:
             del normalized_config["domains_config"]["hive_config"]
 
-        node_to_host_config_id = {(node.hostname, node.port): node.host_config_id for node in self.__cluster_details.hosts}
+        def get_compatible_port(node):
+            if node.port != base.DEFAULT_INTERCONNECT_PORT:
+                return node.port
+            return node.ic_port
+
+        node_to_host_config_id = {(node.hostname, get_compatible_port(node)): node.host_config_id for node in self.__cluster_details.hosts}
         normalized_config["hosts"] = []
         for node in normalized_config["nameservice_config"]["node"]:
             if "port" in node and int(node.get("port")) == base.DEFAULT_INTERCONNECT_PORT:

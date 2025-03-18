@@ -423,8 +423,9 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 
     const auto forceShardSplitSettings = Self->SplitSettings.GetForceShardSplitSettings();
     TVector<TShardIdx> shardsToMerge;
+    TString mergeReason;
     if ((!index || index->State == NKikimrSchemeOp::EIndexStateReady)
-        && table->CheckCanMergePartitions(Self->SplitSettings, forceShardSplitSettings, shardIdx, shardsToMerge, mainTableForIndex)
+        && table->CheckCanMergePartitions(Self->SplitSettings, forceShardSplitSettings, shardIdx, shardsToMerge, mainTableForIndex, mergeReason)
     ) {
         TTxId txId = Self->GetCachedTxId(ctx);
 
@@ -438,6 +439,10 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         }
 
         auto request = MergeRequest(Self, txId, Self->ShardInfos[shardIdx].PathId, shardsToMerge);
+
+        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+            "Propose merge request : " << request->Record.ShortDebugString()
+            << ", reason: " << mergeReason);
 
         TMemoryChanges memChanges;
         TStorageChanges dbChanges;
@@ -455,12 +460,13 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     }
 
     bool collectKeySample = false;
-    if (table->ShouldSplitBySize(dataSize, forceShardSplitSettings)) {
+    TString reason;
+    if (table->ShouldSplitBySize(dataSize, forceShardSplitSettings, reason)) {
         // We would like to split by size and do this no matter how many partitions there are
     } else if (table->GetPartitions().size() >= table->GetMaxPartitionsCount()) {
         // We cannot split as there are max partitions already
         return true;
-    } else if (table->CheckSplitByLoad(Self->SplitSettings, shardIdx, dataSize, rowCount, mainTableForIndex)) {
+    } else if (table->CheckSplitByLoad(Self->SplitSettings, shardIdx, dataSize, rowCount, mainTableForIndex, reason)) {
         collectKeySample = true;
     } else {
         return true;

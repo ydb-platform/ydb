@@ -75,6 +75,8 @@ EYdbComputeAuth GetYdbComputeAuthMethod(const FederatedQuery::ConnectionSetting&
 
 FederatedQuery::IamAuth GetAuth(const FederatedQuery::Connection& connection);
 
+FederatedQuery::IamAuth* GetMutableAuth(FederatedQuery::ConnectionSetting* setting);
+
 TString RemoveDatabaseFromStr(TString str, const TString& substr);
 
 NYql::TIssues RemoveDatabaseFromIssues(const NYql::TIssues& issues, const TString& databasePath);

@@ -1703,7 +1703,7 @@ protected:
                 for (auto&& pair : nodeShards) {
                     const auto nodeId = pair.first;
                     auto& shardsInfo = pair.second;
-                    std::size_t maxTasksPerNode = std::min<std::size_t>(shardsInfo.size(), GetScanTasksPerNode(stageInfo, isOlapScan, nodeId));
+                    std::size_t maxTasksPerNode = std::min<std::size_t>(shardsInfo.size(), 2 * GetScanTasksPerNode(stageInfo, isOlapScan, nodeId));
                     std::vector<TTaskMeta> metas(maxTasksPerNode, TTaskMeta());
                     {
                         for (std::size_t i = 0; i < shardsInfo.size(); ++i) {

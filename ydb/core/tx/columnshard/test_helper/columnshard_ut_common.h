@@ -560,9 +560,9 @@ struct TestTableDescription {
 std::optional<ui64> SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId, const TestTableDescription& table = {}, TString codec = "none");
 std::optional<ui64> SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId, bool succeed = true);
 
-void PrepareTablet(
+std::optional<ui64> PrepareTablet(
     TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize = 1);
-void PrepareTablet(TTestBasicRuntime& runtime, const TString& schemaTxBody, bool succeed);
+std::optional<ui64> PrepareTablet(TTestBasicRuntime& runtime, const TString& schemaTxBody, bool succeed);
 
 std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(
     TTestBasicRuntime& runtime, const ui64 tableId, const NOlap::TSnapshot& snapshot, const std::vector<NArrow::NTest::TTestColumn>& schema);

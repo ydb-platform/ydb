@@ -5,6 +5,7 @@ SRCS(
     events.cpp
     merge.cpp
     subscriber.cpp
+    fetching.cpp
 )
 
 PEERDIR(

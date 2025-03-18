@@ -1,21 +1,22 @@
 from ydb.tests.stress.oltp_workload.workload import cleanup_type_name
 
 ttl_types = {
-    "Date": "CAST('30{:02}-01-01' AS Date)",
-    "Datetime": "CAST('30{:02}-10-02T11:00:00Z' AS Datetime)",
+    "Date": "CAST('20{:02}-01-01' AS Date)",
+    "Datetime": "CAST('20{:02}-10-02T11:00:00Z' AS Datetime)",
     "Timestamp": "CAST(269624{:02}00000000 AS Timestamp)",
     "Uint32": "CAST({} AS Uint32)",
     "Uint64": "CAST({} AS Uint64)",
     "DyNumber": "CAST({} AS DyNumber)",
 }
 
+
+# Отсюда убраны uint16 и int16 потому что при поиске по данным индексам выдает ошибку
+# ydb/core/kqp/provider/yql_kikimr_provider.cpp:685 FillLiteralProtoImpl(): requirement false failed, message: Unexpected type slot Int16 (или Uint16)
 index_first = {
     "Int64": "CAST({} AS Int64)",
     "Uint64": "CAST({} AS Uint64)",
     "Int32": "CAST({} AS Int32)",
     "Uint32": "CAST({} AS Uint32)",
-    "Int16": "CAST({} AS Int16)",
-    "Uint16": "CAST({} AS Uint16)",
     "Int8": "CAST({} AS Int8)",
     "Uint8": "CAST({} AS Uint8)",
     "Bool": "CAST({} AS Bool)",
@@ -74,7 +75,7 @@ non_pk_types = {
     "JsonDocument": "CAST('{{\"another_doc_key\":{}}}' AS JsonDocument)",
     "Yson": "CAST('[{}]' AS Yson)"
 }
-index_unique = ["", "UNIQUE"]
+unique = ["", "UNIQUE"]
 index_sync = ["SYNC", "ASYNC"]
 
 
@@ -91,6 +92,6 @@ class TestCreateTables():
                     {", ".join(["pk_" + cleanup_type_name(type_name) for type_name in pk_types.keys()])}),
                     {", ".join([f"INDEX idx_{cleanup_type_name(type_name)} GLOBAL {unique} {sync} ON (col_index_{cleanup_type_name(type_name)})" for type_name in index.keys()])},
                     ) WITH (
-                    TTL = Interval("PT0S") ON ttl_{cleanup_type_name(ttl)}
+                    TTL = Interval("PT1H") ON ttl_{cleanup_type_name(ttl)} {"as SECONDS" if ttl == "Uint32" or ttl == "Uint64" or ttl == "DyNumber" else ""}
                 );
         """

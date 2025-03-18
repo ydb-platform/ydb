@@ -12,7 +12,7 @@ namespace NGRpcService {
 class TGRpcYdbTableService
     : public TGrpcServiceBase<Ydb::Table::V1::TableService>
 {
-    constexpr static i64 DEFAULT_MAX_IN_FLIGHT = 100;
+    constexpr static i64 UNLIMITED_INFLIGHT = 0;
 public:
     using TGrpcServiceBase<Ydb::Table::V1::TableService>::TGrpcServiceBase;
 

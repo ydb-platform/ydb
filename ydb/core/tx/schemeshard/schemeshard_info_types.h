@@ -670,11 +670,11 @@ public:
                             const TForceShardSplitSettings& forceShardSplitSettings,
                             TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge,
                             THashSet<TTabletId>& partOwners, ui64& totalSize, float& totalLoad,
-                            const TTableInfo* mainTableForIndex, TString& reason) const;
+                            float cpuUsageThreshold, const TTableInfo* mainTableForIndex, TString& reason) const;
 
     bool CheckCanMergePartitions(const TSplitSettings& splitSettings,
                                  const TForceShardSplitSettings& forceShardSplitSettings,
-                                 TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge,
+                                 TShardIdx shardIdx, const TTabletId& tabletId, TVector<TShardIdx>& shardsToMerge,
                                  const TTableInfo* mainTableForIndex, TString& reason) const;
 
     bool CheckSplitByLoad(
@@ -810,18 +810,18 @@ public:
         // When shard is over the maximum size we split even when over max partitions
         if (dataSize >= params.ForceShardSplitDataSize && !params.DisableForceShardSplit) {
             reason = TStringBuilder() << "force split by size ("
-                << "dataSize: " << dataSize << ", "
-                << "maxDataSize: " << params.ForceShardSplitDataSize << ")";
+                << "shardSize: " << dataSize << ", "
+                << "maxShardSize: " << params.ForceShardSplitDataSize << ")";
 
             return true;
         }
         // Otherwise we split when we may add one more partition
         if (Partitions.size() < GetMaxPartitionsCount() && dataSize >= GetShardSizeToSplit(params)) {
             reason = TStringBuilder() << "split by size ("
-                << "partitionCount: " << Partitions.size() << ", "
-                << "maxPartitionCount: " << GetMaxPartitionsCount() << ", "
-                << "dataSize: " << dataSize << ", "
-                << "maxDataSize: " << GetShardSizeToSplit(params) << ")";
+                << "shardCount: " << Partitions.size() << ", "
+                << "maxShardCount: " << GetMaxPartitionsCount() << ", "
+                << "shardSize: " << dataSize << ", "
+                << "maxShardSize: " << GetShardSizeToSplit(params) << ")";
 
             return true;
         }

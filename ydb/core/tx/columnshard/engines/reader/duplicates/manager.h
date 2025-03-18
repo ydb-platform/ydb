@@ -3,10 +3,29 @@
 #include "events.h"
 
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/scheduler.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr::NOlap::NReader {
+
+class TEvDuplicateFilterPartialResult
+    : public NActors::TEventLocal<TEvDuplicateFilterPartialResult, NColumnShard::TEvPrivate::EvDuplicateFilterPartialResult> {
+private:
+    using TFilterBySourceId = THashMap<ui64, NArrow::TColumnFilter>;
+    YDB_READONLY(TConclusion<TFilterBySourceId>, Result, TFilterBySourceId());
+    YDB_READONLY_DEF(ui32, IntervalIdx);
+
+public:
+    TEvDuplicateFilterPartialResult(TConclusion<TFilterBySourceId>&& result, const ui32 intervalIdx)
+        : Result(std::move(result))
+        , IntervalIdx(intervalIdx) {
+    }
+
+    TFilterBySourceId&& DetachResult() {
+        return Result.DetachResult();
+    }
+};
 
 class TRangeIndex {
 private:
@@ -75,10 +94,10 @@ private:
         std::vector<ui32> FormerOnes;
 
     public:
-        void OnUpdate(const ui32 l, const ui32 r, const ui64 formerValue, const i64 delta) {
+        void OnUpdate(const TPosition& node, const ui64 newValue, const i64 delta) {
             AFL_VERIFY(delta == -1);
-            if (formerValue == 1) {
-                for (ui32 i = l; i <= r; ++i) {
+            if (newValue == 0) {
+                for (ui32 i = node.GetLeft(); i <= node.GetRight(); ++i) {
                     FormerOnes.emplace_back(i);
                 }
             }
@@ -89,7 +108,7 @@ private:
         }
     };
 
-    // Segment tree: Count[i] = Count[i * 2 + 1] + PropagatedDeltas[i * 2 + 1] * intervalSize(i) + Count[i * 2 + 2] + PropagateDelta[i * 2 + 2] * intervalSize(i)
+    // Segment tree: Count[i] = GetCount(i * 2 + 1) + GetCount(i * 2 + 2)
     std::vector<ui64> Count;
     std::vector<i64> PropagatedDeltas;
     ui32 MaxIndex = 0;
@@ -104,10 +123,12 @@ private:
         AFL_VERIFY(PropagatedDeltas[node.GetIndex()] * node.IntervalSize() >= (i64)Count[node.GetIndex()]);
         return Count[node.GetIndex()] + PropagatedDeltas[node.GetIndex()] * node.IntervalSize();
     }
+    TPosition GetRoot() const {
+        return TPosition(MaxIndex);
+    }
 
 public:
     TIntervalCounter(const std::vector<std::pair<ui32, ui32>>& intervals);
-
     std::vector<ui32> DecAndGetZeros(const ui32 l, const ui32 r);
     bool IsAllZeros() const;
 };
@@ -165,6 +186,7 @@ private:
         std::shared_ptr<IFilterSubscriber> Subscriber;
         std::vector<ui64> IntervalOffsets;
         ui64 ReadyFilterCount = 0;
+        std::optional<NSimple::ISourceFetchingScheduler::TSourceBlockedGuard> BlockGuard;
 
     public:
         TSourceFilterConstructor(const std::shared_ptr<NCommon::IDataSource>& source, const std::shared_ptr<IFilterSubscriber>& subscriber,
@@ -202,51 +224,13 @@ private:
             }
         }
 
+        void SetBlockGuard(NSimple::ISourceFetchingScheduler::TSourceBlockedGuard&& guard) {
+            AFL_VERIFY(!BlockGuard);
+            BlockGuard.emplace(std::move(guard));
+        }
+
         void Finish() &&;
         void AbortConstruction(const TString& reason) &&;
-    };
-
-    class TEvDuplicateFilterPartialResult
-        : public NActors::TEventLocal<TEvDuplicateFilterPartialResult, NColumnShard::TEvPrivate::EvDuplicateFilterPartialResult> {
-    private:
-        YDB_READONLY(TConclusion<NArrow::TColumnFilter>, Result, NArrow::TColumnFilter::BuildAllowFilter());
-        YDB_READONLY_DEF(ui32, IntervalIdx);
-        YDB_READONLY_DEF(ui64, SourceId);
-
-    public:
-        TEvDuplicateFilterPartialResult(TConclusion<NArrow::TColumnFilter>&& result, const ui32 intervalIdx, const ui64 sourceId)
-            : Result(std::move(result))
-            , IntervalIdx(intervalIdx)
-            , SourceId(sourceId) {
-        }
-
-        TConclusion<NArrow::TColumnFilter>&& ExtractResult() {
-            return std::move(Result);
-        }
-    };
-
-    class TInternalFilterSubscriber: public IFilterSubscriber {
-    private:
-        ui32 IntervalIdx;
-        ui32 SourceId;
-        TActorId Owner;
-
-        virtual void OnFilterReady(const NArrow::TColumnFilter& result) override {
-            TActorContext::AsActorContext().Send(
-                Owner, new TDuplicateFilterConstructor::TEvDuplicateFilterPartialResult(result, IntervalIdx, SourceId));
-        }
-
-        virtual void OnFailure(const TString& reason) override {
-            TActorContext::AsActorContext().Send(
-                Owner, new TDuplicateFilterConstructor::TEvDuplicateFilterPartialResult(TConclusionStatus::Fail(reason), IntervalIdx, SourceId));
-        }
-
-    public:
-        TInternalFilterSubscriber(const ui32 intervalIdx, const ui64 sourceId, const TActorId& owner)
-            : IntervalIdx(intervalIdx)
-            , SourceId(sourceId)
-            , Owner(owner) {
-        }
     };
 
 private:

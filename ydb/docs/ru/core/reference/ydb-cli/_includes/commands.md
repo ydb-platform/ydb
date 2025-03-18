@@ -36,7 +36,7 @@
 [import file tsv](../export-import/import-file.md) | Импорт данных из TSV-файла
 [import s3](../export-import/import-s3.md) | Импорт данных из хранилища S3
 [init](../profile/create.md) | Инициализация CLI, создание [профиля](../profile/index.md)
-monitoring healthcheck | Проверка состояния базы. Возвращает данные в формате ответа [Health Check API](../../ydb-sdk/health-check-api.md)
+[monitoring healthcheck](../commands/monitoring-healthcheck.md) | Проверка состояния базы
 [operation cancel](../operation-cancel.md) | Прерывание исполнения фоновой операции
 [operation forget](../operation-forget.md) | Удаление фоновой операции из списка
 [operation get](../operation-get.md) | Статус фоновой операции

@@ -12,20 +12,19 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(proto)
-add_subdirectory(codec)
-add_subdirectory(provider)
-add_subdirectory(mkql)
-add_subdirectory(schema)
-add_subdirectory(config)
-add_subdirectory(gateway)
-add_subdirectory(metrics)
-add_subdirectory(udf_resolve)
-add_subdirectory(arrow_resolve)
-add_subdirectory(gateways_utils)
-add_subdirectory(activation)
-add_subdirectory(transform)
-add_subdirectory(structured_token)
-add_subdirectory(comp_nodes)
-add_subdirectory(dq)
-add_subdirectory(mkql_simple_file)
+add_library(providers-common-gateways_utils)
+
+
+target_link_libraries(providers-common-gateways_utils PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  yql-essentials-utils
+  providers-common-proto
+  providers-common-provider
+)
+
+target_sources(providers-common-gateways_utils PRIVATE
+  ${PROJECT_SOURCE_DIR}/yql/essentials/providers/common/gateways_utils/gateways_utils.cpp
+)
+

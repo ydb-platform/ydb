@@ -52,6 +52,7 @@ target_link_libraries(essentials-core-facade PUBLIC
   providers-common-provider
   providers-common-udf_resolve
   providers-common-arrow_resolve
+  providers-common-gateways_utils
   essentials-providers-config
   providers-result-provider
 )

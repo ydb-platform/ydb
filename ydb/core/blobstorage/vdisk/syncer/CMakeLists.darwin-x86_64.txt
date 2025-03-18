@@ -29,6 +29,7 @@ target_link_libraries(blobstorage-vdisk-syncer PUBLIC
   blobstorage-vdisk-anubis_osiris
   blobstorage-vdisk-common
   vdisk-hulldb-base
+  core-control-lib
   version
 )
 

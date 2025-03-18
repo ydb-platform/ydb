@@ -18,8 +18,15 @@ add_library(contrib-libs-nghttp3)
 target_compile_options(contrib-libs-nghttp3 PRIVATE
   -DBUILDING_NGHTTP3
   -DHAVE_CONFIG_H
-  -DNGHTTP3_STATICLIB
+  -Dsfparse_base64decode=nghttp3_sfparse_base64decode
   -Dsfparse_parser_dict=nghttp3_sfparse_parser_dict
+  -Dsfparse_parser_inner_list=nghttp3_sfparse_parser_inner_list
+  -Dsfparse_parser_init=nghttp3_sfparse_parser_init
+  -Dsfparse_parser_item=nghttp3_sfparse_parser_item
+  -Dsfparse_parser_list=nghttp3_sfparse_parser_list
+  -Dsfparse_parser_param=nghttp3_sfparse_parser_param
+  -Dsfparse_pctdecode=nghttp3_sfparse_pctdecode
+  -Dsfparse_unescape=nghttp3_sfparse_unescape
   $<IF:$<CXX_COMPILER_ID:MSVC>,,-Wno-everything>
 )
 

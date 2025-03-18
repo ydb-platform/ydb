@@ -8,7 +8,7 @@ General command format:
 ydb [global options...] monitoring healthcheck [options...]
 ```
 
-* `global options` — [global options](global-options.md).
+* `global options` — [global options](global-options.md),
 * `options` — [subcommand options](#options).
 
 ## Subcommand options {#options}
@@ -18,7 +18,7 @@ ydb [global options...] monitoring healthcheck [options...]
 ||`--timeout` | The time within which the operation should be completed on the server, ms.||
 ||`--format` | Output format. Available options:
 
-* `pretty` — short human readable output;
+* `pretty` — short human readable output,
 * `json` — detailed JSON output.
 
 Default — `pretty`.||
@@ -26,4 +26,4 @@ Default — `pretty`.||
 
 ## Examples {#examples}
 
-Response structure and description are provided in the [Health Check API](../../ydb-sdk/health-check-api.md#response-structure)
+Response structure and description are provided in the [Health Check API](../../ydb-sdk/health-check-api.md#response-structure) documentation.

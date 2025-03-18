@@ -29,6 +29,7 @@ class TJsonQuery : public TViewerPipeClient {
     int LimitRows = 10000;
     int TotalRows = 0;
     bool CollectDiagnostics = true;
+    TDuration StatsPeriod;
     TDuration KeepAlive = TDuration::MilliSeconds(10000);
     TInstant LastSendTime;
     static constexpr TDuration WakeupPeriod = TDuration::Seconds(1);
@@ -116,6 +117,9 @@ public:
             OutputChunkMaxSize = FromStringWithDefault<ui64>(params.Get("output_chunk_max_size"), OutputChunkMaxSize);
         }
         CollectDiagnostics = FromStringWithDefault<bool>(params.Get("collect_diagnostics"), CollectDiagnostics);
+        if (params.Has("stats_period")) {
+            StatsPeriod = TDuration::MilliSeconds(std::clamp<ui64>(FromStringWithDefault<ui64>(params.Get("stats_period"), StatsPeriod.MilliSeconds()), 1000, 600000));
+        }
     }
 
     TJsonQuery(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
@@ -383,6 +387,9 @@ public:
             request.SetOutputChunkMaxSize(OutputChunkMaxSize);
         }
         request.SetCollectDiagnostics(CollectDiagnostics);
+        if (StatsPeriod) {
+            event->SetProgressStatsPeriod(StatsPeriod);
+        }
         ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
         QueryResponse = MakeRequest<NKqp::TEvKqp::TEvQueryResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
 
@@ -1051,6 +1058,10 @@ public:
                 description: collect query diagnostics
                 type: boolean
                 default: true
+              - name: stats_period
+                in: query
+                description: time interval for sending periodical query statistics in ms
+                type: integer
             requestBody:
                 description: Executes SQL query
                 required: false

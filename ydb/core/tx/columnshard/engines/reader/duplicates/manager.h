@@ -5,14 +5,13 @@
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/default_fetching.h>
-#include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/scheduler.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr::NOlap::NReader {
 
 namespace NSimple {
-class TPortionDataSource;
+class IDataSource;
 }
 
 class TEvDuplicateFilterPartialResult
@@ -154,11 +153,11 @@ private:
     private:
         using TRangeBySourceId = THashMap<ui64, TIntervalsRange>;
         YDB_READONLY_DEF(TRangeBySourceId, SourceRanges);
-        std::vector<ui64> SortedSourceIds; // TODO: init
+        std::vector<ui64> SortedSourceIds;
         std::vector<NArrow::TReplaceKey> IntervalBorders;
 
     public:
-        TSourceIntervals(const std::vector<std::shared_ptr<NSimple::TPortionDataSource>>& portions);
+        TSourceIntervals(const std::deque<std::shared_ptr<NSimple::IDataSource>>& sources);
 
         const NArrow::TReplaceKey& GetRightInclusiveBorder(const ui32 intervalIdx) const {
             return IntervalBorders[intervalIdx];
@@ -240,7 +239,6 @@ private:
         std::shared_ptr<IFilterSubscriber> Subscriber;
         std::vector<ui64> IntervalOffsets;
         ui64 ReadyFilterCount = 0;
-        std::optional<NSimple::ISourceFetchingScheduler::TSourceBlockedGuard> BlockGuard;
 
     public:
         TSourceFilterConstructor(const std::shared_ptr<NCommon::IDataSource>& source,
@@ -254,6 +252,8 @@ private:
                 const NArrow::NAccessor::IChunkedArray::TRowRange findLeftBorder = source->GetStageData().ToGeneralContainer()->EqualRange(
                     *intervals.GetLeftExlusiveBorder(intervalIdx)
                          ->ToBatch(source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPrimaryKey()));
+                // TODO: handle reverse (now it's supposed to be false)
+                AFL_VERIFY(!source->GetContext()->GetReadMetadata()->IsDescSorted());  // TODO remove
                 IntervalOffsets.emplace_back(findLeftBorder.GetEnd());
             }
             AFL_VERIFY(IntervalOffsets.size() == sourceIntervals.NumIntervals());
@@ -292,11 +292,6 @@ private:
             }
         }
 
-        void SetBlockGuard(NSimple::ISourceFetchingScheduler::TSourceBlockedGuard&& guard) {
-            AFL_VERIFY(!BlockGuard);
-            BlockGuard.emplace(std::move(guard));
-        }
-
         void Finish();
         void AbortConstruction(const TString& reason);
     };
@@ -305,7 +300,7 @@ private:
     TSourceIntervals Intervals;
     ui64 FinishedSourcesCount = 0;
     std::deque<std::shared_ptr<TSourceFilterConstructor>> ActiveSources;
-    std::deque<std::shared_ptr<NCommon::IDataSource>> SortedSources;
+    std::deque<std::shared_ptr<NSimple::IDataSource>> SortedSources;
     TIntervalCounter NotFetchedSourcesCount;
     TIntervalsCursor NextIntervalToMerge;
 
@@ -334,7 +329,7 @@ private:
     std::shared_ptr<TSourceFilterConstructor> GetConstructorVerified(const ui32 sourceIdx) const;
 
 public:
-    TDuplicateFilterConstructor(const std::vector<std::shared_ptr<NSimple::TPortionDataSource>>& portions);
+    TDuplicateFilterConstructor(const std::deque<std::shared_ptr<NSimple::IDataSource>>& sources);
 };
 
 }   // namespace NKikimr::NOlap::NReader

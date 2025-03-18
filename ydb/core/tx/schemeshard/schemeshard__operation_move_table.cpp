@@ -50,19 +50,22 @@ public:
         NKikimrTxDataShard::TFlatSchemeTransaction tx;
         SS->FillSeqNo(tx, seqNo);
         auto move = tx.MutableMoveTable();
-        SrcPath->PathId = TPathId::FromProto(*move->MutablePathId());
+        SrcPath->PathId.ToProto(move->MutablePathId());
         move->SetTableSchemaVersion(SrcTable->AlterVersion+1);
 
-        DstPath->PathId = TPathId::FromProto(*move->MutableDstPathId());
+        DstPath->PathId.ToProto(move->MutableDstPathId());
         move->SetDstPath(TPath::Init(DstPath->PathId, SS).PathString());
 
         for (const auto& child: SrcPath->GetChildren()) {
             auto name = child.first;
 
-            TPath srcIndexPath = SrcPath.Child(name);
-            Y_ABORT_UNLESS(srcIndexPath.IsResolved());
+            TPath srcChildPath = SrcPath.Child(name);
+            Y_ABORT_UNLESS(srcChildPath.IsResolved());
 
-            if (srcIndexPath.IsDeleted()) {
+            if (srcChildPath.IsDeleted()) {
+                continue;
+            }
+            if (srcChildPath.IsSequence()) {
                 continue;
             }
 
@@ -70,8 +73,8 @@ public:
             Y_ABORT_UNLESS(dstIndexPath.IsResolved());
 
             auto remap = move->AddReMapIndexes();
-            srcIndexPath->PathId = TPathId::FromProto(*remap->MutableSrcPathId());
-            dstIndexPath->PathId = TPathId::FromProto(*remap->MutableDstPathId());
+            srcChildPath->PathId.ToProto(remap->MutableSrcPathId());
+            dstIndexPath->PathId.ToProto(remap->MutableDstPathId());
         }
         TString result;
         Y_PROTOBUF_SUPPRESS_NODISCARD tx.SerializeToString(&result);
@@ -256,10 +259,21 @@ public:
         TString txBody = moveHelper->GetSerializedTxMsg(seqNo);
         // send messages
         txState->ClearShardsInProgress();
-        for (const auto& shard: txState->Shards) {
-            const auto& tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
-            auto event = moveHelper->MakeProposalEvent(txState->TargetPathId, OperationId, txBody, seqNo, context.Ctx);
-            context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event);
+        //TODO moveto moveHelper
+        if (srcPath->IsColumnTable()) {
+            for (const auto& shard: txState->Shards) {
+                const auto& tabletId = context.SS->ShardInfos[shard.Idx].TabletID;
+                auto event = moveHelper->MakeProposalEvent(txState->TargetPathId, OperationId, txBody, seqNo, context.Ctx);
+                context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event);
+            }
+        } else {
+            for (ui32 i = 0; i < txState->Shards.size(); ++i) {
+                auto idx = txState->Shards[i].Idx;
+                auto datashardId = context.SS->ShardInfos[idx].TabletID;
+
+                auto event = context.SS->MakeDataShardProposal(txState->TargetPathId, OperationId, txBody, context.Ctx);
+                context.OnComplete.BindMsgToPipe(OperationId, datashardId, idx, event.Release());
+            }
         }
 
         txState->UpdateShardsInProgress(TTxState::ConfigureParts);
@@ -409,9 +423,11 @@ public:
         for (const auto& shard : txState->Shards) {
             TShardIdx idx = shard.Idx;
             TTabletId tablet = context.SS->ShardInfos.at(idx).TabletID;
-            //TODO this message is for CS only
-            auto event = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(ui64(OperationId.GetTxId()));
-            context.OnComplete.BindMsgToPipe(OperationId, tablet, shard.Idx, event.release());
+            TPath srcPath = TPath::Init(txState->SourcePathId, context.SS);
+            if (srcPath->IsColumnTable()) {
+                auto event = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(ui64(OperationId.GetTxId()));
+                context.OnComplete.BindMsgToPipe(OperationId, tablet, shard.Idx, event.release());
+            }
             shardSet.insert(tablet);
         }
 
@@ -853,8 +869,7 @@ public:
                 } else {
                     checks
                         .NotUnderTheSameOperation(OperationId.GetTxId())
-                        // todo(avevad)
-                        .FailOnExist(TPathElement::EPathType::EPathTypeColumnTable, acceptExisted);
+                        .FailOnExist(srcPath->IsColumnTable() ? TPathElement::EPathType::EPathTypeColumnTable : TPathElement::EPathType::EPathTypeTable, acceptExisted);
                 }
             } else {
                 checks

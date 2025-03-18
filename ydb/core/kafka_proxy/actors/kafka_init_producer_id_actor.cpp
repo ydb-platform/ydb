@@ -4,7 +4,7 @@
 #include "../kqp_helper.h"
 
 #include <util/random/random.h>
-#include <ydb-cpp-sdk/client/params/params.h>
+#include <ydb/public/sdk/cpp/src/client/params/impl.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/base/tablet_pipe.h>

@@ -95,6 +95,87 @@ namespace NActors {
         Cleanup();
     }
 
+    static void CheckEventMemory(IEventBase *ev) {
+        if constexpr (!NSan::MSanIsOn()) {
+            return;
+        }
+
+        class TSerializerChecker : public TChunkSerializer {
+            char Buffer[4096];
+            int64_t Size = 0;
+            bool BufferGivenAway = false;
+
+        public:
+            ~TSerializerChecker() {
+                if (BufferGivenAway) {
+                    NSan::CheckMemIsInitialized(Buffer, sizeof(Buffer));
+                }
+            }
+
+            bool Next(void **data, int *size) override {
+                if (BufferGivenAway) {
+                    NSan::CheckMemIsInitialized(Buffer, sizeof(Buffer));
+                }
+#if defined(_msan_enabled_)
+                __msan_allocated_memory(Buffer, sizeof(Buffer));
+#endif
+                *data = Buffer;
+                *size = sizeof(Buffer);
+                Size += *size;
+                BufferGivenAway = true;
+                return true;
+            }
+
+            void BackUp(int count) override {
+                if (!count && !BufferGivenAway) {
+                    // this mitigates a bug in protobuf implementation -- sometimes BackUp() gets called without mandatory preceding Next()
+                    return;
+                }
+                Y_ABORT_UNLESS(BufferGivenAway);
+                Y_ABORT_UNLESS(count <= static_cast<int>(sizeof(Buffer)));
+                NSan::CheckMemIsInitialized(Buffer, sizeof(Buffer) - count);
+                Y_ABORT_UNLESS(count <= Size);
+                Size -= count;
+                BufferGivenAway = false;
+            }
+
+            int64_t ByteCount() const override {
+                return Size;
+            }
+
+            bool WriteAliasedRaw(const void *data, int size) override {
+                if (BufferGivenAway) {
+                    NSan::CheckMemIsInitialized(Buffer, sizeof(Buffer));
+                    BufferGivenAway = false;
+                }
+                NSan::CheckMemIsInitialized(data, size);
+                Size += size;
+                return true;
+            }
+
+            bool AllowsAliasing() const override {
+                return true;
+            }
+
+            bool WriteRope(const TRope *rope) override {
+                for (auto iter = rope->Begin(); iter.Valid(); iter.AdvanceToNextContiguousBlock()) {
+                    if (!WriteAliasedRaw(iter.ContiguousData(), iter.ContiguousSize())) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            bool WriteString(const TString *s) override {
+                return WriteAliasedRaw(s->data(), s->size());
+            }
+        };
+
+        TSerializerChecker checker;
+        const bool success = ev->SerializeToArcadiaStream(&checker);
+        Y_ABORT_UNLESS(success);
+    }
+
     template <TActorSystem::TEPSendFunction EPSpecificSend>
     bool TActorSystem::GenericSend(TAutoPtr<IEventHandle> ev) const {
         if (Y_UNLIKELY(!ev))
@@ -111,6 +192,9 @@ namespace NActors {
         if (recpNodeId != NodeId && recpNodeId != 0) {
             // if recipient is not local one - rewrite with forward instruction
             Y_DEBUG_ABORT_UNLESS(!ev->HasEvent() || ev->GetBase()->IsSerializable());
+            if (ev->HasEvent()) {
+                CheckEventMemory(ev->GetBase());
+            }
             Y_ABORT_UNLESS(ev->Recipient == recipient,
                 "Event rewrite from %s to %s would be lost via interconnect",
                 ev->Recipient.ToString().c_str(),

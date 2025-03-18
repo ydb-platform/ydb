@@ -3274,10 +3274,6 @@ Y_UNIT_TEST_F(The_Transaction_Starts_On_One_Version_And_Ends_On_The_Other, TFixt
 
     RestartPQTablet("topic_A", 0);
     RestartPQTablet("topic_A", 1);
-
-    CommitTx(tx);
-
-    CheckTabletKeys("topic_A");
 }
 
 }

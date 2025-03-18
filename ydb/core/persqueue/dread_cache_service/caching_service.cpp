@@ -357,6 +357,7 @@ private:
         auto* directReadMessage = message->mutable_direct_read_response();
         directReadMessage->set_direct_read_id(readId);
         directReadMessage->set_partition_session_id(partSessionId);
+        directReadMessage->set_bytes_size(response->GetPartitionResponse().GetCmdPrepareReadResult().GetBytesSizeEstimate());
 
         auto ok = VaildatePartitionResponse(proxyClient, *response);
         if (!ok) {

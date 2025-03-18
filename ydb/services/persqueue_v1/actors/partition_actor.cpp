@@ -1174,8 +1174,8 @@ bool TPartitionActor::SendNextRestorePrepareOrForget() {
         DirectReadRestoreStage = EDirectReadRestoreStage::Prepare;
         Y_ABORT_UNLESS(dr.GetReadOffset() <= dr.GetLastOffset());
 
-        auto request = MakeReadRequest(dr.GetReadOffset(), dr.GetLastOffset(), std::numeric_limits<i32>::max(),
-                                    std::numeric_limits<i32>::max(), 0, 0, dr.GetDirectReadId());
+        auto request = MakeReadRequest(dr.GetReadOffset(), dr.GetLastOffset() + 1, std::numeric_limits<i32>::max(),
+                                    std::numeric_limits<i32>::max(), 0, 0, dr.GetDirectReadId(), dr.GetBytesSizeEstimate());
 
         if (!PipeClient) //Pipe will be recreated soon
             return true;
@@ -1323,7 +1323,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
 
 
 NKikimrClient::TPersQueueRequest TPartitionActor::MakeReadRequest(
-        ui64 readOffset, ui64 lastOffset, ui64 maxCount, ui64 maxSize, ui64 maxTimeLagMs, ui64 readTimestampMs, ui64 directReadId
+        ui64 readOffset, ui64 lastOffset, ui64 maxCount, ui64 maxSize, ui64 maxTimeLagMs, ui64 readTimestampMs, ui64 directReadId, ui64 sizeEstimate
 ) const {
     NKikimrClient::TPersQueueRequest request;
 
@@ -1339,6 +1339,7 @@ NKikimrClient::TPersQueueRequest TPartitionActor::MakeReadRequest(
     read->SetSessionId(Session);
     if (DirectRead) {
         read->SetDirectReadId(directReadId);
+        read->SetSizeEstimate(sizeEstimate);
     }
     if (maxCount) {
         read->SetCount(maxCount);

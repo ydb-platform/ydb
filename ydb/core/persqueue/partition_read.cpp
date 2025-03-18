@@ -152,7 +152,7 @@ bool TPartition::ProcessHasDataRequest(const THasDataReq& request, const TActorC
 
             auto now = ctx.Now();
             auto& userInfo = UsersInfoStorage->GetOrCreate(request.ClientId, ctx);
-            userInfo.UpdateReadOffset((i64)BlobEncoder.EndOffset - 1, now, now, now, true);          
+            userInfo.UpdateReadOffset((i64)BlobEncoder.EndOffset - 1, now, now, now, true);
         }
     } else if (request.Offset < BlobEncoder.EndOffset) {
         sendResponse(GetSizeLag(request.Offset), false);
@@ -513,6 +513,11 @@ TReadAnswer TReadInfo::FormAnswer(
                     << " size " << header.GetPayloadSize() << " from pos " << pos << " cbcount " << batch.Blobs.size());
 
             for (size_t i = pos; i < batch.Blobs.size(); ++i) {
+                if (0 < LastOffset && LastOffset <= Offset) {
+                    needStop = true;
+                    break;
+                }
+
                 TClientBlob &res = batch.Blobs[i];
                 VERIFY_RESULT_BLOB(res, i);
 

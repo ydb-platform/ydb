@@ -141,6 +141,7 @@ target_link_libraries(run PUBLIC
   grpc-server-actors
   ydb-library-pdisk_io
   ydb-library-security
+  ydb-library-signal_backtrace
   providers-pq-cm_client
   providers-s3-actors
   public-lib-base

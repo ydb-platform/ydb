@@ -9,7 +9,7 @@ class TestYtReading:
         add_sample_table(kqp_run)
 
         kqp_run.add_query("""
-            PRAGMA ydb.DataSizePerJob = "1";
+            PRAGMA ydb.DataSizePerPartition = "1";
 
             SELECT * FROM plato.input
         """)

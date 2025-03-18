@@ -57,6 +57,9 @@ public:
         IKqpGateway::TExecPhysicalRequest&& literalRequest,
         IKqpGateway::TExecPhysicalRequest&& physicalRequest,
         const TActorId sessionActorId,
+        const NMiniKQL::IFunctionRegistry* funcRegistry,
+        TIntrusivePtr<ITimeProvider> timeProvider,
+        TIntrusivePtr<IRandomProvider> randomProvider,
         const TString& database,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
         const TIntrusivePtr<TKqpCounters>& counters,
@@ -71,6 +74,9 @@ public:
         : LiteralRequest(std::move(literalRequest))
         , PhysicalRequest(std::move(physicalRequest))
         , SessionActorId(sessionActorId)
+        , FuncRegistry(funcRegistry)
+        , TimeProvider(timeProvider)
+        , RandomProvider(randomProvider)
         , Database(database)
         , UserToken(userToken)
         , Counters(counters)
@@ -160,6 +166,7 @@ public:
                 Ydb::StatusIds::INTERNAL_ERROR,
                 NYql::TIssues({NYql::TIssue(TStringBuilder() << CurrentStateFuncName()
                     << ", failed to get table")}));
+            return;
         }
 
         YQL_ENSURE(request->ResultSet.size() == 1);
@@ -215,8 +222,10 @@ public:
     }
 
     void CreateExecuterWithBuffer(size_t partitionIdx, bool isRetry) {
-        IKqpGateway::TExecPhysicalRequest newRequest(PhysicalRequest.TxAlloc);
-        FillPhysicalRequest(newRequest, partitionIdx);
+        auto txAlloc = std::make_shared<TTxAllocatorState>(FuncRegistry, TimeProvider, RandomProvider);
+
+        IKqpGateway::TExecPhysicalRequest newRequest(txAlloc);
+        FillPhysicalRequest(newRequest, txAlloc, partitionIdx);
 
         auto& partInfo = Partitions[partitionIdx];
 
@@ -501,8 +510,8 @@ private:
         TablePath = settings.GetTable().GetPath();
     }
 
-    void FillPhysicalRequest(IKqpGateway::TExecPhysicalRequest& physicalRequest, size_t partitionIdx) {
-        IKqpGateway::TExecPhysicalRequest newLiteralRequest(LiteralRequest.TxAlloc);
+    void FillPhysicalRequest(IKqpGateway::TExecPhysicalRequest& physicalRequest, TTxAllocatorState::TPtr txAlloc, size_t partitionIdx) {
+        IKqpGateway::TExecPhysicalRequest newLiteralRequest(txAlloc);
         FillRequestWithParams(newLiteralRequest, partitionIdx, /* literal */ true);
         PrepareParameters(newLiteralRequest);
 
@@ -514,6 +523,7 @@ private:
                 Ydb::StatusIds::BAD_REQUEST,
                 NYql::TIssues({NYql::TIssue(TStringBuilder() << CurrentStateFuncName()
                     << ", error status from literal.")}));
+            return;
         }
 
         FillRequestWithParams(physicalRequest, partitionIdx, /* literal */ false);
@@ -778,12 +788,13 @@ private:
     }
 
     void RuntimeError(Ydb::StatusIds::StatusCode code, const NYql::TIssues& issues) {
+        PE_LOG_E(Ydb::StatusIds_StatusCode_Name(code) << ": " << issues.ToOneLineString());
+
         if (this->CurrentStateFunc() != &TKqpPartitionedExecuter::AbortState) {
             Abort();
             return;
         }
 
-        PE_LOG_E(Ydb::StatusIds_StatusCode_Name(code) << ": " << issues.ToOneLineString());
         ReplyErrorAndDie(code, issues);
     }
 
@@ -823,6 +834,9 @@ private:
     IKqpGateway::TExecPhysicalRequest LiteralRequest;
     IKqpGateway::TExecPhysicalRequest PhysicalRequest;
     const TActorId SessionActorId;
+    const NMiniKQL::IFunctionRegistry* FuncRegistry;
+    TIntrusivePtr<ITimeProvider> TimeProvider;
+    TIntrusivePtr<IRandomProvider> RandomProvider;
     TString Database;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TIntrusivePtr<TKqpCounters> Counters;
@@ -841,16 +855,18 @@ private:
 
 NActors::IActor* CreateKqpPartitionedExecuter(
     NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest&& literalRequest, NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest&& physicalRequest,
-    const TActorId sessionActorId, const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
+    const TActorId sessionActorId, const NMiniKQL::IFunctionRegistry* funcRegistry, TIntrusivePtr<ITimeProvider> timeProvider,
+    TIntrusivePtr<IRandomProvider> randomProvider, const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
     const TIntrusivePtr<NKikimr::NKqp::TKqpCounters>& counters, NKikimr::NKqp::TKqpRequestCounters::TPtr requestCounters,
     const NKikimrConfig::TTableServiceConfig& tableServiceConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     TPreparedQueryHolder::TConstPtr preparedQuery, const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext>& userRequestContext,
     ui32 statementResultIndex, const std::optional<NKikimr::NKqp::TKqpFederatedQuerySetup>& federatedQuerySetup,
     const TGUCSettings::TPtr& GUCSettings, const NKikimr::NKqp::TShardIdToTableInfoPtr& shardIdToTableInfo)
 {
-    return new TKqpPartitionedExecuter(std::move(literalRequest), std::move(physicalRequest), sessionActorId, database, userToken,
-        counters, requestCounters, tableServiceConfig, std::move(asyncIoFactory), std::move(preparedQuery), userRequestContext,
-        statementResultIndex, federatedQuerySetup, GUCSettings, shardIdToTableInfo);
+    return new TKqpPartitionedExecuter(std::move(literalRequest), std::move(physicalRequest), sessionActorId, funcRegistry,
+        timeProvider, randomProvider, database, userToken, counters, requestCounters, tableServiceConfig,
+        std::move(asyncIoFactory), std::move(preparedQuery), userRequestContext, statementResultIndex, federatedQuerySetup,
+        GUCSettings, shardIdToTableInfo);
 }
 
 } // namespace NKqp

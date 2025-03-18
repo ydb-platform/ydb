@@ -25,7 +25,8 @@ constexpr ui64 MinLimitSize = 1;
 
 NActors::IActor* CreateKqpPartitionedExecuter(
     NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest&& literalRequest, NKikimr::NKqp::IKqpGateway::TExecPhysicalRequest&& physicalRequest,
-    const TActorId sessionActorId, const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
+    const TActorId sessionActorId, const NMiniKQL::IFunctionRegistry* funcRegistry, TIntrusivePtr<ITimeProvider> timeProvider,
+    TIntrusivePtr<IRandomProvider> randomProvider, const TString& database, const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
     const TIntrusivePtr<NKikimr::NKqp::TKqpCounters>& counters, NKikimr::NKqp::TKqpRequestCounters::TPtr requestCounters,
     const NKikimrConfig::TTableServiceConfig& tableServiceConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     TPreparedQueryHolder::TConstPtr preparedQuery, const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext>& userRequestContext,

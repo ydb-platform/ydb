@@ -41,10 +41,10 @@ NJson::TJsonValue IIndexMeta::SerializeDataToJson(const TIndexChunk& iChunk, con
     return result;
 }
 
-std::shared_ptr<NReader::NCommon::IKernelFetchLogic> IIndexMeta::DoBuildFetchTask(const NRequest::TOriginalDataAddress& dataAddress,
-    const TIndexDataAddress& indexAddress, const std::shared_ptr<IIndexMeta>& selfPtr,
+std::shared_ptr<NReader::NCommon::IKernelFetchLogic> IIndexMeta::DoBuildFetchTask(
+    const THashSet<NRequest::TOriginalDataAddress>& dataAddresses, const std::shared_ptr<IIndexMeta>& selfPtr,
     const std::shared_ptr<IStoragesManager>& storagesManager) const {
-    return std::make_shared<TIndexFetcherLogic>(dataAddress, indexAddress, selfPtr, storagesManager);
+    return std::make_shared<TIndexFetcherLogic>(dataAddresses, selfPtr, storagesManager);
 }
 
 std::optional<ui64> IIndexMeta::CalcCategory(const TString& subColumnName) const {

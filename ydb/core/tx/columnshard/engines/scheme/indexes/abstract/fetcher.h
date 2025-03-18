@@ -48,39 +48,101 @@ public:
 class TIndexChunkFetching {
 private:
     std::shared_ptr<IIndexHeader> Header;
-    TIndexDataAddress Address;
+    std::vector<TIndexDataAddress> IndexAddresses;
     const TChunkOriginalData OriginalData;
-    TRangeFetchingState Result;
+
+    class TFetchingState {
+    private:
+        std::optional<TRangeFetchingState> HeaderFetching;
+        YDB_READONLY_DEF(std::vector<TRangeFetchingState>, ColumnsFetching);
+
+    public:
+        const TRangeFetchingState& GetHeaderFetching() const {
+            AFL_VERIFY(!!HeaderFetching);
+            return *HeaderFetching;
+        }
+
+        TRangeFetchingState& MutableHeaderFetching() {
+            AFL_VERIFY(!!HeaderFetching);
+            return *HeaderFetching;
+        }
+
+        bool NeedFetchHeader() const {
+            return !!HeaderFetching;
+        }
+
+        std::vector<TBlobRange> GetRangesToFetch() const {
+            std::vector<TBlobRange> result;
+            if (!!HeaderFetching) {
+                if (!HeaderFetching->HasData()) {
+                    AFL_VERIFY(ColumnsFetching.empty());
+                    result.emplace_back(HeaderFetching->GetRangeVerified());
+                } else {
+                    AFL_VERIFY(ColumnsFetching.size());
+                }
+            }
+            for (auto&& i : ColumnsFetching) {
+                if (!i.HasData()) {
+                    result.emplace_back(i.GetRangeVerified());
+                }
+            }
+            return result;
+        }
+
+        TFetchingState(const TRangeFetchingState& headerFetching)
+            : HeaderFetching(headerFetching) {
+        }
+        TFetchingState(const std::vector<TRangeFetchingState>& colsFetching)
+            : ColumnsFetching(colsFetching) {
+        }
+        void FillDataFrom(NBlobOperations::NRead::TCompositeReadBlobs& blobs) {
+            if (HeaderFetching) {
+                HeaderFetching->FillDataFrom(blobs);
+            }
+            for (auto&& i : ColumnsFetching) {
+                i.FillDataFrom(blobs);
+            }
+        }
+    };
+
     const ui32 RecordsCount;
 
-    static TRangeFetchingState BuildResult(const TString& storageId, const TChunkOriginalData& originalData,
-        const std::shared_ptr<IIndexHeader>& header, const TIndexDataAddress& address) {
-        if (!originalData.HasData()) {
-            if (header) {
-                auto addressRange = header->GetAddressRangeOptional(address, originalData.GetBlobRangeVerified());
-                if (!addressRange) {
-                    return TRangeFetchingState("");
+    static TFetchingState BuildFetchingState(const TString& storageId, const TChunkOriginalData& originalData,
+        const std::shared_ptr<IIndexHeader>& header, const std::vector<TIndexDataAddress>& addresses) {
+        std::vector<TRangeFetchingState> colsFetching;
+        for (auto&& address : addresses) {
+            if (!originalData.HasData()) {
+                if (header) {
+                    auto addressRange = header->GetAddressRangeOptional(address, originalData.GetBlobRangeVerified());
+                    if (!addressRange) {
+                        colsFetching.emplace_back(TRangeFetchingState(""));
+                    } else {
+                        colsFetching.emplace_back(TRangeFetchingState(storageId, *addressRange));
+                    }
                 } else {
-                    return TRangeFetchingState(storageId, *addressRange);
+                    auto addressRange =
+                        originalData.GetBlobRangeVerified().BuildSubset(0, std::min<ui32>(originalData.GetBlobRangeVerified().GetSize(), 4096));
+                    AFL_VERIFY(colsFetching.empty());
+                    return TFetchingState(TRangeFetchingState(storageId, addressRange));
                 }
             } else {
+                const TString& data = originalData.GetDataVerified();
+                AFL_VERIFY(header);
                 auto addressRange =
-                    originalData.GetBlobRangeVerified().BuildSubset(0, std::min<ui32>(originalData.GetBlobRangeVerified().GetSize(), 4096));
-                return TRangeFetchingState(storageId, addressRange);
+                    header->GetAddressRangeOptional(address, TBlobRange(TUnifiedBlobId(0, 0, 0, 0, 0, 0, data.size()), 0, data.size()));
+                if (!addressRange) {
+                    colsFetching.emplace_back(TRangeFetchingState(""));
+                } else {
+                    AFL_VERIFY(addressRange->GetOffset() + addressRange->GetSize() <= data.size());
+                    auto finalAddressData = data.substr(addressRange->GetOffset(), addressRange->GetSize());
+                    colsFetching.emplace_back(TRangeFetchingState(finalAddressData));
+                }
             }
-        } else {
-            const TString& data = originalData.GetDataVerified();
-            AFL_VERIFY(header);
-            auto addressRange =
-                header->GetAddressRangeOptional(address, TBlobRange(TUnifiedBlobId(0, 0, 0, 0, 0, 0, data.size()), 0, data.size()));
-            if (!addressRange) {
-                return TRangeFetchingState("");
-            }
-            AFL_VERIFY(addressRange->GetOffset() + addressRange->GetSize() <= data.size());
-            auto finalAddressData = data.substr(addressRange->GetOffset(), addressRange->GetSize());
-            return TRangeFetchingState(finalAddressData);
         }
+        return TFetchingState(colsFetching);
     }
+
+    TFetchingState FetchingState;
 
 public:
     ui32 GetRecordsCount() const {
@@ -92,27 +154,21 @@ public:
         return Header;
     }
 
-    void FetchFrom(
-        const std::shared_ptr<IIndexMeta>& indexMeta, const TString& storageId, std::vector<TBlobRange>& nextReads, NBlobOperations::NRead::TCompositeReadBlobs& blobs) {
-        Result.FillDataFrom(blobs);
+    void FetchFrom(const std::shared_ptr<IIndexMeta>& indexMeta, const TString& storageId, NBlobOperations::NRead::TCompositeReadBlobs& blobs) {
+        FetchingState.FillDataFrom(blobs);
         bool wasHeader = !!Header;
         if (!Header) {
-            auto size = IIndexHeader::ReadHeaderSize(Result.GetBlobData(), true).DetachResult();
-            if (size <= Result.GetBlobData().size()) {
-                Header = indexMeta->BuildHeader(TChunkOriginalData(Result.GetBlobData())).DetachResult();
+            auto size = IIndexHeader::ReadHeaderSize(FetchingState.GetHeaderFetching().GetBlobData(), true).DetachResult();
+            if (size <= FetchingState.GetHeaderFetching().GetBlobData().size()) {
+                Header = indexMeta->BuildHeader(TChunkOriginalData(FetchingState.GetHeaderFetching().GetBlobData())).DetachResult();
             } else {
-                Result = TRangeFetchingState(storageId, OriginalData.GetBlobRangeVerified().BuildSubset(0, size));
-                nextReads.emplace_back(Result.GetRangeVerified());
+                FetchingState.MutableHeaderFetching() = TRangeFetchingState(storageId, OriginalData.GetBlobRangeVerified().BuildSubset(0, size));
             }
         }
         if (!wasHeader && !!Header) {
-            auto indexRange = Header->GetAddressRangeOptional(Address, OriginalData.GetBlobRangeVerified());
-            if (!indexRange) {
-                Result = TRangeFetchingState("");
-            } else {
-                Result = TRangeFetchingState(storageId, *indexRange);
-                nextReads.emplace_back(Result.GetRangeVerified());
-            }
+            FetchingState = BuildFetchingState(storageId, OriginalData, Header, IndexAddresses);
+            AFL_VERIFY(!FetchingState.NeedFetchHeader());
+            AFL_VERIFY(FetchingState.GetColumnsFetching().size());
         }
     }
 
@@ -120,44 +176,51 @@ public:
         return OriginalData;
     }
 
-    const TRangeFetchingState& GetResult() const {
-        return Result;
+    const TFetchingState& GetResult() const {
+        return FetchingState;
     }
 
-    TRangeFetchingState& MutableResult() {
-        return Result;
+    TFetchingState& MutableResult() {
+        return FetchingState;
     }
 
-    TIndexChunkFetching(const TString& storageId, const TIndexDataAddress& address, const TChunkOriginalData& originalData,
+    TIndexChunkFetching(const TString& storageId, const std::vector<TIndexDataAddress>& addresses, const TChunkOriginalData& originalData,
         const std::shared_ptr<IIndexHeader>& header, const ui32 recordsCount)
         : Header(header)
-        , Address(address)
+        , IndexAddresses(addresses)
         , OriginalData(std::move(originalData))
-        , Result(BuildResult(storageId, OriginalData, Header, address))
-        , RecordsCount(recordsCount) {
+        , RecordsCount(recordsCount)
+        , FetchingState(BuildFetchingState(storageId, OriginalData, Header, addresses)) {
     }
 };
 
 class TIndexFetcherLogic: public NReader::NCommon::IKernelFetchLogic {
 private:
     using TBase = NReader::NCommon::IKernelFetchLogic;
-    const NRequest::TOriginalDataAddress DataAddress;
-    const TIndexDataAddress IndexAddress;
+    THashMap<NRequest::TOriginalDataAddress, TIndexDataAddress> DataAddresses;
+    THashMap<TIndexDataAddress, std::vector<NRequest::TOriginalDataAddress>> IndexAddresses;
     TString StorageId;
     std::shared_ptr<IIndexMeta> IndexMeta;
     std::vector<TIndexChunkFetching> Fetching;
+    std::vector<TIndexDataAddress> IndexAddressesVector;
 
     virtual void DoStart(TReadActionsCollection& nextRead, NReader::NCommon::TFetchingResultContext& context) override;
     virtual void DoOnDataReceived(TReadActionsCollection& nextRead, NBlobOperations::NRead::TCompositeReadBlobs& blobs) override;
     virtual void DoOnDataCollected(NReader::NCommon::TFetchingResultContext& context) override;
 
 public:
-    TIndexFetcherLogic(const NRequest::TOriginalDataAddress& dataAddress, const TIndexDataAddress& indexAddress,
-        const std::shared_ptr<IIndexMeta>& indexMeta, const std::shared_ptr<IStoragesManager>& storagesManager)
-        : TBase(indexAddress.GetIndexId(), storagesManager)
-        , DataAddress(dataAddress)
-        , IndexAddress(indexAddress)
+    TIndexFetcherLogic(const THashSet<NRequest::TOriginalDataAddress>& dataAddress, const std::shared_ptr<IIndexMeta>& indexMeta,
+        const std::shared_ptr<IStoragesManager>& storagesManager)
+        : TBase(indexMeta->GetIndexId(), storagesManager)
         , IndexMeta(indexMeta) {
+        for (auto&& i : dataAddress) {
+            const TIndexDataAddress indexAddr(IndexMeta->GetIndexId(), IndexMeta->CalcCategory(i.GetSubColumnName()));
+            DataAddresses.emplace(i, indexAddr);
+            IndexAddresses[indexAddr].emplace_back(i);
+        }
+        for (auto&& i : IndexAddresses) {
+            IndexAddressesVector.emplace_back(i.first);
+        }
         AFL_VERIFY(IndexMeta);
     }
 };

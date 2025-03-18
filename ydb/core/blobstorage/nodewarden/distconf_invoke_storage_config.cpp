@@ -221,7 +221,9 @@ namespace NKikimr::NStorage {
         }
         if (request.GetSkipConsoleValidation() || !NewYaml) {
             if (request.GetDryRun()) {
-                CheckConfigUpdate(*Self->StorageConfig, ProposedStorageConfig);
+                if (!CheckConfigUpdate(*Self->StorageConfig, ProposedStorageConfig)) {
+                    return FinishWithError(TResult::ERROR, TStringBuilder() << "Config update validation failed");
+                }
                 return Finish(Sender, SelfId(), PrepareResult(TResult::DRY_RUN_SUCCESS, std::nullopt).release(), 0, Cookie);
             } else {
                 StartProposition(&ProposedStorageConfig);
@@ -445,7 +447,9 @@ namespace NKikimr::NStorage {
                 }
                 const auto& replaceConfig = Event->Get()->Record.GetReplaceStorageConfig();
                 if (replaceConfig.GetDryRun()) {
-                    CheckConfigUpdate(*Self->StorageConfig, ProposedStorageConfig);
+                    if (!CheckConfigUpdate(*Self->StorageConfig, ProposedStorageConfig)) {
+                        return FinishWithError(TResult::ERROR, TStringBuilder() << "Config update validation failed");
+                    }
                     return Finish(Sender, SelfId(), PrepareResult(TResult::DRY_RUN_SUCCESS, std::nullopt).release(), 0, Cookie);
                 }
                 return StartProposition(&ProposedStorageConfig);

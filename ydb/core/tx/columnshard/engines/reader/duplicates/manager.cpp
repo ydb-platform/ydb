@@ -128,8 +128,8 @@ TDuplicateFilterConstructor::TSourceIntervals::TSourceIntervals(const std::deque
         }
 
         bool operator<(const TBorderView& other) const {
-            return std::tie<const NSimple::TReplaceKeyAdapter&, const bool&, const ui64&>(*PK, !IsLast, SourceId) <
-                   std::tie<const NSimple::TReplaceKeyAdapter&, const bool&, const ui64&>(*other.PK, !other.IsLast, other.SourceId);
+            return std::tie<const NSimple::TReplaceKeyAdapter&, const bool&, const ui64&>(*PK, IsLast, SourceId) <
+                   std::tie<const NSimple::TReplaceKeyAdapter&, const bool&, const ui64&>(*other.PK, other.IsLast, other.SourceId);
         };
         bool operator==(const TBorderView& other) const {
             return SourceId == other.SourceId && IsLast == other.IsLast;

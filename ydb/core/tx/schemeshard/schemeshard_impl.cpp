@@ -1362,7 +1362,7 @@ bool TSchemeShard::CheckApplyIf(const NKikimrSchemeOp::TModifyScheme& scheme, TS
 
             if (item.HasLockedTxId()) {
                 const auto lockOwnerTxId = TTxId(item.GetLockedTxId());
-    
+
                 TString lockErr = "fail user constraint in ApplyIf section:";
                 if (!CheckLocks(pathId, lockOwnerTxId, lockErr)) {
                     errStr = lockErr;
@@ -7163,7 +7163,7 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
                 dataErasureShards.push_back(p.ShardIdx);
             }
         }
-        if (DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
+        if (EnableDataErasure && DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
             Execute(CreateTxAddEntryToDataErasure(dataErasureShards), this->ActorContext());
         }
 

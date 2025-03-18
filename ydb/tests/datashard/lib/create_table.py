@@ -80,9 +80,9 @@ index_sync = ["SYNC", "ASYNC"]
 
 
 class TestCreateTables():
-    def create_table(self, ttl: str, index: dict[str, str], unique: str, sync: str) -> str:
+    def create_table(self, ttl: str, table_name: str, index: dict[str, str], unique: str, sync: str) -> str:
         return f"""
-            CREATE TABLE IF NOT EXISTS {self.table_name} (
+            CREATE TABLE IF NOT EXISTS {table_name} (
                     {", ".join(["pk_" + cleanup_type_name(type_name) + " " + type_name for type_name in pk_types.keys()])},
                     {", ".join(["col_" + cleanup_type_name(type_name) + " " + type_name for type_name in pk_types.keys()])},
                     {", ".join(["col_" + cleanup_type_name(type_name) + " " + type_name for type_name in non_pk_types.keys()])},
@@ -94,4 +94,5 @@ class TestCreateTables():
                     ) WITH (
                     TTL = Interval("PT1H") ON ttl_{cleanup_type_name(ttl)} {"as SECONDS" if ttl == "Uint32" or ttl == "Uint64" or ttl == "DyNumber" else ""}
                 );
+
         """

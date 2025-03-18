@@ -17,6 +17,7 @@ An important consideration is that the `TablePathPrefix` pragma is never actuall
 {% endnote %}
 
 For example, a view is created with the following query:
+
 ```sql
 CREATE VIEW `view` WITH (security_invoker = TRUE) AS
     SELECT
@@ -31,6 +32,7 @@ CREATE VIEW `view` WITH (security_invoker = TRUE) AS
 ```
 
 In the `SELECT` query of the view we see:
+
 - `/my_database_root` - the root of the database
 - `/my_database_root/seasons` - a reference to an object (a table or a view) expressed as an absolute path
 - `episodes` - an object reference expressed as a relative path, which corresponds to the absolute path `/my_database_root/episodes`

@@ -279,9 +279,9 @@ struct TPendingPartSwitch {
     }
 };
 
-enum class EPageCollectionRequest : ui64 {
+enum class ESharedCachePagesRequestType : ui64 {
     Undefined = 0,
-    Cache = 1,
+    Transaction = 1,
     InMemPages,
     PendingInit,
     BootLogic,
@@ -292,7 +292,7 @@ struct TExecutorStatsImpl : public TExecutorStats {
     ui64 PacksMetaBytes = 0;    /* Memory occupied by NPageCollection::TMeta */
 };
 
-struct TTransactionWaitPad : public TPrivatePageCacheWaitPad {
+struct TTransactionWaitPad : public NPageCollection::TPagesWaitPad {
     TSeat* Seat;
     NWilson::TSpan WaitingSpan;
 
@@ -461,7 +461,7 @@ class TExecutor
 
     TActorId Launcher;
 
-    THashMap<TPrivatePageCacheWaitPad*, THolder<TTransactionWaitPad>> TransactionWaitPads;
+    THashMap<NPageCollection::TPagesWaitPad*, TIntrusivePtr<TTransactionWaitPad>> TransactionWaitPads;
 
     ui64 TransactionUniqCounter = 0;
 
@@ -529,7 +529,8 @@ class TExecutor
     void EnqueueActivation(TSeat* seat, bool activate);
     void PlanTransactionActivation();
     void MakeLogSnapshot();
-    void ActivateWaitingTransactions(TPrivatePageCache::TPage::TWaitQueuePtr waitPadsQueue);
+    void LogWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad);
+    void ActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPagesWaitPad>&& waitPad);
     void AddCachesOfBundle(const NTable::TPartView &partView);
     void AddSingleCache(const TIntrusivePtr<TPrivatePageCache::TInfo> &info);
     void DropCachesOfBundle(const NTable::TPart &part);
@@ -541,7 +542,7 @@ class TExecutor
     void StickInMemPages(NSharedCache::TEvResult *msg);
     THashSet<NTable::TTag> GetStickyColumns(ui32 tableId);
     void RequestFromSharedCache(TAutoPtr<NPageCollection::TFetch> fetch,
-        NBlockIO::EPriority way, EPageCollectionRequest requestCategory);
+        NBlockIO::EPriority way, ESharedCachePagesRequestType requestType);
     THolder<TScanSnapshot> PrepareScanSnapshot(ui32 table,
         const NTable::TCompactionParams* params, TRowVersion snapshot = TRowVersion::Max());
     void ReleaseScanLocks(TIntrusivePtr<TBarrier>, const NTable::TSubset&);

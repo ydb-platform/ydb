@@ -235,7 +235,8 @@ namespace NKikimr {
                     .NodeId = nodeId,
                     .PDiskId = pdiskId,
                     .VSlotId = vslotId,
-                    .NotReady = false
+                    .NotReady = false,
+                    .NotReadyCount = 0
                 });
                 Donors.emplace_back(vdiskId, queueActorId);
             }
@@ -504,13 +505,13 @@ namespace NKikimr {
             LastReplQuantumStart = TAppData::TimeProvider->Now();
             Y_ABORT_UNLESS(!ReplJobActorId);
 
-            // find first ready donor and move it in front of the queue if needed
+            // Iterate through the donor queue, moving "NotReady" donors to the end  
+            // until a ready donor or an empty optional (indicating the use of the group's other disks instead of a donor) is found.
             auto donorIt = DonorQueue.begin();
             while (donorIt != DonorQueue.end() && (*donorIt && (*donorIt)->NotReady)) {
-                ++donorIt;
-            }
-            if (donorIt != DonorQueue.begin() && donorIt != DonorQueue.end()) {
-                DonorQueue.splice(DonorQueue.begin(), DonorQueue, donorIt);
+                auto cur = donorIt;
+                donorIt++;
+                DonorQueue.splice(DonorQueue.end(), DonorQueue, cur);
             }
 
             const auto& donor = DonorQueue.front();

@@ -36,7 +36,7 @@ Any command can be run from the command line with the `--help` option to get hel
 | [import file tsv](../export-import/import-file.md) | Importing data from a TSV file |
 | [import s3](../export-import/import-s3.md) | Importing data from S3 storage |
 | [init](../profile/create.md) | Initializing the CLI, creating a [profile](../profile/index.md) |
-| monitoring healthcheck | Self check. Returns status of the database in [Health Check API](../../ydb-sdk/health-check-api.md) response format |
+| [monitoring healthcheck](../commands/monitoring-healthcheck.md) | Database self check. |
 | [operation cancel](../operation-cancel.md) | Aborting long-running operations |
 | [operation forget](../operation-forget.md) | Deleting long-running operations from the list |
 | [operation get](../operation-get.md) | Status of long-running operations |

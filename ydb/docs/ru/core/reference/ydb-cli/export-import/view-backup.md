@@ -31,28 +31,28 @@
 
 1. Пользователь создаёт представление при помощи следующего запроса:
 
-```sql
-CREATE VIEW my_view WITH security_invoker = TRUE AS
-SELECT * FROM `/my_database/my_table`;
-```
+    ```sql
+    CREATE VIEW my_view WITH security_invoker = TRUE AS
+    SELECT * FROM `/my_database/my_table`;
+    ```
 
 Заметим, что таблица `my_table` адресуется абсолютным путём.
 
 2. Пользователь выгружает базу данных, используя {{ ydb-short-name }} CLI:
 
-```bash
-ydb --database /my_database --endpoint <endpoint> tools dump --path . --output ./my_backup
-```
+    ```bash
+    ydb --database /my_database --endpoint <endpoint> tools dump --path . --output ./my_backup
+    ```
 
 3. Позже пользователь создает новую базу данных, например, с именем `target_db`.
 
 4. В момент восстановления данных из ранее сделанной резервной копии:
 
-```bash
-ydb --database /target_db --endpoint <endpoint> tools restore --path . --input ./my_backup
-```
+    ```bash
+    ydb --database /target_db --endpoint <endpoint> tools restore --path . --input ./my_backup
+    ```
 
-утилита {{ ydb-short-name }} CLI автоматически переписывает SQL-запрос из файла `create_view.sql` так, чтобы ссылка указывала на таблицу `/target_db/my_table` вместо изначальной `/my_database/my_table`.
+    утилита {{ ydb-short-name }} CLI автоматически переписывает SQL-запрос из файла `create_view.sql` так, чтобы ссылка указывала на таблицу `/target_db/my_table` вместо изначальной `/my_database/my_table`.
 
 ### Правила переписывания запросов
 
@@ -60,15 +60,15 @@ ydb --database /target_db --endpoint <endpoint> tools restore --path . --input .
 
 - Исходный путь к объекту разделяется на две части:
 
-```text
-исходный_путь_к_объекту = корень_бекапа + путь_относительно_корня_бекапа
-```
+    ```text
+    исходный_путь_к_объекту = корень_бекапа + путь_относительно_корня_бекапа
+    ```
 
 - При восстановлении каждая ссылка модифицируется так, чтобы указывать на объект с аналогичным положением относительно корня восстановления (значения `--path` параметра `ydb tools restore` команды):
 
-```text
-ссылка_после_восстановления = корень_восстановления + путь_относительно_корня_бекапа
-```
+    ```text
+    ссылка_после_восстановления = корень_восстановления + путь_относительно_корня_бекапа
+    ```
 
 Это обеспечивает корректность ссылок внутри представлений после восстановления.
 
@@ -84,15 +84,15 @@ ydb --database /target_db --endpoint <endpoint> tools restore --path . --input .
 
 1. Прагма разбивается на две части:
 
-```text
-исходный_префикс = корень_бекапа + префикс_относительно_корня_бекапа
-```
+    ```text
+    исходный_префикс = корень_бекапа + префикс_относительно_корня_бекапа
+    ```
 
 2. Значение прагмы после восстановления получается заменой корня бекапа на корень восстановления:
 
-```text
-префикс_после_восстановления = корень_восстановления + префикс_относительно_корня_бекапа
-```
+    ```text
+    префикс_после_восстановления = корень_восстановления + префикс_относительно_корня_бекапа
+    ```
 
 Следует иметь в виду, что прагма `TablePathPrefix` никогда не бывает пустой или неустановленной. Если пользователь явно не указывает значение для неё, система автоматически выставляет значение по умолчанию, равное корню базы данных. Если представление неявно использовало корень базы данных в качестве `TablePathPrefix` и восстановление происходит не в корень целевой базы, а ниже, то процедура восстановления автоматически выставляет прагму `TablePathPrefix` в SQL-запросе на создание представления. В этом можно убедиться, проверив текст запроса восстановленного представления с помощью команды:
 
@@ -106,37 +106,37 @@ ydb scheme describe <путь_к_восстановленному_предста
 
 1. Пользователь создал исходное представление без явного указания прагмы `TablePathPrefix`:
 
-```sql
-CREATE VIEW my_view WITH security_invoker = TRUE AS
-SELECT * FROM my_table;
-```
+    ```sql
+    CREATE VIEW my_view WITH security_invoker = TRUE AS
+    SELECT * FROM my_table;
+    ```
 
 2. Резервная копия сделана следующим образом:
 
-```bash
-ydb --database /my_database --endpoint <endpoint> tools dump --path . --output ./my_backup
-```
+    ```bash
+    ydb --database /my_database --endpoint <endpoint> tools dump --path . --output ./my_backup
+    ```
 
 3. Восстановление выполнено в ту же базу данных, но в другую подпапку:
 
-```bash
-ydb --database /my_database --endpoint <endpoint> tools restore --path ./restore/point --input ./my_backup
-```
+    ```bash
+    ydb --database /my_database --endpoint <endpoint> tools restore --path ./restore/point --input ./my_backup
+    ```
 
 4. В результате восстановленное представление будет указывать на таблицу `/my_database/restore/point/my_table` вместо исходного пути `/my_database/my_table`.
 
 5. Убедиться в этом можно, проверив текст запроса представления командой:
 
-```bash
-ydb scheme describe restore/point/my_view
-```
+    ```bash
+    ydb scheme describe restore/point/my_view
+    ```
 
-В выводе команды видна прагма `TablePathPrefix`:
+    В выводе команды видна прагма `TablePathPrefix`:
 
-```text
-<view> my_view
+    ```text
+    <view> my_view
 
-Query text:
-PRAGMA TablePathPrefix = '/my_database/restore/point';
-SELECT * FROM my_table
-```
+    Query text:
+    PRAGMA TablePathPrefix = '/my_database/restore/point';
+    SELECT * FROM my_table
+    ```

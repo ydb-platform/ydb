@@ -28,18 +28,18 @@ Let's consider the following scenario:
 
 1. A user creates a view with the following query:
 
-```sql
-CREATE VIEW my_view WITH security_invoker = TRUE AS
-SELECT * FROM `/my_database/my_table`;
-```
+    ```sql
+    CREATE VIEW my_view WITH security_invoker = TRUE AS
+    SELECT * FROM `/my_database/my_table`;
+    ```
 
-Note that the table `my_table` is referenced using its absolute path.
+    Note that the table `my_table` is referenced using its absolute path.
 
 2. The user performs a backup of the database using {{ ydb-short-name }} CLI:
 
-```bash
-ydb --database /my_database --endpoint <endpoint> tools dump --path . --output ./my_backup
-```
+    ```bash
+    ydb --database /my_database --endpoint <endpoint> tools dump --path . --output ./my_backup
+    ```
 
 3. Later, the user creates a new database, for instance: `target_db`.
 
@@ -120,7 +120,7 @@ Consider the following scenario:
     ydb --database /my_database --endpoint <endpoint> tools restore --path ./restore/point --input ./my_backup
     ```
 
-4. As a consequence, the view definition has been built to reference the `/my_database/restore/point/my_table` instead of the originally referenced `/my_database/my_table`.
+4. As a consequence, the view definition has been modified to reference the `/my_database/restore/point/my_table` instead of the originally referenced `/my_database/my_table`.
 
 5. To confirm the query modification, get the restored view query text with the following command:
 

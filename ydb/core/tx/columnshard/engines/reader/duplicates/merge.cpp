@@ -14,12 +14,12 @@ TConclusionStatus TBuildDuplicateFilters::DoExecute(const std::shared_ptr<ITask>
     std::vector<NArrow::TColumnFilter> filters = std::move(filtersBuilder).ExtractFilters();
     AFL_VERIFY(filters.size() == Sources.size());
     // TODO: avoid copying filters
-    THashMap<ui64, NArrow::TColumnFilter> result;
+    THashMap<ui32, NArrow::TColumnFilter> result;
     for (ui64 i = 0; i < filters.size(); ++i) {
         AFL_VERIFY(Sources[i].GetData()->GetRecordsCount() == filters[i].GetRecordsCountVerified())(
                                                                   "data", Sources[i].GetData()->GetRecordsCount())(
                                                                   "filter", filters[i].GetRecordsCountVerified());
-        result.emplace(Sources[i].GetSourceId(), std::move(filters[i]));
+        result.emplace(Sources[i].GetSourceIdx(), std::move(filters[i]));
     }
     TActorContext::AsActorContext().Send(Owner, new TEvDuplicateFilterPartialResult(std::move(result), IntervalIdx));
     return TConclusionStatus::Success();

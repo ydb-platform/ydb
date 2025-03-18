@@ -151,7 +151,7 @@ void TReadQuoter::OnAccountQuotaApproved(TRequestContext&& context) {
 
 TAccountQuoterHolder* TReadQuoter::GetAccountQuotaTracker(const THolder<TEvPQ::TEvRequestQuota>& request) {
     if (!TopicConverter)
-        return nullptr;;
+        return nullptr;
     auto clientId = request->Request->CastAsLocal<TEvPQ::TEvRead>()->ClientId;
     return GetOrCreateConsumerQuota(clientId, ActorContext())->AccountQuotaTracker.Get();
 }
@@ -285,7 +285,7 @@ ui64 TReadQuoter::GetTotalPartitionSpeedBurst(const NKikimrPQ::TPQTabletConfig& 
 THolder<TAccountQuoterHolder> TReadQuoter::CreateAccountQuotaTracker(const TString& user, const TActorContext& ctx) const {
     const auto& quotingConfig = AppData()->PQConfig.GetQuotingConfig();
     TActorId actorId;
-    Y_ABORT_UNLESS(TopicConverter);
+    Y_ENSURE(TopicConverter);
     if (GetTabletActor() && quotingConfig.GetEnableQuoting()) {
         if(quotingConfig.GetEnableReadQuoting()) {
             actorId = TActivationContext::Register(

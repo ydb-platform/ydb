@@ -242,7 +242,7 @@ public:
         auto* bufferActor = CreateKqpBufferWriterActor(std::move(settings));
         auto bufferActorId = RegisterWithSameMailbox(bufferActor);
 
-        auto batchSettings = TBatchOperationSettings(BatchOperationSettings.MinBatchSize, partInfo->LimitSize);
+        auto batchSettings = TBatchOperationSettings(partInfo->LimitSize, BatchOperationSettings.MinBatchSize);
         auto executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, RequestCounters,
             TableServiceConfig, AsyncIoFactory, PreparedQuery, SelfId(), UserRequestContext, StatementResultIndex,
             FederatedQuerySetup, GUCSettings, ShardIdToTableInfo, txManager, bufferActorId, std::move(batchSettings));
@@ -586,7 +586,7 @@ private:
         newRequest.UserTraceId = from.UserTraceId;
         newRequest.OutputChunkMaxSize = from.OutputChunkMaxSize;
 
-        newRequest.Transactions.emplace_back(PreparedQuery->GetTransactions()[static_cast<size_t>(!literal)], std::make_shared<TQueryData>(from.TxAlloc));
+        newRequest.Transactions.emplace_back(PreparedQuery->GetTransactions()[static_cast<size_t>(!literal)], std::make_shared<TQueryData>(newRequest.TxAlloc));
 
         auto newParams = newRequest.Transactions.front().Params;
         auto oldParams = LiteralRequest.Transactions.front().Params;
@@ -636,7 +636,7 @@ private:
             }
 
             NKikimrMiniKQL::TType protoType = paramDesc.GetType();
-            NKikimr::NMiniKQL::TType* paramType = ImportTypeFromProto(protoType, PhysicalRequest.TxAlloc->TypeEnv);
+            NKikimr::NMiniKQL::TType* paramType = ImportTypeFromProto(protoType, queryData->GetAllocState()->TypeEnv);
 
             if (setDefault) {
                 auto defaultValue = MakeDefaultValueByType(paramType);

@@ -240,7 +240,7 @@ void TestLargeTable(size_t maxBatchSize, size_t rowsPerShard) {
     auto db = kikimr.GetQueryClient();
     auto session = db.GetSession().GetValueSync().GetSession();
 
-    CreateLargeTable(kikimr, rowsPerShard, 4, 8);
+    CreateLargeTable(kikimr, rowsPerShard, 4, 4, 10000);
 
     {
         auto query = Q_(R"(
@@ -293,15 +293,14 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
     }
 
     Y_UNIT_TEST(LargeTable_2) {
-        // for (size_t size = 100; size <= 10000; size *= 10) {
-        //     TestLargeTable(size, 10000);
-        // }
-        TestLargeTable(1000, 10000);
+        for (size_t size = 100; size <= 10000; size *= 10) {
+            TestLargeTable(size, 10000);
+        }
     }
 
     Y_UNIT_TEST(LargeTable_3) {
         for (size_t size = 1000; size <= 100000; size *= 10) {
-            TestLargeTable(size, 1000000);
+            TestLargeTable(size, 100000);
         }
     }
 
@@ -429,41 +428,6 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
         }
     }
-
-    // Y_UNIT_TEST(DeleteTwoPartitionsByPrimaryPoint) {
-    //     TKikimrRunner kikimr(GetAppConfig());
-    //     auto db = kikimr.GetQueryClient();
-    //     auto session = db.GetSession().GetValueSync().GetSession();
-
-    //     CreateTwoPartitionsTable(session);
-
-    //     {
-    //         auto query = Q_(R"(
-    //             BATCH DELETE FROM TestTable WHERE Group = 1u;
-    //         )");
-
-    //         auto txControl = NYdb::NQuery::TTxControl::NoTx();
-    //         auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
-    //         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), /* EStatus::SUCCESS */ EStatus::BAD_REQUEST); // todo: isBatch does not match in SA
-    //     }
-    //     {
-    //         auto query = Q_(R"(
-    //             SELECT * FROM TestTable ORDER BY Group;
-    //         )");
-
-    //         auto txControl = NYdb::NQuery::TTxControl::NoTx();
-    //         auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
-    //         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-
-    //         CompareYson(R"([
-    //             [[36u];[300u];[2u];["Paul"]];
-    //             [[81u];[7200u];[3u];["Tony"]];
-    //             [[11u];[10u];[4u];["John"]];
-    //             [[3u];[0u];[5u];["Lena"]];
-    //             [[48u];[730u];[6u];["Mary"]]
-    //         ])", FormatResultSetYson(result.GetResultSet(0)));
-    //     }
-    // }
 }
 
 } // namespace NKqp

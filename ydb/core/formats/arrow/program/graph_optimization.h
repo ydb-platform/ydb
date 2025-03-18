@@ -132,6 +132,7 @@ public:
 class TGraph {
 private:
     ui32 NextResourceId = 0;
+    THashSet<ui32> FetchersMerged;
     const IColumnResolver& Resolver;
     std::map<ui64, std::shared_ptr<TGraphNode>> Nodes;
     THashMap<TResourceAddress, TGraphNode*> Producers;
@@ -153,12 +154,15 @@ private:
     TConclusion<bool> OptimizeIndexesToApply(TGraphNode* condNode);
     TConclusion<bool> OptimizeFilterWithCoalesce(TGraphNode* cNode);
     TConclusion<bool> OptimizeFilterWithAnd(TGraphNode* filterNode, TGraphNode* filterArg, const std::shared_ptr<TCalculationProcessor>& calc);
+    TConclusion<bool> OptimizeMergeFetching(TGraphNode* baseNode);
+
 
     bool HasEdge(const TGraphNode* from, const TGraphNode* to, const ui32 resourceId) const;
     void AddEdge(TGraphNode* from, TGraphNode* to, const ui32 resourceId);
     void RemoveEdge(TGraphNode* from, TGraphNode* to, const ui32 resourceId);
     void RemoveNode(const ui32 idenitifier);
-    void RemoveBranch(TGraphNode* from);
+    THashMap<ui32, TGraphNode*> GetBranch(TGraphNode* from, const bool backOnly) const;
+    void RemoveBranch(TGraphNode* from, const bool backOnly);
     [[nodiscard]] std::shared_ptr<TGraphNode> AddNode(const std::shared_ptr<IResourceProcessor>& processor) {
         auto result = std::make_shared<TGraphNode>(NodeId++, processor);
         Nodes.emplace(result->GetIdentifier(), result);

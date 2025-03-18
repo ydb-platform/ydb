@@ -54,14 +54,14 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
     NKikimrArrowAccessorProto::TSubColumnsAccessor proto;
     std::vector<TString> blobRanges;
     if (ColumnsData.GetStats().GetColumnsCount()) {
-        blobRanges.emplace_back(ColumnsData.GetStats().SerializeAsString(externalInfo.GetDefaultSerializer()));
+        blobRanges.emplace_back(ColumnsData.GetStats().SerializeAsString(nullptr));
         proto.SetColumnStatsSize(blobRanges.back().size());
     } else {
         proto.SetColumnStatsSize(0);
     }
 
     if (OthersData.GetStats().GetColumnsCount()) {
-        blobRanges.emplace_back(OthersData.GetStats().SerializeAsString(externalInfo.GetDefaultSerializer()));
+        blobRanges.emplace_back(OthersData.GetStats().SerializeAsString(nullptr));
         proto.SetOtherStatsSize(blobRanges.back().size());
     } else {
         proto.SetOtherStatsSize(0);

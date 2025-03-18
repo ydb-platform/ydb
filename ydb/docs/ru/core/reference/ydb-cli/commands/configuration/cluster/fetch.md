@@ -5,11 +5,10 @@
 Общий вид команды:
 
 ```bash
-ydb [global options...] admin cluster config fetch [options...]
+ydb [global options...] admin cluster config fetch
 ```
 
 * `global options` — глобальные параметры.
-* `options` — [параметры подкоманды](#options).
 
 Посмотрите описание команды получения динамической конфигурации:
 

@@ -49,20 +49,6 @@
 #define CROARING_REGULAR_VISUAL_STUDIO 0
 #endif
 
-#if defined(_POSIX_C_SOURCE) && (_POSIX_C_SOURCE < 200809L)
-#undef _POSIX_C_SOURCE
-#endif
-
-#ifndef _POSIX_C_SOURCE
-#define _POSIX_C_SOURCE 200809L
-#endif  // !(defined(_POSIX_C_SOURCE)) || (_POSIX_C_SOURCE < 200809L)
-
-#ifdef __illumos__
-#ifndef __EXTENSIONS__
-#define __EXTENSIONS__
-#endif  // __EXTENSIONS__
-#endif
-
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>  // will provide posix_memalign with _POSIX_C_SOURCE as defined above

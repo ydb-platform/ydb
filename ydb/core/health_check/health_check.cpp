@@ -270,6 +270,7 @@ public:
         TString ErasureSpecies;
         std::vector<const NKikimrSysView::TVSlotEntry*> VSlots;
         ui32 Generation;
+        bool LayoutCorrect = true;
     };
 
     struct TSelfCheckResult {
@@ -1537,10 +1538,13 @@ public:
             FilterDomainKey[subDomainKey] = path;
 
             TTabletId hiveId = domainInfo->Params.GetHive();
-            if (hiveId && NeedToAskHive(hiveId)) {
+            if (hiveId) {
                 DatabaseState[path].HiveId = hiveId;
-                AskHive(path, hiveId);
+                if (NeedToAskHive(hiveId)) {
+                    AskHive(path, hiveId);
+                }
             } else if (RootHiveId && NeedToAskHive(RootHiveId)) {
+                DatabaseState[DomainPath].HiveId = RootHiveId;
                 AskHive(DomainPath, RootHiveId);
             }
 
@@ -1641,23 +1645,31 @@ public:
 
     void AggregateHiveInfo() {
         TNodeTabletState::TTabletStateSettings settings;
-        for (const auto& [hiveId, hiveResponse] : HiveInfo) {
+        for (auto& [dbPath, dbState] : DatabaseState) {
+            const auto& hiveResponse = HiveInfo[dbState.HiveId];
             if (hiveResponse.IsOk()) {
                 settings.AliveBarrier = TInstant::MilliSeconds(hiveResponse->Record.GetResponseTimestamp()) - TDuration::Minutes(5);
                 settings.MaxRestartsPerPeriod = HealthCheckConfig.GetThresholds().GetTabletsRestartsOrange();
                 for (const NKikimrHive::TTabletInfo& hiveTablet : hiveResponse->Record.GetTablets()) {
                     TSubDomainKey tenantId = TSubDomainKey(hiveTablet.GetObjectDomain());
                     auto itDomain = FilterDomainKey.find(tenantId);
+                    TDatabaseState* database = nullptr;
                     if (itDomain == FilterDomainKey.end()) {
-                        continue;
+                        if (!FilterDatabase || FilterDatabase == dbPath) {
+                            database = &dbState;
+                        } else {
+                            continue;
+                        }
+                    } else {
+                        auto itDatabase = DatabaseState.find(itDomain->second);
+                        if (itDatabase != DatabaseState.end()) {
+                            database = &itDatabase->second;
+                        } else {
+                            continue;
+                        }
                     }
-                    auto itDatabase = DatabaseState.find(itDomain->second);
-                    if (itDatabase == DatabaseState.end()) {
-                        continue;
-                    }
-                    TDatabaseState& database = itDatabase->second;
                     auto tabletId = std::make_pair(hiveTablet.GetTabletID(), hiveTablet.GetFollowerID());
-                    database.MergedTabletState.emplace(tabletId, &hiveTablet);
+                    database->MergedTabletState.emplace(tabletId, &hiveTablet);
                     TNodeId nodeId = hiveTablet.GetNodeID();
                     switch (hiveTablet.GetVolatileState()) {
                         case NKikimrHive::ETabletVolatileState::TABLET_VOLATILE_STATE_STARTING:
@@ -1667,7 +1679,7 @@ public:
                             nodeId = 0;
                             break;
                     }
-                    database.MergedNodeTabletState[nodeId].AddTablet(hiveTablet, settings);
+                    database->MergedNodeTabletState[nodeId].AddTablet(hiveTablet, settings);
                 }
             }
         }
@@ -1710,6 +1722,7 @@ public:
             auto& groupState = GroupState[groupId];
             groupState.ErasureSpecies = group.GetInfo().GetErasureSpeciesV2();
             groupState.Generation = group.GetInfo().GetGeneration();
+            groupState.LayoutCorrect = group.GetInfo().GetLayoutCorrect();
             StoragePoolState[poolId].Groups.emplace(groupId);
         }
         for (const auto& vSlot : VSlots->Get()->Record.GetEntries()) {
@@ -2504,6 +2517,7 @@ public:
 
     class TGroupChecker {
         TString ErasureSpecies;
+        bool LayoutCorrect;
         int FailedDisks = 0;
         std::array<int, Ydb::Monitoring::StatusFlag::Status_ARRAYSIZE> DisksColors = {};
         TStackVec<std::pair<ui32, int>> FailedRealms;
@@ -2520,7 +2534,10 @@ public:
         }
 
     public:
-        TGroupChecker(const TString& erasure) : ErasureSpecies(erasure) {}
+        TGroupChecker(const TString& erasure, const bool layoutCorrect = true)
+            : ErasureSpecies(erasure)
+            , LayoutCorrect(layoutCorrect)
+        {}
 
         void AddVDiskStatus(Ydb::Monitoring::StatusFlag::Status status, ui32 realm) {
             ++DisksColors[status];
@@ -2539,6 +2556,9 @@ public:
 
         void ReportStatus(TSelfCheckContext& context) const {
             context.OverallStatus = Ydb::Monitoring::StatusFlag::GREEN;
+            if (!LayoutCorrect) {
+                context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Group layout is incorrect", ETags::GroupState);
+            }
             if (ErasureSpecies == NONE) {
                 if (FailedDisks > 0) {
                     context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "Group failed", ETags::GroupState, {ETags::VDiskState});
@@ -2888,7 +2908,7 @@ public:
             return;
         }
 
-        TGroupChecker checker(itGroup->second.ErasureSpecies);
+        TGroupChecker checker(itGroup->second.ErasureSpecies, itGroup->second.LayoutCorrect);
         const auto& slots = itGroup->second.VSlots;
         for (const auto* slot : slots) {
             const auto& slotInfo = slot->GetInfo();

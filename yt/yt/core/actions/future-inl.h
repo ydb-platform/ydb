@@ -1421,7 +1421,7 @@ bool TPromiseBase<T>::TrySet(NYT::TErrorOr<T>&& value) const
 
 template <class T>
 template <class U>
-inline void TPromiseBase<T>::TrySetFrom(TFuture<U> another) const
+inline void TPromiseBase<T>::TrySetFrom(const TFuture<U>& another) const
 {
     YT_ASSERT(Impl_);
 

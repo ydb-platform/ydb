@@ -9,6 +9,7 @@
 ```bash
 ydb [global options] admin cluster config [command options] <subcommand>
 ```
+
 , где:
 
 - `ydb` - команда запуска YDB CLI из командной строки операционной системы

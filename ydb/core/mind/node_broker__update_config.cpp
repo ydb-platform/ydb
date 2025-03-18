@@ -35,7 +35,7 @@ public:
         LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
                     "TTxUpdateConfig Execute " << rec.ShortDebugString());
 
-        if (!google::protobuf::util::MessageDifferencer::Equals(Config, Self->Config))
+        if (!google::protobuf::util::MessageDifferencer::Equals(Config, Self->Dirty.Config))
             Modify = true;
 
         auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
@@ -52,7 +52,7 @@ public:
         LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
                     "TTxUpdateConfig Execute " << rec.ShortDebugString());
 
-        if (!google::protobuf::util::MessageDifferencer::Equals(Config, Self->Config))
+        if (!google::protobuf::util::MessageDifferencer::Equals(Config, Self->Dirty.Config))
             Modify = true;
 
         auto resp = MakeHolder<TEvNodeBroker::TEvSetConfigResponse>();
@@ -72,8 +72,10 @@ public:
         if (Request && !ProcessRequest(ctx))
             return true;
 
-        if (Modify)
-            Self->DbUpdateConfig(Config, txc);
+        if (Modify) {
+            Self->Dirty.DbUpdateConfig(Config, txc);
+            Self->Dirty.LoadConfigFromProto(Config);
+        }
 
         return true;
     }
@@ -83,15 +85,13 @@ public:
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxUpdateConfig Complete");
 
         if (Modify)
-            Self->LoadConfigFromProto(Config);
+            Self->Committed.LoadConfigFromProto(Config);
 
         if (Response) {
             LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER,
                         "TTxUpdateConfig reply with: " << Response->ToString());
             ctx.Send(Response);
         }
-
-        Self->TxCompleted(this, ctx);
     }
 
 private:

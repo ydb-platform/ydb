@@ -81,28 +81,37 @@ class TestLogScenario(BaseTestSet):
 
     @classmethod
     def setup_class(cls):
-        cls._setup_ydb()
+        super().setup_class()
+        ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
+        logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
+        cls.ydb_client = YdbClient(endpoint=cls._ydb_instance.endpoint(), database=f"/{cls._ydb_instance.database()}")
+        cls.ydb_client.wait_connection()
         pass
 
     @classmethod
     def teardown_class(cls):
         cls.ydb_client.stop()
-        cls.cluster.stop()
+        super().teardown_class()
 
-    @classmethod
-    def _setup_ydb(cls):
-        ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
-        logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
-        config = KikimrConfigGenerator(
-            extra_feature_flags={
-                "enable_immediate_writing_on_bulk_upsert": True
-            },
-        )
-        cls.cluster = KiKiMR(config)
-        cls.cluster.start()
-        node = cls.cluster.nodes[1]
-        cls.ydb_client = YdbClient(endpoint=f"grpc://{node.host}:{node.port}", database=f"/{config.domain_name}")
-        cls.ydb_client.wait_connection()
+    # @classmethod
+    # def teardown_class(cls):
+    #     cls.ydb_client.stop()
+    #     cls.cluster.stop()
+
+    # @classmethod
+    # def _setup_ydb(cls):
+    #     ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
+    #     logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
+    #     config = KikimrConfigGenerator(
+    #         extra_feature_flags={
+    #             "enable_immediate_writing_on_bulk_upsert": True
+    #         },
+    #     )
+    #     cls.cluster = KiKiMR(config)
+    #     cls.cluster.start()
+    #     node = cls.cluster.nodes[1]
+    #     cls.ydb_client = YdbClient(endpoint=f"grpc://{node.host}:{node.port}", database=f"/{config.domain_name}")
+    #     cls.ydb_client.wait_connection()
 
     def get_row_count(self) -> int:
         return self.ydb_client.query(f"select count(*) as Rows from `{self.table_name}`")[0].rows[0]["Rows"]
@@ -127,13 +136,12 @@ class TestLogScenario(BaseTestSet):
 
     def scenario_test(self, ctx: TestContext):
         """As per https://github.com/ydb-platform/ydb/issues/13530"""
-        sth = ScenarioTestHelper(ctx)
-        assert False
 
         wait_time: int = int(get_external_param("wait_minutes", "3")) * 60
         self.table_name: str = "log"
-
+        logging.error(f"_ydb.instance.database: {self._ydb_instance.database()}")
         ydb_workload: YdbWorkloadLog = YdbWorkloadLog(endpoint=self.ydb_client.endpoint, database=self.ydb_client.database, table_name=self.table_name)
+        # ydb_workload: YdbWorkloadLog = YdbWorkloadLog(endpoint=self._ydb_instance.endpoint(), database=f"/{self._ydb_instance.database()}", table_name=self.table_name)
         ydb_workload.create_table(self.table_name)
         logging.info(f"Count rows after insert {self.get_row_count()} before wait")
         assert self.get_row_count() != 0

@@ -3014,7 +3014,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/dedicated_db": {
             "result": [
@@ -3032,7 +3032,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/serverless_db": {
             "result": [
@@ -3050,7 +3050,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/shared_db": {
             "result": [
@@ -3068,7 +3068,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         }
     },
     "test.test_viewer_query_issue_13757": {
@@ -3091,7 +3091,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/dedicated_db": {
             "result": [
@@ -3112,7 +3112,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/serverless_db": {
             "result": [
@@ -3133,7 +3133,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/shared_db": {
             "result": [
@@ -3154,7 +3154,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         }
     },
     "test.test_viewer_query_issue_13945": {
@@ -3174,7 +3174,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/dedicated_db": {
             "result": [
@@ -3192,7 +3192,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/serverless_db": {
             "result": [
@@ -3210,7 +3210,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/shared_db": {
             "result": [
@@ -3228,7 +3228,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         }
     },
     "test.test_viewer_sysinfo": {

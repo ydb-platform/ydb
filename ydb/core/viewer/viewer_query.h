@@ -17,8 +17,6 @@ using namespace NNodeWhiteboard;
 class TJsonQuery : public TViewerPipeClient {
     using TThis = TJsonQuery;
     using TBase = TViewerPipeClient;
-    TJsonSettings JsonSettings;
-    ui32 Timeout = 60000;
     std::vector<std::vector<Ydb::ResultSet>> ResultSets;
     TString Query;
     TString Action;
@@ -30,6 +28,9 @@ class TJsonQuery : public TViewerPipeClient {
     bool IsBase64Encode = true;
     int LimitRows = 10000;
     int TotalRows = 0;
+    TDuration KeepAlive = TDuration::MilliSeconds(10000);
+    TInstant LastSendTime;
+    static constexpr TDuration WakeupPeriod = TDuration::Seconds(1);
 
     enum ESchemaType {
         Classic,
@@ -66,10 +67,8 @@ public:
         }
     }
 
-    void ParseCgiParameters(const TCgiParameters& params) {
-        JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), false);
-        JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
-        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), Timeout);
+    void InitConfig(const TCgiParameters& params) {
+        Timeout = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("timeout"), 60000)); // override default timeout to 60 seconds
         if (params.Has("query")) {
             Query = params.Get("query");
         }
@@ -88,6 +87,9 @@ public:
                 Streaming = true;
                 if (params.Has("concurrent_results")) {
                     ConcurrentResults = FromStringWithDefault<bool>(params.Get("concurrent_results"), ConcurrentResults);
+                }
+                if (params.Has("keep_alive")) {
+                    KeepAlive = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("keep_alive"), KeepAlive.MilliSeconds()));
                 }
             }
         }
@@ -117,13 +119,13 @@ public:
     TJsonQuery(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
         : TBase(viewer, ev)
     {
+        InitConfig(Params);
     }
 
     void Bootstrap() override {
         if (NeedToRedirect()) {
             return;
         }
-        ParseCgiParameters(Params);
         if (Query.empty() && Action != "cancel-query") {
             return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Query is empty"), "EmptyQuery");
         }
@@ -147,7 +149,11 @@ public:
         }
         Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
         SendKpqProxyRequest();
-        Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+        Become(&TThis::StateWork);
+        if (Timeout || KeepAlive) {
+            Schedule(WakeupPeriod, new TEvents::TEvWakeup());
+        }
+        LastSendTime = TActivationContext::Now();
     }
 
     void CancelQuery() {
@@ -203,7 +209,7 @@ public:
             hFunc(NKqp::TEvKqpExecuter::TEvStreamData, HandleReply);
             cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
             hFunc(TEvents::TEvUndelivered, Undelivered);
-            cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
         }
     }
 
@@ -656,8 +662,15 @@ private:
         ReplyWithJsonAndPassAway(json);
     }
 
-    void HandleTimeout() {
-        ReplyWithError("Timeout executing query");
+    void HandleWakeup() {
+        auto now = TActivationContext::Now();
+        if (Timeout && (now - LastSendTime > Timeout)) {
+            return ReplyWithError("Timeout executing query");
+        }
+        if (KeepAlive && (now - LastSendTime > KeepAlive)) {
+            SendKeepAlive();
+        }
+        Schedule(WakeupPeriod, new TEvents::TEvWakeup());
     }
 
 private:
@@ -853,6 +866,7 @@ private:
         data << "--boundary\r\nContent-Type: application/json\r\nContent-Length: " << content.Size() << "\r\n\r\n" << content.Str() << "\r\n";
         auto dataChunk = HttpResponse->CreateDataChunk(data);
         Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(dataChunk));
+        LastSendTime = TActivationContext::Now();
     }
 
     void StreamJsonResponse(const NKikimrKqp::TEvExecuterStreamData& data) {
@@ -876,6 +890,19 @@ private:
         auto dataChunk = HttpResponse->CreateDataChunk("--boundary--\r\n");
         dataChunk->SetEndOfData();
         Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(dataChunk));
+        LastSendTime = TActivationContext::Now();
+    }
+
+    void SendKeepAlive() {
+        if (Streaming) {
+            NJson::TJsonValue json;
+            NJson::TJsonValue& jsonMeta = json["meta"];
+            jsonMeta["event"] = "KeepAlive";
+            StreamJsonResponse(json);
+        }
+        if (SessionId) {
+            PingSession();
+        }
     }
 
     void ReplyWithJsonAndPassAway(const NJson::TJsonValue& json, const TString& error = {}) {

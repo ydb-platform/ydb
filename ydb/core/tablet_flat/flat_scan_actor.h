@@ -209,6 +209,7 @@ namespace NOps {
             STRICT_STFUNC(StateLoadPart, {
                 sFunc(TEvents::TEvPoison, PassAway);
                 hFunc(NSharedCache::TEvResult, Handle);
+                hFunc(NBlockIO::TEvStat, Handle);
             });
 
             void Handle(NSharedCache::TEvResult::TPtr& ev) {
@@ -227,6 +228,11 @@ namespace NOps {
                 if (ReadsLeft == 0) {
                     RunLoader();
                 }
+            }
+
+            void Handle(NBlockIO::TEvStat::TPtr& ev) {
+                ev->Rewrite(ev->GetTypeRewrite(), Owner);
+                TActivationContext::Send(ev.Release());
             }
 
         private:

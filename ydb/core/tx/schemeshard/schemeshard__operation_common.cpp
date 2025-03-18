@@ -667,7 +667,7 @@ bool CollectSchemaChanged(
 
 bool CollectSchemaChanged(
         const TOperationId& operationId,
-        const TEvColumnShard::TEvProposeTransactionResult::TPtr& ev,
+        const TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev,
         TOperationContext& context)
 {
     auto ssId = context.SS->SelfTabletId();
@@ -698,7 +698,7 @@ bool CollectSchemaChanged(
     //     return false;
     // }
 
-    //txState.SchemeChangeNotificationReceived[shardIdx] = std::make_pair(ackTo, generation);
+    txState.SchemeChangeNotificationReceived[shardIdx] = std::make_pair(TActorId{}, 0);
 
 
     // if (evRecord.HasOpResult()) {
@@ -706,21 +706,19 @@ bool CollectSchemaChanged(
     //     Y_DEBUG_ABORT_UNLESS(txState.TxType == TTxState::TxBackup || txState.TxType == TTxState::TxRestore);
     // }
 
-    txState.ShardsInProgress.erase(shardIdx);
-
-    // if (!txState.ReadyForNotifications) {
-    //     return false;
-    // }
+    if (!txState.ReadyForNotifications) {
+        return false;
+    }
     if (txState.TxType == TTxState::TxBackup || txState.TxType == TTxState::TxRestore) {
         Y_ABORT_UNLESS(txState.State == TTxState::ProposedWaitParts || txState.State == TTxState::Aborting);
     } else {
-        //Y_ABORT_UNLESS(txState.State == TTxState::ProposedWaitParts);
+        Y_ABORT_UNLESS(txState.State == TTxState::ProposedWaitParts);
     }
 
-    //txState.ShardsInProgress.erase(shardIdx);
+    txState.ShardsInProgress.erase(shardIdx);
 
     LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "CollectSchemaChanged accept TEvColumnShard::TEvProposeTransactionResult"
+                "CollectSchemaChanged accept TEvDataShard::TEvNotifyTxCompletionResult"
                     << ", operationId: " << operationId
                     << ", shardIdx: " << shardIdx
                     << ", datashard: " << shardId
@@ -1096,6 +1094,38 @@ bool TProposedWaitParts::HandleReply(TEvDataShard::TEvSchemaChanged::TPtr& ev, T
     if (!txState.ReadyForNotifications) {
         LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                     DebugHint() << " HandleReply TEvSchemaChanged"
+                                << " ReadyForNotifications: false");
+        return false;
+    }
+
+    return true;
+}
+
+bool TProposedWaitParts::HandleReply(TEvColumnShard::TEvNotifyTxCompletionResult::TPtr& ev, TOperationContext& context) {
+    TTabletId ssId = context.SS->SelfTabletId();
+    const auto& evRecord = ev->Get()->Record;
+
+    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                DebugHint() << " HandleReply TEvNotifyTxCompletionResult"
+                            << " at tablet: " << ssId);
+    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                DebugHint() << " HandleReply TEvNotifyTxCompletionResult"
+                            << " at tablet: " << ssId
+                            << " message: " << evRecord.ShortDebugString());
+
+    if (!CollectSchemaChanged(OperationId, ev, context)) {
+        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    DebugHint() << " HandleReply TEvNotifyTxCompletionResult"
+                                << " CollectSchemaChanged: false");
+        return false;
+    }
+
+    Y_ABORT_UNLESS(context.SS->FindTx(OperationId));
+    TTxState& txState = *context.SS->FindTx(OperationId);
+
+    if (!txState.ReadyForNotifications) {
+        LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    DebugHint() << " HandleReply TEvNotifyTxCompletionResult"
                                 << " ReadyForNotifications: false");
         return false;
     }

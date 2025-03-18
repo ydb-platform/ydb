@@ -25,6 +25,8 @@ Building on the high-level overview in [{#T}](index.md), this article dives deep
    - Enable auto-merge for the pull request.
    - Dismiss their stale review with a ["lgtm"](https://en.wiktionary.org/wiki/LGTM) comment.
    - Pass the process to the **final reviewer** for additional review with a fresh set of eyes.
+   
+  ![Example of enabling auto-merge and dismissing stale review](./_assets/automerge-and-dismiss.png)
 
 7. Depending on the **final reviewer**'s verdict:
 

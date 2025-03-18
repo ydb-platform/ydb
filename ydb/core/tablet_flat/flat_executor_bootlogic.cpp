@@ -184,8 +184,7 @@ NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, TAutoPtr<NPage
         NSharedCache::MakeSharedPageCacheId(),
         new NSharedCache::TEvRequest(
             NBlockIO::EPriority::Fast,
-            req,
-            SelfId),
+            req),
         0, (ui64)EPageCollectionRequest::BootLogic);
 
     return NBoot::TSpawned(true);

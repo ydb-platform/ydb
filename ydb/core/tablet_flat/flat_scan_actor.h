@@ -484,7 +484,7 @@ namespace NOps {
                     if (auto logl = Logger->Log(ELnLev::Debug))
                         logl << NFmt::Do(*this) << " " << NFmt::Do(*req);
 
-                    Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(Args.ReadPrio, req, SelfId()));
+                    Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(Args.ReadPrio, req));
                 }
 
                 if (ready == NTable::EReady::Page)
@@ -566,7 +566,7 @@ namespace NOps {
 
             TActorIdentity(ev->Sender).Send(
                 MakeSharedPageCacheId(),
-                new NSharedCache::TEvRequest(Args.ReadPrio, std::move(msg->Request), SelfId()),
+                new NSharedCache::TEvRequest(Args.ReadPrio, std::move(msg->Request)),
                 ev->Flags, ev->Cookie);
         }
 

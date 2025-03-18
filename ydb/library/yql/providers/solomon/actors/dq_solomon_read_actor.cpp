@@ -184,6 +184,10 @@ public:
         ListedMetricsCount += listedMetrics.size();
 
         while (TryRequestPointsCount()) {}
+
+        if (LastMetricProcessed()) {
+            NotifyComputeActorWithData();
+        }
     }
 
     void HandleMetricsReadError(TEvSolomonProvider::TEvMetricsReadError::TPtr& metricsReadError) {
@@ -355,6 +359,9 @@ private:
     // IActor & IDqComputeActorAsyncInput
     void PassAway() override { // Is called from Compute Actor
         SOURCE_LOG_I("PassAway, processed " << CompletedMetricsCount << " metrics.");
+        if (UseMetricsQueue) {
+            MetricsQueueEvents.Unsubscribe();
+        }
         TActor<TDqSolomonReadActor>::PassAway();
     }
 
@@ -368,14 +375,14 @@ private:
 
     bool LastMetricProcessed() const {
         if (UseMetricsQueue) {
-            return IsConfirmedMetricsQueueFinish && CompletedMetricsCount == ListedMetricsCount;
+            return IsMetricsQueueEmpty && CompletedMetricsCount == ListedMetricsCount;
         } else {
             return CompletedMetricsCount == 1;
         }
     }
 
     void TryRequestMetrics() {
-        if (ListedMetrics.size() < 100 && !IsMetricsQueueEmpty && !IsWaitingMetricsQueueResponse) {
+        if (ListedMetrics.size() < 1000 && !IsMetricsQueueEmpty && !IsWaitingMetricsQueueResponse) {
             RequestMetrics();
         }
     }

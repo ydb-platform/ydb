@@ -611,7 +611,7 @@ namespace NActors {
 #define AFL_ALERT(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_ALERT, component)
 #define AFL_EMERG(component) ACTORS_FORMATTED_LOG(NActors::NLog::PRI_EMERG, component)
 
-#define FOR_PRIORITY_LOG(component, priority, action) if (!(IS_LOG_PRIORITY_ENABLED(priority, component))) ;else {action};
+#define FOR_PRIORITY_LOG(component, priority, action) if (!(IS_LOG_PRIORITY_ENABLED(priority, component))) ;else {action;};
 
 #define FOR_TRACE_LOG(component, action) FOR_PRIORITY_LOG(component, NActors::NLog::PRI_TRACE, action);
 #define FOR_DEBUG_LOG(component, action) FOR_PRIORITY_LOG(component, NActors::NLog::PRI_DEBUG, action);

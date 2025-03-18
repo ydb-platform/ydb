@@ -83,10 +83,6 @@ struct TCollection {
     TDeque<ui32> DroppedPages;
 };
 
-struct TCollectionsOwner {
-    THashSet<TCollection*> Collections;
-};
-
 struct TRequestQueue {
     struct TPagesToRequest : public TIntrusiveListItem<TPagesToRequest> {
         TIntrusivePtr<TRequest> Request;
@@ -247,7 +243,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
     TActorId Owner;
     THashMap<TLogoBlobID, TCollection> Collections;
-    THashMap<TActorId, TCollectionsOwner> CollectionsOwners;
+    THashMap<TActorId, THashSet<TCollection*>> CollectionsOwners;
     TIntrusivePtr<NMemory::IMemoryConsumer> MemoryConsumer;
     NSharedCache::TSharedCachePages* SharedCachePages;
 
@@ -387,7 +383,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
 
         if (collection.Owners.insert(owner).second) {
-            CollectionsOwners[owner].Collections.insert(&collection);
+            CollectionsOwners[owner].insert(&collection);
         }
 
         return collection;
@@ -779,7 +775,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         auto ownerIt = CollectionsOwners.find(ev->Sender);
         if (ownerIt != CollectionsOwners.end()) {
-            for (auto* collection : ownerIt->second.Collections) {
+            for (auto* collection : ownerIt->second) {
                 collection->Owners.erase(ev->Sender);
                 TryDropExpiredCollection(collection);
             }
@@ -808,8 +804,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         if (collection.Owners.erase(ev->Sender)) {
             auto ownerIt = CollectionsOwners.find(ev->Sender);
             if (ownerIt != CollectionsOwners.end() &&
-                ownerIt->second.Collections.erase(&collection) &&
-                ownerIt->second.Collections.empty())
+                ownerIt->second.erase(&collection) &&
+                ownerIt->second.empty())
             {
                 CollectionsOwners.erase(ownerIt);
             }

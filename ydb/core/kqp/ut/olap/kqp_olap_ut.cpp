@@ -963,6 +963,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
+        kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::TX_COLUMNSHARD_SCAN, NActors::NLog::PRI_DEBUG);
 
         TLocalHelper(kikimr).CreateTestOlapTable();
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
@@ -999,7 +1000,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT(results.erase(ts.GetValue()));
             tsPrev = ts;
         }
-        UNIT_ASSERT(rows.size() == 4);
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 4);
     }
 
     Y_UNIT_TEST(ExtractRangesSimpleLimit) {
@@ -1041,7 +1042,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             UNIT_ASSERT(results.erase(ts.GetValue()));
             tsPrev = ts;
         }
-        UNIT_ASSERT(rows.size() == 1);
+        UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
     }
 
     Y_UNIT_TEST(ExtractRanges) {

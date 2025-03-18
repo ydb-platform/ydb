@@ -54,6 +54,73 @@ bool MaybeSystemViewFolderPath(const TVector<TString>& path) {
     return true;
 }
 
+template <typename Table>
+struct TSchemaFiller {
+
+    using TSchema = ISystemViewResolver::TSchema;
+
+    template <typename...>
+    struct TFiller;
+
+    template <typename Column>
+    struct TFiller<Column> {
+        static void Fill(TSchema& schema) {
+            schema.Columns[Column::ColumnId] = TSysTables::TTableColumnInfo(
+                Table::template TableColumns<Column>::GetColumnName(),
+                Column::ColumnId, NScheme::TTypeInfo(Column::ColumnType), "", -1);
+        }
+    };
+
+    template <typename Column, typename... Columns>
+    struct TFiller<Column, Columns...> {
+        static void Fill(TSchema& schema) {
+            TFiller<Column>::Fill(schema);
+            TFiller<Columns...>::Fill(schema);
+        }
+    };
+
+    template <typename... Columns>
+    using TColumnsType = typename Table::template TableColumns<Columns...>;
+
+    template <typename... Columns>
+    static void FillColumns(TSchema& schema, TColumnsType<Columns...>) {
+        TFiller<Columns...>::Fill(schema);
+    }
+
+    template <typename...>
+    struct TKeyFiller;
+
+    template <typename Key>
+    struct TKeyFiller<Key> {
+        static void Fill(TSchema& schema, i32 index) {
+            auto& column = schema.Columns[Key::ColumnId];
+            column.KeyOrder = index;
+            schema.KeyColumnTypes.push_back(column.PType);
+        }
+    };
+
+    template <typename Key, typename... Keys>
+    struct TKeyFiller<Key, Keys...> {
+        static void Fill(TSchema& schema, i32 index) {
+            TKeyFiller<Key>::Fill(schema, index);
+            TKeyFiller<Keys...>::Fill(schema, index + 1);
+        }
+    };
+
+    template <typename... Keys>
+    using TKeysType = typename Table::template TableKey<Keys...>;
+
+    template <typename... Keys>
+    static void FillKeys(TSchema& schema, TKeysType<Keys...>) {
+        TKeyFiller<Keys...>::Fill(schema, 0);
+    }
+
+    static void Fill(TSchema& schema) {
+        FillColumns(schema, typename Table::TColumns());
+        FillKeys(schema, typename Table::TKey());
+    }
+};
+
 class TSystemViewResolver : public ISystemViewResolver {
 public:
     TSystemViewResolver() {
@@ -134,72 +201,14 @@ public:
         return result;
     }
 
+    bool IsSystemView(const TStringBuf viewName) const override final {
+        return DomainSystemViews.contains(viewName) ||
+            SubDomainSystemViews.contains(viewName) ||
+            OlapStoreSystemViews.contains(viewName) ||
+            ColumnTableSystemViews.contains(viewName);
+    }
+
 private:
-    template <typename Table>
-    struct TSchemaFiller {
-
-        template <typename...>
-        struct TFiller;
-
-        template <typename Column>
-        struct TFiller<Column> {
-            static void Fill(TSchema& schema) {
-                schema.Columns[Column::ColumnId] = TSysTables::TTableColumnInfo(
-                    Table::template TableColumns<Column>::GetColumnName(),
-                    Column::ColumnId, NScheme::TTypeInfo(Column::ColumnType), "", -1);
-            }
-        };
-
-        template <typename Column, typename... Columns>
-        struct TFiller<Column, Columns...> {
-            static void Fill(TSchema& schema) {
-                TFiller<Column>::Fill(schema);
-                TFiller<Columns...>::Fill(schema);
-            }
-        };
-
-        template <typename... Columns>
-        using TColumnsType = typename Table::template TableColumns<Columns...>;
-
-        template <typename... Columns>
-        static void FillColumns(TSchema& schema, TColumnsType<Columns...>) {
-            TFiller<Columns...>::Fill(schema);
-        }
-
-        template <typename...>
-        struct TKeyFiller;
-
-        template <typename Key>
-        struct TKeyFiller<Key> {
-            static void Fill(TSchema& schema, i32 index) {
-                auto& column = schema.Columns[Key::ColumnId];
-                column.KeyOrder = index;
-                schema.KeyColumnTypes.push_back(column.PType);
-            }
-        };
-
-        template <typename Key, typename... Keys>
-        struct TKeyFiller<Key, Keys...> {
-            static void Fill(TSchema& schema, i32 index) {
-                TKeyFiller<Key>::Fill(schema, index);
-                TKeyFiller<Keys...>::Fill(schema, index + 1);
-            }
-        };
-
-        template <typename... Keys>
-        using TKeysType = typename Table::template TableKey<Keys...>;
-
-        template <typename... Keys>
-        static void FillKeys(TSchema& schema, TKeysType<Keys...>) {
-            TKeyFiller<Keys...>::Fill(schema, 0);
-        }
-
-        static void Fill(TSchema& schema) {
-            FillColumns(schema, typename Table::TColumns());
-            FillKeys(schema, typename Table::TKey());
-        }
-    };
-
     void RegisterPgTablesSystemViews() {
         auto registerView = [&](TStringBuf tableName, const TVector<Schema::PgColumn>& columns) {
             auto& dsv  = DomainSystemViews[tableName];
@@ -298,8 +307,6 @@ private:
             RegisterSystemView<Schema::AuthPermissions>(PermissionsName);
             RegisterSystemView<Schema::AuthPermissions>(EffectivePermissionsName);
         }
-
-        RegisterSystemView<Schema::ShowCreate>(ShowCreateName);
     }
 
 private:
@@ -309,8 +316,52 @@ private:
     THashMap<TString, TSchema> ColumnTableSystemViews;
 };
 
+class TSystemViewRewrittenResolver : public ISystemViewResolver {
+public:
+
+    TSystemViewRewrittenResolver() {
+        TSchemaFiller<Schema::ShowCreate>::Fill(SystemViews[ShowCreateName]);
+    }
+
+    bool IsSystemViewPath(const TVector<TString>& path, TSystemViewPath& sysViewPath) const override final {
+        if (MaybeSystemViewPath(path)) {
+            auto maybeSystemViewName = path.back();
+            if (!SystemViews.contains(maybeSystemViewName)) {
+                return false;
+            }
+            TVector<TString> realPath(path.begin(), path.end() - 2);
+            sysViewPath.Parent = std::move(realPath);
+            sysViewPath.ViewName = path.back();
+            return true;
+        }
+        return false;
+    }
+
+    TMaybe<TSchema> GetSystemViewSchema(const TStringBuf viewName, ETarget target) const override final {
+        Y_UNUSED(target);
+        const TSchema* view = SystemViews.FindPtr(viewName);
+        return view ? TMaybe<TSchema>(*view) : Nothing();
+    }
+
+    TVector<TString> GetSystemViewNames(ETarget target) const override {
+        Y_UNUSED(target);
+        return {};
+    }
+
+    bool IsSystemView(const TStringBuf viewName) const override final {
+        return SystemViews.contains(viewName);
+    }
+
+private:
+    THashMap<TString, TSchema> SystemViews;
+};
+
 ISystemViewResolver* CreateSystemViewResolver() {
     return new TSystemViewResolver();
+}
+
+ISystemViewResolver* CreateSystemViewRewrittenResolver() {
+    return new TSystemViewRewrittenResolver();
 }
 
 } // NSysView

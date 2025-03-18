@@ -753,7 +753,7 @@ public:
     struct TSystemViewPath {
         TVector<TString> Parent;
         TString ViewName;
-        };
+    };
 
     struct TSchema {
         THashMap<NTable::TTag, TSysTables::TTableColumnInfo> Columns;
@@ -764,10 +764,14 @@ public:
 
     virtual TMaybe<TSchema> GetSystemViewSchema(const TStringBuf viewName, ETarget target) const = 0;
 
+    virtual bool IsSystemView(const TStringBuf viewName) const = 0;
+
     virtual TVector<TString> GetSystemViewNames(ETarget target) const = 0;
 };
 
 ISystemViewResolver* CreateSystemViewResolver();
+
+ISystemViewResolver* CreateSystemViewRewrittenResolver();
 
 } // NSysView
 } // NKikimr

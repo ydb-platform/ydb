@@ -2,41 +2,48 @@
 
 #include "events.h"
 
+#include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/default_fetching.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/scheduler.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 
 namespace NKikimr::NOlap::NReader {
 
+namespace NSimple {
+class TPortionDataSource;
+}
+
 class TEvDuplicateFilterPartialResult
     : public NActors::TEventLocal<TEvDuplicateFilterPartialResult, NColumnShard::TEvPrivate::EvDuplicateFilterPartialResult> {
 private:
-    using TFilterBySourceId = THashMap<ui64, NArrow::TColumnFilter>;
-    YDB_READONLY(TConclusion<TFilterBySourceId>, Result, TFilterBySourceId());
+    using TFilterBySourceIdx = THashMap<ui32, NArrow::TColumnFilter>;
+    YDB_READONLY(TConclusion<TFilterBySourceIdx>, Result, TFilterBySourceIdx());
     YDB_READONLY_DEF(ui32, IntervalIdx);
 
 public:
-    TEvDuplicateFilterPartialResult(TConclusion<TFilterBySourceId>&& result, const ui32 intervalIdx)
+    TEvDuplicateFilterPartialResult(TConclusion<TFilterBySourceIdx>&& result, const ui32 intervalIdx)
         : Result(std::move(result))
         , IntervalIdx(intervalIdx) {
     }
 
-    TFilterBySourceId&& DetachResult() {
+    TFilterBySourceIdx&& DetachResult() {
         return Result.DetachResult();
     }
 };
 
-class TRangeIndex {
+class TEvDuplicateFilterDataFetched
+    : public NActors::TEventLocal<TEvDuplicateFilterDataFetched, NColumnShard::TEvPrivate::EvDuplicateFilterDataFetched> {
 private:
-    // TODO: optimize implementation
-    THashMap<ui64, std::pair<ui32, ui32>> Intervals;
+    YDB_READONLY_DEF(ui64, SourceId);
+    YDB_READONLY(TConclusionStatus, Status, TConclusionStatus::Success());
 
 public:
-    void AddRange(const ui32 l, const ui32 r, const ui64 id);
-    void RemoveRange(const ui64 id);
-
-    std::vector<ui64> FindIntersections(const ui64 p) const;
+    TEvDuplicateFilterDataFetched(const ui64 sourceId, const TConclusionStatus& status)
+        : SourceId(sourceId)
+        , Status(status) {
+    }
 };
 
 class TIntervalCounter {
@@ -89,25 +96,6 @@ private:
         }
     };
 
-    class TZerosCollector {
-    private:
-        std::vector<ui32> FormerOnes;
-
-    public:
-        void OnUpdate(const TPosition& node, const ui64 newValue, const i64 delta) {
-            AFL_VERIFY(delta == -1);
-            if (newValue == 0) {
-                for (ui32 i = node.GetLeft(); i <= node.GetRight(); ++i) {
-                    FormerOnes.emplace_back(i);
-                }
-            }
-        }
-
-        std::vector<ui32> ExtractValues() {
-            return std::move(FormerOnes);
-        }
-    };
-
     // Segment tree: Count[i] = GetCount(i * 2 + 1) + GetCount(i * 2 + 2)
     std::vector<ui64> Count;
     std::vector<i64> PropagatedDeltas;
@@ -115,8 +103,9 @@ private:
 
 private:
     void PropagateDelta(const TPosition& node);
-    void Update(const TPosition& node, const TModification& modification, TZerosCollector* callback);
+    void Update(const TPosition& node, const TModification& modification);
     void Inc(const ui32 l, const ui32 r);
+    ui64 GetCount(const TPosition& node, const ui32 l, const ui32 r) const;
     ui64 GetCount(const TPosition& node) const {
         AFL_VERIFY(Count.size() == PropagatedDeltas.size());
         AFL_VERIFY(node.GetIndex() < Count.size());
@@ -129,12 +118,17 @@ private:
 
 public:
     TIntervalCounter(const std::vector<std::pair<ui32, ui32>>& intervals);
-    std::vector<ui32> DecAndGetZeros(const ui32 l, const ui32 r);
+    void Dec(const ui32 l, const ui32 r);
+    ui64 GetCount(const ui32 l, const ui32 r) const {
+        return GetCount(GetRoot(), l, r);
+    }
     bool IsAllZeros() const;
 };
 
 class TDuplicateFilterConstructor: public NActors::TActor<TDuplicateFilterConstructor> {
 private:
+    friend class TColumnFetchingContext;
+
     class TIntervalsRange {
     private:
         YDB_READONLY_DEF(ui32, FirstIdx);
@@ -150,16 +144,21 @@ private:
         ui32 NumIntervals() const {
             return LastIdx - FirstIdx + 1;
         }
+
+        // bool ContainsInterval(const ui32 intervalIdx) const {
+        //     return FirstIdx <= intervalIdx && intervalIdx <= LastIdx;
+        // }
     };
 
     class TSourceIntervals {
     private:
         using TRangeBySourceId = THashMap<ui64, TIntervalsRange>;
         YDB_READONLY_DEF(TRangeBySourceId, SourceRanges);
+        std::vector<ui64> SortedSourceIds; // TODO: init
         std::vector<NArrow::TReplaceKey> IntervalBorders;
 
     public:
-        TSourceIntervals(const std::vector<std::shared_ptr<TPortionInfo>>& portions);
+        TSourceIntervals(const std::vector<std::shared_ptr<NSimple::TPortionDataSource>>& portions);
 
         const NArrow::TReplaceKey& GetRightInclusiveBorder(const ui32 intervalIdx) const {
             return IntervalBorders[intervalIdx];
@@ -170,11 +169,64 @@ private:
             }
             return IntervalBorders[intervalIdx - 1];
         }
+        ui32 NumIntervals() const {
+            return IntervalBorders.size();
+        }
+        ui32 NumSources() const {
+            return SourceRanges.size();
+        }
 
-        TIntervalsRange GetRangeVerified(const ui64 sourceId) const {
+        TIntervalsRange GetRangeBySourceId(const ui64 sourceId) const {
             const TIntervalsRange* findRange = SourceRanges.FindPtr(sourceId);
             AFL_VERIFY(findRange)("source", sourceId);
             return *findRange;
+        }
+
+        TIntervalsRange GetRangeBySourceIndex(const ui32 sourceIdx) const {
+            AFL_VERIFY(sourceIdx < SortedSourceIds.size());
+            return GetRangeBySourceId(SortedSourceIds[sourceIdx]);
+        }
+    };
+
+    class TIntervalsCursor {
+    private:
+        using TSourceIdxByIntervalIdx = std::map<ui32, ui32>;
+        YDB_READONLY(ui32, IntervalIdx, 0);
+        YDB_READONLY_DEF(TSourceIdxByIntervalIdx, SourcesByRightInterval);
+        const TSourceIntervals* Owner;
+        ui32 NextSourceIdx = 0;
+
+        void NextImpl(const bool init = false) {
+            if (init) {
+                AFL_VERIFY(IntervalIdx == 0);
+            } else {
+                ++IntervalIdx;
+            }
+
+            while (!SourcesByRightInterval.empty() && SourcesByRightInterval.begin()->first < IntervalIdx) {
+                SourcesByRightInterval.erase(SourcesByRightInterval.begin());
+            }
+
+            while (NextSourceIdx != Owner->NumSources() && Owner->GetRangeBySourceIndex(NextSourceIdx).GetFirstIdx() <= IntervalIdx) {
+                SourcesByRightInterval.emplace(Owner->GetRangeBySourceIndex(NextSourceIdx).GetFirstIdx(), NextSourceIdx);
+                ++NextSourceIdx;
+            }
+
+            AFL_VERIFY(IntervalIdx <= Owner->NumIntervals());
+            if (IntervalIdx == Owner->NumIntervals()) {
+                AFL_VERIFY(SourcesByRightInterval.empty());
+            }
+        }
+
+    public:
+        TIntervalsCursor(const TSourceIntervals* owner)
+            : Owner(owner) {
+            AFL_VERIFY(Owner);
+            NextImpl(true);
+        }
+
+        void Next() {
+            NextImpl(false);
         }
     };
 
@@ -182,6 +234,8 @@ private:
     private:
         ui32 FirstIntervalIdx;
         YDB_READONLY_DEF(std::vector<std::optional<NArrow::TColumnFilter>>, IntervalFilters);
+        YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, ColumnData);
+        std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> MemoryGuard;
         YDB_READONLY_DEF(std::shared_ptr<NCommon::IDataSource>, Source);
         std::shared_ptr<IFilterSubscriber> Subscriber;
         std::vector<ui64> IntervalOffsets;
@@ -189,14 +243,13 @@ private:
         std::optional<NSimple::ISourceFetchingScheduler::TSourceBlockedGuard> BlockGuard;
 
     public:
-        TSourceFilterConstructor(const std::shared_ptr<NCommon::IDataSource>& source, const std::shared_ptr<IFilterSubscriber>& subscriber,
+        TSourceFilterConstructor(const std::shared_ptr<NCommon::IDataSource>& source,
             const TSourceIntervals& intervals)
-            : FirstIntervalIdx(intervals.GetRangeVerified(source->GetSourceId()).GetFirstIdx())
-            , IntervalFilters(intervals.GetRangeVerified(source->GetSourceId()).NumIntervals())
-            , Source(source)
-            , Subscriber(subscriber) {
+            : FirstIntervalIdx(intervals.GetRangeBySourceId(source->GetSourceId()).GetFirstIdx())
+            , IntervalFilters(intervals.GetRangeBySourceId(source->GetSourceId()).NumIntervals())
+            , Source(source) {
             IntervalOffsets.emplace_back(0);
-            const TIntervalsRange& sourceIntervals = intervals.GetRangeVerified(source->GetSourceId());
+            const TIntervalsRange& sourceIntervals = intervals.GetRangeBySourceId(source->GetSourceId());
             for (ui32 intervalIdx = sourceIntervals.GetFirstIdx() + 1; intervalIdx <= sourceIntervals.GetLastIdx(); ++intervalIdx) {
                 const NArrow::NAccessor::IChunkedArray::TRowRange findLeftBorder = source->GetStageData().ToGeneralContainer()->EqualRange(
                     *intervals.GetLeftExlusiveBorder(intervalIdx)
@@ -206,10 +259,25 @@ private:
             AFL_VERIFY(IntervalOffsets.size() == sourceIntervals.NumIntervals());
         }
 
+        void StartFetchingColumns(const ui64 memoryGroupId);
+
         void SetFilter(const ui32 intervalIdx, NArrow::TColumnFilter&& filter);
+        void SetMemoryGuard(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard) {
+            AFL_VERIFY(!MemoryGuard);
+            MemoryGuard = std::move(guard);
+        }
+        void SetColumnData(std::shared_ptr<NArrow::TGeneralContainer>&& data) {
+            AFL_VERIFY(MemoryGuard);
+            AFL_VERIFY(!ColumnData);
+            ColumnData = std::move(data);
+        }
+        void SetSubscriber(const std::shared_ptr<IFilterSubscriber>& subscriber) {
+            AFL_VERIFY(!Subscriber);
+            Subscriber = subscriber;
+        }
 
         bool IsReady() const {
-            return ReadyFilterCount == IntervalFilters.size();
+            return Subscriber && ReadyFilterCount == IntervalFilters.size();
         }
 
         NArrow::NAccessor::IChunkedArray::TRowRange GetIntervalRange(const ui32 globalIntervalIdx) const {
@@ -229,21 +297,24 @@ private:
             BlockGuard.emplace(std::move(guard));
         }
 
-        void Finish() &&;
-        void AbortConstruction(const TString& reason) &&;
+        void Finish();
+        void AbortConstruction(const TString& reason);
     };
 
 private:
     TSourceIntervals Intervals;
-    THashMap<ui64, TSourceFilterConstructor> AvailableSources;
-    TRangeIndex AvailableSourcesCount;
-    TIntervalCounter AwaitedSourcesCount;
+    ui64 FinishedSourcesCount = 0;
+    std::deque<std::shared_ptr<TSourceFilterConstructor>> ActiveSources;
+    std::deque<std::shared_ptr<NCommon::IDataSource>> SortedSources;
+    TIntervalCounter NotFetchedSourcesCount;
+    TIntervalsCursor NextIntervalToMerge;
 
 private:
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvRequestFilter, Handle);
             hFunc(TEvDuplicateFilterPartialResult, Handle);
+            hFunc(TEvDuplicateFilterDataFetched, Handle);
             hFunc(NActors::TEvents::TEvPoison, Handle);
             default:
                 AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
@@ -252,12 +323,18 @@ private:
 
     void Handle(const TEvRequestFilter::TPtr&);
     void Handle(const TEvDuplicateFilterPartialResult::TPtr&);
+    void Handle(const TEvDuplicateFilterDataFetched::TPtr&);
     void Handle(const NActors::TEvents::TEvPoison::TPtr&);
 
     void AbortConstruction(const TString& reason);
+    void StartFetchingColumns(const std::shared_ptr<TSourceFilterConstructor>& source, const ui64 memoryGroupId) const;
+    void StartMergingColumns(const TIntervalsCursor& interval) const;
+    void FlushFinishedSources() ;
+
+    std::shared_ptr<TSourceFilterConstructor> GetConstructorVerified(const ui32 sourceIdx) const;
 
 public:
-    TDuplicateFilterConstructor(const std::vector<std::shared_ptr<TPortionInfo>>& portions);
+    TDuplicateFilterConstructor(const std::vector<std::shared_ptr<NSimple::TPortionDataSource>>& portions);
 };
 
 }   // namespace NKikimr::NOlap::NReader

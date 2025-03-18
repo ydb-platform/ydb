@@ -71,6 +71,8 @@ struct TEvPrivate {
 
         EvRequestFilter,
         EvFilterConstructionResult,
+        EvDuplicateFilterPartialResult,
+        EvDuplicateFilterDataFetched,
 
         EvEnd
     };

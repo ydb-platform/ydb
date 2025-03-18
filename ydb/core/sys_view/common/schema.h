@@ -709,15 +709,17 @@ struct Schema : NIceDb::Schema {
     };
 
     struct ResourcePoolClassifiers : Table<20> {
-        struct Name    : Column<1, NScheme::NTypeIds::Utf8> {};
-        struct Rank    : Column<2, NScheme::NTypeIds::Int64> {};
-        struct Config  : Column<3, NScheme::NTypeIds::JsonDocument> {};
+        struct Name: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Rank: Column<2, NScheme::NTypeIds::Int64> {};
+        struct MemberName: Column<4, NScheme::NTypeIds::Utf8> {};
+        struct ResourcePool: Column<5, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<Name>;
         using TColumns = TableColumns<
             Name,
             Rank,
-            Config>;
+            MemberName,
+            ResourcePool>;
     };
 
     struct ShowCreate: Table<21> {

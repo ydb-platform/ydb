@@ -24,6 +24,7 @@
 #include <yql/essentials/core/extract_predicate/extract_predicate_dbg.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/gateways_utils/gateways_utils.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_outproc_udf_resolver.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_udf_resolver_with_index.h>
@@ -390,6 +391,14 @@ TProgram::TProgram(
                 if (GatewaysForMerge_) {
                     YQL_ENSURE(LoadedGatewaysConfig_.MergeFromString(*GatewaysForMerge_));
                 }
+                THashMap<TString, TString> clusterMapping;
+                GetClusterMappingFromGateways(LoadedGatewaysConfig_, clusterMapping);
+                auto sqlFlags = ExtractSqlFlags(LoadedGatewaysConfig_);
+                if (auto modules = dynamic_cast<TModuleResolver*>(Modules_.get())) {
+                    modules->SetClusterMapping(clusterMapping);
+                    modules->SetSqlFlags(sqlFlags);
+                }
+
                 GatewaysConfig_ = &LoadedGatewaysConfig_;
             }
         } else if (QContext_.CanWrite() && GatewaysConfig_) {

@@ -20,7 +20,7 @@ struct TClientsCacheConfig
 {
     NApi::NRpcProxy::TConnectionConfigPtr DefaultConnection;
 
-    THashMap<TString, NApi::NRpcProxy::TConnectionConfigPtr> PerClusterConnection;
+    THashMap<std::string, NApi::NRpcProxy::TConnectionConfigPtr> PerClusterConnection;
 
     REGISTER_YSON_STRUCT(TClientsCacheConfig);
 

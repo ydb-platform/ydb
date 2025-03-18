@@ -36,7 +36,7 @@ public:
     // IConnection implementation.
     TClusterTag GetClusterTag() const override;
     const std::string& GetLoggingTag() const override;
-    const TString& GetClusterId() const override;
+    const std::string& GetClusterId() const override;
     const std::optional<std::string>& GetClusterName() const override;
 
     bool IsSameCluster(const IConnectionPtr& other) const override;
@@ -67,7 +67,7 @@ private:
 
     const TGuid ConnectionId_;
     const std::string LoggingTag_;
-    const TString ClusterId_;
+    const std::string ClusterId_;
     const NLogging::TLogger Logger;
     const NRpc::IChannelFactoryPtr ChannelFactory_;
     const NRpc::IChannelFactoryPtr CachingChannelFactory_;

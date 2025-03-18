@@ -1145,6 +1145,7 @@ class TestFiles:
         'grut/libs/bigrt/common',
         'grut/libs/bigrt/data',
         'grut/libs/bigrt/event_filter',
+        'grut/libs/bigrt/graph',
         'grut/libs/bigrt/info_keepers',
         'grut/libs/bigrt/processor',
         'grut/libs/bigrt/profile',

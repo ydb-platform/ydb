@@ -1162,7 +1162,9 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersSysView) {
             UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
         }
     }
+}
 
+Y_UNIT_TEST_SUITE(ResourcePoolsSysView) {
     Y_UNIT_TEST(TestResourcePoolsSysViewOnServerless) {
         auto ydb = TYdbSetupSettings()
             .CreateSampleTenants(true)
@@ -1209,41 +1211,58 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersSysView) {
 
             auto name = resultSet.ColumnParser("Name").GetOptionalUtf8();
             UNIT_ASSERT_VALUES_EQUAL(*name, "a");
-            auto config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"CONCURRENT_QUERY_LIMIT":"1","QUEUE_SIZE":"0"})");
-            auto owner = resultSet.ColumnParser("Owner").GetOptionalUtf8();
-            UNIT_ASSERT_VALUES_EQUAL(*owner, "user@system");
-            auto permissions = resultSet.ColumnParser("Permissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*permissions, "[]");
-            auto effectivePermissions = resultSet.ColumnParser("EffectivePermissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*effectivePermissions, "[]");
-
+            auto concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, 1);
+            auto queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, 0);
+            auto databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            auto resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            auto totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            auto queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            auto queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
 
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
             name = resultSet.ColumnParser("Name").GetOptionalUtf8();
             UNIT_ASSERT_VALUES_EQUAL(*name, "b");
-            config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"CONCURRENT_QUERY_LIMIT":"2","QUEUE_SIZE":"0"})");
-            owner = resultSet.ColumnParser("Owner").GetOptionalUtf8();
-            UNIT_ASSERT_VALUES_EQUAL(*owner, "user@system");
-            permissions = resultSet.ColumnParser("Permissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*permissions, "[]");
-            effectivePermissions = resultSet.ColumnParser("EffectivePermissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*effectivePermissions, "[]");
+            concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, 2);
+            queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, 0);
+            databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
 
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
             name = resultSet.ColumnParser("Name").GetOptionalUtf8();
             UNIT_ASSERT_VALUES_EQUAL(*name, "default");
-            config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"CONCURRENT_QUERY_LIMIT":"-1","DATABASE_LOAD_CPU_THRESHOLD":"-1","QUERY_CANCEL_AFTER_SECONDS":"0","QUERY_CPU_LIMIT_PERCENT_PER_NODE":"-1","QUERY_MEMORY_LIMIT_PERCENT_PER_NODE":"-1","QUEUE_SIZE":"-1","RESOURCE_WEIGHT":"-1","TOTAL_CPU_LIMIT_PERCENT_PER_NODE":"-1"})");
-            owner = resultSet.ColumnParser("Owner").GetOptionalUtf8();
-            UNIT_ASSERT_VALUES_EQUAL(*owner, "metadata@system");
-            permissions = resultSet.ColumnParser("Permissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*permissions, R"([{"Permission":"ydb.granular.describe_schema","SID":"all-users@well-known"},{"Permission":"ydb.granular.select_row","SID":"all-users@well-known"},{"Permission":"ydb.granular.describe_schema","SID":"root@builtin"},{"Permission":"ydb.granular.select_row","SID":"root@builtin"}])");
-            effectivePermissions = resultSet.ColumnParser("EffectivePermissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*effectivePermissions, R"([{"Permission":"ydb.granular.describe_schema","SID":"all-users@well-known"},{"Permission":"ydb.granular.select_row","SID":"all-users@well-known"},{"Permission":"ydb.granular.describe_schema","SID":"root@builtin"},{"Permission":"ydb.granular.select_row","SID":"root@builtin"}])");
+            concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, -1);
+            queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, -1);
+            databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
 
             UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
         }
@@ -1259,42 +1278,59 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersSysView) {
 
             auto name = resultSet.ColumnParser("Name").GetOptionalUtf8();
             UNIT_ASSERT_VALUES_EQUAL(*name, "c");
-            auto config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"CONCURRENT_QUERY_LIMIT":"1","QUEUE_SIZE":"0"})");
-            auto owner = resultSet.ColumnParser("Owner").GetOptionalUtf8();
-            UNIT_ASSERT_VALUES_EQUAL(*owner, "user@system");
-            auto permissions = resultSet.ColumnParser("Permissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*permissions, "[]");
-            auto effectivePermissions = resultSet.ColumnParser("EffectivePermissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*effectivePermissions, "[]");
+            auto concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, 1);
+            auto queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, 0);
+            auto databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            auto resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            auto totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            auto queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            auto queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
 
 
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
             name = resultSet.ColumnParser("Name").GetOptionalUtf8();
             UNIT_ASSERT_VALUES_EQUAL(*name, "d");
-            config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"CONCURRENT_QUERY_LIMIT":"2","QUEUE_SIZE":"0"})");
-            owner = resultSet.ColumnParser("Owner").GetOptionalUtf8();
-            UNIT_ASSERT_VALUES_EQUAL(*owner, "user@system");
-            permissions = resultSet.ColumnParser("Permissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*permissions, "[]");
-            effectivePermissions = resultSet.ColumnParser("EffectivePermissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*effectivePermissions, "[]");
+            concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, 2);
+            queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, 0);
+            databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
 
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
             name = resultSet.ColumnParser("Name").GetOptionalUtf8();
             UNIT_ASSERT_VALUES_EQUAL(*name, "default");
-            config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"CONCURRENT_QUERY_LIMIT":"-1","DATABASE_LOAD_CPU_THRESHOLD":"-1","QUERY_CANCEL_AFTER_SECONDS":"0","QUERY_CPU_LIMIT_PERCENT_PER_NODE":"-1","QUERY_MEMORY_LIMIT_PERCENT_PER_NODE":"-1","QUEUE_SIZE":"-1","RESOURCE_WEIGHT":"-1","TOTAL_CPU_LIMIT_PERCENT_PER_NODE":"-1"})");
-            owner = resultSet.ColumnParser("Owner").GetOptionalUtf8();
-            UNIT_ASSERT_VALUES_EQUAL(*owner, "metadata@system");
-            permissions = resultSet.ColumnParser("Permissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*permissions, R"([{"Permission":"ydb.granular.describe_schema","SID":"all-users@well-known"},{"Permission":"ydb.granular.select_row","SID":"all-users@well-known"},{"Permission":"ydb.granular.describe_schema","SID":"root@builtin"},{"Permission":"ydb.granular.select_row","SID":"root@builtin"}])");
-            effectivePermissions = resultSet.ColumnParser("EffectivePermissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*effectivePermissions, R"([{"Permission":"ydb.granular.describe_schema","SID":"all-users@well-known"},{"Permission":"ydb.granular.select_row","SID":"all-users@well-known"},{"Permission":"ydb.granular.describe_schema","SID":"root@builtin"},{"Permission":"ydb.granular.select_row","SID":"root@builtin"}])");
-
+            concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, -1);
+            queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, -1);
+            databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
             UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
         }
     }
@@ -1338,53 +1374,76 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersSysView) {
 
             auto name = resultSet.ColumnParser("Name").GetOptionalUtf8();
             UNIT_ASSERT_VALUES_EQUAL(*name, "a");
-            auto config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"CONCURRENT_QUERY_LIMIT":"1","QUEUE_SIZE":"0"})");
-            auto owner = resultSet.ColumnParser("Owner").GetOptionalUtf8();
-            UNIT_ASSERT_VALUES_EQUAL(*owner, "user@system");
-            auto permissions = resultSet.ColumnParser("Permissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*permissions, "[]");
-            auto effectivePermissions = resultSet.ColumnParser("EffectivePermissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*effectivePermissions, "[]");
+            auto concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, 1);
+            auto queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, 0);
+            auto databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            auto resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            auto totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            auto queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            auto queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
 
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
             name = resultSet.ColumnParser("Name").GetOptionalUtf8();
             UNIT_ASSERT_VALUES_EQUAL(*name, "b");
-            config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"CONCURRENT_QUERY_LIMIT":"2","QUEUE_SIZE":"0"})");
-            owner = resultSet.ColumnParser("Owner").GetOptionalUtf8();
-            UNIT_ASSERT_VALUES_EQUAL(*owner, "user@system");
-            permissions = resultSet.ColumnParser("Permissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*permissions, "[]");
-            effectivePermissions = resultSet.ColumnParser("EffectivePermissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*effectivePermissions, "[]");
+            concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, 2);
+            queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, 0);
+            databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
 
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
             name = resultSet.ColumnParser("Name").GetOptionalUtf8();
             UNIT_ASSERT_VALUES_EQUAL(*name, "c");
-            config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"CONCURRENT_QUERY_LIMIT":"3","QUEUE_SIZE":"0"})");
-            owner = resultSet.ColumnParser("Owner").GetOptionalUtf8();
-            UNIT_ASSERT_VALUES_EQUAL(*owner, "user@system");
-            permissions = resultSet.ColumnParser("Permissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*permissions, "[]");
-            effectivePermissions = resultSet.ColumnParser("EffectivePermissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*effectivePermissions, "[]");
-
+            concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, 3);
+            queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, 0);
+            databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
             name = resultSet.ColumnParser("Name").GetOptionalUtf8();
             UNIT_ASSERT_VALUES_EQUAL(*name, "default");
-            config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"CONCURRENT_QUERY_LIMIT":"-1","DATABASE_LOAD_CPU_THRESHOLD":"-1","QUERY_CANCEL_AFTER_SECONDS":"0","QUERY_CPU_LIMIT_PERCENT_PER_NODE":"-1","QUERY_MEMORY_LIMIT_PERCENT_PER_NODE":"-1","QUEUE_SIZE":"-1","RESOURCE_WEIGHT":"-1","TOTAL_CPU_LIMIT_PERCENT_PER_NODE":"-1"})");
-            owner = resultSet.ColumnParser("Owner").GetOptionalUtf8();
-            UNIT_ASSERT_VALUES_EQUAL(*owner, "metadata@system");
-            permissions = resultSet.ColumnParser("Permissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*permissions, R"([{"Permission":"ydb.granular.describe_schema","SID":"all-users@well-known"},{"Permission":"ydb.granular.select_row","SID":"all-users@well-known"},{"Permission":"ydb.granular.describe_schema","SID":"root@builtin"},{"Permission":"ydb.granular.select_row","SID":"root@builtin"}])");
-            effectivePermissions = resultSet.ColumnParser("EffectivePermissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*effectivePermissions, R"([{"Permission":"ydb.granular.describe_schema","SID":"all-users@well-known"},{"Permission":"ydb.granular.select_row","SID":"all-users@well-known"},{"Permission":"ydb.granular.describe_schema","SID":"root@builtin"},{"Permission":"ydb.granular.select_row","SID":"root@builtin"}])");
+            concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, -1);
+            queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, -1);
+            databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
 
             UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
         }
@@ -1400,53 +1459,76 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersSysView) {
 
             auto name = resultSet.ColumnParser("Name").GetOptionalUtf8();
             UNIT_ASSERT_VALUES_EQUAL(*name, "default");
-            auto config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"CONCURRENT_QUERY_LIMIT":"-1","DATABASE_LOAD_CPU_THRESHOLD":"-1","QUERY_CANCEL_AFTER_SECONDS":"0","QUERY_CPU_LIMIT_PERCENT_PER_NODE":"-1","QUERY_MEMORY_LIMIT_PERCENT_PER_NODE":"-1","QUEUE_SIZE":"-1","RESOURCE_WEIGHT":"-1","TOTAL_CPU_LIMIT_PERCENT_PER_NODE":"-1"})");
-            auto owner = resultSet.ColumnParser("Owner").GetOptionalUtf8();
-            UNIT_ASSERT_VALUES_EQUAL(*owner, "metadata@system");
-            auto permissions = resultSet.ColumnParser("Permissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*permissions, R"([{"Permission":"ydb.granular.describe_schema","SID":"all-users@well-known"},{"Permission":"ydb.granular.select_row","SID":"all-users@well-known"},{"Permission":"ydb.granular.describe_schema","SID":"root@builtin"},{"Permission":"ydb.granular.select_row","SID":"root@builtin"}])");
-            auto effectivePermissions = resultSet.ColumnParser("EffectivePermissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*effectivePermissions, R"([{"Permission":"ydb.granular.describe_schema","SID":"all-users@well-known"},{"Permission":"ydb.granular.select_row","SID":"all-users@well-known"},{"Permission":"ydb.granular.describe_schema","SID":"root@builtin"},{"Permission":"ydb.granular.select_row","SID":"root@builtin"}])");
-
+            auto concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, -1);
+            auto queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, -1);
+            auto databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            auto resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            auto totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            auto queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            auto queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
             name = resultSet.ColumnParser("Name").GetOptionalUtf8();
             UNIT_ASSERT_VALUES_EQUAL(*name, "c");
-            config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"CONCURRENT_QUERY_LIMIT":"3","QUEUE_SIZE":"0"})");
-            owner = resultSet.ColumnParser("Owner").GetOptionalUtf8();
-            UNIT_ASSERT_VALUES_EQUAL(*owner, "user@system");
-            permissions = resultSet.ColumnParser("Permissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*permissions, "[]");
-            effectivePermissions = resultSet.ColumnParser("EffectivePermissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*effectivePermissions, "[]");
+            concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, 3);
+            queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, 0);
+            databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
 
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
             name = resultSet.ColumnParser("Name").GetOptionalUtf8();
             UNIT_ASSERT_VALUES_EQUAL(*name, "b");
-            config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"CONCURRENT_QUERY_LIMIT":"2","QUEUE_SIZE":"0"})");
-            owner = resultSet.ColumnParser("Owner").GetOptionalUtf8();
-            UNIT_ASSERT_VALUES_EQUAL(*owner, "user@system");
-            permissions = resultSet.ColumnParser("Permissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*permissions, "[]");
-            effectivePermissions = resultSet.ColumnParser("EffectivePermissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*effectivePermissions, "[]");
+            concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, 2);
+            queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, 0);
+            databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
 
             UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
 
             name = resultSet.ColumnParser("Name").GetOptionalUtf8();
             UNIT_ASSERT_VALUES_EQUAL(*name, "a");
-            config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"CONCURRENT_QUERY_LIMIT":"1","QUEUE_SIZE":"0"})");
-            owner = resultSet.ColumnParser("Owner").GetOptionalUtf8();
-            UNIT_ASSERT_VALUES_EQUAL(*owner, "user@system");
-            permissions = resultSet.ColumnParser("Permissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*permissions, "[]");
-            effectivePermissions = resultSet.ColumnParser("EffectivePermissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*effectivePermissions, "[]");
+            concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, 1);
+            queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, 0);
+            databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
 
             UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
         }
@@ -1462,14 +1544,20 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersSysView) {
 
             auto name = resultSet.ColumnParser("Name").GetOptionalUtf8();
             UNIT_ASSERT_VALUES_EQUAL(*name, "b");
-            auto config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"CONCURRENT_QUERY_LIMIT":"2","QUEUE_SIZE":"0"})");
-            auto owner = resultSet.ColumnParser("Owner").GetOptionalUtf8();
-            UNIT_ASSERT_VALUES_EQUAL(*owner, "user@system");
-            auto permissions = resultSet.ColumnParser("Permissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*permissions, "[]");
-            auto effectivePermissions = resultSet.ColumnParser("EffectivePermissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*effectivePermissions, "[]");
+            auto concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, 2);
+            auto queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, 0);
+            auto databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            auto resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            auto totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            auto queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            auto queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
 
             UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
         }
@@ -1485,14 +1573,20 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersSysView) {
 
             auto name = resultSet.ColumnParser("Name").GetOptionalUtf8();
             UNIT_ASSERT_VALUES_EQUAL(*name, "default");
-            auto config = resultSet.ColumnParser("Config").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*config, R"({"CONCURRENT_QUERY_LIMIT":"-1","DATABASE_LOAD_CPU_THRESHOLD":"-1","QUERY_CANCEL_AFTER_SECONDS":"0","QUERY_CPU_LIMIT_PERCENT_PER_NODE":"-1","QUERY_MEMORY_LIMIT_PERCENT_PER_NODE":"-1","QUEUE_SIZE":"-1","RESOURCE_WEIGHT":"-1","TOTAL_CPU_LIMIT_PERCENT_PER_NODE":"-1"})");
-            auto owner = resultSet.ColumnParser("Owner").GetOptionalUtf8();
-            UNIT_ASSERT_VALUES_EQUAL(*owner, "metadata@system");
-            auto permissions = resultSet.ColumnParser("Permissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*permissions, R"([{"Permission":"ydb.granular.describe_schema","SID":"all-users@well-known"},{"Permission":"ydb.granular.select_row","SID":"all-users@well-known"},{"Permission":"ydb.granular.describe_schema","SID":"root@builtin"},{"Permission":"ydb.granular.select_row","SID":"root@builtin"}])");
-            auto effectivePermissions = resultSet.ColumnParser("EffectivePermissions").GetOptionalJsonDocument();
-            UNIT_ASSERT_VALUES_EQUAL(*effectivePermissions, R"([{"Permission":"ydb.granular.describe_schema","SID":"all-users@well-known"},{"Permission":"ydb.granular.select_row","SID":"all-users@well-known"},{"Permission":"ydb.granular.describe_schema","SID":"root@builtin"},{"Permission":"ydb.granular.select_row","SID":"root@builtin"}])");
+            auto concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, -1);
+            auto queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, -1);
+            auto databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            auto resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            auto totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            auto queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            auto queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
 
             UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
         }

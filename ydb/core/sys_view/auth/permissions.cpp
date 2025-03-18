@@ -1,11 +1,11 @@
 #include "auth_scan_base.h"
 #include "permissions.h"
 
-#include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/sys_view/common/common.h>
+
 #include <ydb/core/sys_view/common/events.h>
-#include <ydb/core/sys_view/common/scan_actor_base_impl.h>
 #include <ydb/core/sys_view/common/schema.h>
+#include <ydb/core/sys_view/common/scan_actor_base_impl.h>
+#include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/login/protos/login.pb.h>
 
@@ -39,10 +39,34 @@ protected:
         }
 
         auto entryPath = CanonizePath(entry.Path);
-        auto permissions = ConvertACLToString(entry.SecurityObject->GetACL(), Effective);
-        EraseIf(permissions, [&](const auto& p) { return !StringKeyIsInTableRange({entryPath, p.first, p.second}); });
+
+        TVector<std::pair<TString, TString>> permissions;
+        for (const NACLibProto::TACE& ace : entry.SecurityObject->GetACL().GetACE()) {
+            if (ace.GetAccessType() != (ui32)NACLib::EAccessType::Allow) {
+                continue;
+            }
+            if (!Effective && ace.GetInherited()) {
+                continue;
+            }
+            if (!ace.HasSID()) {
+                continue;
+            }
+
+            auto acePermissions = ConvertACLMaskToYdbPermissionNames(ace.GetAccessRight());
+            for (const auto& permission : acePermissions) {
+                if (StringKeyIsInTableRange({entryPath, ace.GetSID(), permission})) {
+                    permissions.emplace_back(ace.GetSID(), std::move(permission));
+                }
+            }
+        }
+        // Note: due to rights inheritance permissions may be duplicated
+        SortBatch(permissions, [](const auto& left, const auto& right) {
+            return left.first < right.first ||
+                left.first == right.first && left.second < right.second;
+        }, false);
 
         TVector<TCell> cells(::Reserve(Columns.size()));
+
         for (const auto& [sid, permission] : permissions) {
             for (auto& column : Columns) {
                 switch (column.Tag) {

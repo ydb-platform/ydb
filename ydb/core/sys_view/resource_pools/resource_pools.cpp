@@ -32,13 +32,6 @@ public:
         DESCRIBE_RESOURCE_POOLS
     };
 
-    struct TResourcePoolDescription {
-        TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TResourcePoolInfo> Info;
-        TString Owner;
-        TVector<std::pair<TString, TString>> Permissions;
-        TVector<std::pair<TString, TString>> EffectivePermissions;
-    };
-
     static constexpr auto ActorActivityType() {
         return NKikimrServices::TActivity::KQP_SYSTEM_VIEW_SCAN;
     }
@@ -141,7 +134,7 @@ private:
 
     void ProcessDescribeResourcePools(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& results = ev->Get()->Request->ResultSet;
-        TMap<TString, TResourcePoolDescription> resourcePools;
+        TMap<TString, TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TResourcePoolInfo>> resourcePools;
         for (const auto& result : results) {
             switch (result.Status) {
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::Unknown:
@@ -163,42 +156,57 @@ private:
                     return;
                 case NSchemeCache::TSchemeCacheNavigate::EStatus::Ok:
                     const auto& name = result.ResourcePoolInfo->Description.GetName();
-                    resourcePools[name] = { result.ResourcePoolInfo, result.SecurityObject->GetOwnerSID(), ConvertACLToString(result.SecurityObject->GetACL(), false), ConvertACLToString(result.SecurityObject->GetACL(), true)};                    
+                    resourcePools[name] = result.ResourcePoolInfo;                    
             }
         }
 
         SendResponse(resourcePools);
     }
 
-    void SendResponse(const TMap<TString, TResourcePoolDescription>& resourcePools) {
-        using TExtractor = std::function<TCell(const std::pair<TString, TResourcePoolDescription>&, TVector<TBuffer>&)>;
+    void SendResponse(const TMap<TString, TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TResourcePoolInfo>>& resourcePools) {
+        using TExtractor = std::function<TCell(const TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TResourcePoolInfo>&)>;
         using TSchema = Schema::ResourcePools;
 
         struct TExtractorsMap : public THashMap<NTable::TTag, TExtractor> {
             TExtractorsMap() {
-                insert({TSchema::Name::ColumnId, [] (const std::pair<TString, TResourcePoolDescription>& resourcePool, TVector<TBuffer>&) {
-                    return TCell(resourcePool.first.data(), resourcePool.first.size());
+                insert({TSchema::Name::ColumnId, [] (const TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TResourcePoolInfo>& resourcePool) {
+                    const auto& name = resourcePool->Description.GetName();
+                    return TCell(name.data(), name.size());
                 }});
-                insert({TSchema::Config::ColumnId, [] (const std::pair<TString, TResourcePoolDescription>& resourcePool, TVector<TBuffer>& holder) {
-                    NJson::TJsonValue jsonMap;
-                    for (const auto& [key, value] : resourcePool.second.Info->Description.GetProperties().GetProperties()) {
-                        TString upperKey = key;
-                        upperKey.to_upper();
-                        jsonMap[upperKey] = value;
-                    }
-                    CreateJsonColumn(jsonMap, holder);
-                    return TCell(holder.back().Data(), holder.back().Size());
+                insert({TSchema::ConcurrentQueryLimit::ColumnId, [] (const TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TResourcePoolInfo>& resourcePool) {
+                    const auto& properties = resourcePool->Description.GetProperties().GetProperties();
+                    auto it = properties.find("concurrent_query_limit");
+                    return it == properties.end() ? TCell::Make<i32>(-1) : TCell::Make<i32>(std::stoi(it->second));
                 }});
-                insert({TSchema::Owner::ColumnId, [] (const std::pair<TString, TResourcePoolDescription>& resourcePool, TVector<TBuffer>&) {
-                    return TCell(resourcePool.second.Owner.data(), resourcePool.second.Owner.size());
+                insert({TSchema::QueueSize::ColumnId, [] (const TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TResourcePoolInfo>& resourcePool) {
+                    const auto& properties = resourcePool->Description.GetProperties().GetProperties();
+                    auto it = properties.find("queue_size");
+                    return it == properties.end() ? TCell::Make<i32>(-1) : TCell::Make<i32>(std::stoi(it->second));
                 }});
-                insert({TSchema::Permissions::ColumnId, [] (const std::pair<TString, TResourcePoolDescription>& resourcePool, TVector<TBuffer>& holder) {
-                    CreatePermissionsColumn(resourcePool.second.Permissions, holder);
-                    return TCell(holder.back().Data(), holder.back().Size());
+                insert({TSchema::DatabaseLoadCpuThreshold::ColumnId, [] (const TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TResourcePoolInfo>& resourcePool) {
+                    const auto& properties = resourcePool->Description.GetProperties().GetProperties();
+                    auto it = properties.find("database_load_cpu_threshold");
+                    return it == properties.end() ? TCell::Make<double>(-1) : TCell::Make<double>(std::stod(it->second));
                 }});
-                insert({TSchema::EffectivePermissions::ColumnId, [] (const std::pair<TString, TResourcePoolDescription>& resourcePool, TVector<TBuffer>& holder) {
-                    CreatePermissionsColumn(resourcePool.second.EffectivePermissions, holder);
-                    return TCell(holder.back().Data(), holder.back().Size());
+                insert({TSchema::ResourceWeight::ColumnId, [] (const TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TResourcePoolInfo>& resourcePool) {
+                    const auto& properties = resourcePool->Description.GetProperties().GetProperties();
+                    auto it = properties.find("resource_weight");
+                    return it == properties.end() ? TCell::Make<double>(-1) : TCell::Make<double>(std::stod(it->second));
+                }});
+                insert({TSchema::TotalCpuLimitPercentPerNode::ColumnId, [] (const TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TResourcePoolInfo>& resourcePool) {
+                    const auto& properties = resourcePool->Description.GetProperties().GetProperties();
+                    auto it = properties.find("total_cpu_limit_percent_per_node");
+                    return it == properties.end() ? TCell::Make<double>(-1) : TCell::Make<double>(std::stod(it->second));
+                }});
+                insert({TSchema::QueryCpuLimitPercentPerNode::ColumnId, [] (const TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TResourcePoolInfo>& resourcePool) {
+                    const auto& properties = resourcePool->Description.GetProperties().GetProperties();
+                    auto it = properties.find("query_cpu_limit_percent_per_node");
+                    return it == properties.end() ? TCell::Make<double>(-1) : TCell::Make<double>(std::stod(it->second));
+                }});
+                insert({TSchema::QueryMemoryLimitPercentPerNode::ColumnId, [] (const TIntrusiveConstPtr<NSchemeCache::TSchemeCacheNavigate::TResourcePoolInfo>& resourcePool) {
+                    const auto& properties = resourcePool->Description.GetProperties().GetProperties();
+                    auto it = properties.find("query_memory_limit_percent_per_node");
+                    return it == properties.end() ? TCell::Make<double>(-1) : TCell::Make<double>(std::stod(it->second));
                 }});
             }
         };
@@ -207,18 +215,17 @@ private:
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(ScanId);
         batch->Finished = true;
         // It's a mandatory condition to keep sorted PK here
-        for (const auto& p : resourcePools) {
-            if (!StringKeyIsInTableRange({p.first})) {
+        for (const auto& [name, info] : resourcePools) {
+            if (!StringKeyIsInTableRange({name})) {
                 continue;
             }
             TVector<TCell> cells;
-            TVector<TBuffer> holder;
             for (auto column : Columns) {
                 auto extractor = extractors.find(column.Tag);
                 if (extractor == extractors.end()) {
                     cells.push_back(TCell());
                 } else {
-                    cells.push_back(extractor->second(p, holder));
+                    cells.push_back(extractor->second(info));
                 }
             }
             TArrayRef<const TCell> ref(cells);
@@ -232,28 +239,6 @@ private:
 
     void Handle(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr&) {
         StartScan();
-    }
-
-    static void CreateJsonColumn(const NJson::TJsonValue& jsonValue, TVector<TBuffer>& holder) {
-        TStringStream str;
-        NJson::WriteJson(&str, &jsonValue, NJson::TJsonWriterConfig{});
-        const auto maybeBinaryJson = NBinaryJson::SerializeToBinaryJson(str.Str());
-        if (std::holds_alternative<TString>(maybeBinaryJson)) {
-            ythrow yexception() << "Can't serialize binary json value: " << std::get<TString>(maybeBinaryJson);
-        }
-        holder.emplace_back(std::move(std::get<NBinaryJson::TBinaryJson>(maybeBinaryJson)));
-    }
-
-    static void CreatePermissionsColumn(const TVector<std::pair<TString, TString>>& permissions, TVector<TBuffer>& holder) {
-        NJson::TJsonValue jsonArray;
-        jsonArray.SetType(NJson::EJsonValueType::JSON_ARRAY);
-        for (const auto& [sid, permission] : permissions) {
-            NJson::TJsonValue json;
-            json["SID"] = sid;
-            json["Permission"] = permission;
-            jsonArray.AppendValue(json);
-        }
-        CreateJsonColumn(jsonArray, holder);
     }
 
 private:

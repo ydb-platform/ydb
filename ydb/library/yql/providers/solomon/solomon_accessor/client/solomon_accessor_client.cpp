@@ -489,11 +489,14 @@ private:
             .UnsafeWriteKey("program").WriteString(program)
             .UnsafeWriteKey("downsampling")
                 .BeginObject()
-                    .UnsafeWriteKey("disabled").WriteBool(ds.GetDisabled())
-                    .UnsafeWriteKey("aggregation").WriteString(ds.GetAggregation())
-                    .UnsafeWriteKey("fill").WriteString(ds.GetFill())
-                    .UnsafeWriteKey("gridMillis").WriteLongLong(ds.GetGridMs())
-                .EndObject()
+                    .UnsafeWriteKey("disabled").WriteBool(ds.GetDisabled());
+
+        if (!ds.GetDisabled()) {
+            w.UnsafeWriteKey("aggregation").WriteString(ds.GetAggregation())
+                .UnsafeWriteKey("fill").WriteString(ds.GetFill())
+                .UnsafeWriteKey("gridMillis").WriteLongLong(ds.GetGridMs());
+        }
+        w.EndObject()
             .UnsafeWriteKey("forceCluster").WriteString(DefaultReplica)
         .EndObject();
 

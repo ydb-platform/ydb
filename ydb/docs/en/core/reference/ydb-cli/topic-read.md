@@ -21,12 +21,15 @@ Three command modes are supported:
 
 ### Required parameters
 
-| Name | Description |
----|---
-| `<topic-path>` | Topic path |
-| `-c VAL`, `--consumer VAL` | Topic consumer name.<br/>Message consumption starts from the current offset for this consumer (if the `--timestamp` parameter is not specified).<br/>The current offset is shifted as messages are consumed and output (if `--commit=false` is not set). |
+`<topic-path>`: Topic path
 
 ### Basic optional parameters
+
+`-c VAL`, `--consumer VAL`: Topic consumer name.
+
+- If not set, then you need to specify partitions through --partition-ids to read without consumer
+- Message consumption starts from the current offset for this consumer (if the `--timestamp` parameter is not specified).
+- If `--commit=true` is set, the current offset is shifted as messages are consumed and output.
 
 `--format STR`: Output format.
 
@@ -63,9 +66,9 @@ Three command modes are supported:
 
 `--file VAL` (`-f VAL`): Write the messages read to the specified file. If not set, messages are output to `stdout`.
 
-`--commit BOOL`: Commit message reads.
+`--commit BOOL`: Commit message reads. Default value - `false`.
 
-1. If `true` (by default), a consumer's current offset is shifted as topic messages are consumed.
+1. If `true`, a consumer's current offset is shifted as topic messages are consumed.
 2. Possible values: `true` or `false`.
 
 ### Other optional parameters

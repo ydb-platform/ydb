@@ -1154,6 +1154,7 @@ void TColumnShard::Die(const TActorContext& ctx) {
     AFL_VERIFY(TabletActivityImpl->Dec() == 0);
     CleanupActors(ctx);
     NTabletPipe::CloseAndForgetClient(SelfId(), StatsReportPipe);
+    NTabletPipe::CloseAndForgetClient(SelfId(), TableResolvePipe);
     UnregisterMediatorTimeCast();
     NYDBTest::TControllers::GetColumnShardController()->OnTabletStopped(*this);
     Send(SpaceWatcherId, new NActors::TEvents::TEvPoison);

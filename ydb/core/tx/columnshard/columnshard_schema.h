@@ -185,9 +185,10 @@ struct Schema : NIceDb::Schema {
         struct DropStep : Column<2, NScheme::NTypeIds::Uint64> {};
         struct DropTxId : Column<3, NScheme::NTypeIds::Uint64> {};
         struct TieringUsage: Column<4, NScheme::NTypeIds::String> {};
+        struct Path: Column<5, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<PathId>;
-        using TColumns = TableColumns<PathId, DropStep, DropTxId, TieringUsage>;
+        using TColumns = TableColumns<PathId, DropStep, DropTxId, TieringUsage, Path>;
     };
 
     struct TableVersionInfo : Table<(ui32)ECommonTables::TableVersionInfo> {
@@ -782,8 +783,9 @@ struct Schema : NIceDb::Schema {
         db.Table<SchemaPresetInfo>().Key(id).Delete();
     }
 
-    static void SaveTableInfo(NIceDb::TNiceDb& db, const ui64 pathId) {
-        db.Table<TableInfo>().Key(pathId).Update();
+    static void SaveTableInfo(NIceDb::TNiceDb& db, const ui64 pathId, const TString& path = {}) {
+        db.Table<TableInfo>().Key(pathId).Update(
+            NIceDb::TUpdate<TableInfo::Path>(path));
     }
 
 

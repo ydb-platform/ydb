@@ -146,7 +146,7 @@ void TColumnShard::HandleInit(TEvPrivate::TEvTieringModified::TPtr& /*ev*/, cons
     TrySwitchToWork(ctx);
 }
 
-void TColumnShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext&) {
+void TColumnShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TActorContext& ctx) {
     auto tabletId = ev->Get()->TabletId;
     auto clientId = ev->Get()->ClientId;
 
@@ -156,6 +156,17 @@ void TColumnShard::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const TAc
         } else {
             LOG_S_INFO("Failed to connect to " << tabletId << " at tablet " << TabletID());
             StatsReportPipe = {};
+        }
+        return;
+    }
+
+    if (clientId == TableResolvePipe) {
+        if (ev->Get()->Status == NKikimrProto::OK) {
+            LOG_S_DEBUG("Connected to " << tabletId << " at tablet " << TabletID());
+        } else {
+            LOG_S_INFO("Failed to connect to " << tabletId << " at tablet " << TabletID());
+            TableResolvePipe = TActorId();
+            ResolveTablePath(ctx);
         }
         return;
     }
@@ -460,6 +471,29 @@ void TColumnShard::SendPeriodicStats() {
     FillColumnTableStats(ctx, ev);
 
     NTabletPipe::SendData(ctx, StatsReportPipe, ev.release());
+}
+
+void TColumnShard::ResolveTablePath(const TActorContext &ctx)
+{
+    for (auto& [pathId, info] : TablesManager.GetTables()) {
+        TString reason = "empty path";
+
+        if (info.Path) {
+            continue;
+        }
+
+        LOG_S_DEBUG("Resolve path at " << TabletID() << ": reason# " << reason);
+    
+        if (!TableResolvePipe) {
+            TableResolvePipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, CurrentSchemeShardId, NTabletPipe::TClientConfig{}));
+        }
+
+        auto event = MakeHolder<NSchemeShard::TEvSchemeShard::TEvDescribeScheme>(OwnerPathId, pathId);
+        event->Record.MutableOptions()->SetReturnPartitioningInfo(false);
+        event->Record.MutableOptions()->SetReturnPartitionConfig(false);
+        event->Record.MutableOptions()->SetReturnChildren(false);
+        NTabletPipe::SendData(ctx, TableResolvePipe, event.Release());
+    }
 }
 
 }   // namespace NKikimr::NColumnShard

@@ -94,6 +94,7 @@ public:
 class TTableInfo {
 public:
     ui64 PathId;
+    TString Path;
     std::optional<NOlap::TSnapshot> DropVersion;
     YDB_READONLY_DEF(TSet<NOlap::TSnapshot>, Versions);
 
@@ -104,6 +105,10 @@ public:
 
     ui64 GetPathId() const {
         return PathId;
+    }
+
+    TString GetPath() const {
+        return Path;
     }
 
     const NOlap::TSnapshot& GetDropVersionVerified() const {
@@ -143,6 +148,7 @@ public:
             DropVersion.emplace(
                 rowset.template GetValue<Schema::TableInfo::DropStep>(), rowset.template GetValue<Schema::TableInfo::DropTxId>());
         }
+        Path = rowset.template GetValue<Schema::TableInfo::Path>();
         return true;
     }
 };
@@ -320,6 +326,7 @@ public:
     void DropPreset(const ui32 presetId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db);
 
     void RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db);
+    void UpdateTable(TTableInfo&& table, NIceDb::TNiceDb& db);
     bool RegisterSchemaPreset(const TSchemaPreset& schemaPreset, NIceDb::TNiceDb& db);
 
     void AddSchemaVersion(

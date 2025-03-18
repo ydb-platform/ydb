@@ -43,7 +43,7 @@
 
 ## Таблицы {#tables}
 
-Каждой таблице в базе данных также соответствует одноименная директория в иерархии директорий файловой структуры, в которой находятся:
+Каждой таблице в базе данных соответствует одноименная директория в файловой структуре, в которой находятся:
 
 - Файл `scheme.pb`, содержащий информацию о структуре таблицы и её параметрах в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
 - Файл `permissions.pb`, содержащий информацию об ACL таблицы и её владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
@@ -59,6 +59,20 @@
 ```text
 1,"%D0%9F%D1%80%D0%B8%D0%B2%D0%B5%D1%82"
 ```
+
+## Представления (views) {#views}
+
+Каждому [представлению](../../../../concepts/datamodel/view.md) в базе данных соответствует одноименная директория в файловой структуре, в которой находятся:
+
+- Файл `create_view.sql`, содержащий информацию о представлении в формате YQL
+- Файл `permissions.pb`, содержащий информацию об ACL представления и её владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
+
+## Сравнение форматов резервных копий различных схемных объектов {#backup-format}
+
+| Тип объекта   | Файл резервной копии             | Формат                                                  |
+|---------------|----------------------------------|---------------------------------------------------------|
+| Таблица       | scheme.pb                        | [Text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) сообщение `CreateTableRequest` |
+| Представление | create_view.sql                  | Текстовый YQL-запрос [CREATE VIEW](../../../../yql/reference/syntax/create-view.md) |
 
 ## Контрольные суммы {#checksums}
 

@@ -64,7 +64,7 @@ This ensures that after restoration, the references within the view correctly po
 
 #### Handling relative paths
 
-In short, [object reference paths](#object-reference-paths) expressed as absolute paths are handled by replacing the `backup_root` prefix with the `restore_root`. Relative reference paths are processed according to the same logic. More precisely, relative paths are first resolved to absolute paths using the [TablePathPrefix](../../../yql/reference/syntax/pragma#table-path-prefix) pragma:
+In short, [object reference paths](#object-reference-paths) expressed as absolute paths are handled by replacing the `backup_root` prefix with the `restore_root` (the algorithm is described in more detail [above](#query-rewriting-rules)). Relative reference paths are processed according to the same logic. More precisely, relative paths are first resolved to absolute paths using the [TablePathPrefix](../../../yql/reference/syntax/pragma#table-path-prefix) pragma:
 
 ```text
 effective_absolute_path = table_path_prefix + relative_path

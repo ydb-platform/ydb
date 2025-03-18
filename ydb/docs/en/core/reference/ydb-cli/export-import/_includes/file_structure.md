@@ -63,12 +63,12 @@ The format of data files is `.csv`, where each row corresponds to a record in th
 
 ## Views {#views}
 
-For each view in the database, there is a same-named directory in the file structure of the backup that includes:
+For each [view](../../../../concepts/datamodel/view.md) in the database, there is a same-named directory in the file structure of the backup that includes:
 
 - The `create_view.sql` file describing the view in YQL format
 - The `permissions.pb` file specifying the view owner and ACL in the [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format
 
-## Backup format comparison: tables, views, and other schema objects {#backup-format}
+## Comparison of backup formats for various schema objects {#backup-format}
 
 | Object Type | Backup File                      | Format |
 |-------------|----------------------------------|--------|

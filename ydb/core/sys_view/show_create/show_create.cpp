@@ -48,26 +48,51 @@ public:
     }
 
 private:
+
+    void HandleLimiter(TEvSysView::TEvGetScanLimiterResult::TPtr& ev) override {
+        ScanLimiter = ev->Get()->ScanLimiter;
+
+        if (!ScanLimiter->Inc()) {
+            FailState = LIMITER_FAILED;
+            if (AckReceived) {
+                ReplyLimiterFailedAndDie();
+            }
+            return;
+        }
+
+        AllowedByLimiter = true;
+
+        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
+            "Scan prepared, actor: " << TBase::SelfId());
+
+        ProceedToScan();
+        return;
+    }
+
     void StartScan() {
         if (!AppData()->FeatureFlags.GetEnableShowCreate()) {
             ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR,
                 TStringBuilder() << "Sys view is not supported: " << ShowCreateName);
+            return;
         }
 
         const auto& cellsFrom = TableRange.From.GetCells();
 
         if (cellsFrom.size() != 2 || cellsFrom[0].IsNull() || cellsFrom[1].IsNull()) {
             ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, "Invalid read key");
+            return;
         }
 
         if (!TableRange.To.GetCells().empty()) {
             const auto& cellsTo = TableRange.To.GetCells();
             if (cellsTo.size() != 2 || cellsTo[0].IsNull() || cellsTo[1].IsNull()) {
                 ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, "Invalid read key");
+                return;
             }
 
             if (cellsFrom[0].AsBuf() != cellsTo[0].AsBuf() || cellsFrom[1].AsBuf() != cellsTo[1].AsBuf()) {
                 ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, "Invalid table range");
+                return;
             }
         }
 
@@ -76,6 +101,7 @@ private:
 
         if (PathType != "Table") {
             ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, TStringBuilder() << "Invalid path type: " << PathType);
+            return;
         }
 
         std::unique_ptr<TEvTxUserProxy::TEvNavigate> navigateRequest(new TEvTxUserProxy::TEvNavigate());
@@ -112,6 +138,7 @@ private:
                 const auto& pathDescription = record.GetPathDescription();
                 if (pathDescription.GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeTable) {
                     ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, "Invalid path type");
+                    return;
                 }
 
                 const auto& tableDesc = pathDescription.GetTable();

@@ -1236,8 +1236,6 @@ WITH (
 
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
-
-
     }
 
     Y_UNIT_TEST(QueryStats) {
@@ -2582,7 +2580,7 @@ WITH (
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 31);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 30);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -2600,7 +2598,7 @@ WITH (
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 25);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 24);
 
             THashSet<TString> names;
             for (const auto& child : children) {

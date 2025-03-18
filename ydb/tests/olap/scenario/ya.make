@@ -14,7 +14,9 @@ PY3TEST()
     )
 
     ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+    ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
     DEPENDS(
+        ydb/apps/ydb
         ydb/apps/ydbd
     )
 

@@ -65,7 +65,7 @@
 Каждому [представлению](../../../../concepts/datamodel/view.md) в базе данных соответствует одноименная директория в файловой структуре, в которой находятся:
 
 - Файл `create_view.sql`, содержащий информацию о представлении в формате YQL
-- Файл `permissions.pb`, содержащий информацию об ACL представления и её владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
+- Файл `permissions.pb`, содержащий информацию об ACL представления и его владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
 
 ## Сравнение форматов резервных копий различных схемных объектов {#backup-format}
 

@@ -3650,7 +3650,9 @@ void TSchemeShard::PersistColumnTable(NIceDb::TNiceDb& db, TPathId pathId, const
     TString serialized;
     TString serializedSharding;
     auto tableInfoCopy = tableInfo;
-    tableInfoCopy.Description.MutableSchema()->SetEngine(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
+    if (tableInfo.IsStandalone()) {
+        tableInfoCopy.Description.MutableSchema()->SetEngine(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
+    }
     Y_ABORT_UNLESS(tableInfoCopy.Description.SerializeToString(&serialized));
     Y_ABORT_UNLESS(tableInfoCopy.Description.GetSharding().SerializeToString(&serializedSharding));
 

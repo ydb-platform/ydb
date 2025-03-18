@@ -409,8 +409,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         const auto &pageCollection = *msg->PageCollection;
         const TLogoBlobID pageCollectionId = pageCollection.Label();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Save page collection " << pageCollectionId << 
-            " compacted pages " << msg->Pages);
+        LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Save page collection " << pageCollectionId
+            << " owner " << ev->Sender
+            << " compacted pages " << msg->Pages);
 
         Y_ABORT_UNLESS(pageCollectionId);
         Y_ABORT_IF(Collections.contains(pageCollectionId), "Only new collections can save compacted pages");
@@ -767,7 +768,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void Handle(NSharedCache::TEvUnregister::TPtr &ev, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Unregister " << ev->Sender);
+        LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Unregister"
+            << " owner " << ev->Sender);
 
         DropFromQueue(ScanRequests, ev->Sender, ctx);
         DropFromQueue(AsyncRequests, ev->Sender, ctx);
@@ -792,7 +794,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         auto collectionIt = Collections.find(pageCollectionId);
 
         LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Invalidate page collection " << pageCollectionId
-            << (collectionIt == Collections.end() ? " unknown" : ""));
+            << (collectionIt == Collections.end() ? " unknown" : "")
+            << " owner " << ev->Sender);
 
         if (collectionIt == Collections.end()) {
             return;

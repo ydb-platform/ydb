@@ -1,6 +1,9 @@
 #include "manager.h"
+// TODO: move to simple_reader/
 
 #include <ydb/core/tx/columnshard/engines/reader/duplicates/merge.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/context.h>
+#include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/scanner.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 
 #include <bit>
@@ -35,13 +38,13 @@ void TIntervalCounter::PropagateDelta(const TPosition& node) {
 
 void TIntervalCounter::Update(const TPosition& node, const TModification& modification, TZerosCollector* callback) {
     if (modification.GetLeft() <= node.GetLeft() && modification.GetRight() >= node.GetRight()) {
-        if (callback) {
-            callback->OnUpdate(node.GetLeft(), node.GetRight(), GetCount(node), modification.GetDelta());
-        }
         if (node.GetLeft() == node.GetRight()) {
             Count[node.GetIndex()] += modification.GetDelta();
         } else {
             PropagatedDeltas[node.GetIndex()] += modification.GetDelta();
+        }
+        if (callback) {
+            callback->OnUpdate(node, GetCount(node), modification.GetDelta());
         }
     } else {
         PropagateDelta(node.GetIndex());
@@ -55,7 +58,7 @@ void TIntervalCounter::Update(const TPosition& node, const TModification& modifi
 }
 
 void TIntervalCounter::Inc(const ui32 l, const ui32 r) {
-    Update(TPosition(MaxIndex), TModification(l, r, 1), nullptr);
+    Update(GetRoot(), TModification(l, r, 1), nullptr);
 }
 
 TIntervalCounter::TIntervalCounter(const std::vector<std::pair<ui32, ui32>>& intervals) {
@@ -67,8 +70,8 @@ TIntervalCounter::TIntervalCounter(const std::vector<std::pair<ui32, ui32>>& int
         }
     }
     MaxIndex = std::bit_ceil(maxValue);
-    Count.resize(MaxIndex * 2 - 1);
-    PropagatedDeltas.resize(MaxIndex * 2 - 1);
+    Count.resize(MaxIndex * 2 + 1);
+    PropagatedDeltas.resize(MaxIndex * 2 + 1);
 
     for (const auto& [l, r] : intervals) {
         Inc(l, r);
@@ -76,12 +79,12 @@ TIntervalCounter::TIntervalCounter(const std::vector<std::pair<ui32, ui32>>& int
 }
 
 bool TIntervalCounter::IsAllZeros() const {
-    return GetCount(TPosition(MaxIndex)) == 0;
+    return GetCount(GetRoot()) == 0;
 }
 
 std::vector<ui32> TIntervalCounter::DecAndGetZeros(const ui32 l, const ui32 r) {
     TZerosCollector callback;
-    Update(TPosition(MaxIndex), TModification(l, r, -1), &callback);
+    Update(GetRoot(), TModification(l, r, -1), &callback);
     return callback.ExtractValues();
 }
 
@@ -160,20 +163,30 @@ TDuplicateFilterConstructor::TSourceIntervals::TSourceIntervals(const std::vecto
 }
 
 void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "request_duplicates_filter")("source_id", ev->Get()->GetSource()->GetSourceId());
+    // TODO: handle step restarts (completely avoid them or fix verify here)
     // TODO: add counter: max volume of redundant memory for merges
     const auto& source = ev->Get()->GetSource();
     TIntervalsRange range = Intervals.GetRangeVerified(source->GetSourceId());
-    AFL_VERIFY(AvailableSources.emplace(source->GetSourceId(), TSourceFilterConstructor(source, ev->Get()->GetSubscriber(), Intervals)).second);
+    auto [constructionInfo, emplaced] =
+        AvailableSources.emplace(source->GetSourceId(), TSourceFilterConstructor(source, ev->Get()->GetSubscriber(), Intervals));
+    AFL_VERIFY(emplaced);
     AvailableSourcesCount.AddRange(range.GetFirstIdx(), range.GetLastIdx(), source->GetSourceId());
     std::vector<ui32> readyIntervals = AwaitedSourcesCount.DecAndGetZeros(range.GetFirstIdx(), range.GetLastIdx());
+
+    if (readyIntervals.size() != range.NumIntervals()) {
+        AFL_VERIFY(readyIntervals.size() < range.NumIntervals());
+        constructionInfo->second.SetBlockGuard(NSimple::TSourceFetchingScheduler::SetBlocked(
+            source->GetSourceIdx(), source->GetContextAsVerified<NSimple::TSpecialReadContext>()->GetScheduler()));
+    }
 
     for (const ui32 intervalIdx : readyIntervals) {
         auto sourceIds = AvailableSourcesCount.FindIntersections(intervalIdx);
         AFL_VERIFY(sourceIds.size());
         const std::shared_ptr<NCommon::TSpecialReadContext> readContext =
             TValidator::CheckNotNull(AvailableSources.FindPtr(sourceIds.front()))->GetSource()->GetContext();
-        const std::shared_ptr<TBuildDuplicateFilters> task =
-            std::make_shared<TBuildDuplicateFilters>(readContext->GetReadMetadata()->GetReplaceKey(), IIndexInfo::GetSnapshotColumnNames());
+        const std::shared_ptr<TBuildDuplicateFilters> task = std::make_shared<TBuildDuplicateFilters>(
+            readContext->GetReadMetadata()->GetReplaceKey(), IIndexInfo::GetSnapshotColumnNames(), intervalIdx, SelfId());
         for (const ui64 sourceId : sourceIds) {
             const TSourceFilterConstructor* constructionInfo = AvailableSources.FindPtr(sourceId);
             AFL_VERIFY(constructionInfo)("source", sourceId);
@@ -184,8 +197,7 @@ void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
                 std::make_shared<NArrow::TGeneralContainer>(source->GetStageData()
                                                                 .ToGeneralContainer(source->GetContext()->GetCommonContext()->GetResolver())
                                                                 ->Slice(intervalRange.GetBegin(), intervalRange.Size()));
-            task->AddSource(slice, source->GetStageData().GetNotAppliedFilter(),
-                std::make_shared<TInternalFilterSubscriber>(intervalIdx, source->GetSourceId(), SelfId()));
+            task->AddSource(slice, source->GetStageData().GetNotAppliedFilter(), source->GetSourceId());
         }
         NConveyor::TScanServiceOperator::SendTaskToExecute(task, readContext->GetCommonContext()->GetConveyorProcessId());
     }
@@ -193,18 +205,23 @@ void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
 
 void TDuplicateFilterConstructor::Handle(const TEvDuplicateFilterPartialResult::TPtr& ev) {
     if (ev->Get()->GetResult().IsFail()) {
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "interval_merging_error")("error", ev->Get()->GetResult().GetErrorMessage());
         AbortConstruction(ev->Get()->GetResult().GetErrorMessage());
         return;
     }
-    TSourceFilterConstructor* constructor = AvailableSources.FindPtr(ev->Get()->GetSourceId());
-    AFL_VERIFY(constructor)("portion", ev->Get()->GetSourceId());
-    // TODO: avoid copying filters
-    constructor->SetFilter(ev->Get()->GetIntervalIdx(), ev->Get()->ExtractResult().DetachResult());
-    if (constructor->IsReady()) {
-        std::move(*constructor).Finish();
-        AFL_VERIFY(AvailableSources.erase(ev->Get()->GetSourceId()));
-        if (AvailableSources.empty() && AwaitedSourcesCount.IsAllZeros()) {
-            PassAway();
+    for (auto&& [sourceId, filter] : ev->Get()->DetachResult()) {
+        TSourceFilterConstructor* constructor = AvailableSources.FindPtr(sourceId);
+        AFL_VERIFY(constructor)("portion", sourceId);
+        // TODO: avoid copying filters
+        constructor->SetFilter(ev->Get()->GetIntervalIdx(), std::move(filter));
+        if (constructor->IsReady()) {
+            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "build_duplicates_filter")(
+                "source_id", constructor->GetSource()->GetSourceId());
+            std::move(*constructor).Finish();
+            AFL_VERIFY(AvailableSources.erase(sourceId));
+            if (AvailableSources.empty() && AwaitedSourcesCount.IsAllZeros()) {
+                PassAway();
+            }
         }
     }
 }

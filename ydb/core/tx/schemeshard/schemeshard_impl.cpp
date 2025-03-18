@@ -7118,7 +7118,7 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
                 UpdateShardMetrics(p.ShardIdx, it->second);
                 dataErasureShards.push_back(p.ShardIdx);
             }
-            if (DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
+            if (EnableDataErasure && DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
                 Execute(CreateTxAddEntryToDataErasure(dataErasureShards), this->ActorContext());
             }
         }
@@ -7130,7 +7130,7 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
                 OnShardRemoved(p.ShardIdx);
                 cancelDataErasureShards.push_back(p.ShardIdx);
             }
-            if (DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
+            if (EnableDataErasure && DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
                 Execute(CreateTxCancelDataErasureShards(cancelDataErasureShards), this->ActorContext());
             }
         }

@@ -148,6 +148,7 @@ PEERDIR(
     ydb/library/yql/minikql/comp_nodes/llvm14
     ydb/library/yql/providers/yt/codec/codegen
     ydb/library/yql/providers/yt/comp_nodes/llvm14
+    ydb/library/signal_backtrace
     ydb/library/yql/providers/pq/cm_client
     ydb/library/yql/providers/s3/actors
     ydb/library/yql/public/udf/service/exception_policy

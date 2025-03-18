@@ -1530,7 +1530,12 @@ protected:
         meta.Reads->emplace_back(std::move(readInfo));
     }
 
-    ui32 GetScanTasksPerNode(TStageInfo& stageInfo, const bool isOlapScan, const ui64 /*nodeId*/, bool enableShuffleElimination = false) const {
+    ui32 GetScanTasksPerNode(
+        TStageInfo& stageInfo,
+        const bool isOlapScan,
+        const ui64 /*nodeId*/,
+        bool enableShuffleElimination = false
+    ) const {
         ui32 result = 0;
         if (isOlapScan) {
             if (AggregationSettings.HasCSScanThreadsPerNode()) {
@@ -1550,9 +1555,11 @@ protected:
             }
         }
         result = Max<ui32>(1, result);
+
         if (enableShuffleElimination) {
             result *= 2;
         }
+
         return result;
     }
 
@@ -1699,7 +1706,7 @@ protected:
                     }
                 }
 
-            } else if (enableShuffleElimination /* save partitioning for shuffle elimination */) {
+            } else if (enableShuffleElimination && stage.GetIsShuffleEliminated() /* save partitioning for shuffle elimination */) {
                 std::size_t stageInternalTaskId = 0;
                 columnShardHashV1Params.TaskIndexByHash = std::make_shared<TVector<ui64>>();
                 columnShardHashV1Params.TaskIndexByHash->resize(columnShardHashV1Params.SourceShardCount);
@@ -1707,7 +1714,7 @@ protected:
                 for (auto&& pair : nodeShards) {
                     const auto nodeId = pair.first;
                     auto& shardsInfo = pair.second;
-                    std::size_t maxTasksPerNode = std::min<std::size_t>(shardsInfo.size(), GetScanTasksPerNode(stageInfo, isOlapScan, nodeId, enableShuffleElimination));
+                    std::size_t maxTasksPerNode = std::min<std::size_t>(shardsInfo.size(), GetScanTasksPerNode(stageInfo, isOlapScan, nodeId, true));
                     std::vector<TTaskMeta> metas(maxTasksPerNode, TTaskMeta());
                     {
                         for (std::size_t i = 0; i < shardsInfo.size(); ++i) {

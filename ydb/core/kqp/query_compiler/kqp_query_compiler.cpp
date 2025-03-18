@@ -705,6 +705,9 @@ private:
         TStagePredictor& stagePredictor = rPredictor.BuildForStage(stage, ctx);
         stagePredictor.Scan(stage.Program().Ptr());
 
+        auto stageSettings = NDq::TDqStageSettings::Parse(stage);
+        stageProto.SetIsShuffleEliminated(stageSettings.IsShuffleEliminated);
+
         for (ui32 inputIndex = 0; inputIndex < stage.Inputs().Size(); ++inputIndex) {
             const auto& input = stage.Inputs().Item(inputIndex);
 
@@ -1235,15 +1238,15 @@ private:
             if (const auto inconsistentWrite = settings.InconsistentWrite().Cast(); inconsistentWrite.StringValue() == "true") {
                 settingsProto.SetInconsistentTx(true);
             }
-          
+
             if (const auto streamWrite = settings.StreamWrite().Cast(); streamWrite.StringValue() == "true") {
                 settingsProto.SetEnableStreamWrite(true);
             }
-          
+
             if (const auto isBatch = settings.IsBatch().Cast(); isBatch.StringValue() == "true") {
                 settingsProto.SetIsBatch(true);
             }
-            
+
             settingsProto.SetIsOlap(settings.TableType().Cast().StringValue() == "olap");
             settingsProto.SetPriority(FromString<i64>(settings.Priority().Cast().StringValue()));
 
@@ -1339,7 +1342,7 @@ private:
                         case ETypeAnnotationKind::Optional: {
                             auto optionalType = ty->Cast<TOptionalExprType>()->GetItemType();
                             Y_ENSURE(
-                                optionalType->GetKind() == ETypeAnnotationKind::Data, 
+                                optionalType->GetKind() == ETypeAnnotationKind::Data,
                                 TStringBuilder{} << "Can't retrieve type from optional" << static_cast<std::int64_t>(optionalType->GetKind()) << "for ColumnHashV1 Shuffling"
                             );
                             slot = optionalType->Cast<TDataExprType>()->GetSlot();

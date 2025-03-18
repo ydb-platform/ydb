@@ -4699,7 +4699,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 UNIT_ASSERT_C(!it.IsSuccess(), it.GetIssues().ToString());
                 UNIT_ASSERT_C(
                     it.GetIssues().ToString().contains("Operation is aborting because an duplicate key")
-                    || it.GetIssues().ToString().contains("Conflict with existing key."),
+                    || it.GetIssues().ToString().contains("Conflict with existing key.")
+                    || it.GetIssues().ToString().contains("Duplicate keys have been found."),
                     it.GetIssues().ToString());
             }
 

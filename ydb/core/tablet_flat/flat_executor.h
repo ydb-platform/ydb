@@ -279,7 +279,7 @@ struct TPendingPartSwitch {
     }
 };
 
-enum class EPageCollectionRequest : ui64 {
+enum class ESharedCachePagesRequestType : ui64 {
     Undefined = 0,
     Transaction = 1,
     InMemPages,
@@ -542,7 +542,7 @@ class TExecutor
     void StickInMemPages(NSharedCache::TEvResult *msg);
     THashSet<NTable::TTag> GetStickyColumns(ui32 tableId);
     void RequestFromSharedCache(TAutoPtr<NPageCollection::TFetch> fetch,
-        NBlockIO::EPriority way, EPageCollectionRequest requestCategory);
+        NBlockIO::EPriority way, ESharedCachePagesRequestType requestType);
     THolder<TScanSnapshot> PrepareScanSnapshot(ui32 table,
         const NTable::TCompactionParams* params, TRowVersion snapshot = TRowVersion::Max());
     void ReleaseScanLocks(TIntrusivePtr<TBarrier>, const NTable::TSubset&);

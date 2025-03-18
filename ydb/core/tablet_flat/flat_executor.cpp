@@ -1185,7 +1185,7 @@ void TExecutor::ApplyFollowerAuxUpdate(const TString &auxBody) {
 
 void TExecutor::RequestFromSharedCache(TAutoPtr<NPageCollection::TFetch> fetch,
     NBlockIO::EPriority priority,
-    EPageCollectionRequest requestCategory)
+    ESharedCachePagesRequestType requestType)
 {
     Y_ABORT_UNLESS(fetch->Pages.size() > 0, "Got TFetch req w/o any page");
 
@@ -1193,7 +1193,7 @@ void TExecutor::RequestFromSharedCache(TAutoPtr<NPageCollection::TFetch> fetch,
         priority,
         fetch,
         SelfId()),
-        0, (ui64)requestCategory);
+        0, (ui64)requestType);
 }
 
 void TExecutor::AddFollowerPartSwitch(
@@ -1321,7 +1321,7 @@ bool TExecutor::PrepareExternalPart(TPendingPartSwitch &partSwitch, TPendingPart
 
             for (auto req : fetch) {
                 stage->Fetching = req->PageCollection.Get();
-                RequestFromSharedCache(req, NBlockIO::EPriority::Fast, EPageCollectionRequest::PendingInit);
+                RequestFromSharedCache(req, NBlockIO::EPriority::Fast, ESharedCachePagesRequestType::PendingInit);
             }
 
             ++partSwitch.PendingLoads;
@@ -1491,7 +1491,7 @@ void TExecutor::RequestInMemPagesForPartStore(ui32 tableId, const NTable::TPartV
         if (stickyGroup) {
             auto req = partView.As<NTable::TPartStore>()->GetPages(groupIndex);
             // TODO: only request missing pages
-            RequestFromSharedCache(req, NBlockIO::EPriority::Bkgr, EPageCollectionRequest::InMemPages);
+            RequestFromSharedCache(req, NBlockIO::EPriority::Bkgr, ESharedCachePagesRequestType::InMemPages);
         }
     }
 }
@@ -2154,7 +2154,7 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
         req->TraceId = waitPad->GetWaitingTraceId();
         req->WaitPad = waitPad;
 
-        RequestFromSharedCache(req, NBlockIO::EPriority::Fast, EPageCollectionRequest::Transaction);
+        RequestFromSharedCache(req, NBlockIO::EPriority::Fast, ESharedCachePagesRequestType::Transaction);
     }
 
     if (auto logl = Logger->Log(ELnLev::Debug)) {
@@ -2910,9 +2910,9 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
             << ", category " << ev->Cookie;
     }
 
-    switch (auto requestType = EPageCollectionRequest(ev->Cookie)) {
-    case EPageCollectionRequest::Transaction:
-    case EPageCollectionRequest::InMemPages:
+    switch (auto requestType = ESharedCachePagesRequestType(ev->Cookie)) {
+    case ESharedCachePagesRequestType::Transaction:
+    case ESharedCachePagesRequestType::InMemPages:
         {
             TPrivatePageCache::TInfo *collectionInfo = PrivatePageCache->Info(msg->Origin->Label());
             if (!collectionInfo) {
@@ -2934,22 +2934,26 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
                 return Broken();
             }
 
-            if (requestType == EPageCollectionRequest::InMemPages) {
+            if (requestType == ESharedCachePagesRequestType::InMemPages) {
                 StickInMemPages(msg);
             }
             for (auto& loaded : msg->Loaded) {
                 PrivatePageCache->ProvideBlock(std::move(loaded), collectionInfo);
             }
-            Y_ABORT_UNLESS(msg->WaitPad);
-            if (msg->WaitPad->RefCount() <= 2) { // one ref here, one in TransactionWaitPads
-                ActivateWaitingTransaction(std::move(msg->WaitPad));
+            if (requestType == ESharedCachePagesRequestType::Transaction) {
+                Y_ABORT_UNLESS(msg->WaitPad);
+                if (msg->WaitPad->RefCount() <= 2) { // one ref here, one in TransactionWaitPads
+                    ActivateWaitingTransaction(std::move(msg->WaitPad));
+                } else {
+                    LogWaitingTransaction(std::move(msg->WaitPad));
+                }
             } else {
-                LogWaitingTransaction(std::move(msg->WaitPad));
+                Y_ABORT_UNLESS(!msg->WaitPad);
             }
         }
         return;
 
-    case EPageCollectionRequest::PendingInit:
+    case ESharedCachePagesRequestType::PendingInit:
         {
             const auto *pageCollection = msg->Origin.Get();
             TPendingPartSwitch *foundSwitch = nullptr;

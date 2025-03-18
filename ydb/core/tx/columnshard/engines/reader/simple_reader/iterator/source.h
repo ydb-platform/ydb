@@ -83,6 +83,10 @@ public:
     TString DebugString() const {
         return TStringBuilder() << "point:{" << Value.DebugString() << "};reverse:" << Reverse << ";";
     }
+
+    const NArrow::TReplaceKey& GetReplaceKey() const {
+        return Value;
+    }
 };
 
 class TCompareKeyForScanSequence {
@@ -164,7 +168,7 @@ public:
     const TReplaceKeyAdapter& GetStart() const {
         return Start;
     }
-    const TReplaceKeyAdapter GetFinish() const {
+    const TReplaceKeyAdapter& GetFinish() const {
         return Finish;
     }
 

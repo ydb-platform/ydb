@@ -161,7 +161,7 @@ private:
     NKikimrClient::TPersQueueRequest MakeCreateSessionRequest(bool initial) const;
     NKikimrClient::TPersQueueRequest MakeReadRequest(ui64 readOffset, ui64 lastOffset, ui64 maxCount,
                                                                       ui64 maxSize, ui64 maxTimeLagMs, ui64 readTimestampMs,
-                                                                      ui64 directReadId) const;
+                                                                      ui64 directReadId, ui64 sizeEstimate = 0) const;
 
 
 private:

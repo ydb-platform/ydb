@@ -265,6 +265,8 @@ private:
         }
         if (isDirectRead) {
             auto* prepareResponse = Response->Record.MutablePartitionResponse()->MutableCmdPrepareReadResult();
+            auto sizeEstimate = Request.GetPartitionRequest().GetCmdRead().GetSizeEstimate();
+            PreparedResponse->MutablePartitionResponse()->MutableCmdPrepareReadResult()->SetBytesSizeEstimate(sizeEstimate ? sizeEstimate : readResult.GetSizeEstimate());
             prepareResponse->SetBytesSizeEstimate(readResult.GetSizeEstimate());
             prepareResponse->SetDirectReadId(DirectReadKey.ReadId);
             prepareResponse->SetReadOffset(readResult.GetRealReadOffset());

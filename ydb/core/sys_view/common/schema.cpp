@@ -326,7 +326,7 @@ public:
     bool IsSystemViewPath(const TVector<TString>& path, TSystemViewPath& sysViewPath) const override final {
         if (MaybeSystemViewPath(path)) {
             auto maybeSystemViewName = path.back();
-            if (SystemViews.contains(maybeSystemViewName)) {
+            if (!SystemViews.contains(maybeSystemViewName)) {
                 return false;
             }
             TVector<TString> realPath(path.begin(), path.end() - 2);

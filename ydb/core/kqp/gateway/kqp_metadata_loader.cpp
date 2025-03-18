@@ -583,8 +583,6 @@ NThreading::TFuture<NYql::IKikimrGateway::TTableMetadataResult> TKqpTableMetadat
     entry.Columns = std::move(schema->Columns);
     entry.TableId = TTableId(TSysTables::SysSchemeShard, 0, sysViewPath.ViewName);
 
-    Y_ENSURE(false);
-
     auto result = GetTableMetadataResult(entry, cluster, table);
 
     return MakeFuture(result);

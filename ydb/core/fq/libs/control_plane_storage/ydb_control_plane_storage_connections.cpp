@@ -27,7 +27,7 @@ void PrepareSensitiveFields(::FederatedQuery::Connection& connection, bool extra
         pg.set_password("");
     }
     if (auto auth = GetMutableAuth(&setting); auth && auth->has_token()) {
-        auto->mutable_token()->set_token("");
+        auth->mutable_token()->set_token("");
     }
 }
 

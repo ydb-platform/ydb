@@ -1,5 +1,6 @@
 #pragma once
 #include <util/system/mutex.h>
+#include <util/generic/noncopyable.h>
 #include <util/generic/refcount.h>
 #include <util/generic/string.h>
 
@@ -28,17 +29,20 @@ private:
     TAtomicCounter Size = 0;
 public:
 
-    class TEvWriter {
+    class TEvWriter: TMoveOnly {
     private:
         TStringBuilder sb;
         TLogsThread& Owner;
     public:
-        TEvWriter& operator(const TString& key, const TString& value) {
-            sb << key << "=" << value << ";";
-            return *this;
+        TEvWriter(TLogsThread& owner, const TString& evName = Default<TString>())
+            : Owner(owner) {
+            if (evName) {
+                sb << evName << ";";
+            }
         }
-        TEvWriter& operator(const TString& eventName) {
-            sb << eventName;
+
+        TEvWriter& operator()(const TString& key, const TString& value) {
+            sb << key << "=" << value << ";";
             return *this;
         }
         ~TEvWriter() {
@@ -53,7 +57,7 @@ public:
     }
 
     TEvWriter AddEventStream(const TString& evName) {
-        return TEvWriter(*this);
+        return TEvWriter(*this, evName);
     }
 
     void AddEvent(const TString& evName);

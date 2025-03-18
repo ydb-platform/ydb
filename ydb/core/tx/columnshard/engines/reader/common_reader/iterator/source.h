@@ -16,8 +16,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
-
-#include <ydb/util/evlog/log.h>
+#include <ydb/core/util/evlog/log.h>
 
 #include <util/string/join.h>
 

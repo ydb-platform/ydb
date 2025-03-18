@@ -149,6 +149,7 @@
 #include <ydb/library/actors/util/memory_track.h>
 #include <ydb/library/actors/prof/tag.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
+#include <ydb/library/signal_backtrace/signal_backtrace.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
 #include <util/charset/wide.h>
@@ -1942,6 +1943,10 @@ void TKikimrRunner::SetSignalHandlers() {
 #endif
     signal(SIGINT, &TKikimrRunner::OnTerminate);
     signal(SIGTERM, &TKikimrRunner::OnTerminate);
+
+    if (IsTrue(GetEnv("YDB_ENABLE_SIGNAL_BACKTRACE"))) {
+        Singleton<TTraceCollector>(TTraceCollector::DEFAULT_SIGNALS);
+    }
 
 #if !defined(_win_)
     SetAsyncSignalHandler(SIGHUP, [](int) {

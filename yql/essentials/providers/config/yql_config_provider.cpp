@@ -517,6 +517,18 @@ namespace {
                 }
                 Types.OptLLVM = args.empty() ? TString() : TString(args[0]);
             }
+            else if (name == "RuntimeLogLevel") {
+                if (args.size() != 1) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));
+                    return false;
+                }
+                auto value = NUdf::TryLevelFromString(args[0]);
+                if (!value) {
+                    ctx.AddError(TIssue(pos, TStringBuilder() << "Invalid log level value: " << args[0]));
+                    return false;
+                }
+                Types.RuntimeLogLevel = *value;
+            }
             else if (name == "NodesAllocationLimit") {
                 if (args.size() != 1) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Expected 1 argument, but got " << args.size()));

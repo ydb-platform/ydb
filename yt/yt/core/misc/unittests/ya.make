@@ -27,6 +27,7 @@ SRCS(
     enum_ut.cpp
     error_ut.cpp
     fair_scheduler_ut.cpp
+    fair_share_hierarchical_queue_ut.cpp
     fenwick_tree_ut.cpp
     finally_ut.cpp
     format_ut.cpp

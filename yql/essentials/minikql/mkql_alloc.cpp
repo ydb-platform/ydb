@@ -298,9 +298,15 @@ void* MKQLArrowAllocateOnArena(ui64 size) {
 }
 
 void* MKQLArrowAllocate(ui64 size) {
-    if (size <= ArrowSizeForArena) {
-        return MKQLArrowAllocateOnArena(size);
+#if defined(ALLOW_DEFAULT_ALLOCATOR)
+    if (Y_LIKELY(!TAllocState::IsDefaultAllocatorUsed())) {
+#endif
+        if (size <= ArrowSizeForArena) {
+            return MKQLArrowAllocateOnArena(size);
+        }
+#if defined(ALLOW_DEFAULT_ALLOCATOR)
     }
+#endif
 
     TAllocState* state = TlsAllocState;
     Y_ENSURE(state);
@@ -366,9 +372,15 @@ void MKQLArrowFreeOnArena(const void* ptr) {
 }
 
 void MKQLArrowFree(const void* mem, ui64 size) {
-    if (size <= ArrowSizeForArena) {
-        return MKQLArrowFreeOnArena(mem);
+#if defined(ALLOW_DEFAULT_ALLOCATOR)
+    if (Y_LIKELY(!TAllocState::IsDefaultAllocatorUsed())) {
+#endif
+        if (size <= ArrowSizeForArena) {
+            return MKQLArrowFreeOnArena(mem);
+        }
+#if defined(ALLOW_DEFAULT_ALLOCATOR)
     }
+#endif
 
     auto fullSize = size + sizeof(TMkqlArrowHeader);
     auto header = ((TMkqlArrowHeader*)mem) - 1;
@@ -400,22 +412,28 @@ void MKQLArrowUntrack(const void* mem, ui64 size) {
         return;
     }
 
-    if (size <= ArrowSizeForArena) {
-        auto* page = (TMkqlArrowHeader*)TAllocState::GetPageStart(mem);
+#if defined(ALLOW_DEFAULT_ALLOCATOR)
+    if (Y_LIKELY(!TAllocState::IsDefaultAllocatorUsed())) {
+#endif
+        if (size <= ArrowSizeForArena) {
+            auto* page = (TMkqlArrowHeader*)TAllocState::GetPageStart(mem);
 
-        auto it = state->ArrowBuffers.find(page);
-        if (it == state->ArrowBuffers.end()) {
+            auto it = state->ArrowBuffers.find(page);
+            if (it == state->ArrowBuffers.end()) {
+                return;
+            }
+
+            if (!page->Entry.IsUnlinked()) {
+                page->Entry.Unlink(); // unlink page immediately so we don't accidentally free untracked memory within `TAllocState`
+                state->ArrowBuffers.erase(it);
+                state->OffloadFree(page->Size);
+            }
+
             return;
         }
-
-        if (!page->Entry.IsUnlinked()) {
-            page->Entry.Unlink(); // unlink page immediately so we don't accidentally free untracked memory within `TAllocState`
-            state->ArrowBuffers.erase(it);
-            state->OffloadFree(page->Size);
-        }
-
-        return;
+#if defined(ALLOW_DEFAULT_ALLOCATOR)
     }
+#endif
 
     auto it = state->ArrowBuffers.find(mem);
     if (it == state->ArrowBuffers.end()) {

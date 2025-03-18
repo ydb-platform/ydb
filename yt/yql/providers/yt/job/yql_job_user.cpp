@@ -149,7 +149,8 @@ void TYqlUserJob::DoImpl(const TFile& inHandle, const TVector<TFile>& outHandles
     TYqlJobBase::Init();
 
     TLambdaBuilder builder(FunctionRegistry.Get(), *Alloc,
-        Env.Get(), RandomProvider.Get(), TimeProvider.Get(), JobStats.Get(), &JobCountersProvider, SecureParamsProvider.Get());
+        Env.Get(), RandomProvider.Get(), TimeProvider.Get(), JobStats.Get(), &JobCountersProvider,
+        SecureParamsProvider.Get(), LogProvider.Get());
 
     TType* itemType = nullptr;
     if (InputType) {

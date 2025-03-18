@@ -70,6 +70,10 @@ public:
         TableNames = tableNames;
     }
 
+    void SetRuntimeLogLevel(NUdf::ELogLevel level) {
+        RuntimeLogLevel = level;
+    }
+
     void Do(const NYT::TRawJobContext& jobContext) override;
     void Save(IOutputStream& stream) const override;
     void Load(IInputStream& stream) override;
@@ -88,6 +92,7 @@ protected:
     NKikimr::NUdf::EValidateMode UdfValidateMode = NKikimr::NUdf::EValidateMode::None;
     TString OptLLVM;
     TVector<TString> TableNames;
+    NUdf::ELogLevel RuntimeLogLevel = NUdf::ELogLevel::Info;
     // End serializable part
 
     ui64 StartCycles = 0;
@@ -100,6 +105,7 @@ protected:
     NKikimr::NMiniKQL::IStatsRegistryPtr JobStats;
     TJobCountersProvider JobCountersProvider;
     THolder<NKikimr::NUdf::ISecureParamsProvider> SecureParamsProvider;
+    NUdf::TUniquePtr<NUdf::ILogProvider> LogProvider;
     THolder<NCommon::TCodecContext> CodecCtx;
 };
 

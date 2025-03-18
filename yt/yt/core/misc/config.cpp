@@ -53,6 +53,14 @@ void TLogDigestConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TFairShareHierarchicalSchedulerDynamicConfig::Register(TRegistrar registrar)
+{
+    registrar.Parameter("window_size", &TThis::WindowSize)
+        .Default(TDuration::Minutes(5));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void THistogramDigestConfig::Register(TRegistrar registrar)
 {
     registrar.Parameter("absolute_precision", &TThis::AbsolutePrecision)

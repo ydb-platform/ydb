@@ -8,6 +8,7 @@
 #include "yql_statistics.h"
 
 #include <yql/essentials/public/udf/udf_validate.h>
+#include <yql/essentials/public/udf/udf_log.h>
 #include <yql/essentials/core/credentials/yql_credentials.h>
 #include <yql/essentials/core/url_lister/interface/url_lister_manager.h>
 #include <yql/essentials/core/qplayer/storage/interface/yql_qstorage.h>
@@ -389,6 +390,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     NUdf::EValidateMode ValidateMode = NUdf::EValidateMode::None;
     bool DisableNativeUdfSupport = false;
     TMaybe<TString> OptLLVM;
+    NUdf::ELogLevel RuntimeLogLevel = NUdf::ELogLevel::Info;
     bool IsReadOnly = false;
     TAutoPtr<IGraphTransformer> CustomInstantTypeTransformer;
     bool Diagnostics = false;

@@ -1,8 +1,14 @@
 #pragma once
-#include <util/system/mutex.h>
+#include <ydb/library/accessor/accessor.h>
+#include <ydb/library/actors/core/monotonic.h>
+
 #include <util/generic/noncopyable.h>
 #include <util/generic/refcount.h>
 #include <util/generic/string.h>
+#include <util/string/builder.h>
+#include <util/system/mutex.h>
+#include <optional>
+#include <deque>
 
 namespace NKikimr::NEvLog {
 
@@ -34,17 +40,9 @@ public:
         TStringBuilder sb;
         TLogsThread& Owner;
     public:
-        TEvWriter(TLogsThread& owner, const TString& evName = Default<TString>())
-            : Owner(owner) {
-            if (evName) {
-                sb << evName << ";";
-            }
-        }
+        TEvWriter(TLogsThread& owner, const TString& evName = Default<TString>());
 
-        TEvWriter& operator()(const TString& key, const TString& value) {
-            sb << key << "=" << value << ";";
-            return *this;
-        }
+        TEvWriter& operator()(const TString& key, const TString& value);
         ~TEvWriter() {
             Owner.AddEvent(sb);
         }

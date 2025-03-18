@@ -12,16 +12,16 @@ TString TEvent::DebugString(const TMonotonic start) const {
 void TLogsThread::AddEvent(const TString& text) {
     const i64 pos = Position.Inc();
     if (pos < Size.Val()) {
-        Events[pos] = TEvent(Text);
+        Events[pos] = TEvent(text);
     } else {
         {
             TGuard<TMutex> g(Mutex);
-            if (Events.size() <= pos) {
+            if ((i64)Events.size() <= pos) {
                 Events.resize(std::max<ui32>(Events.size() * 2, Events.size() + 8));
             }
-            Size.Set(Events.size());
+            Size = Events.size();
         }
-        Events[pos] = TEvent(Text);
+        Events[pos] = TEvent(text);
     }
 }
 
@@ -44,6 +44,17 @@ TString TLogsThread::DebugString() const {
     }
     sb << "]";
     return sb;
+}
+
+TLogsThread::TEvWriter::TEvWriter(TLogsThread& owner, const TString& evName /*= Default<TString>()*/): Owner(owner) {
+    if (evName) {
+        sb << evName << ";";
+    }
+}
+
+TLogsThread::TEvWriter& TLogsThread::TEvWriter::operator()(const TString& key, const TString& value) {
+    sb << key << "=" << value << ";";
+    return *this;
 }
 
 }

@@ -109,7 +109,7 @@ sudo usermod -aG disk ydb
 
 {% include [_includes/storage-device-requirements.md](../../_includes/storage-device-requirements.md) %}
 
-To get a list of block devices on the server, you can use the lsblk command. Example output:
+To get a list of available block devices on the server, you can use the `lsblk` command. Example output:
 
 ```txt
 NAME   MAJ:MIN RM   SIZE RO TYPE MOUNTPOINTS
@@ -122,7 +122,11 @@ vdb    252:16   0   186G  0 disk
 └─vdb1 252:17   0   186G  0 part
 ```
 
-The names of block devices depend on the OS settings configured by the system administrator or provided by the cloud provider. For example, block device names in Yandex Cloud are based on `vd(n)`, where `n` is an incrementing literal. In AWS, block device names include the device type (`hdd`, `ssd`, `nvme`) and a sequential number (`0n1`, `1n1`).
+The names of block devices depend on the operating system settings provided by the base image or manually configured. Typically, device names consist of up to three parts:
+
+- A fixed prefix or a prefix indicating the device type  
+- A device sequential identifier (which can be a letter or a number)  
+- A partition sequential identifier on the given device (usually a number)  
 
 1. Create partitions on the selected disks:
 
@@ -400,7 +404,7 @@ The database creation procedure depends on whether you enabled user authenticati
 
   ```bash
   export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://`hostname -f`:2135 \
+  /opt/ydb/bin/ydbd --ca-file ca.crt -s grpcs://$(hostname -f):2135 \
       admin database /Root/testdb create ssd:1
   echo $?
   ```
@@ -522,7 +526,7 @@ To perform initial account setup in the created {{ ydb-short-name }} cluster, ru
       yql -s 'ALTER GROUP `ADMINS` ADD USER user1'
   ```
 
-In the command examples listed above, `<node.ydb.tech>` is the FQDN of the server where any dynamic node servicing the `/Root/testdb` database is running. When connecting via SSH to a YDB dynamic node, it's convenient to use the construction `grpcs://hostname -f:2136` to obtain the FQDN.
+In the command examples listed above, `<node.ydb.tech>` is the FQDN of the server where any dynamic node servicing the `/Root/testdb` database is running. When connecting via SSH to a {{ ydb-short-name }} node, it's convenient to use the `grpcs://$(hostname -f):2136` command to use the current server's FQDN.
 
 
 ## Start using the created database {#try-first-db}

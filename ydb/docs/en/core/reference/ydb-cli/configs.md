@@ -28,9 +28,9 @@
 # Generate dynamic configuration file, based on static configuration on cluster
 {{ ydb-cli }} admin cluster config genereate
 # Initialize directory with configuration, using path to configuration file
-{{ ydb-cli }} admin node config init --config-dir <путь до директории> --from-config <путь до файла конфигурации>
+{{ ydb-cli }} admin node config init --config-dir <path_to_directory> --from-config <path_to_configuration_file>
 # Initialize directory with configuration, using configuration from the cluster
-{{ ydb-cli }} admin node config init --config-dir <путь до директории> --seed-node <эндпоинт узла кластера>
+{{ ydb-cli }} admin node config init --config-dir <path_to_directory> --seed-node <cluster_node_endpoint>
 # Fetch all temporary configurations of the cluster
 {{ ydb-cli }} admin volatile-config fetch --all --output-directory <dir>
 # Fetch the temporary configuration with id 1 from the cluster

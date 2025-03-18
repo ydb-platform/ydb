@@ -806,11 +806,9 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             {
                 CollectionsOwners.erase(ownerIt);
             }
-
-            if (collection.Owners.empty()) {
-                DropCollection(collectionIt, NKikimrProto::RACE);
-            }
         }
+
+        TryDropExpiredCollection(&collection);
 
         ProcessGCList();
     }

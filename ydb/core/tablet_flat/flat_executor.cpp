@@ -726,8 +726,8 @@ void TExecutor::DropSingleCache(const TLogoBlobID &label)
 
     auto toActivate = PrivatePageCache->ForgetPageCollection(pageCollection);
     ActivateWaitingTransactions(toActivate);
-    if (!PrivatePageCache->Info(label))
-        Send(MakeSharedPageCacheId(), new NSharedCache::TEvInvalidate(label));
+    Y_ABORT_IF(PrivatePageCache->Info(label));
+    Send(MakeSharedPageCacheId(), new NSharedCache::TEvInvalidate(label));
 
     Counters->Simple()[TExecutorCounters::CACHE_PINNED_SET] = PrivatePageCache->GetStats().PinnedSetSize;
     Counters->Simple()[TExecutorCounters::CACHE_PINNED_LOAD] = PrivatePageCache->GetStats().PinnedLoadSize;
@@ -3250,9 +3250,6 @@ THolder<TScanSnapshot> TExecutor::PrepareScanSnapshot(ui32 table, const NTable::
         subset = Database->ScanSnapshot(table, snapshot);
     }
 
-    for (auto &partView : subset->Flatten)
-        PrivatePageCache->LockPageCollection(partView->Label);
-
     GcLogic->HoldBarrier(barrier->Step);
     CompactionLogic->UpdateLogUsage(LogicRedo->GrabLogUsage());
 
@@ -3419,11 +3416,9 @@ void TExecutor::UtilizeSubset(const NTable::TSubset &subset,
 
 void TExecutor::ReleaseScanLocks(TIntrusivePtr<TBarrier> barrier, const NTable::TSubset &subset)
 {
-    CheckCollectionBarrier(barrier);
+    Y_UNUSED(subset);
 
-    for (auto &partView : subset.Flatten)
-        if (PrivatePageCache->UnlockPageCollection(partView->Label))
-            Send(MakeSharedPageCacheId(), new NSharedCache::TEvInvalidate(partView->Label));
+    CheckCollectionBarrier(barrier);
 }
 
 void TExecutor::Handle(NOps::TEvScanStat::TPtr &ev, const TActorContext &ctx) {

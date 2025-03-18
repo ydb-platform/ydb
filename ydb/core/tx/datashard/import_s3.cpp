@@ -69,25 +69,39 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
     public:
         virtual ~IReadController() = default;
         virtual void Feed(TString&& portion) = 0;
-        // Returns data (view to internal buffer) or error
+        // Returns data (points to internal buffer) or error
         virtual EDataStatus TryGetData(TStringBuf& data, TString& error) = 0;
-        // Clear internal buffer & makes it ready for another Feed() and TryGetData()
+        // Clears internal buffer & makes it ready for another Feed() and TryGetData()
         virtual void Confirm() = 0;
+        // Bytes that were read from S3 and put into controller. In terms of input bytes
         virtual ui64 PendingBytes() const = 0;
+        // Bytes that controller has given to processing. In terms of input bytes
         virtual ui64 ReadyBytes() const = 0;
+        virtual std::pair<ui64, ui64> NextRange(ui64 contentLength, ui64 processedBytes) const = 0;
     };
 
     class TReadController: public IReadController {
     public:
-        explicit TReadController(ui32 rangeSize, ui64 bufferSizeLimit)
+        explicit TReadController(ui32 rangeSize, ui64 bufferSizeLimit, NBackupRestoreTraits::ECompressionCodec codec)
             : RangeSize(rangeSize)
             , BufferSizeLimit(bufferSizeLimit)
+            , Codec(codec)
         {
-            // able to contain at least one range
-            Buffer.Reserve(RangeSize);
+            Y_VERIFY(Codec != NBackupRestoreTraits::ECompressionCodec::Invalid);
+            if (Codec == NBackupRestoreTraits::ECompressionCodec::Zstd) {
+                CompressionContext.Reset(ZSTD_createDCtx());
+                ResetCompressionContext();
+
+                // able to contain at least one block
+                // take effect if RangeSize < BlockSize
+                DecompressedDataBuffer.Reserve(AppData()->ZstdBlockSizeForTest.GetOrElse(ZSTD_BLOCKSIZE_MAX));
+            } else {
+                // able to contain at least one range
+                Portion.Reserve(RangeSize);
+            }
         }
 
-        std::pair<ui64, ui64> NextRange(ui64 contentLength, ui64 processedBytes) const {
+        std::pair<ui64, ui64> NextRange(ui64 contentLength, ui64 processedBytes) const override {
             Y_ABORT_UNLESS(contentLength > 0);
             Y_ABORT_UNLESS(processedBytes < contentLength);
 
@@ -96,7 +110,125 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             return std::make_pair(start, end);
         }
 
-    protected:
+        EDataStatus TryGetReadyData(TStringBuf& readyData, TString& error) {
+            ui64 pos = readyData.rfind('\n');
+            if (TString::npos == pos) {
+                if (!CanRequestNextRange(readyData.size(), error)) {
+                    return ERROR;
+                } else {
+                    return NOT_ENOUGH_DATA;
+                }
+            }
+
+            ++pos; // \n
+            readyData = readyData.SubStr(0, pos);
+            return READY_DATA;
+        }
+
+        void Feed(TString&& portion) override {
+            FeedSize += portion.size();
+            Portion.Append(portion.data(), portion.size());
+        }
+
+        EDataStatus TryGetData(TStringBuf& data, TString& error) override {
+            Y_ABORT_UNLESS(ReadyInputBytes == 0 && ReadyOutputPos == 0);
+            if (Codec == NBackupRestoreTraits::ECompressionCodec::None) {
+                TStringBuf readyData(Portion.Data(), Portion.Data() + Portion.Size());
+                EDataStatus ret = TryGetReadyData(readyData, error);
+                if (ret != ERROR) {
+                    data = readyData;
+                    ReadyInputBytes = readyData.size();
+                }
+                return ret;
+            }
+
+            auto input = ZSTD_inBuffer{Portion.Data(), Portion.Size(), 0};
+            while (!ReadyOutputPos) {
+                PendingInputBytes -= input.pos; // dec before decompress
+
+                auto output = ZSTD_outBuffer{DecompressedDataBuffer.Data(), DecompressedDataBuffer.Capacity(), DecompressedDataBuffer.Size()};
+                auto res = ZSTD_decompressStream(CompressionContext.Get(), &output, &input);
+
+                if (ZSTD_isError(res)) {
+                    error = ZSTD_getErrorName(res);
+                    return ERROR;
+                }
+
+                PendingInputBytes += input.pos; // inc after decompress
+                DecompressedDataBuffer.Proceed(output.pos);
+
+                if (res == 0) {
+                    // end of frame
+                    if (AsStringBuf(DecompressedDataBuffer.Size()).back() != '\n') {
+                        error = "cannot find new line symbol";
+                        return ERROR;
+                    }
+
+                    ReadyInputBytes = PendingInputBytes;
+                    ReadyOutputPos = DecompressedDataBuffer.Size();
+                    ResetCompressionContext();
+                } else {
+                    // try to find complete row
+                    const ui64 pos = AsStringBuf(DecompressedDataBuffer.Size()).rfind('\n');
+                    if (TString::npos != pos) {
+                        ReadyOutputPos = pos + 1 /* \n */;
+                    }
+                }
+
+                if (input.pos >= input.size) {
+                    // end of input
+                    break;
+                }
+
+                if (!ReadyOutputPos && output.pos == output.size) {
+                    const auto blockSize = AppData()->ZstdBlockSizeForTest.GetOrElse(ZSTD_BLOCKSIZE_MAX);
+                    if (CanIncreaseBuffer(DecompressedDataBuffer.Size(), blockSize, error)) {
+                        DecompressedDataBuffer.Reserve(DecompressedDataBuffer.Size() + blockSize);
+                    } else {
+                        return ERROR;
+                    }
+                }
+            }
+
+            Portion.ChopHead(input.pos);
+
+            if (!ReadyOutputPos) {
+                if (!CanRequestNextRange(DecompressedDataBuffer.Size(), error)) {
+                    return ERROR;
+                } else {
+                    return NOT_ENOUGH_DATA;
+                }
+            }
+
+            data = AsStringBuf(ReadyOutputPos);
+            return READY_DATA;
+        }
+
+        void Confirm() override {
+            DecompressedDataBuffer.ChopHead(ReadyOutputPos);
+            ReadyOutputPos = 0;
+
+            PendingInputBytes -= ReadyInputBytes;
+            FeedSize -= ReadyInputBytes;
+
+            Portion.ChopHead(ReadyInputBytes);
+            ReadyInputBytes = 0;
+        }
+
+        ui64 PendingBytes() const override {
+            return FeedSize;
+        }
+
+        ui64 ReadyBytes() const override {
+            return ReadyInputBytes;
+        }
+
+    private:
+        void ResetCompressionContext() {
+            ZSTD_DCtx_reset(CompressionContext.Get(), ZSTD_reset_session_only);
+            ZSTD_DCtx_refDDict(CompressionContext.Get(), NULL);
+        }
+
         bool CanIncreaseBuffer(size_t size, size_t delta, TString& reason) const {
             if ((size + delta) >= BufferSizeLimit) {
                 reason = "reached buffer size limit";
@@ -111,171 +243,21 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         }
 
         TStringBuf AsStringBuf(size_t size) const {
-            return TStringBuf(Buffer.Data(), size);
+            return TStringBuf(DecompressedDataBuffer.Data(), size);
         }
 
     private:
         const ui32 RangeSize;
         const ui64 BufferSizeLimit;
-
-    protected:
-        TBuffer Buffer;
-
-    }; // TReadController
-
-    class TReadControllerRaw: public TReadController {
-    public:
-        using TReadController::TReadController;
-
-        void Feed(TString&& portion) override {
-            Buffer.Append(portion.data(), portion.size());
-        }
-
-        EDataStatus TryGetData(TStringBuf& data, TString& error) override {
-            Y_ABORT_UNLESS(Pos == 0);
-
-            const ui64 pos = AsStringBuf(Buffer.Size()).rfind('\n');
-            if (TString::npos == pos) {
-                if (!CanRequestNextRange(Buffer.Size(), error)) {
-                    return ERROR;
-                } else {
-                    return NOT_ENOUGH_DATA;
-                }
-            }
-
-            Pos = pos + 1 /* \n */;
-            data = AsStringBuf(Pos);
-
-            return READY_DATA;
-        }
-
-        void Confirm() override {
-            Buffer.ChopHead(Pos);
-            Pos = 0;
-        }
-
-        ui64 PendingBytes() const override {
-            return Buffer.Size();
-        }
-
-        ui64 ReadyBytes() const override {
-            return Pos;
-        }
-
-    private:
-        ui64 Pos = 0;
-    };
-
-    class TReadControllerZstd: public TReadController {
-        void Reset() {
-            ZSTD_DCtx_reset(Context.Get(), ZSTD_reset_session_only);
-            ZSTD_DCtx_refDDict(Context.Get(), NULL);
-        }
-
-    public:
-        explicit TReadControllerZstd(ui32 rangeSize, ui64 bufferSizeLimit)
-            : TReadController(rangeSize, bufferSizeLimit)
-            , Context(ZSTD_createDCtx())
-        {
-            Reset();
-            // able to contain at least one block
-            // take effect if RangeSize < BlockSize
-            Buffer.Reserve(AppData()->ZstdBlockSizeForTest.GetOrElse(ZSTD_BLOCKSIZE_MAX));
-        }
-
-        void Feed(TString&& portion) override {
-            Y_ABORT_UNLESS(Portion.Empty());
-            Portion.Assign(portion.data(), portion.size());
-        }
-
-        EDataStatus TryGetData(TStringBuf& data, TString& error) override {
-            Y_ABORT_UNLESS(ReadyInputBytes == 0 && ReadyOutputPos == 0);
-
-            auto input = ZSTD_inBuffer{Portion.Data(), Portion.Size(), 0};
-            while (!ReadyOutputPos) {
-                PendingInputBytes -= input.pos; // dec before decompress
-
-                auto output = ZSTD_outBuffer{Buffer.Data(), Buffer.Capacity(), Buffer.Size()};
-                auto res = ZSTD_decompressStream(Context.Get(), &output, &input);
-
-                if (ZSTD_isError(res)) {
-                    error = ZSTD_getErrorName(res);
-                    return ERROR;
-                }
-
-                PendingInputBytes += input.pos; // inc after decompress
-                Buffer.Proceed(output.pos);
-
-                if (res == 0) {
-                    // end of frame
-                    if (AsStringBuf(Buffer.Size()).back() != '\n') {
-                        error = "cannot find new line symbol";
-                        return ERROR;
-                    }
-
-                    ReadyInputBytes = PendingInputBytes;
-                    ReadyOutputPos = Buffer.Size();
-                    Reset();
-                } else {
-                    // try to find complete row
-                    const ui64 pos = AsStringBuf(Buffer.Size()).rfind('\n');
-                    if (TString::npos != pos) {
-                        ReadyOutputPos = pos + 1 /* \n */;
-                    }
-                }
-
-                if (input.pos >= input.size) {
-                    // end of input
-                    break;
-                }
-
-                if (!ReadyOutputPos && output.pos == output.size) {
-                    const auto blockSize = AppData()->ZstdBlockSizeForTest.GetOrElse(ZSTD_BLOCKSIZE_MAX);
-                    if (CanIncreaseBuffer(Buffer.Size(), blockSize, error)) {
-                        Buffer.Reserve(Buffer.Size() + blockSize);
-                    } else {
-                        return ERROR;
-                    }
-                }
-            }
-
-            Portion.ChopHead(input.pos);
-
-            if (!ReadyOutputPos) {
-                if (!CanRequestNextRange(Buffer.Size(), error)) {
-                    return ERROR;
-                } else {
-                    return NOT_ENOUGH_DATA;
-                }
-            }
-
-            data = AsStringBuf(ReadyOutputPos);
-            return READY_DATA;
-        }
-
-        void Confirm() override {
-            Buffer.ChopHead(ReadyOutputPos);
-            ReadyOutputPos = 0;
-
-            PendingInputBytes -= ReadyInputBytes;
-            ReadyInputBytes = 0;
-        }
-
-        ui64 PendingBytes() const override {
-            return PendingInputBytes;
-        }
-
-        ui64 ReadyBytes() const override {
-            return ReadyInputBytes;
-        }
-
-    private:
-        THolder<::ZSTD_DCtx, DestroyZCtx> Context;
+        NBackupRestoreTraits::ECompressionCodec Codec = NBackupRestoreTraits::ECompressionCodec::Invalid;
+        THolder<::ZSTD_DCtx, DestroyZCtx> CompressionContext;
         TBuffer Portion;
+        TBuffer DecompressedDataBuffer;
+        ui64 FeedSize = 0;
         ui64 PendingInputBytes = 0;
         ui64 ReadyInputBytes = 0;
         ui64 ReadyOutputPos = 0;
-    };
+    }; // TReadController
 
     class TUploadRowsRequestBuilder {
     public:
@@ -399,16 +381,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             return HeadObject(Settings.GetDataKey(DataFormat, CompressionCodec));
         }
 
-        switch (CompressionCodec) {
-        case NBackupRestoreTraits::ECompressionCodec::None:
-            Reader.Reset(new TReadControllerRaw(ReadBatchSize, ReadBufferSizeLimit));
-            break;
-        case NBackupRestoreTraits::ECompressionCodec::Zstd:
-            Reader.Reset(new TReadControllerZstd(ReadBatchSize, ReadBufferSizeLimit));
-            break;
-        case NBackupRestoreTraits::ECompressionCodec::Invalid:
-            Y_ABORT("unreachable");
-        }
+        Reader.Reset(new TReadController(ReadBatchSize, ReadBufferSizeLimit, CompressionCodec));
 
         ETag = result.GetResult().GetETag();
         ContentLength = result.GetResult().GetContentLength();
@@ -528,10 +501,10 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         TString error;
 
         switch (Reader->TryGetData(data, error)) {
-        case TReadController::READY_DATA:
+        case IReadController::READY_DATA:
             break;
 
-        case TReadController::NOT_ENOUGH_DATA:
+        case IReadController::NOT_ENOUGH_DATA:
             if (SumWithSaturation(ProcessedBytes, Reader->PendingBytes()) < ContentLength) {
                 return GetObject(Settings.GetDataKey(DataFormat, CompressionCodec),
                     Reader->NextRange(ContentLength, ProcessedBytes));
@@ -889,7 +862,7 @@ private:
 
     const ui32 ReadBatchSize;
     const ui64 ReadBufferSizeLimit;
-    THolder<TReadController> Reader;
+    THolder<IReadController> Reader;
     TUploadRowsRequestBuilder RequestBuilder;
 
     NBackup::IChecksum::TPtr Checksum;

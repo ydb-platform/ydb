@@ -1805,6 +1805,8 @@ Y_UNIT_TEST_F(UserActCount, TPartitionFixture)
 
     CreatePartition();
 
+    Ctx->Runtime->SetScheduledLimit(6000);
+
     SendCreateSession(1, "client", "session-id", 2, 3);
     WaitCmdWrite({.Count=2, .UserInfos={{0, {.Session="session-id", .Offset=0, .Generation=2, .Step=3}}}});
     SendCmdWriteResponse(NMsgBusProxy::MSTATUS_OK);

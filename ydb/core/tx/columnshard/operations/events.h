@@ -61,21 +61,21 @@ class TInsertedPortions {
 private:
     YDB_ACCESSOR_DEF(std::vector<TWriteResult>, WriteResults);
     YDB_ACCESSOR_DEF(std::vector<TInsertedPortion>, Portions);
-    YDB_READONLY(ui64, PathId, 0);
+    YDB_READONLY(NColumnShard::TInternalPathId, PathId, NColumnShard::TInternalPathId{});
 
 public:
     TInsertedPortions(std::vector<TWriteResult>&& writeResults, std::vector<TInsertedPortion>&& portions)
         : WriteResults(std::move(writeResults))
         , Portions(std::move(portions)) {
         AFL_VERIFY(WriteResults.size());
-        std::optional<ui64> pathId;
+        std::optional<NColumnShard::TInternalPathId> pathId;
         for (auto&& i : WriteResults) {
             i.GetWriteMeta().OnStage(NEvWrite::EWriteStage::Finished);
             AFL_VERIFY(!i.GetWriteMeta().HasLongTxId());
             if (!pathId) {
-                pathId = i.GetWriteMeta().GetTableId();
+                pathId = i.GetWriteMeta().GetPathId().InternalPathId;
             } else {
-                AFL_VERIFY(pathId == i.GetWriteMeta().GetTableId());
+                AFL_VERIFY(pathId == i.GetWriteMeta().GetPathId().InternalPathId);
             }
         }
         AFL_VERIFY(pathId);

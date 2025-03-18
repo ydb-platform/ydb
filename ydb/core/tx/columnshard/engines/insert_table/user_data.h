@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/common/blob.h>
 
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 
@@ -23,20 +24,20 @@ private:
     };
 
     std::shared_ptr<TBlobStorageGuard> BlobDataGuard;
-    YDB_READONLY(ui64, PathId, 0);
+    YDB_READONLY(NColumnShard::TInternalPathId, PathId, NColumnShard::TInternalPathId{});
     YDB_READONLY(ui64, SchemaVersion, 0);
 
 public:
     TUserData() = delete;
-    TUserData(const ui64 pathId, const TBlobRange& blobRange, const NKikimrTxColumnShard::TLogicalMetadata& proto, const ui64 schemaVersion,
+    TUserData(const NColumnShard::TInternalPathId pathId, const TBlobRange& blobRange, const NKikimrTxColumnShard::TLogicalMetadata& proto, const ui64 schemaVersion,
         const std::optional<TString>& blobData);
 
-    static std::shared_ptr<TUserData> Build(const ui64 pathId, const TBlobRange& blobRange, const NKikimrTxColumnShard::TLogicalMetadata& proto, const ui64 schemaVersion,
+    static std::shared_ptr<TUserData> Build(const NColumnShard::TInternalPathId pathId, const TBlobRange& blobRange, const NKikimrTxColumnShard::TLogicalMetadata& proto, const ui64 schemaVersion,
         const std::optional<TString>& blobData) {
         return std::make_shared<TUserData>(pathId, blobRange, proto, schemaVersion, blobData);
     }
 
-    static std::shared_ptr<TUserData> Build(const ui64 pathId, const TUnifiedBlobId& blobId, const NKikimrTxColumnShard::TLogicalMetadata& proto, const ui64 schemaVersion,
+    static std::shared_ptr<TUserData> Build(const NColumnShard::TInternalPathId pathId, const TUnifiedBlobId& blobId, const NKikimrTxColumnShard::TLogicalMetadata& proto, const ui64 schemaVersion,
         const std::optional<TString>& blobData) {
         return std::make_shared<TUserData>(pathId, TBlobRange(blobId), proto, schemaVersion, blobData);
     }
@@ -80,7 +81,7 @@ public:
         return UserData->GetTxVolume();
     }
 
-    ui64 GetPathId() const {
+    NColumnShard::TInternalPathId GetPathId() const {
         return UserData->GetPathId();
     }
 

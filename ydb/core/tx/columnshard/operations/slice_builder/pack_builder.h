@@ -26,7 +26,7 @@ public:
 
 class TBuildPackSlicesTask: public NConveyor::ITask, public NColumnShard::TMonitoringObjectsCounter<TBuildPackSlicesTask> {
 private:
-    const ui64 PathId;
+    const NColumnShard::TInternalPathId PathId;
     const ui64 TabletId;
     const NEvWrite::EModificationType ModificationType;
     const std::vector<TWriteUnit> WriteUnits;
@@ -41,7 +41,7 @@ public:
         return "Write::ConstructBlobs::PackSlices";
     }
 
-    TBuildPackSlicesTask(std::vector<TWriteUnit>&& writeUnits, const NOlap::TWritingContext& context, const ui64 pathId, const ui64 tabletId,
+    TBuildPackSlicesTask(std::vector<TWriteUnit>&& writeUnits, const NOlap::TWritingContext& context, const NColumnShard::TInternalPathId pathId, const ui64 tabletId,
         const NEvWrite::EModificationType modificationType)
         : PathId(pathId)
         , TabletId(tabletId)

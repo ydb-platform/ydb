@@ -1,3 +1,4 @@
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include "clean.h"
 
 #include <ydb/core/formats/arrow/arrow_helpers.h>

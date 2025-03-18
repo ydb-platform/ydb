@@ -21,7 +21,7 @@ namespace {
         TString Metadata;
         ui64 Offset;
         ui32 Size;
-        ui64 PathId;
+        NColumnShard::TInternalPathId PathId;
 
         template <class TRowSet>
         TChunkData(const TRowSet& rowset) {
@@ -40,7 +40,7 @@ namespace {
             Metadata = rowset.template GetValue<Schema::IndexColumns::Metadata>();
             Offset = rowset.template GetValue<Schema::IndexColumns::Offset>();
             Size = rowset.template GetValue<Schema::IndexColumns::Size>();
-            PathId = rowset.template GetValue<Schema::IndexColumns::PathId>();
+            PathId = NColumnShard::TInternalPathId::FromInternalPathIdValue(rowset.template GetValue<Schema::IndexColumns::PathId>());
         }
     };
 }
@@ -67,7 +67,7 @@ public:
 
             db.Table<Schema::IndexColumns>().Key(0, 0, key.ColumnIdx,
                 key.PlanStep, key.TxId, key.PortionId, key.Chunk).Update(
-                    NIceDb::TUpdate<Schema::IndexColumns::PathId>(key.PathId),
+                    NIceDb::TUpdate<Schema::IndexColumns::PathId>(key.PathId.GetInternalPathIdValue()),
                     NIceDb::TUpdate<Schema::IndexColumns::Blob>(key.Blob),
                     NIceDb::TUpdate<Schema::IndexColumns::Metadata>(key.Metadata),
                     NIceDb::TUpdate<Schema::IndexColumns::Offset>(key.Offset),

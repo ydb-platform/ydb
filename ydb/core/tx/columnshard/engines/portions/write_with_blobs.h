@@ -90,7 +90,7 @@ public:
     std::vector<std::shared_ptr<IPortionDataChunk>> GetEntityChunks(const ui32 entityId) const;
 
     static TWritePortionInfoWithBlobsConstructor BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
-        const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks, const ui64 granule, const ui64 schemaVersion,
+        const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks, const NColumnShard::TInternalPathId granule, const ui64 schemaVersion,
         const TSnapshot& snapshot, const std::shared_ptr<IStoragesManager>& operators);
 
     static TWritePortionInfoWithBlobsConstructor BuildByBlobs(std::vector<TSplittedBlob>&& chunks,

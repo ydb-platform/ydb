@@ -65,7 +65,7 @@ public:
             meta.SetIndexBlobBytes(indexBlobBytes);
 
             db.Table<Schema::IndexPortions>()
-                .Key(i.GetPortionInfo().GetPathId(), i.GetPortionInfo().GetPortionId())
+                .Key(i.GetPortionInfo().GetPathId().GetInternalPathIdValue(), i.GetPortionInfo().GetPortionId())
                 .Update(NIceDb::TUpdate<Schema::IndexPortions::Metadata>(meta.SerializeAsString()));
         }
 

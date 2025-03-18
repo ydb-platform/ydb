@@ -39,7 +39,7 @@ void TInsertionSummary::AddPriority(const TPathInfo& pathInfo) noexcept {
     }
 }
 
-TPathInfo& TInsertionSummary::RegisterPathInfo(const ui64 pathId) {
+TPathInfo& TInsertionSummary::RegisterPathInfo(const NColumnShard::TInternalPathId pathId) {
     auto it = PathInfo.find(pathId);
     if (it == PathInfo.end()) {
         it = PathInfo.emplace(pathId, TPathInfo(*this, pathId)).first;
@@ -47,7 +47,7 @@ TPathInfo& TInsertionSummary::RegisterPathInfo(const ui64 pathId) {
     return it->second;
 }
 
-TPathInfo* TInsertionSummary::GetPathInfoOptional(const ui64 pathId) {
+TPathInfo* TInsertionSummary::GetPathInfoOptional(const NColumnShard::TInternalPathId pathId) {
     auto it = PathInfo.find(pathId);
     if (it == PathInfo.end()) {
         return nullptr;
@@ -55,7 +55,7 @@ TPathInfo* TInsertionSummary::GetPathInfoOptional(const ui64 pathId) {
     return &it->second;
 }
 
-const TPathInfo* TInsertionSummary::GetPathInfoOptional(const ui64 pathId) const {
+const TPathInfo* TInsertionSummary::GetPathInfoOptional(const NColumnShard::TInternalPathId pathId) const {
     auto it = PathInfo.find(pathId);
     if (it == PathInfo.end()) {
         return nullptr;
@@ -63,7 +63,7 @@ const TPathInfo* TInsertionSummary::GetPathInfoOptional(const ui64 pathId) const
     return &it->second;
 }
 
-bool TInsertionSummary::IsOverloaded(const ui64 pathId) const {
+bool TInsertionSummary::IsOverloaded(const NColumnShard::TInternalPathId pathId) const {
     auto* pathInfo = GetPathInfoOptional(pathId);
     if (!pathInfo) {
         return false;

@@ -60,7 +60,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
         if (request.HasLockTxId()) {
             read.LockId = request.GetLockTxId();
         }
-        read.PathId = request.GetLocalPathId();
+        read.PathId = InternalPathId;
         read.ReadNothing = !Self->TablesManager.HasTable(read.PathId);
         read.TableName = table;
 

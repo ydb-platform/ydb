@@ -5,18 +5,18 @@ namespace NKikimr::NOlap {
 
 class TPortionConstructors {
 private:
-    THashMap<ui64, THashMap<ui64, TPortionAccessorConstructor>> Constructors;
+    THashMap<NColumnShard::TInternalPathId, THashMap<ui64, TPortionAccessorConstructor>> Constructors;
 
 public:
-    THashMap<ui64, THashMap<ui64, TPortionAccessorConstructor>>::iterator begin() {
+    THashMap<NColumnShard::TInternalPathId, THashMap<ui64, TPortionAccessorConstructor>>::iterator begin() {
         return Constructors.begin();
     }
 
-    THashMap<ui64, THashMap<ui64, TPortionAccessorConstructor>>::iterator end() {
+    THashMap<NColumnShard::TInternalPathId, THashMap<ui64, TPortionAccessorConstructor>>::iterator end() {
         return Constructors.end();
     }
 
-    TPortionAccessorConstructor* GetConstructorVerified(const ui64 pathId, const ui64 portionId) {
+    TPortionAccessorConstructor* GetConstructorVerified(const NColumnShard::TInternalPathId pathId, const ui64 portionId) {
         auto itPathId = Constructors.find(pathId);
         AFL_VERIFY(itPathId != Constructors.end());
         auto itPortionId = itPathId->second.find(portionId);
@@ -25,7 +25,7 @@ public:
     }
 
     TPortionAccessorConstructor* AddConstructorVerified(TPortionAccessorConstructor&& constructor) {
-        const ui64 pathId = constructor.GetPortionConstructor().GetPathId();
+        const NColumnShard::TInternalPathId pathId = constructor.GetPortionConstructor().GetPathId();
         const ui64 portionId = constructor.GetPortionConstructor().GetPortionIdVerified();
         auto info = Constructors[pathId].emplace(portionId, std::move(constructor));
         AFL_VERIFY(info.second);

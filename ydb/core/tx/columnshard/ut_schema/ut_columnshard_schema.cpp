@@ -296,12 +296,12 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     lastTtlFinishedCount = csControllerGuard->GetTTLFinishedCounter().Val();
     auto ok = ProposeSchemaTx(runtime, sender,
                          TTestSchema::AlterTableTxBody(tableId, 3, TTestSchema::TTableSpecials()),
-                         NOlap::TSnapshot(++planStep, ++txId));
+                         ++txId);
     UNIT_ASSERT(ok);
     if (spec.HasTiers()) {
         csControllerGuard->OverrideTierConfigs(runtime, sender, TTestSchema::BuildSnapshot(TTestSchema::TTableSpecials()));
     }
-    PlanSchemaTx(runtime, sender, NOlap::TSnapshot(planStep, txId));
+    PlanSchemaTx(runtime, sender, NOlap::TSnapshot(++planStep, txId));
 
 
     std::vector<ui64> writeIds;
@@ -1023,9 +1023,9 @@ void TestDropWriteRace() {
     auto commitTxId = txId;
 
     // Drop table
-    auto ok = ProposeSchemaTx(runtime, sender, TTestSchema::DropTableTxBody(tableId, 2), NOlap::TSnapshot(++planStep, ++txId));
+    auto ok = ProposeSchemaTx(runtime, sender, TTestSchema::DropTableTxBody(tableId, 2), ++txId);
     if (ok) {
-        PlanSchemaTx(runtime, sender, NOlap::TSnapshot(planStep, txId));
+        PlanSchemaTx(runtime, sender, NOlap::TSnapshot(++planStep, txId));
     }
 
     // Plan commit

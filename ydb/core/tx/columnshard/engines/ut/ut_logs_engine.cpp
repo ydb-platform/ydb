@@ -58,7 +58,7 @@ public:
         THashMap<ui32, ui64> Counters;
     };
 
-    virtual TConclusion<THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() override {
+    virtual TConclusion<THashMap<NColumnShard::TLocalPathId, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() override {
         THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>> result;
         return result;
     }
@@ -114,7 +114,7 @@ public:
     virtual void ErasePortion(const NOlap::TPortionInfo& portion) override {
         AFL_VERIFY(Portions.erase(portion.GetPortionId()));
     }
-    virtual bool LoadPortions(const std::optional<ui64> pathId,
+    virtual bool LoadPortions(const std::optional<NColumnShard::TInternalPathId> pathId,
         const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& callback) override {
         for (auto&& i : Portions) {
             if (!pathId || *pathId == i.second.GetPathId()) {
@@ -419,7 +419,7 @@ bool Compact(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, N
 }
 
 bool Cleanup(TColumnEngineForLogs& engine, TTestDbWrapper& db, TSnapshot snap, ui32 expectedToDrop) {
-    THashSet<ui64> pathsToDrop;
+    THashSet<NColumnShard::TInternalPathId> pathsToDrop;
     std::shared_ptr<TCleanupPortionsColumnEngineChanges> changes = engine.StartCleanupPortions(snap, pathsToDrop, EmptyDataLocksManager);
     UNIT_ASSERT(changes || !expectedToDrop);
     if (!expectedToDrop && !changes) {
@@ -460,7 +460,7 @@ public:
 
 }   // namespace
 
-bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db, const THashMap<ui64, NOlap::TTiering>& pathEviction, ui32 expectedToDrop) {
+bool Ttl(TColumnEngineForLogs& engine, TTestDbWrapper& db, const THashMap<NColumnShard::TInternalPathId, NOlap::TTiering>& pathEviction, ui32 expectedToDrop) {
     engine.StartActualization(pathEviction);
     std::vector<NOlap::TCSMetadataRequest> requests = engine.CollectMetadataRequests();
     for (auto&& i : requests) {
@@ -610,7 +610,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         TTestDbWrapper db;
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(ydbSchema, key);
 
-        ui64 pathId = 1;
+        NColumnShard::TInternalPathId pathId = 1;
         ui32 step = 1000;
 
         TSnapshot indexSnapshot(1, 1);
@@ -708,7 +708,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(testColumns, testKey);
         ;
 
-        ui64 pathId = 1;
+        NColumnShard::TInternalPathId pathId = 1;
         ui32 step = 1000;
 
         // inserts
@@ -787,7 +787,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
         csDefaultControllerGuard->SetOverrideTasksActualizationLag(TDuration::Zero());
 
-        ui64 pathId = 1;
+        NColumnShard::TInternalPathId pathId = 1;
         ui32 step = 1000;
 
         // insert

@@ -1,6 +1,7 @@
 # Backup and restoration of views
 
 This article explains how [views](../../../concepts/datamodel/view.md) are backed up and restored in {{ ydb-short-name }}. The [view query rewriting](#view-query-rewrite) described here applies to all backup methods covered in the ["Backup and recovery"](../../../devops/manual/backup-and-recovery.md) manual:
+
 - backing up data to files
 - backing up data to S3-compatible storage
 

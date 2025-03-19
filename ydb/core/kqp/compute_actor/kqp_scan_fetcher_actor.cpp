@@ -81,7 +81,37 @@ void TKqpScanFetcherActor::Bootstrap() {
     }
     AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "bootstrap")("compute", ComputeActorIds.size())("shards", PendingShards.size());
     StartTableScan();
+    Schedule(TDuration::Seconds(30), new NActors::TEvents::TEvWakeup);
     Become(&TKqpScanFetcherActor::StateFunc);
+}
+
+void TKqpScanFetcherActor::HandleExecute(NActors::TEvents::TEvWakeup::TPtr& ev) {
+    const TMonotonic now = TMonotonic::Now();
+    TMonotonic maxInstant = TMonotonic::Zero();
+    for (auto&& i : InFlightComputes.GetComputeActors()) {
+        if (maxInstant < i.GetLastAckInstant()) {
+            maxInstant = i.GetLastAckInstant();
+        }
+    }
+    TStringBuilder sb;
+    sb << "[";
+    for (auto&& i : InFlightComputes.GetPacksToSend()) {
+        sb << "{" << i.first << ":" << i.second << "}"
+    }
+    sb << "];";
+    sb << "[";
+    for (auto&& i : InFlightComputes.GetComputeActors()) {
+        sb << "{" << i.GetActorId() << ":" << now - i.GetLastAckInstant() << ":" << i.IsFree() << "}";
+    }
+    sb << "]";
+    if (TDuration::Seconds(120) < now - maxInstant) {
+        AFL_ENSURE(false)("in_flight", sb)("count", InFlightComputes.GetComputeActors().size())
+            ("shards", InFlightShards.GetShardsCount())("scans", InFlightShards.GetScansCount())("duration", now - InFlightComputes.GetStartInstant());
+    } else {
+        AFL_INFO(NKikimrServices::KQP_COMPUTE)("in_flight", sb)("count", InFlightComputes.GetComputeActors().size())
+            ("shards", InFlightShards.GetShardsCount())("scans", InFlightShards.GetScansCount())("duration", now - InFlightComputes.GetStartInstant());
+    }
+    Schedule(TDuration::Seconds(30), new NActors::TEvents::TEvWakeup);
 }
 
 void TKqpScanFetcherActor::HandleExecute(TEvScanExchange::TEvAckData::TPtr& ev) {

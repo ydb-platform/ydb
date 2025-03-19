@@ -47,25 +47,25 @@ public:
 class TCategoryBuilder {
 private:
     YDB_READONLY_DEF(std::set<ui64>, Categories);
-    YDB_ACCESSOR_DEF(std::vector<bool>, Filter);
+    YDB_ACCESSOR_DEF(TDynBitMap, Filter);
 
 public:
     TCategoryBuilder(std::set<ui64>&& categories, const ui32 count, const ui32 hashesCount)
         : Categories(categories) {
         AFL_VERIFY(count);
-        const ui32 bitsCount = TFixStringBitsStorage::GrowBitsCountToByte(hashesCount * std::max<ui32>(count, 10) / std::log(2));
+        const ui32 bitsCount = hashesCount * std::max<ui32>(count, 10) / std::log(2);
         AFL_VERIFY(bitsCount);
-        Filter.resize(bitsCount, false);
+        Filter.Reserve(bitsCount);
     }
 };
 
 class TFiltersBuilder {
 private:
     YDB_READONLY_DEF(std::deque<TCategoryBuilder>, Builders);
-    THashMap<ui64, std::vector<bool>*> FiltersByHash;
+    THashMap<ui64, TDynBitMap*> FiltersByHash;
 
 public:
-    std::vector<bool>& MutableFilter(const ui64 hashBase) {
+    TDynBitMap& MutableFilter(const ui64 hashBase) {
         auto it = FiltersByHash.find(hashBase);
         AFL_VERIFY(it != FiltersByHash.end());
         return *it->second;
@@ -139,8 +139,9 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*r
             dataOwners.front(),
             [&](const std::shared_ptr<arrow::Array>& arr, const ui64 hashBase) {
                 auto& filterBits = filtersBuilder.MutableFilter(hashBase);
+                const ui32 size = filterBits.Size();
                 const auto pred = [&](const ui64 hash, const ui32 /*idx*/) {
-                    filterBits[hash % filterBits.size()] = true;
+                    filterBits.Set(hash % size);
                 };
                 for (ui64 i = 0; i < HashesCount; ++i) {
                     NArrow::NHash::TXX64::CalcForAll(arr, i, pred);
@@ -148,9 +149,10 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*r
             },
             [&](const std::string_view data, const ui64 hashBase) {
                 auto& filterBits = filtersBuilder.MutableFilter(hashBase);
+                const ui32 size = filterBits.Size();
                 for (ui64 i = 0; i < HashesCount; ++i) {
                     const ui64 hash = NArrow::NHash::TXX64::CalcSimple(data, i);
-                    filterBits[hash % filterBits.size()] = true;
+                    filterBits.Set(hash % size);
                 }
             });
         dataOwners.pop_front();
@@ -159,7 +161,7 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*r
     std::vector<TString> filterDescriptions;
     ui32 filtersSumSize = 0;
     for (auto&& i : filtersBuilder.GetBuilders()) {
-        filterDescriptions.emplace_back(TFixStringBitsStorage(i.GetFilter()).GetData());
+        filterDescriptions.emplace_back(TFixStringBitsStorage(i.GetFilter()).SerializeToString());
         filtersSumSize += filterDescriptions.back().size();
         auto* category = protoDescription.AddCategories();
         category->SetFilterSize(filterDescriptions.back().size());
@@ -205,7 +207,7 @@ bool TIndexMeta::DoCheckValue(
     TFixStringBitsStorage bits(data);
     for (ui64 hashSeed = 0; hashSeed < HashesCount; ++hashSeed) {
         const ui64 hash = NArrow::NHash::TXX64::CalcForScalar(value, hashSeed);
-        if (!bits.Get(hash % bits.GetSizeBits())) {
+        if (!bits.TestHash(hash)) {
             return false;
         }
     }

@@ -67,7 +67,7 @@ public:
     }
 
     template <class TAction>
-    void CalcForAll(const std::shared_ptr<arrow::Array>& array, const ui64 seed, const TAction& action) {
+    static void CalcForAll(const std::shared_ptr<arrow::Array>& array, const ui64 seed, const TAction& action) {
         AFL_VERIFY(array);
         NArrow::SwitchType(array->type_id(), [&](const auto& type) {
             using TWrap = std::decay_t<decltype(type)>;

@@ -10,7 +10,7 @@ TString TFixStringBitsStorage::DebugString() const {
     TStringBuilder sb;
     ui32 count1 = 0;
     ui32 count0 = 0;
-    for (ui32 i = 0; i < GetSizeBits(); ++i) {
+    for (ui32 i = 0; i < Bits.Size(); ++i) {
         //            if (i % 20 == 0 && i) {
         //                sb << i << " ";
         //            }
@@ -22,26 +22,29 @@ TString TFixStringBitsStorage::DebugString() const {
             ++count0;
         }
     }
-    sb << GetSizeBits() << "=" << count0 << "[0]+" << count1 << "[1]";
+    sb << Bits.Size() << "=" << count0 << "[0]+" << count1 << "[1]";
     return sb;
 }
 
-void TFixStringBitsStorage::Set(const bool val, const ui32 idx) {
-    AFL_VERIFY(idx < GetSizeBits());
-    auto* start = &Data[idx / 8];
-    ui8 word = (*(ui8*)start);
-    if (val) {
-        word |= 1 << (idx % 8);
-    } else {
-        word &= (Max<ui8>() - (1 << (idx % 8)));
-    }
-    memcpy(start, &word, sizeof(ui8));
+bool TFixStringBitsStorage::Get(const ui32 idx) const {
+    return Bits.Test(idx);
 }
 
-bool TFixStringBitsStorage::Get(const ui32 idx) const {
-    AFL_VERIFY(idx < GetSizeBits());
-    const ui8 start = (*(ui8*)&Data[idx / 8]);
-    return start & (1 << (idx % 8));
+TFixStringBitsStorage::TFixStringBitsStorage(const TString& data) {
+    try {
+        TStringInput input(data);
+        Bits.Load(&input);
+    } catch (...) {
+        Bits.Reserve(1024);
+    }
+}
+
+TString TFixStringBitsStorage::SerializeToString() const {
+    TString result;
+    result.reserve(Bits.GetChunkCount() * sizeof(TDynBitMap::TChunk) + 16);
+    TStringOutput output(result);
+    Bits.Save(&output);
+    return result;
 }
 
 }   // namespace NKikimr::NOlap::NIndexes

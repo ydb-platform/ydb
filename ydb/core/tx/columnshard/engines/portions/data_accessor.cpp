@@ -23,24 +23,24 @@ void FillDefaultColumn(TPortionDataAccessor::TColumnAssemblingInfo& column, cons
     if (column.GetColumnId() == (ui32)IIndexInfo::ESpecialColumn::PLAN_STEP) {
         column.AddBlobInfo(0, portionInfo.GetRecordsCount(),
             TPortionDataAccessor::TAssembleBlobInfo(
-                portionInfo.GetRecordsCount(), std::make_shared<arrow::UInt64Scalar>(defaultSnapshot.GetPlanStep()), false));
+                portionInfo.GetRecordsCount(), std::make_shared<arrow::UInt64Scalar>(defaultSnapshot.GetPlanStep())));
     }
     if (column.GetColumnId() == (ui32)IIndexInfo::ESpecialColumn::TX_ID) {
         column.AddBlobInfo(0, portionInfo.GetRecordsCount(),
             TPortionDataAccessor::TAssembleBlobInfo(
-                portionInfo.GetRecordsCount(), std::make_shared<arrow::UInt64Scalar>(defaultSnapshot.GetTxId()), false));
+                portionInfo.GetRecordsCount(), std::make_shared<arrow::UInt64Scalar>(defaultSnapshot.GetTxId())));
     }
     if (column.GetColumnId() == (ui32)IIndexInfo::ESpecialColumn::WRITE_ID) {
         column.AddBlobInfo(0, portionInfo.GetRecordsCount(),
             TPortionDataAccessor::TAssembleBlobInfo(
-                portionInfo.GetRecordsCount(), std::make_shared<arrow::UInt64Scalar>((ui64)portionInfo.GetInsertWriteIdVerified()), false));
+                portionInfo.GetRecordsCount(), std::make_shared<arrow::UInt64Scalar>((ui64)portionInfo.GetInsertWriteIdVerified())));
     }
     if (column.GetColumnId() == (ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG) {
         AFL_VERIFY(portionInfo.GetRecordsCount() == portionInfo.GetMeta().GetDeletionsCount() || portionInfo.GetMeta().GetDeletionsCount() == 0)("deletes",
                                                           portionInfo.GetMeta().GetDeletionsCount())("count", portionInfo.GetRecordsCount());
         column.AddBlobInfo(0, portionInfo.GetRecordsCount(),
             TPortionDataAccessor::TAssembleBlobInfo(
-                portionInfo.GetRecordsCount(), std::make_shared<arrow::BooleanScalar>((bool)portionInfo.GetMeta().GetDeletionsCount()), true));
+                portionInfo.GetRecordsCount(), std::make_shared<arrow::BooleanScalar>((bool)portionInfo.GetMeta().GetDeletionsCount())));
     }
 }
 

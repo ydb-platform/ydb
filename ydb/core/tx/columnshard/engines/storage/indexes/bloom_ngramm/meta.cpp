@@ -194,13 +194,14 @@ public:
     }
 };
 
+template <class TBitMapExternal>
 class TVectorInserterPower2 {
 private:
-    TDynBitMap& Values;
+    TBitMapExternal& Values;
     const ui32 SizeMask;
 
 public:
-    TVectorInserterPower2(TDynBitMap& values)
+    TVectorInserterPower2(TBitMapExternal& values)
         : Values(values)
         , SizeMask(values.Size() - 1) {
         AFL_VERIFY(values.Size());
@@ -211,11 +212,38 @@ public:
     }
 };
 
+template <ui64 Size>
+class TBitmapDetector {
+public:
+    template <class TFiller>
+    static TString Detector(const ui64 size, const TFiller& filler) {
+        if (size == Size) {
+            TBitMap<Size> bitMap;
+            bitMap.Reserve(size);
+            TVectorInserterPower2<TBitMap<Size>> inserter(bitMap);
+            filler(inserter);
+            return TFixStringBitsStorage(std::move(bitMap)).SerializeToString();
+        } else {
+            AFL_VERIFY(size < Size);
+            return TBitmapDetector<Size / 2>::Detector(size, filler);
+        }
+    }
+};
+
+template <>
+class TBitmapDetector<8> {
+public:
+    template <class TFiller>
+    static TString Detector(const ui64 /*size*/, const TFiller& /*filler*/) {
+        AFL_VERIFY(false);
+        return "";
+    }
+};
+
 TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const {
     AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
     TNGrammBuilder builder(HashesCount);
 
-    TDynBitMap bitMap;
     ui32 size = FilterSizeBytes * 8;
     if ((size & (size - 1)) == 0) {
         ui32 recordsCountBase = RecordsCount;
@@ -226,8 +254,7 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 rec
     } else {
         size *= ((recordsCount <= RecordsCount) ? 1.0 : (1.0 * recordsCount / RecordsCount));
     }
-    bitMap.Reserve(size * 8);
-
+    size = std::max<ui32>(16, size);
     const auto doFillFilter = [&](auto& inserter) {
         for (reader.Start(); reader.IsCorrect();) {
             AFL_VERIFY(reader.GetColumnsCount() == 1);
@@ -246,13 +273,15 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 rec
     };
 
     if ((size & (size - 1)) == 0) {
-        TVectorInserterPower2 inserter(bitMap);
-        doFillFilter(inserter);
+        static constexpr ui64 maxConst = ((ui64)1) << 32;
+        return TBitmapDetector<maxConst>::Detector(size, doFillFilter);
     } else {
+        TDynBitMap bitMap;
+        bitMap.Reserve(size);
         TVectorInserter inserter(bitMap);
         doFillFilter(inserter);
+        return TFixStringBitsStorage(std::move(bitMap)).SerializeToString();
     }
-    return TFixStringBitsStorage(bitMap).GetData();
 }
 
 bool TIndexMeta::DoCheckValue(
@@ -262,7 +291,7 @@ bool TIndexMeta::DoCheckValue(
     AFL_VERIFY(value->type->id() == arrow::utf8()->id() || value->type->id() == arrow::binary()->id())("id", value->type->ToString());
     bool result = true;
     const auto predSet = [&](const ui64 hashSecondary) {
-        if (!bits.Get(hashSecondary % bits.GetSizeBits())) {
+        if (!bits.TestHash(hashSecondary)) {
             result = false;
         }
     };

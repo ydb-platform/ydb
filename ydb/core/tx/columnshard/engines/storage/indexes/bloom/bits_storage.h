@@ -7,30 +7,15 @@
 namespace NKikimr::NOlap::NIndexes {
 class TFixStringBitsStorage {
 private:
-    YDB_READONLY_DEF(TString, Data);
-
-    template <class T>
-    class TSizeDetector {};
-
-    template <>
-    class TSizeDetector<std::vector<bool>> {
-    public:
-        static ui32 GetSize(const std::vector<bool>& v) {
-            return v.size();
-        }
-    };
-
-    template <>
-    class TSizeDetector<TDynBitMap> {
-    public:
-        static ui32 GetSize(const TDynBitMap& v) {
-            return v.Size();
-        }
-    };
+    TDynBitMap Bits;
 
 public:
-    TFixStringBitsStorage(const TString& data)
-        : Data(data) {
+    TFixStringBitsStorage(const TString& data);
+
+    TString SerializeToString() const;
+
+    bool TestHash(const ui64 hash) const {
+        return Bits.Get(hash % Bits.Size());
     }
 
     static ui32 GrowBitsCountToByte(const ui32 bitsCount) {
@@ -40,38 +25,14 @@ public:
 
     TString DebugString() const;
 
-    template <class TBitsVector>
-    TFixStringBitsStorage(const TBitsVector& bitsVector)
-        : TFixStringBitsStorage(TSizeDetector<TBitsVector>::GetSize(bitsVector)) {
-        ui32 byteIdx = 0;
-        ui8 byteCurrent = 0;
-        ui8 shiftCurrent = 1;
-        for (ui32 i = 0; i < TSizeDetector<TBitsVector>::GetSize(bitsVector); ++i) {
-            if (i && i % 8 == 0) {
-                Data[byteIdx] = (char)byteCurrent;
-                byteCurrent = 0;
-                shiftCurrent = 1;
-                ++byteIdx;
-            }
-            if (bitsVector[i]) {
-                byteCurrent += shiftCurrent;
-            }
-            shiftCurrent = (shiftCurrent << 1);
-        }
-        if (byteCurrent) {
-            Data[byteIdx] = (char)byteCurrent;
-        }
+    TFixStringBitsStorage(TDynBitMap&& bits)
+        : Bits(std::move(bits)) {
+    }
+    template <class TFixedSizeBitMap>
+    TFixStringBitsStorage(TFixedSizeBitMap&& bits)
+        : Bits(std::move(bits)) {
     }
 
-    ui32 GetSizeBits() const {
-        return Data.size() * 8;
-    }
-
-    TFixStringBitsStorage(const ui32 sizeBits)
-        : Data(GrowBitsCountToByte(sizeBits) / 8, '\0') {
-    }
-
-    void Set(const bool val, const ui32 idx);
     bool Get(const ui32 idx) const;
 };
 

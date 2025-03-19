@@ -26,11 +26,12 @@ TString TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui3
         }
         reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount());
     }
-    const ui32 bitsCount = TFixStringBitsStorage::GrowBitsCountToByte(HashesCount * std::max<ui32>(indexHitsCount, 10) / std::log(2));
-    std::vector<bool> filterBits(bitsCount, false);
+    TDynBitMap filterBits;
+    filterBits.Reserve(HashesCount * std::max<ui32>(indexHitsCount, 10) / std::log(2));
+    const ui64 bitsCount = filterBits.Size();
 
     const auto predNoBase = [&](const ui64 hash, const ui32 /*idx*/) {
-        filterBits[hash % bitsCount] = true;
+        filterBits.Set(hash % bitsCount);
     };
     while (dataOwners.size()) {
         GetDataExtractor()->VisitAll(
@@ -39,7 +40,7 @@ TString TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui3
                 for (ui64 i = 0; i < HashesCount; ++i) {
                     if (hashBase) {
                         const auto predWithBase = [&](const ui64 hash, const ui32 /*idx*/) {
-                            filterBits[CombineHashes(hashBase, hash) % bitsCount] = true;
+                            filterBits.Set(CombineHashes(hashBase, hash) % bitsCount);
                         };
                         NArrow::NHash::TXX64::CalcForAll(arr, i, predWithBase);
                     } else {
@@ -60,7 +61,7 @@ TString TBloomIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui3
         dataOwners.pop_front();
     }
 
-    return TFixStringBitsStorage(filterBits).GetData();
+    return TFixStringBitsStorage(std::move(filterBits)).SerializeToString();
 }
 
 bool TBloomIndexMeta::DoCheckValue(
@@ -71,14 +72,14 @@ bool TBloomIndexMeta::DoCheckValue(
     if (!!category) {
         for (ui64 hashSeed = 0; hashSeed < HashesCount; ++hashSeed) {
             const ui64 hash = NArrow::NHash::TXX64::CalcForScalar(value, hashSeed);
-            if (!bits.Get(CombineHashes(*category, hash) % bits.GetSizeBits())) {
+            if (!bits.TestHash(CombineHashes(*category, hash))) {
                 return false;
             }
         }
     } else {
         for (ui64 hashSeed = 0; hashSeed < HashesCount; ++hashSeed) {
             const ui64 hash = NArrow::NHash::TXX64::CalcForScalar(value, hashSeed);
-            if (!bits.Get(hash % bits.GetSizeBits())) {
+            if (!bits.TestHash(hash)) {
                 return false;
             }
         }

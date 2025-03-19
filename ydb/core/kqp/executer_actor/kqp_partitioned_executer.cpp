@@ -90,7 +90,7 @@ public:
         , GUCSettings(GUCSettings)
         , ShardIdToTableInfo(shardIdToTableInfo)
     {
-        YQL_ENSURE(PreparedQuery->GetTransactions().size() == 2);
+        UseLiteral = PreparedQuery->GetTransactions().size() == 2;
 
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(PhysicalRequest.TxAlloc,
             TEvKqpExecuter::TEvTxResponse::EExecutionType::Data);
@@ -224,8 +224,8 @@ public:
     void CreateExecuterWithBuffer(size_t partitionIdx, bool isRetry) {
         auto txAlloc = std::make_shared<TTxAllocatorState>(FuncRegistry, TimeProvider, RandomProvider);
 
-        IKqpGateway::TExecPhysicalRequest newRequest(txAlloc);
-        FillPhysicalRequest(newRequest, txAlloc, partitionIdx);
+        IKqpGateway::TExecPhysicalRequest request(txAlloc);
+        FillPhysicalRequest(request, txAlloc, partitionIdx);
 
         auto& partInfo = Partitions[partitionIdx];
 
@@ -243,7 +243,7 @@ public:
         auto bufferActorId = RegisterWithSameMailbox(bufferActor);
 
         auto batchSettings = TBatchOperationSettings(partInfo->LimitSize, BatchOperationSettings.MinBatchSize);
-        auto executerActor = CreateKqpExecuter(std::move(newRequest), Database, UserToken, RequestCounters,
+        auto executerActor = CreateKqpExecuter(std::move(request), Database, UserToken, RequestCounters,
             TableServiceConfig, AsyncIoFactory, PreparedQuery, SelfId(), UserRequestContext, StatementResultIndex,
             FederatedQuerySetup, GUCSettings, ShardIdToTableInfo, txManager, bufferActorId, std::move(batchSettings));
         auto exId = RegisterWithSameMailbox(executerActor);
@@ -511,52 +511,55 @@ private:
     }
 
     void FillPhysicalRequest(IKqpGateway::TExecPhysicalRequest& physicalRequest, TTxAllocatorState::TPtr txAlloc, size_t partitionIdx) {
-        IKqpGateway::TExecPhysicalRequest newLiteralRequest(txAlloc);
-        FillRequestWithParams(newLiteralRequest, partitionIdx, /* literal */ true);
-        PrepareParameters(newLiteralRequest);
-
-        auto ev = ExecuteLiteral(std::move(newLiteralRequest), RequestCounters, SelfId(), UserRequestContext);
-        auto* response = ev->Record.MutableResponse();
-
-        if (response->GetStatus() != Ydb::StatusIds::SUCCESS) {
-            RuntimeError(
-                Ydb::StatusIds::BAD_REQUEST,
-                NYql::TIssues({NYql::TIssue(TStringBuilder() << CurrentStateFuncName()
-                    << ", error status from literal.")}));
-            return;
-        }
-
-        FillRequestWithParams(physicalRequest, partitionIdx, /* literal */ false);
+        FillRequestByInitWithParams(physicalRequest, partitionIdx, /* literal */ false);
 
         auto queryData = physicalRequest.Transactions.front().Params;
         queryData->ClearPrunedParams();
 
-        DebugPrintRequest(queryData, partitionIdx);
+        if (UseLiteral) {
+            IKqpGateway::TExecPhysicalRequest literalRequest(txAlloc);
+            FillRequestByInitWithParams(literalRequest, partitionIdx, /* literal */ true);
+            PrepareParameters(literalRequest);
 
-        if (!ev->GetTxResults().empty()) {
-            queryData->AddTxResults(0, std::move(ev->GetTxResults()));
+            auto ev = ExecuteLiteral(std::move(literalRequest), RequestCounters, SelfId(), UserRequestContext);
+            auto* response = ev->Record.MutableResponse();
+
+            if (response->GetStatus() != Ydb::StatusIds::SUCCESS) {
+                RuntimeError(
+                    Ydb::StatusIds::BAD_REQUEST,
+                    NYql::TIssues({NYql::TIssue(TStringBuilder() << CurrentStateFuncName()
+                        << ", got error from KqpLiteralExecuter.")}));
+                return;
+            }
+
+            if (!ev->GetTxResults().empty()) {
+                queryData->AddTxResults(0, std::move(ev->GetTxResults()));
+            }
+
+            queryData->AddTxHolders(std::move(ev->GetTxHolders()));
         }
 
-        queryData->AddTxHolders(std::move(ev->GetTxHolders()));
-
         PrepareParameters(physicalRequest);
+        DebugPrintRequest(queryData, partitionIdx);
     }
 
-    void FillRequestWithParams(IKqpGateway::TExecPhysicalRequest& newRequest, size_t partitionIdx, bool literal)
+    void FillRequestByInitWithParams(IKqpGateway::TExecPhysicalRequest& request, size_t partitionIdx, bool literal)
     {
-        FillNewRequest(newRequest, literal);
+        FillRequestByInit(request, literal);
 
-        auto& queryData = newRequest.Transactions.front().Params;
+        YQL_ENSURE(!request.Transactions.empty());
+
+        auto& queryData = request.Transactions.front().Params;
         auto& partition = Partitions[partitionIdx];
 
-        FillParamValue(queryData, NBatchParams::IsFirstQuery, partition->IsFirstQuery);
-        FillParamValue(queryData, NBatchParams::IsLastQuery, partition->IsLastQuery);
+        FillRequestParameter(queryData, NBatchParams::IsFirstQuery, partition->IsFirstQuery);
+        FillRequestParameter(queryData, NBatchParams::IsLastQuery, partition->IsLastQuery);
 
         FillRequestRange(queryData, partition->BeginRange, /* isBegin */ true);
         FillRequestRange(queryData, partition->EndRange, /* isBegin */ false);
     }
 
-    void FillNewRequest(IKqpGateway::TExecPhysicalRequest& newRequest, bool literal) {
+    void FillRequestByInit(IKqpGateway::TExecPhysicalRequest& newRequest, bool literal) {
         auto& from = (literal) ? LiteralRequest : PhysicalRequest;
 
         newRequest.AllowTrailingResults = from.AllowTrailingResults;
@@ -586,14 +589,15 @@ private:
         newRequest.UserTraceId = from.UserTraceId;
         newRequest.OutputChunkMaxSize = from.OutputChunkMaxSize;
 
-        newRequest.Transactions.emplace_back(PreparedQuery->GetTransactions()[static_cast<size_t>(!literal)], std::make_shared<TQueryData>(newRequest.TxAlloc));
+        auto tx = PreparedQuery->GetTransactions()[(UseLiteral) ? 1 - static_cast<size_t>(literal) : 0];
+        newRequest.Transactions.emplace_back(tx, std::make_shared<TQueryData>(newRequest.TxAlloc));
 
-        auto newParams = newRequest.Transactions.front().Params;
-        auto oldParams = LiteralRequest.Transactions.front().Params;
-        for (auto& [name, _] : oldParams->GetParams()) {
+        auto newData = newRequest.Transactions.front().Params;
+        auto oldData = (UseLiteral) ? LiteralRequest.Transactions.front().Params : PhysicalRequest.Transactions.front().Params;
+        for (auto& [name, _] : oldData->GetParams()) {
             if (!name.StartsWith(NBatchParams::Header)) {
-                TTypedUnboxedValue& typedValue = oldParams->GetParameterUnboxedValue(name);
-                newParams->AddUVParam(name, typedValue.first, typedValue.second);
+                TTypedUnboxedValue& typedValue = oldData->GetParameterUnboxedValue(name);
+                newData->AddUVParam(name, typedValue.first, typedValue.second);
             }
         }
     }
@@ -603,7 +607,7 @@ private:
         auto rangeName = ((isBegin) ? NBatchParams::Begin : NBatchParams::End);
         auto prefixRangeName = ((isBegin) ? NBatchParams::BeginPrefixSize : NBatchParams::EndPrefixSize);
 
-        FillParamValue(queryData, isInclusive, (!range.Empty()) ? range->IsInclusive : false);
+        FillRequestParameter(queryData, isInclusive, (!range.Empty()) ? range->IsInclusive : false);
 
         size_t firstEmpty = (range.Empty()) ? 0 : KeyColumnInfo.size();
 
@@ -613,7 +617,7 @@ private:
 
             if (range.Empty() || range->EndKeyPrefix.GetCells().size() <= i) {
                 firstEmpty = std::min(firstEmpty, info.ParamIndex);
-                FillParamValue(queryData, paramName, false, /* setDefault */ true);
+                FillRequestParameter(queryData, paramName, false, /* setDefault */ true);
                 continue;
             }
 
@@ -622,14 +626,14 @@ private:
                 firstEmpty = std::min(firstEmpty, info.ParamIndex);
             }
 
-            FillParamValue(queryData, paramName, cellValue);
+            FillRequestParameter(queryData, paramName, cellValue);
         }
 
-        FillParamValue(queryData, prefixRangeName, firstEmpty);
+        FillRequestParameter(queryData, prefixRangeName, firstEmpty);
     }
 
     template <typename T>
-    void FillParamValue(TQueryData::TPtr queryData, const TString& name, T value, bool setDefault = false) {
+    void FillRequestParameter(TQueryData::TPtr queryData, const TString& name, T value, bool setDefault = false) {
         for (const auto& paramDesc : PreparedQuery->GetParameters()) {
             if (paramDesc.GetName() != name) {
                 continue;
@@ -669,7 +673,7 @@ private:
             RuntimeError(
                 Ydb::StatusIds::BAD_REQUEST,
                 NYql::TIssues({NYql::TIssue(TStringBuilder() << CurrentStateFuncName()
-                    << ", cannot prepare parameters for request, name = " << paramName)}));
+                    << ", cannot prepare parameters for request, parameter name = " << paramName)}));
         }
     }
 
@@ -831,6 +835,7 @@ private:
     THashMap<TActorId, TBatchPartitionInfo::TPtr> BufferPartition;
     TTableId TableId;
     TString TablePath;
+    bool UseLiteral;
     IKqpGateway::TExecPhysicalRequest LiteralRequest;
     IKqpGateway::TExecPhysicalRequest PhysicalRequest;
     const TActorId SessionActorId;

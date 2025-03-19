@@ -1165,9 +1165,11 @@ public:
             return;
         }
 
+        bool isBatchQuery = IsBatchQuery(QueryState->PreparedQuery->GetPhysicalQuery());
+
         TKqpPhyTxHolder::TConstPtr tx;
         try {
-            tx = QueryState->GetCurrentPhyTx();
+            tx = QueryState->GetCurrentPhyTx(isBatchQuery);
         } catch (const yexception& ex) {
             ythrow TRequestFail(Ydb::StatusIds::BAD_REQUEST) << ex.what();
         }
@@ -1176,7 +1178,7 @@ public:
             return;
         }
 
-        if (Settings.TableService.GetEnableOltpSink() && IsBatchQuery(QueryState->PreparedQuery->GetPhysicalQuery())) {
+        if (Settings.TableService.GetEnableOltpSink() && isBatchQuery) {
             if (!Settings.TableService.GetEnableBatchUpdates()) {
                 ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                         "Batch updates and deletes are disabled at current time.");
@@ -1198,15 +1200,17 @@ public:
         auto literalRequest = PrepareLiteralRequest(QueryState.get());
         auto physicalRequest = PreparePhysicalRequest(QueryState.get(), txCtx.TxAlloc);
 
-        literalRequest.Transactions.emplace_back(tx, QueryState->QueryData);
+        if (QueryState->PreparedQuery->GetTransactions().size() == 2) {
+            literalRequest.Transactions.emplace_back(tx, QueryState->QueryData);
+        } else {
+            physicalRequest.Transactions.emplace_back(tx, QueryState->QueryData);
+        }
+
         QueryState->TxCtx->OnNewExecutor(false);
         QueryState->Commited = true;
 
-        literalRequest.TraceId = QueryState->KqpSessionSpan.GetTraceId();
-        physicalRequest.LocksOp = ELocksOp::Commit;
-
         SendToPartitionedExecuter(QueryState->TxCtx.Get(), std::move(literalRequest), std::move(physicalRequest));
-        QueryState->CurrentTx += 2;
+        QueryState->CurrentTx += QueryState->PreparedQuery->GetTransactions().size();
     }
 
     void ExecuteDeferredEffectsImmediately(const TKqpPhyTxHolder::TConstPtr& tx) {
@@ -1488,6 +1492,10 @@ public:
         physicalRequest.Orbit = std::move(QueryState->Orbit);
         QueryState->StatementResultSize = GetResultsCount(physicalRequest);
 
+        literalRequest.TraceId = QueryState->KqpSessionSpan.GetTraceId();
+
+        physicalRequest.LocksOp = ELocksOp::Commit;
+        physicalRequest.IsolationLevel = NKikimrKqp::ISOLATION_LEVEL_SERIALIZABLE;
         physicalRequest.PerRequestDataSizeLimit = RequestControls.PerRequestDataSizeLimit;
         physicalRequest.MaxShardCount = RequestControls.MaxShardCount;
         physicalRequest.TraceId = QueryState ? QueryState->KqpSessionSpan.GetTraceId() : NWilson::TTraceId();

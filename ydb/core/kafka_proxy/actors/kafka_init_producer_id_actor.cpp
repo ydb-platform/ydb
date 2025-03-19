@@ -98,7 +98,6 @@ namespace NKafka {
             if (CurrentTxAbortRetryNumber < TX_ABORT_RETRY_MAX_COUNT) {
                 KAFKA_LOG_ERROR(TStringBuilder() << "Retry after tx aborted. CurrentTxAbortRetryNumber# " << static_cast<int>(CurrentTxAbortRetryNumber));
                 RequestFullRetry(ctx);
-                Die(ctx);
                 return;
             }
         }

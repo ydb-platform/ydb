@@ -103,6 +103,11 @@ void TQueryBuilder::AddOrderByDescendingExpression(TString expression)
     AddOrderByExpression(std::move(expression), EOrderByDirection::Descending);
 }
 
+void TQueryBuilder::SetOffset(i64 offset)
+{
+    Offset_ = offset;
+}
+
 void TQueryBuilder::SetLimit(i64 limit)
 {
     Limit_ = limit;
@@ -175,6 +180,10 @@ TString TQueryBuilder::Build()
     if (!OrderByEntries_.empty()) {
         parts.push_back("ORDER BY");
         parts.push_back(JoinSeq(", ", OrderByEntries_));
+    }
+
+    if (Offset_) {
+        parts.push_back(Format("OFFSET %v", *Offset_));
     }
 
     if (Limit_) {

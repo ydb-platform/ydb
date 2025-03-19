@@ -16,6 +16,7 @@
 
 #include <library/cpp/logger/stream.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/streams/bzip2/bzip2.h>
 
 namespace NYdb::NTopic::NTests {
 

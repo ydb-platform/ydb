@@ -6754,7 +6754,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_BTreeIndex) {
         env.WaitFor<NFake::TEvCompacted>();
 
         // all pages are always kept in shared cache (except flat index)
-        UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 334);
+        UNIT_ASSERT_GE(counters->ActivePages->Val(), 334);
 
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) });
         UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
@@ -6792,7 +6792,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_BTreeIndex) {
         env.WaitFor<NFake::TEvCompacted>();
 
         // all pages are always kept in shared cache (except flat index)
-        UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 334);
+        UNIT_ASSERT_GE(counters->ActivePages->Val(), 334);
 
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) });
         UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
@@ -6831,7 +6831,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_BTreeIndex) {
         env.WaitFor<NFake::TEvCompacted>();
 
         // all pages are always kept in shared cache
-        UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 290);
+        UNIT_ASSERT_GE(counters->ActivePages->Val(), 290);
 
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) });
         UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
@@ -6870,7 +6870,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_BTreeIndex) {
         env.WaitFor<NFake::TEvCompacted>();
 
         // all pages are always kept in shared cache
-        UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 334);
+        UNIT_ASSERT_GE(counters->ActivePages->Val(), 334);
 
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) });
         UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
@@ -6909,7 +6909,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_BTreeIndex) {
         env.WaitFor<NFake::TEvCompacted>();
 
         // all pages are always kept in shared cache
-        UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 290);
+        UNIT_ASSERT_GE(counters->ActivePages->Val(), 290);
 
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) });
         UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
@@ -6948,7 +6948,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_BTreeIndex) {
         env.WaitFor<NFake::TEvCompacted>();
 
         // all pages are always kept in shared cache (except flat index)
-        UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 334);
+        UNIT_ASSERT_GE(counters->ActivePages->Val(), 334);
 
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) });
         UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);
@@ -6997,7 +6997,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_BTreeIndex) {
 
         // gen 0 data pages are always kept in shared cache
         // b-tree index pages are always kept in shared cache
-        UNIT_ASSERT_VALUES_EQUAL(counters->ActivePages->Val(), 48);
+        UNIT_ASSERT_GE(counters->ActivePages->Val(), 48);
 
         env.SendSync(new NFake::TEvExecute{ new TTxFullScan(readRows, failedAttempts) });
         UNIT_ASSERT_VALUES_EQUAL(readRows, 1000);

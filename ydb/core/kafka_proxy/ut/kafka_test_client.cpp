@@ -70,12 +70,13 @@ TMessagePtr<TSaslAuthenticateResponseData> TKafkaTestClient::SaslAuthenticate(co
     return WriteAndRead<TSaslAuthenticateResponseData>(header, request);
 }
 
-TMessagePtr<TInitProducerIdResponseData> TKafkaTestClient::InitProducerId() {
+TMessagePtr<TInitProducerIdResponseData> TKafkaTestClient::InitProducerId(const TString& transactionalId) {
     Cerr << ">>>>> TInitProducerIdRequestData\n";
 
     TRequestHeaderData header = Header(NKafka::EApiKey::INIT_PRODUCER_ID, 4);
 
     TInitProducerIdRequestData request;
+    request.TransactionalId = transactionalId;
     request.TransactionTimeoutMs = 5000;
 
     return WriteAndRead<TInitProducerIdResponseData>(header, request);

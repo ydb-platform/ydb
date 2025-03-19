@@ -306,7 +306,7 @@ ORDER BY IntervalEnd desc, CPUCores desc
 
 Системное представление `resource_pools` содержит информацию о [настройках](../yql/reference/syntax/create-resource-pool.md#parameters) [пулов ресурсов](../concepts/glossary.md#resource-pool).
 
-Структура таблицы:
+Структура системного представления:
 
 Поле | Описание
 --- | ---

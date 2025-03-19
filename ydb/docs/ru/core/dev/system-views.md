@@ -304,7 +304,7 @@ ORDER BY IntervalEnd desc, CPUCores desc
 
 ## Информация о пулах ресурсов {#resource_pools}
 
-`resource_pools` — таблица содержит информацию о [настройках](../yql/reference/syntax/create-resource-pool.md#parameters) [пулов ресурсов](../concepts/glossary.md#resource-pool).
+Системное представление `resource_pools` содержит информацию о [настройках](../yql/reference/syntax/create-resource-pool.md#parameters) [пулов ресурсов](../concepts/glossary.md#resource-pool).
 
 Структура таблицы:
 

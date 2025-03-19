@@ -1,4 +1,3 @@
-#include "bits_storage.h"
 #include "meta.h"
 
 #include <ydb/core/formats/arrow/hash/calcer.h>

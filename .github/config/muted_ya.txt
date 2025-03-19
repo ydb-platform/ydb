@@ -237,7 +237,6 @@ ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[86]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[9]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[7]
 ydb/tests/olap sole chunk chunk
-ydb/tests/olap test_quota_exhaustion.py.TestYdbWorkload.test_delete
 ydb/tests/olap/column_family/compression alter_compression.py.TestAlterCompression.test_all_supported_compression
 ydb/tests/olap/column_family/compression alter_compression.py.TestAlterCompression.test_availability_data
 ydb/tests/olap/column_family/compression sole chunk chunk

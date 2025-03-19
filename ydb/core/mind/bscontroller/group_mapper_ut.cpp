@@ -650,8 +650,6 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         }
     }
 
-<<<<<<< HEAD
-=======
     Y_UNIT_TEST(InterlacedRacksWithoutInterlacedNodes) {
         TTestContext context(
             {
@@ -685,33 +683,6 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         UNIT_ASSERT_EQUAL_C(TPDiskId(9, 1), newGroup[0][7][0], context.FormatGroup(newGroup));
     }
 
-    Y_UNIT_TEST(NonUniformClusterDifferentSlotsPerDisk) {
-        std::vector<std::tuple<ui32, ui32, ui32, ui32, ui32>> disks;
-        for (ui32 rack = 0; rack < 12; ++rack) {
-            disks.emplace_back(1, 1, rack, 1, 1);
-        }
-        std::random_shuffle(disks.begin(), disks.end());
-        TTestContext context(disks);
-        UNIT_ASSERT_VALUES_EQUAL((8 + 4), context.GetTotalDisks());
-        TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::Erasure4Plus2Block));
-        context.PopulateGroupMapper(mapper, 8, {}, {}, std::nullopt, false);
-        for (ui32 i = 0; i < 16; ++i) {
-            Ctest << i << "/" << 16 << Endl;
-            TGroupMapper::TGroupDefinition group;
-            context.AllocateGroup(mapper, group);
-            context.CheckGroupErasure(group);
-        }
-        TVector<ui32> slots = context.GetSlots();
-        ui64 slots_total = 0;
-        for (ui32 numSlots : slots) {
-            slots_total += numSlots;
-            Ctest << "slots " << numSlots << " ";
-        }
-        Ctest << slots_total << Endl;
-        UNIT_ASSERT_VALUES_EQUAL(slots_total, 8 * 8 + 4 * 16);
-    }
-
->>>>>>> 02662ebbf35 (Add node interlace in TScore for group mapper (#13867))
     Y_UNIT_TEST(NonUniformCluster2) {
         std::vector<std::tuple<ui32, ui32, ui32, ui32, ui32>> disks;
         for (ui32 rack = 0, body = 0; rack < 12; ++rack) {

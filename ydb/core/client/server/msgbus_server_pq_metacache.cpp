@@ -519,7 +519,11 @@ private:
         auto inserted = DescribeTopicsWaiters.insert(std::make_pair(reqId, waiter)).second;
         Y_ABORT_UNLESS(inserted);
 
+        TMaybe<TString> db = {};
+
         for (const auto& [path, database] : waiter->GetTopics()) {
+            if (!db) db = database;
+            if (*db != database) db = "";
             auto split = NKikimr::SplitPath(path);
             TSchemeCacheNavigate::TEntry entry;
             if (!split.empty()) {
@@ -532,8 +536,9 @@ private:
 
             schemeCacheRequest->ResultSet.emplace_back(std::move(entry));
         }
-
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "send request for " << (waiter->Type == EWaiterType::DescribeAllTopics ? " all " : "") << waiter->GetTopics().size() << " topics, got " << DescribeTopicsWaiters.size() << " requests infly");
+        if (db) schemeCacheRequest->DatabaseName = *db;
+        LOG_DEBUG_S(ctx, NKikimrServices::PQ_METACACHE, "send request for " << (waiter->Type == EWaiterType::DescribeAllTopics ? " all " : "")
+                             << waiter->GetTopics().size() << " topics, got " << DescribeTopicsWaiters.size() << " requests infly, db = \"" << db << "\"");
 
         ctx.Send(SchemeCacheId, new TEvTxProxySchemeCache::TEvNavigateKeySet(schemeCacheRequest.release()), 0, 0, waiter->Span.GetTraceId());
     }

@@ -4521,6 +4521,13 @@
             "uri": "https://{canondata_backend}/1942173/99e88108149e222741552e7e6cddef041d6a2846/resource.tar.gz#test_sql2yql.test_order_by-tuple01_/sql.yql"
         }
     ],
+    "test_sql2yql.test[params-bad_dict]": [
+        {
+            "checksum": "de90a977f1e3e94ae2c6cb438cbf68cf",
+            "size": 1052,
+            "uri": "https://{canondata_backend}/1946324/70c05a25360e59ed701e167d489f84e1b53fece9/resource.tar.gz#test_sql2yql.test_params-bad_dict_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[params-dict]": [
         {
             "checksum": "f9d9d2f637f3375d580a94c58f8a1aeb",
@@ -10598,6 +10605,11 @@
     "test_sql_format.test[order_by-tuple01]": [
         {
             "uri": "file://test_sql_format.test_order_by-tuple01_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[params-bad_dict]": [
+        {
+            "uri": "file://test_sql_format.test_params-bad_dict_/formatted.sql"
         }
     ],
     "test_sql_format.test[params-dict]": [

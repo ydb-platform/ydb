@@ -3,9 +3,9 @@
 
 namespace NYdb::inline Dev::NTopic {
 
-TTransactionId MakeTransactionId(const NTable::TTransaction& tx)
+TTransactionId MakeTransactionId(const ITransactionBase& tx)
 {
-    return {tx.GetSession().GetId(), tx.GetId()};
+    return {tx.GetSessionId(), tx.GetId()};
 }
 
 TStatus MakeStatus(EStatus code, NYdb::NIssue::TIssues&& issues)

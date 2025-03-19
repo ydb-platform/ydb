@@ -65,6 +65,6 @@ message TDqSolomonSource {
     TDownsampling Downsampling = 11;
     repeated string SystemColumns = 12;
     repeated string LabelNames = 13;
-    repeated string RequiredLabelNames = 14;
-    map<string, string> Settings = 15;
+    map<string, string> Settings = 14;
+    repeated string RequiredLabelNames = 15;
 }

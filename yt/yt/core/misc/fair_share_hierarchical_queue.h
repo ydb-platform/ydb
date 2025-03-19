@@ -112,7 +112,7 @@ public:
     const std::vector<IFairShareHierarchicalSlotQueueResourcePtr>& GetResources() const;
     const std::vector<TFairShareHierarchyLevel<TTag>>& GetLevels() const;
 
-    TGuid GetSlotId() const;
+    TFairShareSlotId GetSlotId() const;
     TInstant GetEnqueueTime() const;
     i64 GetSize() const;
 
@@ -122,7 +122,7 @@ public:
     void ReleaseResources();
 
 private:
-    const TGuid RequestId_;
+    const TFairShareSlotId SlotId_;
     const i64 Size_;
     const std::vector<TFairShareHierarchyLevel<TTag>> Levels_;
     const TInstant EnqueueTime_;
@@ -426,7 +426,7 @@ public:
 
     // This method returns the slot that has the highest priority and needs to be processed first.
     // In this case, the slots are compared according to the amount consumed by the requests.
-    TFairShareHierarchicalSlotQueueSlotPtr<TTag> PeekSlot(const THashSet<TGuid>& slotFilter);
+    TFairShareHierarchicalSlotQueueSlotPtr<TTag> PeekSlot(const THashSet<TFairShareSlotId>& slotFilter);
 
     // This method allows the user of the class to mark the consumption of requests in the slot.
     void AccountSlot(TFairShareHierarchicalSlotQueueSlotPtr<TTag> slot, i64 requestSize);

@@ -374,6 +374,7 @@ PEERDIR(
     yt/yt/library/profiling
     yt/yt/library/profiling/resource_tracker
     yt/yt/library/tracing
+    yt/yt/library/numeric
 )
 
 IF (OS_WINDOWS)

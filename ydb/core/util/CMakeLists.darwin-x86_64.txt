@@ -13,6 +13,7 @@
 # changes in this file.
 
 add_subdirectory(actorsys_test)
+add_subdirectory(evlog)
 add_subdirectory(btree_benchmark)
 add_subdirectory(ut)
 

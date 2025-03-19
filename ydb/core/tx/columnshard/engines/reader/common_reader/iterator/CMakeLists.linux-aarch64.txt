@@ -28,6 +28,7 @@ target_link_libraries(reader-common_reader-iterator PUBLIC
   yutil
   columnshard-engines-scheme
   yql-essentials-minikql
+  core-util-evlog
   tools-enum_parser-enum_serialization_runtime
 )
 
@@ -59,6 +60,7 @@ target_link_libraries(reader-common_reader-iterator.global PUBLIC
   yutil
   columnshard-engines-scheme
   yql-essentials-minikql
+  core-util-evlog
   tools-enum_parser-enum_serialization_runtime
 )
 

@@ -794,8 +794,8 @@ public:
         : TransformLambda(transformLambda)
         , TablePathId(tablePathId)
         , CompileServiceId(compileServiceId)
-        , FlushInterval(TDuration::MilliSeconds(batchingSettings.GetFlushIntervalMilliSeconds()))
-        , BatchSizeBytes(batchingSettings.GetBatchSizeBytes())
+        , FlushInterval(TDuration::MilliSeconds(std::max<ui64>(batchingSettings.GetFlushIntervalMilliSeconds(), 1000)))
+        , BatchSizeBytes(std::min<ui64>(batchingSettings.GetBatchSizeBytes(), 1_GB))
     {}
 
 private:

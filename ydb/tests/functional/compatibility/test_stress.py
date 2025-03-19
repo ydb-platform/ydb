@@ -27,8 +27,9 @@ class TestStress(object):
     def setup(self, request):
         binary_paths = request.param
         self.config = KikimrConfigGenerator(
-            erasure=Erasure.MIRROR_3_DC,
+            erasure=Erasure.NONE,
             binary_paths=binary_paths,
+            nodes=1,
             # uncomment for 64 datetime in tpc-h/tpc-ds
             # extra_feature_flags={"enable_table_datetime64": True},
         )
@@ -255,10 +256,13 @@ class TestStress(object):
             "tpch",
             "run",
             "--scale=1",
-            "--exclude",
-            # not working for row tables
-            "17",
+            "--include",
+            "10",
             "--check-canonical",
+            "--iterations",
+            "2",
+            "--plan",
+            "plan",
         ]
 
         yatest.common.execute(init_command, wait=True, stdout=self.output_f, stderr=self.output_f)

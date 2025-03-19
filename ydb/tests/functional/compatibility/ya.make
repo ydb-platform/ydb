@@ -1,6 +1,8 @@
 PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
+ENV(YDB_ADDITIONAL_LOG_CONFIGS="KQP_COMPUTE:DEBUG")
+
 
 TEST_SRCS(
     test_followers.py
@@ -10,6 +12,7 @@ TEST_SRCS(
 
 SIZE(LARGE)
 REQUIREMENTS(cpu:all)
+REQUIREMENTS(ram:all)
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 
 DEPENDS(

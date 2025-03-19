@@ -347,7 +347,7 @@ WHERE Name = "default";
 
 `resource_pools_classifiers` — таблица содержит информацию о [настройках](../yql/reference/syntax/create-resource-pool-classifier.md#parameters) [классификаторов пулов ресурсов](../concepts/glossary.md#resource-pool-classifier).
 
-Структура таблицы:
+Структура системного представления:
 
 Поле | Описание
 --- | ---

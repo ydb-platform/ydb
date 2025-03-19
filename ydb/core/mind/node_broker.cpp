@@ -68,9 +68,9 @@ void TNodeBroker::OnActivateExecutor(const TActorContext &ctx)
     EnableStableNodeNames = appData->FeatureFlags.GetEnableStableNodeNames();
 
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
-    ClearState();
+    Committed.ClearState();
 
-    ProcessTx(CreateTxInitScheme(), ctx);
+    Execute(CreateTxInitScheme(), ctx);
 }
 
 void TNodeBroker::OnDetach(const TActorContext &ctx)
@@ -106,21 +106,21 @@ bool TNodeBroker::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
         PRE() {
             str << "Served domain: " << AppData(ctx)->DomainsInfo->GetDomain()->Name << Endl
                 << "DynamicNameserviceConfig:" << Endl
-                << "  MaxStaticNodeId: " << AppData(ctx)->DynamicNameserviceConfig->MaxStaticNodeId << Endl
-                << "  MaxDynamicNodeId: " << AppData(ctx)->DynamicNameserviceConfig->MaxDynamicNodeId << Endl
-                << "  EpochDuration: " << EpochDuration << Endl
-                << "  StableNodeNamePrefix: " << StableNodeNamePrefix << Endl
+                << "  MaxStaticNodeId: " << MaxStaticId << Endl
+                << "  MaxDynamicNodeId: " << MaxDynamicId << Endl
+                << "  EpochDuration: " << Committed.EpochDuration << Endl
+                << "  StableNodeNamePrefix: " << Committed.StableNodeNamePrefix << Endl
                 << "  BannedIds:";
-            for (auto &pr : BannedIds)
+            for (auto &pr : Committed.BannedIds)
                 str << " [" << pr.first << ", " << pr.second << "]";
             str << Endl << Endl;
             str << "Registered nodes:" << Endl;
 
             TSet<ui32> ids;
-            for (auto &pr : Nodes)
+            for (auto &pr : Committed.Nodes)
                 ids.insert(pr.first);
             for (auto id : ids) {
-                auto &node = Nodes.at(id);
+                auto &node = Committed.Nodes.at(id);
                 str << " - " << id << Endl
                     << "   Address: " << node.Address << Endl
                     << "   Host: " << node.Host << Endl
@@ -136,13 +136,13 @@ bool TNodeBroker::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
             }
             str << Endl;
 
-            str << "Free Node IDs count: " << FreeIds.Count() << Endl;
+            str << "Free Node IDs count: " << Committed.FreeIds.Count() << Endl;
 
             str << Endl;
             str << "Slot Indexes Pools usage: " << Endl;
             size_t totalSize = 0;
             size_t totalCapacity = 0;
-            for (const auto &[subdomainKey, slotIndexesPool] : SlotIndexesPools) {
+            for (const auto &[subdomainKey, slotIndexesPool] : Committed.SlotIndexesPools) {
                 const size_t size = slotIndexesPool.Size();
                 totalSize += size;
                 const size_t capacity = slotIndexesPool.Capacity();
@@ -174,8 +174,6 @@ void TNodeBroker::Cleanup(const TActorContext &ctx)
     LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TNodeBroker::Cleanup");
 
     NConsole::UnsubscribeViaConfigDispatcher(ctx, ctx.SelfID);
-
-    TxProcessor->Clear();
 }
 
 void TNodeBroker::Die(const TActorContext &ctx)
@@ -184,7 +182,7 @@ void TNodeBroker::Die(const TActorContext &ctx)
     TActorBase::Die(ctx);
 }
 
-void TNodeBroker::ClearState()
+void TNodeBroker::TState::ClearState()
 {
     Nodes.clear();
     ExpiredNodes.clear();
@@ -194,7 +192,7 @@ void TNodeBroker::ClearState()
     RecomputeSlotIndexesPools();
 }
 
-void TNodeBroker::AddNode(const TNodeInfo &info)
+void TNodeBroker::TState::AddNode(const TNodeInfo &info)
 {
     FreeIds.Reset(info.NodeId);
     if (info.SlotIndex.has_value()) {
@@ -203,41 +201,41 @@ void TNodeBroker::AddNode(const TNodeInfo &info)
 
     if (info.Expire > Epoch.Start) {
         LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                    "Added node " << info.IdString());
+                    LogPrefix() << " Added node " << info.IdString());
 
         Hosts.emplace(std::make_tuple(info.Host, info.Address, info.Port), info.NodeId);
         Nodes.emplace(info.NodeId, info);
     } else {
         LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                    "Added expired node " << info.IdString());
+                    LogPrefix() << " Added expired node " << info.IdString());
 
         ExpiredNodes.emplace(info.NodeId, info);
     }
 }
 
-void TNodeBroker::ExtendLease(TNodeInfo &node)
+void TNodeBroker::TState::ExtendLease(TNodeInfo &node)
 {
     ++node.Lease;
     node.Expire = Epoch.NextEnd;
 
     LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                "Extended lease of " << node.IdString() << " up to "
+                LogPrefix() << " Extended lease of " << node.IdString() << " up to "
                 << node.ExpirationString() << " (lease " << node.Lease << ")");
 }
 
-void TNodeBroker::FixNodeId(TNodeInfo &node)
+void TNodeBroker::TState::FixNodeId(TNodeInfo &node)
 {
     ++node.Lease;
     node.Expire = TInstant::Max();
 
     LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                "Fix ID for node " << node.IdString());
+                LogPrefix() << " Fix ID for node " << node.IdString());
 }
 
-void TNodeBroker::RecomputeFreeIds()
+void TNodeBroker::TState::RecomputeFreeIds()
 {
     FreeIds.Clear();
-    FreeIds.Set(MinDynamicId, MaxDynamicId + 1);
+    FreeIds.Set(Self->MinDynamicId, Self->MaxDynamicId + 1);
 
     // Remove all allocated IDs from the set.
     for (auto &pr : Nodes)
@@ -251,7 +249,7 @@ void TNodeBroker::RecomputeFreeIds()
     }
 }
 
-void TNodeBroker::RecomputeSlotIndexesPools()
+void TNodeBroker::TState::RecomputeSlotIndexesPools()
 {
     for (auto &[_, slotIndexesPool] : SlotIndexesPools) {
         slotIndexesPool.ReleaseAll();
@@ -269,7 +267,7 @@ void TNodeBroker::RecomputeSlotIndexesPools()
     }
 }
 
-bool TNodeBroker::IsBannedId(ui32 id) const
+bool TNodeBroker::TState::IsBannedId(ui32 id) const
 {
     for (auto &pr : BannedIds)
         if (id >= pr.first && id <= pr.second)
@@ -280,7 +278,7 @@ bool TNodeBroker::IsBannedId(ui32 id) const
 void TNodeBroker::AddDelayedListNodesRequest(ui64 epoch,
                                              TEvNodeBroker::TEvListNodes::TPtr &ev)
 {
-    Y_ABORT_UNLESS(epoch > Epoch.Id);
+    Y_ABORT_UNLESS(epoch > Committed.Epoch.Id);
     LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
                 "Delaying list nodes request for epoch #" << epoch);
 
@@ -292,14 +290,14 @@ void TNodeBroker::ProcessListNodesRequest(TEvNodeBroker::TEvListNodes::TPtr &ev)
     auto *msg = ev->Get();
 
     NKikimrNodeBroker::TNodesInfo info;
-    Epoch.Serialize(*info.MutableEpoch());
+    Committed.Epoch.Serialize(*info.MutableEpoch());
     info.SetDomain(AppData()->DomainsInfo->GetDomain()->DomainUid);
     TAutoPtr<TEvNodeBroker::TEvNodesInfo> resp = new TEvNodeBroker::TEvNodesInfo(info);
 
     bool optimized = false;
 
     if (msg->Record.HasCachedVersion()) {
-        if (msg->Record.GetCachedVersion() == Epoch.Version) {
+        if (msg->Record.GetCachedVersion() == Committed.Epoch.Version) {
             // Client has an up-to-date list already
             optimized = true;
         } else {
@@ -308,8 +306,8 @@ void TNodeBroker::ProcessListNodesRequest(TEvNodeBroker::TEvListNodes::TPtr &ev)
             ui64 neededFirstVersion = msg->Record.GetCachedVersion() + 1;
             if (!EpochDeltasVersions.empty() &&
                 EpochDeltasVersions.front() <= neededFirstVersion &&
-                EpochDeltasVersions.back() == Epoch.Version &&
-                neededFirstVersion <= Epoch.Version)
+                EpochDeltasVersions.back() == Committed.Epoch.Version &&
+                neededFirstVersion <= Committed.Epoch.Version)
             {
                 ui64 firstIndex = neededFirstVersion - EpochDeltasVersions.front();
                 if (firstIndex > 0) {
@@ -331,7 +329,7 @@ void TNodeBroker::ProcessListNodesRequest(TEvNodeBroker::TEvListNodes::TPtr &ev)
 
     TabletCounters->Percentile()[COUNTER_LIST_NODES_BYTES].IncrementFor(resp->GetCachedByteSize());
     LOG_TRACE_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                "Send TEvNodesInfo for epoch " << Epoch.ToString());
+                "Send TEvNodesInfo for epoch " << Committed.Epoch.ToString());
 
     Send(ev->Sender, resp.Release());
 }
@@ -341,7 +339,7 @@ void TNodeBroker::ProcessDelayedListNodesRequests()
     THashSet<TActorId> processed;
     while (!DelayedListNodesRequests.empty()) {
         auto it = DelayedListNodesRequests.begin();
-        if (it->first > Epoch.Id)
+        if (it->first > Committed.Epoch.Id)
             break;
 
         // Avoid processing more than one request from the same sender
@@ -355,16 +353,16 @@ void TNodeBroker::ProcessDelayedListNodesRequests()
 void TNodeBroker::ScheduleEpochUpdate(const TActorContext &ctx)
 {
     auto now = ctx.Now();
-    if (now >= Epoch.End) {
+    if (now >= Committed.Epoch.End) {
         ctx.Schedule(TDuration::Zero(), new TEvPrivate::TEvUpdateEpoch);
     } else {
         auto *ev = new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvUpdateEpoch);
         EpochTimerCookieHolder.Reset(ISchedulerCookie::Make2Way());
-        CreateLongTimer(ctx, Epoch.End - now, ev, AppData(ctx)->SystemPoolId,
+        CreateLongTimer(ctx, Committed.Epoch.End - now, ev, AppData(ctx)->SystemPoolId,
                         EpochTimerCookieHolder.Get());
 
         LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER,
-                    "Scheduled epoch update at " << Epoch.End);
+                    "Scheduled epoch update at " << Committed.Epoch.End);
     }
 }
 
@@ -385,12 +383,12 @@ void TNodeBroker::FillNodeName(const std::optional<ui32> &slotIndex,
                                NKikimrNodeBroker::TNodeInfo &info) const
 {
     if (EnableStableNodeNames && slotIndex.has_value()) {
-        const TString name = TStringBuilder() << StableNodeNamePrefix << slotIndex.value();
+        const TString name = TStringBuilder() << Committed.StableNodeNamePrefix << slotIndex.value();
         info.SetName(name);
     }
 }
 
-void TNodeBroker::ComputeNextEpochDiff(TStateDiff &diff)
+void TNodeBroker::TState::ComputeNextEpochDiff(TStateDiff &diff)
 {
     for (auto &pr : Nodes) {
         if (pr.second.Expire <= Epoch.End)
@@ -407,14 +405,14 @@ void TNodeBroker::ComputeNextEpochDiff(TStateDiff &diff)
     diff.NewEpoch.NextEnd = diff.NewEpoch.End + EpochDuration;
 }
 
-void TNodeBroker::ApplyStateDiff(const TStateDiff &diff)
+void TNodeBroker::TState::ApplyStateDiff(const TStateDiff &diff)
 {
     for (auto id : diff.NodesToExpire) {
         auto it = Nodes.find(id);
         Y_ABORT_UNLESS(it != Nodes.end());
 
         LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                    "Node " << it->second.IdString() << " has expired");
+                    LogPrefix() << " Node " << it->second.IdString() << " has expired");
 
         Hosts.erase(std::make_tuple(it->second.Host, it->second.Address, it->second.Port));
         ExpiredNodes.emplace(id, std::move(it->second));
@@ -426,9 +424,9 @@ void TNodeBroker::ApplyStateDiff(const TStateDiff &diff)
         Y_ABORT_UNLESS(it != ExpiredNodes.end());
 
         LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                    "Remove node " << it->second.IdString());
+                    LogPrefix() << " Remove node " << it->second.IdString());
 
-        if (!IsBannedId(id) && id >= MinDynamicId && id <= MaxDynamicId) {
+        if (!IsBannedId(id) && id >= Self->MinDynamicId && id <= Self->MaxDynamicId) {
             FreeIds.Set(id);
         }
         if (it->second.SlotIndex.has_value()) {
@@ -438,15 +436,15 @@ void TNodeBroker::ApplyStateDiff(const TStateDiff &diff)
     }
 
     LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                "Move to new epoch " << diff.NewEpoch.ToString());
+                LogPrefix() << " Move to new epoch " << diff.NewEpoch.ToString());
 
     Epoch = diff.NewEpoch;
 }
 
-void TNodeBroker::UpdateEpochVersion()
+void TNodeBroker::TState::UpdateEpochVersion()
 {
     LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                "Update current epoch version from " << Epoch.Version
+                LogPrefix() << " Update current epoch version from " << Epoch.Version
                 << " to " << Epoch.Version + 1);
 
     ++Epoch.Version;
@@ -455,13 +453,13 @@ void TNodeBroker::UpdateEpochVersion()
 void TNodeBroker::PrepareEpochCache()
 {
     LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                "Preparing nodes list cache for epoch #" << Epoch.Id
-                << " nodes=" << Nodes.size() << " expired=" << ExpiredNodes.size());
+                "Preparing nodes list cache for epoch #" << Committed.Epoch.Id
+                << " nodes=" << Committed.Nodes.size() << " expired=" << Committed.ExpiredNodes.size());
 
     NKikimrNodeBroker::TNodesInfo info;
-    for (auto &entry : Nodes)
+    for (auto &entry : Committed.Nodes)
         FillNodeInfo(entry.second, *info.AddNodes());
-    for (auto &entry : ExpiredNodes)
+    for (auto &entry : Committed.ExpiredNodes)
         FillNodeInfo(entry.second, *info.AddExpiredNodes());
 
     Y_PROTOBUF_SUPPRESS_NODISCARD info.SerializeToString(&EpochCache);
@@ -487,14 +485,14 @@ void TNodeBroker::AddNodeToEpochCache(const TNodeInfo &node)
     EpochCache += delta;
     TabletCounters->Simple()[COUNTER_EPOCH_SIZE_BYTES].Set(EpochCache.size());
 
-    if (!EpochDeltasVersions.empty() && EpochDeltasVersions.back() + 1 != Epoch.Version) {
+    if (!EpochDeltasVersions.empty() && EpochDeltasVersions.back() + 1 != Committed.Epoch.Version) {
         EpochDeltasCache.clear();
         EpochDeltasVersions.clear();
         EpochDeltasEndOffsets.clear();
     }
 
     EpochDeltasCache += delta;
-    EpochDeltasVersions.push_back(Epoch.Version);
+    EpochDeltasVersions.push_back(Committed.Epoch.Version);
     EpochDeltasEndOffsets.push_back(EpochDeltasCache.size());
     TabletCounters->Simple()[COUNTER_EPOCH_DELTAS_SIZE_BYTES].Set(EpochDeltasCache.size());
 }
@@ -506,40 +504,14 @@ void TNodeBroker::SubscribeForConfigUpdates(const TActorContext &ctx)
     NConsole::SubscribeViaConfigDispatcher(ctx, {nodeBrokerItem, featureFlagsItem}, ctx.SelfID);
 }
 
-void TNodeBroker::ProcessTx(ITransaction *tx,
-                            const TActorContext &ctx)
-{
-    TxProcessor->ProcessTx(tx, ctx);
-}
-
-void TNodeBroker::ProcessTx(ui32 nodeId,
-                            ITransaction *tx,
-                            const TActorContext &ctx)
-{
-    TxProcessor->GetSubProcessor(ToString(nodeId), ctx)->ProcessTx(tx, ctx);
-}
-
-void TNodeBroker::TxCompleted(ITransaction *tx,
-                              const TActorContext &ctx)
-{
-    TxProcessor->TxCompleted(tx, ctx);
-}
-
-void TNodeBroker::TxCompleted(ui32 nodeId,
-                              ITransaction *tx,
-                              const TActorContext &ctx)
-{
-    TxProcessor->GetSubProcessor(ToString(nodeId), ctx)->TxCompleted(tx, ctx);
-}
-
-void TNodeBroker::LoadConfigFromProto(const NKikimrNodeBroker::TConfig &config)
+void TNodeBroker::TState::LoadConfigFromProto(const NKikimrNodeBroker::TConfig &config)
 {
     Config = config;
 
     EpochDuration = TDuration::MicroSeconds(config.GetEpochDuration());
     if (EpochDuration < MIN_LEASE_DURATION) {
         LOG_ERROR_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                    "Configured lease duration (" << EpochDuration << ") is too"
+                    LogPrefix() << " Configured lease duration (" << EpochDuration << ") is too"
                     " small. Using min. value: " << MIN_LEASE_DURATION);
         EpochDuration = MIN_LEASE_DURATION;
     }
@@ -552,11 +524,17 @@ void TNodeBroker::LoadConfigFromProto(const NKikimrNodeBroker::TConfig &config)
     RecomputeFreeIds();
 }
 
-void TNodeBroker::DbAddNode(const TNodeInfo &node,
+void TNodeBroker::TState::ReleaseSlotIndex(TNodeInfo &node)
+{
+    SlotIndexesPools[node.ServicedSubDomain].Release(node.SlotIndex.value());
+    node.SlotIndex.reset();
+}
+
+void TNodeBroker::TDirtyState::DbAddNode(const TNodeInfo &node,
                             TTransactionContext &txc)
 {
     LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                "Adding node " << node.IdString() << " to database"
+                DbLogPrefix() << " Adding node " << node.IdString() << " to database"
                 << " resolvehost=" << node.ResolveHost
                 << " address=" << node.Address
                 << " dc=" << node.Location.GetDataCenterId()
@@ -589,18 +567,18 @@ void TNodeBroker::DbAddNode(const TNodeInfo &node,
     }
 }
 
-void TNodeBroker::DbApplyStateDiff(const TStateDiff &diff,
+void TNodeBroker::TDirtyState::DbApplyStateDiff(const TStateDiff &diff,
                                    TTransactionContext &txc)
 {
     DbRemoveNodes(diff.NodesToRemove, txc);
     DbUpdateEpoch(diff.NewEpoch, txc);
 }
 
-void TNodeBroker::DbFixNodeId(const TNodeInfo &node,
+void TNodeBroker::TDirtyState::DbFixNodeId(const TNodeInfo &node,
                               TTransactionContext &txc)
 {
     LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                "Fix ID for node: " <<  node.IdString());
+                DbLogPrefix() << " Fix ID in database for node: " <<  node.IdString());
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::Nodes>().Key(node.NodeId)
@@ -608,7 +586,7 @@ void TNodeBroker::DbFixNodeId(const TNodeInfo &node,
         .Update<Schema::Nodes::Expire>(TInstant::Max().GetValue());
 }
 
-bool TNodeBroker::DbLoadState(TTransactionContext &txc,
+bool TNodeBroker::TDirtyState::DbLoadState(TTransactionContext &txc,
                               const TActorContext &ctx)
 {
     NIceDb::TNiceDb db(txc.DB);
@@ -648,10 +626,10 @@ bool TNodeBroker::DbLoadState(TTransactionContext &txc,
         LoadConfigFromProto(config);
 
         LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
-                    "Loaded config:" << Endl << config.DebugString());
+                    DbLogPrefix() << " Loaded config:" << Endl << config.DebugString());
     } else {
         LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
-                    "Using default config.");
+                    DbLogPrefix() << " Using default config.");
 
         LoadConfigFromProto(NKikimrNodeBroker::TConfig());
     }
@@ -660,7 +638,7 @@ bool TNodeBroker::DbLoadState(TTransactionContext &txc,
         ConfigSubscriptionId = subscriptionRow.GetValue<Schema::Params::Value>();
 
         LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
-                    "Loaded config subscription: " << ConfigSubscriptionId);
+                    DbLogPrefix() << " Loaded config subscription: " << ConfigSubscriptionId);
     }
 
     if (currentEpochIdRow.IsValid()) {
@@ -677,7 +655,7 @@ bool TNodeBroker::DbLoadState(TTransactionContext &txc,
         Epoch.NextEnd = TInstant::FromValue(nextEpochEndRow.GetValue<Schema::Params::Value>());
 
         LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
-                    "Loaded current epoch: " << Epoch.ToString());
+                    DbLogPrefix() << " Loaded current epoch: " << Epoch.ToString());
     } else {
         // If there is no epoch start the first one.
         Epoch.Id = 1;
@@ -687,7 +665,7 @@ bool TNodeBroker::DbLoadState(TTransactionContext &txc,
         Epoch.NextEnd = Epoch.End + EpochDuration;
 
         LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
-                    "Starting the first epoch: " << Epoch.ToString());
+                    DbLogPrefix() << " Starting the first epoch: " << Epoch.ToString());
 
         updateEpoch = true;
     }
@@ -701,10 +679,10 @@ bool TNodeBroker::DbLoadState(TTransactionContext &txc,
         // mode, and now temporarily restarted without this mode enabled. We
         // should still support nodes that have been registered before we
         // restarted, even though it's not available for allocation.
-        if (id <= MaxStaticId || id > MaxDynamicId) {
+        if (id <= Self->MaxStaticId || id > Self->MaxDynamicId) {
             LOG_ERROR_S(ctx, NKikimrServices::NODE_BROKER,
-                        "Ignoring node with wrong ID " << id << " not in range ("
-                        << MaxStaticId << ", " << MaxDynamicId << "]");
+                        DbLogPrefix() << " Ignoring node with wrong ID " << id << " not in range ("
+                        << Self->MaxStaticId << ", " << Self->MaxDynamicId << "]");
             toRemove.push_back(id);
         } else {
             auto expire = TInstant::FromValue(nodesRowset.GetValue<T::Expire>());
@@ -736,7 +714,7 @@ bool TNodeBroker::DbLoadState(TTransactionContext &txc,
             AddNode(info);
 
             LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
-                        "Loaded node " << info.IdString()
+                        DbLogPrefix() << " Loaded node " << info.IdString()
                         << " expiring " << info.ExpirationString());
         }
 
@@ -751,23 +729,23 @@ bool TNodeBroker::DbLoadState(TTransactionContext &txc,
     return true;
 }
 
-void TNodeBroker::DbRemoveNodes(const TVector<ui32> &nodes,
+void TNodeBroker::TDirtyState::DbRemoveNodes(const TVector<ui32> &nodes,
                                 TTransactionContext &txc)
 {
     NIceDb::TNiceDb db(txc.DB);
     for (auto id : nodes) {
         LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                    "Removing node #" << id << " from database");
+                    DbLogPrefix() << " Removing node #" << id << " from database");
 
         db.Table<Schema::Nodes>().Key(id).Delete();
     }
 }
 
-void TNodeBroker::DbUpdateConfig(const NKikimrNodeBroker::TConfig &config,
+void TNodeBroker::TDirtyState::DbUpdateConfig(const NKikimrNodeBroker::TConfig &config,
                                  TTransactionContext &txc)
 {
     LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                "Update config in database"
+                DbLogPrefix() << " Update config in database"
                 << " config=" << config.ShortDebugString());
 
     TString value;
@@ -777,11 +755,11 @@ void TNodeBroker::DbUpdateConfig(const NKikimrNodeBroker::TConfig &config,
         .Update<Schema::Config::Value>(value);
 }
 
-void TNodeBroker::DbUpdateConfigSubscription(ui64 subscriptionId,
+void TNodeBroker::TDirtyState::DbUpdateConfigSubscription(ui64 subscriptionId,
                                              TTransactionContext &txc)
 {
     LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                "Update config subscription in database"
+                DbLogPrefix() << " Update config subscription in database"
                 << " id=" << subscriptionId);
 
     NIceDb::TNiceDb db(txc.DB);
@@ -789,11 +767,11 @@ void TNodeBroker::DbUpdateConfigSubscription(ui64 subscriptionId,
         .Update<Schema::Params::Value>(subscriptionId);
 }
 
-void TNodeBroker::DbUpdateEpoch(const TEpochInfo &epoch,
+void TNodeBroker::TDirtyState::DbUpdateEpoch(const TEpochInfo &epoch,
                                 TTransactionContext &txc)
 {
     LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                "Update epoch in database: " << epoch.ToString());
+                DbLogPrefix() << " Update epoch in database: " << epoch.ToString());
 
     NIceDb::TNiceDb db(txc.DB);
     db.Table<Schema::Params>().Key(ParamKeyCurrentEpochId)
@@ -808,11 +786,11 @@ void TNodeBroker::DbUpdateEpoch(const TEpochInfo &epoch,
         .Update<Schema::Params::Value>(epoch.NextEnd.GetValue());
 }
 
-void TNodeBroker::DbUpdateEpochVersion(ui64 version,
+void TNodeBroker::TDirtyState::DbUpdateEpochVersion(ui64 version,
                                        TTransactionContext &txc)
 {
     LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                "Update epoch version in database"
+                DbLogPrefix() << " Update epoch version in database"
                 << " version=" << version);
 
     NIceDb::TNiceDb db(txc.DB);
@@ -820,11 +798,11 @@ void TNodeBroker::DbUpdateEpochVersion(ui64 version,
         .Update<Schema::Params::Value>(version);
 }
 
-void TNodeBroker::DbUpdateNodeLease(const TNodeInfo &node,
+void TNodeBroker::TDirtyState::DbUpdateNodeLease(const TNodeInfo &node,
                                     TTransactionContext &txc)
 {
     LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                "Update node " << node.IdString() << " lease in database"
+                DbLogPrefix() << " Update node " << node.IdString() << " lease in database"
                 << " lease=" << node.Lease + 1
                 << " expire=" << Epoch.NextEnd);
 
@@ -834,11 +812,11 @@ void TNodeBroker::DbUpdateNodeLease(const TNodeInfo &node,
         .Update<Schema::Nodes::Expire>(Epoch.NextEnd.GetValue());
 }
 
-void TNodeBroker::DbUpdateNodeLocation(const TNodeInfo &node,
+void TNodeBroker::TDirtyState::DbUpdateNodeLocation(const TNodeInfo &node,
                                        TTransactionContext &txc)
 {
     LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                "Update node " << node.IdString() << " location in database"
+                DbLogPrefix() << " Update node " << node.IdString() << " location in database"
                 << " location=" << node.Location.ToString());
 
     NIceDb::TNiceDb db(txc.DB);
@@ -846,23 +824,24 @@ void TNodeBroker::DbUpdateNodeLocation(const TNodeInfo &node,
     db.Table<T>().Key(node.NodeId).Update<T::Location>(node.Location.GetSerializedLocation());
 }
 
-void TNodeBroker::DbReleaseSlotIndex(const TNodeInfo &node,
+void TNodeBroker::TDirtyState::DbReleaseSlotIndex(const TNodeInfo &node,
                                        TTransactionContext &txc) 
 {
 
     LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                "Release slot index (" << node.SlotIndex << ") node " << node.IdString() );
+                DbLogPrefix() << " Release slot index (" << node.SlotIndex << ") node "
+                << node.IdString() << " in database");
     NIceDb::TNiceDb db(txc.DB);
     using T = Schema::Nodes;
     db.Table<T>().Key(node.NodeId)
         .UpdateToNull<T::SlotIndex>();
 }
   
-void TNodeBroker::DbUpdateNodeAuthorizedByCertificate(const TNodeInfo &node,
+void TNodeBroker::TDirtyState::DbUpdateNodeAuthorizedByCertificate(const TNodeInfo &node,
                                        TTransactionContext &txc)
 {
     LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                "Update node " << node.IdString() << " authorizedbycertificate in database"
+                DbLogPrefix() << " Update node " << node.IdString() << " authorizedbycertificate in database"
                 << " authorizedbycertificate=" << (node.AuthorizedByCertificate ? "true" : "false"));
 
     NIceDb::TNiceDb db(txc.DB);
@@ -879,7 +858,7 @@ void TNodeBroker::Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev,
     }
 
     if (ev->Get()->Record.HasLocal() && ev->Get()->Record.GetLocal()) {
-        ProcessTx(CreateTxUpdateConfig(ev), ctx);
+        Execute(CreateTxUpdateConfig(ev), ctx);
     } else {
         // ignore and immediately ack messages from old persistent console subscriptions
         auto response = MakeHolder<TEvConsole::TEvConfigNotificationResponse>();
@@ -899,7 +878,7 @@ void TNodeBroker::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse::TPtr
         return;
     }
 
-    ProcessTx(0, CreateTxUpdateConfigSubscription(ev), ctx);
+    Execute(CreateTxUpdateConfigSubscription(ev), ctx);
 }
 
 void TNodeBroker::Handle(TEvNodeBroker::TEvListNodes::TPtr &ev,
@@ -909,7 +888,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvListNodes::TPtr &ev,
     auto &rec = ev->Get()->Record;
 
     ui64 epoch = rec.GetMinEpoch();
-    if (epoch > Epoch.Id) {
+    if (epoch > Committed.Epoch.Id) {
         AddDelayedListNodesRequest(epoch, ev);
         return;
     }
@@ -924,8 +903,8 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvResolveNode::TPtr &ev,
     ui32 nodeId = ev->Get()->Record.GetNodeId();
     TAutoPtr<TEvNodeBroker::TEvResolvedNode> resp = new TEvNodeBroker::TEvResolvedNode;
 
-    auto it = Nodes.find(nodeId);
-    if (it != Nodes.end() && it->second.Expire > ctx.Now()) {
+    auto it = Committed.Nodes.find(nodeId);
+    if (it != Committed.Nodes.end() && it->second.Expire > ctx.Now()) {
         resp->Record.MutableStatus()->SetCode(TStatus::OK);
         FillNodeInfo(it->second, *resp->Record.MutableNode());
     } else {
@@ -1033,15 +1012,14 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvGracefulShutdownRequest::TPtr &ev,
     LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER, "Handle TEvNodeBroker::TEvGracefulShutdownRequest"
         << ": request# " << ev->Get()->Record.ShortDebugString());   
     TabletCounters->Cumulative()[COUNTER_GRACEFUL_SHUTDOWN_REQUESTS].Increment(1);
-    ProcessTx(CreateTxGracefulShutdown(ev), ctx);                     
+    Execute(CreateTxGracefulShutdown(ev), ctx);                     
 }
 
 void TNodeBroker::Handle(TEvNodeBroker::TEvExtendLeaseRequest::TPtr &ev,
                          const TActorContext &ctx)
 {
     TabletCounters->Cumulative()[COUNTER_EXTEND_LEASE_REQUESTS].Increment(1);
-    ui32 nodeId = ev->Get()->Record.GetNodeId();
-    ProcessTx(nodeId, CreateTxExtendLease(ev), ctx);
+    Execute(CreateTxExtendLease(ev), ctx);
 }
 
 void TNodeBroker::Handle(TEvNodeBroker::TEvCompactTables::TPtr &ev,
@@ -1056,7 +1034,7 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvGetConfigRequest::TPtr &ev,
                          const TActorContext &ctx)
 {
     auto resp = MakeHolder<TEvNodeBroker::TEvGetConfigResponse>();
-    resp->Record.MutableConfig()->CopyFrom(Config);
+    resp->Record.MutableConfig()->CopyFrom(Committed.Config);
 
     LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER,
                 "Send TEvGetConfigResponse: " << resp->ToString());
@@ -1067,36 +1045,54 @@ void TNodeBroker::Handle(TEvNodeBroker::TEvGetConfigRequest::TPtr &ev,
 void TNodeBroker::Handle(TEvNodeBroker::TEvSetConfigRequest::TPtr &ev,
                          const TActorContext &ctx)
 {
-    ProcessTx(CreateTxUpdateConfig(ev), ctx);
+    Execute(CreateTxUpdateConfig(ev), ctx);
 }
 
 void TNodeBroker::Handle(TEvPrivate::TEvUpdateEpoch::TPtr &ev,
                          const TActorContext &ctx)
 {
     Y_UNUSED(ev);
-    if (Epoch.End > ctx.Now()) {
+    if (Committed.Epoch.End > ctx.Now()) {
         LOG_INFO_S(ctx, NKikimrServices::NODE_BROKER,
                    "Epoch update event is too early");
         ScheduleEpochUpdate(ctx);
         return;
     }
 
-    ProcessTx(CreateTxUpdateEpoch(), ctx);
+    Execute(CreateTxUpdateEpoch(), ctx);
 }
 
 void TNodeBroker::Handle(TEvPrivate::TEvResolvedRegistrationRequest::TPtr &ev,
                          const TActorContext &ctx)
 {
-    ProcessTx(CreateTxRegisterNode(ev), ctx);
+    Execute(CreateTxRegisterNode(ev), ctx);
+}
+
+TNodeBroker::TState::TState(TNodeBroker* self)
+        : Self(self)
+{}
+
+TStringBuf TNodeBroker::TState::LogPrefix() const {
+    return "[Committed]";
+}
+
+TNodeBroker::TDirtyState::TDirtyState(TNodeBroker* self)
+        : TState(self)
+{}
+
+TStringBuf TNodeBroker::TDirtyState::LogPrefix() const {
+    return "[Dirty]";
+}
+
+TStringBuf TNodeBroker::TDirtyState::DbLogPrefix() const {
+    return "[DB]";
 }
 
 TNodeBroker::TNodeBroker(const TActorId &tablet, TTabletStorageInfo *info)
         : TActor(&TThis::StateInit)
         , TTabletExecutedFlat(info, tablet, new NMiniKQL::TMiniKQLFactory)
-        , EpochDuration(TDuration::Hours(1))
-        , ConfigSubscriptionId(0)
-        , StableNodeNamePrefix("slot-")
-        , TxProcessor(new TTxProcessor(*this, "root", NKikimrServices::NODE_BROKER))
+        , Dirty(this)
+        , Committed(this)
 {
     TabletCountersPtr.Reset(new TProtobufTabletCounters<
         ESimpleCounters_descriptor,

@@ -106,6 +106,9 @@ public:
     }
 
     virtual bool HasSubColumnData(const TString& subColumnName) const override {
+        if (!subColumnName) {
+            return false;
+        }
         return !NeedFetch(std::string_view(subColumnName.data(), subColumnName.size()));
     }
 

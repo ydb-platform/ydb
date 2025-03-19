@@ -177,11 +177,15 @@ public:
     ETableType GetTableType() const { return TableType; }
     void SetTableType(ETableType tableType) { TableType = tableType; }
 
+    void SetSysViewRewritten(bool flag) { SysViewRewritten = flag; }
+    bool GetSysViewRewritten() const { return SysViewRewritten; }
+
 private:
     THashMap<TString, const TTypeAnnotationNode*> ColumnTypes;
     bool NeedsStats = false;
     bool NeedAuthInfo = true;
     ETableType TableType;
+    bool SysViewRewritten = false;
 };
 
 class TKikimrTablesData : public TThrRefBase {
@@ -191,7 +195,7 @@ public:
     TKikimrTablesData& operator=(const TKikimrTablesData&) = delete;
 
     TKikimrTableDescription& GetOrAddTable(const TString& cluster, const TString& database, const TString& table,
-        ETableType tableType = ETableType::Table);
+        ETableType tableType = ETableType::Table, bool sysViewRewritten = false);
     TKikimrTableDescription& GetTable(const TString& cluster, const TString& table);
 
     const TKikimrTableDescription* EnsureTableExists(const TString& cluster, const TString& table,

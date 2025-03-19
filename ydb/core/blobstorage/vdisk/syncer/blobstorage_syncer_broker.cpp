@@ -1,11 +1,12 @@
 #include "blobstorage_syncer_broker.h"
 
 #include <ydb/core/blobstorage/vdisk/common/vdisk_log.h>
+#include <ydb/core/control/lib/immediate_control_board_wrapper.h>
 
 namespace NKikimr {
 
-    class TSyncBroker : public TActor<TSyncBroker> {
-        static constexpr size_t ACTIVE_SYNC_LIMIT = 8;
+    class TSyncBroker : public TActorBootstrapped<TSyncBroker> {
+        TControlWrapper MaxInProgressSyncCount;
 
         std::unordered_map<TActorId, std::unordered_set<TActorId>> Active;
 
@@ -23,11 +24,16 @@ namespace NKikimr {
         STRICT_STFUNC(StateFunc,
             hFunc(TEvQuerySyncToken, Handle)
             hFunc(TEvReleaseSyncToken, Handle)
+            hFunc(TEvents::TEvWakeup, Handle)
         )
 
-        TSyncBroker()
-            : TActor(&TSyncBroker::StateFunc)
+        explicit TSyncBroker(const TControlWrapper& maxInProgressSyncCount)
+            : MaxInProgressSyncCount(maxInProgressSyncCount)
         {}
+
+        void Bootstrap() {
+            Become(&TThis::StateFunc, TDuration::MilliSeconds(100), new TEvents::TEvWakeup);
+        }
 
         void Handle(TEvQuerySyncToken::TPtr& ev) {
             const auto vDiskActorId = ev->Get()->VDiskActorId;
@@ -45,7 +51,9 @@ namespace NKikimr {
                 return;
             }
 
-            if (Active.size() < ACTIVE_SYNC_LIMIT) {
+            const auto limit = (ui64)MaxInProgressSyncCount;
+
+            if (!limit || Active.size() < limit) {
                 Active[vDiskActorId].insert(actorId);
                 Send(actorId, new TEvSyncToken);
 
@@ -83,7 +91,9 @@ namespace NKikimr {
         }
 
         void ProcessQueue() {
-            while (!WaitQueue.empty() && Active.size() < ACTIVE_SYNC_LIMIT) {
+            const auto limit = (ui64)MaxInProgressSyncCount;
+
+            while (!WaitQueue.empty() && (!limit || Active.size() < limit)) {
                 const auto& waitSync = WaitQueue.front();
                 for (const auto& actorId : waitSync.ActorIds) {
                     Send(actorId, new TEvSyncToken);
@@ -129,10 +139,15 @@ namespace NKikimr {
                     ", waiting: " << WaitQueue.size());
             }
         }
+
+        void Handle(TEvents::TEvWakeup::TPtr&) {
+            ProcessQueue();
+            Schedule(TDuration::MilliSeconds(100), new TEvents::TEvWakeup);
+        }
     };
 
-    IActor *CreateSyncBrokerActor() {
-        return new TSyncBroker;
+    IActor *CreateSyncBrokerActor(const TControlWrapper& maxInProgressSyncCount) {
+        return new TSyncBroker(maxInProgressSyncCount);
     }
 
 } // NKikimr

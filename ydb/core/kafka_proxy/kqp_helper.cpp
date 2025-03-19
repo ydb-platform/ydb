@@ -1,7 +1,7 @@
-#include "kqp_balance_transaction.h"
-#include "kafka_consumer_groups_metadata_initializers.h"
-#include "kafka_consumer_members_metadata_initializers.h"
+#include "kqp_helper.h"
 
+#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/services/metadata/service.h>
 
 namespace NKafka {
 
@@ -95,15 +95,10 @@ void TKqpTxHelper::CommitTx(ui64 cookie, const TActorContext& ctx) {
     ctx.Send(MakeKqpProxyID(ctx.SelfID.NodeId()), commit.Release(), 0, cookie);
 }
 
-void TKqpTxHelper::SendInitTablesRequest(const TActorContext& ctx) {
+void TKqpTxHelper::SendInitTableRequest(const TActorContext& ctx, std::shared_ptr<NKikimr::NMetadata::IClassBehaviour> prepareManager) {
     ctx.Send(
         NKikimr::NMetadata::NProvider::MakeServiceId(ctx.SelfID.NodeId()),
-        new NKikimr::NMetadata::NProvider::TEvPrepareManager(NKikimr::NGRpcProxy::V1::TKafkaConsumerMembersMetaInitManager::GetInstant())
-    );
-
-    ctx.Send(
-        NKikimr::NMetadata::NProvider::MakeServiceId(ctx.SelfID.NodeId()),
-        new NKikimr::NMetadata::NProvider::TEvPrepareManager(NKikimr::NGRpcProxy::V1::TKafkaConsumerGroupsMetaInitManager::GetInstant())
+        new NKikimr::NMetadata::NProvider::TEvPrepareManager(prepareManager)
     );
 }
 

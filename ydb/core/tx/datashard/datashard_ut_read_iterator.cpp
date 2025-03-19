@@ -4727,6 +4727,57 @@ Y_UNIT_TEST_SUITE(DataShardReadIteratorConsistency) {
             "{ items { uint32_value: 7 } items { uint32_value: 70 } }");
     }
 
+    Y_UNIT_TEST(LeaseConfirmationNotOutOfOrder) {
+        TTestHelper helper;
+
+        auto& runtime = *helper.Server->GetRuntime();
+        runtime.SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NLog::PRI_TRACE);
+
+        auto& table1 = helper.Tables.at("table-1");
+
+        // Make sure the table is primed for reads
+        auto request1 = GetBaseReadRequest(table1.TableId, table1.UserTable.GetDescription(), 1);
+        AddRangeQuery<ui32>(*request1, { 1 }, true, { 3 }, true);
+        auto readResult1 = helper.SendRead("table-1", request1.release());
+        CheckResult(table1.UserTable, *readResult1, {
+            {1, 1, 1, 100},
+            {3, 3, 3, 300},
+        });
+        UNIT_ASSERT(readResult1->Record.GetFinished());
+
+        // Slee for some time, this will make sure the lease expires and stops getting renewed
+        runtime.SimulateSleep(TDuration::Seconds(10));
+
+        // Start blocking new commits for the tablet
+        TBlockEvents<TEvBlobStorage::TEvPut> blockCommits(runtime,
+            [tabletId = table1.TabletId](auto& ev) {
+                if (ev->Get()->Id.TabletID() == tabletId) {
+                    Cerr << "... blocking blob " << ev->Get()->Id << Endl;
+                    return true;
+                }
+                return false;
+            });
+
+        // Make one more request, this time forcing more than one result
+        auto request2 = GetBaseReadRequest(table1.TableId, table1.UserTable.GetDescription(), 2);
+        AddRangeQuery<ui32>(*request2, { 1 }, true, { 3 }, true);
+        request2->Record.SetMaxRowsInResult(1);
+        helper.SendReadAsync("table-1", request2.release());
+
+        // Sleep for some time, giving the tablet a chance to produce out-of-order results
+        runtime.SimulateSleep(TDuration::Seconds(1));
+
+        // Stop blocking commits
+        blockCommits.Stop().Unblock();
+
+        // The first result we receive should be with the first row
+        auto readResult2 = helper.WaitReadResult();
+        CheckResult(table1.UserTable, *readResult2, {
+            {1, 1, 1, 100},
+        });
+        UNIT_ASSERT(!readResult2->Record.GetFinished());
+    }
+
 }
 
 Y_UNIT_TEST_SUITE(DataShardReadIteratorLatency) {

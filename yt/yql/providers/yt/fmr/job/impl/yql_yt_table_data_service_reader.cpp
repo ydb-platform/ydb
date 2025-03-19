@@ -1,32 +1,31 @@
-#include "yql_yt_raw_table_reader.h"
+#include "yql_yt_table_data_service_reader.h"
 #include <yql/essentials/utils/log/log.h>
+#include <yql/essentials/utils/yql_panic.h>
 #include <yt/yql/providers/yt/fmr/utils/table_data_service_key.h>
 
 namespace NYql::NFmr {
 
-TFmrRawTableReader::TFmrRawTableReader(
+TFmrTableDataServiceReader::TFmrTableDataServiceReader(
     const TString& tableId,
     const std::vector<TTableRange>& tableRanges,
     ITableDataService::TPtr tableDataService,
-    const TFmrRawTableReaderSettings& settings
+    const TFmrTableDataServiceReaderSettings& settings
 )
-    : TableId_(tableId)
-    , TableRanges_(tableRanges)
-    , TableDataService_(tableDataService)
-    , Settings_(settings)
+    : TableId_(tableId),
+    TableRanges_(tableRanges),
+    TableDataService_(tableDataService),
+    ReadAheadChunks_(settings.ReadAheadChunks)
 {
     ReadAhead();
 }
 
-size_t TFmrRawTableReader::DoRead(void* buf, size_t len) {
+size_t TFmrTableDataServiceReader::DoRead(void* buf, size_t len) {
     ui64 totalRead = 0;
     char* output = static_cast<char*>(buf);
-
     while (len > 0) {
         ui64 available = DataBuffer_.size() - CurrentPosition_;
         if (available > 0) {
             ui64 toCopy = std::min(available, len);
-
             auto start = DataBuffer_.Begin() + CurrentPosition_;
             auto end = start + toCopy;
             std::copy(start, end, output);
@@ -41,9 +40,8 @@ size_t TFmrRawTableReader::DoRead(void* buf, size_t len) {
             try {
                 data = chunk.Data.GetValueSync();
             } catch (...) {
-                ythrow yexception() << "Error reading chunk:" << chunk.Meta << "Error: " << CurrentExceptionMessage();
+                ythrow yexception() << "Error reading chunk: " << chunk.Meta << "Error: " << CurrentExceptionMessage();
             }
-
             if (data) {
                 DataBuffer_.Assign(data->data(), data->size());
             } else {
@@ -53,7 +51,6 @@ size_t TFmrRawTableReader::DoRead(void* buf, size_t len) {
             PendingChunks_.pop();
             CurrentPosition_ = 0;
             available = DataBuffer_.size();
-
             ReadAhead();
         } else {
             break;
@@ -62,22 +59,30 @@ size_t TFmrRawTableReader::DoRead(void* buf, size_t len) {
     return totalRead;
 }
 
-void TFmrRawTableReader::ReadAhead() {
-    while (PendingChunks_.size() < Settings_.ReadAheadChunks) {
-        if (CurrentRange_ < TableRanges_.size()) {
-            auto currentPartId = TableRanges_[CurrentRange_].PartId;
-            if (CurrentChunk_ < TableRanges_[CurrentRange_].MaxChunk) {
-                auto key = GetTableDataServiceKey(TableId_, currentPartId, CurrentChunk_);
-                PendingChunks_.push({TableDataService_->Get(key), {TableId_, currentPartId, CurrentChunk_}});
-                CurrentChunk_++;
-            } else {
-                CurrentRange_++;
-            }
-        }
-        else {
+void TFmrTableDataServiceReader::ReadAhead() {
+    while (PendingChunks_.size() < ReadAheadChunks_) {
+        if (CurrentRange_ == TableRanges_.size()) {
             break;
         }
+        auto currentPartId = TableRanges_[CurrentRange_].PartId;
+        if (CurrentChunk_ < TableRanges_[CurrentRange_].MaxChunk) {
+            auto key = GetTableDataServiceKey(TableId_, currentPartId, CurrentChunk_);
+            PendingChunks_.push({.Data=TableDataService_->Get(key), .Meta={TableId_, currentPartId, CurrentChunk_}});
+            CurrentChunk_++;
+        } else {
+            CurrentRange_++;
+        }
     }
+}
+
+bool TFmrTableDataServiceReader::Retry(const TMaybe<ui32>&, const TMaybe<ui64>&, const std::exception_ptr&) {
+    return false;
+}
+
+void TFmrTableDataServiceReader::ResetRetries() { }
+
+bool TFmrTableDataServiceReader::HasRangeIndices() const {
+    return false;
 }
 
 } // namespace NYql::NFmr

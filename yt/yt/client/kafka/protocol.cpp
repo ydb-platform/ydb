@@ -355,13 +355,13 @@ public:
         DoWriteInt(static_cast<int16_t>(value));
     }
 
-    void WriteString(const TString& value) override
+    void WriteString(TStringBuf value) override
     {
         WriteInt16(value.size());
         WriteData(value);
     }
 
-    void WriteNullableString(const std::optional<TString>& value) override
+    void WriteNullableString(std::optional<TStringBuf> value) override
     {
         if (!value) {
             WriteInt16(-1);
@@ -371,13 +371,13 @@ public:
         WriteString(*value);
     }
 
-    void WriteCompactString(const TString& value) override
+    void WriteCompactString(TStringBuf value) override
     {
         WriteUnsignedVarInt(value.size() + 1);
         WriteData(value);
     }
 
-    void WriteCompactNullableString(const std::optional<TString>& value) override
+    void WriteCompactNullableString(std::optional<TStringBuf> value) override
     {
         if (!value) {
             WriteUnsignedVarInt(0);
@@ -386,19 +386,19 @@ public:
         WriteCompactString(*value);
     }
 
-    void WriteBytes(const TString& value) override
+    void WriteBytes(TStringBuf value) override
     {
         WriteInt32(value.size());
         WriteData(value);
     }
 
-    void WriteCompactBytes(const TString& value) override
+    void WriteCompactBytes(TStringBuf value) override
     {
         WriteUnsignedVarInt(value.size() + 1);
         WriteData(value);
     }
 
-    void WriteData(const TString& value) override
+    void WriteData(TStringBuf value) override
     {
         EnsureFreeSpace(value.size());
 
@@ -406,7 +406,7 @@ public:
         Size_ += value.size();
     }
 
-    void WriteData(const TSharedRef& value) override
+    void WriteData(TRef value) override
     {
         EnsureFreeSpace(value.size());
 

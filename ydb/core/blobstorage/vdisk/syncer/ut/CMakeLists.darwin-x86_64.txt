@@ -30,6 +30,7 @@ target_link_libraries(ydb-core-blobstorage-vdisk-syncer-ut PUBLIC
   library-cpp-svnversion
   ydb-core-base
   ydb-core-blobstorage
+  core-testlib-default
 )
 
 target_allocator(ydb-core-blobstorage-vdisk-syncer-ut
@@ -45,6 +46,7 @@ target_link_options(ydb-core-blobstorage-vdisk-syncer-ut PRIVATE
 )
 
 target_sources(ydb-core-blobstorage-vdisk-syncer-ut PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_broker_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_data_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_localwriter_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/blobstorage/vdisk/syncer/blobstorage_syncquorum_ut.cpp

@@ -187,7 +187,7 @@ namespace NKikimr::NStorage {
         }
 
         if (!CheckConfigUpdate(*Self->StorageConfig, *config)) {
-            return FinishWithError(TResult::ERROR, TStringBuilder() << "Config update validation failed");
+            return;
         }
 
         Self->CurrentProposedStorageConfig.emplace(std::move(*config));
@@ -218,6 +218,7 @@ namespace NKikimr::NStorage {
         if (auto error = ValidateConfigUpdate(current, proposed)) {
             STLOG(PRI_DEBUG, BS_NODE, NWDC78, "Config update validation failed", (SelfId, SelfId()),
                 (Error, *error), (ProposedConfig, proposed));
+            FinishWithError(TResult::ERROR, TStringBuilder() << "Config update validation failed: " << *error);
             return false;
         }
         return true;

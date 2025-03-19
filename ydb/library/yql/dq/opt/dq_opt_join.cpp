@@ -242,11 +242,13 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
         rightJoinKeyNames.emplace_back(rightColumnName);
     }
 
+    bool needAnyJoinFallback = linkSettings.JoinAlgo != EJoinAlgoType::StreamLookupJoin && (EHashJoinMode::Off == mode || EHashJoinMode::Map == mode);
+
     auto dqJoinBuilder =
         Build<TDqJoin>(ctx, joinTuple.Pos())
-            .LeftInput(BuildDqJoinInput(ctx, joinTuple.Pos(), left->Input, leftJoinKeys, leftAny))
+            .LeftInput(BuildDqJoinInput(ctx, joinTuple.Pos(), left->Input, leftJoinKeys, needAnyJoinFallback && leftAny))
             .LeftLabel(leftTableLabel)
-            .RightInput(BuildDqJoinInput(ctx, joinTuple.Pos(), right->Input, rightJoinKeys, rightAny))
+            .RightInput(BuildDqJoinInput(ctx, joinTuple.Pos(), right->Input, rightJoinKeys, needAnyJoinFallback && rightAny))
             .RightLabel(rightTableLabel)
             .JoinType(joinTuple.Type())
             .JoinKeys(joinKeysBuilder.Done())

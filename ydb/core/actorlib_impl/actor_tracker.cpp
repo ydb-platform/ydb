@@ -78,7 +78,7 @@ namespace NActors {
         // we have finished processing the query; send TEvPoisonTaken message and Die
         if (currentValue == StopBit && RegisteredActors.empty()) {
             ctx.Send(KillerActorId, new TEvents::TEvPoisonTaken);
-            ctx.ExecutorThread.UnregisterActor(&ctx.Mailbox, ctx.SelfID);
+            //ctx.ActorSystem().UnregisterActor(&ctx.Mailbox, ctx.SelfID); TODO UnregisterActor methon is ponly presented in TExecutorThread
         }
     }
 

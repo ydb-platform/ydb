@@ -697,6 +697,7 @@ namespace NActors {
         TIntrusivePtr<IRandomProvider> RandomProvider;
         TIntrusivePtr<ITimeProvider> TimeProvider;
         TIntrusivePtr<IMonotonicTimeProvider> MonotonicTimeProvider;
+        std::atomic<bool> ActorSystemStarted{ false };
 
     protected:
         struct TNodeDataBase: public TThrRefBase {

@@ -291,6 +291,10 @@ namespace NActors {
         {
         }
 
+        TActorSystem *GetActorSystem() const override {
+            return Node->ActorSystem.Get();
+        }
+
         TTestActorRuntimeBase* GetRuntime() {
             return Runtime;
         }
@@ -550,13 +554,15 @@ namespace NActors {
 
         if (!UseRealThreads) {
             node->SchedulerPool.Reset(CreateExecutorPoolStub(this, nodeIndex, node, 0));
-            node->MailboxTable.Reset(new TMailboxTable());
+            node->MailboxTable.Reset(new TMailboxTable(&ActorSystemStarted));
             node->ActorSystem = MakeActorSystem(nodeIndex, node);
             node->ExecutorThread.Reset(new TExecutorThread(0, node->ActorSystem.Get(), node->SchedulerPool.Get(), "TestExecutor"));
         } else {
             node->ActorSystem = MakeActorSystem(nodeIndex, node);
         }
 
+        ActorSystemStarted = true;
+        ActorSystemStarted.notify_all();
         node->ActorSystem->Start();
     }
 

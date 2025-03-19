@@ -544,7 +544,6 @@ Y_UNIT_TEST_SUITE(TestAliases) {
         {}
 
         void Bootstrap() {
-            Cerr << "Actor " << SelfId() << " sending TEvPing to " << Target << Endl;
             Send(Target, new TEvents::TEvPing, IEventHandle::FlagTrackDelivery, Cookie);
             Become(&TThis::StateWork);
         }

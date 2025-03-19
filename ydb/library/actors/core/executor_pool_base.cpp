@@ -21,12 +21,12 @@ namespace NActors {
     TExecutorPoolBaseMailboxed::TExecutorPoolBaseMailboxed(ui32 poolId)
         : IExecutorPool(poolId)
         , ActorSystem(nullptr)
-        , MailboxTableHolder(new TMailboxTable)
+        , MailboxTableHolder(new TMailboxTable(&ActorSystemStarted))
         , MailboxTable(MailboxTableHolder.Get())
+        , MailboxCache(MailboxTable)
     {}
 
     TExecutorPoolBaseMailboxed::~TExecutorPoolBaseMailboxed() {
-        MailboxTableHolder.Destroy();
     }
 
 #if defined(ACTORSLIB_COLLECT_EXEC_STATS)
@@ -103,13 +103,15 @@ namespace NActors {
             TlsThreadContext->IsCurrentRecipientAService = ev->Recipient.IsService();
         }
 
-        if (TMailbox* mailbox = MailboxTable->Get(ev->GetRecipientRewrite().Hint())) {
+        TMailbox* mailbox = MailboxTable->Get(ev->GetRecipientRewrite().Hint());
+        // Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " mailbox# " << (void*)mailbox << " ev# " << (void*)ev.Get() << Endl);
+        if (mailbox) {
             switch (mailbox->Push(ev)) {
                 case EMailboxPush::Pushed:
                     return true;
                 case EMailboxPush::Locked:
-                    mailbox->ScheduleMoment = GetCycleCountFast();
-                    ScheduleActivation(mailbox);
+                    //mailbox->ScheduleMoment = GetCycleCountFast();
+                    //ScheduleActivation(mailbox);
                     return true;
                 case EMailboxPush::Free:
                     // message cannot be delivered
@@ -129,13 +131,15 @@ namespace NActors {
             TlsThreadContext->IsCurrentRecipientAService = ev->Recipient.IsService();
         }
 
-        if (TMailbox* mailbox = MailboxTable->Get(ev->GetRecipientRewrite().Hint())) {
+        TMailbox* mailbox = MailboxTable->Get(ev->GetRecipientRewrite().Hint());
+        // Cerr << (TStringBuilder() << __PRETTY_FUNCTION__ << " mailbox# " << (void*)mailbox << " ev# " << (void*)ev.Get() << Endl);
+        if (mailbox) {
             switch (mailbox->Push(ev)) {
                 case EMailboxPush::Pushed:
                     return true;
                 case EMailboxPush::Locked:
-                    mailbox->ScheduleMoment = GetCycleCountFast();
-                    SpecificScheduleActivation(mailbox);
+                    //mailbox->ScheduleMoment = GetCycleCountFast();
+                    //SpecificScheduleActivation(mailbox);
                     return true;
                 case EMailboxPush::Free:
                     // message cannot be delivered
@@ -180,8 +184,7 @@ namespace NActors {
     }
 
     TActorId TExecutorPoolBaseMailboxed::Register(IActor* actor, TMailboxType::EType, ui64 revolvingWriteCounter, const TActorId& parentId) {
-        TMailboxCache empty;
-        return Register(actor, empty, revolvingWriteCounter, parentId);
+        return Register(actor, MailboxCache, revolvingWriteCounter, parentId);
     }
 
     TActorId TExecutorPoolBaseMailboxed::Register(IActor* actor, TMailboxCache& cache, ui64 revolvingWriteCounter, const TActorId& parentId) {
@@ -200,11 +203,13 @@ namespace NActors {
 
         TMailbox* mailbox = cache ? cache.Allocate() : MailboxTable->Allocate();
 
-        // Free mailboxes are not executing, lock to a normal state
-        mailbox->LockFromFree();
+        mailbox->SetExecutorPool(this);
 
         const ui64 localActorId = AllocateID();
         mailbox->AttachActor(localActorId, actor);
+
+        // Free mailboxes are not executing, lock to a normal state
+        mailbox->LockFromFree();
 
         // do init
         const TActorId actorId(ActorSystem->NodeId, PoolId, localActorId, mailbox->Hint);
@@ -308,5 +313,9 @@ namespace NActors {
 
     bool TExecutorPoolBase::UseRingQueue() const {
         return UseRingQueueValue;
+    }
+
+    TMailboxCache* TExecutorPoolBaseMailboxed::GetMailboxCache() {
+        return &MailboxCache;
     }
 }

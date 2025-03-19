@@ -136,9 +136,12 @@ struct TComputationContext : public TComputationContextLLVM {
     inline bool CheckAdjustedMemLimit(ui64 memLimit, ui64 initMemUsage);
 
     void UpdateUsageAdjustor(ui64 memLimit);
+    NUdf::TLoggerPtr MakeLogger() const;
 private:
     ui64 InitRss = 0ULL;
     ui64 LastRss = 0ULL;
+    NUdf::TLoggerPtr RssLogger;
+    NUdf::TLogComponentId RssLoggerComponent;
 #ifndef NDEBUG
     TInstant LastPrintUsage;
 #endif

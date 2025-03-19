@@ -80,8 +80,9 @@ private:
 
 class TLogger: public ILogger {
 public:
-    TLogger(TLogProviderFunc func)
+    TLogger(TLogProviderFunc func, TMaybe<ELogLevel> filter)
         : Func_(func)
+        , Filter_(filter)
     {
     }
 
@@ -103,6 +104,10 @@ public:
     }
 
     bool IsActive(TLogComponentId component, ELogLevel level) const final {
+        if (Filter_ && !IsLogLevelAllowed(level, *Filter_)) {
+            return false;
+        }
+
         if (!Names_.contains(component)) {
             return false;
         }
@@ -126,6 +131,7 @@ public:
 
 private:
     const TLogProviderFunc Func_;
+    const TMaybe<ELogLevel> Filter_;
     THashMap<TString, TLogComponentId> Components_;
     THashMap<TLogComponentId, TString> Names_;
     TMaybe<ELogLevel> DefLevel_;
@@ -134,16 +140,18 @@ private:
 
 class TLogProvider : public ILogProvider {
 public:
-    TLogProvider(TLogProviderFunc func)
+    TLogProvider(TLogProviderFunc func, TMaybe<ELogLevel> filter)
         : Func_(func)
+        , Filter_(filter)
     {}
 
     TLoggerPtr MakeLogger() const final {
-        return new TLogger(Func_);
+        return new TLogger(Func_, Filter_);
     }
 
 private:
     const TLogProviderFunc Func_;
+    const TMaybe<ELogLevel> Filter_;
 };
 
 }
@@ -167,8 +175,16 @@ TStringBuf LevelToString(ELogLevel level) {
     return TStringBuf("unknown");
 }
 
-TUniquePtr<ILogProvider> MakeLogProvider(TLogProviderFunc func) {
-    return new TLogProvider(func);
+#define PARSE_ENUM_TYPE_FROM_STR(name, val) \
+    if (#name == str) return static_cast<ELogLevel>(val);
+
+TMaybe<ELogLevel> TryLevelFromString(TStringBuf str) {
+    UDF_LOG_LEVEL(PARSE_ENUM_TYPE_FROM_STR)
+    return Nothing();
+}
+
+TUniquePtr<ILogProvider> MakeLogProvider(TLogProviderFunc func, TMaybe<ELogLevel> filter) {
+    return new TLogProvider(func, filter);
 }
 
 } // namspace NUdf

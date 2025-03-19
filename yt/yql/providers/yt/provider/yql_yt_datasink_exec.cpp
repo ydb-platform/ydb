@@ -311,6 +311,7 @@ private:
                 .OptLLVM(State_->Types->OptLLVM.GetOrElse(TString()))
                 .OperationHash(operationHash)
                 .SecureParams(secureParams)
+                .RuntimeLogLevel(State_->Types->RuntimeLogLevel)
                 .AdditionalSecurityTags(addSecTags)
             );
     }

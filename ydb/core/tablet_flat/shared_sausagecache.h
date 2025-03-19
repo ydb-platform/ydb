@@ -37,6 +37,10 @@ struct TSharedPageCacheCounters final : public TAtomicRefCount<TSharedPageCacheC
     const TCounterPtr PageCollections;
     const TCounterPtr PageCollectionOwners;
 
+    const TCounterPtr PendingRequests;
+    const TCounterPtr SucceedRequests;
+    const TCounterPtr FailedRequests;
+
     explicit TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters);
 
     TCounterPtr ReplacementPolicySize(TReplacementPolicy policy);

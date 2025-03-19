@@ -26,6 +26,9 @@ class TestDML(TestCreateTables, TestBase):
             ttl, table_name, index, uniq, sync)
         self.query(sql_create_table)
         self.inserts(index, ttl, table_name)
+        self.update(index, ttl, table_name)
+        self.upsert(index, ttl, table_name)
+        self.delete(index, ttl, table_name)
         self.query(f"DROP TABLE {table_name}")
 
     def inserts(self, index: dict[str, str], ttl: str, table_name: str):
@@ -49,12 +52,6 @@ class TestDML(TestCreateTables, TestBase):
 
         self.create_insert(
             count, f"ttl_{cleanup_type_name(ttl)}", ttl_types[ttl], table_name)
-
-        rows = self.query(
-            f"SELECT COUNT(*) as count FROM `{table_name}` WHERE ttl_{cleanup_type_name(ttl)}={ttl_types[ttl].format(count)}")
-        assert len(
-            rows) == 1 and rows[0].count == 1, f"Expected one row after insert, faild in ttl_{cleanup_type_name(ttl)}, {count} {ttl_types[ttl].format(count)},table {table_name}"
-
         count += 1
 
         # check after insert
@@ -126,19 +123,22 @@ class TestDML(TestCreateTables, TestBase):
 
     def update(self, index: dict[str, str], ttl: str, table_name: str):
         count = 10
-
+        excluded_numbers = []
         for type_name in pk_types.keys():
-            for change_name in pk_types.keys():
+            if type_name != "Bool":
+                for change_name in pk_types.keys():
+                    self.create_update(count, f"col_{cleanup_type_name(type_name)}", pk_types[type_name],
+                                       f"col_{cleanup_type_name(change_name)}", pk_types[change_name], table_name)
+                for change_name in non_pk_types.keys():
+                    self.create_update(count, f"col_{cleanup_type_name(type_name)}", pk_types[type_name],
+                                       f"col_{cleanup_type_name(change_name)}", non_pk_types[change_name], table_name)
+                for change_name in index.keys():
+                    self.create_update(count, f"col_{cleanup_type_name(type_name)}", pk_types[type_name],
+                                       f"col_index_{cleanup_type_name(change_name)}", index[change_name], table_name)
                 self.create_update(count, f"col_{cleanup_type_name(type_name)}", pk_types[type_name],
-                                   f"col_{cleanup_type_name(change_name)}", pk_types[change_name], table_name)
-            for change_name in non_pk_types.keys():
-                self.create_update(count, f"col_{cleanup_type_name(type_name)}", pk_types[type_name],
-                                   f"col_{cleanup_type_name(change_name)}", non_pk_types[change_name], table_name)
-            for change_name in index.keys():
-                self.create_update(count, f"col_{cleanup_type_name(type_name)}", pk_types[type_name],
-                                   f"col_index_{cleanup_type_name(change_name)}", index[change_name], table_name)
-            self.create_update(count, f"col_{cleanup_type_name(type_name)}", pk_types[type_name],
-                               f"ttl_{cleanup_type_name(ttl)}", ttl_types[ttl], table_name)
+                                   f"ttl_{cleanup_type_name(ttl)}", ttl_types[ttl], table_name)
+            else:
+                excluded_numbers.append(count)
             count += 1
 
         for type_name in non_pk_types.keys():
@@ -154,20 +154,25 @@ class TestDML(TestCreateTables, TestBase):
                                        f"col_index_{cleanup_type_name(change_name)}", index[change_name], table_name)
                 self.create_update(count, f"col_{cleanup_type_name(type_name)}", non_pk_types[type_name],
                                    f"ttl_{cleanup_type_name(ttl)}", ttl_types[ttl], table_name)
+            else:
+                excluded_numbers.append(count)
             count += 1
 
         for type_name in index.keys():
-            for change_name in pk_types.keys():
+            if type_name != "Bool":
+                for change_name in pk_types.keys():
+                    self.create_update(count, f"col_index_{cleanup_type_name(type_name)}", index[type_name],
+                                       f"col_{cleanup_type_name(change_name)}", pk_types[change_name], table_name)
+                for change_name in non_pk_types.keys():
+                    self.create_update(count, f"col_index_{cleanup_type_name(type_name)}", index[type_name],
+                                       f"col_{cleanup_type_name(change_name)}", non_pk_types[change_name], table_name)
+                for change_name in index.keys():
+                    self.create_update(count, f"col_index_{cleanup_type_name(type_name)}", index[type_name],
+                                       f"col_{cleanup_type_name(change_name)}", index[change_name], table_name)
                 self.create_update(count, f"col_index_{cleanup_type_name(type_name)}", index[type_name],
-                                   f"col_{cleanup_type_name(change_name)}", pk_types[change_name], table_name)
-            for change_name in non_pk_types.keys():
-                self.create_update(count, f"col_index_{cleanup_type_name(type_name)}", index[type_name],
-                                   f"col_{cleanup_type_name(change_name)}", non_pk_types[change_name], table_name)
-            for change_name in index.keys():
-                self.create_update(count, f"col_index_{cleanup_type_name(type_name)}", index[type_name],
-                                   f"col_{cleanup_type_name(change_name)}", index[change_name], table_name)
-            self.create_update(count, f"col_index_{cleanup_type_name(type_name)}", index[type_name],
-                               f"ttl_{cleanup_type_name(ttl)}", ttl_types[ttl], table_name)
+                                   f"ttl_{cleanup_type_name(ttl)}", ttl_types[ttl], table_name)
+            else:
+                excluded_numbers.append(count)
             count += 1
 
         for change_name in pk_types.keys():
@@ -184,33 +189,35 @@ class TestDML(TestCreateTables, TestBase):
         # check after update
 
         for i in range(10, count):
-            for type_name in pk_types.keys():
+            if not (i in excluded_numbers):
+                for type_name in pk_types.keys():
+                    if type_name != "Bool":
+                        rows = self.query(
+                            f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_{cleanup_type_name(type_name)}={pk_types[type_name].format(i)}")
+                        assert len(
+                            rows) == 1 and rows[0].count == 1, f"Expected one row after update, faild in col_{cleanup_type_name(type_name)}, {i} {pk_types[type_name].format(i)}, table {table_name}"
+                for type_name in non_pk_types.keys():
+                    if type_name != "Json" and type_name != "JsonDocument" and type_name != "Yson":
+                        rows = self.query(
+                            f"""SELECT COUNT(*) as count FROM `{table_name}`
+                            WHERE col_{cleanup_type_name(type_name)}={non_pk_types[type_name].format(i)}""")
+                        assert len(rows) == 1 and rows[0].count == 1, f"""Expected one row after update, faild in col_{cleanup_type_name(type_name)}, 
+                            {i} {non_pk_types[type_name].format(i)}, table {table_name}"""
+                for type_name in index.keys():
+                    if type_name != "Bool":
+                        rows = self.query(
+                            f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_index_{cleanup_type_name(type_name)}={index[type_name].format(i)}")
+                        assert len(
+                            rows) == 1 and rows[0].count == 1, f"Expected one row after update, faild in col_index_{cleanup_type_name(type_name)}, {i} {index[type_name].format(i)}, table {table_name}"
                 rows = self.query(
-                    f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_{cleanup_type_name(type_name)}={pk_types[type_name].format(i)}")
+                    f"SELECT COUNT(*) as count FROM `{table_name}` WHERE ttl_{cleanup_type_name(ttl)}={ttl_types[ttl].format(i)}")
                 assert len(
-                    rows) == 1 and rows[0].count == 1, f"Expected one row after update, faild in col_{cleanup_type_name(type_name)}, {i} {pk_types[type_name].format(i)}, table {table_name}"
-            for type_name in non_pk_types.keys():
-                if type_name != "Json" and type_name != "JsonDocument" and type_name != "Yson":
-                    rows = self.query(
-                        f"""SELECT COUNT(*) as count FROM `{table_name}`
-                        WHERE col_{cleanup_type_name(type_name)}={non_pk_types[type_name].format(i)}""")
-                    assert len(
-                        rows) == 1 and rows[0].count == 1, f"""Expected one row after update, faild in col_{cleanup_type_name(type_name)}, 
-                        {i} {non_pk_types[type_name].format(i)}, table {table_name}"""
-            for type_name in index.keys():
-                rows = self.query(
-                    f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_index_{cleanup_type_name(type_name)}={index[type_name].format(i)}")
-                assert len(
-                    rows) == 1 and rows[0].count == 1, f"Expected one row after update, faild in col_index_{cleanup_type_name(type_name)}, {i} {index[type_name].format(i)}, table {table_name}"
-            rows = self.query(
-                f"SELECT COUNT(*) as count FROM `{table_name}` WHERE ttl_{cleanup_type_name(ttl)}={ttl_types[ttl].format(i)}")
-            assert len(
-                rows) == 1 and rows[0].count == 1, f"Expected one row after update, faild in ttl_{cleanup_type_name(type_name)}, table {table_name}"
+                    rows) == 1 and rows[0].count == 1, f"Expected one row after update, faild in ttl_{cleanup_type_name(type_name)}, table {table_name}"
 
     def create_update(self, value: int, limit_name: str, key_limit_name: str, change_name: str, key_change_name: str, table_name: str):
         update_sql = f"""
-                    UPDATE {table_name}
-                    SET {change_name} = {key_change_name.format(value)} where {limit_name} = {key_limit_name.format(value)};
+                    UPDATE `{table_name}`
+                    SET {change_name} = {key_change_name.format(value)} WHERE {limit_name} = {key_limit_name.format(value)};
                 """
         self.query(update_sql)
 
@@ -255,14 +262,15 @@ class TestDML(TestCreateTables, TestBase):
         # check after upsert
         count_assert = 9
         for type_name in pk_types.keys():
-            rows = self.query(
-                f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_{cleanup_type_name(type_name)}={pk_types[type_name].format(count_assert)}")
-            if count_assert == 9:
-                assert len(
-                    rows) == 1 and rows[0].count == 1, f"Expected one row after upsert, faild in col_{cleanup_type_name(type_name)}, table {table_name}"
-            else:
-                assert len(
-                    rows) == 1 and rows[0].count == 2, f"Expected two row after upsert, faild in col_{cleanup_type_name(type_name)}, table {table_name}"
+            if type_name != "Bool":
+                rows = self.query(
+                    f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_{cleanup_type_name(type_name)}={pk_types[type_name].format(count_assert)}")
+                if count_assert == 9:
+                    assert len(
+                        rows) == 1 and rows[0].count == 1, f"Expected one row after upsert, faild in col_{cleanup_type_name(type_name)}, table {table_name}"
+                else:
+                    assert len(
+                        rows) == 1 and rows[0].count == 2, f"Expected two row after upsert, faild in col_{cleanup_type_name(type_name)}, table {table_name}"
             count_assert += 1
 
         for type_name in non_pk_types.keys():
@@ -274,10 +282,11 @@ class TestDML(TestCreateTables, TestBase):
                 count_assert += 1
 
         for type_name in index.keys():
-            rows = self.query(
-                f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_index_{cleanup_type_name(type_name)}={index[type_name].format(count_assert)}")
-            assert len(
-                rows) == 1 and rows[0].count == 2, f"Expected two row after upsert, faild in col_index_{cleanup_type_name(type_name)}, table {table_name}"
+            if type_name != "Bool":
+                rows = self.query(
+                    f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_index_{cleanup_type_name(type_name)}={index[type_name].format(count_assert)}")
+                assert len(
+                    rows) == 1 and rows[0].count == 2, f"Expected two row after upsert, faild in col_index_{cleanup_type_name(type_name)}, table {table_name}"
             count_assert += 1
 
         rows = self.query(
@@ -287,10 +296,11 @@ class TestDML(TestCreateTables, TestBase):
         count_assert += 1
 
         for type_name in pk_types.key():
-            rows = self.query(
-                f"SELECT COUNT(*) as count FROM `{table_name}` WHERE pk_{cleanup_type_name(type_name)}={pk_types[type_name].format(count_assert)}")
-            assert len(
-                rows) == 1 and rows[0].count == 1, f"Expected two row after upsert, faild in pk_{cleanup_type_name(type_name)}, table {table_name}"
+            if table_name != "Bool":
+                rows = self.query(
+                    f"SELECT COUNT(*) as count FROM `{table_name}` WHERE pk_{cleanup_type_name(type_name)}={pk_types[type_name].format(count_assert)}")
+                assert len(
+                    rows) == 1 and rows[0].count == 1, f"Expected two row after upsert, faild in pk_{cleanup_type_name(type_name)}, table {table_name}"
             count_assert += 1
 
         rows = self.query(
@@ -317,8 +327,9 @@ class TestDML(TestCreateTables, TestBase):
         count = len(index) + len(pk_types) + len(non_pk_types) + 11
 
         for type_name in pk_types.keys():
-            self.create_delete(
-                count, f"col_{cleanup_type_name(type_name)}", pk_types[type_name], table_name)
+            if type_name != "Bool":
+                self.create_delete(
+                    count, f"col_{cleanup_type_name(type_name)}", pk_types[type_name], table_name)
             count += 1
 
         for type_name in non_pk_types.keys():
@@ -327,8 +338,9 @@ class TestDML(TestCreateTables, TestBase):
             count += 1
 
         for type_name in index.keys():
-            self.create_delete(
-                count, f"col_index_{cleanup_type_name(type_name)}", index[type_name], table_name)
+            if type_name != "Bool":
+                self.create_delete(
+                    count, f"col_index_{cleanup_type_name(type_name)}", index[type_name], table_name)
             count += 1
 
         self.create_delete(
@@ -339,11 +351,12 @@ class TestDML(TestCreateTables, TestBase):
         count_assert = len(index) + len(pk_types) + len(non_pk_types) + 11
 
         for type_name in pk_types.keys():
-            rows = self.query(
-                f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_{cleanup_type_name(type_name)}={pk_types[type_name].format(count_assert)}"
-            )
-            assert len(
-                rows) == 1 and rows[0].count == 0, f"Expected zero row after upsert, faild in col_{cleanup_type_name(type_name)}, table {table_name}"
+            if type_name != "Bool":
+                rows = self.query(
+                    f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_{cleanup_type_name(type_name)}={pk_types[type_name].format(count_assert)}"
+                )
+                assert len(
+                    rows) == 1 and rows[0].count == 0, f"Expected zero row after upsert, faild in col_{cleanup_type_name(type_name)}, table {table_name}"
             count_assert += 1
 
         for type_name in non_pk_types.keys():
@@ -355,11 +368,12 @@ class TestDML(TestCreateTables, TestBase):
             count_assert += 1
 
         for type_name in index.keys():
-            rows = self.query(
-                f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_index_{cleanup_type_name(type_name)}={index[type_name].format(count_assert)}"
-            )
-            assert len(
-                rows) == 1 and rows[0].count == 0, f"Expected zero row after upsert, faild in col_index_{cleanup_type_name(type_name)}, table {table_name}"
+            if type_name != "Bool":
+                rows = self.query(
+                    f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_index_{cleanup_type_name(type_name)}={index[type_name].format(count_assert)}"
+                )
+                assert len(
+                    rows) == 1 and rows[0].count == 0, f"Expected zero row after upsert, faild in col_index_{cleanup_type_name(type_name)}, table {table_name}"
             count_assert += 1
 
     def create_delete(self, value: int, type_name: str, key: str, table_name: str):

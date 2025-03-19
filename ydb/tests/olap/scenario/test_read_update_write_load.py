@@ -2,6 +2,7 @@ import math
 import random
 import sys
 import threading
+import time
 from conftest import BaseTestSet
 from typing import List, Dict, Any
 from ydb import PrimitiveType
@@ -82,6 +83,17 @@ class TestReadUpdateWriteLoad(BaseTestSet):
                         hist.timeit(lambda: sth.bulk_upsert_data(self.big_table_name, self.big_table_schema, batch))
         print(hist, file=sys.stderr)
 
+    def _progress_tracker(self, finished: threading.Event):
+        prev = 0
+        while not finished.is_set():
+            curr = self.range_allocator.get_border * 100 / 1024
+            print(f"Was written: {curr} MiB, Speed: {(curr - prev) / 60} MiB/s", file=sys.stderr)
+            for _ in range(60):
+                if finished.is_set():
+                    break
+                time.sleep(1)
+            prev = curr
+
     def scenario_read_update_write_load(self, ctx: TestContext):
         sth = ScenarioTestHelper(ctx)
         table_size_mib = int(get_external_param("table_size_mib", "64"))
@@ -89,6 +101,11 @@ class TestReadUpdateWriteLoad(BaseTestSet):
         assert table_size_mib >= 64, "invalid table_size_mib parameter"
 
         sth.execute_scheme_query(CreateTable(self.big_table_name).with_schema(self.big_table_schema))
+
+        progress_finished = threading.Event()
+        progress_tracker_threads: TestThreads = TestThreads()
+        progress_tracker_threads.append(TestThread(target=self._progress_tracker, args=[progress_finished]))
+        progress_tracker_threads.start_all()
 
         print("Step 1. only write", file=sys.stderr)
 
@@ -162,3 +179,6 @@ class TestReadUpdateWriteLoad(BaseTestSet):
         finished.set()
         update_threads.join_all()
         read_threads.join_all()
+
+        progress_finished.set()
+        progress_tracker_threads.join_all()

@@ -116,7 +116,6 @@ public:
 private:
     TEvColumnShard::TEvProposeTransaction::TPtr Ev;
     std::shared_ptr<TTxController::ITransactionOperator> TxOperator;
-
 };
 
 void TColumnShard::Handle(TEvColumnShard::TEvProposeTransaction::TPtr& ev, const TActorContext& ctx) {

@@ -31,7 +31,7 @@ const TIndexInfo* TVersionedIndex::AddIndex(const TSnapshot& snapshot, TObjectCa
 }
 
 bool TVersionedIndex::LoadShardingInfo(IDbWrapper& db) {
-    TConclusion<THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>>> shardingLocal = db.LoadGranulesShardingInfo();
+    TConclusion<THashMap<NColumnShard::TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>>> shardingLocal = db.LoadGranulesShardingInfo();
     if (shardingLocal.IsFail()) {
         return false;
     }
@@ -39,7 +39,7 @@ bool TVersionedIndex::LoadShardingInfo(IDbWrapper& db) {
     return true;
 }
 
-std::optional<NKikimr::NOlap::TGranuleShardingInfo> TVersionedIndex::GetShardingInfoActual(const ui64 pathId) const {
+std::optional<NKikimr::NOlap::TGranuleShardingInfo> TVersionedIndex::GetShardingInfoActual(const NColumnShard::TInternalPathId pathId) const {
     auto it = ShardingInfo.find(pathId);
     if (it == ShardingInfo.end() || it->second.empty()) {
         return std::nullopt;

@@ -24,7 +24,7 @@ void TTTLColumnEngineChanges::DoOnFinish(NColumnShard::TColumnShard& self, TChan
     auto& engine = self.MutableIndexAs<TColumnEngineForLogs>();
     engine.GetActualizationController()->FinishActualization(RWAddress);
     if (IsAborted()) {
-        THashMap<ui64, THashSet<ui64>> restoreIndexAddresses;
+        THashMap<NColumnShard::TInternalPathId, THashSet<ui64>> restoreIndexAddresses;
         for (auto&& i : PortionsToEvict) {
             AFL_VERIFY(restoreIndexAddresses[i.GetPortionInfo()->GetPathId()].emplace(i.GetPortionInfo()->GetPortionId()).second);
         }

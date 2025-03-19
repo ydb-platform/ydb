@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include "ro_controller.h"
 
 #include <ydb/core/tx/columnshard/blob.h>
@@ -282,7 +283,7 @@ public:
         return result;
     }
 
-    std::vector<ui64> GetPathIds(const ui64 tabletId) const;
+    std::vector<NKikimr::NColumnShard::TInternalPathId> GetPathIds(const ui64 tabletId) const;
 
     void SetExpectedShardsCount(const ui32 value) {
         ExpectedShardsCount = value;

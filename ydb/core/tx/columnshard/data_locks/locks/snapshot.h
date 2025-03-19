@@ -9,7 +9,7 @@ class TSnapshotLock: public ILock {
 private:
     using TBase = ILock;
     const TSnapshot SnapshotBarrier;
-    const THashSet<ui64> PathIds;
+    const THashSet<NColumnShard::TInternalPathId> PathIds;
 protected:
     virtual std::optional<TString> DoIsLocked(
         const TPortionInfo& portion, const ELockCategory /*category*/, const THashSet<TString>& /*excludedLocks*/) const override {
@@ -29,7 +29,7 @@ protected:
         return {};
     }
 public:
-    TSnapshotLock(const TString& lockName, const TSnapshot& snapshotBarrier, const THashSet<ui64>& pathIds, const ELockCategory category, const bool readOnly = false)
+    TSnapshotLock(const TString& lockName, const TSnapshot& snapshotBarrier, const THashSet<NColumnShard::TInternalPathId>& pathIds, const ELockCategory category, const bool readOnly = false)
         : TBase(lockName, category, readOnly)
         , SnapshotBarrier(snapshotBarrier)
         , PathIds(pathIds)

@@ -13,7 +13,7 @@ private:
     using TBase = NDataReader::IRestoreTask;
     NEvWrite::TWriteData WriteData;
     std::shared_ptr<IMerger> Merger;
-    const ui64 LocalPathId;
+    const NColumnShard::TInternalPathId PathId;
     const TSnapshot Snapshot;
     NArrow::TContainerWithIndexes<arrow::RecordBatch> IncomingData;
     const TWritingContext Context;

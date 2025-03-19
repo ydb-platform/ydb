@@ -170,7 +170,7 @@ public:
         return ResultIndexSchema->GetIndexInfo();
     }
 
-    void InitShardingInfo(const ui64 pathId) {
+    void InitShardingInfo(const NColumnShard::TInternalPathId pathId) {
         AFL_VERIFY(!RequestShardingInfo);
         RequestShardingInfo = IndexVersionsPointer->GetShardingInfoOptional(pathId, RequestSnapshot);
     }

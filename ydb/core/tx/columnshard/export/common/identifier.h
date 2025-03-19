@@ -3,6 +3,7 @@
 #include <ydb/library/conclusion/status.h>
 #include <ydb/library/conclusion/result.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimrColumnShardExportProto {
 class TIdentifier;
@@ -16,12 +17,12 @@ namespace NKikimr::NOlap::NExport {
 
 class TIdentifier {
 private:
-    YDB_READONLY(ui64, PathId, 0);
+    YDB_READONLY(NColumnShard::TInternalPathId, PathId, NColumnShard::TInternalPathId{});
 
     TIdentifier() = default;
     TConclusionStatus DeserializeFromProto(const NKikimrColumnShardExportProto::TIdentifier& proto);
 public:
-    TIdentifier(const ui64 pathId)
+    TIdentifier(const NColumnShard::TInternalPathId pathId)
         : PathId(pathId)
     {
 
@@ -34,9 +35,9 @@ public:
 
     TString ToString() const;
 
-    operator size_t() const {
-        return PathId;
-    }
+    // operator size_t() const {
+    //     return PathId;
+    // }
 
     bool operator==(const TIdentifier& id) const {
         return PathId == id.PathId;

@@ -19,14 +19,14 @@ namespace {
 
 class TGranulesNormalizer::TNormalizerResult : public INormalizerChanges {
     std::vector<TChunkData> Chunks;
-    THashMap<ui64, ui64> Granule2Path;
+    THashMap<ui64, NColumnShard::TInternalPathId> Granule2Path;
 
 private:
     void AddChunk(TChunkData&& chunk) {
         Chunks.push_back(std::move(chunk));
     }
 
-    TNormalizerResult(const THashMap<ui64, ui64>& g2p)
+    TNormalizerResult(const THashMap<ui64, NColumnShard::TInternalPathId>& g2p)
         : Granule2Path(g2p)
     {}
 
@@ -42,7 +42,7 @@ public:
 
             db.Table<Schema::IndexColumns>().Key(key.Index, key.GranuleId, key.ColumnIdx,
             key.PlanStep, key.TxId, key.PortionId, key.Chunk).Update(
-                NIceDb::TUpdate<Schema::IndexColumns::PathId>(granuleIt->second)
+                NIceDb::TUpdate<Schema::IndexColumns::PathId>(granuleIt->second.GetInternalPathIdValue())
             );
         }
         return true;
@@ -63,7 +63,7 @@ public:
             return std::nullopt;
         }
 
-        THashMap<ui64, ui64> granule2Path;
+        THashMap<ui64, TInternalPathId> granule2Path;
         {
             auto rowset = db.Table<Schema::IndexGranules>().Select();
             if (!rowset.IsReady()) {
@@ -71,7 +71,7 @@ public:
             }
 
             while (!rowset.EndOfSet()) {
-                ui64 pathId = rowset.GetValue<Schema::IndexGranules::PathId>();
+                const auto pathId = NColumnShard::TInternalPathId::FromInternalPathIdValue(rowset.GetValue<Schema::IndexGranules::PathId>());
                 ui64 granuleId = rowset.GetValue<Schema::IndexGranules::Granule>();
                 Y_ABORT_UNLESS(granuleId != 0);
                 granule2Path[granuleId] = pathId;

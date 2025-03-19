@@ -16,16 +16,17 @@ private:
     std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAddSharding;
     NKikimrTxColumnShard::TSchemaTxBody SchemaTxBody;
     THashSet<TActorId> NotifySubscribers;
-    THashSet<ui64> WaitPathIdsToErase;
+    THashSet<NColumnShard::TInternalPathId> WaitPathIdsToErase;
 
     virtual void DoOnTabletInit(TColumnShard& owner) override;
 
     template <class TInfoProto>
-    THashSet<ui64> GetNotErasedTableIds(const TColumnShard& owner, const TInfoProto& tables) const {
-        THashSet<ui64> result;
+    THashSet<NColumnShard::TInternalPathId> GetNotErasedTableIds(const TColumnShard& owner, const TInfoProto& tables) const {
+        THashSet<NColumnShard::TInternalPathId> result;
         for (auto&& i : tables) {
-            if (owner.TablesManager.HasTable(i.GetPathId(), true)) {
-                result.emplace(i.GetPathId());
+            const auto& pathId = TInternalPathId::FromInternalPathIdValue(i.GetPathId());
+            if (owner.TablesManager.HasTable(pathId, true)) {
+                result.emplace(pathId);
             }
         }
         if (result.size()) {
@@ -72,7 +73,7 @@ private:
                 return false;
             }
             TxAddSharding = owner.TablesManager.CreateAddShardingInfoTx(
-                owner, SchemaTxBody.GetGranuleShardingInfo().GetPathId(), SchemaTxBody.GetGranuleShardingInfo().GetVersionId(), infoContainer);
+                owner, TInternalPathId::FromInternalPathIdValue(SchemaTxBody.GetGranuleShardingInfo().GetPathId()), SchemaTxBody.GetGranuleShardingInfo().GetVersionId(), infoContainer);
         }
         return true;
     }

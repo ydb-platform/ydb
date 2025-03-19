@@ -3,7 +3,7 @@
 #include "common.h"
 #include "index_chunk.h"
 #include "meta.h"
-
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/common/blob.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
@@ -77,7 +77,7 @@ private:
     std::optional<TSnapshot> CommitSnapshot;
     std::optional<TInsertWriteId> InsertWriteId;
 
-    ui64 PathId = 0;
+    NColumnShard::TInternalPathId PathId = NColumnShard::TInternalPathId{};
     ui64 PortionId = 0;   // Id of independent (overlayed by PK) portion of data in pathId
     TSnapshot MinSnapshotDeprecated = TSnapshot::Zero();   // {PlanStep, TxId} is min snapshot for {Granule, Portion}
     TSnapshot RemoveSnapshot = TSnapshot::Zero();
@@ -88,7 +88,7 @@ private:
     TRuntimeFeatures RuntimeFeatures = 0;
 
     void FullValidation() const {
-        AFL_VERIFY(PathId);
+        AFL_VERIFY(!!PathId);
         AFL_VERIFY(PortionId);
         AFL_VERIFY(MinSnapshotDeprecated.Valid());
         Meta.FullValidation();
@@ -234,7 +234,7 @@ public:
 
     void SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;
 
-    ui64 GetPathId() const {
+    NColumnShard::TInternalPathId GetPathId() const {
         return PathId;
     }
 
@@ -302,7 +302,7 @@ public:
     }
 
     bool ValidSnapshotInfo() const {
-        return MinSnapshotDeprecated.Valid() && PathId && PortionId;
+        return MinSnapshotDeprecated.Valid() && !!PathId && PortionId;
     }
 
     TString DebugString(const bool withDetails = false) const;
@@ -335,7 +335,7 @@ public:
         ShardingVersion.reset();
     }
 
-    void SetPathId(const ui64 pathId) {
+    void SetPathId(const NColumnShard::TInternalPathId pathId) {
         PathId = pathId;
     }
 

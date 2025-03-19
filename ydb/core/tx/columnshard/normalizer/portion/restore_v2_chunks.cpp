@@ -18,7 +18,7 @@ public:
         return PortionAddress;
     }
 
-    ui64 GetPathId() const {
+    NColumnShard::TInternalPathId GetPathId() const {
         return PortionAddress.GetPathId();
     }
 
@@ -63,7 +63,7 @@ public:
         for (auto&& i : Patches) {
             auto metaProto = i.BuildProto();
             db.Table<IndexColumnsV2>()
-                .Key(i.GetPathId(), i.GetPortionId())
+                .Key(i.GetPathId().GetInternalPathIdValue(), i.GetPortionId())
                 .Update(NIceDb::TUpdate<IndexColumnsV2::Metadata>(metaProto.SerializeAsString()));
         }
 
@@ -103,7 +103,7 @@ public:
         using IndexColumnsV1 = NColumnShard::Schema::IndexColumnsV1;
         for (auto&& i : Patches) {
             db.Table<IndexColumnsV1>()
-                .Key(i.GetChunkInfo().GetPathId(), i.GetChunkInfo().GetPortionId(), i.GetChunkInfo().GetAddress().GetEntityId(),
+                .Key(i.GetChunkInfo().GetPathId().GetInternalPathIdValue(), i.GetChunkInfo().GetPortionId(), i.GetChunkInfo().GetAddress().GetEntityId(),
                     i.GetChunkInfo().GetAddress().GetChunkIdx())
                 .Delete();
         }
@@ -136,7 +136,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         }
 
         while (!rowset.EndOfSet()) {
-            AFL_VERIFY(readyPortions.emplace(TPortionAddress(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PathId>(),
+            AFL_VERIFY(readyPortions.emplace(TPortionAddress(NColumnShard::TInternalPathId::FromInternalPathIdValue(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PathId>()),
                 rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PortionId>())).second);
             if (!rowset.Next()) {
                 return TConclusionStatus::Fail("Not ready");

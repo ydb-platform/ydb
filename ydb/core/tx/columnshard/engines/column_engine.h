@@ -84,7 +84,7 @@ public:
 
 class IColumnEngine {
 protected:
-    virtual void DoRegisterTable(const ui64 pathId) = 0;
+    virtual void DoRegisterTable(const NColumnShard::TInternalPathId pathId) = 0;
     virtual void DoFetchDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request) const = 0;
 
 public:
@@ -136,24 +136,24 @@ public:
     virtual std::shared_ptr<TVersionedIndex> CopyVersionedIndexPtr() const = 0;
     virtual const std::shared_ptr<arrow::Schema>& GetReplaceKey() const;
 
-    virtual bool HasDataInPathId(const ui64 pathId) const = 0;
-    virtual bool ErasePathId(const ui64 pathId) = 0;
+    virtual bool HasDataInPathId(const NColumnShard::TInternalPathId pathId) const = 0;
+    virtual bool ErasePathId(const NColumnShard::TInternalPathId pathId) = 0;
     virtual std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) = 0;
-    void RegisterTable(const ui64 pathId) {
+    void RegisterTable(const NColumnShard::TInternalPathId pathId) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "RegisterTable")("path_id", pathId);
         return DoRegisterTable(pathId);
     }
     virtual bool IsOverloadedByMetadata(const ui64 limit) const = 0;
     virtual std::shared_ptr<TSelectInfo> Select(
-        ui64 pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter, const bool withUncommitted) const = 0;
+        NColumnShard::TInternalPathId pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter, const bool withUncommitted) const = 0;
     virtual std::shared_ptr<TInsertColumnEngineChanges> StartInsert(std::vector<TCommittedData>&& dataToIndex) noexcept = 0;
     virtual std::shared_ptr<TColumnEngineChanges> StartCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
-    virtual ui64 GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::set<ui64>& pathIds,
+    virtual ui64 GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::set<NColumnShard::TInternalPathId>& pathIds,
         const std::optional<ui64> waitingPriority) noexcept = 0;
     virtual std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const TSnapshot& snapshot,
-        const THashSet<ui64>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
-    virtual std::shared_ptr<TCleanupTablesColumnEngineChanges> StartCleanupTables(const THashSet<ui64>& pathsToDrop) noexcept = 0;
-    virtual std::vector<std::shared_ptr<TTTLColumnEngineChanges>> StartTtl(const THashMap<ui64, TTiering>& pathEviction,
+        const THashSet<NColumnShard::TInternalPathId>& pathsToDrop, const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept = 0;
+    virtual std::shared_ptr<TCleanupTablesColumnEngineChanges> StartCleanupTables(const THashSet<NColumnShard::TInternalPathId>& pathsToDrop) noexcept = 0;
+    virtual std::vector<std::shared_ptr<TTTLColumnEngineChanges>> StartTtl(const THashMap<NColumnShard::TInternalPathId, TTiering>& pathEviction,
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const ui64 memoryUsageLimit) noexcept = 0;
     virtual bool ApplyChangesOnTxCreate(std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
     virtual bool ApplyChangesOnExecute(IDbWrapper& db, std::shared_ptr<TColumnEngineChanges> changes, const TSnapshot& snapshot) noexcept = 0;
@@ -167,8 +167,8 @@ public:
     virtual TSnapshot LastUpdate() const {
         return TSnapshot::Zero();
     }
-    virtual void OnTieringModified(const std::optional<NOlap::TTiering>& ttl, const ui64 pathId) = 0;
-    virtual void OnTieringModified(const THashMap<ui64, NOlap::TTiering>& ttl) = 0;
+    virtual void OnTieringModified(const std::optional<NOlap::TTiering>& ttl, const NColumnShard::TInternalPathId pathId) = 0;
+    virtual void OnTieringModified(const THashMap<NColumnShard::TInternalPathId, NOlap::TTiering>& ttl) = 0;
 };
 
 }   // namespace NKikimr::NOlap

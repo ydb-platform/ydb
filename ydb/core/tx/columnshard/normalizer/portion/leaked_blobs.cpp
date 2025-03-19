@@ -1,3 +1,4 @@
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include "leaked_blobs.h"
 
 #include <ydb/core/keyvalue/keyvalue_const.h>
@@ -233,7 +234,7 @@ TConclusionStatus TLeakedBlobsNormalizer::LoadPortionBlobIds(
     }
     if (Indexes.empty()) {
         THashMap<ui64, std::vector<TIndexChunkLoadContext>> indexesLocal;
-        if (!wrapper.LoadIndexes(std::nullopt, [&](const ui64 /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&& indexChunk) {
+        if (!wrapper.LoadIndexes(std::nullopt, [&](const NColumnShard::TInternalPathId /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&& indexChunk) {
                 const ui64 portionId = indexChunk.GetPortionId();
                 indexesLocal[portionId].emplace_back(std::move(indexChunk));
             })) {

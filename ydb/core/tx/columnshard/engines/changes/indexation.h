@@ -39,7 +39,7 @@ protected:
         return NDataLocks::ELockCategory::Compaction;
     }
 public:
-    THashMap<ui64, NArrow::NMerger::TIntervalPositions> PathToGranule;   // pathId -> positions (sorted by pk)
+    THashMap<NColumnShard::TInternalPathId, NArrow::NMerger::TIntervalPositions> PathToGranule;   // pathId -> positions (sorted by pk)
 public:
     TInsertColumnEngineChanges(std::vector<NOlap::TCommittedData>&& dataToIndex, const TSaverContext& saverContext)
         : TBase(saverContext, NBlobOperations::EConsumer::INDEXATION)
@@ -58,7 +58,7 @@ public:
     virtual TString TypeString() const override {
         return StaticTypeName();
     }
-    std::optional<ui64> AddPathIfNotExists(ui64 pathId);
+    std::optional<ui64> AddPathIfNotExists(NColumnShard::TInternalPathId pathId);
 };
 
 }   // namespace NKikimr::NOlap

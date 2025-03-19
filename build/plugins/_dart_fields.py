@@ -1151,6 +1151,7 @@ class TestFiles:
         'grut/libs/bigrt/profile',
         'grut/libs/bigrt/profiles',
         'grut/libs/bigrt/queue_info_config',
+        'grut/libs/bigrt/resharder/compute_shard_number',
         'grut/libs/bigrt/server',
         'grut/libs/shooter',
     )

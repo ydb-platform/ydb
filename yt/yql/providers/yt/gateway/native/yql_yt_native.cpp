@@ -3816,6 +3816,7 @@ private:
                 job->SetLambdaCode(mapLambda);
                 job->SetOptLLVM(execCtx->Options_.OptLLVM());
                 job->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
+                job->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
                 transform.ApplyJobProps(*job);
                 transform.ApplyUserJobSpec(userJobSpec, testRun);
 
@@ -4038,6 +4039,7 @@ private:
                 job->SetLambdaCode(reduceLambda);
                 job->SetOptLLVM(execCtx->Options_.OptLLVM());
                 job->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
+                job->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
                 transform.ApplyJobProps(*job);
                 transform.ApplyUserJobSpec(userJobSpec, testRun);
                 FillUserJobSpec(userJobSpec, execCtx, extraUsage, transform.GetUsedMemory(), execCtx->EstimateLLVMMem(nodeCount), testRun);
@@ -4288,6 +4290,7 @@ private:
                 mapJob->SetLambdaCode(mapLambda);
                 mapJob->SetOptLLVM(execCtx->Options_.OptLLVM());
                 mapJob->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
+                mapJob->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
                 transform.ApplyJobProps(*mapJob);
                 transform.ApplyUserJobSpec(mapUserJobSpec, testRun);
 
@@ -4317,6 +4320,7 @@ private:
                 reduceJob->SetLambdaCode(reduceLambda);
                 reduceJob->SetOptLLVM(execCtx->Options_.OptLLVM());
                 reduceJob->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
+                reduceJob->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
                 transform.ApplyJobProps(*reduceJob);
                 transform.ApplyUserJobSpec(reduceUserJobSpec, testRun);
                 FillUserJobSpec(reduceUserJobSpec, execCtx, reduceExtraUsage, transform.GetUsedMemory(), execCtx->EstimateLLVMMem(nodeCount), testRun);
@@ -4470,6 +4474,7 @@ private:
                 reduceJob->SetLambdaCode(reduceLambda);
                 reduceJob->SetOptLLVM(execCtx->Options_.OptLLVM());
                 reduceJob->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
+                reduceJob->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
                 transform.ApplyJobProps(*reduceJob);
                 transform.ApplyUserJobSpec(reduceUserJobSpec, testRun);
                 FillUserJobSpec(reduceUserJobSpec, execCtx, reduceExtraUsage, transform.GetUsedMemory(), execCtx->EstimateLLVMMem(nodeCount), testRun);
@@ -4795,6 +4800,7 @@ private:
             job->SetLambdaCode(lambda);
             job->SetOptLLVM(execCtx->Options_.OptLLVM());
             job->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
+            job->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
             const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
             job->SetOutSpec(execCtx->GetOutSpec(!useSkiff, nativeTypeCompat));
             job->SetUseSkiff(useSkiff, 0);
@@ -5428,6 +5434,7 @@ private:
         job->SetUseResultYson(factory.UseResultYson());
         job->SetOptLLVM(execCtx->Options_.OptLLVM());
         job->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
+        job->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
 
         mapOpSpec.AddInput(tmpTable);
         mapOpSpec.AddOutput(tmpTable);

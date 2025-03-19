@@ -1838,11 +1838,6 @@ bool RewriteYtMapJoin(TYtEquiJoin equiJoin, const TJoinLabels& labels, bool isLo
                 smallJoinMembers.push_back(smallMemberName);
             }
 
-            auto status = SubstTables(tableContent, state, false, ctx);
-            if (status.Level == IGraphTransformer::TStatus::Error) {
-                return false;
-            }
-
             ctx.Step.Repeat(TExprStep::ExprEval);
 
             tableContent = ctx.Builder(pos)

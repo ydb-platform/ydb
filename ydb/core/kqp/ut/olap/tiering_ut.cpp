@@ -369,6 +369,77 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             return Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetBucket("olap-tier1").GetSize() == 0;
         });
     }
+
+    Y_UNIT_TEST(EvictionNoLongerNeeded) {
+        TTieringTestHelper tieringHelper;
+        auto& csController = tieringHelper.GetCsController();
+        csController->SetOverrideMaxReadStaleness(TDuration::Seconds(1));
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        auto& olapHelper = tieringHelper.GetOlapHelper();
+        auto& testHelper = tieringHelper.GetTestHelper();
+        NYdb::NTable::TTableClient tableClient = testHelper.GetKikimr().GetTableClient();
+
+        olapHelper.CreateTestOlapTable();
+        testHelper.CreateTier("tier1");
+        csController->DisableBackground(NYDBTest::ICSController::EBackground::TTL);
+        testHelper.SetTiering("/Root/olapStore/olapTable", "/Root/tier1", "timestamp");
+
+        {
+            const TString query =
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
+                {"levels" : [{"class_name" : "Zero", "portions_live_duration" : "1s", "expected_blobs_size" : 1, "portions_count_available" : 2},
+                             {"class_name" : "Zero"}]}`);)";
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        tieringHelper.WriteSampleData();
+
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        tieringHelper.CheckAllDataInTier("__DEFAULT", false);
+
+        {
+            const TString query =
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
+                {"levels" : [{"class_name" : "Zero", "portions_live_duration" : "1s", "expected_blobs_size" : 1, "portions_count_available" : 2},
+                             {"class_name" : "Zero", "portions_live_duration" : "1s", "expected_blobs_size" : 1, "portions_count_available" : 2},
+                             {"class_name" : "Zero", "portions_live_duration" : "1000000000s", "expected_blobs_size" : 1000000000, "portions_count_available" : 1000000000},
+                             {"class_name" : "Zero"}]}`);)";
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        {
+            auto selectQuery = TString(R"(
+                SELECT COUNT(*) AS Count
+                FROM `/Root/olapStore/olapTable/.sys/primary_index_portion_stats`
+                WHERE CompactionLevel == 2
+            )");
+
+            auto rows = ExecuteScanQuery(tableClient, selectQuery);
+            UNIT_ASSERT_VALUES_EQUAL(rows.size(), 1);
+            UNIT_ASSERT_GT(GetUint64(rows[0].at("Count")), 0);
+        }
+
+        csController->EnableBackground(NYDBTest::ICSController::EBackground::TTL);
+        csController->WaitTtl(TDuration::Seconds(5));
+        tieringHelper.CheckAllDataInTier("__DEFAULT", false);
+
+        {
+            const TString query =
+                R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`lc-buckets`, `COMPACTION_PLANNER.FEATURES`=`
+                {"levels" : [{"class_name" : "Zero", "portions_live_duration" : "1s", "expected_blobs_size" : 1, "portions_count_available" : 2},
+                             {"class_name" : "Zero", "portions_live_duration" : "1s", "expected_blobs_size" : 1, "portions_count_available" : 2},
+                             {"class_name" : "Zero"}]}`);)";
+            auto result = testHelper.GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        csController->WaitCompactions(TDuration::Seconds(5));
+        csController->WaitActualization(TDuration::Seconds(5));
+        tieringHelper.CheckAllDataInTier("/Root/tier1");
+    }
 }
 
 }   // namespace NKikimr::NKqp

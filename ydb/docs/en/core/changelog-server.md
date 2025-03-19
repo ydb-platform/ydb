@@ -22,7 +22,7 @@ Release date:
 
 #### Bug Fixes
 
-* [Fixed](https://github.com/ydb-platform/ydb/pull/14811) issues causing reads to be performed from masters instead of tablet followers. This allowed for a tenfold increase in read speed when using tablet followers.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/14811) an error that led to a significant decrease in reading speed from [tablet followers](./concepts/glossary#tablet-follower).
 * [Fixed](https://github.com/ydb-platform/ydb/pull/14516) an error that caused volatile distributed transactions to sometimes wait for confirmations until the next reboot.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/15077) a rare assertion (process crash) when followers attached to leaders with an inconsistent snapshot.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/15074) a rare crash in datashard when a dropped table shard is restarted with uncommitted persistent changes.

@@ -216,16 +216,16 @@ template <ui64 Size>
 class TBitmapDetector {
 public:
     template <class TFiller>
-    static TString Detector(const ui64 size, const TFiller& filler) {
+    static TString Detector(const TIndexMeta* meta, const ui64 size, const TFiller& filler) {
         if (size == Size) {
             TBitMap<Size> bitMap;
             bitMap.Reserve(size);
             TVectorInserterPower2<TBitMap<Size>> inserter(bitMap);
             filler(inserter);
-            return TFixStringBitsStorage(std::move(bitMap)).SerializeToString();
+            return meta->GetBitsStorageConstructor()->Build(std::move(bitMap))->SerializeToString();
         } else {
             AFL_VERIFY(size < Size);
-            return TBitmapDetector<Size / 2>::Detector(size, filler);
+            return TBitmapDetector<Size / 2>::Detector(meta, size, filler);
         }
     }
 };
@@ -234,7 +234,7 @@ template <>
 class TBitmapDetector<8> {
 public:
     template <class TFiller>
-    static TString Detector(const ui64 /*size*/, const TFiller& /*filler*/) {
+    static TString Detector(const TIndexMeta* /*meta*/, const ui64 /*size*/, const TFiller& /*filler*/) {
         AFL_VERIFY(false);
         return "";
     }
@@ -274,24 +274,24 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 rec
 
     if ((size & (size - 1)) == 0) {
         static constexpr ui64 maxConst = ((ui64)1) << 32;
-        return TBitmapDetector<maxConst>::Detector(size, doFillFilter);
+        return TBitmapDetector<maxConst>::Detector(this, size, doFillFilter);
     } else {
         TDynBitMap bitMap;
         bitMap.Reserve(size);
         TVectorInserter inserter(bitMap);
         doFillFilter(inserter);
-        return TFixStringBitsStorage(std::move(bitMap)).SerializeToString();
+        return GetBitsStorageConstructor()->Build(std::move(bitMap))->SerializeToString();
     }
 }
 
-bool TIndexMeta::DoCheckValue(
-    const TString& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value, const EOperation op) const {
-    TFixStringBitsStorage bits(data);
+bool TIndexMeta::DoCheckValueImpl(
+    const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value, const EOperation op) const {
     AFL_VERIFY(!category);
     AFL_VERIFY(value->type->id() == arrow::utf8()->id() || value->type->id() == arrow::binary()->id())("id", value->type->ToString());
     bool result = true;
+    const ui32 bitsCount = data.GetBitsCount();
     const auto predSet = [&](const ui64 hashSecondary) {
-        if (!bits.TestHash(hashSecondary)) {
+        if (!data.Get(hashSecondary % bitsCount)) {
             result = false;
         }
     };

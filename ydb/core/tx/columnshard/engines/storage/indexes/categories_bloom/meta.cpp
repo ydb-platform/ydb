@@ -61,7 +61,7 @@ public:
 
 class TFiltersBuilder {
 private:
-    YDB_READONLY_DEF(std::deque<TCategoryBuilder>, Builders);
+    YDB_ACCESSOR_DEF(std::deque<TCategoryBuilder>, Builders);
     THashMap<ui64, TDynBitMap*> FiltersByHash;
 
 public:
@@ -160,8 +160,8 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*r
     NKikimrTxColumnShard::TIndexCategoriesDescription protoDescription;
     std::vector<TString> filterDescriptions;
     ui32 filtersSumSize = 0;
-    for (auto&& i : filtersBuilder.GetBuilders()) {
-        filterDescriptions.emplace_back(TFixStringBitsStorage(i.GetFilter()).SerializeToString());
+    for (auto&& i : filtersBuilder.MutableBuilders()) {
+        filterDescriptions.emplace_back(GetBitsStorageConstructor()->Build(std::move(i.MutableFilter()))->SerializeToString());
         filtersSumSize += filterDescriptions.back().size();
         auto* category = protoDescription.AddCategories();
         category->SetFilterSize(filterDescriptions.back().size());
@@ -197,17 +197,14 @@ TConclusion<std::shared_ptr<IIndexHeader>> TIndexMeta::DoBuildHeader(const TChun
     return std::make_shared<TCompositeBloomHeader>(std::move(proto), IIndexHeader::ReadHeaderSize(data.GetDataVerified(), true).DetachResult());
 }
 
-bool TIndexMeta::DoCheckValue(
-    const TString& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value, const EOperation op) const {
+bool TIndexMeta::DoCheckValueImpl(
+    const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value, const EOperation op) const {
     AFL_VERIFY(!!category);
     AFL_VERIFY(op == EOperation::Equals)("op", op);
-    if (data.empty()) {
-        return false;
-    }
-    TFixStringBitsStorage bits(data);
+    const ui32 bitsCount = data.GetBitsCount();
     for (ui64 hashSeed = 0; hashSeed < HashesCount; ++hashSeed) {
         const ui64 hash = NArrow::NHash::TXX64::CalcForScalar(value, hashSeed);
-        if (!bits.TestHash(hash)) {
+        if (!data.Get(hash % bitsCount)) {
             return false;
         }
     }
@@ -219,6 +216,38 @@ std::optional<ui64> TIndexMeta::DoCalcCategory(const TString& subColumnName) con
     const NRequest::TOriginalDataAddress addr(Max<ui32>(), subColumnName);
     AFL_VERIFY(GetDataExtractor()->CheckForIndex(addr, result));
     return result;
+}
+
+bool TIndexMeta::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) {
+    AFL_VERIFY(TBase::DoDeserializeFromProto(proto));
+    AFL_VERIFY(proto.HasBloomFilter());
+    auto& bFilter = proto.GetBloomFilter();
+    {
+        auto conclusion = TBase::DeserializeFromProtoImpl(bFilter);
+        if (conclusion.IsFail()) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("index_parsing", conclusion.GetErrorMessage());
+            return false;
+        }
+    }
+    FalsePositiveProbability = bFilter.GetFalsePositiveProbability();
+    for (auto&& i : bFilter.GetColumnIds()) {
+        AddColumnId(i);
+    }
+    if (!MutableDataExtractor().DeserializeFromProto(bFilter.GetDataExtractor())) {
+        return false;
+    }
+    Initialize();
+    return true;
+}
+
+void TIndexMeta::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const {
+    auto* filterProto = proto.MutableBloomFilter();
+    TBase::SerializeToProtoImpl(*filterProto);
+    filterProto->SetFalsePositiveProbability(FalsePositiveProbability);
+    for (auto&& i : GetColumnIds()) {
+        filterProto->AddColumnIds(i);
+    }
+    *filterProto->MutableDataExtractor() = GetDataExtractor().SerializeToProto();
 }
 
 }   // namespace NKikimr::NOlap::NIndexes::NCategoriesBloom

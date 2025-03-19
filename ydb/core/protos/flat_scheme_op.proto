@@ -403,10 +403,23 @@ message TIndexDataExtractor {
     }
 }
 
+message TSkipIndexBitSetStorage {
+    optional string ClassName = 1;
+    message TFixString {
+    }
+    message TBitSet {
+    }
+    oneof Implementation {
+        TFixString FixString = 20;
+        TBitSet BitSet = 21;
+    }
+}
+
 message TRequestedBloomFilter {
     optional double FalsePositiveProbability = 1 [default = 0.1];
     repeated string ColumnNames = 3;
     optional TIndexDataExtractor DataExtractor = 4;
+    optional TSkipIndexBitSetStorage BitsStorage = 5;
 }
 
 message TRequestedBloomNGrammFilter {
@@ -416,6 +429,7 @@ message TRequestedBloomNGrammFilter {
     optional string ColumnName = 4;
     optional uint32 RecordsCount = 5;
     optional TIndexDataExtractor DataExtractor = 6;
+    optional TSkipIndexBitSetStorage BitsStorage = 7;
 }
 
 message TRequestedMaxIndex {
@@ -446,6 +460,7 @@ message TBloomFilter {
     optional uint64 MaxBytesCount = 2 [default = 8196];
     repeated uint32 ColumnIds = 3;
     optional TIndexDataExtractor DataExtractor = 4;
+    optional TSkipIndexBitSetStorage BitsStorage = 5;
 }
 
 message TBloomNGrammFilter {
@@ -455,6 +470,7 @@ message TBloomNGrammFilter {
     optional uint32 ColumnId = 4;
     optional uint32 RecordsCount = 5;
     optional TIndexDataExtractor DataExtractor = 6;
+    optional TSkipIndexBitSetStorage BitsStorage = 7;
 }
 
 message TMaxIndex {

@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         {
             auto alterQuery = TStringBuilder() <<
                               R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
-                    FEATURES=`{"column_names" : ["uid"], "false_positive_probability" : 0.01}`);
+                    FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0.01}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -102,7 +102,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             auto alterQuery =
                 TStringBuilder() <<
                 R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id, TYPE=BLOOM_FILTER,
-                    FEATURES=`{"column_names" : ["resource_id"], "false_positive_probability" : 0.05}`);
+                    FEATURES=`{"column_name" : "resource_id", "false_positive_probability" : 0.05}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         {
             auto alterQuery = TStringBuilder() <<
                               R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_ts, TYPE=COUNT_MIN_SKETCH,
-                    FEATURES=`{"column_names" : ['timestamp']}`);
+                    FEATURES=`{"column_name" : "timestamp"}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -176,7 +176,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         {
             auto alterQuery = TStringBuilder() <<
                               R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_res_id, TYPE=COUNT_MIN_SKETCH,
-                    FEATURES=`{"column_names" : ['resource_id']}`);
+                    FEATURES=`{"column_name" : 'resource_id'}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -186,7 +186,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         {
             auto alterQuery = TStringBuilder() <<
                               R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_uid, TYPE=COUNT_MIN_SKETCH,
-                    FEATURES=`{"column_names" : ['uid']}`);
+                    FEATURES=`{"column_name" : 'uid'}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -196,7 +196,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         {
             auto alterQuery = TStringBuilder() <<
                               R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_level, TYPE=COUNT_MIN_SKETCH,
-                    FEATURES=`{"column_names" : ['level']}`);
+                    FEATURES=`{"column_name" : 'level'}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -206,7 +206,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         {
             auto alterQuery = TStringBuilder() <<
                               R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_message, TYPE=COUNT_MIN_SKETCH,
-                    FEATURES=`{"column_names" : ['message']}`);
+                    FEATURES=`{"column_name" : 'message'}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -423,7 +423,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 auto alterQuery =
                     TStringBuilder() << Sprintf(
                         R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
-                    FEATURES=`{"column_names" : ["uid"], "false_positive_probability" : 0.01, "storage_id" : "%s"}`);
+                    FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0.01, "storage_id" : "%s"}`);
                 )",
                         StorageId.data());
                 auto session = tableClient.CreateSession().GetValueSync().GetSession();
@@ -442,7 +442,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 auto alterQuery =
                     TStringBuilder() << Sprintf(
                         R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id, TYPE=BLOOM_FILTER,
-                    FEATURES=`{"column_names" : ["resource_id"], "false_positive_probability" : 0.05, "storage_id" : "%s"}`);
+                    FEATURES=`{"column_name" : "resource_id", "false_positive_probability" : 0.05, "storage_id" : "%s"}`);
                 )",
                         StorageId.data());
                 auto session = tableClient.CreateSession().GetValueSync().GetSession();
@@ -618,7 +618,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         {
             auto alterQuery = TStringBuilder() <<
                               R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
-                    FEATURES=`{"column_names" : ["uid"], "false_positive_probability" : 0.05}`);
+                    FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0.05}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -628,7 +628,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         {
             auto alterQuery = TStringBuilder() <<
                               R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
-                    FEATURES=`{"column_names" : ["uid", "resource_id"], "false_positive_probability" : 0.05}`);
+                    FEATURES=`{"column_name" : "resource_id", "false_positive_probability" : 0.05}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -638,7 +638,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         {
             auto alterQuery = TStringBuilder() <<
                               R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
-                    FEATURES=`{"column_names" : ["uid"], "false_positive_probability" : 0.005}`);
+                    FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0.005}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -648,7 +648,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         {
             auto alterQuery = TStringBuilder() <<
                               R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
-                    FEATURES=`{"column_names" : ["uid"], "false_positive_probability" : 0.01}`);
+                    FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0.01, "bits_storage_type", "BITMAP"}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();

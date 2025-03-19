@@ -30,7 +30,7 @@ bool TFixStringBitsStorage::Get(const ui32 idx) const {
     return Bits.Test(idx);
 }
 
-TFixStringBitsStorage::TFixStringBitsStorage(const TString& data) {
+TFixStringBitsStorage::TFixStringBitsStorage(const TString& data) noexcept {
     try {
         TStringInput input(data);
         Bits.Load(&input);

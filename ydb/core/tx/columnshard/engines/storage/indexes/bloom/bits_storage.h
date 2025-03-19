@@ -10,7 +10,7 @@ private:
     TDynBitMap Bits;
 
 public:
-    TFixStringBitsStorage(const TString& data);
+    TFixStringBitsStorage(const TString& data) noexcept;
 
     TString SerializeToString() const;
 

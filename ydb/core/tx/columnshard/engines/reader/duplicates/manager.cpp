@@ -6,7 +6,6 @@
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/context.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/scanner.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
-#include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 #include <bit>
 
@@ -215,7 +214,7 @@ void TDuplicateFilterConstructor::Handle(const TEvDuplicateFilterDataFetched::TP
     NotFetchedSourcesCount.Dec(intervals.GetFirstIdx(), intervals.GetLastIdx());
 
     AFL_VERIFY(intervals.GetFirstIdx() >= NextIntervalToMerge.GetIntervalIdx());
-    while (!NotFetchedSourcesCount.GetCount(NextIntervalToMerge.GetIntervalIdx(), NextIntervalToMerge.GetIntervalIdx())) {
+    while (!NextIntervalToMerge.IsEnd() && !NotFetchedSourcesCount.GetCount(NextIntervalToMerge.GetIntervalIdx(), NextIntervalToMerge.GetIntervalIdx())) {
         StartMergingColumns(NextIntervalToMerge);
         NextIntervalToMerge.Next();
     }
@@ -250,31 +249,15 @@ void TDuplicateFilterConstructor::StartFetchingColumns(const std::shared_ptr<TSo
     auto fetchingContext = std::make_shared<TColumnFetchingContext>(
         source, source->GetSource()->GetContext()->GetCommonContext()->GetCounters().GetReadTasksGuard(), SelfId());
 
-    THashMap<ui32, std::shared_ptr<NCommon::IKernelFetchLogic>> fetchers;
-    TReadActionsCollection readActions;
-    const std::set<ui32> columnIds(
-        fetchingContext->GetResultSchema()->GetColumnIds().begin(), fetchingContext->GetResultSchema()->GetColumnIds().end());
-    AFL_VERIFY(!columnIds.empty());
-    for (const ui32 columnId : columnIds) {
-        std::shared_ptr<NCommon::IKernelFetchLogic> fetcher =
-            std::make_shared<NCommon::TDefaultFetchLogic>(columnId, source->GetSource()->GetContext()->GetCommonContext()->GetStoragesManager());
+    auto portion = std::dynamic_pointer_cast<NSimple::TPortionDataSource>(source->GetSource());
+    AFL_VERIFY(portion);   // TODO: make a specialization to allow extending fetching behaviour on other source types
 
-        {
-            NArrow::NAccessor::TAccessorsCollection emptyTable;
-            NIndexes::TIndexesCollection emptyIndexes;
-            NCommon::TFetchingResultContext contextFetch(emptyTable, emptyIndexes, source->GetSource());
-            fetcher->Start(readActions, contextFetch);
-        }
-        fetchers.emplace(columnId, fetcher);
-    }
-    AFL_VERIFY(!readActions.IsEmpty());
-    auto fetchingTask = std::make_shared<TColumnsFetcherTask>(std::move(readActions), fetchingContext);
-
-    const ui64 mem = source->GetSource()->GetColumnsVolume(columnIds, NCommon::EMemType::Raw);
-    auto allocationTask = std::make_shared<TColumnsMemoryAllocation>(mem, fetchingTask, fetchingContext);
-    NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(source->GetSource()->GetContext()->GetProcessMemoryControlId(),
-        source->GetSource()->GetContext()->GetCommonContext()->GetScanId(), memoryGroupId, { allocationTask },
-        (ui32)NCommon::EStageFeaturesIndexes::Filter);
+    std::shared_ptr<TDataAccessorsRequest> request = std::make_shared<TDataAccessorsRequest>("DUPLICATES");
+    request->AddPortion(portion->GetPortionInfoPtr());
+    request->SetColumnIds(
+        { fetchingContext->GetResultSchema()->GetColumnIds().begin(), fetchingContext->GetResultSchema()->GetColumnIds().end() });
+    request->RegisterSubscriber(std::make_shared<TPortionAccessorFetchingSubscriber>(fetchingContext, memoryGroupId));
+    source->GetSource()->GetContext()->GetCommonContext()->GetDataAccessorsManager()->AskData(request);
 }
 
 void TDuplicateFilterConstructor::StartMergingColumns(const TIntervalsCursor& interval) const {

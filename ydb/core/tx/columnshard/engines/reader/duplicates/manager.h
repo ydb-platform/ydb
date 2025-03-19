@@ -211,7 +211,7 @@ private:
                 ++NextSourceIdx;
             }
 
-            AFL_VERIFY(IntervalIdx <= Owner->NumIntervals());
+            AFL_VERIFY(IntervalIdx <= Owner->NumIntervals())("i", IntervalIdx)("num_intervals", Owner->NumIntervals());
             if (IntervalIdx == Owner->NumIntervals()) {
                 AFL_VERIFY(SourcesByRightInterval.empty());
             }
@@ -226,6 +226,10 @@ private:
 
         void Next() {
             NextImpl(false);
+        }
+
+        bool IsEnd() const {
+            return IntervalIdx == Owner->NumIntervals();
         }
     };
 

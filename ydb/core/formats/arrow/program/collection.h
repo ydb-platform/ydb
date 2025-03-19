@@ -452,14 +452,15 @@ public:
         return UseFilter ? nullptr : Filter;
     }
 
-    void AddFilter(const TColumnFilter& filter) {
-        if (filter.IsTotalAllowFilter()) {
-            return;
-        }
+    void AddFilter(const TColumnFilter& filter, const bool sequential = true) {
         if (!UseFilter) {
             *Filter = Filter->And(filter);
         } else {
-            *Filter = Filter->CombineSequentialAnd(filter);
+            if (sequential) {
+                *Filter = Filter->CombineSequentialAnd(filter);
+            } else {
+                *Filter = Filter->And(filter);
+            }
             for (auto&& i : Accessors) {
                 i.second = TAccessorCollectedContainer(i.second.GetData()->ApplyFilter(filter, i.second.GetData()));
             }

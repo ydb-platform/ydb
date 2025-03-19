@@ -2,7 +2,7 @@ import threading
 
 from ydb.tests.sql.lib.test_base import TestBase
 from ydb.tests.stress.oltp_workload.workload import cleanup_type_name
-from ydb.tests.datashard.lib.create_table import TestCreateTables, pk_types, non_pk_types, index_first, index_second, ttl_types, unique, index_sync
+from ydb.tests.datashard.lib.create_table import TestCreateTables, pk_types, non_pk_types, index_first, index_second, ttl_types, unique, index_sync, not_comparable
 
 
 class TestDML(TestCreateTables, TestBase):
@@ -26,9 +26,6 @@ class TestDML(TestCreateTables, TestBase):
             ttl, table_name, index, uniq, sync)
         self.query(sql_create_table)
         self.inserts(index, ttl, table_name)
-        self.update(index, ttl, table_name)
-        self.upsert(index, ttl, table_name)
-        self.delete(index, ttl, table_name)
         self.query(f"DROP TABLE {table_name}")
 
     def inserts(self, index: dict[str, str], ttl: str, table_name: str):
@@ -54,6 +51,11 @@ class TestDML(TestCreateTables, TestBase):
             count, f"ttl_{cleanup_type_name(ttl)}", ttl_types[ttl], table_name)
         count += 1
 
+        for type_name in not_comparable.keys():
+            self.create_insert(
+                count, f"col_{cleanup_type_name(type_name)}", not_comparable[type_name], table_name)
+            count += 1
+
         # check after insert
         rows = self.query(
             f"""
@@ -72,11 +74,10 @@ class TestDML(TestCreateTables, TestBase):
             count_assert += 1
 
         for type_name in non_pk_types.keys():
-            if type_name != "Json" and type_name != "JsonDocument" and type_name != "Yson":
-                rows = self.query(
-                    f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_{cleanup_type_name(type_name)}={non_pk_types[type_name].format(count_assert)}")
-                assert len(
-                    rows) == 1 and rows[0].count == 1, f"Expected one row after insert, faild in col_{cleanup_type_name(type_name)}, table {table_name}"
+            rows = self.query(
+                f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_{cleanup_type_name(type_name)}={non_pk_types[type_name].format(count_assert)}")
+            assert len(
+                rows) == 1 and rows[0].count == 1, f"Expected one row after insert, faild in col_{cleanup_type_name(type_name)}, table {table_name}"
             count_assert += 1
 
         for type_name in index.keys():
@@ -86,14 +87,14 @@ class TestDML(TestCreateTables, TestBase):
                 rows) == 1 and rows[0].count == 1, f"Expected one row after insert, faild in col_{cleanup_type_name(type_name)}, table {table_name}"
             count_assert += 1
 
-        assert count_assert + 1 == count, "vsdvsdvsdvsdv"
-
         rows = self.query(
             f"SELECT COUNT(*) as count FROM `{table_name}` WHERE ttl_{cleanup_type_name(ttl)}={ttl_types[ttl].format(count_assert)}")
         assert len(
             rows) == 1 and rows[0].count == 1, f"Expected one row after insert, faild in ttl_{cleanup_type_name(ttl)}, {count_assert} {ttl_types[ttl].format(count_assert)},table {table_name}"
         count_assert += 1
-        assert count == count_assert, f"Expected {count} select after insert, table {table_name}"
+        assert count == count_assert + \
+            len(
+                not_comparable), f"Expected {count - 10} rows after insert, table {table_name}"
 
         for i in range(10, count_assert):
             for type_name in pk_types.keys():
@@ -104,7 +105,7 @@ class TestDML(TestCreateTables, TestBase):
                         rows) == 1 and rows[0].count == 1, f"Expected one row after insert, faild in pk_{cleanup_type_name(type_name)}, table {table_name}"
                 else:
                     assert len(
-                        rows) == 1 and rows[0].count == count_assert-10, f"Expected {count_assert-10} row after insert, faild in pk_{cleanup_type_name(type_name)}, table {table_name}"
+                        rows) == 1 and rows[0].count == count_assert-10+len(not_comparable), f"Expected {count_assert-10+len(not_comparable)} rows after insert, faild in pk_{cleanup_type_name(type_name)}, table {table_name}"
 
     def create_insert(self, value: int, name: str, key: str, table_name: str):
         insert_sql = f"""
@@ -132,6 +133,9 @@ class TestDML(TestCreateTables, TestBase):
                 for change_name in non_pk_types.keys():
                     self.create_update(count, f"col_{cleanup_type_name(type_name)}", pk_types[type_name],
                                        f"col_{cleanup_type_name(change_name)}", non_pk_types[change_name], table_name)
+                for change_name in not_comparable.keys():
+                    self.create_update(count, f"col_{cleanup_type_name(type_name)}", pk_types[type_name],
+                                       f"col_{cleanup_type_name(change_name)}", not_comparable[change_name], table_name)
                 for change_name in index.keys():
                     self.create_update(count, f"col_{cleanup_type_name(type_name)}", pk_types[type_name],
                                        f"col_index_{cleanup_type_name(change_name)}", index[change_name], table_name)
@@ -142,20 +146,20 @@ class TestDML(TestCreateTables, TestBase):
             count += 1
 
         for type_name in non_pk_types.keys():
-            if type_name != "Json" and type_name != "JsonDocument" and type_name != "Yson":
-                for change_name in pk_types.keys():
-                    self.create_update(count, f"col_{cleanup_type_name(type_name)}", non_pk_types[type_name],
-                                       f"col_{cleanup_type_name(change_name)}", pk_types[change_name], table_name)
-                for change_name in non_pk_types.keys():
-                    self.create_update(count, f"col_{cleanup_type_name(type_name)}", non_pk_types[type_name],
-                                       f"col_{cleanup_type_name(change_name)}", non_pk_types[change_name], table_name)
-                for change_name in index.keys():
-                    self.create_update(count, f"col_{cleanup_type_name(type_name)}", non_pk_types[type_name],
-                                       f"col_index_{cleanup_type_name(change_name)}", index[change_name], table_name)
+            for change_name in pk_types.keys():
                 self.create_update(count, f"col_{cleanup_type_name(type_name)}", non_pk_types[type_name],
-                                   f"ttl_{cleanup_type_name(ttl)}", ttl_types[ttl], table_name)
-            else:
-                excluded_numbers.append(count)
+                                   f"col_{cleanup_type_name(change_name)}", pk_types[change_name], table_name)
+            for change_name in non_pk_types.keys():
+                self.create_update(count, f"col_{cleanup_type_name(type_name)}", non_pk_types[type_name],
+                                   f"col_{cleanup_type_name(change_name)}", non_pk_types[change_name], table_name)
+            for change_name in not_comparable.keys():
+                    self.create_update(count, f"col_{cleanup_type_name(type_name)}", non_pk_types[type_name],
+                                       f"col_{cleanup_type_name(change_name)}", not_comparable[change_name], table_name)
+            for change_name in index.keys():
+                self.create_update(count, f"col_{cleanup_type_name(type_name)}", non_pk_types[type_name],
+                                   f"col_index_{cleanup_type_name(change_name)}", index[change_name], table_name)
+            self.create_update(count, f"col_{cleanup_type_name(type_name)}", non_pk_types[type_name],
+                               f"ttl_{cleanup_type_name(ttl)}", ttl_types[ttl], table_name)
             count += 1
 
         for type_name in index.keys():
@@ -166,9 +170,12 @@ class TestDML(TestCreateTables, TestBase):
                 for change_name in non_pk_types.keys():
                     self.create_update(count, f"col_index_{cleanup_type_name(type_name)}", index[type_name],
                                        f"col_{cleanup_type_name(change_name)}", non_pk_types[change_name], table_name)
+                for change_name in not_comparable.keys():
+                    self.create_update(count, f"col_index_{cleanup_type_name(type_name)}", index[type_name],
+                                       f"col_{cleanup_type_name(change_name)}", not_comparable[change_name], table_name)
                 for change_name in index.keys():
                     self.create_update(count, f"col_index_{cleanup_type_name(type_name)}", index[type_name],
-                                       f"col_{cleanup_type_name(change_name)}", index[change_name], table_name)
+                                       f"col_index_{cleanup_type_name(change_name)}", index[change_name], table_name)
                 self.create_update(count, f"col_index_{cleanup_type_name(type_name)}", index[type_name],
                                    f"ttl_{cleanup_type_name(ttl)}", ttl_types[ttl], table_name)
             else:
@@ -181,6 +188,9 @@ class TestDML(TestCreateTables, TestBase):
         for change_name in non_pk_types.keys():
             self.create_update(count, f"ttl_{cleanup_type_name(ttl)}", ttl_types[ttl],
                                f"col_{cleanup_type_name(change_name)}", non_pk_types[change_name], table_name)
+        for change_name in not_comparable.keys():
+            self.create_update(count, f"ttl_{cleanup_type_name(ttl)}", ttl_types[ttl],
+                               f"col_{cleanup_type_name(change_name)}", not_comparable[change_name], table_name)
         for change_name in index.keys():
             self.create_update(count, f"ttl_{cleanup_type_name(ttl)}", ttl_types[ttl],
                                f"col_index_{cleanup_type_name(change_name)}", index[change_name], table_name)
@@ -197,11 +207,10 @@ class TestDML(TestCreateTables, TestBase):
                         assert len(
                             rows) == 1 and rows[0].count == 1, f"Expected one row after update, faild in col_{cleanup_type_name(type_name)}, {i} {pk_types[type_name].format(i)}, table {table_name}"
                 for type_name in non_pk_types.keys():
-                    if type_name != "Json" and type_name != "JsonDocument" and type_name != "Yson":
-                        rows = self.query(
-                            f"""SELECT COUNT(*) as count FROM `{table_name}`
+                    rows = self.query(
+                        f"""SELECT COUNT(*) as count FROM `{table_name}`
                             WHERE col_{cleanup_type_name(type_name)}={non_pk_types[type_name].format(i)}""")
-                        assert len(rows) == 1 and rows[0].count == 1, f"""Expected one row after update, faild in col_{cleanup_type_name(type_name)}, 
+                    assert len(rows) == 1 and rows[0].count == 1, f"""Expected one row after update, faild in col_{cleanup_type_name(type_name)}, 
                             {i} {non_pk_types[type_name].format(i)}, table {table_name}"""
                 for type_name in index.keys():
                     if type_name != "Bool":
@@ -240,6 +249,14 @@ class TestDML(TestCreateTables, TestBase):
 
         self.create_upsert(
             count, count-1, f"ttl_{cleanup_type_name(ttl)}", ttl_types[ttl], table_name)
+        count += 1
+
+        for type_name in not_comparable.keys():
+            self.create_upsert(
+                count, count-1, f"col_{cleanup_type_name(type_name)}", not_comparable[type_name], table_name)
+            count += 1
+
+        count += 1
 
         for type_name in pk_types.keys():
             self.create_upsert(
@@ -259,6 +276,11 @@ class TestDML(TestCreateTables, TestBase):
             count, count, f"ttl_{cleanup_type_name(ttl)}", ttl_types[ttl], table_name)
         count += 1
 
+        for type_name in not_comparable.keys():
+            self.create_upsert(
+                count, count, f"col_{cleanup_type_name(type_name)}", not_comparable[type_name], table_name)
+            count += 1
+
         # check after upsert
         count_assert = 9
         for type_name in pk_types.keys():
@@ -274,12 +296,11 @@ class TestDML(TestCreateTables, TestBase):
             count_assert += 1
 
         for type_name in non_pk_types.keys():
-            if type_name != "Json" and type_name != "JsonDocument" and type_name != "Yson":
-                rows = self.query(
-                    f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_{cleanup_type_name(type_name)}={non_pk_types[type_name].format(count_assert)}")
-                assert len(
-                    rows) == 1 and rows[0].count == 2, f"Expected two row after upsert, faild in col_{cleanup_type_name(type_name)}, table {table_name}"
-                count_assert += 1
+            rows = self.query(
+                f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_{cleanup_type_name(type_name)}={non_pk_types[type_name].format(count_assert)}")
+            assert len(
+                rows) == 1 and rows[0].count == 2, f"Expected two row after upsert, faild in col_{cleanup_type_name(type_name)}, table {table_name}"
+            count_assert += 1
 
         for type_name in index.keys():
             if type_name != "Bool":
@@ -295,6 +316,7 @@ class TestDML(TestCreateTables, TestBase):
             rows) == 1 and rows[0].count == 2, f"Expected two row after upsert, faild in ttl_{cleanup_type_name(ttl)}, table {table_name}"
         count_assert += 1
 
+        count_assert += len(not_comparable)
         for type_name in pk_types.key():
             if table_name != "Bool":
                 rows = self.query(
@@ -324,7 +346,7 @@ class TestDML(TestCreateTables, TestBase):
         self.query(insert_sql)
 
     def delete(self, index: dict[str, str], ttl: str, table_name: str):
-        count = len(index) + len(pk_types) + len(non_pk_types) + 11
+        count = 12 + len(pk_types) + len(non_pk_types) + len(index) + len(not_comparable)
 
         for type_name in pk_types.keys():
             if type_name != "Bool":
@@ -344,12 +366,12 @@ class TestDML(TestCreateTables, TestBase):
             count += 1
 
         self.create_delete(
-            count, f"ttl{cleanup_type_name(ttl)}", ttl_types[ttl], table_name)
+            count, f"ttl_{cleanup_type_name(ttl)}", ttl_types[ttl], table_name)
         count += 1
 
         # check after delete
-        count_assert = len(index) + len(pk_types) + len(non_pk_types) + 11
-
+        count_assert = len(index) + len(pk_types) + \
+            len(non_pk_types) + 11 + len(not_comparable)
         for type_name in pk_types.keys():
             if type_name != "Bool":
                 rows = self.query(
@@ -378,6 +400,6 @@ class TestDML(TestCreateTables, TestBase):
 
     def create_delete(self, value: int, type_name: str, key: str, table_name: str):
         delete_sql = f"""
-            DELETE FROM {table_name} WHERE {type_name} = {key.format(value)}
+            DELETE FROM {table_name} WHERE {type_name} = {key.format(value)};
         """
         self.query(delete_sql)

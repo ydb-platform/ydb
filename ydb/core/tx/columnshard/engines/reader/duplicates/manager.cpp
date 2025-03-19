@@ -283,24 +283,19 @@ void TDuplicateFilterConstructor::StartMergingColumns(const TIntervalsCursor& in
     const std::shared_ptr<TBuildDuplicateFilters> task = std::make_shared<TBuildDuplicateFilters>(
         readContext->GetReadMetadata()->GetReplaceKey(), IIndexInfo::GetSnapshotColumnNames(), interval.GetIntervalIdx(), SelfId());
     for (const auto& [_, sourceIdx] : interval.GetSourcesByRightInterval()) {
-        auto constructionInfo = GetConstructorVerified(sourceIdx);
-        const std::shared_ptr<NCommon::IDataSource>& source = constructionInfo->GetSource();
-        const auto intervalRange = constructionInfo->GetIntervalRange(interval.GetIntervalIdx());
-        const auto slice =
-            std::make_shared<NArrow::TGeneralContainer>(source->GetStageData()
-                                                            .ToGeneralContainer(source->GetContext()->GetCommonContext()->GetResolver())
-                                                            ->Slice(intervalRange.GetBegin(), intervalRange.Size()));
-        task->AddSource(slice, source->GetStageData().GetNotAppliedFilter(), source->GetSourceIdx());
+        std::shared_ptr<TSourceFilterConstructor> constructionInfo = GetConstructorVerified(sourceIdx);
+        task->AddSource(constructionInfo->GetColumnData(), std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter()),
+            constructionInfo->GetSource()->GetSourceIdx());
     }
     NConveyor::TScanServiceOperator::SendTaskToExecute(task, readContext->GetCommonContext()->GetConveyorProcessId());
 }
 
-    void TDuplicateFilterConstructor::FlushFinishedSources() {
+void TDuplicateFilterConstructor::FlushFinishedSources() {
     if (ActiveSources.empty() && SortedSources.empty()) {
         AFL_VERIFY(NotFetchedSourcesCount.IsAllZeros());
         PassAway();
     }
-    }
+}
 
 std::shared_ptr<TDuplicateFilterConstructor::TSourceFilterConstructor> TDuplicateFilterConstructor::GetConstructorVerified(
     const ui32 sourceIdx) const {

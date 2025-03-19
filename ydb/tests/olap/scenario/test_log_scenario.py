@@ -131,11 +131,11 @@ class TestLogScenario(BaseTestSet):
         while datetime.datetime.now() < deadline:
             hours: int = random.randint(1, 10)
             self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` ")
-            self.ydb_client.query(f"SELECT * FROM `{self.table_name}` WHERE ts < CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours})")
-            self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` WHERE ts < CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours})")
+            self.ydb_client.query(f"SELECT * FROM `{self.table_name}` WHERE timestamp < CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours})")
+            self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` WHERE timestamp < CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours})")
             self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` WHERE "
-                                  f"(ts >= CurrentUtcTimestamp() - DataTime::IntervalFromHours({hours}) - 1) AND "
-                                  f"(ts <= CurrentUtcTimestamp() - DataTime::IntervalFromHours({hours}))")
+                                  f"(timestamp >= CurrentUtcTimestamp() - DataTime::IntervalFromHours({hours}) - 1) AND "
+                                  f"(timestamp <= CurrentUtcTimestamp() - DataTime::IntervalFromHours({hours}))")
 
     def check_insert(self, duration: int):
         prev_count: int = self.get_row_count()
@@ -162,7 +162,8 @@ class TestLogScenario(BaseTestSet):
         # assert false
         # ydb_workload: YdbWorkloadLog = YdbWorkloadLog(endpoint=self._ydb_instance.endpoint(), database=f"/{self._ydb_instance.database()}", table_name=self.table_name)
         ydb_workload.create_table(self.table_name)
-        ydb_workload.insert(seconds=60, threads=10, rows=1000, wait=True)
+        # TODO: using insert here will somehow make self.get_row_count() equal 0
+        ydb_workload.bulk_upsert(seconds=60, threads=10, rows=1000, wait=True)
         # assert False
         
         # time.sleep(10000000)

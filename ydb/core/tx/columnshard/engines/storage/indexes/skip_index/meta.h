@@ -48,10 +48,6 @@ private:
     virtual bool DoCheckValue(const TString& data, const std::optional<ui64> cat, const std::shared_ptr<arrow::Scalar>& value,
         const EOperation op) const override final {
         auto storageConclusion = BitsStorageConstructor->Build(data);
-        if (storageConclusion.IsFail()) {
-            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("index_problem", storageConclusion.GetErrorMessage());
-            return true;
-        }
         return DoCheckValueImpl(*storageConclusion.GetResult(), cat, value, op);
     }
 

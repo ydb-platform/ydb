@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         {
             auto alterQuery = TStringBuilder() <<
                               R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_ts, TYPE=COUNT_MIN_SKETCH,
-                    FEATURES=`{"column_name" : "timestamp"}`);
+                    FEATURES=`{"column_names" : ["timestamp"]}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -176,7 +176,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         {
             auto alterQuery = TStringBuilder() <<
                               R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_res_id, TYPE=COUNT_MIN_SKETCH,
-                    FEATURES=`{"column_name" : 'resource_id'}`);
+                    FEATURES=`{"column_names" : ['resource_id']}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -186,7 +186,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         {
             auto alterQuery = TStringBuilder() <<
                               R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_uid, TYPE=COUNT_MIN_SKETCH,
-                    FEATURES=`{"column_name" : 'uid'}`);
+                    FEATURES=`{"column_names" : ['uid']}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -196,7 +196,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         {
             auto alterQuery = TStringBuilder() <<
                               R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_level, TYPE=COUNT_MIN_SKETCH,
-                    FEATURES=`{"column_name" : 'level'}`);
+                    FEATURES=`{"column_names" : ['level']}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -206,7 +206,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         {
             auto alterQuery = TStringBuilder() <<
                               R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_message, TYPE=COUNT_MIN_SKETCH,
-                    FEATURES=`{"column_name" : 'message'}`);
+                    FEATURES=`{"column_names" : ['message']}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -648,7 +648,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         {
             auto alterQuery = TStringBuilder() <<
                               R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
-                    FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0.01, "bits_storage_type", "BITMAP"}`);
+                    FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0.01, "bits_storage_type": "BITSET"}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();

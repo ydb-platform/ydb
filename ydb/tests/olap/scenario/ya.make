@@ -10,9 +10,11 @@ PY3TEST()
         test_alter_tiering.py
         test_insert.py
         test_alter_compression.py
+        test_log_scenario.py
     )
 
     ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+    ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
     DEPENDS(
         ydb/apps/ydb
         ydb/apps/ydbd

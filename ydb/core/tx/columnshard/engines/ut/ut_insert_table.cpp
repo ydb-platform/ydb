@@ -36,7 +36,7 @@ public:
     void EraseAborted(const TInsertedData&) override {
     }
 
-    virtual TConclusion<THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() override {
+    virtual TConclusion<THashMap<NColumnShard::TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() override {
         THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>> result;
         return result;
     }
@@ -49,7 +49,7 @@ public:
     }
     virtual void ErasePortion(const NOlap::TPortionInfo& /*portion*/) override {
     }
-    virtual bool LoadPortions(const std::optional<ui64> /*reqPathId*/,
+    virtual bool LoadPortions(const std::optional<NColumnShard::TInternalPathId> /*reqPathId*/,
         const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& /*callback*/) override {
         return true;
     }
@@ -58,7 +58,7 @@ public:
     }
     void EraseColumn(const TPortionInfo&, const TColumnRecord&) override {
     }
-    bool LoadColumns(const std::optional<ui64> /*reqPathId*/, const std::function<void(TColumnChunkLoadContextV2&&)>&) override {
+    bool LoadColumns(const std::optional<NColumnShard::TInternalPathId> /*reqPathId*/, const std::function<void(TColumnChunkLoadContextV2&&)>&) override {
         return true;
     }
 
@@ -66,8 +66,8 @@ public:
     }
     virtual void EraseIndex(const TPortionInfo& /*portion*/, const TIndexChunk& /*row*/) override {
     }
-    virtual bool LoadIndexes(const std::optional<ui64> /*reqPathId*/,
-        const std::function<void(const ui64 /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&&)>& /*callback*/) override {
+    virtual bool LoadIndexes(const std::optional<NColumnShard::TInternalPathId> /*reqPathId*/,
+        const std::function<void(const NColumnShard::TInternalPathId /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&&)>& /*callback*/) override {
         return true;
     }
 
@@ -83,7 +83,7 @@ public:
 Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
     Y_UNIT_TEST(TestInsertCommit) {
         TInsertWriteId writeId = (TInsertWriteId)0;
-        ui64 tableId = 0;
+        NColumnShard::TInternalPathId tableId{};
         TString dedupId = "0";
         TUnifiedBlobId blobId1(2222, 1, 1, 100, 2, 0, 1);
 

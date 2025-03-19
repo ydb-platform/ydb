@@ -7,6 +7,7 @@
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/formats/arrow/replace_key.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <util/stream/output.h>
 
@@ -127,11 +128,11 @@ public:
 
 class TPortionAddress {
 private:
-    YDB_READONLY(ui64, PathId, 0);
+    YDB_READONLY(NColumnShard::TInternalPathId, PathId, NColumnShard::TInternalPathId{});
     YDB_READONLY(ui64, PortionId, 0);
 
 public:
-    TPortionAddress(const ui64 pathId, const ui64 portionId)
+    TPortionAddress(const NColumnShard::TInternalPathId pathId, const ui64 portionId)
         : PathId(pathId)
         , PortionId(portionId) {
     }
@@ -152,6 +153,6 @@ public:
 template <>
 struct THash<NKikimr::NOlap::TPortionAddress> {
     inline ui64 operator()(const NKikimr::NOlap::TPortionAddress& x) const noexcept {
-        return CombineHashes(x.GetPortionId(), x.GetPathId());
+        return CombineHashes(x.GetPortionId(), x.GetPathId().GetInternalPathIdValue());
     }
 };

@@ -67,10 +67,11 @@ public:
 class TEvUnregisterController
     : public NActors::TEventLocal<TEvUnregisterController, NColumnShard::TEvPrivate::EEv::EvUnregisterGranuleDataAccessor> {
 private:
-    YDB_READONLY(ui64, PathId, 0);
+    YDB_READONLY(NColumnShard::TInternalPathId, PathId, NColumnShard::TInternalPathId{});
+
 
 public:
-    explicit TEvUnregisterController(const ui64 pathId)
+    explicit TEvUnregisterController(const NColumnShard::TInternalPathId pathId)
         : PathId(pathId) {
     }
 };

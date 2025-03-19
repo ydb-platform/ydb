@@ -43,7 +43,7 @@ public:
 
     }
 
-    THashSet<ui64> TablesToDrop;
+    THashSet<NColumnShard::TInternalPathId> TablesToDrop;
 
     virtual ui32 GetWritePortionsCount() const override {
         return 0;

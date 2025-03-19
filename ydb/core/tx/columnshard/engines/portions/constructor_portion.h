@@ -15,7 +15,7 @@ class TPortionAccessorConstructor;
 class TPortionInfoConstructor {
 private:
     bool Constructed = false;
-    YDB_ACCESSOR(ui64, PathId, 0);
+    YDB_ACCESSOR(NColumnShard::TInternalPathId, PathId, NColumnShard::TInternalPathId{});
     std::optional<ui64> PortionId;
 
     TPortionMetaConstructor MetaConstructor;
@@ -105,14 +105,14 @@ public:
         return !!RemoveSnapshot;
     }
 
-    TPortionInfoConstructor(const ui64 pathId, const ui64 portionId)
+    TPortionInfoConstructor(const NColumnShard::TInternalPathId pathId, const ui64 portionId)
         : PathId(pathId)
         , PortionId(portionId) {
         AFL_VERIFY(PathId);
         AFL_VERIFY(PortionId);
     }
 
-    TPortionInfoConstructor(const ui64 pathId)
+    TPortionInfoConstructor(const NColumnShard::TInternalPathId pathId)
         : PathId(pathId) {
         AFL_VERIFY(PathId);
     }

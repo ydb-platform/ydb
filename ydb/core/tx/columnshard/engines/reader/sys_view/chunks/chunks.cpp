@@ -35,7 +35,7 @@ void TStatsIterator::AppendStats(
         arrow::util::string_view lastColumnName;
         arrow::util::string_view lastTierName;
         for (auto&& r : records) {
-            NArrow::Append<arrow::UInt64Type>(*builders[0], portion.GetPathId());
+            NArrow::Append<arrow::UInt64Type>(*builders[0], portion.GetPathId().GetInternalPathIdValue());
             NArrow::Append<arrow::StringType>(*builders[1], prodView);
             NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->TabletId);
             NArrow::Append<arrow::UInt64Type>(*builders[3], r->GetMeta().GetRecordsCount());
@@ -92,7 +92,7 @@ void TStatsIterator::AppendStats(
             std::reverse(indexes.begin(), indexes.end());
         }
         for (auto&& r : indexes) {
-            NArrow::Append<arrow::UInt64Type>(*builders[0], portion.GetPathId());
+            NArrow::Append<arrow::UInt64Type>(*builders[0], portion.GetPathId().GetInternalPathIdValue());
             NArrow::Append<arrow::StringType>(*builders[1], prodView);
             NArrow::Append<arrow::UInt64Type>(*builders[2], ReadMetadata->TabletId);
             NArrow::Append<arrow::UInt64Type>(*builders[3], r->GetRecordsCount());

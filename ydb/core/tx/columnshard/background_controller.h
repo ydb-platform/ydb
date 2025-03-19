@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include "engines/changes/abstract/compaction_info.h"
 #include "engines/portions/meta.h"
 #include <ydb/core/tx/columnshard/counters/counters_manager.h>
@@ -13,7 +14,7 @@ class TBackgroundController {
 private:
     THashMap<TString, TMonotonic> ActiveIndexationTasks;
 
-    using TCurrentCompaction = THashMap<ui64, NOlap::TPlanCompactionInfo>;
+    using TCurrentCompaction = THashMap<NColumnShard::TInternalPathId, NOlap::TPlanCompactionInfo>;
     TCurrentCompaction ActiveCompactionInfo;
     std::optional<ui64> WaitingCompactionPriority;
 

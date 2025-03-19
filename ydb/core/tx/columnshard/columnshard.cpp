@@ -408,12 +408,11 @@ void TColumnShard::FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDa
 void TColumnShard::FillColumnTableStats(const TActorContext& ctx, std::unique_ptr<TEvDataShard::TEvPeriodicTableStats>& ev) {
     auto tables = TablesManager.GetTables();
     TTableStatsBuilder tableStatsBuilder(Counters, Executor());
-
     LOG_S_DEBUG("There are stats for " << tables.size() << " tables");
     for (const auto& [pathId, _] : tables) {
         auto* periodicTableStats = ev->Record.AddTables();
         periodicTableStats->SetDatashardId(TabletID());
-        periodicTableStats->SetTableLocalId(pathId);
+        periodicTableStats->SetTableLocalId(pathId.GetInternalPathIdValue());
 
         periodicTableStats->SetShardState(2);   // NKikimrTxDataShard.EDatashardState.Ready
         periodicTableStats->SetGeneration(Executor()->Generation());

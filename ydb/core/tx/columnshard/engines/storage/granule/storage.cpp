@@ -27,14 +27,14 @@ public:
 }   // namespace
 
 std::optional<NStorageOptimizer::TOptimizationPriority> TGranulesStorage::GetCompactionPriority(
-    const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::set<ui64>& pathIds, const std::optional<ui64> waitingPriority,
+    const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::set<NColumnShard::TInternalPathId>& pathIds, const std::optional<ui64> waitingPriority,
     std::shared_ptr<TGranuleMeta>* granuleResult) const {
     const TInstant now = HasAppData() ? AppDataVerified().TimeProvider->Now() : TInstant::Now();
     std::vector<TGranuleOrdered> granulesSorted;
     std::optional<NStorageOptimizer::TOptimizationPriority> priorityChecker;
     std::shared_ptr<TGranuleMeta> maxPriorityGranule;
     const TDuration actualizationLag = NYDBTest::TControllers::GetColumnShardController()->GetCompactionActualizationLag();
-    const auto actor = [&](const ui64 /*pathId*/, const std::shared_ptr<TGranuleMeta>& granule) {
+    const auto actor = [&](const NColumnShard::TInternalPathId /*pathId*/, const std::shared_ptr<TGranuleMeta>& granule) {
         //        NActors::TLogContextGuard lGuard = NActors::TLogContextBuilder::Build()("path_id", i.first);
         if (pathIds.empty()) {
             granule->ActualizeOptimizer(now, actualizationLag);

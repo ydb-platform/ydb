@@ -30,7 +30,6 @@ Three command modes are supported:
 - If not set, then you need to specify partitions through --partition-ids to read without consumer
 - Message consumption starts from the current offset for this consumer (if the `--timestamp` parameter is not specified).
 If consumer name is not specified, message consumption will start from the first message in partition. 
-- If `--commit=true` is set, the current offset is shifted as messages are consumed and output.
 
 `--format STR`: Output format.
 

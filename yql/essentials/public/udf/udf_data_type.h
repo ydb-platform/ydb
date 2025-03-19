@@ -45,8 +45,15 @@ enum EDataTypeFeatures : ui32 {
     TzDateType = 1u << 27,
     DecimalType = 1u << 28,
     TimeIntervalType = 1u << 29,
+    // FIXME: Remove, when no entries in the code are left.
     BigDateType = 1u << 30,
+    ExtDateType = 1u << 30,
 };
+
+// FIXME: This static assert is vital for renaming BigDateType
+// flag into ExtDateType to be in sync with naming in docs.
+// Remove this assert, only when BigDateType flags is removed.
+static_assert(ExtDateType == BigDateType);
 
 template <typename T>
 struct TDataType;
@@ -200,13 +207,13 @@ constexpr i32 MAX_YEAR32 = 148108; // non-inclusive
     XX(Decimal, NYql::NProto::Decimal, TDecimal, CommonType | DecimalType, TDecimal, 2) \
     XX(DyNumber, NYql::NProto::DyNumber, TDyNumber, CommonType, TDyNumber, 0) \
     XX(JsonDocument, NYql::NProto::JsonDocument, TJsonDocument, PayloadType, TJsonDocument, 0) \
-    XX(Date32, NYql::NProto::Date32, TDate32, CommonType | DateType | BigDateType, i32, 0) \
-    XX(Datetime64, NYql::NProto::Datetime64, TDatetime64, CommonType | DateType | BigDateType, i64, 0) \
-    XX(Timestamp64, NYql::NProto::Timestamp64, TTimestamp64, CommonType | DateType | BigDateType, i64, 0) \
-    XX(Interval64, NYql::NProto::Interval64, TInterval64, CommonType | TimeIntervalType | BigDateType, i64, 0) \
-    XX(TzDate32, NYql::NProto::TzDate32, TTzDate32, CommonType | TzDateType | BigDateType, i32, 0) \
-    XX(TzDatetime64, NYql::NProto::TzDatetime64, TTzDatetime64, CommonType | TzDateType | BigDateType, i64, 0) \
-    XX(TzTimestamp64, NYql::NProto::TzTimestamp64, TTzTimestamp64, CommonType | TzDateType | BigDateType, i64, 0) \
+    XX(Date32, NYql::NProto::Date32, TDate32, CommonType | DateType | ExtDateType, i32, 0) \
+    XX(Datetime64, NYql::NProto::Datetime64, TDatetime64, CommonType | DateType | ExtDateType, i64, 0) \
+    XX(Timestamp64, NYql::NProto::Timestamp64, TTimestamp64, CommonType | DateType | ExtDateType, i64, 0) \
+    XX(Interval64, NYql::NProto::Interval64, TInterval64, CommonType | TimeIntervalType | ExtDateType, i64, 0) \
+    XX(TzDate32, NYql::NProto::TzDate32, TTzDate32, CommonType | TzDateType | ExtDateType, i32, 0) \
+    XX(TzDatetime64, NYql::NProto::TzDatetime64, TTzDatetime64, CommonType | TzDateType | ExtDateType, i64, 0) \
+    XX(TzTimestamp64, NYql::NProto::TzTimestamp64, TTzTimestamp64, CommonType | TzDateType | ExtDateType, i64, 0) \
 
 #define UDF_TYPE_ID(xName, xTypeId, xType, xFeatures, xLayoutType, xParamsCount)                 \
     template <>                                                                                  \

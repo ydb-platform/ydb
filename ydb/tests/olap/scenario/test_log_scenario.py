@@ -1,3 +1,6 @@
+import sys
+import ipdb
+
 import datetime
 import os
 import random
@@ -86,7 +89,14 @@ class TestLogScenario(BaseTestSet):
         logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
         cls.ydb_client = YdbClient(endpoint=cls._ydb_instance.endpoint(), database=f"/{cls._ydb_instance.database()}")
         cls.ydb_client.wait_connection()
-        pass
+
+    @classmethod
+    def _get_cluster_config(cls):
+        return KikimrConfigGenerator(
+            extra_feature_flags={
+                "enable_immediate_writing_on_bulk_upsert": True
+            },
+        )
 
     @classmethod
     def teardown_class(cls):
@@ -138,12 +148,26 @@ class TestLogScenario(BaseTestSet):
         """As per https://github.com/ydb-platform/ydb/issues/13530"""
 
         wait_time: int = int(get_external_param("wait_minutes", "3")) * 60
+
         self.table_name: str = "log"
         logging.error(f"_ydb.instance.database: {self._ydb_instance.database()}")
         ydb_workload: YdbWorkloadLog = YdbWorkloadLog(endpoint=self.ydb_client.endpoint, database=self.ydb_client.database, table_name=self.table_name)
+        
+        # logging.error(f"_ydb.instance.database: {self._ydb_instance.database()}")
+        logging.error(f"YdbCluster endpoint: {self.ydb_client.endpoint}, database: {self.ydb_client.database}")
+
+        # yatest.common.execute(command="echo " + f"'YdbCluster endpoint: {self.ydb_client.endpoint}, database: {self.ydb_client.database}'" + ">> /home/emgariko/project/ydb_fork/ydb/ydb/tests/olap/scenario/logs.txt")
+
+        print(f"YdbCluster endpoint: {self.ydb_client.endpoint}, database: {self.ydb_client.database}", file=sys.stderr)
+        # assert false
         # ydb_workload: YdbWorkloadLog = YdbWorkloadLog(endpoint=self._ydb_instance.endpoint(), database=f"/{self._ydb_instance.database()}", table_name=self.table_name)
         ydb_workload.create_table(self.table_name)
+        ydb_workload.insert(seconds=60, threads=10, rows=1000, wait=True)
+        # assert False
+        
+        # time.sleep(10000000)
         logging.info(f"Count rows after insert {self.get_row_count()} before wait")
+        # ipdb.set_trace()
         assert self.get_row_count() != 0
 
         threads: list[TestThread] = []

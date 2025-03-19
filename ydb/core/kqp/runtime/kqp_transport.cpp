@@ -46,15 +46,14 @@ TKqpProtoBuilder::~TKqpProtoBuilder() {
     }
 }
 
-Ydb::ResultSet TKqpProtoBuilder::BuildYdbResultSet(
+void TKqpProtoBuilder::BuildYdbResultSet(
+    Ydb::ResultSet& resultSet,
     TVector<NYql::NDq::TDqSerializedBatch>&& data,
     NKikimr::NMiniKQL::TType* mkqlSrcRowType,
     const TVector<ui32>* columnOrder)
 {
     YQL_ENSURE(mkqlSrcRowType->GetKind() == NKikimr::NMiniKQL::TType::EKind::Struct);
     const auto* mkqlSrcRowStructType = static_cast<const TStructType*>(mkqlSrcRowType);
-
-    Ydb::ResultSet resultSet;
 
     for (ui32 idx = 0; idx < mkqlSrcRowStructType->GetMembersCount(); ++idx) {
         auto* column = resultSet.add_columns();
@@ -82,8 +81,6 @@ Ydb::ResultSet TKqpProtoBuilder::BuildYdbResultSet(
             });
         }
     }
-
-    return resultSet;
 }
 
 } // namespace NKqp

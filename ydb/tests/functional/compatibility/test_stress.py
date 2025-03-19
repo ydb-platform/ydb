@@ -255,13 +255,10 @@ class TestStress(object):
             "tpch",
             "run",
             "--scale=1",
-            "--include",
-            "10",
+            "--exclude",
+            # not working for row tables
+            "17",
             "--check-canonical",
-            "--iterations",
-            "2",
-            "--plan",
-            "plan",
         ]
 
         yatest.common.execute(init_command, wait=True, stdout=self.output_f, stderr=self.output_f)

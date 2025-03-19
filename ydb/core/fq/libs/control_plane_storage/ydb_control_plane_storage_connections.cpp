@@ -22,14 +22,22 @@ void PrepareSensitiveFields(::FederatedQuery::Connection& connection, bool extra
     auto& setting = *connection.mutable_content()->mutable_setting();
     if (setting.has_clickhouse_cluster()) {
         auto& ch = *setting.mutable_clickhouse_cluster();
-        ch.set_password("");
+        ch.clear_password();
+    }
+    if (setting.has_greenplum_cluster()) {
+        auto& pg = *setting.mutable_greenplum_cluster();
+        pg.clear_password();
+    }
+    if (setting.has_mysql_cluster()) {
+        auto& ch = *setting.mutable_mysql_cluster();
+        ch.clear_password();
     }
     if (setting.has_postgresql_cluster()) {
         auto& pg = *setting.mutable_postgresql_cluster();
-        pg.set_password("");
+        pg.clear_password();
     }
     if (auto auth = GetMutableAuth(setting); auth && auth->has_token()) {
-        auth->mutable_token()->set_token("");
+        auth->mutable_token()->clear_token();
     }
 }
 

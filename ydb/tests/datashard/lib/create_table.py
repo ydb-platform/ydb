@@ -71,10 +71,14 @@ pk_types = {
 non_pk_types = {
     "Float": "CAST('{}.1' AS Float)",
     "Double": "CAST('{}.2' AS Double)",
+}
+
+not_comparable = {
     "Json": "CAST('{{\"another_key\":{}}}' AS Json)",
     "JsonDocument": "CAST('{{\"another_doc_key\":{}}}' AS JsonDocument)",
     "Yson": "CAST('[{}]' AS Yson)"
 }
+
 unique = ["", "UNIQUE"]
 index_sync = ["SYNC", "ASYNC"]
 
@@ -86,6 +90,7 @@ class TestCreateTables():
                     {", ".join(["pk_" + cleanup_type_name(type_name) + " " + type_name for type_name in pk_types.keys()])},
                     {", ".join(["col_" + cleanup_type_name(type_name) + " " + type_name for type_name in pk_types.keys()])},
                     {", ".join(["col_" + cleanup_type_name(type_name) + " " + type_name for type_name in non_pk_types.keys()])},
+                    {", ".join(["col_" + cleanup_type_name(type_name) + " " + type_name for type_name in not_comparable.keys()])},
                     {", ".join(["col_index_" + cleanup_type_name(type_name) + " " + type_name for type_name in index.keys()])},
                     ttl_{cleanup_type_name(ttl)} {ttl},
                     PRIMARY KEY(

@@ -12,6 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+get_built_tool_path(
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
+)
+
 add_subdirectory(ut_utils)
 
 add_executable(ydb-public-sdk-cpp-src-client-topic-ut)
@@ -44,6 +51,7 @@ target_link_libraries(ydb-public-sdk-cpp-src-client-topic-ut PUBLIC
   topic-ut-ut_utils
   tx-schemeshard-ut_helpers
   persqueue-ut-common
+  library-cpp-resource
 )
 
 target_allocator(ydb-public-sdk-cpp-src-client-topic-ut
@@ -67,6 +75,7 @@ target_sources(ydb-public-sdk-cpp-src-client-topic-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/local_partition_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/topic_to_table_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/trace_ut.cpp
+  ${PROJECT_BINARY_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/595c8d08f14d8e7791461abe94aa0089.cpp
 )
 
 
@@ -104,6 +113,17 @@ set_yunittest_property(
   ydb-public-sdk-cpp-src-client-topic-ut
   PROPERTY
   ENVIRONMENT
+)
+
+resources(ydb-public-sdk-cpp-src-client-topic-ut
+  ${PROJECT_BINARY_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/595c8d08f14d8e7791461abe94aa0089.cpp
+  INPUTS
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/resources/topic_A_partition_0_v24-4-2.dat
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/ut/resources/topic_A_partition_1_v24-4-2.dat
+  KEYS
+  topic_A_partition_0_v24-4-2.dat
+  topic_A_partition_1_v24-4-2.dat
+  OPTS
 )
 
 vcs_info(ydb-public-sdk-cpp-src-client-topic-ut)

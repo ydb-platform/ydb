@@ -4,13 +4,15 @@
 
 #include <yql/essentials/utils/chunked_buffer.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
 #include <util/generic/noncopyable.h>
 #include <util/stream/output.h>
 #include <util/system/yassert.h>
 
-namespace NKikimr {
+namespace NKikimr::NMiniKQL {
 
-namespace NMiniKQL {
+    extern NMonitoring::TDynamicCounters::TCounterPtr PageBufferBytesWastedCounter;
 
 class TPagedBuffer;
 
@@ -19,7 +21,7 @@ class TBufferPage : private TNonCopyable {
     static const size_t PageCapacity;
 
 public:
-    static const size_t PageAllocSize = 128 * 1024;
+    static const size_t PageAllocSize = 32 * 1024;
 
     TBufferPage() = default;
     ~TBufferPage() = default;
@@ -48,6 +50,11 @@ public:
         Size_ = 0;
     }
 
+     inline size_t Wasted() const  {
+        Y_ABORT_UNLESS(PageCapacity - Size_ >= 0);
+        return PageCapacity - Size_;
+     }
+
 private:
     TBufferPage* Next_ = nullptr;
     size_t Size_ = 0;
@@ -72,10 +79,10 @@ class TPagedBuffer : private TNonCopyable {
     using TConstPtr = std::shared_ptr<const TPagedBuffer>;
 
     TPagedBuffer() = default;
-
     ~TPagedBuffer() {
         if (Head_) {
             TBufferPage* curr = TBufferPage::GetPage(Head_);
+            TBufferPage::GetPage(Tail_)->Size_ = TailSize_;
             while (curr) {
                 auto drop = curr;
                 curr = curr->Next_;
@@ -170,27 +177,25 @@ class TPagedBuffer : private TNonCopyable {
         return Tail_ + TailSize_;
     }
 
-    inline void Clear() {
-        Tail_ = Head_;
-        ClosedPagesSize_ = HeadReserve_ = 0;
-        //        = Tail_ ? 0 : TBufferPage::PageAllocSize;
-        TailSize_ = (-size_t(Tail_ == nullptr)) & TBufferPage::PageCapacity;
-    }
-
     inline void EraseBack(size_t len) {
         Y_DEBUG_ABORT_UNLESS(Tail_ && TailSize_ >= len);
         TailSize_ -= len;
+        (*PageBufferBytesWastedCounter) += len;
     }
 
     inline void Advance(size_t len) {
         if (Y_LIKELY(TailSize_ + len <= TBufferPage::PageCapacity)) {
             TailSize_ += len;
+            (*PageBufferBytesWastedCounter) -= len;
+            Y_ABORT_UNLESS(*PageBufferBytesWastedCounter >= 0, "Total wasted vs page wasted: %ld, %ld", PageBufferBytesWastedCounter->Val(), TBufferPage::GetPage(Tail_)->Wasted());
             return;
         }
 
         MKQL_ENSURE(len <= TBufferPage::PageCapacity, "Advance() size too big");
         AppendPage();
         TailSize_ = len;
+        (*PageBufferBytesWastedCounter) -= len;
+        Y_ABORT_UNLESS(*PageBufferBytesWastedCounter >= 0, "Total wasted vs page wasted: %ld, %ld", PageBufferBytesWastedCounter->Val(), TBufferPage::GetPage(Tail_)->Wasted());
     }
 
     inline void Append(char c) {
@@ -211,6 +216,8 @@ class TPagedBuffer : private TNonCopyable {
             TailSize_ += chunk;
             data += chunk;
             size -= chunk;
+            (*PageBufferBytesWastedCounter) -= chunk;
+            Y_ABORT_UNLESS(*PageBufferBytesWastedCounter >= 0, "Total wasted vs page wasted: %ld, %ld", PageBufferBytesWastedCounter->Val(), TBufferPage::GetPage(Tail_)->Wasted());
         }
     }
 
@@ -221,12 +228,12 @@ private:
     char* Head_ = nullptr;
     char* Tail_ = nullptr;
 
-    // TailSize_ is initialized as if last page is full, this way we can simplifiy check in Advance()
+    // TailSize_ is initialized as if last page is full, this way we can simplify check in Advance()
     size_t TailSize_ = TBufferPage::PageCapacity;
     size_t HeadReserve_ = 0;
     size_t ClosedPagesSize_ = 0;
 };
 
-} // NMiniKQL
+void InitializeGlobalPagedBufferCounters(::NMonitoring::TDynamicCounterPtr root);
 
-} // NKikimr
+} // namespace NKikimr::NMiniKQL

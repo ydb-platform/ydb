@@ -83,7 +83,7 @@ default_tablet_preference:
 || `max_movements_on_emergency_balancer` | MaxMovementsOnEmergencyBalancer | Целое число | Аналогично MaxMovementsOnAutoBalancer, но для emergency-балансировки. | 2 ||
 || `continue_emergency_balancer` | ContinueEmergencyBalancer | true/false | Аналогично ContinueAutoBalancer, но для emergency-балансировки. | true ||
 || `check_move_expediency` | CheckMoveExpediency | true/false | Проверка целесообразности перемещений таблеток. | true ||
-|| `object_imbalance_to_balance` | ObjectImbalanceToBalance | Вещественное число | Порог метрики дисбаланса таблеток одного объекта. | 0.02 ||
+|| `object_imbalance_to_balance` | ObjectImbalanceToBalance | Вещественное число | Порог метрики [дисбаланса таблеток одного объекта](../../contributor/hive.md#imbalance). | 0.02 ||
 || `less_system_tablets_moves` | LessSystemTabletMoves | true/false | Минимизация перемещения системных таблеток при автобалансировке. | true ||
 || `balancer_ignore_tablet_types` | BalancerIgnoreTabletTypes | Список типов таблеток. При выставлении через Hive UI — разделённый точкой с запятой. | Типы таблеток, на которые не распространяется автобалансировка. | Пустой список ||
 |#
@@ -108,7 +108,7 @@ hive_config:
 
 #|
 || Название параметра в конфигурации | Название параметра в Hive web-viewer | Формат | Описание | Значение по умолчанию ||
-|| `max_resource_cpu` | MaxResourceCPU | Целое число наносекунд | Максимальное потребление CPU на узле в секунду. Значение по умолчанию, используется только если узел не предоставляет значение при регистрации в Hive. | 10000000 ||
+|| `max_resource_cpu` | MaxResourceCPU | Целое число микросекунд | Максимальное потребление CPU на узле в секунду. Значение по умолчанию, используется только если узел не предоставляет значение при регистрации в Hive. | 10000000 ||
 || `max_resource_memory` | MaxResourceMemory | Целое число байт | Максимальное потребление памяти на узле. Значение по умолчанию, используется только если узел не предоставляет значение при регистрации в Hive. | 512000000000 ||
 || `max_resource_network` | MaxResourceNetwork | Целое число байт/секунду | Максимальное потребление полосы на узле. Значение по умолчанию, используется только если узел не предоставляет значение при регистрации в Hive. | 1000000000 ||
 || `max_resource_counter` | MaxResourceCounter | Целое число | Максимальное потребление виртуального ресурса Counter на узле. | 100000000 ||
@@ -127,12 +127,12 @@ hive_config:
 || `default_unit_throughput` | DefaultUnitThroughput | Целое число байт/секунду | Значение по умолчанию для потребления пропускной способности одним каналом. | 1000 ||
 || `default_unit_size` | DefaultUnitSize | Целое число байт | Значение по умолчанию для потребления места на дисках одним каналом. | 100000000 ||
 || `storage_overcommit` | StorageOvercommit | Вещественное число | Коэффициент переподписки на ресурсы групп хранения. | 1.0 ||
-|| `storage_balance_strategy` | StorageBalanceStrategy | Перечисление | Выбор параметра используемого для распределения каналов таблеток по группам хранения. Вариант AUTO — использование того, чьё потребление максимально. Возможные варианты:
+|| `storage_balance_strategy` | StorageBalanceStrategy | Перечисление | Выбор параметра используемого для распределения каналов таблеток по группам хранения. Возможные варианты:
 
-- `HIVE_STORAGE_BALANCE_STRATEGY_AUTO`;
-- `HIVE_STORAGE_BALANCE_STRATEGY_IOPS`;
-- `HIVE_STORAGE_BALANCE_STRATEGY_IOPS`;
-- `HIVE_STORAGE_BALANCE_STRATEGY_SIZE`;
+- `HIVE_STORAGE_BALANCE_STRATEGY_IOPS` — учитывается только IOPS;
+- `HIVE_STORAGE_BALANCE_STRATEGY_THROUGHPUT` — учитывается только потребление пропускной способности;
+- `HIVE_STORAGE_BALANCE_STRATEGY_SIZE` — учитывается только объём занятого места;
+- `HIVE_STORAGE_BALANCE_STRATEGY_AUTO` — учитывается тот из параметров выше, чьё потребление максимально;
 
 | `HIVE_STORAGE_BALANCE_STRATEGY_SIZE` ||
 || `storage_safe_mode` | StorageSafeMode | true/false | Проверка превышения максимального потребления ресурсов групп хранения. | true ||
@@ -185,7 +185,7 @@ Hive отслеживает, как часто рестартуют различ
 || `min_request_sequence_size` | — | Целое число | Минимальное количество идентификаторов таблеток, которое за один раз корневой Hive выделяет для Hive базы данных. | 1000 ||
 || `max_request_sequence_size` | — | Целое число | Максимальное количество идентификаторов таблеток, которое за один раз выделяет для Hive базы данных. | 1000000 ||
 || `node_delete_period` | — | Целое число секунд | Период неактивности, по истечении которого узел удаляется из базы Hive. | 3600 ||
-|| `warm_up_enabled` | WarmUpEnabled | true/false | Ожидание старта всех узлов при старте базы или запуск таблеток на первом подключившемся. | true ||
+|| `warm_up_enabled` | WarmUpEnabled | true/false | При включении этой опции при старте базы Hive дожидается подключения всех узлов прежде чем начать запускать таблетки. При выключении все таблетки могут быть запущены на первом подключившемся узле. | true ||
 || `warm_up_boot_waiting_period` | MaxWarmUpBootWaitingPeriod | Целое число миллисекунд | Время ожидания старта всех известных узлов при старте базы. | 30000 ||
 || `max_warm_up_period` | MaxWarmUpPeriod | Целое число секунд | Максимальное время ожидания старта узлов при старте базы. | 600 ||
 || `enable_destroy_operations` | — | true/false | Разрешены ли деструктивные ручные операции. | false ||

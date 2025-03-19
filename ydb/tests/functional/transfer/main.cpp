@@ -1186,6 +1186,11 @@ Y_UNIT_TEST_SUITE(Transfer)
             Sleep(TDuration::Seconds(1));
         }
 
+        // flush interval is small
+        testCase.AlterTransfer(MainTestCase::AlterTransferSettings::WithBatching(TDuration::MilliSeconds(1), 1_GB), false);
+        // flush interval is big
+        testCase.AlterTransfer(MainTestCase::AlterTransferSettings::WithBatching(TDuration::Days(1) + TDuration::Seconds(1), 1_GB), false);
+
         testCase.AlterTransfer(MainTestCase::AlterTransferSettings::WithBatching(TDuration::Seconds(1), 1_GB));
 
         // check if there is data in the table

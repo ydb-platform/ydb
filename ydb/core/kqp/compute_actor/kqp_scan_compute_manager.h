@@ -164,7 +164,7 @@ public:
     private:
         YDB_READONLY_DEF(NActors::TActorId, ActorId);
         YDB_READONLY(ui64, FreeSpace, 0);
-        YDB_READONLY_DEF(TMonotonic, LastAckInstant, TMonotonic::Now());
+        YDB_READONLY(TMonotonic, LastAckInstant, TMonotonic::Now());
         std::deque<std::unique_ptr<TComputeTaskData>> DataQueue;
 
         bool SendData() {

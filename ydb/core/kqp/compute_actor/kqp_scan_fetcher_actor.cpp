@@ -85,7 +85,7 @@ void TKqpScanFetcherActor::Bootstrap() {
     Become(&TKqpScanFetcherActor::StateFunc);
 }
 
-void TKqpScanFetcherActor::HandleExecute(NActors::TEvents::TEvWakeup::TPtr& ev) {
+void TKqpScanFetcherActor::HandleExecute(NActors::TEvents::TEvWakeup::TPtr& /*ev*/) {
     const TMonotonic now = TMonotonic::Now();
     TMonotonic maxInstant = TMonotonic::Zero();
     for (auto&& i : InFlightComputes.GetComputeActors()) {
@@ -96,7 +96,7 @@ void TKqpScanFetcherActor::HandleExecute(NActors::TEvents::TEvWakeup::TPtr& ev) 
     TStringBuilder sb;
     sb << "[";
     for (auto&& i : InFlightComputes.GetPacksToSend()) {
-        sb << "{" << i.first << ":" << i.second << "}"
+        sb << "{" << i.first << ":" << i.second << "}";
     }
     sb << "];";
     sb << "[";

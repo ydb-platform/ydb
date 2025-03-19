@@ -740,6 +740,17 @@ message TGenericClusterConfig {
     reserved 2, 3, 5;
 }
 
+// Connection factory type
+enum EConnectionFactory {
+    FACTORY_UNSPECIFIED = 0;
+
+    // Single connection for all requests
+    SINGLE = 1;
+
+    // Create new connection for each request
+    NEW_FOR_EACH_REQUEST = 2;
+}
+
 message TGenericConnectorConfig {
     // There are two options to configure Connector network address:
     // 1. Set address statically via `Endpoint.Host` and `Endpoint.Port`;
@@ -754,13 +765,35 @@ message TGenericConnectorConfig {
     // If empty, the default system CA certificate pool will be used.
     optional string SslCaCrt = 5;
 
+    // Сonnection factory to use
+    // Default = SINGLE
+    optional EConnectionFactory Factory = 7;
+
+    // List of DataSourceKinds for which this connector can be used
+    // Default = empty
+    repeated EGenericDataSourceKind ForKinds = 8;
+
     reserved 1, 2;
 }
 
 message TGenericGatewayConfig {
-    // Connector service network endpoint
-    // TODO: replace with map<DataSourceKind, TGenericConnectorConfig>
+    //
+    // Default Connector service network endpoint.
+    //
+    // This field is interpreted as a "Default Connector".
+    // Used when "Connectors" does not contain an appropriate connector for a request's.
+    // EGenericDataSourceKind. The value of a field "Connector.ForKinds" is ignored.
+    //
     optional TGenericConnectorConfig Connector = 5;
+
+    //
+    // The list of Connectors.
+    // 
+    // When a request is served, firstly this list is checked.
+    // If the list has a connector for a request's EGenericDataSourceKind it will
+    // be applied to that request; otherwise, the "Default Connector" is used.
+    //
+    repeated TGenericConnectorConfig Connectors = 8;
 
     // Database clusters supported by this particular instance
     repeated TGenericClusterConfig ClusterMapping = 3;

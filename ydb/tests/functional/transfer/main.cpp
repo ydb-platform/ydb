@@ -241,7 +241,7 @@ struct MainTestCase {
         AlterTransfer(AlterTransferSettings::WithTransformLambda(lambda));
     }
 
-    void AlterTransfer(const AlterTransferSettings& settings) {
+    void AlterTransfer(const AlterTransferSettings& settings, bool success = true) {
         TString lambda = settings.TransformLambda ? *settings.TransformLambda : "";
         TString setLambda = settings.TransformLambda ? "SET USING $l" : "";
 
@@ -265,7 +265,7 @@ struct MainTestCase {
             %s
             %s;
         )", lambda.data(), TransferName.data(), setLambda.data(), setOptions.data()), TTxControl::NoTx()).GetValueSync();
-        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL_C(success, res.IsSuccess(), res.GetIssues().ToString());
     }
 
     void DropTransfer() {
@@ -1193,6 +1193,49 @@ Y_UNIT_TEST_SUITE(Transfer)
         }
 
         testCase.AlterTransfer(MainTestCase::AlterTransferSettings::WithBatching(TDuration::Seconds(1), 1_GB));
+
+        // check if there is data in the table
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }});
+    }
+
+    Y_UNIT_TEST(AlterBatchSize)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )");
+
+        testCase.CreateTopic(1);
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithBatching(TDuration::Hours(1), 512_MB));
+
+
+        testCase.Write({"Message-1"});
+
+        // batch size is big. alter is not success
+        testCase.AlterTransfer(MainTestCase::AlterTransferSettings::WithBatching(TDuration::Hours(1), 1_GB + 1), false);
+
+        // batch size is top valid value. alter is success
+        testCase.AlterTransfer(MainTestCase::AlterTransferSettings::WithBatching(TDuration::Hours(1), 1_GB));
+
+        // batch size is small. alter is success. after flush will
+        testCase.AlterTransfer(MainTestCase::AlterTransferSettings::WithBatching(TDuration::Hours(1), 1));
 
         // check if there is data in the table
         testCase.CheckResult({{

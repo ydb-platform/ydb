@@ -25,7 +25,7 @@ struct TReplicationStrategy : public IStrategy {
     };
 
     bool Validate(TProposeResponse&, const NKikimrSchemeOp::TReplicationDescription&) const override {
-        return false;
+        return true;
     }
 };
 
@@ -37,23 +37,24 @@ struct TTransferStrategy : public IStrategy {
     bool Validate(TProposeResponse& result, const NKikimrSchemeOp::TReplicationDescription& desc) const override {
         const auto& alter = desc.GetAlterTransfer();
         const auto& batching = desc.GetConfig().GetTransferSpecific().GetBatching();
+
         if ((alter.HasBatchSizeBytes() && alter.GetBatchSizeBytes() > 1_GB)
             || (batching.HasBatchSizeBytes() && batching.GetBatchSizeBytes() > 1_GB)) {
             result.SetError(NKikimrScheme::StatusInvalidParameter, "Batch size must be less than or equal to 1Gb");
-            return true;
+            return false;
         }
         if ((alter.HasFlushIntervalMilliSeconds() && alter.GetFlushIntervalMilliSeconds() < TDuration::Seconds(1).MilliSeconds())
             || (batching.HasFlushIntervalMilliSeconds() && batching.GetFlushIntervalMilliSeconds() < TDuration::Seconds(1).MilliSeconds())) {
             result.SetError(NKikimrScheme::StatusInvalidParameter, "Flush interval must be greater than or equal to 1 second");
-            return true;
+            return false;
         }
         if ((alter.HasFlushIntervalMilliSeconds() && alter.GetFlushIntervalMilliSeconds() > TDuration::Hours(24).MilliSeconds())
             || (batching.HasFlushIntervalMilliSeconds() && batching.GetFlushIntervalMilliSeconds() > TDuration::Hours(24).MilliSeconds())) {
             result.SetError(NKikimrScheme::StatusInvalidParameter, "Flush interval must be less than or equal to 24 hours");
-            return true;
+            return false;
         }
 
-        return false;
+        return true;
     }
 };
 
@@ -414,7 +415,7 @@ public:
             return result;
         }
 
-        if (!Strategy->Validate(*result, replication->Description)) {
+        if (!Strategy->Validate(*result, op)) {
             return result;
         }
 

@@ -356,6 +356,20 @@ struct MainTestCase {
         }
     }
 
+    void CheckTransferStateError(const TString& expectedMessage) {
+        for (size_t i = 20; i--;) {
+            auto result = DescribeTransfer().GetReplicationDescription();
+            if (TReplicationDescription::EState::Error == result.GetState()) {
+                Cerr << ">>>>> " << result.GetErrorState().GetIssues().ToOneLineString() << Endl << Flush;
+                UNIT_ASSERT(result.GetErrorState().GetIssues().ToOneLineString().contains(expectedMessage));
+                break;
+            }
+    
+            UNIT_ASSERT_C(i, "Unable to wait transfer error");
+            Sleep(TDuration::Seconds(1));
+        }
+    }
+
     void Run(const TConfig& config) {
 
         CreateTable(config.TableDDL);
@@ -1003,18 +1017,8 @@ Y_UNIT_TEST_SUITE(Transfer)
                     return $x._unknown_field_for_lambda_compilation_error;
                 };
             )");
-
-        for (size_t i = 20; i--;) {
-            auto result = testCase.DescribeTransfer().GetReplicationDescription();
-            if (TReplicationDescription::EState::Error == result.GetState()) {
-                Cerr << ">>>>> " << result.GetErrorState().GetIssues().ToOneLineString() << Endl << Flush;
-                UNIT_ASSERT(result.GetErrorState().GetIssues().ToOneLineString().contains("_unknown_field_for_lambda_compilation_error"));
-                break;
-            }
-
-            UNIT_ASSERT_C(i, "Unable to wait transfer error");
-            Sleep(TDuration::Seconds(1));
-        }
+        
+        testCase.CheckTransferStateError("_unknown_field_for_lambda_compilation_error");
     }
 /*
     Y_UNIT_TEST(DescribeError_OnWriteToShard)
@@ -1044,17 +1048,7 @@ Y_UNIT_TEST_SUITE(Transfer)
         
         testCase.Write({"message-1"});
 
-        for (size_t i = 20; i--;) {
-            auto result = testCase.DescribeTransfer().GetReplicationDescription();
-            if (TReplicationDescription::EState::Error == result.GetState()) {
-                Cerr << ">>>>> " << result.GetErrorState().GetIssues().ToOneLineString() << Endl << Flush;
-                UNIT_ASSERT(result.GetErrorState().GetIssues().ToOneLineString().contains("Cannot write data into shard"));
-                break;
-            }
-
-            UNIT_ASSERT_C(i, "Unable to wait transfer error");
-            Sleep(TDuration::Seconds(1));
-        }
+        testCase.CheckTransferStateError("Cannot write data into shard");
     }
 */
 
@@ -1241,6 +1235,59 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.CheckResult({{
             _C("Message", TString("Message-1"))
         }});
+    }
+
+    Y_UNIT_TEST(CreateTransferTopicNotExists)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8 NOT NULL,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )");
+        
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )");
+
+        testCase.CheckTransferStateError("Discovery error: local/Topic_");
+    }
+
+    Y_UNIT_TEST(CreateTransferRowTable)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8 NOT NULL,
+                    PRIMARY KEY (Key)
+                );
+            )");
+        testCase.CreateTopic();
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )");
+
+        testCase.CheckTransferStateError("Unexpected entry kind at 'writer'");
     }
 }
 

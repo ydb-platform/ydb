@@ -3,8 +3,108 @@
 #include "manager.h"
 
 #include <ydb/core/tx/conveyor/usage/service.h>
+#include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 namespace NKikimr::NOlap::NReader {
+
+class TSimpleFetchLogic: public NCommon::IKernelFetchLogic {
+private:
+    using TBase = IKernelFetchLogic;
+
+    class TChunkRestoreInfo {
+    private:
+        std::optional<TBlobRange> BlobRange;
+        std::optional<TPortionDataAccessor::TAssembleBlobInfo> Data;
+        const ui32 RecordsCount;
+
+    public:
+        TChunkRestoreInfo(const ui32 recordsCount, const TBlobRange& range)
+            : BlobRange(range)
+            , RecordsCount(recordsCount) {
+        }
+
+        const std::optional<TBlobRange>& GetBlobRangeOptional() const {
+            return BlobRange;
+        }
+
+        TChunkRestoreInfo(const ui32 recordsCount, const TPortionDataAccessor::TAssembleBlobInfo& defaultData)
+            : Data(defaultData)
+            , RecordsCount(recordsCount) {
+        }
+
+        TPortionDataAccessor::TAssembleBlobInfo ExtractDataVerified() {
+            AFL_VERIFY(!!Data);
+            Data->SetExpectedRecordsCount(RecordsCount);
+            return std::move(*Data);
+        }
+
+        void SetBlobData(const TString& data) {
+            AFL_VERIFY(!Data);
+            Data.emplace(data);
+        }
+    };
+
+    std::vector<TColumnRecord> ColumnChunksExt;
+    std::vector<TChunkRestoreInfo> ColumnChunks;
+    std::optional<TString> StorageId;
+
+    virtual void DoOnDataCollected(NCommon::TFetchingResultContext& context) override {
+        // TODO: why? investigate in simple reader or ask
+        // AFL_VERIFY(!IIndexInfo::IsSpecialColumn(GetEntityId()));
+        std::vector<TPortionDataAccessor::TAssembleBlobInfo> chunks;
+        for (auto&& i : ColumnChunks) {
+            chunks.emplace_back(i.ExtractDataVerified());
+        }
+
+        TPortionDataAccessor::TPreparedColumn column(
+            std::move(chunks), context.GetSource()->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId()));
+        context.GetAccessors().AddVerified(GetEntityId(), column.AssembleAccessor().DetachResult(), true);
+    }
+
+    virtual void DoOnDataReceived(TReadActionsCollection& /*nextRead*/, NBlobOperations::NRead::TCompositeReadBlobs& blobs) override {
+        if (ColumnChunks.empty()) {
+            return;
+        }
+        for (auto&& i : ColumnChunks) {
+            if (!i.GetBlobRangeOptional()) {
+                continue;
+            }
+            AFL_VERIFY(!!StorageId);
+            i.SetBlobData(blobs.Extract(*StorageId, *i.GetBlobRangeOptional()));
+        }
+    }
+
+    virtual void DoStart(TReadActionsCollection& nextRead, NCommon::TFetchingResultContext& context) override {
+        auto source = context.GetSource();
+        // TODO: CRIT -> TRACE
+        AFL_CRIT(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicate_filter_manager")("event", "start_fetching_columns")(
+            "column_id", GetEntityId())("column_chunks", ColumnChunksExt.size());
+        if (ColumnChunksExt.empty()) {
+            ColumnChunks.emplace_back(source->GetRecordsCount(), TPortionDataAccessor::TAssembleBlobInfo(source->GetRecordsCount(),
+                                                                     source->GetSourceSchema()->GetExternalDefaultValueVerified(GetEntityId())));
+            return;
+        }
+        StorageId = source->GetColumnStorageId(GetEntityId());
+        TBlobsAction blobsAction(source->GetContext()->GetCommonContext()->GetStoragesManager(), NBlobOperations::EConsumer::SCAN);
+        auto reading = blobsAction.GetReading(*StorageId);
+        auto filterPtr = source->GetStageData().GetAppliedFilter();
+        for (auto&& c : ColumnChunksExt) {
+            reading->SetIsBackgroundProcess(false);
+            reading->AddRange(source->RestoreBlobRange(c.BlobRange));
+            ColumnChunks.emplace_back(c.GetMeta().GetRecordsCount(), source->RestoreBlobRange(c.BlobRange));
+        }
+        ColumnChunksExt.clear();
+        for (auto&& i : blobsAction.GetReadingActions()) {
+            nextRead.Add(i);
+        }
+    }
+
+public:
+    TSimpleFetchLogic(const ui32 entityId, const std::shared_ptr<IStoragesManager>& storagesManager, std::vector<TColumnRecord>&& columnChunks)
+        : TBase(entityId, storagesManager)
+        , ColumnChunksExt(std::move(columnChunks)) {
+    }
+};
 
 class TColumnFetchingContext {
 private:
@@ -97,7 +197,8 @@ private:
             NConveyor::TScanServiceOperator::SendTaskToExecute(
                 task, Context->GetConstructor()->GetSource()->GetContext()->GetCommonContext()->GetConveyorProcessId());
         } else {
-            std::shared_ptr<TColumnsFetcherTask> nextReadTask = std::make_shared<TColumnsFetcherTask>(std::move(readActions), Context);
+            std::shared_ptr<TColumnsFetcherTask> nextReadTask =
+                std::make_shared<TColumnsFetcherTask>(std::move(readActions), Context, std::move(DataFetchers));
             NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(nextReadTask));
         }
     }
@@ -108,9 +209,11 @@ private:
     }
 
 public:
-    TColumnsFetcherTask(const TReadActionsCollection& actions, const std::shared_ptr<TColumnFetchingContext>& context)
+    TColumnsFetcherTask(const TReadActionsCollection& actions, const std::shared_ptr<TColumnFetchingContext>& context,
+        THashMap<ui32, std::shared_ptr<NCommon::IKernelFetchLogic>>&& fetchers)
         : TBase(actions, "DUPLICATES", context->GetConstructor()->GetSource()->GetContext()->GetReadMetadata()->GetScanIdentifier())
-        , Context(context) {
+        , Context(context)
+        , DataFetchers(std::move(fetchers)) {
     }
 };
 
@@ -137,6 +240,59 @@ public:
         : TBase(mem)
         , Action(action)
         , Context(context) {
+    }
+};
+
+class TPortionAccessorFetchingSubscriber: public IDataAccessorRequestsSubscriber {
+private:
+    std::shared_ptr<TColumnFetchingContext> Context;
+    ui64 MemoryGroupId;
+
+    virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
+        return Context->GetConstructor()->GetSource()->GetContext()->GetCommonContext()->GetAbortionFlag();
+    }
+
+    virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
+        AFL_VERIFY(!result.HasErrors());
+        AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
+        const TPortionDataAccessor& portionAccessor = result.GetPortionAccessorVerified(Context->GetConstructor()->GetSource()->GetSourceId());
+
+        const std::set<ui32> columnIds(Context->GetResultSchema()->GetColumnIds().begin(), Context->GetResultSchema()->GetColumnIds().end());
+        THashMap<ui32, std::shared_ptr<NCommon::IKernelFetchLogic>> fetchers;
+        TReadActionsCollection readActions;
+
+        for (const ui32 columnId : columnIds) {
+            std::vector<TColumnRecord> columnCunks;
+            for (const auto* record : portionAccessor.GetColumnChunksPointers(columnId)) {
+                columnCunks.emplace_back(*record);
+            }
+
+            std::shared_ptr<NCommon::IKernelFetchLogic> fetcher = std::make_shared<TSimpleFetchLogic>(columnId,
+                Context->GetConstructor()->GetSource()->GetContext()->GetCommonContext()->GetStoragesManager(), std::move(columnCunks));
+
+            {
+                NArrow::NAccessor::TAccessorsCollection emptyTable;
+                NIndexes::TIndexesCollection emptyIndexes;
+                NCommon::TFetchingResultContext contextFetch(emptyTable, emptyIndexes, Context->GetConstructor()->GetSource());
+                fetcher->Start(readActions, contextFetch);
+            }
+            fetchers.emplace(columnId, fetcher);
+        }
+        AFL_VERIFY(!readActions.IsEmpty());
+        auto fetchingTask = std::make_shared<TColumnsFetcherTask>(std::move(readActions), Context, std::move(fetchers));
+
+        const ui64 mem = portionAccessor.GetColumnRawBytes(columnIds, false);
+        auto allocationTask = std::make_shared<TColumnsMemoryAllocation>(mem, fetchingTask, Context);
+        NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(
+            Context->GetConstructor()->GetSource()->GetContext()->GetProcessMemoryControlId(),
+            Context->GetConstructor()->GetSource()->GetContext()->GetCommonContext()->GetScanId(), MemoryGroupId, { allocationTask },
+            (ui32)NCommon::EStageFeaturesIndexes::Filter);
+    }
+
+public:
+    TPortionAccessorFetchingSubscriber(const std::shared_ptr<TColumnFetchingContext>& context, const ui64 memoryGroupId)
+        : Context(context)
+        , MemoryGroupId(memoryGroupId) {
     }
 };
 }   // namespace NKikimr::NOlap::NReader

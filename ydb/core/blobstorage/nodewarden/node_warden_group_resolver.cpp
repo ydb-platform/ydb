@@ -336,9 +336,12 @@ namespace NKikimr::NStorage {
         if (const auto it = Groups.find(r.GetGroupId()); it != Groups.end() && it->second.Group) {
             record.MutableGroup()->CopyFrom(*it->second.Group);
         }
+        THashSet<TGroupId> groupsAdded;
         for (const auto& [key, value] : LocalVDisks) {
             if (const auto& r = value.RuntimeData; r && !r->DonorMode) {
-                record.AddStartedGroupIds(r->GroupInfo->GroupID.GetRawId());
+                if (const auto& groupId = r->GroupInfo->GroupID; groupsAdded.insert(groupId).second) {
+                    record.AddStartedGroupIds(groupId.GetRawId());
+                }
             }
         }
         Send(ev->Sender, res.release(), 0, ev->Cookie);

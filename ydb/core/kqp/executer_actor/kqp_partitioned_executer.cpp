@@ -32,8 +32,6 @@ class TKqpPartitionedExecuter : public TActorBootstrapped<TKqpPartitionedExecute
         TMaybe<TKeyDesc::TPartitionRangeInfo> BeginRange;
         TMaybe<TKeyDesc::TPartitionRangeInfo> EndRange;
         size_t PartitionIdx = 0;
-        bool IsFirstQuery = false;
-        bool IsLastQuery = false;
         ui64 LimitSize = 0;
         TActorId ExecuterId;
         TActorId BufferId;
@@ -178,8 +176,6 @@ public:
             auto ptr = std::make_shared<TBatchPartitionInfo>();
             ptr->EndRange = partitioning->at(i).Range;
             ptr->PartitionIdx = i;
-            ptr->IsFirstQuery = (i == 0);
-            ptr->IsLastQuery = (i + 1 == partitioning->size());
             ptr->LimitSize = BatchOperationSettings.MaxBatchSize;
 
             if (i > 0) {
@@ -375,7 +371,6 @@ public:
                 /* IsInclusive */ false,
                 /* IsPoint */ false
             );
-            partInfo->IsFirstQuery = false;
             RetryPartExecution(exId, /* fromBuffer */ false);
             return;
         }
@@ -421,7 +416,7 @@ public:
     }
 
     void RetryPartExecution(TActorId actorId, bool fromBuffer) {
-        PE_LOG_I("Got retry error from ActorId = " << actorId << ", retry execution");
+        PE_LOG_I("Retry query execution for ActorId = " << actorId << " , fromBuffer = " << fromBuffer);
 
         auto it = (fromBuffer) ? BufferPartition.find(actorId) : ExecuterPartition.find(actorId);
         if (it == BufferPartition.end() || it == ExecuterPartition.end()) {
@@ -551,9 +546,6 @@ private:
 
         auto& queryData = request.Transactions.front().Params;
         auto& partition = Partitions[partitionIdx];
-
-        FillRequestParameter(queryData, NBatchParams::IsFirstQuery, partition->IsFirstQuery);
-        FillRequestParameter(queryData, NBatchParams::IsLastQuery, partition->IsLastQuery);
 
         FillRequestRange(queryData, partition->BeginRange, /* isBegin */ true);
         FillRequestRange(queryData, partition->EndRange, /* isBegin */ false);
@@ -747,14 +739,11 @@ private:
         TStringBuilder builder;
         builder << "Fill request with parameters for partitionIdx = " << partitionIdx << ": ";
 
-        auto [isFirstQueryType, isFirstQueryValue] = queryData->GetParameterUnboxedValue(NBatchParams::IsFirstQuery);
-        auto [isLastQueryType, isLastQueryValue] = queryData->GetParameterUnboxedValue(NBatchParams::IsLastQuery);
-
-        builder << "IsFirstQuery = " << isFirstQueryValue.Get<bool>();
-        builder << ", IsLastQuery = " << isLastQueryValue.Get<bool>() << ", ";
-
         auto [isInclusiveLeftType, isInclusiveLeftValue] = queryData->GetParameterUnboxedValue(NBatchParams::IsInclusiveLeft);
         auto [isInclusiveRightType, isInclusiveRightValue] = queryData->GetParameterUnboxedValue(NBatchParams::IsInclusiveRight);
+
+        auto [beginPrefixSizeType, beginPrefixSizeValue] = queryData->GetParameterUnboxedValue(NBatchParams::BeginPrefixSize);
+        auto [endPrefixSizeType, endPrefixSizeValue] = queryData->GetParameterUnboxedValue(NBatchParams::EndPrefixSize);
 
         builder << "(";
 
@@ -766,7 +755,7 @@ private:
             auto endName = NBatchParams::End + ToString(paramIndex + 1);
             auto [endType, endValue] = queryData->GetParameterUnboxedValue(endName);
 
-            if (isFirstQueryValue.Get<bool>()) {
+            if (i >= beginPrefixSizeValue.Get<ui32>()) {
                 builder << "-inf";
             } else {
                 builder << "[" << beginValue << "]";
@@ -776,7 +765,7 @@ private:
             builder << ("Column" + ToString(paramIndex + 1));
 
             builder << ((isInclusiveRightValue.Get<bool>()) ? " <= " : " < ");
-            if (isLastQueryValue.Get<bool>()) {
+            if (i >= endPrefixSizeValue.Get<ui32>()) {
                 builder << "+inf";
             } else {
                 builder << "[" << endValue << "]";

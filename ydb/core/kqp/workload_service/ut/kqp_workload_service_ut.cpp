@@ -1164,4 +1164,433 @@ Y_UNIT_TEST_SUITE(ResourcePoolClassifiersSysView) {
     }
 }
 
+Y_UNIT_TEST_SUITE(ResourcePoolsSysView) {
+    Y_UNIT_TEST(TestResourcePoolsSysViewOnServerless) {
+        auto ydb = TYdbSetupSettings()
+            .CreateSampleTenants(true)
+            .EnableResourcePoolsOnServerless(true)
+            .Create();
+
+        const auto& serverlessTenant = ydb->GetSettings().GetServerlessTenantName();
+        const auto& sharedTenant = ydb->GetSettings().GetSharedTenantName();
+
+        auto settings = TQueryRunnerSettings()
+            .PoolId("")
+            .NodeIndex(1);
+
+        ydb->ExecuteQueryRetry("Wait TestResourcePoolClassifiersSysViewOnServerless", TStringBuilder() << R"(
+            CREATE RESOURCE POOL a WITH (
+                CONCURRENT_QUERY_LIMIT=1,
+                QUEUE_SIZE=0
+            );
+            CREATE RESOURCE POOL b WITH (
+                CONCURRENT_QUERY_LIMIT=2,
+                QUEUE_SIZE=0
+            );
+        )", settings.Database(serverlessTenant));
+
+        ydb->ExecuteQueryRetry("Wait TestResourcePoolClassifiersSysViewOnServerless", TStringBuilder() << R"(
+            CREATE RESOURCE POOL c WITH (
+                CONCURRENT_QUERY_LIMIT=1,
+                QUEUE_SIZE=0
+            );
+            CREATE RESOURCE POOL d WITH (
+                CONCURRENT_QUERY_LIMIT=2,
+                QUEUE_SIZE=0
+            );
+        )", settings.Database(sharedTenant));
+
+        {  // Check tables
+            auto result = ydb->ExecuteQuery(R"(
+                SELECT * FROM `.sys/resource_pools` ORDER BY Name ASC
+            )", settings.PoolId(NResourcePool::DEFAULT_POOL_ID).Database(serverlessTenant));
+            TSampleQueries::CheckSuccess(result);
+
+            NYdb::TResultSetParser resultSet(result.GetResultSet(0));
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            auto name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "a");
+            auto concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, 1);
+            auto queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, 0);
+            auto databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            auto resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            auto totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            auto queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            auto queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "b");
+            concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, 2);
+            queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, 0);
+            databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "default");
+            concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, -1);
+            queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, -1);
+            databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+
+            UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
+        }
+
+        {  // Check tables
+            auto result = ydb->ExecuteQuery(R"(
+                SELECT * FROM `.sys/resource_pools` ORDER BY Name ASC
+            )", settings.PoolId(NResourcePool::DEFAULT_POOL_ID).Database(sharedTenant));
+            TSampleQueries::CheckSuccess(result);
+
+            NYdb::TResultSetParser resultSet(result.GetResultSet(0));
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            auto name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "c");
+            auto concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, 1);
+            auto queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, 0);
+            auto databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            auto resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            auto totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            auto queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            auto queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+
+
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "d");
+            concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, 2);
+            queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, 0);
+            databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "default");
+            concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, -1);
+            queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, -1);
+            databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+            UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
+        }
+    }
+
+    Y_UNIT_TEST(TestResourcePoolsSysViewFilters) {
+        auto ydb = TYdbSetupSettings()
+            .CreateSampleTenants(true)
+            .EnableResourcePoolsOnServerless(true)
+            .Create();
+
+        const auto& dedicatedTenant = ydb->GetSettings().GetDedicatedTenantName();
+
+        auto settings = TQueryRunnerSettings()
+            .PoolId("")
+            .NodeIndex(1);
+
+        const TString& poolId = "my_pool";
+        ydb->ExecuteQueryRetry("Wait TestResourcePoolClassifiersSysViewOnServerless", TStringBuilder() << R"(
+            CREATE RESOURCE POOL a WITH (
+                CONCURRENT_QUERY_LIMIT=1,
+                QUEUE_SIZE=0
+            );
+            CREATE RESOURCE POOL b WITH (
+                CONCURRENT_QUERY_LIMIT=2,
+                QUEUE_SIZE=0
+            );
+            CREATE RESOURCE POOL c WITH (
+                CONCURRENT_QUERY_LIMIT=3,
+                QUEUE_SIZE=0
+            );
+        )", settings.Database(dedicatedTenant));
+
+        {  // Check tables
+            auto result = ydb->ExecuteQuery(R"(
+                SELECT * FROM `.sys/resource_pools` ORDER BY Name ASC
+            )", settings.PoolId(NResourcePool::DEFAULT_POOL_ID).Database(dedicatedTenant));
+            TSampleQueries::CheckSuccess(result);
+
+            NYdb::TResultSetParser resultSet(result.GetResultSet(0));
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            auto name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "a");
+            auto concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, 1);
+            auto queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, 0);
+            auto databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            auto resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            auto totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            auto queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            auto queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "b");
+            concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, 2);
+            queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, 0);
+            databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "c");
+            concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, 3);
+            queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, 0);
+            databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "default");
+            concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, -1);
+            queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, -1);
+            databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+
+            UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
+        }
+
+        {  // Check tables
+            auto result = ydb->ExecuteQuery(R"(
+                SELECT * FROM `.sys/resource_pools` ORDER BY Name DESC
+            )", settings.PoolId(NResourcePool::DEFAULT_POOL_ID).Database(dedicatedTenant));
+            TSampleQueries::CheckSuccess(result);
+
+            NYdb::TResultSetParser resultSet(result.GetResultSet(0));
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            auto name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "default");
+            auto concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, -1);
+            auto queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, -1);
+            auto databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            auto resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            auto totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            auto queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            auto queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "c");
+            concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, 3);
+            queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, 0);
+            databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "b");
+            concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, 2);
+            queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, 0);
+            databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "a");
+            concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, 1);
+            queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, 0);
+            databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+
+            UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
+        }
+
+        {  // Check tables
+            auto result = ydb->ExecuteQuery(R"(
+                SELECT * FROM `.sys/resource_pools` WHERE "a" < Name AND Name < "c"
+            )", settings.PoolId(NResourcePool::DEFAULT_POOL_ID).Database(dedicatedTenant));
+            TSampleQueries::CheckSuccess(result);
+
+            NYdb::TResultSetParser resultSet(result.GetResultSet(0));
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            auto name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "b");
+            auto concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, 2);
+            auto queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, 0);
+            auto databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            auto resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            auto totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            auto queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            auto queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+
+            UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
+        }
+
+        {  // Check tables
+            auto result = ydb->ExecuteQuery(R"(
+                SELECT * FROM `.sys/resource_pools` WHERE Name >= "default"
+            )", settings.PoolId(NResourcePool::DEFAULT_POOL_ID).Database(dedicatedTenant));
+            TSampleQueries::CheckSuccess(result);
+
+            NYdb::TResultSetParser resultSet(result.GetResultSet(0));
+            UNIT_ASSERT_C(resultSet.TryNextRow(), "Unexpected row count");
+
+            auto name = resultSet.ColumnParser("Name").GetOptionalUtf8();
+            UNIT_ASSERT_VALUES_EQUAL(*name, "default");
+            auto concurrentQueryLimit = resultSet.ColumnParser("ConcurrentQueryLimit").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*concurrentQueryLimit, -1);
+            auto queueSize = resultSet.ColumnParser("QueueSize").GetOptionalInt32();
+            UNIT_ASSERT_VALUES_EQUAL(*queueSize, -1);
+            auto databaseLoadCpuThreshold = resultSet.ColumnParser("DatabaseLoadCpuThreshold").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*databaseLoadCpuThreshold, -1);
+            auto resourceWeight = resultSet.ColumnParser("ResourceWeight").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*resourceWeight, -1);
+            auto totalCpuLimitPercentPerNode = resultSet.ColumnParser("TotalCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*totalCpuLimitPercentPerNode, -1);
+            auto queryCpuLimitPercentPerNode = resultSet.ColumnParser("QueryCpuLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryCpuLimitPercentPerNode, -1);
+            auto queryMemoryLimitPercentPerNode = resultSet.ColumnParser("QueryMemoryLimitPercentPerNode").GetOptionalDouble();
+            UNIT_ASSERT_VALUES_EQUAL(*queryMemoryLimitPercentPerNode, -1);
+
+            UNIT_ASSERT_C(!resultSet.TryNextRow(), "Unexpected row count");
+        }
+    }
+}
+
 }  // namespace NKikimr::NKqp

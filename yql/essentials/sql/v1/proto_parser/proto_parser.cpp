@@ -27,7 +27,7 @@ namespace NSQLTranslationV1 {
 
 namespace {
 
-void ReportError(NProtoAST::IErrorCollector& err, const TString& name) {
+void ReportError(NAST::IErrorCollector& err, const TString& name) {
     err.Error(0, 0, TStringBuilder() << "Parser " << name << " is not supported");
 }
 
@@ -39,7 +39,7 @@ google::protobuf::Message* SqlAST(const TParsers& parsers, const TString& query,
     return SqlAST(parsers, query, queryName, collector, ansiLexer, anlr4Parser, arena);
 }
 
-google::protobuf::Message* SqlAST(const TParsers& parsers, const TString& query, const TString& queryName, NProtoAST::IErrorCollector& err,
+google::protobuf::Message* SqlAST(const TParsers& parsers, const TString& query, const TString& queryName, NAST::IErrorCollector& err,
     bool ansiLexer, bool anlr4Parser, google::protobuf::Arena* arena) {
     YQL_ENSURE(arena);
 #if defined(_tsan_enabled_)

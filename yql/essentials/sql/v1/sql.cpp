@@ -20,7 +20,7 @@ TAstNode* SqlASTToYql(const google::protobuf::Message& protoAst, TContext& ctx) 
         if (node && node->Init(ctx, nullptr)) {
             return node->Translate(ctx);
         }
-    } catch (const NProtoAST::TTooManyErrors&) {
+    } catch (const NAST::TTooManyErrors&) {
         // do not add error issue, no room for it
     }
 
@@ -34,7 +34,7 @@ TAstNode* SqlASTsToYqls(const std::vector<::NSQLv1Generated::TRule_sql_stmt_core
         if (node && node->Init(ctx, nullptr)) {
             return node->Translate(ctx);
         }
-    } catch (const NProtoAST::TTooManyErrors&) {
+    } catch (const NAST::TTooManyErrors&) {
         // do not add error issue, no room for it
     }
 

@@ -82,7 +82,7 @@ class TestReadUpdateWriteLoad(BaseTestSet):
                         hist.timeit(lambda: sth.bulk_upsert_data(self.big_table_name, self.big_table_schema, batch))
         print(hist, file=sys.stderr)
 
-    def scenario_read_data_during_bulk_upsert(self, ctx: TestContext):
+    def scenario_read_update_write_load(self, ctx: TestContext):
         sth = ScenarioTestHelper(ctx)
         table_size_mib = int(get_external_param("table_size_mib", "64"))
 

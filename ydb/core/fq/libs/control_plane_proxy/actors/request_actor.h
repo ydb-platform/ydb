@@ -93,7 +93,7 @@ public:
     }
 
     void HandleTimeout() {
-        CPP_LOG_D("Request timeout. " << SecureDebugString(RequestProxy->Get()->Request));
+        CPP_LOG_D("Request timeout. " << NKikimr::SecureDebugString(RequestProxy->Get()->Request));
         NYql::TIssues issues;
         NYql::TIssue issue =
             MakeErrorIssue(TIssuesIds::TIMEOUT,

@@ -68,7 +68,7 @@ public:
             const auto* clusterDesc = State_->Configuration->ClusterConfigs.FindPtr(clusterName);
             auto& settings = soReadObject.Object().Settings().Ref();
 
-            if (auto maybeSelectors = ExtractSetting(settings, "selectors"); maybeSelectors) {
+            if (auto maybeSelectors = ExtractSetting(settings, "selectors")) {
                 NSo::NProto::TDqSolomonSource source;
                 source.SetEndpoint(clusterDesc->GetCluster());
                 source.SetProject(soReadObject.Object().Project().StringValue());
@@ -81,9 +81,9 @@ public:
                 auto providerFactory = CreateCredentialsProviderFactoryForStructuredToken(State_->CredentialsFactory, State_->Configuration->Tokens.at(clusterName));
                 auto credentialsProvider = providerFactory->CreateProvider();
 
-                SolomonClient = NSo::ISolomonAccessorClient::Make(std::move(source), credentialsProvider);
-                auto future = SolomonClient->GetLabelNames(*maybeSelectors);
-                
+                SolomonClient_ = NSo::ISolomonAccessorClient::Make(std::move(source), credentialsProvider);
+                auto future = SolomonClient_->GetLabelNames(*maybeSelectors);
+
                 LabelNamesRequests_[soReadObject.Raw()] = future;
                 futures.push_back(future);
             }
@@ -142,7 +142,7 @@ private:
     TSolomonState::TPtr State_;
     NThreading::TFuture<void> AllFuture_;
 
-    NSo::ISolomonAccessorClient::TPtr SolomonClient;
+    NSo::ISolomonAccessorClient::TPtr SolomonClient_;
     TNodeMap<NThreading::TFuture<NSo::TGetLabelsResponse>> LabelNamesRequests_;
 };
 

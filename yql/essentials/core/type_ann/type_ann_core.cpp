@@ -12915,6 +12915,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["WithOptionalArgs"] = &WithOptionalArgsWrapper;
         Functions["WithContext"] = &WithContextWrapper;
         Functions["EmptyFrom"] = &EmptyFromWrapper;
+        Functions["PruneAdjacentKeys"] = &PruneKeysWrapper;
+        Functions["PruneKeys"] = &PruneKeysWrapper;
 
         Functions["DecimalDiv"] = &DecimalBinaryWrapper;
         Functions["DecimalMod"] = &DecimalBinaryWrapper;

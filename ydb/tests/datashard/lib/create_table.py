@@ -4,9 +4,9 @@ ttl_types = {
     "Date": "CAST('20{:02}-01-01' AS Date)",
     "Datetime": "CAST('20{:02}-10-02T11:00:00Z' AS Datetime)",
     "Timestamp": "CAST(269624{:02}00000000 AS Timestamp)",
-    "Uint32": "CAST({} AS Uint32)",
-    "Uint64": "CAST({} AS Uint64)",
-    "DyNumber": "CAST({} AS DyNumber)",
+    "Uint32": "CAST({}0 AS Uint32)",
+    "Uint64": "CAST({}0 AS Uint64)",
+    "DyNumber": "CAST('{}E1' AS DyNumber)",
 }
 
 

@@ -20,7 +20,7 @@ Building on the high-level overview in [{#T}](index.md), this article dives deep
 3. *(optional)* **Author** shares a link to the pull request in a [community](https://t.me/ydb_en) or documentation-related chat for extra visibility.
 4. A **primary reviewer** gets automatically assigned or picks the pull request from the [inbound list](https://github.com/ydb-platform/ydb/pulls?q=is%3Aopen+is%3Apr+label%3Adocumentation+draft%3Afalse+no%3Aassignee) via the "assign yourself" button, and then provides the initial set of feedback and suggestions.
 
-   {% cut "Temporarily excluding yourself from automatic assignment if you're a primary reviewer"}
+   {% cut "Temporarily excluding yourself from automatic assignment if you're a primary reviewer" %}
 
    ![Excluding yourself from primary reviewers](./_assets/excluding-primary-reviewer.jpeg)
 

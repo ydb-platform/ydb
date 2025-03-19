@@ -72,7 +72,7 @@ namespace NYql::NConnector {
         ///
         /// Creates a new connection for each method call. It is safe to dispose
         /// connection after making request. All necessary data will be held in a
-        /// request object (@sa TGRpcRequestProcessorCommon's descedants).
+        /// request object (@sa TGRpcRequestProcessorCommon's descendants).
         ///
         /// Hence the call Create()->DoRequest(...) is absolutely legitimate.
         ///
@@ -91,8 +91,71 @@ namespace NYql::NConnector {
     };
 
     ///
-    /// TODO: PooledConnectionFactory. Factory which returns a connection from a pool
+    ///  Experimental Pool Factory (do not use it in a prod)
+    ///  which returns a connection from a pool.
     ///
+    ///  TODO:
+    ///  1. Ttl for connections.
+    ///  2. Check if a connection in a pool is broken and replace it.
+    ///  3. Need to choose balancing strategy.
+    ///
+    template<typename T>
+    class TFixedPoolConnectionFactory final: public IConnectionFactory<T> {
+    public:
+        TFixedPoolConnectionFactory(
+            int size,
+            std::shared_ptr<NYdbGrpc::TGRpcClientLow> Client,
+            const NYdbGrpc::TGRpcClientConfig & GrpcConfig
+        )
+            : Client_(Client)
+            , GrpcConfig_(GrpcConfig)
+        {
+            init(size);
+        }
+
+        TFixedPoolConnectionFactory(
+            int size,
+            std::shared_ptr<NYdbGrpc::TGRpcClientLow> Client,
+            const NYdbGrpc::TGRpcClientConfig & GrpcConfig,
+            const NYdbGrpc::TTcpKeepAliveSettings & KeepAlive
+        )
+            : Client_(Client)
+            , GrpcConfig_(GrpcConfig)
+            , KeepAlive_(KeepAlive)
+        {
+            init(size);
+        }
+    private:
+        void init(int size) {
+            for(int i = 0; i < size; ++i) {
+                auto r = KeepAlive_ ?
+                    Client_->CreateGRpcServiceConnection<T>(GrpcConfig_, *KeepAlive_)
+                    : Client_->CreateGRpcServiceConnection<T>(GrpcConfig_);
+
+                Pool_.push_back(std::move(r));
+            }
+
+            Size_ = size;
+        }
+
+    public:
+        std::shared_ptr<NYdbGrpc::TServiceConnection<T>> Create() override {
+            // Round Robin Balancing
+            auto n = NextSlot_++;
+            auto r = Pool_.at(n % Size_);
+            auto expectedVal = n + 1;
+
+            NextSlot_.compare_exchange_weak(expectedVal, expectedVal % Size_);
+            return r;
+        }
+    private:
+        int Size_;
+        std::atomic_long NextSlot_;
+        std::shared_ptr<NYdbGrpc::TGRpcClientLow> Client_;
+        const NYdbGrpc::TGRpcClientConfig GrpcConfig_;
+        const std::optional<NYdbGrpc::TTcpKeepAliveSettings> KeepAlive_;
+        std::vector<std::shared_ptr<NYdbGrpc::TServiceConnection<T>>> Pool_;
+    };
 
     /*
 
@@ -144,7 +207,7 @@ namespace NYql::NConnector {
     class TClientGRPC: public IClient {
     public:
         TClientGRPC(const TGenericConnectorConfig& config) {
-            GrpcClient_ = std::make_shared<NYdbGrpc::TGRpcClientLow>();
+            GrpcClient_ = std::make_shared<NYdbGrpc::TGRpcClientLow>(20);
             auto grpcConfig = ConnectorConfigToGrpcConfig(config);
 
             auto keepAlive = NYdbGrpc::TTcpKeepAliveSettings {
@@ -219,7 +282,7 @@ namespace NYql::NConnector {
         /// @param[in] kind             Datasource's kind, it is a key to choose which connector will be queried 
         /// @param[in] request          Request's data 
         /// @param[in] rpc              Method on a Stub which will be executed 
-        /// @param[in] timeour          How long to wait a response 
+        /// @param[in] timeout          How long to wait a response 
         ///
         /// @return                     Future that provides with a streaming response 
         ///

@@ -152,7 +152,6 @@ Y_UNIT_TEST_SUITE(TExternalDataSourceTestReboots) {
                 TestDescribeResult(DescribePath(runtime, "/MyRoot/ExternalDataSource"),
                                    {NLs::PathNotExist});
 
-                UpdateQueryServiceConfig(runtime);
                 TestCreateExternalDataSource(runtime, ++t.TxId, "/MyRoot", R"(
                         Name: "ExternalDataSource"
                         SourceType: "ObjectStorage"

@@ -12,6 +12,7 @@ PY3_LIBRARY()
 
     PEERDIR(
         contrib/python/boto3
+        contrib/python/numpy
         library/recipes/common
         ydb/public/sdk/python
     )

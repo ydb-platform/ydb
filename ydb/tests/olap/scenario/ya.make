@@ -25,7 +25,6 @@ PY3TEST()
         contrib/python/allure-python-commons
         contrib/python/boto3
         contrib/python/moto
-        contrib/python/numpy
         contrib/python/requests
         library/python/testing/yatest_common
         library/recipes/common

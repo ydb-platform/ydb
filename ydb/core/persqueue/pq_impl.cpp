@@ -232,6 +232,17 @@ private:
                 }
             }
         }
+
+        if (isDirectRead) {
+            auto* prepareResponse = Response->Record.MutablePartitionResponse()->MutableCmdPrepareReadResult();
+            auto estimate = Request.GetPartitionRequest().GetCmdRead().GetSizeEstimate();
+            if (estimate == 0) {
+                estimate = prepareResponse->GetBytesSizeEstimate() + readResult.GetSizeEstimate();
+            }
+            prepareResponse->SetBytesSizeEstimate(estimate);
+            PreparedResponse->MutablePartitionResponse()->MutableCmdPrepareReadResult()->SetBytesSizeEstimate(estimate);
+        }
+
         if (!partResp->GetResult().empty()) {
             const auto& lastRes = partResp->GetResult(partResp->GetResult().size() - 1);
             if (lastRes.HasPartNo() && lastRes.GetPartNo() + 1 < lastRes.GetTotalParts()) { //last res is not full
@@ -265,10 +276,6 @@ private:
         }
         if (isDirectRead) {
             auto* prepareResponse = Response->Record.MutablePartitionResponse()->MutableCmdPrepareReadResult();
-            auto sizeEstimate = Request.GetPartitionRequest().GetCmdRead().GetSizeEstimate();
-            sizeEstimate = sizeEstimate ? sizeEstimate : readResult.GetSizeEstimate();
-            PreparedResponse->MutablePartitionResponse()->MutableCmdPrepareReadResult()->SetBytesSizeEstimate(sizeEstimate);
-            prepareResponse->SetBytesSizeEstimate(sizeEstimate);
             prepareResponse->SetDirectReadId(DirectReadKey.ReadId);
             prepareResponse->SetReadOffset(readResult.GetRealReadOffset());
             prepareResponse->SetLastOffset(readResult.GetLastOffset());
@@ -2326,15 +2333,18 @@ void TPersQueue::HandleReadRequest(
                 return;
             }
         }
+
         THolder<TEvPQ::TEvRead> event =
             MakeHolder<TEvPQ::TEvRead>(responseCookie, cmd.GetOffset(), cmd.GetLastOffset(),
                                        cmd.HasPartNo() ? cmd.GetPartNo() : 0,
                                        count,
                                        cmd.HasSessionId() ? cmd.GetSessionId() : "",
                                        cmd.GetClientId(),
-                                       cmd.HasTimeoutMs() ? cmd.GetTimeoutMs() : 0, bytes,
+                                       cmd.HasTimeoutMs() ? cmd.GetTimeoutMs() : 0,
+                                       bytes,
                                        cmd.HasMaxTimeLagMs() ? cmd.GetMaxTimeLagMs() : 0,
-                                       cmd.HasReadTimestampMs() ? cmd.GetReadTimestampMs() : 0, clientDC,
+                                       cmd.HasReadTimestampMs() ? cmd.GetReadTimestampMs() : 0,
+                                       clientDC,
                                        cmd.GetExternalOperation(),
                                        pipeClient);
 

@@ -65,6 +65,7 @@ class TestYdbWorkload(object):
     @link_test_case("#13529")
     def test(self):
         """As per https://github.com/ydb-platform/ydb/issues/13529"""
+        self.database_name = '/Root'
         session = self.make_session()
 
         # Overflow the database

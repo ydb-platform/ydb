@@ -42,10 +42,20 @@ public:
         Server->AnnoyingClient->CreateTopicNoLegacy(
                 "/Root/LbCommunal/account/topic2", 1, true, true, {}, {}, "account"
         );
-
         Server->AnnoyingClient->CreateTopicNoLegacy(
                 "/Root/LbCommunal/account/topic2-mirrored-from-dc2", 1, true, false, {}, {}, "account"
         );
+
+        Server->AnnoyingClient->MkDir("/Root", "LbCommunal");
+        Server->AnnoyingClient->MkDir("/Root/LbCommunal", "account2");
+        Server->AnnoyingClient->CreateTopicNoLegacy(
+                "/Root/LbCommunal/account2/topic3", 1, true, true, {}, {}, "account2"
+        );
+        Server->AnnoyingClient->CreateTopicNoLegacy(
+                "/Root/LbCommunal/account2/topic3-mirrored-from-dc2", 1, true, false, {}, {}, "account2"
+        );
+
+
         Server->AnnoyingClient->CreateConsumer("test-consumer");
         InitPQLib();
     }
@@ -153,6 +163,12 @@ Y_UNIT_TEST_SUITE(TPQCompatTest) {
             GetLocks({"account/topic1", "account/topic2"}, rs);
             rs->Close();
         }
+        {
+            auto rs = testServer.CreateReadSession({"account/topic1", "account/topic2", "account2/topic3"});
+            GetLocks({"account/topic1", "account/topic2", "account2/topic3"}, rs);
+            rs->Close();
+        }
+
     }
 
     Y_UNIT_TEST(BadTopics) {

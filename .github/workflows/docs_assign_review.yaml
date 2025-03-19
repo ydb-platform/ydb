@@ -2,17 +2,17 @@ name: Assign a reviewer for documentation
 
 on:
   pull_request_target:
-    types: [labeled]
+    types: [opened]
 
 jobs:
   assign-docs-reviewer:
     runs-on: ubuntu-latest
-    if: github.event.label.name == 'documentation'
+    if: contains(github.event.pull_request.body, '* Documentation') && !contains(github.event.pull_request.body, '* New feature')
     steps:
       - name: Assign a random documentation reviewer, excluding the PR author and busy members
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          github-token: ${{ secrets.YDBOT_TOKEN }}
           script: |
             const teamSlug = "primary-docs-reviewers";
             const org = "ydb-platform";

@@ -293,12 +293,24 @@ private:
         UNIT_ASSERT_VALUES_EQUAL(res_path.size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(res_path[0].GetMap().size(), 2);
 
-        if (labels.empty()) {
-            UNIT_ASSERT(map.find("labels") == map.end());
+        if (labels.empty() || labels == "{}") {
+            auto it1 = map.find("attributes");
+            if (it1 != map.end()) {
+                auto& attributes = it1->second.GetMap();
+                auto it2 = attributes.find("labels");
+                if (it2 != attributes.end()) {
+                    UNIT_ASSERT(it2->second.GetMap().empty());
+                }
+            }
         } else {
-            auto it = map.find("labels");
-            UNIT_ASSERT(it != map.end());
-            UNIT_ASSERT_VALUES_EQUAL(it->second.GetString(), labels);
+            NJson::TJsonMap labelsMap;
+            NJson::ReadJsonTree(labels, &labelsMap);
+            auto it1 = map.find("attributes");
+            UNIT_ASSERT(it1 != map.end());
+            auto& attributes = it1->second.GetMap();
+            auto it2 = attributes.find("labels");
+            UNIT_ASSERT(it2 != attributes.end());
+            UNIT_ASSERT_VALUES_EQUAL(it2->second.GetMap(), labelsMap.GetMap());
         }
 
         switch (type) {

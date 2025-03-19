@@ -27,9 +27,8 @@ class TestStress(object):
     def setup(self, request):
         binary_paths = request.param
         self.config = KikimrConfigGenerator(
-            erasure=Erasure.NONE,
+            erasure=Erasure.MIRROR_3_DC,
             binary_paths=binary_paths,
-            nodes=1,
             # uncomment for 64 datetime in tpc-h/tpc-ds
             # extra_feature_flags={"enable_table_datetime64": True},
         )

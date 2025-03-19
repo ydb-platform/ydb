@@ -5,6 +5,7 @@
 
 #include <contrib/libs/fmt/include/fmt/format.h>
 #include <ydb/library/actors/core/event.h>
+#include <ydb/library/protobuf_printer/security_printer.h>
 #include <util/generic/maybe.h>
 
 #include <ydb/core/fq/libs/actors/logging/log.h>
@@ -92,7 +93,7 @@ public:
     }
 
     void HandleTimeout() {
-        CPP_LOG_D("Request timeout. " << RequestProxy->Get()->Request.DebugString());
+        CPP_LOG_D("Request timeout. " << SecureDebugString(RequestProxy->Get()->Request));
         NYql::TIssues issues;
         NYql::TIssue issue =
             MakeErrorIssue(TIssuesIds::TIMEOUT,

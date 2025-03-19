@@ -764,7 +764,7 @@ protected:
                     });
                 }
             } else {
-                CPS_LOG_AS_T(*actorSystem, name << ": {" << TrimForLogs(result.DebugString()) << "} SUCCESS");
+                CPS_LOG_AS_T(*actorSystem, name << ": {" << TrimForLogs(SecureDebugString(result)) << "} SUCCESS");
                 std::unique_ptr<ResponseEvent> event;
                 if constexpr (ResponseEvent::Auditable) {
                     event = std::make_unique<ResponseEvent>(result, auditDetails);

@@ -29,6 +29,7 @@ target_link_libraries(ydb-core-kafka_proxy PUBLIC
   contrib-libs-cxxsupp
   yutil
   tools-enum_parser-enum_serialization_runtime
+  src-client-params
   library-actors-core
   library-actors-protos
   ydb-core-base
@@ -66,6 +67,7 @@ target_sources(ydb-core-kafka_proxy PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kqp_helper.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_consumer_groups_metadata_initializers.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_consumer_members_metadata_initializers.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_transactional_producers_initializers.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_connection.h
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_constants.h
   ${PROJECT_SOURCE_DIR}/ydb/core/kafka_proxy/kafka_listener.h

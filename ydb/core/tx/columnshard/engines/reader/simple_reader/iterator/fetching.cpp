@@ -206,8 +206,7 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDa
 
 void TDuplicateFilter::TFilterSubscriber::OnFilterReady(const NArrow::TColumnFilter& filter) {
     // TODO: Consider abort scenario (should TDuplicateFilterConstructor return error to subscribers?)
-    // TODO: This is a filter for whole portion, stage result accepts filter only for elements that pass previous filters
-    Source->MutableStageData().AddFilter(filter);
+    Source->MutableStageData().AddFilter(filter, false);
     Step.Next();
     auto task = std::make_shared<TStepAction>(Source, std::move(Step), Source->GetContext()->GetCommonContext()->GetScanActorId());
     NConveyor::TScanServiceOperator::SendTaskToExecute(task, Source->GetContext()->GetCommonContext()->GetConveyorProcessId());

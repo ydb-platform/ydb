@@ -45,6 +45,8 @@ TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonito
     , CacheMissBytes(counters->GetCounter("CacheMissBytes", true))
     , LoadInFlyPages(counters->GetCounter("LoadInFlyPages"))
     , LoadInFlyBytes(counters->GetCounter("LoadInFlyBytes"))
+    , PageCollections(counters->GetCounter("PageCollections"))
+    , PageCollectionOwners(counters->GetCounter("PageCollectionOwners"))
 { }
 
 TSharedPageCacheCounters::TCounterPtr TSharedPageCacheCounters::ReplacementPolicySize(TReplacementPolicy policy) {
@@ -371,6 +373,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     TCollection& AttachCollection(const TLogoBlobID &pageCollectionId, const NPageCollection::IPageCollection &pageCollection, const TActorId &owner) {
         TCollection &collection = Collections[pageCollectionId];
         if (!collection.Id) {
+            Counters.PageCollections->Inc();
             Y_ENSURE(pageCollectionId);
             collection.Id = pageCollectionId;
             collection.PageMap.resize(pageCollection.Total());
@@ -383,6 +386,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
 
         if (collection.Owners.insert(owner).second) {
+            Counters.PageCollectionOwners->Inc();
             CollectionsOwners[owner].insert(&collection);
         }
 
@@ -411,6 +415,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         Y_ENSURE(pageCollectionId);
         Y_ENSURE(!Collections.contains(pageCollectionId), "Only new collections can save compacted pages");
+        Counters.PageCollections->Inc();
         TCollection &collection = Collections[pageCollectionId];
         collection.Id = pageCollectionId;
         collection.PageMap.resize(pageCollection.Total());
@@ -773,8 +778,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         auto ownerIt = CollectionsOwners.find(ev->Sender);
         if (ownerIt != CollectionsOwners.end()) {
             for (auto* collection : ownerIt->second) {
-                collection->Owners.erase(ev->Sender);
-                TryDropExpiredCollection(collection);
+                if (collection->Owners.erase(ev->Sender)) {
+                    Counters.PageCollectionOwners->Dec();
+                }
+                TryDropExpiredCollection(*collection);
             }
             CollectionsOwners.erase(ownerIt);
         }
@@ -784,31 +791,30 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
     void Handle(NSharedCache::TEvInvalidate::TPtr &ev, const TActorContext& ctx) {
         const TLogoBlobID pageCollectionId = ev->Get()->PageCollectionId;
-        auto collectionIt = Collections.find(pageCollectionId);
+        auto collection = Collections.FindPtr(pageCollectionId);
 
         LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Invalidate page collection " << pageCollectionId
-            << (collectionIt == Collections.end() ? " unknown" : "")
+            << (collection ? "" : " unknown")
             << " owner " << ev->Sender);
 
-        if (collectionIt == Collections.end()) {
+        if (!collection) {
             return;
         }
 
-        auto &collection = collectionIt->second;
-
         DropRequestsFromQueues(ev->Sender, pageCollectionId);
 
-        if (collection.Owners.erase(ev->Sender)) {
+        if (collection->Owners.erase(ev->Sender)) {
             auto ownerIt = CollectionsOwners.find(ev->Sender);
-            if (ownerIt != CollectionsOwners.end() &&
-                ownerIt->second.erase(&collection) &&
-                ownerIt->second.empty())
-            {
-                CollectionsOwners.erase(ownerIt);
+            if (ownerIt != CollectionsOwners.end()) {
+                ownerIt->second.erase(collection);
+                if (ownerIt->second.empty()) {
+                    CollectionsOwners.erase(ownerIt);
+                }
             }
+            Counters.PageCollectionOwners->Dec();
         }
 
-        TryDropExpiredCollection(&collection);
+        TryDropExpiredCollection(*collection);
 
         ProcessGCList();
     }
@@ -829,23 +835,22 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             RequestFromQueue(*queue);
         }
 
-        auto collectionIt = Collections.find(msg->Fetch->PageCollection->Label());
-        if (collectionIt == Collections.end())
+        auto collection = Collections.FindPtr(msg->Fetch->PageCollection->Label());
+        if (!collection)
             return;
 
         if (msg->Status != NKikimrProto::OK) {
-            DropCollection(collectionIt, msg->Status);
+            DropCollection(*collection, msg->Status);
         } else {
-            TCollection &collection = collectionIt->second;
             for (auto &paged : msg->Blocks) {
-                Y_ENSURE(paged.PageId < collection.PageMap.size());
-                auto* page = collection.PageMap[paged.PageId].Get();
+                Y_ENSURE(paged.PageId < collection->PageMap.size());
+                auto* page = collection->PageMap[paged.PageId].Get();
                 if (!page || !page->HasMissingBody()) {
                     continue;
                 }
 
                 page->Initialize(std::move(paged.Data));
-                BodyProvided(collection, page);
+                BodyProvided(*collection, page);
                 Evict(Cache.Touch(page));
             }
         }
@@ -853,14 +858,15 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         DoGC();
     }
 
-    void TryDropExpiredCollection(TCollection* pageCollection) {
-        if (!pageCollection->Owners &&
-            !pageCollection->PendingRequests &&
-            pageCollection->PageMap.used() == 0)
+    void TryDropExpiredCollection(TCollection& collection) {
+        if (!collection.Owners &&
+            !collection.PendingRequests &&
+            collection.PageMap.used() == 0)
         {
             // Drop unnecessary collections from memory
-            auto pageCollectionId = pageCollection->Id;
+            auto pageCollectionId = collection.Id;
             Collections.erase(pageCollectionId);
+            Counters.PageCollections->Dec();
         }
     }
 
@@ -933,7 +939,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 collection->DroppedPages.clear();
             }
 
-            TryDropExpiredCollection(collection);
+            TryDropExpiredCollection(*collection);
         }
 
         for (auto& kv : droppedPages) {
@@ -982,12 +988,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         StatBioReqs += 1;
     }
 
-    void DropCollection(THashMap<TLogoBlobID, TCollection>::iterator collectionIt, NKikimrProto::EReplyStatus blobStorageError) {
+    void DropCollection(TCollection &collection, NKikimrProto::EReplyStatus blobStorageError) {
         // decline all pending requests
-        TCollection &collection = collectionIt->second;
-        const TLogoBlobID &pageCollectionId = collectionIt->first;
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Drop page collection " << pageCollectionId);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Drop page collection " << collection.Id);
 
         for (auto &expe : collection.PendingRequests) {
             for (auto &xpair : expe.second) {
@@ -1044,13 +1048,10 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
 
         for (TActorId owner : collection.Owners) {
-            DropRequestsFromQueues(owner, pageCollectionId);
+            DropRequestsFromQueues(owner, collection.Id);
         }
 
-        if (!collection.Owners && !haveValidPages) {
-            // This collection no longer has anything useful
-            Collections.erase(collectionIt);
-        }
+        TryDropExpiredCollection(collection);
     }
 
     void RequestFromQueues() {

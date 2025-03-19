@@ -1173,7 +1173,7 @@ namespace NActors {
         std::unique_lock g(Mutex);
         Y_ABORT_UNLESS(Table);
 
-        MY_DEBUG(1, "cache# " << (void*)this << " BackupBlock# " << (void*)BackupBlock << " block# " << (void*) CurrentBlock << " size# " << CurrentSize);
+        MY_DEBUG(2, "cache# " << (void*)this << " BackupBlock# " << (void*)BackupBlock << " block# " << (void*) CurrentBlock << " size# " << CurrentSize);
         if (!CurrentBlock) {
             if (BackupBlock) [[likely]] {
                 CurrentBlock = BackupBlock;
@@ -1194,7 +1194,7 @@ namespace NActors {
         CurrentBlock = mailbox->ActorsInfo.Empty.NextFree;
         CurrentSize--;
 
-        MY_DEBUG(1, "cache# " << (void*)this << " mailbox# " << (void*)mailbox << " block# " << (void*) CurrentBlock << " size# " << CurrentSize);
+        MY_DEBUG(2, "cache# " << (void*)this << " mailbox# " << (void*)mailbox << " block# " << (void*) CurrentBlock << " size# " << CurrentSize);
         if (!(CurrentBlock ? CurrentSize > 0 : CurrentSize == 0)) {
             Sleep(TDuration::Seconds(1));
         }
@@ -1206,7 +1206,7 @@ namespace NActors {
 
     void TMailboxCache::Free(TMailbox* mailbox) {
         std::unique_lock g(Mutex);
-        MY_DEBUG(1, "cache# " << (void*)this << " mailbox# " << (void*)mailbox << " block# " << (void*) CurrentBlock << " size# " << CurrentSize);
+        MY_DEBUG(2, "cache# " << (void*)this << " mailbox# " << (void*)mailbox << " block# " << (void*) CurrentBlock << " size# " << CurrentSize);
         Y_ABORT_UNLESS(Table);
         Y_ABORT_UNLESS(mailbox != CurrentBlock, "double free");
 
@@ -1223,7 +1223,7 @@ namespace NActors {
         mailbox->ActorsInfo.Empty.NextFree = CurrentBlock;
         CurrentBlock = mailbox;
         CurrentSize++;
-        MY_DEBUG(1, "cache# " << (void*)this << " mailbox# " << (void*)mailbox << " block# " << (void*) CurrentBlock << " size# " << CurrentSize);
+        MY_DEBUG(2, "cache# " << (void*)this << " mailbox# " << (void*)mailbox << " block# " << (void*) CurrentBlock << " size# " << CurrentSize);
     }
 
     TMailboxTable::TMailboxTable(std::atomic<bool>* actorSystemStarted)
@@ -1299,7 +1299,7 @@ namespace NActors {
         std::unique_lock g(Lock);
 
         TMailbox* head = AllocateFullBlockLocked();
-        MY_DEBUG(1, "cache# " << (void*)this << " head# " << (void*) head << " BlockSize# " << BlockSize);
+        MY_DEBUG(2, "cache# " << (void*)this << " head# " << (void*) head << " BlockSize# " << BlockSize);
         if (head) [[likely]] {
             return { head, BlockSize };
         }

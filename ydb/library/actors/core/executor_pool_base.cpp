@@ -313,6 +313,7 @@ namespace NActors {
 
     bool TExecutorPoolBase::UseRingQueue() const {
         return UseRingQueueValue;
+    }
 
     TMailboxCache* TExecutorPoolBaseMailboxed::GetMailboxCache() {
         return &MailboxCache;

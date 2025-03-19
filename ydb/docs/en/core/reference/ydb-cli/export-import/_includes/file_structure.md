@@ -65,15 +65,8 @@ The format of data files is `.csv`, where each row corresponds to a record in th
 
 For each [view](../../../../concepts/datamodel/view.md) in the database, there is a same-named directory in the file structure of the backup that includes:
 
-- The `create_view.sql` file describing the view in YQL format
+- The `create_view.sql` file containing the view's definition in plain-text YQL format (as a [CREATE VIEW](../../../../yql/reference/syntax/create-view.md) query)
 - The `permissions.pb` file specifying the view owner and ACL in the [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format
-
-## Comparison of backup formats for various schema objects {#backup-format}
-
-| Object Type | Backup File                      | Format |
-|-------------|----------------------------------|--------|
-| Table       | scheme.pb                        | [Text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) `CreateTableRequest` message |
-| View        | create_view.sql                  | Plain-text [CREATE VIEW](../../../../yql/reference/syntax/create-view.md) YQL statement |
 
 ## Checksums {#checksums}
 

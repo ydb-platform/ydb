@@ -21,6 +21,7 @@ add_subdirectory(nodes)
 add_subdirectory(pg_tables)
 add_subdirectory(query_stats)
 add_subdirectory(resource_pool_classifiers)
+add_subdirectory(resource_pools)
 add_subdirectory(sessions)
 add_subdirectory(show_create)
 add_subdirectory(storage)
@@ -48,6 +49,7 @@ target_link_libraries(ydb-core-sys_view PUBLIC
   core-sys_view-pg_tables
   core-sys_view-query_stats
   core-sys_view-resource_pool_classifiers
+  core-sys_view-resource_pools
   core-sys_view-service
   core-sys_view-sessions
   core-sys_view-show_create

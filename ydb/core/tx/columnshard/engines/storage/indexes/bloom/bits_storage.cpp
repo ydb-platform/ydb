@@ -35,7 +35,11 @@ TFixStringBitsStorage::TFixStringBitsStorage(const TString& data) noexcept {
         TStringInput input(data);
         Bits.Load(&input);
     } catch (...) {
-        Bits.Reserve(1024);
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "index_broken");
+        Bits.Reserve(10);
+        for (ui32 i = 0; i < 10; ++i) {
+            Bits.Set(i);
+        }
     }
 }
 

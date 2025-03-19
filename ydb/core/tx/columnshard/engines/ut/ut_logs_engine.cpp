@@ -54,13 +54,12 @@ public:
     }
 
     struct TIndex {
-        THashMap<ui64, THashMap<ui64, TPortionAccessorConstructor>> Columns;   // pathId -> portions
+        THashMap<NColumnShard::TInternalPathId, THashMap<ui64, TPortionAccessorConstructor>> Columns;   // pathId -> portions
         THashMap<ui32, ui64> Counters;
     };
 
     virtual TConclusion<THashMap<NColumnShard::TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() override {
-        THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>> result;
-        return result;
+        return THashMap<NColumnShard::TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>>{};
     }
 
     void Insert(const TInsertedData& data) override {
@@ -175,7 +174,7 @@ public:
         portionLocal.TestMutableRecords().swap(filtered);
     }
 
-    bool LoadColumns(const std::optional<ui64> reqPathId, const std::function<void(TColumnChunkLoadContextV2&&)>& callback) override {
+    bool LoadColumns(const std::optional<NColumnShard::TInternalPathId> reqPathId, const std::function<void(TColumnChunkLoadContextV2&&)>& callback) override {
         auto& columns = Indices[0].Columns;
         for (auto& [pathId, portions] : columns) {
             if (pathId && *reqPathId != pathId) {
@@ -197,8 +196,8 @@ public:
     }
     virtual void EraseIndex(const TPortionInfo& /*portion*/, const TIndexChunk& /*row*/) override {
     }
-    virtual bool LoadIndexes(const std::optional<ui64> /*reqPathId*/,
-        const std::function<void(const ui64 /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&&)>& /*callback*/) override {
+    virtual bool LoadIndexes(const std::optional<NColumnShard::TInternalPathId> /*reqPathId*/,
+        const std::function<void(const NColumnShard::TInternalPathId /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&&)>& /*callback*/) override {
         return true;
     }
 
@@ -217,7 +216,7 @@ public:
 
 private:
     THashMap<TInsertWriteId, TInsertedData> Inserted;
-    THashMap<ui64, TSet<TCommittedData>> Committed;
+    THashMap<NColumnShard::TInternalPathId, TSet<TCommittedData>> Committed;
     THashMap<TInsertWriteId, TInsertedData> Aborted;
     THashMap<ui64, NOlap::TPortionInfo> Portions;
     THashMap<ui32, TIndex> Indices;
@@ -520,7 +519,10 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         TTestDbWrapper db;
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(ydbSchema, key);
 
-        std::vector<ui64> paths = { 1, 2 };
+        std::vector<NColumnShard::TInternalPathId> paths = { 
+            NColumnShard::TInternalPathId::FromInternalPathIdValue(1),
+            NColumnShard::TInternalPathId::FromInternalPathIdValue(2)
+        };
 
         TString testBlob = MakeTestBlob();
 
@@ -610,7 +612,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         TTestDbWrapper db;
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(ydbSchema, key);
 
-        NColumnShard::TInternalPathId pathId = 1;
+        const auto& pathId =  NColumnShard::TInternalPathId::FromInternalPathIdValue(1);
         ui32 step = 1000;
 
         TSnapshot indexSnapshot(1, 1);
@@ -708,7 +710,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(testColumns, testKey);
         ;
 
-        NColumnShard::TInternalPathId pathId = 1;
+        const auto& pathId =  NColumnShard::TInternalPathId::FromInternalPathIdValue(1);
         ui32 step = 1000;
 
         // inserts
@@ -787,7 +789,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
         csDefaultControllerGuard->SetOverrideTasksActualizationLag(TDuration::Zero());
 
-        NColumnShard::TInternalPathId pathId = 1;
+        const auto pathId = NColumnShard::TInternalPathId::FromInternalPathIdValue(1);
         ui32 step = 1000;
 
         // insert
@@ -857,7 +859,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
 
             // TTL
             std::shared_ptr<arrow::DataType> ttlColType = arrow::timestamp(arrow::TimeUnit::MICRO);
-            THashMap<ui64, NOlap::TTiering> pathTtls;
+            THashMap<NColumnShard::TInternalPathId, NOlap::TTiering> pathTtls;
             NOlap::TTiering tiering;
             AFL_VERIFY(tiering.Add(NOlap::TTierInfo::MakeTtl(gap, "timestamp")));
             pathTtls.emplace(pathId, std::move(tiering));

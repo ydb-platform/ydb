@@ -45,7 +45,6 @@ public:
     virtual void EraseCommitted(const TCommittedData& data) = 0;
     virtual void EraseAborted(const TInsertedData& data) = 0;
     virtual void WriteColumns(const NOlap::TPortionInfo& portion, const NKikimrTxColumnShard::TIndexPortionAccessor& proto) = 0;
-    virtual void CloneColumns(const TPortionInfo& originalPortion, const ui64 newPathId) = 0;
 
     virtual bool Load(TInsertTableAccessor& insertTable, const TInstant& loadTime) = 0;
 
@@ -90,8 +89,6 @@ public:
 
     void WriteColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row, const ui32 firstPKColumnId) override;
     void WriteColumns(const NOlap::TPortionInfo& portion, const NKikimrTxColumnShard::TIndexPortionAccessor& proto) override;
-    void CloneColumns(const TPortionInfo& originalPortion, const ui64 newPathId) override;
-
     void EraseColumn(const NOlap::TPortionInfo& portion, const TColumnRecord& row) override;
     bool LoadColumns(const std::optional<NColumnShard::TInternalPathId> pathId, const std::function<void(TColumnChunkLoadContextV2&&)>& callback) override;
 

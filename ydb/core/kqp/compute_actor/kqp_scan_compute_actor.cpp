@@ -80,7 +80,9 @@ void TKqpScanComputeActor::AcquireRateQuota() {
 }
 
 void TKqpScanComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, bool last) {
-    if (last && ScanData && dst->TasksSize() > 0) {
+    Y_UNUSED(last);
+
+    if (ScanData && dst->TasksSize() > 0) {
         YQL_ENSURE(dst->TasksSize() == 1);
 
         auto* taskStats = dst->MutableTasks(0);
@@ -96,22 +98,24 @@ void TKqpScanComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, b
         tableStats->SetTablePath(ScanData->TablePath);
 
         if (auto* stats = ScanData->BasicStats.get()) {
-            ingressStats.SetRows(stats->Rows);
-            ingressStats.SetBytes(stats->Bytes);
-            ingressStats.SetFirstMessageMs(stats->FirstMessageMs);
-            ingressStats.SetLastMessageMs(stats->LastMessageMs);
+            if (RuntimeSettings.StatsMode >= NYql::NDqProto::DQ_STATS_MODE_FULL) {
+                ingressStats.SetRows(stats->Rows);
+                ingressStats.SetBytes(stats->Bytes);
+                ingressStats.SetFirstMessageMs(stats->FirstMessageMs);
+                ingressStats.SetLastMessageMs(stats->LastMessageMs);
 
-            for (auto& [shardId, stat] : stats->ExternalStats) {
-                auto& externalStat = *sourceStats.AddExternalPartitions();
-                externalStat.SetPartitionId(ToString(shardId));
-                externalStat.SetExternalRows(stat.ExternalRows);
-                externalStat.SetExternalBytes(stat.ExternalBytes);
-                externalStat.SetFirstMessageMs(stat.FirstMessageMs);
-                externalStat.SetLastMessageMs(stat.LastMessageMs);
+                for (auto& [shardId, stat] : stats->ExternalStats) {
+                    auto& externalStat = *sourceStats.AddExternalPartitions();
+                    externalStat.SetPartitionId(ToString(shardId));
+                    externalStat.SetExternalRows(stat.ExternalRows);
+                    externalStat.SetExternalBytes(stat.ExternalBytes);
+                    externalStat.SetFirstMessageMs(stat.FirstMessageMs);
+                    externalStat.SetLastMessageMs(stat.LastMessageMs);
+                }
+
+                taskStats->SetIngressRows(taskStats->GetIngressRows() + stats->Rows);
+                taskStats->SetIngressBytes(taskStats->GetIngressBytes() + stats->Bytes);
             }
-
-            taskStats->SetIngressRows(taskStats->GetIngressRows() + stats->Rows);
-            taskStats->SetIngressBytes(taskStats->GetIngressBytes() + stats->Bytes);
 
             tableStats->SetReadRows(stats->Rows);
             tableStats->SetReadBytes(stats->Bytes);

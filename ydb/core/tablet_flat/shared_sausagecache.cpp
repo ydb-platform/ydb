@@ -457,6 +457,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 queue = &ScanRequests;
                 break;
         }
+        queue = &ScanRequests;
 
         for (const ui32 reqIdx : xrange(msg->Fetch->Pages.size())) {
             const ui32 pageId = msg->Fetch->Pages[reqIdx];

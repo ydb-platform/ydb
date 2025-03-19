@@ -2539,21 +2539,4 @@ namespace NSchemeShardUT_Private {
         SendNextValRequest(runtime, sender, path);
         return WaitNextValResult(runtime, sender, expectedStatus);
     }
-
-    void UpdateQueryServiceConfig(TTestActorRuntime& runtime) {
-        auto request = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
-        auto* queryServiceConfig = request->Record.MutableConfig()->MutableQueryServiceConfig();
-        queryServiceConfig->AddAvailableExternalDataSources("ObjectStorage");
-        queryServiceConfig->AddAvailableExternalDataSources("ClickHouse");
-        queryServiceConfig->AddAvailableExternalDataSources("PostgreSQL");
-        queryServiceConfig->AddAvailableExternalDataSources("MySQL");
-        queryServiceConfig->AddAvailableExternalDataSources("Ydb");
-        queryServiceConfig->AddAvailableExternalDataSources("YT");
-        queryServiceConfig->AddAvailableExternalDataSources("Greenplum");
-        queryServiceConfig->AddAvailableExternalDataSources("MsSQLServer");
-        queryServiceConfig->AddAvailableExternalDataSources("Oracle");
-        queryServiceConfig->AddAvailableExternalDataSources("Logging");
-        queryServiceConfig->AddAvailableExternalDataSources("Solomon");
-        SetConfig(runtime, TTestTxConfig::SchemeShard, std::move(request));
-    }
 }

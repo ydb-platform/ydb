@@ -697,9 +697,15 @@ private:
         return type;
     }
 
-    void CompileStage(const TDqPhyStage& stage, NKqpProto::TKqpPhyStage& stageProto, TExprContext& ctx,
-        const TMap<ui64, ui32>& stagesMap, TRequestPredictor& rPredictor, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
-    {
+    void CompileStage(
+        const TDqPhyStage& stage,
+        NKqpProto::TKqpPhyStage& stageProto,
+        TExprContext& ctx,
+        const TMap<ui64, ui32>& stagesMap,
+        TRequestPredictor& rPredictor,
+        THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap,
+        THashMap<ui64, NKqpProto::TKqpPhyStage*>& physicalStageByID
+    ) {
         const bool hasEffects = NOpt::IsKqpEffectsStage(stage);
 
         TStagePredictor& stagePredictor = rPredictor.BuildForStage(stage, ctx);
@@ -720,7 +726,7 @@ private:
                 auto connection = input.Cast<TDqConnection>();
 
                 auto& protoInput = *stageProto.AddInputs();
-                FillConnection(connection, stagesMap, protoInput, ctx, tablesMap);
+                FillConnection(connection, stagesMap, protoInput, ctx, tablesMap, physicalStageByID);
                 protoInput.SetInputIndex(inputIndex);
             }
         }
@@ -899,13 +905,14 @@ private:
         bool hasEffectStage = false;
 
         TMap<ui64, ui32> stagesMap;
+        THashMap<ui64, NKqpProto::TKqpPhyStage*> physicalStageByID;
         THashMap<TStringBuf, THashSet<TStringBuf>> tablesMap;
 
         TRequestPredictor rPredictor;
         for (const auto& stage : tx.Stages()) {
-            auto* protoStage = txProto.AddStages();
-            CompileStage(stage, *protoStage, ctx, stagesMap, rPredictor, tablesMap);
-            hasEffectStage |= protoStage->GetIsEffectsStage();
+            physicalStageByID[stage.Ref().UniqueId()] = txProto.AddStages();
+            CompileStage(stage, *physicalStageByID[stage.Ref().UniqueId()], ctx, stagesMap, rPredictor, tablesMap, physicalStageByID);
+            hasEffectStage |= physicalStageByID[stage.Ref().UniqueId()]->GetIsEffectsStage();
             stagesMap[stage.Ref().UniqueId()] = txProto.StagesSize() - 1;
         }
         for (auto&& i : *txProto.MutableStages()) {
@@ -948,7 +955,7 @@ private:
 
             auto& resultProto = *txProto.AddResults();
             auto& connectionProto = *resultProto.MutableConnection();
-            FillConnection(connection, stagesMap, connectionProto, ctx, tablesMap);
+            FillConnection(connection, stagesMap, connectionProto, ctx, tablesMap, physicalStageByID);
 
             const TTypeAnnotationNode* itemType = nullptr;
             switch (connectionProto.GetTypeCase()) {
@@ -1300,10 +1307,14 @@ private:
         }
     }
 
-    void FillConnection(const TDqConnection& connection, const TMap<ui64, ui32>& stagesMap,
-        NKqpProto::TKqpPhyConnection& connectionProto, TExprContext& ctx,
-        THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
-    {
+    void FillConnection(
+        const TDqConnection& connection,
+        const TMap<ui64, ui32>& stagesMap,
+        NKqpProto::TKqpPhyConnection& connectionProto,
+        TExprContext& ctx,
+        THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap,
+        THashMap<ui64, NKqpProto::TKqpPhyStage*>& physicalStageByID
+    ) {
         auto inputStageIndex = stagesMap.FindPtr(connection.Output().Stage().Ref().UniqueId());
         YQL_ENSURE(inputStageIndex, "stage #" << connection.Output().Stage().Ref().UniqueId() << " not found in stages map: "
             << PrintKqpStageOnly(connection.Output().Stage(), ctx));
@@ -1363,6 +1374,10 @@ private:
         }
 
         if (connection.Maybe<TDqCnMap>()) {
+            auto stageID = connection.Output().Stage().Ref().UniqueId();
+            auto physicalStage = physicalStageByID[stageID];
+            Y_ENSURE(physicalStage != nullptr, TStringBuf{} << "stage#" << stageID);
+            physicalStage->SetIsShuffleEliminated(true);
             connectionProto.MutableMap();
             return;
         }

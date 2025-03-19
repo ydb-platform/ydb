@@ -1434,35 +1434,9 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
     };
 
     const auto buildMap = [&ctx, &join](TDqOutput& input) {
-        auto stageSettings = TDqStageSettings::Parse(input.Stage());
-
-        if (stageSettings.IsShuffleEliminated /* In case of DqReplicate*/) {
-            return
-                Build<TDqCnMap>(ctx, join.Pos())
-                    .Output(input)
-                .Done().Ptr();
-        }
-
-        auto newStageSettings = stageSettings.SetShuffleEliminated().BuildNode(ctx, join.Pos());
-        auto inputStageWithNewSettings =
-            Build<TDqStage>(ctx, join.Pos())
-                .InitFrom(input.Stage().Cast<TDqStage>())
-                .Settings(newStageSettings)
-            .Done();
-        TNodeOnNodeOwnedMap stageReplace(1);
-        stageReplace.emplace(input.Stage().Raw(), inputStageWithNewSettings.Ptr());
-        auto newStage = ctx.ReplaceNodes(input.Stage().Ptr(), stageReplace);
-
-        auto inputToReplace =
-            Build<TDqOutput>(ctx, join.Pos())
-                .InitFrom(input)
-                .Stage(newStage)
-            .Done();
-        TNodeOnNodeOwnedMap inputReplace(1);
-        inputReplace.emplace(input.Raw(), inputToReplace.Ptr());
-        auto newInput = ctx.ReplaceNodes(input.Ptr(), inputReplace);
-        return Build<TDqCnMap>(ctx, join.Pos())
-                .Output(newInput)
+        return
+            Build<TDqCnMap>(ctx, join.Pos())
+                .Output(input)
                 .Done().Ptr();
     };
 

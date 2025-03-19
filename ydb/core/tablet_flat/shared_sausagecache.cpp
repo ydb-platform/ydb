@@ -859,12 +859,13 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void TryDropExpiredCollection(TCollection& collection) {
+        // Drop unnecessary collections from memory
         if (!collection.Owners &&
             !collection.PendingRequests &&
             collection.PageMap.used() == 0)
         {
-            // Drop unnecessary collections from memory
             auto pageCollectionId = collection.Id;
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Dropping expired page collection " << pageCollectionId);
             Collections.erase(pageCollectionId);
             Counters.PageCollections->Dec();
         }

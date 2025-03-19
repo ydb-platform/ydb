@@ -13,36 +13,6 @@
 
 namespace NKikimr::NOlap::NIndexes::NCategoriesBloom {
 
-class TCategory {
-private:
-    YDB_READONLY(ui32, Identifier, 0);
-    YDB_READONLY(ui32, Size, 0);
-    YDB_READONLY_DEF(std::vector<ui64>, Hashes);
-    std::vector<bool> Filter;
-
-public:
-    TCategory(const ui32 id)
-        : Identifier(id) {
-    }
-
-    const std::vector<bool>& GetFilter() const {
-        AFL_VERIFY(Filter.size());
-        return Filter;
-    }
-
-    void AddHash(const ui64 hashBase, const ui32 hitsCount) {
-        Hashes.emplace_back(hashBase);
-        Size += hitsCount;
-    }
-
-    void Finalize(const ui32 hashesCount) {
-        AFL_VERIFY(Filter.size() == 0);
-        const ui32 bitsCount = TFixStringBitsStorage::GrowBitsCountToByte(hashesCount * std::max<ui32>(Size, 10) / std::log(2));
-        AFL_VERIFY(bitsCount);
-        Filter.resize(bitsCount, false);
-    }
-};
-
 class TCategoryBuilder {
 private:
     YDB_READONLY_DEF(std::set<ui64>, Categories);

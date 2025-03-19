@@ -1,0 +1,9 @@
+<tmp_path>/program.sql:<main>: Info: Type annotation
+
+    <tmp_path>/program.sql:<main>:2:1: Info: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At function: SqlProjectItem
+    	select SimpleUdf::Logging(0,'foo');
+	^
+        <tmp_path>/program.sql:<main>:2:19: Info: At function: Apply, At function: Udf, At SimpleUdf.Logging
+        	select SimpleUdf::Logging(0,'foo');
+	                  ^
+            <tmp_path>/program.sql:<main>: Info: 1970-01-01T00:00:01.000000Z SimpleUdf.Logging [Debug] DeclareSignature

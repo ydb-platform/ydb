@@ -139,7 +139,7 @@ public:
         return FunctionRegistry_->IsLoadedUdfModule(moduleName);
     }
 
-    bool LoadMetadata(const TVector<TImport*>& imports, const TVector<TFunction*>& functions, TExprContext& ctx) const override {
+    bool LoadMetadata(const TVector<TImport*>& imports, const TVector<TFunction*>& functions, TExprContext& ctx, NUdf::ELogLevel logLevel) const override {
         THashSet<TString> requiredLoadedModules;
         THashSet<TString> requiredExternalModules;
         TVector<TFunction*> loadedFunctions;
@@ -164,6 +164,7 @@ public:
         }
 
         TResolve request;
+        request.SetRuntimeLogLevel(static_cast<ui32>(logLevel));
         TVector<TImport*> usedImports;
         THoldingFileStorage holdingFileStorage(FileStorage_);
         THolder<TFilesBox> filesBox = CreateFilesBoxOverFileStorageTemp();
@@ -232,7 +233,7 @@ public:
 
         // extract regardless of hasErrors value
         hasErrors = !ExtractMetadata(response, usedImports, externalFunctions, ctx) || hasErrors;
-        hasErrors = !LoadFunctionsMetadata(loadedFunctions, *FunctionRegistry_, TypeInfoHelper_, ctx) || hasErrors;
+        hasErrors = !LoadFunctionsMetadata(loadedFunctions, *FunctionRegistry_, TypeInfoHelper_, ctx, logLevel) || hasErrors;
 
         if (!hasErrors) {
             for (auto& m : FunctionRegistry_->GetAllModuleNames()) {
@@ -246,8 +247,9 @@ public:
         return !hasErrors;
     }
 
-    TResolveResult LoadRichMetadata(const TVector<TImport>& imports) const override {
+    TResolveResult LoadRichMetadata(const TVector<TImport>& imports, NUdf::ELogLevel logLevel) const override {
         TResolve request;
+        request.SetRuntimeLogLevel(static_cast<ui32>(logLevel));
         THoldingFileStorage holdingFileStorage(FileStorage_);
         THolder<TFilesBox> filesBox = CreateFilesBoxOverFileStorageTemp();
         Y_DEFER {
@@ -369,6 +371,9 @@ private:
                 }
                 udf->SupportsBlocks = udfRes.GetSupportsBlocks();
                 udf->IsStrict = udfRes.GetIsStrict();
+                for (const auto& m : udfRes.GetMessages()) {
+                    udf->Messages.push_back(m);
+                }
             }
         }
 

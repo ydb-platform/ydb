@@ -486,7 +486,7 @@ namespace NTypeAnnImpl {
             imports.push_back(&x.second);
         }
 
-        if (!Types.UdfResolver->LoadMetadata(imports, functions, Expr)) {
+        if (!Types.UdfResolver->LoadMetadata(imports, functions, Expr, Types.RuntimeLogLevel)) {
             return false;
         }
 
@@ -7661,7 +7661,15 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
                     return MakeIntrusive<TIssue>(ctx.Expr.GetPosition(input->Pos()), TStringBuilder() << "At " << input->Head().Content());
                 });
 
-                if (!ctx.LoadUdfMetadata(functions)) {
+                auto success = ctx.LoadUdfMetadata(functions);
+                for (const auto& m : description.Messages) {
+                    TIssue issue;
+                    issue.SetMessage(m);
+                    issue.SetCode(TIssuesIds::CORE_UDF_RESOLVER, TSeverityIds::S_INFO);
+                    ctx.Expr.AddError(issue);
+                }
+
+                if (!success) {
                     return IGraphTransformer::TStatus::Error;
                 }
 

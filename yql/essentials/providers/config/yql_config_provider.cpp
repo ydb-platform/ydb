@@ -1082,7 +1082,7 @@ namespace {
             TString errorMessage;
             const TUserDataBlock* udfSource = nullptr;
             if (!Types.QContext.CanRead()) {
-                udfSource = Types.UserDataStorage->FreezeUdfNoThrow(key, errorMessage, customUdfPrefix);
+                udfSource = Types.UserDataStorage->FreezeUdfNoThrow(key, errorMessage, customUdfPrefix, Types.RuntimeLogLevel);
                 if (!udfSource) {
                     ctx.AddError(TIssue(pos, TStringBuilder() << "Unknown file: " << fileAlias << ", details: " << errorMessage));
                     return false;

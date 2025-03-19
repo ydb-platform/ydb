@@ -90,8 +90,8 @@ void TDuplicateFilterConstructor::TSourceFilterConstructor::Finish() {
     for (ui64 i = 0; i < IntervalFilters.size(); ++i) {
         result.Append(*TValidator::CheckNotNull(IntervalFilters[i]));
     }
-    AFL_VERIFY(result.GetRecordsCountVerified() == Source->GetStageData().GetTable()->GetRecordsCountVerified())(
-                                                       "filter", result.GetRecordsCountVerified())("source", Source->GetRecordsCount());
+    AFL_VERIFY(result.GetRecordsCountVerified() == Source->GetRecordsCount())("filter", result.GetRecordsCountVerified())(
+                                                       "source", Source->GetRecordsCount());
     Subscriber->OnFilterReady(result);
 }
 

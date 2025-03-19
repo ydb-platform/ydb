@@ -1,0 +1,7 @@
+{
+    "typeCheckingMode": "off",
+    "pythonVersion": "3.12",
+    "reportMissingImports": "warning",
+    "reportUndefinedVariable": "error",
+    "extraPaths": []
+}

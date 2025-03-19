@@ -69,12 +69,15 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
     public:
         virtual ~IReadController() = default;
         virtual void Feed(TString&& portion) = 0;
-        // Returns data (view to internal buffer) or error
+        // Returns data (points to internal buffer) or error
         virtual EDataStatus TryGetData(TStringBuf& data, TString& error) = 0;
-        // Clear internal buffer & makes it ready for another Feed() and TryGetData()
+        // Clears internal buffer & makes it ready for another Feed() and TryGetData()
         virtual void Confirm() = 0;
+        // Bytes that were read from S3 and put into controller. In terms of input bytes
         virtual ui64 PendingBytes() const = 0;
+        // Bytes that controller has given to processing. In terms of input bytes
         virtual ui64 ReadyBytes() const = 0;
+        virtual std::pair<ui64, ui64> NextRange(ui64 contentLength, ui64 processedBytes) const = 0;
     };
 
     class TReadController: public IReadController {
@@ -87,7 +90,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             Buffer.Reserve(RangeSize);
         }
 
-        std::pair<ui64, ui64> NextRange(ui64 contentLength, ui64 processedBytes) const {
+        std::pair<ui64, ui64> NextRange(ui64 contentLength, ui64 processedBytes) const override {
             Y_ABORT_UNLESS(contentLength > 0);
             Y_ABORT_UNLESS(processedBytes < contentLength);
 
@@ -528,10 +531,10 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         TString error;
 
         switch (Reader->TryGetData(data, error)) {
-        case TReadController::READY_DATA:
+        case IReadController::READY_DATA:
             break;
 
-        case TReadController::NOT_ENOUGH_DATA:
+        case IReadController::NOT_ENOUGH_DATA:
             if (SumWithSaturation(ProcessedBytes, Reader->PendingBytes()) < ContentLength) {
                 return GetObject(Settings.GetDataKey(DataFormat, CompressionCodec),
                     Reader->NextRange(ContentLength, ProcessedBytes));
@@ -889,7 +892,7 @@ private:
 
     const ui32 ReadBatchSize;
     const ui64 ReadBufferSizeLimit;
-    THolder<TReadController> Reader;
+    THolder<IReadController> Reader;
     TUploadRowsRequestBuilder RequestBuilder;
 
     NBackup::IChecksum::TPtr Checksum;

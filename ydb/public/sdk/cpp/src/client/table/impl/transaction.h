@@ -12,6 +12,10 @@ public:
         return TxId_;
     }
 
+    const std::string& GetSessionId() const {
+        return Session_.GetId();
+    }
+
     bool IsActive() const {
         return !TxId_.empty();
     }

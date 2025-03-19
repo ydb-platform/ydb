@@ -1991,6 +1991,11 @@ const std::string& TTransaction::GetId() const
     return TransactionImpl_->GetId();
 }
 
+const std::string& TTransaction::GetSessionId() const
+{
+    return TransactionImpl_->GetSessionId();
+}
+
 bool TTransaction::IsActive() const
 {
     return TransactionImpl_->IsActive();

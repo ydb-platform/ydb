@@ -808,7 +808,7 @@ namespace {
 
         for (auto setting : srcSettings) {
             auto name = setting.Name().Value();
-            if (name == "batch_size") {
+            if (name == "batch_size_bytes") {
                 auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
                 auto batchSizeBytes = FromString<i64>(value);
                 if (batchSizeBytes <= 0) {
@@ -835,7 +835,7 @@ namespace {
                 }
 
                 dstSettings.EnsureBatching().FlushInterval = TDuration::FromValue(value);
-            } else if (name == "consumer_name") {
+            } else if (name == "consumer") {
                 auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
                 if (value.empty()) {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),

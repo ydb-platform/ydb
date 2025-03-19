@@ -163,7 +163,7 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
         "password",
         "password_secret_name",
         "flush_interval",
-        "batch_size",
+        "batch_size_bytes",
     };
 
     TSet<TString> stateSettings = {
@@ -172,7 +172,7 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
     };
 
     TSet<TString> crateOnlySettings = {
-        "consumer_name",
+        "consumer",
     };
 
     const auto keyName = to_lower(key.Name);

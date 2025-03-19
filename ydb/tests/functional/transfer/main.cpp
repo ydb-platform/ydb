@@ -191,13 +191,13 @@ struct MainTestCase {
     void CreateTransfer(const TString& lambda, const CreateTransferSettings& settings = CreateTransferSettings()) {
         TStringBuilder sb;
         if (settings.ConsumerName) {
-            sb << ", CONSUMER_NAME = '" << *settings.ConsumerName << "'" << Endl;
+            sb << ", CONSUMER = '" << *settings.ConsumerName << "'" << Endl;
         }
         if (settings.FlushInterval) {
             sb << ", FLUSH_INTERVAL = Interval('PT" << settings.FlushInterval->Seconds() << "S')" << Endl;
         }
         if (settings.BatchSizeBytes) {
-            sb << ", BATCH_SIZE = " << *settings.BatchSizeBytes << Endl;
+            sb << ", BATCH_SIZE_BYTES = " << *settings.BatchSizeBytes << Endl;
         }
 
         auto res = Session.ExecuteQuery(Sprintf(R"(

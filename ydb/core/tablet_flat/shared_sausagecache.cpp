@@ -789,11 +789,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         ProcessGCList();
     }
 
-    void Handle(NSharedCache::TEvInvalidate::TPtr &ev, const TActorContext& ctx) {
+    void Handle(NSharedCache::TEvDetach::TPtr &ev, const TActorContext& ctx) {
         const TLogoBlobID pageCollectionId = ev->Get()->PageCollectionId;
         auto collection = Collections.FindPtr(pageCollectionId);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Invalidate page collection " << pageCollectionId
+        LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Detach page collection " << pageCollectionId
             << (collection ? "" : " unknown")
             << " owner " << ev->Sender);
 
@@ -1268,7 +1268,7 @@ public:
             HFunc(NSharedCache::TEvRequest, Handle);
             HFunc(NSharedCache::TEvTouch, Handle);
             HFunc(NSharedCache::TEvUnregister, Handle);
-            HFunc(NSharedCache::TEvInvalidate, Handle);
+            HFunc(NSharedCache::TEvDetach, Handle);
 
             HFunc(NBlockIO::TEvData, Handle);
             HFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);

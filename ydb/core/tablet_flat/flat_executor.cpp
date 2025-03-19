@@ -728,7 +728,7 @@ void TExecutor::DropSingleCache(const TLogoBlobID &label)
     auto toActivate = PrivatePageCache->ForgetPageCollection(pageCollection);
     ActivateWaitingTransactions(toActivate);
     Y_ABORT_IF(PrivatePageCache->Info(label));
-    Send(MakeSharedPageCacheId(), new NSharedCache::TEvInvalidate(label));
+    Send(MakeSharedPageCacheId(), new NSharedCache::TEvDetach(label));
 
     Counters->Simple()[TExecutorCounters::CACHE_PINNED_SET] = PrivatePageCache->GetStats().PinnedSetSize;
     Counters->Simple()[TExecutorCounters::CACHE_PINNED_LOAD] = PrivatePageCache->GetStats().PinnedLoadSize;

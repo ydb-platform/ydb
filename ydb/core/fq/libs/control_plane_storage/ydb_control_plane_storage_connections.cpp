@@ -28,7 +28,7 @@ void PrepareSensitiveFields(::FederatedQuery::Connection& connection, bool extra
         auto& pg = *setting.mutable_postgresql_cluster();
         pg.set_password("");
     }
-    if (auto auth = GetMutableAuth(&setting); auth && auth->has_token()) {
+    if (auto auth = GetMutableAuth(setting); auth && auth->has_token()) {
         auth->mutable_token()->set_token("");
     }
 }

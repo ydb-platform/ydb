@@ -258,29 +258,26 @@ FederatedQuery::IamAuth GetAuth(const FederatedQuery::Connection& connection) {
     }
 }
 
-FederatedQuery::IamAuth* GetMutableAuth(FederatedQuery::ConnectionSetting* setting) {
-    if (setting == nullptr) {
-        return nullptr;
-    }
-    switch (setting->connection_case()) {
+FederatedQuery::IamAuth* GetMutableAuth(FederatedQuery::ConnectionSetting& setting) {
+    switch (setting.connection_case()) {
     case FederatedQuery::ConnectionSetting::kObjectStorage:
-        return setting->mutable_object_storage()->mutable_auth();
+        return setting.mutable_object_storage()->mutable_auth();
     case FederatedQuery::ConnectionSetting::kYdbDatabase:
-        return setting->mutable_ydb_database()->mutable_auth();
+        return setting.mutable_ydb_database()->mutable_auth();
     case FederatedQuery::ConnectionSetting::kClickhouseCluster:
-        return setting->mutable_clickhouse_cluster()->mutable_auth();
+        return setting.mutable_clickhouse_cluster()->mutable_auth();
     case FederatedQuery::ConnectionSetting::kDataStreams:
-        return setting->mutable_data_streams()->mutable_auth();
+        return setting.mutable_data_streams()->mutable_auth();
     case FederatedQuery::ConnectionSetting::kMonitoring:
-        return setting->mutable_monitoring()->mutable_auth();
+        return setting.mutable_monitoring()->mutable_auth();
     case FederatedQuery::ConnectionSetting::kPostgresqlCluster:
-        return setting->mutable_postgresql_cluster()->mutable_auth();
+        return setting.mutable_postgresql_cluster()->mutable_auth();
     case FederatedQuery::ConnectionSetting::kGreenplumCluster:
-        return setting->mutable_greenplum_cluster()->mutable_auth();
+        return setting.mutable_greenplum_cluster()->mutable_auth();
     case FederatedQuery::ConnectionSetting::kMysqlCluster:
-        return setting->mutable_mysql_cluster()->mutable_auth();
+        return setting.mutable_mysql_cluster()->mutable_auth();
     case FederatedQuery::ConnectionSetting::kLogging:
-        return setting->mutable_logging()->mutable_auth();
+        return setting.mutable_logging()->mutable_auth();
     case FederatedQuery::ConnectionSetting::CONNECTION_NOT_SET:
         return nullptr;
     }

@@ -135,7 +135,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             if (Codec == NBackupRestoreTraits::ECompressionCodec::None) {
                 TStringBuf readyData(Portion.Data(), Portion.Data() + Portion.Size());
                 EDataStatus ret = TryGetReadyData(readyData, error);
-                if (ret != ERROR) {
+                if (ret == READY_DATA) {
                     data = readyData;
                     ReadyInputBytes = readyData.size();
                 }
@@ -211,7 +211,9 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             PendingInputBytes -= ReadyInputBytes;
             FeedSize -= ReadyInputBytes;
 
-            Portion.ChopHead(ReadyInputBytes);
+            if (Codec == NBackupRestoreTraits::ECompressionCodec::None) {
+                Portion.ChopHead(ReadyInputBytes);
+            }
             ReadyInputBytes = 0;
         }
 

@@ -48,6 +48,7 @@ TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonito
     , LoadInFlyBytes(counters->GetCounter("LoadInFlyBytes"))
 
     , PageCollections(counters->GetCounter("PageCollections"))
+    , Owners(counters->GetCounter("Owners"))
     , PageCollectionOwners(counters->GetCounter("PageCollectionOwners"))
 
     , PendingRequests(counters->GetCounter("PendingRequests"))
@@ -400,7 +401,11 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         if (collection.Owners.insert(owner).second) {
             Counters.PageCollectionOwners->Inc();
-            bool inserted = Owners[owner].insert(&collection).second;
+            auto& ownerCollections = Owners[owner];
+            if (ownerCollections.empty()) {
+                Counters.Owners->Inc();
+            }
+            bool inserted = ownerCollections.insert(&collection).second;
             Y_ABORT_UNLESS(inserted);
         }
 
@@ -802,6 +807,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             TryDropExpiredCollection(*collection);
         }
         Owners.erase(ownerIt);
+        Counters.Owners->Dec();
 
         ProcessGCList();
     }
@@ -829,6 +835,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         if (ownerIt->second.empty()) {
             Owners.erase(ownerIt);
+            Counters.Owners->Dec();
         }
 
         TryDropExpiredCollection(*collection);

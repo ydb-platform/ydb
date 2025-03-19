@@ -1875,7 +1875,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             "state",
             "failover_mode",
             "flush_interval",
-            "batch_size",
+            "batch_size_bytes",
         };
 
         if (!CheckReplicationSettings(node.TransferSettings(), supportedSettings, ctx)) {

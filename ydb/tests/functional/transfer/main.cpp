@@ -214,13 +214,57 @@ struct MainTestCase {
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
     }
 
+    struct AlterTransferSettings {
+        std::optional<TString> TransformLambda;
+        std::optional<TDuration> FlushInterval;
+        std::optional<ui64> BatchSizeBytes;
+
+        AlterTransferSettings()
+            : FlushInterval(std::nullopt)
+            , BatchSizeBytes(std::nullopt) {}
+
+        static AlterTransferSettings WithBatching(const TDuration& flushInterval, const ui64 batchSize) {
+            AlterTransferSettings result;
+            result.FlushInterval = flushInterval;
+            result.BatchSizeBytes = batchSize;
+            return result;
+        }
+
+        static AlterTransferSettings WithTransformLambda(const TString& lambda) {
+            AlterTransferSettings result;
+            result.TransformLambda = lambda;
+            return result;
+        }
+    };
+
     void AlterTransfer(const TString& lambda) {
+        AlterTransfer(AlterTransferSettings::WithTransformLambda(lambda));
+    }
+
+    void AlterTransfer(const AlterTransferSettings& settings) {
+        TString lambda = settings.TransformLambda ? *settings.TransformLambda : "";
+        TString setLambda = settings.TransformLambda ? "SET USING $l" : "";
+
+        TStringBuilder sb;
+        if (settings.FlushInterval) {
+            sb << "FLUSH_INTERVAL = Interval('PT" << settings.FlushInterval->Seconds() << "S')" << Endl;
+        }
+        if (settings.BatchSizeBytes) {
+            sb << ", BATCH_SIZE_BYTES = " << *settings.BatchSizeBytes << Endl;
+        }
+
+        TString setOptions;
+        if (!sb.empty()) {
+            setOptions = TStringBuilder() << "SET (" << sb << " )";
+        }
+
         auto res = Session.ExecuteQuery(Sprintf(R"(
             %s;
 
             ALTER TRANSFER `%s`
-            SET USING $l;
-        )", lambda.data(), TransferName.data()), TTxControl::NoTx()).GetValueSync();
+            %s
+            %s;
+        )", lambda.data(), TransferName.data(), setLambda.data(), setOptions.data()), TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
     }
 
@@ -1108,6 +1152,52 @@ Y_UNIT_TEST_SUITE(Transfer)
             UNIT_ASSERT_C(attempt, "Unable to wait transfer result");
             Sleep(TDuration::Seconds(1));
         }
+    }
+
+    Y_UNIT_TEST(AlterFlushInterval)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )");
+
+        testCase.CreateTopic(1);
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithBatching(TDuration::Hours(1), 1_GB));
+
+
+        testCase.Write({"Message-1"});
+
+        // check if there isn`t data in the table (flush_interval is big)
+        for (size_t attempt = 5; attempt--; ) {
+            auto res = testCase.DoRead({{
+                _C("Key", ui64(0)),
+            }});
+            Cerr << "Attempt=" << attempt << " count=" << res.first << Endl << Flush;
+            UNIT_ASSERT_VALUES_EQUAL_C(0, res.first, "Flush has not been happened");
+            Sleep(TDuration::Seconds(1));
+        }
+
+        testCase.AlterTransfer(MainTestCase::AlterTransferSettings::WithBatching(TDuration::Seconds(1), 1_GB));
+
+        // check if there is data in the table
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }});
     }
 }
 

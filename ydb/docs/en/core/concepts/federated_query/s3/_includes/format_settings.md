@@ -1,4 +1,5 @@
 |Setting name|Description|Possible values|
+|----|----|---|
 |`file_pattern`|File name template|File name template string. Wildcards `*` are supported.|
 |`data.interval.unit`|Unit for parsing `Interval` type|MICROSECONDS, MILLISECONDS, SECONDS, MINUTES, HOURS, DAYS, WEEKS|
 |`data.datetime.format_name`|The format in which `Datetime` data is stored|POSIX, ISO|

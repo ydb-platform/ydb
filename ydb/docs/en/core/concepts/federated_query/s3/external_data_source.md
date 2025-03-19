@@ -143,6 +143,12 @@ In {{ ydb-full-name }}, the following data paths are supported:
 
 {% include [!](_includes/path_format.md) %}
 
+### Format settings {#format_settings}
+
+In {{ ydb-full-name }}, the following format settings are supported:
+
+{% include [!](_includes/format_settings.md) %}
+
 ## Example {#read_example}
 
 Example query to read data from S3 ({{ objstorage-full-name }}):

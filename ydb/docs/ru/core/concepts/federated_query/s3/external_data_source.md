@@ -143,6 +143,12 @@ WHERE
 
 {% include [!](_includes/path_format.md) %}
 
+### Параметры форматирования {#format_settings}
+
+В {{ ydb-full-name }} поддерживаются следующие параметры форматирования:
+
+{% include [!](_includes/format_settings.md) %}
+
 ## Пример {#read_example}
 
 Пример запроса для чтения данных из S3 ({{ objstorage-full-name }}):

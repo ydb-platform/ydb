@@ -122,14 +122,19 @@
                 "ColumnType": "String"
             },
             {
-                "ColumnId": 25,
-                "ColumnName": "ConfigVersion",
-                "ColumnType": "Uint32"
-            },
-            {
                 "ColumnId": 26,
                 "ColumnName": "ShredState",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 27,
+                "ColumnName": "StorageYamlConfig",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 28,
+                "ColumnName": "ExpectedStorageYamlConfigVersion",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -159,8 +164,9 @@
                     22,
                     23,
                     24,
-                    25,
-                    26
+                    26,
+                    27,
+                    28
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -261,6 +267,11 @@
                 "ColumnType": "Uint32"
             },
             {
+                "ColumnId": 19,
+                "ColumnName": "ShredComplete",
+                "ColumnType": "Bool"
+            },
+            {
                 "ColumnId": 2,
                 "ColumnName": "PDiskID",
                 "ColumnType": "Uint32"
@@ -333,6 +344,7 @@
                     17,
                     18,
                     1,
+                    19,
                     2,
                     3,
                     4,

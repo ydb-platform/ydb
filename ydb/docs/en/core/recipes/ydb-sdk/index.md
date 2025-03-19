@@ -25,6 +25,7 @@ Table of contents:
 - [Inserting data](upsert.md)
 - [Bulk upsert of data](bulk-upsert.md)
 - [Setting up the transaction execution mode](tx-control.md)
+- [Configuring time to live (TTL)](ttl.md)
 - Coordination
 
   - [Distributed lock](distributed-lock.md)

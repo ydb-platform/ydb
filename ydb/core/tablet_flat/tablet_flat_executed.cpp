@@ -2,6 +2,7 @@
 #include "flat_executor.h"
 #include "flat_executor_counters.h"
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
 namespace NKikimr {
@@ -15,6 +16,28 @@ TTabletExecutedFlat::TTabletExecutedFlat(TTabletStorageInfo *info, const TActorI
     , Executor0(nullptr)
     , StartTime0(TAppData::TimeProvider->Now())
 {}
+
+bool TTabletExecutedFlat::OnUnhandledException(const std::exception& e) {
+    if (AppData()->FeatureFlags.GetEnableTabletRestartOnUnhandledExceptions()) {
+        // Tablets have a weird inheritence where subclass is always an actor,
+        // but we don't know the exact type at compile time. This dynamic_cast
+        // is expected to always succeed.
+        if (auto* actor = dynamic_cast<IActor*>(this)) {
+            auto ctx = TActivationContext::ActorContextFor(actor->SelfId());
+            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TABLET_EXECUTOR,
+                "Tablet " << TabletID() << " unhandled exception " << TypeName(e) << ": " << e.what()
+                << '\n' << TBackTrace::FromCurrentException().PrintToString());
+
+            GetServiceCounters(AppData(ctx)->Counters, "tablets")->GetCounter("alerts_broken", true)->Inc();
+
+            HandlePoison(ctx);
+            return true;
+        }
+    }
+
+    // Exception will propagate and cause the process to crash
+    return false;
+}
 
 IExecutor* TTabletExecutedFlat::CreateExecutor(const TActorContext &ctx) {
     if (!Executor()) {
@@ -39,12 +62,27 @@ void TTabletExecutedFlat::Execute(TAutoPtr<ITransaction> transaction) {
         static_cast<TExecutor*>(Executor())->Execute(transaction, ExecutorCtx(*TlsActivationContext));
 }
 
-void TTabletExecutedFlat::EnqueueExecute(TAutoPtr<ITransaction> transaction) {
-    if (transaction)
-        static_cast<TExecutor*>(Executor())->Enqueue(transaction, ExecutorCtx(*TlsActivationContext));
+ui64 TTabletExecutedFlat::Enqueue(TAutoPtr<ITransaction> transaction) {
+    if (transaction) {
+        return static_cast<TExecutor*>(Executor())->Enqueue(transaction);
+    } else {
+        return 0;
+    }
 }
 
-const NTable::TScheme& TTabletExecutedFlat::Scheme() const noexcept {
+ui64 TTabletExecutedFlat::EnqueueExecute(TAutoPtr<ITransaction> transaction) {
+    return Enqueue(transaction);
+}
+
+ui64 TTabletExecutedFlat::EnqueueLowPriority(TAutoPtr<ITransaction> transaction) {
+    if (transaction) {
+        return static_cast<TExecutor*>(Executor())->EnqueueLowPriority(transaction);
+    } else {
+        return 0;
+    }
+}
+
+const NTable::TScheme& TTabletExecutedFlat::Scheme() const {
     return static_cast<TExecutor*>(Executor())->Scheme();
 }
 
@@ -108,9 +146,9 @@ void TTabletExecutedFlat::OnTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const
     ctx.Send(Tablet(), new TEvTablet::TEvTabletStopped());
 }
 
-void TTabletExecutedFlat::HandlePoison(const TActorContext &ctx) {
+void TTabletExecutedFlat::HandlePoison(const TActorContext& ctx) {
     if (Executor0) {
-        Executor0->DetachTablet(ExecutorCtx(ctx));
+        Executor0->DetachTablet();
         Executor0 = nullptr;
     }
 
@@ -127,7 +165,7 @@ void TTabletExecutedFlat::HandleTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, c
 
 void TTabletExecutedFlat::HandleTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) {
     if (Executor0) {
-        Executor0->DetachTablet(ExecutorCtx(ctx));
+        Executor0->DetachTablet();
         Executor0 = nullptr;
     }
 
@@ -153,11 +191,21 @@ void TTabletExecutedFlat::HandleLocalReadColumns(TEvTablet::TEvLocalReadColumns:
 }
 
 void TTabletExecutedFlat::SignalTabletActive(const TActorIdentity &id, TString &&versionInfo) {
+    ReportStartTime();
     id.Send(Tablet(), new TEvTablet::TEvTabletActive(std::move(versionInfo)));
 }
 
 void TTabletExecutedFlat::SignalTabletActive(const TActorContext &ctx, TString &&versionInfo) {
+    ReportStartTime();
     ctx.Send(Tablet(), new TEvTablet::TEvTabletActive(std::move(versionInfo)));
+}
+
+void TTabletExecutedFlat::ReportStartTime() {
+    TDuration startTime = TAppData::TimeProvider->Now() - StartTime0;
+    auto* counters = Executor()->GetCounters();
+    if (counters) {
+        counters->Simple()[TExecutorCounters::TABLET_LAST_START_TIME_US].Set(startTime.MicroSeconds());
+    }
 }
 
 void TTabletExecutedFlat::Enqueue(STFUNC_SIG) {

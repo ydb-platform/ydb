@@ -43,7 +43,7 @@ namespace NWriter {
             return Writer || Result.RegularPages || Result.StickyPages;
         }
 
-        TResult Finish() noexcept
+        TResult Finish()
         {
             if (auto meta = Writer.Finish(false /* omit empty page collection */)) {
                 for (auto &glob : Writer.Grab()) {

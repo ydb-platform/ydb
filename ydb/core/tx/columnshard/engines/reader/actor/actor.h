@@ -25,11 +25,7 @@ private:
     const std::shared_ptr<IStoragesManager> StoragesManager;
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     std::optional<TMonotonic> StartInstant;
-
-public:
-    static constexpr auto ActorActivityType() {
-        return NKikimrServices::TActivity::KQP_OLAP_SCAN;
-    }
+    std::optional<TMonotonic> FinishInstant;
 
 public:
     virtual void PassAway() override;
@@ -77,6 +73,8 @@ private:
     void HandleScan(TEvents::TEvWakeup::TPtr& /*ev*/);
 
 private:
+    void CheckHanging(const bool logging = false) const;
+
     void MakeResult(size_t reserveRows = 0);
 
     void AddRow(const TConstArrayRef<TCell>& row) override;

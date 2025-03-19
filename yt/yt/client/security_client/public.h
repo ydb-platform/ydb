@@ -76,12 +76,6 @@ YT_DEFINE_ERROR_ENUM(
     ((IrreversibleAclModification)  (909))
 );
 
-// NB: Changing this list requires reign promotion.
-DEFINE_ENUM(EProxyKind,
-    ((Http)          (1))
-    ((Rpc)           (2))
-);
-
 DEFINE_ENUM(EAccessControlObjectNamespace,
     (AdminCommands)
 );
@@ -98,6 +92,7 @@ DEFINE_ENUM(EAccessControlObject,
     (DiscombobulateNonvotingPeers)
     (SwitchLeader)
     (RequestRestart)
+    (CollectCoverage)
 );
 
 ////////////////////////////////////////////////////////////////////////////////

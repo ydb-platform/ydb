@@ -190,7 +190,7 @@ IViablePeerRegistryPtr CreateTestRegistry(
 std::vector<std::string> AddressesFromChannels(const std::vector<IChannelPtr>& channels)
 {
     std::vector<std::string> result;
-    for (const auto& channel: channels) {
+    for (const auto& channel : channels) {
         result.push_back(channel->GetEndpointDescription());
     }
     return result;
@@ -503,9 +503,9 @@ TEST(TPreferLocalViablePeerRegistryTest, Simple)
     auto viablePeerRegistry = CreateTestRegistry(EPeerPriorityStrategy::PreferLocal, channelFactory, 3);
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
-        NNet::WriteLocalHostName(oldLocalHostName);
+        NNet::SetLocalHostName(oldLocalHostName);
     });
-    NNet::WriteLocalHostName("home.man.yp-c.yandex.net");
+    NNet::SetLocalHostName("home.man.yp-c.yandex.net");
 
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("b.sas.yp-c.yandex.net"));
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("c.sas.yp-c.yandex.net"));
@@ -534,9 +534,9 @@ TEST(TPreferLocalViablePeerRegistryTest, MinPeerCountForPriorityAwareness)
         /*minPeerCountForPriorityAwareness*/ 2);
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
-        NNet::WriteLocalHostName(oldLocalHostName);
+        NNet::SetLocalHostName(oldLocalHostName);
     });
-    NNet::WriteLocalHostName("home.man.yp-c.yandex.net");
+    NNet::SetLocalHostName("home.man.yp-c.yandex.net");
 
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("local.man.yp-c.yandex.net"));
 
@@ -563,9 +563,9 @@ TEST(TPreferLocalViablePeerRegistryTest, RegistrationEvictsLesserPeers)
     auto viablePeerRegistry = CreateTestRegistry(EPeerPriorityStrategy::PreferLocal, channelFactory, 3);
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
-        NNet::WriteLocalHostName(oldLocalHostName);
+        NNet::SetLocalHostName(oldLocalHostName);
     });
-    NNet::WriteLocalHostName("home.man.yp-c.yandex.net");
+    NNet::SetLocalHostName("home.man.yp-c.yandex.net");
 
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("b.sas.yp-c.yandex.net"));
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("c.sas.yp-c.yandex.net"));
@@ -591,9 +591,9 @@ TEST(TPreferLocalViablePeerRegistryTest, PeerRotationRespectsPriority)
     auto viablePeerRegistry = CreateTestRegistry(EPeerPriorityStrategy::PreferLocal, channelFactory, 3);
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
-        NNet::WriteLocalHostName(oldLocalHostName);
+        NNet::SetLocalHostName(oldLocalHostName);
     });
-    NNet::WriteLocalHostName("home.man.yp-c.yandex.net");
+    NNet::SetLocalHostName("home.man.yp-c.yandex.net");
 
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("b.sas.yp-c.yandex.net"));
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("c.sas.yp-c.yandex.net"));
@@ -615,9 +615,9 @@ TEST(TPreferLocalViablePeerRegistryTest, FillFromBacklogRespectsPriority)
     auto viablePeerRegistry = CreateTestRegistry(EPeerPriorityStrategy::PreferLocal, channelFactory, 3);
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
-        NNet::WriteLocalHostName(oldLocalHostName);
+        NNet::SetLocalHostName(oldLocalHostName);
     });
-    NNet::WriteLocalHostName("home.man.yp-c.yandex.net");
+    NNet::SetLocalHostName("home.man.yp-c.yandex.net");
 
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("b.sas.yp-c.yandex.net"));
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("c.sas.yp-c.yandex.net"));
@@ -650,9 +650,9 @@ TEST(TPreferLocalViablePeerRegistryTest, DoNotCrashIfNoLocalPeers)
     auto viablePeerRegistry = CreateTestRegistry(EPeerPriorityStrategy::PreferLocal, channelFactory, 3);
 
     auto finally = Finally([oldLocalHostName = NNet::GetLocalHostName()] {
-        NNet::WriteLocalHostName(oldLocalHostName);
+        NNet::SetLocalHostName(oldLocalHostName);
     });
-    NNet::WriteLocalHostName("home.man.yp-c.yandex.net");
+    NNet::SetLocalHostName("home.man.yp-c.yandex.net");
 
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("b.sas.yp-c.yandex.net"));
     EXPECT_TRUE(viablePeerRegistry->RegisterPeer("a.man.yp-c.yandex.net"));

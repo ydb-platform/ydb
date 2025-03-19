@@ -10,9 +10,7 @@ namespace NKikimr {
             ui32 NodeId = 0;
             TString Path;
 
-            bool operator==(const TDiskId& other) const {
-                return NodeId == other.NodeId && Path == other.Path;
-            }
+            friend std::strong_ordering operator<=>(const TDiskId&, const TDiskId&) = default;
         };
 
         struct TDiskInfo {
@@ -32,21 +30,6 @@ namespace NKikimr {
                 return {NodeId, Path};
             }
         };
-
-    } // NBsController
-} // NKikimr
-
-namespace std {
-    template <>
-    struct hash<NKikimr::NBsController::TDiskId> {
-        size_t operator()(const NKikimr::NBsController::TDiskId& diskId) const {
-            return hash<ui32>()(diskId.NodeId) ^ hash<TString>()(diskId.Path);
-        }
-    };
-}
-
-namespace NKikimr {
-    namespace NBsController {
 
         static TPDiskId FindFirstEmptyPDiskId(const TOverlayMap<TPDiskId, TBlobStorageController::TPDiskInfo>& pdisks,
                 TNodeId nodeId) {
@@ -150,8 +133,8 @@ namespace NKikimr {
             return TString();
         }
 
-        static std::unordered_map<TDiskId, TDiskInfo> GetDisksFromHostConfig(const TBlobStorageController::TConfigState& state, const std::set<TBoxId>& relevantBoxes) {
-            std::unordered_map<TDiskId, TDiskInfo> disks;
+        static std::map<TDiskId, TDiskInfo> GetDisksFromHostConfig(const TBlobStorageController::TConfigState& state, const std::set<TBoxId>& relevantBoxes) {
+            std::map<TDiskId, TDiskInfo> disks;
 
             const auto& hostConfigs = state.HostConfigs.Get();
             const auto& boxes = state.Boxes.Get();
@@ -208,8 +191,8 @@ namespace NKikimr {
             return disks;
         }
 
-        static std::unordered_map<TDiskId, TDiskInfo> GetDisksFromDrivesSerials(const TBlobStorageController::TConfigState& state, const std::set<TBoxId>& relevantBoxes) {
-            std::unordered_map<TDiskId, TDiskInfo> disks;
+        static std::map<TDiskId, TDiskInfo> GetDisksFromDrivesSerials(const TBlobStorageController::TConfigState& state, const std::set<TBoxId>& relevantBoxes) {
+            std::map<TDiskId, TDiskInfo> disks;
 
             state.DrivesSerials.ForEachInRange({}, {}, [&](const auto& serial, const auto& driveInfo) {
                 if (!relevantBoxes.contains(driveInfo.BoxId)) {
@@ -262,7 +245,7 @@ namespace NKikimr {
             return disks;
         }
 
-        static std::unordered_map<TDiskId, TDiskInfo> GetDisksFromDrivesSerialsAndHostConfig(
+        static std::map<TDiskId, TDiskInfo> GetDisksFromDrivesSerialsAndHostConfig(
             const TBlobStorageController::TConfigState& state, const std::set<TBoxId>& relevantBoxes)
         {
             auto disksFromDrivesSerials = GetDisksFromDrivesSerials(state, relevantBoxes);
@@ -344,7 +327,8 @@ namespace NKikimr {
                             /* nextVslotId */ 1000, disk.PDiskConfig, disk.BoxId, DefaultMaxSlots,
                             NKikimrBlobStorage::EDriveStatus::ACTIVE, /* statusTimestamp */ TInstant::Zero(),
                             NKikimrBlobStorage::EDecommitStatus::DECOMMIT_NONE, NBsController::TPDiskMood::Normal,
-                            disk.Serial, disk.LastSeenSerial, disk.LastSeenPath, staticSlotUsage);
+                            disk.Serial, disk.LastSeenSerial, disk.LastSeenPath, staticSlotUsage,
+                            true /* assume shred completed for this disk */);
 
                     // Set PDiskId and Guid in DrivesSerials
                     if (auto info = state.DrivesSerials.FindForUpdate(disk.Serial)) {

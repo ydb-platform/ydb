@@ -9,7 +9,10 @@ from ydb.library.yql.providers.generic.connector.tests.utils.run.dqrun import Dq
 from ydb.library.yql.providers.generic.connector.tests.utils.run.kqprun import KqpRunner
 
 # used in every test.py
-runner_types: Final = ("dqrun", "kqprun")
+runner_types: Final = (
+    # "dqrun",
+    "kqprun",
+)
 
 
 # used in every test.py

@@ -1,10 +1,10 @@
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/data_plane_helpers.h>
-#include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/data_plane_helpers.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
 #include <ydb/library/services/services.pb.h>
 
@@ -227,7 +227,7 @@ auto TTxFixture::CreateTopicReadSession(const TString& topic,
                                         const TString& consumer) -> TTopicReadSessionPtr
 {
     NYdb::NPersQueue::TReadSessionSettings settings;
-    settings.AppendTopics(topic);
+    settings.AppendTopics(std::string{topic});
     settings.ConsumerName(consumer);
     settings.ReadOriginal({DC});
 
@@ -279,8 +279,8 @@ void TTxFixture::Call_UpdateOffsetsInTransaction(const NYdb::NTable::TTransactio
     Ydb::Topic::UpdateOffsetsInTransactionRequest request;
     Ydb::Topic::UpdateOffsetsInTransactionResponse response;
 
-    request.mutable_tx()->set_id(tx.GetId());
-    request.mutable_tx()->set_session(tx.GetSession().GetId());
+    request.mutable_tx()->set_id(TString{tx.GetId()});
+    request.mutable_tx()->set_session(TString{tx.GetSession().GetId()});
     request.set_consumer(consumer);
 
     auto *topic = request.mutable_topics()->Add();
@@ -335,10 +335,10 @@ void TTxFixture::Ensure_In_Table(const TString& tablePath,
         UNIT_ASSERT(rs.TryNextRow());
 
         auto key = rs.ColumnParser("key").GetOptionalInt64();
-        UNIT_ASSERT(key.Defined());
+        UNIT_ASSERT(key.has_value());
 
         auto value = rs.ColumnParser("value").GetOptionalInt64();
-        UNIT_ASSERT(value.Defined());
+        UNIT_ASSERT(value.has_value());
 
         auto p = values.find(*key);
         UNIT_ASSERT(p != values.end());

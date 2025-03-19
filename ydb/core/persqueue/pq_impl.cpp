@@ -183,6 +183,8 @@ private:
         auto partResp = responseRecord.MutablePartitionResponse()->MutableCmdReadResult();
 
         partResp->SetMaxOffset(readResult.GetMaxOffset());
+        partResp->SetStartOffset(readResult.GetStartOffset());
+        partResp->SetEndOffset(readResult.GetEndOffset());
         partResp->SetSizeLag(readResult.GetSizeLag());
         partResp->SetWaitQuotaTimeMs(partResp->GetWaitQuotaTimeMs() + readResult.GetWaitQuotaTimeMs());
 
@@ -865,6 +867,7 @@ NKikimrPQ::TPQTabletConfig TPersQueue::MakeSupportivePartitionConfig() const
     partitionConfig.MutableReadRuleServiceTypes()->Clear();
     partitionConfig.MutableReadRuleVersions()->Clear();
     partitionConfig.MutableReadRuleGenerations()->Clear();
+    partitionConfig.MutableConsumers()->Clear();
 
     return partitionConfig;
 }
@@ -3667,10 +3670,18 @@ void TPersQueue::ProcessPlanStepQueue(const TActorContext& ctx)
 
         for (auto& tx : event.GetTransactions()) {
             Y_ABORT_UNLESS(tx.HasTxId());
-            Y_ABORT_UNLESS(tx.HasAckTo());
 
             txIds.push_back(tx.GetTxId());
-            txAcks[ActorIdFromProto(tx.GetAckTo())].push_back(tx.GetTxId());
+
+            // Note: we plan to remove AckTo in the future
+            if (tx.HasAckTo()) {
+                TActorId txOwner = ActorIdFromProto(tx.GetAckTo());
+                // Note: when mediators ack transactions on their own they also
+                // specify an empty AckTo. Sends to empty actors are a no-op anyway.
+                if (txOwner) {
+                    txAcks[txOwner].push_back(tx.GetTxId());
+                }
+            }
         }
 
         if (step >= PlanStep) {
@@ -4631,7 +4642,6 @@ TActorId TPersQueue::GetPartitionQuoter(const TPartitionId& partition) {
             partition,
             SelfId(),
             TabletID(),
-            IsLocalDC,
             *Counters
         ));
     }

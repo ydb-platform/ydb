@@ -21,9 +21,19 @@ public:
         ReplyAndPassAway();
     }
 
+    NJson::TJsonValue GetSettings() {
+        NJson::TJsonValue json;
+        NJson::TJsonValue& security(json["Security"]);
+        security["IsTokenRequired"] = AppData()->EnforceUserTokenRequirement;
+        security["UseLoginProvider"] = AppData()->AuthConfig.GetUseLoginProvider();
+        security["DomainLoginOnly"] = AppData()->AuthConfig.GetDomainLoginOnly();
+        return json;
+    }
+
     void ReplyAndPassAway() override {
         NJson::TJsonValue json;
         json["Capabilities"] = Viewer->GetCapabilities();
+        json["Settings"] = GetSettings();
         TBase::ReplyAndPassAway(GetHTTPOKJSON(json));
     }
 };

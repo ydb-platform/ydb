@@ -135,7 +135,7 @@ struct TSchemeShard::TTxDeleteTabletReply : public TSchemeShard::TRwTxBase {
             path->DecShardsInside();
 
             auto domain = Self->ResolveDomainInfo(path);
-            domain->RemoveInternalShard(ShardIdx);
+            domain->RemoveInternalShard(ShardIdx, Self);
             switch (tabletType) {
             case ETabletType::SequenceShard:
                 domain->RemoveSequenceShard(ShardIdx);

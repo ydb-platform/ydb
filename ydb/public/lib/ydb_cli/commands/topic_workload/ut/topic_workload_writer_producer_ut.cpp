@@ -17,19 +17,19 @@ namespace NTests {
             public:
                 MOCK_METHOD(NThreading::TFuture<void>, WaitEvent, (), (override));
 
-                MOCK_METHOD(TMaybe<TWriteSessionEvent::TEvent>, GetEvent, (bool block), (override));
+                MOCK_METHOD(std::optional<TWriteSessionEvent::TEvent>, GetEvent, (bool block), (override));
 
-                MOCK_METHOD(TVector<TWriteSessionEvent::TEvent>, GetEvents, (bool block, TMaybe<size_t> maxEventsCount), (override));
+                MOCK_METHOD(std::vector<TWriteSessionEvent::TEvent>, GetEvents, (bool block, std::optional<size_t> maxEventsCount), (override));
 
-                MOCK_METHOD(NThreading::TFuture<ui64>, GetInitSeqNo, (), (override));
+                MOCK_METHOD(NThreading::TFuture<uint64_t>, GetInitSeqNo, (), (override));
 
                 MOCK_METHOD(void, Write, (TContinuationToken&& continuationToken, TWriteMessage&& message, NTable::TTransaction* tx), (override));
 
-                MOCK_METHOD(void, Write, (TContinuationToken&& continuationToken, TStringBuf data, TMaybe<ui64> seqNo, TMaybe<TInstant> createTimestamp), (override));
+                MOCK_METHOD(void, Write, (TContinuationToken&& continuationToken, std::string_view data, std::optional<uint64_t> seqNo, std::optional<TInstant> createTimestamp), (override));
 
                 MOCK_METHOD(void, WriteEncoded, (TContinuationToken&& continuationToken, TWriteMessage&& params, NTable::TTransaction* tx), (override));
 
-                MOCK_METHOD(void, WriteEncoded, (TContinuationToken&& continuationToken, TStringBuf data, ECodec codec, ui32 originalSize, TMaybe<ui64> seqNo, TMaybe<TInstant> createTimestamp), (override));
+                MOCK_METHOD(void, WriteEncoded, (TContinuationToken&& continuationToken, std::string_view data, ECodec codec, uint32_t originalSize, std::optional<uint64_t> seqNo, std::optional<TInstant> createTimestamp), (override));
 
                 MOCK_METHOD(bool, Close, (TDuration closeTimeout), (override));
 
@@ -152,7 +152,7 @@ namespace NTests {
 
         void TFixture::InitContinuationToken(TTopicWorkloadWriterProducer& producer) {
             auto continuationToken = MockContinuationTokenIssuer::IssueContinuationToken();
-            TMaybe<TWriteSessionEvent::TEvent> event = std::variant<
+            std::optional<TWriteSessionEvent::TEvent> event = std::variant<
                     TWriteSessionEvent::TAcksEvent, 
                     TWriteSessionEvent::TReadyToAcceptEvent, 
                     TSessionClosedEvent
@@ -188,7 +188,7 @@ namespace NTests {
         Y_UNIT_TEST_F(Send_ShouldCallWriteMethodOfTheWriteSession, TFixture) {
             // arrange
             auto producer = CreateProducer();
-            auto initSeqNo = 0ul;
+            uint64_t initSeqNo = 0;
             ON_CALL(*WriteSession, GetInitSeqNo()).WillByDefault(testing::Return(NThreading::MakeFuture(initSeqNo)));
             producer.WaitForInitSeqNo();
             InitContinuationToken(producer);
@@ -221,7 +221,7 @@ namespace NTests {
         
         Y_UNIT_TEST_F(WaitForContinuationToken_ShouldThrowExceptionIfEventOfTheWrongType, TFixture) {
             auto producer = CreateProducer();
-            TMaybe<TWriteSessionEvent::TEvent> event = std::variant<
+            std::optional<TWriteSessionEvent::TEvent> event = std::variant<
                     TWriteSessionEvent::TAcksEvent, 
                     TWriteSessionEvent::TReadyToAcceptEvent, 
                     TSessionClosedEvent

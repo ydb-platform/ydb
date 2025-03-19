@@ -67,6 +67,7 @@
 #include <util/system/execpath.h>
 #include <util/system/guard.h>
 #include <util/system/shellcommand.h>
+#include <util/system/mutex.h>
 #include <util/ysaveload.h>
 
 #include <algorithm>
@@ -211,6 +212,240 @@ TString DebugPath(NYT::TRichYPath path) {
     path.Columns_->Parts_.erase(path.Columns_->Parts_.begin() + maxDebugColumns, path.Columns_->Parts_.end());
     path.Columns_->Parts_.push_back("...");
     return NYT::NodeToCanonicalYsonString(NYT::PathToNode(path), NYT::NYson::EYsonFormat::Text) + " (" + std::to_string(numColumns) + " columns)";
+}
+
+void GetIntegerConstraints(const TExprNode::TPtr& column, bool& isSigned, ui64& minValueAbs, ui64& maxValueAbs) {
+    EDataSlot toType = column->GetTypeAnn()->Cast<TDataExprType>()->GetSlot();
+
+    // AllowIntegralConversion (may consider some refactoring)
+    if (toType == EDataSlot::Uint8) {
+        isSigned = false;
+        minValueAbs = 0;
+        maxValueAbs = Max<ui8>();
+    }
+    else if (toType == EDataSlot::Uint16) {
+        isSigned = false;
+        minValueAbs = 0;
+        maxValueAbs = Max<ui16>();
+    }
+    else if (toType == EDataSlot::Uint32) {
+        isSigned = false;
+        minValueAbs = 0;
+        maxValueAbs = Max<ui32>();
+    }
+    else if (toType == EDataSlot::Uint64) {
+        isSigned = false;
+        minValueAbs = 0;
+        maxValueAbs = Max<ui64>();
+    }
+    else if (toType == EDataSlot::Int8) {
+        isSigned = true;
+        minValueAbs = (ui64)Max<i8>() + 1;
+        maxValueAbs = (ui64)Max<i8>();
+    }
+    else if (toType == EDataSlot::Int16) {
+        isSigned = true;
+        minValueAbs = (ui64)Max<i16>() + 1;
+        maxValueAbs = (ui64)Max<i16>();
+    }
+    else if (toType == EDataSlot::Int32) {
+        isSigned = true;
+        minValueAbs = (ui64)Max<i32>() + 1;
+        maxValueAbs = (ui64)Max<i32>();
+    }
+    else if (toType == EDataSlot::Int64) {
+        isSigned = true;
+        minValueAbs = (ui64)Max<i64>() + 1;
+        maxValueAbs = (ui64)Max<i64>();
+    } else {
+        YQL_ENSURE(false, "unexpected integer node type");
+    }
+}
+
+void QuoteColumnForQL(const TStringBuf& columnName, TStringBuilder& result) {
+    result << '`';
+    if (!columnName.Contains('`')) {
+        result << columnName;
+    } else {
+        for (const auto c : columnName) {
+            if (c == '`') {
+                result << "\\`";
+            } else {
+                result << c;
+            }
+        }
+    }
+    result << '`';
+}
+
+void ConvertComparisonForQL(const TStringBuf& opName, TStringBuilder& result) {
+    if (opName == "==") {
+        result << '=';
+    } else {
+        result << opName;
+    }
+}
+
+void GenerateInputQueryIntegerComparison(const TStringBuf& opName, const TExprNode::TPtr& intColumn, const TExprNode::TPtr& intValue, TStringBuilder& result) {
+    bool columnsIsSigned;
+    ui64 minValueAbs;
+    ui64 maxValueAbs;
+    GetIntegerConstraints(intColumn, columnsIsSigned, minValueAbs, maxValueAbs);
+
+    const auto maybeInt = TMaybeNode<TCoIntegralCtor>(intValue);
+    YQL_ENSURE(maybeInt);
+    bool hasSign;
+    bool isSigned;
+    ui64 valueAbs;
+    ExtractIntegralValue(maybeInt.Ref(), false, hasSign, isSigned, valueAbs);
+
+    if (!hasSign && valueAbs > maxValueAbs) {
+        // value is greater than maximum
+        if (opName == ">" || opName == ">=" || opName == "==") {
+            result << "FALSE";
+        } else {
+            result << "TRUE";
+        }
+    } else if (hasSign && valueAbs > minValueAbs) {
+        // value is less than minimum
+        if (opName == "<" || opName == "<=" || opName == "==") {
+            result << "FALSE";
+        } else {
+            result << "TRUE";
+        }
+    } else {
+        // value is in the range
+        const auto columnName = intColumn->ChildPtr(1)->Content();
+        const auto valueStr = maybeInt.Cast().Literal().Value();
+        QuoteColumnForQL(columnName, result);
+        result << " ";
+        ConvertComparisonForQL(opName, result);
+        result << " " << valueStr;
+    }
+}
+
+void GenerateInputQueryComparison(const TCoCompare& op, TStringBuilder& result) {
+    YQL_ENSURE(op.Ref().IsCallable({"<", "<=", ">", ">=", "==", "!="}));
+    const auto left = op.Left().Ptr();
+    const auto right = op.Right().Ptr();
+
+    if (left->IsCallable("Member")) {
+        GenerateInputQueryIntegerComparison(op.CallableName(), left, right, result);
+    } else {
+        YQL_ENSURE(right->IsCallable("Member"));
+        auto invertedOp = op.CallableName();
+        if (invertedOp == "<") {
+            invertedOp = ">";
+        } else if (invertedOp == "<=") {
+            invertedOp = ">=";
+        } else if (invertedOp == ">") {
+            invertedOp = "<";
+        } else if (invertedOp == ">=") {
+            invertedOp = "<=";
+        }
+        GenerateInputQueryIntegerComparison(invertedOp, right, left, result);
+    }
+}
+
+void GenerateInputQueryWhereExpression(const TExprNode::TPtr& node, TStringBuilder& result) {
+    if (const auto maybeCompare = TMaybeNode<TCoCompare>(node)) {
+        GenerateInputQueryComparison(maybeCompare.Cast(), result);
+    } else if (node->IsCallable("Not")) {
+        result << "NOT (";
+        GenerateInputQueryWhereExpression(node->ChildPtr(0), result);
+        result << ")";
+    } else if (node->IsCallable({"And", "Or"})) {
+        const TStringBuf op = node->IsCallable("And") ? "AND" : "OR";
+
+        result << "(";
+        GenerateInputQueryWhereExpression(node->Child(0), result);
+        result << ")";
+
+        const auto size = node->ChildrenSize();
+        for (TExprNode::TListType::size_type i = 1U; i < size; ++i) {
+            result << " " << op << " (";
+            GenerateInputQueryWhereExpression(node->Child(i), result);
+            result << ")";
+        };
+    } else {
+        YQL_ENSURE(false, "unexpected node type");
+    }
+}
+
+TString GenerateInputQueryWhereExpression(const TExprNode& settings) {
+    auto qlFilterNode = NYql::GetSetting(settings, EYtSettingType::QLFilter);
+    if (!qlFilterNode) {
+        return "";
+    }
+
+    qlFilterNode = qlFilterNode->ChildPtr(1);
+    YQL_ENSURE(qlFilterNode && qlFilterNode->IsCallable("YtQLFilter"));
+    const TYtQLFilter qlFilter(qlFilterNode);
+    const auto predicate = qlFilter.Predicate().Body();
+
+    TStringBuilder result;
+    GenerateInputQueryWhereExpression(predicate.Ptr(), result);
+    YQL_CLOG(INFO, ProviderYt)  << __FUNCTION__ << ": " << result;
+    return result;
+}
+
+TString GenerateInputQuery(const TRichYPath& path, const TString& whereExpression, bool useSystemColumns) {
+    YQL_ENSURE(whereExpression);
+    TStringBuilder result;
+    if (!path.Columns_ || !path.Columns_->Parts_) {
+        result << "*";
+    } else {
+        bool first = true;
+        for (const auto& column: path.Columns_->Parts_) {
+            if (!first) {
+                result << ", ";
+            }
+            QuoteColumnForQL(column, result);
+            first = false;
+        }
+        if (useSystemColumns) {
+            result << ", `$row_index`, `$range_index`";
+        }
+    }
+    result << " WHERE " << whereExpression;
+    YQL_CLOG(INFO, ProviderYt)  << __FUNCTION__ << ": " << result;
+    return result;
+}
+
+void SetInputQuerySpec(NYT::TNode& spec, const TString& inputQuery, bool useSystemColumns) {
+    spec["input_query"] = inputQuery;
+    spec["input_query_filter_options"]["enable_chunk_filter"] = true;
+    spec["input_query_filter_options"]["enable_row_filter"] = true;
+    if (useSystemColumns) {
+        spec["input_query_options"]["use_system_columns"] = true;
+    }
+}
+
+void PrepareInputQueryForMerge(NYT::TNode& spec, TVector<TRichYPath>& paths, const TString& whereExpression) {
+    // YQL-19382
+    if (whereExpression) {
+        YQL_ENSURE(paths.size() == 1, "YtQLFilter: multiple inputs are not supported");
+        auto& path = paths[0];
+        const TString inputQuery = GenerateInputQuery(path, whereExpression, /*useSystemColumns*/ false);
+        path.Columns_.Clear();
+        SetInputQuerySpec(spec, inputQuery, /*useSystemColumns*/ false);
+    }
+}
+
+template <typename T>
+void PrepareInputQueryForMap(NYT::TNode& spec, T& specWithPaths, const TString& whereExpression, bool useSystemColumns) {
+    // YQL-19382
+    if (whereExpression) {
+        const auto& inputs = specWithPaths.GetInputs();
+        YQL_ENSURE(inputs.size() == 1, "YtQLFilter: multiple inputs are not supported");
+        auto path = inputs[0];
+        const TString inputQuery = GenerateInputQuery(path, whereExpression, useSystemColumns);
+        if (path.Columns_) {
+            path.Columns_.Clear();
+            specWithPaths.SetInput(0, path);
+        }
+        SetInputQuerySpec(spec, inputQuery, useSystemColumns);
+    }
 }
 
 } // unnamed
@@ -685,6 +920,8 @@ public:
                 execCtx->SetOutput(outputOp.Cast().Output());
             }
 
+            ReportBlockStatus(opBase, execCtx);
+
             TFuture<void> future;
             if (auto op = opBase.Maybe<TYtSort>()) {
                 future = DoSort(op.Cast(), execCtx);
@@ -1044,18 +1281,20 @@ public:
         return Clusters_->TryGetServer(cluster);
     }
 
-    NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder) const final {
+    NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder, bool temp, bool anonymous) const final {
         auto richYPath = NYT::TRichYPath(table);
         if (TSession::TPtr session = GetSession(sessionId, true)) {
             if (auto ytServer = Clusters_->TryGetServer(cluster)) {
                 auto entry = session->TxCache_.GetEntry(ytServer);
-                if (auto p = entry->Snapshots.FindPtr(std::make_pair(table, epoch))) {
-                    richYPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p)).OriginalPath(NYT::AddPathPrefix(table, NYT::TConfig::Get()->Prefix));
-                } else {
-                    auto realTableName = NYql::TransformPath(tmpFolder, table, true, session->UserName_);
+                auto realTableName = NYql::TransformPath(tmpFolder, table, temp, session->UserName_);
+                if (temp && !anonymous) {
                     realTableName = NYT::AddPathPrefix(realTableName, NYT::TConfig::Get()->Prefix);
                     richYPath = NYT::TRichYPath(realTableName);
-                    richYPath.TransactionId(session->TxCache_.GetEntry(ytServer)->Tx->GetId());
+                    richYPath.TransactionId(entry->Tx->GetId());
+                } else {
+                    auto p = entry->Snapshots.FindPtr(std::make_pair(realTableName, epoch));
+                    YQL_ENSURE(p, "Table " << table << " has no snapshot");
+                    richYPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p)).OriginalPath(NYT::AddPathPrefix(realTableName, NYT::TConfig::Get()->Prefix));
                 }
             }
         }
@@ -1103,14 +1342,10 @@ public:
                 }
 
                 auto richYPath = NYT::TRichYPath(table);
-                if (auto p = entry->Snapshots.FindPtr(std::make_pair(table, epoch))) {
-                    richYPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p));
-                } else {
-                    auto realTableName = NYql::TransformPath(GetTablesTmpFolder(*options.Config()), table, anon, session->UserName_);
-                    realTableName = NYT::AddPathPrefix(realTableName, NYT::TConfig::Get()->Prefix);
-                    richYPath = NYT::TRichYPath(realTableName);
-                    richYPath.TransactionId(entry->Tx->GetId());
-                }
+                auto realTableName = NYql::TransformPath(GetTablesTmpFolder(*options.Config()), table, anon, session->UserName_);
+                auto p = entry->Snapshots.FindPtr(std::make_pair(realTableName, epoch));
+                YQL_ENSURE(p, "Table " << table << " has no snapshot");
+                richYPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p)).OriginalPath(NYT::AddPathPrefix(realTableName, NYT::TConfig::Get()->Prefix));
 
                 waits.push_back(session->Queue_->Async([entry, richYPath, targetPath, logCtx] () {
                     YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
@@ -1357,8 +1592,10 @@ public:
             for (const auto& pathInfo: execCtx->Options_.Paths()) {
                 const auto tablePath = TransformPath(tmpFolder, pathInfo->Table->Name, pathInfo->Table->IsTemp, session->UserName_);
                 NYT::TRichYPath richYtPath{NYT::AddPathPrefix(tablePath, NYT::TConfig::Get()->Prefix)};
-                if (auto p = entry->Snapshots.FindPtr(std::make_pair(pathInfo->Table->Name, pathInfo->Table->Epoch.GetOrElse(0)))) {
-                    richYtPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p)).OriginalPath(NYT::AddPathPrefix(pathInfo->Table->Name, NYT::TConfig::Get()->Prefix));
+                if (!pathInfo->Table->IsTemp || pathInfo->Table->IsAnonymous) {
+                    auto p = entry->Snapshots.FindPtr(std::make_pair(tablePath, pathInfo->Table->Epoch.GetOrElse(0)));
+                    YQL_ENSURE(p, "Table " << tablePath << " (epoch=" << pathInfo->Table->Epoch.GetOrElse(0) << ") has no snapshot");
+                    richYtPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p)).OriginalPath(NYT::AddPathPrefix(tablePath, NYT::TConfig::Get()->Prefix));
                 }
                 pathInfo->FillRichYPath(richYtPath);  // n.b. throws exception, if there is no RowSpec (we assume it is always there)
                 paths.push_back(std::move(richYtPath));
@@ -2309,8 +2546,16 @@ private:
                 yqlAttrs["expiration_timeout"] = isDuration ? duration.MilliSeconds()
                                                          : (*interval).MilliSeconds();
             }
-            if (execCtx->Options_.Config()->NightlyCompress.Get(cluster).GetOrElse(false)) {
-                yqlAttrs["force_nightly_compress"] = true;
+            const TMaybe<bool> nightlyCompress =
+                execCtx->Options_.Config()->NightlyCompress.Get(cluster);
+            if (nightlyCompress.Defined()) {
+                if (*nightlyCompress) {
+                    yqlAttrs["force_nightly_compress"] = true;
+                } else {
+                    NYT::TNode compressSettings = NYT::TNode::CreateMap();
+                    compressSettings["enabled"] = false;
+                    yqlAttrs["nightly_compression_settings"] = compressSettings;
+                }
             }
         }
 
@@ -2364,6 +2609,7 @@ private:
             columnGroupsSpec = NYT::NodeFromYsonString(it->second);
             if (it->second != srcColumnGroups) {
                 forceMerge = forceTransform = true;
+                YQL_CLOG(INFO, ProviderYt) << "Column groups diff forces merge, src=" << srcColumnGroups << ", dst=" << it->second;
             }
         }
 
@@ -2458,6 +2704,7 @@ private:
                 }
                 mergeSpec.Output(ytDst);
                 mergeSpec.ForceTransform(forceTransform);
+                FillOperationSpec(mergeSpec, execCtx);
 
                 if (rowSpec->IsSorted()) {
                     mergeSpec.Mode(MM_SORTED);
@@ -2577,20 +2824,61 @@ private:
         TTableInfoResult& result)
     {
         TVector<NYT::TNode> attributes(tables.size());
-        TVector<TMaybe<NYT::TNode>> linkAttributes(tables.size());
+        NSorted::TSimpleMap<size_t, TString> requestSchemasIdxs;
         {
+            TMutex lock;
             auto batchGet = tx->CreateBatchRequest();
             TVector<TFuture<void>> batchRes(Reserve(idxs.size()));
             for (auto& idx: idxs) {
-                batchRes.push_back(batchGet->Get(tables[idx.first].Table() + "&/@").Apply(
-                     [&attributes, &linkAttributes, idx] (const TFuture<NYT::TNode>& res) {
+                batchRes.push_back(batchGet->Get(idx.second + "/@").Apply([&attributes, &requestSchemasIdxs, &lock, idx] (const TFuture<NYT::TNode>& res) {
+                    attributes[idx.first] = res.GetValue();
+                    if (attributes[idx.first].HasKey("schema") && attributes[idx.first]["schema"].IsEntity()) {
+                        with_lock (lock) {
+                            requestSchemasIdxs.push_back(idx);
+                        }
+                    }
+                }));
+            }
+            batchGet->ExecuteBatch();
+            WaitExceptionOrAll(batchRes).GetValue();
+        }
+        if (!requestSchemasIdxs.empty()) {
+            YQL_CLOG(INFO, ProviderYt) << "Additional request of @schema for " << requestSchemasIdxs.size() << " table(s)";
+            auto batchGet = tx->CreateBatchRequest();
+            TVector<TFuture<void>> batchRes(Reserve(requestSchemasIdxs.size()));
+            auto getOpts = TGetOptions()
+                .AttributeFilter(TAttributeFilter()
+                    .AddAttribute("schema")
+                );
+            for (auto& idx: requestSchemasIdxs) {
+                batchRes.push_back(batchGet->Get(idx.second + "/@", getOpts).Apply([&attributes, idx] (const TFuture<NYT::TNode>& res) {
+                    attributes[idx.first]["schema"] = res.GetValue().At("schema");
+                }));
+            }
+            batchGet->ExecuteBatch();
+            WaitExceptionOrAll(batchRes).GetValue();
+        }
+        {
+            auto batchGet = tx->CreateBatchRequest();
+            TVector<TFuture<void>> batchRes;
+            auto getOpts = TGetOptions()
+                .AttributeFilter(TAttributeFilter()
+                    .AddAttribute("type")
+                    .AddAttribute(TString{QB2Premapper})
+                    .AddAttribute(TString{YqlRowSpecAttribute})
+                );
+            for (auto& idx: idxs) {
+                batchRes.push_back(batchGet->Get(tables[idx.first].Table() + "&/@", getOpts).Apply([idx, &attributes](const TFuture<NYT::TNode>& f) {
                     try {
-                        NYT::TNode attrs = res.GetValue();
-                        auto type = GetTypeFromAttributes(attrs, false);
-                        if (type == "link") {
-                            linkAttributes[idx.first] = attrs;
-                        } else {
-                            attributes[idx.first] = attrs;
+                        NYT::TNode attrs = f.GetValue();
+                        if (GetTypeFromAttributes(attrs, false) == "link") {
+                            // override some attributes by the link ones
+                            if (attrs.HasKey(QB2Premapper)) {
+                                attributes[idx.first][QB2Premapper] = attrs[QB2Premapper];
+                            }
+                            if (attrs.HasKey(YqlRowSpecAttribute)) {
+                                attributes[idx.first][YqlRowSpecAttribute] = attrs[YqlRowSpecAttribute];
+                            }
                         }
                     } catch (const TErrorResponse& e) {
                         // Yt returns NoSuchTransaction as inner issue for ResolveError
@@ -2603,50 +2891,6 @@ private:
             }
             batchGet->ExecuteBatch();
             WaitExceptionOrAll(batchRes).GetValue();
-        }
-
-        {
-            auto schemaAttrFilter = TAttributeFilter().AddAttribute("schema");
-            TVector<NYT::TNode> schemas(tables.size());
-
-            auto batchGet = tx->CreateBatchRequest();
-            TVector<TFuture<void>> batchRes;
-            for (auto& idx : idxs) {
-                batchRes.push_back(batchGet->Get(tables[idx.first].Table() + "/@", TGetOptions().AttributeFilter(schemaAttrFilter))
-                    .Apply([idx, &schemas] (const TFuture<NYT::TNode>& res) {
-                        try {
-                            schemas[idx.first] = res.GetValue();
-                        } catch (const TErrorResponse& e) {
-                            // Yt returns NoSuchTransaction as inner issue for ResolveError
-                            if (!e.IsResolveError() || e.IsNoSuchTransaction()) {
-                                throw;
-                            }
-                            // Just ignore. Original table path may be deleted at this time
-                        }
-                    }));
-
-                if (linkAttributes[idx.first]) {
-                    const auto& linkAttr = *linkAttributes[idx.first];
-                    batchRes.push_back(batchGet->Get(idx.second + "/@").Apply(
-                        [idx, &linkAttr, &attributes](const TFuture<NYT::TNode>& f) {
-                        NYT::TNode attrs = f.GetValue();
-                        attributes[idx.first] = attrs;
-                        // override some attributes by the link ones
-                        if (linkAttr.HasKey(QB2Premapper)) {
-                            attributes[idx.first][QB2Premapper] = linkAttr[QB2Premapper];
-                        }
-                        if (linkAttr.HasKey(YqlRowSpecAttribute)) {
-                            attributes[idx.first][YqlRowSpecAttribute] = linkAttr[YqlRowSpecAttribute];
-                        }
-                    }));
-                }
-            }
-            batchGet->ExecuteBatch();
-            WaitExceptionOrAll(batchRes).GetValue();
-
-            for (auto& idx: idxs) {
-                attributes[idx.first]["schema"] = schemas[idx.first]["schema"];
-            }
         }
 
         auto batchGet = tx->CreateBatchRequest();
@@ -2678,6 +2922,7 @@ private:
                 }
 
                 statInfo->Id = attrs["id"].AsString();
+                YQL_ENSURE(statInfo->Id == TStringBuf(idx.second).Skip(1));
                 statInfo->TableRevision = attrs["revision"].IntCast<ui64>();
                 statInfo->Revision = GetContentRevision(attrs);
 
@@ -2721,6 +2966,9 @@ private:
                 }
                 if (attrs.AsMap().contains("schema_mode") && attrs["schema_mode"].AsString() == "weak") {
                     metaInfo->Attrs["schema_mode"] = attrs["schema_mode"].AsString();
+                }
+                if (isDynamic && attrs.AsMap().contains("enable_dynamic_store_read") && NYT::GetBool(attrs["enable_dynamic_store_read"])) {
+                    metaInfo->Attrs["enable_dynamic_store_read"] = "true";
                 }
                 if (attrs.AsMap().contains(SecurityTagsName)) {
                     TVector<TString> securityTags;
@@ -2867,7 +3115,7 @@ private:
         mapOpSpec.AddOutput(tmpTable);
         job->SetTableNames(inputTables);
 
-        FillOperationSpec(mapOpSpec, execCtx);
+        FillUserOperationSpec(mapOpSpec, execCtx);
 
         NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc(execCtx->CodeSnippets_);
         FillSpec(spec, *execCtx, entry, 0., Nothing(), EYtOpProp::WithMapper);
@@ -3337,6 +3585,7 @@ private:
                 sortOpSpec.Output(outYPaths.front());
                 sortOpSpec.SortBy(execCtx->OutTables_.front().SortedBy);
                 sortOpSpec.SchemaInferenceMode(ESchemaInferenceMode::FromOutput);
+                FillOperationSpec(sortOpSpec, execCtx);
 
                 NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc(execCtx->CodeSnippets_);
 
@@ -3377,9 +3626,10 @@ private:
         bool forceTransform = NYql::HasAnySetting(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::SoftTransform);
         bool combineChunks = NYql::HasSetting(merge.Settings().Ref(), EYtSettingType::CombineChunks);
         TMaybe<ui64> limit = GetLimit(merge.Settings().Ref());
+        const TString inputQueryExpr = GenerateInputQueryWhereExpression(merge.Settings().Ref());
 
-        return execCtx->Session_->Queue_->Async([forceTransform, combineChunks, limit, execCtx]() {
-            return execCtx->LookupQueryCacheAsync().Apply([forceTransform, combineChunks, limit, execCtx] (const auto& f) {
+        return execCtx->Session_->Queue_->Async([forceTransform, combineChunks, limit, inputQueryExpr, execCtx]() {
+            return execCtx->LookupQueryCacheAsync().Apply([forceTransform, combineChunks, limit, inputQueryExpr, execCtx] (const auto& f) {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
                 auto entry = execCtx->GetEntry();
                 bool cacheHit = f.GetValue();
@@ -3413,6 +3663,7 @@ private:
                 mergeOpSpec.ForceTransform(forceTransform);
                 mergeOpSpec.CombineChunks(combineChunks);
                 mergeOpSpec.SchemaInferenceMode(ESchemaInferenceMode::FromOutput);
+                FillOperationSpec(mergeOpSpec, execCtx);
 
                 NYT::TNode spec = execCtx->Session_->CreateSpecWithDesc(execCtx->CodeSnippets_);
                 EYtOpProps flags = EYtOpProp::AllowSampling;
@@ -3423,6 +3674,8 @@ private:
                 if (hasNonStrict) {
                     spec["schema_inference_mode"] = "from_output"; // YTADMINREQ-17692
                 }
+
+                PrepareInputQueryForMerge(spec, mergeOpSpec.Inputs_, inputQueryExpr);
 
                 return execCtx->RunOperation([entry, mergeOpSpec = std::move(mergeOpSpec), spec = std::move(spec)](){
                     return entry->Tx->Merge(mergeOpSpec, TOperationOptions().StartOperationMode(TOperationOptions::EStartOperationMode::AsyncPrepare).Spec(spec));
@@ -3441,12 +3694,13 @@ private:
         TString mapLambda,
         const TString& inputType,
         const TExpressionResorceUsage& extraUsage,
+        const TString& inputQueryExpr,
         const TExecContext<TRunOptions>::TPtr& execCtx
     ) {
         const bool testRun = execCtx->Config_->GetLocalChainTest();
         TFuture<bool> ret = testRun ? MakeFuture<bool>(false) : execCtx->LookupQueryCacheAsync();
         return ret.Apply([ordered, blockInput, blockOutput, jobCount, limit, sortLimitBy, mapLambda,
-                          inputType, extraUsage, execCtx, testRun] (const auto& f) mutable
+                          inputType, extraUsage, inputQueryExpr, execCtx, testRun] (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             TTransactionCache::TEntry::TPtr entry;
@@ -3562,6 +3816,7 @@ private:
                 job->SetLambdaCode(mapLambda);
                 job->SetOptLLVM(execCtx->Options_.OptLLVM());
                 job->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
+                job->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
                 transform.ApplyJobProps(*job);
                 transform.ApplyUserJobSpec(userJobSpec, testRun);
 
@@ -3579,7 +3834,7 @@ private:
 
                 mapOpSpec.MapperSpec(userJobSpec);
             }
-            FillOperationSpec(mapOpSpec, execCtx);
+            FillUserOperationSpec(mapOpSpec, execCtx);
             auto formats = job->GetIOFormats(execCtx->FunctionRegistry_);
             mapOpSpec.InputFormat(forceYsonInputFormat ? NYT::TFormat::YsonBinary() : formats.first);
             mapOpSpec.OutputFormat(formats.second);
@@ -3608,6 +3863,8 @@ private:
             if (jobCount) {
                 spec["job_count"] = static_cast<i64>(*jobCount);
             }
+
+            PrepareInputQueryForMap(spec, mapOpSpec, inputQueryExpr, /*useSystemColumns*/ useSkiff);
 
             TOperationOptions opOpts;
             FillOperationOptions(opOpts, execCtx, entry);
@@ -3646,11 +3903,12 @@ private:
         }
         auto extraUsage = execCtx->ScanExtraResourceUsage(map.Mapper().Body().Ref(), true);
         TString inputType = NCommon::WriteTypeToYson(GetSequenceItemType(map.Input().Size() == 1U ? TExprBase(map.Input().Item(0)) : TExprBase(map.Mapper().Args().Arg(0)), true));
+        const TString inputQueryExpr = GenerateInputQueryWhereExpression(map.Settings().Ref());
 
-        return execCtx->Session_->Queue_->Async([ordered, blockInput, blockOutput, jobCount, limit, sortLimitBy, mapLambda, inputType, extraUsage, execCtx]() {
+        return execCtx->Session_->Queue_->Async([ordered, blockInput, blockOutput, jobCount, limit, sortLimitBy, mapLambda, inputType, extraUsage, inputQueryExpr, execCtx]() {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->MakeUserFiles();
-            return ExecMap(ordered, blockInput, blockOutput, jobCount, limit, sortLimitBy, mapLambda, inputType, extraUsage, execCtx);
+            return ExecMap(ordered, blockInput, blockOutput, jobCount, limit, sortLimitBy, mapLambda, inputType, extraUsage, inputQueryExpr, execCtx);
         });
     }
 
@@ -3781,12 +4039,13 @@ private:
                 job->SetLambdaCode(reduceLambda);
                 job->SetOptLLVM(execCtx->Options_.OptLLVM());
                 job->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
+                job->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
                 transform.ApplyJobProps(*job);
                 transform.ApplyUserJobSpec(userJobSpec, testRun);
                 FillUserJobSpec(userJobSpec, execCtx, extraUsage, transform.GetUsedMemory(), execCtx->EstimateLLVMMem(nodeCount), testRun);
                 reduceOpSpec.ReducerSpec(userJobSpec);
             }
-            FillOperationSpec(reduceOpSpec, execCtx);
+            FillUserOperationSpec(reduceOpSpec, execCtx);
             auto formats = job->GetIOFormats(execCtx->FunctionRegistry_);
             reduceOpSpec.InputFormat(formats.first);
             reduceOpSpec.OutputFormat(formats.second);
@@ -3878,13 +4137,14 @@ private:
         NYT::TNode intermediateMeta,
         const NYT::TNode& intermediateSchema,
         const NYT::TNode& intermediateStreams,
+        const TString& inputQueryExpr,
         const TExecContext<TRunOptions>::TPtr& execCtx
     ) {
         const bool testRun = execCtx->Config_->GetLocalChainTest();
         TFuture<bool> ret = testRun ? MakeFuture<bool>(false) : execCtx->LookupQueryCacheAsync();
         return ret.Apply([reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs,
                           mapExtraUsage, reduceLambda, reduceInputType, reduceExtraUsage,
-                          intermediateMeta, intermediateSchema, intermediateStreams, execCtx, testRun]
+                          intermediateMeta, intermediateSchema, intermediateStreams, inputQueryExpr, execCtx, testRun]
                          (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
@@ -4030,6 +4290,7 @@ private:
                 mapJob->SetLambdaCode(mapLambda);
                 mapJob->SetOptLLVM(execCtx->Options_.OptLLVM());
                 mapJob->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
+                mapJob->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
                 transform.ApplyJobProps(*mapJob);
                 transform.ApplyUserJobSpec(mapUserJobSpec, testRun);
 
@@ -4059,12 +4320,13 @@ private:
                 reduceJob->SetLambdaCode(reduceLambda);
                 reduceJob->SetOptLLVM(execCtx->Options_.OptLLVM());
                 reduceJob->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
+                reduceJob->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
                 transform.ApplyJobProps(*reduceJob);
                 transform.ApplyUserJobSpec(reduceUserJobSpec, testRun);
                 FillUserJobSpec(reduceUserJobSpec, execCtx, reduceExtraUsage, transform.GetUsedMemory(), execCtx->EstimateLLVMMem(nodeCount), testRun);
                 mapReduceOpSpec.ReducerSpec(reduceUserJobSpec);
             }
-            FillOperationSpec(mapReduceOpSpec, execCtx);
+            FillUserOperationSpec(mapReduceOpSpec, execCtx);
             auto formats = mapJob->GetIOFormats(execCtx->FunctionRegistry_);
             if (!intermediateSchema.IsUndefined() && formats.second.Config.AsString() == "skiff") {
                 formats.second.Config.Attributes()["override_intermediate_table_schema"] = intermediateSchema;
@@ -4102,6 +4364,8 @@ private:
                 spec["mapper"]["output_streams"] = intermediateStreams;
             }
 
+            PrepareInputQueryForMap(spec, mapReduceOpSpec, inputQueryExpr, /*useSystemColumns*/ useSkiff);
+
             TOperationOptions opOpts;
             FillOperationOptions(opOpts, execCtx, entry);
             opOpts.StartOperationMode(TOperationOptions::EStartOperationMode::AsyncPrepare).Spec(spec);
@@ -4123,12 +4387,13 @@ private:
         const TExpressionResorceUsage& reduceExtraUsage,
         const NYT::TNode& intermediateSchema,
         bool useIntermediateStreams,
+        const TString& inputQueryExpr,
         const TExecContext<TRunOptions>::TPtr& execCtx
     ) {
         const bool testRun = execCtx->Config_->GetLocalChainTest();
         TFuture<bool> ret = testRun ? MakeFuture<bool>(false) : execCtx->LookupQueryCacheAsync();
         return ret.Apply([reduceBy, sortBy, limit, sortLimitBy, reduceLambda, reduceInputType,
-                          reduceExtraUsage, intermediateSchema, useIntermediateStreams, execCtx, testRun]
+                          reduceExtraUsage, intermediateSchema, useIntermediateStreams, inputQueryExpr, execCtx, testRun]
                          (const auto& f) mutable
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
@@ -4209,12 +4474,13 @@ private:
                 reduceJob->SetLambdaCode(reduceLambda);
                 reduceJob->SetOptLLVM(execCtx->Options_.OptLLVM());
                 reduceJob->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
+                reduceJob->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
                 transform.ApplyJobProps(*reduceJob);
                 transform.ApplyUserJobSpec(reduceUserJobSpec, testRun);
                 FillUserJobSpec(reduceUserJobSpec, execCtx, reduceExtraUsage, transform.GetUsedMemory(), execCtx->EstimateLLVMMem(nodeCount), testRun);
                 mapReduceOpSpec.ReducerSpec(reduceUserJobSpec);
             }
-            FillOperationSpec(mapReduceOpSpec, execCtx);
+            FillUserOperationSpec(mapReduceOpSpec, execCtx);
             auto formats = reduceJob->GetIOFormats(execCtx->FunctionRegistry_);
             if (!intermediateSchema.IsUndefined() && formats.first.Config.AsString() == "skiff") {
                 formats.first.Config.Attributes()["override_intermediate_table_schema"] = intermediateSchema;
@@ -4245,6 +4511,8 @@ private:
             if (useIntermediateStreams) {
                 spec["reducer"]["enable_input_table_index"] = true;
             }
+
+            PrepareInputQueryForMap(spec, mapReduceOpSpec, inputQueryExpr, /*useSystemColumns*/ useSkiff);
 
             TOperationOptions opOpts;
             FillOperationOptions(opOpts, execCtx, entry);
@@ -4367,17 +4635,19 @@ private:
             limit.Clear();
         }
 
+        const TString inputQueryExpr = GenerateInputQueryWhereExpression(mapReduce.Settings().Ref());
+
         return execCtx->Session_->Queue_->Async([reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs, mapExtraUsage,
-            reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, useIntermediateStreams, execCtx]()
+            reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, useIntermediateStreams, inputQueryExpr, execCtx]()
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->MakeUserFiles();
             if (mapLambda) {
                 return ExecMapReduce(reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs, mapExtraUsage,
-                    reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, execCtx);
+                    reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, inputQueryExpr, execCtx);
             } else {
                 return ExecMapReduce(reduceBy, sortBy, limit, sortLimitBy, reduceLambda, reduceInputType, reduceExtraUsage, intermediateSchema,
-                    useIntermediateStreams, execCtx);
+                    useIntermediateStreams, inputQueryExpr, execCtx);
             }
         });
     }
@@ -4530,6 +4800,7 @@ private:
             job->SetLambdaCode(lambda);
             job->SetOptLLVM(execCtx->Options_.OptLLVM());
             job->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
+            job->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
             const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
             job->SetOutSpec(execCtx->GetOutSpec(!useSkiff, nativeTypeCompat));
             job->SetUseSkiff(useSkiff, 0);
@@ -4540,7 +4811,7 @@ private:
                 mapOpSpec.AddOutput(outYPaths[i]);
             }
 
-            FillOperationSpec(mapOpSpec, execCtx);
+            FillUserOperationSpec(mapOpSpec, execCtx);
             const auto formats = job->GetIOFormats(execCtx->FunctionRegistry_);
             mapOpSpec.InputFormat(formats.first);
             mapOpSpec.OutputFormat(formats.second);
@@ -5163,10 +5434,11 @@ private:
         job->SetUseResultYson(factory.UseResultYson());
         job->SetOptLLVM(execCtx->Options_.OptLLVM());
         job->SetUdfValidateMode(execCtx->Options_.UdfValidateMode());
+        job->SetRuntimeLogLevel(execCtx->Options_.RuntimeLogLevel());
 
         mapOpSpec.AddInput(tmpTable);
         mapOpSpec.AddOutput(tmpTable);
-        FillOperationSpec(mapOpSpec, execCtx);
+        FillUserOperationSpec(mapOpSpec, execCtx);
 
         if (localRun && mapOpSpec.MapperSpec_.Files_.empty()) {
             return LocalCalcJob(mapOpSpec, job.Get(), lambda, std::move(factory));
@@ -5463,6 +5735,65 @@ private:
             }
         }
         return ctx;
+    }
+
+    TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& options) override {
+        try {
+            auto session =  GetSession(options.SessionId(), true);
+            auto ytServer = Clusters_->GetServer(options.Cluster());
+            auto entry = session->TxCache_.GetEntry(ytServer);
+            TClusterConnectionResult clusterConnectionResult{};
+            clusterConnectionResult.TransactionId = GetGuidAsString(entry->Tx->GetId());
+            clusterConnectionResult.YtServerName = ytServer;
+            clusterConnectionResult.Token = options.Config()->Auth.Get();
+            clusterConnectionResult.SetSuccess();
+            return clusterConnectionResult;
+        } catch (...) {
+            return ResultFromCurrentException<TClusterConnectionResult>({}, true);
+        }
+    }
+
+    static void ReportBlockStatus(const TYtOpBase& op, const TExecContext<TRunOptions>::TPtr& execCtx) {
+        if (execCtx->Options_.PublicId().Empty()) {
+            return;
+        }
+
+        auto opPublicId = *execCtx->Options_.PublicId();
+
+        TOperationProgress::EOpBlockStatus status;
+        if (auto map = op.Maybe<TYtMap>()) {
+            status = DetermineProgramBlockStatus(map.Cast().Mapper().Body().Ref());
+        } else if (auto map = op.Maybe<TYtReduce>()) {
+            status = DetermineProgramBlockStatus(map.Cast().Reducer().Body().Ref());
+        } else if (auto map = op.Maybe<TYtMapReduce>()) {
+            status = DetermineProgramBlockStatus(map.Cast().Reducer().Body().Ref());
+            if (auto mapLambda = map.Cast().Mapper().Maybe<TCoLambda>()) {
+                status = TOperationProgress::CombineBlockStatuses(status, DetermineProgramBlockStatus(mapLambda.Cast().Body().Ref()));
+            }
+        } else if (auto fill = op.Maybe<TYtFill>()) {
+            status = DetermineProgramBlockStatus(fill.Cast().Content().Body().Ref());
+        } else if (op.Maybe<TYtSort>()) {
+            return;
+        } else if (op.Maybe<TYtCopy>()) {
+            return;
+        } else if (op.Maybe<TYtMerge>()) {
+            return;
+        } else if (op.Maybe<TYtTouch>()) {
+            return;
+        } else if (op.Maybe<TYtDropTable>()) {
+            return;
+        } else if (op.Maybe<TYtStatOut>()) {
+            return;
+        } else if (op.Maybe<TYtDqProcessWrite>()) {
+            return;
+        } else {
+            YQL_ENSURE(false, "unknown operation: " << op.Ref().Content());
+        }
+
+        YQL_CLOG(INFO, ProviderYt) << "Reporting " << status << " block status for operation " << op.Ref().Content() << " with public id #" << opPublicId;
+        auto p = TOperationProgress(TString(YtProviderName), opPublicId, TOperationProgress::EState::InProgress);
+        p.BlockStatus = status;
+        execCtx->Session_->ProgressWriter_(p);
     }
 
 private:

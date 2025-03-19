@@ -4,7 +4,7 @@
 
 #include <yql/essentials/types/dynumber/dynumber.h>
 #include <ydb/public/api/protos/ydb_value.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <util/string/builder.h>
 #include <library/cpp/string_utils/quote/quote.h>
@@ -260,7 +260,7 @@ void TQueryBuilder::AddLine(TStringBuf line) {
         Y_ENSURE(tok, "Empty token on line");
         TTypeParser type(col.Type);
         Value.AddMember(col.Name);
-        AddMemberFromString(type, col.Name, tok);
+        AddMemberFromString(type, TString{col.Name}, tok);
     }
     Value.EndStruct();
 }

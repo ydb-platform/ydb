@@ -12,6 +12,7 @@ SRCS(
     columnshard__propose_transaction.cpp
     columnshard__scan.cpp
     columnshard__statistics.cpp
+    columnshard_subdomain_path_id.cpp
     columnshard__write.cpp
     columnshard__write_index.cpp
     columnshard.cpp
@@ -32,7 +33,7 @@ GENERATE_ENUM_SERIALIZATION(columnshard_impl.h)
 PEERDIR(
     ydb/core/actorlib_impl
     ydb/core/base
-    ydb/core/control
+    ydb/core/control/lib
     ydb/core/formats
     ydb/core/kqp
     ydb/core/protos

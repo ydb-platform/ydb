@@ -1,8 +1,8 @@
 diff --git a/include/complex b/include/complex
-index 5f62c04..1b82c25 100644
+index bfe61c5..91cf3f4 100644
 --- a/include/complex
 +++ b/include/complex
-@@ -1254,7 +1254,8 @@ _LIBCPP_HIDE_FROM_ABI complex<_Tp> acos(const complex<_Tp>& __x) {
+@@ -1282,7 +1282,8 @@ _LIBCPP_HIDE_FROM_ABI complex<_Tp> acos(const complex<_Tp>& __x) {
    }
    if (std::__constexpr_isinf(__x.imag()))
      return complex<_Tp>(__pi / _Tp(2), -__x.imag());

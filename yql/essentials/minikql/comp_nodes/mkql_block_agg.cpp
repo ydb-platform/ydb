@@ -442,18 +442,6 @@ size_t GetBitmapPopCount(const std::shared_ptr<arrow::ArrayData>& arr) {
     return GetSparseBitmapPopCount(src, len);
 }
 
-TArrayRef<TType *const> GetWideComponents(TType* type) {
-    if (type->IsFlow()) {
-        const auto outputFlowType = AS_TYPE(TFlowType, type);
-        return GetWideComponents(outputFlowType);
-    }
-    if (type->IsStream()) {
-        const auto outputStreamType = AS_TYPE(TStreamType, type);
-        return GetWideComponents(outputStreamType);
-    }
-    MKQL_ENSURE(false, "Expect either flow or stream");
-}
-
 size_t CalcMaxBlockLenForOutput(TType* out) {
     const auto wideComponents = GetWideComponents(out);
     MKQL_ENSURE(wideComponents.size() > 0, "Expecting at least one output column");

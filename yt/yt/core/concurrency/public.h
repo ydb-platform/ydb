@@ -106,7 +106,7 @@ DEFINE_ENUM(EFiberState,
     (Finished)
 );
 
-using TFairShareThreadPoolTag = TString;
+using TFairShareThreadPoolTag = std::string;
 
 DECLARE_REFCOUNTED_STRUCT(IPoolWeightProvider)
 
@@ -120,8 +120,8 @@ DECLARE_REFCOUNTED_STRUCT(TFiberManagerDynamicConfig)
 DECLARE_REFCOUNTED_STRUCT(TFairThrottlerConfig)
 DECLARE_REFCOUNTED_STRUCT(TFairThrottlerBucketConfig)
 
-DECLARE_REFCOUNTED_STRUCT(IThrottlerIPC)
-DECLARE_REFCOUNTED_STRUCT(IIPCBucket)
+DECLARE_REFCOUNTED_STRUCT(IThrottlerIpc)
+DECLARE_REFCOUNTED_STRUCT(IIpcBucket)
 
 DECLARE_REFCOUNTED_CLASS(TFairThrottler)
 DECLARE_REFCOUNTED_CLASS(TBucketThrottler)

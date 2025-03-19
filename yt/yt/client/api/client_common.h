@@ -140,7 +140,7 @@ struct TSelectRowsOptionsBase
     //! Expected schemas for tables in a query (used for replica fallback in replicated tables).
     using TExpectedTableSchemas = THashMap<NYPath::TYPath, NTableClient::TTableSchemaPtr>;
     TExpectedTableSchemas ExpectedTableSchemas;
-    //! Add |$timestamp:columnName| to result if read_mode is latest_timestamp.
+    //! Add |$timestamp:columnName| to result if ReadMode is latest_timestamp.
     NTableClient::TVersionedReadOptions VersionedReadOptions;
     //! Limits range expanding.
     ui64 RangeExpansionLimit = 200'000;
@@ -192,6 +192,9 @@ struct TSelectRowsOptions
     bool UseCanonicalNullRelations = false;
     //! Merge versioned rows from different stores when reading.
     bool MergeVersionedRows = true;
+    //! For internal use only.
+    //! Use original table schema in result rowset.
+    bool UseOriginalTableSchema = false;
 };
 
 struct TFallbackReplicaOptions

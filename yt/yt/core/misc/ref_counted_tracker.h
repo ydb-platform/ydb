@@ -13,7 +13,7 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-struct TRefCountedTrackerStatistics
+struct TRefCountedTrackerStatistics final
 {
     struct TStatistics
     {

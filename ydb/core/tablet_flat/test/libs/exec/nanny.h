@@ -97,7 +97,7 @@ namespace NFake {
         }
 
     protected:
-        void QueueTx(TFuncTx::TCall func) noexcept
+        void QueueTx(TFuncTx::TCall func)
         {
             TxInFlight++;
 
@@ -138,7 +138,7 @@ namespace NFake {
             }
         }
 
-        void Handle(NFake::TEvReady &ev) noexcept
+        void Handle(NFake::TEvReady &ev)
         {
             if (std::exchange(State, EDo::More) != EDo::Born) {
                 Y_ABORT("Got an unexpected TEvReady{ } event");
@@ -151,7 +151,7 @@ namespace NFake {
             QueueTx(CompareDbs);
         }
 
-        void Handle(NFake::TEvResult&) noexcept
+        void Handle(NFake::TEvResult&)
         {
             Y_ABORT_UNLESS(TxInFlight-- > 0, "Tx counter is underflowed");
 
@@ -170,7 +170,7 @@ namespace NFake {
             }
         }
 
-        void StartTablet() noexcept
+        void StartTablet()
         {
             if (auto logl = Logger->Log(NUtil::ELnLev::Info)) {
                 logl << "TNanny initiates TDummy tablet " << MyId << " birth";
@@ -180,13 +180,13 @@ namespace NFake {
                 return new NFake::TDummy(tablet, info, SelfId());
             };
 
-            auto *actor = TStarter().Do(SelfId(), 1, MyId, std::move(make));
+            auto *actor = TStarter().Do(SelfId(), 1, MyId, std::move(make), 4);
             auto *event = new TEvFire{ 7, { }, { actor, EMail::Simple, 0 } };
 
             Send(TWorld::Where(EPath::Root), event);
         }
 
-        void DoSuicide() noexcept
+        void DoSuicide()
         {
             Send(std::exchange(Owner, { }), new TEvents::TEvGone);
             State = EDo::Gone;

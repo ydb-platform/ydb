@@ -3,8 +3,11 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/auth.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/base/ticket_parser.h>
+
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/json/json_writer.h>
@@ -152,7 +155,7 @@ NActors::IEventHandle* GetAuthorizeTicketResult(const NActors::TActorId& owner) 
 }
 
 void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const NYdb::TStatus& status) {
-    MakeJsonErrorReply(jsonResponse, message, status.GetIssues(), status.GetStatus());
+    MakeJsonErrorReply(jsonResponse, message, NYdb::NAdapters::ToYqlIssues(status.GetIssues()), status.GetStatus());
 }
 
 void MakeJsonErrorReply(NJson::TJsonValue& jsonResponse, TString& message, const NYql::TIssues& issues, NYdb::EStatus status) {
@@ -536,16 +539,7 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        bool found = false;
-        if (result.UserToken) {
-            for (const TString& sid : ActorMonPage->AllowedSIDs) {
-                if (result.UserToken->IsExist(sid)) {
-                    found = true;
-                    break;
-                }
-            }
-        }
-        if (found || ActorMonPage->AllowedSIDs.empty() || !result.UserToken) {
+        if (IsTokenAllowed(result.UserToken.Get(), ActorMonPage->AllowedSIDs)) {
             SendRequest(&result);
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");
@@ -1167,16 +1161,7 @@ public:
         if (result.Status != Ydb::StatusIds::SUCCESS) {
             return ReplyErrorAndPassAway(result);
         }
-        bool found = false;
-        if (result.UserToken) {
-            for (const TString& sid : AllowedSIDs) {
-                if (result.UserToken->IsExist(sid)) {
-                    found = true;
-                    break;
-                }
-            }
-        }
-        if (found || AllowedSIDs.empty() || !result.UserToken) {
+        if (IsTokenAllowed(result.UserToken.Get(), AllowedSIDs)) {
             SendRequest(result);
         } else {
             return ReplyForbiddenAndPassAway("SID is not allowed");

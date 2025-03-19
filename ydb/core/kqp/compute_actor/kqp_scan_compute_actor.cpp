@@ -80,18 +80,46 @@ void TKqpScanComputeActor::AcquireRateQuota() {
 }
 
 void TKqpScanComputeActor::FillExtraStats(NDqProto::TDqComputeActorStats* dst, bool last) {
-    if (last && ScanData && dst->TasksSize() > 0) {
+    Y_UNUSED(last);
+
+    if (ScanData && dst->TasksSize() > 0) {
         YQL_ENSURE(dst->TasksSize() == 1);
 
         auto* taskStats = dst->MutableTasks(0);
         auto* tableStats = taskStats->AddTables();
 
+        auto& sourceStats = *taskStats->AddSources();
+
+        // sourceStats.SetInputIndex(0); // do not have real input index
+        sourceStats.SetIngressName("CS");
+
+        auto& ingressStats = *sourceStats.MutableIngress();
+
         tableStats->SetTablePath(ScanData->TablePath);
 
-        if (auto* x = ScanData->BasicStats.get()) {
-            tableStats->SetReadRows(x->Rows);
-            tableStats->SetReadBytes(x->Bytes);
-            tableStats->SetAffectedPartitions(x->AffectedShards);
+        if (auto* stats = ScanData->BasicStats.get()) {
+            if (RuntimeSettings.StatsMode >= NYql::NDqProto::DQ_STATS_MODE_FULL) {
+                ingressStats.SetRows(stats->Rows);
+                ingressStats.SetBytes(stats->Bytes);
+                ingressStats.SetFirstMessageMs(stats->FirstMessageMs);
+                ingressStats.SetLastMessageMs(stats->LastMessageMs);
+
+                for (auto& [shardId, stat] : stats->ExternalStats) {
+                    auto& externalStat = *sourceStats.AddExternalPartitions();
+                    externalStat.SetPartitionId(ToString(shardId));
+                    externalStat.SetExternalRows(stat.ExternalRows);
+                    externalStat.SetExternalBytes(stat.ExternalBytes);
+                    externalStat.SetFirstMessageMs(stat.FirstMessageMs);
+                    externalStat.SetLastMessageMs(stat.LastMessageMs);
+                }
+
+                taskStats->SetIngressRows(taskStats->GetIngressRows() + stats->Rows);
+                taskStats->SetIngressBytes(taskStats->GetIngressBytes() + stats->Bytes);
+            }
+
+            tableStats->SetReadRows(stats->Rows);
+            tableStats->SetReadBytes(stats->Bytes);
+            tableStats->SetAffectedPartitions(stats->AffectedShards);
             // TODO: CpuTime
         }
 
@@ -139,6 +167,7 @@ void TKqpScanComputeActor::Handle(TEvScanExchange::TEvTerminateFromFetcher::TPtr
     ALS_DEBUG(NKikimrServices::KQP_COMPUTE) << "TEvTerminateFromFetcher: " << ev->Sender << "/" << SelfId();
     TBase::InternalError(ev->Get()->GetStatusCode(), ev->Get()->GetIssues());
     State = ev->Get()->GetState();
+    DoTerminateImpl();
 }
 
 void TKqpScanComputeActor::Handle(TEvScanExchange::TEvSendData::TPtr& ev) {

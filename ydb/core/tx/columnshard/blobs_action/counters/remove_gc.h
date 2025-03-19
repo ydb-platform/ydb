@@ -1,6 +1,7 @@
 #pragma once
-#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <ydb/core/tx/columnshard/counters/common/owner.h>
+
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 
 namespace NKikimr::NOlap::NBlobOperations {
 
@@ -21,6 +22,7 @@ private:
 
     NMonitoring::TDynamicCounters::TCounterPtr FailsCount;
     NMonitoring::TDynamicCounters::TCounterPtr FailBytes;
+
 public:
     TRemoveGCCounters(const TConsumerCounters& owner);
 
@@ -46,4 +48,4 @@ public:
     }
 };
 
-}
+}   // namespace NKikimr::NOlap::NBlobOperations

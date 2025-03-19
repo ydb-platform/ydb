@@ -19,18 +19,18 @@ public:
         SwitchGen();
     }
 
-    NIceDb::TNiceDb Begin() noexcept {
+    NIceDb::TNiceDb Begin() {
         Annex->Switch(++Step, /* require step switch */ true);
         DB.Begin({ Gen, Step }, Env.emplace());
         return DB;
     }
 
-    void Commit() noexcept {
+    void Commit() {
         DB.Commit({ Gen, Step }, true, Annex.Get());
         Env.reset();
     }
 
-    TSnapEdge SnapshotTable(ui32 table) noexcept {
+    TSnapEdge SnapshotTable(ui32 table) {
         const auto scn = DB.Head().Serial + 1;
         TTxStamp txStamp(Gen, ++Step);
         DB.SnapshotToLog(table, txStamp);
@@ -125,10 +125,13 @@ public:
             SnapshotTable(params->Table);
         }
 
-        auto subset = DB.Subset(params->Table, { }, params->Edge.Head);
+        auto subset = DB.CompactionSubset(params->Table, params->Edge.Head, { });
         if (params->Parts) {
             subset->Flatten.insert(subset->Flatten.end(), params->Parts.begin(), params->Parts.end());
         }
+
+        // Note: we don't compact TxStatus in these tests
+        Y_ABORT_UNLESS(subset->TxStatus.empty());
 
         Y_ABORT_UNLESS(!*subset || subset->IsStickedToHead());
 
@@ -163,8 +166,7 @@ public:
             Y_ABORT_UNLESS(parts.back());
         }
 
-        auto partsCopy = parts;
-        DB.Replace(params->Table, partsCopy, *subset);
+        DB.Replace(params->Table, *subset, parts, { });
 
         return MakeHolder<TCompactionResult>(subset->Epoch(), std::move(parts));
     }
@@ -370,7 +372,7 @@ private:
 };
 
 struct TSimpleLogger : public NUtil::ILogger {
-    NUtil::TLogLn Log(NUtil::ELnLev level) const noexcept override {
+    NUtil::TLogLn Log(NUtil::ELnLev level) const override {
         return { nullptr, level };
     }
 };

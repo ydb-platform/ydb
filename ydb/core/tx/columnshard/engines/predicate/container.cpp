@@ -95,7 +95,7 @@ bool TPredicateContainer::IsInclude() const {
     return CompareType == NArrow::ECompareType::GREATER_OR_EQUAL || CompareType == NArrow::ECompareType::LESS_OR_EQUAL;
 }
 
-bool TPredicateContainer::CrossRanges(const TPredicateContainer& ext) {
+bool TPredicateContainer::CrossRanges(const TPredicateContainer& ext) const {
     if (Object && ext.Object) {
         if (IsForwardInterval() == ext.IsForwardInterval()) {
             return true;
@@ -138,7 +138,13 @@ TConclusion<NKikimr::NOlap::TPredicateContainer> TPredicateContainer::BuildPredi
                     break;
                 }
             }
-            AFL_VERIFY(countSortingFields == object->Batch->num_columns())("count", countSortingFields)("object", object->Batch->num_columns());
+            if (countSortingFields != object->Batch->num_columns()) {
+                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "incorrect predicate")("count", countSortingFields)(
+                    "object", object->Batch->num_columns())("schema", pkSchema->ToString())(
+                    "object", JoinSeq(",", cNames));
+                return TConclusionStatus::Fail(
+                    "incorrect predicate (not prefix for pk: " + pkSchema->ToString() + " vs " + JoinSeq(",", cNames) + ")");
+            }
         }
         return TPredicateContainer(object, pkSchema ? ExtractKey(*object, pkSchema) : nullptr);
     }

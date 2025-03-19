@@ -23,6 +23,7 @@ public:
     {
 #define HNDL(name) "YtBlockInput-"#name, Hndl(&TYtBlockInputTransformer::name)
         AddHandler(0, &TYtMap::Match, HNDL(TryTransformMap));
+        AddHandler(0, &TYtTableContent::Match, HNDL(TryTransformTableContent));
 #undef HNDL
     }
 
@@ -41,21 +42,16 @@ private:
 
         auto settings = RemoveSetting(map.Settings().Ref(), EYtSettingType::BlockInputReady, ctx);
         settings = AddSetting(*settings, EYtSettingType::BlockInputApplied, TExprNode::TPtr(), ctx);
-
-        // Static assert to ensure backward compatible change: if the
-        // constant below is true, both input and output types of
-        // WideFromBlocks callable have to be WideStream; otherwise,
-        // both input and output types have to be WideFlow.
-        // FIXME: When all spots using WideFromBlocks are adjusted
-        // to work with WideStream, drop the assertion below.
-        static_assert(!NYql::NBlockStreamIO::WideFromBlocks);
-
         auto mapperLambda = Build<TCoLambda>(ctx, map.Mapper().Pos())
             .Args({"flow"})
             .Body<TExprApplier>()
                 .Apply(map.Mapper())
-                .With<TCoWideFromBlocks>(0)
-                    .Input("flow")
+                .With<TCoToFlow>(0)
+                    .Input<TCoWideFromBlocks>()
+                        .Input<TCoFromFlow>()
+                            .Input("flow")
+                        .Build()
+                    .Build()
                 .Build()
             .Build()
             .Done()
@@ -74,6 +70,50 @@ private:
         }
 
         return EnsureWideFlowType(map.Mapper().Args().Arg(0).Ref(), ctx);
+    }
+
+    TMaybeNode<TExprBase> TryTransformTableContent(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
+        auto tableContent = node.Cast<TYtTableContent>();
+        if (!NYql::HasSetting(tableContent.Settings().Ref(), EYtSettingType::BlockInputReady)) {
+            return tableContent;
+        }
+
+        const TParentsMap* parentsMap = getParents();
+        if (auto it = parentsMap->find(tableContent.Raw()); it != parentsMap->end() && it->second.size() > 1) {
+            return tableContent;
+        }
+
+        YQL_CLOG(INFO, ProviderYt) << "Rewrite YtTableContent with block input";
+
+        auto inputStructType = GetSeqItemType(tableContent.Ref().GetTypeAnn())->Cast<TStructExprType>();
+        auto asStructBuilder = Build<TCoAsStruct>(ctx, tableContent.Pos());
+        TExprNode::TListType narrowMapArgs;
+        for (auto& item : inputStructType->GetItems()) {
+            auto arg = ctx.NewArgument(tableContent.Pos(), item->GetName());
+            asStructBuilder.Add<TCoNameValueTuple>()
+                .Name().Build(item->GetName())
+                .Value(arg)
+                .Build();
+            narrowMapArgs.push_back(std::move(arg));
+        }
+
+        auto settings = RemoveSetting(tableContent.Settings().Ref(), EYtSettingType::BlockInputReady, ctx);
+        return Build<TCoForwardList>(ctx, tableContent.Pos())
+            .Stream<TCoNarrowMap>()
+                .Input<TCoToFlow>()
+                    .Input<TCoWideFromBlocks>()
+                        .Input<TYtBlockTableContent>()
+                            .Input(tableContent.Input())
+                            .Settings(settings)
+                        .Build()
+                    .Build()
+                .Build()
+                .Lambda()
+                    .Args(narrowMapArgs)
+                    .Body(asStructBuilder.Done())
+                .Build()
+            .Build()
+            .Done();
     }
 
 private:

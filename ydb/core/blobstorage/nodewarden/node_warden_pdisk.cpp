@@ -224,6 +224,11 @@ namespace NKikimr::NStorage {
             Y_ABORT_UNLESS(jt != PDiskByPath.end() && jt->second.RunningPDiskId == it->first);
             pending = std::move(jt->second.Pending);
             PDiskByPath.erase(jt);
+            auto& cookies = it->second.ShredCookies;
+            for (auto it = cookies.begin(); it != cookies.end(); ) {
+                const auto& [cookie, generation] = *it++;
+                ProcessShredStatus(cookie, generation, "pdisk has been restarted");
+            }
             LocalPDisks.erase(it);
             PDiskRestartInFlight.erase(pdiskId);
 
@@ -250,13 +255,25 @@ namespace NKikimr::NStorage {
         }
     }
 
-    void TNodeWarden::SendPDiskReport(ui32 pdiskId, NKikimrBlobStorage::TEvControllerNodeReport::EPDiskPhase phase) {
+    void TNodeWarden::SendPDiskReport(ui32 pdiskId, NKikimrBlobStorage::TEvControllerNodeReport::EPDiskPhase phase,
+            std::variant<std::monostate, ui64, TString> shredState) {
         STLOG(PRI_DEBUG, BS_NODE, NW41, "SendPDiskReport", (PDiskId, pdiskId), (Phase, phase));
 
         auto report = std::make_unique<TEvBlobStorage::TEvControllerNodeReport>(LocalNodeId);
         auto *pReport = report->Record.AddPDiskReports();
         pReport->SetPDiskId(pdiskId);
         pReport->SetPhase(phase);
+
+        const TPDiskKey key(LocalNodeId, pdiskId);
+        if (const auto it = LocalPDisks.find(key); it != LocalPDisks.end() && it->second.Record.HasPDiskGuid()) {
+            pReport->SetPDiskGuid(it->second.Record.GetPDiskGuid());
+        }
+
+        std::visit(TOverloaded{
+            [](std::monostate&) {},
+            [pReport](ui64& generation) { pReport->SetShredGenerationFinished(generation); },
+            [pReport](TString& aborted) { pReport->SetShredAborted(aborted); }
+        }, shredState);
 
         SendToController(std::move(report));
     }

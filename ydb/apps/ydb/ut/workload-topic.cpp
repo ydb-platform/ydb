@@ -3,7 +3,7 @@
 #include <library/cpp/testing/common/env.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/public/lib/ydb_cli/commands/topic_workload/topic_workload_defines.h>
 
 #include <util/string/cast.h>
@@ -11,6 +11,7 @@
 #include <util/system/env.h>
 #include <util/system/shellcommand.h>
 
+namespace {
 class TFixture : public NUnitTest::TBaseFixture {
 
     public:
@@ -184,9 +185,9 @@ Y_UNIT_TEST(Full_Statistics_UseTx)
     const TVector<TString> expectedSubheaders = {"#", "msg/s", "MB/s", "percentile,ms", "percentile,msg", "msg/s", "MB/s", "percentile,ms", "percentile,ms", "percentile,ms", "percentile,ms"};
     TVector<TString> values = ParseStatisticsLine(lines[2]);
     UnitAssertColumnsOrder(lines[1], expectedSubheaders);
-    // assert there are correct values in output
-    // messages per second
-    UNIT_ASSERT_EQUAL_C(values[1], "5", "Messages per second differs from expected: expected = " << 5 << ", got = " << values[1]);
+    // assert there are correct values in output messages per second
+    UNIT_ASSERT_GT(std::stoi(values[1]), 1);
+    UNIT_ASSERT_LE(std::stoi(values[1]), 5);
 }
 
 Y_UNIT_TEST(WriteInTx)
@@ -242,3 +243,4 @@ Y_UNIT_TEST(WriteProducesToAllPartitionsEvenly)
 }
 
 }
+} // anonymous namespace

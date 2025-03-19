@@ -29,6 +29,7 @@ namespace NKikimr::NPQ {
 
 static const ui32 MAX_BLOB_PART_SIZE = 500_KB;
 static const ui32 DEFAULT_BUCKET_COUNTER_MULTIPLIER = 20;
+static const ui32 MAX_USER_ACTS = 1000;
 
 using TPartitionLabeledCounters = TProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>;
 
@@ -242,6 +243,7 @@ private:
     void ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, const TActorContext& ctx);
     void ProcessChangeOwnerRequests(const TActorContext& ctx);
     void ProcessHasDataRequests(const TActorContext& ctx);
+    bool ProcessHasDataRequest(const THasDataReq& request, const TActorContext& ctx);
     void ProcessRead(const TActorContext& ctx, TReadInfo&& info, const ui64 cookie, bool subscription);
     void ProcessReserveRequests(const TActorContext& ctx);
     void ProcessTimestampRead(const TActorContext& ctx);
@@ -295,7 +297,8 @@ private:
                                                       const TActorContext& ctx);
     // will return rcount and rsize also
     TVector<TRequestedBlob> GetReadRequestFromBody(const ui64 startOffset, const ui16 partNo, const ui32 maxCount,
-                                                   const ui32 maxSize, ui32* rcount, ui32* rsize, ui64 lastOffset);
+                                                   const ui32 maxSize, ui32* rcount, ui32* rsize, ui64 lastOffset,
+                                                   TBlobKeyTokens* blobKeyTokens);
     TVector<TClientBlob>    GetReadRequestFromHead(const ui64 startOffset, const ui16 partNo, const ui32 maxCount,
                                                    const ui32 maxSize, const ui64 readTimestampMs, ui32* rcount,
                                                    ui32* rsize, ui64* insideHeadOffset, ui64 lastOffset);
@@ -426,7 +429,6 @@ private:
 
     void ChangePlanStepAndTxId(ui64 step, ui64 txId);
 
-    void ResendPendingEvents(const TActorContext& ctx);
     void SendReadPreparedProxyResponse(const TReadAnswer& answer, const TReadInfo& readInfo, TUserInfo& user);
 
     void CheckIfSessionExists(TUserInfoBase& userInfo, const TActorId& newPipe);
@@ -687,6 +689,9 @@ private:
     TMessageQueue PendingRequests;
     TMessageQueue QuotaWaitingRequests;
 
+    std::deque<TString> DeletedKeys;
+    std::deque<TBlobKeyTokenPtr> DefferedKeysForDeletion;
+
     THead Head;
     THead NewHead;
     TPartitionedBlob PartitionedBlob;
@@ -934,7 +939,24 @@ private:
 
     TInstant LastUsedStorageMeterTimestamp;
 
-    TDeque<std::unique_ptr<IEventBase>> PendingEvents;
+    using TPendingEvent = std::variant<
+        std::unique_ptr<TEvPQ::TEvTxCalcPredicate>,
+        std::unique_ptr<TEvPQ::TEvTxCommit>,
+        std::unique_ptr<TEvPQ::TEvTxRollback>,
+        std::unique_ptr<TEvPQ::TEvProposePartitionConfig>,
+        std::unique_ptr<TEvPQ::TEvGetWriteInfoRequest>,
+        std::unique_ptr<TEvPQ::TEvGetWriteInfoResponse>,
+        std::unique_ptr<TEvPQ::TEvGetWriteInfoError>,
+        std::unique_ptr<TEvPQ::TEvDeletePartition>
+    >;
+
+    TDeque<TPendingEvent> PendingEvents;
+
+    template <class T> void AddPendingEvent(TAutoPtr<TEventHandle<T>>& ev);
+    template <class T> void ProcessPendingEvent(std::unique_ptr<T> ev, const TActorContext& ctx);
+    template <class T> void ProcessPendingEvent(TAutoPtr<TEventHandle<T>>& ev, const TActorContext& ctx);
+    void ProcessPendingEvents(const TActorContext& ctx);
+
     TRowVersion LastEmittedHeartbeat;
 
     TLastCounter SourceIdCounter;
@@ -977,6 +999,11 @@ private:
     void UpdateAvgWriteBytes(ui64 size, const TInstant& now);
 
     size_t WriteNewSizeFromSupportivePartitions = 0;
+
+    bool TryAddDeleteHeadKeysToPersistRequest();
+    void DumpKeyValueRequest(const NKikimrClient::TKeyValueRequest& request);
+
+    TBlobKeyTokenPtr MakeBlobKeyToken(const TString& key);
 };
 
 } // namespace NKikimr::NPQ

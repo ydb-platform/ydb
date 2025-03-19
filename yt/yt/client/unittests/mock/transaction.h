@@ -43,11 +43,11 @@ public:
         const TMultiLookupOptions& options), (override));
 
     MOCK_METHOD(TFuture<TSelectRowsResult>, SelectRows, (
-        const TString& query,
+        const std::string& query,
         const TSelectRowsOptions& options), (override));
 
     MOCK_METHOD(TFuture<NYson::TYsonString>, ExplainQuery, (
-        const TString& query,
+        const std::string& query,
         const TExplainQueryOptions& options), (override));
 
     MOCK_METHOD(TFuture<TPullRowsResult>, PullRows, (

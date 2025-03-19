@@ -2,15 +2,22 @@
 
 #include <ydb/public/lib/ydb_cli/common/command.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 
 #include <library/cpp/logger/backend.h>
 
 namespace NYdb {
 namespace NConsoleClient {
 
-class TYdbCommand : public TClientCommand {
+class TLeafCommand : public TClientCommand {
+public:
+    using TClientCommand::TClientCommand;
+
+    bool Prompt(TConfig& config) override;
+};
+
+class TYdbCommand : public TLeafCommand {
 public:
     TYdbCommand(
         const TString& name,
@@ -18,11 +25,18 @@ public:
         const TString& description = TString()
     );
 
-    static TDriver CreateDriver(const TConfig& config);
-    static TDriver CreateDriver(const TConfig& config, THolder<TLogBackend>&& loggingBackend);
+    static TDriver CreateDriver(TConfig& config);
+    static TDriver CreateDriver(TConfig& config, std::unique_ptr<TLogBackend>&& loggingBackend);
 
 private:
-    static TDriverConfig CreateDriverConfig(const TConfig& config);
+    static TDriverConfig CreateDriverConfig(TConfig& config);
+};
+
+class TYdbReadOnlyCommand : public TYdbCommand {
+public:
+    using TYdbCommand::TYdbCommand;
+
+    bool Prompt(TConfig& config) override;
 };
 
 class TYdbSimpleCommand : public TYdbCommand {

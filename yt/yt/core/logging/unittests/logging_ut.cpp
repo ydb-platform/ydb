@@ -10,6 +10,7 @@
 #include <yt/yt/core/logging/file_log_writer.h>
 #include <yt/yt/core/logging/fluent_log.h>
 #include <yt/yt/core/logging/stream_log_writer.h>
+#include <yt/yt/core/logging/structured_log.h>
 #include <yt/yt/core/logging/random_access_gzip.h>
 #include <yt/yt/core/logging/compression.h>
 #include <yt/yt/core/logging/zstd_compression.h>
@@ -602,6 +603,80 @@ TEST_F(TLoggingTest, StructuredLogging)
 
         EXPECT_EQ(message->FindChild("fiber_id"), nullptr);
         EXPECT_EQ(message->FindChild("trace_id"), nullptr);
+    }
+}
+
+TEST_F(TLoggingTest, SlogMacroLogging)
+{
+    for (auto format : {ELogFormat::Yson, ELogFormat::Json}) {
+        TTempFile logFile(GenerateLogFileName());
+        Configure(Format(R"({
+            rules = [
+                {
+                    min_level = info;
+                    writers = [ "test" ];
+                };
+            ];
+            writers = {
+                "test" = {
+                    "format" = "%v";
+                    file_name = "%v";
+                    type = "file";
+                };
+            };
+        })", format, logFile.Name()));
+
+        YT_SLOG_EVENT(Logger(), ELogLevel::Info, "test_message", ("tag1", "value1"), ("tag2", 2));
+
+        TLogManager::Get()->Synchronize();
+
+        auto lines = ReadPlainTextEvents(logFile.Name());
+        EXPECT_EQ(1, std::ssize(lines));
+
+        auto message = DeserializeStructuredEvent(lines[0], format);
+        EXPECT_EQ(message->GetChildOrThrow("message")->AsString()->GetValue(), "test_message");
+        EXPECT_EQ(message->GetChildOrThrow("level")->AsString()->GetValue(), "info");
+        EXPECT_EQ(message->GetChildOrThrow("category")->AsString()->GetValue(), Logger().GetCategory()->Name);
+        EXPECT_EQ(message->GetChildOrThrow("tag1")->AsString()->GetValue(), "value1");
+        EXPECT_EQ(message->GetChildOrThrow("tag2")->AsInt64()->GetValue(), 2);
+    }
+}
+
+TEST_F(TLoggingTest, SlogMacroConstexprLogging)
+{
+    // This test is to demonstrate that the slog macros allow constexpr
+    // construction of log messages, just not completely dynamic construction.
+    for (auto format : {ELogFormat::Yson, ELogFormat::Json}) {
+        TTempFile logFile(GenerateLogFileName());
+        Configure(Format(R"({
+            rules = [
+                {
+                    min_level = info;
+                    writers = [ "test" ];
+                };
+            ];
+            writers = {
+                "test" = {
+                    "format" = "%v";
+                    file_name = "%v";
+                    type = "file";
+                };
+            };
+        })", format, logFile.Name()));
+
+        constexpr auto messageSelector = [](bool first) {
+            return first ? "this" : "that";
+        };
+
+        YT_SLOG_EVENT(Logger(), ELogLevel::Info, messageSelector(true));
+
+        TLogManager::Get()->Synchronize();
+
+        auto lines = ReadPlainTextEvents(logFile.Name());
+        EXPECT_EQ(1, std::ssize(lines));
+
+        auto message = DeserializeStructuredEvent(lines[0], format);
+        EXPECT_EQ(message->GetChildOrThrow("message")->AsString()->GetValue(), "this");
     }
 }
 
@@ -1341,12 +1416,11 @@ TEST_F(TLoggingTest, Anchors)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(TTestWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TTestWriterConfig)
 
-class TTestWriterConfig
+struct TTestWriterConfig
     : public TYsonStruct
 {
-public:
     int Padding;
 
     REGISTER_YSON_STRUCT(TTestWriterConfig);

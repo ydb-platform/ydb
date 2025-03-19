@@ -24,7 +24,6 @@ private:
     THashSet<ui64> GetNotErasedTableIds(const TColumnShard& owner, const TInfoProto& tables) const {
         THashSet<ui64> result;
         for (auto&& i : tables) {
-            AFL_VERIFY(!owner.TablesManager.HasTable(i.GetPathId()));
             if (owner.TablesManager.HasTable(i.GetPathId(), true)) {
                 result.emplace(i.GetPathId());
             }
@@ -105,9 +104,6 @@ public:
             ctx.Send(subscriber, event.Release(), 0, 0);
         }
 
-        auto result = std::make_unique<TEvColumnShard::TEvProposeTransactionResult>(owner.TabletID(), TxInfo.TxKind, TxInfo.TxId, NKikimrTxColumnShard::SUCCESS);
-        result->Record.SetStep(TxInfo.PlanStep);
-        ctx.Send(TxInfo.Source, result.release(), 0, TxInfo.Cookie);
         return true;
     }
 

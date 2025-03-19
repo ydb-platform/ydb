@@ -438,7 +438,7 @@ private:
 
 class TDelayRequestQuery : public TQueryBase {
 public:
-    TDelayRequestQuery(const TString& databaseId, const TString& poolId, const TString& sessionId, TInstant startTime, TMaybe<TInstant> waitDeadline, TDuration leaseDuration, NMonitoring::TDynamicCounterPtr counters)
+    TDelayRequestQuery(const TString& databaseId, const TString& poolId, const TString& sessionId, TInstant startTime, std::optional<TInstant> waitDeadline, TDuration leaseDuration, NMonitoring::TDynamicCounterPtr counters)
         : TQueryBase(__func__, poolId, databaseId, sessionId, counters)
         , DatabaseId(databaseId)
         , PoolId(poolId)
@@ -507,7 +507,7 @@ private:
     const TString PoolId;
     const TString SessionId;
     const TInstant StartTime;
-    const TMaybe<TInstant> WaitDeadline;
+    const std::optional<TInstant> WaitDeadline;
     const TDuration LeaseDuration;
 };
 
@@ -564,7 +564,7 @@ public:
             return;
         }
 
-        TMaybe<ui32> nodeId = result.ColumnParser("node_id").GetOptionalUint32();
+        std::optional<ui32> nodeId = result.ColumnParser("node_id").GetOptionalUint32();
         if (!nodeId) {
             Finish(Ydb::StatusIds::INTERNAL_ERROR, "Node id is not specified for delayed request");
             return;
@@ -576,7 +576,7 @@ public:
             return;
         }
 
-        TMaybe<TString> sessionId = result.ColumnParser("session_id").GetOptionalUtf8();
+        std::optional<std::string> sessionId = result.ColumnParser("session_id").GetOptionalUtf8();
         if (!sessionId) {
             Finish(Ydb::StatusIds::INTERNAL_ERROR, "Session id is not specified for delayed request");
             return;
@@ -585,7 +585,7 @@ public:
         RequestSessionId = *sessionId;
         UpdateLogInfo(PoolId, DatabaseId, RequestSessionId);
 
-        TMaybe<TInstant> startTime = result.ColumnParser("start_time").GetOptionalTimestamp();
+        std::optional<TInstant> startTime = result.ColumnParser("start_time").GetOptionalTimestamp();
         if (!startTime) {
             Finish(Ydb::StatusIds::INTERNAL_ERROR, "Start time is not specified for delayed request");
             return;
@@ -855,8 +855,8 @@ IActor* CreateRefreshPoolStateActor(const TActorId& replyActorId, const TString&
     return new TQueryRetryActor<TRefreshPoolStateQuery, TEvPrivate::TEvRefreshPoolStateResponse, TString, TString, TDuration, NMonitoring::TDynamicCounterPtr>(replyActorId, databaseId, poolId, leaseDuration, counters);
 }
 
-IActor* CreateDelayRequestActor(const TActorId& replyActorId, const TString& databaseId, const TString& poolId, const TString& sessionId, TInstant startTime, TMaybe<TInstant> waitDeadline, TDuration leaseDuration, NMonitoring::TDynamicCounterPtr counters) {
-    return new TQueryRetryActor<TDelayRequestQuery, TEvPrivate::TEvDelayRequestResponse, TString, TString, TString, TInstant, TMaybe<TInstant>, TDuration, NMonitoring::TDynamicCounterPtr>(replyActorId, databaseId, poolId, sessionId, startTime, waitDeadline, leaseDuration, counters);
+IActor* CreateDelayRequestActor(const TActorId& replyActorId, const TString& databaseId, const TString& poolId, const TString& sessionId, TInstant startTime, std::optional<TInstant> waitDeadline, TDuration leaseDuration, NMonitoring::TDynamicCounterPtr counters) {
+    return new TQueryRetryActor<TDelayRequestQuery, TEvPrivate::TEvDelayRequestResponse, TString, TString, TString, TInstant, std::optional<TInstant>, TDuration, NMonitoring::TDynamicCounterPtr>(replyActorId, databaseId, poolId, sessionId, startTime, waitDeadline, leaseDuration, counters);
 }
 
 IActor* CreateStartRequestActor(const TActorId& replyActorId, const TString& databaseId, const TString& poolId, const std::optional<TString>& sessionId, TDuration leaseDuration, NMonitoring::TDynamicCounterPtr counters) {

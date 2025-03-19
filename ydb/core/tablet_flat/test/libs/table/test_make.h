@@ -20,7 +20,7 @@ namespace NTest {
 
         struct IBand {
             virtual ~IBand() = default;
-            virtual void Add(const TRow&) noexcept = 0;
+            virtual void Add(const TRow&) = 0;
             virtual void Ver(TRowVersion rowVersion = TRowVersion::Min()) = 0;
         };
 
@@ -32,7 +32,7 @@ namespace NTest {
 
             }
 
-            void Add(const TRow &row) noexcept override
+            void Add(const TRow &row) override
             {
                 Cook.Add(row);
             }
@@ -53,7 +53,7 @@ namespace NTest {
 
             }
 
-            void Add(const TRow &row) noexcept override
+            void Add(const TRow &row) override
             {
                 Cooker.Add(row, ERowOp::Upsert);
             }

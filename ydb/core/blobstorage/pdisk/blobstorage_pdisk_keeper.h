@@ -26,6 +26,8 @@ protected:
     TFreeChunks TrimmedFreeChunks; // Trimmed free chunk list for fast allocation
 
     TChunkTracker ChunkTracker;
+
+    friend class TPDisk;
 public:
 
     TKeeper(TPDiskMon &mon, TIntrusivePtr<TPDiskConfig> cfg)
@@ -85,6 +87,10 @@ public:
 
     i64 GetOwnerUsed(TOwner owner) const {
         return ChunkTracker.GetOwnerUsed(owner);
+    }
+
+    i64 GetLogChunkCount() const {
+        return ChunkTracker.GetLogChunkCount();
     }
 
     TChunkIdx PopOwnerFreeChunk(TOwner owner, TString &outErrorReason) {

@@ -554,7 +554,7 @@ private:
         MKQL_ENSURE(codegenKeyArg, "Key arg must be codegenerator node.");
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto containerType = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(PointerType::getUnqual(valueType)) : static_cast<Type*>(valueType);
+        const auto containerType = static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
         const auto stateType = Type::getInt8Ty(context);
@@ -578,8 +578,7 @@ private:
 
         auto block = main;
 
-        const auto container = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-            new LoadInst(valueType, containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
+        const auto container = static_cast<Value*>(containerArg);
 
         const auto first = new LoadInst(stateType, stateArg, "first", block);
         const auto reload = CmpInst::Create(Instruction::ICmp, ICmpInst::ICMP_EQ, first, ConstantInt::get(stateType, ui8(EState::Next)), "reload", block);
@@ -650,7 +649,7 @@ private:
         MKQL_ENSURE(codegenInput, "Input arg must be codegenerator node.");
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto containerType = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(PointerType::getUnqual(valueType)) : static_cast<Type*>(valueType);
+        const auto containerType = static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
         const auto stateType = Type::getInt8Ty(context);
@@ -680,8 +679,7 @@ private:
 
         auto block = main;
 
-        const auto input = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-            new LoadInst(valueType, inputArg, "load_input", false, block) : static_cast<Value*>(inputArg);
+        const auto input = static_cast<Value*>(inputArg);
 
         BranchInst::Create(loop, block);
 

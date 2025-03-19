@@ -3,13 +3,10 @@ import argparse
 import configparser
 import datetime
 import os
-import posixpath
 import re
 import ydb
 import logging
 
-from get_diff_lines_of_file import get_diff_lines_of_file
-from mute_utils import pattern_to_re
 from transform_ya_junit import YaMuteCheck
 from update_mute_issues import (
     create_and_add_issue_to_project,
@@ -43,10 +40,10 @@ def execute_query(driver):
 
         FROM
         (SELECT test_name, suite_folder, full_name, date_window, build_type, branch, days_ago_window, history, history_class, pass_count, mute_count, fail_count, skip_count, success_rate, summary, owner, is_muted, is_test_chunk, state, previous_state, state_change_date, days_in_state, previous_state_filtered, state_change_date_filtered, days_in_state_filtered, state_filtered
-        FROM `test_results/analytics/tests_monitor_test_with_filtered_states`) as data
+        FROM `test_results/analytics/tests_monitor`) as data
         left JOIN 
         (SELECT full_name, build_type, branch
-            FROM `test_results/analytics/tests_monitor_test_with_filtered_states`
+            FROM `test_results/analytics/tests_monitor`
             WHERE state = 'Flaky'
             AND days_in_state = 1
             AND date_window = CurrentUtcDate()
@@ -57,7 +54,7 @@ def execute_query(driver):
             and data.branch = new_flaky.branch
         LEFT JOIN 
         (SELECT full_name, build_type, branch
-            FROM `test_results/analytics/tests_monitor_test_with_filtered_states`
+            FROM `test_results/analytics/tests_monitor`
             WHERE state = 'Flaky'
             AND date_window = CurrentUtcDate()
             )as flaky
@@ -67,7 +64,7 @@ def execute_query(driver):
             and data.branch = flaky.branch
         LEFT JOIN 
         (SELECT full_name, build_type, branch
-            FROM `test_results/analytics/tests_monitor_test_with_filtered_states`
+            FROM `test_results/analytics/tests_monitor`
             WHERE state = 'Muted Stable'
             AND date_window = CurrentUtcDate()
             )as muted_stable
@@ -78,7 +75,7 @@ def execute_query(driver):
             and data.branch = muted_stable.branch
         LEFT JOIN 
         (SELECT full_name, build_type, branch
-            FROM `test_results/analytics/tests_monitor_test_with_filtered_states`
+            FROM `test_results/analytics/tests_monitor`
             WHERE state= 'Muted Stable'
             AND days_in_state >= 14
             AND date_window = CurrentUtcDate()
@@ -92,7 +89,7 @@ def execute_query(driver):
        
         LEFT JOIN 
         (SELECT full_name, build_type, branch
-            FROM `test_results/analytics/tests_monitor_test_with_filtered_states`
+            FROM `test_results/analytics/tests_monitor`
             WHERE state = 'no_runs'
             AND days_in_state >= 14
             AND date_window = CurrentUtcDate()
@@ -181,8 +178,9 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
             for test in all_tests
             if test.get('days_in_state') >= 1
             and test.get('flaky_today')
-            and (test.get('pass_count') + test.get('fail_count')) > 3
+            and (test.get('pass_count') + test.get('fail_count')) >= 3
             and test.get('fail_count') > 2
+            and test.get('fail_count')/(test.get('pass_count') + test.get('fail_count')) > 0.2 # <=80% success rate
         )
         flaky_tests = sorted(flaky_tests)
         add_lines_to_file(os.path.join(output_path, 'flaky.txt'), flaky_tests)
@@ -193,8 +191,9 @@ def apply_and_add_mutes(all_tests, output_path, mute_check):
             for test in all_tests
             if test.get('days_in_state') >= 1
             and test.get('flaky_today')
-            and (test.get('pass_count') + test.get('fail_count')) > 3
+            and (test.get('pass_count') + test.get('fail_count')) >= 3
             and test.get('fail_count') > 2
+            and test.get('fail_count')/(test.get('pass_count') + test.get('fail_count')) > 0.2 # <=80% success rate
         )
         ## тесты может запускаться 1 раз в день. если за последние 7 дней набирается трешход то мьютим
         ## падения сегодня более весомы ??  
@@ -296,7 +295,7 @@ def read_tests_from_file(file_path):
                 testsuite, testcase = line.split(" ", maxsplit=1)
                 result.append({'testsuite': testsuite, 'testcase': testcase, 'full_name': f"{testsuite}/{testcase}"})
             except ValueError:
-                log_print(f"cant parse line: {line!r}")
+                logging.warning(f"cant parse line: {line!r}")
                 continue
     return result
 
@@ -338,9 +337,8 @@ def create_mute_issues(all_tests, file_path):
     for item in prepared_tests_by_suite:
 
         title, body = generate_github_issue_title_and_body(prepared_tests_by_suite[item])
-        result = create_and_add_issue_to_project(
-            title, body, state='Muted', owner=prepared_tests_by_suite[item][0]['owner'].split('/', 1)[1]
-        )
+        owner_value = prepared_tests_by_suite[item][0]['owner'].split('/', 1)[1] if '/' in prepared_tests_by_suite[item][0]['owner'] else prepared_tests_by_suite[item][0]['owner']
+        result = create_and_add_issue_to_project(title, body, state='Muted', owner=owner_value)
         if not result:
             break
         else:
@@ -374,8 +372,6 @@ def mute_worker(args):
         credentials=ydb.credentials_from_env_variables(),
     ) as driver:
         driver.wait(timeout=10, fail_fast=True)
-        session = ydb.retry_operation_sync(lambda: driver.table_client.session().create())
-        tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
 
         all_tests = execute_query(driver)
     if args.mode == 'update_muted_ya':

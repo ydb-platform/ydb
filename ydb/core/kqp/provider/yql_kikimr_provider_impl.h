@@ -46,6 +46,10 @@ private:
     virtual TStatus HandleAlterReplication(NNodes::TKiAlterReplication node, TExprContext& ctx) = 0;
     virtual TStatus HandleDropReplication(NNodes::TKiDropReplication node, TExprContext& ctx) = 0;
 
+    virtual TStatus HandleCreateTransfer(NNodes::TKiCreateTransfer node, TExprContext& ctx) = 0;
+    virtual TStatus HandleAlterTransfer(NNodes::TKiAlterTransfer node, TExprContext& ctx) = 0;
+    virtual TStatus HandleDropTransfer(NNodes::TKiDropTransfer node, TExprContext& ctx) = 0;
+
     virtual TStatus HandleCreateUser(NNodes::TKiCreateUser node, TExprContext& ctx) = 0;
     virtual TStatus HandleAlterUser(NNodes::TKiAlterUser node, TExprContext& ctx) = 0;
     virtual TStatus HandleDropUser(NNodes::TKiDropUser node, TExprContext& ctx) = 0;
@@ -98,6 +102,7 @@ public:
         Replication,
         BackupCollection,
         Sequence,
+        Transfer,
     };
 
     struct TViewDescription {
@@ -140,6 +145,12 @@ public:
     TString GetReplicationPath() const {
         Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
         Y_DEBUG_ABORT_UNLESS(KeyType == Type::Replication);
+        return Target;
+    }
+
+    TString GetTransferPath() const {
+        Y_DEBUG_ABORT_UNLESS(KeyType.Defined());
+        Y_DEBUG_ABORT_UNLESS(KeyType == Type::Transfer);
         return Target;
     }
 
@@ -287,7 +298,7 @@ void TableDescriptionToTableInfo(const TKikimrTableDescription& desc, TYdbOperat
 
 Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseDistance(std::string_view distance);
 Ydb::Table::VectorIndexSettings_Metric VectorIndexSettingsParseSimilarity(std::string_view similarity);
-Ydb::Table::VectorIndexSettings_VectorType VectorIndexSettingsParseVectorType(std::string_view vectorType);  
+Ydb::Table::VectorIndexSettings_VectorType VectorIndexSettingsParseVectorType(std::string_view vectorType);
 
 bool IsPgNullExprNode(const NNodes::TExprBase& maybeLiteral);
 std::optional<TString> FillLiteralProto(NNodes::TExprBase maybeLiteral, const TTypeAnnotationNode* valueType, Ydb::TypedValue& proto);

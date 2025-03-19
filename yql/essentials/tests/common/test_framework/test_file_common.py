@@ -12,21 +12,19 @@ from yql_utils import execute, get_supported_providers, get_tables, get_files, g
 from yqlrun import YQLRun
 
 from test_utils import get_parameters_json, replace_vars
-# FIXME dq usage
-from test_utils import DATA_PATH
 
 
-def get_gateways_config(http_files, yql_http_file_server, force_blocks=False, is_hybrid=False, allow_llvm=True):
+def get_gateways_config(http_files, yql_http_file_server, force_blocks=False, is_hybrid=False, allow_llvm=True, postprocess_func=None):
     config = None
 
-    if http_files or force_blocks or is_hybrid or not allow_llvm:
+    if http_files or force_blocks or is_hybrid or not allow_llvm or postprocess_func is not None:
         config_message = gateways_config_pb2.TGatewaysConfig()
         if http_files:
             schema = config_message.Fs.CustomSchemes.add()
             schema.Pattern = 'http_test://(.*)'
             schema.TargetUrl = yql_http_file_server.compose_http_link('$1')
         if force_blocks:
-            config_message.SqlCore.TranslationFlags.extend(['EmitAggApply'])
+            config_message.SqlCore.TranslationFlags.extend(['EmitAggApply', 'EmitTableSource'])
             flags = config_message.YqlCore.Flags.add()
             flags.Name = 'UseBlocks'
         if is_hybrid:
@@ -39,6 +37,8 @@ def get_gateways_config(http_files, yql_http_file_server, force_blocks=False, is
         if not allow_llvm:
             flags = config_message.YqlCore.Flags.add()
             flags.Name = 'LLVM_OFF'
+        if postprocess_func is not None:
+            postprocess_func(config_message)
         config = text_format.MessageToString(config_message)
 
     return config
@@ -56,10 +56,7 @@ def check_provider(provider, config):
         pytest.skip('%s provider is not supported here' % provider)
 
 
-# FIXME make data_path required (dq usage)
 def get_sql_query(provider, suite, case, config, data_path=None, template='.sql'):
-    if data_path is None:
-        data_path = DATA_PATH
     pragmas = get_pragmas(config)
 
     if get_param('TARGET_PLATFORM'):
@@ -91,11 +88,8 @@ def get_sql_query(provider, suite, case, config, data_path=None, template='.sql'
 
 def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
                       yqlrun_binary=None, extra_args=[], force_blocks=False, allow_llvm=True, data_path=None,
-                      run_sql=True):
+                      run_sql=True, cfg_postprocess=None):
     check_provider(provider, config)
-    # FIXME dq usage
-    if data_path is None:
-        data_path = DATA_PATH
 
     sql_query = get_sql_query(provider, suite, case, config, data_path, template='.sql' if run_sql else '.yqls')
     sql_query = replace_vars(sql_query, "yqlrun_var")
@@ -122,7 +116,8 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
         prov=provider,
         keep_temp=not re.search(r"yt\.ReleaseTempData", sql_query),
         binary=yqlrun_binary,
-        gateway_config=get_gateways_config(http_files, yql_http_file_server, force_blocks=force_blocks, is_hybrid=is_hybrid(provider), allow_llvm=allow_llvm),
+        gateway_config=get_gateways_config(http_files, yql_http_file_server, force_blocks=force_blocks, is_hybrid=is_hybrid(provider), allow_llvm=allow_llvm,
+                                           postprocess_func=cfg_postprocess),
         extra_args=extra_args,
         udfs_dir=yql_binary_path('yql/essentials/tests/common/test_framework/udfs_deps')
     )
@@ -161,12 +156,12 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
 
 
 def run_file(provider, suite, case, cfg, config, yql_http_file_server, yqlrun_binary=None,
-             extra_args=[], force_blocks=False, allow_llvm=True, data_path=None, run_sql=True):
+             extra_args=[], force_blocks=False, allow_llvm=True, data_path=None, run_sql=True, cfg_postprocess=None):
     if (suite, case, cfg) not in run_file.cache:
         run_file.cache[(suite, case, cfg)] = \
             run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
                               yqlrun_binary, extra_args, force_blocks=force_blocks, allow_llvm=allow_llvm,
-                              data_path=data_path, run_sql=run_sql)
+                              data_path=data_path, run_sql=run_sql, cfg_postprocess=cfg_postprocess)
 
     return run_file.cache[(suite, case, cfg)]
 

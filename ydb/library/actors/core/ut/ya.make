@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/library/actors/core)
 FORK_SUBTESTS()
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     SPLIT_FACTOR(20)
     REQUIREMENTS(
         ram:32
@@ -19,7 +19,10 @@ PEERDIR(
 )
 
 SRCS(
+    actor_basic_ut.cpp
     actor_coroutine_ut.cpp
+    actor_exception_ut.cpp
+    actor_shared_threads.cpp
     benchmark_ut.cpp
     actor_ut.cpp
     actorsystem_ut.cpp

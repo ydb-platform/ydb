@@ -1,5 +1,5 @@
 diff --git a/include/__expected/bad_expected_access.h b/include/__expected/bad_expected_access.h
-index 27f01d9..174f97f 100644
+index 1b73438..d954545 100644
 --- a/include/__expected/bad_expected_access.h
 +++ b/include/__expected/bad_expected_access.h
 @@ -20,7 +20,7 @@
@@ -12,10 +12,10 @@ index 27f01d9..174f97f 100644
  _LIBCPP_BEGIN_NAMESPACE_STD
  
 diff --git a/include/__expected/expected.h b/include/__expected/expected.h
-index 97f92bd..507dd72 100644
+index f618b20..d08222f 100644
 --- a/include/__expected/expected.h
 +++ b/include/__expected/expected.h
-@@ -62,7 +62,7 @@
+@@ -53,7 +53,7 @@
  _LIBCPP_PUSH_MACROS
  #include <__undef_macros>
  

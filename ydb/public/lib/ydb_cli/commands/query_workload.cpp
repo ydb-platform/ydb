@@ -1,7 +1,7 @@
 #include "query_workload.h"
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_common.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <library/cpp/histogram/hdr/histogram.h>
 #include <util/system/thread.h>
 #include <util/system/mutex.h>
@@ -116,7 +116,7 @@ int TCommandQueryWorkloadRun::Run(TConfig& config) {
                     );
 
                     auto result = asyncResult.GetValueSync();
-                    ThrowOnError(result);
+                    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
                     TDuration local_duration;
 
@@ -128,7 +128,7 @@ int TCommandQueryWorkloadRun::Run(TConfig& config) {
                         }
 
                         if (streamPart.GetStats()) {
-                            const auto& queryStats = streamPart.GetStats().GetRef();
+                            const auto& queryStats = streamPart.GetStats().value();
                             local_duration += queryStats.GetTotalDuration();
                         }
                     }

@@ -2,6 +2,7 @@
 #include "plain_read_data.h"
 #include "source.h"
 
+#include <ydb/core/formats/arrow/program/collection.h>
 #include <ydb/core/formats/arrow/serializer/native.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 
@@ -38,9 +39,15 @@ void TBaseMergeTask::PrepareResultBatch() {
     {
         ResultBatch = NArrow::TColumnOperator().VerifyIfAbsent().Extract(ResultBatch, Context->GetProgramInputColumns()->GetColumnNamesVector());
         AFL_VERIFY((ui32)ResultBatch->num_columns() == Context->GetProgramInputColumns()->GetColumnNamesVector().size());
-        NArrow::TStatusValidator::Validate(Context->GetReadMetadata()->GetProgram().ApplyProgram(ResultBatch));
+        auto accessors = std::make_shared<NArrow::NAccessor::TAccessorsCollection>(ResultBatch, *Context->GetCommonContext()->GetResolver());
+        Context->GetReadMetadata()->GetProgram().ApplyProgram(accessors, std::make_shared<NArrow::NSSA::TFakeDataSource>()).Validate();
+        if (accessors->GetRecordsCountOptional().value_or(0) == 0) {
+            ResultBatch = nullptr;
+        } else {
+            ResultBatch = accessors->ToTable(std::nullopt, Context->GetCommonContext()->GetResolver(), false);
+        }
     }
-    if (ResultBatch->num_rows()) {
+    if (ResultBatch && ResultBatch->num_rows()) {
         const auto& shardingPolicy = Context->GetCommonContext()->GetComputeShardingPolicy();
         if (NArrow::THashConstructor::BuildHashUI64(ResultBatch, shardingPolicy.GetColumnNames(), "__compute_sharding_hash")) {
             ShardedBatch = NArrow::TShardingSplitIndex::Apply(shardingPolicy.GetShardsCount(), ResultBatch, "__compute_sharding_hash");
@@ -90,8 +97,7 @@ TConclusionStatus TStartMergeTask::DoExecuteImpl() {
             break;
         }
     }
-    if ((MergingContext->IsExclusiveInterval()) &&
-        sourcesInMemory) {
+    if ((MergingContext->IsExclusiveInterval()) && sourcesInMemory) {
         TMemoryProfileGuard mGuard("SCAN_PROFILE::MERGE::EXCLUSIVE", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
         auto& container = Sources.begin()->second->GetStageResult().GetBatch();
         if (container && container->num_rows()) {

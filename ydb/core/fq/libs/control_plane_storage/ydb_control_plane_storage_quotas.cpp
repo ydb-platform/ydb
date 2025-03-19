@@ -13,7 +13,7 @@
 #include <ydb/core/fq/libs/quota_manager/quota_manager.h>
 
 #include <ydb/public/api/protos/draft/fq.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <util/digest/multi.h>
 
@@ -54,7 +54,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvQuotaService::TQuotaUsageRequest::T
                 "GROUP BY `" SCOPE_COLUMN_NAME "`\n"
             );
         },
-        [=](TQuotaCountExecuter& executer, const TVector<NYdb::TResultSet>& resultSets) {
+        [=](TQuotaCountExecuter& executer, const std::vector<NYdb::TResultSet>& resultSets) {
             TResultSetParser parser(resultSets.front());
             while (parser.TryNextRow()) {
                 auto scope = *parser.ColumnParser(SCOPE_COLUMN_NAME).GetOptionalString();
@@ -66,9 +66,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvQuotaService::TQuotaUsageRequest::T
                             "FROM `" QUERIES_TABLE_NAME "`\n"
                             "WHERE `" SCOPE_COLUMN_NAME "` = $scope LIMIT 1;\n"
                         );
-                        builder.AddString("scope", scope);
+                        builder.AddString("scope", TString{scope});
                     },
-                    [=](TQuotaCountExecuter& executer, const TVector<NYdb::TResultSet>& resultSets) {
+                    [=](TQuotaCountExecuter& executer, const std::vector<NYdb::TResultSet>& resultSets) {
                         TResultSetParser parser(resultSets.front());
                         if (parser.TryNextRow()) {
                             FederatedQuery::Internal::QueryInternal internal;

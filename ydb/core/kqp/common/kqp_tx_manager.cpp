@@ -91,7 +91,6 @@ public:
         auto& shardInfo = ShardsInfo.at(shardId);
         if (auto lockPtr = shardInfo.Locks.FindPtr(lock.GetKey()); lockPtr) {
             if (lock.Proto.GetHasWrites()) {
-                AFL_ENSURE(!ReadOnly);
                 lockPtr->Lock.Proto.SetHasWrites(true);
             }
 
@@ -146,8 +145,21 @@ public:
         return ShardsInfo.at(shardId).State;
     }
 
-    void SetState(ui64 shardId, EShardState state) override {
-        ShardsInfo.at(shardId).State = state;
+    void SetError(ui64 shardId) override {
+        auto& shardInfo = ShardsInfo.at(shardId);
+        shardInfo.State = EShardState::ERROR;
+    }
+
+    void SetPartitioning(const TTableId tableId, const std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>& partitioning) override {
+        TablePartitioning[tableId] = partitioning;
+    }
+
+    std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>> GetPartitioning(const TTableId tableId) const override {
+        auto iterator = TablePartitioning.find(tableId);
+        if (iterator != std::end(TablePartitioning)) {
+            return iterator->second;
+        }
+        return nullptr;
     }
 
     void SetTopicOperations(NTopic::TTopicOperations&& topicOperations) override {
@@ -156,6 +168,10 @@ public:
 
     const NTopic::TTopicOperations& GetTopicOperations() const override {
         return TopicOperations;
+    }
+
+    void SetAllowVolatile(bool allowVolatile) override {
+        AllowVolatile = allowVolatile;
     }
 
     void BuildTopicTxs(NTopic::TTopicOperationTransactions& txs) override {
@@ -183,6 +199,29 @@ public:
             locks.push_back(lockInfo.Lock.Proto);
         }
         return locks;
+    }
+
+    void Reattached(ui64 shardId) override {
+        auto& shardInfo = ShardsInfo.at(shardId);
+        shardInfo.Reattaching = false;
+    }
+
+    void SetRestarting(ui64 shardId) override {
+        auto& shardInfo = ShardsInfo.at(shardId);
+        shardInfo.Restarting = true;
+    }
+
+    bool ShouldReattach(ui64 shardId, TInstant now) override {
+        auto& shardInfo = ShardsInfo.at(shardId);
+        if (!std::exchange(shardInfo.Restarting, false) && !shardInfo.Reattaching) {
+            return false;
+        }
+        return ::NKikimr::NKqp::ShouldReattach(now, shardInfo.ReattachState.ReattachInfo);;
+    }
+
+    TReattachState& GetReattachState(ui64 shardId) override {
+        auto& shardInfo = ShardsInfo.at(shardId);
+        return shardInfo.ReattachState;
     }
 
     bool IsTxPrepared() const override {
@@ -229,8 +268,8 @@ public:
     }
 
     bool IsVolatile() const override {
-        return !HasOlapTable()
-            && !IsReadOnly()
+        return AllowVolatile
+            && !HasOlapTable()
             && !IsSingleShard()
             && !HasTopics();
 
@@ -263,8 +302,12 @@ public:
     }
 
     bool NeedCommit() const override {
-        const bool dontNeedCommit = IsReadOnly() && (IsSingleShard() || HasSnapshot());
+        const bool dontNeedCommit = IsEmpty() || IsReadOnly() && (IsSingleShard() || HasSnapshot());
         return !dontNeedCommit;
+    }
+
+    virtual ui64 GetCoordinator() const override {
+        return Coordinator;
     }
 
     void StartPrepare() override {
@@ -328,7 +371,7 @@ public:
             ReceivingShards.insert(*ArbiterColumnShard);
         }
 
-        ShardsToWaitPrepare = ShardsIds;
+        ShardsToWait = ShardsIds;
 
         MinStep = std::numeric_limits<ui64>::min();
         MaxStep = std::numeric_limits<ui64>::max();
@@ -357,7 +400,7 @@ public:
         AFL_ENSURE(shardInfo.State == EShardState::PREPARING);
         shardInfo.State = EShardState::PREPARED;
 
-        ShardsToWaitPrepare.erase(result.ShardId);
+        ShardsToWait.erase(result.ShardId);
 
         MinStep = std::max(MinStep, result.MinStep);
         MaxStep = std::min(MaxStep, result.MaxStep);
@@ -368,7 +411,7 @@ public:
 
         AFL_ENSURE(Coordinator && Coordinator == result.Coordinator)("prev_coordinator", Coordinator)("new_coordinator", result.Coordinator);
 
-        return ShardsToWaitPrepare.empty();
+        return ShardsToWait.empty();
     }
 
     void StartExecute() override {
@@ -385,6 +428,8 @@ public:
                     && IsSingleShard()));
             shardInfo.State = EShardState::EXECUTING;
         }
+
+        ShardsToWait = ShardsIds;
 
         AFL_ENSURE(ReceivingShards.empty() || HasTopics() || !IsSingleShard() || HasOlapTable());
     }
@@ -413,24 +458,8 @@ public:
         AFL_ENSURE(shardInfo.State == EShardState::EXECUTING);
         shardInfo.State = EShardState::FINISHED;
 
-        if (IsSingleShard() || ReceivingShards.contains(shardId)) {
-            // Either all shards committed write or all shards failed,
-            // so we need to wait only for one answer from ReceivingShards.
-            return true;
-        } else if (IsReadOnly() && !HasSnapshot()) {
-            AFL_ENSURE(ReceivingShards.empty());
-            // NOTE: In this case we have a possible RW transaction, that didn't write anything.
-            // For example, statement 'update dst set ... where ...' or 'insert into dst select from src where ...'.
-            // So, it's ok to use distributed commit in this case,
-            // because in general case (possible RW tx is RW tx) tx will be executed faster
-            // due to absence of taking snapshot (up to 10ms).
-
-            // In case of read only multishard tx without snapshot,
-            // we need to wait for all shards answers (to check locks).
-            AFL_ENSURE(SendingShards.erase(shardId) == 1);
-            return SendingShards.empty();
-        }
-        return false;
+        ShardsToWait.erase(shardId);
+        return ShardsToWait.empty();
     }
 
 private:
@@ -451,11 +480,16 @@ private:
 
         bool IsOlap = false;
         THashSet<TStringBuf> Pathes;
+
+        bool Restarting = false;
+        bool Reattaching = false;
+        TReattachState ReattachState;
     };
 
     void MakeLocksIssue(const TShardInfo& shardInfo) {
         TStringBuilder message;
-        message << "Transaction locks invalidated. Tables: ";
+        message << "Transaction locks invalidated. ";
+        message << (shardInfo.Pathes.size() == 1 ? "Table: " : "Tables: ");
         bool first = true;
         // TODO: add error by pathid
         for (const auto& path : shardInfo.Pathes) {
@@ -472,6 +506,9 @@ private:
     THashMap<ui64, TShardInfo> ShardsInfo;
     std::unordered_set<TString> TablePathes;
 
+    THashMap<TTableId, std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>> TablePartitioning;
+
+    bool AllowVolatile = false;
     bool ReadOnly = true;
     bool ValidSnapshot = false;
     bool HasOlapTableShard = false;
@@ -482,7 +519,7 @@ private:
     std::optional<ui64> Arbiter;
     std::optional<ui64> ArbiterColumnShard;
 
-    THashSet<ui64> ShardsToWaitPrepare;
+    THashSet<ui64> ShardsToWait;
 
     NTopic::TTopicOperations TopicOperations;
 

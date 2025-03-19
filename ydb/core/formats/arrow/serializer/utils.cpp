@@ -32,4 +32,4 @@ std::optional<int> MaximumCompressionLevel(const arrow::Compression::type compre
     }
     return NArrow::TStatusValidator::GetValid(arrow::util::Codec::MaximumCompressionLevel(compression));
 }
-}
+}  // namespace NKikimr::NArrow

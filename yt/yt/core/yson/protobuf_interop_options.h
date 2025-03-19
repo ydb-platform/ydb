@@ -14,6 +14,7 @@ namespace NYT::NYson {
 struct TResolveProtobufElementByYPathOptions
 {
     bool AllowUnknownYsonFields = false;
+    bool AllowAsterisks = false;
 };
 
 struct TProtobufWriterOptions
@@ -31,6 +32,8 @@ struct TProtobufWriterOptions
     using TUnknownYsonFieldModeResolver = std::function<EUnknownYsonFieldsMode(const NYPath::TYPath&)>;
 
     static TUnknownYsonFieldModeResolver CreateConstantUnknownYsonFieldModeResolver(EUnknownYsonFieldsMode mode);
+
+    TProtobufWriterOptions CreateChildOptions(const NYPath::TYPath& path) const;
 
     TUnknownYsonFieldModeResolver UnknownYsonFieldModeResolver = CreateConstantUnknownYsonFieldModeResolver(EUnknownYsonFieldsMode::Fail);
     //! If |true| then required fields not found in protobuf metadata are

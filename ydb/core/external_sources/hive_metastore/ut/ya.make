@@ -33,17 +33,19 @@ ENV(COMPOSE_HTTP_TIMEOUT=1200)  # during parallel tests execution there could be
 INCLUDE(${ARCADIA_ROOT}/library/recipes/docker_compose/recipe.inc)
 
 IF (OPENSOURCE)
-    IF (SANITIZER_TYPE)
-        # Too huge for precommit check with sanitizers
-        SIZE(LARGE)
-    ELSE()
-        # Including of docker_compose/recipe.inc automatically converts these tests into LARGE, 
-        # which makes it impossible to run them during precommit checks on Github CI. 
-        # Next several lines forces these tests to be MEDIUM. To see discussion, visit YDBOPS-8928.
-        SIZE(MEDIUM)
-    ENDIF()
-    SET(TEST_TAGS_VALUE)
-    SET(TEST_REQUIREMENTS_VALUE)
+    # TODO: uncomment these lines when build infrastructure is fixed.
+    #
+    # IF (SANITIZER_TYPE)
+    #     # Too huge for precommit check with sanitizers
+    #     SIZE(LARGE)
+    # ELSE()
+    #     # Including of docker_compose/recipe.inc automatically converts these tests into LARGE, 
+    #     # which makes it impossible to run them during precommit checks on Github CI. 
+    #     # Next several lines forces these tests to be MEDIUM. To see discussion, visit YDBOPS-8928.
+    #     SIZE(MEDIUM)
+    # ENDIF()
+    # SET(TEST_TAGS_VALUE)
+    # SET(TEST_REQUIREMENTS_VALUE)
 
     # This requirement forces tests to be launched consequently,
     # otherwise CI system would be overloaded due to simultaneous launch of many Docker containers.
@@ -65,7 +67,7 @@ PEERDIR(
     ydb/core/testlib/actors
     ydb/core/testlib/basics
     yql/essentials/minikql/comp_nodes
-    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/sql/pg_dummy
 )
 

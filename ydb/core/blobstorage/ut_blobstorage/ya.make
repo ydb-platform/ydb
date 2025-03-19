@@ -8,7 +8,7 @@ ENDIF()
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -46,6 +46,8 @@ SRCS(
     space_check.cpp
     sync.cpp
     ut_helpers.cpp
+    validation.cpp
+    vdisk_malfunction.cpp
 )
 
 PEERDIR(

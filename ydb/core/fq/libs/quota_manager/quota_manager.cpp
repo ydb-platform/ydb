@@ -6,7 +6,7 @@
 #include <ydb/library/actors/core/log.h>
 #include <library/cpp/protobuf/interop/cast.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/core/fq/libs/control_plane_storage/schema.h>
 #include <ydb/core/fq/libs/control_plane_storage/util.h>
 #include <ydb/core/fq/libs/shared_resources/db_exec.h>
@@ -416,7 +416,7 @@ private:
                 builder.AddString("subject", executer.State.SubjectType);
                 builder.AddString("id", executer.State.SubjectId);
             },
-            [](TReadQuotaExecuter& executer, const TVector<NYdb::TResultSet>& resultSets) {
+            [](TReadQuotaExecuter& executer, const std::vector<NYdb::TResultSet>& resultSets) {
                 TResultSetParser parser(resultSets.front());
                 while (parser.TryNextRow()) {
                     auto name = *parser.ColumnParser(METRIC_NAME_COLUMN_NAME).GetOptionalString();
@@ -570,7 +570,7 @@ private:
                 builder.AddString("id", executer.State.SubjectId);
                 builder.AddString("metric", executer.State.MetricName);
             },
-            [](TSyncQuotaExecuter& executer, const TVector<NYdb::TResultSet>& resultSets) {
+            [](TSyncQuotaExecuter& executer, const std::vector<NYdb::TResultSet>& resultSets) {
                 TResultSetParser parser(resultSets.front());
                 if (parser.TryNextRow()) {
                     auto limitUpdatedAt = parser.ColumnParser(LIMIT_UPDATED_AT_COLUMN_NAME).GetOptionalTimestamp();

@@ -27,6 +27,7 @@ class TTransactionContext;
 class TExecutor;
 struct TPageCollectionTxEnv;
 struct TSeat;
+class TExecutorCounters;
 
 class TTableSnapshotContext : public TThrRefBase, TNonCopyable {
     friend class TExecutor;
@@ -58,7 +59,7 @@ public:
         AtomicStore(&Dropped, true);
     }
 
-    void Describe(IOutputStream &out) const noexcept
+    void Describe(IOutputStream &out) const
     {
         out << "Res{";
 
@@ -103,9 +104,9 @@ struct IExecuting {
     virtual void LoanTable(ui32 tableId, const TString &partsInfo) = 0; // attach table parts to table (called on part destination)
     virtual void CleanupLoan(const TLogoBlobID &bundleId, ui64 from) = 0; // mark loan completion (called on part source)
     virtual void ConfirmLoan(const TLogoBlobID &bundleId, const TLogoBlobID &borrowId) = 0; // confirm loan update delivery (called on part destination)
-    virtual void EnableReadMissingReferences() noexcept = 0;
-    virtual void DisableReadMissingReferences() noexcept = 0;
-    virtual ui64 MissingReferencesSize() const noexcept = 0;
+    virtual void EnableReadMissingReferences() = 0;
+    virtual void DisableReadMissingReferences() = 0;
+    virtual ui64 MissingReferencesSize() const = 0;
 };
 
 class TTxMemoryProviderBase : TNonCopyable {
@@ -231,11 +232,11 @@ public:
         return Rescheduled_;
     }
 
-    void StartExecutionSpan() noexcept {
+    void StartExecutionSpan() {
         TransactionExecutionSpan = NWilson::TSpan(TWilsonTablet::TabletDetailed, TransactionSpan.GetTraceId(), "Tablet.Transaction.Execute");
     }
 
-    void FinishExecutionSpan() noexcept {
+    void FinishExecutionSpan() {
         TransactionExecutionSpan.EndOk();
     }
 
@@ -305,18 +306,18 @@ public:
     virtual void ReleaseTxData(TTxMemoryProvider &/*provider*/, const TActorContext &/*ctx*/) {}
     virtual TTxType GetTxType() const { return UnknownTxType; }
 
-    virtual void Describe(IOutputStream &out) const noexcept
+    virtual void Describe(IOutputStream &out) const
     {
         out << TypeName(*this);
     }
 
-    void SetupTxSpanName() noexcept {
+    void SetupTxSpanName() {
         if (TxSpan) {
             TxSpan.Attribute("Type", TypeName(*this));
         }
     }
 
-    void SetupTxSpan(NWilson::TTraceId traceId) noexcept {
+    void SetupTxSpan(NWilson::TTraceId traceId) {
         TxSpan = NWilson::TSpan(TWilsonTablet::TabletBasic, std::move(traceId), "Tablet.Transaction");
         if (TxSpan) {
             TxSpan.Attribute("Type", TypeName(*this));
@@ -498,6 +499,7 @@ namespace NFlatExecutorSetup {
         virtual void SnapshotComplete(TIntrusivePtr<TTableSnapshotContext> snapContext, const TActorContext &ctx); // would be FAIL in default implementation
         virtual void CompletedLoansChanged(const TActorContext &ctx); // would be no-op in default implementation
         virtual void CompactionComplete(ui32 tableId, const TActorContext &ctx); // would be no-op in default implementation
+        virtual void DataCleanupComplete(ui64 dataCleanupGeneration, const TActorContext& ctx);
 
         virtual void ScanComplete(NTable::EAbort status, TAutoPtr<IDestructable> prod, ui64 cookie, const TActorContext &ctx);
 
@@ -548,7 +550,7 @@ namespace NFlatExecutorSetup {
         // tablet generation restoration complete, tablet could act as leader
         virtual void Restored(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &ctx) = 0;
         // die!
-        virtual void DetachTablet(const TActorContext &ctx) = 0;
+        virtual void DetachTablet() = 0;
 
         // tablet assigned as follower (or follower connection refreshed), must begin loading
         virtual void FollowerBoot(TEvTablet::TEvFBoot::TPtr &ev, const TActorContext &ctx) = 0;
@@ -563,7 +565,26 @@ namespace NFlatExecutorSetup {
         virtual void FollowerGcApplied(ui32 step, TDuration followerSyncDelay) = 0;
 
         virtual void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) = 0;
-        virtual void Enqueue(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) = 0;
+
+        /**
+         * Enqueue a transaction for execution
+         * Returns the unique id that may be used for cancellation.
+         */
+        virtual ui64 Enqueue(TAutoPtr<ITransaction> transaction) = 0;
+
+        /**
+         * Enqueue a transaction that is low priority with respect to other
+         * mailbox events. Every transaction in turn is scheduled at the end of
+         * the current mailbox, which allows actors to handle possible cancellation
+         * before each transaction's execution.
+         * Returns the unique id that may be used for cancellation.
+         */
+        virtual ui64 EnqueueLowPriority(TAutoPtr<ITransaction> transaction) = 0;
+
+        /**
+         * Cancel a previously enqueued transaction with the specified id.
+         */
+        virtual bool CancelTransaction(ui64 id) = 0;
 
         virtual void ConfirmReadOnlyLease(TMonotonic at) = 0;
         virtual void ConfirmReadOnlyLease(TMonotonic at, std::function<void()> callback) = 0;
@@ -621,15 +642,18 @@ namespace NFlatExecutorSetup {
 
         virtual const TExecutorStats& GetStats() const = 0;
         virtual NMetrics::TResourceMetrics* GetResourceMetrics() const = 0;
+        virtual TExecutorCounters* GetCounters() = 0;
 
         /* This stange looking functionallity probably should be dropped */
 
         virtual float GetRejectProbability() const = 0;
 
         // Returns current database scheme (executor must be active)
-        virtual const NTable::TScheme& Scheme() const noexcept = 0;
+        virtual const NTable::TScheme& Scheme() const = 0;
 
         virtual void SetPreloadTablesData(THashSet<ui32> tables) = 0;
+
+        virtual void CleanupData(ui64 dataCleanupGeneration) = 0;
 
         ui32 Generation() const { return Generation0; }
         ui32 Step() const { return Step0; }

@@ -416,6 +416,7 @@
   - sys/mode.h
   - win32thread.h
   - GL/glx.h
+  - GL/glcorearb.h
   - CL/va_ext.h
   - sys/sysconf.h
   - ivx.hpp

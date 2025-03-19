@@ -39,9 +39,9 @@ namespace NBoot {
 
     struct IEnv {
         virtual const NUtil::ILogger* Logger() const noexcept = 0;
-        virtual void Describe(IOutputStream&) const noexcept = 0;
-        virtual void Start(TIntrusivePtr<IStep>) noexcept = 0;
-        virtual void Finish(TIntrusivePtr<IStep>) noexcept = 0;
+        virtual void Describe(IOutputStream&) const = 0;
+        virtual void Start(TIntrusivePtr<IStep>) = 0;
+        virtual void Finish(TIntrusivePtr<IStep>) = 0;
     };
 
     class IStep : public TSimpleRefCount<IStep> {
@@ -70,14 +70,14 @@ namespace NBoot {
 
         virtual ~IStep() = default;
 
-        virtual void Start() noexcept = 0;
+        virtual void Start() = 0;
 
-        virtual bool HandleBio(NSharedCache::TEvResult&) noexcept
+        virtual bool HandleBio(NSharedCache::TEvResult&)
         {
             Y_ABORT("Boot IStep got an unhandled NSharedCache::TEvResult event");
         }
 
-        virtual void HandleStep(TIntrusivePtr<IStep>) noexcept
+        virtual void HandleStep(TIntrusivePtr<IStep>)
         {
             Y_ABORT("Boot IStep got an unhandled child step result");
         }

@@ -20,6 +20,8 @@
 
 #include <yt/yt/core/profiling/timing.h>
 
+#include <library/cpp/yt/memory/memory_usage_tracker.h>
+
 namespace NYT::NHttp {
 
 using namespace NConcurrency;
@@ -62,6 +64,7 @@ public:
         IPollerPtr poller,
         IPollerPtr acceptor,
         IInvokerPtr invoker,
+        IMemoryUsageTrackerPtr memoryUsageTracker,
         IRequestPathMatcherPtr requestPathMatcher,
         bool ownPoller = false)
         : Config_(std::move(config))
@@ -69,6 +72,7 @@ public:
         , Poller_(std::move(poller))
         , Acceptor_(std::move(acceptor))
         , Invoker_(std::move(invoker))
+        , MemoryUsageTracker_(std::move(memoryUsageTracker))
         , OwnPoller_(ownPoller)
         , RequestPathMatcher_(std::move(requestPathMatcher))
     { }
@@ -123,6 +127,7 @@ private:
     const IPollerPtr Poller_;
     const IPollerPtr Acceptor_;
     const IInvokerPtr Invoker_;
+    const IMemoryUsageTrackerPtr MemoryUsageTracker_;
     const bool OwnPoller_ = false;
 
     IRequestPathMatcherPtr RequestPathMatcher_;
@@ -291,7 +296,8 @@ private:
             connection->GetRemoteAddress(),
             GetCurrentInvoker(),
             EMessageType::Request,
-            Config_);
+            Config_,
+            MemoryUsageTracker_);
 
         if (Config_->IsHttps) {
             request->SetHttps();
@@ -302,7 +308,8 @@ private:
         auto response = New<THttpOutput>(
             connection,
             EMessageType::Response,
-            Config_);
+            Config_,
+            MemoryUsageTracker_);
 
         while (true) {
             auto requestId = TRequestId::Create();
@@ -381,6 +388,7 @@ IServerPtr CreateServer(
     IPollerPtr poller,
     IPollerPtr acceptor,
     IInvokerPtr invoker,
+    IMemoryUsageTrackerPtr memoryUsageTracker,
     bool ownPoller)
 {
     auto handlers = New<TRequestPathMatcher>();
@@ -390,6 +398,7 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
+        std::move(memoryUsageTracker),
         std::move(handlers),
         ownPoller);
 }
@@ -399,19 +408,15 @@ IServerPtr CreateServer(
     IPollerPtr poller,
     IPollerPtr acceptor,
     IInvokerPtr invoker,
+    IMemoryUsageTrackerPtr memoryUsageTracker,
     bool ownPoller)
 {
     auto address = TNetworkAddress::CreateIPv6Any(config->Port);
+    IListenerPtr listener;
     for (int i = 0;; ++i) {
         try {
-            auto listener = CreateListener(address, poller, acceptor, config->MaxBacklogSize);
-            return CreateServer(
-                std::move(config),
-                std::move(listener),
-                std::move(poller),
-                std::move(acceptor),
-                std::move(invoker),
-                ownPoller);
+            listener = CreateListener(address, poller, acceptor, config->MaxBacklogSize);
+            break;
         } catch (const std::exception& ex) {
             if (i + 1 == config->BindRetryCount) {
                 throw;
@@ -421,6 +426,14 @@ IServerPtr CreateServer(
             }
         }
     }
+    return CreateServer(
+        std::move(config),
+        std::move(listener),
+        std::move(poller),
+        std::move(acceptor),
+        std::move(invoker),
+        std::move(memoryUsageTracker),
+        ownPoller);
 }
 
 } // namespace
@@ -440,6 +453,7 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
+        /*memoryUsageTracker*/ GetNullMemoryUsageTracker(),
         /*ownPoller*/ false);
 }
 
@@ -447,7 +461,8 @@ IServerPtr CreateServer(
     TServerConfigPtr config,
     IListenerPtr listener,
     IPollerPtr poller,
-    IPollerPtr acceptor)
+    IPollerPtr acceptor,
+    IMemoryUsageTrackerPtr memoryUsageTracker)
 {
     auto invoker = poller->GetInvoker();
     return CreateServer(
@@ -456,13 +471,15 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
+        std::move(memoryUsageTracker),
         /*ownPoller*/ false);
 }
 
 IServerPtr CreateServer(
     TServerConfigPtr config,
     IPollerPtr poller,
-    IPollerPtr acceptor)
+    IPollerPtr acceptor,
+    IMemoryUsageTrackerPtr memoryUsageTracker)
 {
     auto invoker = poller->GetInvoker();
     return CreateServer(
@@ -470,6 +487,7 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
+        std::move(memoryUsageTracker),
         /*ownPoller*/ false);
 }
 
@@ -499,6 +517,7 @@ IServerPtr CreateServer(TServerConfigPtr config, int pollerThreadCount)
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
+        /*memoryUsageTracker*/ GetNullMemoryUsageTracker(),
         /*ownPoller*/ true);
 }
 
@@ -513,18 +532,36 @@ IServerPtr CreateServer(
         std::move(poller),
         std::move(acceptor),
         std::move(invoker),
+        /*memoryUsageTracker*/ GetNullMemoryUsageTracker(),
         /*ownPoller*/ false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
+/*!
+ *  Path matching semantic is copied from go standard library.
+ *  See https://golang.org/pkg/net/http/#ServeMux
+ *
+ *  Supported features:
+ *  - matching path exactly: "/path/name"
+ *  - matching path prefix: "/path/" matches all with prefix "/path/"
+ *  - trailing-slash redirection: matching "/path/" implies "/path"
+ *  - end of path wildcard: "/path/{$}" matches only "/path/" and "/path"
+ */
 void TRequestPathMatcher::Add(const TString& pattern, const IHttpHandlerPtr& handler)
 {
     if (pattern.empty()) {
         THROW_ERROR_EXCEPTION("Empty pattern is invalid");
     }
 
-    if (pattern.back() == '/') {
+    if (pattern.EndsWith("/{$}")) {
+        auto withoutWildcard = pattern.substr(0, pattern.size() - 3);
+
+        Exact_[withoutWildcard] = handler;
+        if (withoutWildcard.size() > 1) {
+            Exact_[withoutWildcard.substr(0, withoutWildcard.size() - 1)] = handler;
+        }
+    } else if (pattern.back() == '/') {
         Subtrees_[pattern] = handler;
 
         auto withoutSlash = pattern.substr(0, pattern.size() - 1);

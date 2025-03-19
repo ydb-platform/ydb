@@ -56,7 +56,7 @@ namespace NPQ {
         bool CheckInProgress(const TActorContext& ctx, TKvRequest& kvRequest)
         {
             for (const TRequestedBlob& reqBlob : kvRequest.Blobs) {
-                TBlobId blob(kvRequest.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
+                TBlobId blob = MakeBlobId(kvRequest.Partition, reqBlob);
                 auto it = ReadsInProgress.find(blob);
                 if (it != ReadsInProgress.end()) {
                     LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "Read request is blocked. Partition "
@@ -73,7 +73,7 @@ namespace NPQ {
         {
             TVector<TKvRequest> unblocked;
             for (const TRequestedBlob& reqBlob : blocker.Blobs) {
-                TBlobId blob(blocker.Partition, reqBlob.Offset, reqBlob.PartNo, reqBlob.Count, reqBlob.InternalPartsCount);
+                TBlobId blob = MakeBlobId(blocker.Partition, reqBlob);
                 ReadsInProgress.erase(blob);
 
                 auto it = BlockedReads.find(blob);
@@ -264,15 +264,32 @@ namespace NPQ {
             auto& srcRequest = ev->Get()->Record;
 
             TKvRequest kvReq(TKvRequest::TypeWrite, ev->Sender, Max<ui64>(), TPartitionId(Max<ui32>()));
+
+            SaveCmdWrite(srcRequest, kvReq, ctx);
+            SaveCmdRename(srcRequest, kvReq, ctx);
+            SaveCmdDelete(srcRequest, kvReq, ctx);
+
+            ui64 cookie = SaveKvRequest(std::move(kvReq));
+
+            auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+            request->Record = std::move(srcRequest);
+            request->Record.SetCookie(cookie);
+
+            ctx.Send(Tablet, request.Release(), 0, 0, std::move(ev->TraceId)); // -> KV
+        }
+
+        void SaveCmdWrite(const NKikimrClient::TKeyValueRequest& srcRequest, TKvRequest& kvReq, const TActorContext& ctx)
+        {
             kvReq.Blobs.reserve(srcRequest.CmdWriteSize());
 
             for (ui32 i = 0; i < srcRequest.CmdWriteSize(); ++i) {
                 const auto& cmd = srcRequest.GetCmdWrite(i);
-                if (cmd.HasKeyToCache()) {
-                    const TString& strKey = cmd.GetKeyToCache();
-                    Y_ABORT_UNLESS(strKey.size() == TKey::KeySize(), "Unexpected key size: %" PRIu64, strKey.size());
+                const TString& strKey = cmd.GetKey();
+                if (IsDataKey(strKey)) {
+                    Y_ABORT_UNLESS((strKey.size() >= TKey::KeySize()) && (strKey.size() - TKey::KeySize() <= 1),
+                                   "Unexpected key size: %" PRIu64 " (%s)",
+                                   strKey.size(), strKey.data());
                     TKey key(strKey);
-                    Y_ABORT_UNLESS(!key.IsHead());
 
                     const TString& value = cmd.GetValue();
                     kvReq.Partition = key.GetPartition();
@@ -285,14 +302,49 @@ namespace NPQ {
                     kvReq.MetadataWritesCount++;
                 }
             }
+        }
 
-            ui64 cookie = SaveKvRequest(std::move(kvReq));
+        void SaveCmdRename(const NKikimrClient::TKeyValueRequest& srcRequest, TKvRequest& kvReq, const TActorContext& ctx)
+        {
+            kvReq.RenamedBlobs.reserve(srcRequest.CmdRenameSize());
 
-            auto request = MakeHolder<TEvKeyValue::TEvRequest>();
-            request->Record = std::move(srcRequest);
-            request->Record.SetCookie(cookie);
+            for (ui32 i = 0; i < srcRequest.CmdRenameSize(); ++i) {
+                const auto& cmd = srcRequest.GetCmdRename(i);
+                if (!IsDataKey(cmd.GetOldKey()) || !IsDataKey(cmd.GetNewKey())) {
+                    continue;
+                }
+                kvReq.RenamedBlobs.emplace_back(cmd.GetOldKey(), cmd.GetNewKey());
 
-            ctx.Send(Tablet, request.Release(), 0, 0, std::move(ev->TraceId)); // -> KV
+                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "CacheProxy. Rename blob from " << cmd.GetOldKey() << " to " << cmd.GetNewKey());
+            }
+        }
+
+        void SaveCmdDelete(const NKikimrClient::TKeyValueRequest& srcRequest, TKvRequest& kvReq, const TActorContext& ctx)
+        {
+            kvReq.DeletedBlobs.reserve(srcRequest.CmdDeleteRangeSize());
+
+            for (ui32 i = 0; i < srcRequest.CmdDeleteRangeSize(); ++i) {
+                const auto& cmd = srcRequest.GetCmdDeleteRange(i);
+                const auto& range = cmd.GetRange();
+                if (!IsDataKey(range.GetFrom()) || !IsDataKey(range.GetTo())) {
+                    continue;
+                }
+                kvReq.DeletedBlobs.emplace_back(range.GetFrom(), range.GetIncludeFrom(),
+                                                range.GetTo(), range.GetIncludeTo());
+
+                LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE,
+                            "CacheProxy. Delete blobs from " <<
+                            range.GetFrom() << "(" << (range.GetIncludeFrom() ? '+' : '-') << ") to " <<
+                            range.GetTo() << "(" << (range.GetIncludeTo() ? '+' : '-') << ")");
+            }
+        }
+
+        bool IsDataKey(const TString& key) const {
+            if (key.empty()) {
+                return false;
+            }
+            const char type = std::tolower(key.front());
+            return type == TKeyPrefix::TypeData; // TypeData || ServiceTypeData
         }
 
         void Handle(TEvPqCache::TEvCacheL2Response::TPtr& ev, const TActorContext& ctx)
@@ -300,8 +352,8 @@ namespace NPQ {
             THolder<TCacheL2Response> resp(ev->Get()->Data.Release());
             Y_ABORT_UNLESS(resp->TabletId == TabletId);
 
-            for (TCacheBlobL2& blob : resp->Removed)
-                Cache.RemoveEvictedBlob(ctx, TBlobId(blob.Partition, blob.Offset, blob.PartNo, 0, 0), blob.Value);
+            for (const TCacheBlobL2& blob : resp->Removed)
+                Cache.RemoveEvictedBlob(ctx, TBlobId(blob.Partition, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount), blob.Value);
 
             if (resp->Overload) {
                 LOG_NOTICE_S(ctx, NKikimrServices::PERSQUEUE,

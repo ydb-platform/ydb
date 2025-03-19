@@ -83,7 +83,7 @@ struct TPathElement : TSimpleRefCount<TPathElement> {
     ui64 DocumentApiVersion = 0;
     NJson::TJsonValue AsyncReplication;
     bool IsAsyncReplica = false;
-    bool IsRestoreTable = false;
+    bool IsIncrementalRestoreTable = false;
 
     // Number of references to this path element in the database
     size_t DbRefCount = 0;
@@ -101,10 +101,9 @@ private:
 public:
     TPathElement(TPathId pathId, TPathId parentPathId, TPathId domainPathId, const TString& name, const TString& owner);
     ui64 GetAliveChildren() const;
-    void SetAliveChildren(ui64 val);
+    void IncAliveChildrenPrivate(bool isBackup = false);
+    void DecAliveChildrenPrivate(bool isBackup = false);
     ui64 GetBackupChildren() const;
-    void IncAliveChildren(ui64 delta = 1, bool isBackup = false);
-    void DecAliveChildren(ui64 delta = 1, bool isBackup = false);
     ui64 GetShardsInside() const;
     void SetShardsInside(ui64 val);
     void IncShardsInside(ui64 delta = 1);
@@ -167,7 +166,7 @@ public:
     void ChangeFileStoreSpaceCommit(TFileStoreSpace newSpace, TFileStoreSpace oldSpace);
     bool CheckFileStoreSpaceChange(TFileStoreSpace newSpace, TFileStoreSpace oldSpace, TString& errStr);
     void SetAsyncReplica(bool value);
-    void SetRestoreTable();
+    void SetIncrementalRestoreTable();
     bool HasRuntimeAttrs() const;
     void SerializeRuntimeAttrs(google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TUserAttribute>* userAttrs) const;
 };

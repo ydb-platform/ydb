@@ -313,7 +313,7 @@ double GetPercentageInconsistentFiles(
 
     auto countDisplaced = [&] (const std::vector<std::pair<EQueryType, std::pair<TString, int>>>& queries) {
         std::map<TCrpItemWithToken, TCompactVector<TString, 1>> serversBefore;
-        for (const auto& file: files) {
+        for (const auto& file : files) {
             auto candidates = ring.GetServersForFile(file.first, file.second);
             candidates.resize(std::min(static_cast<size_t>(file.second), candidateCount));
             serversBefore[file] = candidates;
@@ -339,7 +339,7 @@ double GetPercentageInconsistentFiles(
         }
 
         int result = 0;
-        for (const auto& elem: files) {
+        for (const auto& elem : files) {
             auto candidates = ring.GetServersForFile(elem.first, elem.second);
             candidates.resize(std::min(static_cast<size_t>(elem.second), candidateCount));
             result += (serversBefore[elem] != candidates);

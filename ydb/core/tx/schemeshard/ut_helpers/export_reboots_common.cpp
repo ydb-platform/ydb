@@ -6,20 +6,45 @@
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>
 #include <ydb/core/protos/msgbus_kv.pb.h>
 
+using namespace NKikimrSchemeOp;
+
 namespace NSchemeShardUT_Private {
 namespace NExportReboots {
 
-void Run(const TVector<TString>& tables, const TString& request, TTestWithReboots& t) {
+void TestCreate(TTestActorRuntime& runtime, ui64 txId, const TString& scheme, NKikimrSchemeOp::EPathType pathType) {
+    using TTestCreateFunc = ui64(*)(TTestActorRuntime&, ui64, const TString&, const TString&, 
+        const TVector<TExpectedResult>&, const TApplyIf&);
+
+    static const THashMap<NKikimrSchemeOp::EPathType, TTestCreateFunc> functions = {
+        {EPathTypeTable, &TestSimpleCreateTable},
+        {EPathTypeView, &TestCreateView},
+        {EPathTypeCdcStream, &TestCreateCdcStream},
+    };
+
+    auto it = functions.find(pathType);
+    if (it != functions.end()) {
+        it->second(runtime, txId, "/MyRoot", scheme, {NKikimrScheme::StatusAccepted}, {});
+    } else {
+        UNIT_FAIL("export is not implemented for the scheme object type: " << pathType);
+    }
+}
+
+void CreateSchemeObjects(TTestWithReboots& t, TTestActorRuntime& runtime, const TVector<TTypedScheme>& schemeObjects) {
+    TSet<ui64> toWait;
+    for (const auto& [type, scheme, _] : schemeObjects) {
+        TestCreate(runtime, ++t.TxId, scheme, type);
+        toWait.insert(t.TxId);
+    }
+    t.TestEnv->TestWaitNotification(runtime, toWait);
+}
+
+void Run(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTestWithReboots& t) {
     t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+        runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
+        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         {
             TInactiveZone inactive(activeZone);
-
-            TSet<ui64> toWait;
-            for (const auto& table : tables) {
-                TestCreateTable(runtime, ++t.TxId, "/MyRoot", table);
-                toWait.insert(t.TxId);
-            }
-            t.TestEnv->TestWaitNotification(runtime, toWait);
+            CreateSchemeObjects(t, runtime, schemeObjects);
         }
 
         TestExport(runtime, ++t.TxId, "/MyRoot", request);
@@ -47,17 +72,13 @@ void Run(const TVector<TString>& tables, const TString& request, TTestWithReboot
     });
 }
 
-void Cancel(const TVector<TString>& tables, const TString& request, TTestWithReboots& t) {
+void Cancel(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTestWithReboots& t) {
     t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+        runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
+        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         {
             TInactiveZone inactive(activeZone);
-
-            TSet<ui64> toWait;
-            for (const auto& table : tables) {
-                TestCreateTable(runtime, ++t.TxId, "/MyRoot", table);
-                toWait.insert(t.TxId);
-            }
-            t.TestEnv->TestWaitNotification(runtime, toWait);
+            CreateSchemeObjects(t, runtime, schemeObjects);
         }
 
         TestExport(runtime, ++t.TxId, "/MyRoot", request);
@@ -90,17 +111,13 @@ void Cancel(const TVector<TString>& tables, const TString& request, TTestWithReb
     });
 }
 
-void Forget(const TVector<TString>& tables, const TString& request, TTestWithReboots& t) {
+void Forget(const TVector<TTypedScheme>& schemeObjects, const TString& request, TTestWithReboots& t) {
     t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+        runtime.GetAppData().FeatureFlags.SetEnableViewExport(true);
+        runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
         {
             TInactiveZone inactive(activeZone);
-
-            TSet<ui64> toWait;
-            for (const auto& table : tables) {
-                TestCreateTable(runtime, ++t.TxId, "/MyRoot", table);
-                toWait.insert(t.TxId);
-            }
-            t.TestEnv->TestWaitNotification(runtime, toWait);
+            CreateSchemeObjects(t, runtime, schemeObjects);
 
             TestExport(runtime, ++t.TxId, "/MyRoot", request);
             t.TestEnv->TestWaitNotification(runtime, t.TxId);

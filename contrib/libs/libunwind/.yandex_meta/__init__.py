@@ -9,6 +9,11 @@ def post_install(self):
         libunwind.NO_RUNTIME = True
         libunwind.NO_SANITIZE = True
         libunwind.NO_SANITIZE_COVERAGE = True
+        # There should be a clang option to disable pragma comment(lib) completely.
+        # Having these defines breaks musl build, as there is no such libs in musl
+        libunwind.CFLAGS.remove("-D_LIBUNWIND_LINK_DL_LIB")
+        libunwind.CFLAGS.remove("-D_LIBUNWIND_LINK_PTHREAD_LIB")
+
         # original build uses -f options heavily, keep only necessary subset
         libunwind.CFLAGS += ["-fno-exceptions", "-fno-rtti", "-funwind-tables"]
         libunwind.after("CFLAGS", Switch({"SANITIZER_TYPE == memory": "CFLAGS(-fPIC)"}))
@@ -59,6 +64,7 @@ llvm_libunwind = CMakeNinjaNixProject(
         "src/UnwindRegistersRestore.S",
     ],
     disable_includes=[
+        "commpage_defs.h",
         "sys/debug.h",
         "sys/pseg.h",
         "System/pthread_machdep.h",

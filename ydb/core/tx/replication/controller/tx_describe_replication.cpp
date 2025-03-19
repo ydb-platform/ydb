@@ -1,6 +1,7 @@
 #include "controller_impl.h"
 #include "logging.h"
 #include "private_events.h"
+#include "target_base.h"
 
 #include <ydb/core/tx/replication/ydb_proxy/ydb_proxy.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -206,6 +207,7 @@ public:
             item.SetId(target->GetId());
             item.SetSrcPath(target->GetSrcPath());
             item.SetDstPath(target->GetDstPath());
+
             if (target->GetStreamName()) {
                 item.SetSrcStreamName(target->GetStreamName());
             }
@@ -256,7 +258,7 @@ public:
             break;
         case TReplication::EState::Error:
             if (auto issue = state.MutableError()->AddIssues()) {
-                issue->set_severity(NYql::TSeverityIds::S_ERROR);
+                issue->set_severity(static_cast<uint32_t>(NYdb::NIssue::ESeverity::Error));
                 issue->set_message(replication->GetIssue());
             }
             break;

@@ -99,6 +99,8 @@ struct TEvTablet {
         // utilitary
         EvCheckBlobstorageStatusResult = EvBoot + 3072,
         EvResetTabletResult,
+        EvGcForStepAckRequest, // from executer to sys tablet
+        EvGcForStepAckResponse, // from sys tablet to executer
 
         EvEnd
     };
@@ -787,6 +789,28 @@ struct TEvTablet {
         TEvResetTabletResult(NKikimrProto::EReplyStatus status, ui64 tabletId)
             : Status(status)
             , TabletId(tabletId)
+        {}
+    };
+
+    // will send TEvGcForStepAckResponse when the requested Generation and Step are less
+    // than the actual garbage collected Generation and Step
+    struct TEvGcForStepAckRequest : public TEventLocal<TEvGcForStepAckRequest, EvGcForStepAckRequest> {
+        const ui32 Generation;
+        const ui32 Step;
+
+        TEvGcForStepAckRequest(ui32 generation, ui32 step)
+            : Generation(generation)
+            , Step(step)
+        {}
+    };
+
+    struct TEvGcForStepAckResponse : public TEventLocal<TEvGcForStepAckResponse, EvGcForStepAckResponse> {
+        const ui32 Generation;
+        const ui32 Step;
+
+        TEvGcForStepAckResponse(ui32 generation, ui32 step)
+            : Generation(generation)
+            , Step(step)
         {}
     };
 

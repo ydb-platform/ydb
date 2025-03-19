@@ -1,4 +1,8 @@
 #include "impl.h"
+#include "console_interaction.h"
+#include "group_geometry_info.h"
+
+#include <ydb/library/yaml_config/yaml_config.h>
 
 namespace NKikimr {
 namespace NBsController {
@@ -91,12 +95,20 @@ public:
                 Self->SysViewChangedSettings = true;
                 Self->UseSelfHealLocalPolicy = state.GetValue<T::UseSelfHealLocalPolicy>();
                 Self->TryToRelocateBrokenDisksLocallyFirst = state.GetValue<T::TryToRelocateBrokenDisksLocallyFirst>();
-                Self->YamlConfig = state.GetValue<T::YamlConfig>();
-                Self->ConfigVersion = state.GetValue<T::ConfigVersion>();
+                if (state.HaveValue<T::YamlConfig>()) {
+                    Self->YamlConfig = DecompressYamlConfig(state.GetValue<T::YamlConfig>());
+                    Self->YamlConfigHash = GetSingleConfigHash(*Self->YamlConfig);
+                }
+                if (state.HaveValue<T::StorageYamlConfig>()) {
+                    Self->StorageYamlConfig = DecompressStorageYamlConfig(state.GetValue<T::StorageYamlConfig>());
+                    Self->StorageYamlConfigVersion = NYamlConfig::GetStorageMetadata(*Self->StorageYamlConfig).Version.value_or(0);
+                    Self->StorageYamlConfigHash = NYaml::GetConfigHash(*Self->StorageYamlConfig);
+                }
+                if (state.HaveValue<T::ExpectedStorageYamlConfigVersion>()) {
+                    Self->ExpectedStorageYamlConfigVersion = state.GetValue<T::ExpectedStorageYamlConfigVersion>();
+                }
                 if (state.HaveValue<T::ShredState>()) {
-                    TString buffer = state.GetValue<T::ShredState>();
-                    const bool success = Self->ShredState.ParseFromString(buffer);
-                    Y_ABORT_UNLESS(success);
+                    Self->ShredState.OnLoad(state.GetValue<T::ShredState>());
                 }
             }
         }
@@ -329,7 +341,8 @@ public:
                     disks.GetValueOrDefault<T::NextVSlotId>(), disks.GetValue<T::PDiskConfig>(), boxId,
                     Self->DefaultMaxSlots, disks.GetValue<T::Status>(), disks.GetValue<T::Timestamp>(),
                     disks.GetValue<T::DecommitStatus>(), disks.GetValue<T::Mood>(), disks.GetValue<T::ExpectedSerial>(),
-                    disks.GetValue<T::LastSeenSerial>(), disks.GetValue<T::LastSeenPath>(), staticSlotUsage);
+                    disks.GetValue<T::LastSeenSerial>(), disks.GetValue<T::LastSeenPath>(), staticSlotUsage,
+                    disks.GetValueOrDefault<T::ShredComplete>());
 
                 if (!disks.Next())
                     return false;
@@ -506,9 +519,23 @@ public:
             }
         }
 
+        THashMap<TBoxStoragePoolId, TGroupGeometryInfo> cache;
+
         // calculate group status for all groups
         for (auto& [id, group] : Self->GroupMap) {
             group->CalculateGroupStatus();
+
+            group->CalculateLayoutStatus(Self, group->Topology.get(), [&] {
+                const auto [it, inserted] = cache.try_emplace(group->StoragePoolId);
+                if (inserted) {
+                    if (const auto jt = Self->StoragePools.find(it->first); jt != Self->StoragePools.end()) {
+                        it->second = TGroupGeometryInfo(group->Topology->GType, jt->second.GetGroupGeometry());
+                    } else {
+                        Y_DEBUG_ABORT();
+                    }
+                }
+                return it->second;
+            });
         }
 
         return true;
@@ -517,6 +544,9 @@ public:
     void Complete(const TActorContext&) override {
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE03, "TTxLoadEverything Complete");
         Self->LoadFinished();
+        if (!Self->SelfManagementEnabled) {
+            Self->ConsoleInteraction->Start();
+        }
         STLOG(PRI_DEBUG, BS_CONTROLLER, BSCTXLE04, "TTxLoadEverything InitQueue processed");
     }
 };

@@ -44,7 +44,7 @@ Y_UNIT_TEST_SUITE(TMonitoring) {
 
             TString path = "myworker";
             TString name = "myworker";
-            mon->RegisterActorPage(actorsMonPage, path, name, false, ctx.ExecutorThread.ActorSystem, ctx.SelfID);
+            mon->RegisterActorPage(actorsMonPage, path, name, false, ctx.ActorSystem(), ctx.SelfID);
 
             STR << "MyWorker Bootstrap: Incarnation: " << Incarnation << "\n";
 

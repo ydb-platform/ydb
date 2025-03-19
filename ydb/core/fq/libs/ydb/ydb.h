@@ -1,12 +1,13 @@
 #pragma once
 
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
+#include <yql/essentials/public/issue/yql_issue.h>
 #include <ydb/core/fq/libs/config/protos/storage.pb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_coordination/coordination.h>
-#include <ydb/public/sdk/cpp/client/ydb_rate_limiter/rate_limiter.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <util/stream/file.h>
 #include <util/string/strip.h>
@@ -74,7 +75,7 @@ struct TGenerationContext : public TThrRefBase {
     // it with Transaction (must have CommitTx = false)
     const ui64 Generation;
 
-    TMaybe<NYdb::NTable::TTransaction> Transaction;
+    std::optional<NYdb::NTable::TTransaction> Transaction;
 
     // result of Select
     ui64 GenerationRead = 0;

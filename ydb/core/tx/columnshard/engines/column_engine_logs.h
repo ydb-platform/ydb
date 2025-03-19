@@ -12,6 +12,7 @@
 #include <ydb/core/tx/columnshard/common/scalars.h>
 #include <ydb/core/tx/columnshard/counters/common_data.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
+#include <ydb/core/tx/columnshard/counters/portion_index.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
 
 namespace NKikimr::NArrow {
@@ -95,18 +96,18 @@ public:
     };
 
     enum class EStatsUpdateType {
-        DEFAULT = 0,
-        ERASE,
+        SUB = 0,
         ADD,
     };
 
     TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<TSchemaObjectsCache>& schemaCache,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
         const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const ui64 presetId,
-        const TSchemaInitializationData& schema);
+        const TSchemaInitializationData& schema, const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters);
     TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<TSchemaObjectsCache>& schemaCache,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-        const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const ui64 presetId, TIndexInfo&& schema);
+        const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const ui64 presetId, TIndexInfo&& schema,
+        const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters);
 
     void OnTieringModified(const std::optional<NOlap::TTiering>& ttl, const ui64 pathId) override;
     void OnTieringModified(const THashMap<ui64, NOlap::TTiering>& ttl) override;
@@ -119,8 +120,6 @@ public:
         return VersionedIndex;
     }
 
-    const TMap<ui64, std::shared_ptr<TColumnEngineStats>>& GetStats() const override;
-    const TColumnEngineStats& GetTotalStats() override;
     TSnapshot LastUpdate() const override {
         return LastSnapshot;
     }
@@ -231,16 +230,17 @@ public:
         AFL_VERIFY(portion);
         auto granule = GetGranulePtrVerified(portion->GetPathId());
         granule->ModifyPortionOnComplete(portion, modifier);
-        UpdatePortionStats(*portion, EStatsUpdateType::DEFAULT, &exPortion);
+        Counters->AddPortion(*portion);
+        Counters->RemovePortion(exPortion);
     }
 
-    void AppendPortion(const TPortionDataAccessor& portionInfo, const bool addAsAccessor = true);
+    void AppendPortion(const TPortionDataAccessor& portionInfo);
+    void AppendPortion(const std::shared_ptr<TPortionInfo>& portionInfo);
 
 private:
     ui64 TabletId;
-    TMap<ui64, std::shared_ptr<TColumnEngineStats>> PathStats;   // per path_id stats sorted by path_id
     std::map<TInstant, std::vector<TPortionInfo::TConstPtr>> CleanupPortions;
-    TColumnEngineStats Counters;
+    std::shared_ptr<NColumnShard::TPortionIndexStats> Counters;
     ui64 LastPortion;
     ui64 LastGranule;
     TSnapshot LastSnapshot = TSnapshot::Zero();
@@ -248,10 +248,6 @@ private:
 
 private:
     bool ErasePortion(const TPortionInfo& portionInfo, bool updateStats = true);
-    void UpdatePortionStats(
-        const TPortionInfo& portionInfo, EStatsUpdateType updateType = EStatsUpdateType::DEFAULT, const TPortionInfo* exPortionInfo = nullptr);
-    void UpdatePortionStats(TColumnEngineStats& engineStats, const TPortionInfo& portionInfo, EStatsUpdateType updateType,
-        const TPortionInfo* exPortionInfo = nullptr) const;
 };
 
 }   // namespace NKikimr::NOlap

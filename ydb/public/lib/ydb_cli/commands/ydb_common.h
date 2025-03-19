@@ -1,47 +1,25 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 
 namespace NYdb {
 namespace NConsoleClient {
 
-class TYdbErrorException : public yexception {
-public:
-    TYdbErrorException(NYdb::TStatus status)
-        : Status(std::move(status))
-    { }
-
-    friend IOutputStream& operator<<(IOutputStream& out, const TYdbErrorException& e) {
-        return out << e.Status;
-    }
-
-private:
-    NYdb::TStatus Status;
-};
-
-inline void ThrowOnError(NYdb::TStatus status) {
-    if (!status.IsSuccess()) {
-        throw TYdbErrorException(status) << status;
-    } else if (status.GetIssues()) {
-        Cerr << status;
-    }
-}
-
-inline void ThrowOnError(const NYdb::TOperation& operation) {
+inline void ThrowOnError(const NYdb::Dev::TOperation& operation) {
     if (!operation.Ready())
         return;
-    ThrowOnError(operation.Status());
+    NStatusHelpers::ThrowOnError(operation.Status());
 }
 
-inline bool ThrowOnErrorAndCheckEOS(NYdb::TStreamPartStatus status) {
+inline bool ThrowOnErrorAndCheckEOS(NYdb::Dev::TStreamPartStatus status) {
     if (!status.IsSuccess()) {
         if (status.EOS()) {
             return true;
         }
-        throw TYdbErrorException(status) << static_cast<TStatus>(status);
+        throw NStatusHelpers::TYdbErrorException(status) << static_cast<NYdb::Dev::TStatus>(status);
     } else if (status.GetIssues()) {
-        Cerr << static_cast<TStatus>(status);
+        Cerr << static_cast<NYdb::Dev::TStatus>(status);
     }
     return false;
 }

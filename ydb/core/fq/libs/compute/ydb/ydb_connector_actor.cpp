@@ -3,8 +3,9 @@
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
@@ -70,13 +71,13 @@ public:
                 try {
                     auto response = future.ExtractValueSync();
                     if (response.Status().IsSuccess()) {
-                        actorSystem->Send(recipient, new TEvYdbCompute::TEvExecuteScriptResponse(response.Id(), response.Metadata().ExecutionId), 0, cookie);
+                        actorSystem->Send(recipient, new TEvYdbCompute::TEvExecuteScriptResponse(response.Id(), TString{response.Metadata().ExecutionId}), 0, cookie);
                     } else {
                         actorSystem->Send(
                             recipient,
                             MakeResponse<TEvYdbCompute::TEvExecuteScriptResponse>(
                                 database,
-                                response.Status().GetIssues(),
+                                NYdb::NAdapters::ToYqlIssues(response.Status().GetIssues()),
                                 response.Status().GetStatus()),
                             0, cookie);
                     }
@@ -98,7 +99,7 @@ public:
             .Apply([actorSystem = NActors::TActivationContext::ActorSystem(), recipient = ev->Sender, cookie = ev->Cookie, database = ComputeConnection.database()](auto future) {
                 try {
                     auto response = future.ExtractValueSync();
-                    if (response.Id().GetKind() != Ydb::TOperationId::UNUSED) {
+                    if (response.Id().GetKind() != NKikimr::NOperationId::TOperationId::UNUSED) {
                         actorSystem->Send(
                             recipient, 
                             new TEvYdbCompute::TEvGetOperationResponse(
@@ -106,7 +107,7 @@ public:
                                 static_cast<Ydb::StatusIds::StatusCode>(response.Status().GetStatus()),
                                 response.Metadata().ResultSetsMeta,
                                 response.Metadata().ExecStats,
-                                RemoveDatabaseFromIssues(response.Status().GetIssues(), database),
+                                RemoveDatabaseFromIssues(NYdb::NAdapters::ToYqlIssues(response.Status().GetIssues()), database),
                                 response.Ready()),
                             0, cookie);
                     } else {
@@ -114,7 +115,7 @@ public:
                             recipient,
                             MakeResponse<TEvYdbCompute::TEvGetOperationResponse>(
                                 database,
-                                response.Status().GetIssues(),
+                                NYdb::NAdapters::ToYqlIssues(response.Status().GetIssues()),
                                 response.Status().GetStatus(),
                                 true),
                             0, cookie);
@@ -142,13 +143,13 @@ public:
                 try {
                     auto response = future.ExtractValueSync();
                     if (response.IsSuccess()) {
-                        actorSystem->Send(recipient, new TEvYdbCompute::TEvFetchScriptResultResponse(response.ExtractResultSet(), response.GetNextFetchToken()), 0, cookie);
+                        actorSystem->Send(recipient, new TEvYdbCompute::TEvFetchScriptResultResponse(response.ExtractResultSet(), TString{response.GetNextFetchToken()}), 0, cookie);
                     } else {
                         actorSystem->Send(
                             recipient,
                             MakeResponse<TEvYdbCompute::TEvFetchScriptResultResponse>(
                                 database,
-                                response.GetIssues(),
+                                NYdb::NAdapters::ToYqlIssues(response.GetIssues()),
                                 response.GetStatus()),
                             0, cookie);
                     }
@@ -174,7 +175,7 @@ public:
                         recipient,
                         MakeResponse<TEvYdbCompute::TEvCancelOperationResponse>(
                             database,
-                            response.GetIssues(),
+                            NYdb::NAdapters::ToYqlIssues(response.GetIssues()),
                             response.GetStatus()),
                         0, cookie);
                 } catch (...) {
@@ -199,7 +200,7 @@ public:
                         recipient,
                         MakeResponse<TEvYdbCompute::TEvForgetOperationResponse>(
                             database,
-                            response.GetIssues(),
+                            NYdb::NAdapters::ToYqlIssues(response.GetIssues()),
                             response.GetStatus()),
                         0, cookie);
                 } catch (...) {

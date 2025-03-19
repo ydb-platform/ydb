@@ -1,13 +1,13 @@
 #include <ydb/services/ydb/ydb_common_ut.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_coordination/coordination.h>
-#include <ydb/public/sdk/cpp/client/ydb_rate_limiter/rate_limiter.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_types/status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 #include <ydb/core/grpc_services/local_rate_limiter.h>
 
-#include <yql/essentials/public/issue/yql_issue_message.h>
+#include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
 
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -113,16 +113,16 @@ private:
             }
 
             if (Settings.IsUsedAmount_) {
-                request.set_used(Settings.Amount_.GetRef());
+                request.set_used(Settings.Amount_.value());
             } else {
-                request.set_required(Settings.Amount_.GetRef());
+                request.set_required(Settings.Amount_.value());
             }
 
             auto id = SelfId();
 
             auto cb = [this, id](Ydb::RateLimiter::AcquireResourceResponse resp) {
-                NYql::TIssues opIssues;
-                NYql::IssuesFromMessage(resp.operation().issues(), opIssues);
+                NYdb::NIssue::TIssues opIssues;
+                NYdb::NIssue::IssuesFromMessage(resp.operation().issues(), opIssues);
                 NYdb::TStatus status(static_cast<NYdb::EStatus>(resp.operation().status()), std::move(opIssues));
                 Promise.SetValue(status);
                 Send(id, new TEvents::TEvPoisonPill);
@@ -277,7 +277,7 @@ Y_UNIT_TEST_SUITE(TGRpcRateLimiterTest) {
             const auto listResultFuture = setup.RateLimiterClient.ListResources(TTestSetup::CoordinationNodePath, "", TListResourcesSettings().Recursive(true));
             ASSERT_STATUS_SUCCESS(listResultFuture);
             const auto listResult = listResultFuture.GetValueSync();
-            TVector<TString> paths = listResult.GetResourcePaths();
+            auto paths = listResult.GetResourcePaths();
             std::sort(paths.begin(), paths.end());
             UNIT_ASSERT_VALUES_EQUAL(paths.size(), 5);
             UNIT_ASSERT_VALUES_EQUAL(paths[0], "parent1");
@@ -292,7 +292,7 @@ Y_UNIT_TEST_SUITE(TGRpcRateLimiterTest) {
             const auto listResultFuture = setup.RateLimiterClient.ListResources(TTestSetup::CoordinationNodePath, "", TListResourcesSettings().Recursive(false));
             ASSERT_STATUS_SUCCESS(listResultFuture);
             const auto listResult = listResultFuture.GetValueSync();
-            TVector<TString> paths = listResult.GetResourcePaths();
+            auto paths = listResult.GetResourcePaths();
             std::sort(paths.begin(), paths.end());
             UNIT_ASSERT_VALUES_EQUAL(paths.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(paths[0], "parent1");
@@ -304,7 +304,7 @@ Y_UNIT_TEST_SUITE(TGRpcRateLimiterTest) {
             const auto listResultFuture = setup.RateLimiterClient.ListResources(TTestSetup::CoordinationNodePath, "parent1", TListResourcesSettings().Recursive());
             ASSERT_STATUS_SUCCESS(listResultFuture);
             const auto listResult = listResultFuture.GetValueSync();
-            TVector<TString> paths = listResult.GetResourcePaths();
+            auto paths = listResult.GetResourcePaths();
             std::sort(paths.begin(), paths.end());
             UNIT_ASSERT_VALUES_EQUAL(paths.size(), 3);
             UNIT_ASSERT_VALUES_EQUAL(paths[0], "parent1");

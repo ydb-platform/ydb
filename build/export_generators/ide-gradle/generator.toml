@@ -47,6 +47,7 @@ proto_common_version="str"
 
 proto_grpc="flag"
 proto_grpc_version="str"
+proto_kotlin="flag"
 proto_kotlin_grpc="flag"
 proto_kotlin_grpc_version="str"
 
@@ -69,7 +70,19 @@ runs-out="list"
 runs-out_dir="list"
 runs-tool="list"
 
+custom_runs="list"
+custom_runs-depends="list"
+custom_runs-env="list"
+custom_runs-command="list"
+custom_runs-outputs="list"
+custom_runs-cwd="str"
+custom_runs-cmake_packages="list"
+custom_runs-cmake_packages-ITEM="dict"
+custom_runs-cmake_packages-name="str"
+custom_runs-cmake_packages-components="list"
+
 javac-flags="list"
+kotlinc-flags="list"
 
 [attrs.root]
 
@@ -87,6 +100,7 @@ test=[
     "/src/test",
     "/src/test/java",
     "/src/test-integration",
+    "/src/integration-test",
     "/src/testFixtures",
     "/src/intTest",
 ]

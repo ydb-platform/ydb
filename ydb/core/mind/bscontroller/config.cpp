@@ -93,7 +93,8 @@ namespace NKikimr::NBsController {
                 const ui32 nodeId = fullPDiskId.NodeId;
                 const ui32 pdiskId = fullPDiskId.PDiskId;
 
-                NKikimrBlobStorage::TNodeWardenServiceSet &service = *Services[nodeId].MutableServiceSet();
+                auto& query = Services[nodeId];
+                NKikimrBlobStorage::TNodeWardenServiceSet &service = *query.MutableServiceSet();
                 NKikimrBlobStorage::TNodeWardenServiceSet::TPDisk *pdisk = service.AddPDisks();
                 pdisk->SetNodeID(nodeId);
                 pdisk->SetPDiskID(pdiskId);
@@ -123,6 +124,14 @@ namespace NKikimr::NBsController {
                     case NBsController::TPDiskMood::EValue::Stop:
                         pdisk->SetStop(true);
                         break;
+                }
+
+                if (auto& shred = Self->ShredState; shred.ShouldShred(fullPDiskId, pdiskInfo)) {
+                    const auto& generation = shred.GetCurrentGeneration();
+                    Y_ABORT_UNLESS(generation);
+                    auto *m = query.MutableShredRequest();
+                    m->SetShredGeneration(*generation);
+                    m->AddPDiskIds(fullPDiskId.PDiskId);
                 }
 
                 return pdisk;
@@ -505,6 +514,7 @@ namespace NKikimr::NBsController {
             CommitStoragePoolStatUpdates(state);
             CommitSysViewUpdates(state);
             CommitVirtualGroupUpdates(state);
+            CommitShredUpdates(state);
 
             // add updated and remove deleted vslots from VSlotReadyTimestampQ
             const TMonotonic now = TActivationContext::Monotonic();
@@ -1193,6 +1203,11 @@ namespace NKikimr::NBsController {
             settings->AddAllowMultipleRealmsOccupation(AllowMultipleRealmsOccupation);
             settings->AddUseSelfHealLocalPolicy(UseSelfHealLocalPolicy);
             settings->AddTryToRelocateBrokenDisksLocallyFirst(TryToRelocateBrokenDisksLocallyFirst);
+        }
+
+        void TBlobStorageController::TConfigState::ExecuteStep(const NKikimrBlobStorage::TGetInterfaceVersion& /*cmd*/,
+                TStatus& status) {
+            status.SetInterfaceVersion(BSC_INTERFACE_VERSION);
         }
 
 } // NKikimr::NBsController

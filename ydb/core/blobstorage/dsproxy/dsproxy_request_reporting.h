@@ -7,8 +7,8 @@
 
 namespace NKikimr {
 
-bool AllowToReport(NKikimrBlobStorage::EPutHandleClass handleClass);
-bool AllowToReport(NKikimrBlobStorage::EGetHandleClass handleClass);
+bool PopAllowToken(NKikimrBlobStorage::EPutHandleClass handleClass);
+bool PopAllowToken(NKikimrBlobStorage::EGetHandleClass handleClass);
 
 IActor* CreateRequestReportingThrottler(const TControlWrapper& bucketSize, const TControlWrapper& leakDurationMs,
     const TControlWrapper& leakRate);

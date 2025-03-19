@@ -26,6 +26,7 @@ struct TSuspendOperationOptions
     : public TTimeoutOptions
 {
     bool AbortRunningJobs = false;
+    std::optional<TString> Reason;
 };
 
 struct TResumeOperationOptions
@@ -37,6 +38,10 @@ struct TCompleteOperationOptions
 { };
 
 struct TUpdateOperationParametersOptions
+    : public TTimeoutOptions
+{ };
+
+struct TPatchOperationSpecOptions
     : public TTimeoutOptions
 { };
 
@@ -109,11 +114,11 @@ struct TGetJobFailContextOptions
 struct TListOperationsAccessFilter
     : public NYTree::TYsonStruct
 {
-    TString Subject;
+    std::string Subject;
     NYTree::EPermissionSet Permissions;
 
     // This parameter cannot be set from YSON, it must be computed.
-    THashSet<TString> SubjectTransitiveClosure;
+    THashSet<std::string> SubjectTransitiveClosure;
 
     REGISTER_YSON_STRUCT(TListOperationsAccessFilter);
 
@@ -204,7 +209,9 @@ struct TListJobsOptions
     std::optional<bool> WithSpec;
     std::optional<bool> WithCompetitors;
     std::optional<bool> WithMonitoringDescriptor;
+    std::optional<bool> WithInterruptionInfo;
     std::optional<TString> TaskName;
+    std::optional<std::string> OperationIncarnation;
 
     std::optional<TInstant> FromTime;
     std::optional<TInstant> ToTime;
@@ -297,7 +304,7 @@ struct TOperation
     std::optional<TInstant> StartTime;
     std::optional<TInstant> FinishTime;
 
-    std::optional<TString> AuthenticatedUser;
+    std::optional<std::string> AuthenticatedUser;
 
     NYson::TYsonString BriefSpec;
     NYson::TYsonString Spec;
@@ -313,6 +320,7 @@ struct TOperation
     NYson::TYsonString RuntimeParameters;
 
     std::optional<bool> Suspended;
+    std::optional<std::string> SuspendReason;
 
     NYson::TYsonString Events;
     NYson::TYsonString Result;
@@ -382,6 +390,7 @@ struct TJob
     std::optional<TString> MonitoringDescriptor;
     std::optional<ui64> JobCookie;
     NYson::TYsonString ArchiveFeatures;
+    std::optional<std::string> OperationIncarnation;
 
     std::optional<bool> IsStale;
 
@@ -475,6 +484,11 @@ struct IOperationClient
         const NYson::TYsonString& parameters,
         const TUpdateOperationParametersOptions& options = {}) = 0;
 
+    virtual TFuture<void> PatchOperationSpec(
+        const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
+        const NScheduler::TSpecPatchList& patches,
+        const TPatchOperationSpecOptions& options = {}) = 0;
+
     virtual TFuture<TOperation> GetOperation(
         const NScheduler::TOperationIdOrAlias& operationIdOrAlias,
         const TGetOperationOptions& options = {}) = 0;
@@ -546,4 +560,3 @@ struct IOperationClient
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NApi
-

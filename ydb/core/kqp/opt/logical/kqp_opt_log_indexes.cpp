@@ -423,45 +423,13 @@ TExprBase DoRewriteTopSortOverKMeansTree(
     auto postingColumns = BuildKeyColumnsList(*postingTableDesc, pos, ctx, tableDesc.Metadata->KeyColumnNames);
     const auto& mainColumns = read.Columns();
 
-    auto mapArg = Build<TCoArgument>(ctx, pos)
-        .Name("mapArg")
-    .Done();
-    TVector<TExprBase> mapMembers{
-        Build<TCoNameValueTuple>(ctx, pos)
-            .Name().Build(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn)
-            .Value<TCoMember>().Struct(mapArg)
-                .Name().Build(NTableIndex::NTableVectorKmeansTreeIndex::IdColumn)
-            .Build()
-        .Done()
-    };
-
     // TODO(mbkkt) How to inline construction of these constants to construction of readLevel0?
     auto fromValues = ctx.Builder(pos)
-        .Callable("Uint32").Atom(0, "0", TNodeFlags::Default).Seal()
+        .Callable(NTableIndex::ClusterIdTypeName).Atom(0, "0", TNodeFlags::Default).Seal()
     .Build();
     auto toValues = ctx.Builder(pos)
-        .Callable("Uint32").Atom(0, "1", TNodeFlags::Default).Seal()
+        .Callable(NTableIndex::ClusterIdTypeName).Atom(0, "1", TNodeFlags::Default).Seal()
     .Build();
-
-    // TODO(mbkkt) count should be customizable via query options
-    auto count = ctx.Builder(pos)
-        .Callable("Uint64").Atom(0, "2", TNodeFlags::Default).Seal()
-    .Build();
-
-    // TODO(mbkkt) Is it best way to do `SELECT FROM levelTable WHERE first_pk_column = 0`?
-    auto readLevel0 = Build<TKqlReadTable>(ctx, pos)
-        .Table(levelTable)
-        .Range<TKqlKeyRange>()
-            .From<TKqlKeyInc>()
-                .Add(fromValues)
-            .Build()
-            .To<TKqlKeyExc>()
-                .Add(toValues)
-            .Build()
-        .Build()
-        .Columns(levelColumns)
-        .Settings(read.Settings())
-    .Done();
 
     auto levelLambda = [&] {
         const auto oldArgNodes = lambdaArgs.Children();
@@ -514,29 +482,78 @@ TExprBase DoRewriteTopSortOverKMeansTree(
             ctx.ReplaceNodes(TExprNode::TListType{apply.Ptr()}, replaces));
     }();
 
-    auto topLevel0 = Build<TCoTop>(ctx, pos)
-        .Input(readLevel0)
-        // TODO(mbkkt) how to construct our own lambda?
-        //  Maybe good idea is construct lambda with knn udf and two member access as arguments
-        //   and then replace one of them to argument without access to indexed field...
-        .KeySelectorLambda(levelLambda)
-        .SortDirections(top.SortDirections())
-        .Count(count)
-    .Done();
+    ui32 level = 1;
+    const auto& settings = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc.SpecializedIndexDescription)
+        .settings();
+    const auto clusters = std::max<ui32>(2, settings.clusters());
+    const auto levels = std::max<ui32>(1, settings.levels());
+    Y_ENSURE(level <= levels);
+    const auto levelTop = std::min<ui32>(kqpCtx.Config->KMeansTreeSearchTopSize.Get().GetOrElse(1), clusters);
 
-    auto mapLevel0 = Build<TCoMap>(ctx, pos)
-        .Input(topLevel0)
-        .Lambda()
-            .Args({mapArg})
-            .Body<TCoAsStruct>().Add(mapMembers).Build()
+    auto count = ctx.Builder(pos)
+        .Callable("Uint64").Atom(0, std::to_string(levelTop), TNodeFlags::Default).Seal()
+    .Build();
+
+    // TODO(mbkkt) Is it best way to do `SELECT FROM levelTable WHERE first_pk_column = 0`?
+    auto readLevel = Build<TKqlReadTable>(ctx, pos)
+        .Table(levelTable)
+        .Range<TKqlKeyRange>()
+            .From<TKqlKeyInc>()
+                .Add(fromValues)
+            .Build()
+            .To<TKqlKeyExc>()
+                .Add(toValues)
+            .Build()
         .Build()
-    .Done();
+        .Columns(levelColumns)
+        .Settings(read.Settings())
+    .Done().Ptr();
 
+    for (;; ++level) {
+        readLevel = Build<TCoTop>(ctx, pos)
+            .Input(readLevel)
+            .KeySelectorLambda(levelLambda)
+            .SortDirections(top.SortDirections())
+            .Count(count)
+        .Done().Ptr();
+
+        auto mapArg = Build<TCoArgument>(ctx, pos)
+            .Name("mapArg")
+        .Done();
+        TVector<TExprBase> mapMembers{
+            Build<TCoNameValueTuple>(ctx, pos)
+                .Name().Build(NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn)
+                .Value<TCoMember>().Struct(mapArg)
+                    .Name().Build(NTableIndex::NTableVectorKmeansTreeIndex::IdColumn)
+                .Build()
+            .Done()
+        };
+
+        readLevel = Build<TCoMap>(ctx, pos)
+            .Input(readLevel)
+            .Lambda()
+                .Args({mapArg})
+                .Body<TCoAsStruct>().Add(mapMembers).Build()
+            .Build()
+        .Done().Ptr();
+
+        if (level == levels) {
+            break;
+        }
+
+        readLevel = Build<TKqlLookupTable>(ctx, pos)
+            .Table(levelTable)
+            .LookupKeys(readLevel)
+            .Columns(levelColumns)
+        .Done().Ptr();
+    }
+
+    // TODO(mbkkt) handle covered index columns
     auto postingRead = Build<TKqlLookupTable>(ctx, pos)
         .Table(postingTable)
-        .LookupKeys(mapLevel0)
+        .LookupKeys(readLevel)
         .Columns(postingColumns)
-    .Done();
+    .Done().Ptr();
 
     auto mainRead = Build<TKqlLookupTable>(ctx, pos)
         .Table(mainTable)
@@ -551,15 +568,15 @@ TExprBase DoRewriteTopSortOverKMeansTree(
         .Done().Ptr();
     }
 
-    auto mainTop = Build<TCoTopBase>(ctx, top.Pos())
+    mainRead = Build<TCoTopBase>(ctx, top.Pos())
         .CallableName(top.Ref().Content())
         .Input(mainRead)
         .KeySelectorLambda(ctx.DeepCopyLambda(top.KeySelectorLambda().Ref()))
         .SortDirections(top.SortDirections())
         .Count(top.Count())
-    .Done();
+    .Done().Ptr();
 
-    return mainTop;
+    return TExprBase{mainRead};
 }
 
 } // namespace

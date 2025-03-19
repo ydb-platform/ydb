@@ -49,7 +49,7 @@ struct TCompleteMultipartUpload {
     }
 
     TString BuildUrl() const {
-        TUrlBuilder urlBuilder(Url);
+        NS3Util::TUrlBuilder urlBuilder(NS3Util::UrlEscapeRet(Url));
         urlBuilder.AddUrlParam("uploadId", UploadId);
         return urlBuilder.Build();
     }
@@ -87,7 +87,7 @@ struct TListMultipartUploads {
         // This requirement will be fixed in the curl library
         // https://github.com/curl/curl/commit/fc76a24c53b08cdf6eec8ba787d8eac64651d56e
         // https://github.com/curl/curl/commit/c87920353883ef9d5aa952e724a8e2589d76add5
-        TUrlBuilder urlBuilder(Url);
+        NS3Util::TUrlBuilder urlBuilder(NS3Util::UrlEscapeRet(Url));
         if (KeyMarker) {
             urlBuilder.AddUrlParam("key-marker", KeyMarker);
         }
@@ -114,7 +114,7 @@ struct TAbortMultipartUpload {
     }
 
     TString BuildUrl() const {
-        TUrlBuilder urlBuilder(Url);
+        NS3Util::TUrlBuilder urlBuilder(NS3Util::UrlEscapeRet(Url));
         urlBuilder.AddUrlParam("uploadId", UploadId);
         return urlBuilder.Build();
     }
@@ -141,7 +141,7 @@ struct TListParts {
         // This requirement will be fixed in the curl library
         // https://github.com/curl/curl/commit/fc76a24c53b08cdf6eec8ba787d8eac64651d56e
         // https://github.com/curl/curl/commit/c87920353883ef9d5aa952e724a8e2589d76add5
-        TUrlBuilder urlBuilder(Url);
+        NS3Util::TUrlBuilder urlBuilder(NS3Util::UrlEscapeRet(Url));
         if (PartNumberMarker) {
             urlBuilder.AddUrlParam("part-number-marker", PartNumberMarker);
         }

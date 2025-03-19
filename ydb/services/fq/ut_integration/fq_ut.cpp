@@ -1,5 +1,5 @@
 #include <ydb/services/ydb/ydb_common_ut.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 #include <ydb/public/lib/fq/fq.h>
 #include <ydb/public/lib/fq/helpers.h>

@@ -69,6 +69,7 @@ message TEvTabletStateRequest {
     optional string Format = 5; // it could be "packed5"
     optional string GroupBy = 20; // it's either empty or "Type,State" for now
     repeated fixed64 FilterTabletId = 22;
+    optional NKikimrSubDomains.TDomainKey FilterTenantId = 23;
 }
 
 message TEvTabletStateResponse {
@@ -106,6 +107,7 @@ message TNodeStateInfo {
     optional uint64 BytesWritten = 14; // bytes written to the socket
     optional uint64 WriteThroughput = 15; // bytes written per second
     optional ESessionState SessionState = 16;
+    optional bool SameScope = 17; // true if the peer is in the same scope
 }
 
 message TEvNodeStateRequest {
@@ -342,6 +344,8 @@ message TSystemStateInfo {
     optional NKikimrMemory.TMemoryStats MemoryStats = 38;
     optional double CoresUsed = 39;
     optional uint32 CoresTotal = 40;
+    optional float NetworkUtilization = 41;
+    optional uint64 NetworkWriteThroughput = 42;
 }
 
 message TEvSystemStateRequest {

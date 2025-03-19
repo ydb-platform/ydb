@@ -16,7 +16,8 @@
 
 namespace NYql::NDq {
 
-const ui64 PartitionId = 666;
+const ui64 PartitionId1 = 666;
+const ui64 PartitionId2 = 667;
 
 struct TFixture : public TPqIoTestFixture {
     TFixture() {
@@ -29,13 +30,14 @@ struct TFixture : public TPqIoTestFixture {
 
     void InitRdSource(
         const NYql::NPq::NProto::TDqPqTopicSource& settings,
-        i64 freeSpace = 1_MB)
+        i64 freeSpace = 1_MB,
+        ui64 partitionCount = 1)
     {
         CaSetup->Execute([&](TFakeActor& actor) {
             NPq::NProto::TDqReadTaskParams params;
             auto* partitioninigParams = params.MutablePartitioningParams();
-            partitioninigParams->SetTopicPartitionsCount(1);
-            partitioninigParams->SetEachTopicPartitionGroupId(PartitionId);
+            partitioninigParams->SetTopicPartitionsCount(partitionCount);
+            partitioninigParams->SetEachTopicPartitionGroupId(PartitionId1);
             partitioninigParams->SetDqPartitionsCount(1);
 
             TString serializedParams;
@@ -76,23 +78,33 @@ struct TFixture : public TPqIoTestFixture {
         return eventHolder;
     }
 
-    void ExpectStartSession(ui64 expectedOffset, NActors::TActorId rowDispatcherId, ui64 expectedGeneration = 1) {
+    void ExpectStartSession(const TMap<ui32, ui64>& expectedOffsets, NActors::TActorId rowDispatcherId, ui64 expectedGeneration = 1) {
         auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvStartSession>(rowDispatcherId, TDuration::Seconds(5));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
-        UNIT_ASSERT(eventHolder->Get()->Record.GetOffset() == expectedOffset);
-        UNIT_ASSERT(eventHolder->Cookie == expectedGeneration);
+        TMap<ui32, ui64> offsets;
+        for (auto p : eventHolder->Get()->Record.GetOffsets()) {
+            offsets[p.GetPartitionId()] = p.GetOffset();
+        }
+        UNIT_ASSERT_EQUAL(offsets, expectedOffsets);
+        UNIT_ASSERT_EQUAL(eventHolder->Cookie, expectedGeneration);
     }
 
     void ExpectStopSession(NActors::TActorId rowDispatcherId, ui64 expectedGeneration = 1) {
         auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvStopSession>(rowDispatcherId, TDuration::Seconds(5));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
+        UNIT_ASSERT_EQUAL(eventHolder->Cookie, expectedGeneration);
+    }
+
+    void ExpectNoSession(NActors::TActorId rowDispatcherId, ui64 expectedGeneration = 1) {
+        auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvNoSession>(rowDispatcherId, TDuration::Seconds(5));
+        UNIT_ASSERT(eventHolder.Get() != nullptr);
         UNIT_ASSERT(eventHolder->Cookie == expectedGeneration);
     }
 
-    void ExpectGetNextBatch(NActors::TActorId rowDispatcherId) {
+    void ExpectGetNextBatch(NActors::TActorId rowDispatcherId, ui64 partitionId = PartitionId1) {
         auto eventHolder = CaSetup->Runtime->GrabEdgeEvent<NFq::TEvRowDispatcher::TEvGetNextBatch>(rowDispatcherId, TDuration::Seconds(5));
         UNIT_ASSERT(eventHolder.Get() != nullptr);
-        UNIT_ASSERT(eventHolder->Get()->Record.GetPartitionId() == PartitionId);
+        UNIT_ASSERT_EQUAL(eventHolder->Get()->Record.GetPartitionId(), partitionId);
     }
 
     void MockCoordinatorChanged(NActors::TActorId coordinatorId) {
@@ -102,20 +114,23 @@ struct TFixture : public TPqIoTestFixture {
         });
     }
 
-    void MockCoordinatorResult(NActors::TActorId rowDispatcherId, ui64 cookie = 0) {
+    void MockCoordinatorResult(const TMap<NActors::TActorId, ui64> result, ui64 cookie = 0) {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NFq::TEvRowDispatcher::TEvCoordinatorResult();
-            auto* partitions = event->Record.AddPartitions();
-            partitions->AddPartitionId(PartitionId);
-            ActorIdToProto(rowDispatcherId, partitions->MutableActorId());
+
+            for (const auto& [rowDispatcherId, partitionId] : result) {
+                auto* partitions = event->Record.AddPartitions();
+                partitions->AddPartitionIds(partitionId);
+                ActorIdToProto(rowDispatcherId, partitions->MutableActorId());
+            }
             CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, Coordinator1Id, event, 0, cookie));
         });
     }
 
-    void MockAck(NActors::TActorId rowDispatcherId, ui64 generation = 1) {
+    void MockAck(NActors::TActorId rowDispatcherId, ui64 generation = 1, ui64 partitionId = PartitionId1) {
         CaSetup->Execute([&](TFakeActor& actor) {
             NFq::NRowDispatcherProto::TEvStartSession proto;
-            proto.SetPartitionId(PartitionId);
+            proto.AddPartitionIds(partitionId);
             auto event = new NFq::TEvRowDispatcher::TEvStartSessionAck(proto);
             CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event, 0, generation));
         });
@@ -123,15 +138,15 @@ struct TFixture : public TPqIoTestFixture {
 
     void MockHeartbeat(NActors::TActorId rowDispatcherId, ui64 generation = 1) {
         CaSetup->Execute([&](TFakeActor& actor) {
-            auto event = new NFq::TEvRowDispatcher::TEvHeartbeat(PartitionId);
+            auto event = new NFq::TEvRowDispatcher::TEvHeartbeat();
             CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event, 0, generation));
         });
     }
 
-    void MockNewDataArrived(NActors::TActorId rowDispatcherId, ui64 generation = 1) {
+    void MockNewDataArrived(NActors::TActorId rowDispatcherId, ui64 generation = 1, ui64 partitionId = PartitionId1) {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NFq::TEvRowDispatcher::TEvNewDataArrived();
-            event->Record.SetPartitionId(PartitionId);
+            event->Record.SetPartitionId(partitionId);
             CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event, 0, generation));
         });
     }
@@ -155,7 +170,7 @@ struct TFixture : public TPqIoTestFixture {
     }
 
     // Supported schema (Uint64, String)
-    void MockMessageBatch(ui64 offset, const std::vector<std::pair<ui64, TString>>& messages, NActors::TActorId rowDispatcherId, ui64 generation = 1) {
+    void MockMessageBatch(ui64 offset, const std::vector<std::pair<ui64, TString>>& messages, NActors::TActorId rowDispatcherId, ui64 generation = 1, ui64 partitionId = PartitionId1) {
         CaSetup->Execute([&](TFakeActor& actor) {
             auto event = new NFq::TEvRowDispatcher::TEvMessageBatch();
             for (const auto& item : messages) {
@@ -164,7 +179,7 @@ struct TFixture : public TPqIoTestFixture {
                 message.AddOffsets(offset++);
                 *event->Record.AddMessages() = message;
             }
-            event->Record.SetPartitionId(PartitionId);
+            event->Record.SetPartitionId(partitionId);
             event->Record.SetNextMessageOffset(offset);
             CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event, 0, generation));
         });
@@ -175,8 +190,17 @@ struct TFixture : public TPqIoTestFixture {
             auto event = new NFq::TEvRowDispatcher::TEvSessionError();
             event->Record.SetStatusCode(::NYql::NDqProto::StatusIds::BAD_REQUEST);
             IssueToMessage(TIssue("A problem has been detected and session has been shut down to prevent damage your life"), event->Record.AddIssues());
-            event->Record.SetPartitionId(PartitionId);
             CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, RowDispatcher1, event, 0, 1));
+        });
+    }
+
+    void MockStatistics(NActors::TActorId rowDispatcherId, ui64 nextOffset, ui64 generation, ui64 partitionId) {
+        CaSetup->Execute([&](TFakeActor& actor) {
+            auto event = new NFq::TEvRowDispatcher::TEvStatistics();
+            auto* partitionsProto = event->Record.AddPartition();
+            partitionsProto->SetPartitionId(partitionId);
+            partitionsProto->SetNextMessageOffset(nextOffset);
+            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event, 0, generation));
         });
     }
 
@@ -221,35 +245,37 @@ struct TFixture : public TPqIoTestFixture {
         });
     }
 
-    void MockUndelivered() {
+    void MockUndelivered(NActors::TActorId rowDispatcherId, ui64 generation = 0, NActors::TEvents::TEvUndelivered::EReason reason = NActors::TEvents::TEvUndelivered::ReasonActorUnknown) {
         CaSetup->Execute([&](TFakeActor& actor) {
-            auto event = new NActors::TEvents::TEvUndelivered(0, NActors::TEvents::TEvUndelivered::ReasonActorUnknown);
-            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, RowDispatcher1, event));
+            auto event = new NActors::TEvents::TEvUndelivered(0, reason);
+            CaSetup->Runtime->Send(new NActors::IEventHandle(*actor.DqAsyncInputActorId, rowDispatcherId, event, 0, generation));
         });
     }
 
-    void StartSession(NYql::NPq::NProto::TDqPqTopicSource& settings, i64 freeSpace = 1_MB) {
-        InitRdSource(settings, freeSpace);
+    void StartSession(NYql::NPq::NProto::TDqPqTopicSource& settings, i64 freeSpace = 1_MB, ui64 partitionCount = 1) {
+        InitRdSource(settings, freeSpace, partitionCount);
         SourceRead<std::pair<ui64, TString>>(UVPairParser);
         ExpectCoordinatorChangesSubscribe();
     
         MockCoordinatorChanged(Coordinator1Id);
-        auto req =ExpectCoordinatorRequest(Coordinator1Id);
+        auto req = ExpectCoordinatorRequest(Coordinator1Id);
 
-        MockCoordinatorResult(RowDispatcher1, req->Cookie);
-        ExpectStartSession(0, RowDispatcher1);
+        MockCoordinatorResult({{RowDispatcher1, PartitionId1}}, req->Cookie);
+        ExpectStartSession({}, RowDispatcher1);
         MockAck(RowDispatcher1);
     }
 
     void ProcessSomeMessages(ui64 offset, const std::vector<std::pair<ui64, TString>>& messages, NActors::TActorId rowDispatcherId,
-        std::function<std::vector<std::pair<ui64, TString>>(const NUdf::TUnboxedValue&)> uvParser = UVPairParser, ui64 generation = 1) {
-        MockNewDataArrived(rowDispatcherId, generation);
-        ExpectGetNextBatch(rowDispatcherId);
+        std::function<std::vector<std::pair<ui64, TString>>(const NUdf::TUnboxedValue&)> uvParser = UVPairParser, ui64 generation = 1,
+        ui64 partitionId = PartitionId1, bool readedByCA = true) {
+        MockNewDataArrived(rowDispatcherId, generation, partitionId);
+        ExpectGetNextBatch(rowDispatcherId, partitionId);
 
-        MockMessageBatch(offset, messages, rowDispatcherId, generation);
-
-        auto result = SourceReadDataUntil<std::pair<ui64, TString>>(uvParser, messages.size());
-        AssertDataWithWatermarks(result, messages, {});
+        MockMessageBatch(offset, messages, rowDispatcherId, generation, partitionId);
+        if (readedByCA) {
+            auto result = SourceReadDataUntil<std::pair<ui64, TString>>(uvParser, messages.size());
+            AssertDataWithWatermarks(result, messages, {});
+        }
     } 
 
     const std::pair<ui64, TString> Message1 = {100, "value1"};
@@ -267,9 +293,16 @@ struct TFixture : public TPqIoTestFixture {
 };
 
 Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
-    Y_UNIT_TEST_F(TestReadFromTopic, TFixture) {
+    Y_UNIT_TEST_F(TestReadFromTopic2, TFixture) {
         StartSession(Source1);
         ProcessSomeMessages(0, {Message1, Message2}, RowDispatcher1);
+    }
+
+    Y_UNIT_TEST_F(IgnoreUndeliveredWithWrongGeneration, TFixture) {
+        StartSession(Source1);
+        ProcessSomeMessages(0, {Message1, Message2}, RowDispatcher1);
+        MockUndelivered(RowDispatcher1, 999, NActors::TEvents::TEvUndelivered::Disconnected);
+        ProcessSomeMessages(2, {Message3}, RowDispatcher1);
     }
 
     Y_UNIT_TEST_F(SessionError, TFixture) {
@@ -325,7 +358,6 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         {
             TFixture f;
             f.InitRdSource(f.Source1);
-            f.SourceRead<std::pair<ui64, TString>>(UVPairParser);
             f.LoadSource(state);
             f.SourceRead<std::pair<ui64, TString>>(UVPairParser);
             f.ExpectCoordinatorChangesSubscribe();
@@ -333,8 +365,8 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
             f.MockCoordinatorChanged(f.Coordinator1Id);
             auto req = f.ExpectCoordinatorRequest(f.Coordinator1Id);
 
-            f.MockCoordinatorResult(f.RowDispatcher1, req->Cookie);
-            f.ExpectStartSession(2, f.RowDispatcher1);
+            f.MockCoordinatorResult({{f.RowDispatcher1, PartitionId1}}, req->Cookie);
+            f.ExpectStartSession({{PartitionId1, 2}}, f.RowDispatcher1);
             f.MockAck(f.RowDispatcher1);
 
             f.ProcessSomeMessages(2, {f.Message3}, f.RowDispatcher1);  // offsets: 2
@@ -345,7 +377,6 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         {
             TFixture f;
             f.InitRdSource(f.Source1);
-            f.SourceRead<std::pair<ui64, TString>>(UVPairParser);
             f.LoadSource(state);
             f.SourceRead<std::pair<ui64, TString>>(UVPairParser);
             f.ExpectCoordinatorChangesSubscribe();
@@ -353,8 +384,8 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
             f.MockCoordinatorChanged(f.Coordinator1Id);
             auto req = f.ExpectCoordinatorRequest(f.Coordinator1Id);
 
-            f.MockCoordinatorResult(f.RowDispatcher1, req->Cookie);
-            f.ExpectStartSession(3, f.RowDispatcher1);
+            f.MockCoordinatorResult({{f.RowDispatcher1, PartitionId1}}, req->Cookie);
+            f.ExpectStartSession({{PartitionId1, 3}}, f.RowDispatcher1);
             f.MockAck(f.RowDispatcher1);
 
             f.ProcessSomeMessages(3, {f.Message4}, f.RowDispatcher1);  // offsets: 3
@@ -368,21 +399,30 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
 
         // change active Coordinator 
         MockCoordinatorChanged(Coordinator2Id);
-        ExpectStopSession(RowDispatcher1);
-
-        auto result = SourceReadDataUntil<std::pair<ui64, TString>>(UVPairParser, 1);
-        AssertDataWithWatermarks(result, {Message3}, {});
+        // continue use old sessions
+        MockMessageBatch(3, {Message4}, RowDispatcher1);
 
         auto req = ExpectCoordinatorRequest(Coordinator2Id);
-        MockCoordinatorResult(RowDispatcher2, req->Cookie);
 
-        ExpectStartSession(3, RowDispatcher2, 2);
+        auto result = SourceReadDataUntil<std::pair<ui64, TString>>(UVPairParser, 2);
+        AssertDataWithWatermarks(result, {Message3, Message4}, {});
+
+        MockCoordinatorResult({{RowDispatcher2, PartitionId1}}, req->Cookie);       // change distribution
+        ExpectStopSession(RowDispatcher1);
+
+        ExpectStartSession({{PartitionId1, 4}}, RowDispatcher2, 2);
         MockAck(RowDispatcher2, 2);
 
-        ProcessSomeMessages(3, {Message4}, RowDispatcher2, UVPairParser, 2);
+        ProcessSomeMessages(4, {Message4}, RowDispatcher2, UVPairParser, 2);
 
         MockHeartbeat(RowDispatcher1, 1);       // old generation
-        ExpectStopSession(RowDispatcher1);
+        ExpectNoSession(RowDispatcher1, 1);
+
+        // change active Coordinator 
+        MockCoordinatorChanged(Coordinator1Id);
+        req = ExpectCoordinatorRequest(Coordinator1Id);
+        MockCoordinatorResult({{RowDispatcher2, PartitionId1}}, req->Cookie);       // distribution is not changed
+        ProcessSomeMessages(5, {Message2}, RowDispatcher2, UVPairParser, 2);
     }
 
     Y_UNIT_TEST_F(Backpressure, TFixture) {
@@ -393,7 +433,7 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
 
         MockNewDataArrived(RowDispatcher1);
         ExpectGetNextBatch(RowDispatcher1);
-        MockMessageBatch(0, {message, message, message}, RowDispatcher1);
+        MockMessageBatch(1, {message, message, message}, RowDispatcher1);
 
         MockNewDataArrived(RowDispatcher1);
         ASSERT_THROW(
@@ -404,29 +444,68 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
         AssertDataWithWatermarks(result, {message, message, message}, {});
         ExpectGetNextBatch(RowDispatcher1);
 
-        MockMessageBatch(3, {Message1}, RowDispatcher1);
+        MockMessageBatch(4, {Message1}, RowDispatcher1);
         result = SourceReadDataUntil<std::pair<ui64, TString>>(UVPairParser, 1);
         AssertDataWithWatermarks(result, {Message1}, {});
     }
 
-    Y_UNIT_TEST_F(RowDispatcherIsRestarted, TFixture) {
+    Y_UNIT_TEST_F(RowDispatcherIsRestarted2, TFixture) {
         StartSession(Source1);
         ProcessSomeMessages(0, {Message1, Message2}, RowDispatcher1);
         MockDisconnected();
         MockConnected();
-        MockUndelivered();
+        MockUndelivered(RowDispatcher1, 1);
 
         auto req = ExpectCoordinatorRequest(Coordinator1Id);
-        MockCoordinatorResult(RowDispatcher1, req->Cookie);
-        ExpectStartSession(2, RowDispatcher1, 2);
+        MockCoordinatorResult({{RowDispatcher1, PartitionId1}}, req->Cookie);
+        ExpectStartSession({{PartitionId1, 2}}, RowDispatcher1, 2);
         MockAck(RowDispatcher1, 2);
 
         ProcessSomeMessages(2, {Message3}, RowDispatcher1, UVPairParser, 2);
     }
 
+    Y_UNIT_TEST_F(TwoPartitionsRowDispatcherIsRestarted, TFixture) {
+        InitRdSource(Source1, 1_MB, PartitionId2 + 1);
+        SourceRead<TString>(UVParser);
+        ExpectCoordinatorChangesSubscribe();
+        MockCoordinatorChanged(Coordinator1Id);
+        auto req = ExpectCoordinatorRequest(Coordinator1Id);
+        MockCoordinatorResult({{RowDispatcher1, PartitionId1}, {RowDispatcher2, PartitionId2}}, req->Cookie);
+        ExpectStartSession({}, RowDispatcher1, 1);
+        ExpectStartSession({}, RowDispatcher2, 2);
+        MockAck(RowDispatcher1, 1, PartitionId1);
+        MockAck(RowDispatcher2, 2, PartitionId2);
+        
+        ProcessSomeMessages(0, {Message1, Message2}, RowDispatcher1, UVPairParser, 1, PartitionId1);
+        ProcessSomeMessages(0, {Message3}, RowDispatcher2, UVPairParser, 2, PartitionId2, false);     // not read by CA
+        MockStatistics(RowDispatcher2, 10,  2, PartitionId2);
+
+        // Restart node 2 (RowDispatcher2)
+        MockDisconnected();
+        MockConnected();
+        MockUndelivered(RowDispatcher2, 2);
+
+        // session1 is still working
+        ProcessSomeMessages(2, {Message4}, RowDispatcher1, UVPairParser, 1, PartitionId1, false); 
+
+        // Reinit session to RowDispatcher2
+        auto req2 = ExpectCoordinatorRequest(Coordinator1Id);
+        MockCoordinatorResult({{RowDispatcher1, PartitionId1}, {RowDispatcher2, PartitionId2}}, req2->Cookie);
+        ExpectStartSession({{PartitionId2, 10}}, RowDispatcher2, 3);
+        MockAck(RowDispatcher2, 3, PartitionId2);
+
+        ProcessSomeMessages(3, {Message4}, RowDispatcher1, UVPairParser, 1, PartitionId1, false);
+        ProcessSomeMessages(10, {Message4}, RowDispatcher2, UVPairParser, 3, PartitionId2, false);
+
+        std::vector<std::pair<ui64, TString>> expected{Message3, Message4, Message4, Message4};
+        auto result = SourceReadDataUntil<std::pair<ui64, TString>>(UVPairParser, expected.size());
+        AssertDataWithWatermarks(result, expected, {});
+    }
+
     Y_UNIT_TEST_F(IgnoreMessageIfNoSessions, TFixture) {
         StartSession(Source1);
         MockCoordinatorChanged(Coordinator2Id);
+        MockUndelivered(RowDispatcher1, 1);
         MockSessionError();
     }
 
@@ -450,12 +529,13 @@ Y_UNIT_TEST_SUITE(TDqPqRdReadActorTests) {
 
         MockCoordinatorChanged(Coordinator2Id);
         auto req = ExpectCoordinatorRequest(Coordinator2Id);
+        MockUndelivered(RowDispatcher1, 1);
+        auto req2 = ExpectCoordinatorRequest(Coordinator2Id);
 
-        MockUndelivered();
+        MockCoordinatorResult({{RowDispatcher1, PartitionId1}}, req->Cookie);
+        MockCoordinatorResult({{RowDispatcher1, PartitionId1}}, req2->Cookie);
+        ExpectStartSession({{PartitionId1, 2}}, RowDispatcher1, 2);
 
-        MockCoordinatorResult(RowDispatcher1, req->Cookie);
-        MockCoordinatorResult(RowDispatcher1, req->Cookie);
-        ExpectStartSession(2, RowDispatcher1, 2);
         MockAck(RowDispatcher1);
     }
 }

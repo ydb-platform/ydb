@@ -115,6 +115,7 @@ public:
         AddHandler({TYtDqWideWrite::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleDqWrite<true>));
         AddHandler({TYtTryFirst::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleTryFirst));
         AddHandler({TYtMaterialize::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleMaterialize));
+        AddHandler({TYtQLFilter::CallableName()}, Hndl(&TYtDataSinkTypeAnnotationTransformer::HandleQLFilter));
     }
 
 private:
@@ -197,14 +198,15 @@ private:
                 if (auto maybeTable = path.Table().Maybe<TYtTable>()) {
                     auto table = maybeTable.Cast();
                     auto tableName = table.Name().Value();
+                    TString tableCluster{table.Cluster().Value()};
                     if (!NYql::HasSetting(table.Settings().Ref(), EYtSettingType::UserSchema)) {
                         // Don't validate already substituted anonymous tables
                         if (!TYtTableInfo::HasSubstAnonymousLabel(table)) {
-                            const TYtTableDescription& tableDesc = State_->TablesData->GetTable(clusterName,
+                            const TYtTableDescription& tableDesc = State_->TablesData->GetTable(tableCluster,
                                 TString{tableName},
                                 TEpochInfo::Parse(table.Epoch().Ref()));
 
-                            if (!tableDesc.Validate(ctx.GetPosition(table.Pos()), clusterName, tableName,
+                            if (!tableDesc.Validate(ctx.GetPosition(table.Pos()), tableCluster, tableName,
                                 NYql::HasSetting(table.Settings().Ref(), EYtSettingType::WithQB), State_->AnonymousLabels, ctx)) {
                                 return TStatus::Error;
                             }
@@ -238,7 +240,10 @@ private:
         }
 
         auto opInput = input->ChildPtr(TYtTransientOpBase::idx_Input);
-        auto newInput = ValidateAndUpdateTablesMeta(opInput, clusterName, State_->TablesData, State_->Types->UseTableMetaFromGraph, ctx);
+        const ERuntimeClusterSelectionMode selectionMode =
+            State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+        auto newInput = ValidateAndUpdateTablesMeta(opInput, clusterName, State_->TablesData,
+            State_->Types->UseTableMetaFromGraph, selectionMode, ctx);
         if (!newInput) {
             return TStatus::Error;
         }
@@ -453,7 +458,7 @@ private:
             return TStatus::Error;
         }
 
-        if (meta->IsDynamic) {
+        if (meta->IsDynamic && State_->Types->EngineType != EEngineType::Ytflow) {
             ctx.AddError(TIssue(pos, TStringBuilder() <<
                 "Modification of dynamic table " << outTableInfo.Name.Quote() << " is not supported"));
             return TStatus::Error;
@@ -589,6 +594,7 @@ private:
                 TYtTableMetaInfo::TPtr nextMetadata = (nextDescription.Meta = MakeIntrusive<TYtTableMetaInfo>());
                 nextMetadata->DoesExist = true;
                 nextMetadata->YqlCompatibleScheme = true;
+                nextMetadata->IsDynamic = meta->IsDynamic;
 
                 TYqlRowSpecInfo::TPtr nextRowSpec = (nextDescription.RowSpec = MakeIntrusive<TYqlRowSpecInfo>());
                 if (replaceMeta) {
@@ -992,7 +998,7 @@ private:
 
         if (outGroup != inputColGroupSpec) {
             ctx.AddError(TIssue(ctx.GetPosition(copy.Output().Item(0).Settings().Pos()), TStringBuilder() << TYtCopy::CallableName()
-                << "has input/output tables with different " << EYtSettingType::ColumnGroups << " values"));
+                << " has input/output tables with different " << EYtSettingType::ColumnGroups << " values"));
             return TStatus::Error;
         }
 
@@ -1013,7 +1019,7 @@ private:
 
         auto merge = TYtMerge(input);
 
-        if (!ValidateSettings(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::SoftTransform | EYtSettingType::CombineChunks | EYtSettingType::Limit | EYtSettingType::KeepSorted | EYtSettingType::NoDq, ctx)) {
+        if (!ValidateSettings(merge.Settings().Ref(), EYtSettingType::ForceTransform | EYtSettingType::SoftTransform | EYtSettingType::CombineChunks | EYtSettingType::Limit | EYtSettingType::KeepSorted | EYtSettingType::NoDq | EYtSettingType::QLFilter, ctx)) {
             return TStatus::Error;
         }
 
@@ -1097,7 +1103,8 @@ private:
             | EYtSettingType::BlockInputReady
             | EYtSettingType::BlockInputApplied
             | EYtSettingType::BlockOutputReady
-            | EYtSettingType::BlockOutputApplied;
+            | EYtSettingType::BlockOutputApplied
+            | EYtSettingType::QLFilter;
         if (!ValidateSettings(map.Settings().Ref(), accpeted, ctx)) {
             return TStatus::Error;
         }
@@ -1297,7 +1304,8 @@ private:
             | EYtSettingType::KeySwitch
             | EYtSettingType::MapOutputType
             | EYtSettingType::ReduceInputType
-            | EYtSettingType::NoDq;
+            | EYtSettingType::NoDq
+            | EYtSettingType::QLFilter;
         if (!ValidateSettings(mapReduce.Settings().Ref(), acceptedSettings, ctx)) {
             return TStatus::Error;
         }
@@ -2139,6 +2147,38 @@ private:
         }
 
         input.Ptr()->SetTypeAnn(ctx.MakeType<TListExprType>(&itemType));
+        return TStatus::Ok;
+    }
+
+    TStatus HandleQLFilter(const TExprNode::TPtr& input, TExprContext& ctx) {
+        if (!EnsureArgsCount(*input, 2, ctx)) {
+            return TStatus::Error;
+        }
+
+        const auto& type = input->Child(0);
+        if (!EnsureTypeWithStructType(*type, ctx)) {
+            return TStatus::Error;
+        }
+
+        auto& lambda = input->ChildRef(1);
+        const auto status = ConvertToLambda(lambda, ctx, 1);
+        if (status.Level != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        if (!UpdateLambdaAllArgumentsTypes(lambda, {type->GetTypeAnn()->Cast<TTypeExprType>()->GetType()}, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!lambda->GetTypeAnn()) {
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (!EnsureSpecificDataType(*lambda, EDataSlot::Bool, ctx)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(ctx.MakeType<TUnitExprType>());
         return TStatus::Ok;
     }
 

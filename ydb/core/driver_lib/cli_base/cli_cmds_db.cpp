@@ -7,13 +7,13 @@
 
 #include <ydb/library/aclib/aclib.h>
 
-#include <ydb/public/sdk/cpp/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <util/generic/hash.h>
 #include <util/string/split.h>
@@ -883,6 +883,8 @@ public:
         ClientConfig.MaxInFlight = CommandConfig.ClientConfig.MaxInFlight;
         ClientConfig.EnableSsl = CommandConfig.ClientConfig.EnableSsl;
         ClientConfig.SslCredentials.pem_root_certs = CommandConfig.ClientConfig.SslCredentials.pem_root_certs;
+        ClientConfig.SslCredentials.pem_cert_chain = CommandConfig.ClientConfig.SslCredentials.pem_cert_chain;
+        ClientConfig.SslCredentials.pem_private_key = CommandConfig.ClientConfig.SslCredentials.pem_private_key;
     }
 
     template<typename T>
@@ -902,13 +904,13 @@ public:
     virtual int Run(TConfig& config) override {
         int res = 0;
 
-        if (!ClientConfig.Locator) {
+        if (ClientConfig.Locator.empty()) {
             Cerr << "GRPC call error: GRPC server is not specified (MBus protocol is not supported for this command)." << Endl;
             return -2;
         }
 
         NYdbGrpc::TCallMeta meta;
-        if (config.SecurityToken) {
+        if (config.SecurityToken.empty()) {
             meta.Aux.push_back({NYdb::YDB_AUTH_TICKET_HEADER, config.SecurityToken});
         }
 
@@ -1002,7 +1004,7 @@ public:
     }
 
     virtual int Run(TConfig& config) override {
-        if (!ClientConfig.Locator) {
+        if (ClientConfig.Locator.empty()) {
             Cerr << "GRPC call error: GRPC server is not specified (MBus protocol is not supported for this command)." << Endl;
             return -2;
         }

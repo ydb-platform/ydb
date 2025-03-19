@@ -62,7 +62,7 @@ message TKqpPhyColumnId {
 
 message TKqpPhyColumnTypeParam {
     oneof TypeParam {
-        string PgTypeName = 1;    
+        string PgTypeName = 1;
         Ydb.DecimalType Decimal = 2;
     }
 }
@@ -211,6 +211,8 @@ message TKqpPhyOpReadOlapRanges {
     EReadType ReadType = 13;
 
     repeated string GroupByColumnNames = 14;
+    // If set, only data from the specified tablet will be processed
+    optional uint64 TabletId = 15;
 }
 
 message TKqpPhyOpReadRanges {
@@ -245,8 +247,20 @@ message TKqpPhyCnUnionAll {
 message TKqpPhyCnMap {
 }
 
+message THashV1 {
+}
+
+message TColumnShardHashV1 {
+    repeated uint32 KeyColumnTypes = 3;
+}
+
 message TKqpPhyCnHashShuffle {
     repeated string KeyColumns = 1;
+
+    oneof HashKind {
+        THashV1 HashV1 = 2;
+        TColumnShardHashV1 ColumnShardHashV1 = 3;
+    }
 }
 
 message TKqpPhyCnBroadcast {
@@ -339,6 +353,7 @@ message TKqpReadRangesSource {
 message TKqpExternalSource {
     string Type = 1;
     google.protobuf.Any Settings = 2;
+    bool Embedded = 7;
 
     // Partitioning
     string TaskParamKey = 3;
@@ -484,6 +499,9 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme Backup = 48;
         NKikimrSchemeOp.TModifyScheme BackupIncremental = 49;
         NKikimrSchemeOp.TModifyScheme Restore = 50;
+        NKikimrSchemeOp.TModifyScheme CreateTransfer = 51;
+        NKikimrSchemeOp.TModifyScheme AlterTransfer = 52;
+        NKikimrSchemeOp.TModifyScheme DropTransfer = 53;
     }
 }
 
@@ -506,6 +524,7 @@ message TKqpPhyTx {
     repeated TKqpPhyTable Tables = 7;
     TKqpSchemeOperation SchemeOperation = 8;
     repeated string SecretNames = 9;
+    bool EnableShuffleElimination = 10;
 }
 
 message TKqpTableInfo {

@@ -3,7 +3,9 @@
 #include "common.h"
 #include "actors.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_query/query.h>
+#include <ydb/tests/tools/kqprun/runlib/utils.h>
+
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
 
 
 namespace NKqpRun {
@@ -30,23 +32,9 @@ struct TExecutionMeta : public TQueryMeta {
 };
 
 
-struct TRequestResult {
-    Ydb::StatusIds::StatusCode Status;
-    NYql::TIssues Issues;
-
-    TRequestResult();
-
-    TRequestResult(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues);
-
-    TRequestResult(Ydb::StatusIds::StatusCode status, const google::protobuf::RepeatedPtrField<Ydb::Issue::IssueMessage>& issues);
-
-    bool IsSuccess() const;
-
-    TString ToString() const;
-};
-
-
 class TYdbSetup {
+    using TRequestResult = NKikimrRun::TRequestResult;
+
 public:
     explicit TYdbSetup(const TYdbSetupSettings& settings);
 

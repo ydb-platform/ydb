@@ -123,6 +123,7 @@ struct TQueryResult
     NTableClient::TTableSchemaPtr Schema;
     NChunkClient::NProto::TDataStatistics DataStatistics;
     bool IsTruncated;
+    NYson::TYsonString FullResult;
 };
 
 void Serialize(const TQueryResult& queryResult, NYson::IYsonConsumer* consumer);
@@ -153,9 +154,10 @@ struct TGetQueryTrackerInfoOptions
 struct TGetQueryTrackerInfoResult
 {
     TString QueryTrackerStage;
-    TString ClusterName;
+    std::string ClusterName;
     NYson::TYsonString SupportedFeatures;
     std::vector<TString> AccessControlObjects;
+    std::vector<std::string> Clusters;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -11,9 +11,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(19.1.6)
+VERSION(20.1.0)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-19.1.6.tar.gz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/archive/llvmorg-20.1.0.tar.gz)
 
 PEERDIR(
     library/cpp/sanitizer/include
@@ -36,8 +36,6 @@ NO_SANITIZE_COVERAGE()
 CFLAGS(
     -D_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER
     -D_LIBUNWIND_IS_NATIVE_ONLY
-    -D_LIBUNWIND_LINK_DL_LIB
-    -D_LIBUNWIND_LINK_PTHREAD_LIB
     -fno-exceptions
     -fno-rtti
     -funwind-tables

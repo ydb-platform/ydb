@@ -7,14 +7,27 @@
 
 namespace NYdb::NConsoleClient::NDynamicConfig {
 
+struct TCommandFlagsOverrides {
+    std::optional<bool> Dangerous;
+    std::optional<bool> OnlyExplicitProfile;
+};
+
 class TCommandConfig : public TClientCommandTree {
 public:
-    TCommandConfig();
+    TCommandConfig(
+        TCommandFlagsOverrides commandFlagsOverrides = {},
+        bool allowEmptyDatabase = false);
+
+    TCommandConfig(bool allowEmptyDatabase);
+
+    void PropagateFlags(const TCommandFlags& flags) override;
+private:
+    TCommandFlagsOverrides CommandFlagsOverrides;
 };
 
 class TCommandConfigReplace : public TYdbCommand {
 public:
-    TCommandConfigReplace();
+    TCommandConfigReplace(bool allowEmptyDatabase);
     void Config(TConfig& config) override;
     void Parse(TConfig& config) override;
     int Run(TConfig& config) override;
@@ -26,22 +39,25 @@ private:
     bool AllowUnknownFields = false;
     TString DynamicConfig;
     TString Filename;
+    bool AllowEmptyDatabase = false;
 };
 
-class TCommandConfigFetch : public TYdbCommand {
+class TCommandConfigFetch : public TYdbReadOnlyCommand {
 public:
-    TCommandConfigFetch();
+    TCommandConfigFetch(bool allowEmptyDatabase);
     void Config(TConfig&) override;
     void Parse(TConfig&) override;
     int Run(TConfig& config) override;
 
 private:
-    bool All = false;
     bool StripMetadata = false;
     TString OutDir;
+    bool AllowEmptyDatabase = false;
+    bool DedicatedStorageSection = false;
+    bool DedicatedClusterSection = false;
 };
 
-class TCommandConfigResolve : public TYdbCommand {
+class TCommandConfigResolve : public TYdbReadOnlyCommand {
 public:
     TCommandConfigResolve();
     void Config(TConfig& config) override;
@@ -49,7 +65,7 @@ public:
     int Run(TConfig& config) override;
 
 private:
-    TMap<TString, TString> Labels;
+    std::map<std::string, std::string> Labels;
     bool All = false;
     TString Filename;
     TString Dir;
@@ -86,7 +102,7 @@ public:
     int Run(TConfig& config) override;
 
 private:
-    ui64 Version;
+    ui64 Version = 0;
     TString Cluster;
     THashSet<ui64> Ids;
     TString Dir;
@@ -107,6 +123,15 @@ private:
     bool All = false;
     TString OutDir;
     bool StripMetadata = false;
+};
+
+class TCommandGenerateDynamicConfig : public TYdbReadOnlyCommand {
+public:
+    TCommandGenerateDynamicConfig(bool allowEmptyDatabase);
+    void Config(TConfig&) override;
+    int Run(TConfig&) override;
+private:
+    bool AllowEmptyDatabase = false;
 };
 
 } // namespace NYdb::NConsoleClient::NDynamicConfig

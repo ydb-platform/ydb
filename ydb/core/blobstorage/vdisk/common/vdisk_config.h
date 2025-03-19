@@ -8,7 +8,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/base/feature_flags.h>
 
 namespace NKikimr {
@@ -219,8 +219,6 @@ namespace NKikimr {
         TDuration WhiteboardUpdateInterval;
         bool EnableVDiskCooldownTimeout;
         TControlWrapper EnableVPatch = true;
-        TControlWrapper DefaultHugeGarbagePerMille;
-        TControlWrapper HugeDefragFreeSpaceBorderPerMille;
         bool UseActorSystemTimeInBSQueue = false;
 
         ///////////// BALANCING SETTINGS ////////////////////
@@ -238,18 +236,30 @@ namespace NKikimr {
         TDuration BalancingEpochTimeout;
         TDuration BalancingTimeToSleepIfNothingToDo;
 
+        ///////////////// DEFRAG SETTINGS /////////////////
+        TControlWrapper DefaultHugeGarbagePerMille = 300;
+        TControlWrapper HugeDefragFreeSpaceBorderPerMille = 260;
+        TControlWrapper MaxChunksToDefragInflight = 10;
+
         ///////////// COST METRICS SETTINGS ////////////////
         bool UseCostTracker = true;
         TCostMetricsParametersByMedia CostMetricsParametersByMedia;
 
         ///////////// THROTTLING SETTINGS //////////////////
-        TControlWrapper ThrottlingDeviceSpeed;
-        TControlWrapper ThrottlingMinSstCount;
-        TControlWrapper ThrottlingMaxSstCount;
-        TControlWrapper ThrottlingMinInplacedSize;
-        TControlWrapper ThrottlingMaxInplacedSize;
+        TControlWrapper ThrottlingDryRun;
+        TControlWrapper ThrottlingMinLevel0SstCount;
+        TControlWrapper ThrottlingMaxLevel0SstCount;
+        TControlWrapper ThrottlingMinInplacedSizeHDD;
+        TControlWrapper ThrottlingMaxInplacedSizeHDD;
+        TControlWrapper ThrottlingMinInplacedSizeSSD;
+        TControlWrapper ThrottlingMaxInplacedSizeSSD;
         TControlWrapper ThrottlingMinOccupancyPerMille;
         TControlWrapper ThrottlingMaxOccupancyPerMille;
+        TControlWrapper ThrottlingMinLogChunkCount;
+        TControlWrapper ThrottlingMaxLogChunkCount;
+
+        ///////////// SYNC SETTINGS //////////////////
+        TControlWrapper MaxInProgressSyncCount;
 
         ///////////// FEATURE FLAGS ////////////////////////
         NKikimrConfig::TFeatureFlags FeatureFlags;

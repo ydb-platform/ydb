@@ -14,11 +14,12 @@ TEST_SRCS(
     test_format_without_version.py
     test_throttling.py
     test_queue_counters.py
+    test_queue_tags.py
 )
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
     REQUIREMENTS(ram:32 cpu:2)
 ELSE()
     SIZE(MEDIUM)

@@ -6,10 +6,10 @@
 #include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/json/json_reader.h>
@@ -89,6 +89,7 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     NKqp::IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory = std::make_shared<NKqp::TKqpFederatedQuerySetupFactoryNoop>();
     NMonitoring::TDynamicCounterPtr CountersRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory = NYql::NDq::CreateDefaultS3ActorsFactory();
+    NKikimrConfig::TImmediateControlsConfig Controls;
 
     TKikimrSettings()
     {
@@ -98,11 +99,13 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
         exchangerSettings->SetStartDelayMs(10);
         exchangerSettings->SetMaxDelayMs(10);
         AppConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
+        AppConfig.MutableColumnShardConfig()->SetMaxInFlightIntervalsOnRequest(1);
         FeatureFlags.SetEnableSparsedColumns(true);
         FeatureFlags.SetEnableWritePortionsOnInsert(true);
         FeatureFlags.SetEnableParameterizedDecimal(true);
         FeatureFlags.SetEnableTopicAutopartitioningForCDC(true);
         FeatureFlags.SetEnableFollowerStats(true);
+        FeatureFlags.SetEnableColumnStore(true);
     }
 
     TKikimrSettings& SetAppConfig(const NKikimrConfig::TAppConfig& value) { AppConfig = value; return *this; }
@@ -120,6 +123,15 @@ struct TKikimrSettings: public TTestFeatureFlagsHolder<TKikimrSettings> {
     TKikimrSettings& SetUseRealThreads(bool value) { UseRealThreads = value; return *this; };
     TKikimrSettings& SetEnableForceFollowers(bool value) { EnableForceFollowers = value; return *this; };
     TKikimrSettings& SetS3ActorsFactory(std::shared_ptr<NYql::NDq::IS3ActorsFactory> value) { S3ActorsFactory = std::move(value); return *this; };
+    TKikimrSettings& SetControls(const NKikimrConfig::TImmediateControlsConfig& value) { Controls = value; return *this; }
+    TKikimrSettings& SetColumnShardAlterObjectEnabled(bool enable) {
+            AppConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(enable);
+            return *this;
+    }
+    TKikimrSettings& SetColumnShardDoubleOutOfRangeHandling(const NKikimrConfig::TColumnShardConfig_EJsonDoubleOutOfRangeHandlingPolicy value) {
+        AppConfig.MutableColumnShardConfig()->SetDoubleOutOfRangeHandling(value);
+        return *this;
+    }
 };
 
 class TKikimrRunner {
@@ -290,8 +302,8 @@ inline constexpr TStringBuf IndexWithSqlString(EIndexTypeSql type) {
 }
 
 TString ReformatYson(const TString& yson);
-void CompareYson(const TString& expected, const TString& actual);
-void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual);
+void CompareYson(const TString& expected, const TString& actual, const TString& message = {});
+void CompareYson(const TString& expected, const NKikimrMiniKQL::TResult& actual, const TString& message = {});
 
 void CreateLargeTable(TKikimrRunner& kikimr, ui32 rowsPerShard, ui32 keyTextSize,
     ui32 dataTextSize, ui32 batchSizeRows = 100, ui32 fillShardsCount = 8, ui32 largeTableKeysPerShard = 1000000);
@@ -300,6 +312,9 @@ void CreateManyShardsTable(TKikimrRunner& kikimr, ui32 totalRows = 1000, ui32 sh
 
 bool HasIssue(const NYql::TIssues& issues, ui32 code,
     std::function<bool(const NYql::TIssue& issue)> predicate = {});
+
+bool HasIssue(const NYdb::NIssue::TIssues& issues, ui32 code,
+    std::function<bool(const NYdb::NIssue::TIssue& issue)> predicate = {});
 
 void PrintQueryStats(const NYdb::NTable::TDataQueryResult& result);
 
@@ -374,12 +389,15 @@ TVector<ui64> GetColumnTableShards(Tests::TServer* server, TActorId sender, cons
 void WaitForZeroSessions(const NKqp::TKqpCounters& counters);
 void WaitForZeroReadIterators(Tests::TServer& server, const TString& path);
 
+void WaitForCompaction(Tests::TServer* server, const TString& path, bool compactBorrowed = false);
+
 bool JoinOrderAndAlgosMatch(const TString& optimized, const TString& reference);
 
 struct TGetPlanParams {
     bool IncludeFilters = false;
     bool IncludeOptimizerEstimation = false;
     bool IncludeTables = true;
+    bool IncludeShuffles = false;
 };
 
 /* Gets join order with details as: join algo, join type and scan type. */

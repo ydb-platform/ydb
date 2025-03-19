@@ -170,6 +170,17 @@ public:
     ui32 StatementResultSize = 0;
 
     TMaybe<TString> CommandTagName;
+    THashSet<ui32> ParticipantNodes;
+
+    bool IsLocalExecution(ui32 nodeId) const {
+        if (RequestEv->GetRequestCtx() == nullptr) {
+            return false;
+        }
+        if (ParticipantNodes.size() == 1) {
+            return *ParticipantNodes.begin() == nodeId;
+        }
+        return false;
+    }
 
     NKikimrKqp::EQueryAction GetAction() const {
         return QueryAction;

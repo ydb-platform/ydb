@@ -4,6 +4,7 @@ on:
     branches:
       - 'main'
       - 'stable-*'
+      - 'prestable-*'
       - 'stream-nb-*'
       - '*-stable-*'
       - 'dev-*'

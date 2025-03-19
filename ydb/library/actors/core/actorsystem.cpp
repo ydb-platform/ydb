@@ -1,4 +1,5 @@
 #include "defs.h"
+#include "debug.h"
 #include "activity_guard.h"
 #include "actorsystem.h"
 #include "callstack.h"
@@ -12,6 +13,7 @@
 #include "log.h"
 #include "probes.h"
 #include "ask.h"
+#include "thread_context.h"
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/util/datetime.h>
 #include <util/generic/hash.h>
@@ -19,6 +21,7 @@
 #include <util/random/random.h>
 
 namespace NActors {
+
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
     TActorSetupCmd::TActorSetupCmd()
@@ -92,6 +95,87 @@ namespace NActors {
         Cleanup();
     }
 
+    static void CheckEventMemory(IEventBase *ev) {
+        if constexpr (!NSan::MSanIsOn()) {
+            return;
+        }
+
+        class TSerializerChecker : public TChunkSerializer {
+            char Buffer[4096];
+            int64_t Size = 0;
+            bool BufferGivenAway = false;
+
+        public:
+            ~TSerializerChecker() {
+                if (BufferGivenAway) {
+                    NSan::CheckMemIsInitialized(Buffer, sizeof(Buffer));
+                }
+            }
+
+            bool Next(void **data, int *size) override {
+                if (BufferGivenAway) {
+                    NSan::CheckMemIsInitialized(Buffer, sizeof(Buffer));
+                }
+#if defined(_msan_enabled_)
+                __msan_allocated_memory(Buffer, sizeof(Buffer));
+#endif
+                *data = Buffer;
+                *size = sizeof(Buffer);
+                Size += *size;
+                BufferGivenAway = true;
+                return true;
+            }
+
+            void BackUp(int count) override {
+                if (!count && !BufferGivenAway) {
+                    // this mitigates a bug in protobuf implementation -- sometimes BackUp() gets called without mandatory preceding Next()
+                    return;
+                }
+                Y_ABORT_UNLESS(BufferGivenAway);
+                Y_ABORT_UNLESS(count <= static_cast<int>(sizeof(Buffer)));
+                NSan::CheckMemIsInitialized(Buffer, sizeof(Buffer) - count);
+                Y_ABORT_UNLESS(count <= Size);
+                Size -= count;
+                BufferGivenAway = false;
+            }
+
+            int64_t ByteCount() const override {
+                return Size;
+            }
+
+            bool WriteAliasedRaw(const void *data, int size) override {
+                if (BufferGivenAway) {
+                    NSan::CheckMemIsInitialized(Buffer, sizeof(Buffer));
+                    BufferGivenAway = false;
+                }
+                NSan::CheckMemIsInitialized(data, size);
+                Size += size;
+                return true;
+            }
+
+            bool AllowsAliasing() const override {
+                return true;
+            }
+
+            bool WriteRope(const TRope *rope) override {
+                for (auto iter = rope->Begin(); iter.Valid(); iter.AdvanceToNextContiguousBlock()) {
+                    if (!WriteAliasedRaw(iter.ContiguousData(), iter.ContiguousSize())) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            bool WriteString(const TString *s) override {
+                return WriteAliasedRaw(s->data(), s->size());
+            }
+        };
+
+        TSerializerChecker checker;
+        const bool success = ev->SerializeToArcadiaStream(&checker);
+        Y_ABORT_UNLESS(success);
+    }
+
     template <TActorSystem::TEPSendFunction EPSpecificSend>
     bool TActorSystem::GenericSend(TAutoPtr<IEventHandle> ev) const {
         if (Y_UNLIKELY(!ev))
@@ -108,6 +192,9 @@ namespace NActors {
         if (recpNodeId != NodeId && recpNodeId != 0) {
             // if recipient is not local one - rewrite with forward instruction
             Y_DEBUG_ABORT_UNLESS(!ev->HasEvent() || ev->GetBase()->IsSerializable());
+            if (ev->HasEvent()) {
+                CheckEventMemory(ev->GetBase());
+            }
             Y_ABORT_UNLESS(ev->Recipient == recipient,
                 "Event rewrite from %s to %s would be lost via interconnect",
                 ev->Recipient.ToString().c_str(),
@@ -167,9 +254,9 @@ namespace NActors {
         if (!TlsThreadContext) {
             return this->GenericSend<&IExecutorPool::Send>(ev);
         } else {
-            ESendingType previousType = std::exchange(TlsThreadContext->SendingType, sendingType);
+            ESendingType previousType = TlsThreadContext->ExchangeSendingType(sendingType);
             bool isSent = this->GenericSend<&IExecutorPool::SpecificSend>(ev);
-            TlsThreadContext->SendingType = previousType;
+            TlsThreadContext->SetSendingType(previousType);
             return isSent;
         }
     }
@@ -273,6 +360,7 @@ namespace NActors {
     }
 
     void TActorSystem::Start() {
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start");
         Y_ABORT_UNLESS(StartExecuted == false);
         StartExecuted = true;
 
@@ -283,6 +371,7 @@ namespace NActors {
         Scheduler->Prepare(this, &CurrentTimestamp, &CurrentMonotonic);
         Scheduler->PrepareSchedules(&scheduleReaders.front(), (ui32)scheduleReaders.size());
 
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start: setup interconnect proxies start");
         // setup interconnect proxies
         {
             TInterconnectSetup& setup = SystemSetup->Interconnect;
@@ -297,6 +386,7 @@ namespace NActors {
             ProxyWrapperFactory = std::move(SystemSetup->Interconnect.ProxyWrapperFactory);
         }
 
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start: setup local services start");
         // setup local services
         {
             for (ui32 i = 0, e = (ui32)SystemSetup->LocalServices.size(); i != e; ++i) {
@@ -312,11 +402,15 @@ namespace NActors {
         CpuManager->Start();
         Send(MakeSchedulerActorId(), new TEvSchedulerInitialize(scheduleReaders, &CurrentTimestamp, &CurrentMonotonic));
         Scheduler->Start();
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Start: started");
     }
 
     void TActorSystem::Stop() {
-        if (StopExecuted || !StartExecuted)
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Stop");
+        if (StopExecuted || !StartExecuted) {
+            ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Stop: already stopped");
             return;
+        }
 
         StopExecuted = true;
 
@@ -328,15 +422,20 @@ namespace NActors {
         CpuManager->PrepareStop();
         Scheduler->Stop();
         CpuManager->Shutdown();
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Stop: stopped");
     }
 
     void TActorSystem::Cleanup() {
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Cleanup");
         Stop();
-        if (CleanupExecuted || !StartExecuted)
+        if (CleanupExecuted || !StartExecuted) {
+            ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Cleanup: already cleaned up");
             return;
+        }
         CleanupExecuted = true;
         CpuManager->Cleanup();
         Scheduler.Destroy();
+        ACTORLIB_DEBUG(EDebugLevel::ActorSystem, "TActorSystem::Cleanup: cleaned up");
     }
 
     void TActorSystem::GetExecutorPoolState(i16 poolId, TExecutorPoolState &state) const {

@@ -1,6 +1,6 @@
 {% extends '//builtin/bag.ym' %}
 
-{% block current_version %}19.1.6{% endblock %}
+{% block current_version %}20.1.0{% endblock %}
 
 {% block current_url %}
 https://github.com/llvm/llvm-project/releases/download/llvmorg-{{self.version().strip()}}/compiler-rt-{{self.version().strip()}}.src.tar.xz
@@ -12,6 +12,7 @@ rm CMakeLists.txt
 cd lib/builtins
 rm CMakeLists.txt
 rm aarch64/lse.S
+sed -e 's|.*#include.*ptrauth.h.*||' -i crtbegin.c
 sed -e 's|.*#include.*sys/byteorder.h.*||' -i int_endianness.h
 sed -e 's|.*#include.*zircon/features.h.*||' -i cpu_model/aarch64/fmv/fuchsia.inc
 sed -e 's|.*#include.*zircon/features.h.*||' -i cpu_model/aarch64/lse_atomics/fuchsia.inc
@@ -20,8 +21,6 @@ sed -e 's|.*#include.*zircon/features.h.*||' -i cpu_model/aarch64/lse_atomics/fu
 
 {% block ya_make %}
 SUBSCRIBER(
-    pg
-    somov
     g:contrib
     g:cpp-contrib
 )
@@ -89,19 +88,21 @@ def name(n):
 sset = frozenset([name(x) for x in special])
 scrt = frozenset(['crtbegin', 'crtend'])
 # x86_80_BIT_SOURCES
-x86_not_win = frozenset(['divxc3', 'extendxftf2', 'fixxfdi', 'fixxfti', 'fixunsxfdi', 'fixunsxfsi', 'fixunsxfti', 'floatdixf', 'floattixf', 'floatundixf', 'floatuntixf', 'mulxc3', 'powixf2', 'trunctfxf2'])
+x86_not_win = frozenset(['divxc3', 'extendhfxf2', 'extendxftf2', 'fixxfdi', 'fixxfti', 'fixunsxfdi', 'fixunsxfsi', 'fixunsxfti', 'floatdixf', 'floattixf', 'floatundixf', 'floatuntixf', 'mulxc3', 'powixf2', 'trunctfxf2', 'truncxfhf2'])
 other_not_emscripten = frozenset([
     'clear_cache',
     'emutls',
     'enable_execute_stack',
     'eprintf',
-    'truncdfbf2',
-    'truncsfbf2',
 ])
 
 def it_srcs():
     for x in common:
         n = name(x)
+
+        if n.startswith("atomic_") or n.endswith("bf2") or n == "extendbfsf2":
+            # these are handled explicitly below
+            continue
         if n in scrt:
             continue
         if arch != 'x86_64_not_win' and n in x86_not_win:
@@ -122,18 +123,57 @@ EOF
 
 ls *.c > common
 
-echo 'IF (ARCH_AARCH64)'
+cat << EOF
+IF (OS_DARWIN OR OS_IOS)
+    SRCS(
+        atomic_flag_clear.c
+        atomic_flag_clear_explicit.c
+        atomic_flag_test_and_set.c
+        atomic_flag_test_and_set_explicit.c
+        atomic_signal_fence.c
+        atomic_thread_fence.c
+    )
+ENDIF()
+
+IF (ARCH_ARM64 OR ARCH_X86_64)
+    # As of r25b, clang-for-android does not have bf16 support.
+    # These can be built using r27 and above.
+    IF (NOT OS_ANDROID)
+        SRCS(
+            # NB: sources that were commented out were added in llvm-20
+            extendbfsf2.c
+            truncdfbf2.c
+            truncxfbf2.c
+            truncsfbf2.c
+            trunctfbf2.c
+        )
+    ENDIF()
+ENDIF()
+EOF
+
+echo 'IF (ARCH_ARM7)'
+echo 'SRCS('
+ls arm/*.S arm/*.c > special
+python3 join.py common special arm
+echo ')'
+
+echo 'ELSEIF (ARCH_AARCH64)'
 echo 'SRCS('
 ls aarch64/*.c cpu_model/aarch64.*c aarch64/*.S > special
 python3 join.py common special aarch
 echo ')'
+
 echo 'IF(NOT OS_DARWIN) SRCS(aarch64/sme-libc-routines.c) ENDIF()'
 echo 'ELSEIF (ARCH_X86_64)'
 echo 'SRCS('
 ls x86_64/*.c cpu_model/x86.*c  x86_64/*.S > special
 python3 join.py common special x86_64
 echo ')'
-echo 'IF(NOT OS_WINDOWS) SRCS(x86_64/floatdixf.c'
+
+# As llvm/compiler-rt/lib/builtins says:
+# Implement extended-precision builtins, assuming long double is 80 bits.
+# long double is not 80 bits on Android or MSVC.
+echo 'IF(NOT OS_WINDOWS AND NOT OS_ANDROID) SRCS(x86_64/floatdixf.c'
 echo '' > special
 python3 join.py common special x86_64_not_win
 echo ') ENDIF()'

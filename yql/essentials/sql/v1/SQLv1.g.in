@@ -76,6 +76,11 @@ sql_stmt_core:
   | backup_stmt
   | restore_stmt
   | alter_sequence_stmt
+  | create_transfer_stmt
+  | alter_transfer_stmt
+  | drop_transfer_stmt
+  | alter_database_stmt
+  | show_create_table_stmt
 ;
 
 expr:
@@ -392,7 +397,7 @@ reduce_core:
 opt_set_quantifier: (ALL | DISTINCT)?;
 
 select_core:
-  (FROM join_source)? SELECT STREAM? opt_set_quantifier result_column (COMMA result_column)* COMMA? (WITHOUT without_column_list)? (FROM join_source)? (WHERE expr)?
+  (FROM join_source)? SELECT STREAM? opt_set_quantifier result_column (COMMA result_column)* COMMA? (WITHOUT (IF EXISTS)? without_column_list)? (FROM join_source)? (WHERE expr)?
   group_by_clause? (HAVING expr)? window_clause? ext_order_by_clause?
 ;
 
@@ -688,6 +693,8 @@ table_tablestore: TABLESTORE simple_table_ref_core;
 table_settings_entry: an_id EQUALS table_setting_value;
 table_as_source: AS values_source;
 
+alter_database_stmt: ALTER DATABASE an_id_schema OWNER TO role_name;
+
 alter_table_stmt: ALTER TABLE simple_table_ref alter_table_action (COMMA alter_table_action)*;
 alter_table_action:
     alter_table_add_column
@@ -825,8 +832,8 @@ alter_table_alter_index_action:
 
 drop_table_stmt: DROP (TABLE | TABLESTORE | EXTERNAL TABLE) (IF EXISTS)? simple_table_ref;
 
-create_user_stmt: CREATE USER role_name create_user_option*;
-alter_user_stmt: ALTER USER role_name (WITH? create_user_option+ | RENAME TO role_name);
+create_user_stmt: CREATE USER role_name user_option*;
+alter_user_stmt: ALTER USER role_name (WITH? user_option+ | RENAME TO role_name);
 
 create_group_stmt: CREATE GROUP role_name (WITH USER role_name (COMMA role_name)* COMMA?)?;
 alter_group_stmt: ALTER GROUP role_name ((ADD|DROP) USER role_name (COMMA role_name)* COMMA? | RENAME TO role_name);
@@ -834,8 +841,13 @@ alter_group_stmt: ALTER GROUP role_name ((ADD|DROP) USER role_name (COMMA role_n
 drop_role_stmt: DROP (USER|GROUP) (IF EXISTS)? role_name (COMMA role_name)* COMMA?;
 
 role_name: an_id_or_type | bind_parameter;
-create_user_option: password_option | login_option;
-password_option: ENCRYPTED? PASSWORD expr;
+
+user_option: authentication_option | login_option;
+
+authentication_option: password_option | hash_option;
+password_option: ENCRYPTED? PASSWORD password_value;
+password_value: STRING_VALUE | NULL;
+hash_option: HASH STRING_VALUE;
 login_option: LOGIN | NOLOGIN;
 
 grant_permissions_stmt: GRANT permission_name_target ON an_id_schema (COMMA an_id_schema)* TO role_name (COMMA role_name)* COMMA? (WITH GRANT OPTION)?;
@@ -906,6 +918,29 @@ alter_replication_set_setting: SET LPAREN replication_settings RPAREN;
 
 drop_replication_stmt: DROP ASYNC REPLICATION object_ref CASCADE?;
 
+create_transfer_stmt: CREATE TRANSFER object_ref
+    FROM object_ref TO object_ref (USING lambda_or_parameter)?
+    WITH LPAREN transfer_settings RPAREN
+;
+
+lambda_or_parameter:
+    lambda
+  | bind_parameter
+;
+transfer_settings: transfer_settings_entry (COMMA transfer_settings_entry)*;
+transfer_settings_entry: an_id EQUALS expr;
+
+alter_transfer_stmt: ALTER TRANSFER object_ref alter_transfer_action (COMMA alter_transfer_action)*;
+alter_transfer_action:
+    alter_transfer_set_setting
+  | alter_transfer_set_using
+;
+
+alter_transfer_set_setting: SET LPAREN transfer_settings RPAREN;
+alter_transfer_set_using: SET USING lambda_or_parameter;
+
+drop_transfer_stmt: DROP TRANSFER object_ref CASCADE?;
+
 action_or_subquery_args: opt_bind_parameter (COMMA opt_bind_parameter)*;
 
 define_action_or_subquery_stmt: DEFINE (ACTION|SUBQUERY) bind_parameter LPAREN action_or_subquery_args? RPAREN AS define_action_or_subquery_body END DEFINE;
@@ -930,8 +965,8 @@ simple_table_ref_core: object_ref | COMMAT? bind_parameter;
 simple_table_ref: simple_table_ref_core table_hints?;
 into_simple_table_ref: simple_table_ref (ERASE BY pure_column_list)?;
 
-delete_stmt: DELETE FROM simple_table_ref (WHERE expr | ON into_values_source)? returning_columns_list?;
-update_stmt: UPDATE simple_table_ref (SET set_clause_choice (WHERE expr)? | ON into_values_source)  returning_columns_list?;
+delete_stmt: BATCH? DELETE FROM simple_table_ref (WHERE expr | ON into_values_source)? returning_columns_list?;
+update_stmt: BATCH? UPDATE simple_table_ref (SET set_clause_choice (WHERE expr)? | ON into_values_source)  returning_columns_list?;
 
 /// out of 2003 standart
 set_clause_choice: set_clause_list | multiple_column_assignment;
@@ -1064,6 +1099,8 @@ alter_sequence_action:
   | RESTART
   | INCREMENT BY? integer
 ;
+
+show_create_table_stmt: SHOW CREATE TABLE simple_table_ref;
 
 // Special rules that allow to use certain keywords as identifiers.
 identifier: ID_PLAIN | ID_QUOTED;
@@ -1278,6 +1315,7 @@ keyword_as_compat:
   | ATTRIBUTES
   | AUTOINCREMENT
   | BACKUP
+  | BATCH
   | BEFORE
   | BEGIN
   | BERNOULLI
@@ -1399,6 +1437,7 @@ keyword_as_compat:
   | OTHERS
   // | OUTER
   // | OVER
+  | OWNER
   | PARALLEL
   | PARTITION
   | PASSING
@@ -1465,6 +1504,7 @@ keyword_as_compat:
   | TO
   | TOPIC
   | TRANSACTION
+  | TRANSFER
   | TRIGGER
   | TYPE
   | UNCONDITIONAL
@@ -1504,6 +1544,7 @@ keyword_compat: (
   | ATTRIBUTES
   | AUTOINCREMENT
   | BACKUP
+  | BATCH
   | BEFORE
   | BEGIN
   | BERNOULLI
@@ -1625,6 +1666,7 @@ keyword_compat: (
   | OTHERS
   | OUTER
   | OVER
+  | OWNER
   | PARALLEL
   | PARTITION
   | PASSING
@@ -1691,6 +1733,7 @@ keyword_compat: (
   | TO
   | TOPIC
   | TRANSACTION
+  | TRANSFER
   | TRIGGER
   | TYPE
   | UNCONDITIONAL
@@ -1830,6 +1873,7 @@ ATTRIBUTES: A T T R I B U T E S;
 AUTOINCREMENT: A U T O I N C R E M E N T;
 AUTOMAP: A U T O M A P;
 BACKUP: B A C K U P;
+BATCH: B A T C H;
 COLLECTION: C O L L E C T I O N;
 BEFORE: B E F O R E;
 BEGIN: B E G I N;
@@ -1987,6 +2031,7 @@ ORDER: O R D E R;
 OTHERS: O T H E R S;
 OUTER: O U T E R;
 OVER: O V E R;
+OWNER: O W N E R;
 PARALLEL: P A R A L L E L;
 PARTITION: P A R T I T I O N;
 PASSING: P A S S I N G;
@@ -2069,6 +2114,7 @@ TIES: T I E S;
 TO: T O;
 TOPIC: T O P I C;
 TRANSACTION: T R A N S A C T I O N;
+TRANSFER: T R A N S F E R;
 TRIGGER: T R I G G E R;
 TRUE: T R U E;
 TUPLE: T U P L E;

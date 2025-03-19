@@ -1,8 +1,8 @@
 requirements:
+  - jaraco.collections
   - jaraco.context
   - jaraco.functools
   - jaraco.text
-  - ordered-set
   - more-itertools
   - packaging
   - platformdirs

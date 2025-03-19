@@ -89,6 +89,7 @@ private:
     }
 
     virtual ui64 DoGetWeight() const override;
+    virtual TInstant DoGetWeightExpirationInstant() const override;
 
     virtual TCompactionTaskData DoGetOptimizationTask() const override;
 

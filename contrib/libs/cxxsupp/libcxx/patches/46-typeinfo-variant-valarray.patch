@@ -1,8 +1,8 @@
 diff --git a/include/typeinfo b/include/typeinfo
-index ed89a4f..aa18b3b 100644
+index 8b75ced..266ae95 100644
 --- a/include/typeinfo
 +++ b/include/typeinfo
-@@ -322,24 +322,40 @@ public:
+@@ -332,24 +332,40 @@ public:
  
  class _LIBCPP_EXPORTED_FROM_ABI bad_cast : public exception {
  public:

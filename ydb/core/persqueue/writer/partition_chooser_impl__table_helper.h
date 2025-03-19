@@ -7,10 +7,10 @@
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/persqueue/pq_database.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/services/metadata/service.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 
 namespace NKikimr::NPQ::NPartitionChooser {
@@ -176,13 +176,13 @@ public:
         while(parser.TryNextRow()) {
             auto tt = parser.ColumnParser(0).GetOptionalUint32();
 
-            if (tt.Defined()) { //already got partition
-                auto accessTime = parser.ColumnParser(2).GetOptionalUint64().GetOrElse(0);
+            if (tt.has_value()) { //already got partition
+                auto accessTime = parser.ColumnParser(2).GetOptionalUint64().value_or(0);
                 if (accessTime > AccessTime) { // AccessTime
                     PartitionId_ = *tt;
-                    CreateTime = parser.ColumnParser(1).GetOptionalUint64().GetOrElse(0);
+                    CreateTime = parser.ColumnParser(1).GetOptionalUint64().value_or(0);
                     AccessTime = accessTime;
-                    SeqNo_ = parser.ColumnParser(3).GetOptionalUint64().GetOrElse(0);
+                    SeqNo_ = parser.ColumnParser(3).GetOptionalUint64().value_or(0);
                 }
             }
         }

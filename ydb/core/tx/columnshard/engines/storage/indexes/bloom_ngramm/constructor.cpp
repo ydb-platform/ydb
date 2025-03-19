@@ -2,6 +2,7 @@
 #include "constructor.h"
 #include "meta.h"
 
+#include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/default.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
 namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
@@ -15,7 +16,7 @@ std::shared_ptr<IIndexMeta> TIndexConstructor::DoCreateIndexMeta(
     }
     const ui32 columnId = columnInfo->GetId();
     return std::make_shared<TIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId), columnId,
-        HashesCount, FilterSizeBytes, NGrammSize, RecordsCount);
+        DataExtractor, HashesCount, FilterSizeBytes, NGrammSize, RecordsCount);
 }
 
 TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
@@ -29,12 +30,20 @@ TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson::TJsonVal
         return TConclusionStatus::Fail("empty column_name in bloom ngramm filter features");
     }
 
+    {
+        auto conclusion = DataExtractor.DeserializeFromJson(jsonInfo["data_extractor"]);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+    }
+
     if (!jsonInfo["records_count"].IsUInteger()) {
         return TConclusionStatus::Fail("records_count have to be in bloom filter features as uint field");
     }
     RecordsCount = jsonInfo["records_count"].GetUInteger();
     if (!TConstants::CheckRecordsCount(RecordsCount)) {
-        return TConclusionStatus::Fail("records_count have to be in bloom ngramm filter in interval " + TConstants::GetRecordsCountIntervalString());
+        return TConclusionStatus::Fail(
+            "records_count have to be in bloom ngramm filter in interval " + TConstants::GetRecordsCountIntervalString());
     }
 
     if (!jsonInfo["ngramm_size"].IsUInteger()) {
@@ -92,6 +101,9 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKiki
     if (!ColumnName) {
         return TConclusionStatus::Fail("empty column name");
     }
+    if (!DataExtractor.DeserializeFromProto(bFilter.GetDataExtractor())) {
+        return TConclusionStatus::Fail("cannot parse data extractor from proto: " + bFilter.GetDataExtractor().DebugString());
+    }
     return TConclusionStatus::Success();
 }
 
@@ -102,6 +114,7 @@ void TIndexConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested&
     filterProto->SetNGrammSize(NGrammSize);
     filterProto->SetFilterSizeBytes(FilterSizeBytes);
     filterProto->SetHashesCount(HashesCount);
+    *filterProto->MutableDataExtractor() = DataExtractor.SerializeToProto();
 }
 
 }   // namespace NKikimr::NOlap::NIndexes::NBloomNGramm

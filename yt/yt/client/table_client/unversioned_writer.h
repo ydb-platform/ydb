@@ -6,9 +6,9 @@
 
 #include <yt/yt/core/actions/future.h>
 
-#include <yt/yt/core/misc/range.h>
-
 #include <yt/yt/core/crypto/crypto.h>
+
+#include <library/cpp/yt/memory/range.h>
 
 namespace NYT::NTableClient {
 

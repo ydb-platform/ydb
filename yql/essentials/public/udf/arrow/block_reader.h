@@ -2,11 +2,12 @@
 
 #include "block_item.h"
 #include "block_io_buffer.h"
+#include "dispatch_traits.h"
 #include "util.h"
+
 #include <arrow/datum.h>
 
-#include <yql/essentials/public/udf/udf_type_inspection.h>
-#include <yql/essentials/public/udf/udf_value_builder.h>
+#include <yql/essentials/public/decimal/yql_decimal.h>
 
 namespace NYql {
 namespace NUdf {
@@ -423,6 +424,48 @@ private:
     TFixedSizeBlockReader<ui16, /* Nullable */false> TimezoneReader_;
 };
 
+// NOTE: For any singular type we use arrow::null() data type.
+// This data type DOES NOT support bit mask so for optional type
+// we have to use |TExternalOptional| wrapper.
+class TSingularTypeBlockReader: public IBlockReader {
+public:
+    TSingularTypeBlockReader() = default;
+
+    ~TSingularTypeBlockReader() override = default;
+
+    TBlockItem GetItem(const arrow::ArrayData& data, size_t index) override {
+        Y_UNUSED(data, index);
+        return TBlockItem::Zero();
+    }
+
+    TBlockItem GetScalarItem(const arrow::Scalar& scalar) override {
+        Y_UNUSED(scalar);
+        return TBlockItem::Zero();
+    }
+
+    ui64 GetDataWeight(const arrow::ArrayData& data) const override {
+        Y_UNUSED(data);
+        return 0;
+    }
+
+    ui64 GetDataWeight(TBlockItem item) const override {
+        Y_UNUSED(item);
+        return 0;
+    }
+
+    ui64 GetDefaultValueWeight() const override {
+        return 0;
+    }
+
+    void SaveItem(const arrow::ArrayData& data, size_t index, TOutputBuffer& out) const override {
+        Y_UNUSED(index, data, out);
+    }
+
+    void SaveScalarItem(const arrow::Scalar& scalar, TOutputBuffer& out) const override {
+        Y_UNUSED(scalar, out);
+    }
+};
+
 class TExternalOptionalBlockReader final : public IBlockReader {
 public:
     TExternalOptionalBlockReader(std::unique_ptr<IBlockReader>&& inner)
@@ -497,6 +540,9 @@ struct TReaderTraits {
     using TResource = TResourceBlockReader<Nullable>;
     template<typename TTzDate, bool Nullable>
     using TTzDateReader = TTzDateBlockReader<TTzDate, Nullable>;
+    using TSingularType = TSingularTypeBlockReader;
+
+    constexpr static bool PassType = false;
 
     static std::unique_ptr<TResult> MakePg(const TPgTypeDescription& desc, const IPgBuilder* pgBuilder) {
         Y_UNUSED(pgBuilder);
@@ -515,6 +561,10 @@ struct TReaderTraits {
         }
     }
 
+    static std::unique_ptr<TResult> MakeSingular() {
+        return std::make_unique<TSingularType>();
+    }
+
     template<typename TTzDate>
     static std::unique_ptr<TResult> MakeTzDate(bool isOptional) {
         if (isOptional) {
@@ -525,186 +575,8 @@ struct TReaderTraits {
     }
 };
 
-template <typename TTraits, typename... TArgs>
-std::unique_ptr<typename TTraits::TResult> MakeTupleBlockReaderImpl(bool isOptional, TVector<std::unique_ptr<typename TTraits::TResult>>&& children, TArgs... args) {
-    if (isOptional) {
-        return std::make_unique<typename TTraits::template TTuple<true>>(std::move(children), args...);
-    } else {
-        return std::make_unique<typename TTraits::template TTuple<false>>(std::move(children), args...);
-    }
-}
-
-template <typename TTraits, typename T, typename... TArgs>
-std::unique_ptr<typename TTraits::TResult> MakeFixedSizeBlockReaderImpl(bool isOptional, TArgs... args) {
-    if (isOptional) {
-        return std::make_unique<typename TTraits::template TFixedSize<T, true>>(args...);
-    } else {
-        return std::make_unique<typename TTraits::template TFixedSize<T, false>>(args...);
-    }
-}
-
-template <typename TTraits, typename T, NKikimr::NUdf::EDataSlot TOriginal, typename... TArgs>
-std::unique_ptr<typename TTraits::TResult> MakeStringBlockReaderImpl(bool isOptional, TArgs... args) {
-    if (isOptional) {
-        return std::make_unique<typename TTraits::template TStrings<T, true, TOriginal>>(args...);
-    } else {
-        return std::make_unique<typename TTraits::template TStrings<T, false, TOriginal>>(args...);
-    }
-}
-
-template<typename TTraits>
-concept CanInstantiateBlockReaderForDecimal = requires {
-    typename TTraits::template TFixedSize<NYql::NDecimal::TInt128, true>;
-};
-
-template <typename TTraits, typename... TArgs>
-std::unique_ptr<typename TTraits::TResult> MakeBlockReaderImpl(const ITypeInfoHelper& typeInfoHelper, const TType* type, const IPgBuilder* pgBuilder, TArgs... args) {
-    const TType* unpacked = type;
-    TOptionalTypeInspector typeOpt(typeInfoHelper, type);
-    bool isOptional = false;
-    if (typeOpt) {
-        unpacked = typeOpt.GetItemType();
-        isOptional = true;
-    }
-
-    TOptionalTypeInspector unpackedOpt(typeInfoHelper, unpacked);
-    TPgTypeInspector unpackedPg(typeInfoHelper, unpacked);
-    if (unpackedOpt || typeOpt && unpackedPg) {
-        // at least 2 levels of optionals
-        ui32 nestLevel = 0;
-        auto currentType = type;
-        auto previousType = type;
-        for (;;) {
-            ++nestLevel;
-            previousType = currentType;
-            TOptionalTypeInspector currentOpt(typeInfoHelper, currentType);
-            currentType = currentOpt.GetItemType();
-            TOptionalTypeInspector nexOpt(typeInfoHelper, currentType);
-            if (!nexOpt) {
-                break;
-            }
-        }
-
-        if (TPgTypeInspector(typeInfoHelper, currentType)) {
-            previousType = currentType;
-            ++nestLevel;
-        }
-
-        auto reader = MakeBlockReaderImpl<TTraits>(typeInfoHelper, previousType, pgBuilder, args...);
-        for (ui32 i = 1; i < nestLevel; ++i) {
-            reader = std::make_unique<typename TTraits::TExtOptional>(std::move(reader), args...);
-        }
-
-        return reader;
-    }
-    else {
-        type = unpacked;
-    }
-
-    TStructTypeInspector typeStruct(typeInfoHelper, type);
-    if (typeStruct) {
-        TVector<std::unique_ptr<typename TTraits::TResult>> members;
-        for (ui32 i = 0; i < typeStruct.GetMembersCount(); i++) {
-            members.emplace_back(MakeBlockReaderImpl<TTraits>(typeInfoHelper, typeStruct.GetMemberType(i), pgBuilder, args...));
-        }
-        // XXX: Use Tuple block reader for Struct.
-        return MakeTupleBlockReaderImpl<TTraits>(isOptional, std::move(members), args...);
-    }
-
-    TTupleTypeInspector typeTuple(typeInfoHelper, type);
-    if (typeTuple) {
-        TVector<std::unique_ptr<typename TTraits::TResult>> children;
-        for (ui32 i = 0; i < typeTuple.GetElementsCount(); ++i) {
-            children.emplace_back(MakeBlockReaderImpl<TTraits>(typeInfoHelper, typeTuple.GetElementType(i), pgBuilder, args...));
-        }
-
-        return MakeTupleBlockReaderImpl<TTraits>(isOptional, std::move(children), args...);
-    }
-
-    TDataTypeInspector typeData(typeInfoHelper, type);
-    if (typeData) {
-        auto typeId = typeData.GetTypeId();
-        switch (GetDataSlot(typeId)) {
-        case NUdf::EDataSlot::Int8:
-            return MakeFixedSizeBlockReaderImpl<TTraits, i8>(isOptional, args...);
-        case NUdf::EDataSlot::Bool:
-        case NUdf::EDataSlot::Uint8:
-            return MakeFixedSizeBlockReaderImpl<TTraits, ui8>(isOptional, args...);
-        case NUdf::EDataSlot::Int16:
-            return MakeFixedSizeBlockReaderImpl<TTraits, i16>(isOptional, args...);
-        case NUdf::EDataSlot::Uint16:
-        case NUdf::EDataSlot::Date:
-            return MakeFixedSizeBlockReaderImpl<TTraits, ui16>(isOptional, args...);
-        case NUdf::EDataSlot::Int32:
-        case NUdf::EDataSlot::Date32:
-            return MakeFixedSizeBlockReaderImpl<TTraits, i32>(isOptional, args...);
-        case NUdf::EDataSlot::Uint32:
-        case NUdf::EDataSlot::Datetime:
-            return MakeFixedSizeBlockReaderImpl<TTraits, ui32>(isOptional, args...);
-        case NUdf::EDataSlot::Int64:
-        case NUdf::EDataSlot::Interval:
-        case NUdf::EDataSlot::Interval64:
-        case NUdf::EDataSlot::Datetime64:
-        case NUdf::EDataSlot::Timestamp64:
-            return MakeFixedSizeBlockReaderImpl<TTraits, i64>(isOptional, args...);
-        case NUdf::EDataSlot::Uint64:
-        case NUdf::EDataSlot::Timestamp:
-            return MakeFixedSizeBlockReaderImpl<TTraits, ui64>(isOptional, args...);
-        case NUdf::EDataSlot::Float:
-            return MakeFixedSizeBlockReaderImpl<TTraits, float>(isOptional, args...);
-        case NUdf::EDataSlot::Double:
-            return MakeFixedSizeBlockReaderImpl<TTraits, double>(isOptional, args...);
-        case NUdf::EDataSlot::String:
-            return MakeStringBlockReaderImpl<TTraits, arrow::BinaryType, NUdf::EDataSlot::String>(isOptional, args...);
-        case NUdf::EDataSlot::Yson:
-            return MakeStringBlockReaderImpl<TTraits, arrow::BinaryType, NUdf::EDataSlot::Yson>(isOptional, args...);
-        case NUdf::EDataSlot::JsonDocument:
-            return MakeStringBlockReaderImpl<TTraits, arrow::BinaryType, NUdf::EDataSlot::JsonDocument>(isOptional, args...);
-        case NUdf::EDataSlot::Utf8:
-            return MakeStringBlockReaderImpl<TTraits, arrow::StringType, NUdf::EDataSlot::Utf8>(isOptional, args...);
-        case NUdf::EDataSlot::Json:
-            return MakeStringBlockReaderImpl<TTraits, arrow::StringType, NUdf::EDataSlot::Json>(isOptional, args...);
-        case NUdf::EDataSlot::TzDate:
-            return TTraits::template MakeTzDate<TTzDate>(isOptional, args...);
-        case NUdf::EDataSlot::TzDatetime:
-            return TTraits::template MakeTzDate<TTzDatetime>(isOptional, args...);
-        case NUdf::EDataSlot::TzTimestamp:
-            return TTraits::template MakeTzDate<TTzTimestamp>(isOptional, args...);
-        case NUdf::EDataSlot::TzDate32:
-            return TTraits::template MakeTzDate<TTzDate32>(isOptional, args...);
-        case NUdf::EDataSlot::TzDatetime64:
-            return TTraits::template MakeTzDate<TTzDatetime64>(isOptional, args...);
-        case NUdf::EDataSlot::TzTimestamp64:
-            return TTraits::template MakeTzDate<TTzTimestamp64>(isOptional, args...);
-        case NUdf::EDataSlot::Decimal: {
-            if constexpr (CanInstantiateBlockReaderForDecimal<TTraits>) {
-                return MakeFixedSizeBlockReaderImpl<TTraits, NYql::NDecimal::TInt128>(isOptional, args...);
-            } else {
-                Y_ENSURE(false, "Unsupported data slot");
-            }
-        }
-        case NUdf::EDataSlot::Uuid:
-        case NUdf::EDataSlot::DyNumber:
-            Y_ENSURE(false, "Unsupported data slot");
-        }
-    }
-
-    TResourceTypeInspector resource(typeInfoHelper, type);
-    if (resource) {
-        return TTraits::MakeResource(isOptional, args...);
-    }
-
-    TPgTypeInspector typePg(typeInfoHelper, type);
-    if (typePg) {
-        auto desc = typeInfoHelper.FindPgTypeDescription(typePg.GetTypeId());
-        return TTraits::MakePg(*desc, pgBuilder, args...);
-    }
-
-    Y_ENSURE(false, "Unsupported type");
-}
-
 inline std::unique_ptr<IBlockReader> MakeBlockReader(const ITypeInfoHelper& typeInfoHelper, const TType* type) {
-    return MakeBlockReaderImpl<TReaderTraits>(typeInfoHelper, type, nullptr);
+    return DispatchByArrowTraits<TReaderTraits>(typeInfoHelper, type, nullptr);
 }
 
 inline void UpdateBlockItemSerializeProps(const ITypeInfoHelper& typeInfoHelper, const TType* type, TBlockItemSerializeProps& props) {
@@ -767,6 +639,10 @@ inline void UpdateBlockItemSerializeProps(const ITypeInfoHelper& typeInfoHelper,
             props.IsFixed = false;
         }
 
+        return;
+    }
+
+    if (IsSingularType(typeInfoHelper, type)) {
         return;
     }
 

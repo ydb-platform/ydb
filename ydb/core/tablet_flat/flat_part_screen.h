@@ -55,14 +55,14 @@ namespace NTable {
         };
 
         struct TCook {
-            TDeque<THole> Unwrap() noexcept
+            TDeque<THole> Unwrap()
             {
                 Pass(Max<TRowId>()); /* will flush current hole */
 
                 return std::exchange(Holes, TDeque<THole>{ });
             }
 
-            void Pass(TRowId ref) noexcept
+            void Pass(TRowId ref)
             {
                 Y_ABORT_UNLESS(Tail <= ref, "Got page ref from the past");
 
@@ -135,7 +135,7 @@ namespace NTable {
                 && std::equal(begin(), end(), screen.begin());
         }
 
-        size_t Lookup(TRowId rowId, int dir) const noexcept
+        size_t Lookup(TRowId rowId, int dir) const
         {
             Y_ABORT_UNLESS(dir == +1, "Only forward direction supported");
 
@@ -161,7 +161,7 @@ namespace NTable {
                     Holes ? Holes.back().End : Max<TRowId>() );
         }
 
-        void Validate() const noexcept
+        void Validate() const
         {
             TRowId last = 0;
             for (const auto &hole : Holes) {
@@ -170,7 +170,7 @@ namespace NTable {
             }
         }
 
-        static TIntrusiveConstPtr<TScreen> Cut(TIntrusiveConstPtr<TScreen> scr, THole hole) noexcept
+        static TIntrusiveConstPtr<TScreen> Cut(TIntrusiveConstPtr<TScreen> scr, THole hole)
         {
             if (hole == THole(true)) {
                 return scr;

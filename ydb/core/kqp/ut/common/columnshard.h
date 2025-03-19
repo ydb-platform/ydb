@@ -9,8 +9,8 @@
 #include <ydb/library/formats/arrow/simple_builder/batch.h>
 #include <ydb/library/formats/arrow/simple_builder/filler.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/type.h>
 
@@ -20,7 +20,7 @@ class TTestHelper {
 public:
     class TCompression {
         YDB_ACCESSOR(TString, SerializerClassName, "ARROW_SERIALIZER");
-        YDB_ACCESSOR_DEF(NKikimrSchemeOp::EColumnCodec, CompressionType);
+        YDB_OPT(NKikimrSchemeOp::EColumnCodec, CompressionType);
         YDB_ACCESSOR_DEF(std::optional<i32>, CompressionLevel);
 
     public:

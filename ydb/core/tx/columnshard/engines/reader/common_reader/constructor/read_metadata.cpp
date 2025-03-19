@@ -42,15 +42,20 @@ TConclusionStatus TReadMetadata::Init(
     return TConclusionStatus::Success();
 }
 
+TReadMetadata::TReadMetadata(const std::shared_ptr<TVersionedIndex>& schemaIndex, const TReadDescription& read)
+    : TBase(schemaIndex, read.PKRangesFilter->IsReverse() ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC,
+          read.GetProgram(), schemaIndex->GetSchemaVerified(read.GetSnapshot()), read.GetSnapshot(), read.GetScanCursorOptional())
+    , PathId(read.PathId)
+    , ReadStats(std::make_shared<TReadStats>()) {
+}
+
 std::set<ui32> TReadMetadata::GetEarlyFilterColumnIds() const {
     auto& indexInfo = ResultIndexSchema->GetIndexInfo();
-    std::set<ui32> result;
+    const auto& ids = GetProgram().GetEarlyFilterColumns();
+    std::set<ui32> result(ids.begin(), ids.end());
+    AFL_VERIFY(result.size() == ids.size());
     for (auto&& i : GetProgram().GetEarlyFilterColumns()) {
-        auto id = indexInfo.GetColumnIdOptional(i);
-        if (id) {
-            result.emplace(*id);
-            AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("early_filter_column", i);
-        }
+        AFL_VERIFY(indexInfo.HasColumnId(i));
     }
     return result;
 }

@@ -50,6 +50,7 @@ NNodes::TCoLambda FallbackLambdaInput(NNodes::TCoLambda lambda, TExprContext& ct
 NNodes::TCoLambda FallbackLambdaOutput(NNodes::TCoLambda lambda, TExprContext& ctx);
 
 NNodes::TYtDSink GetDataSink(NNodes::TExprBase input, TExprContext& ctx);
+NNodes::TYtDSink MakeDataSink(TPositionHandle pos, TStringBuf cluster, TExprContext& ctx);
 
 NNodes::TExprBase GetWorld(NNodes::TExprBase input, NNodes::TMaybeNode<NNodes::TExprBase> main, TExprContext& ctx);
 
@@ -108,6 +109,8 @@ NNodes::TYtOutTable ConvertSingleOutTableWithSortAware(TExprNode::TPtr& lambda, 
 
 TVector<NNodes::TYtOutTable> ConvertOutTablesWithSortAware(TExprNode::TPtr& lambda, bool& ordered, TPositionHandle pos,
     const TTypeAnnotationNode* outItemType, TExprContext& ctx, const TYtState::TPtr& state, const TConstraintSet& constraints);
+
+bool EnsurePersistableYsonTypes(TPositionHandle pos, const TTypeAnnotationNode& type, TExprContext& ctx, const TYtState::TPtr& state);
 
 NNodes::TExprBase WrapOp(NNodes::TYtOutputOpBase op, TExprContext& ctx);
 

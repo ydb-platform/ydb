@@ -1,7 +1,9 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_utils.h"  // for PQGroupReserve
+#include "schemeshard__data_erasure_manager.h"
 
 #include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
+#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
@@ -22,6 +24,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
     TVector<ui64> ExportsToResume;
     TVector<ui64> ImportsToResume;
     THashMap<TPathId, TVector<TPathId>> CdcStreamScansToResume;
+    TVector<TPathId> RestoreTablesToUnmark;
     bool Broken = false;
 
     explicit TTxInit(TSelf *self)
@@ -308,7 +311,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString, bool, TString, TString> TTableRec;
+    typedef std::tuple<TPathId, ui32, ui64, TString, TString, TString, ui64, TString, bool, TString, bool, TString, TString, bool> TTableRec;
     typedef TDeque<TTableRec> TTableRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -325,7 +328,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::ReplicationConfig>(),
             rowSet.template GetValueOrDefault<typename SchemaTable::IsTemporary>(false),
             rowSet.template GetValueOrDefault<typename SchemaTable::OwnerActorId>(""),
-            rowSet.template GetValueOrDefault<typename SchemaTable::IncrementalBackupConfig>()
+            rowSet.template GetValueOrDefault<typename SchemaTable::IncrementalBackupConfig>(),
+            rowSet.template GetValueOrDefault<typename SchemaTable::IsRestore>(false)
         );
     }
 
@@ -801,7 +805,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, TString, TString, TString, TString, bool, TString, ui32> TBackupSettingsRec;
+    typedef std::tuple<TPathId, TString, TString, TString, TString, bool, TString, ui32, bool, bool, TString> TBackupSettingsRec;
     typedef TDeque<TBackupSettingsRec> TBackupSettingsRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -813,7 +817,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::ScanSettings>(""),
             rowSet.template GetValueOrDefault<typename SchemaTable::NeedToBill>(true),
             rowSet.template GetValueOrDefault<typename SchemaTable::TableDescription>(""),
-            rowSet.template GetValueOrDefault<typename SchemaTable::NumberOfRetries>(0)
+            rowSet.template GetValueOrDefault<typename SchemaTable::NumberOfRetries>(0),
+            rowSet.template GetValueOrDefault<typename SchemaTable::EnableChecksums>(false),
+            rowSet.template GetValueOrDefault<typename SchemaTable::EnablePermissions>(false),
+            rowSet.template GetValueOrDefault<typename SchemaTable::ChangefeedUnderlyingTopics>("")
         );
     }
 
@@ -1511,7 +1518,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
 
                 TSubDomainInfo::TPtr rootDomainInfo = new TSubDomainInfo(version, Self->RootPathId());
-                rootDomainInfo->SetSchemeLimits(rootLimits);
+                rootDomainInfo->SetSchemeLimits(rootLimits, Self);
                 rootDomainInfo->SetSecurityStateVersion(row.GetValueOrDefault<Schema::SubDomains::SecurityStateVersion>());
 
                 rootDomainInfo->InitializeAsGlobal(Self->CreateRootProcessingParams(ctx));
@@ -1551,7 +1558,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     TTabletId sharedHiveId = rowset.GetValue<Schema::SubDomains::SharedHiveId>();
                     domainInfo->SetSharedHive(sharedHiveId);
 
-                    domainInfo->SetSchemeLimits(LoadSchemeLimits(rootLimits, rowset));
+                    domainInfo->SetSchemeLimits(LoadSchemeLimits(rootLimits, rowset), !Self->IsDomainSchemeShard ? Self : nullptr);
 
                     if (rowset.HaveValue<Schema::SubDomains::DeclaredSchemeQuotas>()) {
                         NKikimrSubDomains::TSchemeQuotas declaredSchemeQuotas;
@@ -1845,12 +1852,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     bool parseOk = ParseFromStringNoSizeLimit(tableInfo->MutableIncrementalBackupConfig(), incrementalBackupConfig);
                     Y_ABORT_UNLESS(parseOk);
 
-                    if (tableInfo->IsRestoreTable()) {
-                        Self->PathsById.at(pathId)->SetRestoreTable();
+                    if (tableInfo->IsIncrementalRestoreTable()) {
+                        Self->PathsById.at(pathId)->SetIncrementalRestoreTable();
                     }
                 }
 
                 tableInfo->IsBackup = std::get<8>(rec);
+                tableInfo->IsRestore = std::get<13>(rec);
 
                 Self->Tables[pathId] = tableInfo;
                 Self->IncrementPathDbRefCount(pathId);
@@ -1860,6 +1868,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 }
             }
 
+        }
+
+        // Read Running data erasure for tenants
+        {
+            if (!Self->DataErasureManager->Restore(db)) {
+                return false;
+            }
         }
 
         // Read External Tables
@@ -3788,6 +3803,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 bool needToBill = std::get<5>(rec);
                 TString tableDesc = std::get<6>(rec);
                 ui32 nRetries = std::get<7>(rec);
+                bool enableChecksums = std::get<8>(rec);
+                bool enablePermissions = std::get<9>(rec);
+                TString changefeedUnderlyingTopics = std::get<10>(rec);
 
                 Y_ABORT_UNLESS(tableName.size() > 0);
 
@@ -3797,6 +3815,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 tableInfo->BackupSettings.SetTableName(tableName);
                 tableInfo->BackupSettings.SetNeedToBill(needToBill);
                 tableInfo->BackupSettings.SetNumberOfRetries(nRetries);
+                tableInfo->BackupSettings.SetEnableChecksums(enableChecksums);
+                tableInfo->BackupSettings.SetEnablePermissions(enablePermissions);
 
                 if (ytSerializedSettings) {
                     auto settings = tableInfo->BackupSettings.MutableYTSettings();
@@ -3816,6 +3836,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 if (tableDesc) {
                     auto desc = tableInfo->BackupSettings.MutableTable();
                     Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*desc, tableDesc));
+                }
+                
+                if (changefeedUnderlyingTopics) {
+                    NKikimrSchemeOp::TChangefeedUnderlyingTopics wrapperOverTopics;
+                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(wrapperOverTopics, changefeedUnderlyingTopics));
+                    for (const auto& topic : wrapperOverTopics.GetChangefeedUnderlyingTopics()) {
+                        *tableInfo->BackupSettings.AddChangefeedUnderlyingTopics() = topic;
+                    }
                 }
 
                 LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Loaded backup settings"
@@ -3884,6 +3912,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 sid.SetType(rowset.GetValue<Schema::LoginSids::SidType>());
                 sid.SetHash(rowset.GetValue<Schema::LoginSids::SidHash>());
                 sid.SetCreatedAt(rowset.GetValueOrDefault<Schema::LoginSids::CreatedAt>());
+                sid.SetFailedLoginAttemptCount(rowset.GetValueOrDefault<Schema::LoginSids::FailedAttemptCount>());
+                sid.SetLastFailedLogin(rowset.GetValueOrDefault<Schema::LoginSids::LastFailedAttempt>());
+                sid.SetLastSuccessfulLogin(rowset.GetValueOrDefault<Schema::LoginSids::LastSuccessfulAttempt>());
+                sid.SetIsEnabled(rowset.GetValueOrDefault<Schema::LoginSids::IsEnabled>());
                 sidIndex[sid.name()] = securityState.SidsSize() - 1;
                 if (!rowset.Next()) {
                     return false;
@@ -3938,6 +3970,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                              << ", read records: " << history.size()
                              << ", at schemeshard: " << Self->TabletID());
 
+            RestoreTablesToUnmark.clear();
+
             for (auto& rec: history) {
                 auto pathId = std::get<0>(rec);
                 auto txId = std::get<1>(rec);
@@ -3984,6 +4018,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     break;
                 case TTableInfo::TBackupRestoreResult::EKind::Restore:
                     tableInfo->RestoreHistory[txId] = std::move(info);
+                    if (tableInfo->IsRestore) {
+                        RestoreTablesToUnmark.push_back(pathId);
+                    }
                     break;
                 }
 
@@ -4006,7 +4043,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             path->IncShardsInside();
 
             auto domainInfo = Self->ResolveDomainInfo(pathId); //domain should't be dropped?
-            domainInfo->AddInternalShard(shardIdx, Self->IsBackupTable(pathId));
+            domainInfo->AddInternalShard(shardIdx, Self, Self->IsBackupTable(pathId));
 
             switch (si.second.TabletType) {
             case ETabletType::DataShard:
@@ -4113,8 +4150,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             if (!path->IsRoot()) {
                 const bool isBackupTable = Self->IsBackupTable(item.first);
-                parent->IncAliveChildren(1, isBackupTable);
-                inclusiveDomainInfo->IncPathsInside(1, isBackupTable);
+                parent->IncAliveChildrenPrivate(isBackupTable);
+                inclusiveDomainInfo->IncPathsInside(Self, 1, isBackupTable);
             }
 
             Self->TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Add(path->UserAttrs->Size());
@@ -4281,6 +4318,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     exportInfo->StartTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::Exports::StartTime>());
                     exportInfo->EndTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::Exports::EndTime>());
                     exportInfo->EnableChecksums = rowset.GetValueOrDefault<Schema::Exports::EnableChecksums>(false);
+                    exportInfo->EnablePermissions = rowset.GetValueOrDefault<Schema::Exports::EnablePermissions>(false);
 
                     Self->Exports[id] = exportInfo;
                     if (uid) {
@@ -4325,6 +4363,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                     item.SourcePathId.OwnerId = rowset.GetValueOrDefault<Schema::ExportItems::SourceOwnerPathId>(selfId);
                     item.SourcePathId.LocalPathId = rowset.GetValue<Schema::ExportItems::SourcePathId>();
+                    item.SourcePathType = rowset.GetValue<Schema::ExportItems::SourcePathType>();
 
                     item.State = static_cast<TExportInfo::EState>(rowset.GetValue<Schema::ExportItems::State>());
                     item.WaitTxId = rowset.GetValueOrDefault<Schema::ExportItems::BackupTxId>(InvalidTxId);
@@ -4428,6 +4467,19 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         item.Scheme = scheme;
                     }
 
+                    if (rowset.HaveValue<Schema::ImportItems::CreationQuery>()) {
+                        item.CreationQuery = rowset.GetValue<Schema::ImportItems::CreationQuery>();
+                    }
+
+                    if (rowset.HaveValue<Schema::ImportItems::PreparedCreationQuery>()) {
+                        NKikimrSchemeOp::TModifyScheme preparedQuery;
+                        Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(
+                            preparedQuery,
+                            rowset.GetValue<Schema::ImportItems::PreparedCreationQuery>()
+                        ));
+                        item.PreparedCreationQuery = std::move(preparedQuery);
+                    }
+
                     if (rowset.HaveValue<Schema::ImportItems::Permissions>()) {
                         Ydb::Scheme::ModifyPermissionsRequest permissions;
                         Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(permissions, rowset.GetValue<Schema::ImportItems::Permissions>()));
@@ -4438,9 +4490,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         item.Metadata = NBackup::TMetadata::Deserialize(rowset.GetValue<Schema::ImportItems::Metadata>());
                     }
 
+                    if (rowset.HaveValue<Schema::ImportItems::Changefeeds>()) {
+                        item.Changefeeds = rowset.GetValue<Schema::ImportItems::Changefeeds>();
+                    }
+
                     item.State = static_cast<TImportInfo::EState>(rowset.GetValue<Schema::ImportItems::State>());
                     item.WaitTxId = rowset.GetValueOrDefault<Schema::ImportItems::WaitTxId>(InvalidTxId);
                     item.NextIndexIdx = rowset.GetValueOrDefault<Schema::ImportItems::NextIndexIdx>(0);
+                    item.NextChangefeedIdx = rowset.GetValueOrDefault<Schema::ImportItems::NextChangefeedIdx>(0);
                     item.Issue = rowset.GetValueOrDefault<Schema::ImportItems::Issue>(TString());
 
                     if (item.WaitTxId != InvalidTxId) {
@@ -4486,6 +4543,55 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                          "IndexBuild "
                              << ", records: " << Self->IndexBuilds.size()
                              << ", at schemeshard: " << Self->TabletID());
+
+            // read kmeans tree state
+            {
+                auto rowset = db.Table<Schema::KMeansTreeProgress>().Range().Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+
+                while (!rowset.EndOfSet()) {
+                    TIndexBuildId id = rowset.GetValue<Schema::KMeansTreeProgress::Id>();
+                    const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
+                    Y_VERIFY_S(buildInfoPtr, "BuildIndex not found: id# " << id);
+                    auto& buildInfo = *buildInfoPtr->Get();
+                    buildInfo.KMeans.Set(
+                        rowset.GetValue<Schema::KMeansTreeProgress::Level>(),
+                        rowset.GetValue<Schema::KMeansTreeProgress::Parent>(),
+                        rowset.GetValue<Schema::KMeansTreeProgress::State>()
+                    );
+                    buildInfo.Sample.Rows.reserve(buildInfo.KMeans.K * 2);
+
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                }
+            }
+
+
+            // read kmeans tree sample
+            {
+                auto rowset = db.Table<Schema::KMeansTreeSample>().Range().Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+
+                while (!rowset.EndOfSet()) {
+                    TIndexBuildId id = rowset.GetValue<Schema::KMeansTreeSample::Id>();
+                    const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
+                    Y_VERIFY_S(buildInfoPtr, "BuildIndex not found: id# " << id);
+                    auto& buildInfo = *buildInfoPtr->Get();
+                    buildInfo.Sample.Set(
+                        rowset.GetValue<Schema::KMeansTreeSample::Probability>(),
+                        rowset.GetValue<Schema::KMeansTreeSample::Data>()
+                    );
+
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                }
+            }
 
             // read index build columns
             {
@@ -4996,6 +5102,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             .CdcStreamScans = std::move(cdcStreamScansToResume),
             .TablesToClean = std::move(TablesToClean),
             .BlockStoreVolumesToClean = std::move(BlockStoreVolumesToClean),
+            .RestoreTablesToUnmark = std::move(RestoreTablesToUnmark),
         });
     }
 };

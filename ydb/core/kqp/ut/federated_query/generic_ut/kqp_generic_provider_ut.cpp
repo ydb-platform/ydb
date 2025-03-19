@@ -5,9 +5,12 @@
 #include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/connector_client_mock.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/database_resolver_mock.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
-#include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/query.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/status_codes.h>
+#include <ydb/public/api/protos/ydb_query.pb.h>
+#include <ydb/public/api/grpc/ydb_query_v1.grpc.pb.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -66,6 +69,11 @@ namespace NKikimr::NKqp {
         appConfig.MutableQueryServiceConfig()->MutableGeneric()->MutableConnector()->MutableEndpoint()->set_host("localhost");
         appConfig.MutableQueryServiceConfig()->MutableGeneric()->MutableConnector()->MutableEndpoint()->set_port(1234);
         appConfig.MutableQueryServiceConfig()->MutableGeneric()->MutableDefaultSettings()->Add(std::move(dateTimeFormat));
+        appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ClickHouse");
+        appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("PostgreSQL");
+        appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("MySQL");
+        appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("Ydb");
         return appConfig;
     }
 
@@ -110,9 +118,6 @@ namespace NKikimr::NKqp {
             clientMock->ExpectListSplits()
                 .Select()
                     .DataSourceInstance(dataSourceInstance)
-                    .What()
-                        .Column("col1", Ydb::Type::UINT16)
-                        .Done()
                     .Done()
                 .Result()
                     .AddResponse(NewSuccess())
@@ -161,7 +166,7 @@ namespace NKikimr::NKqp {
             auto db = kikimr->GetQueryClient();
             auto scriptExecutionOperation = db.ExecuteScript(query).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
-            UNIT_ASSERT(scriptExecutionOperation.Metadata().ExecutionId);
+            UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
 
             NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
             UNIT_ASSERT_C(readyOp.Metadata().ExecStatus == EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
@@ -209,9 +214,6 @@ namespace NKikimr::NKqp {
             clientMock->ExpectListSplits()
                 .Select()
                     .DataSourceInstance(dataSourceInstance)
-                    .What()
-                        // Empty
-                        .Done()
                     .Done()
                 .Result()
                     .AddResponse(NewSuccess())
@@ -302,9 +304,6 @@ namespace NKikimr::NKqp {
             clientMock->ExpectListSplits()
                 .Select()
                     .DataSourceInstance(dataSourceInstance)
-                    .What()
-                        // Empty
-                        .Done()
                     .Done()
                 .Result()
                     .AddResponse(NewSuccess())
@@ -375,8 +374,12 @@ namespace NKikimr::NKqp {
             auto clientMock = std::make_shared<TConnectorClientMock>();
 
             const NYql::TGenericDataSourceInstance dataSourceInstance = MakeDataSourceInstance(providerType);
+
             // clang-format off
-            const NApi::TSelect select = TConnectorClientMock::TSelectBuilder<>()
+            const NApi::TSelect selectInListSplits = TConnectorClientMock::TSelectBuilder<>()
+                .DataSourceInstance(dataSourceInstance).GetResult();
+
+            const NApi::TSelect selectInReadSplits = TConnectorClientMock::TSelectBuilder<>()
                 .DataSourceInstance(dataSourceInstance)
                 .What()
                     .NullableColumn("data_column", Ydb::Type::STRING)
@@ -406,11 +409,11 @@ namespace NKikimr::NKqp {
             // step 2: ListSplits
             // clang-format off
             clientMock->ExpectListSplits()
-                .Select(select)
+                .Select(selectInListSplits)
                 .Result()
                     .AddResponse(NewSuccess())
                         .Description("some binary description")
-                        .Select(select);
+                        .Select(selectInReadSplits);
             // clang-format on
 
             // step 3: ReadSplits
@@ -424,7 +427,7 @@ namespace NKikimr::NKqp {
                 .Filtering(NYql::NConnector::NApi::TReadSplitsRequest::FILTERING_OPTIONAL)
                 .Split()
                     .Description("some binary description")
-                    .Select(select)
+                    .Select(selectInReadSplits)
                     .Done()
                 .Result()
                     .AddResponse(MakeRecordBatch(
@@ -475,6 +478,40 @@ namespace NKikimr::NKqp {
 
         Y_UNIT_TEST(YdbFilterPushdown) {
             TestFilterPushdown(EProviderType::Ydb);
+        }
+
+        void TestFailsOnIncorrectScriptExecutionOperation(const TString& operationId, const TString& fetchToken) {
+            auto clientMock = std::make_shared<TConnectorClientMock>();
+            auto databaseAsyncResolverMock = MakeDatabaseAsyncResolver(EProviderType::Ydb);
+            auto appConfig = CreateDefaultAppConfig();
+            auto s3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
+            auto kikimr = MakeKikimrRunner(false, clientMock, databaseAsyncResolverMock, appConfig, s3ActorsFactory);
+
+            // Create trash query
+            NYdbGrpc::TGRpcClientLow clientLow;
+
+            std::shared_ptr<grpc::Channel> channel;
+            channel = grpc::CreateChannel("localhost:" + ToString(kikimr->GetTestServer().GetGRpcServer().GetPort()), grpc::InsecureChannelCredentials());
+            {
+                std::unique_ptr<Ydb::Query::V1::QueryService::Stub> stub;
+                stub = Ydb::Query::V1::QueryService::NewStub(channel);
+                grpc::ClientContext context;
+                Ydb::Query::FetchScriptResultsRequest request;
+                request.set_operation_id(operationId);
+                request.set_fetch_token(fetchToken);
+                Ydb::Query::FetchScriptResultsResponse response;
+                grpc::Status st = stub->FetchScriptResults(&context, request, &response);
+                UNIT_ASSERT(st.ok());
+                UNIT_ASSERT_EQUAL_C(response.status(), Ydb::StatusIds::BAD_REQUEST, response);
+            }
+        }
+
+        Y_UNIT_TEST(TestFailsOnIncorrectScriptExecutionOperationId) {
+            TestFailsOnIncorrectScriptExecutionOperation("trash", "");
+        }
+
+        Y_UNIT_TEST(TestFailsOnIncorrectScriptExecutionFetchToken) {
+            TestFailsOnIncorrectScriptExecutionOperation("", "trash");
         }
     }
 }

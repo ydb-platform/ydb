@@ -3,6 +3,10 @@
 #include "self_heal.h"
 #include "sys_view.h"
 #include "console_interaction.h"
+#include "group_geometry_info.h"
+#include "group_layout_checker.h"
+
+#include <library/cpp/streams/zstd/zstd.h>
 
 namespace NKikimr {
 
@@ -80,6 +84,25 @@ void TBlobStorageController::TGroupInfo::CalculateGroupStatus() {
     }
 }
 
+void TBlobStorageController::TGroupInfo::CalculateLayoutStatus(TBlobStorageController *self,
+        TBlobStorageGroupInfo::TTopology *topology, const std::function<TGroupGeometryInfo()>& getGeom) {
+    LayoutCorrect = true;
+    if (VDisksInGroup) {
+        NLayoutChecker::TGroupLayout layout(*topology);
+        NLayoutChecker::TDomainMapper mapper;
+        auto geom = getGeom();
+
+        for (size_t index = 0; index < VDisksInGroup.size(); ++index) {
+            const TVSlotInfo *slot = VDisksInGroup[index];
+            TPDiskId pdiskId = slot->VSlotId.ComprisingPDiskId();
+            const auto& location = self->HostRecords->GetLocation(pdiskId.NodeId);
+            layout.AddDisk({mapper, location, pdiskId, geom}, index);
+        }
+
+        LayoutCorrect = layout.IsCorrect();
+    }
+}
+
 NKikimrBlobStorage::TGroupStatus::E TBlobStorageController::DeriveStatus(const TBlobStorageGroupInfo::TTopology *topology,
         const TBlobStorageGroupInfo::TGroupVDisks& failed) {
     auto& checker = *topology->QuorumChecker;
@@ -97,6 +120,8 @@ NKikimrBlobStorage::TGroupStatus::E TBlobStorageController::DeriveStatus(const T
 }
 
 void TBlobStorageController::OnActivateExecutor(const TActorContext&) {
+    StartConsoleInteraction();
+
     // create stat processor
     StatProcessorActorId = Register(CreateStatProcessorActor());
 
@@ -124,6 +149,7 @@ void TBlobStorageController::OnActivateExecutor(const TActorContext&) {
 
 void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
     ev->Get()->Config->Swap(&StorageConfig);
+    SelfManagementEnabled = ev->Get()->SelfManagementEnabled;
 
     auto prevStaticPDisks = std::exchange(StaticPDisks, {});
     auto prevStaticVSlots = std::exchange(StaticVSlots, {});
@@ -158,20 +184,21 @@ void TBlobStorageController::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         }
     }
 
-    if (StorageConfig.GetSelfManagementConfig().GetEnabled()) {
+    if (SelfManagementEnabled) {
         // assuming that in autoconfig mode HostRecords are managed by the distconf; we need to apply it here to
         // avoid race with box autoconfiguration and node list change
         HostRecords = std::make_shared<THostRecordMap::element_type>(StorageConfig);
         if (SelfHealId) {
             Send(SelfHealId, new TEvPrivate::TEvUpdateHostRecords(HostRecords));
         }
-    } else {
-        StartConsoleInteraction();
-        ConsoleInteraction->Start(); // start console interaction when working in non-distconf mode
+
+        ConsoleInteraction->Stop(); // distconf will handle the Console from now on
+    } else if (Loaded) {
+        ConsoleInteraction->Start(); // we control the Console now
     }
 
     if (!std::exchange(StorageConfigObtained, true)) { // this is the first time we get StorageConfig in this instance of BSC
-        if (HostRecords) {
+        if (SelfManagementEnabled) {
             OnHostRecordsInitiate();
         } else {
             Send(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes(true));
@@ -191,10 +218,78 @@ void TBlobStorageController::Handle(TEvents::TEvUndelivered::TPtr ev) {
     }
 }
 
+bool TBlobStorageController::HostConfigEquals(const THostConfigInfo& left, const NKikimrBlobStorage::TDefineHostConfig& right) const {
+    if (left.Name != right.GetName()) {
+        return false;
+    }
+
+    THashMap<TStringBuf, const THostConfigInfo::TDriveInfo*> driveMap;
+    for (const auto& [key, info] : left.Drives) {
+        driveMap.emplace(key.Path, &info);
+    }
+
+    TMaybe<TString> defaultPDiskConfig;
+    if (right.HasDefaultHostPDiskConfig()) {
+        const bool success = right.GetDefaultHostPDiskConfig().SerializeToString(&defaultPDiskConfig.ConstructInPlace());
+        Y_ABORT_UNLESS(success);
+    }
+
+    auto checkDrive = [&](const auto& drive) {
+        const auto it = driveMap.find(drive.GetPath());
+        if (it == driveMap.end()) {
+            return false;
+        }
+
+        if (drive.GetType() != it->second->Type ||
+                drive.GetSharedWithOs() != it->second->SharedWithOs ||
+                drive.GetReadCentric() != it->second->ReadCentric ||
+                drive.GetKind() != it->second->Kind) {
+            return false;
+        }
+
+        TMaybe<TString> pdiskConfig;
+        if (drive.HasPDiskConfig()) {
+            const bool success = drive.GetPDiskConfig().SerializeToString(&pdiskConfig.ConstructInPlace());
+            Y_ABORT_UNLESS(success);
+        } else {
+            pdiskConfig = defaultPDiskConfig;
+        }
+
+        if (pdiskConfig != it->second->PDiskConfig) {
+            return false;
+        }
+
+        driveMap.erase(it);
+        return true;
+    };
+
+    for (const auto& drive : right.GetDrive()) {
+        if (!checkDrive(drive)) {
+            return false;
+        }
+    }
+
+    auto addDrives = [&](const auto& field, NKikimrBlobStorage::EPDiskType type) {
+        NKikimrBlobStorage::THostConfigDrive drive;
+        drive.SetType(type);
+        for (const auto& path : field) {
+            if (drive.SetPath(path); !checkDrive(drive)) {
+                return false;
+            }
+        }
+        return true;
+    };
+    if (!addDrives(right.GetRot(), NKikimrBlobStorage::EPDiskType::ROT) ||
+            !addDrives(right.GetSsd(), NKikimrBlobStorage::EPDiskType::SSD) ||
+            !addDrives(right.GetNvme(), NKikimrBlobStorage::EPDiskType::NVME)) {
+        return false;
+    }
+
+    return driveMap.empty();
+}
+
 void TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf) {
-    if (!StorageConfig.HasBlobStorageConfig() || // this would be strange
-            !ignoreDistconf && (!StorageConfig.GetSelfManagementConfig().GetEnabled() ||
-            !StorageConfig.GetSelfManagementConfig().GetAutomaticBoxManagement())) {
+    if (!StorageConfig.HasBlobStorageConfig()) {
         return;
     }
     const auto& bsConfig = StorageConfig.GetBlobStorageConfig();
@@ -202,74 +297,196 @@ void TBlobStorageController::ApplyStorageConfig(bool ignoreDistconf) {
     if (Boxes.size() > 1) {
         return;
     }
+
+    if (!ignoreDistconf && (!SelfManagementEnabled || !StorageConfig.GetSelfManagementConfig().GetAutomaticBoxManagement())) {
+        return; // not expected to be managed by BSC
+    }
+
+    ui64 expectedBoxId = 1;
     std::optional<ui64> generation;
+    bool needToDefineBox = true;
     if (!Boxes.empty()) {
         const auto& [boxId, box] = *Boxes.begin();
 
-        THashSet<THostConfigId> unusedHostConfigs;
-        for (const auto& [hostConfigId, _] : HostConfigs) {
-            unusedHostConfigs.insert(hostConfigId);
+        expectedBoxId = boxId;
+        generation = box.Generation.GetOrElse(1);
+        needToDefineBox = false;
+
+        // put all existing hosts of a singular box into the set
+        THashSet<std::tuple<TString, ui32, ui64, TMaybe<ui32>>> hosts;
+        for (const auto& [key, value] : box.Hosts) {
+            hosts.emplace(key.Fqdn, key.IcPort, value.HostConfigId, value.EnforcedNodeId);
         }
-        for (const auto& [_, host] : box.Hosts) {
-            if (!HostConfigs.contains(host.HostConfigId)) {
-                return;
+
+        // drop matching entries from the new set
+        for (const auto& host : bsConfig.GetDefineBox().GetHost()) {
+            const auto& resolved = HostRecords->GetHostId(host.GetEnforcedNodeId());
+            Y_ABORT_UNLESS(resolved);
+            const auto& [fqdn, port] = *resolved;
+
+            if (!hosts.erase(std::make_tuple(fqdn, port, host.GetHostConfigId(), Nothing()))) {
+                needToDefineBox = true;
+                break;
             }
-            unusedHostConfigs.erase(host.HostConfigId);
         }
 
-        if (!unusedHostConfigs.empty()) {
-            return;
+        if (!hosts.empty()) {
+            needToDefineBox = true;
         }
-
-        generation = box.Generation.GetOrElse(0);
     }
 
     auto ev = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
     auto& r = ev->Record;
     auto *request = r.MutableRequest();
     for (const auto& hostConfig : bsConfig.GetDefineHostConfig()) {
+        const auto it = HostConfigs.find(hostConfig.GetHostConfigId());
+        if (it != HostConfigs.end() && HostConfigEquals(it->second, hostConfig)) {
+            continue;
+        }
+
         auto *cmd = request->AddCommand();
-        cmd->MutableDefineHostConfig()->CopyFrom(hostConfig);
-    }
-    auto *cmd = request->AddCommand();
-    auto *defineBox = cmd->MutableDefineBox();
-    defineBox->CopyFrom(bsConfig.GetDefineBox());
-    defineBox->SetBoxId(1);
-    for (auto& host : *defineBox->MutableHost()) {
-        const ui32 nodeId = host.GetEnforcedNodeId();
-        host.ClearEnforcedNodeId();
-        auto *key = host.MutableKey();
-        const auto& resolved = HostRecords->GetHostId(nodeId);
-        Y_ABORT_UNLESS(resolved);
-        const auto& [fqdn, port] = *resolved;
-        key->SetFqdn(fqdn);
-        key->SetIcPort(port);
-    }
-    if (generation) {
-        defineBox->SetItemConfigGeneration(*generation);
+        auto *defineHostConfig = cmd->MutableDefineHostConfig();
+        defineHostConfig->CopyFrom(hostConfig);
+        if (it != HostConfigs.end()) {
+            defineHostConfig->SetItemConfigGeneration(it->second.Generation.GetOrElse(1));
+        }
     }
 
-    THashSet<THostConfigId> unusedHostConfigs;
-    for (const auto& [hostConfigId, _] : HostConfigs) {
-        unusedHostConfigs.insert(hostConfigId);
+    if (needToDefineBox) {
+        auto *cmd = request->AddCommand();
+        auto *defineBox = cmd->MutableDefineBox();
+        defineBox->CopyFrom(bsConfig.GetDefineBox());
+        defineBox->SetBoxId(expectedBoxId);
+        for (auto& host : *defineBox->MutableHost()) {
+            const ui32 nodeId = host.GetEnforcedNodeId();
+            host.ClearEnforcedNodeId();
+            auto *key = host.MutableKey();
+            const auto& resolved = HostRecords->GetHostId(nodeId);
+            Y_ABORT_UNLESS(resolved);
+            const auto& [fqdn, port] = *resolved;
+            key->SetFqdn(fqdn);
+            key->SetIcPort(port);
+        }
+        if (generation) {
+            defineBox->SetItemConfigGeneration(*generation);
+        }
     }
-    for (const auto& host : defineBox->GetHost()) {
-        unusedHostConfigs.erase(host.GetHostConfigId());
+
+    THashMap<THostConfigId, ui64> unusedHostConfigs;
+    for (const auto& [hostConfigId, value] : HostConfigs) {
+        unusedHostConfigs.emplace(hostConfigId, value.Generation.GetOrElse(1));
     }
-    for (const THostConfigId hostConfigId : unusedHostConfigs) {
+    for (const auto& hostConfig : bsConfig.GetDefineHostConfig()) {
+        unusedHostConfigs.erase(hostConfig.GetHostConfigId());
+    }
+    for (const auto& [hostConfigId, generation] : unusedHostConfigs) {
         auto *cmd = request->AddCommand();
         auto *del = cmd->MutableDeleteHostConfig();
         del->SetHostConfigId(hostConfigId);
-        del->SetItemConfigGeneration(HostConfigs[hostConfigId].Generation.GetOrElse(0));
+        del->SetItemConfigGeneration(generation);
     }
 
-    STLOG(PRI_DEBUG, BS_CONTROLLER, BSC14, "ApplyStorageConfig", (Request, r));
-
-    Send(SelfId(), ev.release());
+    if (request->CommandSize()) {
+        STLOG(PRI_DEBUG, BS_CONTROLLER, BSC14, "ApplyStorageConfig", (Request, r));
+        Send(SelfId(), ev.release());
+    }
 }
 
 void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerConfigResponse::TPtr ev) {
-    STLOG(PRI_DEBUG, BS_CONTROLLER, BSC15, "TEvControllerConfigResponse", (Response, ev->Get()->Record));
+    auto& record = ev->Get()->Record;
+    auto& response = record.GetResponse();
+    STLOG(response.GetSuccess() ? PRI_DEBUG : PRI_ERROR, BS_CONTROLLER, BSC15, "TEvControllerConfigResponse",
+        (Response, response));
+}
+
+void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerDistconfRequest::TPtr ev) {
+    const auto& record = ev->Get()->Record;
+
+    // prepare the response
+    auto response = std::make_unique<TEvBlobStorage::TEvControllerDistconfResponse>();
+    auto& rr = response->Record;
+    auto h = std::make_unique<IEventHandle>(ev->Sender, SelfId(), response.release(), 0, ev->Cookie);
+    if (ev->InterconnectSession) {
+        h->Rewrite(TEvInterconnect::EvForward, ev->InterconnectSession);
+    }
+
+    rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::OK);
+
+    bool putConfigs = false;
+    bool lock = false;
+
+    std::optional<TString> mainYaml = record.HasCompressedMainConfig()
+        ? std::make_optional(NYamlConfig::DecompressYamlString(record.GetCompressedMainConfig()))
+        : std::nullopt;
+
+    std::optional<TString> storageYaml = record.HasCompressedStorageConfig()
+        ? std::make_optional(NYamlConfig::DecompressYamlString(record.GetCompressedStorageConfig()))
+        : std::nullopt;
+
+    switch (record.GetOperation()) {
+        case NKikimrBlobStorage::TEvControllerDistconfRequest::EnableDistconf:
+            if (ConsoleInteraction->RequestIsBeingProcessed()) {
+                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                rr.SetErrorReason("a request is being processed right now");
+            } else if (record.GetDedicatedConfigMode() != StorageYamlConfig.has_value()) {
+                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                rr.SetErrorReason("can't switch dedicated storage config section along with enabling distconf");
+            } else {
+                putConfigs = lock = true;
+            }
+            break;
+
+        case NKikimrBlobStorage::TEvControllerDistconfRequest::DisableDistconf: {
+            // commit new configuration to the local database and then reply
+            if (!mainYaml) {
+                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                rr.SetErrorReason("missing main config yaml while disabling distconf");
+                break;
+            } else if (storageYaml.has_value() != record.GetDedicatedConfigMode()) {
+                rr.SetStatus(NKikimrBlobStorage::TEvControllerDistconfResponse::Error);
+                rr.SetErrorReason("storage yaml setting does not match desired dedicated storage config section mode");
+                break;
+            }
+
+            // create full yaml config
+            auto metadata = NYamlConfig::GetMainMetadata(*mainYaml);
+            const ui64 mainYamlVersion = metadata.Version.value_or(0);
+            auto updatedMetadata = metadata;
+            updatedMetadata.Version.emplace(mainYamlVersion + 1);
+            TYamlConfig yamlConfig(*mainYaml, mainYamlVersion, NYamlConfig::ReplaceMetadata(*mainYaml, updatedMetadata));
+
+            // check if we have storage yaml expected version
+            std::optional<ui64> expectedStorageYamlConfigVersion;
+            if (record.HasExpectedStorageConfigVersion()) {
+                expectedStorageYamlConfigVersion.emplace(record.GetExpectedStorageConfigVersion());
+            }
+
+            // commit it
+            Execute(CreateTxCommitConfig(std::move(yamlConfig), std::make_optional(std::move(storageYaml)), std::nullopt,
+                expectedStorageYamlConfigVersion, std::exchange(h, {})));
+            break;
+        }
+
+        case NKikimrBlobStorage::TEvControllerDistconfRequest::ValidateConfig:
+            break;
+    }
+
+    if (putConfigs) {
+        if (YamlConfig) {
+            rr.SetCompressedMainConfig(CompressSingleConfig(*YamlConfig));
+            rr.SetExpectedMainConfigVersion(GetVersion(*YamlConfig) + 1);
+        }
+        if (StorageYamlConfig) {
+            rr.SetCompressedStorageConfig(CompressStorageYamlConfig(*StorageYamlConfig));
+        }
+        rr.SetExpectedStorageConfigVersion(ExpectedStorageYamlConfigVersion);
+    }
+
+    if (lock) {
+        ConfigLock.insert(ev->Recipient);
+    }
+
+    TActivationContext::Send(h.release());
 }
 
 void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerUpdateGroupStat::TPtr& ev) {
@@ -292,11 +509,10 @@ void TBlobStorageController::OnHostRecordsInitiate() {
                 "BlobStorageControllerControls.EnableSelfHealWithDegraded");
         }
     }
+    Y_ABORT_UNLESS(!SelfHealId);
     SelfHealId = Register(CreateSelfHealActor());
     PushStaticGroupsToSelfHeal();
-    if (StorageConfigObtained) {
-        Execute(CreateTxInitScheme());
-    }
+    Execute(CreateTxInitScheme());
 }
 
 void TBlobStorageController::IssueInitialGroupContent() {
@@ -425,13 +641,17 @@ STFUNC(TBlobStorageController::StateWork) {
         hFunc(TEvBlobStorage::TEvControllerConfigResponse, Handle);
         hFunc(TEvBlobStorage::TEvControllerProposeConfigResponse, ConsoleInteraction->Handle);
         hFunc(TEvBlobStorage::TEvControllerConsoleCommitResponse, ConsoleInteraction->Handle);
-        hFunc(TConsoleInteraction::TEvPrivate::TEvValidationTimeout, ConsoleInteraction->Handle);
+        fFunc(TConsoleInteraction::TEvPrivate::EvValidationTimeout, ConsoleInteraction->HandleValidationTimeout);
         hFunc(TEvBlobStorage::TEvControllerReplaceConfigRequest, ConsoleInteraction->Handle);
+        hFunc(TEvBlobStorage::TEvControllerFetchConfigRequest, ConsoleInteraction->Handle);
         hFunc(TEvBlobStorage::TEvControllerValidateConfigResponse, ConsoleInteraction->Handle);
         hFunc(TEvTabletPipe::TEvClientConnected, ConsoleInteraction->Handle);
         hFunc(TEvTabletPipe::TEvClientDestroyed, ConsoleInteraction->Handle);
         hFunc(TEvBlobStorage::TEvGetBlockResult, ConsoleInteraction->Handle);
+        hFunc(TEvBlobStorage::TEvControllerDistconfRequest, Handle);
         fFunc(TEvBlobStorage::EvControllerShredRequest, EnqueueIncomingEvent);
+        cFunc(TEvPrivate::EvUpdateShredState, ShredState.HandleUpdateShredState);
+        cFunc(TEvPrivate::EvCommitMetrics, CommitMetrics);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 STLOG(PRI_ERROR, BS_CONTROLLER, BSC06, "StateWork unexpected event", (Type, type),
@@ -471,9 +691,9 @@ void TBlobStorageController::PassAway() {
     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Unsubscribe, 0, MakeBlobStorageNodeWardenID(SelfId().NodeId()),
         SelfId(), nullptr, 0));
     if (ConsoleInteraction) {
-        ConsoleInteraction->OnPassAway();
+        ConsoleInteraction->Stop();
     }
-    return TActor::PassAway();
+    TActor::PassAway();
 }
 
 TBlobStorageController::TBlobStorageController(const TActorId &tablet, TTabletStorageInfo *info)
@@ -585,6 +805,7 @@ ui32 TBlobStorageController::GetEventPriority(IEventHandle *ev) {
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kRestartPDisk:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kSetPDiskReadOnly:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kStopPDisk:
+                    case NKikimrBlobStorage::TConfigRequest::TCommand::kGetInterfaceVersion:
                         return 2; // read-write commands go with higher priority as they are needed to keep cluster intact
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kReadHostConfig:

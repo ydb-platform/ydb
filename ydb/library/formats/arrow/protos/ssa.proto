@@ -19,7 +19,6 @@ option java_package = "ru.yandex.kikimr.proto";
 message TProgram {
     message TColumn {
         optional uint64 Id = 1;
-        optional string Name = 2;
     }
 
     message TConstant {
@@ -50,22 +49,6 @@ message TProgram {
     }
 
     message TCountMinSketchChecker {
-    }
-
-    message TOlapIndexChecker {
-        optional uint32 IndexId = 1;
-        optional string ClassName = 2;
-
-        message TCompositeChecker {
-            repeated TOlapIndexChecker ChildrenCheckers = 1;
-        }
-
-        oneof Implementation {
-            TBloomFilterChecker BloomFilter = 40;
-            TCompositeChecker Composite = 41;
-            TCountMinSketchChecker CountMinSketch = 42;
-            TBloomNGrammFilterChecker BloomNGrammFilter = 43;
-        }
     }
 
     message TParameter {
@@ -125,6 +108,7 @@ message TProgram {
             optional EFunctionType FunctionType = 3 [ default = SIMPLE_ARROW ];
             optional uint32 KernelIdx = 4;
             optional uint32 YqlOperationId = 5; // TKernelRequestBuilder::EBinaryOp
+            optional string KernelName = 6;
         }
 
         message TExternalFunction {
@@ -214,5 +198,5 @@ message TOlapProgram {
     // RecordBatch deserialization require arrow::Schema, thus store it here
     optional bytes ParametersSchema = 2;
     optional bytes Parameters = 3;
-    optional TProgram.TOlapIndexChecker IndexChecker = 4;
+    reserved 4;
 }

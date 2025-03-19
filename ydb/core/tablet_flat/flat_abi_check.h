@@ -9,7 +9,7 @@ namespace NTable {
     struct TAbi {
         using EVol = ECompatibility;
 
-        void Check(ui32 tail, ui32 head, const char *label) const noexcept
+        void Check(ui32 tail, ui32 head, const char *label) const
         {
             if (tail > head) {
                 Y_Fail(label << " ABI [" << tail << ", " << head << "]"

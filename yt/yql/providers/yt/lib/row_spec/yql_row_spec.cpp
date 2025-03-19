@@ -1616,4 +1616,9 @@ TConstraintSet TYqlRowSpecInfo::GetConstraints() const {
     return set;
 }
 
+bool TYqlRowSpecInfo::HasPersistableYson() const {
+    YQL_ENSURE(Type);
+    return !Type->HasBareYson() || 0 == NativeYtTypeFlags;
+}
+
 }

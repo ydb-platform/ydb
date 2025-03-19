@@ -28,7 +28,7 @@ public:
         , Logger(ConcurrencyLogger().WithTag("Executor: %v", Name_))
         , ControlQueue_(New<TActionQueue>(Format("%vCtl", Name_)))
         , ControlInvoker_(ControlQueue_->GetInvoker())
-        , DesiredWorkerCount_(options.WorkerCount)
+        , DesiredThreadCount_(options.ThreadCount)
     {
         YT_ASSERT_INVOKER_THREAD_AFFINITY(ControlInvoker_, ControlThread);
     }
@@ -42,11 +42,11 @@ public:
             .Run();
     }
 
-    void Reconfigure(int workerCount) override
+    void SetThreadCount(int threadCount) override
     {
         YT_ASSERT_THREAD_AFFINITY_ANY();
 
-        DesiredWorkerCount_.store(workerCount);
+        DesiredThreadCount_.store(threadCount);
     }
 
 private:
@@ -63,8 +63,8 @@ private:
 
     std::vector<ISuspendableActionQueuePtr> Workers_;
     std::vector<IInvokerPtr> Invokers_;
-    std::atomic<int> ActiveWorkerCount_ = 0;
-    std::atomic<int> DesiredWorkerCount_ = 0;
+    std::atomic<int> ActiveThreadCount_ = 0;
+    std::atomic<int> DesiredThreadCount_ = 0;
 
     int QuantumIndex_ = 0;
 
@@ -80,21 +80,21 @@ private:
         YT_ASSERT_THREAD_AFFINITY(ControlThread);
         YT_VERIFY(!Running_);
 
-        int desiredWorkerCount = DesiredWorkerCount_.load();
-        if (ActiveWorkerCount_ == desiredWorkerCount) {
+        int desiredThreadCount = DesiredThreadCount_.load();
+        if (ActiveThreadCount_ == desiredThreadCount) {
             return;
         }
 
-        int currentWorkerCount = std::ssize(Workers_);
+        int currentThreadCount = std::ssize(Workers_);
 
-        YT_LOG_DEBUG("Updating worker count (WorkerCount: %v -> %v)",
-            currentWorkerCount,
-            desiredWorkerCount);
+        YT_LOG_DEBUG("Updating thread count (Count: %v -> %v)",
+            currentThreadCount,
+            desiredThreadCount);
 
-        if (desiredWorkerCount > currentWorkerCount) {
-            Workers_.reserve(desiredWorkerCount);
-            Invokers_.reserve(desiredWorkerCount);
-            for (int index = currentWorkerCount; index < desiredWorkerCount; ++index) {
+        if (desiredThreadCount > currentThreadCount) {
+            Workers_.reserve(desiredThreadCount);
+            Invokers_.reserve(desiredThreadCount);
+            for (int index = currentThreadCount; index < desiredThreadCount; ++index) {
                 auto worker = CreateSuspendableActionQueue(
                     /*threadName*/ Format("%v:%v", Name_, index),
                     {.ThreadInitializer = Options_.ThreadInitializer});
@@ -109,8 +109,8 @@ private:
             }
         }
 
-        YT_VERIFY(std::ssize(Workers_) >= desiredWorkerCount);
-        ActiveWorkerCount_ = desiredWorkerCount;
+        YT_VERIFY(std::ssize(Workers_) >= desiredThreadCount);
+        ActiveThreadCount_ = desiredThreadCount;
     }
 
     TFuture<void> StartQuantum(TDuration timeout)
@@ -200,7 +200,7 @@ private:
         }
 
         // Worker is disabled, do not schedule new callbacks to it.
-        if (workerIndex >= ActiveWorkerCount_) {
+        if (workerIndex >= ActiveThreadCount_) {
             return;
         }
 

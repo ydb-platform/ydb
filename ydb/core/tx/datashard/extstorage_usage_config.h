@@ -6,6 +6,7 @@
 
 #include <ydb/core/base/events.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/public/api/protos/ydb_export.pb.h>
 
 #include <contrib/libs/aws-sdk-cpp/aws-cpp-sdk-s3/include/aws/s3/model/StorageClass.h>
@@ -44,6 +45,14 @@ public:
 
     inline TString GetPermissionsKey() const {
         return ObjectKeyPattern + '/' + NBackupRestoreTraits::PermissionsKeySuffix();
+    }
+
+    inline TString GetTopicKey(const TString& changefeedName) const {
+        return TStringBuilder() << ObjectKeyPattern << '/'<< changefeedName << '/' << NBackupRestoreTraits::TopicKeySuffix();
+    }
+
+     inline TString GetChangefeedKey(const TString& changefeedName) const {
+        return TStringBuilder() << ObjectKeyPattern << '/' << changefeedName << '/' << NBackupRestoreTraits::ChangefeedKeySuffix();
     }
 
     inline TString GetMetadataKey() const {

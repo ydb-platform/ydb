@@ -667,8 +667,9 @@ struct TInMemorySubscription : public TThrRefBase {
 
     bool ServeYaml = false;
     ui64 YamlApiVersion = 0;
-    ui64 YamlConfigVersion = 0;
+    ui64 MainYamlConfigVersion = 0;
     TMap<ui64, ui64> VolatileYamlConfigHashes;
+    std::optional<ui64> DatabaseYamlConfigVersion;
 
     bool FirstUpdateSent = false;
 
@@ -684,6 +685,7 @@ public:
     TInMemorySubscription::TPtr GetSubscription(const TActorId &subscriber);
 
     const THashMap<TActorId, TInMemorySubscription::TPtr> &GetSubscriptions() const;
+    const TInMemorySubscriptionSet *GetSubscriptions(const TString &path) const;
 
     void AddSubscription(TInMemorySubscription::TPtr subscription);
 

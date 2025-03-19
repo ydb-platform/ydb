@@ -246,7 +246,7 @@ public:
             return false;
         }
 
-        TKind::FinishStats(OperationId, txState, context);
+        TKind::Finish(OperationId, txState, context);
         return true;
     }
 
@@ -286,7 +286,7 @@ public:
         if (txState->ShardsInProgress.empty()) {
             NTableState::AckAllSchemaChanges(OperationId, *txState, context);
             context.SS->ChangeTxState(db, OperationId, TTxState::Done);
-            TKind::FinishStats(OperationId, *txState, context);
+            TKind::Finish(OperationId, *txState, context);
             return true;
         }
 
@@ -362,7 +362,7 @@ public:
         if (txState->ShardsInProgress.empty()) {
             NTableState::AckAllSchemaChanges(OperationId, *txState, context);
             context.SS->ChangeTxState(db, OperationId, TTxState::Done);
-            TKind::FinishStats(OperationId, *txState, context);
+            TKind::Finish(OperationId, *txState, context);
             return true;
         }
 

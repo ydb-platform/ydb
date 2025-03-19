@@ -24,6 +24,7 @@ EYdbComputeAuth GetIamAuthMethod(const FederatedQuery::IamAuth& auth) {
         case FederatedQuery::IamAuth::kServiceAccount:
             return EYdbComputeAuth::SERVICE_ACCOUNT;
         case FederatedQuery::IamAuth::kCurrentIam:
+        case FederatedQuery::IamAuth::kToken:
         // Do not replace with default. Adding a new auth item should cause a compilation error
         case FederatedQuery::IamAuth::IDENTITY_NOT_SET:
             return EYdbComputeAuth::UNKNOWN;
@@ -37,6 +38,7 @@ EYdbComputeAuth GetBasicAuthMethod(const FederatedQuery::IamAuth& auth) {
         case FederatedQuery::IamAuth::kServiceAccount:
             return EYdbComputeAuth::MDB_BASIC;
         case FederatedQuery::IamAuth::kCurrentIam:
+        case FederatedQuery::IamAuth::kToken:
         // Do not replace with default. Adding a new auth item should cause a compilation error
         case FederatedQuery::IamAuth::IDENTITY_NOT_SET:
             return EYdbComputeAuth::UNKNOWN;
@@ -49,7 +51,7 @@ public:
         : DatabasePath(databasePath) {}
 
     TIntrusivePtr<NYql::TIssue> Run(const NYql::TIssue& issue) {
-        auto msg = RemoveDatabaseFromStr(issue.GetMessage(), DatabasePath);
+        auto msg = RemoveDatabaseFromStr(TString(issue.GetMessage()), DatabasePath);
         auto newIssue = MakeIntrusive<NYql::TIssue>(issue.Position, issue.EndPosition, msg);
         newIssue->SetCode(issue.GetCode(), issue.GetSeverity());
         for (auto issue : issue.GetSubIssues()) {

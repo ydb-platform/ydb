@@ -8,7 +8,6 @@ import ymake
 from _common import stripext, rootrel_arc_src, listid, pathid, lazy, get_no_lint_value, ugly_conftest_exception
 
 
-YA_IDE_VENV_VAR = 'YA_IDE_VENV'
 PY_NAMESPACE_PREFIX = 'py/namespace'
 BUILTIN_PROTO = 'builtin_proto'
 DEFAULT_FLAKE8_FILE_PROCESSING_TIME = "1.5"  # in seconds
@@ -37,8 +36,8 @@ def is_extended_source_search_enabled(path, unit):
         return False
     if unit.get('NO_EXTENDED_SOURCE_SEARCH') == 'yes':
         return False
-    # contrib is unfriendly to extended source search
-    if unit.resolve_arc_path(path).startswith('$S/contrib/'):
+    # Python itself and contrib/python are unfriendly to extended source search
+    if unit.resolve_arc_path(path).startswith(('$S/contrib/python', '$S/contrib/tools/python3')):
         return False
     return True
 
@@ -171,7 +170,7 @@ def add_python_lint_checks(unit, py_ver, files):
             "passport/backend/oauth/",  # PASSP-35982
             "sdg/sdc/contrib/",  # SDC contrib
             "sdg/sdc/third_party/",  # SDC contrib
-            "testenv/",  # CI-3229
+            "smart_devices/third_party/",  # smart_devices contrib
             "yt/yt/",  # YT-20053
             "yt/python/",  # YT-20053
             "yt/python_py2/",
@@ -252,7 +251,7 @@ def onpy_srcs(unit, *args):
     with_py = not unit.get('PYBUILD_NO_PY')
     with_pyc = not unit.get('PYBUILD_NO_PYC')
     in_proto_library = unit.get('PY_PROTO') or unit.get('PY3_PROTO')
-    venv = unit.get(YA_IDE_VENV_VAR)
+    external_py_files_mode = unit.get('EXTERNAL_PY_FILES') or unit.get('YA_IDE_VENV')
     need_gazetteer_peerdir = False
     trim = 0
 
@@ -542,10 +541,21 @@ def onpy_srcs(unit, *args):
         if py3:
             mod_list_md5 = md5()
             compress = False
+            resfs_mocks = []
+
             for path, mod in pys:
                 mod_list_md5.update(six.ensure_binary(mod))
-                if not (venv and is_extended_source_search_enabled(path, unit)):
-                    dest = 'py/' + mod.replace('.', '/') + '.py'
+                dest = 'py/' + mod.replace('.', '/') + '.py'
+                # In external_py_files mode we want to build python binaries without embedded python files.
+                # The application will still be able to load them from the file system.
+                # However, the import hook still needs meta information about the file locations to work correctly.
+                # That's why we manually register the files in resfs/src/resfs/file, but don't provide any actual files.
+                # For more info see:
+                # - library/python/runtime_py3
+                # - https://docs.yandex-team.ru/ya-make/manual/python/vars
+                if external_py_files_mode and is_extended_source_search_enabled(path, unit):
+                    resfs_mocks += ['-', 'resfs/src/resfs/file/' + dest + '=' + rootrel_arc_src(path, unit)]
+                else:
                     if with_py:
                         res += ['DEST', dest, path]
                     if with_pyc:
@@ -555,6 +565,9 @@ def onpy_srcs(unit, *args):
                         res += ['DEST', dest + '.yapyc3', dst + '.yapyc3']
                     if not compress and ugly_conftest_exception(path):
                         compress = True
+
+            if resfs_mocks:
+                unit.onresource(['DONT_COMPRESS'] + resfs_mocks)
 
             if py_namespaces:
                 # Note: Add md5 to key to prevent key collision if two or more PY_SRCS() used in the same ya.make
@@ -660,7 +673,11 @@ def _check_test_srcs(*args):
 def ontest_srcs(unit, *args):
     _check_test_srcs(*args)
     if unit.get('PY3TEST_BIN' if is_py3(unit) else 'PYTEST_BIN') != 'no':
-        unit.onpy_srcs(["NAMESPACE", "__tests__"] + list(args))
+        namespace = "__tests__"
+        # Avoid collision on test modules in venv mode
+        if unit.get('YA_IDE_VENV'):
+            namespace += "." + unit.path()[3:].replace('/', '.')
+        unit.onpy_srcs(["NAMESPACE", namespace] + list(args))
 
 
 def onpy_doctests(unit, *args):
@@ -708,6 +725,8 @@ def onpy_register(unit, *args):
                 unit.oncflags(['-DPyInit_{}=PyInit_{}'.format(shortname, mangle(name))])
             else:
                 unit.oncflags(['-Dinit{}=init{}'.format(shortname, mangle(name))])
+            # BOOST_PYTHON_MODULE case
+            unit.oncflags(['-Dinit_module_{}=init_module_{}'.format(shortname, mangle(name))])
 
 
 def py_main(unit, arg):

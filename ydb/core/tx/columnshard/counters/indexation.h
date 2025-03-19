@@ -1,6 +1,8 @@
 #pragma once
-#include "common/owner.h"
 #include "splitter.h"
+#include "sub_columns.h"
+
+#include "common/owner.h"
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
@@ -10,7 +12,13 @@ class TIndexationCounters: public TCommonCountersOwner {
 private:
     using TBase = TCommonCountersOwner;
     NMonitoring::THistogramPtr HistogramCompactionInputBytes;
+
+    NMonitoring::THistogramPtr HistogramCompactionCorrectRawBytes;
+    NMonitoring::THistogramPtr HistogramCompactionHugeRawBytes;
+    NMonitoring::TDynamicCounters::TCounterPtr CompactionHugePartsCount;
+
 public:
+    std::shared_ptr<TSubColumnCounters> SubColumnCounters;
     NMonitoring::TDynamicCounters::TCounterPtr CompactionInputBytes;
 
     NMonitoring::TDynamicCounters::TCounterPtr ReadErrors;
@@ -46,6 +54,15 @@ public:
         HistogramCompactionInputBytes->Collect(size);
         CompactionInputBytes->Add(size);
     }
+
+    void OnCompactionCorrectMemory(const ui64 memorySize) const {
+        HistogramCompactionCorrectRawBytes->Collect(memorySize);
+    }
+
+    void OnCompactionHugeMemory(const ui64 memorySize, const ui32 partsCount) const {
+        HistogramCompactionHugeRawBytes->Collect(memorySize);
+        CompactionHugePartsCount->Add(partsCount);
+    }
 };
 
-}
+}   // namespace NKikimr::NColumnShard

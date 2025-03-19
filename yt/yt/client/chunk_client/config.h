@@ -10,10 +10,9 @@ namespace NYT::NChunkClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TFetchChunkSpecConfig
+struct TFetchChunkSpecConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     int MaxChunksPerFetch;
     int MaxChunksPerLocateRequest;
 
@@ -26,10 +25,9 @@ DEFINE_REFCOUNTED_TYPE(TFetchChunkSpecConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TFetcherConfig
+struct TFetcherConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     TDuration NodeRpcTimeout;
 
     //! If node throttled fetch request, it becomes banned for this period of time.
@@ -52,10 +50,9 @@ DEFINE_REFCOUNTED_TYPE(TFetcherConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBlockReordererConfig
+struct TBlockReordererConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     bool EnableBlockReordering;
 
     //! Instead of grouping blocks by column groups, shuffle them.
@@ -71,10 +68,9 @@ DEFINE_REFCOUNTED_TYPE(TBlockReordererConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TChunkSliceFetcherConfig
+struct TChunkSliceFetcherConfig
     : public TFetcherConfig
 {
-public:
     int MaxSlicesPerFetch;
 
     REGISTER_YSON_STRUCT(TChunkSliceFetcherConfig);
@@ -86,11 +82,10 @@ DEFINE_REFCOUNTED_TYPE(TChunkSliceFetcherConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TEncodingWriterConfig
+struct TEncodingWriterConfig
     : public virtual TWorkloadConfig
     , public virtual TBlockReordererConfig
 {
-public:
     i64 EncodeWindowSize;
     double DefaultCompressionRatio;
     bool VerifyCompression;
@@ -130,10 +125,9 @@ public:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TReplicationReaderConfig
+struct TReplicationReaderConfig
     : public virtual TRemoteReaderConfigBase
 {
-public:
     //! Timeout for a block request.
     TDuration BlockRpcTimeout;
 
@@ -259,10 +253,9 @@ DEFINE_REFCOUNTED_TYPE(TReplicationReaderConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TBlockFetcherConfig
+struct TBlockFetcherConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     //! Prefetch window size (in bytes).
     i64 WindowSize;
 
@@ -284,11 +277,10 @@ DEFINE_REFCOUNTED_TYPE(TBlockFetcherConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TErasureReaderConfig
+struct TErasureReaderConfig
     : public virtual TReplicationReaderConfig
     , public virtual TBlockFetcherConfig
 {
-public:
     bool EnableAutoRepair;
     double ReplicationReaderSpeedLimitPerSec;
     TDuration SlowReaderExpirationTimeout;
@@ -304,13 +296,12 @@ DEFINE_REFCOUNTED_TYPE(TErasureReaderConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TMultiChunkReaderConfig
+struct TMultiChunkReaderConfig
     : public virtual TErasureReaderConfig
     , public virtual TBlockFetcherConfig
     , public virtual TFetchChunkSpecConfig
     , public virtual TWorkloadConfig
 {
-public:
     i64 MaxBufferSize;
     int MaxParallelReaders;
 
@@ -323,11 +314,10 @@ DEFINE_REFCOUNTED_TYPE(TMultiChunkReaderConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TReplicationWriterConfig
+struct TReplicationWriterConfig
     : public virtual TWorkloadConfig
     , public virtual TBlockReordererConfig
 {
-public:
     //! Maximum window size (in bytes).
     i64 SendWindowSize;
 
@@ -387,10 +377,9 @@ DEFINE_REFCOUNTED_TYPE(TReplicationWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TErasureWriterConfig
+struct TErasureWriterConfig
     : public virtual TBlockReordererConfig
 {
-public:
     i64 WriterWindowSize;
     i64 WriterGroupSize;
 
@@ -416,11 +405,10 @@ DEFINE_REFCOUNTED_TYPE(TErasureWriterConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TMultiChunkWriterConfig
+struct TMultiChunkWriterConfig
     : public TReplicationWriterConfig
     , public TErasureWriterConfig
 {
-public:
     i64 DesiredChunkSize;
     i64 DesiredChunkWeight;
     i64 MaxMetaSize;
@@ -460,10 +448,9 @@ DEFINE_REFCOUNTED_TYPE(TEncodingWriterOptions)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TChunkFragmentReaderConfig
+struct TChunkFragmentReaderConfig
     : public virtual TRemoteReaderConfigBase
 {
-public:
     //! Expiration timeout of corresponding sync expiring cache.
     TDuration PeerInfoExpirationTimeout;
 

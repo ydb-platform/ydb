@@ -48,6 +48,7 @@
 #include <ydb/core/control/immediate_control_board_actor.h>
 
 #include <ydb/core/driver_lib/version/version.h>
+#include <ydb/core/discovery/discovery.h>
 
 #include <ydb/core/grpc_services/grpc_mon.h>
 #include <ydb/core/grpc_services/grpc_request_proxy.h>
@@ -156,6 +157,7 @@
 #include <ydb/core/tx/long_tx_service/public/events.h>
 #include <ydb/core/tx/long_tx_service/long_tx_service.h>
 
+#include <ydb/core/util/aws.h>
 #include <ydb/core/util/failure_injection.h>
 #include <ydb/core/util/memory_tracker.h>
 #include <ydb/core/util/sig.h>
@@ -247,32 +249,17 @@
 
 #include <util/system/hostname.h>
 
-#ifndef KIKIMR_DISABLE_S3_OPS
-#include <aws/core/Aws.h>
-#endif
+namespace NKikimr::NKikimrServicesInitializers {
 
-namespace {
-
-#ifndef KIKIMR_DISABLE_S3_OPS
 struct TAwsApiGuard {
     TAwsApiGuard() {
-        Aws::InitAPI(Options);
+        InitAwsAPI();
     }
 
     ~TAwsApiGuard() {
-        Aws::ShutdownAPI(Options);
+        ShutdownAwsAPI();
     }
-
-private:
-    Aws::SDKOptions Options;
 };
-#endif
-
-}
-
-namespace NKikimr {
-
-namespace NKikimrServicesInitializers {
 
 ui32 TFederatedQueryInitializer::IcPort = 0;
 
@@ -498,16 +485,23 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
     return result;
 }
 
+bool NeedToUseAutoConfig(const NKikimrConfig::TActorSystemConfig& config) {
+    return config.GetUseAutoConfig()
+        || config.HasNodeType()
+        || config.HasCpuCount();
+}
 
 void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* setup,
                                                    const NKikimr::TAppData* appData) {
-    auto& systemConfig = Config.GetActorSystemConfig();
     bool hasASCfg = Config.HasActorSystemConfig();
-    if (!hasASCfg || (systemConfig.HasUseAutoConfig() && systemConfig.GetUseAutoConfig())) {
-        NAutoConfigInitializer::ApplyAutoConfig(Config.MutableActorSystemConfig());
+    bool useAutoConfig = !hasASCfg || NeedToUseAutoConfig(Config.GetActorSystemConfig());
+    if (useAutoConfig) {
+        bool isDynamicNode = appData->DynamicNameserviceConfig->MinDynamicNodeId <= NodeId;
+        NAutoConfigInitializer::ApplyAutoConfig(Config.MutableActorSystemConfig(), isDynamicNode);
     }
 
     Y_ABORT_UNLESS(Config.HasActorSystemConfig());
+    auto& systemConfig = Config.GetActorSystemConfig();
     Y_ABORT_UNLESS(systemConfig.HasScheduler());
     Y_ABORT_UNLESS(systemConfig.ExecutorSize());
     const ui32 systemPoolId = appData->SystemPoolId;
@@ -665,11 +659,8 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     } else if (data.SessionConnected) {
                         record.SetSessionState(NKikimrWhiteboard::TNodeStateInfo::CONNECTED);
                     }
+                    record.SetSameScope(data.SameScope);
                     data.ActorSystem->Send(whiteboardId, update.release());
-                    if (data.ReportClockSkew) {
-                        data.ActorSystem->Send(whiteboardId, new NNodeWhiteboard::TEvWhiteboard::TEvClockSkewUpdate(
-                            data.PeerNodeId, data.ClockSkewUs));
-                    }
                 };
             }
 
@@ -858,6 +849,7 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                         mon->RegisterActorPage(actorsMonPage, "wilson_uploader", "Wilson Trace Uploader", false, actorSystem, actorId);
                     };
                 }
+                uploaderParams.Counters = GetServiceCounters(counters, "utils");
 
                 wilsonUploader.reset(std::move(uploaderParams).CreateUploader());
                 break;
@@ -948,6 +940,19 @@ void TBSNodeWardenInitializer::InitializeServices(NActors::TActorSystemSetup* se
     if (Config.HasSelfManagementConfig()) {
         nodeWardenConfig->SelfManagementConfig.emplace(Config.GetSelfManagementConfig());
     }
+
+    if (Config.HasConfigDirPath()) {
+        nodeWardenConfig->ConfigDirPath = Config.GetConfigDirPath();
+    }
+
+    if (Config.HasStoredConfigYaml()) {
+        nodeWardenConfig->YamlConfig.emplace(Config.GetStoredConfigYaml());
+    }
+
+    nodeWardenConfig->StartupConfigYaml = Config.GetStartupConfigYaml();
+    nodeWardenConfig->StartupStorageYaml = Config.HasStartupStorageYaml()
+        ? std::make_optional(Config.GetStartupStorageYaml())
+        : std::nullopt;
 
     ObtainTenantKey(&nodeWardenConfig->TenantKey, Config.GetKeyConfig());
     ObtainStaticKey(&nodeWardenConfig->StaticKey);
@@ -1712,6 +1717,18 @@ void TGRpcServicesInitializer::InitializeServices(NActors::TActorSystemSetup* se
                 desc->EndpointId = config.GetEndpointId();
             }
             endpoints.push_back(std::move(desc));
+        }
+
+        if (Config.GetKafkaProxyConfig().GetEnableKafkaProxy()) {
+            const auto& kakfaConfig = Config.GetKafkaProxyConfig();
+            TIntrusivePtr<NGRpcService::TGrpcEndpointDescription> desc = new NGRpcService::TGrpcEndpointDescription();
+            desc->Address = config.GetPublicHost() ? config.GetPublicHost() : address;
+            desc->Port = kakfaConfig.GetListeningPort();
+            desc->Ssl = kakfaConfig.HasSslCertificate();
+
+            desc->EndpointId = NGRpcService::KafkaEndpointId;
+            endpoints.push_back(std::move(desc));
+
         }
 
         for (auto &sx : config.GetExtEndpoints()) {
@@ -2743,9 +2760,15 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
         settings.PrivateKeyFile = Config.GetKafkaProxyConfig().GetKey();
 
         setup->LocalServices.emplace_back(
-            TActorId(),
-            TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings, Config.GetKafkaProxyConfig()),
+            NKafka::MakeKafkaDiscoveryCacheID(),
+            TActorSetupCmd(CreateDiscoveryCache(NGRpcService::KafkaEndpointId),
                 TMailboxType::HTSwap, appData->UserPoolId)
+        );
+        setup->LocalServices.emplace_back(
+            TActorId(),
+            TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings, Config.GetKafkaProxyConfig(),
+                                                       NKafka::MakeKafkaDiscoveryCacheID()),
+                           TMailboxType::HTSwap, appData->UserPoolId)
         );
 
         IActor* metricsActor = CreateKafkaMetricsActor(NKafka::TKafkaMetricsSettings{appData->Counters});
@@ -2795,7 +2818,6 @@ void TGraphServiceInitializer::InitializeServices(NActors::TActorSystemSetup* se
         TActorSetupCmd(NGraph::CreateGraphService(appData->TenantName), TMailboxType::HTSwap, appData->UserPoolId));
 }
 
-#ifndef KIKIMR_DISABLE_S3_OPS
 TAwsApiInitializer::TAwsApiInitializer(IGlobalObjectStorage& globalObjects)
     : GlobalObjects(globalObjects)
 {
@@ -2806,7 +2828,5 @@ void TAwsApiInitializer::InitializeServices(NActors::TActorSystemSetup* setup, c
     Y_UNUSED(appData);
     GlobalObjects.AddGlobalObject(std::make_shared<TAwsApiGuard>());
 }
-#endif
 
-} // namespace NKikimrServicesInitializers
-} // namespace NKikimr
+} // namespace NKikimr::NKikimrServicesInitializers

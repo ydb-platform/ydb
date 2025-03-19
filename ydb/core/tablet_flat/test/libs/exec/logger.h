@@ -21,7 +21,7 @@ namespace NFake {
 
         }
 
-        void Put(TInstant stamp, ui32 level, EComp comp, TArrayRef<const char> line) noexcept
+        void Put(TInstant stamp, ui32 level, EComp comp, TArrayRef<const char> line)
         {
             Y_ABORT_UNLESS(line.size() < 8192 * 16, "Too large log line");
 
@@ -86,13 +86,13 @@ namespace NFake {
 
         }
 
-        NUtil::TLogLn Log(ELnLev prio) const noexcept override
+        NUtil::TLogLn Log(ELnLev prio) const override
         {
             return { prio <= Level ? this : nullptr, prio };
         }
 
     private:
-        void LogLn(ELnLev prio, const TString &line) const noexcept override
+        void LogLn(ELnLev prio, const TString &line) const override
         {
             const auto comp = NKikimrServices::FAKE_ENV;
 

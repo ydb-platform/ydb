@@ -264,6 +264,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void Complete(const TActorContext&) override {
+                Self->Self->OnUpdateDecommitState();
                 Self->Self->Data->CommitTrash(this);
                 Self->UpdateAssimilatorPosition();
 
@@ -539,6 +540,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void Complete(const TActorContext&) override {
+                Self->Self->OnUpdateDecommitState();
                 Self->ActionInProgress = false;
                 Self->Action();
             }
@@ -592,7 +594,9 @@ namespace NKikimr::NBlobDepot {
                     return true;
                 }
 
-                void Complete(const TActorContext&) override {}
+                void Complete(const TActorContext&) override {
+                    Self->OnUpdateDecommitState();
+                }
             };
 
             Self->GroupAssimilatorId = {};
@@ -704,6 +708,15 @@ namespace NKikimr::NBlobDepot {
            GroupAssimilatorId = RegisterWithSameMailbox(new TGroupAssimilator(this));
            JsonHandler.Invalidate();
         }
+    }
+
+    void TBlobDepot::OnUpdateDecommitState() {
+        auto&& c = TabletCounters->Simple();
+        const bool d = Configured && Config.GetIsDecommittingGroup(); // is decommission enabled for this tablet?
+        using E = EDecommitState;
+        c[NKikimrBlobDepot::COUNTER_DECOMMIT_MODE_PREPARING] = d && DecommitState < E::BlocksFinished;
+        c[NKikimrBlobDepot::COUNTER_DECOMMIT_MODE_IN_PROGRESS] = d && E::BlocksFinished <= DecommitState && DecommitState < E::Done;
+        c[NKikimrBlobDepot::COUNTER_DECOMMIT_MODE_DONE] = d && E::Done <= DecommitState;
     }
 
 } // NKikimr::NBlobDepot

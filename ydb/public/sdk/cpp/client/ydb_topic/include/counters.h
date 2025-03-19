@@ -2,7 +2,7 @@
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 using TCounterPtr = ::NMonitoring::TDynamicCounters::TCounterPtr;
 

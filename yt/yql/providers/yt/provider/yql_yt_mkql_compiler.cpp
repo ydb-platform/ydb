@@ -49,6 +49,8 @@ TRuntimeNode BuildTableContentCall(TStringBuf callName,
     TType* const tupleTypeTables = ctx.ProgramBuilder.NewTupleType({strType, boolType, strType, ui64Type, ui64Type, boolType, ui32Type});
     TType* const listTypeGroup = ctx.ProgramBuilder.NewListType(tupleTypeTables);
 
+    bool useBlocks = callName.EndsWith(TYtBlockTableContent::CallableName());
+
     const TExprNode* settings = nullptr;
     TMaybe<TSampleParams> sampling;
     TVector<TRuntimeNode> groups;
@@ -227,9 +229,23 @@ TRuntimeNode BuildTableContentCall(TStringBuf callName,
         samplingTupleItems.push_back(ctx.ProgramBuilder.NewDataLiteral(isSystemSampling));
     }
 
-    auto outListType = ctx.ProgramBuilder.NewListType(outItemType);
+    TType* outType = nullptr;
+    if (useBlocks) {
+        auto structType = AS_TYPE(TStructType, outItemType);
 
-    TCallableBuilder call(ctx.ProgramBuilder.GetTypeEnvironment(), callName, outListType);
+        std::vector<TType*> outputItems;
+        outputItems.reserve(structType->GetMembersCount());
+        for (size_t i = 0; i < structType->GetMembersCount(); i++) {
+            outputItems.push_back(ctx.ProgramBuilder.NewBlockType(structType->GetMemberType(i), TBlockType::EShape::Many));
+        }
+        outputItems.push_back(ctx.ProgramBuilder.NewBlockType(ctx.ProgramBuilder.NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar));
+        outType = ctx.ProgramBuilder.NewStreamType(ctx.ProgramBuilder.NewMultiType(outputItems));
+
+    } else {
+        outType = ctx.ProgramBuilder.NewListType(outItemType);
+    }
+
+    TCallableBuilder call(ctx.ProgramBuilder.GetTypeEnvironment(), callName, outType);
 
     call.Add(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(clusterName)); // cluster name
     call.Add(ctx.ProgramBuilder.NewList(listTypeGroup, groups));
@@ -239,6 +255,10 @@ TRuntimeNode BuildTableContentCall(TStringBuf callName,
         call.Add(ctx.ProgramBuilder.NewTuple({ctx.ProgramBuilder.NewDataLiteral(*itemsCount)}));
     } else {
         call.Add(ctx.ProgramBuilder.NewEmptyTuple());
+    }
+
+    if (useBlocks) {
+        call.Add(TRuntimeNode(outItemType, true));
     }
 
     auto res = TRuntimeNode(call.Build(), false);
@@ -381,7 +401,8 @@ TRuntimeNode BuildDqYtInputCall(
                 YQL_ENSURE(tableName, "Unaccounted anonymous table: " << pathInfo.Table->Name);
             }
 
-            NYT::TRichYPath richYPath = state->Gateway->GetRealTable(state->SessionId, clusterName, tableName, pathInfo.Table->Epoch.GetOrElse(0), tmpFolder);
+            NYT::TRichYPath richYPath = state->Gateway->GetRealTable(state->SessionId, clusterName, tableName,
+                pathInfo.Table->Epoch.GetOrElse(0), tmpFolder, pathInfo.Table->IsTemp, pathInfo.Table->IsAnonymous);
             pathInfo.FillRichYPath(richYPath);
             auto pathNode = NYT::PathToNode(richYPath);
 
@@ -476,6 +497,41 @@ void RegisterYtMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
                 return BuildTableContentCall(name,
                     ctx.BuildType(node, *node.GetTypeAnn()->Cast<TListExprType>()->GetItemType()),
                     GetOutputOp(output).DataSink().Cluster().Value(), output.Ref(), itemsCount, ctx, true);
+            }
+        });
+
+    compiler.AddCallable(TYtBlockTableContent::CallableName(),
+        [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
+            TYtBlockTableContent tableContent(&node);
+            if (node.GetConstraint<TEmptyConstraintNode>()) {
+                const auto streamType = ctx.BuildType(node, *node.GetTypeAnn());
+                return ctx.ProgramBuilder.EmptyIterator(streamType);
+            }
+
+            auto origItemStructType = (
+                tableContent.Input().Maybe<TYtOutput>()
+                    ? tableContent.Input().Ref().GetTypeAnn()
+                    : tableContent.Input().Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back()
+            )->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+
+            TMaybe<ui64> itemsCount;
+            TString name = ToString(TYtBlockTableContent::CallableName());
+            if (auto setting = NYql::GetSetting(tableContent.Settings().Ref(), EYtSettingType::ItemsCount)) {
+                itemsCount = FromString<ui64>(setting->Child(1)->Content());
+            }
+            if (NYql::HasSetting(tableContent.Settings().Ref(), EYtSettingType::Small)) {
+                name.prepend("Small");
+            }
+            if (auto maybeRead = tableContent.Input().Maybe<TYtReadTable>()) {
+                auto read = maybeRead.Cast();
+                return BuildTableContentCall(name,
+                    ctx.BuildType(node, *origItemStructType),
+                    read.DataSource().Cluster().Value(), read.Input().Ref(), itemsCount, ctx, true);
+            } else {
+                auto output = tableContent.Input().Cast<TYtOutput>();
+                return BuildTableContentCall(name,
+                ctx.BuildType(node, *origItemStructType),
+                GetOutputOp(output).DataSink().Cluster().Value(), output.Ref(), itemsCount, ctx, true);
             }
         });
 

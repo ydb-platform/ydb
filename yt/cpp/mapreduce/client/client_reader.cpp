@@ -6,22 +6,17 @@
 
 #include <yt/cpp/mapreduce/common/helpers.h>
 #include <yt/cpp/mapreduce/common/retry_lib.h>
+#include <yt/cpp/mapreduce/common/retry_request.h>
 #include <yt/cpp/mapreduce/common/wait_proxy.h>
 
-#include <yt/cpp/mapreduce/http/helpers.h>
-#include <yt/cpp/mapreduce/http/requests.h>
-#include <yt/cpp/mapreduce/http/retry_request.h>
-
 #include <yt/cpp/mapreduce/interface/config.h>
+#include <yt/cpp/mapreduce/interface/raw_client.h>
 #include <yt/cpp/mapreduce/interface/tvm.h>
 
 #include <yt/cpp/mapreduce/interface/logging/yt_log.h>
 
 #include <yt/cpp/mapreduce/io/helpers.h>
 #include <yt/cpp/mapreduce/io/yamr_table_reader.h>
-
-#include <yt/cpp/mapreduce/raw_client/raw_client.h>
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
 
 #include <library/cpp/yson/node/serialize.h>
 
@@ -74,7 +69,7 @@ TClientReader::TClientReader(
 
     if (useFormatFromTableAttributes) {
         auto transactionId2 = ReadTransaction_ ? ReadTransaction_->GetId() : ParentTransactionId_;
-        auto newFormat = GetTableFormat(ClientRetryPolicy_, RawClient_, transactionId2, Path_);
+        auto newFormat = GetTableFormat(ClientRetryPolicy_, RawClient_, Context_, transactionId2, Path_);
         if (newFormat) {
             Format_->Config = *newFormat;
         }

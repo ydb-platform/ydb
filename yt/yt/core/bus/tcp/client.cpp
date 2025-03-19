@@ -146,20 +146,9 @@ public:
         : Config_(std::move(config))
         , PacketTranscoderFactory_(packetTranscoderFactory)
         , MemoryUsageTracker_(std::move(memoryUsageTracker))
-    {
-        if (Config_->Address) {
-            EndpointDescription_ = *Config_->Address;
-        } else if (Config_->UnixDomainSocketPath) {
-            EndpointDescription_ = Format("unix://%v", *Config_->UnixDomainSocketPath);
-        }
-
-        EndpointAttributes_ = ConvertToAttributes(BuildYsonStringFluently()
-            .BeginMap()
-                .Item("address").Value(EndpointDescription_)
-                .Item("encryption_mode").Value(Config_->EncryptionMode)
-                .Item("verification_mode").Value(Config_->VerificationMode)
-            .EndMap());
-    }
+        , EndpointDescription_(MakeEndpointDescription(Config_))
+        , EndpointAttributes_(MakeEndpointAttributes(Config_, EndpointDescription_))
+    { }
 
     const std::string& GetEndpointDescription() const override
     {
@@ -169,6 +158,11 @@ public:
     const IAttributeDictionary& GetEndpointAttributes() const override
     {
         return *EndpointAttributes_;
+    }
+
+    void OnDynamicConfigChanged(const NBus::TBusClientDynamicConfigPtr& config) override
+    {
+        DynamicConfig_.Store(config);
     }
 
     IBusPtr CreateBus(IMessageHandlerPtr handler, const TCreateBusOptions& options) override
@@ -192,7 +186,6 @@ public:
             .EndMap());
 
         auto poller = TTcpDispatcher::TImpl::Get()->GetXferPoller();
-
         auto connection = New<TTcpConnection>(
             Config_,
             EConnectionType::Client,
@@ -207,7 +200,8 @@ public:
             std::move(handler),
             std::move(poller),
             PacketTranscoderFactory_,
-            MemoryUsageTracker_);
+            MemoryUsageTracker_,
+            DynamicConfig_.Acquire()->NeedRejectConnectionDueMemoryOvercommit);
         connection->Start();
 
         return New<TTcpClientBusProxy>(std::move(connection));
@@ -215,13 +209,33 @@ public:
 
 private:
     const TBusClientConfigPtr Config_;
-
+    TAtomicIntrusivePtr<TBusClientDynamicConfig> DynamicConfig_{New<TBusClientDynamicConfig>()};
     IPacketTranscoderFactory* const PacketTranscoderFactory_;
-
     const IMemoryUsageTrackerPtr MemoryUsageTracker_;
+    const std::string EndpointDescription_;
+    const IAttributeDictionaryPtr EndpointAttributes_;
 
-    std::string EndpointDescription_;
-    IAttributeDictionaryPtr EndpointAttributes_;
+    static std::string MakeEndpointDescription(const TBusClientConfigPtr& config)
+    {
+        if (config->Address) {
+            return *config->Address;
+        } else if (config->UnixDomainSocketPath) {
+            return Format("unix://%v", *config->UnixDomainSocketPath);
+        }
+        YT_ABORT();
+    }
+
+    static IAttributeDictionaryPtr MakeEndpointAttributes(
+        const TBusClientConfigPtr& config,
+        const std::string& endpointDescription)
+    {
+        return ConvertToAttributes(BuildYsonStringFluently()
+            .BeginMap()
+                .Item("address").Value(endpointDescription)
+                .Item("encryption_mode").Value(config->EncryptionMode)
+                .Item("verification_mode").Value(config->VerificationMode)
+            .EndMap());
+    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////

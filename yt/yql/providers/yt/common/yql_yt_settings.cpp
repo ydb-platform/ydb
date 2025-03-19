@@ -199,8 +199,8 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, ScriptCpu).Lower(1.0).GlobalOnly();
     REGISTER_SETTING(*this, PythonCpu).Lower(1.0).GlobalOnly();
     REGISTER_SETTING(*this, JavascriptCpu).Lower(1.0).GlobalOnly();
-    REGISTER_SETTING(*this, ErasureCodecCpu).Lower(1.0);
-    REGISTER_SETTING(*this, ErasureCodecCpuForDq).Lower(1.0);
+    REGISTER_SETTING(*this, ErasureCodecCpu).Lower(0.1);
+    REGISTER_SETTING(*this, ErasureCodecCpuForDq).Lower(0.1);
 
     REGISTER_SETTING(*this, Owners)
         .NonEmpty()
@@ -308,6 +308,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, MapJoinShardMinRows);
     REGISTER_SETTING(*this, MapJoinShardCount).Lower(1).Upper(10);
     REGISTER_SETTING(*this, MapJoinUseFlow);
+    REGISTER_SETTING(*this, BlockMapJoin);
     REGISTER_SETTING(*this, EvaluationTableSizeLimit).Upper(10_MB); // Max 10Mb
     REGISTER_SETTING(*this, LookupJoinLimit).Upper(10_MB); // Same as EvaluationTableSizeLimit
     REGISTER_SETTING(*this, LookupJoinMaxRows).Upper(10000);
@@ -316,6 +317,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, MaxOutputTables).Lower(1).Upper(100); // https://ml.yandex-team.ru/thread/yt/166633186212752141/
     REGISTER_SETTING(*this, MaxInputTablesForSortedMerge).Lower(2).Upper(1000); // https://st.yandex-team.ru/YTADMINREQ-16742
     REGISTER_SETTING(*this, DisableFuseOperations);
+    REGISTER_SETTING(*this, EnableFuseMapToMapReduce);
     REGISTER_SETTING(*this, MaxExtraJobMemoryToFuseOperations);
     REGISTER_SETTING(*this, MaxReplicationFactorToFuseOperations).Lower(1.0);
     REGISTER_SETTING(*this, MaxOperationFiles).Lower(2).Upper(1000);
@@ -443,6 +445,8 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, UseNewPredicateExtraction);
     REGISTER_SETTING(*this, PruneKeyFilterLambda);
     REGISTER_SETTING(*this, DqPruneKeyFilterLambda);
+    REGISTER_SETTING(*this, UseQLFilter);
+    REGISTER_SETTING(*this, PruneQLFilterLambda);
     REGISTER_SETTING(*this, MergeAdjacentPointRanges);
     REGISTER_SETTING(*this, KeyFilterForStartsWith);
     REGISTER_SETTING(*this, MaxKeyRangeCount).Upper(10000);
@@ -455,6 +459,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, ForceTmpSecurity);
     REGISTER_SETTING(*this, JoinCommonUseMapMultiOut);
     REGISTER_SETTING(*this, _EnableYtPartitioning);
+    REGISTER_SETTING(*this, EnableDynamicStoreReadInDQ);
     REGISTER_SETTING(*this, UseAggPhases);
     REGISTER_SETTING(*this, UsePartitionsByKeysForFinalAgg);
     REGISTER_SETTING(*this, ForceJobSizeAdjuster);
@@ -520,9 +525,22 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
     REGISTER_SETTING(*this, MaxColumnGroups);
     REGISTER_SETTING(*this, ExtendedStatsMaxChunkCount);
     REGISTER_SETTING(*this, JobBlockInput);
+    REGISTER_SETTING(*this, JobBlockTableContent);
     REGISTER_SETTING(*this, JobBlockOutput).Parser([](const TString& v) { return FromString<EBlockOutputMode>(v); });
     REGISTER_SETTING(*this, _EnableYtDqProcessWriteConstraints);
     REGISTER_SETTING(*this, CompactForDistinct);
+    REGISTER_SETTING(*this, DropUnusedKeysFromKeyFilter);
+    REGISTER_SETTING(*this, ReportEquiJoinStats);
+    REGISTER_SETTING(*this, RuntimeCluster)
+        .Validator([this] (const TString& cluster, TString value) {
+            if (cluster != "$all") {
+                throw yexception() << "Per-cluster setting is not supported for RuntimeCluster";
+            }
+            if (!ValidClusters.contains(value)) {
+                throw yexception() << "Unknown cluster name: " << value;
+            }
+        });
+    REGISTER_SETTING(*this, RuntimeClusterSelection).Parser([](const TString& v) { return FromString<ERuntimeClusterSelectionMode>(v); });
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

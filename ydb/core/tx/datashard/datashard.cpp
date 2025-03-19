@@ -159,6 +159,7 @@ TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
     , EnableLeaderLeases(1, 0, 1)
     , MinLeaderLeaseDurationUs(250000, 1000, 5000000)
     , ChangeRecordDebugPrint(0, 0, 1)
+    , ReadIteratorKeysExtBlobsPrecharge(0, 0, 1)
     , DataShardSysTables(InitDataShardSysTables(this))
     , ChangeSenderActivator(info->TabletID)
     , ChangeExchangeSplitter(this)
@@ -350,6 +351,8 @@ void TDataShard::IcbRegister() {
         appData->Icb->RegisterSharedControl(CdcInitialScanReadAheadLo, "DataShardControls.CdcInitialScanReadAheadLo");
         appData->Icb->RegisterSharedControl(CdcInitialScanReadAheadHi, "DataShardControls.CdcInitialScanReadAheadHi");
 
+        appData->Icb->RegisterSharedControl(ReadIteratorKeysExtBlobsPrecharge, "DataShardControls.ReadIteratorKeysExtBlobsPrecharge");
+
         IcbRegistered = true;
     }
 }
@@ -435,6 +438,7 @@ void TDataShard::SwitchToWork(const TActorContext &ctx) {
     NotifySchemeshard(ctx);
     CheckInitiateBorrowedPartsReturn(ctx);
     CheckStateChange(ctx);
+    CleanupUncommitted(ctx);
 }
 
 void TDataShard::SyncConfig() {
@@ -557,7 +561,7 @@ void TDataShard::SendDelayedAcks(const TActorContext& ctx, TVector<THolder<IEven
         LOG_DEBUG(ctx, NKikimrServices::TX_DATASHARD,
                   "Send delayed Ack RS Ack at %" PRIu64 " %s",
                   TabletID(), x->ToString().data());
-        ctx.ExecutorThread.Send(x.Release());
+        ctx.Send(x.Release());
         IncCounter(COUNTER_ACK_SENT_DELAYED);
     }
 
@@ -3279,7 +3283,7 @@ void TDataShard::HandleAsFollower(TEvDataShard::TEvProposeTransaction::TPtr &ev,
 void TDataShard::CheckDelayedProposeQueue(const TActorContext &ctx) {
     if (DelayedProposeQueue && !Pipeline.HasProposeDelayers()) {
         for (auto& ev : DelayedProposeQueue) {
-            ctx.ExecutorThread.Send(ev.Release());
+            ctx.Send(ev.Release());
         }
         DelayedProposeQueue.clear();
         DelayedProposeQueue.shrink_to_fit();
@@ -3757,12 +3761,13 @@ void TDataShard::Handle(TEvMediatorTimecast::TEvSubscribeReadStepResult::TPtr& e
     auto it = CoordinatorSubscriptionById.find(msg->CoordinatorId);
     Y_VERIFY_S(it != CoordinatorSubscriptionById.end(),
         "Unexpected TEvSubscribeReadStepResult for coordinator " << msg->CoordinatorId);
-    size_t index = it->second;
-    auto& subscription = CoordinatorSubscriptions.at(index);
-    subscription.ReadStep = msg->ReadStep;
     CoordinatorPrevReadStepMin = Max(CoordinatorPrevReadStepMin, msg->LastReadStep);
     CoordinatorPrevReadStepMax = Min(CoordinatorPrevReadStepMax, msg->NextReadStep);
     --CoordinatorSubscriptionsPending;
+
+    // Note: we don't use the subscription and unsubscribe immediately
+    ctx.Send(MakeMediatorTimecastProxyID(), new TEvMediatorTimecast::TEvUnsubscribeReadStep(msg->CoordinatorId));
+
     CheckMediatorStateRestored();
 }
 

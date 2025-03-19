@@ -408,7 +408,6 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
                 TKikimrSettings settings;
                 NKikimrConfig::TAppConfig appConfig;
                 appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(testActorType == ETestActorType::SorceRead);
-                appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(testActorType == ETestActorType::StreamLookup);
                 settings.SetDomainRoot(KikimrDefaultUtDomainRoot);
                 settings.SetAppConfig(appConfig);
 
@@ -681,7 +680,6 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
         Tests::TServerSettings serverSettings(pm.GetPort(2134));
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(true);
-        appConfig.MutableTableServiceConfig()->SetEnableKqpScanQueryStreamLookup(false);
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetAppConfig(appConfig);

@@ -3,96 +3,20 @@
 
 #include <thread>
 
-#include <library/cpp/threading/blocking_queue/blocking_queue.h>
 #include <library/cpp/threading/future/async.h>
 
+#include <util/folder/path.h>
 #include <util/system/file.h>
+#include "yql_pq_blocking_queue.h"
 
 namespace NYql {
-
-template<typename TEvent>
-class TBlockingEQueue {
-public:
-    explicit TBlockingEQueue(size_t maxSize)
-        : MaxSize_(maxSize)
-    {
-    }
-    void Push(TEvent&& e, size_t size = 0) {
-        with_lock(Mutex_) {
-            CanPush_.WaitI(Mutex_, [this] () {return CanPushPredicate();});
-            Events_.emplace_back(std::move(e), size );
-            Size_ += size;
-        }
-        CanPop_.BroadCast();
-    }
-
-    void BlockUntilEvent() {
-        with_lock(Mutex_) {
-            CanPop_.WaitI(Mutex_, [this] () {return CanPopPredicate();});
-        }
-    }
-
-    TMaybe<TEvent> Pop(bool block) {
-        with_lock(Mutex_) {
-            if (block) {
-                CanPop_.WaitI(Mutex_, [this] () {return CanPopPredicate();});
-            } else {
-                if (!CanPopPredicate()) {
-                    return {};
-                }
-            }
-            if (Events_.empty()) {
-                return {};
-            }
-
-            auto [front, size] = std::move(Events_.front());
-            Events_.pop_front();
-            Size_ -= size;
-            if (Size_ < MaxSize_) {
-                CanPush_.BroadCast();
-            }
-            return std::move(front); // cast to TMaybe<>
-        }
-    }
-
-    void Stop() {
-        with_lock(Mutex_) {
-            Stopped_ = true;
-            CanPop_.BroadCast();
-            CanPush_.BroadCast();
-        }
-    }
-
-    bool IsStopped() {
-        with_lock(Mutex_) {
-            return Stopped_;
-        }
-    }
-
-private:
-    bool CanPopPredicate() const {
-        return !Events_.empty() || Stopped_;
-    }
-
-    bool CanPushPredicate() const {
-        return Size_ < MaxSize_ || Stopped_;
-    }
-
-    size_t MaxSize_;
-    size_t Size_ = 0;
-    TDeque<std::pair<TEvent, size_t>> Events_;
-    bool Stopped_ = false;
-    TMutex Mutex_;
-    TCondVar CanPop_;
-    TCondVar CanPush_;
-};
 
 class TFileTopicReadSession : public NYdb::NTopic::IReadSession {
 
 constexpr static auto FILE_POLL_PERIOD = TDuration::MilliSeconds(5);
 
 public:
-    TFileTopicReadSession(TFile file, NYdb::NTopic::TPartitionSession::TPtr session, const TString& producerId = "")
+    TFileTopicReadSession(TFile file, NYdb::NTopic::TPartitionSession::TPtr session, const TString& producerId = "", bool cancelOnFileFinish = false)
         : File_(std::move(file))
         , Session_(std::move(session))
         , ProducerId_(producerId)
@@ -100,6 +24,7 @@ public:
                 PollFileForChanges();
             })
         , Counters_()
+        , CancelOnFileFinish_(cancelOnFileFinish)
     {
         Pool_.Start(1);
     }
@@ -111,29 +36,29 @@ public:
         }, Pool_);
     }
 
-    TVector<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvents(bool block, TMaybe<size_t> maxEventsCount, size_t maxByteSize) override {
+    std::vector<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvents(bool block, std::optional<size_t> maxEventsCount, size_t maxByteSize) override {
         // TODO
         Y_UNUSED(maxByteSize);
 
-        TVector<NYdb::NTopic::TReadSessionEvent::TEvent> res;
-        for (auto event = EventsQ_.Pop(block); !event.Empty() && res.size() < maxEventsCount.GetOrElse(std::numeric_limits<size_t>::max()); event = EventsQ_.Pop(/*block=*/ false)) {
+        std::vector<NYdb::NTopic::TReadSessionEvent::TEvent> res;
+        for (auto event = EventsQ_.Pop(block); event.has_value() && res.size() < maxEventsCount.value_or(std::numeric_limits<size_t>::max()); event = EventsQ_.Pop(/*block=*/ false)) {
             res.push_back(std::move(*event));
         }
         return res;
     }
 
-    TVector<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvents(const NYdb::NTopic::TReadSessionGetEventSettings& settings) override {
+    std::vector<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvents(const NYdb::NTopic::TReadSessionGetEventSettings& settings) override {
         return GetEvents(settings.Block_, settings.MaxEventsCount_, settings.MaxByteSize_);
     }
 
-    TMaybe<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvent(bool block, size_t maxByteSize) override {
+    std::optional<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvent(bool block, size_t maxByteSize) override {
         // TODO
         Y_UNUSED(maxByteSize);
 
         return EventsQ_.Pop(block);
     }
 
-    TMaybe<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvent(const NYdb::NTopic::TReadSessionGetEventSettings& settings) override {
+    std::optional<NYdb::NTopic::TReadSessionEvent::TEvent> GetEvent(const NYdb::NTopic::TReadSessionGetEventSettings& settings) override {
         return GetEvent(settings.Block_, settings.MaxByteSize_);
     }
 
@@ -154,7 +79,7 @@ public:
         return Counters_;
     }
 
-    TString GetSessionId() const override {
+    std::string GetSessionId() const override {
         return ToString(Session_->GetPartitionSessionId());
     }
 
@@ -199,7 +124,7 @@ private:
             size_t size = 0;
             ui64 maxBatchRowSize = 100;
 
-            while (size_t read = fi.ReadLine(rawMsg)) {
+            while (fi.ReadLine(rawMsg)) {
                 msgs.emplace_back(MakeNextMessage(rawMsg));
                 MsgOffset_++;
                 if (!maxBatchRowSize--) {
@@ -209,6 +134,8 @@ private:
             }
             if (!msgs.empty()) {
                 EventsQ_.Push(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent(msgs, {}, Session_), size);
+            } else if (CancelOnFileFinish_) {
+                EventsQ_.Push(NYdb::NTopic::TSessionClosedEvent(NYdb::EStatus::CANCELLED, {NYdb::NIssue::TIssue("PQ file topic was finished")}), size);
             }
 
             Sleep(FILE_POLL_PERIOD);
@@ -221,6 +148,7 @@ private:
     TString ProducerId_;
     std::thread FilePoller_;
     NYdb::NTopic::TReaderCounters::TPtr Counters_;
+    bool CancelOnFileFinish_ = false;
 
     TThreadPool Pool_;
     size_t MsgOffset_ = 0;
@@ -247,19 +175,19 @@ public:
         }, Pool_);
     }
 
-    TMaybe<NYdb::NTopic::TWriteSessionEvent::TEvent> GetEvent(bool block) override {
+    std::optional<NYdb::NTopic::TWriteSessionEvent::TEvent> GetEvent(bool block) override {
         return EventsQ_.Pop(block);
     }
 
-    TVector<NYdb::NTopic::TWriteSessionEvent::TEvent> GetEvents(bool block, TMaybe<size_t> maxEventsCount) override {
-        TVector<NYdb::NTopic::TWriteSessionEvent::TEvent> res;
-        for (auto event = EventsQ_.Pop(block); !event.Empty() && res.size() < maxEventsCount.GetOrElse(std::numeric_limits<size_t>::max()); event = EventsQ_.Pop(/*block=*/ false)) {
+    std::vector<NYdb::NTopic::TWriteSessionEvent::TEvent> GetEvents(bool block, std::optional<size_t> maxEventsCount) override {
+        std::vector<NYdb::NTopic::TWriteSessionEvent::TEvent> res;
+        for (auto event = EventsQ_.Pop(block); event.has_value() && res.size() < maxEventsCount.value_or(std::numeric_limits<size_t>::max()); event = EventsQ_.Pop(/*block=*/ false)) {
             res.push_back(std::move(*event));
         }
         return res;
     }
 
-    NThreading::TFuture<ui64> GetInitSeqNo() override {
+    NThreading::TFuture<uint64_t> GetInitSeqNo() override {
         return NThreading::MakeFuture(SeqNo_);
     }
 
@@ -271,13 +199,13 @@ public:
         EventsMsgQ_.Push(TOwningWriteMessage(std::move(message)), size);
     }
 
-    void Write(NYdb::NTopic::TContinuationToken&& token, TStringBuf data, TMaybe<ui64> seqNo,
-                       TMaybe<TInstant> createTimestamp) override {
+    void Write(NYdb::NTopic::TContinuationToken&& token, std::string_view data, std::optional<uint64_t> seqNo,
+                       std::optional<TInstant> createTimestamp) override {
         NYdb::NTopic::TWriteMessage message(data);
-        if (seqNo.Defined()) {
+        if (seqNo.has_value()) {
             message.SeqNo(*seqNo);
         }
-        if (createTimestamp.Defined()) {
+        if (createTimestamp.has_value()) {
             message.CreateTimestamp(*createTimestamp);
         }
 
@@ -291,7 +219,7 @@ public:
 
         NYdb::NTopic::TWriteMessage message(params.Data);
 
-        if (params.CreateTimestamp_.Defined()) {
+        if (params.CreateTimestamp_.has_value()) {
             message.CreateTimestamp(*params.CreateTimestamp_);
         }
         if (params.SeqNo_) {
@@ -303,16 +231,16 @@ public:
     }
 
     // Ignores codec in message and always writes raw for debugging purposes
-    void WriteEncoded(NYdb::NTopic::TContinuationToken&& token, TStringBuf data, NYdb::NTopic::ECodec codec, ui32 originalSize,
-                              TMaybe<ui64> seqNo, TMaybe<TInstant> createTimestamp) override {
+    void WriteEncoded(NYdb::NTopic::TContinuationToken&& token, std::string_view data, NYdb::NTopic::ECodec codec, uint32_t originalSize,
+                              std::optional<uint64_t> seqNo, std::optional<TInstant> createTimestamp) override {
         Y_UNUSED(codec);
         Y_UNUSED(originalSize);
 
         NYdb::NTopic::TWriteMessage message(data);
-        if (seqNo.Defined()) {
+        if (seqNo.has_value()) {
             message.SeqNo(*seqNo);
         }
-        if (createTimestamp.Defined()) {
+        if (createTimestamp.has_value()) {
             message.CreateTimestamp(*createTimestamp);
         }
 
@@ -356,11 +284,11 @@ private:
             do {
                 auto& [content, msg] = *maybeMsg;
                 NYdb::NTopic::TWriteSessionEvent::TWriteAck ack;
-                if (msg.SeqNo_.Defined()) { // FIXME should be auto generated otherwise
+                if (msg.SeqNo_.has_value()) { // FIXME should be auto generated otherwise
                     ack.SeqNo = *msg.SeqNo_;
                 }
                 ack.State = NYdb::NTopic::TWriteSessionEvent::TWriteAck::EES_WRITTEN;
-                ack.Details.ConstructInPlace(offset, partitionId);
+                ack.Details.emplace(offset, partitionId);
                 acks.Acks.emplace_back(std::move(ack));
                 offset += content.size() + 1;
                 fo.Write(content);
@@ -397,7 +325,7 @@ private:
 
     TThreadPool Pool_;
     NYdb::NTopic::TWriterCounters::TPtr Counters_;
-    ui64 SeqNo_ = 0;
+    uint64_t SeqNo_ = 0;
 };
 
 struct TDummyPartitionSession: public NYdb::NTopic::TPartitionSession {
@@ -412,22 +340,34 @@ struct TDummyPartitionSession: public NYdb::NTopic::TPartitionSession {
     }
 };
 
+TFileTopicClient::TFileTopicClient(THashMap<TDummyPqGateway::TClusterNPath, TDummyTopic> topics)
+    : Topics_(std::move(topics))
+{}
+
 std::shared_ptr<NYdb::NTopic::IReadSession> TFileTopicClient::CreateReadSession(const NYdb::NTopic::TReadSessionSettings& settings) {
     Y_ENSURE(!settings.Topics_.empty());
-    TString topicPath = settings.Topics_.front().Path_;
-
+    const auto& topic = settings.Topics_.front();
+    auto topicPath = topic.Path_;
+    Y_ENSURE(topic.PartitionIds_.size() >= 1);
+    ui64 partitionId = topic.PartitionIds_.front();
     auto topicsIt = Topics_.find(make_pair("pq", topicPath));
     Y_ENSURE(topicsIt != Topics_.end());
-    auto filePath = topicsIt->second.FilePath;
+    auto filePath = topicsIt->second.Path;
     Y_ENSURE(filePath);
+
+    TFsPath fsPath(*filePath);
+    if (fsPath.IsDirectory()) {
+        filePath = TStringBuilder() << *filePath << "/" << ToString(partitionId);
+    } else if (!fsPath.Exists()) {
+        filePath = TStringBuilder() << *filePath << "_" << partitionId;
+    }
 
     // TODO
     ui64 sessionId = 0;
-    ui64 partitionId = 0;
-
     return std::make_shared<TFileTopicReadSession>(
         TFile(*filePath, EOpenMode::TEnum::RdOnly),
-        MakeIntrusive<TDummyPartitionSession>(sessionId, topicPath, partitionId)
+        MakeIntrusive<TDummyPartitionSession>(sessionId, TString{topicPath}, partitionId),
+        "", topicsIt->second.CancelOnFileFinish
     );
 }
 
@@ -485,10 +425,10 @@ std::shared_ptr<NYdb::NTopic::ISimpleBlockingWriteSession> TFileTopicClient::Cre
 }
 
 std::shared_ptr<NYdb::NTopic::IWriteSession> TFileTopicClient::CreateWriteSession(const NYdb::NTopic::TWriteSessionSettings& settings) {
-    TString topicPath = settings.Path_;
+    auto topicPath = TString{settings.Path_};
     auto topicsIt = Topics_.find(make_pair("pq", topicPath));
     Y_ENSURE(topicsIt != Topics_.end());
-    auto filePath = topicsIt->second.FilePath;
+    auto filePath = topicsIt->second.Path;
     Y_ENSURE(filePath);
 
     return std::make_shared<TFileTopicWriteSession>(TFile(*filePath, EOpenMode::TEnum::RdWr));

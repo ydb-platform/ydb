@@ -1,12 +1,14 @@
 #include "executor_pool_basic.h"
 #include "executor_pool_basic_feature_flags.h"
 #include "executor_pool_basic_sanitizer.h"
+#include "executor_pool_shared.h"
 #include "executor_pool_jail.h"
 #include "actor.h"
 #include "config.h"
 #include "executor_thread_ctx.h"
 #include "probes.h"
 #include "mailbox.h"
+#include "debug.h"
 #include "thread_context.h"
 #include <atomic>
 #include <memory>
@@ -17,13 +19,26 @@
 #include <pthread.h>
 #endif
 
+#define POOL_ID() \
+    (!TlsThreadContext ? "OUTSIDE" : \
+    (TlsThreadContext->IsShared() ? "Shared[" + ToString(TlsThreadContext->OwnerPoolId()) + "]_" + ToString(TlsThreadContext->PoolId()) : \
+    ("Pool_" + ToString(TlsThreadContext->PoolId()))))
+
+#define WORKER_ID() ("Worker_" + ToString(TlsThreadContext ? TlsThreadContext->WorkerId() : Max<TWorkerId>()))
+
+#define EXECUTOR_POOL_BASIC_DEBUG(level, ...) \
+    ACTORLIB_DEBUG(level, POOL_ID(), " ", WORKER_ID(), " TExecutorPoolBasic::", __func__, ": ", __VA_ARGS__)
+
+
 namespace NActors {
 
+    namespace {
 #ifdef ACTOR_SANITIZER
-    constexpr bool DebugMode = true;
+        constexpr bool DebugMode = true;
 #else
-    constexpr bool DebugMode = false;
+        constexpr bool DebugMode = false;
 #endif
+    }
 
 
     LWTRACE_USING(ACTORLIB_PROVIDER);
@@ -36,7 +51,7 @@ namespace NActors {
 
     TString GetCurrentThreadKind() { 
         if (TlsThreadContext) {
-            return TlsThreadContext->WorkerId >= 0 ? "[common]" : "[shared]";
+            return TlsThreadContext->WorkerId() >= 0 ? "[common]" : "[shared]";
         }
         return "[outsider]";
     }
@@ -85,11 +100,11 @@ namespace NActors {
         , DefaultSpinThresholdCycles(cfg.SpinThreshold * NHPTimer::GetCyclesPerSecond() * 0.000001) // convert microseconds to cycles
         , SpinThresholdCycles(DefaultSpinThresholdCycles)
         , SpinThresholdCyclesPerThread(new NThreading::TPadded<std::atomic<ui64>>[cfg.Threads])
-        , Threads(new NThreading::TPadded<TExecutorThreadCtx>[cfg.Threads])
         , WaitingStats(new TWaitingStats<ui64>[cfg.Threads])
         , PoolName(cfg.PoolName)
         , TimePerMailbox(cfg.TimePerMailbox)
-        , EventsPerMailbox(cfg.EventsPerMailbox)
+        , TimePerMailboxTsValue(NHPTimer::GetClockRate() * cfg.TimePerMailbox.SecondsFloat())
+        , EventsPerMailboxValue(cfg.EventsPerMailbox)
         , RealtimePriority(cfg.RealtimePriority)
         , ThreadCount(cfg.Threads)
         , MinFullThreadCount(cfg.MinThreadCount)
@@ -98,27 +113,22 @@ namespace NActors {
         , Harmonizer(harmonizer)
         , SoftProcessingDurationTs(cfg.SoftProcessingDurationTs)
         , HasOwnSharedThread(cfg.HasSharedThread)
+        , MaxLocalQueueSize(cfg.MaxLocalQueueSize)
+        , MinLocalQueueSize(cfg.MinLocalQueueSize)
         , Priority(cfg.Priority)
         , Jail(jail)
         , ActorSystemProfile(cfg.ActorSystemProfile)
     {
         Y_UNUSED(Jail, SoftProcessingDurationTs);
-        for (ui32 idx = 0; idx < MaxSharedThreadsForPool; ++idx) {
-            SharedThreads[idx].store(nullptr, std::memory_order_release);
-        }
 
         ui32 threads = ThreadCount;
         if (HasOwnSharedThread && threads) {
             threads = threads - 1;
         }
 
-        if constexpr (NFeatures::IsLocalQueues()) {
+        if (MaxLocalQueueSize) {
             LocalQueues.Reset(new NThreading::TPadded<std::queue<ui32>>[threads]);
-            if constexpr (NFeatures::TLocalQueuesFeatureFlags::FIXED_LOCAL_QUEUE_SIZE) {
-                LocalQueueSize = *NFeatures::TLocalQueuesFeatureFlags::FIXED_LOCAL_QUEUE_SIZE;
-            } else {
-                LocalQueueSize = NFeatures::TLocalQueuesFeatureFlags::MIN_LOCAL_QUEUE_SIZE;
-            }
+            LocalQueueSize = MinLocalQueueSize;
         }
         if constexpr (NFeatures::TSpinFeatureFlags::CalcPerThread) {
             for (ui32 idx = 0; idx < threads; ++idx) {
@@ -153,6 +163,7 @@ namespace NActors {
         MinThreadCount = MinFullThreadCount + HasOwnSharedThread;
         MaxThreadCount = MaxFullThreadCount + HasOwnSharedThread;
 
+        Threads.Reset(new NThreading::TPadded<TExecutorThreadCtx>[MaxFullThreadCount]);
         if constexpr (DebugMode) {
             Sanitizer.reset(new TBasicExecutorPoolSanitizer(this));
         }
@@ -198,29 +209,30 @@ namespace NActors {
         } while (true);
     }
 
-    TMailbox* TBasicExecutorPool::GetReadyActivationCommon(TWorkerContext& wctx, ui64 revolvingCounter) {
+    TMailbox* TBasicExecutorPool::GetReadyActivationCommon(ui64 revolvingCounter) {
+        TWorkerId workerId = TlsThreadContext->WorkerId();
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "");
         NHPTimer::STime hpnow = GetCycleCountFast();
         TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION, false> activityGuard(hpnow);
 
-        TWorkerId workerId = wctx.WorkerId;
         Y_DEBUG_ABORT_UNLESS(workerId < MaxFullThreadCount);
 
-        if (workerId >= 0) {
-            Threads[workerId].UnsetWork();
-        } else {
-            Y_ABORT_UNLESS(wctx.SharedThread);
-            wctx.SharedThread->UnsetWork();
-        }
+        Threads[workerId].UnsetWork();
         if (Harmonizer) {
+            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "try to harmonize");
             LWPROBE(TryToHarmonize, PoolId, PoolName);
             Harmonizer->Harmonize(hpnow);
+            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "harmonize done");
         }
 
         TAtomic semaphoreRaw = AtomicGet(Semaphore);
         TSemaphore semaphore = TSemaphore::GetSemaphore(semaphoreRaw);
         while (!StopFlag.load(std::memory_order_acquire)) {
+            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "semaphore.OldSemaphore == ", semaphore.OldSemaphore, " semaphore.CurrentSleepThreadCount == ", semaphore.CurrentSleepThreadCount);
             if (!semaphore.OldSemaphore || workerId >= 0 && semaphore.CurrentSleepThreadCount < 0) {
-                if (workerId < 0 || !wctx.IsNeededToWaitNextActivation) {
+                EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "semaphore.OldSemaphore == 0 or workerId >= 0 && semaphore.CurrentSleepThreadCount < 0");
+                if (!TlsThreadContext->ExecutionContext.IsNeededToWaitNextActivation) {
+                    EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "wctx.ExecutionContext.IsNeededToWaitNextActivation == false");
                     return nullptr;
                 }
 
@@ -228,19 +240,17 @@ namespace NActors {
                 bool needToBlock = false;
                 AskToGoToSleep(&needToWait, &needToBlock);
                 if (needToWait) {
+                    EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "go to sleep");
                     if (Threads[workerId].Wait(SpinThresholdCycles, &StopFlag)) {
+                        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "sleep interrupted");
                         return nullptr;
                     }
                 }
             } else {
                 TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
-                if (const ui32 activation = std::visit([&revolvingCounter](auto &queue) {return queue.Pop(++revolvingCounter);}, Activations)) {
-                    if (workerId >= 0) {
-                        Threads[workerId].SetWork();
-                    } else {
-                        Y_ABORT_UNLESS(wctx.SharedThread);
-                        wctx.SharedThread->SetWork();
-                    }
+                if (const ui32 activation = std::visit([&revolvingCounter](auto &x) {return x.Pop(++revolvingCounter);}, Activations)) {
+                    EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "activation found");
+                    Threads[workerId].SetWork();
                     AtomicDecrement(Semaphore);
                     return MailboxTable->Get(activation);
                 }
@@ -254,28 +264,94 @@ namespace NActors {
         return nullptr;
     }
 
-    TMailbox* TBasicExecutorPool::GetReadyActivationLocalQueue(TWorkerContext& wctx, ui64 revolvingCounter) {
-        TWorkerId workerId = wctx.WorkerId;
+    TMailbox* TBasicExecutorPool::GetReadyActivationRingQueue(ui64 revolvingCounter) {
+        if (StopFlag.load(std::memory_order_acquire)) {
+            return nullptr;
+        }
+        
+        TWorkerId workerId = TlsThreadContext->WorkerId();
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "");
+        NHPTimer::STime hpnow = GetCycleCountFast();
+        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION, false> activityGuard(hpnow);
+
+        Y_DEBUG_ABORT_UNLESS(workerId < MaxFullThreadCount);
+
+        Threads[workerId].UnsetWork();
+        if (Harmonizer) {
+            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "try to harmonize");
+            LWPROBE(TryToHarmonize, PoolId, PoolName);
+            Harmonizer->Harmonize(hpnow);
+            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "harmonize done");
+        }
+
+        do {
+            {
+                TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
+                if (const ui32 activation = std::visit([&revolvingCounter](auto &x) {return x.Pop(++revolvingCounter);}, Activations)) {
+                    EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "activation found");
+                    Threads[workerId].SetWork();
+                    AtomicDecrement(Semaphore);
+                    return MailboxTable->Get(activation);
+                }
+            }
+
+            TAtomic semaphoreRaw = AtomicGet(Semaphore);
+            TSemaphore semaphore = TSemaphore::GetSemaphore(semaphoreRaw);
+            if (!semaphore.OldSemaphore || workerId >= 0 && semaphore.CurrentSleepThreadCount < 0) {
+                EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "semaphore.OldSemaphore == 0 or workerId >= 0 && semaphore.CurrentSleepThreadCount < 0");
+                if (!TlsThreadContext->ExecutionContext.IsNeededToWaitNextActivation) {
+                    EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "wctx.ExecutionContext.IsNeededToWaitNextActivation == false");
+                    return nullptr;
+                }
+
+                bool needToWait = false;
+                bool needToBlock = false;
+                AskToGoToSleep(&needToWait, &needToBlock);
+                if (needToWait) {
+                    EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "go to sleep");
+                    if (Threads[workerId].Wait(SpinThresholdCycles, &StopFlag)) {
+                        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "sleep interrupted");
+                        return nullptr;
+                    }
+                }
+            }
+            SpinLockPause();
+        } while (!StopFlag.load(std::memory_order_acquire));
+
+        return nullptr;
+    }
+
+    TMailbox* TBasicExecutorPool::GetReadyActivationLocalQueue(ui64 revolvingCounter) {
+        TWorkerId workerId = TlsThreadContext->WorkerId();
         Y_DEBUG_ABORT_UNLESS(workerId < static_cast<i32>(MaxFullThreadCount));
 
         if (workerId >= 0 && LocalQueues[workerId].size()) {
             ui32 activation = LocalQueues[workerId].front();
             LocalQueues[workerId].pop();
+            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "local queue: activation found");
             return MailboxTable->Get(activation);
         } else {
-            TlsThreadContext->WriteTurn = 0;
-            TlsThreadContext->LocalQueueSize = LocalQueueSize.load(std::memory_order_relaxed);
+            TlsThreadContext->LocalQueueContext.WriteTurn = 0;
+            TlsThreadContext->LocalQueueContext.LocalQueueSize = LocalQueueSize.load(std::memory_order_relaxed);
         }
-        return GetReadyActivationCommon(wctx, revolvingCounter);
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "local queue done; moving to common");
+        if (TlsThreadContext->UseRingQueue()) {
+            return GetReadyActivationRingQueue(revolvingCounter);
+        }
+        return GetReadyActivationCommon(revolvingCounter);
     }
 
-    TMailbox* TBasicExecutorPool::GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) {
-        if constexpr (NFeatures::IsLocalQueues()) {
-            return GetReadyActivationLocalQueue(wctx, revolvingCounter);
+    TMailbox* TBasicExecutorPool::GetReadyActivation(ui64 revolvingCounter) {
+        if (MaxLocalQueueSize) {
+            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "local queue");
+            return GetReadyActivationLocalQueue(revolvingCounter);
+        } else if (TlsThreadContext->UseRingQueue()) {
+            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "ring queue");
+            return GetReadyActivationRingQueue(revolvingCounter);
         } else {
-            return GetReadyActivationCommon(wctx, revolvingCounter);
+            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "");
+            return GetReadyActivationCommon(revolvingCounter);
         }
-        return nullptr;
     }
 
     inline void TBasicExecutorPool::WakeUpLoop(i16 currentThreadCount) {
@@ -292,49 +368,48 @@ namespace NActors {
         }
     }
 
-    bool TBasicExecutorPool::WakeUpLoopShared() {
-        for (ui32 idx = 0; idx < MaxSharedThreadsForPool; ++idx) {
-            TSharedExecutorThreadCtx *thread = SharedThreads[idx].load(std::memory_order_acquire);
-            if (!thread) {
-                return false;
-            }
-            if (thread->WakeUp()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    void TBasicExecutorPool::ScheduleActivationExCommon(TMailbox* mailbox, ui64 revolvingCounter, TAtomic x) {
-        TSemaphore semaphore = TSemaphore::GetSemaphore(x);
-        std::visit([mailbox, revolvingCounter](auto &x) {
-            x.Push(mailbox->Hint, revolvingCounter);
+    void TBasicExecutorPool::ScheduleActivationExCommon(TMailbox* mailbox, ui64 revolvingCounter, std::optional<TAtomic> initSemaphore) {
+        std::visit([mailbox, revolvingCounter](auto &queue) {
+            queue.Push(mailbox->Hint, revolvingCounter);
         }, Activations);
         bool needToWakeUp = false;
         bool needToChangeOldSemaphore = true;
 
-        i16 sharedThreads = SharedThreadsCount.load(std::memory_order_acquire); // this value changing once in second
-
-        if (sharedThreads) {
-            needToChangeOldSemaphore = false;
+        TAtomic x;
+        TSemaphore semaphore;
+        if (!initSemaphore || SharedPool) {
             x = AtomicIncrement(Semaphore);
-            if (WakeUpLoopShared()) {
+            needToChangeOldSemaphore = false;
+            semaphore = TSemaphore::GetSemaphore(x);
+        } else {
+            x = *initSemaphore;
+            semaphore = TSemaphore::GetSemaphore(x);
+        }
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "semaphore.OldSemaphore == ", semaphore.OldSemaphore, " semaphore.CurrentSleepThreadCount == ", semaphore.CurrentSleepThreadCount);
+        if (SharedPool) {
+            if (SharedPool->WakeUpLocalThreads(PoolId)) {
+                EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "shared pool wake up local threads");
                 return;
             }
-        }
+        }    
 
         i16 sleepThreads = 0;
         Y_UNUSED(sleepThreads);
         do {
             needToWakeUp = semaphore.CurrentSleepThreadCount > 0;
             i64 oldX = semaphore.ConvertToI64();
+            bool changed = false;
             if (needToChangeOldSemaphore) {
                 semaphore.OldSemaphore++;
+                changed = true;
             }
             if (needToWakeUp) {
                 sleepThreads = semaphore.CurrentSleepThreadCount--;
+                changed = true;
             }
-            x = AtomicGetAndCas(&Semaphore, semaphore.ConvertToI64(), oldX);
+            if (changed) {
+                x = AtomicGetAndCas(&Semaphore, semaphore.ConvertToI64(), oldX);
+            }
             if (x == oldX) {
                 break;
             }
@@ -342,14 +417,19 @@ namespace NActors {
         } while (true);
 
         if (needToWakeUp) { // we must find someone to wake-up
+            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "need to wake up");
             WakeUpLoop(semaphore.CurrentThreadCount);
+        } else if (SharedPool) {
+            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "shared pool wake up global threads");
+            SharedPool->WakeUpGlobalThreads(PoolId);
         }
     }
 
     void TBasicExecutorPool::ScheduleActivationExLocalQueue(TMailbox* mailbox, ui64 revolvingWriteCounter) {
-        if (TlsThreadContext && TlsThreadContext->Pool == this && TlsThreadContext->WorkerId >= 0) {
-            if (++TlsThreadContext->WriteTurn < TlsThreadContext->LocalQueueSize) {
-                LocalQueues[TlsThreadContext->WorkerId].push(mailbox->Hint);
+        if (TlsThreadContext && TlsThreadContext->Pool() == this) {
+            TWorkerId workerId = TlsThreadContext->WorkerId();
+            if (++TlsThreadContext->LocalQueueContext.WriteTurn < TlsThreadContext->LocalQueueContext.LocalQueueSize) {
+                LocalQueues[workerId].push(mailbox->Hint);
                 return;
             }
             if (ActorSystemProfile != EASProfile::Default) {
@@ -357,8 +437,8 @@ namespace NActors {
                 TSemaphore semaphore = TSemaphore::GetSemaphore(x);
                 if constexpr (NFeatures::TLocalQueuesFeatureFlags::UseIfAllOtherThreadsAreSleeping) {
                     if (semaphore.CurrentSleepThreadCount == semaphore.CurrentThreadCount - 1 && semaphore.OldSemaphore == 0) {
-                        if (LocalQueues[TlsThreadContext->WorkerId].empty()) {
-                            LocalQueues[TlsThreadContext->WorkerId].push(mailbox->Hint);
+                        if (LocalQueues[workerId].empty()) {
+                            LocalQueues[workerId].push(mailbox->Hint);
                             return;
                         }
                     }
@@ -366,9 +446,9 @@ namespace NActors {
 
                 if constexpr (NFeatures::TLocalQueuesFeatureFlags::UseOnMicroburst) {
                     if (semaphore.OldSemaphore >= semaphore.CurrentThreadCount) {
-                        if (LocalQueues[TlsThreadContext->WorkerId].empty() && TlsThreadContext->WriteTurn < 1) {
-                            TlsThreadContext->WriteTurn++;
-                            LocalQueues[TlsThreadContext->WorkerId].push(mailbox->Hint);
+                        if (LocalQueues[workerId].empty() && TlsThreadContext->LocalQueueContext.WriteTurn < 1) {
+                            TlsThreadContext->LocalQueueContext.WriteTurn++;
+                            LocalQueues[workerId].push(mailbox->Hint);
                             return;
                         }
                     }
@@ -377,14 +457,14 @@ namespace NActors {
                 return;
             }
         }
-        ScheduleActivationExCommon(mailbox, revolvingWriteCounter, AtomicGet(Semaphore));
+        ScheduleActivationExCommon(mailbox, revolvingWriteCounter, std::nullopt);
     }
 
     void TBasicExecutorPool::ScheduleActivationEx(TMailbox* mailbox, ui64 revolvingCounter) {
-        if constexpr (NFeatures::IsLocalQueues()) {
+        if (MaxLocalQueueSize) {
             ScheduleActivationExLocalQueue(mailbox, revolvingCounter);
         } else {
-            ScheduleActivationExCommon(mailbox, revolvingCounter, AtomicGet(Semaphore));
+            ScheduleActivationExCommon(mailbox, revolvingCounter, std::nullopt);
         }
     }
 
@@ -437,37 +517,33 @@ namespace NActors {
 
     void TBasicExecutorPool::Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) {
         TAffinityGuard affinityGuard(Affinity());
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "");
 
         ActorSystem = actorSystem;
 
-        ScheduleReaders.Reset(new NSchedulerQueue::TReader[MaxFullThreadCount + 2]);
-        ScheduleWriters.Reset(new NSchedulerQueue::TWriter[MaxFullThreadCount + 2]);
+        ScheduleReaders.Reset(new NSchedulerQueue::TReader[MaxFullThreadCount]);
+        ScheduleWriters.Reset(new NSchedulerQueue::TWriter[MaxFullThreadCount]);
 
 
         for (i16 i = 0; i != MaxFullThreadCount; ++i) {
             Threads[i].Thread.reset(
                 new TExecutorThread(
                     i,
-                    0, // CpuId is not used in BASIC pool
                     actorSystem,
                     this,
-                    MailboxTable.Get(),
-                    PoolName,
-                    TimePerMailbox,
-                    EventsPerMailbox));
+                    PoolName));
             ScheduleWriters[i].Init(ScheduleReaders[i]);
         }
 
-        ScheduleWriters[MaxFullThreadCount].Init(ScheduleReaders[MaxFullThreadCount]);
-        ScheduleWriters[MaxFullThreadCount + 1].Init(ScheduleReaders[MaxFullThreadCount + 1]);
 
         *scheduleReaders = ScheduleReaders.Get();
-        *scheduleSz = MaxFullThreadCount + 2;
+        *scheduleSz = MaxFullThreadCount;
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "prepared");
     }
 
     void TBasicExecutorPool::Start() {
         TAffinityGuard affinityGuard(Affinity());
-
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "max threads: ", MaxFullThreadCount);
         ThreadUtilization = 0;
         AtomicAdd(MaxUtilizationCounter, -(i64)GetCycleCountFast());
 
@@ -478,9 +554,11 @@ namespace NActors {
         if constexpr (DebugMode) {
             Sanitizer->Start();
         }
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "started");
     }
 
     void TBasicExecutorPool::PrepareStop() {
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "stop flag set");
         StopFlag.store(true, std::memory_order_release);
         for (i16 i = 0; i != MaxFullThreadCount; ++i) {
             Threads[i].Thread->StopFlag.store(true, std::memory_order_release);
@@ -489,44 +567,46 @@ namespace NActors {
         if constexpr (DebugMode) {
             Sanitizer->Stop();
         }
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "stopped");
     }
 
     void TBasicExecutorPool::Shutdown() {
-        for (i16 i = 0; i != MaxFullThreadCount; ++i)
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "shutdown");
+        for (i16 i = 0; i != MaxFullThreadCount; ++i) {
+            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "join ", i);
             Threads[i].Thread->Join();
+        }
         if constexpr (DebugMode) {
+            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "join sanitizer");
             Sanitizer->Join();
         }
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::ExecutorPool, "shutdown done");
     }
 
     void TBasicExecutorPool::Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) {
-        Y_DEBUG_ABORT_UNLESS(workerId < MaxFullThreadCount);
-
         Schedule(deadline - ActorSystem->Timestamp(), ev, cookie, workerId);
     }
 
     void TBasicExecutorPool::Schedule(TMonotonic deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) {
-        Y_DEBUG_ABORT_UNLESS(workerId < MaxFullThreadCount);
-
         const auto current = ActorSystem->Monotonic();
         if (deadline < current)
             deadline = current;
 
-        if (workerId >= 0) {
-            ScheduleWriters[workerId].Push(deadline.MicroSeconds(), ev.Release(), cookie);
+        if (TlsThreadContext && TlsThreadContext->IsShared()) {
+            TlsThreadContext->SharedPool()->Schedule(deadline, ev, cookie, workerId);
         } else {
-            ScheduleWriters[MaxFullThreadCount + 2 + workerId].Push(deadline.MicroSeconds(), ev.Release(), cookie);
+            Y_DEBUG_ABORT_UNLESS(workerId < MaxFullThreadCount);
+            ScheduleWriters[workerId].Push(deadline.MicroSeconds(), ev.Release(), cookie);
         }
     }
 
     void TBasicExecutorPool::Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) {
-        Y_DEBUG_ABORT_UNLESS(workerId < MaxFullThreadCount);
-
         const auto deadline = ActorSystem->Monotonic() + delta;
-        if (workerId >= 0) {
-            ScheduleWriters[workerId].Push(deadline.MicroSeconds(), ev.Release(), cookie);
+        if (TlsThreadContext && TlsThreadContext->IsShared()) {
+            TlsThreadContext->SharedPool()->Schedule(deadline, ev, cookie, workerId);
         } else {
-            ScheduleWriters[MaxFullThreadCount + 2 + workerId].Push(deadline.MicroSeconds(), ev.Release(), cookie);
+            Y_DEBUG_ABORT_UNLESS(workerId < MaxFullThreadCount);
+            ScheduleWriters[workerId].Push(deadline.MicroSeconds(), ev.Release(), cookie);
         }
     }
 
@@ -547,21 +627,7 @@ namespace NActors {
     }
 
     float TBasicExecutorPool::GetThreadCount() const {
-        float extraThreads = 0;
-        for (ui32 sharedIdx = 0; sharedIdx < 2; ++sharedIdx) {
-            auto *sharedThread = SharedThreads[sharedIdx].load(std::memory_order_acquire);
-            if (!sharedThread) {
-                break;
-            }
-            i16 poolsInThread = 0;
-            for (ui32 poolIdx = 0; poolIdx < MaxPoolsForSharedThreads; ++poolIdx) {
-                if (sharedThread->ExecutorPools[poolIdx].load(std::memory_order_acquire)) {
-                    poolsInThread++;
-                }
-            }
-            extraThreads += 1.0 / poolsInThread;
-        }
-        return GetFullThreadCount() + extraThreads;
+        return GetFullThreadCount() + SharedCpuQuota.load(std::memory_order_relaxed);
     }
 
     i16 TBasicExecutorPool::GetFullThreadCount() const {
@@ -569,7 +635,7 @@ namespace NActors {
     }
 
     void TBasicExecutorPool::SetFullThreadCount(i16 threads) {
-        threads = Max<i16>(0, Min(MaxFullThreadCount, threads));
+        threads = Max<i16>(MinFullThreadCount, Min(MaxFullThreadCount, threads));
         with_lock (ChangeThreadsLock) {
             i16 prevCount = GetFullThreadCount();
             AtomicSet(ThreadCount, threads);
@@ -635,15 +701,12 @@ namespace NActors {
     }
 
     void TBasicExecutorPool::SetLocalQueueSize(ui16 size) {
-        if constexpr (!NFeatures::TLocalQueuesFeatureFlags::FIXED_LOCAL_QUEUE_SIZE) {
-            LocalQueueSize.store(std::max(size, NFeatures::TLocalQueuesFeatureFlags::MAX_LOCAL_QUEUE_SIZE), std::memory_order_relaxed);
-        }
+        size = std::min(size, MaxLocalQueueSize);
+        LocalQueueSize.store(size, std::memory_order_relaxed);
     }
 
-    void TBasicExecutorPool::Initialize(TWorkerContext& wctx) {
-        if (wctx.WorkerId >= 0) {
-            TlsThreadContext->WaitingStats = &WaitingStats[wctx.WorkerId];
-        }
+    void TBasicExecutorPool::Initialize() {
+        TlsThreadContext->WaitingStats = &WaitingStats[TlsThreadContext->WorkerId()];
     }
 
     void TBasicExecutorPool::SetSpinThresholdCycles(ui32 cycles) {
@@ -706,109 +769,71 @@ namespace NActors {
         }
     }
 
-    bool TExecutorThreadCtx::Wait(ui64 spinThresholdCycles, std::atomic<bool> *stopFlag) {
-        EThreadState state = ExchangeState<EThreadState>(EThreadState::Spin);
-        Y_ABORT_UNLESS(state == EThreadState::None, "WaitingFlag# %d", int(state));
-        if (spinThresholdCycles > 0) {
-            // spin configured period
-            Spin(spinThresholdCycles, stopFlag);
-        }
-        return Sleep(stopFlag);
+    TBasicExecutorPool::TSemaphore TBasicExecutorPool::GetSemaphore() const {
+        return TSemaphore::GetSemaphore(AtomicGet(Semaphore));
     }
 
-    bool TSharedExecutorThreadCtx::Wait(ui64 spinThresholdCycles, std::atomic<bool> *stopFlag) {
-        i64 requestsForWakeUp = RequestsForWakeUp.fetch_sub(1, std::memory_order_acq_rel);
-        if (requestsForWakeUp > 1) {
-            RequestsForWakeUp.store(1, std::memory_order_release);
-        }
-        if (requestsForWakeUp) {
-            return false;
-        }
-        TWaitState state = ExchangeState<TWaitState>(EThreadState::Spin);
-        Y_ABORT_UNLESS(state.Flag == EThreadState::None, "WaitingFlag# %d", int(state.Flag));
-        if (spinThresholdCycles > 0) {
-            // spin configured period
-            Spin(spinThresholdCycles, stopFlag);
-        }
-        return Sleep(stopFlag);
+    void TBasicExecutorPool::SetSharedPool(TSharedExecutorPool* pool) {
+        SharedPool = pool;
     }
 
-    bool TExecutorThreadCtx::WakeUp() {
-        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_WAKE_UP, false> activityGuard;
-        for (ui32 i = 0; i < 2; ++i) {
-            EThreadState state = GetState<EThreadState>();
-            switch (state) {
-                case EThreadState::None:
-                case EThreadState::Work:
-                    return false;
-                case EThreadState::Spin:
-                case EThreadState::Sleep:
-                    if (ReplaceState<EThreadState>(state, EThreadState::None)) {
-                        if (state == EThreadState::Sleep) {
-                            ui64 beforeUnpark = GetCycleCountFast();
-                            StartWakingTs = beforeUnpark;
-                            WaitingPad.Unpark();
-                            if (TlsThreadContext && TlsThreadContext->WaitingStats) {
-                                TlsThreadContext->WaitingStats->AddWakingUp(GetCycleCountFast() - beforeUnpark);
-                            }
-                        }
-                        return true;
-                    }
-                    break;
-                default:
-                    Y_ABORT();
+    TMailbox* TBasicExecutorPool::GetReadyActivationShared(ui64 revolvingCounter) {
+        TWorkerId workerId = TlsThreadContext->WorkerId();
+        NHPTimer::STime hpnow = GetCycleCountFast();
+        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION, false> activityGuard(hpnow);
+
+        SharedPool->Threads[workerId].UnsetWork();
+        if (Harmonizer) {
+            LWPROBE(TryToHarmonize, PoolId, PoolName);
+            Harmonizer->Harmonize(hpnow);
+        }
+        TAtomic x = AtomicGet(Semaphore);
+        TSemaphore semaphore = TSemaphore::GetSemaphore(x);
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "revolvingCounter == ", revolvingCounter, " semaphore == ", semaphore.OldSemaphore);
+        while (!StopFlag.load(std::memory_order_acquire)) {
+            if (!semaphore.OldSemaphore) {
+                EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Executor, "semaphore == 0");
+                return nullptr;
+            } else {
+                TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
+                if (const ui32 activation = std::visit([&revolvingCounter](auto &x) {return x.Pop(++revolvingCounter);}, Activations)) {
+                    SharedPool->Threads[workerId].SetWork();
+                    AtomicDecrement(Semaphore);
+                    EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "activation == ", activation, " semaphore == ", semaphore.OldSemaphore);
+                    return MailboxTable->Get(activation);
+                }
             }
+
+            SpinLockPause();
+            x = AtomicGet(Semaphore);
+            semaphore = TSemaphore::GetSemaphore(x);
         }
-        return false;
+        EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Executor, "stop");
+        return nullptr;
     }
 
-    bool TSharedExecutorThreadCtx::WakeUp() {
-        TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
-        i64 requestsForWakeUp = RequestsForWakeUp.fetch_add(1, std::memory_order_acq_rel);
-        if (requestsForWakeUp >= 0) {
-            return false;
-        }
-
-        for (;;) {
-            TWaitState state = GetState<TWaitState>();
-            switch (state.Flag) {
-                case EThreadState::None:
-                case EThreadState::Work:
-                    continue;
-                case EThreadState::Spin:
-                case EThreadState::Sleep:
-                    if (ReplaceState<TWaitState>(state, {EThreadState::None})) {
-                        if (state.Flag == EThreadState::Sleep) {
-                            ui64 beforeUnpark = GetCycleCountFast();
-                            StartWakingTs = beforeUnpark;
-                            WaitingPad.Unpark();
-                            if (TlsThreadContext && TlsThreadContext->WaitingStats) {
-                                TlsThreadContext->WaitingStats->AddWakingUp(GetCycleCountFast() - beforeUnpark);
-                            }
-                        }
-                        return true;
-                    }
-                    break;
-                default:
-                    Y_ABORT();
-            }
-        }
-        return false;
+    void TBasicExecutorPool::SetSharedCpuQuota(float quota) {
+        SharedCpuQuota.store(quota, std::memory_order_release);
     }
 
-    TSharedExecutorThreadCtx* TBasicExecutorPool::ReleaseSharedThread() {
-        ui64 count = SharedThreadsCount.fetch_sub(1, std::memory_order_acq_rel);
-        Y_ABORT_UNLESS(count);
-        auto *thread = SharedThreads[count - 1].exchange(nullptr);
-        Y_ABORT_UNLESS(thread);
-        return thread;
+    ui64 TBasicExecutorPool::TimePerMailboxTs() const {
+        return TimePerMailboxTsValue;
     }
 
-    void TBasicExecutorPool::AddSharedThread(TSharedExecutorThreadCtx* thread) {
-        ui64 count = SharedThreadsCount.fetch_add(1, std::memory_order_acq_rel);
-        Y_ABORT_UNLESS(count < MaxSharedThreadsForPool);
-        thread = SharedThreads[count].exchange(thread);
-        Y_ABORT_UNLESS(!thread);
+    ui32 TBasicExecutorPool::EventsPerMailbox() const {
+        return EventsPerMailboxValue;
+    }
+
+    ui16 TBasicExecutorPool::GetLocalQueueSize() const {
+        return LocalQueueSize.load(std::memory_order_relaxed);
+    }
+
+    ui16 TBasicExecutorPool::GetMaxLocalQueueSize() const {
+        return MaxLocalQueueSize;
+    }
+
+    ui16 TBasicExecutorPool::GetMinLocalQueueSize() const {
+        return MinLocalQueueSize;
     }
 
 }

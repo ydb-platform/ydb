@@ -51,6 +51,7 @@ struct TEvPrivate {
 class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
 
     const ui64 PrintStatePeriodSec = 300;
+    const ui64 PrintStateToLogSplitSize = 64000;
 
     struct TTopicKey {
         TString Endpoint;
@@ -219,6 +220,7 @@ private:
     bool ComputeCoordinatorRequest(TActorId readActorId, const TCoordinatorRequest& request);
     void UpdatePendingReadActors();
     void UpdateInterconnectSessions(const NActors::TActorId& interconnectSession);
+    TString GetInternalState();
 };
 
 TActorCoordinator::TActorCoordinator(
@@ -296,7 +298,7 @@ void TActorCoordinator::Handle(NActors::TEvents::TEvPing::TPtr& ev) {
     Send(ev->Sender, new NActors::TEvents::TEvPong(), IEventHandle::FlagTrackDelivery);
 }
 
-void TActorCoordinator::PrintInternalState() {
+TString TActorCoordinator::GetInternalState() {
     TStringStream str;
     str << "Known row dispatchers:\n";
 
@@ -313,8 +315,15 @@ void TActorCoordinator::PrintInternalState() {
     for (const auto& [topic, topicInfo] : TopicsInfo) {
         str << "    " << topic.TopicName << " (" << topic.Endpoint <<  "), pending partitions: " << topicInfo.PendingPartitions.size() << "\n";
     }
+    return str.Str();
+}
 
-    LOG_ROW_DISPATCHER_DEBUG(str.Str());
+void TActorCoordinator::PrintInternalState() {
+    auto str = GetInternalState();
+    auto buf = TStringBuf(str);
+    for (ui64 offset = 0; offset < buf.size(); offset += PrintStateToLogSplitSize) {
+        LOG_ROW_DISPATCHER_DEBUG(buf.SubString(offset, PrintStateToLogSplitSize));
+    }
 }
 
 void TActorCoordinator::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
@@ -409,7 +418,7 @@ void TActorCoordinator::Handle(NFq::TEvRowDispatcher::TEvCoordinatorRequest::TPt
     UpdateInterconnectSessions(ev->InterconnectSession);
 
     TStringStream str;
-    LOG_ROW_DISPATCHER_INFO("TEvCoordinatorRequest from " << ev->Sender.ToString() << ", " << source.GetTopicPath() << ", partIds: " << JoinSeq(", ", ev->Get()->Record.GetPartitionId()));
+    LOG_ROW_DISPATCHER_INFO("TEvCoordinatorRequest from " << ev->Sender.ToString() << ", " << source.GetTopicPath() << ", partIds: " << JoinSeq(", ", ev->Get()->Record.GetPartitionIds()));
     Metrics.IncomingRequests->Inc();
 
     TCoordinatorRequest request = {.Cookie = ev->Cookie, .Record = ev->Get()->Record};
@@ -430,7 +439,7 @@ bool TActorCoordinator::ComputeCoordinatorRequest(TActorId readActorId, const TC
 
     bool hasPendingPartitions = false;
     TMap<NActors::TActorId, TSet<ui64>> tmpResult;
-    for (auto& partitionId : request.Record.GetPartitionId()) {
+    for (auto& partitionId : request.Record.GetPartitionIds()) {
         TTopicKey topicKey{source.GetEndpoint(), source.GetDatabase(), source.GetTopicPath()};
         TPartitionKey key {topicKey, partitionId};
         auto locationIt = PartitionLocations.find(key);
@@ -457,7 +466,7 @@ bool TActorCoordinator::ComputeCoordinatorRequest(TActorId readActorId, const TC
         auto* partitionsProto = response->Record.AddPartitions();
         ActorIdToProto(actorId, partitionsProto->MutableActorId());
         for (auto partitionId : partitions) {
-            partitionsProto->AddPartitionId(partitionId);
+            partitionsProto->AddPartitionIds(partitionId);
         }
     }
 

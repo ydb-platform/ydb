@@ -38,12 +38,12 @@ namespace NTest {
             return Iter->Remap;
         }
 
-        void Make(IPages*) noexcept
+        void Make(IPages*)
         {
             Iter = nullptr;
         }
 
-        EReady Seek(TRawVals key, ESeek seek) noexcept
+        EReady Seek(TRawVals key, ESeek seek)
         {
             if (seek == ESeek::Upper && !key)
                 Y_ABORT("Cannot cast ESeek::Upper with empty key to ELookup");
@@ -80,12 +80,12 @@ namespace NTest {
             return Iter->Next(Mode);
         }
 
-        EReady Next() noexcept
+        EReady Next()
         {
             return Iter->Next(Mode);
         }
 
-        const TRowState& Apply() noexcept
+        const TRowState& Apply()
         {
             return Iter->Row();
         }

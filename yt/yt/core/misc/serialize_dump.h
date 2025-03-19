@@ -1,6 +1,10 @@
 #pragma once
 
+#include <yt/yt/core/misc/checksum.h>
+
 #include <library/cpp/yt/string/format.h>
+
+#include <library/cpp/yt/misc/enum.h>
 
 namespace NYT {
 
@@ -9,14 +13,14 @@ namespace NYT {
 class TSerializationDumper
 {
 public:
-    Y_FORCE_INLINE bool IsEnabled() const
+    Y_FORCE_INLINE ESerializationDumpMode GetMode() const
     {
-        return Enabled_;
+        return Mode_;
     }
 
-    Y_FORCE_INLINE void SetEnabled(bool value)
+    Y_FORCE_INLINE void SetMode(ESerializationDumpMode value)
     {
-        Enabled_ = value;
+        Mode_ = value;
     }
 
     Y_FORCE_INLINE void Indent()
@@ -46,9 +50,14 @@ public:
     }
 
 
-    Y_FORCE_INLINE bool IsActive() const
+    Y_FORCE_INLINE bool IsContentDumpActive() const
     {
-        return IsEnabled() && !IsSuspended();
+        return GetMode() == ESerializationDumpMode::Content && !IsSuspended();
+    }
+
+    Y_FORCE_INLINE bool IsChecksumDumpActive() const
+    {
+        return GetMode() == ESerializationDumpMode::Checksum;
     }
 
 
@@ -58,31 +67,47 @@ public:
     }
 
     template <class... TArgs>
-    void Write(const char* format, const TArgs&... args)
+    void WriteContent(const char* format, const TArgs&... args)
     {
-        if (!IsActive()) {
-            return;
-        }
-
-        TStringBuilder builder;
-        builder.AppendChar(' ', IndentCount_ * 2);
+        BeginWrite();
+        ScratchBuilder_.AppendChar(' ', IndentCount_ * 2);
         if (FieldName_) {
-            builder.AppendString(FieldName_);
-            builder.AppendString(": ");
+            ScratchBuilder_.AppendString(FieldName_);
+            ScratchBuilder_.AppendString(": ");
             FieldName_ = {};
         }
-        builder.AppendFormat(format, args...);
-        builder.AppendChar('\n');
-        auto buffer = builder.GetBuffer();
-        fwrite(buffer.begin(), buffer.length(), 1, stderr);
+        ScratchBuilder_.AppendFormat(format, args...);
+        ScratchBuilder_.AppendChar('\n');
+        EndWrite();
+    }
+
+    void WriteChecksum(TStringBuf path, TChecksum checksum)
+    {
+        BeginWrite();
+        ScratchBuilder_.AppendFormat("%v => %x\n", path, checksum);
+        EndWrite();
     }
 
 private:
-    bool Enabled_ = false;
+    ESerializationDumpMode Mode_ = ESerializationDumpMode::None;
     int IndentCount_ = 0;
     int SuspendCount_ = 0;
     TStringBuf FieldName_;
+    TStringBuilder ScratchBuilder_;
+
+    void BeginWrite()
+    {
+        ScratchBuilder_.Reset();
+    }
+
+    void EndWrite()
+    {
+        auto buffer = ScratchBuilder_.GetBuffer();
+        fwrite(buffer.begin(), buffer.length(), 1, stderr);
+    }
 };
+
+////////////////////////////////////////////////////////////////////////////////
 
 class TSerializeDumpIndentGuard
     : private TNonCopyable
@@ -117,6 +142,8 @@ private:
     TSerializationDumper* Dumper_;
 };
 
+////////////////////////////////////////////////////////////////////////////////
+
 class TSerializeDumpSuspendGuard
     : private TNonCopyable
 {
@@ -150,10 +177,12 @@ private:
     TSerializationDumper* Dumper_;
 };
 
+////////////////////////////////////////////////////////////////////////////////
+
 #define SERIALIZATION_DUMP_WRITE(context, ...) \
-    if (Y_LIKELY(!(context).Dumper().IsActive())) { \
+    if (Y_LIKELY(!(context).Dumper().IsContentDumpActive())) { \
     } else \
-        (context).Dumper().Write(__VA_ARGS__)
+        (context).Dumper().WriteContent(__VA_ARGS__)
 
 #define SERIALIZATION_DUMP_INDENT(context) \
     if (auto SERIALIZATION_DUMP_INDENT__Guard = NYT::TSerializeDumpIndentGuard(&(context).Dumper())) { \
@@ -164,6 +193,8 @@ private:
     if (auto SERIALIZATION_DUMP_SUSPEND__Guard = NYT::TSerializeDumpSuspendGuard(&(context).Dumper())) { \
         Y_UNREACHABLE(); \
     } else
+
+////////////////////////////////////////////////////////////////////////////////
 
 inline TString DumpRangeToHex(TRef data)
 {
@@ -177,6 +208,8 @@ inline TString DumpRangeToHex(TRef data)
     builder.AppendChar('>');
     return builder.Flush();
 }
+
+////////////////////////////////////////////////////////////////////////////////
 
 template <class T>
 struct TSerializationDumpPodWriter

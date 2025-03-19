@@ -14,6 +14,7 @@
 #include <ydb/library/yql/dq/type_ann/dq_type_ann.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/core/yql_join.h>
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/parser/pg_wrapper/interface/optimizer.h>
 
@@ -30,8 +31,10 @@ namespace {
 bool IsStreamLookup(const TCoEquiJoinTuple& joinTuple) {
     for (const auto& outer: joinTuple.Options()) {
         for (const auto& inner: outer.Cast<TExprList>()) {
-            if (inner.Cast<TCoAtom>().StringValue() == "forceStreamLookup") {
-                return true;
+            if (auto maybeForceStreamLookupOption = inner.Maybe<TCoAtom>()) {
+                if (maybeForceStreamLookupOption.Cast().StringValue() == "forceStreamLookup") {
+                    return true;
+                } 
             }
         }
     }
@@ -54,7 +57,13 @@ struct TDqCBOProviderContext : public NYql::TBaseProviderContext {
         const TVector<TJoinColumn>& leftJoinKeys, const TVector<TJoinColumn>& rightJoinKeys,
         NYql::EJoinAlgoType joinAlgo,  NYql::EJoinKind joinKind) override;
 
-    virtual double ComputeJoinCost(const NYql::TOptimizerStatistics& leftStats, const NYql::TOptimizerStatistics& rightStats, const double outputRows, const double outputByteSize, NYql::EJoinAlgoType joinAlgo) const override;
+    virtual double ComputeJoinCost(
+        const NYql::TOptimizerStatistics& leftStats, 
+        const NYql::TOptimizerStatistics& rightStats, 
+        const double outputRows, 
+        const double outputByteSize, 
+        NYql::EJoinAlgoType joinAlgo
+    ) const override;
 
     TDqConfiguration::TPtr Config;
     TTypeAnnotationContext& TypesCtx;
@@ -90,7 +99,13 @@ bool TDqCBOProviderContext::IsJoinApplicable(const std::shared_ptr<NYql::IBaseOp
 }
 
 
-double TDqCBOProviderContext::ComputeJoinCost(const TOptimizerStatistics& leftStats, const TOptimizerStatistics& rightStats, const double outputRows, const double outputByteSize, EJoinAlgoType joinAlgo) const  {
+double TDqCBOProviderContext::ComputeJoinCost(
+    const TOptimizerStatistics& leftStats, 
+    const TOptimizerStatistics& rightStats, 
+    const double outputRows, 
+    const double outputByteSize, 
+    EJoinAlgoType joinAlgo
+) const  {
     Y_UNUSED(outputByteSize);
 
     switch(joinAlgo) {
@@ -225,86 +240,149 @@ protected:
         return TDqLookupSourceWrap(lookupSourceWrap);
     }
 
-    TMaybeNode<TExprBase> RewriteStreamEquiJoinWithLookup(TExprBase node, TExprContext& ctx) {
-        Y_UNUSED(ctx);
-        const auto equiJoin = node.Cast<TCoEquiJoin>();
-        if (equiJoin.ArgCount() != 4) { // 2 parties join
-            return node;
+    // Recursively walk join tree and replace right-side of StreamLookupJoin
+    ui32 RewriteStreamJoinTuple(ui32 idx, const TCoEquiJoin& equiJoin, const TCoEquiJoinTuple& joinTuple, std::vector<TExprNode::TPtr>& args, TExprContext& ctx, bool& changed) {
+        // recursion depth O(args.size())
+        Y_ENSURE(idx < args.size());
+        // handle left side
+        if (!joinTuple.LeftScope().Maybe<TCoAtom>()) {
+            idx = RewriteStreamJoinTuple(idx, equiJoin, joinTuple.LeftScope().Cast<TCoEquiJoinTuple>(), args, ctx, changed);
+        } else {
+            ++idx;
         }
-        const auto left = equiJoin.Arg(0).Cast<TCoEquiJoinInput>().List();
-        const auto right = equiJoin.Arg(1).Cast<TCoEquiJoinInput>().List();
-        const auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();
+        // handle right side
+        if (!joinTuple.RightScope().Maybe<TCoAtom>()) {
+            return RewriteStreamJoinTuple(idx, equiJoin, joinTuple.RightScope().Cast<TCoEquiJoinTuple>(), args, ctx, changed);
+        }
+        Y_ENSURE(idx < args.size());
         if (!IsStreamLookup(joinTuple)) {
+            return idx + 1;
+        }
+        auto right = equiJoin.Arg(idx).Cast<TCoEquiJoinInput>();
+        auto rightList = right.List();
+        if (auto maybeExtractMembers = rightList.Maybe<TCoExtractMembers>()) {
+            rightList = maybeExtractMembers.Cast().Input();
+        }
+        TExprNode::TPtr lookupSourceWrap;
+        if (auto maybeSource = rightList.Maybe<TDqSourceWrap>()) {
+            lookupSourceWrap = LookupSourceFromSource(maybeSource.Cast(), ctx).Ptr();
+        } else if (auto maybeRead = rightList.Maybe<TDqReadWrap>()) {
+            lookupSourceWrap = LookupSourceFromRead(maybeRead.Cast(), ctx).Ptr();
+        } else {
+            return idx + 1;
+        }
+        changed = true;
+        args[idx] =
+            Build<TCoEquiJoinInput>(ctx, joinTuple.Pos())
+                .List(lookupSourceWrap)
+                .Scope(right.Scope())
+            .Done().Ptr();
+        return idx + 1;
+    }
+
+    TMaybeNode<TExprBase> RewriteStreamEquiJoinWithLookup(TExprBase node, TExprContext& ctx) {
+        const auto equiJoin = node.Cast<TCoEquiJoin>();
+        auto argCount = equiJoin.ArgCount();
+        const auto joinTuple = equiJoin.Arg(argCount - 2).Cast<TCoEquiJoinTuple>();
+        std::vector<TExprNode::TPtr> args(argCount);
+        bool changed = false;
+        auto rightIdx = RewriteStreamJoinTuple(0u, equiJoin, joinTuple, args, ctx, changed);
+        Y_ENSURE(rightIdx + 2 == argCount);
+        if (!changed) {
             return node;
         }
-        if (!right.Maybe<TDqSourceWrap>() && !right.Maybe<TDqReadWrap>()) {
-            return node;
+        // fill copies of remaining args
+        for (ui32 i = 0; i < argCount; ++i) {
+            if (!args[i]) {
+                args[i] = equiJoin.Arg(i).Ptr();
+            }
         }
-
-        TDqLookupSourceWrap lookupSourceWrap =  right.Maybe<TDqSourceWrap>()
-            ? LookupSourceFromSource(right.Cast<TDqSourceWrap>(), ctx)
-            : LookupSourceFromRead(right.Cast<TDqReadWrap>(), ctx)
-        ;
-
-        return Build<TCoEquiJoin>(ctx, node.Pos())
-                .Add(equiJoin.Arg(0))
-                .Add<TCoEquiJoinInput>()
-                        .List(lookupSourceWrap)
-                        .Scope(equiJoin.Arg(1).Cast<TCoEquiJoinInput>().Scope())
-                .Build()
-                .Add(equiJoin.Arg(2))
-                .Add(equiJoin.Arg(3))
-            .Done();
+        return Build<TCoEquiJoin>(ctx, node.Pos()).Add(std::move(args)).Done();
     }
 
     TMaybeNode<TExprBase> OptimizeEquiJoinWithCosts(TExprBase node, TExprContext& ctx) {
-        if (TypesCtx.CostBasedOptimizer != ECostBasedOptimizerType::Disable) {
-            std::function<void(const TString&)> log = [&](auto str) {
-                YQL_CLOG(INFO, ProviderDq) << str;
-            };
-
-            auto factory = MakeCBOOptimizerFactory();
-            std::shared_ptr<IOptimizerNew> opt;
-            TDqCBOProviderContext pctx(TypesCtx, Config);
-
-            switch (TypesCtx.CostBasedOptimizer) {
-            case ECostBasedOptimizerType::Native:
-                opt = factory->MakeJoinCostBasedOptimizerNative(pctx, ctx, {.MaxDPhypDPTableSize = 100000});
-                break;
-            case ECostBasedOptimizerType::PG:
-                opt = factory->MakeJoinCostBasedOptimizerPG(pctx, ctx, {.Logger = log});
-                break;
-            default:
-                YQL_ENSURE(false, "Unknown CBO type");
-                break;
-            }
-            std::function<void(TVector<std::shared_ptr<TRelOptimizerNode>>&, TStringBuf, const TExprNode::TPtr, const std::shared_ptr<TOptimizerStatistics>&)> providerCollect = [](auto& rels, auto label, auto node, auto stats) {
-                Y_UNUSED(node);
-                auto rel = std::make_shared<TRelOptimizerNode>(TString(label), *stats);
-                rels.push_back(rel);
-            };
-
-            return DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, 2, *opt, providerCollect);
-        } else {
+        auto equiJoin = node.Cast<TCoEquiJoin>();
+        if (!HasDqConnectionsInEquiJoin(equiJoin)) {
             return node;
         }
+        if (TypesCtx.CostBasedOptimizer == ECostBasedOptimizerType::Disable) {
+            return node;
+        }
+
+        std::function<void(const TString&)> log = [&](auto str) {
+            YQL_CLOG(INFO, ProviderDq) << str;
+        };
+
+        auto factory = MakeCBOOptimizerFactory();
+        std::shared_ptr<IOptimizerNew> opt;
+        TDqCBOProviderContext pctx(TypesCtx, Config);
+
+        switch (TypesCtx.CostBasedOptimizer) {
+        case ECostBasedOptimizerType::Native:
+            opt = factory->MakeJoinCostBasedOptimizerNative(pctx, ctx, {.MaxDPhypDPTableSize = 100000});
+            break;
+        case ECostBasedOptimizerType::PG:
+            opt = factory->MakeJoinCostBasedOptimizerPG(pctx, ctx, {.Logger = log});
+            break;
+        case NYql::ECostBasedOptimizerType::Disable:
+            break;
+        }
+        std::function<void(TVector<std::shared_ptr<TRelOptimizerNode>>&, TStringBuf, const TExprNode::TPtr, const std::shared_ptr<TOptimizerStatistics>&)> providerCollect = [](auto& rels, auto label, auto node, auto stats) {
+            Y_UNUSED(node);
+            auto rel = std::make_shared<TRelOptimizerNode>(TString(label), *stats);
+            rels.push_back(rel);
+        };
+
+        return DqOptimizeEquiJoinWithCosts(node, ctx, TypesCtx, 2, *opt, providerCollect);
+    }
+
+    static bool ValidateDqEquiJoinTree(const TCoEquiJoinTuple& joinTuple, EHashJoinMode mode) {
+        if (!joinTuple.LeftScope().Maybe<TCoAtom>()) {
+            if (!ValidateDqEquiJoinTree(joinTuple.LeftScope().Cast<TCoEquiJoinTuple>(), mode)) {
+                return false;
+            }
+        }
+
+        if (!joinTuple.RightScope().Maybe<TCoAtom>()) {
+            if (!ValidateDqEquiJoinTree(joinTuple.RightScope().Cast<TCoEquiJoinTuple>(), mode)) {
+                return false;
+            }
+        }
+
+        TStringBuf joinType = joinTuple.Type().Value();
+        auto options = joinTuple.Options();
+        auto linkSettings = GetEquiJoinLinkSettings(options.Ref());
+        bool leftAny = linkSettings.LeftHints.contains("any");
+        bool rightAny = linkSettings.RightHints.contains("any");
+        if (linkSettings.JoinAlgo == EJoinAlgoType::MapJoin) {
+            mode = EHashJoinMode::Map;
+        } else if (linkSettings.JoinAlgo == EJoinAlgoType::GraceJoin) {
+            mode = EHashJoinMode::GraceAndSelf;
+        }
+
+        if (mode == EHashJoinMode::Off || mode == EHashJoinMode::Map) {
+            if ((joinType == "Full" || joinType == "Exclusion") && (leftAny || rightAny)) {
+                // YQL-19497
+                return false;
+            }
+        }
+
+        return true;
     }
 
     TMaybeNode<TExprBase> RewriteEquiJoin(TExprBase node, TExprContext& ctx) {
         auto equiJoin = node.Cast<TCoEquiJoin>();
-        bool hasDqConnections = false;
-        for (size_t i = 0; i + 2 < equiJoin.ArgCount(); ++i) {
-            auto list = equiJoin.Arg(i).Cast<TCoEquiJoinInput>().List();
-            if (auto maybeExtractMembers = list.Maybe<TCoExtractMembers>()) {
-                list = maybeExtractMembers.Cast().Input();
-            }
-            if (auto maybeFlatMap = list.Maybe<TCoFlatMapBase>()) {
-                list = maybeFlatMap.Cast().Input();
-            }
-            hasDqConnections |= !!list.Maybe<TDqConnection>();
+        if (!HasDqConnectionsInEquiJoin(equiJoin)) {
+            return node;
         }
 
-        return hasDqConnections ? DqRewriteEquiJoin(node, Config->HashJoinMode.Get().GetOrElse(EHashJoinMode::Off), false, ctx, TypesCtx) : node;
+        auto mode = Config->HashJoinMode.Get().GetOrElse(EHashJoinMode::Off);
+        auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();
+        if (!ValidateDqEquiJoinTree(joinTuple, mode)) {
+            return node;
+        }
+
+        return DqRewriteEquiJoin(node, Config->HashJoinMode.Get().GetOrElse(EHashJoinMode::Off), false, ctx, TypesCtx);
     }
 
     TMaybeNode<TExprBase> ExpandWindowFunctions(TExprBase node, TExprContext& ctx) {
@@ -348,6 +426,17 @@ protected:
     }
 
 private:
+
+    bool HasDqConnectionsInEquiJoin(const TCoEquiJoin& equiJoin) {
+        for (size_t i = 0; i + 2 < equiJoin.ArgCount(); ++i) {
+            const auto& list = SkipCallables(equiJoin.Arg(i).Cast<TCoEquiJoinInput>().List().Ref(),
+                {"ExtractMembers", "FlatMap", "OrderedFlatMap"});
+            if (TDqConnection::Match(&list)) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     void EnsureNotDistinct(const TCoAggregate& aggregate) {
         const auto& aggregateHandlers = aggregate.Handlers();

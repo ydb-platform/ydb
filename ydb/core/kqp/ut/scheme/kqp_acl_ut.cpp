@@ -1,7 +1,7 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -11,7 +11,7 @@ using namespace NYdb::NTable;
 
 const TString UserName = "user0@builtin";
 
-void AddPermissions(const TKikimrRunner& kikimr, const TString& path, const TString& subject, const TVector<TString>& permissionNames) {
+void AddPermissions(const TKikimrRunner& kikimr, const TString& path, const TString& subject, const std::vector<std::string>& permissionNames) {
     auto driver = NYdb::TDriver(NYdb::TDriverConfig()
     .SetEndpoint(kikimr.GetEndpoint())
     .SetDatabase("/Root")
@@ -130,7 +130,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         Cerr << result.GetIssues().ToString() << Endl;
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SCHEME_ERROR);
         const auto expectedIssueMessage = "Cannot find table 'db.[/Root/TwoShard]' because it does not exist or you do not have access permissions.";
-        UNIT_ASSERT_VALUES_EQUAL(result.GetIssues().ToString().Contains(expectedIssueMessage), true);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetIssues().ToString().contains(expectedIssueMessage), true);
         driver.Stop(true);
     }
 
@@ -173,7 +173,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
         )", TTxControl::BeginTx(TTxSettings::SerializableRW()).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::ABORTED);
         const auto expectedIssueMessage = "Failed to resolve table `/Root/TwoShard` status: AccessDenied.";
-        UNIT_ASSERT_VALUES_EQUAL(result.GetIssues().ToString().Contains(expectedIssueMessage), true);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetIssues().ToString().contains(expectedIssueMessage), true);
         driver.Stop(true);
     }
 
@@ -217,8 +217,10 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
                 primary key (id)
             ) WITH (STORE=%s);
         )", isOlap ? "COLUMN" : "ROW");
-    
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        auto settings = NKqp::TKikimrSettings().SetAppConfig(appConfig);
+        TKikimrRunner kikimr(appConfig);
 
         {
             auto driverConfig = TDriverConfig()
@@ -253,13 +255,13 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
             const auto expectedIssueMessage = "Cannot find table 'db.[/Root/test_acl]' because it does not exist or you do not have access permissions.";
-            UNIT_ASSERT_C(result.GetIssues().ToString().Contains(expectedIssueMessage), result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetIssues().ToString().contains(expectedIssueMessage), result.GetIssues().ToString());
 
             auto resultWrite = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/test_acl` (id, name) VALUES (1, 'test');
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(!resultWrite.IsSuccess(), resultWrite.GetIssues().ToString());
-            UNIT_ASSERT_C(resultWrite.GetIssues().ToString().Contains(expectedIssueMessage), resultWrite.GetIssues().ToString());
+            UNIT_ASSERT_C(resultWrite.GetIssues().ToString().contains(expectedIssueMessage), resultWrite.GetIssues().ToString());
 
             driver.Stop(true);
         }
@@ -285,13 +287,13 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
             const auto expectedIssueMessage = "Failed to resolve table `/Root/test_acl` status: AccessDenied., code: 2028";
-            UNIT_ASSERT_C(result.GetIssues().ToString().Contains(expectedIssueMessage), result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetIssues().ToString().contains(expectedIssueMessage), result.GetIssues().ToString());
 
             auto resultWrite = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/test_acl` (id, name) VALUES (1, 'test');
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(!resultWrite.IsSuccess(), resultWrite.GetIssues().ToString());
-            UNIT_ASSERT_C(resultWrite.GetIssues().ToString().Contains(expectedIssueMessage), resultWrite.GetIssues().ToString());
+            UNIT_ASSERT_C(resultWrite.GetIssues().ToString().contains(expectedIssueMessage), resultWrite.GetIssues().ToString());
 
             driver.Stop(true);
         }
@@ -322,7 +324,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(!resultWrite.IsSuccess(), resultWrite.GetIssues().ToString());
             const auto expectedIssueMessage = "Failed to resolve table `/Root/test_acl` status: AccessDenied., code: 2028";
-            UNIT_ASSERT_C(resultWrite.GetIssues().ToString().Contains(expectedIssueMessage), resultWrite.GetIssues().ToString());
+            UNIT_ASSERT_C(resultWrite.GetIssues().ToString().contains(expectedIssueMessage), resultWrite.GetIssues().ToString());
 
             driver.Stop(true);
         }
@@ -358,7 +360,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(!resultDelete.IsSuccess(), resultDelete.GetIssues().ToString());
             const auto expectedIssueMessage = "Failed to resolve table `/Root/test_acl` status: AccessDenied., code: 2028";
-            UNIT_ASSERT_C(resultDelete.GetIssues().ToString().Contains(expectedIssueMessage), resultDelete.GetIssues().ToString());
+            UNIT_ASSERT_C(resultDelete.GetIssues().ToString().contains(expectedIssueMessage), resultDelete.GetIssues().ToString());
 
             driver.Stop(true);
         }
@@ -392,7 +394,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(!resultWrite.IsSuccess(), resultWrite.GetIssues().ToString());
             const auto expectedIssueMessage = "Failed to resolve table `/Root/test_acl` status: AccessDenied., code: 2028";
-            UNIT_ASSERT_C(resultWrite.GetIssues().ToString().Contains(expectedIssueMessage), resultWrite.GetIssues().ToString());
+            UNIT_ASSERT_C(resultWrite.GetIssues().ToString().contains(expectedIssueMessage), resultWrite.GetIssues().ToString());
 
             auto resultDelete = client.ExecuteQuery(R"(
                 DELETE FROM `/Root/test_acl` WHERE 1=1;
@@ -458,7 +460,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
             const auto expectedIssueMessage = "Failed to resolve table `/Root/test_acl` status: AccessDenied., code: 2028";
-            UNIT_ASSERT_C(result.GetIssues().ToString().Contains(expectedIssueMessage), result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.GetIssues().ToString().contains(expectedIssueMessage), result.GetIssues().ToString());
 
             auto resultWrite = client.ExecuteQuery(R"(
                 REPLACE INTO `/Root/test_acl` (id, name) VALUES (1, 'test');
@@ -469,7 +471,7 @@ Y_UNIT_TEST_SUITE(KqpAcl) {
                 DELETE FROM `/Root/test_acl` WHERE 1=1;
             )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_C(!resultDelete.IsSuccess(), resultDelete.GetIssues().ToString());
-            UNIT_ASSERT_C(resultDelete.GetIssues().ToString().Contains(expectedIssueMessage), resultDelete.GetIssues().ToString());
+            UNIT_ASSERT_C(resultDelete.GetIssues().ToString().contains(expectedIssueMessage), resultDelete.GetIssues().ToString());
 
             driver.Stop(true);
         }

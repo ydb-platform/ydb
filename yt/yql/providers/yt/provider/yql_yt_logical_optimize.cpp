@@ -39,6 +39,7 @@ public:
         , State_(state)
     {
 #define HNDL(name) "LogicalOptimizer-"#name, Hndl(&TYtLogicalOptProposalTransformer::name)
+        AddHandler(0, &TCoWithWorld::Match, HNDL(WithWorld));
         AddHandler(0, &TYtMap::Match, HNDL(DirectRow));
         AddHandler(0, Names({TYtReduce::CallableName(), TYtMapReduce::CallableName()}), HNDL(IsKeySwitch));
         AddHandler(0, &TCoLeft::Match, HNDL(TrimReadWorld));
@@ -230,6 +231,7 @@ protected:
                         mapOut.RowSpec->CopySortness(ctx, TYqlRowSpecInfo(map.Output().Item(0).RowSpec()));
                     }
                     mapOut.SetUnique(path.Ref().GetConstraint<TDistinctConstraintNode>(), map.Mapper().Pos(), ctx);
+                    mapOut.RowSpec->SetConstraints(path.Ref().GetConstraintSet());
 
                     TExprBase newColumns = Build<TCoVoid>(ctx, path.Pos()).Done();
                     if (keepColumns) {
@@ -271,6 +273,7 @@ protected:
                         mergeOut.RowSpec->CopyTypeOrders(*nativeType);
                     }
                     mergeOut.SetUnique(path.Ref().GetConstraint<TDistinctConstraintNode>(), merge.Pos(), ctx);
+                    mergeOut.RowSpec->SetConstraints(path.Ref().GetConstraintSet());
 
                     TSet<TStringBuf> columnSet(effectiveColumns.begin(), effectiveColumns.end());
                     if (mergeOut.RowSpec->HasAuxColumns()) {
@@ -327,6 +330,8 @@ protected:
 
         auto cluster = TString{GetClusterName(input)};
         TSyncMap syncList;
+        const ERuntimeClusterSelectionMode selectionMode =
+            State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
 
         for (auto handler: aggregate.Handlers()) {
             auto trait = handler.Trait();
@@ -341,12 +346,12 @@ protected:
                     t.FinishHandler(),
                 };
                 for (auto lambda : lambdas) {
-                    if (!IsYtCompleteIsolatedLambda(lambda.Ref(), syncList, cluster, false)) {
+                    if (!IsYtCompleteIsolatedLambda(lambda.Ref(), syncList, cluster, false, selectionMode)) {
                         return node;
                     }
                 }
             } else if (trait.Ref().IsCallable("AggApply")) {
-                if (!IsYtCompleteIsolatedLambda(*trait.Ref().Child(2), syncList, cluster, false)) {
+                if (!IsYtCompleteIsolatedLambda(*trait.Ref().Child(2), syncList, cluster, false, selectionMode)) {
                     return node;
                 }
             }
@@ -564,6 +569,50 @@ protected:
                     .Build()
                 .Build()
             .Done();
+    }
+
+    TMaybeNode<TExprBase> WithWorld(TExprBase node, TExprContext& ctx) const {
+        auto maybeRead = node.Cast<TCoWithWorld>().Input().Maybe<TCoRight>().Input().Maybe<TYtReadTable>();
+        if (maybeRead) {
+            auto read = maybeRead.Cast();
+            TExprNode::TListType worlds(1, read.World().Ptr());
+            worlds.push_back(node.Cast<TCoWithWorld>().World().Ptr());
+            auto sync = ctx.NewCallable(node.Pos(), TCoSync::CallableName(), std::move(worlds));
+            return Build<TCoRight>(ctx, node.Pos())
+                .Input<TYtReadTable>()
+                    .InitFrom(read)
+                    .World(sync)
+                    .Build()
+                .Done();
+        }
+
+        auto maybeOut = node.Cast<TCoWithWorld>().Input().Maybe<TYtOutput>();
+        if (maybeOut) {
+            TVector<TYtSection> sections;
+            sections.push_back(Build<TYtSection>(ctx, node.Pos())
+                .Paths()
+                    .Add()
+                        .Table(maybeOut.Cast())
+                        .Columns<TCoVoid>().Build()
+                        .Ranges<TCoVoid>().Build()
+                        .Stat<TCoVoid>().Build()
+                    .Build()
+                .Build()
+                .Settings().Build()
+                .Done());
+
+            return Build<TCoRight>(ctx, node.Pos())
+                    .Input<TYtReadTable>()
+                        .World(node.Cast<TCoWithWorld>().World())
+                        .DataSource(GetDataSource(maybeOut.Cast(), ctx))
+                        .Input()
+                            .Add(sections)
+                        .Build()
+                    .Build()
+                .Done();
+        }
+
+        return node;
     }
 
     TMaybeNode<TExprBase> TrimReadWorld(TExprBase node, TExprContext& ctx) const {
@@ -1346,7 +1395,10 @@ protected:
         TYtDSource dataSource = GetDataSource(input, ctx);
         TString cluster = TString{dataSource.Cluster().Value()};
         TSyncMap syncList;
-        if (!IsYtCompleteIsolatedLambda(countBase.Count().Ref(), syncList, cluster, false)) {
+        const ERuntimeClusterSelectionMode selectionMode =
+            State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+
+        if (!IsYtCompleteIsolatedLambda(countBase.Count().Ref(), syncList, cluster, false, selectionMode)) {
             return node;
         }
 

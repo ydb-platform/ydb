@@ -58,6 +58,8 @@ void TPrivatePageCache::RegisterPageCollection(TIntrusivePtr<TInfo> info) {
             Stats.TotalPinnedBody += page->Size;
 
         TryUnload(page);
+        // notify shared cache that we have a page handle
+        ToTouchShared[page->Info->Id].insert(page->Id);
         Y_DEBUG_ABORT_UNLESS(!page->IsUnnecessary());
     }
 
@@ -285,6 +287,7 @@ const TSharedData* TPrivatePageCache::Lookup(TPageId pageId, TInfo *info) {
     }
 
     if (page->Empty()) {
+        Y_DEBUG_ABORT_UNLESS(info->GetPageType(page->Id) != EPage::FlatIndex, "Flat index pages should have been sticked and preloaded");
         ToLoad.PushBack(page);
         Stats.CurrentCacheMisses++;
     }

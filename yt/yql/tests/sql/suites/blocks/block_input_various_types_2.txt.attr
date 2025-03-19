@@ -1,0 +1,441 @@
+{
+    "_yql_row_spec" = {
+        "NativeYtTypeFlags" = 0u;
+        "StrictSchema" = %true;
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "Date";
+                    [
+                        "DataType";
+                        "Date";
+                    ];
+                ];
+                [
+                    "DateTime";
+                    [
+                        "DataType";
+                        "Datetime";
+                    ];
+                ];
+                [
+                    "DoubleOptionalDate";
+                    [
+                        "OptionalType";
+                        [
+                            "OptionalType";
+                            [
+                                "DataType";
+                                "Date";
+                            ];
+                        ];
+                    ];
+                ];
+                [
+                    "DoubleOptionalDateTime";
+                    [
+                        "OptionalType";
+                        [
+                            "OptionalType";
+                            [
+                                "DataType";
+                                "Datetime";
+                            ];
+                        ];
+                    ];
+                ];
+                [
+                    "DoubleOptionalFloat";
+                    [
+                        "OptionalType";
+                        [
+                            "OptionalType";
+                            [
+                                "DataType";
+                                "Float";
+                            ];
+                        ];
+                    ];
+                ];
+                [
+                    "DoubleOptionalInterval";
+                    [
+                        "OptionalType";
+                        [
+                            "OptionalType";
+                            [
+                                "DataType";
+                                "Interval";
+                            ];
+                        ];
+                    ];
+                ];
+                [
+                    "DoubleOptionalTimestamp";
+                    [
+                        "OptionalType";
+                        [
+                            "OptionalType";
+                            [
+                                "DataType";
+                                "Timestamp";
+                            ];
+                        ];
+                    ];
+                ];
+                [
+                    "Float";
+                    [
+                        "DataType";
+                        "Float";
+                    ];
+                ];
+                [
+                    "Interval";
+                    [
+                        "DataType";
+                        "Interval";
+                    ];
+                ];
+                [
+                    "OptionalDate";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Date";
+                        ];
+                    ];
+                ];
+                [
+                    "OptionalDateTime";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Datetime";
+                        ];
+                    ];
+                ];
+                [
+                    "OptionalFloat";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Float";
+                        ];
+                    ];
+                ];
+                [
+                    "OptionalInterval";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Interval";
+                        ];
+                    ];
+                ];
+                [
+                    "OptionalTimestamp";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Timestamp";
+                        ];
+                    ];
+                ];
+                [
+                    "Timestamp";
+                    [
+                        "DataType";
+                        "Timestamp";
+                    ];
+                ];
+            ];
+        ];
+        "TypePatch" = [
+            "StructType";
+            [
+                [
+                    "Date";
+                    [
+                        "DataType";
+                        "Date";
+                    ];
+                ];
+                [
+                    "DateTime";
+                    [
+                        "DataType";
+                        "Datetime";
+                    ];
+                ];
+                [
+                    "DoubleOptionalDate";
+                    [
+                        "OptionalType";
+                        [
+                            "OptionalType";
+                            [
+                                "DataType";
+                                "Date";
+                            ];
+                        ];
+                    ];
+                ];
+                [
+                    "DoubleOptionalDateTime";
+                    [
+                        "OptionalType";
+                        [
+                            "OptionalType";
+                            [
+                                "DataType";
+                                "Datetime";
+                            ];
+                        ];
+                    ];
+                ];
+                [
+                    "DoubleOptionalFloat";
+                    [
+                        "OptionalType";
+                        [
+                            "OptionalType";
+                            [
+                                "DataType";
+                                "Float";
+                            ];
+                        ];
+                    ];
+                ];
+                [
+                    "DoubleOptionalInterval";
+                    [
+                        "OptionalType";
+                        [
+                            "OptionalType";
+                            [
+                                "DataType";
+                                "Interval";
+                            ];
+                        ];
+                    ];
+                ];
+                [
+                    "DoubleOptionalTimestamp";
+                    [
+                        "OptionalType";
+                        [
+                            "OptionalType";
+                            [
+                                "DataType";
+                                "Timestamp";
+                            ];
+                        ];
+                    ];
+                ];
+                [
+                    "Float";
+                    [
+                        "DataType";
+                        "Float";
+                    ];
+                ];
+                [
+                    "Interval";
+                    [
+                        "DataType";
+                        "Interval";
+                    ];
+                ];
+                [
+                    "OptionalDate";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Date";
+                        ];
+                    ];
+                ];
+                [
+                    "OptionalDateTime";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Datetime";
+                        ];
+                    ];
+                ];
+                [
+                    "OptionalFloat";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Float";
+                        ];
+                    ];
+                ];
+                [
+                    "OptionalInterval";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Interval";
+                        ];
+                    ];
+                ];
+                [
+                    "OptionalTimestamp";
+                    [
+                        "OptionalType";
+                        [
+                            "DataType";
+                            "Timestamp";
+                        ];
+                    ];
+                ];
+                [
+                    "Timestamp";
+                    [
+                        "DataType";
+                        "Timestamp";
+                    ];
+                ];
+            ];
+        ];
+    };
+    "schema" = <
+        "strict" = %true;
+        "unique_keys" = %false;
+    > [
+        {
+            "name" = "Date";
+            "required" = %true;
+            "type" = "uint16";
+            "type_v3" = "uint16";
+        };
+        {
+            "name" = "DateTime";
+            "required" = %true;
+            "type" = "uint32";
+            "type_v3" = "uint32";
+        };
+        {
+            "name" = "DoubleOptionalDate";
+            "required" = %false;
+            "type" = "any";
+            "type_v3" = {
+                "type_name" = "optional";
+                "item" = "yson";
+            };
+        };
+        {
+            "name" = "DoubleOptionalDateTime";
+            "required" = %false;
+            "type" = "any";
+            "type_v3" = {
+                "type_name" = "optional";
+                "item" = "yson";
+            };
+        };
+        {
+            "name" = "DoubleOptionalFloat";
+            "required" = %false;
+            "type" = "any";
+            "type_v3" = {
+                "type_name" = "optional";
+                "item" = "yson";
+            };
+        };
+        {
+            "name" = "DoubleOptionalInterval";
+            "required" = %false;
+            "type" = "any";
+            "type_v3" = {
+                "type_name" = "optional";
+                "item" = "yson";
+            };
+        };
+        {
+            "name" = "DoubleOptionalTimestamp";
+            "required" = %false;
+            "type" = "any";
+            "type_v3" = {
+                "type_name" = "optional";
+                "item" = "yson";
+            };
+        };
+        {
+            "name" = "Float";
+            "required" = %true;
+            "type" = "double";
+            "type_v3" = "double";
+        };
+        {
+            "name" = "Interval";
+            "required" = %true;
+            "type" = "int64";
+            "type_v3" = "int64";
+        };
+        {
+            "name" = "OptionalDate";
+            "required" = %false;
+            "type" = "uint16";
+            "type_v3" = {
+                "type_name" = "optional";
+                "item" = "uint16";
+            };
+        };
+        {
+            "name" = "OptionalDateTime";
+            "required" = %false;
+            "type" = "uint32";
+            "type_v3" = {
+                "type_name" = "optional";
+                "item" = "uint32";
+            };
+        };
+        {
+            "name" = "OptionalFloat";
+            "required" = %false;
+            "type" = "double";
+            "type_v3" = {
+                "type_name" = "optional";
+                "item" = "double";
+            };
+        };
+        {
+            "name" = "OptionalInterval";
+            "required" = %false;
+            "type" = "int64";
+            "type_v3" = {
+                "type_name" = "optional";
+                "item" = "int64";
+            };
+        };
+        {
+            "name" = "OptionalTimestamp";
+            "required" = %false;
+            "type" = "uint64";
+            "type_v3" = {
+                "type_name" = "optional";
+                "item" = "uint64";
+            };
+        };
+        {
+            "name" = "Timestamp";
+            "required" = %true;
+            "type" = "uint64";
+            "type_v3" = "uint64";
+        };
+    ];
+}

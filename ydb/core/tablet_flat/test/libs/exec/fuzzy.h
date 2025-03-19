@@ -133,7 +133,7 @@ namespace NFake {
         }
 
     protected:
-        bool RegisterTable(ui32 table) noexcept
+        bool RegisterTable(ui32 table)
         {
             Y_ABORT_UNLESS(table < 8 * sizeof(Tables));
 

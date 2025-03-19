@@ -565,6 +565,8 @@ message TEvStartKqpTasksRequest {
     optional double ResourceWeight = 18;
 
     optional NKikimrDataEvents.ELockMode LockMode = 19;
+
+    optional string UserToken = 20;
 }
 
 message TEvStartKqpTasksResponse {
@@ -740,6 +742,8 @@ message TKqpTableSinkSettings {
     repeated uint32 WriteIndexes = 13;
     optional NKikimrDataEvents.TMvccSnapshot MvccSnapshot = 14;
     optional NKikimrDataEvents.ELockMode LockMode = 15;
+    optional bool EnableStreamWrite = 16;
+    optional bool IsBatch = 17;
 }
 
 message TKqpStreamLookupSettings {

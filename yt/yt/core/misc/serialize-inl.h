@@ -6,6 +6,7 @@
 
 #include "collection_helpers.h"
 #include "maybe_inf.h"
+#include "mpl.h"
 
 #include <yt/yt/core/phoenix/concepts.h>
 
@@ -16,6 +17,8 @@
 #include <library/cpp/yt/compact_containers/compact_set.h>
 
 #include <library/cpp/yt/containers/enum_indexed_array.h>
+
+#include <library/cpp/yt/assert/assert.h>
 
 #include <optional>
 #include <variant>
@@ -452,6 +455,26 @@ T Load(C& context, TArgs&&... args)
 {
     T value{};
     Load(context, value, std::forward<TArgs>(args)...);
+    return value;
+}
+
+template <class TSerializer, class T, class C, class... TArgs>
+void SaveWith(C& context, const T& value, TArgs&&... args)
+{
+    TSerializer::Save(context, value, std::forward<TArgs>(args)...);
+}
+
+template <class TSerializer, class T, class C, class... TArgs>
+void LoadWith(C& context, T& value, TArgs&&... args)
+{
+    TSerializer::Load(context, value, std::forward<TArgs>(args)...);
+}
+
+template <class TSerializer, class T, class C, class... TArgs>
+T LoadWith(C& context, TArgs&&... args)
+{
+    T value{};
+    TSerializer::Load(context, value, std::forward<TArgs>(args)...);
     return value;
 }
 

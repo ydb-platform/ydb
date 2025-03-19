@@ -1,9 +1,9 @@
 #pragma once
 
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
-#include <ydb/public/sdk/cpp/client/ydb_result/result.h>
-#include <ydb/public/sdk/cpp/client/ydb_value/value.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
@@ -13,7 +13,7 @@
 namespace NYdb::NBackup {
 
 class TQueryBuilder {
-    TVector<TColumn> Columns;
+    std::vector<TColumn> Columns;
     const TString Query;
     TValueBuilder Value;
 
@@ -25,7 +25,7 @@ class TQueryBuilder {
     static TType GetType(TTypeParser& typeParser, const TString& name);
 
 public:
-    TQueryBuilder(const TString& path, TVector<TColumn> columns)
+    TQueryBuilder(const TString& path, std::vector<TColumn> columns)
         : Columns(std::move(columns))
         , Query(BuildQuery(path))
     {}
@@ -57,7 +57,7 @@ class TQueryFromFileIterator {
     std::conditional_t<GetValue, TValue, TParams> ReadNext();
 
 public:
-    TQueryFromFileIterator(const TString& path, const TString& dataFileName, TVector<TColumn> columns, i64 buffSize,
+    TQueryFromFileIterator(const TString& path, const TString& dataFileName, std::vector<TColumn> columns, i64 buffSize,
             i64 maxRowsPerQuery, i64 maxBytesPerQuery)
       : DataFile(dataFileName, OpenExisting | RdOnly)
       , Query(path, std::move(columns))

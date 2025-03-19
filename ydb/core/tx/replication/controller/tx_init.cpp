@@ -1,4 +1,6 @@
 #include "controller_impl.h"
+#include "target_table.h"
+#include "target_transfer.h"
 
 namespace NKikimr::NReplication::NController {
 
@@ -52,10 +54,12 @@ class TController::TTxInit: public TTxBase {
             const auto state = rowset.GetValue<Schema::Replications::State>();
             const auto issue = rowset.GetValue<Schema::Replications::Issue>();
             const auto nextTid = rowset.GetValue<Schema::Replications::NextTargetId>();
+            const auto desiredState = rowset.GetValue<Schema::Replications::DesiredState>();
 
             auto replication = Self->Add(rid, pathId, config);
             replication->SetState(state, issue);
             replication->SetNextTargetId(nextTid);
+            replication->SetDesiredState(desiredState);
 
             if (!rowset.Next()) {
                 return false;
@@ -83,11 +87,27 @@ class TController::TTxInit: public TTxBase {
                 rowset.GetValue<Schema::Targets::DstPathOwnerId>(),
                 rowset.GetValue<Schema::Targets::DstPathLocalId>()
             );
+            const auto transformLambda = rowset.GetValue<Schema::Targets::TransformLambda>();
 
             auto replication = Self->Find(rid);
             Y_VERIFY_S(replication, "Unknown replication: " << rid);
 
-            auto* target = replication->AddTarget(tid, kind, srcPath, dstPath);
+            TReplication::ITarget::IConfig::TPtr config;
+            switch(kind) {
+                case TReplication::ETargetKind::Table:
+                    config = std::make_shared<TTargetTable::TTableConfig>(srcPath, dstPath);
+                    break;
+
+                case TReplication::ETargetKind::IndexTable:
+                    config = std::make_shared<TTargetIndexTable::TIndexTableConfig>(srcPath, dstPath);
+                    break;
+
+                case TReplication::ETargetKind::Transfer:
+                    config = std::make_shared<TTargetTransfer::TTransferConfig>(srcPath, dstPath, transformLambda);
+                    break;
+            }
+
+            auto* target = replication->AddTarget(tid, kind, config);
             Y_ABORT_UNLESS(target);
 
             target->SetDstState(dstState);
@@ -113,6 +133,7 @@ class TController::TTxInit: public TTxBase {
             const auto tid = rowset.GetValue<Schema::SrcStreams::TargetId>();
             const auto name = rowset.GetValue<Schema::SrcStreams::Name>();
             const auto state = rowset.GetValue<Schema::SrcStreams::State>();
+            const auto consumerName = rowset.GetValueOrDefault<Schema::SrcStreams::ConsumerName>(ReplicationConsumerName);
 
             auto replication = Self->Find(rid);
             Y_VERIFY_S(replication, "Unknown replication: " << rid);
@@ -124,6 +145,7 @@ class TController::TTxInit: public TTxBase {
 
             target->SetStreamName(name);
             target->SetStreamState(state);
+            target->SetStreamConsumerName(consumerName);
 
             if (!rowset.Next()) {
                 return false;

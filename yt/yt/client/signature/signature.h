@@ -20,20 +20,22 @@ public:
     //! Constructs an empty TSignature.
     TSignature() = default;
 
-    //! Creates a TSignature containing the given payload without an actual signature.
-    explicit TSignature(NYson::TYsonString payload);
-
-    [[nodiscard]] const NYson::TYsonString& Payload() const;
+    [[nodiscard]] const std::string& Payload() const;
 
 private:
-    // TODO(arkady-e1ppa): Whenever trivial generator/validators are added
-    // remove initialization.
-    NYson::TYsonString Header_ = NYson::TYsonString(TStringBuf(""));
-    NYson::TYsonString Payload_;
+    NYson::TYsonString Header_;
+    std::string Payload_;
     std::vector<std::byte> Signature_;
 
-    friend class ISignatureGenerator;
-    friend class ISignatureValidator;
+    friend struct ISignatureGenerator;
+    friend struct TDummySignatureGenerator;
+    friend struct TAlwaysThrowingSignatureGenerator;
+    friend class TSignatureGenerator;
+
+    friend struct ISignatureValidator;
+    friend struct TDummySignatureValidator;
+    friend struct TAlwaysThrowingSignatureValidator;
+    friend class TSignatureValidator;
 
     friend void Serialize(const TSignature& signature, NYson::IYsonConsumer* consumer);
     friend void Deserialize(TSignature& signature, NYTree::INodePtr node);

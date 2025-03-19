@@ -1421,7 +1421,7 @@ bool TPromiseBase<T>::TrySet(NYT::TErrorOr<T>&& value) const
 
 template <class T>
 template <class U>
-inline void TPromiseBase<T>::TrySetFrom(TFuture<U> another) const
+inline void TPromiseBase<T>::TrySetFrom(const TFuture<U>& another) const
 {
     YT_ASSERT(Impl_);
 
@@ -2461,7 +2461,7 @@ public:
         , ConcurrencyLimit_(concurrencyLimit)
         , Futures_(Callbacks_.size(), VoidFuture)
         , Results_(Callbacks_.size())
-        , CurrentIndex_(std::min<int>(ConcurrencyLimit_, ssize(Callbacks_)))
+        , CurrentIndex_(std::min<int>(ConcurrencyLimit_, std::ssize(Callbacks_)))
         , FailOnFirstError_(failOnError)
     { }
 
@@ -2499,35 +2499,44 @@ private:
 
     void RunCallback(int index)
     {
-        auto future = Callbacks_[index]();
+        // ORD-2002: Avoid calling OnResult directly to prevent unbounded
+        // recursive chains like RunCallback -> OnResult -> RunCallback...
+        while (true) {
+            auto future = Callbacks_[index]();
+            if (!future.IsSet()) {
+                {
+                    auto guard = Guard(SpinLock_);
+                    if (Error_) {
+                        guard.Release();
+                        future.Cancel(*Error_);
+                        return;
+                    }
 
-        if (future.IsSet()) {
-            OnResult(index, std::move(future.Get()));
-            return;
-        }
+                    Futures_[index] = future.template As<void>();
+                }
 
-        {
-            auto guard = Guard(SpinLock_);
-            if (Error_) {
-                guard.Release();
-                future.Cancel(*Error_);
-                return;
+                future.Subscribe(
+                    BIND_NO_PROPAGATE(&TCancelableBoundedConcurrencyRunner::OnResult, MakeStrong(this), index)
+                        // NB: Sync invoker protects from unbounded recursion.
+                        .Via(GetSyncInvoker()));
+                break;
             }
 
-            Futures_[index] = future.template As<void>();
-        }
+            auto suggestedIndex = HandleResultAndSuggestNextIndex(index, std::move(future.Get()));
+            if (!suggestedIndex) {
+                break;
+            }
 
-        future.Subscribe(
-            BIND_NO_PROPAGATE(&TCancelableBoundedConcurrencyRunner::OnResult, MakeStrong(this), index)
-                // NB: Sync invoker protects from unbounded recursion.
-                .Via(GetSyncInvoker()));
+            index = *suggestedIndex;
+        }
     }
 
-    void OnResult(int index, const NYT::TErrorOr<T>& result)
+    [[nodiscard]]
+    std::optional<int> HandleResultAndSuggestNextIndex(int index, const TErrorOr<T>& result)
     {
         if (FailOnFirstError_ && !result.IsOK()) {
             OnError(result);
-            return;
+            return std::nullopt;
         }
 
         int newIndex;
@@ -2535,7 +2544,7 @@ private:
         {
             auto guard = Guard(SpinLock_);
             if (Error_) {
-                return;
+                return std::nullopt;
             }
 
             newIndex = CurrentIndex_++;
@@ -2543,12 +2552,17 @@ private:
             Results_[index] = result;
         }
 
-        if (finishedCount == ssize(Callbacks_)) {
+        if (finishedCount == std::ssize(Callbacks_)) {
             Promise_.TrySet(Results_);
         }
 
-        if (newIndex < ssize(Callbacks_)) {
-            RunCallback(newIndex);
+        return newIndex < std::ssize(Callbacks_) ? std::optional(newIndex) : std::nullopt;
+    }
+
+    void OnResult(int index, const TErrorOr<T>& result)
+    {
+        if (auto suggestedIndex = HandleResultAndSuggestNextIndex(index, result)) {
+            RunCallback(*suggestedIndex);
         }
     }
 
@@ -2616,26 +2630,44 @@ private:
 
     void RunCallback(int index)
     {
-        auto future = Callbacks_[index]();
-        if (future.IsSet()) {
-            OnResult(index, future.Get());
-        } else {
-            future.Subscribe(
-                BIND_NO_PROPAGATE(&TBoundedConcurrencyRunner::OnResult, MakeStrong(this), index));
+        // ORD-2002: Avoid calling OnResult directly to prevent unbounded
+        // recursive chains like RunCallback -> OnResult -> RunCallback...
+        while (true) {
+            auto future = Callbacks_[index]();
+            if (!future.IsSet()) {
+                future.Subscribe(
+                    BIND_NO_PROPAGATE(&TBoundedConcurrencyRunner::OnResult, MakeStrong(this), index)
+                        // NB: Sync invoker protects from unbounded recursion.
+                        .Via(GetSyncInvoker()));
+                        break;
+            }
+
+            auto suggestedIndex = HandleResultAndSuggestNextIndex(index, future.Get());
+            if (!suggestedIndex) {
+                break;
+            }
+
+            index = *suggestedIndex;
         }
     }
 
-    void OnResult(int index, const NYT::TErrorOr<T>& result)
+    [[nodiscard]]
+    std::optional<int> HandleResultAndSuggestNextIndex(int index, const TErrorOr<T>& result)
     {
         Results_[index] = result;
 
         int newIndex = CurrentIndex_++;
-        if (newIndex < static_cast<ssize_t>(Callbacks_.size())) {
-            RunCallback(newIndex);
+        if (++FinishedCount_ == std::ssize(Callbacks_)) {
+            Promise_.Set(Results_);
         }
 
-        if (++FinishedCount_ == static_cast<ssize_t>(Callbacks_.size())) {
-            Promise_.Set(Results_);
+        return newIndex < std::ssize(Callbacks_) ? std::optional(newIndex) : std::nullopt;
+    }
+
+    void OnResult(int index, const TErrorOr<T>& result)
+    {
+        if (auto suggestedIndex = HandleResultAndSuggestNextIndex(index, result)) {
+            RunCallback(*suggestedIndex);
         }
     }
 };

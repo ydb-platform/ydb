@@ -12,7 +12,7 @@
 #include <util/stream/buffer.h>
 #include <util/generic/guid.h>
 
-namespace NYdb::NTopic {
+namespace NYdb::inline V2::NTopic {
 
 const TDuration UPDATE_TOKEN_PERIOD = TDuration::Hours(1);
 // Error code from file ydb/public/api/protos/persqueue_error_codes_v1.proto

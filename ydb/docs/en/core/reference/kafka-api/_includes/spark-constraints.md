@@ -1,0 +1,1 @@
+When working with Kafka, Apache Spark does not use any of the [Kafka API features that are currently not supported](../constraints.md) in {{ ydb-short-name }} Topics. Therefore, all features of Spark-Kafka integrations should work through the {{ ydb-short-name }} Topics Kafka API.

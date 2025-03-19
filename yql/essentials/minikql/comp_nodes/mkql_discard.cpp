@@ -167,7 +167,7 @@ private:
             return f;
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto containerType = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(PointerType::getUnqual(valueType)) : static_cast<Type*>(valueType);
+        const auto containerType = static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
         const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType)}, false);
@@ -185,8 +185,7 @@ private:
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         auto block = main;
 
-        const auto container = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-            new LoadInst(valueType, containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
+        const auto container = static_cast<Value*>(containerArg);
 
         const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
 
@@ -227,7 +226,7 @@ IComputationNode* WrapDiscard(TCallable& callable, const TComputationNodeFactory
     if (type->IsFlow()) {
         if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
             auto flowType = AS_TYPE(TFlowType, callable.GetInput(0U).GetStaticType());
-            if (RuntimeVersion > 35 && flowType->GetItemType()->IsMulti() || flowType->GetItemType()->IsTuple()) {
+            if (flowType->GetItemType()->IsMulti() || flowType->GetItemType()->IsTuple()) {
                 return new TDiscardWideFlowWrapper(wide, GetWideComponentsCount(flowType));
             }
             return new TDiscardWideFlowWrapper(wide, 0U);

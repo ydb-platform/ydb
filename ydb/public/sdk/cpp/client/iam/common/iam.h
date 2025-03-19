@@ -14,7 +14,7 @@
 #include <util/stream/file.h>
 #include <util/string/builder.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 namespace NIam {
 constexpr TStringBuf DEFAULT_ENDPOINT = "iam.api.cloud.yandex.net";
@@ -168,7 +168,7 @@ private:
 
                     RequestInflight_ = false;
                     sleepDuration = std::min(BackoffTimeout_, BACKOFF_MAX);
-                    BackoffTimeout_ *= 2;
+                    BackoffTimeout_ = std::min(BackoffTimeout_ * 2, BACKOFF_MAX);
                 }
 
                 Sleep(sleepDuration);

@@ -2,7 +2,7 @@
 
 #include <format>
 #include <ydb/core/kqp/counters/kqp_counters.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <library/cpp/json/json_reader.h>
 
@@ -12,10 +12,9 @@ namespace NKqp {
 using namespace NYdb;
 using namespace NYdb::NTable;
 
-static NKikimrConfig::TAppConfig GetAppConfig(bool scanSourceRead = false, bool streamLookup = true, bool streamLookupJoin = false, bool enableOltpSink = false) {
+static NKikimrConfig::TAppConfig GetAppConfig(bool scanSourceRead = false, bool streamLookupJoin = false, bool enableOltpSink = false) {
     auto app = NKikimrConfig::TAppConfig();
     app.MutableTableServiceConfig()->SetEnableKqpScanQuerySourceRead(scanSourceRead);
-    app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamLookup(streamLookup);
     app.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(streamLookupJoin);
     app.MutableTableServiceConfig()->SetEnableOlapSink(true);
     app.MutableTableServiceConfig()->SetEnableOltpSink(enableOltpSink);
@@ -110,11 +109,8 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         //runtime->SetLogPriority(NKikimrServices::GRPC_SERVER, NActors::NLog::PRI_DEBUG);
     }
 
-    Y_UNIT_TEST_QUAD(IndexLookup, StreamLookup, useSink) {
-        if (useSink && !StreamLookup) {
-            return;
-        }
-        TKikimrRunner kikimr(GetAppConfig(true, StreamLookup, false, useSink));
+    Y_UNIT_TEST_TWIN(IndexLookup, useSink) {
+        TKikimrRunner kikimr(GetAppConfig(true, false, useSink));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -178,11 +174,8 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         UNIT_ASSERT_VALUES_EQUAL(readsByTable.at("/Root/SecondaryKeys/Index/indexImplTable").second, 8);
     }
 
-    Y_UNIT_TEST_QUAD(IndexLookupAtLeast8BytesInStorage, StreamLookup, useSink) {
-        if (useSink && !StreamLookup) {
-            return;
-        }
-        TKikimrRunner kikimr(GetAppConfig(true, StreamLookup, false, useSink));
+    Y_UNIT_TEST_TWIN(IndexLookupAtLeast8BytesInStorage, useSink) {
+        TKikimrRunner kikimr(GetAppConfig(true, false, useSink));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -247,11 +240,8 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         UNIT_ASSERT_VALUES_EQUAL(readsByTable.at("/Root/SecondaryKeys/Index/indexImplTable").second, 8);
     }
 
-    Y_UNIT_TEST_QUAD(IndexLookupAndTake, StreamLookup, useSink) {
-        if (useSink && !StreamLookup) {
-            return;
-        }
-        TKikimrRunner kikimr(GetAppConfig(true, StreamLookup, false, useSink));
+    Y_UNIT_TEST_TWIN(IndexLookupAndTake, useSink) {
+        TKikimrRunner kikimr(GetAppConfig(true, false, useSink));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -370,7 +360,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
     }
 
     Y_UNIT_TEST_TWIN(IndexLookupJoin, StreamLookupJoin) {
-        TKikimrRunner kikimr(GetAppConfig(true, true, StreamLookupJoin, false));
+        TKikimrRunner kikimr(GetAppConfig(true, StreamLookupJoin, false));
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -532,7 +522,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
     }
 
     Y_UNIT_TEST(OlapPointLookup) {
-        TKikimrRunner kikimr(GetAppConfig(false, false));
+        TKikimrRunner kikimr(GetAppConfig(false));
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -622,7 +612,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
     }
 
     Y_UNIT_TEST(OlapWriteRow) {
-        TKikimrRunner kikimr(GetAppConfig(false, false, false, true));
+        TKikimrRunner kikimr(GetAppConfig(false, false, true));
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -676,7 +666,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
             // TODO: fix status?
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
-            
+
             auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
             Cerr << stats.DebugString() << Endl;
@@ -789,7 +779,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
     }
 
     Y_UNIT_TEST_TWIN(OltpWriteRow, isSink) {
-        TKikimrRunner kikimr(GetAppConfig(false, false, false, isSink));
+        TKikimrRunner kikimr(GetAppConfig(false, false, isSink));
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -841,11 +831,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             auto txControl = NYdb::NQuery::TTxControl::BeginTx().CommitTx();
 
             auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
-            if (isSink) { // TODO: fix status?
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
-            }
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
 
             auto stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 

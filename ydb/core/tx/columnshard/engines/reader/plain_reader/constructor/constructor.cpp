@@ -1,9 +1,9 @@
 #include "constructor.h"
 #include "read_metadata.h"
-#include "resolver.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/predicate/filter.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/resolver.h>
 
 namespace NKikimr::NOlap::NReader::NPlain {
 
@@ -11,7 +11,7 @@ NKikimr::TConclusionStatus TIndexScannerConstructor::ParseProgram(
     const TVersionedIndex* vIndex, const NKikimrTxDataShard::TEvKqpScan& proto, TReadDescription& read) const {
     AFL_VERIFY(vIndex);
     auto& indexInfo = vIndex->GetSchemaVerified(Snapshot)->GetIndexInfo();
-    TIndexColumnResolver columnResolver(indexInfo);
+    NCommon::TIndexColumnResolver columnResolver(indexInfo);
     return TBase::ParseProgram(vIndex, proto.GetOlapProgramType(), proto.GetOlapProgram(), read, columnResolver);
 }
 
@@ -35,8 +35,7 @@ NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructo
 
     TDataStorageAccessor dataAccessor(insertTable, index);
     AFL_VERIFY(read.PathId);
-    auto readMetadata = std::make_shared<TReadMetadata>(read.PathId, index->CopyVersionedIndexPtr(), read.GetSnapshot(),
-        IsReverse ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC, read.GetProgram(), nullptr);
+    auto readMetadata = std::make_shared<TReadMetadata>(index->CopyVersionedIndexPtr(), read);
 
     auto initResult = readMetadata->Init(self, read, dataAccessor);
     if (!initResult) {

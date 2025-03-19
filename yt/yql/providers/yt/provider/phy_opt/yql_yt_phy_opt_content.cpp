@@ -2,6 +2,7 @@
 
 #include <yt/yql/providers/yt/provider/yql_yt_helpers.h>
 #include <yt/yql/providers/yt/provider/yql_yt_optimize.h>
+#include <yt/yql/providers/yt/provider/phy_opt/yql_yt_phy_opt_helper.h>
 
 namespace NYql {
 
@@ -22,12 +23,12 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::TableContentWithSetting
 
         if (auto read = TMaybeNode<TYtLength>(input).Input().Maybe<TYtReadTable>()) {
             nodesToOptimize.insert(read.Cast().Raw());
-            return false;
+            return true;
         }
 
         if (auto read = TMaybeNode<TYtTableContent>(input).Input().Maybe<TYtReadTable>()) {
             nodesToOptimize.insert(read.Cast().Raw());
-            return false;
+            return true;
         }
         if (TYtOutput::Match(input.Get())) {
             processedNodes.insert(input->UniqueId());
@@ -91,7 +92,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::NonOptimalTableContent(
 
         if (TYtTableContent::Match(input.Get())) {
             nodesToOptimize.insert(input.Get());
-            return false;
+            return true;
         }
         if (TYtOutput::Match(input.Get())) {
             processedNodes.insert(input->UniqueId());
@@ -154,6 +155,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::NonOptimalTableContent(
                         }
                     }
                     if (materialize) {
+                        if (!NPrivate::EnsurePersistableYsonTypes(section.Pos(), *section.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType(), ctx, state)) {
+                            return {};
+                        }
                         auto path = CopyOrTrivialMap(section.Pos(),
                             TExprBase(world),
                             TYtDSink(ctx.RenameNode(read.DataSource().Ref(), "DataSink")),

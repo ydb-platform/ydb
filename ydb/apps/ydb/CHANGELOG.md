@@ -1,4 +1,38 @@
+
+## 2.20.0 ##
+
+* Added support for dual configuration mode in the `ydb admin cluster config fetch` command, allowing it to handle separate cluster and storage config sections.
+* Add options for client certificates in SSL/TLS connections.
+* Add `ydb admin node config init` command to initialize directory with node config files.
+* Add `ydb admin cluster config generate` command to generate dynamic config from static config on cluster.
+* Fixed memory leak in tpcds generator.
+* Include external data sources and external tables in local backups (`ydb tools dump` and `ydb tools restore`). Both scheme objects are backed up as YQL creation queries saved in the `create_external_data_source.sql` and `create_external_table.sql` files respectively, which can be executed to recreate the original scheme objects.
+* Fixed a bug where `ydb auth get-token` command tried to authenticate twice: while listing andpoints and while executing actual token request.
+* Fixed a bug where `ydb import file csv` command was saving progress even if a batch upload had been failed.
+* Include coordination nodes in local backups (`ydb tools dump` and `ydb tools restore`). Rate limiters that utilize the coordination node are saved in the coordination node's backup folder, preserving the existing path hierarchy.
+* Fixed a bug where some errors could be ignored when restoring from a local backup.
+* Added `ydb workload log import generator` command.
+* Queries in `ydb workload run` command are now executed in random order.
+* Include topics in local backups (`ydb tools dump` and `ydb tools restore`). In this release, only the settings of the topics are retained; messages are not included in the backup.
+* Added `ydb admin cluster dump` and `ydb admin cluster restore` commands for dumping all cluster-level data
+* Added `ydb admin database dump` and `ydb admin database restore` commands for dumping all database-level data
+
+## 2.19.0 ##
+
+* Added some temporary changes to experimental `ydb admin storage` command for internal usage
+* Added message query text if query fails in `ydb workload run` comamnd.
+* Enable view exports and imports. Views are exported as `CREATE VIEW` YQL statements which are executed on import.
+* Save current stats in `ydb workload run`.
+* Added message if global timeout expiried in `ydb workload run` comamnd.
+* Fixed return code of `ydb workload run` comamnd.
+* Added statistics output on the current progress of the query in `ydb workload` command
+* Fixed a bug where arm64 YDB CLI binary was downloading amd64 binary to replace itself during `ydb update`. To update already installed binaries to the latest arm64 version, YDB CLI should be re-installed
+* Fixed a bug where `ydb workload tpch import generator` and `ydb workload tpcds import generator` commands were failing due to not all tables were created
+* Fixed a bug with backslashes in `ydb workload` benchmark paths on Windows
+* Added CREATE TABLE text suggestion on scheme error during `ydb import file csv`
+* Backup and restore of changefeeds has been added to `ydb tools dump` and `ydb tools restore`. As a result, there are changes in the backup file structure: for tables with changefeeds, a subdirectory is created for each changefeed, named after the changefeed. This subdirectory contains two files: `changefeed_description.pb`, which contains the changefeed description, and `topic_description.pb`, which contains information about the underlying topic.
 * Added `--skip-checksum-validation` option to `ydb import s3` command to skip server-side checksum validation.
+* Added new experimental options for `ydb debug ping` command: `--chain-length`, `--chain-work-duration`, `--no-tail-chain`.
 
 ## 2.18.0 ##
 

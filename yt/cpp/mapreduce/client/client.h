@@ -222,8 +222,6 @@ public:
 
     TBatchRequestPtr CreateBatchRequest() override;
 
-    IClientPtr GetParentClient() override;
-
     IRawClientPtr GetRawClient() const;
 
     const TClientContext& GetContext() const;
@@ -327,6 +325,8 @@ public:
     void Detach() override;
 
     ITransactionPingerPtr GetTransactionPinger() override;
+
+    IClientPtr GetParentClient(bool ignoreGlobalTx) override;
 
 protected:
     TClientPtr GetParentClientImpl() override;
@@ -488,6 +488,8 @@ public:
 
     ITransactionPingerPtr GetTransactionPinger() override;
 
+    IClientPtr GetParentClient(bool ignoreGlobalTx) override;
+
     // Helper methods
     TYtPoller& GetYtPoller();
 
@@ -507,9 +509,17 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void SetupClusterContext(
+    TClientContext& context,
+    const TString& serverName);
+
+TClientContext CreateClientContext(
+    const TString& serverName,
+    const TCreateClientOptions& options);
+
 TClientPtr CreateClientImpl(
     const TString& serverName,
-    const TCreateClientOptions& options = TCreateClientOptions());
+    const TCreateClientOptions& options = {});
 
 ////////////////////////////////////////////////////////////////////////////////
 

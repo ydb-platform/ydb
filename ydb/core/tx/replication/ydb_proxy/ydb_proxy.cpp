@@ -2,8 +2,8 @@
 #include "ydb_proxy.h"
 
 #include <ydb/core/protos/replication.pb.h>
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -23,14 +23,6 @@ using namespace NYdb;
 using namespace NYdb::NScheme;
 using namespace NYdb::NTable;
 using namespace NYdb::NTopic;
-
-void TEvYdbProxy::TReadTopicResult::TMessage::Out(IOutputStream& out) const {
-    out << "{"
-        << " Offset: " << Offset
-        << " Data: " << Data.size() << "b"
-        << " Codec: " << Codec
-    << " }";
-}
 
 void TEvYdbProxy::TReadTopicResult::Out(IOutputStream& out) const {
     out << "{"
@@ -185,7 +177,9 @@ private:
 
 class TTopicReader: public TBaseProxyActor<TTopicReader> {
     void Handle(TEvYdbProxy::TEvReadTopicRequest::TPtr& ev) {
-        if (AutoCommit) {
+        auto args = std::move(ev->Get()->GetArgs());
+        const auto& settings = std::get<TEvYdbProxy::TReadTopicSettings>(args);
+        if (AutoCommit && !settings.SkipCommit_) {
             DeferredCommit.Commit();
         }
         WaitEvent(ev->Sender, ev->Cookie);
@@ -230,7 +224,7 @@ class TTopicReader: public TBaseProxyActor<TTopicReader> {
         } else if (std::get_if<TReadSessionEvent::TPartitionSessionStatusEvent>(&*event)) {
             return WaitEvent(ev->Get()->Sender, ev->Get()->Cookie);
         } else if (auto* x = std::get_if<TReadSessionEvent::TPartitionSessionClosedEvent>(&*event)) {
-            auto status = TStatus(EStatus::UNAVAILABLE, NYql::TIssues{NYql::TIssue(x->DebugString())});
+            auto status = TStatus(EStatus::UNAVAILABLE, NYdb::NIssue::TIssues{NYdb::NIssue::TIssue(x->DebugString())});
             return Leave(ev->Get()->Sender, std::move(status));
         } else if (auto* x = std::get_if<TSessionClosedEvent>(&*event)) {
             return Leave(ev->Get()->Sender, std::move(*x));
@@ -512,10 +506,6 @@ IActor* CreateYdbProxy(const TString& endpoint, const TString& database, bool ss
     return new TYdbProxy(endpoint, database, ssl, credentials);
 }
 
-}
-
-Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::TEvYdbProxy::TReadTopicResult::TMessage, o, x) {
-    return x.Out(o);
 }
 
 Y_DECLARE_OUT_SPEC(, NKikimr::NReplication::TEvYdbProxy::TReadTopicResult, o, x) {

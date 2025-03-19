@@ -4,7 +4,7 @@
 #include "topic_workload_stats_collector.h"
 #include "topic_workload_reader_transaction_support.h"
 
-#include <ydb/public/sdk/cpp/client/ydb_topic/topic.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <library/cpp/logger/log.h>
 #include <util/generic/string.h>
@@ -76,7 +76,7 @@ namespace NYdb {
             TInstant StartTimestamp;
 
             std::vector<std::shared_ptr<TTopicWorkloadWriterProducer>> Producers;
-            ui64 PartitionToWriteId;
+            ui64 PartitionToWriteId = 0;
 
             std::shared_ptr<std::atomic<bool>> Closed;
             std::shared_ptr<TTopicWorkloadStatsCollector> StatsCollector;

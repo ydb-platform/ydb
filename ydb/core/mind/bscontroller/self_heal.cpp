@@ -284,6 +284,7 @@ namespace NKikimr::NBsController {
         bool DonorMode;
         THostRecordMap HostRecords;
         std::shared_ptr<TControlWrapper> EnableSelfHealWithDegraded;
+        std::shared_ptr<std::atomic_uint64_t> GroupsWithInvalidLayoutCounter;
 
         using TTopologyDescr = std::tuple<TBlobStorageGroupType::EErasureSpecies, ui32, ui32, ui32>;
         THashMap<TTopologyDescr, std::shared_ptr<TBlobStorageGroupInfo::TTopology>> Topologies;
@@ -296,7 +297,8 @@ namespace NKikimr::NBsController {
     public:
         TSelfHealActor(ui64 tabletId, std::shared_ptr<std::atomic_uint64_t> unreassignableGroups, THostRecordMap hostRecords,
                 bool groupLayoutSanitizerEnabled, bool allowMultipleRealmsOccupation, bool donorMode,
-                std::shared_ptr<TControlWrapper> enableSelfHealWithDegraded)
+                std::shared_ptr<TControlWrapper> enableSelfHealWithDegraded,
+                std::shared_ptr<std::atomic_uint64_t> groupsWithInvalidLayoutCounter)
             : TabletId(tabletId)
             , UnreassignableGroups(std::move(unreassignableGroups))
             , GroupLayoutSanitizerEnabled(groupLayoutSanitizerEnabled)
@@ -304,6 +306,7 @@ namespace NKikimr::NBsController {
             , DonorMode(donorMode)
             , HostRecords(std::move(hostRecords))
             , EnableSelfHealWithDegraded(std::move(enableSelfHealWithDegraded))
+            , GroupsWithInvalidLayoutCounter(std::move(groupsWithInvalidLayoutCounter))
         {}
 
         void Bootstrap(const TActorId& parentId) {
@@ -318,17 +321,16 @@ namespace NKikimr::NBsController {
 
         void Handle(TEvControllerUpdateSelfHealInfo::TPtr& ev) {
             if (const auto& setting = ev->Get()->GroupLayoutSanitizerEnabled) {
-                bool previousSetting = std::exchange(GroupLayoutSanitizerEnabled, *setting);
-                if (!previousSetting && GroupLayoutSanitizerEnabled) {
-                    UpdateLayoutInformationForAllGroups();
-                }
+                std::exchange(GroupLayoutSanitizerEnabled, *setting);
             }
+
             if (const auto& setting = ev->Get()->AllowMultipleRealmsOccupation) {
                 bool previousSetting = std::exchange(AllowMultipleRealmsOccupation, *setting);
                 if (previousSetting != AllowMultipleRealmsOccupation) {
                     UpdateLayoutInformationForAllGroups();
                 }
             }
+
             if (const auto& setting = ev->Get()->DonorMode) {
                 DonorMode = *setting;
             }
@@ -345,9 +347,7 @@ namespace NKikimr::NBsController {
                     
                     g.Content = std::move(*data);
 
-                    if (GroupLayoutSanitizerEnabled) {
-                        UpdateGroupLayoutInformation(g);
-                    }
+                    UpdateGroupLayoutInformation(g);
 
                     ui32 numFailRealms = 0;
                     ui32 numFailDomainsPerFailRealm = 0;
@@ -500,6 +500,7 @@ namespace NKikimr::NBsController {
                 }
             }
 
+            GroupsWithInvalidLayoutCounter->store(GroupsWithInvalidLayout.Size());
             UnreassignableGroups->store(counter);
         }
 
@@ -899,7 +900,7 @@ namespace NKikimr::NBsController {
     IActor *TBlobStorageController::CreateSelfHealActor() {
         Y_ABORT_UNLESS(HostRecords);
         return new TSelfHealActor(TabletID(), SelfHealUnreassignableGroups, HostRecords, GroupLayoutSanitizerEnabled,
-            AllowMultipleRealmsOccupation, DonorMode, EnableSelfHealWithDegraded);
+            AllowMultipleRealmsOccupation, DonorMode, EnableSelfHealWithDegraded, GroupLayoutSanitizerInvalidGroups);
     }
 
     void TBlobStorageController::InitializeSelfHealState() {
@@ -955,8 +956,7 @@ namespace NKikimr::NBsController {
     }
 
     void TBlobStorageController::PushStaticGroupsToSelfHeal() {
-        if (!SelfHealId || !StorageConfigObtained || !StorageConfig.HasBlobStorageConfig() ||
-                !StorageConfig.GetSelfManagementConfig().GetEnabled()) {
+        if (!SelfHealId || !StorageConfigObtained || !StorageConfig.HasBlobStorageConfig() || !SelfManagementEnabled) {
             return;
         }
 
@@ -1160,6 +1160,7 @@ namespace NKikimr::NBsController {
         );
 
         TabletCounters->Simple()[NBlobStorageController::COUNTER_SELF_HEAL_UNREASSIGNABLE_GROUPS] = SelfHealUnreassignableGroups->load();
+        TabletCounters->Simple()[NBlobStorageController::COUNTER_GROUP_LAYOUT_SANITIZER_INVALID_GROUPS] = GroupLayoutSanitizerInvalidGroups->load();
 
         Schedule(TDuration::Seconds(15), new TEvPrivate::TEvUpdateSelfHealCounters);
     }

@@ -1,4 +1,5 @@
 #include <ydb/core/tx/tiering/tier/object.h>
+#include <ydb/core/tx/tiering/tier/s3_uri.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -6,7 +7,7 @@ namespace NKikimr {
 
 using namespace NColumnShard;
 
-Y_UNIT_TEST_SUITE(S3SettingsConvertion) {
+Y_UNIT_TEST_SUITE(S3SettingsConversion) {
     void ValidateConversion(
         const NKikimrSchemeOp::TExternalDataSourceDescription& input, TConclusion<const NKikimrSchemeOp::TS3Settings> expectedResult) {
         NTiers::TTierConfig config;
@@ -68,6 +69,43 @@ Y_UNIT_TEST_SUITE(S3SettingsConvertion) {
             Region: "ru-central1"
         )", &output));
         ValidateConversion(input, output);
+    }
+
+    Y_UNIT_TEST(FoldersStrictStyle) {
+        std::vector<TString> uris = {
+            "http://s3.yandexcloud.net:8080/my-folder/subfolder/bucket",
+            "http://bucket.s3.yandexcloud.net:8080/my-folder/subfolder",
+        };
+        for (const auto& input : uris) {
+            NTiers::TS3Uri uri = NTiers::TS3Uri::ParseUri(input).DetachResult();
+            UNIT_ASSERT_STRINGS_EQUAL_C(uri.GetEndpoint(), "s3.yandexcloud.net:8080/my-folder/subfolder", input);
+            UNIT_ASSERT_STRINGS_EQUAL_C(uri.GetBucket(), "bucket", input);
+        }
+    }
+
+    Y_UNIT_TEST(FoldersStyleDeduction) {
+        std::vector<TString> uris = {
+            "http://storage.yandexcloud.net:8080/my-folder/subfolder/bucket",
+            "http://storage.yandexcloud.net:8080///my-folder/subfolder/bucket//",
+        };
+        for (const auto& input : uris) {
+            NTiers::TS3Uri uri = NTiers::TS3Uri::ParseUri(input).DetachResult();
+            UNIT_ASSERT_STRINGS_EQUAL_C(uri.GetEndpoint(), "storage.yandexcloud.net:8080/my-folder/subfolder", input);
+            UNIT_ASSERT_STRINGS_EQUAL_C(uri.GetBucket(), "bucket", input);
+        }
+    }
+
+    Y_UNIT_TEST(StyleDeduction) {
+        std::vector<TString> uris = {
+            "http://storage.yandexcloud.net/bucket",
+            "http://my-s3.net/bucket",
+            "http://bucket.my-s3.net",
+            "http://bucket.my-s3.net/",
+        };
+        for (const auto& input : uris) {
+            NTiers::TS3Uri uri = NTiers::TS3Uri::ParseUri(input).DetachResult();
+            UNIT_ASSERT_STRINGS_EQUAL_C(uri.GetBucket(), "bucket", input);
+        }
     }
 }
 

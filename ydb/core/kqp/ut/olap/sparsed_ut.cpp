@@ -16,7 +16,9 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
 
     class TSparsedDataTest {
     private:
-        const TKikimrSettings Settings = TKikimrSettings().SetWithSampleTables(false);
+        const TKikimrSettings Settings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
         TKikimrRunner Kikimr;
         NKikimr::NYDBTest::TControllers::TGuard<NKikimr::NYDBTest::NColumnShard::TController> CSController;
         const TString StoreName;
@@ -304,7 +306,9 @@ Y_UNIT_TEST_SUITE(KqpOlapSparsed) {
     }
 
     Y_UNIT_TEST(AccessorActualization) {
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto settings = TKikimrSettings()
+            .SetColumnShardAlterObjectEnabled(true)
+            .SetWithSampleTables(false);
         TKikimrRunner kikimr(settings);
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();

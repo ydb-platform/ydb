@@ -84,7 +84,7 @@ DEFINE_ENUM(ETransactionCoordinatorPrepareMode,
     ((Late)             (1))
 );
 
-DEFINE_ENUM(EProxyType,
+DEFINE_ENUM(EProxyKind,
     ((Http) (1))
     ((Rpc)  (2))
     ((Grpc) (3))
@@ -156,17 +156,17 @@ DECLARE_REFCOUNTED_STRUCT(IJournalWriter)
 
 DECLARE_REFCOUNTED_CLASS(TPersistentQueuePoller)
 
-DECLARE_REFCOUNTED_CLASS(TTableMountCacheConfig)
-DECLARE_REFCOUNTED_CLASS(TConnectionConfig)
-DECLARE_REFCOUNTED_CLASS(TConnectionDynamicConfig)
-DECLARE_REFCOUNTED_CLASS(TPersistentQueuePollerConfig)
+DECLARE_REFCOUNTED_STRUCT(TTableMountCacheConfig)
+DECLARE_REFCOUNTED_STRUCT(TConnectionConfig)
+DECLARE_REFCOUNTED_STRUCT(TConnectionDynamicConfig)
+DECLARE_REFCOUNTED_STRUCT(TPersistentQueuePollerConfig)
 
-DECLARE_REFCOUNTED_CLASS(TFileReaderConfig)
-DECLARE_REFCOUNTED_CLASS(TFileWriterConfig)
-DECLARE_REFCOUNTED_CLASS(TJournalReaderConfig)
+DECLARE_REFCOUNTED_STRUCT(TFileReaderConfig)
+DECLARE_REFCOUNTED_STRUCT(TFileWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TJournalReaderConfig)
 
-DECLARE_REFCOUNTED_CLASS(TJournalChunkWriterConfig)
-DECLARE_REFCOUNTED_CLASS(TJournalWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TJournalChunkWriterConfig)
+DECLARE_REFCOUNTED_STRUCT(TJournalWriterConfig)
 
 DECLARE_REFCOUNTED_CLASS(TJournalChunkWriterOptions)
 
@@ -193,10 +193,10 @@ DECLARE_REFCOUNTED_STRUCT(TShuffleHandle)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline const TString ClusterNamePath("//sys/@cluster_name");
-inline const TString HttpProxiesPath("//sys/http_proxies");
-inline const TString RpcProxiesPath("//sys/rpc_proxies");
-inline const TString GrpcProxiesPath("//sys/grpc_proxies");
+inline const NYPath::TYPath ClusterNamePath("//sys/@cluster_name");
+inline const NYPath::TYPath HttpProxiesPath("//sys/http_proxies");
+inline const NYPath::TYPath RpcProxiesPath("//sys/rpc_proxies");
+inline const NYPath::TYPath GrpcProxiesPath("//sys/grpc_proxies");
 inline const TString AliveNodeName("alive");
 inline const TString BannedAttributeName("banned");
 inline const TString RoleAttributeName("role");

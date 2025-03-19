@@ -59,8 +59,7 @@ struct TMemoryQuotaManager : public NYql::NDq::TGuaranteeQuotaManager {
     }
 
     TString MemoryConsumptionDetails() const override {
-        // NOTE: don't forget to disable verbosity in stable branches.
-        return Tx->ToString(true);
+        return Tx->ToString();
     }
 
     void TerminateHandler(bool success, const NYql::TIssues& issues) {
@@ -227,7 +226,7 @@ public:
             }
             IActor* computeActor = ::NKikimr::NKqp::CreateKqpComputeActor(args.ExecuterId, args.TxId, args.Task, AsyncIoFactory,
                 runtimeSettings, memoryLimits, std::move(args.TraceId), std::move(args.Arena), FederatedQuerySetup, GUCSettings,
-                std::move(args.SchedulingOptions), args.BlockTrackingMode);
+                std::move(args.SchedulingOptions), args.BlockTrackingMode, std::move(args.UserToken), args.Database);
             return args.ShareMailbox ? TlsActivationContext->AsActorContext().RegisterWithSameMailbox(computeActor) :
                 TlsActivationContext->AsActorContext().Register(computeActor);
         }

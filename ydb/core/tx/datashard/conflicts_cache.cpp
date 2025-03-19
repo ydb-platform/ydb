@@ -352,7 +352,7 @@ void TConflictsCache::RegisterDistributedWrites(ui64 txId, TPendingWrites&& writ
 
     if (!writes.empty()) {
         PendingWrites[txId] = std::move(writes);
-        Self->EnqueueExecute(new TTxFindWriteConflicts(Self, txId));
+        Self->Enqueue(new TTxFindWriteConflicts(Self, txId));
     }
 }
 

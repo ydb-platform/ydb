@@ -7,7 +7,7 @@
 #include <util/generic/maybe.h>
 #include <util/system/env.h>
 
-namespace NYdb::NImport {
+namespace NYdb::inline Dev::NImport {
     struct TImportFromS3Settings;
 }
 

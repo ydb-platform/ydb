@@ -483,29 +483,27 @@ public:
     }
 
     NUdf::TUnboxedValuePod CreateStream(TComputationContext& ctx) const {
-        const auto hopTime = Hop->GetValue(ctx).Get<i64>();
-        const auto interval = Interval->GetValue(ctx).Get<i64>();
-        const auto delay = Delay->GetValue(ctx).Get<i64>();
+        const auto hopTime = Hop->GetValue(ctx).Get<ui64>();
+        const auto interval = Interval->GetValue(ctx).Get<ui64>();
+        const auto delay = Delay->GetValue(ctx).Get<ui64>();
         const auto dataWatermarks = DataWatermarks->GetValue(ctx).Get<bool>();
         const auto watermarkMode = WatermarkMode->GetValue(ctx).Get<bool>();
-
-        // TODO: move checks from here
-        MKQL_ENSURE(hopTime > 0, "hop must be positive");
-        MKQL_ENSURE(interval >= hopTime, "interval should be greater or equal to hop");
-        MKQL_ENSURE(delay >= hopTime, "delay should be greater or equal to hop");
-
         const auto intervalHopCount = interval / hopTime;
         const auto delayHopCount = delay / hopTime;
 
-        MKQL_ENSURE(intervalHopCount <= 100000, "too many hops in interval");
-        MKQL_ENSURE(delayHopCount <= 100000, "too many hops in delay");
-
-        return ctx.HolderFactory.Create<TStreamValue>(Stream->GetValue(ctx), this, (ui64)hopTime,
-                                                      (ui64)intervalHopCount, (ui64)delayHopCount,
-                                                      dataWatermarks, watermarkMode, ctx,
-                                                      TValueHasher(KeyTypes, IsTuple, Hash.Get()),
-                                                      TValueEqual(KeyTypes, IsTuple, Equate.Get()),
-                                                      Watermark);
+        return ctx.HolderFactory.Create<TStreamValue>(
+            Stream->GetValue(ctx),
+            this,
+            hopTime,
+            intervalHopCount,
+            delayHopCount,
+            dataWatermarks,
+            watermarkMode,
+            ctx,
+            TValueHasher(KeyTypes, IsTuple, Hash.Get()),
+            TValueEqual(KeyTypes, IsTuple, Equate.Get()),
+            Watermark
+        );
     }
 
     NUdf::TUnboxedValue GetValue(TComputationContext& compCtx) const override {

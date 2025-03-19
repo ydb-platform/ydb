@@ -1,3 +1,5 @@
+#pragma once
+
 #include "ydb_workload.h"
 
 namespace NYdb::NConsoleClient {
@@ -9,6 +11,11 @@ namespace BenchmarkUtils {
 
 class TWorkloadCommandBenchmark final: public TWorkloadCommandBase {
 public:
+    enum class EQueryExecutor {
+        Scan /* "scan" */,
+        Generic /* "generic" */
+    };
+
     TWorkloadCommandBenchmark(NYdbWorkload::TWorkloadParams& params, const NYdbWorkload::IWorkloadQueryGenerator::TWorkloadType& workload);
     virtual void Config(TConfig& config) override;
 
@@ -20,13 +27,13 @@ private:
     bool NeedRun(const ui32 queryIdx) const;
 
     template <typename TClient>
-    bool RunBench(TClient* client, NYdbWorkload::IWorkloadQueryGenerator& workloadGen);
+    int RunBench(TClient* client, NYdbWorkload::IWorkloadQueryGenerator& workloadGen);
     void SavePlans(const BenchmarkUtils::TQueryBenchmarkResult& res, ui32 queryNum, const TStringBuf name) const;
     void PrintResult(const BenchmarkUtils::TQueryBenchmarkResult& res, IOutputStream& out, const std::string& expected) const;
     BenchmarkUtils::TQueryBenchmarkDeadline GetDeadline() const;
 
 private:
-    TString QueryExecuterType;
+    EQueryExecutor QueryExecuterType = EQueryExecutor::Generic;
     TString OutFilePath;
     ui32 IterationsCount;
     TString JsonReportFileName;

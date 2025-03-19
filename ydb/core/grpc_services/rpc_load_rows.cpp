@@ -129,7 +129,7 @@ public:
 
 private:
     void OnBeforeStart(const TActorContext& ctx) override {
-        Request->SetFinishAction([selfId = ctx.SelfID, as = ctx.ExecutorThread.ActorSystem]() {
+        Request->SetFinishAction([selfId = ctx.SelfID, as = ctx.ActorSystem()]() {
             as->Send(selfId, new TEvents::TEvPoison);
         });
     }
@@ -252,7 +252,7 @@ private:
             }
 
             // Fill rest of cells with non-key column members
-            if (!FillCellsFromProto(valueCells, ValueColumnPositions, r, errorMessage, valueDataPool)) {
+            if (!FillCellsFromProto(valueCells, ValueColumnPositions, r, errorMessage, valueDataPool, IsInfinityInJsonAllowed())) {
                 return false;
             }
 
@@ -296,7 +296,7 @@ public:
 
 private:
     void OnBeforeStart(const TActorContext& ctx) override {
-        Request->SetFinishAction([selfId = ctx.SelfID, as = ctx.ExecutorThread.ActorSystem]() {
+        Request->SetFinishAction([selfId = ctx.SelfID, as = ctx.ActorSystem()]() {
             as->Send(selfId, new TEvents::TEvPoison);
         });
     }

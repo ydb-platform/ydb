@@ -85,9 +85,9 @@ def main():
     history_for_n_day = args.days_window
     build_type = args.build_type
     branch = args.branch
-    
-    print(f'Getting hostory in window {history_for_n_day} days')
-    
+
+    print(f'Getting history in window {history_for_n_day} days')
+
 
     if "CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS" not in os.environ:
         print(
@@ -109,17 +109,17 @@ def main():
         session = ydb.retry_operation_sync(
             lambda: driver.table_client.session().create()
         )
-        
+
         # settings, paths, consts
         tc_settings = ydb.TableClientSettings().with_native_date_in_result_sets(enabled=True)
         table_client = ydb.TableClient(driver, tc_settings)
-        
+
         table_path = f'test_results/analytics/flaky_tests_window_{history_for_n_day}_days'
-        default_start_date = datetime.date(2024, 9, 1)
-        
+        default_start_date = datetime.date(2025, 2, 28)
+
         with ydb.SessionPool(driver) as pool:
             create_tables(pool, table_path)
-            
+
         # geting last date from history
         last_date_query = f"""select max(date_window) as max_date_window from `{table_path}`
             where build_type = '{build_type}' and branch = '{branch}'"""
@@ -132,16 +132,16 @@ def main():
                 results = results + result.result_set.rows
             except StopIteration:
                 break
-    
+
         if results[0] and results[0].get( 'max_date_window', default_start_date) is not None and results[0].get( 'max_date_window', default_start_date) > default_start_date:
             last_datetime = results[0].get(
                 'max_date_window', default_start_date)
 
         else:
             last_datetime = default_start_date
-            
+
         last_date = last_datetime.strftime('%Y-%m-%d')
-        
+
         print(f'last hisotry date: {last_date}')
         # getting history for dates >= last_date
 
@@ -178,7 +178,7 @@ def main():
                 max(run_timestamp) as last_run
             from (
                 select * from (
-   
+
                     select distinct
                         full_name,
                         suite_folder,
@@ -187,10 +187,11 @@ def main():
                         Date('{date}') as date_base,
                         '{build_type}' as  build_type,
                         '{branch}' as  branch
-                    from  `test_results/analytics/testowners` 
+                    from  `test_results/analytics/testowners`
+                    where run_timestamp_last >= Date('{date}') - Interval('P30D')
                 ) as test_and_date
                 left JOIN (
-                    
+
                     select
                         suite_folder || '/' || test_name as full_name,
                         run_timestamp,
@@ -198,13 +199,18 @@ def main():
                     from  `test_results/test_runs_column`
                     where
                         run_timestamp <= Date('{date}') + Interval("P1D")
-                        and run_timestamp >= Date('{date}') - {history_for_n_day}*Interval("P1D") 
-
-                        and (job_name ='Nightly-run' or job_name ='Postcommit_relwithdebinfo' or job_name ='Postcommit_asan')
+                        and run_timestamp >= Date('{date}') {'' if history_for_n_day==1 else  f'-{history_for_n_day}*Interval("P1D")'}
+                        and job_name in (
+                            'Nightly-run',
+                            'Regression-run',
+                            'Regression-whitelist-run',
+                            'Postcommit_relwithdebinfo',
+                            'Postcommit_asan'
+                        )
                         and build_type = '{build_type}'
                         and branch = '{branch}'
                     order by full_name,run_timestamp desc
-                    
+
                 ) as hist
                 ON test_and_date.full_name=hist.full_name
             )

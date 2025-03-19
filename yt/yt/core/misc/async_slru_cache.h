@@ -2,7 +2,6 @@
 
 #include "public.h"
 #include "cache_config.h"
-#include "memory_usage_tracker.h"
 
 #include <yt/yt/core/actions/future.h>
 
@@ -10,6 +9,9 @@
 
 #include <yt/yt/library/profiling/sensor.h>
 
+#include <library/cpp/yt/memory/memory_usage_tracker.h>
+
+#include <library/cpp/yt/threading/atomic_object.h>
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 
 #include <atomic>
@@ -26,20 +28,26 @@ class TAsyncCacheValueBase
     : public virtual TRefCounted
 {
 public:
+    using TCache = TAsyncSlruCacheBase<TKey, TValue, THash>;
+
     virtual ~TAsyncCacheValueBase();
 
     const TKey& GetKey() const;
 
     void UpdateWeight() const;
 
+    TIntrusivePtr<TCache> TryGetCache() const;
+    void SetCache(TWeakPtr<TCache> cache);
+    void ResetCache();
+
 protected:
     explicit TAsyncCacheValueBase(const TKey& key);
 
 private:
-    using TCache = TAsyncSlruCacheBase<TKey, TValue, THash>;
-    friend class TAsyncSlruCacheBase<TKey, TValue, THash>;
+    friend TCache;
 
-    TWeakPtr<TCache> Cache_;
+    NThreading::TAtomicObject<TWeakPtr<TCache>> Cache_;
+
     TKey Key_;
     typename TCache::TItem* Item_ = nullptr;
 };
@@ -225,6 +233,8 @@ protected:
     // If item weight ever changes, UpdateWeight() should be called to apply the changes.
     virtual i64 GetWeight(const TValuePtr& value) const;
 
+    // These methods are executed under the cache write lock.
+    // Therefore, these methods should not perform heavy operations.
     virtual void OnAdded(const TValuePtr& value);
     virtual void OnRemoved(const TValuePtr& value);
 

@@ -37,6 +37,7 @@ constexpr TStringBuf PgCatalogFileName = "_yql_pg_catalog";
 struct TWriteTableSettings {
     NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
     NNodes::TMaybeNode<NNodes::TCoAtom> Temporary;
+    NNodes::TMaybeNode<NNodes::TCoAtom> IsBatch;
     NNodes::TMaybeNode<NNodes::TExprList> Columns;
     NNodes::TMaybeNode<NNodes::TExprList> ReturningList;
     NNodes::TMaybeNode<NNodes::TCoAtomList> PrimaryKey;
@@ -94,6 +95,27 @@ struct TWriteReplicationSettings {
     TWriteReplicationSettings(const NNodes::TCoNameValueTupleList& other)
         : Other(other)
     {}
+};
+
+struct TWriteTransferSettings {
+    NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
+    NNodes::TMaybeNode<NNodes::TCoAtom> Source;
+    NNodes::TMaybeNode<NNodes::TCoAtom> Target;
+    NNodes::TMaybeNode<NNodes::TCoAtom> TransformLambda;
+    NNodes::TMaybeNode<NNodes::TCoNameValueTupleList> TransferSettings;
+    NNodes::TCoNameValueTupleList Other;
+
+    TWriteTransferSettings(const NNodes::TCoNameValueTupleList& other)
+        : Other(other)
+    {}
+};
+
+struct TDatabaseSettings {
+    NNodes::TMaybeNode<NNodes::TCoAtom> Mode;
+    NNodes::TCoNameValueTupleList Other;
+
+    TDatabaseSettings(const NNodes::TCoNameValueTupleList& other)
+        : Other(other) {}
 };
 
 struct TWriteRoleSettings {
@@ -167,9 +189,12 @@ TVector<TString> GetResOrPullColumnHints(const TExprNode& node);
 TWriteTableSettings ParseWriteTableSettings(NNodes::TExprList node, TExprContext& ctx);
 TWriteTopicSettings ParseWriteTopicSettings(NNodes::TExprList node, TExprContext& ctx);
 TWriteReplicationSettings ParseWriteReplicationSettings(NNodes::TExprList node, TExprContext& ctx);
+TWriteTransferSettings ParseWriteTransferSettings(NNodes::TExprList node, TExprContext& ctx);
 
 TWriteRoleSettings ParseWriteRoleSettings(NNodes::TExprList node, TExprContext& ctx);
 TWriteObjectSettings ParseWriteObjectSettings(NNodes::TExprList node, TExprContext& ctx);
+
+TDatabaseSettings ParseDatabaseSettings(NNodes::TExprList node, TExprContext& ctx);
 
 TWritePermissionSettings ParseWritePermissionsSettings(NNodes::TExprList node, TExprContext& ctx);
 

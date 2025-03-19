@@ -25,6 +25,12 @@ PY_SRCS(
     sitecustomize.pyx
 )
 
+IF (EXTERNAL_PY_FILES)
+    PEERDIR(
+        library/python/runtime_py3/enable_external_py_files
+    )
+ENDIF()
+
 IF (CYTHON_COVERAGE)
     # Let covarage support add all needed files to resources
 ELSE()
@@ -38,6 +44,10 @@ ELSE()
 ENDIF()
 
 END()
+
+RECURSE(
+    enable_external_py_files
+)
 
 RECURSE_FOR_TESTS(
     test

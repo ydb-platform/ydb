@@ -171,6 +171,9 @@ void TOperatorStats::Resize(ui32 taskCount) {
 }
 
 void TStageExecutionStats::Resize(ui32 taskCount) {
+
+    Y_DEBUG_ABORT_UNLESS((taskCount & 3) == 0);
+
     CpuTimeUs.Resize(taskCount);
     SourceCpuTimeUs.resize(taskCount);
 
@@ -189,30 +192,38 @@ void TStageExecutionStats::Resize(ui32 taskCount) {
     FinishTimeMs.resize(taskCount);
     StartTimeMs.resize(taskCount);
     DurationUs.resize(taskCount);
-    WaitInputTimeUs.resize(taskCount);
-    WaitOutputTimeUs.resize(taskCount);
+
+    WaitInputTimeUs.Resize(taskCount);
+    WaitOutputTimeUs.Resize(taskCount);
 
     SpillingComputeBytes.Resize(taskCount);
     SpillingChannelBytes.Resize(taskCount);
     SpillingComputeTimeUs.Resize(taskCount);
     SpillingChannelTimeUs.Resize(taskCount);
 
-    for (auto& p : Ingress) p.second.Resize(taskCount);
-    for (auto& p : Input)   p.second.Resize(taskCount);
-    for (auto& p : Output)  p.second.Resize(taskCount);
-    for (auto& p : Egress)  p.second.Resize(taskCount);
+    for (auto& [_, t] : Tables) t.Resize(taskCount);
 
-    for (auto& [id, j] : Joins) j.Resize(taskCount);
-    for (auto& [id, f] : Filters) f.Resize(taskCount);
-    for (auto& [id, a] : Aggregations) a.Resize(taskCount);
+    for (auto& [_, i] : Ingress) i.Resize(taskCount);
+    for (auto& [_, i] : Input)   i.Resize(taskCount);
+    for (auto& [_, o] : Output)  o.Resize(taskCount);
+    for (auto& [_, e] : Egress)  e.Resize(taskCount);
+
+    for (auto& [_, j] : Joins) j.Resize(taskCount);
+    for (auto& [_, f] : Filters) f.Resize(taskCount);
+    for (auto& [_, a] : Aggregations) a.Resize(taskCount);
 
     MaxMemoryUsage.Resize(taskCount);
+    Finished.resize(taskCount);
 }
 
 void TStageExecutionStats::SetHistorySampleCount(ui32 historySampleCount) {
     HistorySampleCount = historySampleCount;
     CpuTimeUs.HistorySampleCount = historySampleCount;
     MaxMemoryUsage.HistorySampleCount = historySampleCount;
+
+    WaitInputTimeUs.HistorySampleCount = historySampleCount;
+    WaitOutputTimeUs.HistorySampleCount = historySampleCount;
+
     SpillingComputeBytes.HistorySampleCount = historySampleCount;
     SpillingChannelBytes.HistorySampleCount = historySampleCount;
     SpillingComputeTimeUs.HistorySampleCount = historySampleCount;
@@ -249,6 +260,12 @@ void TStageExecutionStats::ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqSta
     }
     if (stageStats.HasMaxMemoryUsage()) {
         MaxMemoryUsage.ExportHistory(baseTimeMs, *stageStats.MutableMaxMemoryUsage());
+    }
+    if (stageStats.HasWaitInputTimeUs()) {
+        WaitInputTimeUs.ExportHistory(baseTimeMs, *stageStats.MutableWaitInputTimeUs());
+    }
+    if (stageStats.HasWaitOutputTimeUs()) {
+        WaitOutputTimeUs.ExportHistory(baseTimeMs, *stageStats.MutableWaitOutputTimeUs());
     }
     if (stageStats.HasSpillingComputeBytes()) {
         SpillingComputeBytes.ExportHistory(baseTimeMs, *stageStats.MutableSpillingComputeBytes());
@@ -304,20 +321,30 @@ ui64 TStageExecutionStats::UpdateAsyncStats(ui32 index, TAsyncStats& aggrAsyncSt
     return baseTimeMs;
 }
 
-ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskStats, ui64 maxMemoryUsage, ui64 durationUs) {
+ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskStats, NYql::NDqProto::EComputeState state, ui64 maxMemoryUsage, ui64 durationUs) {
     auto taskId = taskStats.GetTaskId();
     auto it = Task2Index.find(taskId);
     ui64 baseTimeMs = 0;
 
-    ui32 taskCount = Task2Index.size();
+    Y_DEBUG_ABORT_UNLESS(TaskCount >= Task2Index.size());
 
     ui32 index;
     if (it == Task2Index.end()) {
-        index = taskCount++;
+        if (TaskCount == Task2Index.size()) {
+            TaskCount += 4;
+            Resize(TaskCount);
+        }
+        index = Task2Index.size();
         Task2Index.emplace(taskId, index);
-        Resize(taskCount);
     } else {
         index = it->second;
+    }
+
+    if (state == NYql::NDqProto::COMPUTE_STATE_FINISHED) {
+        if (!Finished[index]) {
+            Finished[index] = true;
+            FinishedCount++;
+        }
     }
 
     CpuTimeUs.SetNonZero(index, taskStats.GetCpuTimeUs());
@@ -344,8 +371,8 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
     baseTimeMs = NonZeroMin(baseTimeMs, finishTimeMs);
 
     SetNonZero(DurationUs[index], durationUs);
-    SetNonZero(WaitInputTimeUs[index], taskStats.GetWaitInputTimeUs());
-    SetNonZero(WaitOutputTimeUs[index], taskStats.GetWaitOutputTimeUs());
+    WaitInputTimeUs.SetNonZero(index, taskStats.GetWaitInputTimeUs());
+    WaitOutputTimeUs.SetNonZero(index, taskStats.GetWaitOutputTimeUs());
 
     SpillingComputeBytes.SetNonZero(index, taskStats.GetSpillingComputeWriteBytes());
     SpillingChannelBytes.SetNonZero(index, taskStats.GetSpillingChannelWriteBytes());
@@ -354,7 +381,7 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
 
     for (auto& tableStat : taskStats.GetTables()) {
         auto tablePath = tableStat.GetTablePath();
-        auto [it, inserted] = Tables.try_emplace(tablePath, taskCount);
+        auto [it, inserted] = Tables.try_emplace(tablePath, TaskCount);
         auto& aggrTableStats = it->second;
         SetNonZero(aggrTableStats.ReadRows[index], tableStat.GetReadRows());
         SetNonZero(aggrTableStats.ReadBytes[index], tableStat.GetReadBytes());
@@ -368,7 +395,7 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
     for (auto& sourceStat : taskStats.GetSources()) {
         auto ingressName = sourceStat.GetIngressName();
         if (ingressName) {
-            auto [it, inserted] = Ingress.try_emplace(ingressName, taskCount);
+            auto [it, inserted] = Ingress.try_emplace(ingressName, TaskCount);
             auto& asyncBufferStats = it->second;
             if (inserted) {
                 asyncBufferStats.SetHistorySampleCount(HistorySampleCount);
@@ -381,7 +408,7 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
 
     for (auto& inputChannelStat : taskStats.GetInputChannels()) {
         auto stageId = inputChannelStat.GetSrcStageId();
-        auto [it, inserted] = Input.try_emplace(stageId, taskCount);
+        auto [it, inserted] = Input.try_emplace(stageId, TaskCount);
         auto& asyncBufferStats = it->second;
         if (inserted) {
             asyncBufferStats.SetHistorySampleCount(HistorySampleCount);
@@ -392,7 +419,7 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
 
     for (auto& outputChannelStat : taskStats.GetOutputChannels()) {
         auto stageId = outputChannelStat.GetDstStageId();
-        auto [it, inserted] = Output.try_emplace(stageId, taskCount);
+        auto [it, inserted] = Output.try_emplace(stageId, TaskCount);
         auto& asyncBufferStats = it->second;
         if (inserted) {
             asyncBufferStats.SetHistorySampleCount(HistorySampleCount);
@@ -404,7 +431,7 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
     for (auto& sinkStat : taskStats.GetSinks()) {
         auto egressName = sinkStat.GetEgressName();
         if (egressName) {
-            auto [it, inserted] = Egress.try_emplace(egressName, taskCount);
+            auto [it, inserted] = Egress.try_emplace(egressName, TaskCount);
             auto& asyncBufferStats = it->second;
             if (inserted) {
                 asyncBufferStats.SetHistorySampleCount(HistorySampleCount);
@@ -420,21 +447,21 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
         if (operatorId) {
             switch (operatorStat.GetTypeCase()) {
                 case NYql::NDqProto::TDqOperatorStats::kJoin: {
-                    auto [it, inserted] = Joins.try_emplace(operatorId, taskCount);
+                    auto [it, inserted] = Joins.try_emplace(operatorId, TaskCount);
                     auto& joinStats = it->second;
                     SetNonZero(joinStats.Rows[index], operatorStat.GetRows());
                     SetNonZero(joinStats.Bytes[index], operatorStat.GetBytes());
                     break;
                 }
                 case NYql::NDqProto::TDqOperatorStats::kFilter: {
-                    auto [it, inserted] = Filters.try_emplace(operatorId, taskCount);
+                    auto [it, inserted] = Filters.try_emplace(operatorId, TaskCount);
                     auto& filterStats = it->second;
                     SetNonZero(filterStats.Rows[index], operatorStat.GetRows());
                     SetNonZero(filterStats.Bytes[index], operatorStat.GetBytes());
                     break;
                 }
                 case NYql::NDqProto::TDqOperatorStats::kAggregation: {
-                    auto [it, inserted] = Aggregations.try_emplace(operatorId, taskCount);
+                    auto [it, inserted] = Aggregations.try_emplace(operatorId, TaskCount);
                     auto& aggStats = it->second;
                     SetNonZero(aggStats.Rows[index], operatorStat.GetRows());
                     SetNonZero(aggStats.Bytes[index], operatorStat.GetBytes());
@@ -464,6 +491,13 @@ TProgressStatEntry operator - (const TProgressStatEntry& l, const TProgressStatE
     };
 }
 
+void MergeAggr(NDqProto::TDqStatsAggr& aggr, const NDqProto::TDqStatsAggr& stat) noexcept {
+    aggr.SetMin(NonZeroMin(aggr.GetMin(), stat.GetMin()));
+    aggr.SetMax(std::max(aggr.GetMax(), stat.GetMax()));
+    aggr.SetSum(aggr.GetSum() + stat.GetSum());
+    aggr.SetCnt(aggr.GetCnt() + stat.GetCnt());
+}
+
 void UpdateAggr(NDqProto::TDqStatsAggr* aggr, ui64 value) noexcept {
     if (value) {
         if (aggr->GetMin() == 0) {
@@ -475,6 +509,19 @@ void UpdateAggr(NDqProto::TDqStatsAggr* aggr, ui64 value) noexcept {
         aggr->SetSum(aggr->GetSum() + value);
         aggr->SetCnt(aggr->GetCnt() + 1);
     }
+}
+
+void MergeExternal(NDqProto::TDqExternalAggrStats& asyncAggr, const NDqProto::TDqExternalAggrStats& asyncStat) noexcept {
+    MergeAggr(*asyncAggr.MutableExternalRows(), asyncStat.GetExternalRows());
+    MergeAggr(*asyncAggr.MutableExternalBytes(), asyncStat.GetExternalBytes());
+    MergeAggr(*asyncAggr.MutableStorageRows(), asyncStat.GetStorageRows());
+    MergeAggr(*asyncAggr.MutableStorageBytes(), asyncStat.GetStorageBytes());
+    MergeAggr(*asyncAggr.MutableCpuTimeUs(), asyncStat.GetCpuTimeUs());
+    MergeAggr(*asyncAggr.MutableWaitInputTimeUs(), asyncStat.GetWaitInputTimeUs());
+    MergeAggr(*asyncAggr.MutableWaitOutputTimeUs(), asyncStat.GetWaitOutputTimeUs());
+    MergeAggr(*asyncAggr.MutableFirstMessageMs(), asyncStat.GetFirstMessageMs());
+    MergeAggr(*asyncAggr.MutableLastMessageMs(), asyncStat.GetLastMessageMs());
+    asyncAggr.SetPartitionCount(asyncAggr.GetPartitionCount() + asyncStat.GetExternalRows().GetCnt());
 }
 
 ui64 UpdateAsyncAggr(NDqProto::TDqAsyncStatsAggr& asyncAggr, const NDqProto::TDqAsyncBufferStats& asyncStat) noexcept {
@@ -608,13 +655,29 @@ void TQueryExecutionStats::FillStageDurationUs(NYql::NDqProto::TDqStageStats& st
     }
 }
 
+ui64 TQueryExecutionStats::EstimateCollectMem() {
+    ui64 result = 0;
+    for (auto& [_, stageStat] : StageStats) {
+        result += stageStat.EstimateMem();
+    }
+    return result;
+}
+
+ui64 TQueryExecutionStats::EstimateFinishMem() {
+    return Result->ByteSizeLong();
+}
+
 void TQueryExecutionStats::AddComputeActorFullStatsByTask(
         const NYql::NDqProto::TDqTaskStats& task,
-        const NYql::NDqProto::TDqComputeActorStats& stats
+        const NYql::NDqProto::TDqComputeActorStats& stats,
+        NYql::NDqProto::EComputeState state
     ) {
     auto* stageStats = GetOrCreateStageStats(task, *TasksGraph, *Result);
 
     stageStats->SetTotalTasksCount(stageStats->GetTotalTasksCount() + 1);
+    if (state == NYql::NDqProto::COMPUTE_STATE_FINISHED) {
+        stageStats->SetFinishedTasksCount(stageStats->GetFinishedTasksCount() + 1);
+    }
     UpdateAggr(stageStats->MutableMaxMemoryUsage(), stats.GetMaxMemoryUsage()); // only 1 task per CA now
     UpdateAggr(stageStats->MutableCpuTimeUs(), task.GetCpuTimeUs());
     UpdateAggr(stageStats->MutableSourceCpuTimeUs(), task.GetSourceCpuTimeUs());
@@ -650,9 +713,27 @@ void TQueryExecutionStats::AddComputeActorFullStatsByTask(
     FillStageDurationUs(*stageStats);
 
     for (auto& sourcesStat : task.GetSources()) {
-        BaseTimeMs = NonZeroMin(BaseTimeMs, UpdateAsyncAggr(*(*stageStats->MutableIngress())[sourcesStat.GetIngressName()].MutableIngress(), sourcesStat.GetIngress()));
-        BaseTimeMs = NonZeroMin(BaseTimeMs, UpdateAsyncAggr(*(*stageStats->MutableIngress())[sourcesStat.GetIngressName()].MutablePush(),   sourcesStat.GetPush()));
-        BaseTimeMs = NonZeroMin(BaseTimeMs, UpdateAsyncAggr(*(*stageStats->MutableIngress())[sourcesStat.GetIngressName()].MutablePop(),  sourcesStat.GetPop()));
+        auto& ingress = (*stageStats->MutableIngress())[sourcesStat.GetIngressName()];
+        MergeExternal(*ingress.MutableExternal(), sourcesStat.GetExternal());
+
+        const auto& [it, inserted] = ExternalPartitionStats.emplace(stageStats->GetStageId(), sourcesStat.GetIngressName());
+        auto& externalPartitionStat = it->second;
+
+        for (auto& externalPartition : sourcesStat.GetExternalPartitions()) {
+            const auto& [it, inserted] = externalPartitionStat.Stat.emplace(externalPartition.GetPartitionId(),
+                TExternalPartitionStat(externalPartition.GetExternalRows(), externalPartition.GetExternalBytes(),
+                externalPartition.GetFirstMessageMs(), externalPartition.GetLastMessageMs()));
+            if (!inserted) {
+                it->second.ExternalRows += externalPartition.GetExternalRows();
+                it->second.ExternalBytes += externalPartition.GetExternalBytes();
+                it->second.FirstMessageMs = NonZeroMin(it->second.FirstMessageMs, externalPartition.GetFirstMessageMs());
+                it->second.LastMessageMs = std::max(it->second.LastMessageMs, externalPartition.GetLastMessageMs());
+            }
+        }
+
+        BaseTimeMs = NonZeroMin(BaseTimeMs, UpdateAsyncAggr(*ingress.MutableIngress(), sourcesStat.GetIngress()));
+        BaseTimeMs = NonZeroMin(BaseTimeMs, UpdateAsyncAggr(*ingress.MutablePush(),   sourcesStat.GetPush()));
+        BaseTimeMs = NonZeroMin(BaseTimeMs, UpdateAsyncAggr(*ingress.MutablePop(),  sourcesStat.GetPop()));
     }
     for (auto& inputChannelStat : task.GetInputChannels()) {
         BaseTimeMs = NonZeroMin(BaseTimeMs, UpdateAsyncAggr(*(*stageStats->MutableInput())[inputChannelStat.GetSrcStageId()].MutablePush(), inputChannelStat.GetPush()));
@@ -703,13 +784,17 @@ void TQueryExecutionStats::AddComputeActorFullStatsByTask(
 }
 
 void TQueryExecutionStats::AddComputeActorProfileStatsByTask(
-        const NYql::NDqProto::TDqTaskStats& task, const NYql::NDqProto::TDqComputeActorStats& stats) {
+        const NYql::NDqProto::TDqTaskStats& task, const NYql::NDqProto::TDqComputeActorStats& stats,
+        bool keepOnlyLastTask) {
     auto* stageStats = GetOrCreateStageStats(task, *TasksGraph, *Result);
+    if (keepOnlyLastTask) {
+        stageStats->MutableComputeActors()->Clear();
+    }
     stageStats->AddComputeActors()->CopyFrom(stats);
 }
 
 void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProto::TDqComputeActorStats&& stats,
-        TDuration collectLongTaskStatsTimeout) {
+    NYql::NDqProto::EComputeState state, TDuration collectLongTaskStatsTimeout) {
 //    Cerr << (TStringBuilder() << "::AddComputeActorStats " << stats.DebugString() << Endl);
 
     Result->SetCpuTimeUs(Result->GetCpuTimeUs() + stats.GetCpuTimeUs());
@@ -718,7 +803,7 @@ void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProt
 
     UpdateAggr(ExtraStats.MutableComputeCpuTimeUs(), stats.GetCpuTimeUs());
 
-    auto longTasks = TVector<NYql::NDqProto::TDqTaskStats*>(Reserve(stats.GetTasks().size()));
+    NYql::NDqProto::TDqTaskStats * longTask = nullptr;
 
     for (auto& task : *stats.MutableTasks()) {
         ResultBytes += task.GetResultBytes();
@@ -764,26 +849,27 @@ void TQueryExecutionStats::AddComputeActorStats(ui32 /* nodeId */, NYql::NDqProt
         //      enough to result in an enormous duration - triggering the "long tasks" mode.
 
         auto taskDuration = TDuration::MilliSeconds(task.GetFinishTimeMs() - task.GetStartTimeMs());
-        bool longTask = taskDuration > collectLongTaskStatsTimeout;
-        if (longTask) {
+        auto& longestTaskDuration = LongestTaskDurations[task.GetStageId()];
+        if (taskDuration > Max(collectLongTaskStatsTimeout, longestTaskDuration)) {
             CollectStatsByLongTasks = true;
-            longTasks.push_back(&task);
+            longTask = &task;
+            longestTaskDuration = taskDuration;
         }
     }
 
     if (CollectFullStats(StatsMode)) {
         for (const auto& task : stats.GetTasks()) {
-            AddComputeActorFullStatsByTask(task, stats);
+            AddComputeActorFullStatsByTask(task, stats, state);
         }
     }
 
     if (CollectProfileStats(StatsMode)) {
         for (const auto& task : stats.GetTasks()) {
-            AddComputeActorProfileStatsByTask(task, stats);
+            AddComputeActorProfileStatsByTask(task, stats, false);
         }
     } else {
-        for (const auto* task : longTasks) {
-            AddComputeActorProfileStatsByTask(*task, stats);
+        if (longTask) {
+            AddComputeActorProfileStatsByTask(*longTask, stats, true);
         }
     }
 }
@@ -821,9 +907,14 @@ void TQueryExecutionStats::AddDatashardFullStatsByTask(
     UpdateAggr(stageStats->MutableFinishTimeMs(), finishTimeMs);
     BaseTimeMs = NonZeroMin(BaseTimeMs, finishTimeMs);
 
+    FillStageDurationUs(*stageStats);
     UpdateAggr(stageStats->MutableWaitInputTimeUs(), task.GetWaitInputTimeUs());
     UpdateAggr(stageStats->MutableWaitOutputTimeUs(), task.GetWaitOutputTimeUs());
-    FillStageDurationUs(*stageStats);
+
+    UpdateAggr(stageStats->MutableSpillingComputeBytes(), task.GetSpillingComputeWriteBytes());
+    UpdateAggr(stageStats->MutableSpillingChannelBytes(), task.GetSpillingChannelWriteBytes());
+    UpdateAggr(stageStats->MutableSpillingComputeTimeUs(), task.GetSpillingComputeReadTimeUs() + task.GetSpillingComputeWriteTimeUs());
+    UpdateAggr(stageStats->MutableSpillingChannelTimeUs(), task.GetSpillingChannelReadTimeUs() + task.GetSpillingChannelWriteTimeUs());
 
     for (auto& tableStats: task.GetTables()) {
         auto* tableAggrStats = GetOrCreateTableAggrStats(stageStats, tableStats.GetTablePath());
@@ -875,7 +966,7 @@ void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStat
     Result->SetCpuTimeUs(Result->GetCpuTimeUs() + datashardCpuTimeUs);
     TotalTasks += stats.GetTasks().size();
 
-    auto longTasks = TVector<NYql::NDqProto::TDqTaskStats*>(Reserve(stats.GetTasks().size()));
+    NYql::NDqProto::TDqTaskStats* longTask = nullptr;
 
     for (auto& task : *stats.MutableTasks()) {
         for (auto& table : task.GetTables()) {
@@ -902,11 +993,13 @@ void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStat
         }
 
         // checking whether the task is long
+
         auto taskDuration = TDuration::MilliSeconds(task.GetFinishTimeMs() - task.GetStartTimeMs());
-        bool longTask = taskDuration > collectLongTaskStatsTimeout;
-        if (longTask) {
+        auto& longestTaskDuration = LongestTaskDurations[task.GetStageId()];
+        if (taskDuration > Max(collectLongTaskStatsTimeout, longestTaskDuration)) {
             CollectStatsByLongTasks = true;
-            longTasks.push_back(&task);
+            longTask = &task;
+            longestTaskDuration = taskDuration;
         }
     }
 
@@ -916,18 +1009,18 @@ void TQueryExecutionStats::AddDatashardStats(NYql::NDqProto::TDqComputeActorStat
         }
         DatashardStats.emplace_back(std::move(txStats));
     } else {
-        if (!longTasks.empty()) {
+        if (longTask) {
             DatashardStats.emplace_back(std::move(txStats));
         }
     }
 
     if (CollectProfileStats(StatsMode)) {
         for (const auto& task : stats.GetTasks()) {
-            AddComputeActorProfileStatsByTask(task, stats);
+            AddComputeActorProfileStatsByTask(task, stats, false);
         }
     } else {
-        for (const auto* task : longTasks) {
-            AddComputeActorProfileStatsByTask(*task, stats);
+        if (longTask) {
+            AddComputeActorProfileStatsByTask(*longTask, stats, true);
         }
     }
 }
@@ -964,11 +1057,11 @@ void TQueryExecutionStats::AddBufferStats(NYql::NDqProto::TDqTaskStats&& taskSta
         tableAggr->SetWriteRows(tableAggr->GetWriteRows() + table.GetWriteRows());
         tableAggr->SetWriteBytes(tableAggr->GetWriteBytes() + table.GetWriteBytes());
         tableAggr->SetEraseRows(tableAggr->GetEraseRows() + table.GetEraseRows());
-        tableAggr->SetAffectedPartitions(table.GetAffectedPartitions());
+        tableAggr->SetAffectedPartitions(tableAggr->GetAffectedPartitions() + table.GetAffectedPartitions());
     }
 }
 
-void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats) {
+void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TDqComputeActorStats& stats, NYql::NDqProto::EComputeState state) {
     Y_ASSERT(stats.GetTasks().size() == 1);
     const NYql::NDqProto::TDqTaskStats& taskStats = stats.GetTasks(0);
     Y_ASSERT(taskStats.GetTaskId() == taskId);
@@ -978,58 +1071,125 @@ void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TD
         it->second.StageId = TasksGraph->GetTask(taskStats.GetTaskId()).StageId;
         it->second.SetHistorySampleCount(HistorySampleCount);
     }
-    BaseTimeMs = NonZeroMin(BaseTimeMs, it->second.UpdateStats(taskStats, stats.GetMaxMemoryUsage(), stats.GetDurationUs()));
+    BaseTimeMs = NonZeroMin(BaseTimeMs, it->second.UpdateStats(taskStats, state, stats.GetMaxMemoryUsage(), stats.GetDurationUs()));
 }
 
 void ExportAggStats(std::vector<ui64>& data, NYql::NDqProto::TDqStatsMinMax& stats) {
+
+    Y_DEBUG_ABORT_UNLESS((data.size() & 3) == 0);
+
     ui64 count = 0;
-    ui64 min = 0;
-    ui64 max = 0;
-    for (auto d : data) {
-        if (d) {
-            if (count) {
-                if (min > d) min = d;
-                if (max < d) max = d;
-            } else {
-                min = max = d;
-            }
-            count++;
-        }
+    ui64 min4[4] = {0, 0, 0, 0};
+    ui64 max4[4] = {0, 0, 0, 0};
+
+    for (auto it = data.begin(); it < data.end(); it += 4) {
+        count += it[0] != 0;
+        count += it[1] != 0;
+        count += it[2] != 0;
+        count += it[3] != 0;
+        min4[0] = min4[0] ? (it[0] ? (min4[0] < it[0] ? min4[0] : it[0]) : min4[0]) : it[0];
+        min4[1] = min4[1] ? (it[1] ? (min4[1] < it[1] ? min4[1] : it[1]) : min4[1]) : it[1];
+        min4[2] = min4[2] ? (it[2] ? (min4[2] < it[2] ? min4[2] : it[2]) : min4[2]) : it[2];
+        min4[3] = min4[3] ? (it[3] ? (min4[3] < it[3] ? min4[3] : it[3]) : min4[3]) : it[3];
+        max4[0] = max4[0] > it[0] ? max4[0] : it[0];
+        max4[1] = max4[1] > it[1] ? max4[1] : it[1];
+        max4[2] = max4[2] > it[2] ? max4[2] : it[2];
+        max4[3] = max4[3] > it[3] ? max4[3] : it[3];
     }
+
     if (count) {
-        stats.SetMin(min);
-        stats.SetMax(max);
+        ui64 min01 = min4[0] ? (min4[1] ? (min4[0] < min4[1] ? min4[0] : min4[1]) : min4[0]) : min4[1];
+        ui64 min23 = min4[2] ? (min4[3] ? (min4[2] < min4[3] ? min4[2] : min4[3]) : min4[2]) : min4[3];
+        stats.SetMin(min01 ? (min23 ? (min01 < min23 ? min01 : min23) : min01) : min23);
+        ui64 max01 = max4[0] > max4[1] ? max4[0] : max4[1];
+        ui64 max23 = max4[2] > max4[3] ? max4[2] : max4[3];
+        stats.SetMax(max01 > max23 ? max01 : max23);
     }
 }
 
 void ExportOffsetAggStats(std::vector<ui64>& data, NYql::NDqProto::TDqStatsAggr& stats, ui64 offset) {
+
+    Y_DEBUG_ABORT_UNLESS((data.size() & 3) == 0);
+
     ui64 count = 0;
-    ui64 min = 0;
-    ui64 max = 0;
     ui64 sum = 0;
-    for (auto d : data) {
-        d = (d <= offset) ? 0 : (d - offset);
-        if (d) {
-            if (count) {
-                if (min > d) min = d;
-                if (max < d) max = d;
-            } else {
-                min = max = d;
-            }
-            sum += d;
-            count++;
-        }
+    ui64 min4[4] = {0, 0, 0, 0};
+    ui64 max4[4] = {0, 0, 0, 0};
+
+    for (auto ito = data.begin(); ito < data.end(); ito += 4) {
+        ui64 it[4];
+        it[0] = ito[0] <= offset ? 0 : ito[0] - offset;
+        it[1] = ito[1] <= offset ? 0 : ito[1] - offset;
+        it[2] = ito[2] <= offset ? 0 : ito[2] - offset;
+        it[3] = ito[3] <= offset ? 0 : ito[3] - offset;
+        count += it[0] != 0;
+        count += it[1] != 0;
+        count += it[2] != 0;
+        count += it[3] != 0;
+        sum += it[0];
+        sum += it[1];
+        sum += it[2];
+        sum += it[3];
+        min4[0] = min4[0] ? (it[0] ? (min4[0] < it[0] ? min4[0] : it[0]) : min4[0]) : it[0];
+        min4[1] = min4[1] ? (it[1] ? (min4[1] < it[1] ? min4[1] : it[1]) : min4[1]) : it[1];
+        min4[2] = min4[2] ? (it[2] ? (min4[2] < it[2] ? min4[2] : it[2]) : min4[2]) : it[2];
+        min4[3] = min4[3] ? (it[3] ? (min4[3] < it[3] ? min4[3] : it[3]) : min4[3]) : it[3];
+        max4[0] = max4[0] > it[0] ? max4[0] : it[0];
+        max4[1] = max4[1] > it[1] ? max4[1] : it[1];
+        max4[2] = max4[2] > it[2] ? max4[2] : it[2];
+        max4[3] = max4[3] > it[3] ? max4[3] : it[3];
     }
+
     if (count) {
-        stats.SetMin(min);
-        stats.SetMax(max);
-        stats.SetSum(sum);
         stats.SetCnt(count);
+        stats.SetSum(sum);
+        ui64 min01 = min4[0] ? (min4[1] ? (min4[0] < min4[1] ? min4[0] : min4[1]) : min4[0]) : min4[1];
+        ui64 min23 = min4[2] ? (min4[3] ? (min4[2] < min4[3] ? min4[2] : min4[3]) : min4[2]) : min4[3];
+        stats.SetMin(min01 ? (min23 ? (min01 < min23 ? min01 : min23) : min01) : min23);
+        ui64 max01 = max4[0] > max4[1] ? max4[0] : max4[1];
+        ui64 max23 = max4[2] > max4[3] ? max4[2] : max4[3];
+        stats.SetMax(max01 > max23 ? max01 : max23);
     }
 }
 
 void ExportAggStats(std::vector<ui64>& data, NYql::NDqProto::TDqStatsAggr& stats) {
-    ExportOffsetAggStats(data, stats, 0);
+
+    Y_DEBUG_ABORT_UNLESS((data.size() & 3) == 0);
+
+    ui64 count = 0;
+    ui64 sum = 0;
+    ui64 min4[4] = {0, 0, 0, 0};
+    ui64 max4[4] = {0, 0, 0, 0};
+
+    for (auto it = data.begin(); it < data.end(); it += 4) {
+        count += it[0] != 0;
+        count += it[1] != 0;
+        count += it[2] != 0;
+        count += it[3] != 0;
+        sum += it[0];
+        sum += it[1];
+        sum += it[2];
+        sum += it[3];
+        min4[0] = min4[0] ? (it[0] ? (min4[0] < it[0] ? min4[0] : it[0]) : min4[0]) : it[0];
+        min4[1] = min4[1] ? (it[1] ? (min4[1] < it[1] ? min4[1] : it[1]) : min4[1]) : it[1];
+        min4[2] = min4[2] ? (it[2] ? (min4[2] < it[2] ? min4[2] : it[2]) : min4[2]) : it[2];
+        min4[3] = min4[3] ? (it[3] ? (min4[3] < it[3] ? min4[3] : it[3]) : min4[3]) : it[3];
+        max4[0] = max4[0] > it[0] ? max4[0] : it[0];
+        max4[1] = max4[1] > it[1] ? max4[1] : it[1];
+        max4[2] = max4[2] > it[2] ? max4[2] : it[2];
+        max4[3] = max4[3] > it[3] ? max4[3] : it[3];
+    }
+
+    if (count) {
+        stats.SetCnt(count);
+        stats.SetSum(sum);
+        ui64 min01 = min4[0] ? (min4[1] ? (min4[0] < min4[1] ? min4[0] : min4[1]) : min4[0]) : min4[1];
+        ui64 min23 = min4[2] ? (min4[3] ? (min4[2] < min4[3] ? min4[2] : min4[3]) : min4[2]) : min4[3];
+        stats.SetMin(min01 ? (min23 ? (min01 < min23 ? min01 : min23) : min01) : min23);
+        ui64 max01 = max4[0] > max4[1] ? max4[0] : max4[1];
+        ui64 max23 = max4[2] > max4[3] ? max4[2] : max4[3];
+        stats.SetMax(max01 > max23 ? max01 : max23);
+    }
 }
 
 ui64 ExportAggStats(std::vector<ui64>& data) {
@@ -1071,6 +1231,7 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
     for (auto& [stageId, stageStat] : StageStats) {
         auto& stageStats = *protoStages[stageStat.StageId.StageId];
         stageStats.SetTotalTasksCount(stageStat.Task2Index.size());
+        stageStats.SetFinishedTasksCount(stageStat.FinishedCount);
 
         stageStats.SetBaseTimeMs(BaseTimeMs);
         stageStat.CpuTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableCpuTimeUs());
@@ -1092,8 +1253,8 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
         ExportOffsetAggStats(stageStat.StartTimeMs, *stageStats.MutableStartTimeMs(), BaseTimeMs);
         ExportOffsetAggStats(stageStat.FinishTimeMs, *stageStats.MutableFinishTimeMs(), BaseTimeMs);
         ExportAggStats(stageStat.DurationUs, *stageStats.MutableDurationUs());
-        ExportAggStats(stageStat.WaitInputTimeUs, *stageStats.MutableWaitInputTimeUs());
-        ExportAggStats(stageStat.WaitOutputTimeUs, *stageStats.MutableWaitOutputTimeUs());
+        stageStat.WaitInputTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableWaitInputTimeUs());
+        stageStat.WaitOutputTimeUs.ExportAggStats(BaseTimeMs, *stageStats.MutableWaitOutputTimeUs());
 
         stageStat.SpillingComputeBytes.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingComputeBytes());
         stageStat.SpillingChannelBytes.ExportAggStats(BaseTimeMs, *stageStats.MutableSpillingChannelBytes());
@@ -1144,6 +1305,19 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
             ExportAggStats(a.Rows, *aggrStat.MutableRows());
         }
     }
+
+    for (const auto& [_, tableStats] : TableStats) {
+        stats.AddTables()->CopyFrom(*tableStats);
+    }
+}
+
+void TQueryExecutionStats::AdjustExternalAggr(NYql::NDqProto::TDqExternalAggrStats& stats) {
+    if (stats.HasFirstMessageMs()) {
+        AdjustDqStatsAggr(*stats.MutableFirstMessageMs());
+    }
+    if (stats.HasLastMessageMs()) {
+        AdjustDqStatsAggr(*stats.MutableLastMessageMs());
+    }
 }
 
 void TQueryExecutionStats::AdjustAsyncAggr(NYql::NDqProto::TDqAsyncStatsAggr& stats) {
@@ -1162,6 +1336,9 @@ void TQueryExecutionStats::AdjustAsyncAggr(NYql::NDqProto::TDqAsyncStatsAggr& st
 }
 
 void TQueryExecutionStats::AdjustAsyncBufferAggr(NYql::NDqProto::TDqAsyncBufferStatsAggr& stats) {
+    if (stats.HasExternal()) {
+        AdjustExternalAggr(*stats.MutableExternal());
+    }
     if (stats.HasIngress()) {
         AdjustAsyncAggr(*stats.MutableIngress());
     }
@@ -1178,13 +1355,15 @@ void TQueryExecutionStats::AdjustAsyncBufferAggr(NYql::NDqProto::TDqAsyncBufferS
 
 void TQueryExecutionStats::AdjustDqStatsAggr(NYql::NDqProto::TDqStatsAggr& stats) {
     if (auto min = stats.GetMin()) {
-        stats.SetMin(min - BaseTimeMs);
+        stats.SetMin(min > BaseTimeMs ? min - BaseTimeMs : 0);
     }
     if (auto max = stats.GetMax()) {
-        stats.SetMax(max - BaseTimeMs);
+        stats.SetMax(max > BaseTimeMs ? max - BaseTimeMs : 0);
     }
     if (auto cnt = stats.GetCnt()) {
-        stats.SetSum(stats.GetSum() - BaseTimeMs * cnt);
+        auto sum = stats.GetSum();
+        auto baseSum = BaseTimeMs * cnt;
+        stats.SetSum(sum > baseSum ? sum - baseSum : 0);
     }
 }
 
@@ -1216,6 +1395,39 @@ void TQueryExecutionStats::Finish() {
     for (auto& [stageId, stagetype] : TasksGraph->GetStagesInfo()) {
         auto stageStats = GetOrCreateStageStats(stageId, *TasksGraph, *Result);
         stageStats->SetBaseTimeMs(BaseTimeMs);
+
+        if (ExternalPartitionStats.contains(stageStats->GetStageId())) {
+            auto& externalPartitionStat = ExternalPartitionStats[stageStats->GetStageId()];
+            auto& ingress = (*stageStats->MutableIngress())[externalPartitionStat.Name];
+            auto& external = *ingress.MutableExternal();
+            for (auto& [partitionId, partitionStat] : externalPartitionStat.Stat) {
+                auto& externalRows = *external.MutableExternalRows();
+                externalRows.SetMin(NonZeroMin(externalRows.GetMin(), partitionStat.ExternalRows));
+                externalRows.SetMax(std::max(externalRows.GetMax(), partitionStat.ExternalRows));
+                externalRows.SetSum(externalRows.GetSum() + partitionStat.ExternalRows);
+                externalRows.SetCnt(externalRows.GetCnt() + 1);
+
+                auto& externalBytes = *external.MutableExternalBytes();
+                externalBytes.SetMin(NonZeroMin(externalBytes.GetMin(), partitionStat.ExternalBytes));
+                externalBytes.SetMax(std::max(externalBytes.GetMax(), partitionStat.ExternalBytes));
+                externalBytes.SetSum(externalBytes.GetSum() + partitionStat.ExternalBytes);
+                externalBytes.SetCnt(externalBytes.GetCnt() + 1);
+
+                auto& firstMessageMs = *external.MutableFirstMessageMs();
+                firstMessageMs.SetMin(NonZeroMin(firstMessageMs.GetMin(), partitionStat.FirstMessageMs));
+                firstMessageMs.SetMax(std::max(firstMessageMs.GetMax(), partitionStat.FirstMessageMs));
+                firstMessageMs.SetSum(firstMessageMs.GetSum() + partitionStat.FirstMessageMs);
+                firstMessageMs.SetCnt(firstMessageMs.GetCnt() + 1);
+
+                auto& lastMessageMs = *external.MutableLastMessageMs();
+                lastMessageMs.SetMin(NonZeroMin(lastMessageMs.GetMin(), partitionStat.LastMessageMs));
+                lastMessageMs.SetMax(std::max(lastMessageMs.GetMax(), partitionStat.LastMessageMs));
+                lastMessageMs.SetSum(lastMessageMs.GetSum() + partitionStat.LastMessageMs);
+                lastMessageMs.SetCnt(lastMessageMs.GetCnt() + 1);
+            }
+            external.SetPartitionCount(external.GetPartitionCount() + externalPartitionStat.Stat.size());
+        }
+
         AdjustBaseTime(stageStats);
         auto it = StageStats.find(stageId.StageId);
         if (it != StageStats.end()) {

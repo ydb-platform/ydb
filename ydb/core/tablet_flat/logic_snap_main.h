@@ -27,7 +27,7 @@ namespace NTabletFlatExecutor {
 
         }
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "LSnap{" << Cookies->Tablet << ":" << Cookies->Gen
@@ -50,7 +50,7 @@ namespace NTabletFlatExecutor {
 
         const NSnap::TWaste& Waste() const noexcept { return *Waste_; }
 
-        void Confirm(ui32 step) noexcept
+        void Confirm(ui32 step)
         {
             if (Pending == 0 || Pending != step)
                 Y_Fail(

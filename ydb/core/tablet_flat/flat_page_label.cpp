@@ -8,7 +8,7 @@ namespace NKikimr {
 namespace NTable {
 namespace NPage {
 
-    TLabelWrapper::TResult TLabelWrapper::Read(TArrayRef<const char> raw, EPage type) const noexcept
+    TLabelWrapper::TResult TLabelWrapper::Read(TArrayRef<const char> raw, EPage type) const
     {
         Y_ABORT_UNLESS(raw.size() >= sizeof(TLabel), "Page blob is too small to hold label");
 
@@ -45,7 +45,7 @@ namespace NPage {
         return { label.Type, version, codec, { begin, raw.end() } };
     }
 
-    TSharedData TLabelWrapper::Wrap(TArrayRef<const char> plain, EPage page, ui16 version) noexcept
+    TSharedData TLabelWrapper::Wrap(TArrayRef<const char> plain, EPage page, ui16 version)
     {
         Y_ABORT_UNLESS(!(version >> 15), "Version can use only 15 bits");
 
@@ -60,7 +60,7 @@ namespace NPage {
         return blob;
     }
 
-    TString TLabelWrapper::WrapString(TArrayRef<const char> plain, EPage page, ui16 version) noexcept
+    TString TLabelWrapper::WrapString(TArrayRef<const char> plain, EPage page, ui16 version)
     {
         Y_ABORT_UNLESS(!(version >> 15), "Version can use only 15 bits");
 

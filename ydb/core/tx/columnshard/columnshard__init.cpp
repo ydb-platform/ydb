@@ -69,6 +69,7 @@ std::shared_ptr<ITxReader> TTxInit::BuildReader() {
     result->AddChildren(std::make_shared<NLoading::TBackgroundSessionsInitializer>("bg_sessions", Self));
     result->AddChildren(std::make_shared<NLoading::TSharingSessionsInitializer>("sharing_sessions", Self));
     result->AddChildren(std::make_shared<NLoading::TInFlightReadsInitializer>("in_flight_reads", Self));
+    result->AddChildren(std::make_shared<NLoading::TTiersManagerInitializer>("tiers_manager", Self));
     return result;
 }
 
@@ -106,12 +107,12 @@ void TTxInit::Complete(const TActorContext& ctx) {
     Self->Counters.GetCSCounters().Initialization.OnTxInitFinished(TMonotonic::Now() - StartInstant);
     AFL_VERIFY(!Self->IsTxInitFinished);
     Self->IsTxInitFinished = true;
-
-    for (const auto& [pathId, tiering] : Self->TablesManager.GetTtl()) {
-        Self->Tiers->EnablePathId(pathId, tiering.GetUsedTiers());
-    }
-
     Self->TrySwitchToWork(ctx);
+    if (Self->SpaceWatcher->SubDomainPathId) {
+        Self->SpaceWatcher->StartWatchingSubDomainPathId();
+    } else {
+        Self->SpaceWatcher->StartFindSubDomainPathId();
+    }
 }
 
 class TTxUpdateSchema: public TTransactionBase<TColumnShard> {

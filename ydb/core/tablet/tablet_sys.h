@@ -225,6 +225,7 @@ class TTablet : public TActor<TTablet> {
     ui32 GcInFly;
     ui32 GcInFlyStep;
     ui32 GcNextStep;
+    TEvTablet::TEvGcForStepAckRequest::TPtr GcForStepAckRequest;
     TResourceProfilesPtr ResourceProfiles;
     TSharedQuotaPtr TxCacheQuota;
     THolder<NTracing::ITrace> IntrospectionTrace;
@@ -314,6 +315,8 @@ class TTablet : public TActor<TTablet> {
 
     void Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev);
     void Handle(TEvTablet::TEvPreCommit::TPtr &ev);
+
+    void Handle(TEvTablet::TEvGcForStepAckRequest::TPtr& ev);
 
     void Handle(TEvTablet::TEvCommit::TPtr &ev);
     bool HandleNext(TEvTablet::TEvCommit::TPtr &ev);
@@ -533,6 +536,7 @@ class TTablet : public TActor<TTablet> {
             hFunc(TEvInterconnect::TEvNodeDisconnected, HandleByLeader);
             hFunc(TEvents::TEvUndelivered, HandleByLeader);
             hFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
+            hFunc(TEvTablet::TEvGcForStepAckRequest, Handle);
         }
     }
 

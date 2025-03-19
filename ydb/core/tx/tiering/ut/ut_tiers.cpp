@@ -12,7 +12,7 @@
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/av_bootstrapped.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/services/metadata/manager/alter.h>
 #include <ydb/services/metadata/manager/common.h>
 #include <ydb/services/metadata/manager/table_record.h>
@@ -150,7 +150,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
     class TTestCSEmulator: public NActors::TActorBootstrapped<TTestCSEmulator> {
     private:
         using TBase = NActors::TActorBootstrapped<TTestCSEmulator>;
-        THashSet<TString> ExpectedTiers;
+        THashSet<NTiers::TExternalStorageId> ExpectedTiers;
         TInstant Start;
         std::shared_ptr<TTiersManager> Manager;
 
@@ -174,14 +174,14 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 return false;
             }
             THashSet notFoundTiers = ExpectedTiers;
-            for (const auto& [id, config] : Manager->GetTierConfigs()) {
+            for (const auto& [id, config] : Manager->GetTiers()) {
                 notFoundTiers.erase(id);
             }
             return notFoundTiers.empty();
         }
 
-        const THashMap<TString, NTiers::TTierConfig>& GetTierConfigs() {
-            return Manager->GetTierConfigs();
+        const THashMap<NTiers::TExternalStorageId, TTiersManager::TTierGuard>& GetTierConfigs() {
+            return Manager->GetTiers();
         }
 
         void Bootstrap() {
@@ -190,11 +190,17 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             Manager = std::make_shared<TTiersManager>(0, SelfId(), [](const TActorContext&) {
             });
             Manager->Start(Manager);
-            Manager->EnablePathId(0, ExpectedTiers);
+            Manager->ActivateTiers(ExpectedTiers);
         }
 
-        TTestCSEmulator(THashSet<TString> expectedTiers)
+        TTestCSEmulator(THashSet<NTiers::TExternalStorageId> expectedTiers)
             : ExpectedTiers(std::move(expectedTiers)) {
+        }
+
+        TTestCSEmulator(const std::initializer_list<TString>& expectedTiers) {
+            for (const auto& tier : expectedTiers) {
+                ExpectedTiers.emplace(tier);
+            }
         }
     };
 
@@ -251,7 +257,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 TTestCSEmulator* emulator = new TTestCSEmulator({ "/Root/tier1", "/Root/tier2" });
                 runtime.Register(emulator);
                 emulator->CheckRuntime(runtime);
-                UNIT_ASSERT_EQUAL(emulator->GetTierConfigs().at("/Root/tier1").GetProtoConfig().GetBucket(), "abc");
+                UNIT_ASSERT_EQUAL(emulator->GetTierConfigs().at(NTiers::TExternalStorageId("/Root/tier1")).GetConfigVerified().GetProtoConfig().GetBucket(), "abc");
             }
             Cerr << "Initialization finished" << Endl;
             {
@@ -270,7 +276,6 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         ui32 msgbPort = pm.GetPort();
 
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnablePreparedDdl(true);
         appConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
 
         Tests::TServerSettings serverSettings(msgbPort);
@@ -307,7 +312,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             TTestCSEmulator* emulator = new TTestCSEmulator({ "/Root/tier1" });
             runtime.Register(emulator);
             emulator->CheckRuntime(runtime);
-            UNIT_ASSERT_EQUAL(emulator->GetTierConfigs().at("/Root/tier1").GetProtoConfig().GetBucket(), "abc1");
+            UNIT_ASSERT_EQUAL(emulator->GetTierConfigs().at(NTiers::TExternalStorageId("/Root/tier1")).GetConfigVerified().GetProtoConfig().GetBucket(), "abc1");
         }
 
         lHelper.CreateExternalDataSource("/Root/tier2", "http://fake.fake/abc2");
@@ -315,8 +320,8 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             TTestCSEmulator* emulator = new TTestCSEmulator({ "/Root/tier1", "/Root/tier2" });
             runtime.Register(emulator);
             emulator->CheckRuntime(runtime);
-            UNIT_ASSERT_EQUAL(emulator->GetTierConfigs().at("/Root/tier1").GetProtoConfig().GetBucket(), "abc1");
-            UNIT_ASSERT_EQUAL(emulator->GetTierConfigs().at("/Root/tier2").GetProtoConfig().GetBucket(), "abc2");
+            UNIT_ASSERT_EQUAL(emulator->GetTierConfigs().at(NTiers::TExternalStorageId("/Root/tier1")).GetConfigVerified().GetProtoConfig().GetBucket(), "abc1");
+            UNIT_ASSERT_EQUAL(emulator->GetTierConfigs().at(NTiers::TExternalStorageId("/Root/tier2")).GetConfigVerified().GetProtoConfig().GetBucket(), "abc2");
         }
 
         lHelper.CreateTestOlapTable("olapTable");
@@ -409,6 +414,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         Tests::NCommon::TLoggerInit(server->GetRuntime()).Clear().SetComponents({ NKikimrServices::TX_COLUMNSHARD }, "CS").Initialize();
 
         auto& runtime = *server->GetRuntime();
+        runtime.DisableBreakOnStopCondition();
 //        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_TRACE);
 //        runtime.SetLogPriority(NKikimrServices::KQP_YQL, NLog::PRI_TRACE);
 
@@ -432,7 +438,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             TTestCSEmulator* emulator = new TTestCSEmulator({ "/Root/tier1", "/Root/tier2" });
             runtime.Register(emulator);
             emulator->CheckRuntime(runtime);
-            UNIT_ASSERT_VALUES_EQUAL(emulator->GetTierConfigs().at("/Root/tier1").GetProtoConfig().GetEndpoint(), TierEndpoint);
+            UNIT_ASSERT_VALUES_EQUAL(emulator->GetTierConfigs().at(NTiers::TExternalStorageId("/Root/tier1")).GetConfigVerified().GetProtoConfig().GetEndpoint(), TierEndpoint);
         }
 
         lHelper.CreateTestOlapTable("olapTable", 2);

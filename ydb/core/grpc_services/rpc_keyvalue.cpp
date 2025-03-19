@@ -432,58 +432,6 @@ public:
     }
 };
 
-class TAlterVolumeRequest : public TRpcSchemeRequestActor<TAlterVolumeRequest, TEvAlterVolumeKeyValueRequest> {
-public:
-    using TBase = TRpcSchemeRequestActor<TAlterVolumeRequest, TEvAlterVolumeKeyValueRequest>;
-    using TBase::TBase;
-
-    void Bootstrap(const TActorContext& ctx) {
-        TBase::Bootstrap(ctx);
-        Become(&TAlterVolumeRequest::StateFunc);
-        SendProposeRequest(ctx);
-    }
-
-    void SendProposeRequest(const TActorContext &ctx) {
-        const auto req = this->GetProtoRequest();
-
-        std::pair<TString, TString> pathPair;
-        try {
-            pathPair = SplitPath(req->path());
-        } catch (const std::exception& ex) {
-            Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
-            return Reply(StatusIds::BAD_REQUEST, ctx);
-        }
-        const auto& workingDir = pathPair.first;
-        const auto& name = pathPair.second;
-
-        std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = this->CreateProposeTransaction();
-        NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
-        NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
-        modifyScheme->SetWorkingDir(workingDir);
-        NKikimrSchemeOp::TAlterSolomonVolume* tableDesc = nullptr;
-
-        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterSolomonVolume);
-        tableDesc = modifyScheme->MutableAlterSolomonVolume();
-        tableDesc->SetName(name);
-        tableDesc->SetPartitionCount(req->alter_partition_count());
-
-        if (GetProtoRequest()->has_storage_config()) {
-            tableDesc->SetUpdateChannelsBinding(true);
-            auto &storageConfig = GetProtoRequest()->storage_config();
-            auto *internalStorageConfig = tableDesc->MutableStorageConfig();
-            AssignPoolKinds(storageConfig, internalStorageConfig);
-        } else {
-            tableDesc->SetUpdateChannelsBinding(false);
-            tableDesc->SetChannelProfileId(0);
-        }
-
-        ctx.Send(MakeTxProxyID(), proposeRequest.release());
-    }
-
-    STFUNC(StateFunc) {
-        return TBase::StateWork(ev);
-    }
-};
 
 template <typename TDerived>
 class TBaseKeyValueRequest {
@@ -621,6 +569,11 @@ protected:
         Ydb::KeyValue::DescribeVolumeResult result;
         result.set_path(this->GetProtoRequest()->path());
         result.set_partition_count(desc.PartitionsSize());
+        auto *storageConfig = result.mutable_storage_config();
+        for (auto &channel : desc.GetBoundChannels()) {
+            auto *channelBind = storageConfig->add_channel();
+            channelBind->set_media(channel.GetStoragePoolKind());
+        }
         this->ReplyWithResult(Ydb::StatusIds::SUCCESS, result, TActivationContext::AsActorContext());
     }
 
@@ -630,6 +583,94 @@ protected:
 
 private:
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+};
+
+
+class TAlterVolumeRequest
+    : public TRpcSchemeRequestActor<TAlterVolumeRequest, TEvAlterVolumeKeyValueRequest>
+    , public TBaseKeyValueRequest<TAlterVolumeRequest>
+{
+public:
+    using TBase = TRpcSchemeRequestActor<TAlterVolumeRequest, TEvAlterVolumeKeyValueRequest>;
+    using TBase::TBase;
+    using TBaseKeyValueRequest::TBaseKeyValueRequest;
+    friend class TBaseKeyValueRequest<TAlterVolumeRequest>;
+
+    void Bootstrap(const TActorContext& ctx) {
+        TBase::Bootstrap(ctx);
+        Become(&TAlterVolumeRequest::StateWork);
+        if (GetProtoRequest()->has_storage_config()) {
+            StorageConfig = GetProtoRequest()->storage_config();
+            SendProposeRequest(ctx);
+        } else {
+            OnBootstrap();
+        }
+    }
+
+    bool ValidateRequest(Ydb::StatusIds::StatusCode& /*status*/, NYql::TIssues& /*issues*/) {
+        return true;
+    } 
+
+    void SendProposeRequest(const TActorContext &ctx) {
+        const auto req = this->GetProtoRequest();
+
+        std::pair<TString, TString> pathPair;
+        try {
+            pathPair = SplitPath(req->path());
+        } catch (const std::exception& ex) {
+            Request_->RaiseIssue(NYql::ExceptionToIssue(ex));
+            return Reply(StatusIds::BAD_REQUEST, ctx);
+        }
+        const auto& workingDir = pathPair.first;
+        const auto& name = pathPair.second;
+
+        std::unique_ptr<TEvTxUserProxy::TEvProposeTransaction> proposeRequest = this->CreateProposeTransaction();
+        NKikimrTxUserProxy::TEvProposeTransaction& record = proposeRequest->Record;
+        NKikimrSchemeOp::TModifyScheme* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
+        modifyScheme->SetWorkingDir(workingDir);
+        NKikimrSchemeOp::TAlterSolomonVolume* tableDesc = nullptr;
+
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterSolomonVolume);
+        tableDesc = modifyScheme->MutableAlterSolomonVolume();
+        tableDesc->SetName(name);
+        tableDesc->SetPartitionCount(req->alter_partition_count());
+
+        if (GetProtoRequest()->has_storage_config()) {
+            tableDesc->SetUpdateChannelsBinding(true);
+        }
+        auto *internalStorageConfig = tableDesc->MutableStorageConfig();
+        AssignPoolKinds(StorageConfig, internalStorageConfig);
+
+        ctx.Send(MakeTxProxyID(), proposeRequest.release());
+    }
+
+    STFUNC(StateWork) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
+        default:
+            return TBase::StateWork(ev);
+        }
+    }
+
+    void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr &ev) {
+        TEvTxProxySchemeCache::TEvNavigateKeySetResult* res = ev->Get();
+        NSchemeCache::TSchemeCacheNavigate *request = res->Request.Get();
+
+        if (!OnNavigateKeySetResult(ev, NACLib::DescribeSchema)) {
+            return;
+        }
+
+        const NKikimrSchemeOp::TSolomonVolumeDescription &desc = request->ResultSet[0].SolomonVolumeInfo->Description;
+        for (auto &channel : desc.GetBoundChannels()) {
+            auto *channelBind = StorageConfig.add_channel();
+            channelBind->set_media(channel.GetStoragePoolKind());
+        }
+        SendProposeRequest(TActivationContext::AsActorContext());
+    }
+
+private:
+    TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    Ydb::KeyValue::StorageConfig StorageConfig;
 };
 
 

@@ -112,10 +112,16 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelData::TPtr& ev)
 
     TInputChannelState& inputChannel = InCh(channelId);
 
+    if (Y_UNLIKELY(channelData.Proto.GetData().GetRows() == 0 && channelData.Proto.GetData().GetChunks() > 0)) {
+        // For backward compatibility, to support communication with old nodes during rollback/migration
+        // Should be deleted eventually ~ mid 2025
+        channelData.Proto.MutableData()->SetRows(channelData.Proto.GetData().GetChunks());
+    }
+
     LOG_T("Received input for channelId: " << channelId
         << ", seqNo: " << record.GetSeqNo()
         << ", size: " << channelData.Proto.GetData().GetRaw().size()
-        << ", rows: " << channelData.Proto.GetData().GetRows()
+        << ", chunks: " << channelData.Proto.GetData().GetChunks()
         << ", watermark: " << channelData.Proto.HasWatermark()
         << ", checkpoint: " << channelData.Proto.HasCheckpoint()
         << ", finished: " << channelData.Proto.GetFinished()
@@ -177,7 +183,7 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelDataAck::TPtr& 
     if (record.GetFinish()) {
         auto it = outputChannel.InFlight.begin();
         while (it != outputChannel.InFlight.end()) {
-            outputChannel.PeerState.RemoveInFlight(it->second.Data.PayloadSize(), it->second.Data.RowCount());
+            outputChannel.PeerState.RemoveInFlight(it->second.Data.PayloadSize(), it->second.Data.ChunkCount());
             it = outputChannel.InFlight.erase(it);
         }
         outputChannel.RetryState.reset();
@@ -190,7 +196,7 @@ void TDqComputeActorChannels::HandleWork(TEvDqCompute::TEvChannelDataAck::TPtr& 
     // remove all messages with seqNo <= ackSeqNo
     auto it = outputChannel.InFlight.begin();
     while (it != outputChannel.InFlight.end() && it->first <= record.GetSeqNo()) {
-        outputChannel.PeerState.RemoveInFlight(it->second.Data.PayloadSize(), it->second.Data.RowCount());
+        outputChannel.PeerState.RemoveInFlight(it->second.Data.PayloadSize(), it->second.Data.ChunkCount());
         it = outputChannel.InFlight.erase(it);
     }
 
@@ -549,14 +555,14 @@ void TDqComputeActorChannels::SendChannelData(TChannelDataOOB&& channelData, con
     YQL_ENSURE(!outputChannel.RetryState);
 
     const ui64 seqNo = ++outputChannel.LastSentSeqNo;
-    const ui32 chunkBytes = channelData.PayloadSize();
-    const ui32 chunkRows = channelData.RowCount();
+    const ui32 dataBytes = channelData.PayloadSize();
+    const ui32 dataChunks = channelData.ChunkCount();
     const bool finished = channelData.Proto.GetFinished();
 
     LOG_T("SendChannelData, channelId: " << channelData.Proto.GetChannelId()
         << ", peer: " << *outputChannel.Peer
-        << ", rows: " << chunkRows
-        << ", bytes: " << chunkBytes
+        << ", chunks: " << dataChunks
+        << ", bytes: " << dataBytes
         << ", watermark: " << channelData.Proto.HasWatermark()
         << ", checkpoint: " << channelData.Proto.HasCheckpoint()
         << ", seqNo: " << seqNo
@@ -588,7 +594,7 @@ void TDqComputeActorChannels::SendChannelData(TChannelDataOOB&& channelData, con
     dataEv->Record.SetNoAck(!needAck);
     Send(*outputChannel.Peer, dataEv.Release(), flags, /* cookie */ outputChannel.ChannelId);
 
-    outputChannel.PeerState.AddInFlight(chunkBytes, chunkRows);
+    outputChannel.PeerState.AddInFlight(dataBytes, dataChunks);
 }
 
 bool TDqComputeActorChannels::PollChannel(ui64 channelId, i64 freeSpace) {

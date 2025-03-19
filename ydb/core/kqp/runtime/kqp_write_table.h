@@ -15,6 +15,8 @@ public:
     virtual TString SerializeToString() const = 0;
     virtual i64 GetMemory() const = 0;
     virtual bool IsEmpty() const = 0;
+
+    virtual std::shared_ptr<void> ExtractBatch() = 0;
 };
 
 using IDataBatchPtr = TIntrusivePtr<IDataBatch>;
@@ -42,7 +44,7 @@ public:
     virtual void OnPartitioningChanged(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry) = 0;
     virtual void OnPartitioningChanged(
-        THolder<TKeyDesc>&& keyDescription) = 0;
+        const std::shared_ptr<const TVector<TKeyDesc::TPartitionInfo>>& partitioning) = 0;
 
     using TWriteToken = ui64;
 
@@ -114,7 +116,6 @@ using IShardedWriteControllerPtr = TIntrusivePtr<IShardedWriteController>;
 struct TShardedWriteControllerSettings {
     i64 MemoryLimitTotal;
     i64 MemoryLimitPerMessage;
-    i64 MaxBatchesPerMessage;
     bool Inconsistent;
 };
 

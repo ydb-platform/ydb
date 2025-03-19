@@ -20,8 +20,21 @@ ASTDIFF_PATH = yql_binary_path('yql/essentials/tools/astdiff/astdiff')
 MINIRUN_PATH = yql_binary_path('yql/essentials/tools/minirun/minirun')
 
 
+def mode_expander(lst):
+    res = []
+    for (suite, case, cfg) in lst:
+        res.append((suite, case, cfg, 'Results'))
+        res.append((suite, case, cfg, 'Debug'))
+        res.append((suite, case, cfg, 'RunOnOpt'))
+        res.append((suite, case, cfg, 'LLVM'))
+        if suite == 'blocks':
+            res.append((suite, case, cfg, 'Blocks'))
+            res.append((suite, case, cfg, 'Peephole'))
+    return res
+
+
 def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
-    if get_gateway_cfg_suffix() != '' and what not in ('Results','LLVM'):
+    if get_gateway_cfg_suffix() != '' and what not in ('Results','LLVM','Blocks'):
         pytest.skip('non-trivial gateways.conf')
 
     config = get_config(suite, case, cfg, data_path = DATA_PATH)
@@ -44,6 +57,19 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     assert xfail or os.path.exists(res.results_file)
     assert not tables_res
 
+    if what == 'Peephole':
+        canonize_peephole = is_canonize_peephole(config)
+        if not canonize_peephole:
+            canonize_peephole = re.search(r"canonize peephole", sql_query)
+            if not canonize_peephole:
+                pytest.skip('no peephole canonization requested')
+
+        force_blocks = is_peephole_use_blocks(config)
+        (res, tables_res) = run_file_no_cache('pure', suite, case, cfg, config, yql_http_file_server,
+                                              force_blocks=force_blocks, extra_args=['--peephole'],
+                                              data_path=DATA_PATH, yqlrun_binary=MINIRUN_PATH)
+        return [yatest.common.canonical_file(res.opt_file, diff_tool=ASTDIFF_PATH)]
+
     if what == 'Results':
         if xfail:
             return None
@@ -59,26 +85,28 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
     if what == 'Debug':
         to_canonize = [yatest.common.canonical_file(res.opt_file, diff_tool=ASTDIFF_PATH)]
 
-    if what == 'RunOnOpt' or what == 'LLVM':
+    if what == 'RunOnOpt' or what == 'LLVM' or what == 'Blocks':
+        is_on_opt = (what == 'RunOnOpt')
         is_llvm = (what == 'LLVM')
+        is_blocks = (what == 'Blocks')
         files = get_files(suite, config, DATA_PATH)
         http_files = get_http_files(suite, config, DATA_PATH)
         http_files_urls = yql_http_file_server.register_files({}, http_files)
         parameters = get_parameters_json(suite, config, DATA_PATH)
-        query_sql = get_sql_query('pure', suite, case, config, DATA_PATH) if is_llvm else None
+        query_sql = get_sql_query('pure', suite, case, config, DATA_PATH) if not is_on_opt else None
 
         yqlrun = YQLRun(
             prov='pure',
             keep_temp=False,
-            gateway_config=get_gateways_config(http_files, yql_http_file_server, allow_llvm=is_llvm),
+            gateway_config=get_gateways_config(http_files, yql_http_file_server, allow_llvm=is_llvm, force_blocks=is_blocks),
             udfs_dir=yql_binary_path('yql/essentials/tests/common/test_framework/udfs_deps'),
             binary=MINIRUN_PATH
         )
 
         opt_res, opt_tables_res = execute(
             yqlrun,
-            program=res.opt if not is_llvm else query_sql,
-            run_sql=is_llvm,
+            program=res.opt if is_on_opt else query_sql,
+            run_sql=not is_on_opt,
             files=files,
             urls=http_files_urls,
             check_error=True,

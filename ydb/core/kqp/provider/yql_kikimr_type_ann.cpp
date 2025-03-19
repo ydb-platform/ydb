@@ -164,6 +164,17 @@ private:
 
                 auto listSelectType = ctx.MakeType<TListExprType>(selectType);
 
+                if (!SessionCtx->Config().FeatureFlags.GetEnableShowCreate()) {
+                    for (auto setting : readTable.Settings()) {
+                        auto name = setting.Name().Value();
+                        if (name == "showCreateTable") {
+                            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), 
+                                TStringBuilder() << "SHOW CREATE statement is not supported"));
+                            return TStatus::Error;
+                        }
+                    }
+                }
+
                 TTypeAnnotationNode::TListType children;
                 children.push_back(node.World().Ref().GetTypeAnn());
                 children.push_back(listSelectType);
@@ -223,6 +234,10 @@ private:
             {
                 return TStatus::Ok;
             }
+            case TKikimrKey::Type::Transfer:
+            {
+                return TStatus::Ok;
+            }
             case TKikimrKey::Type::BackupCollection:
             {
                 return TStatus::Ok;
@@ -279,7 +294,7 @@ namespace {
             return NKikimr::NScheme::TypeName(typeInfo);;
         }
     }
-    
+
     NKikimr::NScheme::TTypeInfo GetColumnTypeInfo(const TTypeAnnotationNode* type) {
         if (type->GetKind() == ETypeAnnotationKind::Pg) {
             auto pgTypeId = type->Cast<TPgExprType>()->GetId();
@@ -321,7 +336,7 @@ namespace {
         return true;
     }
 
-    bool ParseConstraintNode(TExprContext& ctx, TKikimrColumnMetadata& columnMeta, const TExprList& columnTuple, TCoNameValueTuple constraint,  TKikimrConfiguration& config, bool& needEval, bool isAlter = false) {
+    bool ParseConstraintNode(TExprContext& ctx, TKikimrColumnMetadata& columnMeta, const TExprList& columnTuple, TCoNameValueTuple constraint, bool& needEval, bool isAlter = false) {
         auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
         auto typeNode = columnTuple.Item(1);
 
@@ -334,12 +349,6 @@ namespace {
             auto defaultType = constraint.Value().Ref().GetTypeAnn();
             YQL_ENSURE(constraint.Value().IsValid());
             TExprBase constrValue = constraint.Value().Cast();
-
-            if (!config.EnableColumnsWithDefault) {
-                ctx.AddError(TIssue(ctx.GetPosition(constraint.Pos()),
-                    "Columns with default values are not supported yet."));
-                return false;
-            }
 
             const bool isNull = IsPgNullExprNode(constrValue) || defaultType->HasNull();
             if (isNull && columnMeta.NotNull) {
@@ -868,7 +877,7 @@ Ydb::Table::KMeansTreeSettings SerializeVectorIndexSettingsToProto(const TCoName
     YQL_ENSURE(proto.settings().vector_dimension(), "Missed index setting vector_dimension");
 
     return proto;
-}    
+}
 
 virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) override {
         TString cluster = TString(create.DataSink().Cluster());
@@ -938,7 +947,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                 const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
                 for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
                     bool needEval = false;
-                    if (!ParseConstraintNode(ctx, columnMeta, columnTuple, constraint, SessionCtx->Config(), needEval)) {
+                    if (!ParseConstraintNode(ctx, columnMeta, columnTuple, constraint, needEval)) {
                         return TStatus::Error;
                     }
 
@@ -1352,7 +1361,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                     auto actualType = (type->GetKind() == ETypeAnnotationKind::Optional) ?
                         type->Cast<TOptionalExprType>()->GetItemType() : type;
 
-                    
+
                     if (actualType->GetKind() != ETypeAnnotationKind::Data
                         && actualType->GetKind() != ETypeAnnotationKind::Pg)
                     {
@@ -1374,7 +1383,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                         const auto& columnConstraints = columnTuple.Item(2).Cast<TCoNameValueTuple>();
                         for(const auto& constraint: columnConstraints.Value().Cast<TCoNameValueTupleList>()) {
                             bool needEval = false;
-                            if (!ParseConstraintNode(ctx, columnMeta, columnTuple, constraint, SessionCtx->Config(), needEval, true)) {
+                            if (!ParseConstraintNode(ctx, columnMeta, columnTuple, constraint, needEval, true)) {
                                 return TStatus::Error;
                             }
 
@@ -1473,7 +1482,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                         auto constraintsList = alterColumnList.Item(1).Cast<TExprList>();
 
                         if (constraintsList.Size() != 1) {
-                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() 
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
                                 << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
                                 << " Column: \"" << name
                                 << "\". Several column constrains for a single column are not yet supported"));
@@ -1483,7 +1492,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                         auto constraint = constraintsList.Item(0).Cast<TCoAtomList>();
 
                         if (constraint.Size() != 1) {
-                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder() 
+                            ctx.AddError(TIssue(ctx.GetPosition(nameNode.Pos()), TStringBuilder()
                                 << "AlterTable : " << NCommon::FullTableName(table->Metadata->Cluster, table->Metadata->Name)
                                 << " Column: \"" << name
                                 << "changeColumnConstraints can get exactly one token \\in {\"set_not_null\", \"drop_not_null\"}"));
@@ -1824,15 +1833,89 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         return TStatus::Ok;
     }
 
+    virtual TStatus HandleCreateTransfer(TKiCreateTransfer node, TExprContext& ctx) override {
+        const THashSet<TString> supportedSettings = {
+            "connection_string",
+            "endpoint",
+            "database",
+            "token",
+            "token_secret_name",
+            "user",
+            "password",
+            "password_secret_name",
+            "commit_interval",
+        };
+
+        if (!CheckReplicationSettings(node.TransferSettings(), supportedSettings, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!node.Settings().Empty()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Unsupported settings"));
+            return TStatus::Error;
+        }
+
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleAlterTransfer(TKiAlterTransfer node, TExprContext& ctx) override {
+        const THashSet<TString> supportedSettings = {
+            "connection_string",
+            "endpoint",
+            "database",
+            "token",
+            "token_secret_name",
+            "user",
+            "password",
+            "password_secret_name",
+            "state",
+            "failover_mode",
+        };
+
+        if (!CheckReplicationSettings(node.TransferSettings(), supportedSettings, ctx)) {
+            return TStatus::Error;
+        }
+
+        if (!node.Settings().Empty()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "Unsupported settings"));
+            return TStatus::Error;
+        }
+
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleDropTransfer(TKiDropTransfer node, TExprContext&) override {
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
     virtual TStatus HandleModifyPermissions(TKiModifyPermissions node, TExprContext&) override {
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }
 
     virtual TStatus HandleCreateUser(TKiCreateUser node, TExprContext& ctx) override {
+        const THashSet<TString> supportedSettings = {
+            "password",
+            "hash",
+            "passwordEncrypted",
+            "nullPassword",
+            "login",
+            "noLogin"
+        };
+
         for (const auto& setting : node.Settings()) {
             auto name = setting.Name().Value();
-            if (name == "password") {
+
+            if (!supportedSettings.contains(name)) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                    TStringBuilder() << "Unknown create user setting: " << name));
+                return TStatus::Error;
+            }
+
+            if (name == "password" || name == "hash") {
                 if (!EnsureAtom(setting.Value().Ref(), ctx)) {
                     return TStatus::Error;
                 }
@@ -1846,10 +1929,6 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Ref().Pos()),
                         TStringBuilder() << "nullPassword node shouldn't have value" << name));
                 }
-            } else {
-                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                    TStringBuilder() << "Unknown create user setting: " << name));
-                return TStatus::Error;
             }
         }
 
@@ -1858,9 +1937,25 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleAlterUser(TKiAlterUser node, TExprContext& ctx) override {
+        const THashSet<TString> supportedSettings = {
+            "password",
+            "hash",
+            "passwordEncrypted",
+            "nullPassword",
+            "login",
+            "noLogin"
+        };
+
         for (const auto& setting : node.Settings()) {
             auto name = setting.Name().Value();
-            if (name == "password") {
+
+            if (!supportedSettings.contains(name)) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                    TStringBuilder() << "Unknown alter user setting: " << name));
+                return TStatus::Error;
+            }
+
+            if (name == "password" || name == "hash") {
                 if (!EnsureAtom(setting.Value().Ref(), ctx)) {
                     return TStatus::Error;
                 }
@@ -1874,10 +1969,6 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Value().Ref().Pos()),
                         TStringBuilder() << "nullPassword node shouldn't have value" << name));
                 }
-            } else {
-                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
-                    TStringBuilder() << "Unknown alter user setting: " << name));
-                return TStatus::Error;
             }
         }
 
@@ -2129,7 +2220,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         if (!table) {
             return TStatus::Error;
         }
-    
+
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }

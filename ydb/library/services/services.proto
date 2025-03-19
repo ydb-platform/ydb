@@ -29,6 +29,7 @@ enum EServiceKikimr {
     BS_REPL = 273;
     BS_PDISK = 274;
     BS_PDISK_TEST = 1102;
+    BS_PDISK_SHRED = 1103;
     BS_YARD = 275;
     BS_PROXY = 276;
     BS_NODE = 277;
@@ -53,6 +54,7 @@ enum EServiceKikimr {
     BS_PROXY_ASSIMILATE = 347;
     BS_VDISK_BALANCING = 2600;
     BS_PROXY_GETBLOCK = 2601;
+    BS_SHRED = 2602;
 
     // DATASHARD section //
     TX_DATASHARD = 290;  //
@@ -105,6 +107,7 @@ enum EServiceKikimr {
     OPS_BACKUP = 668;
     SAUSAGE_BIO = 669;
     FAKE_ENV = 670;
+    TABLET_STATS_BUILDER = 671;
 
     // PIPE section
     PIPE_CLIENT = 320;
@@ -304,6 +307,7 @@ enum EServiceKikimr {
     TX_COLUMNSHARD_WRITE = 852;
     TX_COLUMNSHARD_TX = 853;
     TX_COLUMNSHARD_RESTORE = 854;
+    COLUMNSHARD_SCAN_EVLOG = 855;
 
     // System views
     SYSTEM_VIEWS = 900;
@@ -395,6 +399,7 @@ enum EServiceKikimr {
     TX_CONVEYOR = 2000;
     TX_LIMITER=2001;
     ARROW_HELPER = 2100;
+    SSA_GRAPH_EXECUTION = 2101;
 
     KAFKA_PROXY = 2200;
 
@@ -412,6 +417,8 @@ enum EServiceKikimr {
     TX_PRIORITIES_QUEUE = 3100;
 
     BSCONFIG = 3200;
+
+    NAMESERVICE = 3300;
 };
 
 message TActivity {
@@ -1074,5 +1081,10 @@ message TActivity {
         BS_GROUP_GETBLOCK = 653;
         HTTP_MON_INDEX_SERVICE = 654;
         HTTP_MON_AUTHORIZED_ACTOR_REQUEST = 655;
+        IMPORT_SCHEME_QUERY_EXECUTOR = 656;
+        REPLICATION_TRANSFER_WRITER = 657;
+        DATA_ERASURE = 658;
+        TENANT_DATA_ERASURE = 659;
+        BS_SYNC_BROKER = 660;
     };
 };

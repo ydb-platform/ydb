@@ -7,6 +7,7 @@
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/core/persqueue/blob_refcounter.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -43,6 +44,8 @@ struct TReadInfo {
     ui64 LastOffset = 0;
     bool Error = false;
 
+    TBlobKeyTokens BlobKeyTokens;
+
     TReadInfo() = delete;
     TReadInfo(
         const TString& user,
@@ -78,6 +81,7 @@ struct TReadInfo {
     TReadAnswer FormAnswer(
         const TActorContext& ctx,
         const TEvPQ::TEvBlobResponse& response,
+        const ui64 startOffset,
         const ui64 endOffset,
         const TPartitionId& partition,
         TUserInfo* ui,
@@ -90,6 +94,7 @@ struct TReadInfo {
 
     TReadAnswer FormAnswer(
         const TActorContext& ctx,
+        const ui64 startOffset,
         const ui64 endOffset,
         const TPartitionId& partition,
         TUserInfo* ui,
@@ -100,7 +105,7 @@ struct TReadInfo {
         const bool isActive
     ) {
         TEvPQ::TEvBlobResponse response(0, TVector<TRequestedBlob>());
-        return FormAnswer(ctx, response, endOffset, partition, ui, dst, sizeLag, tablet, meteringMode, isActive);
+        return FormAnswer(ctx, response, startOffset, endOffset, partition, ui, dst, sizeLag, tablet, meteringMode, isActive);
     }
 };
 

@@ -1,6 +1,7 @@
 #include "ydb_dynamic_config.h"
 
-#include <ydb/public/sdk/cpp/client/draft/ydb_dynamic_config.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_dynamic_config.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/config/config.h>
 #include <ydb/library/yaml_config/public/yaml_config.h>
 
 #include <openssl/sha.h>
@@ -22,30 +23,72 @@ TString WrapYaml(const TString& yaml) {
     return out.Str();
 }
 
-TCommandConfig::TCommandConfig()
-    : TClientCommandTree("config", {}, "Dynamic config")
-{
-    AddCommand(std::make_unique<TCommandConfigFetch>());
-    AddCommand(std::make_unique<TCommandConfigReplace>());
-    AddCommand(std::make_unique<TCommandConfigResolve>());
+TString WrapStaticConfig(const TString& yaml) {
+    auto newDoc = NFyaml::TDocument::Parse("---\nmetadata: {}\nconfig: {}\n");
+    auto inputDoc = NFyaml::TDocument::Parse(yaml);
+
+    auto configNode = inputDoc.Root().Copy(newDoc);
+    newDoc.Root().Map().pair_at("config").SetValue(configNode.Ref());
+
+    auto metadataNode = newDoc.Root().Map().pair_at("metadata").Value().Map();
+    metadataNode.Append(newDoc.Buildf("kind"), newDoc.Buildf("MainConfig"));
+    metadataNode.Append(newDoc.Buildf("cluster"), newDoc.Buildf("\"\""));
+    metadataNode.Append(newDoc.Buildf("version"), newDoc.Buildf("0"));
+
+    return TString(newDoc.EmitToCharArray().get());
 }
 
-TCommandConfigFetch::TCommandConfigFetch()
-    : TYdbCommand("fetch", {"get", "dump"}, "Fetch main dynamic-config")
+TCommandConfig::TCommandConfig(
+        TCommandFlagsOverrides commandFlagsOverrides,
+        bool allowEmptyDatabase)
+    : TClientCommandTree("config", {}, "Dynamic config")
+    , CommandFlagsOverrides(commandFlagsOverrides)
+{
+    AddCommand(std::make_unique<TCommandConfigFetch>(allowEmptyDatabase));
+    AddCommand(std::make_unique<TCommandConfigReplace>(allowEmptyDatabase));
+    AddCommand(std::make_unique<TCommandConfigResolve>());
+    AddCommand(std::make_unique<TCommandGenerateDynamicConfig>(allowEmptyDatabase));
+}
+
+TCommandConfig::TCommandConfig(bool allowEmptyDatabase)
+    : TCommandConfig(TCommandFlagsOverrides{}, allowEmptyDatabase)
+{}
+
+void TCommandConfig::PropagateFlags(const TCommandFlags& flags) {
+    TClientCommand::PropagateFlags(flags);
+
+    if (CommandFlagsOverrides.OnlyExplicitProfile) {
+        OnlyExplicitProfile = *CommandFlagsOverrides.OnlyExplicitProfile;
+    }
+
+    if (CommandFlagsOverrides.Dangerous) {
+        Dangerous = *CommandFlagsOverrides.Dangerous;
+    }
+
+    for (auto& [_, cmd] : SubCommands) {
+        cmd->PropagateFlags(TCommandFlags{.Dangerous = Dangerous, .OnlyExplicitProfile = OnlyExplicitProfile});
+    }
+}
+
+TCommandConfigFetch::TCommandConfigFetch(bool allowEmptyDatabase)
+    : TYdbReadOnlyCommand("fetch", {"get", "dump"}, "Fetch main dynamic-config")
+    , AllowEmptyDatabase(allowEmptyDatabase)
 {
 }
 
 void TCommandConfigFetch::Config(TConfig& config) {
     TYdbCommand::Config(config);
-    config.Opts->AddLongOption("all", "Fetch both main and volatile config")
-        .NoArgument().SetFlag(&All);
     config.Opts->AddLongOption("output-directory", "Directory to save config(s)")
         .RequiredArgument("[directory]").StoreResult(&OutDir);
     config.Opts->AddLongOption("strip-metadata", "Strip metadata from config")
         .NoArgument().SetFlag(&StripMetadata);
+    config.Opts->AddLongOption("dedicated-storage-section", "Fetch dedicated storage section")
+        .StoreTrue(&DedicatedStorageSection);
+    config.Opts->AddLongOption("dedicated-cluster-section", "Fetch dedicated cluster section")
+        .StoreTrue(&DedicatedClusterSection);
     config.SetFreeArgsNum(0);
 
-    config.Opts->MutuallyExclusive("all", "strip-metadata");
+    config.AllowEmptyDatabase = AllowEmptyDatabase;
     config.Opts->MutuallyExclusive("output-directory", "strip-metadata");
 }
 
@@ -54,60 +97,95 @@ void TCommandConfigFetch::Parse(TConfig& config) {
 }
 
 int TCommandConfigFetch::Run(TConfig& config) {
+    if (AllowEmptyDatabase) {
+        // explicitly clear database to get cluster database
+        // in `ydb admin cluster config fetch` even if
+        // some database is set by mistake
+        config.Database.clear();
+    }
     auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
-    auto result = client.GetConfig().GetValueSync();
-    ThrowOnError(result);
+    auto client = NYdb::NConfig::TConfigClient(*driver);
 
-    auto cfg = result.GetConfig();
+    NYdb::NConfig::TFetchAllConfigsSettings settings;
+    auto result = client.FetchAllConfigs(settings).GetValueSync();
 
-    ui64 version = 0;
+    // if the new Config API is not supported, fallback to the old DynamicConfig API
+    if (result.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED) {
+        auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+        auto result = client.GetConfig().GetValueSync();
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
-    if (cfg) {
-        auto metadata = NYamlConfig::GetMetadata(cfg);
-        version = metadata.Version.value();
+        auto cfg = TString{result.GetConfig()};
 
-        if (StripMetadata) {
-            cfg = NYamlConfig::StripMetadata(cfg);
-        }
-    } else {
-        Cerr << "YAML config is absent on this cluster." << Endl;
-        return EXIT_FAILURE;
-    }
+        if (cfg) {
+            auto metadata = NYamlConfig::GetMainMetadata(cfg);
 
-    if (!OutDir) {
-        Cout << WrapYaml(cfg);
-    } else {
-        TFsPath dir(OutDir);
-        dir.MkDirs();
-        auto filepath = (dir / "dynconfig.yaml");
-        TFileOutput out(filepath);
-        out << cfg;
-    }
-
-    if (All) {
-        for (auto [id, cfg] : result.GetVolatileConfigs()) {
             if (StripMetadata) {
                 cfg = NYamlConfig::StripMetadata(cfg);
             }
-
-            if (!OutDir) {
-                Cout << WrapYaml(cfg);
-            } else {
-                auto filename = TString("volatile_") + ToString(version) + "_" + ToString(id) + ".yaml";
-                auto filepath = (TFsPath(OutDir) / filename);
-                TFileOutput out(filepath);
-                out << cfg;
-            }
+        } else {
+            Cerr << "YAML config is absent on this cluster." << Endl;
+            return EXIT_FAILURE;
         }
+
+        if (!OutDir) {
+            Cout << cfg << Endl;
+        } else {
+            TFsPath dir(OutDir);
+            dir.MkDirs();
+            auto filepath = (dir / "dynconfig.yaml");
+            TFileOutput out(filepath);
+            out << cfg;
+        }
+        return EXIT_SUCCESS;
+    }
+
+    // if the new Config API is supported, continue with the new API
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+    TString clusterConfig;
+    TString storageConfig;
+
+    for (const auto& entry : result.GetConfigs()) {
+        std::visit([&](auto&& arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, NYdb::NConfig::TMainConfigIdentity>) {
+                if (DedicatedClusterSection || !DedicatedStorageSection) {
+                    clusterConfig = entry.Config;
+                }
+            } else if constexpr (std::is_same_v<T, NYdb::NConfig::TStorageConfigIdentity>) {
+                if (DedicatedStorageSection || !DedicatedClusterSection) {
+                    storageConfig = entry.Config;
+                }
+            }
+        }, entry.Identity);
+    }
+
+    if (!clusterConfig.empty()) {
+        if (!storageConfig.empty() || DedicatedStorageSection) {
+            Cerr << "cluster config: " << Endl;
+        }
+        Cout << clusterConfig << Endl;
+    }
+
+    if (!storageConfig.empty()) {
+        if (!clusterConfig.empty() || DedicatedClusterSection) {
+            Cerr << "storage config:" << Endl;
+        }
+        Cout << storageConfig << Endl;
+    }
+
+    if (clusterConfig.empty() && storageConfig.empty()) {
+        Cerr << "No config returned." << Endl;
+        return EXIT_FAILURE;
     }
 
     return EXIT_SUCCESS;
 }
 
-TCommandConfigReplace::TCommandConfigReplace()
+TCommandConfigReplace::TCommandConfigReplace(bool allowEmptyDatabase)
     : TYdbCommand("replace", {}, "Replace dynamic config")
     , IgnoreCheck(false)
+    , AllowEmptyDatabase(allowEmptyDatabase)
 {
 }
 
@@ -123,6 +201,7 @@ void TCommandConfigReplace::Config(TConfig& config) {
         .NoArgument().SetFlag(&AllowUnknownFields);
     config.Opts->AddLongOption("force", "Ignore metadata on config replacement")
         .NoArgument().SetFlag(&Force);
+    config.AllowEmptyDatabase = AllowEmptyDatabase;
     config.SetFreeArgsNum(0);
 }
 
@@ -138,7 +217,7 @@ void TCommandConfigReplace::Parse(TConfig& config) {
     DynamicConfig = configStr;
 
     if (!IgnoreCheck) {
-        NYamlConfig::GetMetadata(configStr);
+        NYamlConfig::GetMainMetadata(configStr);
         auto tree = NFyaml::TDocument::Parse(configStr);
         const auto resolved = NYamlConfig::ResolveAll(tree);
         Y_UNUSED(resolved); // we can't check it better without ydbd
@@ -147,16 +226,45 @@ void TCommandConfigReplace::Parse(TConfig& config) {
 
 int TCommandConfigReplace::Run(TConfig& config) {
     std::unique_ptr<NYdb::TDriver> driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
-    auto exec = [&]() {
-        if (Force) {
-            return client.SetConfig(DynamicConfig, DryRun, AllowUnknownFields).GetValueSync();
-        }
+    auto client = NYdb::NConfig::TConfigClient(*driver);
 
-        return client.ReplaceConfig(DynamicConfig, DryRun, AllowUnknownFields).GetValueSync();
-    };
-    auto status = exec();
-    ThrowOnError(status);
+    NYdb::NConfig::TReplaceConfigSettings settings;
+
+    if (Force) {
+        settings.BypassChecks();
+    }
+
+    if (DryRun) {
+        settings.DryRun();
+    }
+
+    if (AllowUnknownFields) {
+        settings.AllowUnknownFields();
+    }
+
+    auto status = client.ReplaceConfig(DynamicConfig, settings).GetValueSync();
+
+    if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED) {
+        Cerr << "Warning: Fallback to DynamicConfig API" << Endl;
+
+        auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+
+        status = [&]() {
+            if (Force) {
+                return client.SetConfig(
+                    DynamicConfig,
+                    DryRun,
+                    AllowUnknownFields).GetValueSync();
+            }
+
+            return client.ReplaceConfig(
+                DynamicConfig,
+                DryRun,
+                AllowUnknownFields).GetValueSync();
+        }();
+    }
+
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
 
     if (!status.GetIssues()) {
         Cout << status << Endl;
@@ -166,7 +274,7 @@ int TCommandConfigReplace::Run(TConfig& config) {
 }
 
 TCommandConfigResolve::TCommandConfigResolve()
-    : TYdbCommand("resolve", {}, "Resolve config")
+    : TYdbReadOnlyCommand("resolve", {}, "Resolve config")
 {
 }
 
@@ -244,14 +352,14 @@ int TCommandConfigResolve::Run(TConfig& config) {
 
     if (NodeId) {
         auto result = client.GetNodeLabels(NodeId).GetValueSync();
-        ThrowOnError(result);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
         // TODO: maybe we should merge labels instead
         Labels = result.GetLabels();
     }
 
     TString configStr;
-    TMap<ui64, TString> volatileConfigStrs;
+    std::map<uint64_t, std::string> volatileConfigStrs;
 
     if (!Filename.empty()) {
         configStr = TFileInput(Filename).ReadAll();
@@ -276,7 +384,7 @@ int TCommandConfigResolve::Run(TConfig& config) {
 
     if (FromCluster) {
         auto result = client.GetConfig().GetValueSync();
-        ThrowOnError(result);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
         configStr = result.GetConfig();
         volatileConfigStrs = result.GetVolatileConfigs();
@@ -286,7 +394,7 @@ int TCommandConfigResolve::Run(TConfig& config) {
 
     if (!SkipVolatile) {
         for (auto& [_, cfgStr]: volatileConfigStrs) {
-            auto volatileCfg = NFyaml::TDocument::Parse(cfgStr);
+            auto volatileCfg = NFyaml::TDocument::Parse(TString{cfgStr});
             auto selectors = volatileCfg.Root().Map().at("selector_config");
             NYamlConfig::AppendVolatileConfigs(tree, selectors);
         }
@@ -336,7 +444,7 @@ int TCommandConfigResolve::Run(TConfig& config) {
             auto map = doc.Buildf("{}");
             TSet<NYamlConfig::TNamedLabel> namedLabels;
             for (auto& [name, value] : Labels) {
-                namedLabels.insert(NYamlConfig::TNamedLabel{name, value});
+                namedLabels.insert(NYamlConfig::TNamedLabel{TString{name}, TString{value}});
                 auto node = doc.Buildf("%s: {type: COMMON, value: %s}", name.c_str(), value.c_str());
                 map.Insert(node);
             }
@@ -351,13 +459,13 @@ int TCommandConfigResolve::Run(TConfig& config) {
     } else {
         if (All) {
             auto result = client.VerboseResolveConfig(configStr, volatileConfigStrs).GetValueSync();
-            ThrowOnError(result);
+            NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
             TVector<TString> labels(result.GetLabels().begin(), result.GetLabels().end());
 
             for (const auto& [labelSets, configStr] : result.GetConfigs()) {
                 auto doc = NFyaml::TDocument::Parse("---\nlabel_sets: []\nconfig: {}\n");
-                auto config = NFyaml::TDocument::Parse(configStr);
+                auto config = NFyaml::TDocument::Parse(TString{configStr});
 
                 auto node = config.Root().Copy(doc);
                 doc.Root().Map().at("config").Insert(node.Ref());
@@ -390,7 +498,7 @@ int TCommandConfigResolve::Run(TConfig& config) {
             }
         } else {
             const auto result = client.ResolveConfig(configStr, volatileConfigStrs, Labels).GetValueSync();
-            ThrowOnError(result);
+            NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
             auto doc = NFyaml::TDocument::Parse("---\nlabel_sets: []\nconfig: {}\n");
 
@@ -398,13 +506,13 @@ int TCommandConfigResolve::Run(TConfig& config) {
             auto map = doc.Buildf("{}");
             TSet<NYamlConfig::TNamedLabel> namedLabels;
             for (auto& [name, value] : Labels) {
-                namedLabels.insert(NYamlConfig::TNamedLabel{name, value});
+                namedLabels.insert(NYamlConfig::TNamedLabel{TString{name}, TString{value}});
                 auto node = doc.Buildf("%s: {type: COMMON, value: %s}", name.c_str(), value.c_str());
                 map.Insert(node);
             }
             labelSetsSeq.Append(map);
 
-            auto config = NFyaml::TDocument::Parse(result.GetConfig());
+            auto config = NFyaml::TDocument::Parse(TString{result.GetConfig()});
             auto node = config.Root().Copy(doc);
             doc.Root().Map().at("config").Insert(node.Ref());
 
@@ -473,7 +581,7 @@ int TCommandConfigVolatileAdd::Run(TConfig& config) {
 
     if (!IgnoreCheck) {
         auto result = client.GetConfig().GetValueSync();
-        ThrowOnError(result);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
         if (result.GetConfig().empty()) {
             ythrow yexception() << "Config on server is empty";
@@ -481,7 +589,7 @@ int TCommandConfigVolatileAdd::Run(TConfig& config) {
 
         NYamlConfig::GetVolatileMetadata(configStr);
 
-        auto tree = NFyaml::TDocument::Parse(result.GetConfig());
+        auto tree = NFyaml::TDocument::Parse(TString{result.GetConfig()});
 
         auto volatileCfg = NFyaml::TDocument::Parse(configStr);
         auto selectors = volatileCfg.Root().Map().at("selector_config");
@@ -493,7 +601,7 @@ int TCommandConfigVolatileAdd::Run(TConfig& config) {
     }
 
     auto status = client.AddVolatileConfig(configStr).GetValueSync();
-    ThrowOnError(status);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
 
     Cout << status << Endl;
 
@@ -584,13 +692,13 @@ int TCommandConfigVolatileDrop::Run(TConfig& config) {
         }
 
         if (Force) {
-            return client.ForceRemoveVolatileConfig(TVector<ui64>(Ids.begin(), Ids.end())).GetValueSync();
+            return client.ForceRemoveVolatileConfig(std::vector<uint64_t>(Ids.begin(), Ids.end())).GetValueSync();
         }
 
-        return client.RemoveVolatileConfig(Cluster, Version, TVector<ui64>(Ids.begin(), Ids.end())).GetValueSync();
+        return client.RemoveVolatileConfig(Cluster, Version, std::vector<uint64_t>(Ids.begin(), Ids.end())).GetValueSync();
     }();
 
-    ThrowOnError(status);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(status);
 
     Cout << status << Endl;
 
@@ -613,7 +721,6 @@ void TCommandConfigVolatileFetch::Config(TConfig& config) {
     config.Opts->AddLongOption("strip-metadata", "Strip metadata from config(s)")
         .NoArgument().SetFlag(&StripMetadata);
     config.SetFreeArgsNum(0);
-
     config.Opts->MutuallyExclusive("output-directory", "strip-metadata");
 }
 
@@ -625,7 +732,7 @@ int TCommandConfigVolatileFetch::Run(TConfig& config) {
     auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
     auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
     auto result = client.GetConfig().GetValueSync();
-    ThrowOnError(result);
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
 
     if (OutDir) {
         TFsPath dir(OutDir);
@@ -636,14 +743,14 @@ int TCommandConfigVolatileFetch::Run(TConfig& config) {
 
     for (auto [id, cfg] : result.GetVolatileConfigs()) {
         if (All || Ids.contains(id)) {
-            version = NYamlConfig::GetVolatileMetadata(cfg).Version.value();
+            version = NYamlConfig::GetVolatileMetadata(TString{cfg}).Version.value();
 
             if (StripMetadata) {
-                cfg = NYamlConfig::StripMetadata(cfg);
+                cfg = NYamlConfig::StripMetadata(TString{cfg});
             }
 
             if (!OutDir) {
-                Cout << WrapYaml(cfg);
+                Cout << WrapYaml(TString{cfg});
             } else {
                 auto filename = TString("volatile_") + ToString(version) + "_" + ToString(id) + ".yaml";
                 auto filepath = (TFsPath(OutDir) / filename);
@@ -651,6 +758,33 @@ int TCommandConfigVolatileFetch::Run(TConfig& config) {
                 out << cfg;
             }
         }
+    }
+
+    return EXIT_SUCCESS;
+}
+
+TCommandGenerateDynamicConfig::TCommandGenerateDynamicConfig(bool allowEmptyDatabase)
+    : TYdbReadOnlyCommand("generate", {}, "Generate dynamic config from startup static config")
+    , AllowEmptyDatabase(allowEmptyDatabase)
+{
+}
+
+void TCommandGenerateDynamicConfig::Config(TConfig& config) {
+    TYdbCommand::Config(config);
+    config.SetFreeArgsNum(0);
+    config.AllowEmptyDatabase = AllowEmptyDatabase;
+}
+
+int TCommandGenerateDynamicConfig::Run(TConfig& config) {
+    auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
+    auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
+
+    auto result = client.FetchStartupConfig().GetValueSync();
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+    if (NYamlConfig::IsStaticConfig(TString{result.GetConfig()})) {
+        Cout << WrapStaticConfig(TString{result.GetConfig()});
+    } else {
+        Cout << "Startup config is already dynamic" << Endl;
     }
 
     return EXIT_SUCCESS;

@@ -165,7 +165,7 @@ void ResolveUDFs() {
 
             TFunctionTypeInfo funcInfo;
             auto status = newRegistry->FindFunctionTypeInfo(env, typeInfoHelper, nullptr,
-                udf.GetName(), mkqlUserType, udf.GetTypeConfig(), NUdf::IUdfModule::TFlags::TypesOnly, {}, nullptr, &funcInfo);
+                udf.GetName(), mkqlUserType, udf.GetTypeConfig(), NUdf::IUdfModule::TFlags::TypesOnly, {}, nullptr, nullptr, &funcInfo);
             if (!status.IsOk()) {
                 udfRes->SetError(TStringBuilder() << "Failed to find UDF function: " << udf.GetName()
                     << ", reason: " << status.GetError());

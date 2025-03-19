@@ -10,6 +10,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -25,7 +26,7 @@
 #include <ydb/public/api/protos/ydb_value.pb.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <ydb/public/sdk/cpp/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -267,13 +268,25 @@ protected:
 
         ui32 keySize = KeyColumnPositions.size(); // YdbSchema contains keys first
         TRowWriter writer(out, keySize);
-        NArrow::TArrowToYdbConverter batchConverter(YdbSchema, writer);
+        NArrow::TArrowToYdbConverter batchConverter(YdbSchema, writer, IsInfinityInJsonAllowed());
         if (!batchConverter.Process(*batch, errorMessage)) {
             return {};
         }
 
         RuCost = writer.GetRuCost();
         return out;
+    }
+
+    bool IsInfinityInJsonAllowed() const {
+        if (TableKind != NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
+            return false;
+        }
+        switch (AppDataVerified().ColumnShardConfig.GetDoubleOutOfRangeHandling()) {
+            case NKikimrConfig::TColumnShardConfig_EJsonDoubleOutOfRangeHandlingPolicy_REJECT:
+                return false;
+            case NKikimrConfig::TColumnShardConfig_EJsonDoubleOutOfRangeHandlingPolicy_CAST_TO_INFINITY:
+                return true;
+        }
     }
 
 private:
@@ -562,6 +575,8 @@ private:
         // TODO: check all params;
         // Cerr << *Request->GetProtoRequest() << Endl;
 
+        Span && Span.Event("ResolveTable", {{"table", table}});
+
         AuditContextStart();
 
         TAutoPtr<NSchemeCache::TSchemeCacheNavigate> request(new NSchemeCache::TSchemeCacheNavigate());
@@ -592,6 +607,7 @@ private:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
+        Span && Span.Event("DataSerialization");
         const NSchemeCache::TSchemeCacheNavigate& request = *ev->Get()->Request;
 
         Y_ABORT_UNLESS(request.ResultSet.size() == 1);
@@ -658,7 +674,7 @@ private:
                     }
                     // Explicit types conversion
                     if (!ColumnsToConvert.empty()) {
-                        auto convertResult = NArrow::ConvertColumns(Batch, ColumnsToConvert);
+                        auto convertResult = NArrow::ConvertColumns(Batch, ColumnsToConvert, IsInfinityInJsonAllowed());
                         if (!convertResult.ok()) {
                             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST,
                                 TStringBuilder() << "Cannot convert arrow batch:" << convertResult.status().ToString(), ctx);
@@ -915,6 +931,7 @@ private:
     }
 
     void ResolveShards(const NActors::TActorContext& ctx) {
+        Span && Span.Event("ResolveShards");
         if (GetRows().empty()) {
             // We have already resolved the table and know it exists
             // No reason to resolve table range as well
@@ -1005,6 +1022,7 @@ private:
     }
 
     void MakeShardRequests(const NActors::TActorContext& ctx) {
+        Span && Span.Event("MakeShardRequests", {{"rows", long(GetRows().size())}});
         const auto* keyRange = GetKeyRange();
 
         Y_ABORT_UNLESS(!keyRange->GetPartitions().empty());
@@ -1092,6 +1110,7 @@ private:
         }
 
         TBase::Become(&TThis::StateWaitResults);
+        Span && Span.Event("WaitResults", {{"shardRequests", long(shardRequests.size())}});
 
         // Sanity check: don't break when we don't have any shards for some reason
         return ReplyIfDone(ctx);
@@ -1136,6 +1155,8 @@ private:
 
         ui64 shardId = shardResponse.GetTabletID();
 
+        Span && Span.Event("TEvUploadRowsResponse", {{"shardId", long(shardId)}});
+
         LOG_DEBUG_S(ctx, NKikimrServices::RPC_REQUEST, "Upload rows: got "
                     << NKikimrTxDataShard::TError::EKind_Name((NKikimrTxDataShard::TError::EKind)shardResponse.GetStatus())
                     << " from shard " << shardResponse.GetTabletID());
@@ -1174,6 +1195,8 @@ private:
         auto& record = ev->Get()->Record;
         ui64 shardId = record.GetTabletID();
         ui64 seqNo = record.GetSeqNo();
+
+        Span && Span.Event("TEvOverloadReady", {{"shardId", long(shardId)}});
 
         if (auto* state = ShardUploadRetryStates.FindPtr(shardId)) {
             if (state->SentOverloadSeqNo && state->SentOverloadSeqNo == seqNo && ShardRepliesLeft.contains(shardId)) {
@@ -1238,9 +1261,8 @@ private:
 using TFieldDescription = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>::TFieldDescription;
 
 template <class TProto>
-inline bool FillCellsFromProto(TVector<TCell>& cells, const TVector<TFieldDescription>& descr, const TProto& proto,
-                            TString& err, TMemoryPool& valueDataPool)
-{
+inline bool FillCellsFromProto(TVector<TCell>& cells, const TVector<TFieldDescription>& descr, const TProto& proto, TString& err,
+    TMemoryPool& valueDataPool, const bool allowInfDouble = false) {
     cells.clear();
     cells.reserve(descr.size());
 
@@ -1250,7 +1272,8 @@ inline bool FillCellsFromProto(TVector<TCell>& cells, const TVector<TFieldDescri
             return false;
         }
         cells.push_back({});
-        if (!CellFromProtoVal(fd.Type, fd.Typmod, &proto.Getitems(fd.PositionInStruct), false, cells.back(), err, valueDataPool)) {
+        if (!CellFromProtoVal(
+                fd.Type, fd.Typmod, &proto.Getitems(fd.PositionInStruct), false, cells.back(), err, valueDataPool, allowInfDouble)) {
             return false;
         }
 

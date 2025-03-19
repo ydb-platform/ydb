@@ -14,7 +14,7 @@
 #include <ydb/core/protos/follower_group.pb.h>
 #include <ydb/core/protos/msgbus_kv.pb.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 #include <functional>
 
@@ -71,6 +71,12 @@ namespace NSchemeShardUT_Private {
         OPTION(std::optional<bool>, EnableTopicAutopartitioningForCDC, std::nullopt);
         OPTION(std::optional<bool>, EnableBackupService, std::nullopt);
         OPTION(std::optional<bool>, EnableTopicTransfer, std::nullopt);
+        OPTION(bool, SetupKqpProxy, false);
+        OPTION(bool, EnableStrictAclCheck, false);
+        OPTION(std::optional<bool>, EnableStrictUserManagement, std::nullopt);
+        OPTION(std::optional<bool>, EnableDatabaseAdmin, std::nullopt);
+        OPTION(std::optional<bool>, EnablePermissionsExport, std::nullopt);
+        OPTION(std::optional<bool>, EnableChecksumsExport, std::nullopt);
 
         #undef OPTION
     };

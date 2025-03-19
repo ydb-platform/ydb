@@ -1,8 +1,8 @@
 #pragma once
 
 #include <library/cpp/json/json_value.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/ydb_query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/library/accessor/accessor.h>
 
 #include <util/generic/map.h>
@@ -78,11 +78,16 @@ struct TQueryBenchmarkDeadline {
     TString Name;
 };
 
+struct TQueryBenchmarkSettings {
+    TQueryBenchmarkDeadline Deadline;
+    std::optional<TString> PlanFileName;
+    bool WithProgress = false;
+};
+
 TString FullTablePath(const TString& database, const TString& table);
-void ThrowOnError(const TStatus& status);
 bool HasCharsInString(const TString& str);
-TQueryBenchmarkResult Execute(const TString & query, NTable::TTableClient & client, const TQueryBenchmarkDeadline& deadline);
-TQueryBenchmarkResult Execute(const TString & query, NQuery::TQueryClient & client, const TQueryBenchmarkDeadline& deadline);
+TQueryBenchmarkResult Execute(const TString & query, NTable::TTableClient & client, const TQueryBenchmarkSettings& settings);
+TQueryBenchmarkResult Execute(const TString & query, NQuery::TQueryClient & client, const TQueryBenchmarkSettings& settings);
 TQueryBenchmarkResult Explain(const TString & query, NTable::TTableClient & client, const TQueryBenchmarkDeadline& deadline);
 TQueryBenchmarkResult Explain(const TString & query, NQuery::TQueryClient & client, const TQueryBenchmarkDeadline& deadline);
 NJson::TJsonValue GetQueryLabels(ui32 queryId);

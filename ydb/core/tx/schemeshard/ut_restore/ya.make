@@ -6,17 +6,17 @@ SPLIT_FACTOR(60)
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
 
 PEERDIR(
-    contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core
     contrib/libs/double-conversion
     library/cpp/string_utils/quote
     ydb/core/kqp/ut/common
     ydb/core/tx/schemeshard/ut_helpers
+    ydb/core/util
     ydb/core/wrappers/ut_helpers
     ydb/core/ydb_convert
     yql/essentials/sql/pg

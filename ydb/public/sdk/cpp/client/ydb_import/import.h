@@ -5,7 +5,7 @@
 
 #include <ydb/public/sdk/cpp/client/ydb_types/s3_settings.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 namespace NImport {
 
 /// Common
@@ -38,11 +38,11 @@ struct TImportFromS3Settings : public TOperationRequestSettings<TImportFromS3Set
         TString Dst;
     };
 
-    FLUENT_SETTING_VECTOR(TItem, Item);
-    FLUENT_SETTING_OPTIONAL(TString, Description);
-    FLUENT_SETTING_OPTIONAL(ui32, NumberOfRetries);
-    FLUENT_SETTING_OPTIONAL(bool, NoACL);
-    FLUENT_SETTING_OPTIONAL(bool, SkipChecksumValidation);
+    FLUENT_SETTING_VECTOR_DEPRECATED(TItem, Item);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(TString, Description);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(ui32, NumberOfRetries);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(bool, NoACL);
+    FLUENT_SETTING_OPTIONAL_DEPRECATED(bool, SkipChecksumValidation);
 };
 
 class TImportFromS3Response : public TOperation {
@@ -67,7 +67,7 @@ private:
 struct TImportYdbDumpDataSettings : public TOperationRequestSettings<TImportYdbDumpDataSettings> {
     using TSelf = TImportYdbDumpDataSettings;
 
-    FLUENT_SETTING_VECTOR(TString, Columns);
+    FLUENT_SETTING_VECTOR_DEPRECATED(TString, Columns);
 
     using TOperationRequestSettings::TOperationRequestSettings;
 };

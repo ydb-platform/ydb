@@ -50,6 +50,7 @@ SRCS(
     datashard__cleanup_borrowed.cpp
     datashard__cleanup_in_rs.cpp
     datashard__cleanup_tx.cpp
+    datashard__cleanup_uncommitted.cpp
     datashard__column_stats.cpp
     datashard__compact_borrowed.cpp
     datashard__compaction.cpp
@@ -292,8 +293,7 @@ IF (OS_WINDOWS)
     )
 ELSE()
     SRCS(
-        export_s3_buffer_raw.cpp
-        export_s3_buffer_zstd.cpp
+        export_s3_buffer.cpp
         export_s3_uploader.cpp
         extstorage_usage_config.cpp
         import_s3.cpp

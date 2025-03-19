@@ -178,7 +178,7 @@ private:
             , LoggingTag_(Format("AsyncDialerSession{%v:%v}", id, socket))
         { }
 
-        const TString& GetLoggingTag() const override
+        const std::string& GetLoggingTag() const override
         {
             return LoggingTag_;
         }
@@ -200,7 +200,7 @@ private:
     private:
         const NLogging::TLogger Logger;
         const TWeakPtr<TAsyncDialerSession> Owner_;
-        const TString LoggingTag_;
+        const std::string LoggingTag_;
     };
 
     using TPollablePtr = TIntrusivePtr<TPollable>;

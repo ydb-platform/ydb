@@ -57,3 +57,22 @@ message TxProxyResponse {
     StatusIds.StatusCode status = 1;
     repeated Ydb.Issue.IssueMessage issues = 2;
 }
+
+// Ping Actor Chain
+
+message ActorChainRequest {
+
+    // number of actors to be created, default 10
+    uint32 ChainLength = 1;
+
+    // immitate work duration for each actor (approximate), default ~ 5 usec
+    uint32 WorkUsec = 2;
+
+    // don't use tail sends and registrations
+    bool NoTailChain = 3;
+}
+
+message ActorChainResponse {
+    StatusIds.StatusCode status = 1;
+    repeated Ydb.Issue.IssueMessage issues = 2;
+}

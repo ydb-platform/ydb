@@ -17,13 +17,15 @@ namespace {
 NKikimrConfig::TAppConfig AppCfg() {
     NKikimrConfig::TAppConfig appCfg;
 
-    auto* rm = appCfg.MutableTableServiceConfig()->MutableResourceManager();
+    auto* ts = appCfg.MutableTableServiceConfig();
+    ts->SetEnableQueryServiceSpilling(true);
+
+    auto* rm = ts->MutableResourceManager();
+
     rm->SetChannelBufferSize(50);
     rm->SetMinChannelBufferSize(50);
     rm->SetMkqlLightProgramMemoryLimit(100 << 20);
     rm->SetMkqlHeavyProgramMemoryLimit(100 << 20);
-
-    appCfg.MutableTableServiceConfig()->SetEnableQueryServiceSpilling(true);
 
     auto* spilling = appCfg.MutableTableServiceConfig()->MutableSpillingServiceConfig()->MutableLocalFileConfig();
     spilling->SetEnable(true);
@@ -32,19 +34,24 @@ NKikimrConfig::TAppConfig AppCfg() {
     return appCfg;
 }
 
-NKikimrConfig::TAppConfig AppCfgLowComputeLimits(double reasonableTreshold, bool enableSpilling=true) {
+NKikimrConfig::TAppConfig AppCfgLowComputeLimits(double reasonableTreshold, bool enableSpilling=true, bool limitFileSize=false) {
     NKikimrConfig::TAppConfig appCfg;
 
-    auto* rm = appCfg.MutableTableServiceConfig()->MutableResourceManager();
+    auto* ts = appCfg.MutableTableServiceConfig();
+    ts->SetEnableQueryServiceSpilling(enableSpilling);
+
+    auto* rm = ts->MutableResourceManager();
     rm->SetMkqlLightProgramMemoryLimit(100);
     rm->SetMkqlHeavyProgramMemoryLimit(300);
     rm->SetSpillingPercent(reasonableTreshold);
-    appCfg.MutableTableServiceConfig()->SetEnableQueryServiceSpilling(true);
 
-    auto* spilling = appCfg.MutableTableServiceConfig()->MutableSpillingServiceConfig()->MutableLocalFileConfig();
+    auto* spilling = ts->MutableSpillingServiceConfig()->MutableLocalFileConfig();
 
     spilling->SetEnable(enableSpilling);
     spilling->SetRoot("./spilling/");
+    if (limitFileSize) {
+        spilling->SetMaxFileSize(1);
+    }
 
     return appCfg;
 }
@@ -122,7 +129,7 @@ Y_UNIT_TEST_TWIN(SpillingInRuntimeNodes, EnabledSpilling) {
 
 Y_UNIT_TEST(HandleErrorsCorrectly) {
     Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
-    TKikimrRunner kikimr(AppCfgLowComputeLimits(0.01, false));
+    TKikimrRunner kikimr(AppCfgLowComputeLimits(0.01, true, true));
 
     auto db = kikimr.GetQueryClient();
 

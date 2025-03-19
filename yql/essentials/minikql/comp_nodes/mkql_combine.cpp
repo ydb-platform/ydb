@@ -354,12 +354,7 @@ public:
             const auto key = GetNodeValue(Nodes.KeyResultNode, ctx, block);
             codegenKeyArg->CreateSetValue(ctx, block, key);
 
-            const auto keyParam = NYql::NCodegen::ETarget::Windows == ctx.Codegen.GetEffectiveTarget() ?
-                new AllocaInst(key->getType(), 0U, "key_param", &main->back()) : key;
-
-            if (NYql::NCodegen::ETarget::Windows == ctx.Codegen.GetEffectiveTarget()) {
-                new StoreInst(key, keyParam, block);
-            }
+            const auto keyParam = key;
 
             const auto atFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::At));
             const auto atType = FunctionType::get(ptrValueType, {stateArg->getType(), keyParam->getType()}, false);
@@ -722,7 +717,7 @@ private:
 
         const auto valueType = Type::getInt128Ty(context);
         const auto ptrValueType = PointerType::getUnqual(valueType);
-        const auto containerType = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(ptrValueType) : static_cast<Type*>(valueType);
+        const auto containerType = static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt32Ty(context);
 
@@ -830,8 +825,7 @@ private:
 
             const auto used = GetMemoryUsed(MemLimit, ctx, block);
 
-            const auto stream = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-                new LoadInst(valueType, containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
+            const auto stream = static_cast<Value*>(containerArg);
 
             BranchInst::Create(loop, block);
 
@@ -850,12 +844,7 @@ private:
             const auto key = GetNodeValue(Nodes.KeyResultNode, ctx, block);
             codegenKeyArg->CreateSetValue(ctx, block, key);
 
-            const auto keyParam = NYql::NCodegen::ETarget::Windows == ctx.Codegen.GetEffectiveTarget() ?
-                new AllocaInst(key->getType(), 0U, "key_param", &main->back()) : key;
-
-            if (NYql::NCodegen::ETarget::Windows == ctx.Codegen.GetEffectiveTarget()) {
-                new StoreInst(key, keyParam, block);
-            }
+            const auto keyParam = key;
 
             const auto atFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::At));
             const auto atType = FunctionType::get(ptrValueType, {stateArg->getType(), keyParam->getType()}, false);

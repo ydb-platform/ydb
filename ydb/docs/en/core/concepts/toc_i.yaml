@@ -3,8 +3,6 @@ items:
   href: glossary.md
 - name: Connecting to a database
   href: connect.md
-- name: Authentication
-  href: auth.md
 - name: Data model and schema
   href: datamodel/index.md
   include:
@@ -19,7 +17,7 @@ items:
 - name: Change Data Capture (CDC)
   href: cdc.md
   when: feature_changefeed
-- name: Time to Live (TTL)
+- name: Time to live and eviction
   href: ttl.md
 - name: Scan queries
   href: scan_query.md

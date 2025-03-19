@@ -354,6 +354,7 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(RestartPDisk)
                     HANDLE_COMMAND(SetPDiskReadOnly)
                     HANDLE_COMMAND(StopPDisk)
+                    HANDLE_COMMAND(GetInterfaceVersion)
 
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kAddMigrationPlan:
                     case NKikimrBlobStorage::TConfigRequest::TCommand::kDeleteMigrationPlan:
@@ -368,7 +369,7 @@ namespace NKikimr::NBsController {
                         throw TExError() << "unsupported command";
                 }
 
-                Y_ABORT();
+                throw TExError() << "unsupported command";
             }
 
             void Complete(const TActorContext&) override {

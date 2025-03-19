@@ -11,7 +11,7 @@ PEERDIR(
     yql/essentials/public/udf/service/exception_policy
     yql/essentials/sql/pg_dummy
     yql/essentials/minikql
-    yql/essentials/minikql/invoke_builtins/llvm14
+    yql/essentials/minikql/invoke_builtins/llvm16
 )
 
 YQL_LAST_ABI_VERSION()

@@ -41,9 +41,8 @@
 
 #include <yt/cpp/mapreduce/library/table_schema/protobuf.h>
 
-#include <yt/cpp/mapreduce/raw_client/raw_client.h>
-#include <yt/cpp/mapreduce/raw_client/raw_requests.h>
-#include <yt/cpp/mapreduce/raw_client/rpc_parameters_serialization.h>
+#include <yt/cpp/mapreduce/http_client/raw_client.h>
+#include <yt/cpp/mapreduce/http_client/raw_requests.h>
 
 #include <yt/yt/core/ytree/fluent.h>
 
@@ -257,26 +256,54 @@ void TClientBase::Concatenate(
     const TRichYPath& destinationPath,
     const TConcatenateOptions& options)
 {
-    RequestWithRetry<void>(
-        ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-        [this, &sourcePaths, &destinationPath, &options] (TMutationId /*mutationId*/) {
-            auto transaction = StartTransaction(TStartTransactionOptions());
+    Y_ABORT_IF(options.MaxBatchSize_ <= 0);
 
-            if (!options.Append_ && !sourcePaths.empty() && !transaction->Exists(destinationPath.Path_)) {
-                auto typeNode = transaction->Get(CanonizeYPath(sourcePaths.front()).Path_ + "/@type");
-                auto type = FromString<ENodeType>(typeNode.AsString());
-                transaction->Create(destinationPath.Path_, type, TCreateOptions().IgnoreExisting(true));
-            }
+    ITransactionPtr outerTransaction;
+    IClientBase* outerClient;
+    if (std::ssize(sourcePaths) > options.MaxBatchSize_) {
+        outerTransaction = StartTransaction(TStartTransactionOptions());
+        outerClient = outerTransaction.Get();
+    } else {
+        outerClient = this;
+    }
 
-            RawClient_->Concatenate(transaction->GetId(), sourcePaths, destinationPath, options);
+    TVector<TRichYPath> batch;
+    for (ssize_t i = 0; i < std::ssize(sourcePaths); i += options.MaxBatchSize_) {
+        auto begin = sourcePaths.begin() + i;
+        auto end = sourcePaths.begin() + std::min(i + options.MaxBatchSize_, std::ssize(sourcePaths));
+        batch.assign(begin, end);
 
-            transaction->Commit();
-        });
+        bool firstBatch = (i == 0);
+        RequestWithRetry<void>(
+            ClientRetryPolicy_->CreatePolicyForGenericRequest(),
+            [this, &batch, &destinationPath, &options, outerClient, firstBatch] (TMutationId /*mutationId*/) {
+                auto transaction = outerClient->StartTransaction(TStartTransactionOptions());
+
+                if (firstBatch && !options.Append_ && !batch.empty() && !transaction->Exists(destinationPath.Path_)) {
+                    auto typeNode = transaction->Get(transaction->CanonizeYPath(batch.front()).Path_ + "/@type");
+                    auto type = FromString<ENodeType>(typeNode.AsString());
+                    transaction->Create(destinationPath.Path_, type, TCreateOptions().IgnoreExisting(true));
+                }
+
+                TConcatenateOptions currentOptions = options;
+                if (!firstBatch) {
+                    currentOptions.Append_ = true;
+                }
+
+                RawClient_->Concatenate(transaction->GetId(), batch, destinationPath, currentOptions);
+
+                transaction->Commit();
+            });
+    }
+
+    if (outerTransaction) {
+        outerTransaction->Commit();
+    }
 }
 
 TRichYPath TClientBase::CanonizeYPath(const TRichYPath& path)
 {
-    return NRawClient::CanonizeYPath(ClientRetryPolicy_->CreatePolicyForGenericRequest(), Context_, path);
+    return NRawClient::CanonizeYPath(RawClient_, path);
 }
 
 TVector<TTableColumnarStatistics> TClientBase::GetTableColumnarStatistics(
@@ -909,11 +936,6 @@ TBatchRequestPtr TClientBase::CreateBatchRequest()
     return MakeIntrusive<TBatchRequest>(TransactionId_, GetParentClientImpl());
 }
 
-IClientPtr TClientBase::GetParentClient()
-{
-    return GetParentClientImpl();
-}
-
 IRawClientPtr TClientBase::GetRawClient() const
 {
     return RawClient_;
@@ -1027,6 +1049,11 @@ void TTransaction::Detach()
 ITransactionPingerPtr TTransaction::GetTransactionPinger()
 {
     return TransactionPinger_;
+}
+
+IClientPtr TTransaction::GetParentClient(bool ignoreGlobalTx)
+{
+    return GetParentClientImpl()->GetParentClient(ignoreGlobalTx);
 }
 
 TClientPtr TTransaction::GetParentClientImpl()
@@ -1151,7 +1178,7 @@ void TClient::InsertRows(
     RequestWithRetry<void>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
         [this, &path, &rows, &options] (TMutationId /*mutationId*/) {
-            RawClient_->InsertRows(path, rows, options);
+            NRawClient::InsertRows(Context_, path, rows, options);
         });
 }
 
@@ -1164,7 +1191,7 @@ void TClient::DeleteRows(
     RequestWithRetry<void>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
         [this, &path, &keys, &options] (TMutationId /*mutationId*/) {
-            RawClient_->DeleteRows(path, keys, options);
+            NRawClient::DeleteRows(Context_, path, keys, options);
         });
 }
 
@@ -1191,7 +1218,7 @@ TNode::TListType TClient::LookupRows(
     return RequestWithRetry<TNode::TListType>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
         [this, &path, &keys, &options] (TMutationId /*mutationId*/) {
-            return RawClient_->LookupRows(path, keys, options);
+            return NRawClient::LookupRows(Context_, path, keys, options);
         });
 }
 
@@ -1434,7 +1461,7 @@ TYtPoller& TClient::GetYtPoller()
         // We don't use current client and create new client because YtPoller_ might use
         // this client during current client shutdown.
         // That might lead to incrementing of current client refcount and double delete of current client object.
-        YtPoller_ = std::make_unique<TYtPoller>(Context_, ClientRetryPolicy_);
+        YtPoller_ = std::make_unique<TYtPoller>(RawClient_->Clone(), Context_.Config, ClientRetryPolicy_);
     }
     return *YtPoller_;
 }
@@ -1462,6 +1489,19 @@ TClientPtr TClient::GetParentClientImpl()
     return this;
 }
 
+IClientPtr TClient::GetParentClient(bool ignoreGlobalTx)
+{
+    if (!TransactionId_.IsEmpty() && ignoreGlobalTx) {
+        return MakeIntrusive<TClient>(
+            RawClient_,
+            Context_,
+            TTransactionId(),
+            ClientRetryPolicy_);
+    } else {
+        return this;
+    }
+}
+
 void TClient::CheckShutdown() const
 {
     if (Shutdown_) {
@@ -1469,15 +1509,10 @@ void TClient::CheckShutdown() const
     }
 }
 
-TClientPtr CreateClientImpl(
-    const TString& serverName,
-    const TCreateClientOptions& options)
+void SetupClusterContext(
+    TClientContext& context,
+    const TString& serverName)
 {
-    TClientContext context;
-    context.Config = options.Config_ ? options.Config_ : TConfig::Get();
-    context.TvmOnly = options.TvmOnly_;
-    context.ProxyAddress = options.ProxyAddress_;
-
     context.ServerName = serverName;
     ApplyProxyUrlAliasingRules(context.ServerName);
 
@@ -1490,9 +1525,8 @@ TClientPtr CreateClientImpl(
 
     static constexpr char httpUrlSchema[] = "http://";
     static constexpr char httpsUrlSchema[] = "https://";
-    if (options.UseTLS_) {
-        context.UseTLS = *options.UseTLS_;
-    } else {
+
+    if (!context.UseTLS) {
         context.UseTLS = context.ServerName.StartsWith(httpsUrlSchema);
     }
 
@@ -1514,8 +1548,28 @@ TClientPtr CreateClientImpl(
     if (context.ServerName.find(':') == TString::npos) {
         context.ServerName = CreateHostNameWithPort(context.ServerName, context);
     }
-    if (options.TvmOnly_) {
+    if (context.TvmOnly) {
         context.ServerName = Format("tvm.%v", context.ServerName);
+    }
+}
+
+TClientContext CreateClientContext(
+    const TString& serverName,
+    const TCreateClientOptions& options)
+{
+    TClientContext context;
+    context.Config = options.Config_ ? options.Config_ : TConfig::Get();
+    context.TvmOnly = options.TvmOnly_;
+    context.ProxyAddress = options.ProxyAddress_;
+
+    if (options.UseTLS_) {
+        context.UseTLS = *options.UseTLS_;
+    }
+
+    SetupClusterContext(context, serverName);
+
+    if (options.ProxyRole_) {
+        context.Config->Hosts = "hosts?role=" + *options.ProxyRole_;
     }
 
     if (context.UseTLS || options.UseCoreHttpClient_) {
@@ -1538,6 +1592,15 @@ TClientPtr CreateClientImpl(
     if (context.Token) {
         TConfig::ValidateToken(context.Token);
     }
+
+    return context;
+}
+
+TClientPtr CreateClientImpl(
+    const TString& serverName,
+    const TCreateClientOptions& options)
+{
+    auto context = CreateClientContext(serverName, options);
 
     auto globalTxId = GetGuid(context.Config->GlobalTxId);
 

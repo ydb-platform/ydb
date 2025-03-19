@@ -177,6 +177,7 @@ namespace NKikimr {
         bool UnrecoveredNonphantomBlobs = false;
         bool RequestedReplicationToken = false;
         bool HoldingReplicationToken = false;
+        bool CanDropDonor = false;
 
         TWatchdogTimer<TEvReplCheckProgress> ReplProgressWatchdog;
 
@@ -280,6 +281,7 @@ namespace NKikimr {
             // switch to planning state
             Transition(Relaxation, Plan);
 
+            CanDropDonor = true;
             RunRepl(TLogoBlobID());
         }
 
@@ -375,6 +377,8 @@ namespace NKikimr {
                 ResetReplProgressTimer(false);
             }
 
+            CanDropDonor = CanDropDonor && info->DropDonor;
+
             bool finished = false;
 
             if (info->Eof) { // when it is the last quantum for some donor, rotate the blob sets
@@ -399,7 +403,7 @@ namespace NKikimr {
                     }
                 }
                 if (!finished) {
-                    if (info->DropDonor) {
+                    if (CanDropDonor) {
                         Y_ABORT_UNLESS(!DonorQueue.empty() && DonorQueue.front());
                         DropDonor(*DonorQueue.front());
                         DonorQueue.pop_front();
@@ -604,7 +608,7 @@ namespace NKikimr {
             DonorQueryActors.insert(Register(new TDonorQueryActor(*ev->Get(), Donors, ReplCtx->VCtx)));
         }
 
-        void Handle(TEvents::TEvActorDied::TPtr ev) {
+        void Handle(TEvents::TEvGone::TPtr ev) {
             const size_t num = DonorQueryActors.erase(ev->Sender);
             Y_ABORT_UNLESS(num);
         }
@@ -630,7 +634,7 @@ namespace NKikimr {
             hFunc(TEvVGenerationChange, HandleGenerationChange)
             hFunc(TEvResumeForce, Handle)
             hFunc(TEvBlobStorage::TEvEnrichNotYet, Handle)
-            hFunc(TEvents::TEvActorDied, Handle)
+            hFunc(TEvents::TEvGone, Handle)
             cFunc(TEvBlobStorage::EvCommenceRepl, StartReplication)
             hFunc(TEvReplInvoke, Handle)
             hFunc(TEvReplCheckProgress, ReplProgressWatchdog)
@@ -682,7 +686,7 @@ namespace NKikimr {
             hFunc(TEvVGenerationChange, HandleGenerationChange)
             hFunc(TEvResumeForce, Handle)
             hFunc(TEvBlobStorage::TEvEnrichNotYet, Handle)
-            hFunc(TEvents::TEvActorDied, Handle)
+            hFunc(TEvents::TEvGone, Handle)
             cFunc(TEvBlobStorage::EvCommenceRepl, Ignore)
             hFunc(TEvReplInvoke, Handle)
             hFunc(TEvReplCheckProgress, ReplProgressWatchdog)

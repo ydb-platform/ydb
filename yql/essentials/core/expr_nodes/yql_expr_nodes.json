@@ -145,6 +145,15 @@
             ]
         },
         {
+            "Name": "TCoWithWorld",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "WithWorld"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "World", "Type": "TExprBase"}
+            ]
+        },
+        {
             "Name": "TCoTypeOf",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "TypeOf"},
@@ -1563,10 +1572,10 @@
             "Base": "TCoInputBase",
             "Match": {"Type": "Callable", "Name": "MatchRecognize"},
             "Children": [
-                {"Index": 1, "Name": "partitionKeySelector", "Type": "TExprBase"},
-                {"Index": 2, "Name": "partitionColumns", "Type": "TExprBase"},
-                {"Index": 3, "Name": "sortTraits", "Type": "TExprBase"},
-                {"Index": 4, "Name": "params", "Type": "TExprBase"}
+                {"Index": 1, "Name": "PartitionKeySelector", "Type": "TExprBase"},
+                {"Index": 2, "Name": "PartitionColumns", "Type": "TExprBase"},
+                {"Index": 3, "Name": "SortTraits", "Type": "TExprBase"},
+                {"Index": 4, "Name": "Params", "Type": "TExprBase"}
             ]
         },
         {
@@ -1610,6 +1619,40 @@
                 {"Index": 6, "Name": "RightRenames", "Type": "TCoAtomList"},
                 {"Index": 7, "Name": "LeftKeysColumnNames", "Type": "TCoAtomList"},
                 {"Index": 8, "Name": "RightKeysColumnNames", "Type": "TCoAtomList"}
+            ]
+        },
+        {
+            "Name": "TCoBlockStorage",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "BlockStorage"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"}
+            ]
+        },
+        {
+            "Name": "TCoBlockMapJoinIndex",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "BlockMapJoinIndex"},
+            "Children": [
+                {"Index": 0, "Name": "BlockStorage", "Type": "TExprBase"},
+                {"Index": 1, "Name": "InputType", "Type": "TExprBase"},
+                {"Index": 2, "Name": "KeyColumns", "Type": "TCoAtomList"},
+                {"Index": 3, "Name": "Options", "Type": "TExprList"}
+            ]
+        },
+        {
+            "Name": "TCoBlockMapJoinCore",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "BlockMapJoinCore"},
+            "Children": [
+                {"Index": 0, "Name": "LeftInput", "Type": "TExprBase"},
+                {"Index": 1, "Name": "RightInput", "Type": "TExprBase"},
+                {"Index": 2, "Name": "RightInputType", "Type": "TExprBase"},
+                {"Index": 3, "Name": "JoinKind", "Type": "TCoAtom"},
+                {"Index": 4, "Name": "LeftKeyColumns", "Type": "TCoAtomList"},
+                {"Index": 5, "Name": "LeftKeyDrops", "Type": "TCoAtomList"},
+                {"Index": 6, "Name": "RightKeyColumns", "Type": "TCoAtomList"},
+                {"Index": 7, "Name": "RightKeyDrops", "Type": "TCoAtomList"}
             ]
         },
         {

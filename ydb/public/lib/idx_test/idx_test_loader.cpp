@@ -3,7 +3,7 @@
 #include "idx_test_data_provider.h"
 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
-#include <ydb/public/sdk/cpp/client/ydb_params/params.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
 
 #include <util/generic/map.h>
 #include <util/string/printf.h>
@@ -115,7 +115,7 @@ static bool IsIndexedType(const TType& type) {
 }
 
 template<typename T>
-static bool HasColumn(const T& container, const TString& col) {
+static bool HasColumn(const T& container, const std::string& col) {
     return Find(container.begin(), container.end(), col) != container.end();
 }
 
@@ -139,7 +139,7 @@ public:
     TAsyncStatus Run() override {
         if (!Description_) {
             // Nothing to add, skip
-            return NThreading::MakeFuture<TStatus>(TStatus(EStatus::SUCCESS, NYql::TIssues()));
+            return NThreading::MakeFuture<TStatus>(TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues()));
         }
 
         ChooseColumnsForIndex();
@@ -154,12 +154,12 @@ public:
                     // status BAD_REQUEST - index already exists (realy?), treat it as success
                     // TODO: improve this check
                     if (status.GetStatus() == EStatus::BAD_REQUEST) {
-                        return NThreading::MakeFuture<TStatus>(TStatus(EStatus::SUCCESS, NYql::TIssues()));
+                        return NThreading::MakeFuture<TStatus>(TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues()));
                     }
                     return future;
                 });
         });
-        return NThreading::MakeFuture<TStatus>(TStatus(EStatus::SUCCESS, NYql::TIssues()));
+        return NThreading::MakeFuture<TStatus>(TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues()));
     }
 
     IWorkLoader::ELoadCommand GetTaskId() const override {
@@ -167,7 +167,7 @@ public:
     }
 private:
     void ChooseColumnsForIndex() {
-        TVector<TString> columns;
+        std::vector<std::string> columns;
 
         bool hasIndexedType = false;
 
@@ -187,7 +187,7 @@ private:
             return;
         }
 
-        TVector<TString> dataColumn;
+        std::vector<std::string> dataColumn;
         if (WithDataColumn_) {
             for (const TTableColumn& col : TableDescription_.GetTableColumns()) {
                 if (HasColumn(TableDescription_.GetPrimaryKeyColumns(), col.Name)) {
@@ -236,7 +236,7 @@ public:
 
     TAsyncStatus Run() override {
         return Client_.RetryOperation([this](TSession session) mutable {
-            return GetCheckIndexUniq()(1, session, TMaybe<TTransaction>(), THashMap<TString, NYdb::TValue>())
+            return GetCheckIndexUniq()(1, session, std::optional<TTransaction>(), THashMap<TString, NYdb::TValue>())
                 .Apply([this](NThreading::TFuture<IndexValues> future) {
                     auto result = future.ExtractValue();
                     const auto& status = result.Status;
@@ -268,7 +268,7 @@ public:
                         const auto params = ::NIdxTest::CreateParamsAsList(batch, ParamName_);
 
                         return result.Tx->GetSession().ExecuteDataQuery(
-                            programText, TTxControl::Tx(result.Tx.GetRef()), std::move(params),
+                            programText, TTxControl::Tx(result.Tx.value()), std::move(params),
                             TExecDataQuerySettings().KeepInQueryCache(true).ClientTimeout(TDuration::Seconds(5)))
                                 .Apply([](TAsyncDataQueryResult future){
                             auto result = future.ExtractValue();
@@ -294,25 +294,25 @@ private:
     struct IndexValues {
         TStatus Status;
         THashMap<TString, NYdb::TValue> Values;
-        TMaybe<TTransaction> Tx;
+        std::optional<TTransaction> Tx;
     };
     using TCheckIndexCb = std::function<NThreading::TFuture<IndexValues>(
         size_t i,
         TSession session,
-        TMaybe<TTransaction>,
+        std::optional<TTransaction>,
         THashMap<TString, NYdb::TValue>)>;
 
     TCheckIndexCb GetCheckIndexUniq() {
         return [this] (
             size_t i,
             TSession session,
-            TMaybe<TTransaction> tx,
+            std::optional<TTransaction> tx,
             THashMap<TString, NYdb::TValue>&& checked) mutable
         {
             if (i == Programs_.size()) {
                 return NThreading::MakeFuture<IndexValues>(
                         {
-                            TStatus(EStatus::SUCCESS, NYql::TIssues()),
+                            TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues()),
                             checked,
                             tx
                         }
@@ -326,14 +326,14 @@ private:
             for (const auto& col : p.second) {
                 const auto val = ::NIdxTest::CreateValue(col.first, *this);
 
-                checked.insert({col.first.Name, val});
+                checked.insert({TString{col.first.Name}, val});
                 values.push_back(val);
                 paramNames.push_back(col.second);
             }
 
             const auto params = ::NIdxTest::CreateParamsAsItems(values, paramNames);
 
-            TTxControl txctrl = tx ? TTxControl::Tx(tx.GetRef()) : TTxControl::BeginTx(TTxSettings::SerializableRW());
+            TTxControl txctrl = tx ? TTxControl::Tx(tx.value()) : TTxControl::BeginTx(TTxSettings::SerializableRW());
 
             return session.ExecuteDataQuery(
                     p.first,
@@ -348,7 +348,7 @@ private:
                                 {
                                     result,
                                     THashMap<TString, NYdb::TValue>(),
-                                    TMaybe<TTransaction>()
+                                    std::optional<TTransaction>()
                                 }
                             );
                     }
@@ -359,7 +359,7 @@ private:
                     } else {
                         return NThreading::MakeFuture<IndexValues>(
                                 {
-                                    TStatus(EStatus::PRECONDITION_FAILED, NYql::TIssues()),
+                                    TStatus(EStatus::PRECONDITION_FAILED, NYdb::NIssue::TIssues()),
                                     THashMap<TString, NYdb::TValue>(),
                                     result.GetTransaction()
                                 }
@@ -382,7 +382,7 @@ private:
         for (const auto& col : columns) {
             auto pkType = NIdxTest::CreateValue(col, *this);
             auto typeString = NYdb::FormatType(pkType.GetType());
-            colHash.insert({col.Name, {col, typeString}});
+            colHash.insert({TString{col.Name}, {col, TString{typeString}}});
             upsertInput.push_back({col, ""});
         }
 
@@ -442,7 +442,7 @@ private:
     TString TableName_;
     TTableClient Client_;
 
-    TVector<std::pair<TString, TVector<std::pair<TColumn, TString>>>> Programs_;
+    TVector<std::pair<std::string, TVector<std::pair<TColumn, TString>>>> Programs_;
 
     mutable TString Err_;
 };
@@ -505,7 +505,7 @@ public:
                         }
 
                         const auto& mainResultSet = NYdb::FormatResultSetYson(result.GetResultSet(0));;
-                        return GetCheckIndexOp()(1, session, result, mainResultSet, "");
+                        return GetCheckIndexOp()(1, session, result, TString{mainResultSet}, "");
                     });
         }).Apply([this](TAsyncStatus future) {
             TString err;
@@ -568,7 +568,7 @@ private:
                 vp.OpenOptional();
                 if (vp.IsNull()) {
                     //Cerr << "Null value found, skip check.." << Endl;
-                    return NThreading::MakeFuture<TStatus>(TStatus(EStatus::SUCCESS, NYql::TIssues()));
+                    return NThreading::MakeFuture<TStatus>(TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues()));
                 }
                 parNames.push_back(col.second);
             }
@@ -621,7 +621,7 @@ private:
         for (const auto& col : columns) {
             auto pkType = NIdxTest::CreateOptionalValue(col, *this);
             auto typeString = NYdb::FormatType(pkType.GetType());
-            colHash.insert({col.Name, {col, typeString}});
+            colHash.insert({TString{col.Name}, {col, TString{typeString}}});
             allColumns += col.Name;
             if (++id != columns.size())
                 allColumns += ", ";
@@ -631,7 +631,7 @@ private:
         TString pkPredicate;
         TString select1;
         TVector<std::pair<TColumn, TString>> pkPredicates;
-        for (const TString& str : pkColNames) {
+        for (const auto& str : pkColNames) {
             const TString paramName = Sprintf("$items_%zu", id);
             select1 += Sprintf("DECLARE %s AS %s;\n", paramName.c_str(), colHash.find(str)->second.second.c_str());
             pkPredicates.push_back({colHash.find(str)->second.first, paramName});
@@ -662,7 +662,7 @@ private:
                 id++;
             }
             // Add key column to request to handle non uniq index
-            for (const TString& str : pkColNames) {
+            for (const auto& str : pkColNames) {
                 const TString paramName = Sprintf("$items_%zu", id);
                 declare += Sprintf("DECLARE %s AS %s;\n",
                     paramName.c_str(), colHash.find(str)->second.second.c_str());
@@ -686,7 +686,7 @@ private:
     TString TableName_;
     TTableClient Client_;
 
-    TVector<std::pair<TString, TVector<std::pair<TColumn, TString>>>> Programs_;
+    TVector<std::pair<std::string, TVector<std::pair<TColumn, TString>>>> Programs_;
 
     mutable TString Err_;
     TMutex Mtx_;
@@ -735,7 +735,7 @@ public:
         TVector<TColumn> pkCol;
         THashSet<TString> pkColHash;
         for (const auto& pk : pkColNames) {
-            pkColHash.insert(pk);
+            pkColHash.insert(TString{pk});
         }
         for (const auto& col : columns) {
             if (pkColHash.contains(col.Name)) {
@@ -748,7 +748,7 @@ public:
         for (const auto& indexDesc : TableDescription_.GetIndexDescriptions()) {
             if (indexName.empty() || indexDesc.GetIndexName() == indexName) {
                 for (const auto& col : indexDesc.GetIndexColumns()) {
-                    indexColumns.insert(col);
+                    indexColumns.insert(TString{col});
                 }
             }
         }
@@ -857,7 +857,7 @@ private:
             // Columns with given index (only if more then 1 index)
             if (TableDescription_.GetIndexDescriptions().size() > 1) {
                 for (const auto& indexDesc : TableDescription_.GetIndexDescriptions()) {
-                    Programs_.emplace_back(CreateProgram(indexDesc.GetIndexName()));
+                    Programs_.emplace_back(CreateProgram(TString{indexDesc.GetIndexName()}));
                 }
             }
         }
@@ -923,14 +923,14 @@ private:
         THashSet<TString> indexColumns;
         for (const auto& indexDesc : TableDescription_.GetIndexDescriptions()) {
             for (const auto& col : indexDesc.GetIndexColumns()) {
-                indexColumns.insert(col);
+                indexColumns.insert(TString{col});
             }
         }
 
         THashSet<TString> pks;
         for (const auto& pk : TableDescription_.GetPrimaryKeyColumns()) {
-            pks.insert(pk);
-            indexColumns.insert(pk);
+            pks.insert(TString{pk});
+            indexColumns.insert(TString{pk});
         }
 
         for (const auto& col : columns) {
@@ -999,7 +999,7 @@ private:
         // Columns with given index (only if more then 1 index)
         if (TableDescription_.GetIndexDescriptions().size() > 1) {
             for (const auto& indexDesc : TableDescription_.GetIndexDescriptions()) {
-                Programs_.emplace_back(CreateUpsertProgram(indexDesc.GetIndexName()));
+                Programs_.emplace_back(CreateUpsertProgram(TString{indexDesc.GetIndexName()}));
             }
         }
     }

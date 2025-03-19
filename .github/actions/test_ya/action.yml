@@ -78,7 +78,7 @@ runs:
         jobs_url="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/jobs"
         # tricky: we are searching job with name that contains build_preset
         check_url=$(curl -s $jobs_url | jq --arg n "$BUILD_PRESET" -r '.jobs[] | select(.name | contains($n)) | .html_url')
-        
+
         platform_name="$(echo "$(uname -s)-$(uname -p)" | tr '[:upper:]' '[:lower:]')-$BUILD_PRESET"
         echo "Pre-commit [check]($check_url) **$platform_name** for $(git rev-parse HEAD) has started." | .github/scripts/tests/comment-pr.py --rewrite
 
@@ -91,19 +91,19 @@ runs:
             https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
             -d '{"state":"pending","description":"The check has been started","context":"test_${{inputs.build_preset}}"}'
         fi
-  
+
     - name: Clean ya cache
       shell: bash
       run: rm -rf ~/.ya
-  
+
     - name: Init
       id: init
       shell: bash
       run: |
         set -x
-        
+
         echo "$(pwd)/ydb/ci/scripts" >> $GITHUB_PATH
-        
+
         export TMP_DIR=$(pwd)/tmp
         rm -rf $TMP_DIR
         mkdir -p $TMP_DIR
@@ -129,14 +129,14 @@ runs:
           openssl req -x509 -newkey rsa:2048 \
             -keyout $TMP_DIR/key.pem -out $TMP_DIR/cert.pem \
             -sha256 -days 1 -nodes -subj "/CN=127.0.0.1"
-          
+
           TESTMO_TOKEN=${{ inputs.testman_token }} ./ydb/ci/testmo-proxy/testmo-proxy.py -l $TESTMO_PROXY_ADDR \
             --cert-file "$TMP_DIR/cert.pem" \
             --cert-key "$TMP_DIR/key.pem" \
             --target-timeout 3,60 \
             --max-request-time 200 \
             "$TESTMO_URL" > $PUBLIC_DIR/testmo_proxy_log.txt 2>&1 &
-            
+
           TESTMO_PROXY_PID=$!
           echo "TESTMO_PROXY_ADDR=$TESTMO_PROXY_ADDR" >> $GITHUB_ENV
           echo "TESTMO_PROXY_PID=$TESTMO_PROXY_PID" >> $GITHUB_ENV
@@ -160,7 +160,7 @@ runs:
         echo "Artifacts will be uploaded [here](${PUBLIC_DIR_URL}/index.html)" | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py
 
         ORIGINAL_HEAD=$(git rev-parse HEAD)
-        
+
         if [ "${{ inputs.increment }}" = "true" ]; then
           GRAPH_COMPARE_OUTPUT="$PUBLIC_DIR/graph_compare_log.txt"
           GRAPH_COMPARE_OUTPUT_URL="$PUBLIC_DIR_URL/graph_compare_log.txt"
@@ -177,11 +177,11 @@ runs:
             echo "Graph compare failed, see the [logs]($GRAPH_COMPARE_OUTPUT_URL)." | GITHUB_TOKEN="${{ github.token }}"  .github/scripts/tests/comment-pr.py --color red
             exit $RC
           fi
-          
+
           git checkout $ORIGINAL_HEAD
           YA_MAKE_TARGET=.
         else
-          YA_MAKE_TARGET=${{ inputs.build_target }}
+          YA_MAKE_TARGET="${{ inputs.build_target }}"
         fi
 
         readarray -d ',' -t test_size < <(printf "%s" "${{ inputs.test_size }}")
@@ -197,7 +197,7 @@ runs:
 
         TEST_RETRY_COUNT=${{ inputs.test_retry_count }}
         IS_TEST_RESULT_IGNORED=0
-        
+
         case "$BUILD_PRESET" in
           debug)
             params+=(--build "debug")
@@ -205,7 +205,7 @@ runs:
           relwithdebinfo)
             params+=(--build "relwithdebinfo")
             ;;
-          release)  
+          release)
             params+=(--build "release")
             ;;
           release-asan)
@@ -237,14 +237,14 @@ runs:
             exit 1
             ;;
         esac
-        
+
         echo "IS_TEST_RESULT_IGNORED=$IS_TEST_RESULT_IGNORED" >> $GITHUB_ENV
 
         if [ $TEST_RETRY_COUNT -z ]; then
           # default is 3 for ordinary build and 1 for sanitizer builds
           TEST_RETRY_COUNT=3
         fi
-    
+
         if [ ! -z "${{ inputs.additional_ya_make_args }}" ]; then
           params+=(${{ inputs.additional_ya_make_args }})
         fi
@@ -267,7 +267,7 @@ runs:
 
         params+=(
           --stat -DCONSISTENT_DEBUG --no-dir-outputs
-          --test-failure-code 0 --build-all 
+          --test-failure-code 0 --build-all
           --cache-size 2TB --force-build-depends
         )
 
@@ -275,7 +275,7 @@ runs:
         TESTMO_BRANCH_TAG="$GITHUB_REF_NAME"
         TESTMO_ARCH="${{ runner.arch == 'X64' && 'x86-64' || runner.arch == 'ARM64' && 'arm64' || 'unknown' }}"
         TESTMO_PR_NUMBER=${{ github.event.number }}
-        
+
         case "$BUILD_PRESET" in
           relwithdebinfo)
             TESTMO_SOURCE="ya-${TESTMO_ARCH}"
@@ -329,7 +329,7 @@ runs:
               ;;
           esac
 
-          echo "TESTMO_RUN_NAME=$TESTMO_RUN_NAME" >> $GITHUB_ENV 
+          echo "TESTMO_RUN_NAME=$TESTMO_RUN_NAME" >> $GITHUB_ENV
           if [ $RETRY != 1 ]; then
             IS_RETRY=1
             TESTMO_RUN_NAME="$TESTMO_RUN_NAME A$RETRY"
@@ -342,6 +342,8 @@ runs:
           export CURRENT_PUBLIC_DIR=$PUBLIC_DIR/$CURRENT_PUBLIC_DIR_RELATIVE
           export CURRENT_PUBLIC_DIR_URL=$PUBLIC_DIR_URL/$CURRENT_PUBLIC_DIR_RELATIVE
           mkdir $CURRENT_PUBLIC_DIR
+          export TEST_META_INFO=$CURRENT_PUBLIC_DIR/tests_meta
+          mkdir $TEST_META_INFO
 
           if [ ${{ inputs.testman_token }} ]; then
             # inititalize testmo session
@@ -362,7 +364,7 @@ runs:
             echo "10 [Test history](${TESTMO_HISTORY_URL})" >> $SUMMARY_LINKS
           fi
 
-          CURRENT_MESSAGE="ya make is running..." 
+          CURRENT_MESSAGE="ya make is running..."
           if [ $IS_RETRY = 0 ]; then
             CURRENT_MESSAGE="$CURRENT_MESSAGE"
             RERUN_FAILED_OPT=""
@@ -409,8 +411,14 @@ runs:
           fi
 
           # fix junit files (add links, logs etc)
-          # archive unitest reports (orig) 
+          # archive unitest reports (orig)
           gzip -c $CURRENT_JUNIT_XML_PATH > $CURRENT_PUBLIC_DIR/orig_junit.xml.gz
+
+          # postprocess junit user_attributesreport
+          .github/scripts/tests/apply_user_properties_to_junit.py \
+          --test_dir="$TEST_META_INFO" \
+          --in_file="$CURRENT_JUNIT_XML_PATH" \
+          --out_file="$CURRENT_JUNIT_XML_PATH" || true
 
           # postprocess junit report
           .github/scripts/tests/transform_ya_junit.py -i \
@@ -433,7 +441,7 @@ runs:
             IS_LAST_RETRY=1
           fi
 
-          if [ $FAILED_TESTS_COUNT -gt 500 ]; then 
+          if [ $FAILED_TESTS_COUNT -gt 500 ]; then
             IS_LAST_RETRY=1
             TOO_MANY_FAILED="Too many tests failed, NOT going to retry"
             echo $TOO_MANY_FAILED | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color red
@@ -459,7 +467,7 @@ runs:
           if [ "${{ inputs.run_tests }}" = "true" ]; then
             cat summary_text.txt | GITHUB_TOKEN="${{ github.token }}" .github/scripts/tests/comment-pr.py --color `cat summary_color.txt`
           fi
-          
+
           # upload tests results to YDB
           ydb_upload_run_name="${TESTMO_RUN_NAME// /"_"}"
           result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_JUNIT_XML_PATH} --run-timestamp $(date +%s) --commit $(git rev-parse HEAD) --build-type ${BUILD_PRESET} --pull $ydb_upload_run_name --job-name "${{ github.workflow }}" --job-id "${{ github.run_id }}" --branch ${GITHUB_REF_NAME}`
@@ -473,7 +481,7 @@ runs:
             .github/scripts/tests/split-junit.py -o "$TESTMO_JUNIT_REPORT_PARTS" "$CURRENT_JUNIT_XML_PATH"
             # archive unitest reports (transformed)
             tar -C $TESTMO_JUNIT_REPORT_PARTS/.. -czf $PUBLIC_DIR/junit_parts.xml.tar.gz $(basename $TESTMO_JUNIT_REPORT_PARTS)
-            
+
             TESTMO_TOKEN=${{ inputs.testman_token }} retry.sh -- testmo automation:run:submit-thread \
               --instance "https://$TESTMO_PROXY_ADDR" --run-id "$TESTMO_RUN_ID" \
               --results "$TESTMO_JUNIT_REPORT_PARTS/*.xml"
@@ -499,7 +507,7 @@ runs:
         GITHUB_TOKEN: ${{ github.token }}
       run: |
         set -x
-        
+
         if [ "${{ steps.build.outputs.status }}" == "failed" ]; then
           curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
             https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
@@ -509,7 +517,7 @@ runs:
             https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
             -d '{"state":"success","description":"The check has been completed successfully","context":"build_${{inputs.build_preset}}"}'
         fi
-    
+
     - name: Clean up unfinished testmo sessions
       if: always()
       shell: bash
@@ -536,12 +544,12 @@ runs:
           curl -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
               https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
               -d '{"state":"'$teststatus'","description":"'"$testmessage"'","context":"test_${{inputs.build_preset}}"}'
-          
+
           if [[ $teststatus != "success" ]]; then
             echo "status=failed" >> $GITHUB_OUTPUT
           fi
         fi
-    
+
     - name: check test results
       if: inputs.run_tests
       shell: bash
@@ -587,7 +595,7 @@ runs:
             fi
           fi
 
-        
+
     - name: sync results to s3 and publish links
       if: always()
       shell: bash
@@ -611,7 +619,7 @@ runs:
       if: always()
       run: |
         set -x
-        export build_preset="${{ inputs.build_preset }}" 
+        export build_preset="${{ inputs.build_preset }}"
         export commit_git_sha="$(git rev-parse HEAD)"
 
         python3 .github/scripts/send_build_stats.py
@@ -624,15 +632,15 @@ runs:
         GITHUB_TOKEN: ${{ github.token }}
       run: |
         set -x
-        export build_preset="${{ inputs.build_preset }}" 
-        export branch_to_compare="$GITHUB_REF_NAME" 
+        export build_preset="${{ inputs.build_preset }}"
+        export branch_to_compare="$GITHUB_REF_NAME"
         export yellow_treshold=102400
-        export red_treshold=2097152 
+        export red_treshold=2097152
         export commit_git_sha="$(git rev-parse HEAD)"
 
         get_sizes_comment_script=.github/scripts/get_build_diff.py
         comment_raw=`$get_sizes_comment_script`
-        
+
         IFS=';;;'
         read -ra comment_arr <<< "$comment_raw"
 
@@ -641,7 +649,7 @@ runs:
           color=${comment_arr[0]}
           replace=$color";;;"
           comment=${comment_raw/$replace/""}
-          
+
           printf "$comment" | .github/scripts/tests/comment-pr.py --color $color
 
         else

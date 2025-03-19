@@ -179,7 +179,9 @@ private:
                 ? AuditLogItemBuilders[builderIndex] : AuditLogItemBuilders[DefaultAuditLogItemBuilder];
             const auto msg = ev->Get();
             const auto auditLogItem = builder(msg->Time, msg->Parts);
-            WriteLog(auditLogItem, logBackends.second);
+            if (!auditLogItem.empty()) {
+                WriteLog(auditLogItem, logBackends.second);
+            }
         }
     }
 

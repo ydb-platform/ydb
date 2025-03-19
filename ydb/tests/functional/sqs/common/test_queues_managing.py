@@ -32,7 +32,9 @@ class QueuesManagingTest(KikimrSqsTestBase):
         attributes['MessageRetentionPeriod'] = '502000'
         attributes['ReceiveMessageWaitTimeSeconds'] = '11'
         attributes['VisibilityTimeout'] = '42'
-        created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo, use_http=True)
+
+        tags = {'some_tag': 'and-its-value'}
+        created_queue_url = self._create_queue_and_assert(self.queue_name, is_fifo=is_fifo, use_http=True, tags=tags)
         existing_queues = self._sqs_api.list_queues()
         assert_that(
             created_queue_url in existing_queues
@@ -50,6 +52,9 @@ class QueuesManagingTest(KikimrSqsTestBase):
         assert_that(equal_to(created_attributes.get('VisibilityTimeout')), attributes['VisibilityTimeout'])
         if is_fifo:
             assert_that(created_attributes.get('ContentBasedDeduplication'), 'true')
+
+        created_tags = self._sqs_api.list_queue_tags(got_queue_url)
+        assert_that(created_tags, equal_to(tags))
 
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
     def test_create_fifo_queue_wo_postfix(self, tables_format):

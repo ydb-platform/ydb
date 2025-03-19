@@ -542,6 +542,12 @@ struct TOperationSpecBase
 
     /// How many jobs can fail before operation is failed.
     FLUENT_FIELD_OPTION(ui64, MaxFailedJobCount);
+
+    // Arbitrary structured information related to the operation.
+    FLUENT_FIELD_OPTION(TNode, Annotations);
+
+    // Similar to Annotations, shown on the operation page. Recommends concise, human-readable entries to prevent clutter.
+    FLUENT_FIELD_OPTION(TNode, Description);
 };
 
 ///
@@ -764,6 +770,9 @@ struct TUserJobSpec
     /// @brief Porto layers to use in the job. Layers are listed from top to bottom.
     FLUENT_VECTOR_FIELD(TYPath, Layer);
 
+    /// @brief Docker image to use in the job.
+    FLUENT_FIELD_OPTION(TString, DockerImage);
+
     ///
     /// @brief MemoryLimit specifies how much memory job process can use.
     ///
@@ -776,7 +785,7 @@ struct TUserJobSpec
     /// @note
     /// When @ref NYT::TOperationOptions::MountSandboxInTmpfs is enabled library will compute
     /// total size of all files used by this job and add this total size to MemoryLimit.
-    /// Thus you shouldn't include size of your files (e.g. binary file) into MemoryLimit.
+    /// Thus, you shouldn't include size of your files (e.g. binary file) into MemoryLimit.
     ///
     /// @note
     /// Final memory memory_limit passed to YT is calculated as follows:
@@ -2386,6 +2395,31 @@ enum class EOperationBriefState : int
     Failed        /* "failed" */,
 };
 
+
+///
+/// @brief Operation state.
+enum class EOperationState : int
+{
+    None                /* "none" */,
+    Starting            /* "starting" */,
+    Orphaned            /* "orphaned" */,
+    WaitingForAgent     /* "waiting_for_agent" */,
+    Initializing        /* "initializing" */,
+    Preparing           /* "preparing" */,
+    Materializing       /* "orphaned" */,
+    ReviveInitializing  /* "revive_initializing" */,
+    Reviving            /* "reviving" */,
+    RevivingJobs        /* "reviving_jobs" */,
+    Pending             /* "pending" */,
+    Running             /* "running" */,
+    Completing          /* "completing" */,
+    Completed           /* "completed" */,
+    Aborting            /* "aborting" */,
+    Aborted             /* "aborted" */,
+    Failing             /* "failing" */,
+    Failed              /* "failed" */,
+};
+
 ///
 /// @brief Operation type.
 enum class EOperationType : int
@@ -2422,13 +2456,13 @@ struct TOperationProgress
 /// @brief Brief operation progress (numbers of jobs in these states).
 struct TOperationBriefProgress
 {
-    ui64 Aborted = 0;
-    ui64 Completed = 0;
-    ui64 Failed = 0;
-    ui64 Lost = 0;
-    ui64 Pending = 0;
-    ui64 Running = 0;
-    ui64 Total = 0;
+    i64 Aborted = 0;
+    i64 Completed = 0;
+    i64 Failed = 0;
+    i64 Lost = 0;
+    i64 Pending = 0;
+    i64 Running = 0;
+    i64 Total = 0;
 };
 
 ///
@@ -2597,7 +2631,7 @@ struct TListOperationsOptions
 
     ///
     /// @brief Choose operations with given @ref NYT::TOperationAttributes::State.
-    FLUENT_FIELD_OPTION(TString, State);
+    FLUENT_FIELD_OPTION(EOperationState, State);
 
     ///
     /// @brief Choose operations with given @ref NYT::TOperationAttributes::Type.
@@ -2694,7 +2728,6 @@ enum class EListJobsDataSource : int
 /// @brief Job type.
 enum class EJobType : int
 {
-    SchedulerFirst    /* "scheduler_first" */,
     Map               /* "map" */,
     PartitionMap      /* "partition_map" */,
     SortedMerge       /* "sorted_merge" */,
@@ -2712,13 +2745,14 @@ enum class EJobType : int
     JoinReduce        /* "join_reduce" */,
     Vanilla           /* "vanilla" */,
     SchedulerUnknown  /* "scheduler_unknown" */,
-    SchedulerLast     /* "scheduler_last" */,
-    ReplicatorFirst   /* "replicator_first" */,
     ReplicateChunk    /* "replicate_chunk" */,
     RemoveChunk       /* "remove_chunk" */,
     RepairChunk       /* "repair_chunk" */,
     SealChunk         /* "seal_chunk" */,
-    ReplicatorLast    /* "replicator_last" */,
+    ShallowMerge      /* "shallow_merge" */,
+    MergeChunks       /* "merge_chunks" */,
+    AutotomizeChunk   /* "autotomize_chunk" */,
+    ReincarnateChunk  /* "reincarnate_chunk" */,
 };
 
 ///
@@ -2854,6 +2888,14 @@ struct TListJobsOptions
     ///
     /// @brief Return only jobs with monitoring descriptor.
     FLUENT_FIELD_OPTION(bool, WithMonitoringDescriptor);
+
+    ///
+    /// @brief Return only jobs with interruption info.
+    FLUENT_FIELD_OPTION(bool, WithInterruptionInfo);
+
+    ///
+    /// @brief Return only jobs with given operation incarnation.
+    FLUENT_FIELD_OPTION(TString, OperationIncarnation);
 
     ///
     /// @brief Search for jobs with start time >= `FromTime`.

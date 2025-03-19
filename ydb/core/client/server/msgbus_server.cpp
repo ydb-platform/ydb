@@ -103,18 +103,9 @@ public:
             MTYPE(TBusHiveCreateTablet)
             MTYPE(TBusOldHiveCreateTablet)
             MTYPE(TBusHiveCreateTabletResult)
-            MTYPE(TBusLocalEnumerateTablets)
-            MTYPE(TBusOldLocalEnumerateTablets)
-            MTYPE(TBusLocalEnumerateTabletsResult)
-            MTYPE(TBusKeyValue)
-            MTYPE(TBusOldKeyValue)
-            MTYPE(TBusKeyValueResponse)
             MTYPE(TBusPersQueue)
-            MTYPE(TBusTabletKillRequest)
             MTYPE(TBusTabletStateRequest)
             MTYPE(TBusTabletCountersRequest)
-            MTYPE(TBusTabletLocalMKQL)
-            MTYPE(TBusTabletLocalSchemeTx)
             MTYPE(TBusSchemeOperation)
             MTYPE(TBusSchemeOperationStatus)
             MTYPE(TBusSchemeDescribe)
@@ -499,8 +490,6 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
     const ui32 msgType = msg.GetMessage()->GetHeader()->Type;
 
     switch (msgType) {
-    case MTYPE_CLIENT_REQUEST:
-        return ClientProxyRequest<TEvBusProxy::TEvRequest>(msg);
     case MTYPE_CLIENT_SCHEME_INITROOT:
         return ClientProxyRequest<TEvBusProxy::TEvInitRoot>(msg);
     case MTYPE_CLIENT_SCHEME_NAVIGATE:
@@ -510,12 +499,6 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
     case MTYPE_CLIENT_HIVE_CREATE_TABLET:
     case MTYPE_CLIENT_OLD_HIVE_CREATE_TABLET:
         return ClientActorRequest(CreateMessageBusHiveCreateTablet, msg);
-    case MTYPE_CLIENT_LOCAL_ENUMERATE_TABLETS:
-    case MTYPE_CLIENT_OLD_LOCAL_ENUMERATE_TABLETS:
-        return ClientActorRequest(CreateMessageBusLocalEnumerateTablets, msg);
-    case MTYPE_CLIENT_KEYVALUE:
-    case MTYPE_CLIENT_OLD_KEYVALUE:
-        return ClientActorRequest(CreateMessageBusKeyValue, msg);
     case MTYPE_CLIENT_PERSQUEUE:
         return ClientProxyRequest<TEvBusProxy::TEvPersQueue>(msg);
     case MTYPE_CLIENT_CHOOSE_PROXY:
@@ -524,12 +507,6 @@ void TMessageBusServer::OnMessage(TBusMessageContext &msg) {
         return ClientActorRequest(CreateMessageBusTabletStateRequest, msg);
     case MTYPE_CLIENT_TABLET_COUNTERS_REQUEST:
         return ClientActorRequest(CreateMessageBusTabletCountersRequest, msg);
-    case MTYPE_CLIENT_LOCAL_MINIKQL:
-        return ClientActorRequest(CreateMessageBusLocalMKQL, msg);
-    case MTYPE_CLIENT_LOCAL_SCHEME_TX:
-        return ClientActorRequest(CreateMessageBusLocalSchemeTx, msg);
-    case MTYPE_CLIENT_TABLET_KILL_REQUEST:
-        return ClientActorRequest(CreateMessageBusTabletKillRequest, msg);
     case MTYPE_CLIENT_FLAT_TX_REQUEST:
         return ClientProxyRequest<TEvBusProxy::TEvFlatTxRequest>(msg);
     case MTYPE_CLIENT_FLAT_TX_STATUS_REQUEST:

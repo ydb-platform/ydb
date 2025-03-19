@@ -21,9 +21,10 @@ struct TScanRecord {
         bool operator==(const TSeqNo& x) const noexcept = default;
         auto operator<=>(const TSeqNo& x) const noexcept = default;
     };
+    using TScanIds = std::vector<ui64>;
 
-    ui64 ScanId = 0;
     TSeqNo SeqNo;
+    TScanIds ScanIds;
 };
 
 class TScanManager {
@@ -37,11 +38,12 @@ public:
         return nullptr;
     }
 
-    void Set(ui64 id, TScanRecord record) {
+    TScanRecord::TScanIds& Set(ui64 id, TScanRecord::TSeqNo seqNo) {
         Y_ABORT_UNLESS(id != 0);
         Y_ABORT_UNLESS(Id == 0);
         Id = id;
-        Record = record;
+        Record.SeqNo = seqNo;
+        return Record.ScanIds;
     }
 
     void Drop(ui64 id) {

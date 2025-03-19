@@ -76,6 +76,12 @@ enum class EBlockOutputMode {
     Force    /* "force" */,
 };
 
+enum class ERuntimeClusterSelectionMode {
+    Disable  /* "disable" */,
+    Auto     /* "auto" */,
+    Force    /* "force" */,
+};
+
 struct TYtSettings {
     using TConstPtr = std::shared_ptr<const TYtSettings>;
 
@@ -115,6 +121,7 @@ struct TYtSettings {
     NCommon::TConfSetting<EInferSchemaMode, false> InferSchemaMode;
     NCommon::TConfSetting<ui32, false> BatchListFolderConcurrency;
     NCommon::TConfSetting<bool, false> ForceTmpSecurity;
+    NCommon::TConfSetting<ERuntimeClusterSelectionMode, false> RuntimeClusterSelection;
 
     // Job runtime
     NCommon::TConfSetting<TString, true> Pool;
@@ -203,6 +210,7 @@ struct TYtSettings {
     NCommon::TConfSetting<bool, true> _UseKeyBoundApi;
     NCommon::TConfSetting<TString, true> NetworkProject;
     NCommon::TConfSetting<bool, true> _EnableYtPartitioning;
+    NCommon::TConfSetting<bool, false> EnableDynamicStoreReadInDQ;
     NCommon::TConfSetting<bool, true> ForceJobSizeAdjuster;
     NCommon::TConfSetting<bool, true> EnforceJobUtc;
     NCommon::TConfSetting<bool, true> UseRPCReaderInDQ;
@@ -211,6 +219,7 @@ struct TYtSettings {
     NCommon::TConfSetting<TSet<TString>, true> BlockReaderSupportedTypes;
     NCommon::TConfSetting<TSet<NUdf::EDataSlot>, true> BlockReaderSupportedDataTypes;
     NCommon::TConfSetting<TString, true> _BinaryCacheFolder;
+    NCommon::TConfSetting<TString, true> RuntimeCluster;
 
     // Optimizers
     NCommon::TConfSetting<bool, true> _EnableDq;
@@ -227,6 +236,7 @@ struct TYtSettings {
     NCommon::TConfSetting<ui64, false> MapJoinShardMinRows;
     NCommon::TConfSetting<ui64, false> MapJoinShardCount; // [1-10]
     NCommon::TConfSetting<bool, false> MapJoinUseFlow;
+    NCommon::TConfSetting<bool, false> BlockMapJoin;
     NCommon::TConfSetting<NSize::TSize, false> LookupJoinLimit;
     NCommon::TConfSetting<ui64, false> LookupJoinMaxRows;
     NCommon::TConfSetting<NSize::TSize, false> EvaluationTableSizeLimit;
@@ -235,6 +245,7 @@ struct TYtSettings {
     NCommon::TConfSetting<ui32, false> MaxInputTablesForSortedMerge;
     NCommon::TConfSetting<ui32, false> MaxOutputTables;
     NCommon::TConfSetting<bool, false> DisableFuseOperations;
+    NCommon::TConfSetting<bool, false> EnableFuseMapToMapReduce;
     NCommon::TConfSetting<NSize::TSize, false> MaxExtraJobMemoryToFuseOperations;
     NCommon::TConfSetting<double, false> MaxReplicationFactorToFuseOperations;
     NCommon::TConfSetting<ui32, false> MaxOperationFiles;
@@ -273,6 +284,8 @@ struct TYtSettings {
     NCommon::TConfSetting<bool, false> UseNewPredicateExtraction;
     NCommon::TConfSetting<bool, false> PruneKeyFilterLambda;
     NCommon::TConfSetting<bool, false> DqPruneKeyFilterLambda;
+    NCommon::TConfSetting<bool, false> UseQLFilter;
+    NCommon::TConfSetting<bool, false> PruneQLFilterLambda;
     NCommon::TConfSetting<bool, false> MergeAdjacentPointRanges;
     NCommon::TConfSetting<bool, false> KeyFilterForStartsWith;
     NCommon::TConfSetting<ui64, false> MaxKeyRangeCount;
@@ -290,6 +303,7 @@ struct TYtSettings {
     NCommon::TConfSetting<ui16, false> MaxColumnGroups;
     NCommon::TConfSetting<ui64, false> ExtendedStatsMaxChunkCount;
     NCommon::TConfSetting<bool, false> JobBlockInput;
+    NCommon::TConfSetting<bool, false> JobBlockTableContent;
     NCommon::TConfSetting<TSet<TString>, false> JobBlockInputSupportedTypes;
     NCommon::TConfSetting<TSet<NUdf::EDataSlot>, false> JobBlockInputSupportedDataTypes;
     NCommon::TConfSetting<EBlockOutputMode, false> JobBlockOutput;
@@ -297,6 +311,8 @@ struct TYtSettings {
     NCommon::TConfSetting<TSet<NUdf::EDataSlot>, false> JobBlockOutputSupportedDataTypes;
     NCommon::TConfSetting<bool, false> _EnableYtDqProcessWriteConstraints;
     NCommon::TConfSetting<bool, false> CompactForDistinct;
+    NCommon::TConfSetting<bool, false> DropUnusedKeysFromKeyFilter;
+    NCommon::TConfSetting<bool, false> ReportEquiJoinStats;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);

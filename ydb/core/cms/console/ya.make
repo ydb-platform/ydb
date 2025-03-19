@@ -86,7 +86,7 @@ PEERDIR(
     ydb/core/blobstorage/groupinfo
     ydb/core/cms/console/validators
     ydb/core/config/init
-    ydb/core/control
+    ydb/core/control/lib
     ydb/core/engine/minikql
     ydb/core/mind
     ydb/core/node_whiteboard
@@ -97,7 +97,8 @@ PEERDIR(
     ydb/library/aclib
     ydb/library/yaml_config
     ydb/public/api/protos
-    ydb/public/lib/operation_id
+    ydb/public/sdk/cpp/src/library/operation_id
+    ydb/public/sdk/cpp/src/library/operation_id/protos
 )
 
 YQL_LAST_ABI_VERSION()

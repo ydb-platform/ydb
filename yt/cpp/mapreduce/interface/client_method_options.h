@@ -264,6 +264,12 @@ struct TConcatenateOptions
 
     /// Whether we should append to destination or rewrite it.
     FLUENT_FIELD_OPTION(bool, Append);
+
+    // Maximum number of items to process in single concat request.
+    //
+    // If number of items provided is greater then this parameter
+    // client might split concatenate to several requests.
+    FLUENT_FIELD_DEFAULT(int, MaxBatchSize, 20);
 };
 
 ///
@@ -382,6 +388,11 @@ struct TSuspendOperationOptions
     ///
     /// By default running jobs are not aborted.
     FLUENT_FIELD_OPTION(bool, AbortRunningJobs);
+
+    ///
+    /// @brief Something to show in the alert.
+    ///
+    FLUENT_FIELD_OPTION(std::optional<TString>, Reason);
 };
 
 ///
@@ -1107,6 +1118,9 @@ struct TCreateClientOptions
 
     /// @brief Proxy Address to be used for connection
     FLUENT_FIELD_OPTION(TString, ProxyAddress);
+
+    /// @brief Desired proxy role to be used for connection.
+    FLUENT_FIELD_OPTION(TString, ProxyRole);
 };
 
 ///

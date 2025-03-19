@@ -273,6 +273,7 @@ class IPortionsLevel {
 private:
     virtual void DoModifyPortions(const std::vector<TPortionInfo::TPtr>& add, const std::vector<TPortionInfo::TPtr>& remove) = 0;
     virtual ui64 DoGetWeight() const = 0;
+    virtual TInstant DoGetWeightExpirationInstant() const = 0;
     virtual NArrow::NMerger::TIntervalPositions DoGetBucketPositions(const std::shared_ptr<arrow::Schema>& pkSchema) const = 0;
     virtual TCompactionTaskData DoGetOptimizationTask() const = 0;
     virtual std::optional<TPortionsChain> DoGetAffectedPortions(const NArrow::TReplaceKey& from, const NArrow::TReplaceKey& to) const = 0;
@@ -366,6 +367,10 @@ public:
 
     ui64 GetWeight() const {
         return DoGetWeight();
+    }
+
+    TInstant GetWeightExpirationInstant() const {
+        return DoGetWeightExpirationInstant();
     }
 
     NArrow::NMerger::TIntervalPositions GetBucketPositions(const std::shared_ptr<arrow::Schema>& pkSchema) const {

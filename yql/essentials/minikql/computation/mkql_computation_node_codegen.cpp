@@ -137,13 +137,11 @@ Function* GenerateCompareFunction(NYql::NCodegen::ICodegen& codegen, const TStri
 
     auto& context = codegen.GetContext();
     const auto valueType = Type::getInt128Ty(context);
-    const auto ptrType = PointerType::getUnqual(valueType);
     const auto returnType = Type::getInt1Ty(context);
     const auto contextType = GetCompContextType(context);
 
-    const auto funcType = codegen.GetEffectiveTarget() != NYql::NCodegen::ETarget::Windows ?
-        FunctionType::get(returnType, {PointerType::getUnqual(contextType), valueType, valueType}, false):
-        FunctionType::get(returnType, {PointerType::getUnqual(contextType), ptrType, ptrType}, false);
+    const auto funcType =
+        FunctionType::get(returnType, {PointerType::getUnqual(contextType), valueType, valueType}, false);
 
     TCodegenContext ctx(codegen);
     ctx.AlwaysInline = true;
@@ -602,12 +600,10 @@ Function* GenerateEqualsFunction(NYql::NCodegen::ICodegen& codegen, const TStrin
 
     auto& context = codegen.GetContext();
     const auto valueType = Type::getInt128Ty(context);
-    const auto ptrType = PointerType::getUnqual(valueType);
     const auto returnType = Type::getInt1Ty(context);
 
-    const auto funcType = codegen.GetEffectiveTarget() != NYql::NCodegen::ETarget::Windows ?
-        FunctionType::get(returnType, {valueType, valueType}, false):
-        FunctionType::get(returnType, {ptrType, ptrType}, false);
+    const auto funcType =
+        FunctionType::get(returnType, {valueType, valueType}, false);
 
     TCodegenContext ctx(codegen);
     ctx.AlwaysInline = true;
@@ -733,12 +729,10 @@ Function* GenerateHashFunction(NYql::NCodegen::ICodegen& codegen, const TString&
 
     auto& context = codegen.GetContext();
     const auto valueType = Type::getInt128Ty(context);
-    const auto ptrType = PointerType::getUnqual(valueType);
     const auto returnType = Type::getInt64Ty(context);
 
-    const auto funcType = codegen.GetEffectiveTarget() != NYql::NCodegen::ETarget::Windows ?
-        FunctionType::get(returnType, {valueType}, false):
-        FunctionType::get(returnType, {ptrType}, false);
+    const auto funcType =
+        FunctionType::get(returnType, {valueType}, false);
 
     TCodegenContext ctx(codegen);
     ctx.AlwaysInline = true;
@@ -1069,9 +1063,8 @@ Function* TExternalCodegeneratorRootNode::GenerateGetValue(NYql::NCodegen::ICode
     const auto valueType = Type::getInt128Ty(context);
     const auto contextType = GetCompContextType(context);
 
-    const auto funcType = codegen.GetEffectiveTarget() != NYql::NCodegen::ETarget::Windows ?
-        FunctionType::get(valueType, {PointerType::getUnqual(contextType)}, false):
-        FunctionType::get(Type::getVoidTy(context), {PointerType::getUnqual(valueType), PointerType::getUnqual(contextType)}, false);
+    const auto funcType =
+        FunctionType::get(valueType, {PointerType::getUnqual(contextType)}, false);
 
     TCodegenContext ctx(codegen);
     ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
@@ -1079,25 +1072,13 @@ Function* TExternalCodegeneratorRootNode::GenerateGetValue(NYql::NCodegen::ICode
     DISubprogramAnnotator annotator(ctx, ctx.Func);
 
     auto args = ctx.Func->arg_begin();
-    if (codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows) {
-        auto& firstArg = *args++;
-        firstArg.addAttr(Attribute::StructRet);
-        firstArg.addAttr(Attribute::NoAlias);
-    }
-
     auto main = BasicBlock::Create(context, "main", ctx.Func);
     ctx.Ctx = &*args;
     ctx.Ctx->addAttr(Attribute::NonNull);
 
     const auto get = CreateGetValue(ctx, main);
 
-    if (codegen.GetEffectiveTarget() != NYql::NCodegen::ETarget::Windows) {
-        ReturnInst::Create(context, get, main);
-    } else {
-        new StoreInst(get, &*--args, main);
-        ReturnInst::Create(context, main);
-    }
-
+    ReturnInst::Create(context, get, main);
     return ctx.Func;
 }
 
@@ -1110,8 +1091,7 @@ Function* TExternalCodegeneratorRootNode::GenerateSetValue(NYql::NCodegen::ICode
 
     const auto intType = Type::getInt128Ty(context);
     const auto contextType = GetCompContextType(context);
-    const auto valueType = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-        (Type*)PointerType::getUnqual(intType) : (Type*)intType;
+    const auto valueType = (Type*)intType;
 
     const auto funcType = FunctionType::get(Type::getVoidTy(context), {PointerType::getUnqual(contextType), valueType}, false);
     TCodegenContext ctx(codegen);
@@ -1127,12 +1107,7 @@ Function* TExternalCodegeneratorRootNode::GenerateSetValue(NYql::NCodegen::ICode
 
     const auto valueArg = &*++args;
 
-    if (codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows) {
-        const auto value = new LoadInst(valueArg->getType(), valueArg, "load_value", main);
-        CreateSetValue(ctx, main, value);
-    } else {
-        CreateSetValue(ctx, main, valueArg);
-    }
+    CreateSetValue(ctx, main, valueArg);
     ReturnInst::Create(context, main);
     return ctx.Func;
 }
@@ -1436,7 +1411,7 @@ template<> Type* GetTypeFor<double>(LLVMContext &context) { return Type::getDoub
 
 void AddRefBoxed(Value* value, const TCodegenContext& ctx, BasicBlock*& block) {
     auto& context = ctx.Codegen.GetContext();
-    const auto load = value->getType()->isPointerTy() ? new LoadInst(value->getType(), value, "load", block) : value;
+    const auto load = value->getType()->isPointerTy() ? new LoadInst(Type::getInt128Ty(context), value, "load", block) : value;
     const auto half = CastInst::Create(Instruction::Trunc, load, Type::getInt64Ty(context), "half", block);
     const auto counterType = Type::getInt32Ty(context);
     const auto type = StructType::get(context, {PointerType::getUnqual(StructType::get(context)), counterType, Type::getInt16Ty(context)});
@@ -1468,7 +1443,7 @@ void AddRefBoxed(Value* value, const TCodegenContext& ctx, BasicBlock*& block) {
 
 void UnRefBoxed(Value* value, const TCodegenContext& ctx, BasicBlock*& block) {
     auto& context = ctx.Codegen.GetContext();
-    const auto load = value->getType()->isPointerTy() ? new LoadInst(value->getType(), value, "load", block) : value;
+    const auto load = value->getType()->isPointerTy() ? new LoadInst(Type::getInt128Ty(context), value, "load", block) : value;
     const auto half = CastInst::Create(Instruction::Trunc, load, Type::getInt64Ty(context), "half", block);
     const auto counterType = Type::getInt32Ty(context);
     const auto type = StructType::get(context, {PointerType::getUnqual(StructType::get(context)), counterType, Type::getInt16Ty(context)});
@@ -1511,7 +1486,7 @@ void UnRefBoxed(Value* value, const TCodegenContext& ctx, BasicBlock*& block) {
 
 void CleanupBoxed(Value* value, const TCodegenContext& ctx, BasicBlock*& block) {
     auto& context = ctx.Codegen.GetContext();
-    const auto load = value->getType()->isPointerTy() ? new LoadInst(value->getType(), value, "load", block) : value;
+    const auto load = value->getType()->isPointerTy() ? new LoadInst(Type::getInt128Ty(context), value, "load", block) : value;
     const auto half = CastInst::Create(Instruction::Trunc, load, Type::getInt64Ty(context), "half", block);
     const auto counterType = Type::getInt32Ty(context);
     const auto type = StructType::get(context, {PointerType::getUnqual(StructType::get(context)), counterType, Type::getInt16Ty(context)});
@@ -1763,13 +1738,12 @@ void SafeUnRefUnboxedOne(Value* pointer, const TCodegenContext& ctx, BasicBlock*
 }
 
 void SafeUnRefUnboxedArray(Value* pointer, ArrayType* arrayType, const TCodegenContext& ctx, BasicBlock*& block) {
-    auto itemType = arrayType->getElementType();
     const auto indexType = Type::getInt64Ty(ctx.Codegen.GetContext());
-    Value* zeros = UndefValue::get(itemType);
+    Value* zeros = UndefValue::get(arrayType);
     for (ui32 idx = 0U; idx < arrayType->getNumElements(); ++idx) {
-        const auto item = GetElementPtrInst::CreateInBounds(itemType, pointer, { ConstantInt::get(indexType, 0), ConstantInt::get(indexType, idx) }, (TString("item_") += ToString(idx)).c_str(), block);
+        const auto item = GetElementPtrInst::CreateInBounds(arrayType, pointer, { ConstantInt::get(indexType, 0), ConstantInt::get(indexType, idx) }, (TString("item_") += ToString(idx)).c_str(), block);
         UnRefUnboxed(item, ctx, block);
-        zeros = InsertValueInst::Create(zeros, ConstantInt::get(itemType->getArrayElementType(), 0), {idx}, (TString("zero_") += ToString(idx)).c_str(), block);
+        zeros = InsertValueInst::Create(zeros, ConstantInt::get(arrayType->getArrayElementType(), 0), {idx}, (TString("zero_") += ToString(idx)).c_str(), block);
     }
     new StoreInst(zeros, pointer, block);
 }
@@ -1893,20 +1867,10 @@ Value* MakeVariant(Value* item, Value* variant, const TCodegenContext& ctx, Basi
         const auto factory = ctx.GetFactory();
         const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::CreateBoxedVariantHolder));
 
-        if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-            const auto signature = FunctionType::get(item->getType(), {factory->getType(), item->getType(), variant->getType()}, false);
-            const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
-            const auto output = CallInst::Create(signature, creator, {factory, item, variant}, "output", block);
-            result->addIncoming(output, block);
-        } else {
-            const auto place = new AllocaInst(item->getType(), 0U, "place", block);
-            new StoreInst(item, place, block);
-            const auto signature = FunctionType::get(Type::getVoidTy(context), {factory->getType(), place->getType(), place->getType(), variant->getType()}, false);
-            const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
-            CallInst::Create(signature, creator, {factory, place, place, variant}, "", block);
-            const auto output = new LoadInst(item->getType(), place, "output", block);
-            result->addIncoming(output, block);
-        }
+        const auto signature = FunctionType::get(item->getType(), {factory->getType(), item->getType(), variant->getType()}, false);
+        const auto creator = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(signature), "creator", block);
+        const auto output = CallInst::Create(signature, creator, {factory, item, variant}, "output", block);
+        result->addIncoming(output, block);
 
         BranchInst::Create(done, block);
     }
@@ -1926,9 +1890,8 @@ Value* GetNodeValue(IComputationNode* node, const TCodegenContext& ctx, BasicBlo
 
     const auto valueType = Type::getInt128Ty(context);
     const auto retPtr = new AllocaInst(valueType, 0U, "return_ptr", &ctx.Func->getEntryBlock().back());
-    const auto funType = ctx.Codegen.GetEffectiveTarget() != NYql::NCodegen::ETarget::Windows ?
-        FunctionType::get(Type::getVoidTy(context), {retPtr->getType(), nodeThis->getType(), ctx.Ctx->getType()}, false):
-        FunctionType::get(Type::getVoidTy(context), {nodeThis->getType(), retPtr->getType(), ctx.Ctx->getType()}, false);
+    const auto funType =
+        FunctionType::get(Type::getVoidTy(context), {retPtr->getType(), nodeThis->getType(), ctx.Ctx->getType()}, false);
     const auto ptrFunType = PointerType::getUnqual(funType);
     const auto tableType = PointerType::getUnqual(ptrFunType);
     const auto nodeVTable = CastInst::Create(Instruction::IntToPtr, ptr, PointerType::getUnqual(tableType), "node_vtable", block);
@@ -1937,11 +1900,7 @@ Value* GetNodeValue(IComputationNode* node, const TCodegenContext& ctx, BasicBlo
     const auto elem = GetElementPtrInst::CreateInBounds(ptrFunType, table, {ConstantInt::get(Type::getInt64Ty(context), GetMethodIndex(&IComputationNode::GetValue))}, "element", block);
     const auto func = new LoadInst(ptrFunType, elem, "func", false, block);
 
-    if (ctx.Codegen.GetEffectiveTarget() != NYql::NCodegen::ETarget::Windows) {
-        CallInst::Create(funType, func, {retPtr, nodeThis, ctx.Ctx}, "", block);
-    } else {
-        CallInst::Create(funType, func, {nodeThis, retPtr, ctx.Ctx}, "", block);
-    }
+    CallInst::Create(funType, func, {retPtr, nodeThis, ctx.Ctx}, "", block);
 
     ValueRelease(node->GetRepresentation(), retPtr, ctx, block);
     const auto result = new LoadInst(valueType, retPtr, "return", false, block);
@@ -1961,9 +1920,9 @@ void GetNodeValue(Value* value, IComputationNode* node, const TCodegenContext& c
     const auto ptrType = PointerType::getUnqual(StructType::get(context));
     const auto nodeThis = CastInst::Create(Instruction::IntToPtr, ptr, ptrType, "node_this", block);
 
-    const auto funType = ctx.Codegen.GetEffectiveTarget() != NYql::NCodegen::ETarget::Windows ?
-        FunctionType::get(Type::getVoidTy(context), {value->getType(), nodeThis->getType(), ctx.Ctx->getType()}, false):
-        FunctionType::get(Type::getVoidTy(context), {nodeThis->getType(), value->getType(), ctx.Ctx->getType()}, false);
+    const auto funType =
+        FunctionType::get(Type::getVoidTy(context), {value->getType(), nodeThis->getType(), ctx.Ctx->getType()}, false);
+
     const auto ptrFunType = PointerType::getUnqual(funType);
     const auto tableType = PointerType::getUnqual(ptrFunType);
     const auto nodeVTable = CastInst::Create(Instruction::IntToPtr, ptr, PointerType::getUnqual(tableType), "node_vtable", block);
@@ -1972,11 +1931,7 @@ void GetNodeValue(Value* value, IComputationNode* node, const TCodegenContext& c
     const auto elem = GetElementPtrInst::CreateInBounds(ptrFunType, table, {ConstantInt::get(Type::getInt64Ty(context), GetMethodIndex(&IComputationNode::GetValue))}, "element", block);
     const auto func = new LoadInst(ptrFunType, elem, "func", false, block);
 
-    if (ctx.Codegen.GetEffectiveTarget() != NYql::NCodegen::ETarget::Windows) {
-        CallInst::Create(funType, func, {value, nodeThis, ctx.Ctx}, "", block);
-    } else {
-        CallInst::Create(funType, func, {nodeThis, value, ctx.Ctx}, "", block);
-    }
+    CallInst::Create(funType, func, {value, nodeThis, ctx.Ctx}, "", block);
 }
 
 ICodegeneratorInlineWideNode::TGenerateResult GetNodeValues(IComputationWideFlowNode* node, const TCodegenContext& ctx, BasicBlock*& block) {
@@ -1990,17 +1945,9 @@ Value* GenNewArray(const TCodegenContext& ctx, Value* size, Value* items, BasicB
     const auto fact = ctx.GetFactory();
     const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::CreateDirectArrayHolder));
     const auto valueType = Type::getInt128Ty(context);
-    if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-        const auto funType = FunctionType::get(valueType, {fact->getType(), size->getType(), items->getType()}, false);
-        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-        return CallInst::Create(funType, funcPtr, {fact, size, items}, "array", block);
-    } else {
-        const auto resultPtr = new AllocaInst(valueType, 0U, "return", block);
-        const auto funType = FunctionType::get(Type::getVoidTy(context), {fact->getType(), resultPtr->getType(), size->getType(), items->getType()}, false);
-        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
-        CallInst::Create(funType, funcPtr, {fact, resultPtr, size, items}, "", block);
-        return new LoadInst(valueType, resultPtr, "array", block);
-    }
+    const auto funType = FunctionType::get(valueType, {fact->getType(), size->getType(), items->getType()}, false);
+    const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funType), "function", block);
+    return CallInst::Create(funType, funcPtr, {fact, size, items}, "array", block);
 }
 
 Value* GetMemoryUsed(ui64 limit, const TCodegenContext& ctx, BasicBlock* block) {
@@ -2064,16 +2011,6 @@ Value* CheckAdjustedMemLimit(ui64 limit, Value* init, const TCodegenContext& ctx
 template Value* CheckAdjustedMemLimit<false>(ui64 limit, Value* init, const TCodegenContext& ctx, BasicBlock*& block);
 template Value* CheckAdjustedMemLimit<true>(ui64 limit, Value* init, const TCodegenContext& ctx, BasicBlock*& block);
 
-Value* WrapArgumentForWindows(Value* arg, const TCodegenContext& ctx, BasicBlock* block) {
-    if (ctx.Codegen.GetEffectiveTarget() != NYql::NCodegen::ETarget::Windows) {
-        return arg;
-    }
-
-    const auto newArg = new AllocaInst(arg->getType(), 0, "argument", block);
-    new StoreInst(arg, newArg, block);
-    return newArg;
-}
-
 Value* CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Type* returnType, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block) {
     auto& context = codegen.GetContext();
 
@@ -2101,9 +2038,8 @@ void CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Value* output, Value* 
     const auto ptrStructType = PointerType::getUnqual(StructType::get(context));
     const auto boxed = CastInst::Create(Instruction::IntToPtr, data, ptrStructType, "boxed", block);
 
-    const auto funType = (codegen.GetEffectiveTarget() != NYql::NCodegen::ETarget::Windows) ?
-        FunctionType::get(Type::getVoidTy(context), {output->getType(), boxed->getType()}, false):
-        FunctionType::get(Type::getVoidTy(context), {boxed->getType(), output->getType()}, false);
+    const auto funType =
+        FunctionType::get(Type::getVoidTy(context), {output->getType(), boxed->getType()}, false);
     const auto ptrFunType = PointerType::getUnqual(funType);
     const auto tableType = PointerType::getUnqual(ptrFunType);
     const auto vTable = CastInst::Create(Instruction::IntToPtr, data, PointerType::getUnqual(tableType), "vtable", block);
@@ -2112,11 +2048,7 @@ void CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Value* output, Value* 
     const auto elem = GetElementPtrInst::CreateInBounds(ptrFunType, table, {ConstantInt::get(Type::getInt64Ty(context), GetMethodPtrIndex(methodPtr))}, "element", block);
     const auto func = new LoadInst(ptrFunType, elem, "func", false, block);
 
-    if (codegen.GetEffectiveTarget() != NYql::NCodegen::ETarget::Windows) {
-        CallInst::Create(funType, func, {output, boxed}, "", block);
-    } else {
-        CallInst::Create(funType, func, {boxed, output}, "", block);
-    }
+    CallInst::Create(funType, func, {output, boxed}, "", block);
 }
 
 void CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Value* output, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block, Value* argument) {
@@ -2126,9 +2058,8 @@ void CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Value* output, Value* 
     const auto ptrStructType = PointerType::getUnqual(StructType::get(context));
     const auto boxed = CastInst::Create(Instruction::IntToPtr, data, ptrStructType, "boxed", block);
 
-    const auto funType = (codegen.GetEffectiveTarget() != NYql::NCodegen::ETarget::Windows) ?
-        FunctionType::get(Type::getVoidTy(context), {output->getType(), boxed->getType(), argument->getType()}, false):
-        FunctionType::get(Type::getVoidTy(context), {boxed->getType(), output->getType(), argument->getType()}, false);
+    const auto funType =
+        FunctionType::get(Type::getVoidTy(context), {output->getType(), boxed->getType(), argument->getType()}, false);
     const auto ptrFunType = PointerType::getUnqual(funType);
     const auto tableType = PointerType::getUnqual(ptrFunType);
     const auto vTable = CastInst::Create(Instruction::IntToPtr, data, PointerType::getUnqual(tableType), "vtable", block);
@@ -2137,11 +2068,7 @@ void CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Value* output, Value* 
     const auto elem = GetElementPtrInst::CreateInBounds(ptrFunType, table, {ConstantInt::get(Type::getInt64Ty(context), GetMethodPtrIndex(methodPtr))}, "element", block);
     const auto func = new LoadInst(ptrFunType, elem, "func", false, block);
 
-    if (codegen.GetEffectiveTarget() != NYql::NCodegen::ETarget::Windows) {
-        CallInst::Create(funType, func, {output, boxed, argument}, "", block);
-    } else {
-        CallInst::Create(funType, func, {boxed, output, argument}, "", block);
-    }
+    CallInst::Create(funType, func, {output, boxed, argument}, "", block);
 }
 
 Value* CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Type* returnType, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block, Value* argument) {
@@ -2171,9 +2098,8 @@ void CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Value* output, Value* 
     const auto ptrStructType = PointerType::getUnqual(StructType::get(context));
     const auto boxed = CastInst::Create(Instruction::IntToPtr, data, ptrStructType, "boxed", block);
 
-    const auto funType = (codegen.GetEffectiveTarget() != NYql::NCodegen::ETarget::Windows) ?
-        FunctionType::get(Type::getVoidTy(context), {output->getType(), boxed->getType(), arg1->getType(), arg2->getType()}, false):
-        FunctionType::get(Type::getVoidTy(context), {boxed->getType(), output->getType(), arg1->getType(), arg2->getType()}, false);
+    const auto funType =
+        FunctionType::get(Type::getVoidTy(context), {output->getType(), boxed->getType(), arg1->getType(), arg2->getType()}, false);
     const auto ptrFunType = PointerType::getUnqual(funType);
     const auto tableType = PointerType::getUnqual(ptrFunType);
     const auto vTable = CastInst::Create(Instruction::IntToPtr, data, PointerType::getUnqual(tableType), "vtable", block);
@@ -2182,11 +2108,7 @@ void CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Value* output, Value* 
     const auto elem = GetElementPtrInst::CreateInBounds(ptrFunType, table, {ConstantInt::get(Type::getInt64Ty(context), GetMethodPtrIndex(methodPtr))}, "element", block);
     const auto func = new LoadInst(ptrFunType, elem, "func", false, block);
 
-    if (codegen.GetEffectiveTarget() != NYql::NCodegen::ETarget::Windows) {
-        CallInst::Create(funType, func, {output, boxed, arg1, arg2}, "", block);
-    } else {
-        CallInst::Create(funType, func, {boxed, output, arg1, arg2}, "", block);
-    }
+    CallInst::Create(funType, func, {output, boxed, arg1, arg2}, "", block);
 }
 
 Value* CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Type* returnType, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block, Value* arg1, Value* arg2) {
@@ -2212,59 +2134,19 @@ Value* CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Type* returnType, Va
 Value* CallUnaryUnboxedValueFunctionImpl(uintptr_t methodPtr, Type* result, Value* arg, NYql::NCodegen::ICodegen& codegen, BasicBlock* block) {
     auto& context = codegen.GetContext();
     const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), methodPtr);
-    if (NYql::NCodegen::ETarget::Windows != codegen.GetEffectiveTarget()) {
-        const auto funType = FunctionType::get(result, {arg->getType()}, false);
-        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "ptr", block);
-        const auto call = CallInst::Create(funType, funcPtr, {arg}, "call", block);
-        return call;
-    } else {
-        const auto ptrArg = new AllocaInst(arg->getType(), 0U, "arg", block);
-        new StoreInst(arg, ptrArg, block);
-
-        if (Type::getInt128Ty(context) == result) {
-            const auto ptrResult = new AllocaInst(result, 0U, "result", block);
-            const auto funType = FunctionType::get(Type::getVoidTy(context), {ptrResult->getType(), ptrArg->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "ptr", block);
-            CallInst::Create(funType, funcPtr, {ptrResult, ptrArg}, "", block);
-            const auto res = new LoadInst(result, ptrResult, "res", block);
-            return res;
-        } else {
-            const auto funType = FunctionType::get(result, {ptrArg->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "ptr", block);
-            const auto call = CallInst::Create(funType, funcPtr, {ptrArg}, "call", block);
-            return call;
-        }
-    }
+    const auto funType = FunctionType::get(result, {arg->getType()}, false);
+    const auto funcPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "ptr", block);
+    const auto call = CallInst::Create(funType, funcPtr, {arg}, "call", block);
+    return call;
 }
 
 Value* CallBinaryUnboxedValueFunctionImpl(uintptr_t methodPtr, Type* result, Value* left, Value* right, NYql::NCodegen::ICodegen& codegen, BasicBlock* block) {
     auto& context = codegen.GetContext();
     const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), methodPtr);
-    if (NYql::NCodegen::ETarget::Windows != codegen.GetEffectiveTarget()) {
-        const auto funType = FunctionType::get(result, {left->getType(), right->getType()}, false);
-        const auto funcPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "ptr", block);
-        const auto call = CallInst::Create(funType, funcPtr, {left, right}, "call", block);
-        return call;
-    } else {
-        const auto ptrLeft = new AllocaInst(left->getType(), 0U, "left", block);
-        const auto ptrRight = new AllocaInst(right->getType(), 0U, "right", block);
-        new StoreInst(left, ptrLeft, block);
-        new StoreInst(right, ptrRight, block);
-
-        if (Type::getInt128Ty(context) == result) {
-            const auto ptrResult = new AllocaInst(result, 0U, "result", block);
-            const auto funType = FunctionType::get(Type::getVoidTy(context), {ptrResult->getType(), ptrLeft->getType(), ptrRight->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "ptr", block);
-            CallInst::Create(funType, funcPtr, {ptrResult, ptrLeft, ptrRight}, "", block);
-            const auto res = new LoadInst(result, ptrResult, "res", block);
-            return res;
-        } else {
-            const auto funType = FunctionType::get(result, {ptrLeft->getType(), ptrRight->getType()}, false);
-            const auto funcPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "ptr", block);
-            const auto call = CallInst::Create(funType, funcPtr, {ptrLeft, ptrRight}, "call", block);
-            return call;
-        }
-    }
+    const auto funType = FunctionType::get(result, {left->getType(), right->getType()}, false);
+    const auto funcPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "ptr", block);
+    const auto call = CallInst::Create(funType, funcPtr, {left, right}, "call", block);
+    return call;
 }
 
 Y_NO_INLINE Value* TDecoratorCodegeneratorNodeBase::CreateGetValueImpl(IComputationNode* node,
@@ -2541,19 +2423,10 @@ Y_NO_INLINE Value* TMutableCodegeneratorFallbackNodeBase::DoGenerateGetValueImpl
     const auto ptrType = PointerType::getUnqual(StructType::get(context));
     const auto doFunc = ConstantInt::get(Type::getInt64Ty(context), methodPtr);
     const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), thisPtr), ptrType, "self", block);
-    if (NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget()) {
-        const auto funType = FunctionType::get(type, {self->getType(), ctx.Ctx->getType()}, false);
-        const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "function", block);
-        const auto value = CallInst::Create(funType, doFuncPtr, {self, ctx.Ctx}, "value", block);
-        return value;
-    } else {
-        const auto resultPtr = new AllocaInst(type, 0U, "return", block);
-        const auto funType = FunctionType::get(Type::getVoidTy(context), {self->getType(), resultPtr->getType(), ctx.Ctx->getType()}, false);
-        const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "function", block);
-        CallInst::Create(funType, doFuncPtr, {self, resultPtr, ctx.Ctx}, "", block);
-        const auto value = new LoadInst(type, resultPtr, "value", block);
-        return value;
-    }
+    const auto funType = FunctionType::get(type, {self->getType(), ctx.Ctx->getType()}, false);
+    const auto doFuncPtr = CastInst::Create(Instruction::IntToPtr, doFunc, PointerType::getUnqual(funType), "function", block);
+    const auto value = CallInst::Create(funType, doFuncPtr, {self, ctx.Ctx}, "value", block);
+    return value;
 }
 
 Y_NO_INLINE Function* TCodegeneratorRootNodeBase::GenerateGetValueImpl(
@@ -2567,9 +2440,8 @@ Y_NO_INLINE Function* TCodegeneratorRootNodeBase::GenerateGetValueImpl(
     const auto valueType = Type::getInt128Ty(context);
     const auto contextType = GetCompContextType(context);
 
-    const auto funcType = codegen.GetEffectiveTarget() != NYql::NCodegen::ETarget::Windows ?
-        FunctionType::get(valueType, {PointerType::getUnqual(contextType)}, false):
-        FunctionType::get(Type::getVoidTy(context) , {PointerType::getUnqual(valueType), PointerType::getUnqual(contextType)}, false);
+    const auto funcType =
+        FunctionType::get(valueType, {PointerType::getUnqual(contextType)}, false);
 
     TCodegenContext ctx(codegen);
     ctx.Func = cast<Function>(module.getOrInsertFunction(name.c_str(), funcType).getCallee());
@@ -2577,25 +2449,13 @@ Y_NO_INLINE Function* TCodegeneratorRootNodeBase::GenerateGetValueImpl(
     DISubprogramAnnotator annotator(ctx, ctx.Func);
 
     auto args = ctx.Func->arg_begin();
-    if (codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows) {
-        auto& firstArg = *args++;
-        firstArg.addAttr(Attribute::StructRet);
-        firstArg.addAttr(Attribute::NoAlias);
-    }
-
     auto main = BasicBlock::Create(context, "main", ctx.Func);
     ctx.Ctx = &*args;
     ctx.Ctx->addAttr(Attribute::NonNull);
 
     const auto get = gen->CreateGetValue(ctx, main);
 
-    if (codegen.GetEffectiveTarget() != NYql::NCodegen::ETarget::Windows) {
-        ReturnInst::Create(context, get, main);
-    } else {
-        new StoreInst(get, &*--args, main);
-        ReturnInst::Create(context, main);
-    }
-
+    ReturnInst::Create(context, get, main);
     return ctx.Func;
 }
 

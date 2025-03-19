@@ -280,7 +280,7 @@ class KikimrSqsTestBase(object):
         config_generator = KikimrConfigGenerator(
             erasure=cls.erasure,
             use_in_memory_pdisks=cls.use_in_memory_pdisks,
-            additional_log_configs={'SQS': LogLevels.DEBUG},
+            additional_log_configs={'SQS': LogLevels.TRACE},
             enable_sqs=True,
         )
         config_generator.yaml_config['sqs_config']['root'] = cls.sqs_root
@@ -408,17 +408,20 @@ class KikimrSqsTestBase(object):
         ]
         return any_of(*urls_matchers)
 
-    def _create_queue_and_assert(self, queue_name, is_fifo=False, use_http=False, attributes=None, shards=None, retries=3):
+    def _create_queue_and_assert(self, queue_name, is_fifo=False, use_http=False, attributes=None, shards=None, retries=3, tags=None):
         self.queue_url = None
         if attributes is None:
-            attributes = dict()
+            attributes = {}
+        if tags is None:
+            tags = {}
         logging.debug('Create queue. Name: {}. Attributes: {}. Use http: {}. Is fifo: {}'.format(queue_name, attributes, use_http, is_fifo))
         assert (len(attributes.keys()) == 0 or use_http), 'Attributes are supported only for http queue creation'
+        assert (len(tags.keys()) == 0 or use_http), 'Tags are supported only for http queue creation'
         assert (shards is None or not use_http), 'Custom shards number is only supported in non-http mode'
         while retries:
             retries -= 1
             try:
-                self.queue_url = self._sqs_api.create_queue(queue_name, is_fifo=is_fifo, attributes=attributes)
+                self.queue_url = self._sqs_api.create_queue(queue_name, is_fifo=is_fifo, attributes=attributes, tags=tags)
             except (RuntimeError, yatest.common.ExecutionError) as ex:
                 logging.debug("Got error: {}. Retrying creation request".format(ex))
                 if retries:

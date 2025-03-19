@@ -2,7 +2,7 @@
 
 #include <ydb/public/sdk/cpp/client/impl/ydb_internal/internal_header.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 constexpr ui64 TCP_KEEPALIVE_IDLE = 30; // The time the connection needs to remain idle
                                         // before TCP starts sending keepalive probes, seconds

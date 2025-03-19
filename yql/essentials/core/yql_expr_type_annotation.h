@@ -319,6 +319,7 @@ IGraphTransformer::TStatus NormalizeKeyValueTuples(const TExprNode::TPtr& input,
 std::optional<ui32> GetFieldPosition(const TMultiExprType& tupleType, const TStringBuf& field);
 std::optional<ui32> GetFieldPosition(const TTupleExprType& tupleType, const TStringBuf& field);
 std::optional<ui32> GetFieldPosition(const TStructExprType& structType, const TStringBuf& field);
+std::optional<ui32> GetWideBlockFieldPosition(const TMultiExprType& tupleType, const TStringBuf& field);
 
 bool ExtractPgType(const TTypeAnnotationNode* type, ui32& pgType, bool& convertToPg, TPositionHandle pos, TExprContext& ctx);
 bool HasContextFuncs(const TExprNode& input);
@@ -352,9 +353,5 @@ const TStringBuf BlockLengthColumnName = "_yql_block_length";
 TStringBuf NormalizeCallableName(TStringBuf name);
 
 void CheckExpectedTypeAndColumnOrder(const TExprNode& node, TExprContext& ctx, TTypeAnnotationContext& typesCtx);
-
-namespace NBlockStreamIO {
-    constexpr bool WideFromBlocks = false;
-} // namespace NBlockStreamIO
 
 }

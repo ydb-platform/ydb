@@ -1,11 +1,20 @@
-#include <yql/essentials/public/issue/yql_issue.h>
+#pragma once
+
+#include <util/generic/string.h>
+
+namespace NYql {
+    class TIssues;
+}
 
 namespace NYdb::NDump {
 
-bool ValidateViewQuery(const TString& query, NYql::TIssues& issues);
+TString BuildCreateViewQuery(
+    const TString& name, const TString& dbPath, const TString& viewQuery, const TString& backupRoot,
+    NYql::TIssues& issues
+);
 
-TString RewriteAbsolutePath(TStringBuf path, TStringBuf backupRoot, TStringBuf restoreRoot);
+bool RewriteCreateViewQuery(TString& query, const TString& restoreRoot, bool restoreRootIsDatabase,
+    const TString& dbPath, NYql::TIssues& issues
+);
 
-bool RewriteTableRefs(TString& scheme, TStringBuf backupRoot, TStringBuf restoreRoot, NYql::TIssues& issues);
-
-}
+} // NYdb::NDump

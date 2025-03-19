@@ -4,14 +4,9 @@
 #include "client_method_options.h"
 #include "operation.h"
 
+#include <yt/cpp/mapreduce/http/context.h>
+
 namespace NYT {
-
-////////////////////////////////////////////////////////////////////////////////
-
-namespace NHttpClient {
-    class IHttpResponse;
-    using IHttpResponsePtr = std::unique_ptr<IHttpResponse>;
-}
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -205,6 +200,7 @@ public:
         const TGetJobTraceOptions& options = {}) = 0;
 
     // Files
+
     virtual std::unique_ptr<IInputStream> ReadFile(
         const TTransactionId& transactionId,
         const TRichYPath& path,
@@ -334,6 +330,16 @@ public:
         const TGetTablePartitionsOptions& options = {}) = 0;
 
     virtual ui64 GenerateTimestamp() = 0;
+
+    // Batch
+
+    virtual IRawBatchRequestPtr CreateRawBatchRequest() = 0;
+
+    // Other
+
+    virtual IRawClientPtr Clone() = 0;
+
+    virtual IRawClientPtr Clone(const TClientContext& context) = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

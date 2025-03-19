@@ -74,6 +74,10 @@ private:
     // <cmpItem> := '(<cmpOp> <value>)
     NNodes::TMaybeNode<NNodes::TExprBase> ExtractKeyRangeLegacy(NNodes::TExprBase node, TExprContext& ctx) const;
 
+    NNodes::TMaybeNode<NNodes::TExprBase> ExtractQLFilters(NNodes::TExprBase node, TExprContext& ctx) const;
+
+    NNodes::TMaybeNode<NNodes::TExprBase> OptimizeQLFilterType(NNodes::TExprBase node, TExprContext& ctx) const;
+
     NNodes::TMaybeNode<NNodes::TExprBase> FuseReduce(NNodes::TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> FuseReduceWithTrivialMap(NNodes::TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;
@@ -81,6 +85,8 @@ private:
     NNodes::TMaybeNode<NNodes::TExprBase> FuseInnerMap(NNodes::TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> FuseOuterMap(NNodes::TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;
+
+    NNodes::TMaybeNode<NNodes::TExprBase> FuseMapToMapReduce(NNodes::TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;
 
     NNodes::TMaybeNode<NNodes::TExprBase> AssumeConstraints(NNodes::TExprBase node, TExprContext& ctx, const TGetParents& getParents) const;
 
@@ -152,6 +158,7 @@ private:
 
     TMaybe<bool> CanFuseLambdas(const NNodes::TCoLambda& innerLambda, const NNodes::TCoLambda& outerLambda, TExprContext& ctx) const;
 
+    NNodes::TExprBase RebuildKeyFilterAfterPushDown(NNodes::TExprBase filter, size_t usedKeysCount, TExprContext& ctx) const;
 
 private:
     const TYtState::TPtr State_;

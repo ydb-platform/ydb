@@ -173,8 +173,6 @@ public:
     virtual void CreateRun(const TCodegenContext& ctx, BasicBlock*& block, Value* result, Value* args) const = 0;
 };
 
-Value* WrapArgumentForWindows(Value* arg, const TCodegenContext& ctx, BasicBlock* block);
-
 Value* CallBoxedValueVirtualMethodImpl(uintptr_t methodPtr, Type* returnType, Value* value, NYql::NCodegen::ICodegen& codegen, BasicBlock* block);
 
 template<NUdf::TBoxedValueAccessor::EMethod Method>

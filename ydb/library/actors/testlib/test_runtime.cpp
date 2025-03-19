@@ -296,14 +296,25 @@ namespace NActors {
         }
 
         // for threads
-        TMailbox* GetReadyActivation(TWorkerContext& wctx, ui64 revolvingCounter) override {
-            Y_UNUSED(wctx);
+        TMailbox* GetReadyActivation(ui64 revolvingCounter) override {
             Y_UNUSED(revolvingCounter);
             Y_ABORT();
         }
 
         TMailbox* ResolveMailbox(ui32 hint) override {
             return Node->MailboxTable->Get(hint);
+        }
+
+        TMailboxTable* GetMailboxTable() const override {
+            return Node->MailboxTable.Get();
+        }
+
+        ui64 TimePerMailboxTs() const override {
+            return NHPTimer::GetClockRate() * TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX.SecondsFloat();
+        }
+
+        ui32 EventsPerMailbox() const override {
+            return TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
         }
 
         void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie *cookie, TWorkerId workerId) override {
@@ -541,7 +552,7 @@ namespace NActors {
             node->SchedulerPool.Reset(CreateExecutorPoolStub(this, nodeIndex, node, 0));
             node->MailboxTable.Reset(new TMailboxTable());
             node->ActorSystem = MakeActorSystem(nodeIndex, node);
-            node->ExecutorThread.Reset(new TExecutorThread(0, 0, node->ActorSystem.Get(), node->SchedulerPool.Get(), node->MailboxTable.Get(), "TestExecutor"));
+            node->ExecutorThread.Reset(new TExecutorThread(0, node->ActorSystem.Get(), node->SchedulerPool.Get(), "TestExecutor"));
         } else {
             node->ActorSystem = MakeActorSystem(nodeIndex, node);
         }
@@ -1282,7 +1293,7 @@ namespace NActors {
                                         case EEventAction::PROCESS:
                                             UpdateFinalEventsStatsForEachContext(*ev);
                                             SendInternal(ev.Release(), mbox.first.NodeId - FirstNodeId, false);
-                                            if (checkStopConditions(/* perMessage */ true)) {
+                                            if (AllowBreakOnStopCondition && checkStopConditions(/* perMessage */ true)) {
                                                 stopCondition = true;
                                             }
                                             break;
@@ -1711,6 +1722,9 @@ namespace NActors {
         if (!actor) {
             actor = mailbox->FindAlias(localId);
         }
+        if (!actor && node->LocalServicesActors.contains(actorId)) {
+            actor = node->LocalServicesActors[actorId];
+        }
         return actor;
     }
 
@@ -1720,7 +1734,7 @@ namespace NActors {
 
         IHarmonizer* harmonizer = nullptr;
         if (node) {
-            node->Harmonizer.reset(MakeHarmonizer(GetCycleCountFast()));
+            node->Harmonizer = MakeHarmonizer(GetCycleCountFast());
             harmonizer = node->Harmonizer.get();
         }
 
@@ -1952,7 +1966,7 @@ namespace NActors {
                 delete Context->Queue->Pop();
             }
             auto ctx(ActorContext());
-            ctx.ExecutorThread.Send(IEventHandle::Forward(ev, originalSender));
+            ctx.Send(IEventHandle::Forward(ev, originalSender));
             if (!IsSync && Context->Queue->Head()) {
                 SendHead(ctx);
             }
@@ -1961,11 +1975,11 @@ namespace NActors {
     private:
         void SendHead(const TActorContext& ctx) {
             if (!IsSync) {
-                ctx.ExecutorThread.Send(GetForwardedEvent().Release());
+                ctx.Send(GetForwardedEvent().Release());
             } else {
                 while (Context->Queue->Head()) {
                     HasReply = false;
-                    ctx.ExecutorThread.Send(GetForwardedEvent().Release());
+                    ctx.Send(GetForwardedEvent().Release());
                     int count = 100;
                     while (!HasReply && count > 0) {
                         try {

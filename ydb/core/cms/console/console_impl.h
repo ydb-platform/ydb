@@ -114,6 +114,7 @@ private:
             FFunc(TEvConsole::EvDropConfigRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvResolveConfigRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvResolveAllConfigRequest, ForwardToConfigsManager);
+            FFunc(TEvConsole::EvFetchStartupConfigRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvGetConfigSubscriptionRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvGetNodeConfigItemsRequest, ForwardToConfigsManager);
             FFunc(TEvConsole::EvGetNodeConfigRequest, ForwardToConfigsManager);
@@ -179,6 +180,10 @@ public:
         return Config;
     }
 
+    bool HasTenant(const TString& path) const;
+
+    TString GetDomainName() const;
+
 private:
     TDeque<TAutoPtr<IEventHandle>> InitQueue;
     NKikimrConsole::TConfig Config;
@@ -191,8 +196,7 @@ private:
     TActorId NetClassifierUpdaterId;
 
     // For handshake with BSController/distconf
-    TActorId CurrentSenderId;
-    TActorId CurrentPipeServerId;
+    std::array<std::tuple<TActorId, TActorId>, 2> ConfigClients; // distconf -> SenderId, PipeServerId
 };
 
 } // namespace NKikimr::NConsole

@@ -1,5 +1,5 @@
 #include <ydb/library/actors/http/http.h>
-#include <ydb/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 #include <ydb/library/security/util.h>
 #include <ydb/mvp/core/mvp_tokens.h>
 #include <ydb/mvp/core/appdata.h>
@@ -8,6 +8,8 @@
 
 namespace NMVP {
 namespace NOIDC {
+
+using namespace NActors;
 
 THandlerSessionCreateYandex::THandlerSessionCreateYandex(const NActors::TActorId& sender,
                                                          const NHttp::THttpIncomingRequestPtr& request,
@@ -30,7 +32,12 @@ void THandlerSessionCreateYandex::RequestSessionToken(const TString& code) {
     Become(&THandlerSessionCreateYandex::StateWork);
 }
 
-void THandlerSessionCreateYandex::ProcessSessionToken(const TString& sessionToken, const NActors::TActorContext& ctx) {
+void THandlerSessionCreateYandex::ProcessSessionToken(const NJson::TJsonValue& jsonValue) {
+    const NJson::TJsonValue* jsonAccessToken, jsonExpiresIn;
+    if (!jsonValue.GetValuePointer("access_token", &jsonAccessToken)) {
+        return ReplyBadRequestAndPassAway("Wrong OIDC provider response: access_token not found");
+    }
+    TString sessionToken = jsonAccessToken->GetStringRobust();
     std::unique_ptr<NYdbGrpc::TServiceConnection<TSessionService>> connection = CreateGRpcServiceConnection<TSessionService>(Settings.SessionServiceEndpoint);
 
     yandex::cloud::priv::oauth::v1::CreateSessionRequest requestCreate;
@@ -45,8 +52,8 @@ void THandlerSessionCreateYandex::ProcessSessionToken(const TString& sessionToke
     SetHeader(meta, "authorization", token);
     meta.Timeout = TDuration::Seconds(10);
 
-    NActors::TActorSystem* actorSystem = ctx.ActorSystem();
-    NActors::TActorId actorId = ctx.SelfID;
+    NActors::TActorSystem* actorSystem = TActivationContext::ActorSystem();
+    NActors::TActorId actorId = SelfId();
     NYdbGrpc::TResponseCallback<yandex::cloud::priv::oauth::v1::CreateSessionResponse> responseCb =
         [actorId, actorSystem](NYdbGrpc::TGrpcStatus&& status, yandex::cloud::priv::oauth::v1::CreateSessionResponse&& response) -> void {
         if (status.Ok()) {

@@ -3,12 +3,12 @@
 
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 
-#include <ydb/public/sdk/cpp/client/ydb_driver/driver.h>
-#include <ydb/public/sdk/cpp/client/ydb_export/export.h>
-#include <ydb/public/sdk/cpp/client/ydb_import/import.h>
-#include <ydb/public/sdk/cpp/client/ydb_operation/operation.h>
-#include <ydb/public/sdk/cpp/client/ydb_table/table.h>
-#include <ydb/public/sdk/cpp/client/draft/ydb_scripting.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/export/export.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/import/import.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <library/cpp/yson/writer.h>
 
@@ -113,11 +113,10 @@ Y_UNIT_TEST_SUITE(Backup)
 
         auto ob = NTestUtils::GetObjectKeys(bucketName);
         std::sort(ob.begin(), ob.end());
-        UNIT_ASSERT_VALUES_EQUAL(ob.size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(ob.size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(ob[0], "ProducerUuidValueBackup/data_00.csv");
         UNIT_ASSERT_VALUES_EQUAL(ob[1], "ProducerUuidValueBackup/metadata.json");
-        UNIT_ASSERT_VALUES_EQUAL(ob[2], "ProducerUuidValueBackup/permissions.pb");
-        UNIT_ASSERT_VALUES_EQUAL(ob[3], "ProducerUuidValueBackup/scheme.pb");
+        UNIT_ASSERT_VALUES_EQUAL(ob[2], "ProducerUuidValueBackup/scheme.pb");
 
         {
             NImport::TImportFromS3Settings settings;
@@ -149,7 +148,7 @@ Y_UNIT_TEST_SUITE(Backup)
                 auto res = s.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
                 UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
 
-                auto yson = NYdb::FormatResultSetYson(res.GetResultSet(0));
+                TString yson = NYdb::FormatResultSetYson(res.GetResultSet(0));
 
                 const TString& expected = "[[[1u];[\"5b99a330-04ef-4f1a-9b64-ba6d5f44ea01\"];\"5b99a330-04ef-4f1a-9b64-ba6d5f44ea02\"]]";
                 CompareYson(expected, yson);

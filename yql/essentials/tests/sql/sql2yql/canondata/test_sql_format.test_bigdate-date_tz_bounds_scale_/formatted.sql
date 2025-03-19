@@ -1,0 +1,27 @@
+/* postgres can not */
+SELECT
+    CAST(TzDate32('-144169-01-02,Europe/Moscow') AS TzDatetime64),
+    CAST(TzDate32('-144169-01-01,America/Los_Angeles') AS TzDatetime64),
+    CAST(TzDate32('148107-12-31,Europe/Moscow') AS TzDatetime64),
+    CAST(TzDate32('148107-12-31,America/Los_Angeles') AS TzDatetime64),
+    CAST(TzDate32('-144169-01-02,Europe/Moscow') AS TzTimestamp64),
+    CAST(TzDate32('-144169-01-01,America/Los_Angeles') AS TzTimestamp64),
+    CAST(TzDate32('148107-12-31,Europe/Moscow') AS TzTimestamp64),
+    CAST(TzDate32('148107-12-31,America/Los_Angeles') AS TzTimestamp64),
+    CAST(TzDatetime64('-144169-01-02T00:00:00,Europe/Moscow') AS TzDate32),
+    CAST(TzDatetime64('-144169-01-01T00:00:00,America/Los_Angeles') AS TzDate32),
+    CAST(TzDatetime64('148108-01-01T02:59:59,Europe/Moscow') AS TzDate32),
+    CAST(TzDatetime64('148107-12-31T15:59:59,America/Los_Angeles') AS TzDate32),
+    CAST(TzDatetime64('-144169-01-01T02:30:17,Europe/Moscow') AS TzTimestamp64),
+    CAST(TzDatetime64('-144170-12-31T16:07:02,America/Los_Angeles') AS TzTimestamp64),
+    CAST(TzDatetime64('148108-01-01T02:59:59,Europe/Moscow') AS TzTimestamp64),
+    CAST(TzDatetime64('148107-12-31T15:59:59,America/Los_Angeles') AS TzTimestamp64),
+    CAST(TzTimestamp64('-144169-01-02T00:00:00.000000,Europe/Moscow') AS TzDate32),
+    CAST(TzTimestamp64('-144169-01-01T00:00:00.000000,America/Los_Angeles') AS TzDate32),
+    CAST(TzTimestamp64('148108-01-01T02:59:59.999999,Europe/Moscow') AS TzDate32),
+    CAST(TzTimestamp64('148107-12-31T15:59:59.999999,America/Los_Angeles') AS TzDate32),
+    CAST(TzTimestamp64('-144169-01-01T02:30:17.000000,Europe/Moscow') AS TzDatetime64),
+    CAST(TzTimestamp64('-144170-12-31T16:07:02.000000,America/Los_Angeles') AS TzDatetime64),
+    CAST(TzTimestamp64('148108-01-01T02:59:59.999999,Europe/Moscow') AS TzDatetime64),
+    CAST(TzTimestamp64('148107-12-31T15:59:59.999999,America/Los_Angeles') AS TzDatetime64)
+;

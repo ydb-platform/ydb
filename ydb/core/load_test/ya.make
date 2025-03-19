@@ -9,7 +9,7 @@ PEERDIR(
     ydb/core/blobstorage/backpressure
     ydb/core/blobstorage/base
     ydb/core/blobstorage/pdisk
-    ydb/core/control
+    ydb/core/control/lib
     ydb/core/keyvalue
     ydb/core/jaeger_tracing
     ydb/core/kqp/common
@@ -20,8 +20,8 @@ PEERDIR(
     ydb/library/workload/kv
     ydb/library/workload/stock
     ydb/public/lib/base
-    ydb/public/lib/operation_id
-    ydb/public/sdk/cpp/client/ydb_proto
+    ydb/public/sdk/cpp/src/library/operation_id
+    ydb/public/sdk/cpp/src/client/proto
     ydb/services/kesus
     ydb/services/metadata
     ydb/services/persqueue_cluster_discovery

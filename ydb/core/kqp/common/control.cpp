@@ -1,7 +1,7 @@
 #include "control.h"
 
 #include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 
 namespace {
 

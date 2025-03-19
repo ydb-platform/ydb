@@ -44,7 +44,7 @@ struct TKqpPhyTxSettings {
 };
 
 constexpr TStringBuf KqpReadRangesSourceName = "KqpReadRangesSource";
-constexpr TStringBuf KqpTableSinkName = "KqpTableSinkName";
+constexpr TStringBuf KqpTableSinkName = "KqpTableSink";
 
 enum class EStreamLookupStrategyType {
     Unspecified,
@@ -80,12 +80,14 @@ struct TKqpReadTableSettings {
     static constexpr TStringBuf SequentialSettingName = "Sequential";
     static constexpr TStringBuf ForcePrimaryName = "ForcePrimary";
     static constexpr TStringBuf GroupByFieldNames = "GroupByFieldNames";
+    static constexpr TStringBuf TabletIdName = "TabletId";
 
     TVector<TString> SkipNullKeys;
     TExprNode::TPtr ItemsLimit;
     bool Reverse = false;
     bool Sorted = false;
     TMaybe<ui64> SequentialInFlight;
+    TMaybe<ui64> TabletId;
     bool ForcePrimary = false;
 
     void AddSkipNullKey(const TString& key);
@@ -104,21 +106,35 @@ struct TKqpReadTableSettings {
 struct TKqpUpsertRowsSettings {
     static constexpr TStringBuf InplaceSettingName = "Inplace";
     static constexpr TStringBuf IsUpdateSettingName = "IsUpdate";
+    static constexpr TStringBuf IsConditionalUpdateSettingName = "IsConditionalUpdate";
     static constexpr TStringBuf AllowInconsistentWritesSettingName = "AllowInconsistentWrites";
     static constexpr TStringBuf ModeSettingName = "Mode";
 
     bool Inplace = false;
     bool IsUpdate = false;
+    bool IsConditionalUpdate = false;
     bool AllowInconsistentWrites = false;
     TString Mode = "";
 
     void SetInplace() { Inplace = true; }
     void SetIsUpdate() { IsUpdate = true; }
+    void SetIsConditionalUpdate() { IsConditionalUpdate = true; }
     void SetAllowInconsistentWrites() { AllowInconsistentWrites = true; }
     void SetMode(TStringBuf mode) { Mode = mode; }
 
     static TKqpUpsertRowsSettings Parse(const NNodes::TCoNameValueTupleList& settingsList);
     static TKqpUpsertRowsSettings Parse(const NNodes::TKqpUpsertRows& node);
+    NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
+};
+
+struct TKqpDeleteRowsSettings {
+    static constexpr TStringBuf IsConditionalDeleteSettingName = "IsConditionalDelete";
+
+    bool IsConditionalDelete = false;
+
+    void SetIsConditionalDelete() { IsConditionalDelete = true; }
+
+    static TKqpDeleteRowsSettings Parse(const NNodes::TCoNameValueTupleList& settingsList);
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
 };
 

@@ -2,8 +2,8 @@
 
 #include <yql/essentials/minikql/arrow/arrow_util.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
-#include <yql/essentials/public/udf/arrow/block_reader.h>
 #include <yql/essentials/public/udf/arrow/defs.h>
+#include <yql/essentials/public/udf/arrow/dispatch_traits.h>
 #include <yql/essentials/public/udf/arrow/util.h>
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 #include <yql/essentials/public/udf/udf_value.h>
@@ -37,6 +37,13 @@ protected:
         return result;
     }
 
+    template<typename TBuffer = NUdf::TResizeableBuffer>
+    std::unique_ptr<arrow::ResizableBuffer> CreateResizableBuffer(size_t size) const {
+        auto buffer = NUdf::AllocateResizableBuffer<TBuffer>(size, Pool_);
+        ARROW_OK(buffer->Resize(size, false));
+        return buffer;
+    }
+
 protected:
     arrow::MemoryPool* Pool_;
 };
@@ -60,7 +67,7 @@ public:
         auto origData = array->GetValues<TLayout>(1);
         auto dataSize = sizeof(TLayout) * array->length;
 
-        auto trimmedDataBuffer = NUdf::AllocateResizableBuffer(dataSize, Pool_);
+        auto trimmedDataBuffer = CreateResizableBuffer(dataSize);
         memcpy(trimmedDataBuffer->mutable_data(), origData, dataSize);
 
         return arrow::ArrayData::Make(array->type, array->length, {std::move(trimmedNullBitmap), std::move(trimmedDataBuffer)}, array->GetNullCount());
@@ -86,8 +93,7 @@ public:
         auto origData = array->GetValues<NUdf::TUnboxedValue>(1);
         auto dataSize = sizeof(NUdf::TUnboxedValue) * array->length;
 
-        auto trimmedBuffer = NUdf::AllocateResizableBuffer<NUdf::TResizableManagedBuffer<NUdf::TUnboxedValue>>(dataSize, Pool_);
-        ARROW_OK(trimmedBuffer->Resize(dataSize));
+        auto trimmedBuffer = CreateResizableBuffer<NUdf::TResizableManagedBuffer<NUdf::TUnboxedValue>>(dataSize);
         auto trimmedBufferData = reinterpret_cast<NUdf::TUnboxedValue*>(trimmedBuffer->mutable_data());
 
         for (int64_t i = 0; i < array->length; i++) {
@@ -95,6 +101,17 @@ public:
         }
 
         return arrow::ArrayData::Make(array->type, array->length, {std::move(trimmedNullBitmap), std::move(trimmedBuffer)}, array->GetNullCount());
+    }
+};
+
+class TSingularBlockTrimmer: public TBlockTrimmerBase {
+public:
+    TSingularBlockTrimmer(arrow::MemoryPool* pool)
+        : TBlockTrimmerBase(pool) {
+    }
+
+    std::shared_ptr<arrow::ArrayData> Trim(const std::shared_ptr<arrow::ArrayData>& array) override {
+        return array;
     }
 };
 
@@ -120,8 +137,8 @@ public:
         auto origStringData = reinterpret_cast<const char*>(array->buffers[2]->data() + origOffsetData[0]);
         auto stringDataSize = origOffsetData[array->length] - origOffsetData[0];
 
-        auto trimmedOffsetBuffer = NUdf::AllocateResizableBuffer(sizeof(TOffset) * (array->length + 1), Pool_);
-        auto trimmedStringBuffer = NUdf::AllocateResizableBuffer(stringDataSize, Pool_);
+        auto trimmedOffsetBuffer = CreateResizableBuffer(sizeof(TOffset) * (array->length + 1));
+        auto trimmedStringBuffer = CreateResizableBuffer(stringDataSize);
 
         auto trimmedOffsetBufferData = reinterpret_cast<TOffset*>(trimmedOffsetBuffer->mutable_data());
         auto trimmedStringBufferData = reinterpret_cast<char*>(trimmedStringBuffer->mutable_data());
@@ -217,6 +234,9 @@ struct TTrimmerTraits {
     using TResource = TResourceBlockTrimmer<Nullable>;
     template<typename TTzDate, bool Nullable>
     using TTzDateReader = TTzDateBlockTrimmer<TTzDate, Nullable>;
+    using TSingular = TSingularBlockTrimmer;
+
+    constexpr static bool PassType = false;
 
     static TResult::TPtr MakePg(const NUdf::TPgTypeDescription& desc, const NUdf::IPgBuilder* pgBuilder, arrow::MemoryPool* pool) {
         Y_UNUSED(pgBuilder);
@@ -235,6 +255,10 @@ struct TTrimmerTraits {
         }
     }
 
+    static TResult::TPtr MakeSingular(arrow::MemoryPool* pool) {
+        return std::make_unique<TSingular>(pool);
+    }
+
     template<typename TTzDate>
     static TResult::TPtr MakeTzDate(bool isOptional, arrow::MemoryPool* pool) {
         if (isOptional) {
@@ -246,7 +270,7 @@ struct TTrimmerTraits {
 };
 
 IBlockTrimmer::TPtr MakeBlockTrimmer(const NUdf::ITypeInfoHelper& typeInfoHelper, const NUdf::TType* type, arrow::MemoryPool* pool) {
-    return MakeBlockReaderImpl<TTrimmerTraits>(typeInfoHelper, type, nullptr, pool);
+    return DispatchByArrowTraits<TTrimmerTraits>(typeInfoHelper, type, nullptr, pool);
 }
 
 }

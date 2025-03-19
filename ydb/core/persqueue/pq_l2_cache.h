@@ -45,26 +45,45 @@ public:
         TPartitionId Partition;
         ui64 Offset;
         ui16 PartNo;
+        ui32 Count;
+        ui16 InternalPartsCount;
 
         TKey(ui64 tabletId, const TCacheBlobL2& blob)
             : TabletId(tabletId)
             , Partition(blob.Partition)
             , Offset(blob.Offset)
             , PartNo(blob.PartNo)
+            , Count(blob.Count)
+            , InternalPartsCount(blob.InternalPartsCount)
         {
             KeyHash = Hash128to32(TabletId, (static_cast<ui64>(Partition.InternalPartitionId) << 17) + PartNo + (Partition.IsSupportivePartition() ? 0 : (1 << 16)));
             KeyHash = Hash128to32(KeyHash, Offset);
+            KeyHash = Hash128to32(KeyHash, Count);
+            KeyHash = Hash128to32(KeyHash, InternalPartsCount);
         }
 
-        bool operator == (const TKey& key) const {
+        bool operator ==(const TKey& key) const {
             return TabletId == key.TabletId &&
                 Partition == key.Partition &&
                 Offset == key.Offset &&
-                PartNo == key.PartNo;
+                PartNo == key.PartNo &&
+                Count == key.Count &&
+                InternalPartsCount == key.InternalPartsCount;
         }
 
         ui64 Hash() const noexcept {
             return KeyHash;
+        }
+
+        TString ToString() const {
+            TString s;
+            s += "Tablet '"; s += ::ToString(TabletId); s += "'";
+            s += " partition "; s += Partition.ToString();
+            s += " offset "; s += ::ToString(Offset);
+            s += " partno "; s += ::ToString(PartNo);
+            s += " count "; s += ::ToString(Count);
+            s += " parts "; s += ::ToString(InternalPartsCount);
+            return s;
         }
 
     private:
@@ -93,6 +112,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             HFuncTraced(TEvents::TEvPoisonPill, Handle);
             HFuncTraced(TEvPqCache::TEvCacheL2Request, Handle);
+            HFuncTraced(TEvPqCache::TEvCacheKeysRequest, Handle);
             HFuncTraced(NMon::TEvHttpInfo, Handle);
         default:
             break;
@@ -110,11 +130,15 @@ private:
     void Handle(TEvPqCache::TEvCacheL2Request::TPtr& ev, const TActorContext& ctx);
     void SendResponses(const TActorContext& ctx, const THashMap<TKey, TCacheValue::TPtr>& evicted);
 
+    void Handle(TEvPqCache::TEvCacheKeysRequest::TPtr& ev, const TActorContext& ctx);
+
     void AddBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs,
                   THashMap<TKey, TCacheValue::TPtr>& outEvicted);
     void RemoveBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs);
     void TouchBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs, bool isHit = true);
     void RegretBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs);
+    void RenameBlobs(const TActorContext& ctx, ui64 tabletId,
+                     const TVector<std::pair<TCacheBlobL2, TCacheBlobL2>>& blobs);
 
     static ui64 ClampMinSize(ui64 maxSize) {
         static const ui64 MIN_SIZE = 32_MB;
@@ -130,6 +154,8 @@ private:
     TL2Counters Counters;
 
     TString HttpForm() const;
+
+    size_t RenamedKeys = 0;
 };
 
 } // NPQ

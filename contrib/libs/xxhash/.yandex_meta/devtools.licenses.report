@@ -40,7 +40,7 @@ BELONGS ya.make
         Match type      : REFERENCE
         Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
-        CHANGELOG [46:46]
+        CHANGELOG [55:55]
 
 SKIP     GPL-1.0-or-later     27d2a531e656c5ba58681dbccec75c51
 BELONGS ya.make
@@ -53,7 +53,7 @@ BELONGS ya.make
         Match type      : NOTICE
         Links           : http://www.gnu.org/licenses/old-licenses/gpl-1.0-standalone.html, https://spdx.org/licenses/GPL-1.0-or-later
     Files with this license:
-        README.md [229:229]
+        README.md [247:247]
 
 KEEP     BSD-2-Clause         2e1bd71675895bfd7ef1b814d054a830
 BELONGS ya.make
@@ -70,8 +70,8 @@ BELONGS ya.make
 
 SKIP     BSD-3-Clause         536e2c3bf1951155aea6a026055e681c
 BELONGS ya.make
-FILE_INCLUDE xxhash.c found in files: README.md at line 228
-FILE_INCLUDE xxhash.h found in files: README.md at line 228
+FILE_INCLUDE xxhash.c found in files: README.md at line 246
+FILE_INCLUDE xxhash.h found in files: README.md at line 246
 # False positive
     License text:
         The library files `xxhash.c` and `xxhash.h` are BSD licensed.
@@ -81,7 +81,7 @@ FILE_INCLUDE xxhash.h found in files: README.md at line 228
         Match type      : REFERENCE
         Links           : http://www.opensource.org/licenses/BSD-3-Clause, https://spdx.org/licenses/BSD-3-Clause
     Files with this license:
-        README.md [228:228]
+        README.md [246:246]
 
 KEEP     BSD-2-Clause         568bc64582670ea464b86f17f2b19b34
 BELONGS ya.make

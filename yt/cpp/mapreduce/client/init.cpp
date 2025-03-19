@@ -181,6 +181,9 @@ void CommonInitialize(TGuard<TMutex>& g)
     if (logPath.empty()) {
         if (TConfig::Get()->LogUseCore) {
             auto coreLoggingConfig = NLogging::TLogManagerConfig::CreateStderrLogger(ToCoreLogLevel(logLevel));
+            for (const auto& rule : coreLoggingConfig->Rules) {
+                rule->ExcludeCategories = TConfig::Get()->LogExcludeCategories;
+            }
             NLogging::TLogManager::Get()->Configure(coreLoggingConfig);
             SetUseCoreLog();
         } else {
@@ -189,6 +192,9 @@ void CommonInitialize(TGuard<TMutex>& g)
         }
     } else {
         auto coreLoggingConfig = NLogging::TLogManagerConfig::CreateLogFile(logPath, ToCoreLogLevel(logLevel));
+        for (const auto& rule : coreLoggingConfig->Rules) {
+            rule->ExcludeCategories = TConfig::Get()->LogExcludeCategories;
+        }
         NLogging::TLogManager::Get()->Configure(coreLoggingConfig);
         SetUseCoreLog();
     }

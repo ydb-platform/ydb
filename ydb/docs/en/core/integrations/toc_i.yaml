@@ -9,6 +9,11 @@ items:
   include:
     mode: link
     path: visualization/toc-visualization.yaml
+- name: Orchestration
+  href: orchestration/index.md
+  include:
+    mode: link
+    path: orchestration/toc-orchestration.yaml
 - name: Data ingestion
   href: ingestion/index.md
   include:

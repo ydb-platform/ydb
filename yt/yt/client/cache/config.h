@@ -18,9 +18,9 @@ namespace NYT::NClient::NCache {
 struct TClientsCacheConfig
     : public virtual NYTree::TYsonStruct
 {
-    NApi::NRpcProxy::TConnectionConfigPtr DefaultConfig;
+    NApi::NRpcProxy::TConnectionConfigPtr DefaultConnection;
 
-    THashMap<TString, NApi::NRpcProxy::TConnectionConfigPtr> ClusterConfigs;
+    THashMap<std::string, NApi::NRpcProxy::TConnectionConfigPtr> PerClusterConnection;
 
     REGISTER_YSON_STRUCT(TClientsCacheConfig);
 
@@ -37,7 +37,7 @@ struct TClientsCacheAuthentificationOptions final
     static TClientsCacheAuthentificationOptionsPtr GetFromEnvStatic();
 
     NAuth::TAuthenticationOptions DefaultOptions;
-    THashMap<TString, NAuth::TAuthenticationOptions> ClusterOptions;
+    THashMap<std::string, NAuth::TAuthenticationOptions, THash<std::string>, TEqualTo<>> ClusterOptions;
 };
 
 DEFINE_REFCOUNTED_TYPE(TClientsCacheAuthentificationOptions)

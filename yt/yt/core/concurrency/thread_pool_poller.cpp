@@ -2,7 +2,6 @@
 #include "thread_pool_poller.h"
 #include "private.h"
 #include "two_level_fair_share_thread_pool.h"
-#include "new_fair_share_thread_pool.h"
 
 #include <yt/yt/core/misc/collection_helpers.h>
 #include <yt/yt/core/misc/proc.h>
@@ -200,7 +199,7 @@ public:
         // pollables and on shutdown.
         PollerImpl_.Set(nullptr, WakeupHandle_.GetFD(), CONT_POLL_EDGE_TRIGGERED | CONT_POLL_READ);
 
-        FairShareThreadPool_ = CreateNewTwoLevelFairShareThreadPool(
+        FairShareThreadPool_ = CreateTwoLevelFairShareThreadPool(
             threadCount,
             threadNamePrefix + "FS",
             {

@@ -12,10 +12,8 @@ namespace NKikimr::NStorage {
             return; // this is not the root node
         } else if (enablingDistconf) {
             // NO RETURN HERE -> right now we are enabling distconf, so we can skip rest of the checks
-        } else if (!StorageConfig || !StorageConfig->GetSelfManagementConfig().GetEnabled()) {
-            return; // no self-management config enabled
-        } else if (!StorageConfig->HasStateStorageConfig()) {
-            return; // no way to find Console too
+        } else if (!SelfManagementEnabled || !StorageConfig->HasStateStorageConfig()) {
+            return; // no self-management config enabled or no way to find Console (no statestorage configured yet)
         }
 
         STLOG(PRI_DEBUG, BS_NODE, NWDC66, "ConnectToConsole: creating pipe to the Console");
@@ -37,27 +35,36 @@ namespace NKikimr::NStorage {
             return; // still waiting for previous one
         }
 
+        ProposeRequestInFlight = true;
+
         if (!StorageConfig || !StorageConfig->HasConfigComposite()) {
-            return; // no config yet
+            // send empty proposition just to connect to console
+            auto ev = std::make_unique<TEvBlobStorage::TEvControllerProposeConfigRequest>();
+            ev->Record.SetDistconf(true);
+            NTabletPipe::SendData(SelfId(), ConsolePipeId, ev.release(), ++ProposeRequestCookie);
+            return;
         }
 
-        Y_ABORT_UNLESS(StorageConfigYamlVersion);
+        Y_ABORT_UNLESS(MainConfigYamlVersion);
 
         STLOG(PRI_DEBUG, BS_NODE, NWDC67, "SendConfigProposeRequest: sending propose request to the Console",
-            (StorageConfigFetchYamlHash, StorageConfigFetchYamlHash),
-            (StorageConfigYamlVersion, StorageConfigYamlVersion),
+            (MainConfigFetchYamlHash, MainConfigFetchYamlHash),
+            (MainConfigYamlVersion, MainConfigYamlVersion),
             (ProposedConfigHashVersion, ProposedConfigHashVersion),
             (ProposeRequestCookie, ProposeRequestCookie + 1));
 
         Y_DEBUG_ABORT_UNLESS(!ProposedConfigHashVersion || ProposedConfigHashVersion == std::make_tuple(
-            StorageConfigFetchYamlHash, *StorageConfigYamlVersion));
-        ProposedConfigHashVersion.emplace(StorageConfigFetchYamlHash, *StorageConfigYamlVersion);
+            MainConfigFetchYamlHash, *MainConfigYamlVersion));
+        ProposedConfigHashVersion.emplace(MainConfigFetchYamlHash, *MainConfigYamlVersion);
         NTabletPipe::SendData(SelfId(), ConsolePipeId, new TEvBlobStorage::TEvControllerProposeConfigRequest(
-            StorageConfigFetchYamlHash, *StorageConfigYamlVersion), ++ProposeRequestCookie);
-        ProposeRequestInFlight = true;
+            MainConfigFetchYamlHash, *MainConfigYamlVersion, true), ++ProposeRequestCookie);
     }
 
     void TDistributedConfigKeeper::Handle(TEvBlobStorage::TEvControllerValidateConfigResponse::TPtr ev) {
+        STLOG(PRI_DEBUG, BS_NODE, NWDC10, "received TEvControllerValidateConfigResponse",
+            (Sender, ev->Sender), (Cookie, ev->Cookie), (Record, ev->Get()->Record),
+            (ConsoleConfigValidationQ.size, ConsoleConfigValidationQ.size()));
+
         auto& q = ConsoleConfigValidationQ;
         auto pred = [&](const auto& item) {
             const auto& [actorId, yaml, cookie] = item;
@@ -94,24 +101,29 @@ namespace NKikimr::NStorage {
 
             case NKikimrBlobStorage::TEvControllerProposeConfigResponse::CommitIsNeeded: {
                 if (!StorageConfig || !StorageConfig->HasConfigComposite() || ProposedConfigHashVersion !=
-                        std::make_tuple(StorageConfigFetchYamlHash, *StorageConfigYamlVersion)) {
+                        std::make_tuple(MainConfigFetchYamlHash, *MainConfigYamlVersion)) {
                     const char *err = "proposed config, but something has gone awfully wrong";
                     STLOG(PRI_CRIT, BS_NODE, NWDC69, err, (StorageConfig, StorageConfig),
                         (ProposedConfigHashVersion, ProposedConfigHashVersion),
-                        (StorageConfigFetchYamlHash, StorageConfigFetchYamlHash),
-                        (StorageConfigYamlVersion, StorageConfigYamlVersion));
+                        (MainConfigFetchYamlHash, MainConfigFetchYamlHash),
+                        (MainConfigYamlVersion, MainConfigYamlVersion));
                     Y_DEBUG_ABORT("%s", err);
                     return;
                 }
 
                 NTabletPipe::SendData(SelfId(), ConsolePipeId, new TEvBlobStorage::TEvControllerConsoleCommitRequest(
-                    StorageConfigYaml), ++CommitRequestCookie);
+                    MainConfigYaml), // FIXME: probably should propagate force here
+                        ++CommitRequestCookie);
                 break;
             }
 
             case NKikimrBlobStorage::TEvControllerProposeConfigResponse::CommitIsNotNeeded:
                 // it's okay, just wait for another configuration change or something like that
                 ConfigCommittedToConsole = true;
+                break;
+
+            case NKikimrBlobStorage::TEvControllerProposeConfigResponse::ReverseCommit:
+                // just do nothing, we didn't have the config in distconf, possibly it is being enabled
                 break;
         }
     }
@@ -200,7 +212,7 @@ namespace NKikimr::NStorage {
 
         if (!fetched) { // fill in 'to-be-fetched' version of config with version incremented by one
             try {
-                auto metadata = NYamlConfig::GetMetadata(yaml);
+                auto metadata = NYamlConfig::GetMainMetadata(yaml);
                 metadata.Cluster = metadata.Cluster.value_or("unknown"); // TODO: fix this
                 metadata.Version = metadata.Version.value_or(0) + 1;
                 temp = NYamlConfig::ReplaceMetadata(yaml, metadata);

@@ -90,6 +90,11 @@ struct TUnfreezeTableOptions
     , public TTabletRangeOptions
 { };
 
+struct TCancelTabletTransitionOptions
+    : public TTimeoutOptions
+    , public TMutatingOptions
+{ };
+
 struct TReshardTableOptions
     : public TTimeoutOptions
     , public TMutatingOptions
@@ -235,7 +240,7 @@ DEFINE_REFCOUNTED_TYPE(TTableBackupManifest)
 struct TBackupManifest
     : public NYTree::TYsonStruct
 {
-    THashMap<TString, std::vector<TTableBackupManifestPtr>> Clusters;
+    THashMap<std::string, std::vector<TTableBackupManifestPtr>> Clusters;
 
     REGISTER_YSON_STRUCT(TBackupManifest);
 
@@ -376,6 +381,10 @@ struct ITableClient
     virtual TFuture<void> UnfreezeTable(
         const NYPath::TYPath& path,
         const TUnfreezeTableOptions& options = {}) = 0;
+
+    virtual TFuture<void> CancelTabletTransition(
+        NTabletClient::TTabletId tabletId,
+        const TCancelTabletTransitionOptions& options = {}) = 0;
 
     virtual TFuture<void> ReshardTable(
         const NYPath::TYPath& path,

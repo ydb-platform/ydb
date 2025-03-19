@@ -1,9 +1,8 @@
-#include "checker.h"
 #include "const.h"
 #include "meta.h"
 
 #include <ydb/core/formats/arrow/hash/calcer.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom/checker.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom/bits_storage.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
@@ -38,6 +37,7 @@ private:
     template <ui32 HashIdx, ui32 CharsCount>
     class THashesCountSelector {
         static constexpr ui64 HashStart = (ui64)HashIdx * (ui64)2166136261;
+
     public:
         template <class TActor>
         static void BuildHashes(const ui8* data, TActor& actor) {
@@ -61,7 +61,7 @@ private:
         static void BuildHashesImpl(
             const ui8* data, const ui32 dataSize, const std::optional<NRequest::TLikePart::EOperation> op, TActor& actor) {
             TBuffer fakeString;
-            if (!op || op == NRequest::TLikePart::EOperation::StartsWith) {
+            if (!op || op == NRequest::TLikePart::EOperation::StartsWith || op == NRequest::TLikePart::EOperation::Equals) {
                 for (ui32 c = 1; c <= CharsCount; ++c) {
                     fakeString.Clear();
                     fakeString.Fill('\0', CharsCount - c);
@@ -76,7 +76,7 @@ private:
             for (; c + CharsCount <= dataSize; ++c) {
                 THashesCountSelector<HashesCount, CharsCount>::BuildHashes(data + c, actor);
             }
-            if (!op || op == NRequest::TLikePart::EOperation::EndsWith) {
+            if (!op || op == NRequest::TLikePart::EOperation::EndsWith || op == NRequest::TLikePart::EOperation::Equals) {
                 for (; c < dataSize; ++c) {
                     fakeString.Clear();
                     fakeString.Append((const char*)data + c, dataSize - c);
@@ -134,16 +134,16 @@ private:
         }
     };
 
+public:
+    TNGrammBuilder(const ui32 hashesCount)
+        : HashesCount(hashesCount) {
+    }
+
     template <class TAction>
     void BuildNGramms(
         const char* data, const ui32 dataSize, const std::optional<NRequest::TLikePart::EOperation> op, const ui32 nGrammSize, TAction& pred) {
         THashesSelector<TConstants::MaxHashesCount, TConstants::MaxNGrammSize>::BuildHashes(
             (const ui8*)data, dataSize, HashesCount, nGrammSize, op, pred);
-    }
-
-public:
-    TNGrammBuilder(const ui32 hashesCount)
-        : HashesCount(hashesCount) {
     }
 
     template <class TFiller>
@@ -229,8 +229,18 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 rec
 
     const auto doFillFilter = [&](auto& inserter) {
         for (reader.Start(); reader.IsCorrect();) {
-            builder.FillNGrammHashes(NGrammSize, reader.begin()->GetCurrentChunk(), inserter);
-            reader.ReadNext(reader.begin()->GetCurrentChunk()->length());
+            AFL_VERIFY(reader.GetColumnsCount() == 1);
+            for (auto&& r : reader) {
+                GetDataExtractor()->VisitAll(
+                    r.GetCurrentChunk(),
+                    [&](const std::shared_ptr<arrow::Array>& arr, const ui32 /*hashBase*/) {
+                        builder.FillNGrammHashes(NGrammSize, arr, inserter);
+                    },
+                    [&](const std::string_view data, const ui32 /*hashBase*/) {
+                        builder.BuildNGramms(data.data(), data.size(), {}, NGrammSize, inserter);
+                    });
+            }
+            reader.ReadNext(reader.begin()->GetCurrentChunk()->GetRecordsCount());
         }
     };
 
@@ -244,38 +254,38 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 rec
     return TFixStringBitsStorage(bitMap).GetData();
 }
 
-void TIndexMeta::DoFillIndexCheckers(
-    const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const {
-    for (auto&& branch : info->GetBranches()) {
-        std::map<ui32, NRequest::TLikeDescription> foundColumns;
-        for (auto&& cId : ColumnIds) {
-            auto c = schema.GetColumns().GetById(cId);
-            if (!c) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", "incorrect index column")("id", cId);
-                return;
-            }
-            auto it = branch->GetLikes().find(c->GetName());
-            if (it == branch->GetLikes().end()) {
-                break;
-            }
-            foundColumns.emplace(cId, it->second);
+bool TIndexMeta::DoCheckValue(
+    const TString& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value, const EOperation op) const {
+    TFixStringBitsStorage bits(data);
+    AFL_VERIFY(!category);
+    AFL_VERIFY(value->type->id() == arrow::utf8()->id() || value->type->id() == arrow::binary()->id())("id", value->type->ToString());
+    bool result = true;
+    const auto predSet = [&](const ui64 hashSecondary) {
+        if (!bits.Get(hashSecondary % bits.GetSizeBits())) {
+            result = false;
         }
-        if (foundColumns.size() != ColumnIds.size()) {
-            continue;
-        }
+    };
+    TNGrammBuilder builder(HashesCount);
 
-        std::set<ui64> hashes;
-        const auto predSet = [&](const ui64 hashSecondary) {
-            hashes.emplace(hashSecondary);
-        };
-        TNGrammBuilder builder(HashesCount);
-        for (auto&& c : foundColumns) {
-            for (auto&& ls : c.second.GetLikeSequences()) {
-                builder.FillNGrammHashes(NGrammSize, ls.second.GetOperation(), ls.second.GetValue(), predSet);
-            }
-        }
-        branch->MutableIndexes().emplace_back(std::make_shared<TFilterChecker>(GetIndexId(), std::move(hashes)));
+    NRequest::TLikePart::EOperation opLike;
+    switch (op) {
+        case TSkipIndex::EOperation::Equals:
+            opLike = NRequest::TLikePart::EOperation::Equals;
+            break;
+        case TSkipIndex::EOperation::Contains:
+            opLike = NRequest::TLikePart::EOperation::Contains;
+            break;
+        case TSkipIndex::EOperation::StartsWith:
+            opLike = NRequest::TLikePart::EOperation::StartsWith;
+            break;
+        case TSkipIndex::EOperation::EndsWith:
+            opLike = NRequest::TLikePart::EOperation::EndsWith;
+            break;
     }
+    auto strVal = std::static_pointer_cast<arrow::BinaryScalar>(value);
+    const TString valString((const char*)strVal->value->data(), strVal->value->size());
+    builder.FillNGrammHashes(NGrammSize, opLike, valString, predSet);
+    return result;
 }
 
 }   // namespace NKikimr::NOlap::NIndexes::NBloomNGramm

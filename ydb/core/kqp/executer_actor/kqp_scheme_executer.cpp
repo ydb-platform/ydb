@@ -4,11 +4,15 @@
 #include <ydb/core/kqp/gateway/actors/analyze_actor.h>
 #include <ydb/core/kqp/gateway/actors/scheme.h>
 #include <ydb/core/kqp/gateway/local_rpc/helper.h>
+#include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
+#include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard_build_index.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
+#include <ydb/library/aclib/aclib.h>
 #include <ydb/services/metadata/abstract/kqp_common.h>
+
 
 namespace NKikimr::NKqp {
 
@@ -42,6 +46,7 @@ class TKqpSchemeExecuter : public TActorBootstrapped<TKqpSchemeExecuter> {
         enum EEv {
             EvResult = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvMakeTempDirResult,
+            EvMakeSessionDirResult,
         };
 
         struct TEvResult : public TEventLocal<TEvResult, EEv::EvResult> {
@@ -49,6 +54,10 @@ class TKqpSchemeExecuter : public TActorBootstrapped<TKqpSchemeExecuter> {
         };
 
         struct TEvMakeTempDirResult : public TEventLocal<TEvMakeTempDirResult, EEv::EvMakeTempDirResult> {
+            IKqpGateway::TGenericResult Result;
+        };
+
+        struct TEvMakeSessionDirResult : public TEventLocal<TEvMakeSessionDirResult, EEv::EvMakeSessionDirResult> {
             IKqpGateway::TGenericResult Result;
         };
     };
@@ -93,6 +102,46 @@ public:
         auto& record = ev->Record;
 
         record.SetDatabaseName(Database);
+        record.SetUserToken(NACLib::TSystemUsers::Tmp().SerializeAsString());
+        record.SetPeerName(ClientAddress);
+
+        auto* modifyScheme = record.MutableTransaction()->MutableModifyScheme();
+        modifyScheme->SetWorkingDir(GetTmpDirPath(Database));
+        modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMkDir);
+        modifyScheme->SetAllowCreateInTempDir(false);
+        modifyScheme->SetInternal(true);
+
+        auto* makeDir = modifyScheme->MutableMkDir();
+        makeDir->SetName(GetSessionDirName());
+
+        NACLib::TDiffACL diffAcl;
+        diffAcl.AddAccess(
+            NACLib::EAccessType::Allow,
+            NACLib::EAccessRights::CreateDirectory | NACLib::EAccessRights::DescribeSchema,
+            AppData()->AllAuthenticatedUsers);
+
+        auto* modifyAcl = modifyScheme->MutableModifyACL();
+        modifyAcl->SetDiffACL(diffAcl.SerializeAsString());
+
+        auto promise = NewPromise<IKqpGateway::TGenericResult>();
+        IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, false);
+        RegisterWithSameMailbox(requestHandler);
+
+        auto actorSystem = TActivationContext::ActorSystem();
+        auto selfId = SelfId();
+        promise.GetFuture().Subscribe([actorSystem, selfId](const TFuture<IKqpGateway::TGenericResult>& future) {
+            auto ev = MakeHolder<TEvPrivate::TEvMakeTempDirResult>();
+            ev->Result = future.GetValue();
+            actorSystem->Send(selfId, ev.Release());
+        });
+        Become(&TKqpSchemeExecuter::ExecuteState);
+    }
+
+    void CreateSessionDirectory() {
+        auto ev = MakeHolder<TEvTxUserProxy::TEvProposeTransaction>();
+        auto& record = ev->Record;
+
+        record.SetDatabaseName(Database);
         if (UserToken) {
             record.SetUserToken(UserToken->GetSerializedToken());
         }
@@ -102,22 +151,31 @@ public:
         modifyScheme->SetWorkingDir(GetSessionDirsBasePath(Database));
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpMkDir);
         modifyScheme->SetAllowCreateInTempDir(false);
+
         auto* makeDir = modifyScheme->MutableMkDir();
         makeDir->SetName(SessionId);
         ActorIdToProto(KqpTempTablesAgentActor, modifyScheme->MutableTempDirOwnerActorId());
+
+        NACLib::TDiffACL diffAcl;
+        diffAcl.RemoveAccess(
+            NACLib::EAccessType::Allow,
+            NACLib::EAccessRights::CreateDirectory | NACLib::EAccessRights::DescribeSchema,
+            AppData()->AllAuthenticatedUsers);
+
+        auto* modifyAcl = modifyScheme->MutableModifyACL();
+        modifyAcl->SetDiffACL(diffAcl.SerializeAsString());
 
         auto promise = NewPromise<IKqpGateway::TGenericResult>();
         IActor* requestHandler = new TSchemeOpRequestHandler(ev.Release(), promise, false);
         RegisterWithSameMailbox(requestHandler);
 
-        auto actorSystem = TlsActivationContext->AsActorContext().ExecutorThread.ActorSystem;
+        auto actorSystem = TlsActivationContext->ActorSystem();
         auto selfId = SelfId();
         promise.GetFuture().Subscribe([actorSystem, selfId](const TFuture<IKqpGateway::TGenericResult>& future) {
-            auto ev = MakeHolder<TEvPrivate::TEvMakeTempDirResult>();
+            auto ev = MakeHolder<TEvPrivate::TEvMakeSessionDirResult>();
             ev->Result = future.GetValue();
             actorSystem->Send(selfId, ev.Release());
         });
-        Become(&TKqpSchemeExecuter::ExecuteState);
     }
 
     void MakeSchemeOperationRequest() {
@@ -181,18 +239,21 @@ public:
             case NKqpProto::TKqpSchemeOperation::kCreateUser: {
                 const auto& modifyScheme = schemeOp.GetCreateUser();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                ev->Record.SetDatabaseName(NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(), Database));
                 break;
             }
 
             case NKqpProto::TKqpSchemeOperation::kAlterUser: {
                 const auto& modifyScheme = schemeOp.GetAlterUser();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                ev->Record.SetDatabaseName(NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(), Database));
                 break;
             }
 
             case NKqpProto::TKqpSchemeOperation::kDropUser: {
                 const auto& modifyScheme = schemeOp.GetDropUser();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                ev->Record.SetDatabaseName(NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(), Database));
                 break;
             }
             case NKqpProto::TKqpSchemeOperation::kCreateExternalTable: {
@@ -214,30 +275,35 @@ public:
             case NKqpProto::TKqpSchemeOperation::kCreateGroup: {
                 const auto& modifyScheme = schemeOp.GetCreateGroup();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                ev->Record.SetDatabaseName(NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(), Database));
                 break;
             }
 
             case NKqpProto::TKqpSchemeOperation::kAddGroupMembership: {
                 const auto& modifyScheme = schemeOp.GetAddGroupMembership();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                ev->Record.SetDatabaseName(NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(), Database));
                 break;
             }
 
             case NKqpProto::TKqpSchemeOperation::kRemoveGroupMembership: {
                 const auto& modifyScheme = schemeOp.GetRemoveGroupMembership();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                ev->Record.SetDatabaseName(NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(), Database));
                 break;
             }
 
             case NKqpProto::TKqpSchemeOperation::kRenameGroup: {
                 const auto& modifyScheme = schemeOp.GetRenameGroup();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                ev->Record.SetDatabaseName(NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(), Database));
                 break;
             }
 
             case NKqpProto::TKqpSchemeOperation::kDropGroup: {
                 const auto& modifyScheme = schemeOp.GetDropGroup();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                ev->Record.SetDatabaseName(NSchemeHelpers::SelectDatabaseForAlterLoginOperations(AppData(), Database));
                 break;
             }
 
@@ -307,6 +373,24 @@ public:
                 break;
             }
 
+            case NKqpProto::TKqpSchemeOperation::kCreateTransfer: {
+                const auto& modifyScheme = schemeOp.GetCreateTransfer();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kAlterTransfer: {
+                const auto& modifyScheme = schemeOp.GetAlterTransfer();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
+            case NKqpProto::TKqpSchemeOperation::kDropTransfer: {
+                const auto& modifyScheme = schemeOp.GetDropTransfer();
+                ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
+                break;
+            }
+
             case NKqpProto::TKqpSchemeOperation::kAlterSequence: {
                 const auto& modifyScheme = schemeOp.GetAlterSequence();
                 ev->Record.MutableTransaction()->MutableModifyScheme()->CopyFrom(modifyScheme);
@@ -339,7 +423,7 @@ public:
                 TVector<TString> columns{analyzeOperation.columns().begin(), analyzeOperation.columns().end()};
                 IActor* analyzeActor = new TAnalyzeActor(analyzeOperation.GetTablePath(), columns, analyzePromise);
 
-                auto actorSystem = TlsActivationContext->AsActorContext().ExecutorThread.ActorSystem;
+                auto actorSystem = TActivationContext::ActorSystem();
                 RegisterWithSameMailbox(analyzeActor);
 
                 auto selfId = SelfId();
@@ -415,7 +499,7 @@ public:
         );
         RegisterWithSameMailbox(requestHandler);
 
-        auto actorSystem = TlsActivationContext->AsActorContext().ExecutorThread.ActorSystem;
+        auto actorSystem = TActivationContext::ActorSystem();
         auto selfId = SelfId();
         promise.GetFuture().Subscribe([actorSystem, selfId](const TFuture<IKqpGateway::TGenericResult>& future) {
             auto ev = MakeHolder<TEvPrivate::TEvResult>();
@@ -489,6 +573,7 @@ public:
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvPrivate::TEvResult, HandleExecute);
                 hFunc(TEvPrivate::TEvMakeTempDirResult, Handle);
+                hFunc(TEvPrivate::TEvMakeSessionDirResult, Handle);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, Handle);
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
@@ -522,7 +607,17 @@ public:
     void Handle(TEvPrivate::TEvMakeTempDirResult::TPtr& result) {
         if (!result->Get()->Result.Success()) {
             InternalError(TStringBuilder()
-                << "Error creating temporary directory for session " << SessionId
+                << "Error creating temporary directory: "
+                << result->Get()->Result.Issues().ToString(true));
+        }
+
+        CreateSessionDirectory();
+    }
+
+    void Handle(TEvPrivate::TEvMakeSessionDirResult::TPtr& result) {
+        if (!result->Get()->Result.Success()) {
+            InternalError(TStringBuilder()
+                << "Error creating directory for session " << SessionId
                 << ": " << result->Get()->Result.Issues().ToString(true));
         }
         MakeSchemeOperationRequest();

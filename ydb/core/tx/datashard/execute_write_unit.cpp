@@ -4,6 +4,7 @@
 #include "datashard_locks_db.h"
 #include "datashard_user_db.h"
 #include "datashard_kqp.h"
+#include "datashard_integrity_trails.h"
 
 #include <ydb/core/engine/mkql_engine_flat_host.h>
 
@@ -41,7 +42,8 @@ public:
     void AddLocksToResult(TWriteOperation* writeOp, const TActorContext& ctx) {
         NEvents::TDataEvents::TEvWriteResult& writeResult = *writeOp->GetWriteResult();
 
-        auto locks = DataShard.SysLocksTable().ApplyLocks();
+        auto [locks, locksBrokenByTx] = DataShard.SysLocksTable().ApplyLocks();
+        NDataIntegrity::LogIntegrityTrailsLocks(ctx, DataShard.TabletID(), writeOp->GetTxId(), locksBrokenByTx);
         LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "add locks to result: " << locks.size());
         for (const auto& lock : locks) {
             if (lock.IsError()) {
@@ -95,8 +97,8 @@ public:
         if (CheckForVolatileReadDependencies(userDb, writeOp, txc, ctx)) 
             return EExecutionStatus::Continue;
         
-        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting because an duplicate key");
-        writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST, "Operation is aborting because an duplicate key");
+        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << writeOp << " at " << DataShard.TabletID() << " aborting. Duplicate keys have been found.");
+        writeOp.SetError(NKikimrDataEvents::TEvWriteResult::STATUS_CONSTRAINT_VIOLATION, "Duplicate keys have been found.");
         ResetChanges(userDb, writeOp, txc);
         return EExecutionStatus::Executed;
     }
@@ -286,6 +288,12 @@ public:
             }
 
             if (guardLocks.LockTxId) {
+                auto abortLock = [&]() {
+                    LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << tabletId << " aborting because it cannot acquire locks");
+                    writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Operation is aborting because it cannot acquire locks");
+                    return EExecutionStatus::Executed;
+                };
+
                 switch (DataShard.SysLocksTable().EnsureCurrentLock()) {
                     case EEnsureCurrentLock::Success:
                         // Lock is valid, we may continue with reads and side-effects
@@ -294,23 +302,23 @@ public:
                     case EEnsureCurrentLock::Broken:
                         // Lock is valid, but broken, we could abort early in some
                         // cases, but it doesn't affect correctness.
+                        if (!op->IsReadOnly()) {
+                            return abortLock();
+                        }
                         break;
 
                     case EEnsureCurrentLock::TooMany:
                         // Lock cannot be created, it's not necessarily a problem
                         // for read-only transactions, for non-readonly we need to
                         // abort;
-                        if (op->IsReadOnly()) {
-                            break;
+                        if (!op->IsReadOnly()) {
+                            return abortLock();
                         }
-
-                        [[fallthrough]];
+                        break;
 
                     case EEnsureCurrentLock::Abort:
                         // Lock cannot be created and we must abort
-                        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "Operation " << *op << " at " << tabletId << " aborting because it cannot acquire locks");
-                        writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_LOCKS_BROKEN, "Operation is aborting because it cannot acquire locks");
-                        return EExecutionStatus::Executed;
+                        return abortLock();
                 }
             }
 
@@ -338,7 +346,8 @@ public:
                 }
 
                 KqpEraseLocks(tabletId, kqpLocks, sysLocks);
-                sysLocks.ApplyLocks();
+                auto [_, locksBrokenByTx] = sysLocks.ApplyLocks();
+                NDataIntegrity::LogIntegrityTrailsLocks(ctx, tabletId, txId, locksBrokenByTx);
                 DataShard.SubscribeNewLocks(ctx);
                 if (locksDb.HasChanges()) {
                     op->SetWaitCompletionFlag(true);
@@ -386,7 +395,7 @@ public:
             if (commitTxIds) {
                 TVector<ui64> participants(awaitingDecisions.begin(), awaitingDecisions.end());
                 DataShard.GetVolatileTxManager().PersistAddVolatileTx(
-                    txId,
+                    userDb.GetVolatileTxId(),
                     writeVersion,
                     commitTxIds,
                     userDb.GetVolatileDependencies(),

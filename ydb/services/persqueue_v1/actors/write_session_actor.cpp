@@ -13,7 +13,7 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
-#include <ydb/public/sdk/cpp/client/ydb_proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/library/actors/core/log.h>
 #include <google/protobuf/util/time_util.h>
@@ -159,7 +159,6 @@ namespace NGRpcProxy::V1 {
 
 using namespace Ydb::PersQueue::V1;
 
-static const ui32 MAX_BYTES_INFLIGHT = 1_MB;
 static const TDuration SOURCEID_UPDATE_PERIOD = TDuration::Hours(1);
 
 // metering
@@ -542,7 +541,7 @@ void TWriteSessionActor<UseMigrationProtocol>::SetupCounters()
 }
 
 template<bool UseMigrationProtocol>
-void TWriteSessionActor<UseMigrationProtocol>::SetupCounters(const TActorContext& ctx, const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId)
+void TWriteSessionActor<UseMigrationProtocol>::SetupCounters(const TString& cloudId, const TString& dbId, const TString& dbPath, const bool isServerless, const TString& folderId)
 {
     if (SessionsCreated) {
         return;
@@ -559,7 +558,7 @@ void TWriteSessionActor<UseMigrationProtocol>::SetupCounters(const TActorContext
     SessionsCreated.Inc();
     SessionsActive.Inc();
 
-    SetupBytesWrittenByUserAgentCounter(NPersQueue::GetFullTopicPath(ctx, dbPath, FullConverter->GetPrimaryPath()));
+    SetupBytesWrittenByUserAgentCounter(NPersQueue::GetFullTopicPath(dbPath, FullConverter->GetPrimaryPath()));
 }
 
 template<bool UseMigrationProtocol>
@@ -616,7 +615,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(TEvDescribeTopicsResponse:
 
     if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
         const auto& tabletConfig = Config.GetPQTabletConfig();
-        SetupCounters(ctx, tabletConfig.GetYcCloudId(), tabletConfig.GetYdbDatabaseId(),
+        SetupCounters(tabletConfig.GetYcCloudId(), tabletConfig.GetYdbDatabaseId(),
                         tabletConfig.GetYdbDatabasePath(), entry.DomainInfo->IsServerless(),
                       tabletConfig.GetYcFolderId());
     } else {
@@ -942,7 +941,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(NPQ::TEvPartitionWriter::T
     if (BytesInflight) {
         BytesInflight.Dec(diff);
     }
-    if (!NextRequestInited && BytesInflight_ < MAX_BYTES_INFLIGHT) { //allow only one big request to be readed but not sended
+    if (!NextRequestInited && BytesInflight_ < AppData(ctx)->PQConfig.GetMaxWriteSessionBytesInflight()) { //allow only one big request to be readed but not sended
         NextRequestInited = true;
         if (!Request->GetStreamCtx()->Read()) {
             LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc read failed");
@@ -1498,7 +1497,7 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWrite::TPtr& e
         BytesInflightTotal.Inc(diff);
     }
 
-    if (BytesInflight_ < MAX_BYTES_INFLIGHT) { //allow only one big request to be readed but not sended
+    if (BytesInflight_ < AppData(ctx)->PQConfig.GetMaxWriteSessionBytesInflight()) { //allow only one big request to be readed but not sended
         Y_ABORT_UNLESS(NextRequestInited);
         if (!Request->GetStreamCtx()->Read()) {
             LOG_INFO_S(ctx, NKikimrServices::PQ_WRITE_PROXY, "session v1 cookie: " << Cookie << " sessionId: " << OwnerCookie << " grpc read failed");

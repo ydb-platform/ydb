@@ -23,7 +23,7 @@ struct TGCTime {
     inline void Clear() { Generation = Step = 0; }
     static TGCTime Infinity() { return TGCTime(std::numeric_limits<ui32>::max(), std::numeric_limits<ui32>::max()); }
 
-    explicit operator bool() const noexcept { return Valid(); }
+    explicit operator bool() const { return Valid(); }
 };
 
 struct TGCLogEntry {
@@ -49,6 +49,8 @@ public:
     void ReleaseBarrier(ui32 step);
     ui32 GetActiveGcBarrier();
     void FollowersSyncComplete(bool isBoot);
+    void SendCollectGarbage(const TActorContext& executor);
+    bool HasGarbageBefore(TGCTime snapshotTime);
 
     struct TIntrospection {
         ui64 UncommitedEntries;
@@ -84,11 +86,11 @@ protected:
         TGCTime CollectSent;
         TGCTime KnownGcBarrier;
         TGCTime CommitedGcBarrier;
+        TGCTime MinUncollectedTime;
         ui32 GcCounter;
         ui32 GcWaitFor;
 
         inline TChannelInfo();
-        void ApplyDelta(TGCTime time, TGCBlobDelta &delta);
         void SendCollectGarbage(TGCTime uncommittedTime, const TTabletStorageInfo *tabletStorageInfo, ui32 channel, ui32 generation, const TActorContext& executor);
         void SendCollectGarbageEntry(const TActorContext &ctx, TVector<TLogoBlobID> &&keep, TVector<TLogoBlobID> &&notKeep, ui64 tabletid, ui32 channel, ui32 bsgroup, ui32 generation);
         void OnCollectGarbageSuccess();
@@ -105,7 +107,6 @@ protected:
     bool AllowGarbageCollection;
 
     void ApplyDelta(TGCTime time, TGCBlobDelta &delta);
-    void SendCollectGarbage(const TActorContext& executor);
     static inline void MergeVectors(THolder<TVector<TLogoBlobID>>& destination, const TVector<TLogoBlobID>& source);
     static inline void MergeVectors(TVector<TLogoBlobID>& destination, const TVector<TLogoBlobID>& source);
     static inline TVector<TLogoBlobID>* CreateVector(const TVector<TLogoBlobID>& source);

@@ -159,7 +159,7 @@ private:
         const auto valueType = Type::getInt128Ty(context);
         const auto indexType = Type::getInt32Ty(context);
         const auto pairType = ArrayType::get(valueType, 2U);
-        const auto containerType = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ? static_cast<Type*>(PointerType::getUnqual(valueType)) : static_cast<Type*>(valueType);
+        const auto containerType = static_cast<Type*>(valueType);
         const auto contextType = GetCompContextType(context);
         const auto statusType = Type::getInt1Ty(context);
         const auto funcType = FunctionType::get(statusType, {PointerType::getUnqual(contextType), containerType, PointerType::getUnqual(valueType)}, false);
@@ -178,8 +178,7 @@ private:
         const auto main = BasicBlock::Create(context, "main", ctx.Func);
         auto block = main;
 
-        const auto container = codegen.GetEffectiveTarget() == NYql::NCodegen::ETarget::Windows ?
-            new LoadInst(valueType, containerArg, "load_container", false, block) : static_cast<Value*>(containerArg);
+        const auto container = static_cast<Value*>(containerArg);
 
         const auto good = BasicBlock::Create(context, "good", ctx.Func);
         const auto done = BasicBlock::Create(context, "done", ctx.Func);
@@ -278,24 +277,9 @@ private:
 }
 
 IComputationNode* WrapDictItems(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 1 ||  callable.GetInputsCount() == 2, "Expected one or two args");
+    MKQL_ENSURE(callable.GetInputsCount() == 1, "Expected one arg");
     const auto node = LocateNode(ctx.NodeLocator, callable, 0);
-
-    if (1U == callable.GetInputsCount()) {
-        return new TDictItemsWrapper(ctx.Mutables, node);
-    }
-
-    const auto mode = AS_VALUE(TDataLiteral, callable.GetInput(1))->AsValue().Get<ui32>();
-    switch (static_cast<EDictItems>(mode)) {
-    case EDictItems::Both:
-        return new TDictItemsWrapper(ctx.Mutables, node);
-    case EDictItems::Keys:
-        return new TDictHalfsWrapper<true>(ctx.Mutables, node);
-    case EDictItems::Payloads:
-        return new TDictHalfsWrapper<false>(ctx.Mutables, node);
-    default:
-        Y_ABORT("Unknown mode: %" PRIu32, mode);
-    }
+    return new TDictItemsWrapper(ctx.Mutables, node);
 }
 
 IComputationNode* WrapDictKeys(TCallable& callable, const TComputationNodeFactoryContext& ctx) {

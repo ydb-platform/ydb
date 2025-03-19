@@ -9,8 +9,8 @@ ENV(USE_YDB_TRUNK_RECIPE_TOOLS=true)
 PEERDIR(
     library/cpp/threading/local_executor
     ydb/public/lib/ut_helpers
-    ydb/public/sdk/cpp/client/ydb_discovery
-    ydb/public/sdk/cpp/client/draft
+    ydb/public/sdk/cpp/src/client/discovery
+    ydb/public/sdk/cpp/src/client/draft
 )
 
 SRCS(

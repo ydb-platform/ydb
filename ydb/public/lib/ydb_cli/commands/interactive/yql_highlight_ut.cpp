@@ -365,4 +365,4 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
                 " "
                 "kkkkkk no ovvvo ss kk kkkkko"));
     }
-}
+} // Y_UNIT_TEST_SUITE(YqlHighlightTests)

@@ -162,12 +162,61 @@ protected:
         SendBatch(std::move(batch));
     }
 
-private:
-    virtual void ProceedToScan() = 0;
+    bool StringKeyIsInTableRange(const TVector<TString>& key) const {
+        {
+            bool equalPrefixes = true;
+            for (size_t index : xrange(Min(TableRange.From.GetCells().size(), key.size()))) {
+                if (auto cellFrom = TableRange.From.GetCells()[index]; !cellFrom.IsNull()) {
+                    int cmp = cellFrom.AsBuf().compare(key[index]);
+                    if (cmp < 0) {
+                        equalPrefixes = false;
+                        break;
+                    }
+                    if (cmp > 0) {
+                        return false;
+                    }
+                    // cmp == 0, prefixes are equal, go further
+                } else {
+                    equalPrefixes = false;
+                    break;
+                }
+            }
+            if (equalPrefixes && !TableRange.FromInclusive) {
+                return false;
+            }
+        }
+
+        if (TableRange.To.GetCells().size()) {
+            bool equalPrefixes = true;
+            for (size_t index : xrange(Min(TableRange.To.GetCells().size(), key.size()))) {
+                if (auto cellTo = TableRange.To.GetCells()[index]; !cellTo.IsNull()) {
+                    int cmp = cellTo.AsBuf().compare(key[index]);
+                    if (cmp > 0) {
+                        equalPrefixes = false;
+                        break;
+                    }
+                    if (cmp < 0) {
+                        return false;
+                    }
+                    // cmp == 0, prefixes are equal, go further
+                } else {
+                    break;
+                }
+            }
+            if (equalPrefixes && !TableRange.ToInclusive) {
+                return false;
+            }
+        }
+
+        return true;
+    }
 
     void ReplyLimiterFailedAndDie() {
         ReplyErrorAndDie(Ydb::StatusIds::OVERLOADED, "System view: concurrent scans limit exceeded");
     }
+
+private:
+    virtual void ProceedToScan() = 0;
 
     void ReplyNavigateFailedAndDie() {
         ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE, "System view: navigate failed");
@@ -191,7 +240,7 @@ private:
         }
     }
 
-    void HandleLimiter(TEvSysView::TEvGetScanLimiterResult::TPtr& ev) {
+    virtual void HandleLimiter(TEvSysView::TEvGetScanLimiterResult::TPtr& ev) {
         ScanLimiter = ev->Get()->ScanLimiter;
 
         if (!ScanLimiter->Inc()) {
@@ -248,6 +297,8 @@ private:
         DomainKey = entry.DomainInfo->DomainKey;
 
         TenantName = CanonizePath(entry.Path);
+        DatabaseOwner = entry.Self->Info.GetOwner();
+        Y_ABORT_UNLESS(entry.Self->Info.GetOwner() == entry.SecurityObject->GetOwnerSID());
 
         TBase::Register(CreateTenantNodeEnumerationLookup(TBase::SelfId(), TenantName));
         TBase::Become(&TDerived::StateLookup);
@@ -264,9 +315,10 @@ private:
             "Scan prepared, actor: " << TBase::SelfId()
                 << ", schemeshard id: " << SchemeShardId
                 << ", hive id: " << HiveId
-                << ", tenant name: " << TenantName
+                << ", database: " << TenantName
+                << ", database owner: " << DatabaseOwner
                 << ", domain key: " << DomainKey
-                << ", tenant node count: " << TenantNodes.size());
+                << ", database node count: " << TenantNodes.size());
 
         ProceedToScan();
     }
@@ -321,6 +373,7 @@ protected:
     ui64 SchemeShardId = 0;
     TPathId DomainKey;
     TString TenantName;
+    NACLib::TSID DatabaseOwner;
     THashSet<ui32> TenantNodes;
     ui64 HiveId = 0;
     ui64 SysViewProcessorId = 0;
@@ -330,15 +383,14 @@ protected:
     bool BatchRequestInFlight = false;
     bool DoPipeCacheUnlink = false;
 
-private:
+    TIntrusivePtr<TScanLimiter> ScanLimiter;
+    bool AllowedByLimiter = false;
+
     enum EFailState {
         OK,
         LIMITER_FAILED,
         NAVIGATE_FAILED
     } FailState = OK;
-
-    TIntrusivePtr<TScanLimiter> ScanLimiter;
-    bool AllowedByLimiter = false;
 };
 
 

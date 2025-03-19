@@ -77,6 +77,14 @@ public:
         return std::min<i64>(FilteredCountLimit.value_or(Max<i64>()), RequestedLimit.value_or(Max<i64>()));
     }
 
+    std::optional<i64> GetLimitRobustOptional() const {
+        if (HasLimit()) {
+            return GetLimitRobust();
+        } else {
+            return std::nullopt;
+        }
+    }
+
     bool HasLimit() const {
         return !!FilteredCountLimit || !!RequestedLimit;
     }
@@ -144,6 +152,10 @@ public:
         return ResultIndexSchema;
     }
 
+    bool HasResultSchema() const {
+        return !!ResultIndexSchema;
+    }
+
     ISnapshotSchema::TPtr GetLoadSchemaVerified(const TPortionInfo& porition) const;
 
     NArrow::TSchemaLiteView GetBlobSchema(const ui64 version) const {
@@ -182,10 +194,7 @@ public:
 
     std::set<ui32> GetProcessingColumnIds() const {
         AFL_VERIFY(ResultIndexSchema);
-        std::set<ui32> result;
-        for (auto&& i : GetProgram().GetProcessingColumns()) {
-            result.emplace(ResultIndexSchema->GetIndexInfo().GetColumnIdVerified(i));
-        }
+        std::set<ui32> result(GetProgram().GetProcessingColumns().begin(), GetProgram().GetProcessingColumns().end());
         return result;
     }
     bool IsAscSorted() const {

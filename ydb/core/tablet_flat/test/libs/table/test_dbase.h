@@ -62,9 +62,9 @@ namespace NTest {
 
         TDbExec(TAutoPtr<TSchemeChanges> delta) : Base(Make(delta)) { }
 
-        const TRedoLog& GetLog() const noexcept { return RedoLog; }
+        const TRedoLog& GetLog() const { return RedoLog; }
 
-        const TChange& BackLog() const noexcept
+        const TChange& BackLog() const
         {
             Y_ABORT_UNLESS(RedoLog, "Redo log is empty, cannot get last entry");
 
@@ -73,7 +73,7 @@ namespace NTest {
 
         TDatabase* operator->() const noexcept { return Base.Get(); }
 
-        TDbExec& Begin() noexcept
+        TDbExec& Begin()
         {
             return DoBegin(true);
         }
@@ -192,12 +192,12 @@ namespace NTest {
             return Base->TxSnapTable(table);
         }
 
-        NTest::TSchemedCookRow SchemedCookRow(ui32 table) noexcept
+        NTest::TSchemedCookRow SchemedCookRow(ui32 table)
         {
             return { RowSchemeFor(table) };
         }
 
-        TCheckIter Iter(ui32 table, bool erased = true) noexcept
+        TCheckIter Iter(ui32 table, bool erased = true)
         {
             DoBegin(false), RowSchemeFor(table);
 
@@ -206,7 +206,7 @@ namespace NTest {
             return check.To(CurrentStep()), check;
         }
 
-        TCheckIter IterData(ui32 table) noexcept
+        TCheckIter IterData(ui32 table)
         {
             DoBegin(false), RowSchemeFor(table);
 
@@ -215,7 +215,7 @@ namespace NTest {
             return check.To(CurrentStep()), check;
         }
 
-        TCheckSelect Select(ui32 table, bool erased = true) noexcept
+        TCheckSelect Select(ui32 table, bool erased = true)
         {
             DoBegin(false), RowSchemeFor(table);
 
@@ -246,8 +246,11 @@ namespace NTest {
             if (last /* make full subset */) {
                 subset = Base->Subset(table, TEpoch::Max(), { }, { });
             } else /* only flush memtables */ {
-                subset = Base->Subset(table, { }, TEpoch::Max());
+                subset = Base->CompactionSubset(table, TEpoch::Max(), { });
             }
+
+            // Note: we don't compact TxStatus in these tests
+            Y_ABORT_UNLESS(subset->TxStatus.empty());
 
             TLogoBlobID logo(1, Gen, ++Step, 1, 0, 0);
 
@@ -279,7 +282,7 @@ namespace NTest {
             for (auto &part : eggs.Parts)
                 partViews.push_back({ part, nullptr, part->Slices });
 
-            Base->Replace(table, std::move(partViews), *subset);
+            Base->Replace(table, *subset, std::move(partViews), { });
 
             return *this;
         }
@@ -338,7 +341,7 @@ namespace NTest {
             return *this;
         }
 
-        const TRowScheme& RowSchemeFor(ui32 table) noexcept
+        const TRowScheme& RowSchemeFor(ui32 table)
         {
             if (std::exchange(Last, table) != table) {
                 // Note: it's ok if the table has been altered, since
@@ -370,7 +373,7 @@ namespace NTest {
             return *this;
         }
 
-        void DumpChanges(IOutputStream &stream) const noexcept
+        void DumpChanges(IOutputStream &stream) const
         {
             for (auto &one: RedoLog) {
                 NUtil::NBin::TOut(stream)
@@ -417,12 +420,12 @@ namespace NTest {
         }
 
     private:
-        void Birth() noexcept
+        void Birth()
         {
             Annex = new TSteppedCookieAllocator(1, ui64(++Gen) << 32, { 0, 999 }, {{ 1, 7 }});
         }
 
-        TDbExec& DoBegin(bool real) noexcept
+        TDbExec& DoBegin(bool real)
         {
             if (OnTx == EOnTx::Real && real) {
                 Y_ABORT("Cannot run multiple tx at the same time");

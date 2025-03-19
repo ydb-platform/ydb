@@ -123,6 +123,11 @@ namespace NActors {
             NKikimr::TAppData::TimeProvider = TimeProvider;
         }
 
+        // We want tests to fail on unhandled exceptions by default
+        if (!App0->FeatureFlags.HasEnableTabletRestartOnUnhandledExceptions()) {
+            App0->FeatureFlags.SetEnableTabletRestartOnUnhandledExceptions(false);
+        }
+
         MonPorts.clear();
         for (ui32 nodeIndex = 0; nodeIndex < NodeCount; ++nodeIndex) {
             ui32 nodeId = FirstNodeId + nodeIndex;
@@ -139,7 +144,7 @@ namespace NActors {
                 node->SchedulerPool.Reset(CreateExecutorPoolStub(this, nodeIndex, node, 0));
                 node->MailboxTable.Reset(new TMailboxTable());
                 node->ActorSystem = MakeActorSystem(nodeIndex, node);
-                node->ExecutorThread.Reset(new TExecutorThread(0, 0, node->ActorSystem.Get(), node->SchedulerPool.Get(), node->MailboxTable.Get(), "TestExecutor"));
+                node->ExecutorThread.Reset(new TExecutorThread(0, node->ActorSystem.Get(), node->SchedulerPool.Get(), "TestExecutor"));
             } else {
                 node->AppData0.reset(new NKikimr::TAppData(ActorSystemPools.SystemPoolId, ActorSystemPools.UserPoolId, ActorSystemPools.IOPoolId, ActorSystemPools.BatchPoolId, ActorSystemPools.ServicePools, app0->TypeRegistry, app0->FunctionRegistry, app0->FormatFactory, nullptr));
                 node->ActorSystem = MakeActorSystem(nodeIndex, node);
@@ -176,6 +181,7 @@ namespace NActors {
             nodeAppData->GraphConfig = app0->GraphConfig;
             nodeAppData->EnableMvccSnapshotWithLegacyDomainRoot = app0->EnableMvccSnapshotWithLegacyDomainRoot;
             nodeAppData->IoContextFactory = app0->IoContextFactory;
+            nodeAppData->SchemeOperationFactory = app0->SchemeOperationFactory;
             if (nodeIndex < egg.Icb.size()) {
                 nodeAppData->Icb = std::move(egg.Icb[nodeIndex]);
                 nodeAppData->InFlightLimiterRegistry.Reset(new NKikimr::NGRpcService::TInFlightLimiterRegistry(nodeAppData->Icb));

@@ -1,7 +1,7 @@
 #include "credentials.h"
 #include <util/string/cast.h>
 
-namespace NYdb {
+namespace NYdb::inline V2 {
 
 class TInsecureCredentialsProvider : public ICredentialsProvider {
 public:

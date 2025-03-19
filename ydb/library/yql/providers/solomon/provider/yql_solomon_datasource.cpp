@@ -33,6 +33,32 @@ public:
         return SolomonProviderName;
     }
 
+    void AddCluster(const TString& name, const THashMap<TString, TString>& properties) override {
+        const TString& token = properties.Value("token", "");
+
+        TSolomonClusterConfig cluster;
+        cluster.SetName(name);
+        cluster.SetCluster(properties.Value("location", ""));
+        cluster.SetToken(token);
+        cluster.SetUseSsl(properties.Value("use_ssl", "true") == "true"sv);
+
+        if (auto value = properties.Value("grpc_port", ""); !value.empty()) {
+            auto grpcPort = cluster.MutableSettings()->Add();
+            *grpcPort->MutableName() = "grpcPort";
+            *grpcPort->MutableValue() = value;
+        }
+
+        State_->Gateway->AddCluster(cluster);
+
+        State_->Configuration->AddValidCluster(name);
+        State_->Configuration->Tokens[name] = ComposeStructuredTokenJsonForTokenAuthWithSecret(properties.Value("tokenReference", ""), token);
+        State_->Configuration->ClusterConfigs[name] = cluster;
+    }
+
+    const THashMap<TString, TString>* GetClusterTokens() override {
+        return &State_->Configuration->Tokens;
+    }
+
     IGraphTransformer& GetConfigurationTransformer() override {
         return *ConfigurationTransformer_;
     }

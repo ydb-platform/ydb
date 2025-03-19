@@ -42,10 +42,10 @@ index 05e070a..7907c1f 100644
  _LIBCPP_END_NAMESPACE_STD
  
 diff --git a/include/__type_traits/is_nothrow_constructible.h b/include/__type_traits/is_nothrow_constructible.h
-index f56816b..8a87d19 100644
+index 2f7ed84..678debb 100644
 --- a/include/__type_traits/is_nothrow_constructible.h
 +++ b/include/__type_traits/is_nothrow_constructible.h
-@@ -23,7 +23,7 @@
+@@ -25,7 +25,7 @@
  _LIBCPP_BEGIN_NAMESPACE_STD
  
  // GCC is disabled due to https://gcc.gnu.org/bugzilla/show_bug.cgi?id=106611
@@ -129,16 +129,59 @@ index 9561b7b..5013724 100644
  
  _LIBCPP_END_NAMESPACE_STD
  
+diff --git a/include/__type_traits/remove_cv.h b/include/__type_traits/remove_cv.h
+index 2c4e9e4..639a9c4 100644
+--- a/include/__type_traits/remove_cv.h
++++ b/include/__type_traits/remove_cv.h
+@@ -10,6 +10,8 @@
+ #define _LIBCPP___TYPE_TRAITS_REMOVE_CV_H
+ 
+ #include <__config>
++#include <__type_traits/remove_const.h>
++#include <__type_traits/remove_volatile.h>
+ 
+ #if !defined(_LIBCPP_HAS_NO_PRAGMA_SYSTEM_HEADER)
+ #  pragma GCC system_header
+@@ -19,10 +21,14 @@ _LIBCPP_BEGIN_NAMESPACE_STD
+ 
+ template <class _Tp>
+ struct remove_cv {
++#if __has_builtin(__remove_cv)
+   using type _LIBCPP_NODEBUG = __remove_cv(_Tp);
++#else
++  typedef __remove_volatile_t<__remove_const_t<_Tp> > type;
++#endif
+ };
+ 
+-#if defined(_LIBCPP_COMPILER_GCC)
++#if defined(_LIBCPP_COMPILER_GCC) || !__has_builtin(__remove_cv)
+ template <class _Tp>
+ using __remove_cv_t = typename remove_cv<_Tp>::type;
+ #else
 diff --git a/include/__type_traits/remove_cvref.h b/include/__type_traits/remove_cvref.h
-index e8e8745..3ec17b4 100644
+index 55f894d..0334771 100644
 --- a/include/__type_traits/remove_cvref.h
 +++ b/include/__type_traits/remove_cvref.h
-@@ -20,7 +20,7 @@
+@@ -28,6 +28,10 @@ struct __remove_cvref_gcc {
  
- _LIBCPP_BEGIN_NAMESPACE_STD
- 
--#if __has_builtin(__remove_cvref) && !defined(_LIBCPP_COMPILER_GCC)
-+#if __has_builtin(__remove_cvref) && !defined(_LIBCPP_COMPILER_GCC) && !defined(__CUDACC__)
+ template <class _Tp>
+ using __remove_cvref_t _LIBCPP_NODEBUG = typename __remove_cvref_gcc<_Tp>::type;
++// compatibility with cuda && clang14
++#elif defined(__CUDACC__) || !__has_builtin(__remove_cvref)
++template <class _Tp>
++using __remove_cvref_t _LIBCPP_NODEBUG = __remove_cv_t<__libcpp_remove_reference_t<_Tp> >;
+ #else
  template <class _Tp>
  using __remove_cvref_t _LIBCPP_NODEBUG = __remove_cvref(_Tp);
- #else
+@@ -39,7 +43,11 @@ using __is_same_uncvref = _IsSame<__remove_cvref_t<_Tp>, __remove_cvref_t<_Up> >
+ #if _LIBCPP_STD_VER >= 20
+ template <class _Tp>
+ struct remove_cvref {
++#if defined(__CUDACC__) || !__has_builtin(__remove_cvref)
++  using type _LIBCPP_NODEBUG = __remove_cvref_t<_Tp>;
++#else
+   using type _LIBCPP_NODEBUG = __remove_cvref(_Tp);
++#endif
+ };
+ 
+ template <class _Tp>

@@ -1,4 +1,5 @@
 
+#include "yql_yt_cbo_helpers.h"
 #include "yql_yt_provider_context.h"
 #include "yql_yt_join_impl.h"
 #include "yql_yt_helpers.h"
@@ -10,6 +11,7 @@
 #include <yt/yql/providers/yt/opt/yql_yt_join.h>
 #include <yt/yql/providers/yt/provider/yql_yt_provider_context.h>
 #include <yql/essentials/utils/log/log.h>
+#include <util/string/vector.h>
 
 #include <yt/cpp/mapreduce/common/helpers.h>
 
@@ -56,12 +58,10 @@ public:
     TJoinReorderer(
         TYtJoinNodeOp::TPtr op,
         const TYtState::TPtr& state,
-        const TString& cluster,
         TExprContext& ctx,
         bool debug = false)
         : Root(op)
         , State(state)
-        , Cluster(cluster)
         , Ctx(ctx)
         , Debug(debug)
     {
@@ -76,7 +76,7 @@ public:
         std::shared_ptr<IBaseOptimizerNode> tree;
         TOptimizerLinkSettings linkSettings;
         std::shared_ptr<IProviderContext> providerCtx;
-        BuildOptimizerJoinTree(State, Cluster, tree, providerCtx, linkSettings, Root, Ctx);
+        BuildOptimizerJoinTree(State, tree, providerCtx, linkSettings, Root, Ctx);
         auto ytCtx = std::static_pointer_cast<TYtProviderContext>(providerCtx);
 
         std::function<void(const TString& str)> log;
@@ -137,7 +137,6 @@ public:
 private:
     TYtJoinNodeOp::TPtr Root;
     const TYtState::TPtr& State;
-    TString Cluster;
     TExprContext& Ctx;
     bool Debug;
 };
@@ -175,9 +174,8 @@ class TOptimizerTreeBuilder
 {
 public:
     TOptimizerLinkSettings LinkSettings;
-    TOptimizerTreeBuilder(TYtState::TPtr state, const TString& cluster, std::shared_ptr<IBaseOptimizerNode>& tree, std::shared_ptr<IProviderContext>& providerCtx, TYtJoinNodeOp::TPtr inputTree, TExprContext& ctx)
+    TOptimizerTreeBuilder(TYtState::TPtr state, std::shared_ptr<IBaseOptimizerNode>& tree, std::shared_ptr<IProviderContext>& providerCtx, TYtJoinNodeOp::TPtr inputTree, TExprContext& ctx)
         : State(state)
-        , Cluster(cluster)
         , Tree(tree)
         , OutProviderCtx(providerCtx)
         , InputTree(inputTree)
@@ -211,14 +209,20 @@ public:
     }
 
 private:
-    TVector<TString> GetJoinColumns(const TString& label) {
-        auto pos = RelJoinColumns.find(label);
-        if (pos == RelJoinColumns.end()) {
-            return TVector<TString>{};
-        }
+    TVector<TString> GetJoinColumns(const TVector<TString>& labels) {
+        TVector<TString> result;
+        for (const auto& label : labels) {
+            auto pos = RelJoinColumns.find(label);
+            if (pos == RelJoinColumns.end()) {
+                YQL_CLOG(ERROR, ProviderYt) << "Did not find any join columns for label " << label;
+                return TVector<TString>{};
+            }
 
-        return TVector<TString>(pos->second.begin(), pos->second.end());
+            std::copy(pos->second.begin(), pos->second.end(), std::back_inserter(result));
+        }
+        return result;
     }
+
 
     std::shared_ptr<IBaseOptimizerNode> ProcessNode(TYtJoinNode::TPtr node, TRelSizeInfo sizeInfo) {
         if (auto* op = dynamic_cast<TYtJoinNodeOp*>(node.Get())) {
@@ -250,10 +254,24 @@ private:
         }
         TRelSizeInfo leftSizeInfo;
         TRelSizeInfo rightSizeInfo;
-        ExtractMapJoinStats(leftSizeInfo, rightSizeInfo, op);
+        PopulateJoinStrategySizeInfo(leftSizeInfo, rightSizeInfo, State, Ctx, op);
 
         auto left = ProcessNode(op->Left, leftSizeInfo);
         auto right = ProcessNode(op->Right, rightSizeInfo);
+
+        for (auto& joinColumn : leftKeys) {
+            if (MultiLabelIndex_.count(joinColumn.RelName) > 0) {
+                joinColumn.OriginalRelName = joinColumn.RelName;
+                joinColumn.RelName = JoinStrings(MultiLabels_[MultiLabelIndex_[joinColumn.RelName]], ",");
+            }
+        }
+        for (auto& joinColumn : rightKeys) {
+            if (MultiLabelIndex_.count(joinColumn.RelName) > 0) {
+                joinColumn.OriginalRelName = joinColumn.RelName;
+                joinColumn.RelName = JoinStrings(MultiLabels_[MultiLabelIndex_[joinColumn.RelName]], ",");
+            }
+        }
+
         bool nonReorderable = op->LinkSettings.ForceSortedMerge;
         LinkSettings.HasForceSortedMerge = LinkSettings.HasForceSortedMerge || op->LinkSettings.ForceSortedMerge;
         LinkSettings.HasHints = LinkSettings.HasHints || !op->LinkSettings.LeftHints.empty() || !op->LinkSettings.RightHints.empty();
@@ -264,11 +282,12 @@ private:
     }
 
     std::shared_ptr<IBaseOptimizerNode> OnLeaf(TYtJoinNodeLeaf* leaf, TRelSizeInfo sizeInfo) {
-        TString label = JoinLeafLabel(leaf->Label);
+        auto labels = JoinLeafLabels(leaf->Label);
+        TString label = JoinStrings(labels, ",");
 
         const TMaybe<ui64> maxChunkCountExtendedStats = State->Configuration->ExtendedStatsMaxChunkCount.Get();
 
-        TVector<TString> keyList = GetJoinColumns(label);
+        TVector<TString> keyList = GetJoinColumns(labels);
 
         TYtSection section{leaf->Section};
         auto stat = std::make_shared<TOptimizerStatistics>();
@@ -314,7 +333,7 @@ private:
 
         if (maxChunkCountExtendedStats) {
             TVector<TMaybe<IYtGateway::TPathStatResult::TExtendedResult>> extendedStats;
-            extendedStats = GetStatsFromCache(leaf, keyList, *maxChunkCountExtendedStats);
+            extendedStats = GetStatsFromCache(leaf, keyList);
             columnInfo = ExtractColumnInfo(extendedStats);
         }
 
@@ -330,186 +349,34 @@ private:
         });
 
         stat->Specific = std::move(providerStats);
+
+        if (labels.size() != 1) {
+            MultiLabels_.push_back(labels);
+            for (const auto& label : labels) {
+                MultiLabelIndex_[label] = std::ssize(MultiLabels_) - 1;
+            }
+        }
         return std::make_shared<TYtRelOptimizerNode>(std::move(label), std::move(*stat), leaf);
     }
 
-    void ExtractInMemorySize(
-        TMaybe<ui64>& leftMemorySize,
-        TMaybe<ui64>& rightMemorySize,
-        ESizeStatCollectMode mode,
-        TYtJoinNodeOp* op,
-        const TJoinLabels& labels,
-        int numLeaves,
-        TYtJoinNodeLeaf* leftLeaf,
-        bool leftTablesReady,
-        const TVector<TYtPathInfo::TPtr>& leftTables,
-        const THashSet<TString>& leftJoinKeys,
-        const TStructExprType* leftItemType,
-        TYtJoinNodeLeaf* rightLeaf,
-        bool rightTablesReady,
-        const TVector<TYtPathInfo::TPtr>& rightTables,
-        const THashSet<TString>& rightJoinKeys,
-        const TStructExprType* rightItemType)
-    {
-        TMapJoinSettings mapSettings;
-        TJoinSideStats leftStats;
-        TJoinSideStats rightStats;
-        bool isCross = false;
-        auto status = CollectStatsAndMapJoinSettings(mode, mapSettings, leftStats, rightStats,
-                                                     leftTablesReady, leftTables, leftJoinKeys, rightTablesReady, rightTables, rightJoinKeys,
-                                                     leftLeaf, rightLeaf, *State, isCross, Cluster, Ctx);
-        if (status != IGraphTransformer::TStatus::Ok) {
-            YQL_CLOG(WARN, ProviderYt) << "Unable to collect paths and labels: " << status;
-            return;
-        }
-        if (leftLeaf) {
-            const bool needPayload = op->JoinKind->IsAtom("Inner") || op->JoinKind->IsAtom("Right");
-            const auto& label = labels.Inputs[0];
-            TVector<TString> leftJoinKeyList(leftJoinKeys.begin(), leftJoinKeys.end());
-            TYtSection inputSection{leftLeaf->Section};
-            const ui64 rows = mapSettings.LeftRows;
-            ui64 size = 0;
-            auto status = CalculateJoinLeafSize(size, mapSettings, inputSection, *op, Ctx, true, leftItemType, leftJoinKeyList, State, Cluster, leftTables);
-            if (status != IGraphTransformer::TStatus::Ok) {
-                YQL_CLOG(WARN, ProviderYt) << "Unable to calculate join leaf size: " << status;
-                return;
-            }
-            if (op->JoinKind->IsAtom("Cross")) {
-                leftMemorySize = size + rows * (1ULL + label.InputType->GetSize()) * sizeof(NKikimr::NUdf::TUnboxedValuePod);
-            } else {
-                leftMemorySize = CalcInMemorySizeNoCrossJoin(
-                    label, *op, mapSettings, true, Ctx, needPayload, size);
-            }
-        }
-
-        if (rightLeaf) {
-            const bool needPayload = op->JoinKind->IsAtom("Inner") || op->JoinKind->IsAtom("Left");
-            const auto& label = labels.Inputs[numLeaves - 1];
-            TVector<TString> rightJoinKeyList(rightJoinKeys.begin(), rightJoinKeys.end());
-            TYtSection inputSection{rightLeaf->Section};
-            const ui64 rows = mapSettings.RightRows;
-            ui64 size = 0;
-
-            auto status = CalculateJoinLeafSize(size, mapSettings, inputSection, *op, Ctx, false, rightItemType, rightJoinKeyList, State, Cluster, rightTables);
-            if (status != IGraphTransformer::TStatus::Ok) {
-                YQL_CLOG(WARN, ProviderYt) << "Unable to calculate join leaf size: " << status;
-                return;
-            }
-            if (op->JoinKind->IsAtom("Cross")) {
-                rightMemorySize = size + rows * (1ULL + label.InputType->GetSize()) * sizeof(NKikimr::NUdf::TUnboxedValuePod);
-            } else {
-                rightMemorySize = CalcInMemorySizeNoCrossJoin(
-                    label, *op, mapSettings, false, Ctx, needPayload, size);
-            }
-        }
-    }
-
-    void ExtractMapJoinStats(TRelSizeInfo& leftSizeInfo, TRelSizeInfo& rightSizeInfo, TYtJoinNodeOp* op) {
-        auto mapJoinUseFlow = State->Configuration->MapJoinUseFlow.Get().GetOrElse(DEFAULT_MAP_JOIN_USE_FLOW);
-        if (!mapJoinUseFlow) {
-            // Only support flow map joins in CBO.
-            return;
-        }
-
-        TYtJoinNodeLeaf* leftLeaf = dynamic_cast<TYtJoinNodeLeaf*>(op->Left.Get());
-        TYtJoinNodeLeaf* rightLeaf = dynamic_cast<TYtJoinNodeLeaf*>(op->Right.Get());
-
-        bool leftTablesReady = false;
-        TVector<TYtPathInfo::TPtr> leftTables;
-        bool rightTablesReady = false;
-        TVector<TYtPathInfo::TPtr> rightTables;
-        THashSet<TString> leftJoinKeys, rightJoinKeys;
-        int numLeaves = 0;
-        TJoinLabels labels;
-        const TStructExprType* leftItemType = nullptr;
-        const TStructExprType* leftItemTypeBeforePremap = nullptr;
-        const TStructExprType* rightItemType = nullptr;
-        const TStructExprType* rightItemTypeBeforePremap = nullptr;
-
-        {
-            if (leftLeaf) {
-                TYtSection section{leftLeaf->Section};
-                if (Y_UNLIKELY(!section.Settings().Empty() && section.Settings().Item(0).Name() == "Test")) {
-                    return;
-                }
-
-                auto status = CollectPathsAndLabelsReady(leftTablesReady, leftTables, labels, leftItemType, leftItemTypeBeforePremap, *leftLeaf, Ctx);
-                if (status != IGraphTransformer::TStatus::Ok) {
-                    YQL_CLOG(WARN, ProviderYt) << "Unable to collect paths and labels: " << status;
-                    return;
-                }
-                if (!labels.Inputs.empty()) {
-                    leftJoinKeys = BuildJoinKeys(labels.Inputs[0], *op->LeftLabel);
-                }
-                ++numLeaves;
-            }
-            if (rightLeaf) {
-                TYtSection section{rightLeaf->Section};
-                if (Y_UNLIKELY(!section.Settings().Empty() && section.Settings().Item(0).Name() == "Test")) {
-                    return;
-                }
-                auto status = CollectPathsAndLabelsReady(rightTablesReady, rightTables, labels, rightItemType, rightItemTypeBeforePremap, *rightLeaf, Ctx);
-                if (status != IGraphTransformer::TStatus::Ok) {
-                    YQL_CLOG(WARN, ProviderYt) << "Unable to collect paths and labels: " << status;
-                    return;
-                }
-                if (labels.Inputs.size() > 1) {
-                    rightJoinKeys = BuildJoinKeys(labels.Inputs[1], *op->RightLabel);
-                }
-                ++numLeaves;
-            }
-        }
-
-        if (numLeaves == 0) {
-            return;
-        }
-
-        ExtractInMemorySize(leftSizeInfo.MapJoinMemSize, rightSizeInfo.MapJoinMemSize, ESizeStatCollectMode::ColumnarSize, op, labels,
-            numLeaves, leftLeaf, leftTablesReady, leftTables, leftJoinKeys, leftItemType,
-            rightLeaf, rightTablesReady, rightTables, rightJoinKeys, rightItemType);
-        ExtractInMemorySize(leftSizeInfo.LookupJoinMemSize, rightSizeInfo.LookupJoinMemSize, ESizeStatCollectMode::RawSize, op, labels,
-            numLeaves, leftLeaf, leftTablesReady, leftTables, leftJoinKeys, leftItemType,
-            rightLeaf, rightTablesReady, rightTables, rightJoinKeys, rightItemType);
-    }
-
     TVector<TMaybe<IYtGateway::TPathStatResult::TExtendedResult>> GetStatsFromCache(
-        TYtJoinNodeLeaf* nodeLeaf, const TVector<TString>& columns, ui64 maxChunkCount) {
-        TVector<IYtGateway::TPathStatReq> pathStatReqs;
+        TYtJoinNodeLeaf* nodeLeaf, const TVector<TString>& columns)
+    {
+        TVector<TYtPathInfo::TPtr> paths;
         TYtSection section{nodeLeaf->Section};
-        ui64 totalChunkCount = 0;
         for (auto path: section.Paths()) {
-            auto pathInfo = MakeIntrusive<TYtPathInfo>(path);
-
-            totalChunkCount += pathInfo->Table->Stat->ChunkCount;
-
-            auto ytPath = BuildYtPathForStatRequest(Cluster, *pathInfo, columns, *State, Ctx);
-            YQL_ENSURE(ytPath);
-
-            pathStatReqs.push_back(
-                IYtGateway::TPathStatReq()
-                    .Path(*ytPath)
-                    .IsTemp(pathInfo->Table->IsTemp)
-                    .IsAnonymous(pathInfo->Table->IsAnonymous)
-                    .Epoch(pathInfo->Table->Epoch.GetOrElse(0)));
-
-        }
-        if (pathStatReqs.empty() || (maxChunkCount != 0 && totalChunkCount > maxChunkCount)) {
-            return {};
+            paths.push_back(MakeIntrusive<TYtPathInfo>(path));
         }
 
-        IYtGateway::TPathStatOptions pathStatOptions =
-            IYtGateway::TPathStatOptions(State->SessionId)
-                .Cluster(Cluster)
-                .Paths(pathStatReqs)
-                .Config(State->Configuration->Snapshot())
-                .Extended(true);
-
-        IYtGateway::TPathStatResult pathStats = State->Gateway->TryPathStat(std::move(pathStatOptions));
-        if (!pathStats.Success()) {
+        TSet<TString> requestedColumns;
+        IYtGateway::TPathStatResult result;
+        auto status = TryEstimateDataSize(result, requestedColumns, paths, columns, *State, Ctx);
+        YQL_ENSURE(status != IGraphTransformer::TStatus::Error);
+        if (status != IGraphTransformer::TStatus::Ok) {
             YQL_CLOG(WARN, ProviderYt) << "Unable to read path stats that must be already present in cache";
             return {};
         }
-        return pathStats.Extended;
+        return result.Extended;
     }
 
     TVector<TYtColumnStatistic> ExtractColumnInfo(TVector<TMaybe<IYtGateway::TPathStatResult::TExtendedResult>> extendedResults)
@@ -562,29 +429,15 @@ private:
         entry.first->second.insert(rcolumn);
     }
 
-    TString JoinLeafLabel(TExprNode::TPtr label) {
-        if (label->ChildrenSize() == 0) {
-            return TString(label->Content());
-        }
-        TString result;
-        for (ui32 i = 0; i < label->ChildrenSize(); ++i) {
-            result += label->Child(i)->Content();
-            if (i+1 != label->ChildrenSize()) {
-                result += ",";
-            }
-        }
-
-        return result;
-    }
-
     TYtState::TPtr State;
-    const TString Cluster;
     std::shared_ptr<IBaseOptimizerNode>& Tree;
     std::shared_ptr<IProviderContext>& OutProviderCtx;
     THashMap<TString, THashSet<TString>> RelJoinColumns;
     TYtJoinNodeOp::TPtr InputTree;
     TExprContext& Ctx;
     TVector<TYtProviderRelInfo> ProviderRelInfo_;
+    TVector<TVector<TString>> MultiLabels_;
+    THashMap<TString, int> MultiLabelIndex_;
 };
 
 TYtJoinNode::TPtr BuildYtJoinTree(std::shared_ptr<IBaseOptimizerNode> node, TVector<TString>& scope, TExprContext& ctx, TPositionHandle pos) {
@@ -606,11 +459,11 @@ TYtJoinNode::TPtr BuildYtJoinTree(std::shared_ptr<IBaseOptimizerNode> node, TVec
             leftLabel.reserve(op->LeftJoinKeys.size() * 2);
             rightLabel.reserve(op->RightJoinKeys.size() * 2);
             for (auto& left : op->LeftJoinKeys) {
-                leftLabel.emplace_back(ctx.NewAtom(pos, left.RelName));
+                leftLabel.emplace_back(ctx.NewAtom(pos, left.OriginalRelName ? *left.OriginalRelName : left.RelName));
                 leftLabel.emplace_back(ctx.NewAtom(pos, left.AttributeName));
             }
             for (auto& right : op->RightJoinKeys) {
-                rightLabel.emplace_back(ctx.NewAtom(pos, right.RelName));
+                rightLabel.emplace_back(ctx.NewAtom(pos, right.OriginalRelName ? *right.OriginalRelName : right.RelName));
                 rightLabel.emplace_back(ctx.NewAtom(pos, right.AttributeName));
             }
             ret->LeftLabel = Build<TCoAtomList>(ctx, pos)
@@ -659,9 +512,9 @@ bool AreSimilarTrees(TYtJoinNode::TPtr node1, TYtJoinNode::TPtr node2) {
     }
 }
 
-void BuildOptimizerJoinTree(TYtState::TPtr state, const TString& cluster, std::shared_ptr<IBaseOptimizerNode>& tree, std::shared_ptr<IProviderContext>& providerCtx, TOptimizerLinkSettings& linkSettings, TYtJoinNodeOp::TPtr op, TExprContext& ctx)
+void BuildOptimizerJoinTree(TYtState::TPtr state, std::shared_ptr<IBaseOptimizerNode>& tree, std::shared_ptr<IProviderContext>& providerCtx, TOptimizerLinkSettings& linkSettings, TYtJoinNodeOp::TPtr op, TExprContext& ctx)
 {
-    TOptimizerTreeBuilder builder(state, cluster, tree, providerCtx, op, ctx);
+    TOptimizerTreeBuilder builder(state, tree, providerCtx, op, ctx);
     builder.Do();
     linkSettings = builder.LinkSettings;
 }
@@ -671,13 +524,13 @@ TYtJoinNode::TPtr BuildYtJoinTree(std::shared_ptr<IBaseOptimizerNode> node, TExp
     return BuildYtJoinTree(node, scope, ctx, pos);
 }
 
-TYtJoinNodeOp::TPtr OrderJoins(TYtJoinNodeOp::TPtr op, const TYtState::TPtr& state, const TString& cluster, TExprContext& ctx, bool debug)
+TYtJoinNodeOp::TPtr OrderJoins(TYtJoinNodeOp::TPtr op, const TYtState::TPtr& state, TExprContext& ctx, bool debug)
 {
     if (state->Types->CostBasedOptimizer == ECostBasedOptimizerType::Disable || op->CostBasedOptPassed) {
         return op;
     }
 
-    auto result = TJoinReorderer(op, state, cluster, ctx, debug).Do();
+    auto result = TJoinReorderer(op, state, ctx, debug).Do();
     if (!debug && AreSimilarTrees(result, op)) {
         return op;
     }

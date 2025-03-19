@@ -15,6 +15,13 @@
 
 namespace NYT {
 
+////////////////////////////////////////////////////////////////////////////////
+
+extern const TString DefaultRemoteTempTablesDirectory;
+extern const TString DefaultRemoteTempFilesDirectory;
+
+////////////////////////////////////////////////////////////////////////////////
+
 enum EEncoding : int
 {
     E_IDENTITY  /* "identity" */,
@@ -80,6 +87,7 @@ struct TConfig
     TString ApiVersion;
     TString LogLevel;
     TString LogPath;
+    THashSet<TString> LogExcludeCategories = {"Bus", "Net", "Dns", "Concurrency"};
 
     ///
     /// For historical reasons mapreduce client uses its own logging system.

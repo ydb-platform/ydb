@@ -428,6 +428,10 @@ public:
     NMonitoring::THistogramPtr WriteActorWritesOperationsHistogram;
     NMonitoring::THistogramPtr WriteActorWritesLatencyHistogram;
 
+    NMonitoring::THistogramPtr BufferActorPrepareLatencyHistogram;
+    NMonitoring::THistogramPtr BufferActorCommitLatencyHistogram;
+    NMonitoring::THistogramPtr BufferActorFlushLatencyHistogram;
+
     NMonitoring::THistogramPtr ForwardActorWritesSizeHistogram;
     NMonitoring::THistogramPtr ForwardActorWritesLatencyHistogram;
 
@@ -453,12 +457,28 @@ public:
 
     NMonitoring::TDynamicCounters::TCounterPtr RowsDuplicationsFound;
 
+    // Locality metrics for request
+    NMonitoring::TDynamicCounters::TCounterPtr TotalSingleNodeReqCount;
+    NMonitoring::TDynamicCounters::TCounterPtr NonLocalSingleNodeReqCount;
+
     TAlignedPagePoolCounters AllocCounters;
 
     // db counters
     TConcurrentRWHashMap<TString, TKqpDbCountersPtr, 256> DbCounters;
     TActorSystem* ActorSystem = nullptr;
     TActorId DbWatcherActorId;
+
+    // Statistics CPU usage
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueryStatCpuCollectUs;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueryStatCpuFinishUs;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueryStatCpuConvertUs;
+    // Statistics MEM inflight (non deriv)
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueryStatMemCollectInflightBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueryStatMemFinishInflightBytes;
+    // Statistics MEM output (deriv)
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueryStatMemFinishBytes;
+    ::NMonitoring::TDynamicCounters::TCounterPtr QueryStatMemConvertBytes;
+
 };
 
 struct TKqpRequestCounters : public TThrRefBase {

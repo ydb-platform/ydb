@@ -177,11 +177,15 @@ public:
     ETableType GetTableType() const { return TableType; }
     void SetTableType(ETableType tableType) { TableType = tableType; }
 
+    void SetSysViewRewritten(bool flag) { SysViewRewritten = flag; }
+    bool GetSysViewRewritten() const { return SysViewRewritten; }
+
 private:
     THashMap<TString, const TTypeAnnotationNode*> ColumnTypes;
     bool NeedsStats = false;
     bool NeedAuthInfo = true;
     ETableType TableType;
+    bool SysViewRewritten = false;
 };
 
 class TKikimrTablesData : public TThrRefBase {
@@ -191,7 +195,7 @@ public:
     TKikimrTablesData& operator=(const TKikimrTablesData&) = delete;
 
     TKikimrTableDescription& GetOrAddTable(const TString& cluster, const TString& database, const TString& table,
-        ETableType tableType = ETableType::Table);
+        ETableType tableType = ETableType::Table, bool sysViewRewritten = false);
     TKikimrTableDescription& GetTable(const TString& cluster, const TString& table);
 
     const TKikimrTableDescription* EnsureTableExists(const TString& cluster, const TString& table,
@@ -202,6 +206,8 @@ public:
     const THashMap<std::pair<TString, TString>, TKikimrTableDescription>& GetTables() const {
         return Tables;
     }
+
+    std::optional<TString> GetTempTablePath(const TStringBuf& table) const;
 
     void Reset() {
         Tables.clear();
@@ -251,6 +257,9 @@ enum class TYdbOperation : ui64 {
     Backup                 = 1ull << 31,
     BackupIncremental      = 1ull << 32,
     Restore                = 1ull << 33,
+    CreateTransfer         = 1ull << 34,
+    AlterTransfer          = 1ull << 35,
+    DropTransfer           = 1ull << 36,
 };
 
 Y_DECLARE_FLAGS(TYdbOperations, TYdbOperation);

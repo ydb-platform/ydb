@@ -63,7 +63,7 @@ void TSchemeShard::FromXxportInfo(NKikimrImport::TImport& import, const TImportI
     case TImportInfo::EState::Waiting:
         switch (GetMinState(importInfo)) {
         case TImportInfo::EState::GetScheme:
-        case TImportInfo::EState::CreateTable:
+        case TImportInfo::EState::CreateSchemeObject:
             import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_PREPARING);
             break;
         case TImportInfo::EState::Transferring:
@@ -72,6 +72,9 @@ void TSchemeShard::FromXxportInfo(NKikimrImport::TImport& import, const TImportI
             break;
         case TImportInfo::EState::BuildIndexes:
             import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_BUILD_INDEXES);
+            break;
+        case TImportInfo::EState::CreateChangefeed:
+            import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_CREATE_CHANGEFEEDS);
             break;
         case TImportInfo::EState::Done:
             import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_DONE);
@@ -163,6 +166,7 @@ void TSchemeShard::PersistImportItemState(NIceDb::TNiceDb& db, const TImportInfo
         NIceDb::TUpdate<Schema::ImportItems::State>(static_cast<ui8>(item.State)),
         NIceDb::TUpdate<Schema::ImportItems::WaitTxId>(item.WaitTxId),
         NIceDb::TUpdate<Schema::ImportItems::NextIndexIdx>(item.NextIndexIdx),
+        NIceDb::TUpdate<Schema::ImportItems::NextChangefeedIdx>(item.NextChangefeedIdx),
         NIceDb::TUpdate<Schema::ImportItems::Issue>(item.Issue)
     );
 }
@@ -171,17 +175,39 @@ void TSchemeShard::PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInf
     Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
     const auto& item = importInfo->Items.at(itemIdx);
 
-    db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
+    auto record = db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx);
+    record.Update(
         NIceDb::TUpdate<Schema::ImportItems::Scheme>(item.Scheme.SerializeAsString())
     );
+
+    if (!item.CreationQuery.empty()) {
+        record.Update(
+            NIceDb::TUpdate<Schema::ImportItems::CreationQuery>(item.CreationQuery)
+        );
+    }
     if (item.Permissions.Defined()) {
-        db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
+        record.Update(
             NIceDb::TUpdate<Schema::ImportItems::Permissions>(item.Permissions->SerializeAsString())
         );
     }
     db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
         NIceDb::TUpdate<Schema::ImportItems::Metadata>(item.Metadata.Serialize())
     );
+
+    db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
+        NIceDb::TUpdate<Schema::ImportItems::Changefeeds>(item.Changefeeds)
+    );
+}
+
+void TSchemeShard::PersistImportItemPreparedCreationQuery(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx) {
+    Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+    const auto& item = importInfo->Items[itemIdx];
+
+    if (item.PreparedCreationQuery) {
+        db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
+            NIceDb::TUpdate<Schema::ImportItems::PreparedCreationQuery>(item.PreparedCreationQuery->SerializeAsString())
+        );
+    }
 }
 
 void TSchemeShard::PersistImportItemDstPathId(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo, ui32 itemIdx) {
@@ -215,6 +241,10 @@ void TSchemeShard::Handle(TEvImport::TEvListImportsRequest::TPtr& ev, const TAct
 }
 
 void TSchemeShard::Handle(TEvPrivate::TEvImportSchemeReady::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxProgressImport(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvPrivate::TEvImportSchemeQueryResult::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxProgressImport(ev), ctx);
 }
 

@@ -31,6 +31,7 @@ SRCS(
     bootstrapper.proto
     change_exchange.proto
     channel_purpose.proto
+    checksum.proto
     cms.proto
     compaction.proto
     compile_service_config.proto
@@ -85,6 +86,7 @@ SRCS(
     import.proto
     index_builder.proto
     kesus.proto
+    kafka.proto
     key.proto
     kqp.proto
     kqp_physical.proto
@@ -113,6 +115,7 @@ SRCS(
     query_stats.proto
     replication.proto
     resource_broker.proto
+    s3_settings.proto
     scheme_board.proto
     scheme_board_mon.proto
     scheme_log.proto

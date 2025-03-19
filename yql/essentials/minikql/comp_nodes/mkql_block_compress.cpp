@@ -51,15 +51,12 @@ public:
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto ptrValueType = PointerType::getUnqual(valueType);
         const auto statusType = Type::getInt32Ty(context);
         const auto bitmapType = Type::getInt8Ty(context);
 
         const auto name = "GetBitmapScalarValue";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&GetBitmapScalarValue));
-        const auto getBitmapType = NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget() ?
-            FunctionType::get(bitmapType, { valueType }, false):
-            FunctionType::get(bitmapType, { ptrValueType }, false);
+        const auto getBitmapType = FunctionType::get(bitmapType, { valueType }, false);
         const auto getBitmap = ctx.Codegen.GetModule().getOrInsertFunction(name, getBitmapType);
 
         const auto work = BasicBlock::Create(context, "work", ctx.Func);
@@ -83,7 +80,7 @@ public:
         block = test;
 
         const auto bitmapValue = getres.second[BitmapIndex_](ctx, block);
-        const auto bitmap = CallInst::Create(getBitmap, { WrapArgumentForWindows(bitmapValue, ctx, block) }, "bitmap", block);
+        const auto bitmap = CallInst::Create(getBitmap, { bitmapValue }, "bitmap", block);
 
         ValueCleanup(EValueRepresentation::Any, bitmapValue, ctx, block);
 
@@ -156,7 +153,6 @@ public:
         auto& context = ctx.Codegen.GetContext();
 
         const auto valueType = Type::getInt128Ty(context);
-        const auto ptrValueType = PointerType::getUnqual(valueType);
         const auto statusType = Type::getInt32Ty(context);
         const auto sizeType = Type::getInt64Ty(context);
 
@@ -167,9 +163,7 @@ public:
 
         const auto name = "GetBitmapPopCountCount";
         ctx.Codegen.AddGlobalMapping(name, reinterpret_cast<const void*>(&GetBitmapPopCountCount));
-        const auto getPopCountType = NYql::NCodegen::ETarget::Windows != ctx.Codegen.GetEffectiveTarget() ?
-            FunctionType::get(sizeType, { valueType }, false):
-            FunctionType::get(sizeType, { ptrValueType }, false);
+        const auto getPopCountType = FunctionType::get(sizeType, { valueType }, false);
         const auto getPopCount = ctx.Codegen.GetModule().getOrInsertFunction(name, getPopCountType);
 
         const auto loop = BasicBlock::Create(context, "loop", ctx.Func);
@@ -191,7 +185,7 @@ public:
         block = work;
 
         const auto bitmapValue = getres.second[BitmapIndex_](ctx, block);
-        const auto pops = CallInst::Create(getPopCount, { WrapArgumentForWindows(bitmapValue, ctx, block) }, "pops", block);
+        const auto pops = CallInst::Create(getPopCount, { bitmapValue }, "pops", block);
 
         ValueCleanup(EValueRepresentation::Any, bitmapValue, ctx, block);
 
@@ -413,7 +407,7 @@ public:
         block = good;
 
         const auto bitmap = getres.second[BitmapIndex_](ctx, block);
-        const auto bitmapArg = WrapArgumentForWindows(bitmap, ctx, block);
+        const auto bitmapArg = bitmap;
 
         const auto stepType = Type::getInt8Ty(context);
         const auto checkFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::Check));

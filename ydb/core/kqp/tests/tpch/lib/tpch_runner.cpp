@@ -2,7 +2,7 @@
 #include "tpch_tables.h"
 
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
-#include <ydb/public/sdk/cpp/client/ydb_scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <library/cpp/resource/resource.h>
 
@@ -29,7 +29,7 @@ void ThrowOnError(const TStatus& status) {
 }
 
 template <typename T>
-void BuildRow(const TString& line, const TVector<TTableColumn>& columns, TValueBuilderBase<T>& row) {
+void BuildRow(const std::string& line, const std::vector<TTableColumn>& columns, TValueBuilderBase<T>& row) {
     TVector<TStringBuf> data = StringSplitter(line).Split('|').SkipEmpty();
     Y_ENSURE(data.size() == columns.size());
 

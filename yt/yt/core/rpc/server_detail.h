@@ -7,9 +7,9 @@
 
 #include <yt/yt/core/logging/log.h>
 
-#include <yt/yt/core/misc/memory_usage_tracker.h>
-
 #include <yt/yt_proto/yt/core/rpc/proto/rpc.pb.h>
+
+#include <library/cpp/yt/memory/memory_usage_tracker.h>
 
 #include <library/cpp/yt/threading/rw_spin_lock.h>
 #include <library/cpp/yt/threading/spin_lock.h>
@@ -316,7 +316,7 @@ protected:
     TServerConfigPtr AppliedConfig_;
 
     //! Service name to service.
-    using TServiceMap = THashMap<TString, IServicePtr>;
+    using TServiceMap = THashMap<std::string, IServicePtr>;
     THashMap<TGuid, TServiceMap> RealmIdToServiceMap_;
 
     explicit TServerBase(NLogging::TLogger logger);

@@ -198,6 +198,7 @@ message TFeatureFlags {
     optional bool EnableDataErasure = 172 [default = false];
     optional bool EnableChangefeedsExport = 174 [default = false];
     optional bool EnableKafkaNativeBalancing = 175 [default = false];
+    optional bool EnableKafkaTransactions = 177 [default = false];
     optional bool SwitchToConfigV2 = 179 [default = false];
     optional bool SwitchToConfigV1 = 180 [default = false];
     optional bool EnableExportAutoDropping = 183 [default = false];

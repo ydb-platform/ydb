@@ -76,7 +76,8 @@ namespace NKafka {
 
     void TKafkaInitProducerIdActor::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx) {
         if (!Kqp->HandleCreateSessionResponse(ev, ctx)) {
-            SendResponseFail(ctx, EKafkaErrors::UNKNOWN_SERVER_ERROR, "Failed to create KQP session");
+            SendResponseFail(EKafkaErrors::BROKER_NOT_AVAILABLE, "Failed to create KQP session");
+            Die(ctx);
             return;
         }
 
@@ -86,7 +87,7 @@ namespace NKafka {
     void TKafkaInitProducerIdActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
         if (ev->Cookie != KqpReqCookie) {
             KAFKA_LOG_CRIT(TStringBuilder() << "Unexpected cookie in TEvQueryResponse. Expected: " << KqpReqCookie << ", Actual: " << ev->Cookie << ".");
-            SendResponseFail(ctx, EKafkaErrors::BROKER_NOT_AVAILABLE, "Failed to send request to producer_state table");
+            SendResponseFail(EKafkaErrors::BROKER_NOT_AVAILABLE, "Failed to send request to producer_state table");
             Die(ctx);
             return;
         }
@@ -111,7 +112,8 @@ namespace NKafka {
             NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
             kqpQueryError << issues.ToString();
 
-            SendResponseFail(ctx, kafkaErr, kqpQueryError);
+            SendResponseFail(kafkaErr, kqpQueryError);
+            Die(ctx);
             return;
         }
 
@@ -160,7 +162,7 @@ namespace NKafka {
                     break;
             }
         } catch (const yexception& y) {
-            SendResponseFail(ctx, EKafkaErrors::BROKER_NOT_AVAILABLE, TStringBuilder() << "Failed to handle reponse from KQP. Caused by: " << y.what());
+            SendResponseFail(EKafkaErrors::BROKER_NOT_AVAILABLE, TStringBuilder() << "Failed to handle reponse from KQP. Caused by: " << y.what());
             Die(ctx);
         }
     }
@@ -243,12 +245,11 @@ namespace NKafka {
     }
 
     // send responses methods
-    void TKafkaInitProducerIdActor::SendResponseFail(const TActorContext& ctx, EKafkaErrors error, const TString& message) {
+    void TKafkaInitProducerIdActor::SendResponseFail(EKafkaErrors error, const TString& message) {
         KAFKA_LOG_ERROR(TStringBuilder() << "request failed. reason# " << message);
         auto response = std::make_shared<TInitProducerIdResponseData>();
         response->ErrorCode = error;
         Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, response, error));
-        Die(ctx);
     }
 
     void TKafkaInitProducerIdActor::SendSuccessfullResponseForTxProducer(const TProducerState& producerState, const TActorContext& ctx) {
@@ -335,5 +336,4 @@ namespace NKafka {
                 return "NO_REQUEST";
             }
     }
-
 } // namespace NKafka

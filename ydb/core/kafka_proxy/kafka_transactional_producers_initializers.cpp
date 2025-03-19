@@ -39,6 +39,7 @@ void TTransactionalProducersInitializer::DoPrepare(NInitializer::IInitializerInp
             // we need to use signed int, cause Kafka protocol uses signed int and we can't overflow it on client
             column.mutable_type()->set_type_id(Ydb::Type::INT16);
         }
+        // updated_at column is only used for ttl purposes. No other business logic relys on it
         {
             auto& column = *request.add_columns();
             column.set_name("updated_at");

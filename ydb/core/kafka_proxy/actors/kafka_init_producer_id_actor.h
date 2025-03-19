@@ -82,7 +82,7 @@ namespace NKafka {
             NYdb::TParams BuildUpdateProducerStateParams(ui16 newProducerEpoch);
 
             // send responses methods
-            void SendResponseFail(const TActorContext& ctx, EKafkaErrors error, const TString& message);
+            void SendResponseFail(EKafkaErrors error, const TString& message);
             void SendSuccessfullResponseForTxProducer(const TProducerState& producerState, const TActorContext& ctx);
 
             // helper methods

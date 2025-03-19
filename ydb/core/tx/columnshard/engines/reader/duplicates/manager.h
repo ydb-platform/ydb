@@ -108,7 +108,6 @@ private:
     ui64 GetCount(const TPosition& node) const {
         AFL_VERIFY(Count.size() == PropagatedDeltas.size());
         AFL_VERIFY(node.GetIndex() < Count.size());
-        AFL_VERIFY(PropagatedDeltas[node.GetIndex()] * node.IntervalSize() >= (i64)Count[node.GetIndex()]);
         return Count[node.GetIndex()] + PropagatedDeltas[node.GetIndex()] * node.IntervalSize();
     }
     TPosition GetRoot() const {

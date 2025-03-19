@@ -7,6 +7,7 @@
 #include "import_s3.h"
 
 #include <ydb/core/backup/common/checksum.h>
+#include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/datashard_config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -68,7 +69,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
 
     public:
         virtual ~IReadController() = default;
-        virtual void Feed(TString&& portion) = 0;
+        virtual void Feed(TString&& portion, bool last) = 0;
         // Returns data (points to internal buffer) or error
         virtual EDataStatus TryGetData(TStringBuf& data, TString& error) = 0;
         // Clears internal buffer & makes it ready for another Feed() and TryGetData()
@@ -130,7 +131,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
     public:
         using TReadController::TReadController;
 
-        void Feed(TString&& portion) override {
+        void Feed(TString&& portion, bool last) override {
+            Y_UNUSED(last);
             Buffer.Append(portion.data(), portion.size());
         }
 
@@ -186,7 +188,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             Buffer.Reserve(AppData()->ZstdBlockSizeForTest.GetOrElse(ZSTD_BLOCKSIZE_MAX));
         }
 
-        void Feed(TString&& portion) override {
+        void Feed(TString&& portion, bool last) override {
+            Y_UNUSED(last);
             Y_ABORT_UNLESS(Portion.Empty());
             Portion.Assign(portion.data(), portion.size());
         }
@@ -278,6 +281,70 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         ui64 PendingInputBytes = 0;
         ui64 ReadyInputBytes = 0;
         ui64 ReadyOutputPos = 0;
+    };
+
+    class TEncryptionDeserializerController : public IReadController {
+    public:
+        TEncryptionDeserializerController(NBackup::TEncryptionKey key, NBackup::TEncryptionIV expectedIV, THolder<IReadController> deserializedDataController)
+            : Deserializer(std::move(key), std::move(expectedIV))
+            , DataController(std::move(deserializedDataController))
+        {
+        }
+
+        void Feed(TString&& portion, bool last) override {
+            Last = last;
+            FeedUnprocessedBytes += portion.size();
+            Deserializer.AddData(TBuffer(portion.data(), portion.size()), last);
+        }
+
+        EDataStatus TryGetData(TStringBuf& data, TString& error) override {
+            try {
+                const ui64 processedBefore = Deserializer.GetProcessedInputBytes();
+                TMaybe<TBuffer> block = Deserializer.GetNextBlock(); // Returns at least one encrypted block
+                if (block) {
+                    const ui64 processedAfter = Deserializer.GetProcessedInputBytes();
+                    Y_ABORT_UNLESS(processedAfter - processedBefore <= FeedUnprocessedBytes);
+                    // Data is read by blocks from encrypted file.
+                    // Each block contains at least one row of data with '\n',
+                    // so we will always get some data from DataController.
+                    ReadyInputBytes += processedAfter - processedBefore;
+                    DataController->Feed(TString(block->Data(), block->Size()), Last);
+                    const EDataStatus status = DataController->TryGetData(data, error);
+                    Y_ABORT_UNLESS(status == READY_DATA);
+                    return status;
+                } else {
+                    return NOT_ENOUGH_DATA;
+                }
+            } catch (const std::exception& ex) {
+                error = ex.what();
+                return ERROR;
+            }
+        }
+
+        void Confirm() override {
+            FeedUnprocessedBytes -= ReadyInputBytes;
+            ReadyInputBytes = 0;
+            return DataController->Confirm();
+        }
+
+        ui64 PendingBytes() const override {
+            return FeedUnprocessedBytes;
+        }
+
+        ui64 ReadyBytes() const override {
+            return ReadyInputBytes;
+        }
+
+        std::pair<ui64, ui64> NextRange(ui64 contentLength, ui64 processedBytes) const override {
+            return DataController->NextRange(contentLength, processedBytes);
+        }
+
+    private:
+        bool Last = false;
+        ui64 FeedUnprocessedBytes = 0;
+        ui64 ReadyInputBytes = 0;
+        NBackup::TEncryptedFileDeserializer Deserializer;
+        THolder<IReadController> DataController;
     };
 
     class TUploadRowsRequestBuilder {
@@ -402,16 +469,18 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             return HeadObject(Settings.GetDataKey(DataFormat, CompressionCodec));
         }
 
+        THolder<IReadController> reader;
         switch (CompressionCodec) {
         case NBackupRestoreTraits::ECompressionCodec::None:
-            Reader.Reset(new TReadControllerRaw(ReadBatchSize, ReadBufferSizeLimit));
+            reader.Reset(new TReadControllerRaw(ReadBatchSize, ReadBufferSizeLimit));
             break;
         case NBackupRestoreTraits::ECompressionCodec::Zstd:
-            Reader.Reset(new TReadControllerZstd(ReadBatchSize, ReadBufferSizeLimit));
+            reader.Reset(new TReadControllerZstd(ReadBatchSize, ReadBufferSizeLimit));
             break;
         case NBackupRestoreTraits::ECompressionCodec::Invalid:
             Y_ABORT("unreachable");
         }
+        Reader = std::move(reader);
 
         ETag = result.GetResult().GetETag();
         ContentLength = result.GetResult().GetContentLength();
@@ -456,6 +525,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         }
 
         ProcessedBytes = info.ProcessedBytes;
+        ReadBytes = ProcessedBytes;
         WrittenBytes = info.WrittenBytes;
         WrittenRows = info.WrittenRows;
         if (Checksum) {
@@ -492,7 +562,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             << ", content-length# " << ContentLength
             << ", body-size# " << msg.Body.size());
 
-        Reader->Feed(std::move(msg.Body));
+        ReadBytes += msg.Body.size();
+        Reader->Feed(std::move(msg.Body), ReadBytes >= ContentLength);
         Process();
     }
 
@@ -885,6 +956,7 @@ private:
     TString ETag;
     ui64 ContentLength = 0;
     ui64 ProcessedBytes = 0;
+    ui64 ReadBytes = 0;
     ui64 WrittenBytes = 0;
     ui64 WrittenRows = 0;
     ui64 PendingBytes = 0;

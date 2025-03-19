@@ -34,7 +34,7 @@ default_tablet_preference:
 
 | Пустая секция ||
 || `system_category_id` | — | Целое число | При указании любого отличного от 0 числа, все координаторы и медиаторы по возможности запускаются в одном и том же датацентре. | 1 ||
-|| `enable_fast_tablet_move` | — | true/false | Данная опция позволяет не дожидаться смерти предыдущего поколения таблетки при запуске нового. | true ||
+|| `enable_fast_tablet_move` | — | true/false | Данная опция позволяет не дожидаться остановки предыдущего поколения таблетки при запуске нового. | true ||
 || `boot_strategy` | — | Перечисление | Регулирует поведение при запуске большого числа таблеток. Возможные варианты:
 
 * `HIVE_BOOT_STRATEGY_BALANCED` — при достижении лимита в `max_tablets_scheduled` на одном узле останавливает запуск новых таблеток на всех узлах.
@@ -56,7 +56,7 @@ default_tablet_preference:
 || `min_counter_scatter_to_balance` | MinCounterScatterToBalance | Вещественное число | Порог метрики Scatter для ресурса Counter. | 0.02 ||
 || `min_node_usage_to_balance` | MinNodeUsageToBalance | Вещественное число | Потребление ресурсов на узле ниже данного значения приравнивается к данному значению. | 0.1 ||
 || `max_node_usage_to_kick` | MaxNodeUsageToKick | Вещественное число | Порог потребления ресурсов на узле для запуска emergency-автобалансировки. | 0.9 ||
-|| `node_usage_range_to_kick` | NodeUsageRangeToKick | Вещественное число | Автобалансировка считается нецелесообразной, если разница в уровне потребления ресурсов между узлами меньше этого значения. | 0.2 ||
+|| `node_usage_range_to_kick` | NodeUsageRangeToKick | Вещественное число | Минимальная разница в уровне потребления ресурсов между узлами, ниже которой автобалансировка считается нецелесообразной. | 0.2 ||
 || `resource_change_reaction_period` | ResourceChangeReactionPeriod | Целое число секунд | Частота обновления агрегированной статистики потребления ресурсов. | 10 ||
 || `tablet_kick_cooldown_period` | TabletKickCooldownPeriod | Целое число секунд | Минимальный период времени между перемещениями одной таблетки. | 600 ||
 || `spread_neighbours` | SpreadNeighbours | true/false | Запуск таблеток одного объекта по возможности на разных узлах. | true ||
@@ -74,9 +74,9 @@ default_tablet_preference:
 - `HIVE_TABLET_BALANCE_STRATEGY_RANDOM` — выбор случайной таблетки.
 
 | `HIVE_TABLET_BALANCE_STRATEGY_WEIGHTED_RANDOM` ||
-|| `min_period_between_balance` | MinPeriodBetweenBalance | Вещественное число секунд | Минимальный период времени между двумя итерациями автобалансировки, не относится к emergency-балансировке. | 0.2 ||
-|| `balancer_inflight` | BalancerInflight | Целое число | Число таблеток, одновременно перезапускающихся в процессе автобалансировки, не относится к emergency-балансировке. | 1 ||
-|| `max_movements_on_auto_balancer` | MaxMovementsOnAutoBalancer | Целое число | Число перемещений таблеток за одну итерацию автобалансировки, не относится к emergency-балансировке. | 1 ||
+|| `min_period_between_balance` | MinPeriodBetweenBalance | Вещественное число секунд | Минимальный период времени между двумя итерациями автобалансировки. Не относится к emergency-балансировке. | 0.2 ||
+|| `balancer_inflight` | BalancerInflight | Целое число | Число таблеток, одновременно перезапускающихся в процессе автобалансировки. Не относится к emergency-балансировке. | 1 ||
+|| `max_movements_on_auto_balancer` | MaxMovementsOnAutoBalancer | Целое число | Число перемещений таблеток за одну итерацию автобалансировки. Не относится к emergency-балансировке. | 1 ||
 || `continue_auto_balancer` | ContinueAutoBalancer | true/false | При включении следующая итерация балансировки запускается, не дожидаясь окончания `resource_change_reaction_period`. | true ||
 || `min_period_between_emergency_balance` | MinPeriodBetweenEmergencyBalance | Вещественное число секунд | Аналогично MinPeriodBetweenBalance, но для emergency-балансировки. | 0.1 ||
 || `emergency_balancer_inflight` | EmergencyBalancerInfligh | Целое число | Аналогично `balancer_inflight`, но для emergency-балансировки. | 1 ||
@@ -145,8 +145,8 @@ hive_config:
 - `HIVE_STORAGE_SELECT_STRATEGY_ROUND_ROBIN` - выбор группы внтури пула хранения по принципу [Round-robin](https://ru.wikipedia.org/wiki/Round-robin_(%D0%B0%D0%BB%D0%B3%D0%BE%D1%80%D0%B8%D1%82%D0%BC)).
 | `HIVE_STORAGE_SELECT_STRATEGY_WEIGHTED_RANDOM` ||
 || `min_period_between_reassign` | MinPeriodBetweenReassign | Целое число секунд | Минимальный период времени между переназначениями групп хранения для каналов одной таблетки. | 300 ||
-|| `storage_pool_fresh_period` | StoragePoolFreshPeriod | Целое число миллисекунд | Информация о пулах хранения столько времени считается актуальной. | 60000 ||
-|| `space_usage_penalty_threshold` | SpaceUsagePenaltyThreshold | Вещественное число | При перевозе канала из-за кончающегося места в группе пессимизировать группы, в которых свободное место отличается во столько или менее раз от исходной группы. | 1.1 ||
+|| `storage_pool_fresh_period` | StoragePoolFreshPeriod | Целое число миллисекунд | Периодичность обновления информации о пулах хранения. | 60000 ||
+|| `space_usage_penalty_threshold` | SpaceUsagePenaltyThreshold | Вещественное число | Минимальное отношение свободного места в целевой группе к свободному месту в исходной группе, при котором целевая группа будет пессимизирована при перевозе канала. | 1.1 ||
 || `space_usage_penalty` | SpaceUsagePenalty | Вещественное число | Коэффициент штрафа, описанного выше. | 0.2 ||
 || channel_balance_strategy | Перечисление | Стратегия выбора канала для переназначения при балансировке каналов. Возможные варианты:
 
@@ -155,10 +155,10 @@ hive_config:
 - `HIVE_CHANNEL_BALANCE_STRATEGY_RANDOM` — выбор случайного канала.
 
 | `HIVE_CHANNEL_BALANCE_STRATEGY_WEIGHTED_RANDOM` ||
-|| `max_channel_history_size` |  MaxChannelHistorySize | Целое число | Балансировка каналов не должна приводить к тому, чтобы размер истории канала превышал это значение. | 200 ||
+|| `max_channel_history_size` |  MaxChannelHistorySize | Целое число | Максимальный размер истории каналов. | 200 ||
 || `storage_info_refresh_frequency` | StorageInfoRefreshFrequency | Целое число миллисекунд | Частота обновления информации о пулах хранения. | 600000 ||
 || `min_storage_scatter_to_balance` | MinStorageScatterToBalance | Вещественное число | Порог метрики Scatter для групп хранения. | 999 ||
-|| `min_group_usage_to_balance` | MinGroupUsageToBalance | Вещественное число | Потребление ресурсов группы хранения ниже данного значения приравнивается к данному значению. | 0.1 ||
+|| `min_group_usage_to_balance` | MinGroupUsageToBalance | Вещественное число | Порог потребления ресурсов группы хранения, ниже которого не запускается балансировка. | 0.1 ||
 || `storage_balancer_inflight` | StorageBalancerInflight | Целое число | Число таблеток, одновременно перезапускающихся во время балансировки каналов. | 1 ||
 |#
 
@@ -170,10 +170,10 @@ Hive отслеживает, как часто рестартуют различ
 || Название параметра в конфигурации | Название параметра в Hive web-viewer | Формат | Описание | Значение по умолчанию ||
 || `tablet_restart_watch_period` | — | Целое число секунд | Размер окна, на котором собирается статистика о числе рестартов таблетки. | 3600 ||
 || `node_restart_watch_period` | — | Целое число секунд | Размер окна, на котором собирается статистика о числе рестартов узла. | 3600 ||
-|| `tablet_restarts_period` | — | Целое число миллисекунд | Окно, на котором считается количество рестартов таблетки, для пессимизации запуска проблемных таблеток. | 1000 ||
-|| `tablet_restarts_max_count` | — | Целое число | Количество рестартов на окне выше, при превышении которого, применяется пессимизация. | 2 ||
-|| `postopone_start_period` | — | Целое число миллисекунд | Попытки запускать проблемные таблетки делаются не чаще чем раз в это количество миллисекунд. | 1000 ||
-|| `node_restarts_for_penalty` | NodeRestartsForPenalty | Целое число | Узлы получают понижение приоритета за такое количество рестартов на окне в `node_restart_watch_period`. | 3 ||
+|| `tablet_restarts_period` | — | Целое число миллисекунд | Размер окна, на котором считается количество рестартов таблетки для пессимизации запуска проблемных таблеток. | 1000 ||
+|| `tablet_restarts_max_count` | — | Целое число | Количество рестартов на окне `tablet_restarts_period`, при превышении которого применяется пессимизация. | 2 ||
+|| `postopone_start_period` | — | Целое число миллисекунд | Периодичность попыток запуска проблемных таблеток. | 1000 ||
+|| `node_restarts_for_penalty` | NodeRestartsForPenalty | Целое число | Количество рестартов на окне `node_restart_watch_period`, после которого узлы получают понижение приоритета. | 3 ||
 |#
 
 ## Прочее {#misc}
@@ -184,7 +184,7 @@ Hive отслеживает, как часто рестартуют различ
 || `request_sequence_size` | — | Целое число | Количество идентификаторов таблеток, которое за один раз Hive базы данных запрашивает у корневого Hive. | 1000 ||
 || `min_request_sequence_size` | — | Целое число | Минимальное количество идентификаторов таблеток, которое за один раз корневой Hive выделяет для Hive базы данных. | 1000 ||
 || `max_request_sequence_size` | — | Целое число | Максимальное количество идентификаторов таблеток, которое за один раз выделяет для Hive базы данных. | 1000000 ||
-|| `node_delete_period` | — | Целое число секунд | Период неактивности, по истечении которого, узел удаляется из базы Hive. | 3600 ||
+|| `node_delete_period` | — | Целое число секунд | Период неактивности, по истечении которого узел удаляется из базы Hive. | 3600 ||
 || `warm_up_enabled` | WarmUpEnabled | true/false | Ожидание старта всех узлов при старте базы или запуск таблеток на первом подключившемся. | true ||
 || `warm_up_boot_waiting_period` | MaxWarmUpBootWaitingPeriod | Целое число миллисекунд | Время ожидания старта всех известных узлов при старте базы. | 30000 ||
 || `max_warm_up_period` | MaxWarmUpPeriod | Целое число секунд | Максимальное время ожидания старта узлов при старте базы. | 600 ||

@@ -1,0 +1,89 @@
+name: Assign a reviewer for documentation
+
+on:
+  pull_request_target:
+    types: [labeled]
+
+jobs:
+  assign-docs-reviewer:
+    runs-on: ubuntu-latest
+    if: github.event.label.name == 'documentation'
+    steps:
+      - name: Assign a random documentation reviewer, excluding the PR author and busy members
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          script: |
+            const teamSlug = "primary-docs-reviewers";
+            const org = "ydb-platform";
+            
+            // Get team members
+            const teamMembers = await github.paginate("GET /orgs/{org}/teams/{team_slug}/members", {
+              org,
+              team_slug: teamSlug
+            });
+            if (teamMembers.length === 0) {
+              core.setFailed("No team members found in the team.");
+            }
+            
+            // Get the PR author
+            const prAuthor = context.payload.pull_request.user.login;
+            
+            // Function to check if a user is busy:
+            // It checks for "busy" in their status message OR if they have limitedAvailability set (checkbox).
+            async function isBusy(login) {
+              const query = `
+                query($login: String!) {
+                  user(login: $login) {
+                    status {
+                      message
+                      indicatesLimitedAvailability
+                    }
+                  }
+                }
+              `;
+              try {
+                const result = await github.graphql(query, { login });
+                const status = result.user.status;
+                if (!status) return false;
+                // Consider user busy if limitedAvailability is true or message contains "busy"
+                return status.indicatesLimitedAvailability === true ||
+                       (status.message && status.message.toLowerCase().includes("busy"));
+              } catch (error) {
+                console.log(`Error checking status for ${login}: ${error}`);
+                return false; // On error, assume not busy
+              }
+            }
+            
+            // Filter out the PR author and busy members
+            const availableMembers = [];
+            for (const member of teamMembers) {
+              if (member.login === prAuthor) {
+                console.log(`Skipping the author ${member.login}.`);
+                continue;
+              }
+              if (await isBusy(member.login)) {
+                console.log(`Skipping ${member.login} as they appear busy.`);
+                continue;
+              }
+              availableMembers.push(member);
+            }
+            
+            if (availableMembers.length === 0) {
+              core.setFailed("No available team members after excluding PR author and busy members.");
+            }
+            
+            // Pick a random available member
+            const randomIndex = Math.floor(Math.random() * availableMembers.length);
+            const randomMember = availableMembers[randomIndex].login;
+            
+            // Get the PR number from the event context
+            const prNumber = context.payload.pull_request.number;
+            // Assign the PR to the selected team member
+            await github.rest.issues.addAssignees({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              assignees: [randomMember]
+            });
+            console.log(`Assigned PR #${prNumber} to ${randomMember}`);

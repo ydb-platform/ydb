@@ -5,7 +5,6 @@
 #include <ydb/core/fq/libs/config/protos/issue_id.pb.h>
 #include <ydb/core/fq/libs/control_plane_storage/validators.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
-#include <ydb/library/protobuf_printer/security_printer.h>
 
 namespace NFq {
 
@@ -72,13 +71,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateBindi
     CPS_LOG_T(MakeLogPrefix(scope, user, bindingId)
         << "CreateBindingRequest: "
         << NKikimr::MaskTicket(token) << " "
-        << SecureDebugString(request));
+        << request.DebugString());
 
     if (const auto& issues = ValidateRequest(ev)) {
         CPS_LOG_D(MakeLogPrefix(scope, user, bindingId)
             << "CreateBindingRequest, validation failed: "
             << NKikimr::MaskTicket(token) << " "
-            << SecureDebugString(request)
+            << request.DebugString()
             << " error: " << issues.ToString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvCreateBindingResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
@@ -204,14 +203,14 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListBinding
 
     CPS_LOG_T(MakeLogPrefix(scope, user) << "ListBindingsRequest: "
         << NKikimr::MaskTicket(token) << " "
-        << SecureDebugString(request));
+        << request.DebugString());
 
     NYql::TIssues issues = ValidateEvent(ev);
     if (issues) {
         CPS_LOG_D(MakeLogPrefix(scope, user)
             << "ListBindingsRequest, validation failed: "
             << NKikimr::MaskTicket(token) << " "
-            << SecureDebugString(request)
+            << request.DebugString()
             << " error: " << issues.ToString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvListBindingsResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
@@ -353,13 +352,13 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeBin
     CPS_LOG_T(MakeLogPrefix(scope, user, bindingId)
         << "DescribeBindingRequest: "
         << NKikimr::MaskTicket(token) << " "
-        << SecureDebugString(request));
+        << request.DebugString());
     NYql::TIssues issues = ValidateEvent(ev);
     if (issues) {
         CPS_LOG_D(MakeLogPrefix(scope, user, bindingId)
             << "DescribeBindingRequest, validation failed: "
             << NKikimr::MaskTicket(token) << " "
-            << SecureDebugString(request)
+            << request.DebugString()
             << " error: " << issues.ToString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvDescribeBindingResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
@@ -443,14 +442,14 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyBindi
     CPS_LOG_T(MakeLogPrefix(scope, user, bindingId)
         << "ModifyBindingRequest: "
         << NKikimr::MaskTicket(token) << " "
-        << SecureDebugString(request));
+        << request.DebugString());
 
     NYql::TIssues issues = ValidateBinding(ev);
     if (issues) {
         CPS_LOG_D(MakeLogPrefix(scope, user, bindingId)
             << "ModifyBindingRequest, validation failed: "
             << NKikimr::MaskTicket(token) << " "
-            << SecureDebugString(request)
+            << request.DebugString()
             << " error: " << issues.ToString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvModifyBindingResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
@@ -653,14 +652,14 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteBindi
     CPS_LOG_T(MakeLogPrefix(scope, user, bindingId)
         << "DeleteBindingRequest: "
         << NKikimr::MaskTicket(token) << " "
-        << SecureDebugString(request));
+        << request.DebugString());
 
     NYql::TIssues issues = ValidateEvent(ev);
     if (issues) {
         CPS_LOG_D(MakeLogPrefix(scope, user, bindingId)
             << "DeleteBindingRequest, validation failed: "
             << NKikimr::MaskTicket(token) << " "
-            << SecureDebugString(request)
+            << request.DebugString()
             << " error: " << issues.ToString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvDeleteBindingResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);

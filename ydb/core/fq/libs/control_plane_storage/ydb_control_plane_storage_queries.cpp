@@ -17,7 +17,6 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <ydb/core/fq/libs/shared_resources/db_exec.h>
-#include <ydb/library/protobuf_printer/security_printer.h>
 
 #include <util/digest/multi.h>
 
@@ -222,12 +221,12 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvCreateQuery
     const TString user = event.User;
     const TString token = event.Token;
     const size_t byteSize = request.ByteSizeLong();
-    CPS_LOG_T("CreateQueryRequest: {" << SecureDebugString(request) << "} " << MakeUserInfo(user, token));
+    CPS_LOG_T("CreateQueryRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token));
 
     auto tenant = ev->Get()->TenantInfo->Assign(cloudId, scope, queryType, TenantName);
 
     if (const auto& issues = ValidateRequest(ev)) {
-        CPS_LOG_W("CreateQueryRequest: {" << SecureDebugString(request) << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
+        CPS_LOG_W("CreateQueryRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvCreateQueryResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(CreateQueryRequest, scope, user, delta, byteSize, false);
@@ -407,11 +406,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListQueries
     const TString pageToken = request.page_token();
     const int byteSize = request.ByteSize();
     const int64_t limit = request.limit();
-    CPS_LOG_T("ListQueriesRequest: {" << SecureDebugString(request) << "} " << MakeUserInfo(user, token));
+    CPS_LOG_T("ListQueriesRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token));
 
     NYql::TIssues issues = ValidateEvent(ev);
     if (issues) {
-        CPS_LOG_W("ListQueriesRequest: {" << SecureDebugString(request) << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
+        CPS_LOG_W("ListQueriesRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvListQueriesResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(ListQueriesRequest, scope, user, delta, byteSize, false);
@@ -632,10 +631,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeQue
     const FederatedQuery::DescribeQueryRequest& request = event.Request;
     const TString queryId = request.query_id();
     const int byteSize = request.ByteSize();
-    CPS_LOG_T("DescribeQueryRequest: {" << SecureDebugString(request) << "} " << MakeUserInfo(user, token));
+    CPS_LOG_T("DescribeQueryRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token));
 
     if (const auto& issues = ValidateRequest(ev)) {
-        CPS_LOG_W("DescribeQueryRequest: {" << SecureDebugString(request) << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
+        CPS_LOG_W("DescribeQueryRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvDescribeQueryResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(DescribeQueryRequest, scope, user, queryId, delta, byteSize, false);
@@ -716,11 +715,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetQuerySta
     const FederatedQuery::GetQueryStatusRequest& request = event.Request;
     const TString queryId = request.query_id();
     const int byteSize = request.ByteSize();
-    CPS_LOG_T("GetQueryStatusRequest: {" << SecureDebugString(request) << "} " << MakeUserInfo(user, token));
+    CPS_LOG_T("GetQueryStatusRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token));
 
     NYql::TIssues issues = ValidateEvent(ev);
     if (issues) {
-        CPS_LOG_W("GetQueryStatusRequest: {" << SecureDebugString(request) << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
+        CPS_LOG_W("GetQueryStatusRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvGetQueryStatusResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(GetQueryStatusRequest, scope, user, queryId, delta, byteSize, false);
@@ -803,7 +802,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
     const TString queryId = request.query_id();
     const int byteSize = request.ByteSize();
     const int64_t previousRevision = request.previous_revision();
-    CPS_LOG_T("ModifyQueryRequest: {" << SecureDebugString(request) << "} " << MakeUserInfo(user, token));
+    CPS_LOG_T("ModifyQueryRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token));
 
     if (request.content().type() == FederatedQuery::QueryContent::STREAMING && request.state_load_mode() == FederatedQuery::STATE_LOAD_MODE_UNSPECIFIED) {
         request.set_state_load_mode(FederatedQuery::EMPTY);
@@ -824,7 +823,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvModifyQuery
     auto tenant = ev->Get()->TenantInfo->Assign(cloudId, scope, request.content().type(), TenantName);
 
     if (issues) {
-        CPS_LOG_W("ModifyQueryRequest: {" << SecureDebugString(request) << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
+        CPS_LOG_W("ModifyQueryRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvModifyQueryResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(ModifyQueryRequest, scope, user, queryId, delta, byteSize, false);
@@ -1210,11 +1209,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDeleteQuery
     const int byteSize = request.ByteSize();
     const int64_t previousRevision = request.previous_revision();
     const TString idempotencyKey = request.idempotency_key();
-    CPS_LOG_T("DeleteQueryRequest: {" << SecureDebugString(request) << "} " << MakeUserInfo(user, token));
+    CPS_LOG_T("DeleteQueryRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token));
 
     NYql::TIssues issues = ValidateEvent(ev);
     if (issues) {
-        CPS_LOG_W("DeleteQueryRequest: {" << SecureDebugString(request) << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
+        CPS_LOG_W("DeleteQueryRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvDeleteQueryResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(DeleteQueryRequest, scope, queryId, user, delta, byteSize, false);
@@ -1328,11 +1327,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvControlQuer
     const int64_t previousRevision = request.previous_revision();
     const TString idempotencyKey = request.idempotency_key();
     const FederatedQuery::QueryAction action = request.action();
-    CPS_LOG_T("ControlQueryRequest: {" << SecureDebugString(request) << "} " << MakeUserInfo(user, token));
+    CPS_LOG_T("ControlQueryRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token));
 
     NYql::TIssues issues = ValidateEvent(ev);
     if (issues) {
-        CPS_LOG_W("ControlQueryRequest: {" << SecureDebugString(request) << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
+        CPS_LOG_W("ControlQueryRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvControlQueryResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(ControlQueryRequest, scope, user, queryId, delta, byteSize, false);
@@ -1570,10 +1569,10 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvGetResultDa
     const TString token = event.Token;
     const TPermissions permissions = GetResultDataReadPerimssions(event);
     const int64_t limit = request.limit();
-    CPS_LOG_T("GetResultDataRequest: {" << SecureDebugString(request) << "} " << MakeUserInfo(user, token));
+    CPS_LOG_T("GetResultDataRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token));
 
     if (const auto& issues = ValidateRequest(ev)) {
-        CPS_LOG_W("GetResultDataRequest: {" << SecureDebugString(request) << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
+        CPS_LOG_W("GetResultDataRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvGetResultDataResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(GetResultDataRequest, scope, user, queryId, resultSetIndex, offset, limit, delta, byteSize, false);
@@ -1710,11 +1709,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvListJobsReq
         permissions.SetAll();
     }
     const int64_t limit = request.limit();
-    CPS_LOG_T("ListJobsRequest: {" << SecureDebugString(request) << "} " << MakeUserInfo(user, token));
+    CPS_LOG_T("ListJobsRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token));
 
     NYql::TIssues issues = ValidateEvent(ev);
     if (issues) {
-        CPS_LOG_W("ListJobsRequest: {" << SecureDebugString(request) << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
+        CPS_LOG_W("ListJobsRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvListJobsResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(ListJobsRequest, scope, user, queryId, delta, byteSize, false);
@@ -1838,11 +1837,11 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvDescribeJob
     if (IsSuperUser(user)) {
         permissions.SetAll();
     }
-    CPS_LOG_T("DescribeJobRequest: {" << SecureDebugString(request) << "} " << MakeUserInfo(user, token));
+    CPS_LOG_T("DescribeJobRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token));
 
     NYql::TIssues issues = ValidateEvent(ev);
     if (issues) {
-        CPS_LOG_W("DescribeJobRequest: {" << SecureDebugString(request) << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
+        CPS_LOG_W("DescribeJobRequest: {" << request.DebugString() << "} " << MakeUserInfo(user, token) << "validation FAILED: " << issues.ToOneLineString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvDescribeJobResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);
         LWPROBE(DescribeJobRequest, scope, user, jobId, delta, byteSize, false);

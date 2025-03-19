@@ -15,7 +15,7 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
                 }
               }
               TransferSpecific {
-                Targets {
+                Target {
                   SrcPath: "/MyRoot1/Table"
                   DstPath: "/MyRoot2/Table"
                 }
@@ -170,7 +170,7 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
             Name: "Transfer"
             Config {
               TransferSpecific {
-                Targets {
+                Target {
                   SrcPath: "/MyRoot1/Table"
                   DstPath: "/MyRoot2/Table"
                 }
@@ -220,7 +220,7 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
             Name: "Transfer1"
             Config {
               TransferSpecific {
-                Targets {
+                Target {
                   SrcPath: "/MyRoot1/Table"
                   DstPath: "/MyRoot2/Table"
                 }
@@ -238,7 +238,7 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
             Name: "Transfer2"
             Config {
               TransferSpecific {
-                Targets {
+                Target {
                   SrcPath: "/MyRoot1/Table"
                   DstPath: "/MyRoot2/Table"
                 }
@@ -259,7 +259,7 @@ Y_UNIT_TEST_SUITE(TTransferTests) {
             Name: "Transfer3"
             Config {
               TransferSpecific {
-                Targets {
+                Target {
                   SrcPath: "/MyRoot1/Table"
                   DstPath: "/MyRoot2/Table"
                 }

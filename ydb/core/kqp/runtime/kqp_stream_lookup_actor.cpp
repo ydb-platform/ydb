@@ -308,7 +308,7 @@ private:
 
         auto readIt = Reads.find(record.GetReadId());
         if (readIt == Reads.end() || readIt->second.State != EReadState::Running) {
-            CA_LOG_D("Drop read with readId: " << record.GetReadId() << ", because it's already completed or bloked");
+            CA_LOG_D("Drop read with readId: " << record.GetReadId() << ", because it's already completed or blocked");
             return;
         }
 

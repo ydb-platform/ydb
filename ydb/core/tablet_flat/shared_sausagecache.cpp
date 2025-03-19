@@ -1209,8 +1209,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         ActualizeCacheSizeLimit();
 
-        AsyncRequests.Limit = 0;
-        ScanRequests.Limit = 0;
+        AsyncRequests.Limit = Config.GetAsyncQueueInFlyLimit();
+        ScanRequests.Limit = Config.GetScanQueueInFlyLimit();
 
         if (currentReplacementPolicy != Config.GetReplacementPolicy()) {
             LOG_NOTICE_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Switch replacement policy "
@@ -1272,8 +1272,8 @@ public:
         , Counters(counters)
         , Cache(1, CreateCache(), Counters.ReplacementPolicySize(Config.GetReplacementPolicy()))
     {
-        AsyncRequests.Limit = 0;
-        ScanRequests.Limit = 0;
+        AsyncRequests.Limit = Config.GetAsyncQueueInFlyLimit();
+        ScanRequests.Limit = Config.GetScanQueueInFlyLimit();
     }
 
     void Bootstrap(const TActorContext& ctx) {

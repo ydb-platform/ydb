@@ -629,9 +629,8 @@ private:
         }
 
         if (++TotalResolveShardsAttempts > MaxShardResolves()) {
-            //return RuntimeError(TStringBuilder() << "Table '" << StreamLookupWorker->GetTablePath() << "' resolve attempts limit exceeded",
-            //    NYql::NDqProto::StatusIds::UNAVAILABLE);
-            CA_LOG_E("Resolve shards for table: TOO MANY");
+            return RuntimeError(TStringBuilder() << "Table '" << StreamLookupWorker->GetTablePath() << "' resolve attempts limit exceeded",
+                NYql::NDqProto::StatusIds::UNAVAILABLE);
         }
 
         CA_LOG_D("Resolve shards for table: " << StreamLookupWorker->GetTablePath());

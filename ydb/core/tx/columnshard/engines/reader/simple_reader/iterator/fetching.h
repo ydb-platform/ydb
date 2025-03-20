@@ -227,11 +227,7 @@ private:
         virtual void OnFailure(const TString& reason) override;
 
     public:
-        TFilterSubscriber(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step)
-            : Source(source)
-            , Step(step)
-            , TaskGuard(source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard()) {
-        }
+        TFilterSubscriber(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step);
     };
 
 public:

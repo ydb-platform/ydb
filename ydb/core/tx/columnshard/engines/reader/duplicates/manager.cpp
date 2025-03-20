@@ -76,6 +76,8 @@ void TIntervalCounter::Dec(const ui32 l, const ui32 r) {
 }
 
 void TDuplicateFilterConstructor::TSourceFilterConstructor::SetFilter(const ui32 intervalIdx, NArrow::TColumnFilter&& filter) {
+    AFL_VERIFY(filter.GetRecordsCount().value_or(0) == GetIntervalRange(intervalIdx).Size())("actual", filter.GetRecordsCount().value_or(0))(
+                                                           "expected", GetIntervalRange(intervalIdx).Size());
     const ui32 localIdx = intervalIdx - FirstIntervalIdx;
     AFL_VERIFY(localIdx < IntervalFilters.size())("idx", localIdx)("size", IntervalFilters.size());
     AFL_VERIFY(!IntervalFilters[localIdx])("interval", intervalIdx);
@@ -197,11 +199,9 @@ void TDuplicateFilterConstructor::Handle(const TEvDuplicateFilterPartialResult::
     }
 
     for (auto&& [sourceIdx, filter] : ev->Get()->DetachResult()) {
-        AFL_VERIFY(sourceIdx >= FinishedSourcesCount);
-        AFL_VERIFY(sourceIdx - FinishedSourcesCount < ActiveSources.size());
-        std::shared_ptr<TSourceFilterConstructor> constructor = ActiveSources[sourceIdx - FinishedSourcesCount];
+        // TODO: reorganize reverse handling: now when reverse==true, Filters contain filters for intervals in reverse order, each filter in straight order, and offsets are stored in reverse order, each offset from the end of the portion, not beginning
         // TODO: avoid copying filters
-        constructor->SetFilter(ev->Get()->GetIntervalIdx(), std::move(filter));
+        GetConstructorVerified(sourceIdx)->SetFilter(ev->Get()->GetIntervalIdx(), std::move(filter));
     }
 
     while (!ActiveSources.empty() && ActiveSources.front()->IsReady()) {
@@ -252,6 +252,13 @@ TDuplicateFilterConstructor::TDuplicateFilterConstructor(const std::deque<std::s
         return intervals;
     }())
     , NextIntervalToMerge(&Intervals) {
+    {
+        ui64 i = 0;
+        for (const auto& source : SortedSources) {
+            AFL_VERIFY(source->GetSourceIdx() == i)("actual", source->GetSourceIdx())("expected", i);
+            ++i;
+        }
+    }
 }
 
 void TDuplicateFilterConstructor::StartFetchingColumns(const std::shared_ptr<TSourceFilterConstructor>& source, const ui64 memoryGroupId) const {
@@ -275,7 +282,6 @@ void TDuplicateFilterConstructor::StartMergingColumns(const TIntervalsCursor& in
         readContext->GetReadMetadata()->GetReplaceKey(), IIndexInfo::GetSnapshotColumnNames(), interval.GetIntervalIdx(), SelfId());
     for (const auto& [_, sourceIdx] : interval.GetSourcesByRightInterval()) {
         std::shared_ptr<TSourceFilterConstructor> constructionInfo = GetConstructorVerified(sourceIdx);
-        constructionInfo->GetIntervalRange(interval.GetIntervalIdx());
         const NArrow::NAccessor::IChunkedArray::TRowRange range = constructionInfo->GetIntervalRange(interval.GetIntervalIdx());
         std::shared_ptr<NArrow::TGeneralContainer> slice =
             std::make_shared<NArrow::TGeneralContainer>(constructionInfo->GetColumnData()->Slice(range.GetBegin(), range.Size()));

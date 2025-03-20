@@ -114,9 +114,9 @@ using IShardedWriteControllerPtr = TIntrusivePtr<IShardedWriteController>;
 
 
 struct TShardedWriteControllerSettings {
-    i64 MemoryLimitTotal;
-    i64 MemoryLimitPerMessage;
-    bool Inconsistent;
+    i64 MemoryLimitTotal = 0;
+    i64 MemoryLimitPerMessage = 0;
+    bool Inconsistent = false;
 };
 
 IShardedWriteControllerPtr CreateShardedWriteController(

@@ -243,6 +243,7 @@ public:
             TShardedWriteControllerSettings {
                 .MemoryLimitTotal = MessageSettings.InFlightMemoryLimitPerActorBytes,
                 .MemoryLimitPerMessage = MessageSettings.MemoryLimitPerMessageBytes,
+                .Inconsistent = InconsistentTx,
             });
 
         Counters->WriteActorsCount->Inc();

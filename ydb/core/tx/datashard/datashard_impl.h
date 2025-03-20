@@ -790,7 +790,10 @@ class TDataShard
             struct ProcessedBytes :  Column<4, NScheme::NTypeIds::Uint64> {};
             struct WrittenBytes :    Column<5, NScheme::NTypeIds::Uint64> {};
             struct WrittenRows :     Column<6, NScheme::NTypeIds::Uint64> {};
-            struct DownloadState :   Column<7, NScheme::NTypeIds::String> { using Type = NKikimrBackup::TS3DownloadState; };
+            // Column that stores proto with state of particular S3 download.
+            // For historical reasons its name is ChecksumState,
+            // but it stores not only state of checksum calculation.
+            struct ChecksumState :   Column<7, NScheme::NTypeIds::String> { using Type = NKikimrBackup::TS3DownloadState; };
 
             using TKey = TableKey<TxId>;
             using TColumns = TableColumns<
@@ -800,7 +803,7 @@ class TDataShard
                 ProcessedBytes,
                 WrittenBytes,
                 WrittenRows,
-                DownloadState
+                ChecksumState
             >;
         };
 

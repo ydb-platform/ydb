@@ -10,18 +10,18 @@ Release date:
 
 * Enabled by default:
 
-  * support for [views](./concepts/datamodel/view),
-  * [auto-partitioning mode](./concepts/topic#autopartitioning) for topics,
+  * support for [views](./concepts/datamodel/view.md)
+  * [auto-partitioning mode](./concepts/topic.md#autopartitioning) for topics
   * transactions involving [topics](./concepts/glossary.md#topic) and [row-oriented tables](./concepts/glossary.md#row-oriented-table) simultaneously
-  * [volatile distributed transactions](./contributor/datashard-distributed-txs#volatile-transactions),
-  * [automatic index selection](./dev/secondary-indexes#avtomaticheskoe-ispolzovanie-indeksov-pri-vyborke) for queries.
+  * [volatile distributed transactions](./contributor/datashard-distributed-txs.md#volatile-transactions)
+  * [automatic index selection](./dev/secondary-indexes.md#avtomaticheskoe-ispolzovanie-indeksov-pri-vyborke) for queries
 
-* Added the ability to [read and write to a topic](./reference/kafka-api/examples#primery-rabot-s-kafka-api) using the Kafka API without authentication.
+* Added the ability to [read and write to a topic](./reference/kafka-api/examples.md#primery-rabot-s-kafka-api) using the Kafka API without authentication.
 
 
 #### Bug Fixes
 
-* [Fixed](https://github.com/ydb-platform/ydb/pull/14811) an error that led to a significant decrease in reading speed from [tablet followers](./concepts/glossary#tablet-follower).
+* [Fixed](https://github.com/ydb-platform/ydb/pull/14811) an error that led to a significant decrease in reading speed from [tablet followers](./concepts/glossary.md#tablet-follower).
 * [Fixed](https://github.com/ydb-platform/ydb/pull/14516) an error that caused volatile distributed transactions to sometimes wait for confirmations until the next reboot.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/15077) a rare assertion failure (server process crash) when followers attached to leaders with an inconsistent snapshot.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/15074) a rare crash in datashard when a dropped table shard is restarted with uncommitted persistent changes.

@@ -11,5 +11,5 @@ jobs:
     uses: ./.github/workflows/run_all_tests.yml
     secrets: inherit
     with:
-      build_target: ydb/
+      test_targets: ydb/
 

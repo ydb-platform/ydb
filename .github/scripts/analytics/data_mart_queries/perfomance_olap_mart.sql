@@ -30,8 +30,8 @@ select
     CASE
         WHEN max(Report) OVER (PARTITION  by Db , Run_start_timestamp, Suite) IS NULL THEN true
         ELSE false
-    END AS Suite_not_runned
-
+    END AS Suite_not_runned,
+    Stats
  from (
 
 SELECT
@@ -57,7 +57,8 @@ SELECT
     COALESCE(real_data.YdbSumMax, null_template.YdbSumMax) AS YdbSumMax,
     COALESCE(real_data.YdbSumMeans, null_template.YdbSumMeans) AS YdbSumMeans,
     COALESCE(real_data.YdbSumMin, null_template.YdbSumMin) AS YdbSumMin,
-    COALESCE(real_data.diff_response, null_template.diff_response) AS diff_response
+    COALESCE(real_data.diff_response, null_template.diff_response) AS diff_response,
+    Stats
 
 FROM (
     SELECT 
@@ -184,7 +185,8 @@ Full OUTER join
     real_data.YdbSumMeans AS YdbSumMeans,
     real_data.YdbSumMin AS YdbSumMin,
     real_data.diff_response AS diff_response,
-    
+    real_data.Stats AS Stats
+
     FROM (
         SELECT 
             all_tests.*,

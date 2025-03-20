@@ -802,7 +802,52 @@ namespace {
     bool ParseTransferSettings(
         TTransferSettings& dstSettings, const TCoNameValueTupleList& srcSettings, TExprContext& ctx, TPositionHandle pos
     ) {
-        return ParseAsyncReplicationSettingsBase(dstSettings, srcSettings, ctx, pos, "transfer");
+        if (!ParseAsyncReplicationSettingsBase(dstSettings, srcSettings, ctx, pos, "transfer")) {
+            return false;
+        }
+
+        for (auto setting : srcSettings) {
+            auto name = setting.Name().Value();
+            if (name == "batch_size_bytes") {
+                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                auto batchSizeBytes = FromString<i64>(value);
+                if (batchSizeBytes <= 0) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << name << " must be greater than 0 but " << value));
+                    return false;
+                }
+                dstSettings.EnsureBatching().BatchSizeBytes = batchSizeBytes;
+            } else if (name == "flush_interval") {
+                if (!setting.Value().Maybe<TCoInterval>()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << name << " must be Interval"));
+                    return false;
+                }
+
+                const auto value = FromString<i64>(
+                    setting.Value().Cast<TCoInterval>().Literal().Value()
+                );
+
+                if (value <= 0) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << name << " must be positive"));
+                    return false;
+                }
+
+                dstSettings.EnsureBatching().FlushInterval = TDuration::FromValue(value);
+            } else if (name == "consumer") {
+                auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
+                if (value.empty()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                        TStringBuilder() << name << " must be not empty"));
+                    return false;
+                }
+
+                dstSettings.ConsumerName = value;
+            }
+        }
+
+        return true;
     }
 
     bool ParseBackupCollectionSettings(
@@ -2359,11 +2404,11 @@ public:
             TCreateTransferSettings settings;
             settings.Name = TString(createTransfer.Transfer());
 
-            settings.Targets.emplace_back(
+            settings.Target = std::tuple<TString, TString, TString>{
                 createTransfer.Source(),
                 createTransfer.Target(),
                 createTransfer.TransformLambda()
-            );
+            };
 
             if (!ParseTransferSettings(settings.Settings, createTransfer.TransferSettings(), ctx, createTransfer.Pos())) {
                 return SyncError();

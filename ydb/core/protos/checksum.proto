@@ -11,9 +11,11 @@ message TSha256State {
     optional uint32 MdLen = 6;
 }
 
-// Used to serialize the intermediate state of a checksum.
-message TChecksumState {
-    oneof state {
+// Used to serialize the intermediate state of S3 import process:
+// - checksum calculation
+// - encrypted file reader
+message TS3DownloadState {
+    oneof ChecksumState {
         TSha256State Sha256State = 1;
     }
 }

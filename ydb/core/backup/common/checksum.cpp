@@ -35,8 +35,7 @@ public:
         return to_lower(HexEncode(hash, SHA256_DIGEST_LENGTH));
     }
 
-    TChecksumState GetState() const override {
-        TChecksumState state;
+    void GetState(TS3DownloadState& state) const override {
         auto& sha256State = *state.MutableSha256State();
 
         for (ui32 h : Context.h) {
@@ -49,11 +48,9 @@ public:
         }
         sha256State.SetNum(Context.num);
         sha256State.SetMdLen(Context.md_len);
-
-        return state;
     }
 
-    void Continue(const TChecksumState& state) override {
+    void Continue(const TS3DownloadState& state) override {
         const auto& sha256State = state.GetSha256State();
         SHA256_Init(&Context);
         FillArrayFromProto(Context.h, sha256State.GetH());

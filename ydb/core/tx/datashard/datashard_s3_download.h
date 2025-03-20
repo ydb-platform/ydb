@@ -12,7 +12,7 @@ struct TS3Download {
     ui64 ProcessedBytes = 0;
     ui64 WrittenBytes = 0;
     ui64 WrittenRows = 0;
-    NKikimrBackup::TChecksumState ChecksumState;
+    NKikimrBackup::TS3DownloadState DownloadState;
 
     void Out(IOutputStream& out) const {
         out << "{"
@@ -20,7 +20,7 @@ struct TS3Download {
             << " ProcessedBytes: " << ProcessedBytes
             << " WrittenBytes: " << WrittenBytes
             << " WrittenRows: " << WrittenRows
-            << " ChecksumState: " << ChecksumState.ShortDebugString()
+            << " DownloadState: " << DownloadState.ShortDebugString()
         << " }";
     }
 };

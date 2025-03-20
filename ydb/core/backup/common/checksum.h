@@ -6,7 +6,7 @@
 
 namespace NKikimr::NBackup {
 
-using NKikimrBackup::TChecksumState;
+using NKikimrBackup::TS3DownloadState;
 
 class IChecksum {
 public:
@@ -17,8 +17,8 @@ public:
     virtual void AddData(TStringBuf data) = 0;
     virtual TString Finalize() = 0;
 
-    virtual TChecksumState GetState() const = 0;
-    virtual void Continue(const TChecksumState& state) = 0;
+    virtual void GetState(TS3DownloadState& state) const = 0;
+    virtual void Continue(const TS3DownloadState& state) = 0;
 };
 
 IChecksum* CreateChecksum();

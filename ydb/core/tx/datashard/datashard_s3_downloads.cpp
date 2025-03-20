@@ -24,8 +24,8 @@ bool TS3DownloadsManager::Load(NIceDb::TNiceDb& db) {
             info.WrittenBytes = rowset.GetValueOrDefault<Schema::S3Downloads::WrittenBytes>(0);
             info.WrittenRows = rowset.GetValueOrDefault<Schema::S3Downloads::WrittenRows>(0);
 
-            if (rowset.HaveValue<Schema::S3Downloads::ChecksumState>()) {
-                info.ChecksumState = rowset.GetValue<Schema::S3Downloads::ChecksumState>();
+            if (rowset.HaveValue<Schema::S3Downloads::DownloadState>()) {
+                info.DownloadState = rowset.GetValue<Schema::S3Downloads::DownloadState>();
             }
 
             if (!rowset.Next()) {
@@ -61,7 +61,7 @@ const TS3Download& TS3DownloadsManager::Store(NIceDb::TNiceDb& db, ui64 txId, co
         NIceDb::TUpdate<Schema::S3Downloads::ProcessedBytes>(newInfo.ProcessedBytes),
         NIceDb::TUpdate<Schema::S3Downloads::WrittenBytes>(newInfo.WrittenBytes),
         NIceDb::TUpdate<Schema::S3Downloads::WrittenRows>(newInfo.WrittenRows),
-        NIceDb::TUpdate<Schema::S3Downloads::ChecksumState>(newInfo.ChecksumState)
+        NIceDb::TUpdate<Schema::S3Downloads::DownloadState>(newInfo.DownloadState)
     );
 
     return info;

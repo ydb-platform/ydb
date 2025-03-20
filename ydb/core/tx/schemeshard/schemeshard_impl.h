@@ -511,8 +511,6 @@ public:
         const ::NKikimrProto::TAuthConfig& config,
         const TActorContext &ctx);
 
-    void ConfigureLoginCache(bool isCacheUsed, const TActorContext &ctx);
-
     void StartStopCompactionQueues();
 
     void WaitForTableProfiles(ui64 importId, ui32 itemIdx);
@@ -1551,6 +1549,8 @@ private:
     const TDomainsInfo::TDomain& GetDomainDescription(const TActorContext &ctx) const;
     NKikimrSubDomains::TProcessingParams CreateRootProcessingParams(const TActorContext &ctx);
     static NTabletPipe::TClientConfig GetPipeClientConfig();
+
+    static bool IsLoginCacheEnabled();
 
 public:
     static const NKikimrConfig::TDomainsConfig& GetDomainsConfig();

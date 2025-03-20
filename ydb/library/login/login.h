@@ -175,7 +175,6 @@ public:
     };
 
     struct TCacheSettings {
-        bool IsCacheUsed = false;
         size_t SuccessPasswordsCacheCapacity = SUCCESS_PASSWORDS_CACHE_CAPACITY;
         size_t WrongPasswordsCacheCapacity = WRONG_PASSWORDS_CACHE_CAPACITY;
     };
@@ -220,7 +219,10 @@ public:
 
     TLoginProvider();
     TLoginProvider(const TAccountLockout::TInitializer& accountLockoutInitializer);
-    TLoginProvider(const TPasswordComplexity& passwordComplexity, const TAccountLockout::TInitializer& accountLockoutInitializer, const TCacheSettings& cacheSettings);
+    TLoginProvider(const TPasswordComplexity& passwordComplexity,
+        const TAccountLockout::TInitializer& accountLockoutInitializer,
+        const std::function<bool()>& isCacheUsed,
+        const TCacheSettings& cacheSettings);
     ~TLoginProvider();
 
     std::vector<TString> GetGroupsMembership(const TString& member);

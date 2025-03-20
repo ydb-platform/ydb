@@ -16,7 +16,6 @@ PY3TEST()
 
     ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
     DEPENDS(
-        ydb/apps/ydb
         ydb/apps/ydbd
     )
 
@@ -27,8 +26,6 @@ PY3TEST()
         contrib/python/allure-python-commons
         contrib/python/boto3
         contrib/python/moto
-        contrib/python/requests
-        ydb/tests/olap/helpers
         library/python/testing/yatest_common
         library/recipes/common
         ydb/public/sdk/python

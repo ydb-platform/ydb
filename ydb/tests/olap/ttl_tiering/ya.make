@@ -24,7 +24,6 @@ PEERDIR(
     contrib/python/boto3
     library/recipes/common
     ydb/tests/olap/common
-    ydb/tests/olap/helpers
 )
 
 DEPENDS(

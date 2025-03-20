@@ -5,6 +5,7 @@
 #include <yt/yt/core/ytree/ephemeral_node_factory.h>
 #include <yt/yt/core/ytree/fluent.h>
 #include <yt/yt/core/ytree/polymorphic_yson_struct.h>
+#include <yt/yt/core/ytree/size.h>
 #include <yt/yt/core/ytree/tree_builder.h>
 #include <yt/yt/core/ytree/tree_visitor.h>
 #include <yt/yt/core/ytree/ypath_client.h>
@@ -42,6 +43,8 @@ struct TTestSubconfig
     bool MyBool;
     std::vector<TString> MyStringList;
     ETestEnum MyEnum;
+    TDuration MyDuration;
+    TSize MySize;
 
     REGISTER_YSON_STRUCT(TTestSubconfig);
 
@@ -59,6 +62,10 @@ struct TTestSubconfig
             .Default();
         registrar.Parameter("my_enum", &TThis::MyEnum)
             .Default(ETestEnum::Value1);
+        registrar.Parameter("my_duration", &TThis::MyDuration)
+            .Default(TDuration::Seconds(1));
+        registrar.Parameter("my_size", &TThis::MySize)
+            .Default(TSize::FromString("8K"));
     }
 };
 
@@ -135,6 +142,8 @@ auto GetCompleteConfigNode(int offset = 0)
                     .Item().Value("ListItem1")
                     .Item().Value("ListItem2")
                 .EndList()
+                .Item("my_duration").Value("2h")
+                .Item("my_size").Value("2M")
             .EndMap()
             .Item("sub_list").BeginList()
                 .Item().BeginMap()
@@ -147,6 +156,8 @@ auto GetCompleteConfigNode(int offset = 0)
                         .Item().Value("ListItem1")
                         .Item().Value("ListItem2")
                     .EndList()
+                    .Item("my_duration").Value("2h")
+                    .Item("my_size").Value(2'000'000)
                 .EndMap()
                 .Item().BeginMap()
                     .Item("my_int").Value(99 + offset)
@@ -158,6 +169,8 @@ auto GetCompleteConfigNode(int offset = 0)
                         .Item().Value("ListItem1")
                         .Item().Value("ListItem2")
                     .EndList()
+                    .Item("my_duration").Value("2h")
+                    .Item("my_size").Value("2000K")
                 .EndMap()
             .EndList()
             .Item("sub_map").BeginMap()
@@ -171,6 +184,8 @@ auto GetCompleteConfigNode(int offset = 0)
                         .Item().Value("ListItem1")
                         .Item().Value("ListItem2")
                     .EndList()
+                    .Item("my_duration").Value("2h")
+                    .Item("my_size").Value(2'000'000)
                 .EndMap()
                 .Item("sub2").BeginMap()
                     .Item("my_int").Value(99 + offset)
@@ -182,6 +197,8 @@ auto GetCompleteConfigNode(int offset = 0)
                         .Item().Value("ListItem1")
                         .Item().Value("ListItem2")
                     .EndList()
+                    .Item("my_duration").Value(2 * 60 * 60 * 1000)
+                    .Item("my_size").Value(2'000'000)
                 .EndMap()
             .EndMap()
         .EndMap();
@@ -189,7 +206,7 @@ auto GetCompleteConfigNode(int offset = 0)
 
 void TestCompleteSubconfig(TTestSubconfig* subconfig, int offset = 0)
 {
-    for (auto field : {"my_int", "my_uint", "my_bool", "my_enum", "my_string_list"}) {
+    for (auto field : {"my_int", "my_uint", "my_bool", "my_enum", "my_string_list", "my_duration", "my_size"}) {
         EXPECT_TRUE(subconfig->IsSet(field));
     }
 
@@ -201,6 +218,8 @@ void TestCompleteSubconfig(TTestSubconfig* subconfig, int offset = 0)
     EXPECT_EQ("ListItem1", subconfig->MyStringList[1]);
     EXPECT_EQ("ListItem2", subconfig->MyStringList[2]);
     EXPECT_EQ(ETestEnum::Value2, subconfig->MyEnum);
+    EXPECT_EQ(TDuration::Hours(2), subconfig->MyDuration);
+    EXPECT_EQ(2'000'000, subconfig->MySize);
 }
 
 void TestCompleteConfig(TIntrusivePtr<TTestConfig> config, int offset = 0)
@@ -695,14 +714,18 @@ TEST(TYsonStructTest, Save)
         "\"my_enum\"=\"value1\";"
         "\"my_int\"=200;"
         "\"my_uint\"=50u;"
-        "\"my_string_list\"=[]}";
+        "\"my_string_list\"=[];"
+        "\"my_duration\"=1000;"
+        "\"my_size\"=8000}";
 
     TString subconfigYsonOrigin =
         "{\"my_bool\"=%false;"
         "\"my_enum\"=\"value1\";"
         "\"my_int\"=100;"
         "\"my_uint\"=50u;"
-        "\"my_string_list\"=[]}";
+        "\"my_string_list\"=[];"
+        "\"my_duration\"=1000;"
+        "\"my_size\"=8000}";
 
     TString expectedYson;
     expectedYson += "{\"my_string\"=\"hello!\";";
@@ -713,7 +736,9 @@ TEST(TYsonStructTest, Save)
 
     EXPECT_TRUE(AreNodesEqual(
         ConvertToNode(TYsonString(expectedYson)),
-        ConvertToNode(TYsonString(output.AsStringBuf()))));
+        ConvertToNode(TYsonString(output.AsStringBuf()))))
+        << "Expected: " << expectedYson
+        << ", got: " << output.AsStringBuf();
 }
 
 TEST(TYsonStructTest, TestConfigUpdate)

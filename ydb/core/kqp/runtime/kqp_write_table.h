@@ -13,6 +13,7 @@ namespace NKqp {
 class IDataBatch : public TThrRefBase {
 public:
     virtual TString SerializeToString() const = 0;
+    virtual i64 GetSerializedMemory() const = 0;
     virtual i64 GetMemory() const = 0;
     virtual bool IsEmpty() const = 0;
 

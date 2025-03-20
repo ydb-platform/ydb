@@ -28,17 +28,23 @@ public:
         return NArrow::SerializeBatchNoCompression(Data);
     }
 
+    i64 GetSerializedMemory() const override {
+        return SerializedMemory;
+    }
+
     i64 GetMemory() const override {
         return Memory;
     }
 
     bool IsEmpty() const override {
-        return GetMemory() == 0;
+        return Data ? Data->num_rows() == 0 : 0;
     }
 
     TRecordBatchPtr Extract() {
         Memory = 0;
+        SerializedMemory = 0;
         TRecordBatchPtr result = std::move(Data);
+        Data = nullptr;
         return result;
     }
 
@@ -48,12 +54,14 @@ public:
 
     explicit TColumnBatch(const TRecordBatchPtr& data)
         : Data(data)
-        , Memory(NArrow::GetBatchDataSize(Data)) {
+        , SerializedMemory(NArrow::GetBatchDataSize(Data))
+        , Memory(NArrow::GetBatchMemorySize(Data)) {
     }
 
 private:
     TRecordBatchPtr Data;
-    i64 Memory;
+    i64 SerializedMemory = 0;
+    i64 Memory = 0;
 };
 
 
@@ -67,11 +75,15 @@ public:
                 cells.push_back(cell);
             }
         }
-        return TSerializedCellMatrix::Serialize(cells, Rows.size(), Columns);
+        return TSerializedCellMatrix::Serialize(cells, Rows.size(), !IsEmpty() ? Rows.front().size() : 0);
+    }
+
+    i64 GetSerializedMemory() const override {
+        return SerializedMemory;
     }
 
     i64 GetMemory() const override {
-        return MemorySerialized;
+        return Memory;
     }
 
     bool IsEmpty() const override {
@@ -79,7 +91,8 @@ public:
     }
 
     std::vector<TOwnedCellVec> Extract() {
-        MemorySerialized = 0;
+        SerializedMemory = 0;
+        Memory = 0;
         return std::move(Rows);
     }
 
@@ -88,19 +101,21 @@ public:
         return std::reinterpret_pointer_cast<void>(r);
     }
 
-    TRowBatch(std::vector<TOwnedCellVec>&& rows, i64 memorySerialized, ui16 columns)
-        : Rows(std::move(rows))
-        , MemorySerialized(memorySerialized)
-        , Columns(columns) {
+    TRowBatch(std::vector<TOwnedCellVec>&& rows)
+        : Rows(std::move(rows)) {
+        SerializedMemory = GetCellMatrixHeaderSize();
+        Memory = 0;
         for (const auto& row : Rows) {
-            YQL_ENSURE(row.size() == Columns);
+            YQL_ENSURE(row.size() == Rows.front().size());
+            SerializedMemory += GetCellHeaderSize() * rows.size() + row.DataSize();
+            Memory += row.DataSize();
         }
     }
 
 private:
     std::vector<TOwnedCellVec> Rows;
-    ui64 MemorySerialized = 0;
-    ui16 Columns = 0;
+    ui64 SerializedMemory = 0;
+    ui16 Memory = 0;
 };
 
 class IPayloadSerializer : public TThrRefBase {
@@ -660,11 +675,7 @@ public:
 
     IDataBatchPtr Build() override {
         auto batch = RowBatcher.Flush(true);
-
-        return MakeIntrusive<TRowBatch>(
-            std::move(batch.Rows),
-            batch.MemorySerialized,
-            static_cast<ui16>(Columns.size()));
+        return MakeIntrusive<TRowBatch>(std::move(batch.Rows));
     }
 
 private:
@@ -764,10 +775,7 @@ public:
         auto batchResult = batcher.Flush(force);
         Memory -= batchResult.Memory;
         YQL_ENSURE(Columns.size() <= std::numeric_limits<ui16>::max());
-        return MakeIntrusive<TRowBatch>(
-            std::move(batchResult.Rows),
-            static_cast<i64>(batchResult.MemorySerialized),
-            static_cast<ui16>(Columns.size()));
+        return MakeIntrusive<TRowBatch>(std::move(batchResult.Rows));
     }
 
     TBatches FlushBatchesForce() override {
@@ -864,6 +872,10 @@ struct TBatchWithMetadata {
         return Data == nullptr;
     }
 
+    i64 GetSerializedMemory() const {
+        return IsCoveringBatch() ? 0 : Data->GetSerializedMemory();
+    }
+
     i64 GetMemory() const {
         return IsCoveringBatch() ? 0 : Data->GetMemory();
     }
@@ -904,14 +916,14 @@ public:
             // For columnshard batch can be slightly larger than the limit.
             while ((!maxCount || BatchesInFlight < *maxCount)
                     && BatchesInFlight < Batches.size()
-                    && (dataSize + GetBatch(BatchesInFlight).GetMemory() <= maxDataSize || BatchesInFlight == 0)) {
-                dataSize += GetBatch(BatchesInFlight).GetMemory();
+                    && (dataSize + GetBatch(BatchesInFlight).GetSerializedMemory() <= maxDataSize || BatchesInFlight == 0)) {
+                dataSize += GetBatch(BatchesInFlight).GetSerializedMemory();
                 ++BatchesInFlight;
             }
             YQL_ENSURE(BatchesInFlight != 0);
             YQL_ENSURE(BatchesInFlight == Batches.size()
                 || (maxCount && BatchesInFlight >= *maxCount)
-                || dataSize + GetBatch(BatchesInFlight).GetMemory() > maxDataSize);
+                || dataSize + GetBatch(BatchesInFlight).GetSerializedMemory() > maxDataSize);
         }
 
         TBatchWithMetadata& GetBatch(size_t index) {

@@ -604,6 +604,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CompactionScan) {
         TRowsModel data;
 
         env->SetLogPriority(NKikimrServices::RESOURCE_BROKER, NActors::NLog::PRI_DEBUG);
+        env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
+        env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
 
         env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
             return new TTestFlatTablet(env.Edge, tablet, info);
@@ -634,7 +636,9 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CompactionScan) {
         env.WaitFor<NFake::TEvCompacted>(28);
         env.WaitForWakeUp();
 
-        env.SendSync(new TEvTestFlatTablet::TEvQueueScan(data.Rows(), true));
+        auto queueScan = new TEvTestFlatTablet::TEvQueueScan(data.Rows(), true);
+        queueScan->ExpectedPageFaults = 8;
+        env.SendSync(std::move(queueScan));
         env.SendAsync(data.MakeRows(1));
         env.WaitFor<NFake::TEvCompacted>(3);
         env.WaitForWakeUp();

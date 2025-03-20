@@ -2766,11 +2766,7 @@ TExprBase DqBuildJoin(
     }
 
     if (useHashJoin && (hashJoin == EHashJoinMode::GraceAndSelf || hashJoin == EHashJoinMode::Grace || shuffleMapJoin)) {
-        if (allowStageMultiUsage) {
-            return DqBuildHashJoin(join, hashJoin, ctx, optCtx, shuffleElimination, shuffleEliminationWithMap);
-        } else {
-            return node;
-        }
+        return DqBuildHashJoin(join, hashJoin, ctx, optCtx, shuffleElimination, shuffleEliminationWithMap);
     }
 
     if (joinType == "Full"sv || joinType == "Exclusion"sv) {

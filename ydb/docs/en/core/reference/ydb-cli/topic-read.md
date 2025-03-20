@@ -68,8 +68,9 @@ If consumer name is not specified, message consumption will start from the first
 
 `--commit BOOL`: Commit message reads. Default value - `false`.
 
-1. If `true`, a consumer's current offset is shifted as topic messages are consumed.
-2. Possible values: `true` or `false`.
+- Possible values: `true` or `false`.
+- If `true`, a consumer's current offset is shifted as topic messages are consumed.
+- If the value is set to `false`, messages will be read, but the reading progress won't be saved, and upon restart, the messages will be read again. This functionality is useful for debugging: allowing messages to be read without affecting the production system (without offset commit).
 
 ### Other optional parameters
 

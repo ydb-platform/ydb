@@ -40,6 +40,7 @@ struct TDqStageSettings {
     static constexpr TStringBuf PartitionModeSettingName = "_partition_mode";
     static constexpr TStringBuf WideChannelsSettingName = "_wide_channels";
     static constexpr TStringBuf BlockStatusSettingName = "_block_status";
+    static constexpr TStringBuf IsShuffleEliminatedSettingName = "_is_shuffle_eliminated";
 
     ui64 LogicalId = 0;
     TString Id;
@@ -54,6 +55,7 @@ struct TDqStageSettings {
 
     bool WideChannels = false;
     const TStructExprType* OutputNarrowType = nullptr;
+    bool IsShuffleEliminated = false;
 
     enum class EBlockStatus {
         None,
@@ -66,6 +68,7 @@ struct TDqStageSettings {
     TDqStageSettings& SetPartitionMode(EPartitionMode mode) { PartitionMode = mode; return *this; }
     TDqStageSettings& SetWideChannels(const TStructExprType& narrowType) { WideChannels = true; OutputNarrowType = &narrowType; return *this; }
     TDqStageSettings& SetBlockStatus(EBlockStatus status) { BlockStatus = status; return *this; }
+    TDqStageSettings& SetShuffleEliminated() { IsShuffleEliminated = true; return *this; }
 
     static TDqStageSettings New(const NNodes::TDqStageBase& node);
     static TDqStageSettings New();

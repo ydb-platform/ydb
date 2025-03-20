@@ -118,8 +118,8 @@ TExprBase BuildDqJoinInput(TExprContext& ctx, TPositionHandle pos, const TExprBa
 
 TMaybe<TJoinInputDesc> BuildDqJoin(
     const TCoEquiJoinTuple& joinTuple,
-    const THashMap<TStringBuf, TJoinInputDesc>& inputs, 
-    EHashJoinMode mode, 
+    const THashMap<TStringBuf, TJoinInputDesc>& inputs,
+    EHashJoinMode mode,
     TExprContext& ctx,
     const TTypeAnnotationContext& typeCtx,
     TVector<TString>& subtreeLabels,
@@ -163,7 +163,7 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
             std::unordered_set<std::string>(subtreeLabels.begin(), subtreeLabels.end())
         ) {
             linkSettings.JoinAlgo = hint.Algo;
-            hint.Applied = true;   
+            hint.Applied = true;
         }
     }
     YQL_ENSURE(linkSettings.JoinAlgo != EJoinAlgoType::StreamLookupJoin || typeCtx.StreamLookupJoin, "Unsupported join strategy: streamlookup");
@@ -262,14 +262,14 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
         TExprNode::TListType shuffleByExprList;
 
         for (const auto& column: shuffleBy) {
-            auto node = 
+            auto node =
                 ctx.Builder(joinTuple.Pos())
                     .List()
                         .Atom(0, column.RelName)
                         .Atom(1, column.AttributeName)
                     .Seal()
                 .Build();
-            
+
             shuffleByExprList.emplace_back(std::move(node));
         }
 
@@ -309,7 +309,7 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
                         .Done());
         }
 
-        auto dqJoin = 
+        auto dqJoin =
             dqJoinBuilder
                 .JoinAlgoOptions()
                     .Add(std::move(joinAlgoOptions))
@@ -457,10 +457,10 @@ bool CheckJoinColumns(const TExprBase& node) {
 }
 
 TExprBase DqRewriteEquiJoin(
-    const TExprBase& node, 
-    EHashJoinMode mode, 
-    bool useCBO, 
-    TExprContext& ctx, 
+    const TExprBase& node,
+    EHashJoinMode mode,
+    bool useCBO,
+    TExprContext& ctx,
     const TTypeAnnotationContext& typeCtx,
     const TOptimizerHints& hints
 ) {
@@ -474,12 +474,12 @@ TExprBase DqRewriteEquiJoin(
  * Potentially this optimizer can also perform joins reorder given cardinality information.
  */
 TExprBase DqRewriteEquiJoin(
-    const TExprBase& node, 
-    EHashJoinMode mode, 
-    bool /* useCBO */, 
-    TExprContext& ctx, 
-    const TTypeAnnotationContext& typeCtx, 
-    int& joinCounter, 
+    const TExprBase& node,
+    EHashJoinMode mode,
+    bool /* useCBO */,
+    TExprContext& ctx,
+    const TTypeAnnotationContext& typeCtx,
+    int& joinCounter,
     const TOptimizerHints& hints
 ) {
     if (!node.Maybe<TCoEquiJoin>()) {
@@ -1249,8 +1249,8 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
     const auto joinType = join.JoinType().Value();
     YQL_ENSURE(joinType != "Cross"sv);
 
-    const auto leftIn = join.LeftInput().Cast<TDqCnUnionAll>().Output();
-    const auto rightIn = join.RightInput().Cast<TDqCnUnionAll>().Output();
+    auto leftIn = join.LeftInput().Cast<TDqCnUnionAll>().Output();
+    auto rightIn = join.RightInput().Cast<TDqCnUnionAll>().Output();
 
     const auto leftStructType = GetSequenceItemType(leftIn, false, ctx)->Cast<TStructExprType>();
     const auto rightStructType = GetSequenceItemType(rightIn, false, ctx)->Cast<TStructExprType>();
@@ -1410,11 +1410,11 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
 
     auto buildShuffleKeys = [&ctx, &join](const TExprList& exprList, const TVector<TCoAtom>& joinKeys) -> TVector<TCoAtom> {
         Y_ENSURE(exprList.Size() <= joinKeys.size());
-        
+
         TVector<TCoAtom> atomVector;
         atomVector.reserve(exprList.Size());
         for (std::size_t i = 0; i < exprList.Size(); ++i) {
-            auto atom = 
+            auto atom =
                 Build<TCoAtom>(ctx, join.Pos())
                     .Value(joinKeys[i].StringValue())
                 .Done();
@@ -1424,8 +1424,9 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
         return atomVector;
     };
 
-    const auto buildMap = [&ctx, &join](const TDqOutput& input) {
-        return Build<TDqCnMap>(ctx, join.Pos())
+    const auto buildMap = [&ctx, &join](TDqOutput& input) {
+        return
+            Build<TDqCnMap>(ctx, join.Pos())
                 .Output(input)
                 .Done().Ptr();
     };
@@ -1459,12 +1460,12 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
     if (shuffleRightSide) {
         if (shuffleElimination) {
             rightConnection = buildShuffle(
-                rightIn, 
+                rightIn,
                 buildShuffleKeys(join.ShuffleRightSideBy().Cast(),  rightJoinKeys)
             );
         } else {
             rightConnection = buildShuffle(
-                rightIn, 
+                rightIn,
                 rightJoinKeys
             );
         }
@@ -1777,16 +1778,16 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
         .Build();
 
     // this func add join to the stage and add connection to it. we do this instead of map connection to reduce data network interacting
-    auto addJoinToStage = 
+    auto addJoinToStage =
     [&ctx, &hashJoin, &join, &leftInputArg, &rightInputArg](const auto& stage, const TExprNode::TPtr& connection, bool stageSideIsLeft) {
         const auto& program = stage.Program();
         YQL_ENSURE(program.Args().Size() == stage.Inputs().Size());
 
-        TVector<TExprBase> stageInputs; 
+        TVector<TExprBase> stageInputs;
         stageInputs.reserve(program.Args().Size());
         TVector<TCoArgument> inputArgs;
         inputArgs.reserve(program.Args().Size());
-        
+
         size_t argIndex = 0;
         TNodeOnNodeOwnedMap leftReplaces(program.Args().Size() + 1);
         for (size_t i = 0; i < stage.Inputs().Size(); i++) {
@@ -1826,7 +1827,7 @@ TExprBase DqBuildHashJoin(const TDqJoin& join, EHashJoinMode mode, TExprContext&
                         .Args(inputArgs)
                         .Body(std::move(newBody))
                         .Build()
-                    .Settings(TDqStageSettings().BuildNode(ctx, join.Pos()))
+                    .Settings(TDqStageSettings().SetShuffleEliminated().BuildNode(ctx, join.Pos()))
                     .Build()
                 .Index().Build(ctx.GetIndexAsString(0), TNodeFlags::Default)
                 .Build()

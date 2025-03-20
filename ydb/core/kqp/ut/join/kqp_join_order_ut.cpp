@@ -128,6 +128,10 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
         settings.push_back(setting);
     }
 
+    setting.SetName("OptShuffleEliminationWithMap");
+    setting.SetValue("true");
+    settings.push_back(setting);
+
     NKikimrConfig::TAppConfig appConfig;
     appConfig.MutableTableServiceConfig()->SetEnableKqpDataQueryStreamIdxLookupJoin(useStreamLookupJoin);
     appConfig.MutableTableServiceConfig()->SetEnableConstantFolding(true);

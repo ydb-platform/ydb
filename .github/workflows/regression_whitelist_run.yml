@@ -8,13 +8,14 @@ on:
 jobs:
   ya_x86_64:
     name: Regression-run
-    runs-on: [ self-hosted, "${{ inputs.runner_label || 'auto-provisioned' }}", "${{ format('build-preset-{0}', matrix.build_preset || 'relwithdebinfo') }}" ]
-    timeout-minutes: 600
     uses: ./.github/workflows/run_all_tests.yml
     secrets: inherit
     strategy:
-      matrix: ["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]
       fail-fast: false
+      matrix: 
+         build_preset: ["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]
     with:
+      runner_label: auto-provisioned
       test_targets: ydb/tests/sql/ ydb/tests/stress ydb/tests/functional/tpc ydb/tests/functional/benchmarks_init
+      build_preset: ${{ matrix.build_preset }}
 

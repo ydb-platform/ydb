@@ -74,7 +74,7 @@ private:
         }
 
     public:
-        TPosition(const ui32 maxIndex)
+        explicit TPosition(const ui32 maxIndex)
             : Index(0)
             , Left(0)
             , Right(maxIndex) {
@@ -106,9 +106,9 @@ private:
     void Inc(const ui32 l, const ui32 r);
     ui64 GetCount(const TPosition& node, const ui32 l, const ui32 r) const;
     ui64 GetCount(const TPosition& node) const {
-        AFL_VERIFY(Count.size() == PropagatedDeltas.size());
         AFL_VERIFY(node.GetIndex() < Count.size());
-        return Count[node.GetIndex()] + PropagatedDeltas[node.GetIndex()] * node.IntervalSize();
+        return Count[node.GetIndex()] +
+               (node.GetIndex() < PropagatedDeltas.size() ? PropagatedDeltas[node.GetIndex()] : 0) * node.IntervalSize();
     }
     TPosition GetRoot() const {
         return TPosition(MaxIndex);

@@ -63,71 +63,6 @@ TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr &tableInfo) {
     return result;
 }
 
-template<typename T>
-void FillIndexImplTableColumns(
-    const T& baseTableColumns,
-    std::span<const TString> keys,
-    const THashSet<TString>& columns,
-    NKikimrSchemeOp::TTableDescription& implTableDesc)
-{
-    // The function that calls this may have already added some columns
-    // and we want to add new columns after those that have already been added
-    const auto was = implTableDesc.ColumnsSize();
-
-    THashMap<TString, ui32> implKeyToImplColumn;
-    for (ui32 keyId = 0; keyId < keys.size(); ++keyId) {
-        implKeyToImplColumn[keys[keyId]] = keyId;
-    }
-
-    // We want data columns order in index table same as in indexed table,
-    // so we use counter to keep this order in the std::sort
-    // Counter starts with Max/2 to avoid intersection with key columns counter
-    for (ui32 i = Max<ui32>() / 2; auto& columnIt: baseTableColumns) {
-        NKikimrSchemeOp::TColumnDescription* column = nullptr;
-        using TColumn = std::decay_t<decltype(columnIt)>;
-        if constexpr (std::is_same_v<TColumn, std::pair<const ui32, NSchemeShard::TTableInfo::TColumn>>) {
-            const auto& columnInfo = columnIt.second;
-            if (!columnInfo.IsDropped() && columns.contains(columnInfo.Name)) {
-                column = implTableDesc.AddColumns();
-                column->SetName(columnInfo.Name);
-                column->SetType(NScheme::TypeName(columnInfo.PType, columnInfo.PTypeMod));
-                column->SetNotNull(columnInfo.NotNull);
-            }
-        } else if constexpr (std::is_same_v<TColumn, NKikimrSchemeOp::TColumnDescription>) {
-            if (columns.contains(columnIt.GetName())) {
-                column = implTableDesc.AddColumns();
-                *column = columnIt;
-                column->ClearFamily();
-                column->ClearFamilyName();
-                column->ClearDefaultValue();
-            }
-        } else {
-            static_assert(dependent_false<TColumn>::value);
-        }
-        if (column) {
-            ui32 order = i++;
-            if (const auto* id = implKeyToImplColumn.FindPtr(column->GetName())) {
-                order = *id;
-            }
-            column->SetId(order);
-        }
-    }
-
-    std::sort(implTableDesc.MutableColumns()->begin() + was,
-              implTableDesc.MutableColumns()->end(),
-              [] (auto& left, auto& right) {
-                  return left.GetId() < right.GetId();
-              });
-
-    for (auto& column: *implTableDesc.MutableColumns()) {
-        column.ClearId();
-    }
-
-    for (const auto& keyName: keys) {
-        implTableDesc.AddKeyColumnNames(keyName);
-    }
-}
-
 namespace {
 
 NKikimrSchemeOp::TPartitionConfig PartitionConfigForIndexes(
@@ -223,6 +158,70 @@ void SetImplTablePartitionConfig(
     *tableDescription.MutablePartitionConfig() = PartitionConfigForIndexes(baseTablePartitionConfig, indexTableDesc);
 }
 
+void FillIndexImplTableColumns(
+    const auto& baseTableColumns,
+    std::span<const TString> keys,
+    const THashSet<TString>& columns,
+    NKikimrSchemeOp::TTableDescription& implTableDesc)
+{
+    // The function that calls this may have already added some columns
+    // and we want to add new columns after those that have already been added
+    const auto was = implTableDesc.ColumnsSize();
+
+    THashMap<TString, ui32> implKeyToImplColumn;
+    for (ui32 keyId = 0; keyId < keys.size(); ++keyId) {
+        implKeyToImplColumn[keys[keyId]] = keyId;
+    }
+
+    // We want data columns order in index table same as in indexed table,
+    // so we use counter to keep this order in the std::sort
+    // Counter starts with Max/2 to avoid intersection with key columns counter
+    for (ui32 i = Max<ui32>() / 2; auto& columnIt: baseTableColumns) {
+        NKikimrSchemeOp::TColumnDescription* column = nullptr;
+        using TColumn = std::decay_t<decltype(columnIt)>;
+        if constexpr (std::is_same_v<TColumn, std::pair<const ui32, NSchemeShard::TTableInfo::TColumn>>) {
+            const auto& columnInfo = columnIt.second;
+            if (!columnInfo.IsDropped() && columns.contains(columnInfo.Name)) {
+                column = implTableDesc.AddColumns();
+                column->SetName(columnInfo.Name);
+                column->SetType(NScheme::TypeName(columnInfo.PType, columnInfo.PTypeMod));
+                column->SetNotNull(columnInfo.NotNull);
+            }
+        } else if constexpr (std::is_same_v<TColumn, NKikimrSchemeOp::TColumnDescription>) {
+            if (columns.contains(columnIt.GetName())) {
+                column = implTableDesc.AddColumns();
+                *column = columnIt;
+                column->ClearFamily();
+                column->ClearFamilyName();
+                column->ClearDefaultValue();
+            }
+        } else {
+            static_assert(dependent_false<TColumn>::value);
+        }
+        if (column) {
+            ui32 order = i++;
+            if (const auto* id = implKeyToImplColumn.FindPtr(column->GetName())) {
+                order = *id;
+            }
+            column->SetId(order);
+        }
+    }
+
+    std::sort(implTableDesc.MutableColumns()->begin() + was,
+              implTableDesc.MutableColumns()->end(),
+              [] (auto& left, auto& right) {
+                  return left.GetId() < right.GetId();
+              });
+
+    for (auto& column: *implTableDesc.MutableColumns()) {
+        column.ClearId();
+    }
+
+    for (const auto& keyName: keys) {
+        implTableDesc.AddKeyColumnNames(keyName);
+    }
+}
+
 const auto& GetPartitionConfig(const NSchemeShard::TTableInfo::TPtr& tableInfo) {
     return tableInfo->PartitionConfig();
 }
@@ -316,6 +315,14 @@ auto CalcVectorKmeansTreePrefixImplTableDescImpl(
     return implTableDesc;
 }
 
+}
+
+void FillIndexTableColumns(
+    const THashMap<ui32, NSchemeShard::TTableInfo::TColumn>& baseTableColumns,
+    std::span<const TString> keys,
+    const THashSet<TString>& columns,
+    NKikimrSchemeOp::TTableDescription& implTableDesc) {
+    FillIndexImplTableColumns(baseTableColumns, keys, columns, implTableDesc);
 }
 
 NKikimrSchemeOp::TTableDescription CalcImplTableDesc(

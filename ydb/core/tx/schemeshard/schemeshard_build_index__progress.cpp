@@ -358,7 +358,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     };
     if (buildInfo.IsBuildPrefixedVectorIndex() && buildInfo.KMeans.Level == 1) {
         op.SetName(TString::Join(PostingTable, suffix));
-        NTableIndex::FillIndexImplTableColumns(tableInfo->Columns, implTableColumns.Keys, implTableColumns.Columns, op);
+        NTableIndex::FillIndexTableColumns(tableInfo->Columns, implTableColumns.Keys, implTableColumns.Columns, op);
         auto& policy = *resetPartitionsSettings();
         const auto shards = tableInfo->GetShard2PartitionIdx().size();
         policy.SetMinPartitionsCount(shards);

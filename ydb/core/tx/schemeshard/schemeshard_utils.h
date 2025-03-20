@@ -96,9 +96,8 @@ TTableColumns ExtractInfo(const NSchemeShard::TTableInfo::TPtr& tableInfo);
 TTableColumns ExtractInfo(const NKikimrSchemeOp::TTableDescription& tableDesc);
 TIndexColumns ExtractInfo(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc);
 
-template<typename T>
-void FillIndexImplTableColumns(
-    const T& baseTableColumns,
+void FillIndexTableColumns(
+    const THashMap<ui32, NSchemeShard::TTableInfo::TColumn>& baseTableColumns,
     std::span<const TString> keys,
     const THashSet<TString>& columns,
     NKikimrSchemeOp::TTableDescription& implTableDesc);

@@ -1,4 +1,2 @@
 items:
 - include: { mode: link, path: toc_i.yaml }
-- name: Документация
-  path: documentation/toc_p.yaml

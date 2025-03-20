@@ -96,7 +96,7 @@ void TestSimple(size_t maxBatchSize) {
     }
 }
 
-void TestPartitionTables(size_t maxBatchSize) {
+void TestSimplePartitions(size_t maxBatchSize) {
     TKikimrRunner kikimr(GetAppConfig(maxBatchSize));
     auto db = kikimr.GetQueryClient();
     auto session = db.GetSession().GetValueSync().GetSession();
@@ -186,7 +186,43 @@ void TestPartitionTables(size_t maxBatchSize) {
     }
 }
 
-void TestLargeTable(size_t maxBatchSize, size_t rowsPerShard) {
+void TestManyPartitions(size_t maxBatchSize, size_t totalRows, size_t shards) {
+    TKikimrRunner kikimr(GetAppConfig(maxBatchSize));
+    auto db = kikimr.GetQueryClient();
+    auto session = db.GetSession().GetValueSync().GetSession();
+
+    CreateManyShardsTable(kikimr, totalRows, shards, 1000);
+
+    {
+        auto query = Q_(R"(
+            BATCH UPDATE ManyShardsTable
+                SET Data = -10;
+        )");
+        auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        ExecQueryAndTestEmpty(session, R"(
+            SELECT count(*) FROM ManyShardsTable
+                WHERE Data != -10;
+        )");
+    }
+    {
+        auto query = Q_(R"(
+            BATCH UPDATE ManyShardsTable
+                SET Data = 2
+                WHERE Key >= 2000;
+        )");
+        auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        ExecQueryAndTestEmpty(session, R"(
+            SELECT count(*) FROM ManyShardsTable
+                WHERE Key >= 2000 AND Data != 2;
+        )");
+    }
+}
+
+void TestLarge(size_t maxBatchSize, size_t rowsPerShard) {
     TKikimrRunner kikimr(GetAppConfig(maxBatchSize));
     auto db = kikimr.GetQueryClient();
     auto session = db.GetSession().GetValueSync().GetSession();
@@ -231,27 +267,45 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
         }
     }
 
-    Y_UNIT_TEST(PartitionTables) {
+    Y_UNIT_TEST(SimplePartitions) {
         for (size_t size = 1; size <= 1000; size *= 10) {
-            TestPartitionTables(size);
+            TestSimplePartitions(size);
         }
     }
 
-    Y_UNIT_TEST(LargeTable_1) {
+    Y_UNIT_TEST(ManyPartitions_1) {
         for (size_t size = 1; size <= 1000; size *= 10) {
-            TestLargeTable(size, 100);
+            TestManyPartitions(size, 1000, 10);
         }
     }
 
-    Y_UNIT_TEST(LargeTable_2) {
+    Y_UNIT_TEST(ManyPartitions_2) {
+        for (size_t size = 1; size <= 1000; size *= 10) {
+            TestManyPartitions(size, 5000, 50);
+        }
+    }
+
+    Y_UNIT_TEST(ManyPartitions_3) {
+        for (size_t size = 1; size <= 1000; size *= 10) {
+            TestManyPartitions(size, 10000, 100);
+        }
+    }
+
+    Y_UNIT_TEST(Large_1) {
+        for (size_t size = 1; size <= 1000; size *= 10) {
+            TestLarge(size, 100);
+        }
+    }
+
+    Y_UNIT_TEST(Large_2) {
         for (size_t size = 100; size <= 10000; size *= 10) {
-            TestLargeTable(size, 10000);
+            TestLarge(size, 10000);
         }
     }
 
-    Y_UNIT_TEST(LargeTable_3) {
+    Y_UNIT_TEST(Large_3) {
         for (size_t size = 1000; size <= 100000; size *= 10) {
-            TestLargeTable(size, 100000);
+            TestLarge(size, 100000);
         }
     }
 

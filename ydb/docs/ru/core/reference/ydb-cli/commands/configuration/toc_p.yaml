@@ -1,4 +1,6 @@
 items:
+  - name: Обзор
+    href: index.md
   - name: Команды кластера
     href: cluster/index.md
     include:

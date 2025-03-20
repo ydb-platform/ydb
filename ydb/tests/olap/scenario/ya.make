@@ -14,7 +14,6 @@ PY3TEST()
 
     ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
     DEPENDS(
-        ydb/apps/ydb
         ydb/apps/ydbd
     )
 
@@ -29,7 +28,6 @@ PY3TEST()
         ydb/public/sdk/python
         ydb/public/sdk/python/enable_v3_new_behavior
         ydb/tests/olap/lib
-        ydb/tests/olap/helpers
         ydb/tests/library
         ydb/tests/olap/scenario/helpers
         ydb/tests/olap/common

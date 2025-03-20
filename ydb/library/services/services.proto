@@ -307,6 +307,7 @@ enum EServiceKikimr {
     TX_COLUMNSHARD_WRITE = 852;
     TX_COLUMNSHARD_TX = 853;
     TX_COLUMNSHARD_RESTORE = 854;
+    COLUMNSHARD_SCAN_EVLOG = 855;
 
     // System views
     SYSTEM_VIEWS = 900;
@@ -1084,5 +1085,6 @@ message TActivity {
         REPLICATION_TRANSFER_WRITER = 657;
         DATA_ERASURE = 658;
         TENANT_DATA_ERASURE = 659;
+        BS_SYNC_BROKER = 660;
     };
 };

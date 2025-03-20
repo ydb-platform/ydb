@@ -2443,6 +2443,8 @@ message TReqListJobs
 
     optional string continuation_token = 24;
 
+    optional bool with_interruption_info = 26;
+
     optional TMasterReadOptions master_read_options = 102;
 }
 

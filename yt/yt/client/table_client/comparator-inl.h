@@ -8,6 +8,58 @@ namespace NYT::NTableClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <CKeyBound T>
+T TComparator::StrongerKeyBound(const T& lhs, const T& rhs) const
+{
+    YT_VERIFY(lhs);
+    YT_VERIFY(rhs);
+
+    YT_VERIFY(lhs.IsUpper == rhs.IsUpper);
+    auto comparisonResult = CompareKeyBounds(lhs, rhs);
+    if (lhs.IsUpper) {
+        comparisonResult = -comparisonResult;
+    }
+
+    return (comparisonResult <= 0) ? rhs : lhs;
+}
+
+template <CKeyBound T>
+void TComparator::ReplaceIfStrongerKeyBound(T& lhs, const T& rhs) const
+{
+    if (!lhs) {
+        lhs = rhs;
+        return;
+    }
+
+    if (!rhs) {
+        return;
+    }
+
+    YT_VERIFY(lhs.IsUpper == rhs.IsUpper);
+    auto comparisonResult = CompareKeyBounds(lhs, rhs);
+    if (lhs.IsUpper) {
+        comparisonResult = -comparisonResult;
+    }
+
+    if (comparisonResult < 0) {
+        lhs = rhs;
+    }
+}
+
+template <CKeyBound T>
+T TComparator::WeakerKeyBound(const T& lhs, const T& rhs) const
+{
+    YT_VERIFY(lhs.IsUpper == rhs.IsUpper);
+    auto comparisonResult = CompareKeyBounds(lhs, rhs);
+    if (lhs.IsUpper) {
+        comparisonResult = -comparisonResult;
+    }
+
+    return (comparisonResult >= 0) ? rhs : lhs;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <typename TComparer>
 int CompareKeys(TUnversionedValueRange lhs, TUnversionedValueRange rhs, const TComparer& prefixComparer)
 {

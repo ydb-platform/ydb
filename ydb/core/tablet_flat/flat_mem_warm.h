@@ -514,7 +514,7 @@ namespace NMem {
         }
 
     private:
-        NMem::TTreeKey NewKey(const TCell* src) noexcept {
+        NMem::TTreeKey NewKey(const TCell* src) {
             const size_t items = Scheme->Keys->Size();
             const size_t bytes = sizeof(TCell) * items;
 
@@ -529,14 +529,14 @@ namespace NMem {
             return NMem::TTreeKey(key);
         }
 
-        NMem::TUpdate* NewUpdate(ui32 cols) noexcept
+        NMem::TUpdate* NewUpdate(ui32 cols)
         {
             const size_t bytes = sizeof(NMem::TUpdate) + cols * sizeof(NMem::TColumnUpdate);
 
             return (NMem::TUpdate*)Pool.Allocate(bytes);
         }
 
-        TCell Clone(const char *data, ui32 size) noexcept
+        TCell Clone(const char *data, ui32 size)
         {
             const bool small = TCell::CanInline(size);
 

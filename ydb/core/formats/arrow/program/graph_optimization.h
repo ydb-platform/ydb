@@ -5,6 +5,7 @@
 #include <library/cpp/json/writer/json_value.h>
 #include <util/digest/fnv.h>
 #include <util/digest/numeric.h>
+#include <yql/essentials/core/arrow_kernels/request/request.h>
 
 namespace NKikimr::NArrow::NSSA {
 class TCalculationProcessor;
@@ -131,10 +132,12 @@ public:
 class TGraph {
 private:
     ui32 NextResourceId = 0;
+    THashSet<ui32> FetchersMerged;
     const IColumnResolver& Resolver;
     std::map<ui64, std::shared_ptr<TGraphNode>> Nodes;
     THashMap<TResourceAddress, TGraphNode*> Producers;
     THashSet<ui32> IndexesConstructed;
+    THashSet<ui32> HeaderCheckConstructed;
     ui32 NodeId = 0;
     TGraphNode* GetProducerVerified(const TResourceAddress& resourceId) const {
         auto it = Producers.find(resourceId);
@@ -143,18 +146,23 @@ private:
     }
     std::optional<TResourceAddress> GetOriginalAddress(TGraphNode* condNode) const;
     TConclusion<bool> OptimizeForFetchSubColumns(TGraphNode* condNode);
+    TConclusion<bool> OptimizeConditionsForHeadersCheck(TGraphNode* condNode);
+    bool IsBoolResultYqlOperator(const NYql::TKernelRequestBuilder::EBinaryOp op) const;
 
     TConclusion<bool> OptimizeConditionsForStream(TGraphNode* condNode);
     TConclusion<bool> OptimizeConditionsForIndexes(TGraphNode* condNode);
     TConclusion<bool> OptimizeIndexesToApply(TGraphNode* condNode);
     TConclusion<bool> OptimizeFilterWithCoalesce(TGraphNode* cNode);
     TConclusion<bool> OptimizeFilterWithAnd(TGraphNode* filterNode, TGraphNode* filterArg, const std::shared_ptr<TCalculationProcessor>& calc);
+    TConclusion<bool> OptimizeMergeFetching(TGraphNode* baseNode);
+
 
     bool HasEdge(const TGraphNode* from, const TGraphNode* to, const ui32 resourceId) const;
     void AddEdge(TGraphNode* from, TGraphNode* to, const ui32 resourceId);
     void RemoveEdge(TGraphNode* from, TGraphNode* to, const ui32 resourceId);
     void RemoveNode(const ui32 idenitifier);
-    void RemoveBranch(TGraphNode* from);
+    THashMap<ui32, TGraphNode*> GetBranch(TGraphNode* from, const bool backOnly) const;
+    void RemoveBranch(TGraphNode* from, const bool backOnly);
     [[nodiscard]] std::shared_ptr<TGraphNode> AddNode(const std::shared_ptr<IResourceProcessor>& processor) {
         auto result = std::make_shared<TGraphNode>(NodeId++, processor);
         Nodes.emplace(result->GetIdentifier(), result);

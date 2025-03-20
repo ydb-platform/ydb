@@ -4061,7 +4061,7 @@ TRuntimeNode TProgramBuilder::Udf(
 
     TFunctionTypeInfo funcInfo;
     TStatus status = FunctionRegistry.FindFunctionTypeInfo(
-        Env, TypeInfoHelper, nullptr, funcName, userType, typeConfig, flags, {}, nullptr, &funcInfo);
+        Env, TypeInfoHelper, nullptr, funcName, userType, typeConfig, flags, {}, nullptr, nullptr, &funcInfo);
     MKQL_ENSURE(status.IsOk(), status.GetError());
 
     auto runConfigType = funcInfo.RunConfigType;

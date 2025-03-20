@@ -110,6 +110,8 @@ DECLARE_REFCOUNTED_STRUCT(THistogramDigestConfig)
 DECLARE_REFCOUNTED_STRUCT(TSingletonsConfig)
 DECLARE_REFCOUNTED_STRUCT(TSingletonsDynamicConfig)
 
+DECLARE_REFCOUNTED_STRUCT(TFairShareHierarchicalSchedulerDynamicConfig)
+
 class TSignalRegistry;
 
 class TBloomFilterBuilder;
@@ -159,8 +161,34 @@ class TSummary;
 template <class TTask>
 struct IFairScheduler;
 
+using TFairShareSlotId = TGuid;
+
 template <class TTask>
 using IFairSchedulerPtr = TIntrusivePtr<IFairScheduler<TTask>>;
+
+template <typename TTag>
+class TFairShareHierarchicalSlotQueueSlot;
+
+template <typename TTag>
+using TFairShareHierarchicalSlotQueueSlotPtr = TIntrusivePtr<TFairShareHierarchicalSlotQueueSlot<TTag>>;
+
+template <typename TTag>
+class TFairShareHierarchicalSchedulerLog;
+
+template <typename TTag>
+using TFairShareHierarchicalSchedulerLogPtr = TIntrusivePtr<TFairShareHierarchicalSchedulerLog<TTag>>;
+
+template <typename TTag>
+class TFairShareHierarchicalScheduler;
+
+template <typename TTag>
+using TFairShareHierarchicalSchedulerPtr = TIntrusivePtr<TFairShareHierarchicalScheduler<TTag>>;
+
+template <typename TTag>
+class TFairShareHierarchicalSlotQueue;
+
+template <typename TTag>
+using TFairShareHierarchicalSlotQueuePtr = TIntrusivePtr<TFairShareHierarchicalSlotQueue<TTag>>;
 
 DECLARE_REFCOUNTED_STRUCT(TAdaptiveHedgingManagerConfig)
 DECLARE_REFCOUNTED_STRUCT(IHedgingManager)
@@ -173,11 +201,6 @@ DEFINE_ENUM(EProcessErrorCode,
     ((CannotResolveBinary)(10002))
     ((CannotStartProcess) (10003))
 );
-
-////////////////////////////////////////////////////////////////////////////////
-
-DECLARE_REFCOUNTED_STRUCT(IMemoryUsageTracker)
-DECLARE_REFCOUNTED_STRUCT(IReservingMemoryUsageTracker)
 
 ////////////////////////////////////////////////////////////////////////////////
 

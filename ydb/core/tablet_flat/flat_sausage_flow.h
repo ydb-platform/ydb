@@ -12,7 +12,7 @@ namespace NPageCollection {
     public:
         struct TReadPortion {
 
-            void Describe(IOutputStream &out) const noexcept
+            void Describe(IOutputStream &out) const
             {
                 out
                     << "{" << Slot << "p +" << Skip << "b " << Size << "b}";
@@ -55,7 +55,7 @@ namespace NPageCollection {
             return Tail >= Slice.size();
         }
 
-        TReadPortionRange Grow(ui64 bytes) noexcept
+        TReadPortionRange Grow(ui64 bytes)
         {
             const ui32 from = Queue.size();
             const ui64 limit = OnHold + Min(Max<ui64>() - OnHold, bytes);

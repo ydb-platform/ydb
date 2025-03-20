@@ -23,12 +23,12 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::TableContentWithSetting
 
         if (auto read = TMaybeNode<TYtLength>(input).Input().Maybe<TYtReadTable>()) {
             nodesToOptimize.insert(read.Cast().Raw());
-            return false;
+            return true;
         }
 
         if (auto read = TMaybeNode<TYtTableContent>(input).Input().Maybe<TYtReadTable>()) {
             nodesToOptimize.insert(read.Cast().Raw());
-            return false;
+            return true;
         }
         if (TYtOutput::Match(input.Get())) {
             processedNodes.insert(input->UniqueId());
@@ -92,7 +92,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::NonOptimalTableContent(
 
         if (TYtTableContent::Match(input.Get())) {
             nodesToOptimize.insert(input.Get());
-            return false;
+            return true;
         }
         if (TYtOutput::Match(input.Get())) {
             processedNodes.insert(input->UniqueId());

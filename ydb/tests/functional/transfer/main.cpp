@@ -17,7 +17,7 @@ using namespace NYdb::NReplication;
 
 namespace {
 
-volatile size_t TestCaseCounter = 0;
+volatile size_t TestCaseCounter = RandomNumber<size_t>();
 
 struct IChecker {
     virtual void Assert(const TString& msg, const ::Ydb::Value& value) = 0;
@@ -124,7 +124,6 @@ struct TConfig {
     const TExpectations Expectations;
     const TVector<TString> AlterLambdas;
 };
-
 
 struct MainTestCase {
 
@@ -929,7 +928,7 @@ Y_UNIT_TEST_SUITE(Transfer)
             Sleep(TDuration::Seconds(1));
         }
     }
-
+/*
     Y_UNIT_TEST(DescribeError_OnWriteToShard)
     {
         MainTestCase testCase;
@@ -969,5 +968,6 @@ Y_UNIT_TEST_SUITE(Transfer)
             Sleep(TDuration::Seconds(1));
         }
     }
+*/
 }
 

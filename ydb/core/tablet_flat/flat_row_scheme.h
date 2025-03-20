@@ -29,7 +29,7 @@ namespace NTable {
                 Cells[idx] = cell;
             }
 
-            TIntrusiveConstPtr<TNullsType> operator*() const noexcept
+            TIntrusiveConstPtr<TNullsType> operator*() const
             {
                 return TNullsType::Make(Types, Cells);
             }
@@ -109,7 +109,7 @@ namespace NTable {
             return ci == ByTag.end() ? nullptr : &Cols[ci->second];
         }
 
-        TVector<ui32> Tags(bool keysOnly = false) const noexcept
+        TVector<ui32> Tags(bool keysOnly = false) const
         {
             TVector<ui32> tags; /* ordered by value tags */
 

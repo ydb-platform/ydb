@@ -3649,8 +3649,12 @@ void TSchemeShard::PersistColumnTable(NIceDb::TNiceDb& db, TPathId pathId, const
 
     TString serialized;
     TString serializedSharding;
-    Y_ABORT_UNLESS(tableInfo.Description.SerializeToString(&serialized));
-    Y_ABORT_UNLESS(tableInfo.Description.GetSharding().SerializeToString(&serializedSharding));
+    auto tableInfoCopy = tableInfo;
+    if (tableInfo.IsStandalone()) {
+        tableInfoCopy.Description.MutableSchema()->SetEngine(NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES);
+    }
+    Y_ABORT_UNLESS(tableInfoCopy.Description.SerializeToString(&serialized));
+    Y_ABORT_UNLESS(tableInfoCopy.Description.GetSharding().SerializeToString(&serializedSharding));
 
     if (isAlter) {
         db.Table<Schema::ColumnTablesAlters>().Key(pathId.LocalPathId).Update(
@@ -4663,6 +4667,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
     ConfigureStatsOperations(appData->SchemeShardConfig, ctx);
     MaxCdcInitialScanShardsInFlight = appData->SchemeShardConfig.GetMaxCdcInitialScanShardsInFlight();
+    MaxRestoreBuildIndexShardsInFlight = appData->SchemeShardConfig.GetMaxRestoreBuildIndexShardsInFlight();
 
     ConfigureBackgroundCleaningQueue(appData->BackgroundCleaningConfig, ctx);
     ConfigureDataErasureManager(appData->DataErasureConfig);
@@ -7236,6 +7241,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
         ConfigureStatsBatching(schemeShardConfig, ctx);
         ConfigureStatsOperations(schemeShardConfig, ctx);
         MaxCdcInitialScanShardsInFlight = schemeShardConfig.GetMaxCdcInitialScanShardsInFlight();
+        MaxRestoreBuildIndexShardsInFlight = schemeShardConfig.GetMaxRestoreBuildIndexShardsInFlight();
     }
 
     if (appConfig.HasTableProfilesConfig()) {

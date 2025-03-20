@@ -8,8 +8,6 @@
 #include <memory>
 #include <mutex>
 
-#define NEW_PATTERN_CACHE_IN_MKQL
-
 namespace NKikimr::NMiniKQL {
 
 struct TPatternCacheEntry {

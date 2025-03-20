@@ -10,6 +10,7 @@
 #include <ydb/core/blobstorage/dsproxy/dsproxy_nodemonactor.h>
 #include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_replbroker.h>
+#include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_broker.h>
 #include <ydb/library/pdisk_io/file_params.h>
 #include <ydb/core/mind/bscontroller/yaml_config_helpers.h>
 #include <ydb/core/base/nameservice.h>
@@ -44,6 +45,7 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , ThrottlingMaxOccupancyPerMille(950, 1, 1000)
     , ThrottlingMinLogChunkCount(100, 1, 1000)
     , ThrottlingMaxLogChunkCount(130, 1, 1000)
+    , MaxInProgressSyncCount(0, 0, 1000)
     , MaxCommonLogChunksHDD(200, 1, 1'000'000)
     , MaxCommonLogChunksSSD(200, 1, 1'000'000)
     , CostMetricsParametersByMedia({
@@ -370,6 +372,8 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(ThrottlingMinLogChunkCount, "VDiskControls.ThrottlingMinLogChunkCount");
         icb->RegisterSharedControl(ThrottlingMaxLogChunkCount, "VDiskControls.ThrottlingMaxLogChunkCount");
 
+        icb->RegisterSharedControl(MaxInProgressSyncCount, "VDiskControls.MaxInProgressSyncCount");
+
         icb->RegisterSharedControl(MaxCommonLogChunksHDD, "PDiskControls.MaxCommonLogChunksHDD");
         icb->RegisterSharedControl(MaxCommonLogChunksSSD, "PDiskControls.MaxCommonLogChunksSSD");
 
@@ -423,6 +427,9 @@ void TNodeWarden::Bootstrap() {
 
     const ui64 maxBytes = replBrokerConfig.GetMaxInFlightReadBytes();
     actorSystem->RegisterLocalService(MakeBlobStorageReplBrokerID(), Register(CreateReplBrokerActor(maxBytes)));
+
+    actorSystem->RegisterLocalService(MakeBlobStorageSyncBrokerID(), Register(
+        CreateSyncBrokerActor(MaxInProgressSyncCount)));
 
     // determine if we are running in 'mock' mode
     EnableProxyMock = Cfg->BlobStorageConfig.GetServiceSet().GetEnableProxyMock();

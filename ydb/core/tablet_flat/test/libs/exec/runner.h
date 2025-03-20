@@ -87,7 +87,7 @@ namespace NFake {
             Env.AddLocalService(service, TActorSetupCmd(actor, box, 0), 0);
         }
 
-        void RunTest(TAutoPtr<IActor> actor) noexcept
+        void RunTest(TAutoPtr<IActor> actor)
         {
             return RunOn(8, { }, actor.Release(), EMail::Simple);
         }
@@ -192,7 +192,7 @@ namespace NFake {
             }
         }
 
-        static TVector<TString> MakeComponentsNames() noexcept
+        static TVector<TString> MakeComponentsNames()
         {
             const auto begin = ui32(NKikimrServices::EServiceKikimr_MIN);
             const auto end = ui32(NKikimrServices::EServiceKikimr_MAX) + 1;

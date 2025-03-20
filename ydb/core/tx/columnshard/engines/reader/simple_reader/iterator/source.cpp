@@ -2,6 +2,7 @@
 #include "plain_read_data.h"
 #include "source.h"
 
+#include <ydb/core/formats/arrow/accessor/sub_columns/accessor.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
 #include <ydb/core/tx/columnshard/blobs_reader/events.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
@@ -9,6 +10,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/default_fetching.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/sub_columns_fetching.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/meta.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
@@ -145,58 +147,82 @@ std::shared_ptr<NIndexes::TSkipIndex> TPortionDataSource::SelectOptimalIndex(
     return indexes.front();
 }
 
-TConclusion<bool> TPortionDataSource::DoStartFetchIndex(const NArrow::NSSA::TProcessorContext& context, const TFetchIndexContext& indexContext) {
-    NIndexes::NRequest::TOriginalDataAddress addr(indexContext.GetColumnId(), indexContext.GetSubColumnName());
-    auto indexMeta = MutableStageData().GetIndexes()->FindIndexFor(addr, indexContext.GetOperation());
-    if (!indexMeta) {
-        const auto indexesMeta = GetSourceSchema()->GetIndexInfo().FindSkipIndexes(addr, indexContext.GetOperation());
-        if (indexesMeta.empty()) {
-            MutableStageData().AddRemapDataToIndex(addr, nullptr);
-            return false;
-        }
-        indexMeta = SelectOptimalIndex(indexesMeta, indexContext.GetOperation());
-        if (!indexMeta) {
-            MutableStageData().AddRemapDataToIndex(addr, nullptr);
-            return false;
-        }
-    }
-    MutableStageData().AddRemapDataToIndex(addr, indexMeta);
-    const std::optional<ui64> category = indexMeta->CalcCategory(indexContext.GetSubColumnName());
-    std::shared_ptr<NCommon::IKernelFetchLogic> fetcher = indexMeta->BuildFetchTask(
-        addr, NIndexes::TIndexDataAddress(indexMeta->GetIndexId(), category), indexMeta, GetContext()->GetCommonContext()->GetStoragesManager());
-
+TConclusion<bool> TPortionDataSource::DoStartFetchImpl(
+    const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& fetchersExt) {
     TReadActionsCollection readActions;
-    auto source = std::static_pointer_cast<IDataSource>(context.GetDataSource());
+    auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
     NCommon::TFetchingResultContext contextFetch(*GetStageData().GetTable(), *GetStageData().GetIndexes(), source);
-    fetcher->Start(readActions, contextFetch);
-
+    for (auto&& i : fetchersExt) {
+        i->Start(readActions, contextFetch);
+    }
     if (readActions.IsEmpty()) {
-        NBlobOperations::NRead::TCompositeReadBlobs blobs;
-        fetcher->OnDataReceived(readActions, blobs);
-        MutableStageData().AddFetcher(fetcher);
-        AFL_VERIFY(readActions.IsEmpty());
+        for (auto&& i : fetchersExt) {
+            NBlobOperations::NRead::TCompositeReadBlobs blobs;
+            i->OnDataReceived(readActions, blobs);
+            MutableStageData().AddFetcher(i);
+            AFL_VERIFY(readActions.IsEmpty());
+        }
         return false;
     }
     THashMap<ui32, std::shared_ptr<NCommon::IKernelFetchLogic>> fetchers;
-    fetchers.emplace(indexMeta->GetIndexId(), fetcher);
-    NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(
-        std::make_shared<NCommon::TColumnsFetcherTask>(std::move(readActions), fetchers, source, GetExecutionContext().GetCursorStep(), "fetcher", "")));
+    for (auto&& i : fetchersExt) {
+        AFL_VERIFY(fetchers.emplace(i->GetEntityId(), i).second);
+    }
+    NActors::TActivationContext::AsActorContext().Register(
+        new NOlap::NBlobOperations::NRead::TActor(std::make_shared<NCommon::TColumnsFetcherTask>(
+            std::move(readActions), fetchers, source, GetExecutionContext().GetCursorStep(), "fetcher", "")));
     return true;
 }
 
+TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> TPortionDataSource::DoStartFetchIndex(
+    const NArrow::NSSA::TProcessorContext& /*context*/, const TFetchIndexContext& indexContext) {
+    THashMap<TCheckIndexContext, std::shared_ptr<NIndexes::IIndexMeta>> indexInfo;
+    for (auto&& i : indexContext.GetOperationsBySubColumn().GetData()) {
+        NIndexes::NRequest::TOriginalDataAddress addr(indexContext.GetColumnId(), i.first);
+        for (auto&& op : i.second) {
+            auto indexMeta = MutableStageData().GetIndexes()->FindIndexFor(addr, op);
+            TCheckIndexContext checkAddr(indexContext.GetColumnId(), i.first, op);
+            if (!indexMeta) {
+                const auto indexesMeta = GetSourceSchema()->GetIndexInfo().FindSkipIndexes(addr, op);
+                if (indexesMeta.empty()) {
+                    MutableStageData().AddRemapDataToIndex(checkAddr, nullptr);
+                    continue;
+                }
+                indexMeta = SelectOptimalIndex(indexesMeta, op);
+                if (!indexMeta) {
+                    MutableStageData().AddRemapDataToIndex(checkAddr, nullptr);
+                    continue;
+                }
+            }
+            AFL_VERIFY(indexInfo.emplace(checkAddr, indexMeta).second);
+            MutableStageData().AddRemapDataToIndex(checkAddr, indexMeta);
+        }
+    }
+    THashMap<ui32, THashSet<NIndexes::NRequest::TOriginalDataAddress>> addresses;
+    for (auto&& [check, index] : indexInfo) {
+        const NIndexes::NRequest::TOriginalDataAddress addr(check.GetColumnId(), check.GetSubColumnName());
+        addresses[index->GetIndexId()].emplace(addr);
+    }
+    std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>> result;
+    for (auto&& i : addresses) {
+        auto indexMeta = GetSourceSchema()->GetIndexInfo().GetIndexVerified(i.first);
+        result.emplace_back(
+            indexMeta->BuildFetchTask(i.second, indexMeta.GetObjectPtrVerified(), GetContext()->GetCommonContext()->GetStoragesManager()));
+    }
+    return result;
+}
+
 TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
-    const NArrow::NSSA::TProcessorContext& context, const TFetchIndexContext& fetchContext, const std::shared_ptr<arrow::Scalar>& value) {
-    NIndexes::NRequest::TOriginalDataAddress addr(fetchContext.GetColumnId(), fetchContext.GetSubColumnName());
-    auto meta = MutableStageData().ExtractRemapDataToIndex(addr);
+    const NArrow::NSSA::TProcessorContext& context, const TCheckIndexContext& fetchContext, const std::shared_ptr<arrow::Scalar>& value) {
+    auto meta = MutableStageData().GetRemapDataToIndex(fetchContext);
     if (!meta) {
         NYDBTest::TControllers::GetColumnShardController()->OnIndexSelectProcessed({});
         return NArrow::TColumnFilter::BuildAllowFilter();
     }
     AFL_VERIFY(meta->IsSkipIndex());
 
-    {
-        auto fetcher = MutableStageData().ExtractFetcherVerified(meta->GetIndexId());
-        auto source = std::static_pointer_cast<IDataSource>(context.GetDataSource());
+    if (auto fetcher = MutableStageData().ExtractFetcherOptional(meta->GetIndexId())) {
+        auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
         NCommon::TFetchingResultContext fetchContext(*GetStageData().GetTable(), *GetStageData().GetIndexes(), source);
         fetcher->OnDataCollected(fetchContext);
     }
@@ -227,42 +253,83 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
 void TPortionDataSource::DoAbort() {
 }
 
-TConclusion<bool> TPortionDataSource::DoStartFetchData(
-    const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) {
+TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TPortionDataSource::DoStartFetchHeader(
+    const NArrow::NSSA::TProcessorContext& context, const TFetchHeaderContext& fetchContext) {
+    if (context.GetResources()->GetAccessorOptional(fetchContext.GetColumnId())) {
+        return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
+    }
     std::shared_ptr<NCommon::IKernelFetchLogic> fetcher;
-    auto source = std::static_pointer_cast<IDataSource>(context.GetDataSource());
-    if (subColumnName && GetStageData().GetPortionAccessor().GetColumnChunksPointers(columnId).size() &&
+    const ui32 columnId = fetchContext.GetColumnId();
+    auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
+    if (GetStageData().GetPortionAccessor().GetColumnChunksPointers(columnId).size() &&
         GetSourceSchema()->GetColumnLoaderVerified(columnId)->GetAccessorConstructor()->GetType() ==
             NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
-        fetcher = std::make_shared<NCommon::TSubColumnsFetchLogic>(columnId, source, std::vector<TString>({ subColumnName }));
+        return std::make_shared<NCommon::TSubColumnsFetchLogic>(columnId, source, std::vector<TString>());
     } else {
-        fetcher = std::make_shared<NCommon::TDefaultFetchLogic>(columnId, GetContext()->GetCommonContext()->GetStoragesManager());
+        return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
+    }
+}
+
+TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckHeader(
+    const NArrow::NSSA::TProcessorContext& context, const TCheckHeaderContext& fetchContext) {
+    auto result = NArrow::TColumnFilter::BuildAllowFilter();
+    auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
+    {
+        if (auto fetcher = MutableStageData().ExtractFetcherOptional(fetchContext.GetColumnId())) {
+            NCommon::TFetchingResultContext fetchContext(*GetStageData().GetTable(), *GetStageData().GetIndexes(), source);
+            fetcher->OnDataCollected(fetchContext);
+        } else {
+            NYDBTest::TControllers::GetColumnShardController()->OnHeaderSelectProcessed({});
+            return result;
+        }
     }
 
-    TReadActionsCollection readActions;
-    NCommon::TFetchingResultContext contextFetch(*GetStageData().GetTable(), *GetStageData().GetIndexes(), source);
-    fetcher->Start(readActions, contextFetch);
+    auto acc = context.GetResources()->GetAccessorVerified(fetchContext.GetColumnId());
+    NArrow::NAccessor::IChunkedArray::VisitDataOwners<bool>(acc, [&](const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& arrData) {
+        bool isAllowed = false;
+        if (arrData->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsPartialArray) {
+            const auto* data = static_cast<const NArrow::NAccessor::TSubColumnsPartialArray*>(arrData.get());
+            isAllowed = data->GetHeader().HasSubColumn(fetchContext.GetSubColumnName());
+        } else if (arrData->GetType() == NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
+            const auto* data = static_cast<const NArrow::NAccessor::TSubColumnsArray*>(arrData.get());
+            isAllowed = data->HasSubColumn(fetchContext.GetSubColumnName());
+        } else {
+            AFL_VERIFY(false);
+        }
+        result.Add(isAllowed, arrData->GetRecordsCount());
+        NYDBTest::TControllers::GetColumnShardController()->OnHeaderSelectProcessed(isAllowed);
+        if (isAllowed) {
+            GetContext()->GetCommonContext()->GetCounters().OnAcceptedByHeader(source->GetRecordsCount());
+        } else {
+            GetContext()->GetCommonContext()->GetCounters().OnDeniedByHeader(source->GetRecordsCount());
+        }
 
-    if (readActions.IsEmpty()) {
-        NBlobOperations::NRead::TCompositeReadBlobs blobs;
-        fetcher->OnDataReceived(readActions, blobs);
-        MutableStageData().AddFetcher(fetcher);
-        AFL_VERIFY(readActions.IsEmpty());
         return false;
+    });
+    return result;
+}
+
+TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TPortionDataSource::DoStartFetchData(
+    const NArrow::NSSA::TProcessorContext& context, const TDataAddress& addr) {
+    std::shared_ptr<NCommon::IKernelFetchLogic> fetcher;
+    auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
+    if (addr.HasSubColumns() && GetStageData().GetPortionAccessor().GetColumnChunksPointers(addr.GetColumnId()).size() &&
+        GetSourceSchema()->GetColumnLoaderVerified(addr.GetColumnId())->GetAccessorConstructor()->GetType() ==
+            NArrow::NAccessor::IChunkedArray::EType::SubColumnsArray) {
+        return std::make_shared<NCommon::TSubColumnsFetchLogic>(
+            addr.GetColumnId(), source, std::vector<TString>(addr.GetSubColumnNames(false).begin(), addr.GetSubColumnNames(false).end()));
+    } else {
+        return std::make_shared<NCommon::TDefaultFetchLogic>(addr.GetColumnId(), GetContext()->GetCommonContext()->GetStoragesManager());
     }
-    THashMap<ui32, std::shared_ptr<NCommon::IKernelFetchLogic>> fetchers;
-    fetchers.emplace(columnId, fetcher);
-    NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(std::make_shared<NCommon::TColumnsFetcherTask>(
-            std::move(readActions), fetchers, source, GetExecutionContext().GetCursorStep(), "fetcher", "")));
-    return true;
 }
 
 void TPortionDataSource::DoAssembleAccessor(
     const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& /*subColumnName*/) {
-    auto source = std::static_pointer_cast<IDataSource>(context.GetDataSource());
+    auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
     NCommon::TFetchingResultContext fetchContext(*GetStageData().GetTable(), *GetStageData().GetIndexes(), source);
-    auto fetcher = MutableStageData().ExtractFetcherVerified(columnId);
-    fetcher->OnDataCollected(fetchContext);
+    if (auto fetcher = MutableStageData().ExtractFetcherOptional(columnId)) {
+        fetcher->OnDataCollected(fetchContext);
+    }
 }
 
 void TPortionDataSource::DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) {
@@ -297,6 +364,7 @@ private:
     }
 
     virtual void DoOnRequestsFinished(TDataAccessorsResult&& result) override {
+        FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("facc"));
         AFL_VERIFY(!result.HasErrors());
         AFL_VERIFY(result.GetPortions().size() == 1)("count", result.GetPortions().size());
         Source->MutableStageData().SetPortionAccessor(std::move(result.ExtractPortionsVector().front()));

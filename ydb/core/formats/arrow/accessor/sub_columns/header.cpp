@@ -6,7 +6,7 @@
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
-TConclusion<TSubColumnsHeader> TSubColumnsHeader::ReadHeader(const TString& originalData, const TChunkConstructionData& externalInfo) {
+TConclusion<TSubColumnsHeader> TSubColumnsHeader::ReadHeader(const TString& originalData, const TChunkConstructionData& /*externalInfo*/) {
     TStringInput si(originalData);
     ui32 protoSize;
     si.Read(&protoSize, sizeof(protoSize));
@@ -18,8 +18,8 @@ TConclusion<TSubColumnsHeader> TSubColumnsHeader::ReadHeader(const TString& orig
     currentIndex += protoSize;
     TDictStats columnStats = [&]() {
         if (proto.GetColumnStatsSize()) {
-            std::shared_ptr<arrow::RecordBatch> rbColumnStats = TStatusValidator::GetValid(externalInfo.GetDefaultSerializer()->Deserialize(
-                TString(originalData.data() + currentIndex, proto.GetColumnStatsSize()), TDictStats::GetStatsSchema()));
+            std::shared_ptr<arrow::RecordBatch> rbColumnStats =
+                NArrow::DeserializeBatch(TString(originalData.data() + currentIndex, proto.GetColumnStatsSize()), TDictStats::GetStatsSchema());
             return TDictStats(rbColumnStats);
         } else {
             return TDictStats::BuildEmpty();
@@ -28,8 +28,8 @@ TConclusion<TSubColumnsHeader> TSubColumnsHeader::ReadHeader(const TString& orig
     currentIndex += proto.GetColumnStatsSize();
     TDictStats otherStats = [&]() {
         if (proto.GetOtherStatsSize()) {
-            std::shared_ptr<arrow::RecordBatch> rbOtherStats = TStatusValidator::GetValid(externalInfo.GetDefaultSerializer()->Deserialize(
-                TString(originalData.data() + currentIndex, proto.GetOtherStatsSize()), TDictStats::GetStatsSchema()));
+            std::shared_ptr<arrow::RecordBatch> rbOtherStats =
+                NArrow::DeserializeBatch(TString(originalData.data() + currentIndex, proto.GetOtherStatsSize()), TDictStats::GetStatsSchema());
             return TDictStats(rbOtherStats);
         } else {
             return TDictStats::BuildEmpty();

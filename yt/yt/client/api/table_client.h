@@ -240,7 +240,7 @@ DEFINE_REFCOUNTED_TYPE(TTableBackupManifest)
 struct TBackupManifest
     : public NYTree::TYsonStruct
 {
-    THashMap<TString, std::vector<TTableBackupManifestPtr>> Clusters;
+    THashMap<std::string, std::vector<TTableBackupManifestPtr>> Clusters;
 
     REGISTER_YSON_STRUCT(TBackupManifest);
 

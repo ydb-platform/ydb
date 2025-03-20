@@ -35,14 +35,17 @@ SRCS(
     kafka_records.cpp
     kafka_consumer_protocol.cpp
     kafka_metrics.cpp
-    kqp_balance_transaction.cpp
+    kqp_helper.cpp
+    kqp_helper.h
     kafka_consumer_groups_metadata_initializers.cpp
     kafka_consumer_members_metadata_initializers.cpp
+    kafka_transactional_producers_initializers.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(kafka.h)
 
 PEERDIR(
+    ydb/public/sdk/cpp/src/client/params
     ydb/library/actors/core
     ydb/library/actors/protos
     ydb/core/base

@@ -108,12 +108,17 @@ TConstructorContainer TDictStats::GetAccessorConstructor(const ui32 columnIndex)
 }
 
 TDictStats TDictStats::BuildEmpty() {
-    return TDictStats(MakeEmptyBatch(GetStatsSchema()));
+    static const TDictStats result(MakeEmptyBatch(GetStatsSchema()));
+    return result;
 }
 
 TString TDictStats::SerializeAsString(const std::shared_ptr<NSerialization::ISerializer>& serializer) const {
-    AFL_VERIFY(serializer);
-    return serializer->SerializePayload(Original);
+    if (serializer) {
+        AFL_VERIFY(serializer);
+        return serializer->SerializePayload(Original);
+    } else {
+        return NArrow::SerializeBatchNoCompression(Original);
+    }
 }
 
 IChunkedArray::EType TDictStats::GetAccessorType(const ui32 columnIndex) const {

@@ -46,8 +46,8 @@ private:
     YDB_READONLY(ui32, IndexId, 0);
     YDB_READONLY(TString, StorageId, IStoragesManager::DefaultStorageId);
 
-    virtual std::shared_ptr<NReader::NCommon::IKernelFetchLogic> DoBuildFetchTask(const NRequest::TOriginalDataAddress& dataAddress,
-        const TIndexDataAddress& indexAddress, const std::shared_ptr<IIndexMeta>& selfPtr,
+    virtual std::shared_ptr<NReader::NCommon::IKernelFetchLogic> DoBuildFetchTask(const THashSet<NRequest::TOriginalDataAddress>& dataAddresses,
+        const std::shared_ptr<IIndexMeta>& selfPtr,
         const std::shared_ptr<IStoragesManager>& storagesManager) const;
 
     virtual TConclusion<std::shared_ptr<IIndexHeader>> DoBuildHeader(const TChunkOriginalData& data) const {
@@ -83,10 +83,9 @@ public:
         return DoBuildHeader(data);
     }
 
-    std::shared_ptr<NReader::NCommon::IKernelFetchLogic> BuildFetchTask(const NRequest::TOriginalDataAddress& dataAddress,
-        const TIndexDataAddress& indexAddress, const std::shared_ptr<IIndexMeta>& meta,
-        const std::shared_ptr<IStoragesManager>& storagesManager) const {
-        return DoBuildFetchTask(dataAddress, indexAddress, meta, storagesManager);
+    std::shared_ptr<NReader::NCommon::IKernelFetchLogic> BuildFetchTask(const THashSet<NRequest::TOriginalDataAddress>& dataAddresses,
+        const std::shared_ptr<IIndexMeta>& meta, const std::shared_ptr<IStoragesManager>& storagesManager) const {
+        return DoBuildFetchTask(dataAddresses, meta, storagesManager);
     }
 
     bool IsInplaceData() const {

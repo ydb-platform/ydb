@@ -32,7 +32,7 @@ namespace NPageCollection {
             Y_ABORT_UNLESS(Lead && Lead.BlobSize() && Lead.BlobSize() <= Bytes);
         }
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "TLargeGlobId{" << Lead << " ~" << Bytes
@@ -130,7 +130,7 @@ namespace NPageCollection {
         }
 
         template<typename TOut>
-        void MaterializeTo(TOut &out) const noexcept
+        void MaterializeTo(TOut &out) const
         {
             for (auto blobId : Blobs()) {
                 out.emplace_back(blobId);
@@ -234,7 +234,7 @@ namespace NPageCollection {
             Bodies.resize(Blobs.size());
         }
 
-        bool Apply(const TLogoBlobID& id, TString body) noexcept {
+        bool Apply(const TLogoBlobID& id, TString body) {
             for (size_t idx = 0, end = Blobs.size(); idx < end; ++idx) {
                 if (Blobs[idx] != id) {
                     continue;

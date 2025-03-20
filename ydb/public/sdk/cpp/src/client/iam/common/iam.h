@@ -126,7 +126,7 @@ private:
 
                     RequestInflight_ = false;
                     sleepDuration = std::min(BackoffTimeout_, BACKOFF_MAX);
-                    BackoffTimeout_ *= 2;
+                    BackoffTimeout_ = std::min(BackoffTimeout_ * 2, BACKOFF_MAX);
                 }
 
                 Sleep(sleepDuration);

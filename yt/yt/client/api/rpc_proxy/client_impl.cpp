@@ -1452,6 +1452,9 @@ TFuture<TListJobsResult> TClient::ListJobs(
     if (options.WithMonitoringDescriptor) {
         req->set_with_monitoring_descriptor(*options.WithMonitoringDescriptor);
     }
+    if (options.WithInterruptionInfo) {
+        req->set_with_interruption_info(*options.WithInterruptionInfo);
+    }
     if (options.TaskName) {
         req->set_task_name(*options.TaskName);
     }
@@ -2444,10 +2447,10 @@ TFuture<TGetQueryTrackerInfoResult> TClient::GetQueryTrackerInfo(
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspGetQueryTrackerInfoPtr& rsp) {
         return TGetQueryTrackerInfoResult{
             .QueryTrackerStage = FromProto<TString>(rsp->query_tracker_stage()),
-            .ClusterName = FromProto<TString>(rsp->cluster_name()),
+            .ClusterName = FromProto<std::string>(rsp->cluster_name()),
             .SupportedFeatures = TYsonString(rsp->supported_features()),
             .AccessControlObjects = FromProto<std::vector<TString>>(rsp->access_control_objects()),
-            .Clusters = FromProto<std::vector<TString>>(rsp->clusters())
+            .Clusters = FromProto<std::vector<std::string>>(rsp->clusters())
         };
     }));
 }

@@ -558,6 +558,9 @@ TNode SerializeParamsForListJobs(
     if (options.WithMonitoringDescriptor_) {
         result["with_monitoring_descriptor"] = *options.WithMonitoringDescriptor_;
     }
+    if (options.WithInterruptionInfo_) {
+        result["with_interruption_info"] = *options.WithInterruptionInfo_;
+    }
     if (options.OperationIncarnation_) {
         result["operation_incarnation"] = *options.OperationIncarnation_;
     }

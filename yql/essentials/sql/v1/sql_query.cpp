@@ -7,6 +7,7 @@
 #include "antlr_token.h"
 #include <yql/essentials/sql/v1/object_processing.h>
 #include <yql/essentials/utils/yql_paths.h>
+#include <yql/essentials/public/udf/udf_log.h>
 #include <util/generic/scope.h>
 #include <util/string/join.h>
 #ifdef GetMessage
@@ -162,6 +163,8 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
         "user",
         "password",
         "password_secret_name",
+        "flush_interval",
+        "batch_size_bytes",
     };
 
     TSet<TString> stateSettings = {
@@ -169,8 +172,12 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
         "failover_mode",
     };
 
+    TSet<TString> crateOnlySettings = {
+        "consumer",
+    };
+
     const auto keyName = to_lower(key.Name);
-    if (!configSettings.count(keyName) && !stateSettings.contains(keyName)) {
+    if (!configSettings.count(keyName) && !stateSettings.contains(keyName) && !crateOnlySettings.contains(keyName)) {
         ctx.Context().Error() << "Unknown transfer setting: " << key.Name;
         return false;
     }
@@ -180,6 +187,11 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
         return false;
     }
 
+    if (!create && crateOnlySettings.contains(keyName)) {
+        ctx.Context().Error() << key.Name << " is not supported in ALTER";
+        return false;
+    }
+    
     if (!out.emplace(keyName, value).second) {
         ctx.Context().Error() << "Duplicate transfer setting: " << key.Name;
     }
@@ -2962,6 +2974,22 @@ TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success
             }
 
             Ctx.IncrementMonCounter("sql_pragma", "ResultSizeLimit");
+        } else if (normalizedPragma == "runtimeloglevel") {
+            if (values.size() != 1 || !values[0].GetLiteral()) {
+                Error() << "Expected LogLevel as a single argument for: " << pragma;
+                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                return {};
+            }
+
+            auto value = to_title(*values[0].GetLiteral());
+            if (!NUdf::TryLevelFromString(value)) {
+                Error() << "Expected LogLevel as a single argument for: " << pragma;
+                Ctx.IncrementMonCounter("sql_errors", "BadPragmaValue");
+                return {};
+            }
+
+            Ctx.RuntimeLogLevel = value;
+            Ctx.IncrementMonCounter("sql_pragma", "RuntimeLogLevel");
         } else if (normalizedPragma == "warning") {
             if (values.size() != 2U || values.front().Empty() || values.back().Empty()) {
                 Error() << "Expected arguments <action>, <issueId> for: " << pragma;
@@ -3486,7 +3514,7 @@ TNodePtr TSqlQuery::Build(const TRule_delete_stmt& stmt) {
     }
 
     const bool isKikimr = table.Service == KikimrProviderName;
-    if (!isKikimr) {
+    if (!isKikimr && table.Service != UnknownProviderName) {
         Ctx.Error(GetPos(stmt.GetToken2())) << "DELETE is unsupported for " << table.Service;
         return nullptr;
     }
@@ -3552,7 +3580,7 @@ TNodePtr TSqlQuery::Build(const TRule_update_stmt& stmt) {
 
     const bool isKikimr = table.Service == KikimrProviderName;
 
-    if (!isKikimr) {
+    if (!isKikimr && table.Service != UnknownProviderName) {
         Ctx.Error(GetPos(stmt.GetToken2())) << "UPDATE is unsupported for " << table.Service;
         return nullptr;
     }

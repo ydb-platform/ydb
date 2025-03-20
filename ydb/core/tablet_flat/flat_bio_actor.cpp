@@ -54,7 +54,7 @@ void TBlockIO::Inbox(TEventHandlePtr &eh)
     }
 }
 
-void TBlockIO::Bootstrap(EPriority priority, TAutoPtr<NPageCollection::TFetch> origin) noexcept
+void TBlockIO::Bootstrap(EPriority priority, TAutoPtr<NPageCollection::TFetch> origin)
 {
     Origin = origin;
     Priority = priority;
@@ -73,7 +73,7 @@ void TBlockIO::Bootstrap(EPriority priority, TAutoPtr<NPageCollection::TFetch> o
     Dispatch();
 }
 
-void TBlockIO::Dispatch() noexcept
+void TBlockIO::Dispatch()
 {
     const auto ctx = ActorContext();
 
@@ -138,7 +138,7 @@ void TBlockIO::Dispatch() noexcept
     Y_ABORT_UNLESS(PagesToBlobsConverter->Complete(), "NPageCollection::TPagesToBlobsConverter cooked incomplete loads");
 }
 
-void TBlockIO::Handle(ui32 base, TArrayRef<TLoaded> items) noexcept
+void TBlockIO::Handle(ui32 base, TArrayRef<TLoaded> items)
 {
     if (auto logl = Logger->Log(ELnLev::Debug)) {
         logl
@@ -197,7 +197,7 @@ void TBlockIO::Handle(ui32 base, TArrayRef<TLoaded> items) noexcept
     Terminate(NKikimrProto::OK);
 }
 
-void TBlockIO::Terminate(EStatus code) noexcept
+void TBlockIO::Terminate(EStatus code)
 {
     if (auto logl = Logger->Log(code ? ELnLev::Warn : ELnLev::Debug)) {
         logl

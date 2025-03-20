@@ -240,7 +240,7 @@ TOthersData TOthersData::BuildEmpty() {
 std::shared_ptr<IChunkedArray> TOthersData::GetPathAccessor(const std::string_view path, const ui32 recordsCount) const {
     auto idx = Stats.GetKeyIndexOptional(path);
     if (!idx) {
-        return std::make_shared<TTrivialArray>(TThreadSimpleArraysCache::GetNull(arrow::utf8(), recordsCount));
+        return std::make_shared<TSparsedArray>(nullptr, arrow::utf8(), recordsCount);
     }
     TColumnFilter filter = TColumnFilter::BuildAllowFilter();
     for (TIterator it(Records); it.IsValid(); it.Next()) {

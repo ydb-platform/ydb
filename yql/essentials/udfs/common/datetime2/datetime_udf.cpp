@@ -396,7 +396,13 @@ struct TGetTimeComponent {
         }
 
         if (!userType) {
-            builder.SetError("User type is missing");
+            // XXX: Function became polymorphic when overload for
+            // wide resources was implemented. Hence, to make it
+            // backward compatible with previous versions, the
+            // absence of the userType is considered as using the
+            // old version (i.e. without type awareness) that
+            // provides implementation only for narrow dates.
+            BuildSignature<TFieldStorage, TMResourceName, Accessor>(builder, typesOnly);
             return true;
         }
 
@@ -563,20 +569,14 @@ private:
 
 namespace {
 
-// FIXME: The default value for TResourceName allows to omit
-// explicit specialization in functions that still doesn't support
-// big datetime types. Should be removed in future.
-template<const char* TResourceName = TMResourceName, typename TValue,
+template<const char* TResourceName, typename TValue,
          typename TStorage = std::conditional_t<TResourceName == TMResourceName,
                                                 TTMStorage, TTM64Storage>>
 const TStorage& Reference(const TValue& value) {
     return *reinterpret_cast<const TStorage*>(value.GetRawPtr());
 }
 
-// FIXME: The default value for TResourceName allows to omit
-// explicit specialization in functions that still doesn't support
-// big datetime types. Should be removed in future.
-template<const char* TResourceName = TMResourceName, typename TValue,
+template<const char* TResourceName, typename TValue,
          typename TStorage = std::conditional_t<TResourceName == TMResourceName,
                                                 TTMStorage, TTM64Storage>>
 TStorage& Reference(TValue& value) {
@@ -608,20 +608,15 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
     return result;
 }
 
-// FIXME: The default value for TResourceName allows to omit
-// explicit specialization in functions that still doesn't support
-// big datetime types. Should be removed in future.
 #define ACCESSORS_POLY(field, type, wtype)                                        \
-    template<const char* TResourceName = TMResourceName, typename TValue,         \
-             typename rtype = std::conditional_t<TResourceName == TMResourceName, \
-                                                 type, wtype>>                    \
-    inline rtype Get##field(const TValue& tm) {                                   \
-        return (rtype)Reference<TResourceName>(tm).field;                         \
+    template<const char* TResourceName, typename TValue, typename TRetType        \
+             = std::conditional_t<TResourceName == TMResourceName, type, wtype>>  \
+    inline TRetType Get##field(const TValue& tm) {                                \
+        return (TRetType)Reference<TResourceName>(tm).field;                      \
     }                                                                             \
-    template<const char* TResourceName = TMResourceName, typename TValue,         \
-             typename itype = std::conditional_t<TResourceName == TMResourceName, \
-                                                 type, wtype>>                    \
-    inline void Set##field(TValue& tm, itype value) {                             \
+    template<const char* TResourceName, typename TValue, typename TArgType        \
+             = std::conditional_t<TResourceName == TMResourceName, type, wtype>>  \
+    inline void Set##field(TValue& tm, TArgType value) {                          \
         Reference<TResourceName>(tm).field = value;                               \
     }                                                                             \
 
@@ -644,10 +639,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
 #undef ACCESSORS
 #undef ACCESSORS_POLY
 
-    // FIXME: The default value for TResourceName allows to omit
-    // explicit specialization in functions that still doesn't support
-    // big datetime types. Should be removed in future.
-    template<const char* TResourceName = TMResourceName>
+    template<const char* TResourceName>
     inline bool ValidateYear(std::conditional_t<TResourceName == TMResourceName, ui16, i32> year) {
         if constexpr (TResourceName == TMResourceName) {
             return year >= NUdf::MIN_YEAR || year < NUdf::MAX_YEAR;
@@ -781,7 +773,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
         static void Process(const IValueBuilder* valueBuilder, TBlockItem arg, const TSink& sink) {
             try {
                 TBlockItem res {0};
-                Split(arg, Reference(res), *valueBuilder);
+                Split(arg, Reference<TMResourceName>(res), *valueBuilder);
                 sink(res);
             } catch (const std::exception& e) {
                 UdfTerminate((TStringBuilder() << e.what()).data());
@@ -925,7 +917,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
 
             auto& builder = valueBuilder->GetDateBuilder();
             TUnboxedValuePod result(0);
-            auto& storage = Reference(result);
+            auto& storage = Reference<TMResourceName>(result);
             storage.FromDate(builder, args[0].Get<ui16>());
             return result;
         } catch (const std::exception& e) {
@@ -960,7 +952,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
 
             auto& builder = valueBuilder->GetDateBuilder();
             TUnboxedValuePod result(0);
-            auto& storage = Reference(result);
+            auto& storage = Reference<TMResourceName>(result);
             storage.FromDatetime(builder, args[0].Get<ui32>());
             return result;
         } catch (const std::exception& e) {
@@ -995,7 +987,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
 
             auto& builder = valueBuilder->GetDateBuilder();
             TUnboxedValuePod result(0);
-            auto& storage = Reference(result);
+            auto& storage = Reference<TMResourceName>(result);
             storage.FromTimestamp(builder, args[0].Get<ui64>());
             return result;
         } catch (const std::exception& e) {
@@ -1030,7 +1022,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
 
             auto& builder = valueBuilder->GetDateBuilder();
             TUnboxedValuePod result(0);
-            auto& storage = Reference(result);
+            auto& storage = Reference<TMResourceName>(result);
             storage.FromDate(builder, args[0].Get<ui16>(), args[0].GetTimezoneId());
             return result;
         } catch (const std::exception& e) {
@@ -1067,7 +1059,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
 
             auto& builder = valueBuilder->GetDateBuilder();
             TUnboxedValuePod result(0);
-            auto& storage = Reference(result);
+            auto& storage = Reference<TMResourceName>(result);
             storage.FromDatetime(builder, args[0].Get<ui32>(), args[0].GetTimezoneId());
             return result;
         } catch (const std::exception& e) {
@@ -1104,7 +1096,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
 
             auto& builder = valueBuilder->GetDateBuilder();
             TUnboxedValuePod result(0);
-            auto& storage = Reference(result);
+            auto& storage = Reference<TMResourceName>(result);
             storage.FromTimestamp(builder, args[0].Get<ui64>(), args[0].GetTimezoneId());
             return result;
         } catch (const std::exception& e) {
@@ -1143,7 +1135,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
 
         template<typename TSink>
         static void Process(const IValueBuilder* valueBuilder, TBlockItem item, const TSink& sink) {
-            auto& storage = Reference(item);
+            auto& storage = Reference<TMResourceName>(item);
             sink(TBlockItem(Make(storage, *valueBuilder)));
         }
     };
@@ -1183,28 +1175,28 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
 
     BEGIN_SIMPLE_STRICT_ARROW_UDF(TMakeDate, TDate(TAutoMap<TResource<TMResourceName>>)) {
         auto& builder = valueBuilder->GetDateBuilder();
-        auto& storage = Reference(args[0]);
+        auto& storage = Reference<TMResourceName>(args[0]);
         return TUnboxedValuePod(storage.ToDate(builder, false));
     }
     END_SIMPLE_ARROW_UDF(TMakeDate, TMakeDateKernelExec<TDate>::Do);
 
     BEGIN_SIMPLE_STRICT_ARROW_UDF(TMakeDatetime, TDatetime(TAutoMap<TResource<TMResourceName>>)) {
         auto& builder = valueBuilder->GetDateBuilder();
-        auto& storage = Reference(args[0]);
+        auto& storage = Reference<TMResourceName>(args[0]);
         return TUnboxedValuePod(storage.ToDatetime(builder));
     }
     END_SIMPLE_ARROW_UDF(TMakeDatetime, TMakeDateKernelExec<TDatetime>::Do);
 
     BEGIN_SIMPLE_STRICT_ARROW_UDF(TMakeTimestamp, TTimestamp(TAutoMap<TResource<TMResourceName>>)) {
         auto& builder = valueBuilder->GetDateBuilder();
-        auto& storage = Reference(args[0]);
+        auto& storage = Reference<TMResourceName>(args[0]);
         return TUnboxedValuePod(storage.ToTimestamp(builder));
     }
     END_SIMPLE_ARROW_UDF(TMakeTimestamp, TMakeDateKernelExec<TTimestamp>::Do);
 
     BEGIN_SIMPLE_STRICT_ARROW_UDF(TMakeTzDate, TTzDate(TAutoMap<TResource<TMResourceName>>)) {
         auto& builder = valueBuilder->GetDateBuilder();
-        auto& storage = Reference(args[0]);
+        auto& storage = Reference<TMResourceName>(args[0]);
         try {
             TUnboxedValuePod result(storage.ToDate(builder, true));
             result.SetTimezoneId(storage.TimezoneId);
@@ -1220,7 +1212,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
 
     BEGIN_SIMPLE_STRICT_ARROW_UDF(TMakeTzDatetime, TTzDatetime(TAutoMap<TResource<TMResourceName>>)) {
         auto& builder = valueBuilder->GetDateBuilder();
-        auto& storage = Reference(args[0]);
+        auto& storage = Reference<TMResourceName>(args[0]);
         TUnboxedValuePod result(storage.ToDatetime(builder));
         result.SetTimezoneId(storage.TimezoneId);
         return result;
@@ -1229,7 +1221,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
 
     BEGIN_SIMPLE_STRICT_ARROW_UDF(TMakeTzTimestamp, TTzTimestamp(TAutoMap<TResource<TMResourceName>>)) {
         auto& builder = valueBuilder->GetDateBuilder();
-        auto& storage = Reference(args[0]);
+        auto& storage = Reference<TMResourceName>(args[0]);
         TUnboxedValuePod result(storage.ToTimestamp(builder));
         result.SetTimezoneId(storage.TimezoneId);
         return result;
@@ -1240,7 +1232,7 @@ TUnboxedValuePod DoAddYears(const TUnboxedValuePod& date, i64 years, const NUdf:
     SIMPLE_STRICT_UDF(TConvert, TResource<TM64ResourceName>(TAutoMap<TResource<TMResourceName>>)) {
         Y_UNUSED(valueBuilder);
         TUnboxedValuePod result(0);
-        auto& arg = Reference(args[0]);
+        auto& arg = Reference<TMResourceName>(args[0]);
         auto& storage = Reference<TM64ResourceName>(result);
         storage.From(arg);
         return result;
@@ -1328,7 +1320,13 @@ public:
         }
 
         if (!userType) {
-            builder.SetError("User type is missing");
+            // XXX: Function became polymorphic when overload for
+            // wide resources was implemented. Hence, to make it
+            // backward compatible with previous versions, the
+            // absence of the userType is considered as using the
+            // old version (i.e. without type awareness) that
+            // provides implementation only for narrow dates.
+            BuildSignature<TResultType, TMResourceName, Accessor>(builder, typesOnly);
             return true;
         }
 
@@ -1431,7 +1429,13 @@ public:
         }
 
         if (!userType) {
-            builder.SetError("User type is missing");
+            // XXX: Function became polymorphic when overload for
+            // wide resources was implemented. Hence, to make it
+            // backward compatible with previous versions, the
+            // absence of the userType is considered as using the
+            // old version (i.e. without type awareness) that
+            // provides implementation only for narrow dates.
+            BuildSignature<TMResourceName, Accessor>(builder, typesOnly);
             return true;
         }
 
@@ -1611,7 +1615,7 @@ TUnboxedValue GetDayOfWeekName(const IValueBuilder* valueBuilder, const TUnboxed
         template<typename TSink>
         static void Process(const IValueBuilder* valueBuilder, TBlockItem item, const TSink& sink) {
             Y_UNUSED(valueBuilder);
-            auto timezoneId = GetTimezoneId(item);
+            auto timezoneId = GetTimezoneId<TMResourceName>(item);
             if (timezoneId >= NUdf::GetTimezones().size()) {
                 sink(TBlockItem{});
             } else {
@@ -1619,15 +1623,6 @@ TUnboxedValue GetDayOfWeekName(const IValueBuilder* valueBuilder, const TUnboxed
             }
         }
     };
-
-    BEGIN_SIMPLE_STRICT_ARROW_UDF(TGetTimezoneName, char*(TAutoMap<TResource<TMResourceName>>)) {
-        auto timezoneId = GetTimezoneId(args[0]);
-        if (timezoneId >= NUdf::GetTimezones().size()) {
-            return TUnboxedValuePod();
-        }
-        return valueBuilder->NewString(NUdf::GetTimezones()[timezoneId]);
-    }
-    END_SIMPLE_ARROW_UDF(TGetTimezoneName, TTGetTimezoneNameKernelExec::Do);
 
 template<const char* TResourceName>
 TUnboxedValue GetTimezoneName(const IValueBuilder* valueBuilder, const TUnboxedValuePod& arg) {
@@ -1660,7 +1655,13 @@ TUnboxedValue GetTimezoneName(const IValueBuilder* valueBuilder, const TUnboxedV
             }
 
             if (!userType) {
-                builder.SetError("User type is missing");
+                // XXX: Function became polymorphic when overload for
+                // wide resources was implemented. Hence, to make it
+                // backward compatible with previous versions, the
+                // absence of the userType is considered as using the
+                // old version (i.e. without type awareness) that
+                // provides implementation only for narrow dates.
+                BuildSignature<TMResourceName>(builder, typesOnly);
                 return true;
             }
 
@@ -1892,7 +1893,13 @@ public:
         }
 
         if (!userType) {
-            builder.SetError("User type is missing");
+            // XXX: Function became polymorphic when overload for
+            // wide resources was implemented. Hence, to make it
+            // backward compatible with previous versions, the
+            // absence of the userType is considered as using the
+            // old version (i.e. without type awareness) that
+            // provides implementation only for narrow dates.
+            BuildSignature<TInterval, TResult>(builder, typesOnly);
             return true;
         }
 
@@ -1969,8 +1976,8 @@ private:
     struct TStartOfKernelExec : TUnaryKernelExec<TStartOfKernelExec<Core>, TResourceBlockReader<false>, TResourceArrayBuilder<true>> {
         template<typename TSink>
         static void Process(const IValueBuilder* valueBuilder, TBlockItem item, const TSink& sink) {
-            if (auto res = Core(Reference(item), *valueBuilder)) {
-                Reference(item) = res.GetRef();
+            if (auto res = Core(Reference<TMResourceName>(item), *valueBuilder)) {
+                Reference<TMResourceName>(item) = res.GetRef();
                 sink(item);
             } else {
                 sink(TBlockItem{});
@@ -2010,7 +2017,13 @@ public:
         }
 
         if (!userType) {
-            builder.SetError("User type is missing");
+            // XXX: Function became polymorphic when overload for
+            // wide resources was implemented. Hence, to make it
+            // backward compatible with previous versions, the
+            // absence of the userType is considered as using the
+            // old version (i.e. without type awareness) that
+            // provides implementation only for narrow dates.
+            BuildSignature<TMResourceName, Boundary>(builder, typesOnly);
             return true;
         }
 
@@ -2281,7 +2294,7 @@ private:
     struct TStartEndOfBinaryKernelExec : TBinaryKernelExec<TStartEndOfBinaryKernelExec<UseEnd>> {
         template<typename TSink>
         static void Process(const IValueBuilder* valueBuilder, TBlockItem arg1, TBlockItem arg2, const TSink& sink) {
-            auto& storage = Reference(arg1);
+            auto& storage = Reference<TMResourceName>(arg1);
             ui64 interval = std::abs(arg2.Get<i64>());
             if (interval == 0) {
                 sink(arg1);
@@ -2332,7 +2345,13 @@ public:
         }
 
         if (!userType) {
-            builder.SetError("User type is missing");
+            // XXX: Function became polymorphic when overload for
+            // wide resources was implemented. Hence, to make it
+            // backward compatible with previous versions, the
+            // absence of the userType is considered as using the
+            // old version (i.e. without type awareness) that
+            // provides implementation only for narrow dates.
+            BuildSignature<TMResourceName, Boundary>(builder, typesOnly);
             return true;
         }
 
@@ -2424,7 +2443,7 @@ private:
         template<typename TSink>
         static void Process(const IValueBuilder* valueBuilder, TBlockItem item, const TSink& sink) {
             Y_UNUSED(valueBuilder);
-            auto& storage = Reference(item);
+            auto& storage = Reference<TMResourceName>(item);
             sink(TBlockItem{(TDataType<TInterval>::TLayout)storage.ToTimeOfDay()});
         }
     };
@@ -2448,7 +2467,13 @@ public:
         }
 
         if (!userType) {
-            builder.SetError("User type is missing");
+            // XXX: Function became polymorphic when overload for
+            // wide resources was implemented. Hence, to make it
+            // backward compatible with previous versions, the
+            // absence of the userType is considered as using the
+            // old version (i.e. without type awareness) that
+            // provides implementation only for narrow dates.
+            BuildSignature<TMResourceName>(builder, typesOnly);
             return true;
         }
 
@@ -2569,7 +2594,13 @@ public:
         }
 
         if (!userType) {
-            builder.SetError("User type is missing");
+            // XXX: Function became polymorphic when overload for
+            // wide resources was implemented. Hence, to make it
+            // backward compatible with previous versions, the
+            // absence of the userType is considered as using the
+            // old version (i.e. without type awareness) that
+            // provides implementation only for narrow dates.
+            BuildSignature<TMResourceName, Shifter>(builder, typesOnly);
             return true;
         }
 
@@ -3147,7 +3178,7 @@ private:
                         if constexpr (TResourceName == TMResourceName) {
                             static constexpr size_t size = 4;
                             ui32 year = 0U;
-                            if (limit < size || !ParseNDigits<size>::Do(it, year) || !ValidateYear(year)) {
+                            if (limit < size || !ParseNDigits<size>::Do(it, year) || !ValidateYear<TMResourceName>(year)) {
                                 return false;
                             }
                             SetYear<TMResourceName>(result, year);
@@ -3159,7 +3190,7 @@ private:
                                 negative = -1LL;
                                 it++;
                             }
-                            if (!ParseNDigits<size, true>::Do(it, year) || !ValidateYear(negative * year)) {
+                            if (!ParseNDigits<size, true>::Do(it, year) || !ValidateYear<TM64ResourceName>(negative * year)) {
                                 return false;
                             }
                             SetYear<TM64ResourceName>(result, negative * year);
@@ -3333,7 +3364,7 @@ private:
         }                                                                                                                          \
         auto& builder = valueBuilder->GetDateBuilder();                                                                            \
         TUnboxedValuePod result(0);                                                                                                \
-        auto& storage = Reference(result);                                                                                         \
+        auto& storage = Reference<TMResourceName>(result);                                                                         \
         storage.FromTimestamp(builder, instant.MicroSeconds());                                                                    \
         return result;                                                                                                             \
     }

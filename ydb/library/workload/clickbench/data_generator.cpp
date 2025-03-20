@@ -83,6 +83,7 @@ IBulkDataGenerator::TDataPortions TClickbenchWorkloadDataInitializerGenerator::T
         if (auto result = file->GetPortion()) {
             auto g = Guard(Lock);
             Files.push_back(file);
+            file.Drop();
             return {result};
         } else {
             auto g = Guard(Lock);

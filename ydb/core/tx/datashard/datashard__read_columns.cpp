@@ -86,7 +86,7 @@ public:
         , BlockBuilder(std::move(blockBuilder))
     {}
 
-    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override {
+    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) override {
         Driver = driver;
         Scheme = std::move(scheme);
 
@@ -95,7 +95,7 @@ public:
         return hello;
     }
 
-    EScan Seek(TLead& lead, ui64 seq) noexcept override {
+    EScan Seek(TLead& lead, ui64 seq) override {
         Y_ABORT_UNLESS(seq == 0, "Unexpected repeated Seek");
 
         lead.To(ValueColumns, From.Key.GetCells(), From.Inclusive ? NTable::ESeek::Lower : NTable::ESeek::Upper);
@@ -104,7 +104,7 @@ public:
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept override {
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) override {
         const auto& keyTypes = Scheme->Keys->BasicTypes();
 
         Y_ABORT_UNLESS(key.size() == keyTypes.size());
@@ -127,7 +127,7 @@ public:
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort reason) noexcept override {
+    TAutoPtr<IDestructable> Finish(EAbort reason) override {
         Result = new TEvDataShard::TEvReadColumnsResponse(TabletId);
 
         if (reason == EAbort::None) {
@@ -158,11 +158,11 @@ public:
         return this;
     }
 
-    EScan Exhausted() noexcept override {
+    EScan Exhausted() override {
         return EScan::Final;
     }
 
-    void Describe(IOutputStream& str) const noexcept override {
+    void Describe(IOutputStream& str) const override {
         str << "ReadColumnsScan table: ["<< TableName << "]shard: " << TabletId;
     }
 

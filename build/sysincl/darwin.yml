@@ -285,6 +285,7 @@
   - UIKit/UIScreen.h
   - UIKit/UIView.h
   - UIKit/UIWebView.h
+  - UserNotifications/UserNotifications.h
   - VideoDecodeAcceleration/VDADecoder.h
   - VideoToolbox/VideoToolbox.h
   - XCTest/XCTest.h

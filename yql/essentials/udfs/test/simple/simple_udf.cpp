@@ -239,6 +239,50 @@ private:
     const size_t Argc;
 };
 
+class TLogging : public TBoxedValue {
+public:
+    TLogging(TLoggerPtr logger, TLogComponentId component)
+        : Logger(logger)
+        , Component(component)
+    {}
+
+    TUnboxedValue Run(const IValueBuilder* valueBuilder, const TUnboxedValuePod* args) const final {
+        Y_UNUSED(valueBuilder);
+        auto level = Min(args[0].Get<ui32>(),static_cast<ui32>(ELogLevel::Trace));
+        Logger->Log(Component, (ELogLevel)level, args[1].AsStringRef());
+        return TUnboxedValue::Void();
+    }
+
+    static const TStringRef& Name() {
+        static auto name = TStringRef::Of("Logging");
+        return name;
+    }
+
+    static bool DeclareSignature(const TStringRef& name, TType* userType, IFunctionTypeInfoBuilder& builder, bool typesOnly) {
+        Y_UNUSED(userType);
+        if (Name() == name) {
+            auto argBuilder = builder.Args();
+            argBuilder->Add<ui32>();
+            argBuilder->Add<char*>();
+            argBuilder->Done().Returns<TVoid>();
+
+            auto logger = builder.MakeLogger(false);
+            auto component = logger->RegisterComponent(Name());
+            logger->Log(component, ELogLevel::Debug, "DeclareSignature");
+            if (!typesOnly) {
+                builder.Implementation(new TLogging(logger, component));
+            }
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+
+private:
+    const TLoggerPtr Logger;
+    const TLogComponentId Component;
+};
 
 SIMPLE_MODULE(TSimpleUdfModule,
                 TCrash,
@@ -259,7 +303,8 @@ SIMPLE_MODULE(TSimpleUdfModule,
                 TIncrement,
                 TIncrementOpt,
                 TIncrementWithCounters,
-                TGenericAsStruct
+                TGenericAsStruct,
+                TLogging
               )
 
 } // namespace

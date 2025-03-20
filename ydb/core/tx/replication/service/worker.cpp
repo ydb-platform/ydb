@@ -14,6 +14,17 @@
 
 namespace NKikimr::NReplication::NService {
 
+TEvWorker::TEvPoll::TEvPoll(bool skipCommit)
+    : SkipCommit(skipCommit)
+{
+}
+
+TString TEvWorker::TEvPoll::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " SkipCommit: " << SkipCommit
+    << " }";
+}
+
 TEvWorker::TEvData::TEvData(ui32 partitionId, const TString& source, const TVector<TTopicMessage>& records)
     : PartitionId(partitionId)
     , Source(source)

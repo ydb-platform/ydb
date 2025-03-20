@@ -5,6 +5,7 @@
 #include <contrib/libs/antlr3_cpp_runtime/include/antlr3.hpp>
 
 namespace NProtoAST {
+    using namespace NAST;
 
     template <typename TParser, typename TLexer>
     class TProtoASTBuilder3 {

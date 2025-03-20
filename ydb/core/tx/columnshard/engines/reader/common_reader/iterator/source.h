@@ -16,6 +16,7 @@
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
+#include <ydb/core/util/evlog/log.h>
 
 #include <util/string/join.h>
 
@@ -37,7 +38,7 @@ private:
     std::optional<TMonotonic> CurrentNodeStart;
 
     std::optional<TFetchingScriptCursor> CursorStep;
-    
+
 public:
     void OnStartProgramStepExecution(const ui32 nodeId, const std::shared_ptr<TFetchingStepSignals>& signals) {
         if (!CurrentProgramNodeId) {
@@ -113,7 +114,7 @@ public:
     }
 };
 
-class IDataSource: public ICursorEntity, public NArrow::NSSA::IDataSource {
+class IDataSource: public ICursorEntity, public NArrow::NSSA::IDataSource, public NColumnShard::TMonitoringObjectsCounter<IDataSource> {
 private:
     YDB_READONLY(ui64, SourceId, 0);
     YDB_READONLY(ui32, SourceIdx, 0);
@@ -142,9 +143,17 @@ private:
     virtual void DoBuildStageResult(const std::shared_ptr<IDataSource>& sourcePtr) = 0;
     virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) = 0;
 
+    virtual TConclusion<bool> DoStartFetchImpl(
+        const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<IKernelFetchLogic>>& fetchersExt) = 0;
+
+    virtual TConclusion<bool> DoStartFetch(const NArrow::NSSA::TProcessorContext& context,
+        const std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>& fetchersExt) override final;
+
     virtual bool DoStartFetchingColumns(
         const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) = 0;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) = 0;
+
+    NEvLog::TLogsThread Events;
 
 protected:
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
@@ -152,6 +161,14 @@ protected:
     std::unique_ptr<TFetchedResult> StageResult;
 
 public:
+    void AddEvent(const TString& evDescription) {
+        Events.AddEvent(evDescription);
+    }
+
+    TString GetEventsReport() const {
+        return Events.DebugString();
+    }
+
     TExecutionContext& MutableExecutionContext() {
         return ExecutionContext;
     }
@@ -195,6 +212,7 @@ public:
         , RecordsCount(recordsCount)
         , ShardingVersionOptional(shardingVersion)
         , HasDeletions(hasDeletions) {
+        FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, AddEvent("c"));
     }
 
     virtual ~IDataSource() = default;

@@ -314,6 +314,7 @@ private:
         bool defaultEnableShuffleElimination = TableServiceConfig.GetDefaultEnableShuffleElimination();
 
         TString enableSpillingNodes = TableServiceConfig.GetEnableSpillingNodes();
+        bool enableSpilling = TableServiceConfig.GetEnableQueryServiceSpilling();
 
         bool enableSnapshotIsolationRW = TableServiceConfig.GetEnableSnapshotIsolationRW();
 
@@ -348,7 +349,8 @@ private:
             TableServiceConfig.GetEnablePerStatementQueryExecution() != enablePerStatementQueryExecution ||
             TableServiceConfig.GetEnableSnapshotIsolationRW() != enableSnapshotIsolationRW ||
             TableServiceConfig.GetAllowMultiBroadcasts() != allowMultiBroadcasts ||
-            TableServiceConfig.GetDefaultEnableShuffleElimination() != defaultEnableShuffleElimination
+            TableServiceConfig.GetDefaultEnableShuffleElimination() != defaultEnableShuffleElimination ||
+            TableServiceConfig.GetEnableQueryServiceSpilling() != enableSpilling
         ) {
 
             QueryCache->Clear();

@@ -10,6 +10,17 @@ namespace NYT::NKafka {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+#define READ_KAFKA_FIELD(field, method)                                                    \
+    YT_LOG_TRACE("Parsing kafka data (Field: %v)", #field);                                \
+    field = reader->method();                                                              \
+    YT_LOG_TRACE("Parsing kafka data, value read (Field: %v, Value: %v)", #field, field);
+
+#define WRITE_KAFKA_FIELD(kafkaWriter, method, field)                                             \
+    YT_LOG_TRACE("Writing kafka data (Field: %v, Value: %v)", #field, field);                     \
+    kafkaWriter->method(field);
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct IKafkaProtocolReader
 {
     virtual ~IKafkaProtocolReader() = default;
@@ -74,17 +85,20 @@ struct IKafkaProtocolWriter
 
     virtual void WriteErrorCode(NKafka::EErrorCode value) = 0;
 
-    virtual void WriteString(const TString& value) = 0;
-    virtual void WriteNullableString(const std::optional<TString>& value) = 0;
-    virtual void WriteCompactString(const TString& value) = 0;
-    virtual void WriteCompactNullableString(const std::optional<TString>& value) = 0;
-    virtual void WriteBytes(const TString& value) = 0;
-    virtual void WriteCompactBytes(const TString& value) = 0;
-    virtual void WriteData(const TString& value) = 0;
-    virtual void WriteData(const TSharedRef& value) = 0;
+    virtual void WriteString(TStringBuf value) = 0;
+    virtual void WriteNullableString(std::optional<TStringBuf> value) = 0;
+    virtual void WriteCompactString(TStringBuf value) = 0;
+    virtual void WriteCompactNullableString(std::optional<TStringBuf> value) = 0;
+    virtual void WriteBytes(TStringBuf value) = 0;
+    virtual void WriteCompactBytes(TStringBuf value) = 0;
+    virtual void WriteData(TStringBuf value) = 0;
+    virtual void WriteData(TRef value) = 0;
 
     virtual void StartBytes() = 0;
     virtual void FinishBytes() = 0;
+
+    virtual void StartCalculateChecksum() = 0;
+    virtual void FinishCalculateChecksum() = 0;
 
     virtual i64 GetSize() const = 0;
 

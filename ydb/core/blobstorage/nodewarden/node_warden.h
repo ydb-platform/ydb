@@ -46,6 +46,8 @@ namespace NKikimr {
         // debugging options
         bool VDiskReplPausedAtStart = false;
         bool UseActorSystemTimeInBSQueue = false;
+        std::optional<ui32> ReplMaxQuantumBytes = std::nullopt;
+        std::optional<ui32> ReplMaxDonorNotReadyCount = std::nullopt;
 
         TNodeWardenConfig(const TIntrusivePtr<IPDiskServiceFactory> &pDiskServiceFactory)
             : PDiskServiceFactory(pDiskServiceFactory)

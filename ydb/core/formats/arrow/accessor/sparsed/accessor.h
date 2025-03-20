@@ -17,7 +17,7 @@ class TColumnFilter;
 
 namespace NKikimr::NArrow::NAccessor {
 
-class TSparsedArrayChunk: public TMoveOnly {
+class TSparsedArrayChunk {
 private:
     YDB_READONLY(ui32, RecordsCount, 0);
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, Records);
@@ -50,11 +50,20 @@ private:
             return StartExt < item.StartExt;
         }
     };
-
     std::vector<TInternalChunkInfo> RemapExternalToInternal;
     std::shared_ptr<arrow::Array> DefaultsArray;
+    TSparsedArrayChunk(const TSparsedArrayChunk&) = default;
+
+    TSparsedArrayChunk(const ui32 recordsCount, const TSparsedArrayChunk& original)
+        : TSparsedArrayChunk(original) {
+        AFL_VERIFY(!original.GetNotDefaultRecordsCount());
+        RecordsCount = recordsCount;
+    }
 
 public:
+    TSparsedArrayChunk& operator=(TSparsedArrayChunk&&) noexcept = default;
+    TSparsedArrayChunk(TSparsedArrayChunk&&) = default;
+
     void VisitValues(const IChunkedArray::TValuesSimpleVisitor& visitor) const {
         visitor(ColValue);
         visitor(DefaultsArray);
@@ -99,6 +108,9 @@ public:
 
     TSparsedArrayChunk ApplyFilter(const TColumnFilter& filter) const;
     TSparsedArrayChunk Slice(const ui32 offset, const ui32 count) const;
+    TSparsedArrayChunk MakeCopy(const ui32 recordsCount) const {
+        return TSparsedArrayChunk(recordsCount, *this);
+    }
 };
 
 class TSparsedArray: public IChunkedArray {
@@ -169,6 +181,20 @@ protected:
 
 public:
     virtual void Reallocate() override;
+
+    static std::shared_ptr<TSparsedArray> BuildFalseArrayUI8(const ui32 recordsCount) {
+        static const std::shared_ptr<TSparsedArray> preResult(
+            new NAccessor::TSparsedArray(std::make_shared<arrow::UInt8Scalar>(0), arrow::uint8(), 1));
+        return std::shared_ptr<NAccessor::TSparsedArray>(
+            new NAccessor::TSparsedArray(preResult->Record.MakeCopy(recordsCount), preResult->DefaultValue, preResult->GetDataType()));
+    }
+
+    static std::shared_ptr<TSparsedArray> BuildTrueArrayUI8(const ui32 recordsCount) {
+        static const std::shared_ptr<TSparsedArray> preResult(
+            new NAccessor::TSparsedArray(std::make_shared<arrow::UInt8Scalar>(1), arrow::uint8(), 1));
+        return std::shared_ptr<NAccessor::TSparsedArray>(
+            new NAccessor::TSparsedArray(preResult->Record.MakeCopy(recordsCount), preResult->DefaultValue, preResult->GetDataType()));
+    }
 
     static std::shared_ptr<TSparsedArray> Make(const IChunkedArray& defaultArray, const std::shared_ptr<arrow::Scalar>& defaultValue);
 

@@ -11,15 +11,12 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
-#include <vector>
 #include <unordered_set>
 
 namespace NSQLComplete {
 
-    // std::vector is used to prevent copying from c3 results
     struct TSuggestedToken {
         TTokenId Number;
-        std::vector<TRuleId> ParserCallStack;
     };
 
     class IC3Engine {
@@ -93,15 +90,7 @@ namespace NSQLComplete {
         static TVector<TSuggestedToken> Converted(c3::CandidatesCollection candidates) {
             TVector<TSuggestedToken> converted;
             for (const auto& [token, _] : candidates.tokens) {
-                std::vector<TRuleId> parserCallStack;
-
-                if (
-                    auto rules = candidates.rules.find(token);
-                    rules != std::end(candidates.rules)) {
-                    parserCallStack = std::move(rules->second.ruleList);
-                }
-
-                converted.emplace_back(token, std::move(parserCallStack));
+                converted.emplace_back(token);
             }
             return converted;
         }

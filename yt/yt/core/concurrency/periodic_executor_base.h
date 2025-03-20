@@ -50,9 +50,9 @@ concept CInvocationTimePolicy = CCallbackResultProcessor<T> &&
     { policy.SetOptions(options) } -> std::same_as<void>;
 
     { policy.ShouldKickstart(options) } -> std::same_as<bool>;
-    { policy.KickstartDeadline() } -> std::same_as<TInstant>;
+    { policy.GenerateKickstartDeadline() } -> std::same_as<TInstant>;
 
-    { policy.NextDeadline() } -> std::same_as<TInstant>;
+    { policy.GenerateNextDeadline() } -> std::same_as<TInstant>;
     { policy.IsOutOfBandProhibited() } -> std::same_as<bool>;
     { policy.Reset() } -> std::same_as<void>;
 };

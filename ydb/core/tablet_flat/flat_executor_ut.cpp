@@ -602,6 +602,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CompactionScan) {
     Y_UNIT_TEST(TestCompactionScan) {
         TMyEnvBase env;
         TRowsModel data;
+        auto counters = GetSharedPageCounters(env);
 
         env->SetLogPriority(NKikimrServices::RESOURCE_BROKER, NActors::NLog::PRI_DEBUG);
         env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_DEBUG);
@@ -642,9 +643,15 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CompactionScan) {
         env.SendAsync(data.MakeRows(1));
         env.WaitFor<NFake::TEvCompacted>(3);
         env.WaitForWakeUp();
+        
+        auto cacheHitsBefore = counters->CacheHitPages->Val();
+        auto cacheMissBefore = counters->CacheMissPages->Val();
         env.SendAsync(new TEvTestFlatTablet::TEvStartQueuedScan());
         TAutoPtr<IEventHandle> handle;
         env->GrabEdgeEventRethrow<TEvTestFlatTablet::TEvScanFinished>(handle);
+        UNIT_ASSERT_VALUES_EQUAL(cacheHitsBefore + 8, counters->CacheHitPages->Val());
+        UNIT_ASSERT_VALUES_EQUAL(cacheMissBefore, counters->CacheMissPages->Val());
+
         env.SendSync(new TEvents::TEvPoison, false, true);
     }
 }

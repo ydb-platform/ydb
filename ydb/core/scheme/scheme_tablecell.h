@@ -7,6 +7,7 @@
 
 #include <util/generic/bitops.h>
 #include <util/generic/hash.h>
+#include <util/generic/yexception.h>
 #include <util/system/unaligned_mem.h>
 #include <util/memory/pool.h>
 
@@ -91,7 +92,7 @@ public:
 
     TCell(const char* ptr, size_t size) {
         if (!ptr) {
-            Y_DEBUG_ABORT_UNLESS(size == 0);
+            Y_ENSURE(size == 0);
             // All zeroes represents the null value
             ::memset(Raw, 0, 16);
         } else if (CanInline(size)) {
@@ -113,12 +114,12 @@ public:
                 case 2: ::memcpy(Inline.Data, ptr, 2); break;
                 case 1: ::memcpy(Inline.Data, ptr, 1); break;
                 case 0: break;
-                default: Y_ABORT("unreachable");
+                default: Y_ENSURE(false, "unreachable");
             }
             Inline.Size = size;
             Inline.Kind = KindInlineValue;
         } else {
-            Y_DEBUG_ABORT_UNLESS(size <= Max<ui32>());
+            Y_ENSURE(size <= Max<ui32>());
             Ref.Ptr = ptr;
             Ref.Size = size;
             Ref.Kind = KindRefValue;
@@ -142,7 +143,7 @@ public:
     }
 
     constexpr const char* InlineData() const {
-        Y_DEBUG_ABORT_UNLESS(IsInline());
+        Y_ASSERT(IsInline());
         return Raw;
     }
 
@@ -165,17 +166,17 @@ public:
     }
 
     template<typename T, typename = TStdLayout<T>>
-    T AsValue() const noexcept
+    T AsValue() const
     {
-        Y_ABORT_UNLESS(sizeof(T) == Size(), "AsValue<T>() type size %" PRISZT " doesn't match TCell size %" PRIu32, sizeof(T), Size());
+        Y_ENSURE(sizeof(T) == Size(), "AsValue<T>() type size" << sizeof(T) << " doesn't match TCell size " << Size());
 
         return ReadUnaligned<T>(Data());
     }
 
     template <typename T, typename = TStdLayout<T>>
-    bool ToValue(T& value, TString& err) const noexcept {
+    bool ToValue(T& value, TString& err) const {
         if (Y_UNLIKELY(sizeof(T) != Size())) {
-            err = Sprintf("ToValue<T>() type size %" PRISZT " doesn't match TCell size %" PRIu32, sizeof(T), Size());
+            err = TStringBuilder() << "ToValue<T>() type size " << sizeof(T) << " doesn't match TCell size " << Size();
             return false;
         }
 
@@ -184,7 +185,7 @@ public:
     }
 
     template <typename T, typename = TStdLayout<T>>
-    bool ToStream(IOutputStream& out, TString& err) const noexcept {
+    bool ToStream(IOutputStream& out, TString& err) const {
         T value;
         if (!ToValue(value, err))
             return false;
@@ -224,7 +225,7 @@ public:
                 case 2: ::memcpy(dst, Inline.Data, 2); break;
                 case 1: ::memcpy(dst, Inline.Data, 1); break;
                 case 0: break;
-                default: Y_ABORT("unreachable");
+                default: Y_ENSURE(false, "unreachable");
             }
         }
     }
@@ -284,8 +285,8 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, const NScheme::TTyp
 #define SIMPLE_TYPE_SWITCH(typeEnum, castType)      \
     case NKikimr::NScheme::NTypeIds::typeEnum:      \
     {                                               \
-        Y_DEBUG_ABORT_UNLESS(a.IsInline());                      \
-        Y_DEBUG_ABORT_UNLESS(b.IsInline());                      \
+        Y_ENSURE(a.IsInline());                     \
+        Y_ENSURE(b.IsInline());                     \
         castType va = ReadUnaligned<castType>((const castType*)a.InlineData()); \
         castType vb = ReadUnaligned<castType>((const castType*)b.InlineData()); \
         return va == vb ? 0 : ((va < vb) != type.IsDescending() ? -1 : 1);   \
@@ -338,15 +339,15 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, const NScheme::TTyp
 
     case NKikimr::NScheme::NTypeIds::Uuid:
     {
-        Y_DEBUG_ABORT_UNLESS(a.Size() == 16);
-        Y_DEBUG_ABORT_UNLESS(b.Size() == 16);
+        Y_ENSURE(a.Size() == 16);
+        Y_ENSURE(b.Size() == 16);
         return CompareCellsAsByteString(a, b, type.IsDescending());
     }
 
     case NKikimr::NScheme::NTypeIds::Decimal:
     {
-        Y_DEBUG_ABORT_UNLESS(a.Size() == sizeof(std::pair<ui64, i64>));
-        Y_DEBUG_ABORT_UNLESS(b.Size() == sizeof(std::pair<ui64, i64>));
+        Y_ENSURE(a.Size() == sizeof(std::pair<ui64, i64>));
+        Y_ENSURE(b.Size() == sizeof(std::pair<ui64, i64>));
         std::pair<ui64, i64> va = ReadUnaligned<std::pair<ui64, i64>>((const std::pair<ui64, i64>*)a.Data());
         std::pair<ui64, i64> vb = ReadUnaligned<std::pair<ui64, i64>>((const std::pair<ui64, i64>*)b.Data());
         if (va.second == vb.second)
@@ -357,13 +358,13 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, const NScheme::TTyp
     case NKikimr::NScheme::NTypeIds::Pg:
     {
         auto typeDesc = type.GetPgTypeDesc();
-        Y_ABORT_UNLESS(typeDesc, "no pg type descriptor");
+        Y_ENSURE(typeDesc, "no pg type descriptor");
         int result = NPg::PgNativeBinaryCompare(a.Data(), a.Size(), b.Data(), b.Size(), typeDesc);
         return type.IsDescending() ? -result : result;
     }
 
     default:
-        Y_DEBUG_ABORT("Unknown type");
+        Y_ENSURE(false, "Unknown type");
     };
 
     return 0;
@@ -384,7 +385,7 @@ inline int CompareTypedCellVectors(const TCell* a, const TCell* b, const TTypeCl
 // ATTENTION!!! return value is int!! (NOT just -1,0,1)
 template<class TTypeClass>
 inline int CompareTypedCellVectors(const TCell* a, const TCell* b, const TTypeClass* type, const ui32 cnt_a, const ui32 cnt_b) {
-    Y_DEBUG_ABORT_UNLESS(cnt_b <= cnt_a);
+    Y_ENSURE(cnt_b <= cnt_a);
     ui32 i = 0;
     for (; i < cnt_b; ++i) {
         int cmpRes = CompareTypedCells(a[i], b[i], type[i]);
@@ -458,11 +459,11 @@ inline ui64 GetValueHash(NScheme::TTypeInfo info, const TCell& cell) {
 
     if (typeId == NKikimr::NScheme::NTypeIds::Pg) {
         auto typeDesc = info.GetPgTypeDesc();
-        Y_ABORT_UNLESS(typeDesc, "no pg type descriptor");
+        Y_ENSURE(typeDesc, "no pg type descriptor");
         return NPg::PgNativeBinaryHash(cell.Data(), cell.Size(), typeDesc);
     }
 
-    Y_DEBUG_ABORT("Type not supported for user columns: %d", typeId);
+    Y_ENSURE(false, "Type not supported for user columns: " << typeId);
     return 0;
 }
 
@@ -592,13 +593,13 @@ public:
     explicit TSerializedCellVec(TString&& buf)
         : Buf(std::move(buf))
     {
-        Y_ABORT_UNLESS(DoTryParse());
+        Y_ENSURE(DoTryParse());
     }
 
     explicit TSerializedCellVec(const TString& buf)
         : Buf(buf)
     {
-        Y_ABORT_UNLESS(DoTryParse());
+        Y_ENSURE(DoTryParse());
     }
 
     TSerializedCellVec(TSerializedCellVec&& other)
@@ -620,7 +621,7 @@ public:
         Buf = std::move(other.Buf);
         if (Buf.data() != prevPtr) {
             // Data address changed, e.g. when TString is a small std::string
-            Y_ABORT_UNLESS(DoTryParse(), "Failed to re-parse TSerializedCellVec");
+            Y_ENSURE(DoTryParse(), "Failed to re-parse TSerializedCellVec");
             other.Cells.clear();
         } else {
             // Data address unchanged, reuse parsed Cells
@@ -637,7 +638,7 @@ public:
         Buf = other.Buf;
         if (Buf.data() != other.Buf.data()) {
             // Data address changed, e.g. when TString is std::string
-            Y_ABORT_UNLESS(DoTryParse(), "Failed to re-parse TSerializedCellVec");
+            Y_ENSURE(DoTryParse(), "Failed to re-parse TSerializedCellVec");
         } else {
             // Data address unchanged, reuse parsed Cells
             Cells = other.Cells;
@@ -657,12 +658,12 @@ public:
 
     void Parse(TString&& buf) {
         Buf = std::move(buf);
-        Y_ABORT_UNLESS(DoTryParse());
+        Y_ENSURE(DoTryParse());
     }
 
     void Parse(const TString& buf) {
         Buf = buf;
-        Y_ABORT_UNLESS(DoTryParse());
+        Y_ENSURE(DoTryParse());
     }
 
     TConstArrayRef<TCell> GetCells() const {
@@ -711,27 +712,23 @@ public:
     explicit TSerializedCellMatrix(TString&& buf)
         : Buf(std::move(buf))
     {
-        Y_ABORT_UNLESS(DoTryParse());
+        Y_ENSURE(DoTryParse());
     }
 
     explicit TSerializedCellMatrix(const TString& buf)
         : Buf(buf)
     {
-        Y_ABORT_UNLESS(DoTryParse());
-    }
-
-    TSerializedCellMatrix(const TSerializedCellMatrix& other)
-        : Buf(other.Buf)
-        , Cells(other.Cells)
-        , RowCount(other.RowCount)
-        , ColCount(other.ColCount)
-    {
-        Y_ABORT_UNLESS(Buf.data() == other.Buf.data(), "Buffer must be shared");
+        Y_ENSURE(DoTryParse());
     }
 
     TSerializedCellMatrix(TSerializedCellMatrix&& other)
     {
         *this = std::move(other);
+    }
+
+    TSerializedCellMatrix(const TSerializedCellMatrix& other)
+    {
+        *this = other;
     }
 
     TSerializedCellMatrix& operator=(TSerializedCellMatrix&& other)
@@ -743,7 +740,7 @@ public:
         Buf = std::move(other.Buf);
         if (Buf.data() != prevPtr) {
             // Data address changed, e.g. when TString is a small std::string
-            Y_ABORT_UNLESS(DoTryParse(), "Failed to re-parse TSerializedCellMatrix");
+            Y_ENSURE(DoTryParse(), "Failed to re-parse TSerializedCellMatrix");
             other.Cells.clear();
         } else {
             // Data address unchanged, reuse parsed cells
@@ -764,7 +761,7 @@ public:
         Buf = other.Buf;
         if (Buf.data() != other.Buf.data()) {
             // Data address changed, e.g. when TString is std::string
-            Y_ABORT_UNLESS(DoTryParse(), "Failed to re-parse TSerializedCellMatrix");
+            Y_ENSURE(DoTryParse(), "Failed to re-parse TSerializedCellMatrix");
         } else {
             // Data address unchanged, reuse parsed cells
             Cells = other.Cells;
@@ -786,12 +783,12 @@ public:
 
     void Parse(TString&& buf) {
         Buf = std::move(buf);
-        Y_ABORT_UNLESS(DoTryParse());
+        Y_ENSURE(DoTryParse());
     }
 
     void Parse(const TString& buf) {
         Buf = buf;
-        Y_ABORT_UNLESS(DoTryParse());
+        Y_ENSURE(DoTryParse());
     }
 
     TConstArrayRef<TCell> GetCells() const { return Cells; }

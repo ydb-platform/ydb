@@ -1106,7 +1106,7 @@ private:
         IDqIntegration::TPartitionSettings pSettings;
         pSettings.MaxPartitions = maxTasksPerStage;
         pSettings.CanFallback = false;
-        pSettings.DataSizePerJob = NYql::TDqSettings::TDefault::DataSizePerJob;
+        pSettings.DataSizePerJob = Config->DataSizePerPartition.Get().GetOrElse(NYql::TDqSettings::TDefault::DataSizePerJob);
         dqIntegration->Partition(*source, partitionParams, &clusterName, ctx, pSettings);
         externalSource.SetTaskParamKey(TString(dataSourceCategory));
         for (const TString& partitionParam : partitionParams) {

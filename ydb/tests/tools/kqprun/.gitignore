@@ -3,10 +3,11 @@ sync_dir
 example
 udfs
 
-*.log
-*.json
-*.sql
+*.attr
 *.bin
-*.txt
-*.svg
+*.json
+*.log
 *.old
+*.sql
+*.svg
+*.txt

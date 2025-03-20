@@ -618,7 +618,7 @@ private:
     void Handle(TEvPrivate::TEvUploadError::TPtr& result) {
         auto status = result->Get()->Status;
         auto issues = std::move(result->Get()->Issues);
-        LOG_W("TS3WriteActor", "TEvUploadError, status: " << status << ", issues: " << issues.ToOneLineString());
+        LOG_W("TS3WriteActor", "TEvUploadError, status: " << NDqProto::StatusIds::StatusCode_Name(status) << ", issues: " << issues.ToOneLineString());
 
         if (status == NDqProto::StatusIds::UNSPECIFIED) {
             status = NDqProto::StatusIds::INTERNAL_ERROR;
@@ -742,4 +742,4 @@ std::pair<IDqComputeActorAsyncOutput*, NActors::IActor*> CreateS3WriteActor(
     return {actor, actor};
 }
 
-} // namespace NDq
+} // namespace NYql::NDq

@@ -27,6 +27,7 @@ END()
 
 RECURSE(
     lib
+    table_operations
     s3_import
     scenario
     docs

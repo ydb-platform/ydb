@@ -1,6 +1,6 @@
-# Database self check
+# Health check
 
-YDB has a built-in self-diagnostic system, which can be used to get a brief report on the database status and information about existing issues.
+{{ ydb-short-name }} has a built-in self-diagnostic system that provides a brief report on the cluster status and information about existing issues. This report can be obtained via {{ ydb-short-name }} CLI using the command explained below.
 
 General command format:
 
@@ -15,15 +15,15 @@ ydb [global options...] monitoring healthcheck [options...]
 
 #|
 || Name | Description ||
-||`--timeout` | The time within which the operation should be completed on the server, ms.||
-||`--format` | Output format. Available options:
+|| `--timeout` | The time, in milliseconds, within which the operation should be completed on the server. ||
+|| `--format` | Output format. Available options:
 
-* `pretty` — short human readable output,
-* `json` — detailed JSON output.
+* `pretty` — short, human-readable output
+* `json` — detailed JSON output
 
-Default — `pretty`.||
+Default: `pretty`. ||
 |#
 
 ## Examples {#examples}
 
-Response structure and description are provided in the [Health Check API](../../ydb-sdk/health-check-api.md#response-structure) documentation.
+The response structure and description are provided in the [Health Check API](../../ydb-sdk/health-check-api.md#response-structure) documentation.

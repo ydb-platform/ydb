@@ -109,7 +109,7 @@ items:
       href: commands/config-info.md
     - name: Getting the YDB CLI version
       href: version.md
-    - name: Database self check
+    - name: Health check
       href: commands/monitoring-healthcheck.md 
   - name: Load testing
     items:

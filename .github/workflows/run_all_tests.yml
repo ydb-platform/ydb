@@ -102,8 +102,8 @@ jobs:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
 
       - name: Run YDB Tests ${{ github.ref_name }}
-        timeout-minutes: ${{ env.timeout }}
-        uses: ./.github/workflows/build_and_test_ya_provisioned.yml
+        timeout-minutes: ${{ fromJson(env.timeout) }}
+        uses: ./.github/actions/build_and_test_ya
         with:
           commit_sha: ${{ github.ref_name }}
           build_preset: ${{ inputs.build_preset }}
@@ -114,7 +114,7 @@ jobs:
           test_retry_count: 3
           test_size: ${{ inputs.test_size }}
           test_type: ${{ inputs.test_type }}
-          test_threads: ${{ env.threads_count }}
+          test_threads: ${{ fromJson(env.threads_count) }}
           put_build_results_to_cache: true
           additional_ya_make_args: ${{ inputs.additional_ya_make_args }}
           secs: ${{ format('{{"TESTMO_TOKEN2":"{0}","AWS_KEY_ID":"{1}","AWS_KEY_VALUE":"{2}","REMOTE_CACHE_USERNAME":"{3}","REMOTE_CACHE_PASSWORD":"{4}"}}',

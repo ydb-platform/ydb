@@ -12,7 +12,7 @@ Release date:
 
   * support for [views](./concepts/datamodel/view),
   * [auto-partitioning mode](./concepts/topic#autopartitioning) for topics,
-  * transactions involving [topics](./concepts/topic) and row-based tables,
+  * transactions involving [topics](./concepts/glossary.md#topic) and [row-oriented tables](./concepts/glossary.md#row-oriented-table) simultaneously
   * [volatile distributed transactions](./contributor/datashard-distributed-txs#volatile-transactions),
   * [automatic index selection](./dev/secondary-indexes#avtomaticheskoe-ispolzovanie-indeksov-pri-vyborke) for queries.
 
@@ -23,13 +23,13 @@ Release date:
 
 * [Fixed](https://github.com/ydb-platform/ydb/pull/14811) an error that led to a significant decrease in reading speed from [tablet followers](./concepts/glossary#tablet-follower).
 * [Fixed](https://github.com/ydb-platform/ydb/pull/14516) an error that caused volatile distributed transactions to sometimes wait for confirmations until the next reboot.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/15077) a rare assertion (process crash) when followers attached to leaders with an inconsistent snapshot.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/15077) a rare assertion failure (server process crash) when followers attached to leaders with an inconsistent snapshot.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/15074) a rare crash in datashard when a dropped table shard is restarted with uncommitted persistent changes.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/15194) an error that could disrupt the order of message processing in a topic.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/15308) a rare error that caused possible stop of reading from the topic partition.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/15160) the issue of the transaction hanging if a user performs a control plane operation with a topic (for example, adding partitions or a consumer) and the PQ tablet moves to another node. The transaction is now completed successfully.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/15233) an problem with the counter value for UserInfo is leaking. As a result, the reading session returns the error too big in flight after a while.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/15467) proxy crash on duplicate topics in request.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/15308) a rare error that could stop reading from a topic partition.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/15160) an issue where a transaction could hang if a user performed a control plane operation on a topic (for example, adding partitions or a consumer) while the PQ tablet is moving to another node.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/15233) an issue where the counter value for UserInfo was leaking. As a result, the reading session would eventually return a "too big in flight" error.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/15467) a proxy crash due to duplicate topics in a request.
 
 ## Version 24.3 {#24-3}
 

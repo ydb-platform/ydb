@@ -1,207 +1,139 @@
 #include "accumulator.h"
+#include "histogram.h"
 
 #include <cstdlib>
 #include <ydb/library/yql/utils/simd/simd.h>
+#include <arrow/util/bit_util.h>
+#include <yql/essentials/utils/prefetch.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
 namespace NPackedTuple {
 
-THolder<TAccumulator> TAccumulator::Create(TTupleLayout* layout, ui32 nBuckets) {
-    if (NX86::HaveAVX2())
+// -----------------------------------------------------------------------
+THolder<TAccumulator> TAccumulator::Create(
+    const TTupleLayout* layout, ui32 log2Buckets,
+    std::vector<TBuffer, TMKQLAllocator<TBuffer>>&& packedTupleBuckets,
+    std::vector<TBuffer, TMKQLAllocator<TBuffer>>&& overflowBuckets) {
+    // according to https://www.cidrdb.org/cidr2019/papers/p133-zhang-cidr19.pdf
+    if (log2Buckets <= 5) // 5, because we have two vectors (packet tuples and overflow) for each bucket and vector of sizes for them and two input vectors <= 64
     {
-        return MakeHolder<TAccumulatorImpl<NSimd::TSimdAVX2Traits>>(layout, nBuckets);
+        return MakeHolder<TAccumulatorImpl>(
+            layout, log2Buckets, std::move(packedTupleBuckets), std::move(overflowBuckets));
     }
 
-    if (NX86::HaveSSE42())
+    #if 0
+    if (log2Buckets <= 10 && layout->TotalRowSize <= 256) // tuple is too wide SMB will not help us, because the number of tuples that fit into the buffer will be small
     {
-        return MakeHolder<TAccumulatorImpl<NSimd::TSimdSSE42Traits>>(layout, nBuckets);
+        return MakeHolder<TSMBAccumulatorImpl>(
+           layout, log2Buckets, std::move(packedTupleBuckets), std::move(overflowBuckets));
     }
+    #endif
 
-    return MakeHolder<TAccumulatorImpl<NSimd::TSimdFallbackTraits>>(layout, nBuckets);
+    return MakeHolder<TAccumulatorImpl>(
+        layout, log2Buckets, std::move(packedTupleBuckets), std::move(overflowBuckets));
 }
 
 // -----------------------------------------------------------------------
+THolder<TAccumulator> TAccumulator::Create(const TTupleLayout* layout, ui32 log2Buckets) {
+    // according to https://www.cidrdb.org/cidr2019/papers/p133-zhang-cidr19.pdf
+    if (log2Buckets <= 5) // 5, because we have two vectors (packet tuples and overflow) for each bucket and vector of sizes for them and two input vectors <= 64
+    {
+        return MakeHolder<TAccumulatorImpl>(layout, log2Buckets);
+    }
 
-template <typename TTraits>
-TAccumulatorImpl<TTraits>::TAccumulatorImpl(TTupleLayout* layout, ui32 nBuckets)
-    : NBuckets_(nBuckets)
+    #if 0
+    if (log2Buckets <= 10 && layout->TotalRowSize <= 256) // tuple is too wide SMB will not help us, because the number of tuples that fit into the buffer will be small
+    {
+        return MakeHolder<TSMBAccumulatorImpl>(layout, log2Buckets);
+    }
+    #endif
+
+    return MakeHolder<TAccumulatorImpl>(layout, log2Buckets);
+}
+
+// -----------------------------------------------------------------------
+TAccumulatorImpl::TAccumulatorImpl(const TTupleLayout* layout, ui32 log2Buckets)
+    : NBuckets_(1 << log2Buckets)
     , Layout_(layout)
-    , SecondLevelAccum_(NBuckets_, nullptr)
-    // std::max for case when TotalRowSize extremly big, so 32KB wouldn't be enough
-    , FirstLevelMemLimit_(std::max<ui32>((Layout_->TotalRowSize + sizeof(ui32) + sizeof(ui8) + TTraits::Size) * NBuckets_, 32768 /* 32KB */))
-    , FirstLevelBucketSize_(FirstLevelMemLimit_ / NBuckets_)
-    , TuplesPerFirstLevelBucket_(std::min<ui32>((FirstLevelBucketSize_ - sizeof(ui32) - sizeof(ui8) - TTraits::Size) / Layout_->TotalRowSize, 255 /* 0xFF */))
-    , SecondLevelBucketSizes_(NBuckets_, 0)
-    , TuplesPerSecondLevelBucket_(NBuckets_, 0)
-    // std::max for case when TotalRowSize extremly big, so 4KB for L2 bucket wouldn't be enough
-    , MinimalSecondLevelBucketSize_(std::max<ui32>(4096 /* 4KB */, 4 * (Layout_->TotalRowSize + TTraits::Size))) {
-
-    Y_ASSERT(IsPowerOf2(nBuckets));
-    Y_ASSERT(FirstLevelBucketSize_ > sizeof(ui32) + TTraits::Size);
-
-    FirstLevelBucketSize_ = (FirstLevelBucketSize_ / TTraits::Size + 1) * TTraits::Size; // multiple of register width
-    FirstLevelMemLimit_ = FirstLevelBucketSize_ * NBuckets_;
-    FirstLevelAccum_ = static_cast<ui8*>(std::aligned_alloc(TTraits::Size, FirstLevelMemLimit_));
-    std::memset(FirstLevelAccum_, 0, FirstLevelMemLimit_);
-}
-
-template <typename TTraits>
-TAccumulatorImpl<TTraits>::~TAccumulatorImpl() {
-    std::free(FirstLevelAccum_);
-    for (ui32 i = 0; i < NBuckets_; ++i) {
-        std::free(SecondLevelAccum_[i]);
-    }
+    , PackedTupleBucketSizes_(NBuckets_, 0)
+    , OverflowBucketSizes_(NBuckets_, 0)
+    , PackedTupleBuckets_(NBuckets_)
+    , OverflowBuckets_(NBuckets_)
+{
+    // Take leftmost bits for mask
+    BitsCount_ = arrow::BitUtil::NumRequiredBits(NBuckets_ - 1);
+    PMask_ = ((1 << BitsCount_) - 1) << (32 - BitsCount_);
 }
 
 // -----------------------------------------------------------------------
-
-std::pair<ui32, ui32> GetCounters(ui8* firstLevelBucketAddr) {
-    ui32 nCounters = ReadUnaligned<ui32>(firstLevelBucketAddr);
-    ui32 nBucketTuplesL1 = nCounters & (0xFF);
-    ui32 nBucketTuplesL2 = nCounters >> 8;
-
-    return {nBucketTuplesL1, nBucketTuplesL2};
-};
+TAccumulatorImpl::TAccumulatorImpl(
+    const TTupleLayout* layout, ui32 log2Buckets,
+    std::vector<TBuffer, TMKQLAllocator<TBuffer>>&& packedTupleBuckets,
+    std::vector<TBuffer, TMKQLAllocator<TBuffer>>&& overflowBuckets
+)
+    : NBuckets_(1 << log2Buckets)
+    , Layout_(layout)
+    , PackedTupleBucketSizes_(NBuckets_, 0)
+    , OverflowBucketSizes_(NBuckets_, 0)
+    , NoAllocations_(true)
+    , PackedTupleBuckets_(std::move(packedTupleBuckets))
+    , OverflowBuckets_(std::move(overflowBuckets))
+{
+    Y_ASSERT(NBuckets_ > 0);
+    // Take leftmost bits for mask
+    BitsCount_ = arrow::BitUtil::NumRequiredBits(NBuckets_ - 1);
+    PMask_ = ((1 << BitsCount_) - 1) << (32 - BitsCount_);
+}
 
 // -----------------------------------------------------------------------
-
-template <typename TTraits>
-void TAccumulatorImpl<TTraits>::AddData(const ui8* data, ui32 nItems) {
-    using TSimd8 = typename TTraits:: template TSimd8<ui8>;
-
+void TAccumulatorImpl::AddData(const ui8* data, const ui8* overflow, ui32 nItems) {
     const auto layoutTotalRowSize = Layout_->TotalRowSize;
-    const ui32 bound = std::max<ui32>(layoutTotalRowSize, TTraits::Size);
-    const ui8* const end = data + nItems * Layout_->TotalRowSize;
+
+    if (!NoAllocations_) {
+        Histogram hist;
+        hist.AddData(Layout_, data, nItems, TAccumulator::GetBucketId, PMask_, BitsCount_);
+        std::vector<std::pair<ui64, ui64>, TMKQLAllocator<std::pair<ui64, ui64>>> sizes(NBuckets_, {0, 0});
+        hist.EstimateSizes(sizes);
+        for (ui32 i = 0; i < sizes.size(); ++i) {
+            auto [TLsize, Osize] = sizes[i];
+            PackedTupleBuckets_[i].resize(PackedTupleBuckets_[i].size() + TLsize);
+            OverflowBuckets_[i].resize(OverflowBuckets_[i].size() + Osize);
+        }
+    }
 
     for (ui32 i = 0; i < nItems; ++i) {
         const ui8* tuple = data + i * layoutTotalRowSize;
-        const ui32 bucketId = ReadUnaligned<ui32>(tuple) & (NBuckets_ - 1);
+        const ui32 bucketId = GetBucketId(ReadUnaligned<ui32>(tuple), PMask_, BitsCount_);
+        NYql::PrefetchForRead(tuple + layoutTotalRowSize * 32);
 
-        ui8* firstLevelBucketAddr = FirstLevelAccum_ + bucketId * FirstLevelBucketSize_;
-        auto [nBucketTuplesL1, nBucketTuplesL2] = GetCounters(firstLevelBucketAddr);
+        ui8* ptStoreAddr = PackedTupleBuckets_[bucketId].data() + PackedTupleBucketSizes_[bucketId];
+        NYql::PrefetchForWrite(ptStoreAddr + layoutTotalRowSize);
+        ui8* ovStoreAddr = OverflowBuckets_[bucketId].data() + OverflowBucketSizes_[bucketId];
 
-        ui8* firstLevelDataAddr = firstLevelBucketAddr + TTraits::Size;
-
-        if (nBucketTuplesL1 >= TuplesPerFirstLevelBucket_) {
-            nBucketTuplesL2 = Flush(bucketId, nItems - i + nBucketTuplesL1);
-            nBucketTuplesL1 = 0;
-        }
-
-        ui8* storeAddr = firstLevelDataAddr + nBucketTuplesL1 * layoutTotalRowSize;
-
-        if constexpr (TTraits::Size > 8) { // SSE and AVX case
-            // max for the case when the row size < register width
-            ui32 offset = 0;
-
-            for (; offset < bound - TTraits::Size; offset += TTraits::Size, tuple += TTraits::Size, storeAddr += TTraits::Size) {
-                auto reg = TSimd8::Load(tuple);
-                reg.Store(storeAddr);
-            }
-
-            // tail of the data copy via memcpy to avoid wrong memory access
-            if (end - tuple < TTraits::Size) [[unlikely]] {
-                std::memcpy(storeAddr, tuple, bound - offset);
-            } else [[likely]] {
-                auto reg = TSimd8::Load(tuple);
-                reg.Store(storeAddr);
-            }
-        } else { // no SIMD case
-            std::memcpy(storeAddr, tuple, layoutTotalRowSize);
-        }
-
-        nBucketTuplesL1++;
-        WriteUnaligned<ui32>(firstLevelBucketAddr, (nBucketTuplesL2 << 8) | nBucketTuplesL1);
+        Layout_->TupleDeepCopy(tuple, overflow, ptStoreAddr, ovStoreAddr, OverflowBucketSizes_[bucketId]);
+        PackedTupleBucketSizes_[bucketId] += layoutTotalRowSize;
     }
-
-    for (ui32 bucketId = 0; bucketId < NBuckets_; ++bucketId) {
-        ui8* firstLevelBucketAddr = FirstLevelAccum_ + bucketId * FirstLevelBucketSize_;
-        auto [nBucketTuplesL1, nBucketTuplesL2] = GetCounters(firstLevelBucketAddr);
-
-        nBucketTuplesL2 = Flush(bucketId, nBucketTuplesL1);
-        nBucketTuplesL1 = 0;
-
-        WriteUnaligned<ui32>(firstLevelBucketAddr, (nBucketTuplesL2 << 8) | nBucketTuplesL1);
-    }
-
-    TotalTuples_ += nItems;
 }
 
-template __attribute__((target("avx2"))) void
-TAccumulatorImpl<NSimd::TSimdAVX2Traits>::AddData(const ui8* data, ui32 nItems);
-
-template __attribute__((target("sse4.2"))) void
-TAccumulatorImpl<NSimd::TSimdSSE42Traits>::AddData(const ui8* data, ui32 nItems);
-
 // -----------------------------------------------------------------------
-
-template <typename TTraits>
-ui32 TAccumulatorImpl<TTraits>::Flush(ui32 bucketId, ui32 remainingItems) {
-    using TSimd8 = typename TTraits:: template TSimd8<ui8>;
-
-    ui8* firstLevelBucketAddr = FirstLevelAccum_ + bucketId * FirstLevelBucketSize_;
-    ui8* firstLevelDataAddr = firstLevelBucketAddr + TTraits::Size;
-
-    auto [nBucketTuplesL1, nBucketTuplesL2] = GetCounters(firstLevelBucketAddr);
-    const auto layoutTotalRowSize = Layout_->TotalRowSize;
-    const auto tuplesPerSecondLevelBucket = TuplesPerSecondLevelBucket_[bucketId];
-
-    if (nBucketTuplesL2 + nBucketTuplesL1 >= tuplesPerSecondLevelBucket) [[unlikely]] {
-        ui32 newSize =
-            tuplesPerSecondLevelBucket == 0
-                ? MinimalSecondLevelBucketSize_
-                : std::max({ui32(SecondLevelBucketSizes_[bucketId] * GrowthRate_),
-                            ui32(1 + ui64(remainingItems) * layoutTotalRowSize * AddReserveMul_ / NBuckets_)});
-
-        newSize = (newSize / TTraits::Size + 1) * TTraits::Size; // multiple of register width
-        ui8* newBucket = static_cast<ui8*>(std::aligned_alloc(TTraits::Size, newSize));
-
-        if (SecondLevelAccum_[bucketId] != nullptr) [[likely]] {
-            if constexpr (TTraits::Size > 8) { // SSE and AVX case
-                for (ui32 offset = 0; offset < SecondLevelBucketSizes_[bucketId]; offset += TTraits::Size) {
-                    auto reg = TSimd8::LoadStream(SecondLevelAccum_[bucketId] + offset);
-                    reg.StoreStream(newBucket + offset);
-                }
-            } else { // no SIMD case
-                std::memcpy(newBucket, SecondLevelAccum_[bucketId], SecondLevelBucketSizes_[bucketId]);
-            }
-            std::free(SecondLevelAccum_[bucketId]);
-        }
-
-        SecondLevelAccum_[bucketId] = newBucket;
-        SecondLevelBucketSizes_[bucketId] = newSize;
-        TuplesPerSecondLevelBucket_[bucketId] = (SecondLevelBucketSizes_[bucketId] - TTraits::Size) / layoutTotalRowSize;
-    }
-
-    ui8* storeAddr = SecondLevelAccum_[bucketId] + nBucketTuplesL2 * layoutTotalRowSize;
-    std::memcpy(storeAddr, firstLevelDataAddr, layoutTotalRowSize * nBucketTuplesL1);
-
-    return nBucketTuplesL2 + nBucketTuplesL1;
+TAccumulatorImpl::TBucketRef TAccumulatorImpl::GetBucket(ui32 bucket) const {
+    return {
+        &PackedTupleBuckets_[bucket],
+        &OverflowBuckets_[bucket],
+        static_cast<ui32>(PackedTupleBucketSizes_[bucket] / Layout_->TotalRowSize),
+        Layout_
+    };
 }
 
-template __attribute__((target("avx2"))) ui32
-TAccumulatorImpl<NSimd::TSimdAVX2Traits>::Flush(ui32 bucketId, ui32 remainingItems);
-
-template __attribute__((target("sse4.2"))) ui32
-TAccumulatorImpl<NSimd::TSimdSSE42Traits>::Flush(ui32 bucketId, ui32 remainingItems);
-
 // -----------------------------------------------------------------------
-
-template <typename TTraits>
-TAccumulator::BucketInfo TAccumulatorImpl<TTraits>::GetBucket(ui32 bucket) const {
-    TAccumulator::BucketInfo result;
-
-    ui8* bucketPtr = FirstLevelAccum_ + bucket * FirstLevelBucketSize_;
-    const ui32 nCounters = ReadUnaligned<ui32>(bucketPtr);
-    const ui32 nBucketTuplesL1 = nCounters & (0xFF);
-    const ui32 nBucketTuplesL2 = nCounters >> 8;
-    Y_ASSERT(nBucketTuplesL1 == 0); // All elements are stored in L2 buffer
-
-    result.Data     = SecondLevelAccum_[bucket];
-    result.Elements = nBucketTuplesL2;
-    result.Layout   = Layout_;
-
-    return result;
+void TAccumulatorImpl::Detach(std::vector<TBucket, TMKQLAllocator<TBucket>>& buckets) {
+    buckets.clear();
+    for (size_t i = 0; i < PackedTupleBuckets_.size(); ++i) {
+        ui32 NTuples = static_cast<ui32>(PackedTupleBucketSizes_[i] / Layout_->TotalRowSize);
+        buckets.emplace_back(
+            std::move(PackedTupleBuckets_[i]), std::move(OverflowBuckets_[i]), NTuples, Layout_);
+    }
 }
 
 

@@ -84,6 +84,7 @@ struct TTupleLayout {
     std::vector<TColumnDesc> KeyColumns; // Vector describing key columns
     std::vector<TColumnDesc>
         PayloadColumns;      // Vector describing payload columns
+    std::vector<TColumnDesc> VariableColumns;  // Variable-size columns only
     ui32 KeyColumnsNum;      // Total number of key columns
     ui32 KeyColumnsSize;     // Total size of all key columns in bytes
     ui32 KeyColumnsOffset;   // Start of row-packed keys data
@@ -129,8 +130,12 @@ struct TTupleLayout {
 
     // Takes packed rows,
     // outputs vector of column sizes in bytes
-    virtual void CalculateColumnSizes(
-        const ui8* res, ui32 count, std::vector<ui64, TMKQLAllocator<ui64>>& bytes) const = 0;
+    void CalculateColumnSizes(
+        const ui8* res, ui32 count, std::vector<ui64, TMKQLAllocator<ui64>>& bytes) const ;
+    
+    void TupleDeepCopy(
+        const ui8* inTuple, const ui8* inOverflow,
+        ui8* outTuple, ui8* outOverflow, ui64& outOverflowSize) const;
 
     bool KeysEqual(const ui8 *lhsRow, const ui8 *lhsOverflow, const ui8 *rhsRow, const ui8 *rhsOverflow) const;
 };
@@ -153,15 +158,11 @@ struct TTupleLayoutFallback : public TTupleLayout {
                  PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows,
                  ui32 start, ui32 count, ui32 bucketsLogNum) const override;
 
-    void CalculateColumnSizes(
-        const ui8* res, ui32 count, std::vector<ui64, TMKQLAllocator<ui64>>& bytes) const override;
-
   protected:
     std::array<std::vector<TColumnDesc>, 5>
         FixedPOTColumns_; // Fixed-size columns for power-of-two sizes from 1 to
                           // 16 bytes
     std::vector<TColumnDesc> FixedNPOTColumns_; // Remaining fixed-size columns
-    std::vector<TColumnDesc> VariableColumns_;  // Variable-size columns only
 };
 
 

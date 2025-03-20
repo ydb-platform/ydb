@@ -16,60 +16,82 @@ namespace NPackedTuple {
 /*
 * Class TAccumulator is used to split provided vector of tuples to buckets using provided key hashes.
 */
-class TAccumulator {  
+class TAccumulator {
 public:
-    static constexpr ui32 DEFAULT_BUCKETS_COUNT = 64;
-public:
-    struct BucketInfo {
-        const ui8*              Data;       // Pointer to start of a bucket (maybe nullptr)
-        ui32                    Elements;   // Count of elements in a bucket
-        const TTupleLayout*     Layout;     // Layout for packed row (tuple)
+    using TBuffer = std::vector<ui8, TMKQLAllocator<ui8>>;
+
+    struct TBucketRef {
+        const TBuffer*      PackedTuples;
+        const TBuffer*      Overflow;
+        ui32                NTuples;    // Count of elements in a bucket
+        const TTupleLayout* Layout;     // Layout for packed row (tuple)
+    };
+
+    struct TBucket {
+        TBuffer             PackedTuples;
+        TBuffer             Overflow;
+        ui32                NTuples;    // Count of elements in a bucket
+        const TTupleLayout* Layout;     // Layout for packed row (tuple)
     };
 
 public:
-    virtual ~TAccumulator() {};
+    virtual ~TAccumulator() = default;
 
-    // Creates new accumulator for nBuckets for given layout
-    static THolder<TAccumulator> Create(TTupleLayout* layout, ui32 nBuckets = DEFAULT_BUCKETS_COUNT);
+    // Create new accumulator for log2Buckets for given layout using given memory.
+    // Accumulator will not allocate any memory
+    static THolder<TAccumulator> Create(
+        const TTupleLayout* layout, ui32 log2Buckets,
+        std::vector<TBuffer, TMKQLAllocator<TBuffer>>&& packedTupleBuckets,
+        std::vector<TBuffer, TMKQLAllocator<TBuffer>>&& overflowBuckets);
 
-    // Adds new nItems of data in TTupleLayout representation to accumulator 
-    virtual void AddData(const ui8* data, ui32 nItems) = 0;
+    // Create new accumulator for log2Buckets for given layout.
+    // Accumulator will manage memory by itself
+    static THolder<TAccumulator> Create(const TTupleLayout* layout, ui32 log2Buckets);
 
-    // Returns bucket info
-    virtual BucketInfo GetBucket(ui32 bucket) const = 0;
+    // Add new nItems of data in TTupleLayout representation to accumulator 
+    virtual void AddData(const ui8* data, const ui8* overflow, ui32 nItems) = 0;
+
+    // Return bucket reference
+    virtual TBucketRef GetBucket(ui32 bucket) const = 0;
+
+    // Detach and return all buckets. Once this method has been called, the accumulator object can no longer be used
+    virtual void Detach(std::vector<TBucket, TMKQLAllocator<TBucket>>& buckets) = 0;
+
+    // Get bucket id
+    inline static ui32 GetBucketId(ui32 hash, ui32 mask, ui32 bitsCount) {
+        return ((hash & mask) >> (32 - bitsCount)) & ((1 << bitsCount) - 1);
+    }
 };
 
-
-template <typename TTrait>
-class TAccumulatorImpl: public TAccumulator {   
+// Simple radix partitioning algorithm using software prefetching technique to improve performance.
+// Suitable when number of buckets small (<= 16) or very big (>= 1024)
+class TAccumulatorImpl: public TAccumulator {
 public:
-    TAccumulatorImpl(TTupleLayout* layout, ui32 nBuckets = DEFAULT_BUCKETS_COUNT);
-    ~TAccumulatorImpl();
+    TAccumulatorImpl(
+        const TTupleLayout* layout, ui32 log2Buckets,
+        std::vector<TBuffer, TMKQLAllocator<TBuffer>>&& packedTupleBuckets,
+        std::vector<TBuffer, TMKQLAllocator<TBuffer>>&& overflowBuckets);
 
-    void AddData(const ui8* data, ui32 nItems) override;
+    TAccumulatorImpl(const TTupleLayout* layout, ui32 log2Buckets);
 
-    BucketInfo GetBucket(ui32 bucket) const override;
+    ~TAccumulatorImpl() = default;
 
-private:
-    // Save data from first level buffer to the second level buffer.
-    // Parameter remainingItems is used to predict how many memory should be allocated.
-    // Returns count of L2 elements.
-    ui32 Flush(ui32 bucketId, ui32 remainingItems);
+    void AddData(const ui8* data, const ui8* overflow, ui32 nItems) override;
+
+    TBucketRef GetBucket(ui32 bucket) const override;
+
+    void Detach(std::vector<TBucket, TMKQLAllocator<TBucket>>& buckets) override;
 
 private:
     ui32 NBuckets_{0};                                                   // Number of buckets
-    TTupleLayout* Layout_;                                               // Tuple layout
-    ui8* FirstLevelAccum_{nullptr};                                      // First level small accumulator. Should fit into L1 cache
-    std::vector<ui8*, TMKQLAllocator<ui8*>> SecondLevelAccum_;           // Second level accumulator data
-    ui32 FirstLevelMemLimit_{0};                                         // Memory limit for first level accumulator
-    ui32 FirstLevelBucketSize_{0};                                       // Fixed bucket size of level 1 accumulator
-    ui32 TuplesPerFirstLevelBucket_{0};                                  // Fixed bucket tuples number of level 1
-    std::vector<ui32, TMKQLAllocator<ui32>> SecondLevelBucketSizes_;     // Fixed bucket sizes for level 2 accumulator
-    std::vector<ui32, TMKQLAllocator<ui32>> TuplesPerSecondLevelBucket_; // Fixed bucket tuples number of level 2
-    ui32 TotalTuples_{0};                                                // Total tuples number in all buckets and levels
-    ui32 MinimalSecondLevelBucketSize_{0};                               // Fixed minimum initial size for second level bucket
-    static constexpr double GrowthRate_{1.5};                            // Growth rate for second level buckets
-    static constexpr double AddReserveMul_{1.2};                         // Add method reserve size multiplier for second level buckets
+    ui32 PMask_{0};                                                      // Mask used for partitioning tuples 
+    ui32 BitsCount_{0};                                                  // Bits count to write buckets number in binary
+    const TTupleLayout* Layout_;                                         // Tuple layout
+    std::vector<ui64, TMKQLAllocator<ui64>> PackedTupleBucketSizes_;     // Sizes for filled part of packed tuple buckets
+    std::vector<ui64, TMKQLAllocator<ui64>> OverflowBucketSizes_;        // Sizes for filled part of overflow buckets
+    bool NoAllocations_{false};                                          // Do not allocate any memory for buckets
+    std::vector<TBuffer, TMKQLAllocator<TBuffer>> PackedTupleBuckets_;   // Buckets for packed tuples
+    std::vector<TBuffer, TMKQLAllocator<TBuffer>> OverflowBuckets_;      // Buckets for overflow buffers
 };
 
 

@@ -265,7 +265,7 @@ TTupleLayoutFallback::TTupleLayoutFallback(
 
     for (auto &col : Columns) {
         if (col.SizeType == EColumnSizeType::Variable) {
-            VariableColumns_.push_back(col);
+            VariableColumns.push_back(col);
         } else if (IsPowerOf2(col.DataSize) &&
                    col.DataSize < (1u << FixedPOTColumns_.size())) {
             FixedPOTColumns_[CountTrailingZeroBits(col.DataSize)].push_back(
@@ -577,7 +577,7 @@ void TTupleLayoutFallback::Pack(
         // isValid bitmap is NOT included into hashed data
         WriteUnaligned<ui32>(res, hash);
 
-        for (auto &col : VariableColumns_) {
+        for (auto &col : VariableColumns) {
             auto dataOffset = ReadUnaligned<ui32>(
                 columns[col.OriginalIndex] + sizeof(ui32) * start);
             auto nextOffset = ReadUnaligned<ui32>(
@@ -711,7 +711,7 @@ void TTupleLayoutFallback::Unpack(
         PackPOTColumn(4);
 #undef PackPOTColumn
 
-        for (auto &col : VariableColumns_) {
+        for (auto &col : VariableColumns) {
             const auto dataOffset = ReadUnaligned<ui32>(
                 columns[col.OriginalIndex] + sizeof(ui32) * start);
             auto *const data = columns[col.OriginalIndex + 1] + dataOffset;
@@ -860,7 +860,7 @@ void TTupleLayoutFallback::BucketPack(
 
         auto& overflow = overflows[bucket];
 
-        for (auto &col : VariableColumns_) {
+        for (auto &col : VariableColumns) {
             auto dataOffset = ReadUnaligned<ui32>(
                 columns[col.OriginalIndex] + sizeof(ui32) * start);
             auto nextOffset = ReadUnaligned<ui32>(
@@ -1049,7 +1049,7 @@ void TTupleLayoutSIMD<TTraits>::Pack(
             // isValid bitmap is NOT included into hashed data
             WriteUnaligned<ui32>(res, hash);
 
-            for (auto &col : VariableColumns_) {
+            for (auto &col : VariableColumns) {
                 auto dataOffset = ReadUnaligned<ui32>(
                     columns[col.OriginalIndex] + sizeof(ui32) * start);
                 auto nextOffset = ReadUnaligned<ui32>(
@@ -1225,7 +1225,7 @@ void TTupleLayoutSIMD<TTraits>::Unpack(
             const auto new_res = res + block_row_ind * TotalRowSize;
             const auto res = new_res;
 
-            for (auto &col : VariableColumns_) {
+            for (auto &col : VariableColumns) {
                 const auto dataOffset = ReadUnaligned<ui32>(
                     columns[col.OriginalIndex] + sizeof(ui32) * start);
                 auto *const data = columns[col.OriginalIndex + 1] + dataOffset;
@@ -1432,7 +1432,7 @@ void TTupleLayoutSIMD<TTraits>::BucketPack(
 
             auto& overflow = overflows[bucket];
 
-            for (auto &col : VariableColumns_) {
+            for (auto &col : VariableColumns) {
                 auto dataOffset = ReadUnaligned<ui32>(
                     columns[col.OriginalIndex] + sizeof(ui32) * start);
                 auto nextOffset = ReadUnaligned<ui32>(
@@ -1511,7 +1511,7 @@ TTupleLayoutSIMD<NSimd::TSimdSSE42Traits>::BucketPack(
     PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows, ui32 start,
     ui32 count, ui32 bucketsLogNum) const;
 
-void TTupleLayoutFallback::CalculateColumnSizes(
+void TTupleLayout::CalculateColumnSizes(
     const ui8 *res, ui32 count,
     std::vector<ui64, TMKQLAllocator<ui64>> &bytes) const {
 
@@ -1526,7 +1526,7 @@ void TTupleLayoutFallback::CalculateColumnSizes(
 
     // handle variable size columns
     for (; count--; res += TotalRowSize) {
-        for (const auto& col: VariableColumns_) {
+        for (const auto& col: VariableColumns) {
             ui32 size = ReadUnaligned<ui8>(res + col.Offset);
             if (size == 255) { // overflow buffer used
                 const auto prefixSize = (col.DataSize - 1 - 2 * sizeof(ui32));
@@ -1534,6 +1534,23 @@ void TTupleLayoutFallback::CalculateColumnSizes(
                 size = prefixSize + overflowSize;
             }
             bytes[col.OriginalColumnIndex] += size;
+        }
+    }
+}
+
+void TTupleLayout::TupleDeepCopy(
+    const ui8* inTuple, const ui8* inOverflow,
+    ui8* outTuple, ui8* outOverflow, ui64& outOverflowSize) const
+{
+    std::memcpy(outTuple, inTuple, TotalRowSize);
+    for (const auto& col: VariableColumns) {
+        ui32 size = ReadUnaligned<ui8>(inTuple + col.Offset);
+        if (size == 255) { // overflow buffer used
+            auto overflowOffset = ReadUnaligned<ui32>(inTuple + col.Offset + 1 + 0 * sizeof(ui32));
+            auto overflowSize   = ReadUnaligned<ui32>(inTuple + col.Offset + 1 + 1 * sizeof(ui32));
+            std::memcpy(outOverflow, inOverflow + overflowOffset, overflowSize);
+            WriteUnaligned<ui32>(outTuple + col.Offset + 1 + 0 * sizeof(ui32), outOverflowSize);
+            outOverflowSize += overflowSize;
         }
     }
 }

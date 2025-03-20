@@ -204,7 +204,7 @@ namespace NKikimr::NStorage {
         }
         if (request.GetSkipConsoleValidation() || !NewYaml) {
             if (request.GetDryRun()) {
-                if (!CheckConfigUpdate(*Self->StorageConfig, ProposedStorageConfig)) {
+                if (!CheckConfigUpdate(ProposedStorageConfig)) {
                     return;
                 }
                 return Finish(Sender, SelfId(), PrepareResult(TResult::DRY_RUN_SUCCESS, std::nullopt).release(), 0, Cookie);
@@ -430,7 +430,7 @@ namespace NKikimr::NStorage {
                 }
                 const auto& replaceConfig = Event->Get()->Record.GetReplaceStorageConfig();
                 if (replaceConfig.GetDryRun()) {
-                    if (CheckConfigUpdate(*Self->StorageConfig, ProposedStorageConfig)) {
+                    if (!CheckConfigUpdate(ProposedStorageConfig)) {
                         return;
                     }
                     return Finish(Sender, SelfId(), PrepareResult(TResult::DRY_RUN_SUCCESS, std::nullopt).release(), 0, Cookie);

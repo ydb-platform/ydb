@@ -113,20 +113,16 @@ public:
 
         bool Next() {
             AFL_VERIFY(IsValid());
-            while (true) {
-                ++CurrentIndex;
-                if (ChunkAddress->GetAddress().Contains(CurrentIndex)) {
-                    if (CurrentArrayData->IsNull(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex))) {
-                        continue;
-                    }
-                    return true;
-                } else if (CurrentIndex == GlobalChunkedArray->GetRecordsCount()) {
-                    return false;
-                } else {
-                    InitArrays();
-                    return IsValid();
+            AFL_VERIFY(ChunkAddress->GetAddress().Contains(CurrentIndex));
+            ++CurrentIndex;
+            for (; CurrentIndex < ChunkAddress->GetAddress().GetGlobalFinishPosition(); ++CurrentIndex) {
+                if (CurrentArrayData->IsNull(CurrentIndex - ChunkAddress->GetAddress().GetGlobalStartPosition())) {
+                    continue;
                 }
+                return true;
             }
+            InitArrays();
+            return IsValid();
         }
     };
 

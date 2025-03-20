@@ -29,6 +29,11 @@ on:
         type: string
   workflow_call:
     inputs:
+      runner_label:
+        description: 'Label of the runner to be used'
+        required: false
+        type: string
+        default: auto-provisioned
       test_targets:
         description: 'Пути запуска'
         required: true
@@ -54,7 +59,6 @@ on:
         required: true
         type: string
         
-
 jobs:
   run_all_tests:
     name: Test ${{ github.ref_name }}:${{ inputs.build_preset }}

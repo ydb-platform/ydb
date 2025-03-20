@@ -17,7 +17,6 @@
   * [автоматический выбор индекса](./dev/secondary-indexes#avtomaticheskoe-ispolzovanie-indeksov-pri-vyborke) при выполнении запроса.
 
 * Добавлена возможность [чтения и записи в топик](./reference/kafka-api/examples#primery-raboty-s-kafka-api) с использованием Kafka API без аутентификации.
-* Старые блокировки преобразуются в shared блокировки из-за ограничений диапазона блокировок.
 
 #### Исправления ошибок
 

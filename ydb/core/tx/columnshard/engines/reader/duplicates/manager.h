@@ -289,13 +289,10 @@ private:
             const ui32 localIntervalIdx = globalIntervalIdx - FirstIntervalIdx;
             AFL_VERIFY(localIntervalIdx < IntervalOffsets.size())("local", localIntervalIdx)("global", globalIntervalIdx)(
                                               "size", IntervalOffsets.size());
-            NArrow::NAccessor::IChunkedArray::TRowRange localRange = [this, localIntervalIdx]() -> NArrow::NAccessor::IChunkedArray::TRowRange {
-                if (localIntervalIdx == IntervalOffsets.size() - 1) {
-                    return { IntervalOffsets[localIntervalIdx], Source->GetStageData().GetTable()->GetRecordsCountVerified() };
-                } else {
-                    return { IntervalOffsets[localIntervalIdx], IntervalOffsets[localIntervalIdx + 1] };
-                }
-            }();
+            const NArrow::NAccessor::IChunkedArray::TRowRange localRange =
+                (localIntervalIdx == IntervalOffsets.size() - 1)
+                    ? NArrow::NAccessor::IChunkedArray::TRowRange(IntervalOffsets[localIntervalIdx], Source->GetRecordsCount())
+                    : NArrow::NAccessor::IChunkedArray::TRowRange(IntervalOffsets[localIntervalIdx], IntervalOffsets[localIntervalIdx + 1]);
             if (Source->GetContext()->GetReadMetadata()->IsDescSorted()) {
                 return { Source->GetRecordsCount() - localRange.GetEnd(), Source->GetRecordsCount() - localRange.GetBegin() };
             } else {

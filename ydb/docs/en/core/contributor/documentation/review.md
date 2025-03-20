@@ -72,5 +72,5 @@ Documentation review is not a technical design review. Documentation is typicall
 
 ## See also
 
-- [GitHub documentation)(https://docs.github.com/en)
+- [GitHub documentation](https://docs.github.com/en)
 - [Git documentation](https://git-scm.com/doc)

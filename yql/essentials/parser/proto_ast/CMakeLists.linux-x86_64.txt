@@ -17,17 +17,14 @@ add_subdirectory(gen)
 add_subdirectory(collect_issues)
 add_subdirectory(antlr4)
 
-add_library(essentials-parser-proto_ast)
+add_library(essentials-parser-proto_ast INTERFACE)
 
 
-target_link_libraries(essentials-parser-proto_ast PUBLIC
+target_link_libraries(essentials-parser-proto_ast INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
   contrib-libs-protobuf
-)
-
-target_sources(essentials-parser-proto_ast PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/parser/proto_ast/common.cpp
+  essentials-parser-common
 )
 

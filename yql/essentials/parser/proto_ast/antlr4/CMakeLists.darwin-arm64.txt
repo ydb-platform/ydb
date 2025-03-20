@@ -18,6 +18,7 @@ add_library(parser-proto_ast-antlr4)
 target_link_libraries(parser-proto_ast-antlr4 PUBLIC
   contrib-libs-cxxsupp
   yutil
+  parser-common-antlr4
   essentials-parser-proto_ast
   contrib-libs-antlr4_cpp_runtime
 )

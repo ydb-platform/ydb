@@ -15,5 +15,6 @@
 add_subdirectory(pg_catalog)
 add_subdirectory(pg_wrapper)
 add_subdirectory(proto_ast)
+add_subdirectory(common)
 add_subdirectory(lexer_common)
 add_subdirectory(antlr_ast)

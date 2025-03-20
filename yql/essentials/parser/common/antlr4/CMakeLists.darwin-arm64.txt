@@ -12,12 +12,17 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(parser-proto_ast-collect_issues INTERFACE)
+add_library(parser-common-antlr4)
 
 
-target_link_libraries(parser-proto_ast-collect_issues INTERFACE
+target_link_libraries(parser-common-antlr4 PUBLIC
   contrib-libs-cxxsupp
   yutil
+  contrib-libs-antlr4_cpp_runtime
   essentials-parser-common
+)
+
+target_sources(parser-common-antlr4 PRIVATE
+  ${PROJECT_SOURCE_DIR}/yql/essentials/parser/common/antlr4/error_listener.cpp
 )
 

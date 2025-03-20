@@ -19,11 +19,6 @@ target_link_libraries(parser-proto_ast-collect_issues INTERFACE
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  essentials-public-issue
-  essentials-parser-proto_ast
-)
-
-target_sources(parser-proto_ast-collect_issues INTERFACE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/parser/proto_ast/collect_issues/collect_issues.h
+  essentials-parser-common
 )
 

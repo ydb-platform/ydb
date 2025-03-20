@@ -69,6 +69,7 @@ target_link_libraries(yt-yt-core PUBLIC
   yt-library-profiling
   library-profiling-resource_tracker
   yt-library-tracing
+  yt-library-numeric
   backtrace-cursors-libunwind
 )
 
@@ -182,6 +183,7 @@ target_sources(yt-yt-core PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/histogram.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/adjusted_exponential_moving_average.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/id_generator.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/fair_share_hierarchical_queue.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/linear_probe.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/relaxed_mpsc_queue.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/misc/parser_helpers.cpp
@@ -392,6 +394,7 @@ target_link_libraries(yt-yt-core.global PUBLIC
   yt-library-profiling
   library-profiling-resource_tracker
   yt-library-tracing
+  yt-library-numeric
   backtrace-cursors-libunwind
 )
 

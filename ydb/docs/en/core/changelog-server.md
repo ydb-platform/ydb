@@ -17,7 +17,6 @@ Release date:
   * [automatic index selection](./dev/secondary-indexes#avtomaticheskoe-ispolzovanie-indeksov-pri-vyborke) for queries.
 
 * Added the ability to [read and write to a topic](./reference/kafka-api/examples#primery-rabot-s-kafka-api) using the Kafka API without authentication.
-* [Force](https://github.com/ydb-platform/ydb/pull/15473) oldest (not newest) locks into shared locks due to range limits.
 
 
 #### Bug Fixes

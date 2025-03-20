@@ -23,7 +23,7 @@ public:
         , BufferSize(bufSize)
         , ValueType(vtype)
     {
-        Y_ENSURE(!buf || vtype != 0);
+        Y_ASSERT(!buf || vtype != 0);
     }
 
     TRawTypeValue(TArrayRef<const char> ref, NScheme::TTypeId vtype)

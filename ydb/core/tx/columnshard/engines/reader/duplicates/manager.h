@@ -255,9 +255,10 @@ private:
                 const NArrow::NAccessor::IChunkedArray::TRowRange findLeftBorder = source->GetStageData().ToGeneralContainer()->EqualRange(
                     *intervals.GetLeftExlusiveBorder(intervalIdx)
                          ->ToBatch(source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPrimaryKey()));
-                // TODO: handle reverse (now it's supposed to be false)
-                AFL_VERIFY(!source->GetContext()->GetReadMetadata()->IsDescSorted());  // TODO remove
-                IntervalOffsets.emplace_back(findLeftBorder.GetEnd());
+                // TODO: hide decision in a class?
+                IntervalOffsets.emplace_back(source->GetContext()->GetReadMetadata()->IsDescSorted()
+                                                 ? source->GetRecordsCount() - findLeftBorder.GetBegin()
+                                                 : findLeftBorder.GetEnd());
             }
             AFL_VERIFY(IntervalOffsets.size() == sourceIntervals.NumIntervals());
         }
@@ -288,10 +289,17 @@ private:
             const ui32 localIntervalIdx = globalIntervalIdx - FirstIntervalIdx;
             AFL_VERIFY(localIntervalIdx < IntervalOffsets.size())("local", localIntervalIdx)("global", globalIntervalIdx)(
                                               "size", IntervalOffsets.size());
-            if (localIntervalIdx == IntervalOffsets.size() - 1) {
-                return { IntervalOffsets[localIntervalIdx], Source->GetStageData().GetTable()->GetRecordsCountVerified() };
+            NArrow::NAccessor::IChunkedArray::TRowRange localRange = [this, localIntervalIdx]() -> NArrow::NAccessor::IChunkedArray::TRowRange {
+                if (localIntervalIdx == IntervalOffsets.size() - 1) {
+                    return { IntervalOffsets[localIntervalIdx], Source->GetStageData().GetTable()->GetRecordsCountVerified() };
+                } else {
+                    return { IntervalOffsets[localIntervalIdx], IntervalOffsets[localIntervalIdx + 1] };
+                }
+            }();
+            if (Source->GetContext()->GetReadMetadata()->IsDescSorted()) {
+                return { Source->GetRecordsCount() - localRange.GetEnd(), Source->GetRecordsCount() - localRange.GetBegin() };
             } else {
-                return { IntervalOffsets[localIntervalIdx], IntervalOffsets[localIntervalIdx + 1] };
+                return localRange;
             }
         }
 

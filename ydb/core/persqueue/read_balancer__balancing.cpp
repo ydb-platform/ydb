@@ -1079,13 +1079,14 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, bool wasInactive, cons
 
 void TConsumer::StartReading(ui32 partitionId, const TActorContext& ctx) {
     if (!GetPartitionInfo(partitionId)) {
-        PQ_LOG_CRIT("start reading for deleted partition " << partitionId);
+        PQ_LOG_NOTICE("Reading of the partition " << partitionId << " was started by " << ConsumerName << " but partition has been deleted.");
         return;
     }
 
     auto* partition = GetPartition(partitionId);
     if (!partition) {
-        PQ_LOG_D("Reading of the partition " << partitionId << " was started by " << ConsumerName << ".");
+        PQ_LOG_NOTICE("Reading of the partition " << partitionId << " was started by " << ConsumerName << " but partition does not exist.");
+        return;
     }
 
     auto wasInactive = partition->IsInactive();

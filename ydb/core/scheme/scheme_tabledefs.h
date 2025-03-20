@@ -199,7 +199,7 @@ public:
         , Point(point)
     {
         if (Point) {
-            Y_ENSURE(toValues.empty() || fromValues.size() == toValues.size());
+            Y_ASSERT(toValues.empty() || fromValues.size() == toValues.size());
         }
     }
 

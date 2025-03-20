@@ -1,6 +1,6 @@
 ## Обслуживание кластера
 
-Утилита [ydbops](../../reference/ydbops/index.md) использует CMS для проведения обслуживания кластера без потери доступности. Также CMS можно использовать напрямую через [gRPC API](https://github.com/ydb-platform/ydb/blob/main/ydb/public/api/grpc/draft/ydb_maintenance_v1.proto).
+Утилита [ydbops](../../../reference/ydbops/index.md) использует CMS для проведения обслуживания кластера без потери доступности. Также CMS можно использовать напрямую через [gRPC API](https://github.com/ydb-platform/ydb/blob/main/ydb/public/api/grpc/draft/ydb_maintenance_v1.proto).
 
 ### Rolling restart {#rolling-restart}
 

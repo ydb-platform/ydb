@@ -57,4 +57,3 @@
     ```bash
     ydb -e endpoint admin cluster config replace -f config.yaml
     ```
-

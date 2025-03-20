@@ -13,6 +13,8 @@ items:
   href: logging.md
 - name: Updating YDB
   href: upgrade.md
+- name: Database node authentication and authorization
+  href: node-authorization.md
 - name: Changing an actor system's configuration
   href: ../../maintenance/manual/change_actorsystem_configs.md
 - name: Updating configurations via CMS

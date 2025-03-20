@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  main
+  main:
     name: Regression-run
     uses: ./.github/workflows/run_all_tests.yml
     secrets: inherit

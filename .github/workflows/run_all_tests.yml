@@ -59,6 +59,8 @@ jobs:
   run_all_tests:
     name: Test ${{ github.ref_name }}:${{ inputs.build_preset }}
     timeout-minutes: 600
+    runs-on: [ self-hosted, "${{ inputs.runner_label || 'auto-provisioned' }}", "${{ format('build-preset-{0}', matrix.build_preset || 'relwithdebinfo') }}" ]
+    timeout-minutes: 600
 
     steps:
       - name: Set variables based on build_preset

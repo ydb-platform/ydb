@@ -387,6 +387,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     TCollection& AttachCollection(const TLogoBlobID &pageCollectionId, const NPageCollection::IPageCollection &pageCollection, const TActorId &owner) {
         TCollection &collection = Collections[pageCollectionId];
         if (!collection.Id) {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Added page collection " << pageCollectionId);
             Counters.PageCollections->Inc();
             Y_ABORT_UNLESS(pageCollectionId);
             collection.Id = pageCollectionId;
@@ -399,9 +400,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
 
         if (collection.Owners.insert(owner).second) {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Attached page collection " << pageCollectionId
+                << " owner " << owner);
             Counters.PageCollectionOwners->Inc();
             auto& ownerCollections = Owners[owner];
             if (ownerCollections.empty()) {
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Added owner " << owner);
                 Counters.Owners->Inc();
             }
             bool inserted = ownerCollections.insert(&collection).second;
@@ -433,6 +437,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         Y_ABORT_UNLESS(pageCollectionId);
         Y_ABORT_IF(Collections.contains(pageCollectionId), "Only new collections can save compacted pages");
+        LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Added page collection " << pageCollectionId);
         Counters.PageCollections->Inc();
         TCollection &collection = Collections[pageCollectionId];
         collection.Id = pageCollectionId;
@@ -801,10 +806,13 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         for (auto* collection : ownerIt->second) {
             bool erased = collection->Owners.erase(ev->Sender);
             Y_ABORT_UNLESS(erased);
+            LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Unregistered page collection " << collection->Id
+                << " owner " << ev->Sender);
             Counters.PageCollectionOwners->Dec();
             TryDropExpiredCollection(*collection);
         }
         Owners.erase(ownerIt);
+        LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Removed owner " << ev->Sender);
         Counters.Owners->Dec();
 
         ProcessGCList();
@@ -829,10 +837,13 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         Y_ABORT_IF(ownerIt == Owners.end());
         bool erased = ownerIt->second.erase(collection);
         Y_ABORT_UNLESS(erased);
+        LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Detached page collection " << collection->Id
+            << " owner " << ev->Sender);
         Counters.PageCollectionOwners->Dec();
 
         if (ownerIt->second.empty()) {
             Owners.erase(ownerIt);
+            LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Removed owner " << ev->Sender);
             Counters.Owners->Dec();
         }
 

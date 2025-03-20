@@ -37,7 +37,7 @@ CREATE EXTERNAL TABLE `s3_test_data` (
 - `csv_with_names` - один из [допустимых типов хранения данных](formats.md);
 - `gzip` - один из [допустимых алгоритмов сжатия](formats.md#compression).
 
-Так же при создании внешних таблиц поддерживаются [параметры форматирования](external_data_source.md#format_settings).
+Также при создании внешних таблиц поддерживаются [параметры форматирования](external_data_source.md#format_settings).
 
 ## Модель данных {#data-model}
 

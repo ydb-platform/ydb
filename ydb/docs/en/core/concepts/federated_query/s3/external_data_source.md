@@ -149,6 +149,10 @@ In {{ ydb-full-name }}, the following format settings are supported:
 
 {% include [!](_includes/format_settings.md) %}
 
+Any conversion specifiers supported by `strftime`(C99) function can be used in formatting strings. In {{ ydb-full-name }}, the following `Datetime` and `Timestamp` formats are supported:
+
+{% include [!](_includes/date_formats.md) %}
+
 ## Example {#read_example}
 
 Example query to read data from S3 ({{ objstorage-full-name }}):

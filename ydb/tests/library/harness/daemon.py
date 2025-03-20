@@ -80,8 +80,8 @@ class Daemon(object):
         self.__aux_file = None
 
     def __open_output_files(self):
-        self.__stdout_file = open(self.__stdout_file_name, mode='w+b')
-        self.__stderr_file = open(self.__stderr_file_name, mode='w+b')
+        self.__stdout_file = open(self.__stdout_file_name, mode='ab')
+        self.__stderr_file = open(self.__stderr_file_name, mode='ab')
         if self.__aux_file_name is not None:
             self.__aux_file = open(self.__aux_file_name, mode='w+b')
 

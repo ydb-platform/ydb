@@ -124,11 +124,11 @@ namespace NKikimr {
 
                 if (AddingTasks) {
                     for (; it.Valid(); it.Next()) {
+                        StartKey = it.GetCurKey().LogoBlobID();
+
                         if (checkRestart()) {
                             return;
                         }
-
-                        StartKey = it.GetCurKey().LogoBlobID();
 
                         // we still have some space in recovery machine logic, so we can add new item
                         ProcessItem(it, *barriers, allowKeepFlags);
@@ -147,11 +147,11 @@ namespace NKikimr {
                 }
 
                 for (; it.Valid(); it.Next()) {
+                    StartKey = it.GetCurKey().LogoBlobID();
+
                     if (checkRestart()) {
                         return;
                     }
-
-                    StartKey = it.GetCurKey().LogoBlobID();
 
                     // check the milestone queue, if we have requested blob
                     if (MilestoneQueue.Match(StartKey, &ReplInfo->ItemsTotal, &ReplInfo->WorkUnitsTotal)) {

@@ -10,17 +10,17 @@
 
 * Включены по умолчанию:
 
-  * поддержка [представлений (VIEW)](https://ydb.tech/docs/ru/concepts/datamodel/view),
-  * режим [автопартиционирования](./concepts/topic#autopartitioning) топиков,
-  * [транзакции](./concepts/transactions#topic-table-transactions) с участием топиков и строковых таблиц,
-  * [волатильные распределенные транзакции](./contributor/datashard-distributed-txs#osobennosti-vypolneniya-volatilnyh-tranzakcij),
-  * [автоматический выбор индекса](./dev/secondary-indexes#avtomaticheskoe-ispolzovanie-indeksov-pri-vyborke) при выполнении запроса.
+  * поддержка [представлений (VIEW)](./concepts/datamodel/view.md)
+  * режим [автопартиционирования](./concepts/topic.md#autopartitioning) топиков
+  * [транзакции](./concepts/transactions.md#topic-table-transactions) с участием топиков и строковых таблиц
+  * [волатильные распределенные транзакции](./contributor/datashard-distributed-txs.md#osobennosti-vypolneniya-volatilnyh-tranzakcij)
+  * [автоматический выбор индекса](./dev/secondary-indexes.md#avtomaticheskoe-ispolzovanie-indeksov-pri-vyborke) при выполнении запроса.
 
-* Добавлена возможность [чтения и записи в топик](./reference/kafka-api/examples#primery-raboty-s-kafka-api) с использованием Kafka API без аутентификации.
+* Добавлена возможность [чтения и записи в топик](./reference/kafka-api/examples.md#primery-raboty-s-kafka-api) с использованием Kafka API без аутентификации.
 
 #### Исправления ошибок
 
-* [Исправлена](https://github.com/ydb-platform/ydb/pull/14811) ошибка, которая приводила к существенному снижению скорости чтения с  [подписчиков таблетки](./concepts/glossary#tablet-follower).
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/14811) ошибка, которая приводила к существенному снижению скорости чтения с  [подписчиков таблетки](./concepts/glossary.md#tablet-follower).
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/14516) ошибка, которая приводила к ожиданию подтверждения волатильной распределённой транзакции до следующего рестарта.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/15077) редкая ошибка, которая приводила к сбою при подключении подписчиков таблетки к лидеру с несогласованным состоянием журнала команд.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/15074) редкая ошибка, которая приводила к сбою при перезапуске удалённого datashard с неконсистентными изменениями.

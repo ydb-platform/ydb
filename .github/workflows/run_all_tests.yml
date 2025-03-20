@@ -10,17 +10,17 @@ on:
         default: ydb/
       test_type:
         description: 'Тип тестов'
-        required: true
+        required: false
         type: string
         default: unittest,py3test,py2test,pytest
       test_size:
         description: 'Размер тестов'
-        required: true
-        type: string:
+        required: false
+        type: string
         default: small,medium,large
       additional_ya_make_args:
         description: 'Дополнительные аргументы для ya make'
-        required: true
+        required: false
         type: string
         default: -DDEBUGINFO_LINES_ONLY
 

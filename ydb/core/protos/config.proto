@@ -551,6 +551,7 @@ message TMonitoringConfig {
     optional string MemAllocDumpPathPrefix = 16;
     optional uint32 MaxRequestsPerSecond = 17 [default = 0];
     optional string InactivityTimeout = 18 [default = "2m"];
+    optional bool HideHttpEndpoint = 19 [default = false];
 }
 
 message TRestartsCountConfig {

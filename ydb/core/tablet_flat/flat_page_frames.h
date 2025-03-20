@@ -3,6 +3,7 @@
 #include "flat_row_eggs.h"
 #include "flat_page_label.h"
 #include "util_deref.h"
+#include "util_fmt_abort.h"
 #include <algorithm>
 
 namespace NKikimr {
@@ -39,7 +40,7 @@ namespace NPage {
 
             ui32 AbsRef(const ui32 page) const
             {
-                Y_ABORT_UNLESS(Refer < 0 || page >= ui32(Refer));
+                Y_ENSURE(Refer < 0 || page >= ui32(Refer));
 
                 return page - Refer;
             }
@@ -72,26 +73,28 @@ namespace NPage {
             : Raw(std::move(raw))
             , End({ Max<TRowId>(), Max<ui16>(), 0, 0 })
         {
-            Y_ABORT_UNLESS(uintptr_t(Raw.data()) % alignof(TEntry) == 0);
+            Y_ENSURE(uintptr_t(Raw.data()) % alignof(TEntry) == 0);
 
             auto got = NPage::TLabelWrapper().Read(Raw, EPage::Frames);
 
-            Y_ABORT_UNLESS(got == ECodec::Plain && got.Version == 0);
-            Y_ABORT_UNLESS(got.Page.size() > sizeof(THeader), "Damaged page");
+            Y_ENSURE(got == ECodec::Plain && got.Version == 0);
+            Y_ENSURE(got.Page.size() > sizeof(THeader), "Damaged page");
 
             auto * const ptr = got.Page.data();
             auto hdr = TDeref<THeader>::At(ptr, 0);
 
-            if (hdr->Skip > got.Page.size())
-                Y_ABORT("NPage::TFrame header is out of its blob");
+            if (hdr->Skip > got.Page.size()) {
+                Y_TABLET_ERROR("NPage::TFrame header is out of its blob");
+            }
 
             Stats_.Rows = hdr->Rows;
             Stats_.Size = hdr->Size;
             Stats_.Tags = { TDeref<const ui32>::At(ptr, 24), hdr->Tags  };
             Stats_.Items = (got.Page.size() - hdr->Skip) / sizeof(TEntry);
 
-            if (hdr->Skip < sizeof(THeader) + Stats_.Tags.size() * sizeof(ui32))
-                Y_ABORT("Invalid NPage::TFrame meta info blob header");
+            if (hdr->Skip < sizeof(THeader) + Stats_.Tags.size() * sizeof(ui32)) {
+                Y_TABLET_ERROR("Invalid NPage::TFrame meta info blob header");
+            }
 
             Records = { TDeref<TEntry>::At(ptr, hdr->Skip) , Stats_.Items };
         }

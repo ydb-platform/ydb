@@ -263,12 +263,12 @@ namespace NTable {
         }
 
         ITransactionMap& operator*() const {
-            Y_ABORT_UNLESS(State_);
+            Y_ENSURE(State_);
             return *State_;
         }
 
         ITransactionMap* operator->() const {
-            Y_ABORT_UNLESS(State_);
+            Y_ENSURE(State_);
             return State_.Get();
         }
 

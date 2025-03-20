@@ -20,3 +20,8 @@ items:
   include:
     mode: link
     path: before-v25.1/toc_p.yaml
+- name: Миграции
+  href: migration/index.md
+  include:
+    mode: link
+    path: migration/toc_p.yaml

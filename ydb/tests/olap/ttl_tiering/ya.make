@@ -12,7 +12,7 @@ TEST_SRCS(
     unstable_connection.py
 )
 
-SIZE(MEDIUM)
+SIZE(LARGE)
 
 PEERDIR(
     ydb/tests/library

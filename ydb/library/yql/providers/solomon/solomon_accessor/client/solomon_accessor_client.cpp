@@ -113,9 +113,7 @@ TGetLabelsResponse ProcessGetLabelsResponse(NYql::IHTTPGateway::TResult&& respon
             result.Labels.push_back(name.GetString());
         }
     }
-    for (const auto& name : knownLabelNames) {
-        result.Labels.push_back(name);
-    }
+    result.Labels.insert(result.Labels.end(), knownLabelNames.begin(), knownLabelNames.end());
 
     return TGetLabelsResponse(std::move(result));
 }

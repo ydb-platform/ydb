@@ -404,7 +404,7 @@ private:
 
     void RequestPointsCount() {
         std::vector<NSo::TMetric> requestMetrics;
-        requestMetrics.reserve(std::min(MetricsPerPointsCountQuery, ListedMetrics.size()));
+        requestMetrics.reserve(std::min<ui64>(MetricsPerPointsCountQuery, ListedMetrics.size()));
         while (!ListedMetrics.empty() && requestMetrics.size() < MetricsPerPointsCountQuery) {
             requestMetrics.push_back(ListedMetrics.back());
             ListedMetrics.pop_back();

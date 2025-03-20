@@ -86,7 +86,7 @@ default_tablet_preference:
 || `object_imbalance_to_balance` | ObjectImbalanceToBalance | Вещественное число | Порог метрики [дисбаланса таблеток одного объекта](../../contributor/hive.md#imbalance). | 0.02 ||
 || `less_system_tablets_moves` | LessSystemTabletMoves | true/false | Минимизация перемещения системных таблеток при автобалансировке. | true ||
 || `balancer_ignore_tablet_types` | BalancerIgnoreTabletTypes | Список типов таблеток. При выставлении через Hive UI — разделённый точкой с запятой. | Типы таблеток, на которые не распространяется автобалансировка. | Пустой список ||
-|#
+|# {wide-content}
 
 ### Пример
 
@@ -115,7 +115,7 @@ hive_config:
 || `metrics_window_size` | MetricsWindowSize | Целое число миллисекунд | Размер окна, на котором агрегируются метрики потребления ресурсов таблетками. | 60000 ||
 || `resource_overcommitment` | ResourceOvercommitment | Вещественное число | Коэффициент переподписки на ресурсы узлов. | 3.0 ||
 || `pools_to_monitor_for_usage` | — | Названия пулов через запятую | Пулы актор-системы, потребление в которых учитывается при подсчётё потребления ресурсов узла. | System,User,IC ||
-|#
+|# {wide-content}
 
 ## Опции распределения каналов между группами хранения {#storage}
 
@@ -168,7 +168,7 @@ hive_config:
 || `min_storage_scatter_to_balance` | MinStorageScatterToBalance | Вещественное число | Порог метрики Scatter для групп хранения. | 999 ||
 || `min_group_usage_to_balance` | MinGroupUsageToBalance | Вещественное число | Порог потребления ресурсов группы хранения, ниже которого не запускается балансировка. | 0.1 ||
 || `storage_balancer_inflight` | StorageBalancerInflight | Целое число | Число таблеток, одновременно перезапускающихся во время балансировки каналов. | 1 ||
-|#
+|# {wide-content}
 
 ## Опции отслеживания перезапусков {#restarts}
 
@@ -182,7 +182,7 @@ Hive отслеживает, как часто рестартуют различ
 || `tablet_restarts_max_count` | — | Целое число | Количество рестартов на окне `tablet_restarts_period`, при превышении которого применяется пессимизация. | 2 ||
 || `postopone_start_period` | — | Целое число миллисекунд | Периодичность попыток запуска проблемных таблеток. | 1000 ||
 || `node_restarts_for_penalty` | NodeRestartsForPenalty | Целое число | Количество рестартов на окне `node_restart_watch_period`, после которого узлы получают понижение приоритета. | 3 ||
-|#
+|# {wide-content}
 
 ## Прочее {#misc}
 
@@ -205,4 +205,4 @@ Hive отслеживает, как часто рестартуют различ
 || `scale_in_window_size` | ScaleInWindowSize | Целое число | Количество бакетов, на основе которых принимается решение о рекомендации уменьшить число вычислительных узлов. |5 ||
 || `target_tracking_cpumargin` | TargetTrackingCPUMargin | Вещественное число | Допустимое отклонение от целевого значения утилизации CPU при автоскейлинге. | 0.1 ||
 || `dry_run_target_tracking_cpu` | DryRunTargetTrackingCPU | Вещественное число | Целевое значение утилизации CPU для проверки, как работал бы автоскейлинг. | 0 ||
-|#
+|# {wide-content}

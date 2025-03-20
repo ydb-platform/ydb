@@ -263,18 +263,18 @@ public:
     }
 
     TOwnedCellVec Build() {
-        TVector<TCell> cells;
-        cells.reserve(CellsInfo.size());
         const auto size = DataSize();
-        TVector<char> data(size);
-        char* ptr = data.data();
+        Cells.clear();
+        Cells.reserve(CellsInfo.size());
+        Data.resize(size);
+        char* ptr = Data.data();
 
         for (const auto& cellInfo : CellsInfo) {
-            cells.push_back(BuildCell(cellInfo, ptr));
+            Cells.emplace_back(BuildCell(cellInfo, ptr));
         }
 
-        AFL_ENSURE(ptr == data.data() + size);
-        return TOwnedCellVec(std::move(cells));
+        AFL_ENSURE(ptr == Data.data() + size);
+        return TOwnedCellVec(Cells);
     }
 
 private:
@@ -339,6 +339,8 @@ private:
     }
 
     TVector<TCellInfo> CellsInfo;
+    TVector<TCell> Cells;
+    TVector<char> Data;
 };
 
 class TColumnDataBatcher : public IDataBatcher {
@@ -350,7 +352,9 @@ public:
         std::vector<ui32> writeIndex)
             : Columns(BuildColumns(inputColumns))
             , WriteIndex(std::move(writeIndex))
-            , BatchBuilder(arrow::Compression::UNCOMPRESSED, BuildNotNullColumns(inputColumns)) {
+            , BatchBuilder(
+                arrow::Compression::UNCOMPRESSED,
+                BuildNotNullColumns(inputColumns)) {
         TString err;
         if (!BatchBuilder.Start(BuildBatchBuilderColumns(WriteIndex, inputColumns), 0, 0, err)) {
             yexception() << "Failed to start batch builder: " + err;
@@ -442,8 +446,8 @@ public:
             ShardIds.insert(shardId);
             auto& unpreparedBatch = UnpreparedBatches[shardId];
             unpreparedBatch.TotalDataSize += shardBatchMemory;
-            unpreparedBatch.Batches.emplace_back(shardBatch);
             Memory += shardBatchMemory;
+            unpreparedBatch.Batches.emplace_back(shardBatch);
 
             FlushUnpreparedBatch(shardId, unpreparedBatch, force);
         }
@@ -478,7 +482,7 @@ public:
 
                         const auto newBatchDataSize = NArrow::GetBatchDataSize(unpreparedBatch.Batches.front());
 
-                        unpreparedBatch.TotalDataSize += batchDataSize;
+                        unpreparedBatch.TotalDataSize += newBatchDataSize;
                         Memory += newBatchDataSize;
 
                         splitted = true;
@@ -941,7 +945,9 @@ public:
             if (BatchesInFlight != 0 && Cookie == cookie) {
                 TBatchInfo result;
                 for (size_t index = 0; index < BatchesInFlight; ++index) {
-                    result.DataSize += Batches.front().GetMemory();
+                    const i64 batchMemory = Batches.front().GetMemory();
+                    result.DataSize += batchMemory;
+                    Memory -= batchMemory;
                     Batches.pop_front();
                 }
 
@@ -949,7 +955,6 @@ public:
                 SendAttempts = 0;
                 BatchesInFlight = 0;
 
-                Memory -= result.DataSize;
                 return result;
             }
             return std::nullopt;

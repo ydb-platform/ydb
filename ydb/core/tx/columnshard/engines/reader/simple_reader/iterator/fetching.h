@@ -221,6 +221,7 @@ private:
     private:
         std::shared_ptr<IDataSource> Source;
         TFetchingScriptCursor Step;
+        NColumnShard::TCounterGuard TaskGuard;
 
         virtual void OnFilterReady(const NArrow::TColumnFilter& filter) override;
         virtual void OnFailure(const TString& reason) override;
@@ -228,7 +229,8 @@ private:
     public:
         TFilterSubscriber(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step)
             : Source(source)
-            , Step(step) {
+            , Step(step)
+            , TaskGuard(source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard()) {
         }
     };
 

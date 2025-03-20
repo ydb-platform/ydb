@@ -51,9 +51,17 @@ public:
 
         target->SetStreamName(CreateGuidAsString());
 
-        TString consumerName = Replication->GetConfig().HasTransferSpecific()
-            ? CreateGuidAsString()
-            : ReplicationConsumerName;
+        TString consumerName;
+        if (Replication->GetConfig().HasTransferSpecific()) {
+            auto& target = Replication->GetConfig().GetTransferSpecific().GetTarget();
+            if (target.HasConsumerName()) {
+                consumerName = target.GetConsumerName();
+            } else {
+                consumerName = CreateGuidAsString();
+            }
+        } else {
+            consumerName = ReplicationConsumerName;
+        }
         target->SetStreamConsumerName(consumerName);
 
         NIceDb::TNiceDb db(txc.DB);

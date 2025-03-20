@@ -8,9 +8,13 @@ namespace NKikimr {
     struct TPathId;
 }
 
+namespace NKikimrReplication {
+    class TBatchingSettings;
+}
+
 namespace NKikimr::NReplication::NService {
 
 IActor* CreateTransferWriter(const TString& transformLambda, const TPathId& tablePathId,
-    const TActorId& compileServiceId);
+    const TActorId& compileServiceId, const NKikimrReplication::TBatchingSettings& batchingSettings);
 
 }

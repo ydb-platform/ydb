@@ -180,8 +180,7 @@ class TTargetDiscoverer: public TActorBootstrapped<TTargetDiscoverer> {
             LOG_D("Describe topic succeeded"
                 << ": path# " << path.first);
 
-            Y_ABORT_UNLESS((int)*it < Config.GetTransferSpecific().GetTargets().size());
-            const auto& targetConf = Config.GetTransferSpecific().GetTargets().at(*it);
+            const auto& targetConf = Config.GetTransferSpecific().GetTarget();
 
             const auto& target = ToAdd.emplace_back(TReplication::ETargetKind::Transfer,
                 std::make_shared<TTargetTransfer::TTransferConfig>(path.first, path.second, targetConf.GetTransformLambda()));
@@ -351,9 +350,8 @@ public:
                 Paths.emplace_back(target.GetSrcPath(), target.GetDstPath());
             }
         } else if (Config.HasTransferSpecific()) {
-            for (const auto& target : Config.GetTransferSpecific().GetTargets()) {
-                Paths.emplace_back(target.GetSrcPath(), target.GetDstPath());
-            }
+            const auto& target = Config.GetTransferSpecific().GetTarget();
+            Paths.emplace_back(target.GetSrcPath(), target.GetDstPath());
         } else {
             Y_ABORT("Unsupported");
         }

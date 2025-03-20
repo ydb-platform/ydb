@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/runtime/kqp_write_table.h>
 #include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
 #include <ydb/core/persqueue/purecalc/purecalc.h> // should be after topic_message
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
 #include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -408,8 +409,6 @@ class TTransferWriter
     : public TActorBootstrapped<TTransferWriter>
     , private NSchemeCache::TSchemeCacheHelpers
 {
-    static constexpr i64 ExpectedBatchSize = 8_MB;
-    static constexpr TDuration FlushInterval = TDuration::Seconds(5);
     static constexpr TDuration MinRetryDelay = TDuration::Seconds(1);
     static constexpr TDuration MaxRetryDelay = TDuration::Minutes(10);
 
@@ -656,7 +655,7 @@ private:
             }
         }
 
-        if (TableState->BatchSize() >= ExpectedBatchSize || *LastWriteTime < TInstant::Now() - FlushInterval) {
+        if (TableState->BatchSize() >= BatchSizeBytes || *LastWriteTime < TInstant::Now() - FlushInterval) {
             if (TableState->Flush()) {
                 LastWriteTime.reset();
                 return Become(&TThis::StateWrite);
@@ -790,16 +789,21 @@ public:
     explicit TTransferWriter(
             const TString& transformLambda,
             const TPathId& tablePathId,
-            const TActorId& compileServiceId)
+            const TActorId& compileServiceId,
+            const NKikimrReplication::TBatchingSettings& batchingSettings)
         : TransformLambda(transformLambda)
         , TablePathId(tablePathId)
         , CompileServiceId(compileServiceId)
+        , FlushInterval(TDuration::MilliSeconds(std::max<ui64>(batchingSettings.GetFlushIntervalMilliSeconds(), 1000)))
+        , BatchSizeBytes(std::min<ui64>(batchingSettings.GetBatchSizeBytes(), 1_GB))
     {}
 
 private:
     const TString TransformLambda;
     const TPathId TablePathId;
     const TActorId CompileServiceId;
+    const TDuration FlushInterval;
+    const i64 BatchSizeBytes;
     TActorId Worker;
 
     ITableKindState::TPtr TableState;
@@ -825,9 +829,9 @@ private:
 }; // TTransferWriter
 
 IActor* CreateTransferWriter(const TString& transformLambda, const TPathId& tablePathId,
-        const TActorId& compileServiceId)
+        const TActorId& compileServiceId, const NKikimrReplication::TBatchingSettings& batchingSettings)
 {
-    return new TTransferWriter(transformLambda, tablePathId, compileServiceId);
+    return new TTransferWriter(transformLambda, tablePathId, compileServiceId, batchingSettings);
 }
 
 }

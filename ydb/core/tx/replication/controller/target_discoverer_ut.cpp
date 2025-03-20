@@ -25,16 +25,15 @@ NKikimrReplication::TReplicationConfig CreateConfig(const TVector<std::pair<TStr
     return config;
 }
 
-NKikimrReplication::TReplicationConfig CreateTransferConfig(const TVector<std::tuple<TString, TString, TString>>& paths) {
+NKikimrReplication::TReplicationConfig CreateTransferConfig(const std::tuple<TString, TString, TString>& path) {
     NKikimrReplication::TReplicationConfig config;
 
+    const auto& [src, dst, lambda] = path;
     auto& specific = *config.MutableTransferSpecific();
-    for (const auto& [src, dst, lambda] : paths) {
-        auto& t = *specific.AddTargets();
-        t.SetSrcPath(src);
-        t.SetDstPath(dst);
-        t.SetTransformLambda(lambda);
-    }
+    auto& t = *specific.MutableTarget();
+    t.SetSrcPath(src);
+    t.SetDstPath(dst);
+    t.SetTransformLambda(lambda);
 
     return config;
 }
@@ -112,8 +111,8 @@ Y_UNIT_TEST_SUITE(TargetDiscoverer) {
         env.CreateTopic("/Root", *MakeTopicDescription(DummyTopic()));
 
         env.GetRuntime().Register(CreateTargetDiscoverer(env.GetSender(), 1, env.GetYdbProxy(),
-            CreateTransferConfig(TVector<std::tuple<TString, TString, TString>>{
-                {"/Root/Topic", "/Root/Replicated/Table", "lambda body"},
+            CreateTransferConfig(std::tuple<TString, TString, TString>{
+                "/Root/Topic", "/Root/Replicated/Table", "lambda body"
             })
         ));
 

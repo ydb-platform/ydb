@@ -79,30 +79,40 @@ struct TEvPrivate {
             , Issues(std::move(issues))
         {}
 
-        static TEvUploadError* InternalError(const TString& message, const TString& requestId, IHTTPGateway::TResult&& result) {
-            TIssues issues;
-            issues.AddIssues(NS3Util::AddParentIssue("Http geteway issues", std::move(result.Issues)));
-            issues.AddIssue(TStringBuilder() << "CURL response code: " << curl_easy_strerror(result.CurlResponseCode));
+        TEvUploadError(const TString& message, const TString& requestId, const TString& responseBody, const IHTTPGateway::TResult& result)
+            : Status(NDqProto::StatusIds::INTERNAL_ERROR)
+        {
+            BuildIssues(message, requestId, responseBody, result);
+        }
 
-            TS3Result s3Result(std::move(result.Content.Extract()));
+        TEvUploadError(const TString& message, const TString& requestId, const TString& responseBody, const IHTTPGateway::TResult& result, const TS3Result& s3Result) {
             if (s3Result.IsError) {
-                TIssues issuesS3;
                 if (s3Result.Parsed) {
-                    issuesS3.AddIssue(TStringBuilder() << "Error code: " << s3Result.S3ErrorCode);
-                    issuesS3.AddIssue(TStringBuilder() << "Error message: " << s3Result.ErrorMessage);
+                    Status = StatusFromS3ErrorCode(s3Result.S3ErrorCode);
+                    Issues.AddIssue(TStringBuilder() << "Error code: " << s3Result.S3ErrorCode);
+                    Issues.AddIssue(TStringBuilder() << "Error message: " << s3Result.ErrorMessage);
                 } else {
-                    issuesS3.AddIssue(TStringBuilder() << "Failed to parse s3 response: " << s3Result.ErrorMessage);
+                    Status = NDqProto::StatusIds::INTERNAL_ERROR;
+                    Issues.AddIssue(TStringBuilder() << "Failed to parse s3 response: " << s3Result.ErrorMessage);
                 }
-                issues.AddIssues(NS3Util::AddParentIssue("S3 issues", std::move(issuesS3)));
+                Issues = NS3Util::AddParentIssue("S3 issues", TIssues(Issues));
             }
+            BuildIssues(message, requestId, responseBody, result);
+        }
 
-            issues.AddIssue(NS3Util::AddParentIssue("Http request info", {
-                TIssue(TStringBuilder() << "Response code: " << result.Content.HttpResponseCode),
-                TIssue(TStringBuilder() << "Headers: " << result.Content.Headers),
-                TIssue(TStringBuilder() << "Body: \"" << TStringBuf(s3Result.Body).Trunc(BODY_MAX_SIZE) << (s3Result.Body.size() > BODY_MAX_SIZE ? "\"..." : "\""))
-            }));
-
-            return new TEvUploadError(NDqProto::StatusIds::INTERNAL_ERROR, NS3Util::AddParentIssue(TStringBuilder() << message << ", s3 request id: [" << requestId << "]", std::move(issues)));
+        void BuildIssues(const TString& message, const TString& requestId, const TString& responseBody, const IHTTPGateway::TResult& result) {
+            Issues.AddIssues(NS3Util::AddParentIssue("Http geteway issues", TIssues(result.Issues)));
+            if (result.CurlResponseCode != CURLE_OK) {
+                Issues.AddIssue(TStringBuilder() << "CURL response code: " << curl_easy_strerror(result.CurlResponseCode));
+            }
+            if (Status == NDqProto::StatusIds::INTERNAL_ERROR) {
+                Issues.AddIssues(NS3Util::AddParentIssue("Http request info", {
+                    TIssue(TStringBuilder() << "Response code: " << result.Content.HttpResponseCode),
+                    TIssue(TStringBuilder() << "Headers: " << result.Content.Headers),
+                    TIssue(TStringBuilder() << "Body: \"" << TStringBuf(responseBody).Trunc(BODY_MAX_SIZE) << (responseBody.size() > BODY_MAX_SIZE ? "\"..." : "\""))
+                }));
+            }
+            Issues = NS3Util::AddParentIssue(TStringBuilder() << message << ", s3 request id: [" << requestId << "]", TIssues(Issues));
         }
 
         NDqProto::StatusIds::StatusCode Status = NDqProto::StatusIds::UNSPECIFIED;
@@ -265,30 +275,32 @@ private:
     )
 
     static void OnUploadsCreated(TActorSystem* actorSystem, TActorId selfId, TActorId parentId, const TString& requestId, IHTTPGateway::TResult&& result) {
-        if (result.Issues) {
-            actorSystem->Send(new IEventHandle(parentId, selfId, TEvPrivate::TEvUploadError::InternalError("OnUploadsCreated error, response issues is not empty", requestId, std::move(result))));
+        const TString body = result.Content.Extract();
+        if (result.Issues || result.CurlResponseCode != CURLE_OK) {
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError("Create upload response issues is not empty", requestId, body, result)));
             return;
         }
 
         try {
-            TS3Result s3Result(std::move(result.Content.Extract()));
+            const TS3Result s3Result(body);
             const auto& root = s3Result.GetRootNode();
             if (s3Result.IsError) {
-                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(s3Result.S3ErrorCode, TStringBuilder{} << s3Result.ErrorMessage << ", request id: [" << requestId << "]")));
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError("Create upload operation failed", requestId, body, result, s3Result)));
             } else if (root.Name() != "InitiateMultipartUploadResult") {
-                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(NDqProto::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Unexpected response on create upload: " << root.Name() << ", request id: [" << requestId << "]")));
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(TStringBuilder() << "Unexpected response on create upload: " << root.Name(), requestId, body, result, s3Result)));
             } else {
                 const NXml::TNamespacesForXPath nss(1U, {"s3", "http://s3.amazonaws.com/doc/2006-03-01/"});
                 actorSystem->Send(new IEventHandle(selfId, selfId, new TEvPrivate::TEvUploadStarted(root.Node("s3:UploadId", false, nss).Value<TString>())));
             }
         } catch (const std::exception& ex) {
-            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(NDqProto::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Error on parse create upload response: " << ex.what()  << ", request id: [" << requestId << "]")));
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(TStringBuilder() << "Failed to parse create upload response: " << ex.what(), requestId, body, result)));
         }
     }
 
     static void OnPartUploadFinish(TActorSystem* actorSystem, TActorId selfId, TActorId parentId, size_t size, size_t index, const TString& requestId, IHTTPGateway::TResult&& response) {
+        const TString body = response.Content.Extract();
         if (response.Issues) {
-            actorSystem->Send(new IEventHandle(parentId, selfId, TEvPrivate::TEvUploadError::InternalError("OnPartUploadFinish error, response issues is not empty", requestId, std::move(response))));
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError("Part upload finish response issues is not empty", requestId, body, response)));
             return;
         }
 
@@ -297,38 +309,29 @@ private:
         if (const NHttp::THeaders headers(headerStr); headers.Has("Etag")) {
             actorSystem->Send(new IEventHandle(selfId, selfId, new TEvPrivate::TEvUploadPartFinished(size, index, TString(headers.Get("Etag")))));
         } else {
-            TS3Result s3Result(std::move(response.Content.Extract()));
-            if (s3Result.IsError && s3Result.Parsed) {
-                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(s3Result.S3ErrorCode, TStringBuilder{} << "Upload failed: " << s3Result.ErrorMessage << ", request id: [" << requestId << "]")));
-            } else {
-                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(NDqProto::StatusIds::INTERNAL_ERROR,
-                    TStringBuilder() << "Unexpected response"
-                        << ". Headers: " << headerStr
-                        << ". Body: \"" << TStringBuf(s3Result.Body).Trunc(BODY_MAX_SIZE)
-                        << (s3Result.Body.size() > BODY_MAX_SIZE ? "\"..." : "\"")
-                        << ". Request id: [" << requestId << "]")));
-            }
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError("Part upload failed", requestId, body, response, TS3Result(body))));
         }
     }
 
     static void OnMultipartUploadFinish(TActorSystem* actorSystem, TActorId selfId, TActorId parentId, const TString& key, const TString& url, const TString& requestId, ui64 sentSize, IHTTPGateway::TResult&& result) {
+        const TString body = result.Content.Extract();
         if (result.Issues) {
-            actorSystem->Send(new IEventHandle(parentId, selfId, TEvPrivate::TEvUploadError::InternalError("OnMultipartUploadFinish error, response issues is not empty", requestId, std::move(result))));
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError("Multipart upload finish response issues is not empty", requestId, body, result)));
             return;
         }
 
         try {
-            TS3Result s3Result(std::move(result.Content.Extract()));
+            const TS3Result s3Result(body);
             const auto& root = s3Result.GetRootNode();
             if (s3Result.IsError) {
-                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(s3Result.S3ErrorCode, TStringBuilder{} << s3Result.ErrorMessage << ", request id: [" << requestId << "]")));
-            } else if (root.Name() != "CompleteMultipartUploadResult")
-                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(NDqProto::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Unexpected response on finish upload: " << root.Name() << ", request id: [" << requestId << "]")));
-            else {
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError("Multipart upload operation failed", requestId, body, result, s3Result)));
+            } else if (root.Name() != "CompleteMultipartUploadResult") {
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(TStringBuilder() << "Unexpected response on finish multipart upload: " << root.Name(), requestId, body, result, s3Result)));
+            } else {
                 actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadFinished(key, url, sentSize)));
             }
         } catch (const std::exception& ex) {
-            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(NDqProto::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Error on parse finish upload response: " << ex.what() << ", request id: [" << requestId << "]")));
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(TStringBuilder() << "Error on parse finish multipart upload response: " << ex.what(), requestId, body, result)));
         }
     }
 
@@ -341,23 +344,22 @@ private:
     }
 
     static void OnUploadFinish(TActorSystem* actorSystem, TActorId selfId, TActorId parentId, const TString& key, const TString& url, const TString& requestId, ui64 sentSize, IHTTPGateway::TResult&& result) {
+        const TString body = result.Content.Extract();
         if (result.Issues) {
-            actorSystem->Send(new IEventHandle(parentId, selfId, TEvPrivate::TEvUploadError::InternalError("OnUploadFinish error, response issues is not empty", requestId, std::move(result))));
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError("Upload finish response issues is not empty", requestId, body, result)));
             return;
         }
 
-        if (result.Content.HttpResponseCode >= 300) {
-            TString errorText = result.Content.Extract();
-            TString errorCode;
-            TString message;
-            if (ParseS3ErrorResponse(errorText, errorCode, message)) {
-                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(result.Content.HttpResponseCode, errorCode, TStringBuilder{} << message << ", request id: [" << requestId << "]")));
+        try {
+            const TS3Result s3Result(body);
+            if (s3Result.IsError) {
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError("Upload operation failed", requestId, body, result, s3Result)));
             } else {
-                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(result.Content.HttpResponseCode, TStringBuilder{} << errorText << ", request id: [" << requestId << "]")));
+                actorSystem->Send(new IEventHandle(selfId, selfId, new TEvPrivate::TEvUploadFinished(key, url, sentSize)));
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadFinished(key, url, sentSize)));
             }
-        } else {
-            actorSystem->Send(new IEventHandle(selfId, selfId, new TEvPrivate::TEvUploadFinished(key, url, sentSize)));
-            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadFinished(key, url, sentSize)));
+        } catch (const std::exception& ex) {
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(TStringBuilder() << "Error on parse finish upload response: " << ex.what(), requestId, body, result)));
         }
     }
 

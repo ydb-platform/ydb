@@ -30,6 +30,12 @@ private:
     std::shared_ptr<TFetchingScript> AskAccumulatorsScript;
 
     virtual std::shared_ptr<TFetchingScript> DoGetColumnsFetchingPlan(const std::shared_ptr<NCommon::IDataSource>& source) override;
+    virtual void DoAbort() override {
+        if (DuplicatesManager) {
+            NActors::TActivationContext::AsActorContext().Send(DuplicatesManager, new NActors::TEvents::TEvPoison());
+            DuplicatesManager = TActorId();
+        }
+    }
 
 public:
     virtual TString ProfileDebugString() const override;
@@ -37,7 +43,9 @@ public:
     TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext);
 
     ~TSpecialReadContext() {
-        NActors::TActivationContext::AsActorContext().Send(DuplicatesManager, new NActors::TEvents::TEvPoison());
+        if (DuplicatesManager) {
+            NActors::TActivationContext::AsActorContext().Send(DuplicatesManager, new NActors::TEvents::TEvPoison());
+        }
     }
 
     void RegisterDuplicatesManager(const std::deque<std::shared_ptr<IDataSource>>& sources);

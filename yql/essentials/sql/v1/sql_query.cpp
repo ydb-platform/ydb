@@ -191,7 +191,7 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
         ctx.Context().Error() << key.Name << " is not supported in ALTER";
         return false;
     }
-
+    
     if (!out.emplace(keyName, value).second) {
         ctx.Context().Error() << "Duplicate transfer setting: " << key.Name;
     }

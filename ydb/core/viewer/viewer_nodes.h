@@ -1,10 +1,7 @@
 #pragma once
-#include "json_handlers.h"
 #include "json_pipe_req.h"
-#include "log.h"
 #include "viewer.h"
 #include "viewer_helper.h"
-#include "viewer_tabletinfo.h"
 #include "wb_group.h"
 
 namespace NKikimr::NViewer {
@@ -51,7 +48,7 @@ constexpr ui8 operator +(ENodeFields e) {
     return static_cast<ui8>(e);
 }
 
-bool operator ==(const NActorsInterconnect::TScopeId& x, const NActorsInterconnect::TScopeId& y) {
+inline bool operator ==(const NActorsInterconnect::TScopeId& x, const NActorsInterconnect::TScopeId& y) {
     return x.GetX1() == y.GetX1() && x.GetX2() == y.GetX2();
 }
 
@@ -1105,16 +1102,16 @@ public:
             PathNavigateResponse = MakeRequestSchemeCacheNavigate(FilterPath, ENavigateRequestPath);
         }
         if (!FilterStoragePools.empty()) {
-            StoragePoolsResponse = RequestBSControllerPools();
-            GroupsResponse = RequestBSControllerGroups();
-            VSlotsResponse = RequestBSControllerVSlots();
+            StoragePoolsResponse = MakeCachedRequestBSControllerPools();
+            GroupsResponse = MakeCachedRequestBSControllerGroups();
+            VSlotsResponse = MakeCachedRequestBSControllerVSlots();
             FilterStorageStage = EFilterStorageStage::Pools;
         } else if (!FilterGroupIds.empty()) {
-            VSlotsResponse = RequestBSControllerVSlots();
+            VSlotsResponse = MakeCachedRequestBSControllerVSlots();
             FilterStorageStage = EFilterStorageStage::VSlots;
         }
         if (With != EWith::Everything) {
-            PDisksResponse = RequestBSControllerPDisks();
+            PDisksResponse = MakeCachedRequestBSControllerPDisks();
         }
         TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
         auto* domain = domains->GetDomain();
@@ -1124,17 +1121,17 @@ public:
             TTabletId rootHiveId = domains->GetHive();
             HivesToAsk.push_back(rootHiveId);
             if (!PDisksResponse) {
-                PDisksResponse = RequestBSControllerPDisks();
+                PDisksResponse = MakeCachedRequestBSControllerPDisks();
             }
         }
         if (FieldsRequired.test(+ENodeFields::PDisks)) {
             if (!PDisksResponse) {
-                PDisksResponse = RequestBSControllerPDisks();
+                PDisksResponse = MakeCachedRequestBSControllerPDisks();
             }
         }
         if (FieldsRequired.test(+ENodeFields::VDisks)) {
             if (!VSlotsResponse) {
-                VSlotsResponse = RequestBSControllerVSlots();
+                VSlotsResponse = MakeCachedRequestBSControllerVSlots();
             }
         }
         if (FieldsNeeded(FieldsHiveNodeStat) && !FilterDatabase && !FilterPath) {
@@ -1734,13 +1731,13 @@ public:
                 }
                 if (!FilterStoragePools.empty()) {
                     if (!StoragePoolsResponse) {
-                        StoragePoolsResponse = RequestBSControllerPools();
+                        StoragePoolsResponse = MakeCachedRequestBSControllerPools();
                     }
                     if (!GroupsResponse) {
-                        GroupsResponse = RequestBSControllerGroups();
+                        GroupsResponse = MakeCachedRequestBSControllerGroups();
                     }
                     if (!VSlotsResponse) {
-                        VSlotsResponse = RequestBSControllerVSlots();
+                        VSlotsResponse = MakeCachedRequestBSControllerVSlots();
                     }
                 }
             }
@@ -3151,6 +3148,9 @@ public:
         }
         for (auto problem : Problems) {
             json.AddProblems(problem);
+        }
+        if (CachedDataMaxAge) {
+            json.SetCachedDataMaxAge(CachedDataMaxAge.MilliSeconds());
         }
         if (NodeGroups.empty()) {
             for (TNode* node : NodeView) {

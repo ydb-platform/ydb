@@ -23,43 +23,58 @@ on:
         required: false
         type: string
         default: -DDEBUGINFO_LINES_ONLY
+      build_preset:
+        description: 'Build preset type'
+        required: true
+        type: string
 
 jobs:
   run_all_tests:
-    name: Test ${{ github.ref_name }}:${{ matrix.build_preset }}
-    runs-on: [ self-hosted, "${{ inputs.runner_label || 'auto-provisioned' }}", "${{ format('build-preset-{0}', matrix.build_preset || 'relwithdebinfo') }}"]
+    name: Test ${{ github.ref_name }}:${{ inputs.build_preset }}
     timeout-minutes: 600
 
-    strategy:
-      fail-fast: false
-      matrix:
-        build_preset: [relwithdebinfo, release-asan, release-msan, release-tsan]
-        include:
-          - build_preset: relwithdebinfo
-            threads_count: 52
-            timeout: 300
-          - build_preset: release-asan
-            threads_count: 20
-            timeout: 480
-          - build_preset: release-msan
-            threads_count: 20
-            timeout: 480
-          - build_preset: release-tsan
-            threads_count: 10
-            timeout: 600
-
     steps:
+      - name: Set variables based on build_preset
+        id: set-vars
+        run: |
+          if [[ "${{ inputs.build_preset }}" == "relwithdebinfo" ]]; then
+            echo "threads_count=52" >> $GITHUB_ENV
+            echo "timeout=300" >> $GITHUB_ENV
+          elif [[ "${{ inputs.build_preset }}" == "release-asan" ]]; then
+            echo "threads_count=20" >> $GITHUB_ENV
+            echo "timeout=480" >> $GITHUB_ENV
+          elif [[ "${{ inputs.build_preset }}" == "release-msan" ]]; then
+            echo "threads_count=20" >> $GITHUB_ENV
+            echo "timeout=480" >> $GITHUB_ENV
+          elif [[ "${{ inputs.build_preset }}" == "release-tsan" ]]; then
+            echo "threads_count=10" >> $GITHUB_ENV
+            echo "timeout=600" >> $GITHUB_ENV
+          else
+            echo "Unknown build_preset value."
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: ${{ github.ref_name }}
+      
+      - name: Setup ssh key for slice 
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SLICE_QA_SSH_PRIVATE_KEY }}
+
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
 
       - name: Run YDB Tests ${{ github.ref_name }}
-        timeout-minutes: ${{ matrix.timeout }}
+        timeout-minutes: ${{ env.timeout }}
         uses: ./.github/workflows/build_and_test_ya_provisioned.yml
         with:
           commit_sha: ${{ github.ref_name }}
-          build_preset: ${{ matrix.build_preset }}
+          build_preset: ${{ inputs.build_preset }}
           increment: false
           build_target: ${{ inputs.test_targets }}
           run_build: true
@@ -67,7 +82,7 @@ jobs:
           test_retry_count: 3
           test_size: ${{ inputs.test_size }}
           test_type: ${{ inputs.test_type }}
-          test_threads: ${{ matrix.threads_count }}
+          test_threads: ${{ env.threads_count }}
           put_build_results_to_cache: true
           additional_ya_make_args: ${{ inputs.additional_ya_make_args }}
           secs: ${{ format('{{"TESTMO_TOKEN2":"{0}","AWS_KEY_ID":"{1}","AWS_KEY_VALUE":"{2}","REMOTE_CACHE_USERNAME":"{3}","REMOTE_CACHE_PASSWORD":"{4}"}}',

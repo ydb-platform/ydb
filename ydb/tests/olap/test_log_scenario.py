@@ -44,9 +44,9 @@ class YdbWorkloadLog:
             "--threads",
             str(threads),
             "--rows",
-            str(rows)
-            # "--timestamp_deviation",
-            # "180"
+            str(rows), 
+            "--timestamp_deviation",
+            "180"
         ]
         self._call(command=command, wait=wait)
 
@@ -109,11 +109,11 @@ class TestLogScenario(object):
         while datetime.datetime.now() < deadline:
             hours: int = random.randint(1, 10)
             self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` ")
-            self.ydb_client.query(f"SELECT * FROM `{self.table_name}` WHERE ts < CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours})")
-            self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` WHERE ts < CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours})")
-            self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` WHERE "
-                                  f"(ts >= CurrentUtcTimestamp() - DataTime::IntervalFromHours({hours}) - 1) AND "
-                                  f"(ts <= CurrentUtcTimestamp() - DataTime::IntervalFromHours({hours}))")
+            self.ydb_client.query(f"SELECT * FROM `{self.table_name}` WHERE timestamp < CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours})")
+            self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` WHERE timestamp < CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours})")
+            self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` WHERE " + 
+                                  f"(timestamp >= CurrentUtcTimestamp() - DataTime::IntervalFromHours({hours}) - 1) AND " + 
+                                  f"(timestamp <= CurrentUtcTimestamp() - DataTime::IntervalFromHours({hours}))")
 
     def check_insert(self, duration: int):
         prev_count: int = self.get_row_count()

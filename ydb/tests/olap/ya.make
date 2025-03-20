@@ -8,6 +8,8 @@ PY3TEST()
         test_log_scenario.py
     )
 
+    REQUIREMENTS(ram:20)
+
     IF (SANITIZER_TYPE OR WITH_VALGRIND)
         SIZE(LARGE)
         TAG(ya:fat)

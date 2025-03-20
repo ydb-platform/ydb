@@ -120,9 +120,7 @@ struct TShardedWriteControllerSettings {
 };
 
 IShardedWriteControllerPtr CreateShardedWriteController(
-    const TShardedWriteControllerSettings& settings,
-    const NMiniKQL::TTypeEnvironment& typeEnv,
-    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
+    const TShardedWriteControllerSettings& settings);
 
 }
 }

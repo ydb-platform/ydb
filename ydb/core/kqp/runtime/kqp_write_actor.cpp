@@ -214,7 +214,6 @@ public:
         const bool inconsistentTx,
         const bool isOlap,
         TVector<NScheme::TTypeInfo> keyColumnTypes,
-        const NMiniKQL::TTypeEnvironment& typeEnv,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         const std::optional<NKikimrDataEvents::TMvccSnapshot>& mvccSnapshot,
         const NKikimrDataEvents::ELockMode lockMode,
@@ -223,7 +222,6 @@ public:
         TIntrusivePtr<TKqpCounters> counters,
         NWilson::TTraceId traceId)
         : MessageSettings(GetWriteActorSettings())
-        , TypeEnv(typeEnv)
         , Alloc(alloc)
         , MvccSnapshot(mvccSnapshot)
         , LockMode(lockMode)
@@ -245,9 +243,7 @@ public:
             TShardedWriteControllerSettings {
                 .MemoryLimitTotal = MessageSettings.InFlightMemoryLimitPerActorBytes,
                 .MemoryLimitPerMessage = MessageSettings.MemoryLimitPerMessageBytes,
-            },
-            TypeEnv,
-            Alloc);
+            });
 
         Counters->WriteActorsCount->Inc();
     }
@@ -389,6 +385,12 @@ public:
             default:
                 AFL_ENSURE(false)("unknown message", ev->GetTypeRewrite());
             }
+        } catch (const TMemoryLimitExceededException&) {
+            RuntimeError(
+                NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
+                NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+                TStringBuilder() << "Memory limit exception at Processing"
+                    << ", current limit is " << Alloc->GetLimit() << " bytes.");
         } catch (...) {
             RuntimeError(
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR,
@@ -1169,7 +1171,12 @@ public:
         Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
     }
 
-    void PassAway() override {;
+    void PassAway() override {
+        {
+            Y_ABORT_UNLESS(Alloc);
+            TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
+            ShardedWriteController.Reset();
+        }
         Counters->WriteActorsCount->Dec();
         Send(PipeCacheId, new TEvPipeCache::TEvUnlink(0));
         TActorBootstrapped<TKqpTableWriteActor>::PassAway();
@@ -1237,7 +1244,6 @@ public:
 
     TString LogPrefix;
     TWriteActorSettings MessageSettings;
-    const NMiniKQL::TTypeEnvironment& TypeEnv;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
     const std::optional<NKikimrDataEvents::TMvccSnapshot> MvccSnapshot;
@@ -1288,7 +1294,6 @@ public:
         , OutputIndex(args.OutputIndex)
         , Callbacks(args.Callback)
         , Counters(counters)
-        , TypeEnv(args.TypeEnv)
         , Alloc(args.Alloc)
         , TxId(std::get<ui64>(args.TxId))
         , TableId(
@@ -1334,7 +1339,6 @@ public:
                 Settings.GetInconsistentTx(),
                 Settings.GetIsOlap(),
                 std::move(keyColumnTypes),
-                TypeEnv,
                 Alloc,
                 Settings.GetMvccSnapshot(),
                 Settings.GetLockMode(),
@@ -1535,7 +1539,6 @@ private:
     NYql::NDq::TDqAsyncStats EgressStats;
     NYql::NDq::IDqComputeActorAsyncOutput::ICallbacks * Callbacks = nullptr;
     TIntrusivePtr<TKqpCounters> Counters;
-    const NMiniKQL::TTypeEnvironment& TypeEnv;
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
     IDataBatcherPtr Batcher;
 
@@ -1630,13 +1633,7 @@ public:
         : SessionActorId(settings.SessionActorId)
         , MessageSettings(GetWriteActorSettings())
         , TxManager(settings.TxManager)
-        , Alloc(std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(
-                __LOCATION__,
-                NKikimr::TAlignedPagePoolCounters(),
-                true,
-                false
-            ))
-        , TypeEnv(*Alloc)
+        , Alloc(settings.Alloc)
         , Counters(settings.Counters)
         , TxProxyMon(settings.TxProxyMon)
         , BufferWriteActor(TWilsonKqp::BufferWriteActor, NWilson::TTraceId(settings.TraceId), "TKqpBufferWriteActor", NWilson::EFlags::AUTO_END)
@@ -1715,7 +1712,6 @@ public:
                     InconsistentTx,
                     settings.IsOlap,
                     std::move(keyColumnTypes),
-                    TypeEnv,
                     Alloc,
                     settings.TransactionSettings.MvccSnapshot,
                     settings.TransactionSettings.LockMode,
@@ -2790,7 +2786,6 @@ private:
     std::optional<ui64> Coordinator;
 
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
-    NMiniKQL::TTypeEnvironment TypeEnv;
 
     struct TWriteInfo {
         TKqpTableWriteActor* WriteTableActor = nullptr;
@@ -2809,8 +2804,6 @@ private:
         i64 DataSize;
     };
     std::queue<TAckMessage> AckQueue;
-
-    IShardedWriteControllerPtr ShardedWriteController = nullptr;
 
     TIntrusivePtr<TKqpCounters> Counters;
     TIntrusivePtr<NTxProxy::TTxProxyMon> TxProxyMon;

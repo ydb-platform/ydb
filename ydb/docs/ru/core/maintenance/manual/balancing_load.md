@@ -33,12 +33,28 @@
     ydb -e <endpoint> admin cluster config fetch > config.yaml
     ```
 
-    `<endpoint>` - эндпоинт произвольного узла кластера.
+    `<endpoint>` - grpc/grpcs эндпоинт произвольного узла кластера.
 
-2. Добавить (или изменить) поле `expected_slot_count` для нужного устройства `drive` в секции `host_configs`
+2. Добавить (или изменить) поле `expected_slot_count` для нужного устройства `drive` в секции `host_configs`.
+
+    Примерный вид секции конфигурации:
+
+    ```yaml
+    config:
+    host_configs:
+    - host_config_id: 1
+        drive:
+        - path: <path_to_device>
+          type: <type>
+          expected_slot_count: <number>
+        - path: ...
+    - host_config_id: 2
+        ...
+    ```
 
 3. Загрузить обновленный конфигурационный файл на кластер:
 
     ```bash
-    ydb -e <endpoint> admin cluster config replace -f config.yaml
+    ydb -e endpoint admin cluster config replace -f config.yaml
     ```
+

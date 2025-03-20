@@ -53,7 +53,7 @@ TFinalStatusCounters::TFinalStatusCounters(const ::NMonitoring::TDynamicCounterP
     Paused = subgroup->GetCounter("PAUSED", true);
 
     auto subgroupReason = counters->GetSubgroup("subcomponent", "FinalReason");
-    Unavailable = subgroup->GetCounter("Unavailable", true);
+    Unavailable = subgroupReason->GetCounter("Unavailable", true);
 }
 
 void TFinalStatusCounters::IncByStatus(FederatedQuery::QueryMeta::ComputeStatus finalStatus) {

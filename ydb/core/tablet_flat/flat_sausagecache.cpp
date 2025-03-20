@@ -90,16 +90,6 @@ TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ForgetPageCollection(
         }
     }
 
-    UnlockPageCollection(info->Id);
-
-    return ret;
-}
-
-void TPrivatePageCache::UnlockPageCollection(TLogoBlobID id) {
-    auto it = PageCollections.find(id);
-    Y_ABORT_UNLESS(it != PageCollections.end(), "trying to unlock unknown page collection. logic flaw?");
-    TIntrusivePtr<TInfo> info = it->second;
-
     // Completely forget page collection
     for (const auto& kv : info->PageMap) {
         auto* page = kv.second.Get();
@@ -117,9 +107,11 @@ void TPrivatePageCache::UnlockPageCollection(TLogoBlobID id) {
     }
 
     info->PageMap.clear();
-    PageCollections.erase(it);
-    ToTouchShared.erase(id);
+    PageCollections.erase(info->Id);
+    ToTouchShared.erase(info->Id);
     --Stats.TotalCollections;
+
+    return ret;
 }
 
 TPrivatePageCache::TInfo* TPrivatePageCache::Info(TLogoBlobID id) {

@@ -201,8 +201,6 @@ private:
     void TryLoad(TPage *page);
     void TryUnload(TPage *page);
     void TryEraseIfUnnecessary(TPage *page);
-
-    void UnlockPageCollection(TLogoBlobID id);
 };
 
 }}

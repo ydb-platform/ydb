@@ -28,6 +28,7 @@ def get_sql2yql_cmd(suite, case, case_file, out_dir, ansi_lexer, test_format, te
             cmd.append('--test-double-format')
     else:
         cmd.append('--yql')
+        cmd.append('--test-lexers')
         cmd.append('--output=%s' % os.path.join(out_dir, 'sql.yql'))
     if suite == 'kikimr':
         cmd.append('--cluster=plato@kikimr')

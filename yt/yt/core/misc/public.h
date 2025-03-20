@@ -161,6 +161,8 @@ class TSummary;
 template <class TTask>
 struct IFairScheduler;
 
+using TFairShareSlotId = TGuid;
+
 template <class TTask>
 using IFairSchedulerPtr = TIntrusivePtr<IFairScheduler<TTask>>;
 

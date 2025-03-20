@@ -948,6 +948,20 @@ void RegisterCoSimpleCallables2(TCallableOptimizerMap& map) {
     };
 
     map["PgGrouping"] = ExpandPgGrouping;
+
+    map["PruneKeys"] = map["PruneAdjacentKeys"] = [](const TExprNode::TPtr& node, TExprContext& /*ctx*/, TOptimizeContext&) {
+        TCoPruneKeysBase pruneKeys(node);
+
+        if (node->Content() == pruneKeys.Input().Ref().Content()) {
+            auto pruneKeysInput = pruneKeys.Input().Cast<TCoPruneKeysBase>();
+            if (&pruneKeys.Extractor().Ref() == &pruneKeysInput.Extractor().Ref()) {
+                YQL_CLOG(DEBUG, Core) << node->Content() << " Over " << pruneKeys.Input().Ref().Content();
+                return node->HeadPtr();
+            }
+        }
+
+        return node;
+    };
 }
 
 }

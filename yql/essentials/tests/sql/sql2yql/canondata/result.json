@@ -4521,6 +4521,13 @@
             "uri": "https://{canondata_backend}/1942173/99e88108149e222741552e7e6cddef041d6a2846/resource.tar.gz#test_sql2yql.test_order_by-tuple01_/sql.yql"
         }
     ],
+    "test_sql2yql.test[params-bad_dict]": [
+        {
+            "checksum": "de90a977f1e3e94ae2c6cb438cbf68cf",
+            "size": 1052,
+            "uri": "https://{canondata_backend}/1946324/70c05a25360e59ed701e167d489f84e1b53fece9/resource.tar.gz#test_sql2yql.test_params-bad_dict_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[params-dict]": [
         {
             "checksum": "f9d9d2f637f3375d580a94c58f8a1aeb",
@@ -6978,6 +6985,13 @@
             "uri": "https://{canondata_backend}/1942173/99e88108149e222741552e7e6cddef041d6a2846/resource.tar.gz#test_sql2yql.test_select-null_check_/sql.yql"
         }
     ],
+    "test_sql2yql.test[select-prune_keys]": [
+        {
+            "checksum": "55346f77548ef19f9a09d2f1d3f6f466",
+            "size": 17765,
+            "uri": "https://{canondata_backend}/1871182/906a4c4e540bb8746f8d7595500d4d1c9f664846/resource.tar.gz#test_sql2yql.test_select-prune_keys_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[select-result_label]": [
         {
             "checksum": "77393e1875cdffd6504971730f13b85c",
@@ -7081,6 +7095,13 @@
             "checksum": "7b52e62f76aceb26c896d539c9d3ece6",
             "size": 1148,
             "uri": "https://{canondata_backend}/1942173/99e88108149e222741552e7e6cddef041d6a2846/resource.tar.gz#test_sql2yql.test_udf-generic_udf_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[udf-logger_resolve]": [
+        {
+            "checksum": "30cab5ebc3fbccd46acd58ad689db4d1",
+            "size": 1145,
+            "uri": "https://{canondata_backend}/1942278/9db37083b795a3b23a916345e41eb37f06a87a0a/resource.tar.gz#test_sql2yql.test_udf-logger_resolve_/sql.yql"
         }
     ],
     "test_sql2yql.test[udf-named_args]": [
@@ -10586,6 +10607,11 @@
             "uri": "file://test_sql_format.test_order_by-tuple01_/formatted.sql"
         }
     ],
+    "test_sql_format.test[params-bad_dict]": [
+        {
+            "uri": "file://test_sql_format.test_params-bad_dict_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[params-dict]": [
         {
             "uri": "file://test_sql_format.test_params-dict_/formatted.sql"
@@ -10886,6 +10912,11 @@
             "uri": "file://test_sql_format.test_select-null_check_/formatted.sql"
         }
     ],
+    "test_sql_format.test[select-prune_keys]": [
+        {
+            "uri": "file://test_sql_format.test_select-prune_keys_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[select-result_label]": [
         {
             "uri": "file://test_sql_format.test_select-result_label_/formatted.sql"
@@ -10959,6 +10990,11 @@
     "test_sql_format.test[udf-generic_udf]": [
         {
             "uri": "file://test_sql_format.test_udf-generic_udf_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[udf-logger_resolve]": [
+        {
+            "uri": "file://test_sql_format.test_udf-logger_resolve_/formatted.sql"
         }
     ],
     "test_sql_format.test[udf-named_args]": [

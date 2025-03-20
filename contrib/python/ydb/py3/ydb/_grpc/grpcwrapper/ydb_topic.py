@@ -906,10 +906,11 @@ class Consumer(IToProto, IFromProto, IFromPublic, IToPublic):
             read_from=self.read_from,
             supported_codecs=self.supported_codecs.to_public(),
             attributes=self.attributes,
+            consumer_stats=self.consumer_stats.to_public(),
         )
 
     @dataclass
-    class ConsumerStats(IFromProto):
+    class ConsumerStats(IFromProto, IToPublic):
         min_partitions_last_read_time: datetime.datetime
         max_read_time_lag: datetime.timedelta
         max_write_time_lag: datetime.timedelta
@@ -924,6 +925,14 @@ class Consumer(IToProto, IFromProto, IFromPublic, IToPublic):
                 max_read_time_lag=timedelta_from_proto_duration(msg.max_read_time_lag),
                 max_write_time_lag=timedelta_from_proto_duration(msg.max_write_time_lag),
                 bytes_read=MultipleWindowsStat.from_proto(msg.bytes_read),
+            )
+
+        def to_public(self) -> ydb_topic_public_types.PublicConsumer.ConsumerStats:
+            return ydb_topic_public_types.PublicConsumer.ConsumerStats(
+                min_partitions_last_read_time=self.min_partitions_last_read_time,
+                max_read_time_lag=self.max_read_time_lag,
+                max_write_time_lag=self.max_write_time_lag,
+                bytes_read=self.bytes_read,
             )
 
 

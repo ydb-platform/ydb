@@ -9,6 +9,8 @@
 #include <yql/essentials/minikql/mkql_utils.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 
+#include <yql/essentials/utils/time_provider.h>
+
 #include <library/cpp/digest/md5/md5.h>
 
 #include <util/generic/vector.h>
@@ -49,7 +51,7 @@ public:
     }
 
     bool LoadMetadata(const TVector<TImport*>& imports,
-        const TVector<TFunction*>& functions, TExprContext& ctx) const override {
+        const TVector<TFunction*>& functions, TExprContext& ctx, NUdf::ELogLevel logLevel) const override {
 
         with_lock(Lock_) {
             bool hasErrors = false;
@@ -134,13 +136,14 @@ public:
                 }
             }
 
-            hasErrors = !LoadFunctionsMetadata(functions, *newRegistry, TypeInfoHelper_, ctx) || hasErrors;
+            hasErrors = !LoadFunctionsMetadata(functions, *newRegistry, TypeInfoHelper_, ctx, logLevel) || hasErrors;
             return !hasErrors;
         }
     }
 
-    TResolveResult LoadRichMetadata(const TVector<TImport>& imports) const override {
+    TResolveResult LoadRichMetadata(const TVector<TImport>& imports, NUdf::ELogLevel logLevel) const override {
         Y_UNUSED(imports);
+        Y_UNUSED(logLevel);
         ythrow yexception() << "LoadRichMetadata is not supported in SimpleUdfResolver";
     }
 
@@ -167,7 +170,7 @@ IUdfResolver::TPtr CreateSimpleUdfResolver(
 bool LoadFunctionsMetadata(const TVector<IUdfResolver::TFunction*>& functions,
     const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
     NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
-    TExprContext& ctx) {
+    TExprContext& ctx, NUdf::ELogLevel logLevel) {
 
     bool hasErrors = false;
     TScopedAlloc alloc(__LOCATION__);
@@ -202,10 +205,16 @@ bool LoadFunctionsMetadata(const TVector<IUdfResolver::TFunction*>& functions,
 
             auto secureParamsProvider = MakeSimpleSecureParamsProvider(udf.SecureParams);
 
+            auto logProvider = NUdf::MakeLogProvider(
+                [&](const NUdf::TStringRef& component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
+                    udf.Messages.push_back(TStringBuilder() << GetTimeProvider()->Now() << " " << component << " [" << level << "] " << message);
+                },
+                logLevel);
+
             TFunctionTypeInfo funcInfo;
             auto status = functionRegistry.FindFunctionTypeInfo(env, typeInfoHelper, nullptr,
                 udf.Name, mkqlUserType, udf.TypeConfig, NUdf::IUdfModule::TFlags::TypesOnly, {}, secureParamsProvider.get(),
-                nullptr, &funcInfo);
+                logProvider.Get(), &funcInfo);
             if (!status.IsOk()) {
                 ctx.AddError(TIssue(udf.Pos, TStringBuilder() << "Failed to find UDF function: " << udf.Name
                     << ", reason: " << status.GetError()));

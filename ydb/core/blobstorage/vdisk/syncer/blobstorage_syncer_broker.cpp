@@ -97,6 +97,12 @@ namespace NKikimr {
                 const auto& waitSync = WaitQueue.front();
                 for (const auto& actorId : waitSync.ActorIds) {
                     Send(actorId, new TEvSyncToken);
+
+                    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_SYNCER,
+                        "ProcessQueue(), VDisk actor id: " << waitSync.VDiskActorId <<
+                        ", actor id: " << actorId <<
+                        ", token sent, active: " << Active.size() <<
+                        ", waiting: " << WaitQueue.size());
                 }
                 Active[waitSync.VDiskActorId] = std::move(waitSync.ActorIds);
                 WaitQueue.pop_front();
@@ -109,16 +115,17 @@ namespace NKikimr {
 
             if (const auto it = Active.find(vDiskActorId); it != Active.end()) {
                 it->second.erase(actorId);
-                if (it->second.empty()) {
-                    Active.erase(vDiskActorId);
-                    ProcessQueue();
-                }
 
                 LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_SYNCER,
                     "TEvReleaseSyncToken, VDisk actor id: " << vDiskActorId <<
                     ", actor id: " << actorId <<
                     ", token released, active: " << Active.size() <<
                     ", waiting: " << WaitQueue.size());
+
+                if (it->second.empty()) {
+                    Active.erase(vDiskActorId);
+                    ProcessQueue();
+                }
                 return;
             }
 

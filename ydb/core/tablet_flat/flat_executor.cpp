@@ -691,7 +691,7 @@ void TExecutor::AddCachesOfBundle(const NTable::TPartView &partView)
 void TExecutor::AddSingleCache(const TIntrusivePtr<TPrivatePageCache::TInfo> &info)
 {
     PrivatePageCache->RegisterPageCollection(info);
-    Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(info->PageCollection, SelfId()));
+    Send(MakeSharedPageCacheId(), new NSharedCache::TEvAttach(info->PageCollection));
 
     StickyPagesMemory += info->GetStickySize();
 
@@ -1179,8 +1179,7 @@ void TExecutor::RequestFromSharedCache(TAutoPtr<NPageCollection::TFetch> fetch,
 
     Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(
         priority,
-        fetch,
-        SelfId()),
+        fetch),
         0, (ui64)requestCategory);
 }
 

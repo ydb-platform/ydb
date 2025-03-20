@@ -400,6 +400,7 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
         case NKikimrProto::OVERRUN: {
             auto& sourceIdStorage = Partition()->SourceIdStorage;
             auto& usersInfoStorage = Partition()->UsersInfoStorage;
+            const bool isSupportive = Partition()->IsSupportive();
 
             for (ui32 i = 0; i < range.PairSize(); ++i) {
                 const auto& pair = range.GetPair(i);
@@ -421,9 +422,9 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
                     sourceIdStorage.LoadSourceIdInfo(*key, pair.GetValue(), now);
                 } else if (type == TKeyPrefix::MarkProtoSourceId) {
                     sourceIdStorage.LoadSourceIdInfo(*key, pair.GetValue(), now);
-                } else if (type == TKeyPrefix::MarkUser) {
+                } else if ((type == TKeyPrefix::MarkUser) && !isSupportive) {
                     usersInfoStorage->Parse(*key, pair.GetValue(), ctx);
-                } else if (type == TKeyPrefix::MarkUserDeprecated) {
+                } else if ((type == TKeyPrefix::MarkUserDeprecated) && !isSupportive) {
                     usersInfoStorage->ParseDeprecated(*key, pair.GetValue(), ctx);
                 }
             }

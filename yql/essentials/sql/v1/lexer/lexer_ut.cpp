@@ -2,8 +2,10 @@
 
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
+
 #include <yql/essentials/sql/v1/lexer/antlr3/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -79,16 +81,21 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
         NSQLTranslationV1::TLexers lexers;
         lexers.Antlr3 = NSQLTranslationV1::MakeAntlr3LexerFactory();
         lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+        lexers.Antlr4Pure = NSQLTranslationV1::MakeAntlr4PureLexerFactory();
 
         auto lexer3 = MakeLexer(lexers, /* ansi = */ false, /* antlr4 = */ false);
         auto lexer4 = MakeLexer(lexers, /* ansi = */ false, /* antlr4 = */ true);
+        auto lexer4p = MakeLexer(lexers, /* ansi = */ false, /* antlr4 = */ true, /* pure = */ true);
 
         for (const auto& query : queriesUtf8) {
             auto [tokens3, issues3] = Tokenize(lexer3, query);
             auto [tokens4, issues4] = Tokenize(lexer4, query);
+            auto [tokens4p, issues4p] = Tokenize(lexer4p, query);
             AssertEquivialent(tokens3, tokens4);
+            AssertEquivialent(tokens3, tokens4p);
             UNIT_ASSERT(issues3.Empty());
             UNIT_ASSERT(issues4.Empty());
+            UNIT_ASSERT(issues4p.Empty());
         }
     }
 
@@ -160,13 +167,16 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
 
         auto lexer3 = MakeLexer(lexers, /* ansi = */ false, /* antlr4 = */ false);
         auto lexer4 = MakeLexer(lexers, /* ansi = */ false, /* antlr4 = */ true);
+        auto lexer4p = MakeLexer(lexers, /* ansi = */ false, /* antlr4 = */ true, /* pure = */ true);
 
         for (const auto& query : InvalidQueries()) {
             auto issues3 = GetIssueMessages(lexer3, query);
             auto issues4 = GetIssueMessages(lexer4, query);
+            auto issues4p = GetIssueMessages(lexer4p, query);
 
             UNIT_ASSERT(!issues3.empty());
             UNIT_ASSERT(!issues4.empty());
+            UNIT_ASSERT(!issues4p.empty());
         }
     }
 

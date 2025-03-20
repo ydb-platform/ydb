@@ -1881,7 +1881,14 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
         }
 
         if (self.Input().Maybe<TCoSortBase>()) {
-            if (auto res = ApplyExtractMembersToSort(self.Input().Ptr(), self.Members().Ptr(), *optCtx.ParentsMap, ctx, {})) {
+            if (auto res = ApplyExtractMembersToSortOrPruneKeys(self.Input().Ptr(), self.Members().Ptr(), *optCtx.ParentsMap, ctx, {})) {
+                return res;
+            }
+            return node;
+        }
+
+        if (self.Input().Ptr()->IsCallable("PruneKeys") || self.Input().Ptr()->IsCallable("PruneAdjacentKeys")) {
+            if (auto res = ApplyExtractMembersToSortOrPruneKeys(self.Input().Ptr(), self.Members().Ptr(), *optCtx.ParentsMap, ctx, {})) {
                 return res;
             }
             return node;

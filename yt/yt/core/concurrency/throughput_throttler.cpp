@@ -7,6 +7,8 @@
 
 #include <yt/yt/core/tracing/trace_context.h>
 
+#include <yt/yt/library/numeric/util.h>
+
 #include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
 
 #include <queue>
@@ -23,15 +25,6 @@ bool WillOverflowMul(i64 lhs, i64 rhs)
 {
     i64 result;
     return __builtin_mul_overflow(lhs, rhs, &result);
-}
-
-i64 ClampingAdd(i64 lhs, i64 rhs, i64 max)
-{
-    i64 result;
-    if (__builtin_add_overflow(lhs, rhs, &result) || result > max) {
-        return max;
-    }
-    return result;
 }
 
 } // namespace
@@ -418,7 +411,7 @@ private:
             } else {
                 auto deltaAvailable = GetDeltaAvailable(now, lastUpdated, *limit);
 
-                auto newAvailable = ClampingAdd(Available_.load(), deltaAvailable, maxAvailable);
+                auto newAvailable = UnsignedSaturationArithmeticAdd(Available_.load(), deltaAvailable, maxAvailable);
                 YT_VERIFY(newAvailable <= maxAvailable);
                 if (newAvailable == maxAvailable) {
                     LastUpdated_ = now;
@@ -482,7 +475,7 @@ private:
             auto throughputPerPeriod = static_cast<i64>(period.SecondsFloat() * limit);
 
             while (true) {
-                auto newAvailable = ClampingAdd(available, deltaAvailable, /*max*/ throughputPerPeriod);
+                auto newAvailable = UnsignedSaturationArithmeticAdd(available, deltaAvailable, /*max*/ throughputPerPeriod);
                 if (Available_.compare_exchange_weak(available, newAvailable)) {
                     break;
                 }

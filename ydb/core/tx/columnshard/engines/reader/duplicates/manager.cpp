@@ -11,9 +11,13 @@
 namespace NKikimr::NOlap::NReader {
 
 void TIntervalCounter::PropagateDelta(const TPosition& node) {
+    AFL_VERIFY(node.GetIndex() < PropagatedDeltas.size());
     if (PropagatedDeltas[node.GetIndex()]) {
-        Count[node.GetIndex() * 2 + 1] += PropagatedDeltas[node.GetIndex()] * (node.IntervalSize() / 2);
-        Count[node.GetIndex() * 2 + 2] += PropagatedDeltas[node.GetIndex()] * (node.IntervalSize() / 2);
+        const i64 delta = PropagatedDeltas[node.GetIndex()] * (node.IntervalSize() / 2);
+        AFL_VERIFY((i64)Count[node.GetIndex() * 2 + 1] >= -delta);
+        AFL_VERIFY((i64)Count[node.GetIndex() * 2 + 2] >= -delta);
+        Count[node.GetIndex() * 2 + 1] += delta;
+        Count[node.GetIndex() * 2 + 2] += delta;
         PropagatedDeltas[node.GetIndex()] = 0;
     }
 }
@@ -21,18 +25,21 @@ void TIntervalCounter::PropagateDelta(const TPosition& node) {
 void TIntervalCounter::Update(const TPosition& node, const TModification& modification) {
     if (modification.GetLeft() <= node.GetLeft() && modification.GetRight() >= node.GetRight()) {
         if (node.GetLeft() == node.GetRight()) {
+            AFL_VERIFY((i64)Count[node.GetIndex()] >= -modification.GetDelta());
             Count[node.GetIndex()] += modification.GetDelta();
         } else {
+            AFL_VERIFY(node.GetIndex() < PropagatedDeltas.size());
             PropagatedDeltas[node.GetIndex()] += modification.GetDelta();
         }
     } else {
-        PropagateDelta(node.GetIndex());
+        PropagateDelta(node);
         if (modification.GetLeft() <= node.LeftChild().GetRight()) {
             Update(node.LeftChild(), modification);
         }
         if (modification.GetRight() >= node.RightChild().GetLeft()) {
             Update(node.RightChild(), modification);
         }
+        Count[node.GetIndex()] = GetCount(node.LeftChild()) + GetCount(node.RightChild());
     }
 }
 
@@ -58,9 +65,13 @@ TIntervalCounter::TIntervalCounter(const std::vector<std::pair<ui32, ui32>>& int
             maxValue = r;
         }
     }
-    MaxIndex = std::bit_ceil(maxValue);
+    if (maxValue == std::bit_ceil(maxValue)) {
+        MaxIndex = maxValue * 2 - 1;
+    } else {
+        MaxIndex = std::bit_ceil(maxValue) - 1;
+    }
     Count.resize(MaxIndex * 2 + 1);
-    PropagatedDeltas.resize(MaxIndex * 2 + 1);
+    PropagatedDeltas.resize(MaxIndex);
 
     for (const auto& [l, r] : intervals) {
         Inc(l, r);

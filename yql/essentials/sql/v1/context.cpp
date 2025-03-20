@@ -248,7 +248,7 @@ IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TP
         }
 
         if (Settings.MaxErrors <= Issues.Size()) {
-            ythrow NProtoAST::TTooManyErrors() << "Too many issues";
+            ythrow NAST::TTooManyErrors() << "Too many issues";
         }
     }
 

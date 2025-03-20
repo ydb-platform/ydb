@@ -2,6 +2,7 @@
 #include <util/system/mutex.h>
 #include <util/generic/hash.h>
 #include <util/generic/maybe.h>
+#include <util/string/join.h>
 
 namespace NYql {
 namespace NUdf {
@@ -181,6 +182,15 @@ TStringBuf LevelToString(ELogLevel level) {
 TMaybe<ELogLevel> TryLevelFromString(TStringBuf str) {
     UDF_LOG_LEVEL(PARSE_ENUM_TYPE_FROM_STR)
     return Nothing();
+}
+
+#define ENUM_STR_JOIN(name, val) \
+    #name,
+
+TString LogLevelAvailables() {
+    return JoinSeq(", ",
+        {UDF_LOG_LEVEL(ENUM_STR_JOIN)}
+    );
 }
 
 TUniquePtr<ILogProvider> MakeLogProvider(TLogProviderFunc func, TMaybe<ELogLevel> filter) {

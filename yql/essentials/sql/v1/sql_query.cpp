@@ -163,6 +163,8 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
         "user",
         "password",
         "password_secret_name",
+        "flush_interval",
+        "batch_size_bytes",
     };
 
     TSet<TString> stateSettings = {
@@ -170,8 +172,12 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
         "failover_mode",
     };
 
+    TSet<TString> crateOnlySettings = {
+        "consumer",
+    };
+
     const auto keyName = to_lower(key.Name);
-    if (!configSettings.count(keyName) && !stateSettings.contains(keyName)) {
+    if (!configSettings.count(keyName) && !stateSettings.contains(keyName) && !crateOnlySettings.contains(keyName)) {
         ctx.Context().Error() << "Unknown transfer setting: " << key.Name;
         return false;
     }
@@ -181,6 +187,11 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
         return false;
     }
 
+    if (!create && crateOnlySettings.contains(keyName)) {
+        ctx.Context().Error() << key.Name << " is not supported in ALTER";
+        return false;
+    }
+    
     if (!out.emplace(keyName, value).second) {
         ctx.Context().Error() << "Duplicate transfer setting: " << key.Name;
     }

@@ -48,7 +48,7 @@ void TActor::Handle(TEvAddInsertedDataToBuffer::TPtr& ev) {
     AFL_VERIFY(evBase->GetWriteData()->GetBlobsAction()->GetStorageId() == NOlap::IStoragesManager::DefaultStorageId);
 
     SumSize += evBase->GetWriteData()->GetSize();
-    const NColumnShard::TInternalPathId pathId = evBase->GetWriteData()->GetWriteMeta().GetPathId();
+    const NColumnShard::TInternalPathId pathId = evBase->GetWriteData()->GetWriteMeta().GetPathId().InternalPathId;
     const ui64 schemaVersion = evBase->GetContext()->GetActualSchema()->GetVersion();
     TAggregationId aggrId(pathId, schemaVersion, evBase->GetWriteData()->GetWriteMeta().GetModificationType());
     auto it = Aggregations.find(aggrId);

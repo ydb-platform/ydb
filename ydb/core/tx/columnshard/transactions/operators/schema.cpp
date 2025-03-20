@@ -2,7 +2,9 @@
 #include <ydb/core/tx/columnshard/subscriber/abstract/subscriber/subscriber.h>
 #include <ydb/core/tx/columnshard/subscriber/events/tables_erased/event.h>
 #include <ydb/core/tx/columnshard/transactions/transactions/tx_finish_async.h>
+#include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <util/string/join.h>
+#include <util/stream/output.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -170,10 +172,12 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
             break;
         case NKikimrTxColumnShard::TSchemaTxBody::kEnsureTables:
         {
+            THashSet<TInternalPathId> waitPathIdsToErase;
             for (auto&& i : SchemaTxBody.GetEnsureTables().GetTables()) {
-                const auto pathId = TInternalPathId::FromInternalPathIdValue(i.GetPathId());
-                if (owner.TablesManager.HasTable(pathId, true) && !owner.TablesManager.HasTable(pathId)) {
-                    WaitPathIdsToErase.emplace(pathId);
+                if (const auto internalPathId = owner.TablesManager.ResolveInternalPathId(TLocalPathId::FromLocalPathIdValue(i.GetPathId()))) {
+                    if (owner.TablesManager.HasTable(*internalPathId, true)) {
+                        WaitPathIdsToErase.emplace(*internalPathId);
+                    }
                 }
             }
         }

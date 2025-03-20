@@ -378,18 +378,19 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
     NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
 
-    const TInternalPathId pathId = TInternalPathId::FromInternalPathIdValue(tableProto.GetPathId());
-    if (TablesManager.HasTable(pathId)) {
-        LOG_S_DEBUG("EnsureTable for existed pathId: " << pathId << " at tablet " << TabletID());
+    const TLocalPathId localPathId = TLocalPathId::FromLocalPathIdValue(tableProto.GetPathId());
+    if (const auto internalPathId = TablesManager.ResolveInternalPathId(localPathId)) {
+        LOG_S_DEBUG("EnsureTable for existed LocalPathId: " << localPathId << " at tablet " << TabletID());
         return;
     }
+    const auto internalPathId = TablesManager.CreateInternalPathId(localPathId);
 
-    LOG_S_DEBUG("EnsureTable for pathId: " << pathId
+    LOG_S_DEBUG("EnsureTable for LocalPathId: " << localPathId
                                            << " ttl settings: " << tableProto.GetTtlSettings()
                                            << " at tablet " << TabletID());
 
     NKikimrTxColumnShard::TTableVersionInfo tableVerProto;
-    tableVerProto.SetPathId(pathId.GetInternalPathIdValue());
+    tableVerProto.SetPathId(internalPathId.GetInternalPathIdValue());
 
     // check schema changed
 
@@ -412,7 +413,7 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
 
     {
         THashSet<NTiers::TExternalStorageId> usedTiers;
-        TTableInfo table(pathId);
+        TTableInfo table(internalPathId, localPathId); 
         if (tableProto.HasTtlSettings()) {
             const auto& ttlSettings = tableProto.GetTtlSettings();
             *tableVerProto.MutableTtlSettings() = ttlSettings;
@@ -422,16 +423,16 @@ void TColumnShard::RunEnsureTable(const NKikimrTxColumnShard::TCreateTable& tabl
         }
         TablesManager.RegisterTable(std::move(table), db);
         if (!usedTiers.empty()) {
-            ActivateTiering(pathId, usedTiers);
+            ActivateTiering(internalPathId, usedTiers);
         }
     }
 
     tableVerProto.SetSchemaPresetVersionAdj(tableProto.GetSchemaPresetVersionAdj());
 
-    TablesManager.AddTableVersion(pathId, version, tableVerProto, schema, db);
-    InsertTable->RegisterPathInfo(pathId);
+    TablesManager.AddTableVersion(internalPathId, version, tableVerProto, schema, db);
+    InsertTable->RegisterPathInfo(internalPathId);
 
-    Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, TablesManager.GetTables().size());
+    Counters.GetTabletCounters()->SetCounter(COUNTER_TABLES, TablesManager.GetTableCount());
     Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_PRESETS, TablesManager.GetSchemaPresets().size());
     Counters.GetTabletCounters()->SetCounter(COUNTER_TABLE_TTLS, TablesManager.GetTtl().size());
 }
@@ -440,10 +441,11 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
     NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
 
-    const auto pathId = TInternalPathId::FromInternalPathIdValue(alterProto.GetPathId());
-    Y_ABORT_UNLESS(TablesManager.HasTable(pathId), "AlterTable on a dropped or non-existent table");
+    const auto localPathId = NColumnShard::TLocalPathId::FromLocalPathIdValue(alterProto.GetPathId());
+    const auto internalPathId = TablesManager.ResolveInternalPathId(localPathId);
+    Y_ABORT_UNLESS(internalPathId, "AlterTable on a dropped or non-existent table");
 
-    LOG_S_DEBUG("AlterTable for pathId: " << pathId
+    LOG_S_DEBUG("AlterTable for LocalPathId: " << localPathId
                                           << " schema: " << alterProto.GetSchema()
                                           << " ttl settings: " << alterProto.GetTtlSettings()
                                           << " at tablet " << TabletID());
@@ -465,11 +467,11 @@ void TColumnShard::RunAlterTable(const NKikimrTxColumnShard::TAlterTable& alterP
         if (ttlSettings.HasEnabled()) {
             usedTiers = NOlap::TTiering::GetUsedTiers(ttlSettings.GetEnabled());
         }
-        ActivateTiering(pathId, usedTiers);
+        ActivateTiering(*internalPathId, usedTiers);
     }
 
     tableVerProto.SetSchemaPresetVersionAdj(alterProto.GetSchemaPresetVersionAdj());
-    TablesManager.AddTableVersion(pathId, version, tableVerProto, schema, db);
+    TablesManager.AddTableVersion(*internalPathId, version, tableVerProto, schema, db);
 }
 
 void TColumnShard::RunDropTable(const NKikimrTxColumnShard::TDropTable& dropProto, const NOlap::TSnapshot& version,
@@ -831,7 +833,6 @@ void TColumnShard::SetupCompaction(const std::set<TInternalPathId>& pathIds) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_compaction")("reason", "disabled");
         return;
     }
-
     BackgroundController.CheckDeadlines();
     if (BackgroundController.GetCompactionsCount()) {
         return;

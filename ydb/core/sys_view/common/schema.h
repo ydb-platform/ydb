@@ -42,6 +42,7 @@ constexpr TStringBuf TablePrimaryIndexStatsName = "primary_index_stats";
 constexpr TStringBuf TablePrimaryIndexPortionStatsName = "primary_index_portion_stats";
 constexpr TStringBuf TablePrimaryIndexGranuleStatsName = "primary_index_granule_stats";
 constexpr TStringBuf TablePrimaryIndexOptimizerStatsName = "primary_index_optimizer_stats";
+constexpr TStringBuf TablePathIdMappingName = "table_path_id_mapping";
 
 constexpr TStringBuf TopPartitions1MinuteName = "top_partitions_one_minute";
 constexpr TStringBuf TopPartitions1HourName = "top_partitions_one_hour";
@@ -757,6 +758,15 @@ struct Schema : NIceDb::Schema {
             QueryCpuLimitPercentPerNode,
             QueryMemoryLimitPercentPerNode>;
     };
+    struct TablePathIdMapping : Table<23> {
+        struct InternalPathId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct TabletId : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct LocalPathId: Column<3, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<InternalPathId, TabletId>;
+        using TColumns = TableColumns<InternalPathId, TabletId, LocalPathId>;
+    };
+
 };
 
 bool MaybeSystemViewPath(const TVector<TString>& path);

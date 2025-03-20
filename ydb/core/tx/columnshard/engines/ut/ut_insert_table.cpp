@@ -37,7 +37,8 @@ public:
     }
 
     virtual TConclusion<THashMap<NColumnShard::TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() override {
-        return THashMap<NColumnShard::TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>>{};
+        THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>> result;
+        return result;
     }
 
     bool Load(TInsertTableAccessor&, const TInstant&) override {
@@ -82,8 +83,7 @@ public:
 Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
     Y_UNIT_TEST(TestInsertCommit) {
         TInsertWriteId writeId = (TInsertWriteId)0;
-        const auto& tableId0 = NColumnShard::TInternalPathId::FromInternalPathIdValue(0);
-        const auto& tableId1 = NColumnShard::TInternalPathId::FromInternalPathIdValue(0);
+        NColumnShard::TInternalPathId tableId{};
         TString dedupId = "0";
         TUnifiedBlobId blobId1(2222, 1, 1, 100, 2, 0, 1);
 

@@ -183,13 +183,14 @@ struct Schema : NIceDb::Schema {
     };
 
     struct TableInfo : Table<(ui32)ECommonTables::TableInfo> {
-        struct PathId : Column<1, NScheme::NTypeIds::Uint64> {};
+        struct PathId : Column<1, NScheme::NTypeIds::Uint64> {}; //TODO Rename me ToInternalPathId
         struct DropStep : Column<2, NScheme::NTypeIds::Uint64> {};
         struct DropTxId : Column<3, NScheme::NTypeIds::Uint64> {};
         struct TieringUsage: Column<4, NScheme::NTypeIds::String> {};
+        struct LocalPathId : Column<5, NScheme::NTypeIds::Uint64> {}; //PathId the table is known as at SchemeShard
 
         using TKey = TableKey<PathId>;
-        using TColumns = TableColumns<PathId, DropStep, DropTxId, TieringUsage>;
+        using TColumns = TableColumns<PathId, DropStep, DropTxId, TieringUsage, LocalPathId>;
     };
 
     struct TableVersionInfo : Table<(ui32)ECommonTables::TableVersionInfo> {
@@ -806,6 +807,11 @@ struct Schema : NIceDb::Schema {
         db.Table<TableInfo>().Key(pathId.GetInternalPathIdValue()).Update(
             NIceDb::TUpdate<TableInfo::DropStep>(dropStep),
             NIceDb::TUpdate<TableInfo::DropTxId>(dropTxId));
+    }
+    static void UpdateTableLocalPathId(NIceDb::TNiceDb& db, const TInternalPathId pathId, const TLocalPathId localPathId) {
+        db.Table<TableInfo>().Key(pathId.GetInternalPathIdValue()).Update(
+            NIceDb::TUpdate<TableInfo::LocalPathId>(localPathId.GetLocalPathIdValue())
+        );
     }
 
     static void EraseTableVersionInfo(NIceDb::TNiceDb& db, NColumnShard::TInternalPathId pathId, const NOlap::TSnapshot& version) {

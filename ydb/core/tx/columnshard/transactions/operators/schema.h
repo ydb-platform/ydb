@@ -24,9 +24,10 @@ private:
     THashSet<NColumnShard::TInternalPathId> GetNotErasedTableIds(const TColumnShard& owner, const TInfoProto& tables) const {
         THashSet<NColumnShard::TInternalPathId> result;
         for (auto&& i : tables) {
-            const auto& pathId = TInternalPathId::FromInternalPathIdValue(i.GetPathId());
-            if (owner.TablesManager.HasTable(pathId, true)) {
-                result.emplace(pathId);
+            if (const auto internalPathId = owner.TablesManager.ResolveInternalPathId(TLocalPathId::FromLocalPathIdValue(i.GetPathId()))) {
+                if (owner.TablesManager.HasTable(*internalPathId, true)) {
+                    result.emplace(TInternalPathId::FromInternalPathIdValue(i.GetPathId()));
+                }
             }
         }
         if (result.size()) {

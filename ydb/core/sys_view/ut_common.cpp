@@ -32,7 +32,7 @@ TTestEnv::TTestEnv(ui32 staticNodes, ui32 dynamicNodes, const TTestEnvSettings& 
 
     TVector<NKikimrKqp::TKqpSetting> kqpSettings;
 
-    NKikimrProto::TAuthConfig authConfig;
+    NKikimrProto::TAuthConfig authConfig = settings.AuthConfig;
     authConfig.SetUseBuiltinDomain(true);
     Settings = new Tests::TServerSettings(mbusPort, authConfig);
     Settings->SetDomainName("Root");

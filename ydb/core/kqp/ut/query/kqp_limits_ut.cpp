@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
             result.GetIssues().ToString());
         if (useSink) {
             UNIT_ASSERT_C(
-                result.GetIssues().ToString().contains("Stream write queries aren't allowed"),
+                result.GetIssues().ToString().contains("Memory limit exception, current limit is 1024 bytes."),
                 result.GetIssues().ToString());
         }
     }

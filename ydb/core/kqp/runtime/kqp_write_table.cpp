@@ -25,31 +25,50 @@ public:
     using TRecordBatchPtr = std::shared_ptr<arrow::RecordBatch>;
 
     TString SerializeToString() const override {
+        YQL_ENSURE(!Extracted);
         return NArrow::SerializeBatchNoCompression(Data);
     }
 
     i64 GetSerializedMemory() const override {
+        YQL_ENSURE(!Extracted);
         return SerializedMemory;
     }
 
     i64 GetMemory() const override {
+        YQL_ENSURE(!Extracted);
         return Memory;
     }
 
     bool IsEmpty() const override {
+        YQL_ENSURE(!Extracted);
         return Data ? Data->num_rows() == 0 : 0;
     }
 
     TRecordBatchPtr Extract() {
-        Memory = 0;
-        SerializedMemory = 0;
-        TRecordBatchPtr result = std::move(Data);
-        Data = nullptr;
-        return result;
+        YQL_ENSURE(!Extracted);
+        Extracted = true;
+        return std::move(Data);
     }
 
     std::shared_ptr<void> ExtractBatch() override {
         return std::dynamic_pointer_cast<void>(Extract());
+    }
+
+    void SetAlloc(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) override {
+        YQL_ENSURE(!Alloc);
+        if (alloc && Memory > 0) {
+            TGuard guard(*alloc);
+            alloc->Ref().OffloadAlloc(Memory);
+        }
+        Alloc = std::move(alloc);
+    }
+
+    void ResetAlloc() override {
+        if (Alloc && Memory > 0) {
+            TGuard guard(*Alloc);
+            Alloc->Ref().OffloadFree(Memory);
+        }
+        Alloc = nullptr;
     }
 
     explicit TColumnBatch(const TRecordBatchPtr& data)
@@ -58,16 +77,24 @@ public:
         , Memory(NArrow::GetBatchMemorySize(Data)) {
     }
 
+    ~TColumnBatch() {
+        ResetAlloc();
+    }
+
 private:
     TRecordBatchPtr Data;
     i64 SerializedMemory = 0;
     i64 Memory = 0;
+
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc = nullptr;
+    bool Extracted = false;
 };
 
 
 class TRowBatch : public IDataBatch {
 public:
     TString SerializeToString() const override {
+        YQL_ENSURE(!Extracted);
         // TODO: better
         TVector<TCell> cells;
         for (const auto& row : Rows) {
@@ -79,26 +106,47 @@ public:
     }
 
     i64 GetSerializedMemory() const override {
+        YQL_ENSURE(!Extracted);
         return SerializedMemory;
     }
 
     i64 GetMemory() const override {
+        YQL_ENSURE(!Extracted);
         return Memory;
     }
 
     bool IsEmpty() const override {
+        YQL_ENSURE(!Extracted);
         return Rows.empty();
     }
 
     std::vector<TOwnedCellVec> Extract() {
-        SerializedMemory = 0;
-        Memory = 0;
+        YQL_ENSURE(!Extracted);
+        Extracted = true;
         return std::move(Rows);
     }
 
     std::shared_ptr<void> ExtractBatch() override {
         auto r = std::make_shared<std::vector<TOwnedCellVec>>(std::move(Extract()));
         return std::reinterpret_pointer_cast<void>(r);
+    }
+
+    // TODO: MoveToAlloc
+    void SetAlloc(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) override {
+        YQL_ENSURE(!Alloc);
+        if (alloc && Memory > 0) {
+            TGuard guard(*alloc);
+            alloc->Ref().OffloadAlloc(Memory);
+        }
+        Alloc = std::move(alloc);
+    }
+
+    void ResetAlloc() override {
+        if (Alloc && Memory > 0) {
+            TGuard guard(*Alloc);
+            Alloc->Ref().OffloadFree(Memory);
+        }
+        Alloc = nullptr;
     }
 
     TRowBatch(std::vector<TOwnedCellVec>&& rows)
@@ -112,10 +160,17 @@ public:
         }
     }
 
+    ~TRowBatch() {
+        ResetAlloc();
+    }
+
 private:
     std::vector<TOwnedCellVec> Rows;
-    ui64 SerializedMemory = 0;
-    ui16 Memory = 0;
+    i64 SerializedMemory = 0;
+    i64 Memory = 0;
+    bool Extracted = false;
+
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc = nullptr;
 };
 
 class IPayloadSerializer : public TThrRefBase {
@@ -843,13 +898,13 @@ IPayloadSerializerPtr CreateDataShardPayloadSerializer(
 }
 
 IDataBatcherPtr CreateColumnDataBatcher(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-        std::vector<ui32> writeIndex) {
-    return MakeIntrusive<TColumnDataBatcher>(inputColumns, std::move(writeIndex));
+        std::vector<ui32> writeIndex, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> /*alloc*/) {
+    return MakeIntrusive<TColumnDataBatcher>(inputColumns, std::move(writeIndex)/*, std::move(alloc)*/);
 }
 
 IDataBatcherPtr CreateRowDataBatcher(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-        std::vector<ui32> writeIndex) {
-    return MakeIntrusive<TRowDataBatcher>(inputColumns, std::move(writeIndex));
+        std::vector<ui32> writeIndex, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> /*alloc*/) {
+    return MakeIntrusive<TRowDataBatcher>(inputColumns, std::move(writeIndex)/*, std::move(alloc)*/);
 }
 
 bool IDataBatch::IsEmpty() const {
@@ -1180,6 +1235,8 @@ public:
     }
 
     void Write(TWriteToken token, IDataBatchPtr&& data) override {
+        data->SetAlloc(Alloc);
+
         auto& info = WriteInfos.at(token);
         YQL_ENSURE(!info.Closed);
 
@@ -1380,8 +1437,10 @@ public:
     }
 
     TShardedWriteController(
-        const TShardedWriteControllerSettings settings)
-        : Settings(settings) {
+        const TShardedWriteControllerSettings settings,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
+        : Settings(settings)
+        , Alloc(std::move(alloc)) {
     }
 
     ~TShardedWriteController() {
@@ -1452,6 +1511,7 @@ private:
     }
 
     TShardedWriteControllerSettings Settings;
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
     struct TWriteInfo {
         TMetadata Metadata;
@@ -1473,8 +1533,9 @@ private:
 
 
 IShardedWriteControllerPtr CreateShardedWriteController(
-        const TShardedWriteControllerSettings& settings) {
-    return MakeIntrusive<TShardedWriteController>(settings);
+        const TShardedWriteControllerSettings& settings,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
+    return MakeIntrusive<TShardedWriteController>(settings, std::move(alloc));
 }
 
 }

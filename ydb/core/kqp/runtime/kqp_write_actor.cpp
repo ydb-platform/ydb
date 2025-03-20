@@ -244,20 +244,35 @@ public:
                 .MemoryLimitTotal = MessageSettings.InFlightMemoryLimitPerActorBytes,
                 .MemoryLimitPerMessage = MessageSettings.MemoryLimitPerMessageBytes,
                 .Inconsistent = InconsistentTx,
-            });
+            },
+            Alloc);
 
         Counters->WriteActorsCount->Inc();
     }
 
     void Bootstrap() {
         LogPrefix = TStringBuilder() << "SelfId: " << this->SelfId() << ", " << LogPrefix;
-        const auto partitioning = TxManager->GetPartitioning(TableId);
-        if (!partitioning) {
-            Resolve();
-        } else {
-            Partitioning = partitioning;
-            Prepare();
+        try {
+            const auto partitioning = TxManager->GetPartitioning(TableId);
+            if (!partitioning) {
+                Resolve();
+            } else {
+                Partitioning = partitioning;
+                Prepare();
+            }
+        } catch (const TMemoryLimitExceededException&) {
+            RuntimeError(
+                NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
+                NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+                TStringBuilder() << "Memory limit exception"
+                    << ", current limit is " << Alloc->GetLimit() << " bytes.");
+        } catch (...) {
+            RuntimeError(
+                NYql::NDqProto::StatusIds::INTERNAL_ERROR,
+                NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+                CurrentExceptionMessage());
         }
+
         Become(&TKqpTableWriteActor::StateProcessing);
     }
 
@@ -315,30 +330,17 @@ public:
         YQL_ENSURE(!Closed);
         YQL_ENSURE(ShardedWriteController);
         CA_LOG_D("Write: token=" << token);
-        try {
-            ShardedWriteController->Write(token, std::move(data));
-            UpdateShards();
-        } catch (...) {
-            RuntimeError(
-                NYql::NDqProto::StatusIds::INTERNAL_ERROR,
-                NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
-                CurrentExceptionMessage());
-        }
+        ShardedWriteController->Write(token, std::move(data));
+        UpdateShards();
     }
 
     void Close(TWriteToken token) {
         YQL_ENSURE(!Closed);
         YQL_ENSURE(ShardedWriteController);
         CA_LOG_D("Close: token=" << token);
-        try {
-            ShardedWriteController->Close(token);
-            UpdateShards();
-        } catch (...) {
-            RuntimeError(
-                NYql::NDqProto::StatusIds::INTERNAL_ERROR,
-                NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
-                CurrentExceptionMessage());
-        }
+
+        ShardedWriteController->Close(token);
+        UpdateShards();
     }
 
     void Close() {
@@ -390,7 +392,7 @@ public:
             RuntimeError(
                 NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                 NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
-                TStringBuilder() << "Memory limit exception at Processing"
+                TStringBuilder() << "Memory limit exception"
                     << ", current limit is " << Alloc->GetLimit() << " bytes.");
         } catch (...) {
             RuntimeError(
@@ -1128,19 +1130,12 @@ public:
         TableWriteActorStateSpan.EndOk();
         ResolveAttempts = 0;
 
-        try {
-            if (IsOlap) {
-                YQL_ENSURE(SchemeEntry);
-                ShardedWriteController->OnPartitioningChanged(*SchemeEntry);
-            } else {
-                ShardedWriteController->OnPartitioningChanged(Partitioning);
-                Partitioning.reset();
-            }
-        } catch (...) {
-            RuntimeError(
-                NYql::NDqProto::StatusIds::INTERNAL_ERROR,
-                NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
-                CurrentExceptionMessage());
+        if (IsOlap) {
+            YQL_ENSURE(SchemeEntry);
+            ShardedWriteController->OnPartitioningChanged(*SchemeEntry);
+        } else {
+            ShardedWriteController->OnPartitioningChanged(Partitioning);
+            Partitioning.reset();
         }
 
         Callbacks->OnReady();
@@ -1313,9 +1308,9 @@ public:
             Settings.GetWriteIndexes().end());
 
         if (Settings.GetIsOlap()) {
-            Batcher = CreateColumnDataBatcher(columnsMetadata, std::move(writeIndex));
+            Batcher = CreateColumnDataBatcher(columnsMetadata, std::move(writeIndex), Alloc);
         } else {
-            Batcher = CreateRowDataBatcher(columnsMetadata, std::move(writeIndex));
+            Batcher = CreateRowDataBatcher(columnsMetadata, std::move(writeIndex), Alloc);
         }
     }
 
@@ -1367,6 +1362,13 @@ public:
                 std::move(writeIndex),
                 Settings.GetPriority());
             WaitingForTableActor = true;
+        } catch (const TMemoryLimitExceededException&) {
+            RuntimeError(
+                NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
+                NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+                TStringBuilder() << "Memory limit exception"
+                    << ", current limit is " << Alloc->GetLimit() << " bytes.",
+                {});
         } catch (...) {
             RuntimeError(
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR,
@@ -1428,40 +1430,71 @@ private:
         EgressStats.Resume();
         Y_UNUSED(size);
 
-        Batcher->AddData(data);
-        YQL_ENSURE(WriteTableActor);
-        WriteTableActor->Write(*WriteToken, Batcher->Build());
-        if (Closed) {
-            WriteTableActor->Close(*WriteToken);
-            WriteTableActor->Close();
+        try {
+            Batcher->AddData(data);
+            YQL_ENSURE(WriteTableActor);
+            WriteTableActor->Write(*WriteToken, Batcher->Build());
+            if (Closed) {
+                WriteTableActor->Close(*WriteToken);
+                WriteTableActor->Close();
+            }
+        } catch (const TMemoryLimitExceededException&) {
+            RuntimeError(
+                NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
+                NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+                TStringBuilder() << "Memory limit exception"
+                    << ", current limit is " << Alloc->GetLimit() << " bytes.",
+                {});
+        } catch (...) {
+            RuntimeError(
+                NYql::NDqProto::StatusIds::INTERNAL_ERROR,
+                NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+                CurrentExceptionMessage(),
+                {});
         }
+
         Process();
     }
 
     void Process() {
-        const bool outOfMemory = GetFreeSpace() <= 0;
-        if (outOfMemory) {
-            WaitingForTableActor = true;
-        } else if (WaitingForTableActor) {
-            ResumeExecution();
-        }
+        try {
+            const bool outOfMemory = GetFreeSpace() <= 0;
+            if (outOfMemory) {
+                WaitingForTableActor = true;
+            } else if (WaitingForTableActor) {
+                ResumeExecution();
+            }
 
-        if (outOfMemory && !Settings.GetEnableStreamWrite()) {
+            if (outOfMemory && !Settings.GetEnableStreamWrite()) {
+                RuntimeError(
+                    NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
+                    NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+                    TStringBuilder() << "Stream write can't be used for this query.",
+                    {});
+                return;
+            }
+
+            if (Closed || outOfMemory) {
+                WriteTableActor->Flush();
+            }
+
+            if (Closed && WriteTableActor->IsFinished()) {
+                CA_LOG_D("Write actor finished");
+                Callbacks->OnAsyncOutputFinished(GetOutputIndex());
+            }
+        } catch (const TMemoryLimitExceededException&) {
             RuntimeError(
                 NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                 NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
-                TStringBuilder() << "Stream write can't be used for this query.",
+                TStringBuilder() << "Memory limit exception"
+                    << ", current limit is " << Alloc->GetLimit() << " bytes.",
                 {});
-            return;
-        }
-
-        if (Closed || outOfMemory) {
-            WriteTableActor->Flush();
-        }
-
-        if (Closed && WriteTableActor->IsFinished()) {
-            CA_LOG_D("Write actor finished");
-            Callbacks->OnAsyncOutputFinished(GetOutputIndex());
+        } catch (...) {
+            RuntimeError(
+                NYql::NDqProto::StatusIds::INTERNAL_ERROR,
+                NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
+                CurrentExceptionMessage(),
+                {});
         }
     }
 
@@ -1669,6 +1702,13 @@ public:
             default:
                 AFL_ENSURE(false)("unknown message", ev->GetTypeRewrite());
             }
+        } catch (const TMemoryLimitExceededException&) {
+            ReplyErrorAndDie(
+                NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
+                NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
+                TStringBuilder() << "Memory limit exception"
+                    << ", current limit is " << Alloc->GetLimit() << " bytes.",
+                {});
         } catch (...) {
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR,
@@ -2847,9 +2887,9 @@ public:
             Settings.GetWriteIndexes().begin(),
             Settings.GetWriteIndexes().end());
         if (Settings.GetIsOlap()) {
-            Batcher = CreateColumnDataBatcher(columnsMetadata, std::move(writeIndex));
+            Batcher = CreateColumnDataBatcher(columnsMetadata, std::move(writeIndex), Alloc);
         } else {
-            Batcher = CreateRowDataBatcher(columnsMetadata, std::move(writeIndex));
+            Batcher = CreateRowDataBatcher(columnsMetadata, std::move(writeIndex), Alloc);
         }
 
         Counters->ForwardActorsCount->Inc();
@@ -2905,6 +2945,7 @@ private:
         auto ev = std::make_unique<TEvBufferWrite>();
 
         ev->Data = Batcher->Build();
+        ev->Data->ResetAlloc();
         ev->Close = Closed;
 
         if (!WriteToken.IsEmpty()) {
@@ -2945,7 +2986,6 @@ private:
 
         CA_LOG_D("Send data=" << DataSize << ", closed=" << Closed << ", bufferActorId=" << BufferActorId);
         AFL_ENSURE(Send(BufferActorId, ev.release()));
-        DecreaseTrackedMemory(DataSize);
     }
 
     void CommitState(const NYql::NDqProto::TCheckpoint&) final {};
@@ -2974,7 +3014,6 @@ private:
         Closed |= finished;
         Batcher->AddData(data);
         DataSize += size;
-        IncreaseTrackedMemory(size);
 
         CA_LOG_D("Add data: " << size << " / " << DataSize);
         if (Closed || GetFreeSpace() <= 0) {
@@ -3000,16 +3039,6 @@ private:
     void PassAway() override {
         Counters->ForwardActorsCount->Dec();
         TActorBootstrapped<TKqpForwardWriteActor>::PassAway();
-    }
-
-    void IncreaseTrackedMemory(i64 size) {
-        TGuard guard(*Alloc);
-        Alloc->Ref().OffloadAlloc(size);
-    }
-
-    void DecreaseTrackedMemory(i64 size) {
-        TGuard guard(*Alloc);
-        Alloc->Ref().OffloadFree(size);
     }
 
     TString LogPrefix;

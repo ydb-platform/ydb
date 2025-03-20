@@ -18,6 +18,9 @@ public:
     virtual bool IsEmpty() const = 0;
 
     virtual std::shared_ptr<void> ExtractBatch() = 0;
+
+    virtual void SetAlloc(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) = 0;
+    virtual void ResetAlloc() = 0;
 };
 
 using IDataBatchPtr = TIntrusivePtr<IDataBatch>;
@@ -34,11 +37,13 @@ using IDataBatcherPtr = TIntrusivePtr<IDataBatcher>;
 
 IDataBatcherPtr CreateRowDataBatcher(
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-    std::vector<ui32> writeIndex);
+    std::vector<ui32> writeIndex,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
 
 IDataBatcherPtr CreateColumnDataBatcher(
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-    std::vector<ui32> writeIndex);
+    std::vector<ui32> writeIndex,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
 
 class IShardedWriteController : public TThrRefBase {
 public:
@@ -121,7 +126,8 @@ struct TShardedWriteControllerSettings {
 };
 
 IShardedWriteControllerPtr CreateShardedWriteController(
-    const TShardedWriteControllerSettings& settings);
+    const TShardedWriteControllerSettings& settings,
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
 
 }
 }

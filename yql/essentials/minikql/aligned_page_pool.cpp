@@ -437,6 +437,9 @@ template<typename T>
 void TAlignedPagePoolImpl<T>::OffloadFree(ui64 size) noexcept {
     TotalAllocated -= size;
     OffloadedActiveBytes -= size;
+    Y_DEBUG_ABORT_UNLESS(OffloadedActiveBytes >= 0);
+    Y_DEBUG_ABORT_UNLESS(TotalAllocated >= 0);
+
     if (Counters.TotalBytesAllocatedCntr) {
         (*Counters.TotalBytesAllocatedCntr) -= size;
     }

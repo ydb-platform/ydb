@@ -112,11 +112,9 @@ private:
     YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, ResultSchema);
 
 public:
-    TColumnFetchingContext(const std::shared_ptr<TDuplicateFilterConstructor::TSourceFilterConstructor>& constructor,
-        NColumnShard::TCounterGuard&& counterGuard, const TActorId& owner)
+    TColumnFetchingContext(const std::shared_ptr<TDuplicateFilterConstructor::TSourceFilterConstructor>& constructor, const TActorId& owner)
         : Owner(owner)
-        , Constructor(constructor)
-        , Guard(std::move(counterGuard)) {
+        , Constructor(constructor) {
         std::set<ui32> columnIds = Constructor->GetSource()->GetContext()->GetReadMetadata()->GetPKColumnIds();
         for (const ui32 columnId : Constructor->GetSource()->GetContext()->GetReadMetadata()->GetIndexInfo().GetSnapshotColumnIds()) {
             columnIds.emplace(columnId);

@@ -25,10 +25,19 @@ bool TTxMonitoring::Execute(TTransactionContext& txc, const TActorContext&) {
 }
 
 void TTxMonitoring::Complete(const TActorContext& ctx) {
+    const auto& cgi = HttpInfoEvent->Get()->Cgi();
     std::map<std::pair<ui64, ui64>, NJson::TJsonValue> schemaVersions;
     for (const auto& item: JsonReport["tables_manager"]["schema_versions"].GetArray()) {
         auto& schemaVersion = schemaVersions[std::make_pair<ui64, ui64>(item["SinceStep"].GetInteger(), item["SinceTxId"].GetInteger())];
         schemaVersion = item;
+    }
+    size_t countVersions = std::min(10ul, schemaVersions.size());
+    if (const auto& countVersionsParam = cgi.Get("countVersions")) {
+        try {
+            countVersions = std::min(std::stoul(countVersionsParam), schemaVersions.size());
+        } catch (...) {
+            // nothing, use default value
+        }
     }
     JsonReport["tables_manager"].EraseValue("schema_versions");
     TStringStream html;
@@ -50,13 +59,12 @@ void TTxMonitoring::Complete(const TActorContext& ctx) {
     html << "<h3>Tables Manager</h3>";
     html << "<h4>Status</h4>";
     html << "<pre>" << JsonReport << "</pre><br />";
-    html << "<h4>Top 10 Versions</h4>";
-    int counter = 0;
+    html << "<h4>Top " << countVersions << " of " << schemaVersions.size() << " Versions</h4>";
+    size_t counter = 0;
     for (const auto& [_, schemaVersion]: schemaVersions) {
         html << counter;
         html << "<pre>" << schemaVersion << "</pre><br />";
-
-        if (++counter == 10) {
+        if (++counter == countVersions) {
             break;
         }
     }

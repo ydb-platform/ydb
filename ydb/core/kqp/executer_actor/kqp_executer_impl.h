@@ -1560,10 +1560,7 @@ protected:
         }
         result = Max<ui32>(1, result);
 
-        if (enableShuffleElimination) {
-            result *= 2;
-        }
-
+        Y_UNUSED(enableShuffleElimination);
         return result;
     }
 

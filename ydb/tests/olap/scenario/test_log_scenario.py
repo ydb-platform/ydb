@@ -1,6 +1,3 @@
-import sys
-import ipdb
-
 import datetime
 import os
 import random
@@ -133,8 +130,8 @@ class TestLogScenario(BaseTestSet):
             self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` ")
             self.ydb_client.query(f"SELECT * FROM `{self.table_name}` WHERE timestamp < CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours})")
             self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` WHERE timestamp < CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours})")
-            self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` WHERE "
-                                  f"(timestamp >= CurrentUtcTimestamp() - DataTime::IntervalFromHours({hours}) - 1) AND "
+            self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` WHERE " + 
+                                  f"(timestamp >= CurrentUtcTimestamp() - DataTime::IntervalFromHours({hours}) - 1) AND " +
                                   f"(timestamp <= CurrentUtcTimestamp() - DataTime::IntervalFromHours({hours}))")
 
     def check_insert(self, duration: int):
@@ -152,23 +149,11 @@ class TestLogScenario(BaseTestSet):
         self.table_name: str = "log"
         logging.error(f"_ydb.instance.database: {self._ydb_instance.database()}")
         ydb_workload: YdbWorkloadLog = YdbWorkloadLog(endpoint=self.ydb_client.endpoint, database=self.ydb_client.database, table_name=self.table_name)
-        
-        # logging.error(f"_ydb.instance.database: {self._ydb_instance.database()}")
-        logging.error(f"YdbCluster endpoint: {self.ydb_client.endpoint}, database: {self.ydb_client.database}")
-
-        # yatest.common.execute(command="echo " + f"'YdbCluster endpoint: {self.ydb_client.endpoint}, database: {self.ydb_client.database}'" + ">> /home/emgariko/project/ydb_fork/ydb/ydb/tests/olap/scenario/logs.txt")
-
-        print(f"YdbCluster endpoint: {self.ydb_client.endpoint}, database: {self.ydb_client.database}", file=sys.stderr)
-        # assert false
-        # ydb_workload: YdbWorkloadLog = YdbWorkloadLog(endpoint=self._ydb_instance.endpoint(), database=f"/{self._ydb_instance.database()}", table_name=self.table_name)
         ydb_workload.create_table(self.table_name)
         # TODO: using insert here will somehow make self.get_row_count() equal 0
         ydb_workload.bulk_upsert(seconds=60, threads=10, rows=1000, wait=True)
-        # assert False
-        
-        # time.sleep(10000000)
+
         logging.info(f"Count rows after insert {self.get_row_count()} before wait")
-        # ipdb.set_trace()
         assert self.get_row_count() != 0
 
         threads: list[TestThread] = []

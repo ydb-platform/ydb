@@ -755,7 +755,7 @@ private:
             auto endName = NBatchParams::End + ToString(paramIndex + 1);
             auto [endType, endValue] = queryData->GetParameterUnboxedValue(endName);
 
-            if (i >= beginPrefixSizeValue.Get<ui32>()) {
+            if (paramIndex >= beginPrefixSizeValue.Get<ui32>()) {
                 builder << "-inf";
             } else {
                 builder << "[" << beginValue << "]";
@@ -765,7 +765,7 @@ private:
             builder << ("Column" + ToString(paramIndex + 1));
 
             builder << ((isInclusiveRightValue.Get<bool>()) ? " <= " : " < ");
-            if (i >= endPrefixSizeValue.Get<ui32>()) {
+            if (paramIndex >= endPrefixSizeValue.Get<ui32>()) {
                 builder << "+inf";
             } else {
                 builder << "[" << endValue << "]";

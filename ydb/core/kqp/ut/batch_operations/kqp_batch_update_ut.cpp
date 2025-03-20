@@ -22,53 +22,6 @@ NKikimrConfig::TAppConfig GetAppConfig(size_t maxBatchSize = 10000) {
     return app;
 }
 
-TExecuteQuerySettings GetQuerySettings() {
-    TExecuteQuerySettings execSettings;
-    execSettings.StatsMode(EStatsMode::Basic);
-    return execSettings;
-}
-
-void CreateTuplePrimaryTable(TSession& session) {
-    UNIT_ASSERT(session.ExecuteQuery(R"(
-        CREATE TABLE TuplePrimary (
-            Col1 Uint32,
-            Col2 Uint64,
-            Col3 Int64,
-            Col4 Int64,
-            PRIMARY KEY (Col2, Col1, Col3)
-        ) WITH (
-            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2,
-            PARTITION_AT_KEYS = (2, 3)
-        );)", TTxControl::NoTx()).GetValueSync().IsSuccess());
-
-    UNIT_ASSERT(session.ExecuteQuery(R"(
-        REPLACE INTO TuplePrimary (Col1, Col2, Col3, Col4) VALUES
-                (0, 1, 0, 0),
-                (1, 1, 0, 0),
-                (1, 1, 1, 0),
-                (1, 1, 2, 0),
-                (2, 1, 0, 0),
-                (1, 2, 0, 0),
-                (1, 2, 1, 0),
-                (2, 2, 0, 0),
-                (3, 2, 0, 0),
-                (0, 3, 0, 0),
-                (1, 3, 0, 0),
-                (2, 3, 0, 0),
-                (0, 3, 0, 0),
-                (1, 3, 0, 0),
-                (2, 3, 0, 0),
-                (3, 3, 0, 0);
-    )", TTxControl::BeginTx().CommitTx()).GetValueSync().IsSuccess());
-}
-
-void ExecQueryAndTestEmpty(TSession& session, const TString& query) {
-    auto txControl = TTxControl::NoTx();
-    auto result = session.ExecuteQuery(query, txControl, GetQuerySettings()).ExtractValueSync();
-    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
-    CompareYson("[[0u]]", FormatResultSetYson(result.GetResultSet(0)));
-}
-
 void TestSimple(size_t maxBatchSize) {
     TKikimrRunner kikimr(GetAppConfig(maxBatchSize));
     auto db = kikimr.GetQueryClient();
@@ -79,7 +32,7 @@ void TestSimple(size_t maxBatchSize) {
             BATCH UPDATE KeyValue
                 SET Value = "None";
         )");
-        auto result = session.ExecuteQuery(query, TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+        auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         ExecQueryAndTestEmpty(session, R"(
@@ -92,7 +45,7 @@ void TestSimple(size_t maxBatchSize) {
             BATCH UPDATE KeyValue2
                 SET Value = "None";
         )");
-        auto result = session.ExecuteQuery(query, TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+        auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         ExecQueryAndTestEmpty(session, R"(
@@ -105,7 +58,7 @@ void TestSimple(size_t maxBatchSize) {
             BATCH UPDATE KeyValueLargePartition
                 SET Value = "None";
         )");
-        auto result = session.ExecuteQuery(query, TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+        auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         ExecQueryAndTestEmpty(session, R"(
@@ -119,7 +72,7 @@ void TestSimple(size_t maxBatchSize) {
                 SET Amount = 0
                 WHERE Comment = "None";
         )");
-        auto result = session.ExecuteQuery(query, TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+        auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         ExecQueryAndTestEmpty(session, R"(
@@ -133,7 +86,7 @@ void TestSimple(size_t maxBatchSize) {
                 SET Amount = 100, Comment = "Yes"
                 WHERE Comment = "None" AND Group < 2;
         )");
-        auto result = session.ExecuteQuery(query, TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+        auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         ExecQueryAndTestEmpty(session, R"(
@@ -153,7 +106,7 @@ void TestPartitionTables(size_t maxBatchSize) {
             BATCH UPDATE TwoShard
                 SET Value2 = 3;
         )");
-        auto result = session.ExecuteQuery(query, TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+        auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         ExecQueryAndTestEmpty(session, R"(
@@ -167,7 +120,7 @@ void TestPartitionTables(size_t maxBatchSize) {
                 SET Value2 = 5
                 WHERE Key >= 2;
         )");
-        auto result = session.ExecuteQuery(query, TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+        auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         ExecQueryAndTestEmpty(session, R"(
@@ -181,7 +134,7 @@ void TestPartitionTables(size_t maxBatchSize) {
                 SET Text = "None"
                 WHERE Key > 300 AND Data = 2;
         )");
-        auto result = session.ExecuteQuery(query, TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+        auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         ExecQueryAndTestEmpty(session, R"(
@@ -195,7 +148,7 @@ void TestPartitionTables(size_t maxBatchSize) {
                 SET Message = ""
                 WHERE App = "kikimr-db";
         )");
-        auto result = session.ExecuteQuery(query, TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+        auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         ExecQueryAndTestEmpty(session, R"(
@@ -209,7 +162,7 @@ void TestPartitionTables(size_t maxBatchSize) {
                 SET Name = "None", Value2 = "ValueN"
                 WHERE Key1 = 102 AND Key2 = "One";
         )");
-        auto result = session.ExecuteQuery(query, TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+        auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         ExecQueryAndTestEmpty(session, R"(
@@ -218,18 +171,16 @@ void TestPartitionTables(size_t maxBatchSize) {
         )");
     }
     {
-        CreateTuplePrimaryTable(session);
-
         auto query = Q_(R"(
-            BATCH UPDATE TuplePrimary
+            BATCH UPDATE TuplePrimaryDescending
                 SET Col4 = 2
                 WHERE Col3 = 0;
         )");
-        auto result = session.ExecuteQuery(query, TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+        auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         ExecQueryAndTestEmpty(session, R"(
-            SELECT count(*) FROM TuplePrimary
+            SELECT count(*) FROM TuplePrimaryDescending
                 WHERE Col3 = 0 AND Col4 != 2;
         )");
     }
@@ -247,7 +198,7 @@ void TestLargeTable(size_t maxBatchSize, size_t rowsPerShard) {
             BATCH UPDATE LargeTable
                 SET Data = -1, DataText = "Updated";
         )");
-        auto result = session.ExecuteQuery(query, TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+        auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         ExecQueryAndTestEmpty(session, R"(
@@ -261,7 +212,7 @@ void TestLargeTable(size_t maxBatchSize, size_t rowsPerShard) {
                 SET Data = 2
                 WHERE Key >= 2000;
         )");
-        auto result = session.ExecuteQuery(query, TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+        auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
 
         ExecQueryAndTestEmpty(session, R"(
@@ -315,7 +266,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
                     SET Amount = Amount * 10;
             )");
 
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
         }
         {
@@ -324,7 +275,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
                     SET Amount = Amount * Group;
             )");
 
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
         }
         {
@@ -333,7 +284,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
                     SET Name = Comment, Comment = Name;
             )");
 
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
         }
     }
@@ -352,7 +303,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
                     );
             )");
 
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
         }
         {
@@ -364,7 +315,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
                     );
             )");
 
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
         }
         {
@@ -375,7 +326,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
                     SET Value = "None";
             )");
 
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
         }
     }
@@ -392,7 +343,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
                 SELECT 42;
             )");
 
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
         }
         {
@@ -402,7 +353,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
                 SELECT * FROM Test;
             )");
 
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
         }
         {
@@ -413,7 +364,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
                     VALUES (10, "Value10");
             )");
 
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
         }
         {
@@ -424,7 +375,7 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
                     VALUES ("Key10", "Value10");
             )");
 
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx(), GetQuerySettings()).ExtractValueSync();
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
         }
     }

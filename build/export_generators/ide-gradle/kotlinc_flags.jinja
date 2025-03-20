@@ -1,0 +1,20 @@
+{%- if with_kotlin -%}
+{%-     set kotlinc_flags = [] -%}
+{%-     if task.kotlinc.flags|length -%}
+{%-         set kotlinc_flags = kotlinc_flags -%}
+{%-     endif -%}
+{%-     set extra_kotlinc_flags = extra_targets|selectattr('kotlinc')|map(attribute='kotlinc')|map(attribute='flags')|sum -%}
+{%-     if extra_kotlinc_flags|length -%}
+{%-         set kotlinc_flags = kotlinc_flags + extra_kotlinc_flags -%}
+{%-     endif -%}
+{%-     if kotlinc_flags|length %}
+
+tasks.withType<KotlinCompile> {
+    compilerOptions {
+{%-         for kotlinc_flag in kotlinc_flags|unique %}
+        freeCompilerArgs.add("{{ kotlinc_flag|replace(export_root, "$project_root")|replace(arcadia_root, "$project_root") }}")
+{%-         endfor %}
+    }
+}
+{%      endif -%}
+{%- endif -%}

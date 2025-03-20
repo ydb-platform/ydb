@@ -28,6 +28,7 @@ inline bool IsLogLevelAllowed(ELogLevel message, ELogLevel threshold) {
     return static_cast<ui32>(message) <= static_cast<ui32>(threshold);
 }
 
+TString LogLevelAvailables();
 TStringBuf LevelToString(ELogLevel level);
 TMaybe<ELogLevel> TryLevelFromString(TStringBuf str);
 

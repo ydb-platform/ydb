@@ -37,24 +37,6 @@ double TFairShareHierarchyLevel<TTag>::GetWeight() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// The earlier the log arrived, the more expensive it is.
-std::strong_ordering TFairShareLogKey::operator<=>(const TFairShareLogKey& other) const
-{
-    if (CreatedAt > other.CreatedAt) {
-        return std::strong_ordering::less;
-    } else if (CreatedAt < other.CreatedAt) {
-        return std::strong_ordering::greater;
-    }
-    return RequestId <=> other.RequestId;
-}
-
-TFairShareLogKey::operator size_t() const
-{
-    return MultiHash(RequestId, CreatedAt);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
 template <typename TTag>
 TFairShareHierarchicalSchedulerLog<TTag>::TFairShareHierarchicalSchedulerLog(
     TGuid requestId,
@@ -76,7 +58,7 @@ TFairShareHierarchicalSlotQueueSlot<TTag>::TFairShareHierarchicalSlotQueueSlot(
     i64 size,
     std::vector<IFairShareHierarchicalSlotQueueResourcePtr> resources,
     std::vector<TFairShareHierarchyLevel<TTag>> levels)
-    : RequestId_(TGuid::Create())
+    : SlotId_(TGuid::Create())
     , Size_(size)
     , Levels_(std::move(levels))
     , EnqueueTime_(TInstant::Now())
@@ -94,7 +76,7 @@ const std::vector<TFairShareHierarchyLevel<TTag>>& TFairShareHierarchicalSlotQue
 template <typename TTag>
 TGuid TFairShareHierarchicalSlotQueueSlot<TTag>::GetSlotId() const
 {
-    return RequestId_;
+    return SlotId_;
 }
 
 template <typename TTag>
@@ -857,7 +839,7 @@ void TFairShareHierarchicalSlotQueue<TTag>::DequeueSlot(const TFairShareHierarch
 }
 
 template <typename TTag>
-TFairShareHierarchicalSlotQueueSlotPtr<TTag> TFairShareHierarchicalSlotQueue<TTag>::PeekSlot(const THashSet<TGuid>& slotFilter)
+TFairShareHierarchicalSlotQueueSlotPtr<TTag> TFairShareHierarchicalSlotQueue<TTag>::PeekSlot(const THashSet<TFairShareSlotId>& slotFilter)
 {
     NProfiling::TEventTimerGuard timer(PeekSlotWallTimer_);
 

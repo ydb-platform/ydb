@@ -3093,6 +3093,7 @@ WITH (
             }
         }
 
+        // After some attempts login with wrong password user must be locked out. Flag IsLockedOut must be true
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT Sid, IsEnabled, IsLockedOut, FailedAttemptCount
@@ -3106,9 +3107,15 @@ WITH (
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
 
+        // Check that user is locked out and cannot login
+        {
+            auto loginResult = env.GetClient().Login(*(env.GetServer().GetRuntime()), "user1", "password1");
+            UNIT_ASSERT_EQUAL(loginResult.GetError(), "User user1 is not permitted to log in");
+        }
+
         Sleep(TDuration::Seconds(5));
 
-        // Unlock after 5 seconds
+        // User can login after 5 seconds. Flag IsLockedOut is false
         {
             auto it = client.StreamExecuteScanQuery(R"(
                 SELECT Sid, IsEnabled, IsLockedOut, FailedAttemptCount
@@ -3117,6 +3124,26 @@ WITH (
 
             auto expected = R"([
                 [["user1"];[%true];[%false];[4u]];
+            ])";
+
+            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+        }
+
+        // User can login
+        {
+            auto loginResult = env.GetClient().Login(*(env.GetServer().GetRuntime()), "user1", "password1");
+            UNIT_ASSERT_EQUAL(loginResult.GetError(), "");
+        }
+
+        // Check that FailedAttemptCount is reset
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT Sid, IsEnabled, IsLockedOut, FailedAttemptCount
+                FROM `Root/.sys/auth_users`
+            )").GetValueSync();
+
+            auto expected = R"([
+                [["user1"];[%true];[%false];[0u]];
             ])";
 
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));

@@ -1098,6 +1098,13 @@
             "uri": "https://{canondata_backend}/1942173/99e88108149e222741552e7e6cddef041d6a2846/resource.tar.gz#test_sql2yql.test_bigdate-const_timestamp64_/sql.yql"
         }
     ],
+    "test_sql2yql.test[bigdate-date_implicit_casts]": [
+        {
+            "checksum": "a83a400d2d37cac5440715cb909f67e6",
+            "size": 3333,
+            "uri": "https://{canondata_backend}/1871102/c2e9767e39c8f9e50c0016d8377ff12660471aaf/resource.tar.gz#test_sql2yql.test_bigdate-date_implicit_casts_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[bigdate-date_tz_bounds]": [
         {
             "checksum": "7e6319138c451a9af0fab81161b22c28",
@@ -1110,6 +1117,13 @@
             "checksum": "21dcb7017ac0fa052b508230f773ecad",
             "size": 6261,
             "uri": "https://{canondata_backend}/1880306/7ab74c806ebfa825c90d696b230a4fba9939dddd/resource.tar.gz#test_sql2yql.test_bigdate-date_tz_bounds_scale_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[bigdate-date_tz_implicit_casts]": [
+        {
+            "checksum": "38f28381b9bdd5cc1e856fafcba7c1ea",
+            "size": 3243,
+            "uri": "https://{canondata_backend}/1871102/c2e9767e39c8f9e50c0016d8377ff12660471aaf/resource.tar.gz#test_sql2yql.test_bigdate-date_tz_implicit_casts_/sql.yql"
         }
     ],
     "test_sql2yql.test[bigdate-date_tz_impossible_cast]": [
@@ -2127,6 +2141,13 @@
             "uri": "https://{canondata_backend}/1942173/99e88108149e222741552e7e6cddef041d6a2846/resource.tar.gz#test_sql2yql.test_datetime-date_diff_sub_/sql.yql"
         }
     ],
+    "test_sql2yql.test[datetime-date_implicit_casts]": [
+        {
+            "checksum": "de20b1127905d96a5d384d1547419733",
+            "size": 3589,
+            "uri": "https://{canondata_backend}/1871102/c2e9767e39c8f9e50c0016d8377ff12660471aaf/resource.tar.gz#test_sql2yql.test_datetime-date_implicit_casts_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[datetime-date_in]": [
         {
             "checksum": "f042635815e0ece3c9aa69a5cc35c44f",
@@ -2230,6 +2251,13 @@
             "checksum": "343a140de5aff6bb07b48ea7c6121339",
             "size": 1437,
             "uri": "https://{canondata_backend}/1942173/99e88108149e222741552e7e6cddef041d6a2846/resource.tar.gz#test_sql2yql.test_datetime-date_tz_expand_gmt_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[datetime-date_tz_implicit_casts]": [
+        {
+            "checksum": "c56d5f5cf37c97f0ef2a7ca3000a84bc",
+            "size": 3373,
+            "uri": "https://{canondata_backend}/1871102/c2e9767e39c8f9e50c0016d8377ff12660471aaf/resource.tar.gz#test_sql2yql.test_datetime-date_tz_implicit_casts_/sql.yql"
         }
     ],
     "test_sql2yql.test[datetime-date_tz_impossible_cast]": [
@@ -8162,6 +8190,11 @@
             "uri": "file://test_sql_format.test_bigdate-const_timestamp64_/formatted.sql"
         }
     ],
+    "test_sql_format.test[bigdate-date_implicit_casts]": [
+        {
+            "uri": "file://test_sql_format.test_bigdate-date_implicit_casts_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[bigdate-date_tz_bounds]": [
         {
             "uri": "file://test_sql_format.test_bigdate-date_tz_bounds_/formatted.sql"
@@ -8170,6 +8203,11 @@
     "test_sql_format.test[bigdate-date_tz_bounds_scale]": [
         {
             "uri": "file://test_sql_format.test_bigdate-date_tz_bounds_scale_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[bigdate-date_tz_implicit_casts]": [
+        {
+            "uri": "file://test_sql_format.test_bigdate-date_tz_implicit_casts_/formatted.sql"
         }
     ],
     "test_sql_format.test[bigdate-date_tz_impossible_cast]": [
@@ -8897,6 +8935,11 @@
             "uri": "file://test_sql_format.test_datetime-date_diff_sub_/formatted.sql"
         }
     ],
+    "test_sql_format.test[datetime-date_implicit_casts]": [
+        {
+            "uri": "file://test_sql_format.test_datetime-date_implicit_casts_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[datetime-date_in]": [
         {
             "uri": "file://test_sql_format.test_datetime-date_in_/formatted.sql"
@@ -8970,6 +9013,11 @@
     "test_sql_format.test[datetime-date_tz_expand_gmt]": [
         {
             "uri": "file://test_sql_format.test_datetime-date_tz_expand_gmt_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[datetime-date_tz_implicit_casts]": [
+        {
+            "uri": "file://test_sql_format.test_datetime-date_tz_implicit_casts_/formatted.sql"
         }
     ],
     "test_sql_format.test[datetime-date_tz_impossible_cast]": [

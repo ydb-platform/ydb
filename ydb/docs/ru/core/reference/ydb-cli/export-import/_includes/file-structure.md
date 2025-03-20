@@ -43,7 +43,7 @@
 
 ## Таблицы {#tables}
 
-Каждой таблице в базе данных соответствует одноименная директория в файловой структуре, в которой находятся:
+Каждой таблице в базе данных соответствует одноимённая директория в файловой структуре, в которой находятся:
 
 - Файл `scheme.pb`, содержащий информацию о структуре таблицы и её параметрах в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
 - Файл `permissions.pb`, содержащий информацию об ACL таблицы и её владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
@@ -52,7 +52,7 @@
   - Файл `changefeed_description.pb`, содержащий информацию о потоке изменений в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
   - Файл `topic_description.pb`, содержащий информацию о нижележащем топике в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
 
-## Файлы с данными {#datafiles}
+### Файлы с данными {#datafiles}
 
 Формат файлов с данными - `.csv`, одна строка соответствует одной записи в таблице, без строки с заголовками колонок. Для строк применяется  представление в urlencoded формате. Например, строка файла для таблицы с колонками uint64 и utf8, содержащая число 1 и строку "Привет" соответственно, выглядит таким образом:
 
@@ -62,7 +62,7 @@
 
 ## Представления (views) {#views}
 
-Каждому [представлению](../../../../concepts/datamodel/view.md) в базе данных соответствует одноименная директория в файловой структуре, в которой находятся:
+Каждому [представлению](../../../../concepts/datamodel/view.md) в базе данных соответствует одноимённая директория в файловой структуре, в которой находятся:
 
 - Файл `create_view.sql`, содержащий определение представления в виде текста YQL-запроса [CREATE VIEW](../../../../yql/reference/syntax/create-view.md)
 - Файл `permissions.pb`, содержащий информацию об ACL представления и его владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)

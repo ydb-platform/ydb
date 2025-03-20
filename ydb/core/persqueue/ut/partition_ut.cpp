@@ -1374,7 +1374,7 @@ struct TTxBatchingTestParams {
 
 class TPartitionTxTestHelper : public TPartitionFixture {
 private:
-    auto AddWriteTxImpl(const TSrcIdMap& srcIdsAffected, ui64 txId, ui64 step);
+    auto AddWriteTxImpl(const TSrcIdMap& srcIdsAffected, ui64 txId, ui64 step, TMaybe<NPQ::TClientBlob>&& blobFromHead = Nothing());
 
     void AddWriteInfoObserver(bool success, const NPQ::TSourceIdMap& srcIdInfo, const TActorId& supportivePart);
     void SendWriteInfoResponseImpl(const TActorId& supportiveId, const TActorId& partitionId, bool status);
@@ -1390,7 +1390,7 @@ private:
     THashMap<TActorId, bool> ExpectedWriteInfoRequests;
     TQueue<std::pair<TActorId, TActorId>> RecievedWriteInfoRequests;
     TAdaptiveLock Lock;
-    THashMap<TActorId, NPQ::TSourceIdMap> WriteInfoData;
+    THashMap<TActorId, THolder<TEvPQ::TEvGetWriteInfoResponse>> WriteInfoData;
 
     TVector<std::pair<TString, TString>> Sessions;
     THashMap<TString, std::pair<TString, ui64>> Owners;
@@ -1398,6 +1398,8 @@ public:
     void Init(const TTxBatchingTestParams& params = {})
     {
         TxStep = params.TxStep;
+        Ctx->Runtime->SetLogPriority( NKikimrServices::PERSQUEUE, NActors::NLog::PRI_DEBUG);
+
         Ctx->Runtime->GetAppData(0).PQConfig.MutableQuotingConfig()->SetEnableQuoting(false);
         Ctx->Runtime->SetObserverFunc([this](TAutoPtr<IEventHandle>& ev) {
             if (auto* msg = ev->CastAsLocal<TEvPQ::TEvGetWriteInfoRequest>()) {
@@ -1410,6 +1412,7 @@ public:
                     BatchSizes.push_back(msg->BatchSize);
                 }
             } else if (auto* msg = ev->CastAsLocal<TEvKeyValue::TEvRequest>()) {
+                Cerr << "Got KV request\n";
                 with_lock(Lock) {
                     HadKvRequest = true;
                 }
@@ -1443,7 +1446,7 @@ public:
     }
 
     ui64 AddAndSendNormalWrite(const TString& srcId, ui64 startSeqnNo, ui64 lastSeqNo);
-    ui64 MakeAndSendWriteTx(const TSrcIdMap& srcIdsAffected);
+    ui64 MakeAndSendWriteTx(const TSrcIdMap& srcIdsAffected, TMaybe<NPQ::TClientBlob>&& blobFromHead = Nothing());
     ui64 MakeAndSendImmediateTx(const TSrcIdMap& srcIdsAffected);
     ui64 MakeAndSendNormalOffsetCommit(ui64 client, ui64 offset);
     ui64 MakeAndSendTxOffsetCommit(ui64 client, ui64 begin, ui64 end);
@@ -1509,16 +1512,15 @@ void TPartitionTxTestHelper::SendWriteInfoResponseImpl(const TActorId& supportiv
         return;
     }
     NPQ::TSourceIdMap SrcIds;
-    auto* reply = new TEvPQ::TEvGetWriteInfoResponse();
     auto iter = this->WriteInfoData.find(supportiveId);
     Y_ABORT_UNLESS(!iter.IsEnd());
-    reply->SrcIdInfo = iter->second;
+    auto& reply = iter->second;
     reply->BytesWrittenTotal = 1;
     reply->BytesWrittenGrpc = 1;
     reply->BytesWrittenUncompressed = 1;
     reply->MessagesWrittenTotal = 1;
     reply->MessagesWrittenGrpc = 1;
-    SendEvent(reply, supportiveId, partitionId);
+    SendEvent(reply.Release(), supportiveId, partitionId);
 }
 
 void TPartitionTxTestHelper::WaitWriteInfoRequest(ui64 userActId, bool autoRespond) {
@@ -1703,7 +1705,6 @@ ui64 TPartitionTxTestHelper::AddAndSendNormalWrite(
         msg.ReceiveTimestamp = TMonotonic::Now().Seconds();
         msg.DisableDeduplication = false;
         msg.Data = data;
-        msg.Data = data;
         msg.UncompressedSize = data.size();
         msg.External = false;
         msg.IgnoreQuotaDeadline = false;
@@ -1723,7 +1724,7 @@ ui64 TPartitionTxTestHelper::AddAndSendNormalWrite(
     return id;
 }
 
-auto TPartitionTxTestHelper::AddWriteTxImpl(const TSrcIdMap& srcIdsAffected, ui64 txId, ui64 step) {
+auto TPartitionTxTestHelper::AddWriteTxImpl(const TSrcIdMap& srcIdsAffected, ui64 txId, ui64 step, TMaybe<NPQ::TClientBlob>&& blobFromHead) {
     auto id = NextActId++;
     TTestUserAct act{.IsImmediateTx = (step != 0), .TxId = txId, .SupportivePartitionId = CreateFakePartition()};
     NPQ::TSourceIdMap srcIdMap;
@@ -1734,15 +1735,19 @@ auto TPartitionTxTestHelper::AddWriteTxImpl(const TSrcIdMap& srcIdsAffected, ui6
         srcIdMap.emplace(key, std::move(srcInfo));
     }
     auto iter = UserActs.insert(std::make_pair(id, act)).first;
-
+    auto ev = MakeHolder<TEvPQ::TEvGetWriteInfoResponse>();
+    ev->SrcIdInfo = std::move(srcIdMap);
+    if (blobFromHead.Defined()) {
+        ev->BlobsFromHead.emplace_back(std::move(blobFromHead.GetRef()));
+    }
     with_lock(Lock) {
-        WriteInfoData.emplace(act.SupportivePartitionId, std::move(srcIdMap));
+        WriteInfoData.emplace(act.SupportivePartitionId, std::move(ev));
     }
     return iter;
 }
 
-ui64 TPartitionTxTestHelper::MakeAndSendWriteTx(const TSrcIdMap& srcIdsAffected) {
-    auto actIter = AddWriteTxImpl(srcIdsAffected, NextActId++, TxStep);
+ui64 TPartitionTxTestHelper::MakeAndSendWriteTx(const TSrcIdMap& srcIdsAffected, TMaybe<NPQ::TClientBlob>&& blobFromHead) {
+    auto actIter = AddWriteTxImpl(srcIdsAffected, NextActId++, TxStep, std::move(blobFromHead));
     auto event = MakeHolder<TEvPQ::TEvTxCalcPredicate>(TxStep, actIter->second.TxId);
     event->SupportivePartitionActor = actIter->second.SupportivePartitionId;
     Cerr << "Create distr tx with id = " << actIter->second.TxId << " and act no: " << actIter->first << Endl;
@@ -2861,55 +2866,68 @@ Y_UNIT_TEST_F(ConflictingTxProceedAfterRollback, TPartitionTxTestHelper) {
 }
 
 Y_UNIT_TEST_F(ConflictingSrcIdTxInDifferentBatches, TPartitionTxTestHelper) {
-    Init();
+    TTxBatchingTestParams params {.WriterSessions{"src1"}};
+    Init(std::move(params));
 
     auto tx1 = MakeAndSendWriteTx({{"src1", {1, 3}}, {"src2", {5, 10}}});
     auto immTx = MakeAndSendImmediateTx({{"src2", {11, 12}}});
-    auto tx2 = MakeAndSendWriteTx({{"src1", {2, 2}}});
+    auto tx2 = MakeAndSendWriteTx({{"src1", {2, 4}}});
+    auto tx3 = MakeAndSendWriteTx({{"src1", {4, 6}}});
+    AddAndSendNormalWrite("src1", 1, 1);
+    AddAndSendNormalWrite("src1", 7, 7);
+    AddAndSendNormalWrite("src1", 7, 7);
+
 
     WaitWriteInfoRequest(tx1, true);
     WaitWriteInfoRequest(immTx, true);
     WaitWriteInfoRequest(tx2, true);
+    WaitWriteInfoRequest(tx3, true);
     WaitTxPredicateReply(tx1);
 
+    SendTxCommit(tx1);
     WaitBatchCompletion(1);
 
-    SendTxCommit(tx1);
     ExpectNoKvRequest();
     WaitTxPredicateFailure(tx2);
-    WaitBatchCompletion(2); // Immediate Tx.
-
-
+    WaitTxPredicateReply(tx3);
+    SendTxRollback(tx2);
+    SendTxCommit(tx3);
+    WaitBatchCompletion(3); // Immediate Tx, Tx 2 & 3.
+    ExpectNoCommitDone();
     WaitKvRequest();
     SendKvResponse();
     WaitCommitDone(tx1);
     WaitImmediateTxComplete(immTx, true);
-    ExpectNoCommitDone();
+    WaitCommitDone(tx3);
+    WaitBatchCompletion(3);
+    WaitKvRequest();
 }
 
-Y_UNIT_TEST_F(ConflictingSrcIdWriteInDifferentBatches, TPartitionTxTestHelper) {
-    TTxBatchingTestParams params {.WriterSessions{"src1"}};
+Y_UNIT_TEST_F(ConflictingSrcIdForTxWithHead, TPartitionTxTestHelper) {
+    TTxBatchingTestParams params {.WriterSessions{"src1"}, .EndOffset=1};
     Init(std::move(params));
 
-    auto tx1 = MakeAndSendWriteTx({{"src1", {1, 5}}, {"src2", {5, 10}}});
-    auto immTx = MakeAndSendImmediateTx({{"src2", {11, 12}}});
-    AddAndSendNormalWrite("src1", 2, 3);
+    NPQ::TClientBlob clientBlob("src1", 10, "valuevalue", TMaybe<TPartData>(), TInstant::MilliSeconds(1), TInstant::MilliSeconds(1), 0, "123", "123");
+
+    auto tx1 = MakeAndSendWriteTx({{"src1", {1, 10}}}, std::move(clientBlob));
+    AddAndSendNormalWrite("src1", 8, 8);
+    AddAndSendNormalWrite("src1", 10, 10);
+    AddAndSendNormalWrite("src1", 11, 11);
+
 
     WaitWriteInfoRequest(tx1, true);
-    WaitWriteInfoRequest(immTx, true);
     WaitTxPredicateReply(tx1);
 
-    WaitBatchCompletion(1);
-
     SendTxCommit(tx1);
-    WaitBatchCompletion(1); // Immediate Tx.
-
+    WaitBatchCompletion(1);
+    Cerr << "Wait 1st KV request\n";
     WaitKvRequest();
-    ExpectNoBatchCompletion();
     SendKvResponse();
     WaitCommitDone(tx1);
-    WaitBatchCompletion(2);
-    ExpectNoKvRequest();
+    WaitBatchCompletion(3);
+    Cerr << "Wait 2nd KV request\n";
+    WaitKvRequest();
+    SendKvResponse();
 }
 
 class TBatchingConditionsTest {

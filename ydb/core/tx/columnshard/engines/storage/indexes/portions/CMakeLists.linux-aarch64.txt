@@ -35,5 +35,6 @@ target_link_libraries(storage-indexes-portions PUBLIC
 
 target_sources(storage-indexes-portions PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/indexes/portions/constructor.cpp
 )
 

@@ -12,34 +12,36 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(storage-indexes-bloom INTERFACE)
+add_library(storage-indexes-bits_storage)
 
 
-target_link_libraries(storage-indexes-bloom INTERFACE
-  contrib-libs-linux-headers
+target_link_libraries(storage-indexes-bits_storage PUBLIC
   contrib-libs-cxxsupp
   yutil
+  ydb-library-conclusion
+  library-actors-core
   ydb-core-protos
-  core-formats-arrow
-  storage-indexes-portions
+)
+
+target_sources(storage-indexes-bits_storage PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/indexes/bits_storage/abstract.cpp
 )
 
 
-add_global_library_for(storage-indexes-bloom.global
-  storage-indexes-bloom)
+add_global_library_for(storage-indexes-bits_storage.global
+  storage-indexes-bits_storage)
 
 
-target_link_libraries(storage-indexes-bloom.global PUBLIC
-  contrib-libs-linux-headers
+target_link_libraries(storage-indexes-bits_storage.global PUBLIC
   contrib-libs-cxxsupp
   yutil
+  ydb-library-conclusion
+  library-actors-core
   ydb-core-protos
-  core-formats-arrow
-  storage-indexes-portions
 )
 
-target_sources(storage-indexes-bloom.global PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/indexes/bloom/constructor.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/indexes/bloom/meta.cpp
+target_sources(storage-indexes-bits_storage.global PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/indexes/bits_storage/bitset.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/storage/indexes/bits_storage/string.cpp
 )
 

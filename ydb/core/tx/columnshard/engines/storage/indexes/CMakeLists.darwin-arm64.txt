@@ -14,6 +14,8 @@
 
 add_subdirectory(portions)
 add_subdirectory(bloom)
+add_subdirectory(bits_storage)
+add_subdirectory(skip_index)
 add_subdirectory(categories_bloom)
 add_subdirectory(bloom_ngramm)
 add_subdirectory(max)
@@ -27,6 +29,8 @@ target_link_libraries(engines-storage-indexes INTERFACE
   yutil
   storage-indexes-portions
   storage-indexes-bloom
+  storage-indexes-bits_storage
+  storage-indexes-skip_index
   storage-indexes-categories_bloom
   storage-indexes-bloom_ngramm
   storage-indexes-max

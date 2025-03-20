@@ -3,7 +3,6 @@
 
 #include <ydb/core/formats/arrow/hash/calcer.h>
 #include <ydb/core/tx/columnshard/engines/protos/index.pb.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom/bits_storage.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
@@ -14,58 +13,28 @@
 
 namespace NKikimr::NOlap::NIndexes::NCategoriesBloom {
 
-class TCategory {
-private:
-    YDB_READONLY(ui32, Identifier, 0);
-    YDB_READONLY(ui32, Size, 0);
-    YDB_READONLY_DEF(std::vector<ui64>, Hashes);
-    std::vector<bool> Filter;
-
-public:
-    TCategory(const ui32 id)
-        : Identifier(id) {
-    }
-
-    const std::vector<bool>& GetFilter() const {
-        AFL_VERIFY(Filter.size());
-        return Filter;
-    }
-
-    void AddHash(const ui64 hashBase, const ui32 hitsCount) {
-        Hashes.emplace_back(hashBase);
-        Size += hitsCount;
-    }
-
-    void Finalize(const ui32 hashesCount) {
-        AFL_VERIFY(Filter.size() == 0);
-        const ui32 bitsCount = TFixStringBitsStorage::GrowBitsCountToByte(hashesCount * std::max<ui32>(Size, 10) / std::log(2));
-        AFL_VERIFY(bitsCount);
-        Filter.resize(bitsCount, false);
-    }
-};
-
 class TCategoryBuilder {
 private:
     YDB_READONLY_DEF(std::set<ui64>, Categories);
-    YDB_ACCESSOR_DEF(std::vector<bool>, Filter);
+    YDB_ACCESSOR_DEF(TDynBitMap, Filter);
 
 public:
     TCategoryBuilder(std::set<ui64>&& categories, const ui32 count, const ui32 hashesCount)
         : Categories(categories) {
         AFL_VERIFY(count);
-        const ui32 bitsCount = TFixStringBitsStorage::GrowBitsCountToByte(hashesCount * std::max<ui32>(count, 10) / std::log(2));
+        const ui32 bitsCount = hashesCount * std::max<ui32>(count, 10) / std::log(2);
         AFL_VERIFY(bitsCount);
-        Filter.resize(bitsCount, false);
+        Filter.Reserve(bitsCount);
     }
 };
 
 class TFiltersBuilder {
 private:
-    YDB_READONLY_DEF(std::deque<TCategoryBuilder>, Builders);
-    THashMap<ui64, std::vector<bool>*> FiltersByHash;
+    YDB_ACCESSOR_DEF(std::deque<TCategoryBuilder>, Builders);
+    THashMap<ui64, TDynBitMap*> FiltersByHash;
 
 public:
-    std::vector<bool>& MutableFilter(const ui64 hashBase) {
+    TDynBitMap& MutableFilter(const ui64 hashBase) {
         auto it = FiltersByHash.find(hashBase);
         AFL_VERIFY(it != FiltersByHash.end());
         return *it->second;
@@ -139,8 +108,9 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*r
             dataOwners.front(),
             [&](const std::shared_ptr<arrow::Array>& arr, const ui64 hashBase) {
                 auto& filterBits = filtersBuilder.MutableFilter(hashBase);
+                const ui32 size = filterBits.Size();
                 const auto pred = [&](const ui64 hash, const ui32 /*idx*/) {
-                    filterBits[hash % filterBits.size()] = true;
+                    filterBits.Set(hash % size);
                 };
                 for (ui64 i = 0; i < HashesCount; ++i) {
                     NArrow::NHash::TXX64::CalcForAll(arr, i, pred);
@@ -148,9 +118,10 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*r
             },
             [&](const std::string_view data, const ui64 hashBase) {
                 auto& filterBits = filtersBuilder.MutableFilter(hashBase);
+                const ui32 size = filterBits.Size();
                 for (ui64 i = 0; i < HashesCount; ++i) {
                     const ui64 hash = NArrow::NHash::TXX64::CalcSimple(data, i);
-                    filterBits[hash % filterBits.size()] = true;
+                    filterBits.Set(hash % size);
                 }
             });
         dataOwners.pop_front();
@@ -158,8 +129,8 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 /*r
     NKikimrTxColumnShard::TIndexCategoriesDescription protoDescription;
     std::vector<TString> filterDescriptions;
     ui32 filtersSumSize = 0;
-    for (auto&& i : filtersBuilder.GetBuilders()) {
-        filterDescriptions.emplace_back(TFixStringBitsStorage(i.GetFilter()).GetData());
+    for (auto&& i : filtersBuilder.MutableBuilders()) {
+        filterDescriptions.emplace_back(GetBitsStorageConstructor()->Build(std::move(i.MutableFilter()))->SerializeToString());
         filtersSumSize += filterDescriptions.back().size();
         auto* category = protoDescription.AddCategories();
         category->SetFilterSize(filterDescriptions.back().size());
@@ -195,17 +166,14 @@ TConclusion<std::shared_ptr<IIndexHeader>> TIndexMeta::DoBuildHeader(const TChun
     return std::make_shared<TCompositeBloomHeader>(std::move(proto), IIndexHeader::ReadHeaderSize(data.GetDataVerified(), true).DetachResult());
 }
 
-bool TIndexMeta::DoCheckValue(
-    const TString& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value, const EOperation op) const {
+bool TIndexMeta::DoCheckValueImpl(
+    const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value, const EOperation op) const {
     AFL_VERIFY(!!category);
     AFL_VERIFY(op == EOperation::Equals)("op", op);
-    if (data.empty()) {
-        return false;
-    }
-    TFixStringBitsStorage bits(data);
+    const ui32 bitsCount = data.GetBitsCount();
     for (ui64 hashSeed = 0; hashSeed < HashesCount; ++hashSeed) {
         const ui64 hash = NArrow::NHash::TXX64::CalcForScalar(value, hashSeed);
-        if (!bits.Get(hash % bits.GetSizeBits())) {
+        if (!data.Get(hash % bitsCount)) {
             return false;
         }
     }
@@ -217,6 +185,38 @@ std::optional<ui64> TIndexMeta::DoCalcCategory(const TString& subColumnName) con
     const NRequest::TOriginalDataAddress addr(Max<ui32>(), subColumnName);
     AFL_VERIFY(GetDataExtractor()->CheckForIndex(addr, result));
     return result;
+}
+
+bool TIndexMeta::DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) {
+    AFL_VERIFY(TBase::DoDeserializeFromProto(proto));
+    AFL_VERIFY(proto.HasBloomFilter());
+    auto& bFilter = proto.GetBloomFilter();
+    {
+        auto conclusion = TBase::DeserializeFromProtoImpl(bFilter);
+        if (conclusion.IsFail()) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("index_parsing", conclusion.GetErrorMessage());
+            return false;
+        }
+    }
+    FalsePositiveProbability = bFilter.GetFalsePositiveProbability();
+    for (auto&& i : bFilter.GetColumnIds()) {
+        AddColumnId(i);
+    }
+    if (!MutableDataExtractor().DeserializeFromProto(bFilter.GetDataExtractor())) {
+        return false;
+    }
+    Initialize();
+    return true;
+}
+
+void TIndexMeta::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const {
+    auto* filterProto = proto.MutableBloomFilter();
+    TBase::SerializeToProtoImpl(*filterProto);
+    filterProto->SetFalsePositiveProbability(FalsePositiveProbability);
+    for (auto&& i : GetColumnIds()) {
+        filterProto->AddColumnIds(i);
+    }
+    *filterProto->MutableDataExtractor() = GetDataExtractor().SerializeToProto();
 }
 
 }   // namespace NKikimr::NOlap::NIndexes::NCategoriesBloom

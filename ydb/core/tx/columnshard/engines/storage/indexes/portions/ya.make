@@ -3,6 +3,7 @@ LIBRARY()
 
 SRCS(
     meta.cpp
+    constructor.cpp
 )
 
 PEERDIR(

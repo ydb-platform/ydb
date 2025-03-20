@@ -61,6 +61,8 @@ public:
         , Chunks(std::move(chunks)) {
     }
 
+    virtual std::optional<bool> DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const override;
+
     virtual bool HasSubColumnData(const TString& subColumnName) const override {
         for (auto&& i : Chunks) {
             if (!i->HasSubColumnData(subColumnName)) {

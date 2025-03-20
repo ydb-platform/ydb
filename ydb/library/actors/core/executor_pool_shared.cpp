@@ -31,7 +31,7 @@
 
 namespace NActors {
 
-    TPoolManager::TPoolManager(const TVector<TPoolShortInfo> &poolInfos)
+    TPoolManager::TPoolManager(const std::vector<TPoolShortInfo> &poolInfos)
         : PoolInfos(poolInfos)
     {
         PoolThreadRanges.resize(poolInfos.size());
@@ -53,7 +53,7 @@ namespace NActors {
 
     TSharedExecutorPool::TSharedExecutorPool(
         const TSharedExecutorPoolConfig& cfg,
-        const TVector<TPoolShortInfo> &poolInfos
+        const std::vector<TPoolShortInfo> &poolInfos
     )   : TExecutorPoolBaseMailboxed(0)
         , PoolThreads(SumThreads(poolInfos))
         , PoolManager(poolInfos)
@@ -80,9 +80,10 @@ namespace NActors {
             }
         }
         for (ui64 i = 0; i < PoolManager.PoolInfos.size(); ++i) {
-            ForeignThreadsAllowedByPool[i].store(0, std::memory_order_release);
-            ForeignThreadSlots[i].store(0, std::memory_order_release);
-            LocalThreads[i].store(PoolManager.PoolInfos[i].SharedThreadCount, std::memory_order_release);
+            auto &poolInfo = PoolManager.PoolInfos[i];
+            ForeignThreadsAllowedByPool[i].store(poolInfo.ForeignSlots, std::memory_order_release);
+            ForeignThreadSlots[i].store(poolInfo.ForeignSlots, std::memory_order_release);
+            LocalThreads[i].store(poolInfo.SharedThreadCount, std::memory_order_release);
             LocalNotifications[i].store(0, std::memory_order_release);
         }
         Y_ABORT_UNLESS(passedThreads == static_cast<ui64>(PoolThreads), "Passed threads %" PRIu64 " != PoolThreads %" PRIu64, passedThreads, static_cast<ui64>(PoolThreads));
@@ -94,7 +95,7 @@ namespace NActors {
         Threads.Destroy();
     }
 
-    i16 TSharedExecutorPool::SumThreads(const TVector<TPoolShortInfo> &poolInfos) {
+    i16 TSharedExecutorPool::SumThreads(const std::vector<TPoolShortInfo> &poolInfos) {
         i16 threadCount = 0;
         for (const auto &poolInfo : poolInfos) {
             threadCount += poolInfo.SharedThreadCount;
@@ -403,6 +404,14 @@ namespace NActors {
         return PoolThreads;
     }
 
+    i16 TSharedExecutorPool::GetMaxFullThreadCount() const {
+        return PoolThreads;
+    }
+
+    i16 TSharedExecutorPool::GetMinFullThreadCount() const {
+        return PoolThreads;
+    }
+
     ui32 TSharedExecutorPool::GetThreads() const {
         return PoolThreads;
     }
@@ -479,6 +488,8 @@ namespace NActors {
                 }
             }
         }
+        EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Activation, "no 
+ threads");
         return false;
     }
 

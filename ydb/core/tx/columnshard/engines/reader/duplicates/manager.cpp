@@ -1,6 +1,5 @@
 #include "fetching.h"
 #include "manager.h"
-// TODO: move to simple_reader/
 
 #include <ydb/core/tx/columnshard/engines/reader/duplicates/merge.h>
 #include <ydb/core/tx/columnshard/engines/reader/simple_reader/iterator/context.h>
@@ -87,9 +86,20 @@ void TDuplicateFilterConstructor::TSourceFilterConstructor::SetFilter(const ui32
 void TDuplicateFilterConstructor::TSourceFilterConstructor::Finish() {
     AFL_VERIFY(IsReady());
     NArrow::TColumnFilter result = NArrow::TColumnFilter::BuildAllowFilter();
-    for (ui64 i = 0; i < IntervalFilters.size(); ++i) {
+    auto appendFilter = [&result, this](const ui64 i) {
         result.Append(*TValidator::CheckNotNull(IntervalFilters[i]));
+    };
+
+    if (Source->GetContext()->GetReadMetadata()->IsDescSorted()) {
+        for (i64 i = IntervalFilters.size() - 1; i >= 0; --i) {
+            appendFilter(i);
+        }
+    } else {
+        for (ui64 i = 0; i < IntervalFilters.size(); ++i) {
+            appendFilter(i);
+        }
     }
+
     AFL_VERIFY(result.GetRecordsCountVerified() == Source->GetRecordsCount())("filter", result.GetRecordsCountVerified())(
                                                        "source", Source->GetRecordsCount());
     Subscriber->OnFilterReady(result);
@@ -164,7 +174,6 @@ TDuplicateFilterConstructor::TSourceIntervals::TSourceIntervals(const std::deque
 
 void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "request_duplicates_filter")("source_id", ev->Get()->GetSource()->GetSourceId());
-    // TODO: handle step restarts (completely avoid them or fix verify here) Are they even possible (probably should not)?
     const ui32 sourceIdx = ev->Get()->GetSource()->GetSourceIdx();
 
     if (!SortedSources.empty() && sourceIdx == SortedSources.front()->GetSourceIdx()) {
@@ -267,7 +276,11 @@ void TDuplicateFilterConstructor::StartMergingColumns(const TIntervalsCursor& in
         readContext->GetReadMetadata()->GetReplaceKey(), IIndexInfo::GetSnapshotColumnNames(), interval.GetIntervalIdx(), SelfId());
     for (const auto& [_, sourceIdx] : interval.GetSourcesByRightInterval()) {
         std::shared_ptr<TSourceFilterConstructor> constructionInfo = GetConstructorVerified(sourceIdx);
-        task->AddSource(constructionInfo->GetColumnData(), std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter()),
+        constructionInfo->GetIntervalRange(interval.GetIntervalIdx());
+        const NArrow::NAccessor::IChunkedArray::TRowRange range = constructionInfo->GetIntervalRange(interval.GetIntervalIdx());
+        std::shared_ptr<NArrow::TGeneralContainer> slice =
+            std::make_shared<NArrow::TGeneralContainer>(constructionInfo->GetColumnData()->Slice(range.GetBegin(), range.Size()));
+        task->AddSource(std::move(slice), std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter()),
             constructionInfo->GetSource()->GetSourceIdx());
     }
     NConveyor::TScanServiceOperator::SendTaskToExecute(task, readContext->GetCommonContext()->GetConveyorProcessId());

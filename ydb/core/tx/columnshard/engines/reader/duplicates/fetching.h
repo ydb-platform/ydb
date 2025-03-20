@@ -86,7 +86,6 @@ private:
         StorageId = source->GetColumnStorageId(GetEntityId());
         TBlobsAction blobsAction(source->GetContext()->GetCommonContext()->GetStoragesManager(), NBlobOperations::EConsumer::SCAN);
         auto reading = blobsAction.GetReading(*StorageId);
-        auto filterPtr = source->GetStageData().GetAppliedFilter();
         for (auto&& c : ColumnChunksExt) {
             reading->SetIsBackgroundProcess(false);
             reading->AddRange(source->RestoreBlobRange(c.BlobRange));

@@ -1,6 +1,6 @@
 # Review process for {{ ydb-short-name }} documentation
 
-Building on the high-level overview in [{#T}](index.md), this article dives deeper into what happens during the pull request review stage.
+Building on the high-level overview in [{#T}](index.md), this article dives deeper into what happens during the documentation pull request review stage.
 
 ## Roles
 
@@ -48,7 +48,7 @@ Building on the high-level overview in [{#T}](index.md), this article dives deep
 - [ ] Each article follows a single [genre](genres.md) and aligns with its place in the documentation structure.
 - [ ] Each new article includes links to all relevant existing documentation pages, either inline or in a "See also" section.
 - [ ] Relevant existing articles are updated with links to new articles.
-- [ ] All new articles are listed in table of contents and their folder's `index.md`.
+- [ ] All new articles are listed in YAML files with table of contents and their folder's `index.md`.
 - [ ] All renamed or moved articles are reflected in [redirects.yaml](https://github.com/ydb-platform/ydb/blob/main/ydb/docs/redirects.yaml).
 - [ ] The article's voice, tone, and style match the rest of the documentation or, at a minimum, remain consistent within the article.
 

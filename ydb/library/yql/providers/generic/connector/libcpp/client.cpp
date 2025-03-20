@@ -4,6 +4,184 @@
 #include "client.h"
 
 namespace NYql::NConnector {
+
+    const size_t DEFAULT_CONNECTION_MANAGER_NUM_THREADS = 20;
+
+    template<typename T>
+    class IConnectionFactory {
+    public:
+        virtual ~IConnectionFactory() = default;
+
+        virtual std::shared_ptr<NYdbGrpc::TServiceConnection<T>> Create() = 0;
+    };
+
+    ///
+    /// Connection Factory which always returns an exact connection
+    ///
+    template<typename T>
+    class TSingleConnectionFactory final : public IConnectionFactory<T> {
+    public:
+        TSingleConnectionFactory(std::shared_ptr<NYdbGrpc::TGRpcClientLow> client, const NYdbGrpc::TGRpcClientConfig& grpcConfig)
+            : GrpcConnection_(client->CreateGRpcServiceConnection<T>(grpcConfig))
+        {
+        }
+
+        TSingleConnectionFactory(
+            std::shared_ptr<NYdbGrpc::TGRpcClientLow> client,
+            const NYdbGrpc::TGRpcClientConfig& grpcConfig,
+            const NYdbGrpc::TTcpKeepAliveSettings& keepAlive
+        )
+            : GrpcConnection_(client->CreateGRpcServiceConnection<T>(grpcConfig, keepAlive))
+        {
+        }
+
+    public:
+        std::shared_ptr<NYdbGrpc::TServiceConnection<T>> Create() override {
+            return GrpcConnection_;
+        }
+
+    private:
+        const std::shared_ptr<NYdbGrpc::TServiceConnection<T>> GrpcConnection_;
+    };
+
+    ///
+    /// Connection Factory which returns a new connection on each Create
+    ///
+    template<typename T>
+    class TNewOnEachRequestConnectionFactory final: public IConnectionFactory<T> {
+    public:
+        TNewOnEachRequestConnectionFactory(
+            std::shared_ptr<NYdbGrpc::TGRpcClientLow> client,
+            const NYdbGrpc::TGRpcClientConfig& grpcConfig
+        )
+            : Client_(client)
+            , GrpcConfig_(grpcConfig)
+        {
+        }
+
+        TNewOnEachRequestConnectionFactory(
+            std::shared_ptr<NYdbGrpc::TGRpcClientLow> client,
+            const NYdbGrpc::TGRpcClientConfig& grpcConfig,
+            const NYdbGrpc::TTcpKeepAliveSettings& keepAlive
+        )
+            : Client_(client)
+            , GrpcConfig_(grpcConfig)
+            , KeepAlive_(keepAlive)
+        {
+        }
+
+    public:
+        ///
+        /// Creates a new connection for each method call. It is safe to dispose
+        /// connection after making request. All necessary data will be held in a
+        /// request object (@sa TGRpcRequestProcessorCommon's descendants).
+        ///
+        /// Hence the call Create()->DoRequest(...) is absolutely legitimate.
+        ///
+        std::shared_ptr<NYdbGrpc::TServiceConnection<T>> Create() override {
+            auto r = KeepAlive_ ?
+                Client_->CreateGRpcServiceConnection<T>(GrpcConfig_, *KeepAlive_)
+                : Client_->CreateGRpcServiceConnection<T>(GrpcConfig_);
+
+            return std::move(r);
+        }
+
+    private:
+        const std::shared_ptr<NYdbGrpc::TGRpcClientLow> Client_;
+        const NYdbGrpc::TGRpcClientConfig GrpcConfig_;
+        const std::optional<NYdbGrpc::TTcpKeepAliveSettings> KeepAlive_;
+    };
+
+    ///
+    ///  Experimental Pool Factory (do not use it in a prod)
+    ///  which returns a connection from a pool.
+    ///
+    ///  TODO:
+    ///  1. Ttl for connections.
+    ///  2. Check if a connection in a pool is broken and replace it.
+    ///  3. Need to choose balancing strategy.
+    ///
+    template<typename T>
+    class TFixedPoolConnectionFactory final: public IConnectionFactory<T> {
+    public:
+        TFixedPoolConnectionFactory(
+            int size,
+            std::shared_ptr<NYdbGrpc::TGRpcClientLow> client,
+            const NYdbGrpc::TGRpcClientConfig& grpcConfig
+        )
+            : Client_(client)
+            , GrpcConfig_(grpcConfig)
+        {
+            Init(size);
+        }
+
+        TFixedPoolConnectionFactory(
+            int size,
+            std::shared_ptr<NYdbGrpc::TGRpcClientLow> client,
+            const NYdbGrpc::TGRpcClientConfig& grpcConfig,
+            const NYdbGrpc::TTcpKeepAliveSettings& keepAlive
+        )
+            : Client_(client)
+            , GrpcConfig_(grpcConfig)
+            , KeepAlive_(keepAlive)
+        {
+            Init(size);
+        }
+    private:
+        void Init(int size) {
+            for (int i = 0; i < size; ++i) {
+                auto r = KeepAlive_ ?
+                    Client_->CreateGRpcServiceConnection<T>(GrpcConfig_, *KeepAlive_)
+                    : Client_->CreateGRpcServiceConnection<T>(GrpcConfig_);
+
+                Pool_.push_back(std::move(r));
+            }
+
+            Size_ = size;
+        }
+
+    public:
+        std::shared_ptr<NYdbGrpc::TServiceConnection<T>> Create() override {
+            // Round Robin Balancing
+            auto n = NextSlot_++;
+            auto r = Pool_.at(n % Size_);
+            auto expectedVal = n + 1;
+
+            NextSlot_.compare_exchange_weak(expectedVal, expectedVal % Size_);
+            return r;
+        }
+    private:
+        int Size_;
+        std::atomic_long NextSlot_;
+        const std::shared_ptr<NYdbGrpc::TGRpcClientLow> Client_;
+        const NYdbGrpc::TGRpcClientConfig GrpcConfig_;
+        const std::optional<NYdbGrpc::TTcpKeepAliveSettings> KeepAlive_;
+        std::vector<std::shared_ptr<NYdbGrpc::TServiceConnection<T>>> Pool_;
+    };
+
+    /*
+
+    struct TConnectorMetrics {
+        explicit TConnectorMetrics(const ::NMonitoring::TDynamicCounterPtr& counters)
+            : Counters(counters)
+        {
+            GrpcChannelCount = Counters->GetCounter("GrpChannelCount", true);
+        }
+
+        void GrpcChannelCreated() {
+            GrpcChannelCount->Inc();
+        }
+
+        void GrpcChannelDestroyed() {
+            GrpcChannelCount->Dec();
+        }
+
+        ::NMonitoring::TDynamicCounterPtr Counters;
+        ::NMonitoring::TDynamicCounters::TCounterPtr GrpcChannelCount;
+    };
+    
+    */
+
     template <class TResponse>
     class TStreamIteratorImpl: public IStreamIterator<TResponse> {
     public:
@@ -30,130 +208,186 @@ namespace NYql::NConnector {
 
     class TClientGRPC: public IClient {
     public:
-        TClientGRPC() = delete;
         TClientGRPC(const TGenericConnectorConfig& config) {
-            GrpcConfig_ = NYdbGrpc::TGRpcClientConfig();
+            // TODO: place in a config file ?  
+            GrpcClient_ = std::make_shared<NYdbGrpc::TGRpcClientLow>(DEFAULT_CONNECTION_MANAGER_NUM_THREADS);
+            auto grpcConfig = ConnectorConfigToGrpcConfig(config);
 
-            Y_ENSURE(config.GetEndpoint().host(), TStringBuilder() << "Empty host in TGenericConnectorConfig: " << config.DebugString());
-            Y_ENSURE(config.GetEndpoint().port(), TStringBuilder() << "Empty port in TGenericConnectorConfig: " << config.DebugString());
-            GrpcConfig_.Locator = TStringBuilder() << config.GetEndpoint().host() << ":" << config.GetEndpoint().port();
-            GrpcConfig_.EnableSsl = config.GetUseSsl();
+            auto keepAlive = NYdbGrpc::TTcpKeepAliveSettings {
+                // TODO configure hardcoded values
+                .Enabled = true,
+                .Idle = 30,
+                .Count = 5,
+                .Interval = 10
+            };
 
-            YQL_CLOG(INFO, ProviderGeneric) << "Connector endpoint: " << (config.GetUseSsl() ? "grpcs" : "grpc") << "://" << GrpcConfig_.Locator;
-
-            // Read content of CA cert
-            TString rootCertData;
-            if (config.GetSslCaCrt()) {
-                rootCertData = TFileInput(config.GetSslCaCrt()).ReadAll();
-            }
-
-            GrpcConfig_.SslCredentials = grpc::SslCredentialsOptions{.pem_root_certs = rootCertData, .pem_private_key = "", .pem_cert_chain = ""};
-
-            GrpcClient_ = std::make_unique<NYdbGrpc::TGRpcClientLow>();
-
-            // FIXME: is it OK to use single connection during the client lifetime?
-            GrpcConnection_ = GrpcClient_->CreateGRpcServiceConnection<NApi::Connector>(GrpcConfig_, NYdbGrpc::TTcpKeepAliveSettings {
-                    // TODO configure hardcoded values
-                    .Enabled = true,
-                    .Idle = 30,
-                    .Count = 5,
-                    .Interval = 10
-            });
-        }
-
-        virtual TDescribeTableAsyncResult DescribeTable(const NApi::TDescribeTableRequest& request, TDuration timeout = {}) override {
-            return UnaryCall<NApi::TDescribeTableRequest, NApi::TDescribeTableResponse>(request, &NApi::Connector::Stub::AsyncDescribeTable, timeout);
-        }
-
-        virtual TListSplitsStreamIteratorAsyncResult ListSplits(const NApi::TListSplitsRequest& request, TDuration timeout = {}) override {
-            return ServerSideStreamingCall<NApi::TListSplitsRequest, NApi::TListSplitsResponse>(request, &NApi::Connector::Stub::AsyncListSplits, timeout);
-        }
-
-        virtual TReadSplitsStreamIteratorAsyncResult ReadSplits(const NApi::TReadSplitsRequest& request, TDuration timeout = {}) override {
-            return ServerSideStreamingCall<NApi::TReadSplitsRequest, NApi::TReadSplitsResponse>(request, &NApi::Connector::Stub::AsyncReadSplits, timeout);
+            // TODO: 
+            // 1. Add config parameter to TGenericConnectorConfig to choose factory 
+            // 2. Add support for multiple connector's config 
+            ConnectionFactory_ = std::make_unique<TNewOnEachRequestConnectionFactory<NApi::Connector>>(
+                GrpcClient_, grpcConfig, keepAlive);
         }
 
         ~TClientGRPC() {
             GrpcClient_->Stop(true);
         }
 
-    private:
-        template <class TService, class TRequest, class TResponse, template <typename TA, typename TB, typename TC> class TStream>
-        using TStreamRpc =
-            typename TStream<
-                NApi::Connector::Stub,
-                TRequest,
-                TResponse>::TAsyncRequest;
+        virtual TDescribeTableAsyncResult DescribeTable(const NApi::TDescribeTableRequest& request, TDuration timeout = {}) override {
+            auto kind = request.Getdata_source_instance().Getkind();
+            auto promise = NThreading::NewPromise<TResult<NApi::TDescribeTableResponse>>();
 
-        template <class TRequest, class TResponse>
-        TAsyncResult<TResponse> UnaryCall(
-            const TRequest& request,
-            typename NYdbGrpc::TSimpleRequestProcessor<NApi::Connector::Stub, TRequest, TResponse>::TAsyncRequest rpc, TDuration timeout = {}) {
-            auto context = GrpcClient_->CreateContext();
-            if (!context) {
-                throw yexception() << "Client is being shutdown";
+            if (!request.has_data_source_instance() 
+                || !request.data_source_instance().has_kind()) {
+                auto msg =  TStringBuilder() << "DescribeTable request is invalid: either data source or kind is missing";
+                auto status = NYdbGrpc::TGrpcStatus(grpc::Status(grpc::StatusCode::INVALID_ARGUMENT,msg));
+
+                YQL_CLOG(WARN, ProviderGeneric) << msg;
+                promise.SetValue({std::move(status), std::move(NApi::TDescribeTableResponse())});
+                return promise.GetFuture();
             }
-
-            auto promise = NThreading::NewPromise<TResult<TResponse>>();
-            auto callback = [promise, context](NYdbGrpc::TGrpcStatus&& status, TResponse&& resp) mutable {
+            
+            auto callback = [promise](NYdbGrpc::TGrpcStatus&& status, NApi::TDescribeTableResponse&& resp) mutable {
                 promise.SetValue({std::move(status), std::move(resp)});
             };
 
-            GrpcConnection_->DoRequest<TRequest, TResponse>(
+            GetConnection(kind)->DoRequest<NApi::TDescribeTableRequest, NApi::TDescribeTableResponse>(
                 std::move(request),
                 std::move(callback),
-                rpc,
-                { .Timeout = timeout },
-                context.get());
+                &NApi::Connector::Stub::AsyncDescribeTable,
+                { .Timeout = timeout }
+            );
 
             return promise.GetFuture();
         }
 
-        template <class TRequest, class TResponse>
-        TIteratorAsyncResult<IStreamIterator<TResponse>> ServerSideStreamingCall(
-            const TRequest& request,
-            TStreamRpc<NApi::Connector::Stub, TRequest, TResponse, NYdbGrpc::TStreamRequestReadProcessor> rpc,
-            TDuration timeout = {}) {
-            using TStreamProcessorPtr = typename NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr;
-            using TStreamInitResult = std::pair<NYdbGrpc::TGrpcStatus, TStreamProcessorPtr>;
+        virtual TListSplitsStreamIteratorAsyncResult ListSplits(const NApi::TListSplitsRequest& request, TDuration timeout = {}) override {
+            auto selects = request.Getselects();
 
-            auto promise = NThreading::NewPromise<TStreamInitResult>();
+            if (selects.empty() 
+                || !selects.at(0).has_data_source_instance() 
+                || !selects.at(0).data_source_instance().has_kind()) {
+                auto msg =  TStringBuilder() << "ListSplits request is invalid: either selects is empty or data source or kind is missing";
 
-            auto context = GrpcClient_->CreateContext();
-            if (!context) {
-                throw yexception() << "Client is being shutdown";
+                YQL_CLOG(WARN, ProviderGeneric) << msg;
+                return DoEmptyStreamResponse<NApi::TListSplitsResponse>(grpc::StatusCode::INVALID_ARGUMENT, msg);
             }
 
-            GrpcConnection_->DoStreamRequest<TRequest, TResponse>(
-                request,
-                [context, promise](NYdbGrpc::TGrpcStatus&& status, TStreamProcessorPtr streamProcessor) mutable {
-                    promise.SetValue({std::move(status), streamProcessor});
-                },
-                rpc,
-                { .Timeout = timeout },
-                context.get());
+            // The request can hold many selects, but we make assumption that all of them go to the same connector.
+            auto kind = selects.at(0).data_source_instance().kind();
 
-            // TODO: async handling YQ-2513
-            auto result = promise.GetFuture().GetValueSync();
+            return ServerSideStreamingCall<NApi::TListSplitsRequest, NApi::TListSplitsResponse>(
+                kind, request, &NApi::Connector::Stub::AsyncListSplits, timeout);
+        }
 
-            auto status = result.first;
-            auto streamProcessor = result.second;
+        virtual TReadSplitsStreamIteratorAsyncResult ReadSplits(const NApi::TReadSplitsRequest& request, TDuration timeout = {}) override {
+            auto splits = request.Getsplits();
 
-            if (streamProcessor) {
-                auto it = std::make_shared<TStreamIteratorImpl<TResponse>>(std::make_shared<TStreamer<TResponse>>(std::move(streamProcessor)));
-                return NThreading::MakeFuture<TIteratorResult<IStreamIterator<TResponse>>>({std::move(status), std::move(it)});
+            if (splits.empty()
+                || !splits.at(0).has_select()
+                || !splits.at(0).select().has_data_source_instance()
+                || !splits.at(0).select().data_source_instance().has_kind()) {
+                auto msg = TStringBuilder() << "ReadSplits request is invalid: either splits or select is empty or data source or kind is missing";
+
+                YQL_CLOG(WARN, ProviderGeneric) << msg;
+                return DoEmptyStreamResponse<NApi::TReadSplitsResponse>(grpc::StatusCode::INVALID_ARGUMENT, msg);
             }
 
-            return NThreading::MakeFuture<TIteratorResult<IStreamIterator<TResponse>>>({std::move(status), nullptr});
+            // The request can hold many splits, but we make assumption that all of them go to the same connector.
+            auto kind = splits.at(0).select().data_source_instance().kind();
+
+            return ServerSideStreamingCall<NApi::TReadSplitsRequest, NApi::TReadSplitsResponse>(
+                kind, request, &NApi::Connector::Stub::AsyncReadSplits, timeout);
         }
 
     private:
-        NYdbGrpc::TGRpcClientConfig GrpcConfig_;
-        std::unique_ptr<NYdbGrpc::TGRpcClientLow> GrpcClient_;
-        std::shared_ptr<NYdbGrpc::TServiceConnection<NApi::Connector>> GrpcConnection_;
+        std::shared_ptr<NYdbGrpc::TServiceConnection<NApi::Connector>> GetConnection(const NYql::EGenericDataSourceKind&) {
+            // TODO: choose appropriate connection factory by data source kind 
+            return ConnectionFactory_->Create();
+        }
+
+        template<typename TResponse>
+        TIteratorAsyncResult<IStreamIterator<TResponse>> DoEmptyStreamResponse(const grpc::StatusCode& code, TString msg) {
+            auto promise = NThreading::NewPromise<TIteratorResult<IStreamIterator<TResponse>>>();
+            auto status = NYdbGrpc::TGrpcStatus(grpc::Status(code, msg));
+
+            promise.SetValue({std::move(status), nullptr});
+            return promise.GetFuture();
+        }
+
+        /// 
+        /// @brief Make async request to a connector with a streaming response in a Future.
+        /// 
+        /// @tparam TRequest        Type of a request, e.g.: "NApi::TListSplitsRequest"
+        /// @tparam TResponse       Type of a data in a Response Stream, e.g.: "NApi::TListSplitsResponse"
+        /// @tparam TRpcCallback    Definition of a callback on the "NApi::Connector::Stub" that takes "TRequest" as an input arg and
+        ///                         returns "NYdbGrpc::TStreamRequestReadProcessor" with "TResponse" as stream's data
+        ///
+        /// @param[in] kind         Datasource's kind, it is a key to choose which connector will be queried
+        /// @param[in] request      Request's data
+        /// @param[in] rpc          Method on a Stub which will be executed
+        /// @param[in] timeout      How long to wait a response
+        ///
+        /// @return                 Future that provides with a streaming response
+        ///
+        template <
+            typename TRequest,
+            typename TResponse,
+            typename TRpcCallback = typename NYdbGrpc::TStreamRequestReadProcessor<NApi::Connector::Stub, TRequest, TResponse>::TAsyncRequest
+        >
+        TIteratorAsyncResult<IStreamIterator<TResponse>> ServerSideStreamingCall(
+            const NYql::EGenericDataSourceKind& kind, const TRequest& request, TRpcCallback rpc, TDuration timeout = {}) {
+            auto promise = NThreading::NewPromise<TIteratorResult<IStreamIterator<TResponse>>>();
+
+            auto callback = [promise](NYdbGrpc::TGrpcStatus&& status, NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr streamProcessor) mutable {
+                if (!streamProcessor) {
+                    promise.SetValue({std::move(status), nullptr});
+                    return;
+                } 
+                
+                auto processor = std::make_shared<TStreamer<TResponse>>(std::move(streamProcessor));
+                auto iterator = std::make_shared<TStreamIteratorImpl<TResponse>>(processor);
+                promise.SetValue({std::move(status), std::move(iterator)});
+            };
+
+            GetConnection(kind)->DoStreamRequest<TRequest, TResponse>(
+                std::move(request),
+                std::move(callback),
+                rpc,
+                { .Timeout = timeout }
+            );
+
+            return promise.GetFuture();
+        }
+
+        NYdbGrpc::TGRpcClientConfig ConnectorConfigToGrpcConfig(const TGenericConnectorConfig& config) {
+            auto cfg = NYdbGrpc::TGRpcClientConfig();
+
+            Y_ENSURE(config.GetEndpoint().host(), TStringBuilder() << "Empty host in TGenericConnectorConfig: " << config.DebugString());
+            Y_ENSURE(config.GetEndpoint().port(), TStringBuilder() << "Empty port in TGenericConnectorConfig: " << config.DebugString());
+
+            cfg.Locator = TStringBuilder() << config.GetEndpoint().host() << ":" << config.GetEndpoint().port();
+            cfg.EnableSsl = config.GetUseSsl();
+
+            YQL_CLOG(INFO, ProviderGeneric) << "Connector endpoint: " << (config.GetUseSsl() ? "grpcs" : "grpc") << "://" << cfg.Locator;
+
+            // Read content of CA cert
+            TString rootCertData;
+
+            if (config.GetSslCaCrt()) {
+                rootCertData = TFileInput(config.GetSslCaCrt()).ReadAll();
+            }
+
+            cfg.SslCredentials = grpc::SslCredentialsOptions{.pem_root_certs = rootCertData, .pem_private_key = "", .pem_cert_chain = ""};
+            return cfg;
+        }
+
+    private:
+        std::shared_ptr<NYdbGrpc::TGRpcClientLow> GrpcClient_;
+        std::unique_ptr<IConnectionFactory<NApi::Connector>> ConnectionFactory_;
     };
 
     IClient::TPtr MakeClientGRPC(const NYql::TGenericConnectorConfig& cfg) {
         return std::make_shared<TClientGRPC>(cfg);
     }
+
 } // namespace NYql::NConnector

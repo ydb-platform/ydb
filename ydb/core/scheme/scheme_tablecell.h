@@ -92,7 +92,7 @@ public:
 
     TCell(const char* ptr, size_t size) {
         if (!ptr) {
-            Y_ENSURE(size == 0);
+            Y_ASSERT(size == 0);
             // All zeroes represents the null value
             ::memset(Raw, 0, 16);
         } else if (CanInline(size)) {
@@ -119,7 +119,7 @@ public:
             Inline.Size = size;
             Inline.Kind = KindInlineValue;
         } else {
-            Y_ENSURE(size <= Max<ui32>());
+            Y_ASSERT(size <= Max<ui32>());
             Ref.Ptr = ptr;
             Ref.Size = size;
             Ref.Kind = KindRefValue;
@@ -285,8 +285,8 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, const NScheme::TTyp
 #define SIMPLE_TYPE_SWITCH(typeEnum, castType)      \
     case NKikimr::NScheme::NTypeIds::typeEnum:      \
     {                                               \
-        Y_ENSURE(a.IsInline());                     \
-        Y_ENSURE(b.IsInline());                     \
+        Y_ASSERT(a.Size() == sizeof(castType));     \
+        Y_ASSERT(b.Size() == sizeof(castType));     \
         castType va = ReadUnaligned<castType>((const castType*)a.InlineData()); \
         castType vb = ReadUnaligned<castType>((const castType*)b.InlineData()); \
         return va == vb ? 0 : ((va < vb) != type.IsDescending() ? -1 : 1);   \
@@ -339,15 +339,15 @@ inline int CompareTypedCells(const TCell& a, const TCell& b, const NScheme::TTyp
 
     case NKikimr::NScheme::NTypeIds::Uuid:
     {
-        Y_ENSURE(a.Size() == 16);
-        Y_ENSURE(b.Size() == 16);
+        Y_ASSERT(a.Size() == 16);
+        Y_ASSERT(b.Size() == 16);
         return CompareCellsAsByteString(a, b, type.IsDescending());
     }
 
     case NKikimr::NScheme::NTypeIds::Decimal:
     {
-        Y_ENSURE(a.Size() == sizeof(std::pair<ui64, i64>));
-        Y_ENSURE(b.Size() == sizeof(std::pair<ui64, i64>));
+        Y_ASSERT(a.Size() == sizeof(std::pair<ui64, i64>));
+        Y_ASSERT(b.Size() == sizeof(std::pair<ui64, i64>));
         std::pair<ui64, i64> va = ReadUnaligned<std::pair<ui64, i64>>((const std::pair<ui64, i64>*)a.Data());
         std::pair<ui64, i64> vb = ReadUnaligned<std::pair<ui64, i64>>((const std::pair<ui64, i64>*)b.Data());
         if (va.second == vb.second)

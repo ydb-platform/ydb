@@ -1,6 +1,6 @@
 # admin cluster config fetch
 
-С помощью команды `admin cluster config fetch` вы можете получить текущую динамическую конфигурацию кластера YDB.
+С помощью команды `admin cluster config fetch` вы можете получить текущую [динамическую](../../../../../maintenance/manual/dynamic-config.md) конфигурацию кластера YDB.
 
 Общий вид команды:
 

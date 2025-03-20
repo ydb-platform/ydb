@@ -953,8 +953,9 @@ namespace NActors {
 
             // generate some data within this channel
             const ui64 netBefore = channel->GetBufferedAmountOfData();
-            ui64 gross = 0;
-            const bool eventDone = channel->FeedBuf(task, serial, &gross);
+            ui32 gross = task.GetDataSize();
+            const bool eventDone = channel->FeedBuf(task, serial);
+            gross = task.GetDataSize() - gross;
             channel->UnaccountedTraffic += gross;
             const ui64 netAfter = channel->GetBufferedAmountOfData();
             Y_DEBUG_ABORT_UNLESS(netAfter <= netBefore); // net amount should shrink

@@ -43,9 +43,13 @@ protected:
     TString SharedDatabase;
     bool Direct = false;
     bool NeedRedirect = true;
-    ui32 Requests = 0;
+    i32 DataRequests = 0; // how many requests we wait to process data
     bool PassedAway = false;
-    ui32 MaxRequestsInFlight = 200;
+    bool ReplySent = false;
+    bool UseCache = false;
+    TDuration CachedDataMaxAge;
+    TString Error;
+    i32 MaxRequestsInFlight = 200;
     NWilson::TSpan Span;
     IViewer* Viewer = nullptr;
     NMon::TEvHttpInfo::TPtr Event;
@@ -57,7 +61,7 @@ protected:
 
     struct TPipeInfo {
         TActorId PipeClient;
-        ui32 Requests = 0;
+        i32 Requests = 0;
     };
 
     std::unordered_map<TTabletId, TPipeInfo> PipeInfo;
@@ -71,7 +75,7 @@ protected:
 
     template<typename T>
     struct TRequestResponse {
-        std::variant<std::monostate, std::unique_ptr<T>, TString> Response;
+        std::variant<std::monostate, std::shared_ptr<T>, TString> Response;
         NWilson::TSpan Span;
 
         TRequestResponse() = default;
@@ -80,27 +84,41 @@ protected:
         {}
 
         TRequestResponse(const TRequestResponse&) = delete;
+        TRequestResponse& operator =(const TRequestResponse& other) = delete;
         TRequestResponse(TRequestResponse&&) = default;
-        TRequestResponse& operator =(const TRequestResponse&) = delete;
         TRequestResponse& operator =(TRequestResponse&&) = default;
 
-        bool Set(std::unique_ptr<T>&& response) {
+        TRequestResponse(std::shared_ptr<T>&& response)
+            : Response(std::move(response))
+        {}
+
+        void SetInternal(std::shared_ptr<T>&& response) {
+            Response = std::move(response);
+        }
+
+        bool Set(std::shared_ptr<T>&& response) {
+            constexpr bool hasErrorCheck = requires(const T& r) {TViewerPipeClient::IsSuccess(r);};
+            constexpr bool hasUpdateCache = requires(std::shared_ptr<T>&& r) {TEvViewer::TEvUpdateSharedCacheTabletResponse(r);};
+            if constexpr (hasErrorCheck) {
+                if (!TViewerPipeClient::IsSuccess(*response)) {
+                    return Error(TViewerPipeClient::GetError(*response));
+                }
+            }
+            if (Span) {
+                Span.EndOk();
+            }
+            if constexpr (hasUpdateCache) {
+                TActivationContext::Send(MakeViewerID(TActivationContext::ActorSystem()->NodeId), std::make_unique<TEvViewer::TEvUpdateSharedCacheTabletResponse>(response));
+            }
             if (IsDone()) {
                 return false;
             }
-            constexpr bool hasErrorCheck = requires(const std::unique_ptr<T>& r) {TViewerPipeClient::IsSuccess(r);};
-            if constexpr (hasErrorCheck) {
-                if (!TViewerPipeClient::IsSuccess(response)) {
-                    return Error(TViewerPipeClient::GetError(response));
-                }
-            }
-            Span.EndOk();
             Response = std::move(response);
             return true;
         }
 
         bool Set(TAutoPtr<TEventHandle<T>>&& response) {
-            return Set(std::unique_ptr<T>(response->Release().Release()));
+            return Set(std::shared_ptr<T>(response->Release().Release()));
         }
 
         bool Error(const TString& error) {
@@ -113,7 +131,7 @@ protected:
         }
 
         bool IsOk() const {
-            return std::holds_alternative<std::unique_ptr<T>>(Response);
+            return std::holds_alternative<std::shared_ptr<T>>(Response);
         }
 
         bool IsError() const {
@@ -129,11 +147,11 @@ protected:
         }
 
         T* Get() {
-            return std::get<std::unique_ptr<T>>(Response).get();
+            return std::get<std::shared_ptr<T>>(Response).get();
         }
 
         const T* Get() const {
-            return std::get<std::unique_ptr<T>>(Response).get();
+            return std::get<std::shared_ptr<T>>(Response).get();
         }
 
         T& GetRef() {
@@ -246,14 +264,16 @@ protected:
     static TPathId GetPathId(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     static TString GetPath(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
 
-    static bool IsSuccess(const std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySetResult>& ev);
-    static TString GetError(const std::unique_ptr<TEvTxProxySchemeCache::TEvNavigateKeySetResult>& ev);
+    static bool IsSuccess(const TEvTxProxySchemeCache::TEvNavigateKeySetResult& ev);
+    static TString GetError(const TEvTxProxySchemeCache::TEvNavigateKeySetResult& ev);
 
-    static bool IsSuccess(const std::unique_ptr<TEvStateStorage::TEvBoardInfo>& ev);
-    static TString GetError(const std::unique_ptr<TEvStateStorage::TEvBoardInfo>& ev);
+    static bool IsSuccess(const TEvStateStorage::TEvBoardInfo& ev);
+    static TString GetError(const TEvStateStorage::TEvBoardInfo& ev);
 
-    static bool IsSuccess(const std::unique_ptr<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>& ev);
-    static TString GetError(const std::unique_ptr<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>& ev);
+    static bool IsSuccess(const NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult& ev);
+    static TString GetError(const NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult& ev);
+
+    void UpdateSharedCacheTablet(TTabletId tabletId, std::unique_ptr<IEventBase> request);
 
     TRequestResponse<TEvHive::TEvResponseHiveDomainStats> MakeRequestHiveDomainStats(TTabletId hiveId);
     TRequestResponse<TEvHive::TEvResponseHiveStorageStats> MakeRequestHiveStorageStats(TTabletId hiveId);
@@ -279,6 +299,11 @@ protected:
     TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> RequestBSControllerVSlots();
     TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse> RequestBSControllerPDisks();
     TRequestResponse<NSysView::TEvSysView::TEvGetStorageStatsResponse> RequestBSControllerStorageStats();
+    TRequestResponse<NSysView::TEvSysView::TEvGetGroupsResponse> MakeCachedRequestBSControllerGroups();
+    TRequestResponse<NSysView::TEvSysView::TEvGetStoragePoolsResponse> MakeCachedRequestBSControllerPools();
+    TRequestResponse<NSysView::TEvSysView::TEvGetVSlotsResponse> MakeCachedRequestBSControllerVSlots();
+    TRequestResponse<NSysView::TEvSysView::TEvGetPDisksResponse> MakeCachedRequestBSControllerPDisks();
+    TRequestResponse<NSysView::TEvSysView::TEvGetStorageStatsResponse> MakeCachedRequestBSControllerStorageStats();
     void RequestBSControllerPDiskUpdateStatus(const NKikimrBlobStorage::TUpdateDriveStatus& driveStatus, bool force = false);
 
     THolder<NSchemeCache::TSchemeCacheNavigate> SchemeCacheNavigateRequestBuilder(NSchemeCache::TSchemeCacheNavigate::TEntry&& entry);
@@ -315,18 +340,18 @@ protected:
     }
 
     void ClosePipes();
-    ui32 FailPipeConnect(TTabletId tabletId);
+    i32 FailPipeConnect(TTabletId tabletId);
 
     bool IsLastRequest() const {
-        return Requests == 1;
+        return DataRequests == 1;
     }
 
     bool WaitingForResponse() const {
-        return Requests != 0;
+        return DataRequests != 0;
     }
 
-    bool NoMoreRequests(ui32 requestsDone = 0) const {
-        return Requests == requestsDone;
+    bool NoMoreRequests(i32 requestsDone = 0) const {
+        return DataRequests == requestsDone;
     }
 
     TRequestState GetRequest() const;
@@ -343,10 +368,12 @@ protected:
     TString GetHTTPFORBIDDEN(TString contentType = {}, TString response = {});
     TString MakeForward(const std::vector<ui32>& nodes);
 
-    void RequestDone(ui32 requests = 1);
+    void RequestDone(i32 requests = 1);
+    void CacheRequestDone();
     void CancelAllRequests();
     void AddEvent(const TString& name);
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev);
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev);
     void HandleResolveDatabase(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void HandleResolveResource(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void HandleResolve(TEvStateStorage::TEvBoardInfo::TPtr& ev);

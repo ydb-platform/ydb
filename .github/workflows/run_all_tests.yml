@@ -29,6 +29,7 @@ on:
         type: string
   workflow_call:
     inputs:
+
       runner_label:
         description: 'Label of the runner to be used'
         required: false
@@ -63,9 +64,7 @@ jobs:
   run_all_tests:
     name: Test ${{ github.ref_name }}:${{ inputs.build_preset }}
     timeout-minutes: 600
-    runs-on: [ self-hosted, "${{ inputs.runner_label || 'auto-provisioned' }}", "${{ format('build-preset-{0}', matrix.build_preset || 'relwithdebinfo') }}" ]
-    timeout-minutes: 600
-
+    runs-on: ${{ inputs.runner_label }}
     steps:
       - name: Set variables based on build_preset
         id: set-vars

@@ -15,8 +15,6 @@
 
 constexpr size_t MAX_REQS_PER_CYCLE = 200; // 200 requests take ~0.2ms in EnqueueAll function
 
-const bool EncryptedChunks = false;
-
 namespace NKikimr {
 namespace NPDisk {
 
@@ -378,7 +376,7 @@ ui32 TPDisk::GetUserAccessibleChunkSize() const {
 }
 
 ui32 TPDisk::GetChunkAppendBlockSize() const {
-    return EncryptedChunks ? Format.SectorPayloadSize() : Format.SectorSize;
+    return Format.IsUnencryptedDataChunks() ? Format.SectorSize : Format.SectorPayloadSize();
 }
 
 ui32 TPDisk::SystemChunkSize(const TDiskFormat& format, ui32 userAccessibleChunkSizeBytes, ui32 sectorSizeBytes) const {
@@ -1383,7 +1381,7 @@ TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const 
                 (NewOwnerId, req->Owner));
         state.OwnerId = req->Owner;
         state.CommitState = TChunkState::DATA_RESERVED;
-        state.Encrypted = EncryptedChunks;
+        state.Encrypted = !Format.IsUnencryptedDataChunks();
         Mon.UncommitedDataChunks->Inc();
     }
     return chunks;

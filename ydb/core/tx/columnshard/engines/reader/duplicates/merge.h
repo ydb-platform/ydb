@@ -47,14 +47,14 @@ class TBuildDuplicateFilters: public NConveyor::ITask {
     private:
         YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Data);
         YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, Filter);
-        YDB_READONLY_DEF(ui32, SourceIdx);
+        YDB_READONLY_DEF(ui64, SourceId);
 
     public:
         TSourceMergingInfo(
-            const std::shared_ptr<NArrow::TGeneralContainer>& data, const std::shared_ptr<NArrow::TColumnFilter>& filter, const ui32 sourceIdx)
+            const std::shared_ptr<NArrow::TGeneralContainer>& data, const std::shared_ptr<NArrow::TColumnFilter>& filter, const ui64 sourceId)
             : Data(data)
             , Filter(filter)
-            , SourceIdx(sourceIdx) {
+            , SourceId(sourceId) {
         }
     };
 
@@ -83,8 +83,8 @@ public:
     }
 
     void AddSource(
-        const std::shared_ptr<NArrow::TGeneralContainer>& source, const std::shared_ptr<NArrow::TColumnFilter>& filter, const ui32 sourceIdx) {
-        Sources.emplace_back(source, filter, sourceIdx);
+        const std::shared_ptr<NArrow::TGeneralContainer>& source, const std::shared_ptr<NArrow::TColumnFilter>& filter, const ui64 sourceId) {
+        Sources.emplace_back(source, filter, sourceId);
     }
 };
 

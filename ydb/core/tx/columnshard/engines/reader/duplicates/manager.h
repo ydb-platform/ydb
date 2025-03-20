@@ -14,20 +14,20 @@ namespace NSimple {
 class IDataSource;
 }
 
-class TEvDuplicateFilterPartialResult
-    : public NActors::TEventLocal<TEvDuplicateFilterPartialResult, NColumnShard::TEvPrivate::EvDuplicateFilterPartialResult> {
+class TEvDuplicateFilterIntervalResult
+    : public NActors::TEventLocal<TEvDuplicateFilterIntervalResult, NColumnShard::TEvPrivate::EvDuplicateFilterIntervalResult> {
 private:
-    using TFilterBySourceIdx = THashMap<ui32, NArrow::TColumnFilter>;
-    YDB_READONLY(TConclusion<TFilterBySourceIdx>, Result, TFilterBySourceIdx());
+    using TFilterBySourceId = THashMap<ui64, NArrow::TColumnFilter>;
+    YDB_READONLY(TConclusion<TFilterBySourceId>, Result, TFilterBySourceId());
     YDB_READONLY_DEF(ui32, IntervalIdx);
 
 public:
-    TEvDuplicateFilterPartialResult(TConclusion<TFilterBySourceIdx>&& result, const ui32 intervalIdx)
+    TEvDuplicateFilterIntervalResult(TConclusion<TFilterBySourceId>&& result, const ui32 intervalIdx)
         : Result(std::move(result))
         , IntervalIdx(intervalIdx) {
     }
 
-    TFilterBySourceIdx&& DetachResult() {
+    TFilterBySourceId&& DetachResult() {
         return Result.DetachResult();
     }
 };
@@ -142,10 +142,6 @@ private:
         ui32 NumIntervals() const {
             return LastIdx - FirstIdx + 1;
         }
-
-        // bool ContainsInterval(const ui32 intervalIdx) const {
-        //     return FirstIdx <= intervalIdx && intervalIdx <= LastIdx;
-        // }
     };
 
     class TSourceIntervals {
@@ -180,19 +176,19 @@ private:
             return *findRange;
         }
 
-        TIntervalsRange GetRangeBySourceIndex(const ui32 sourceIdx) const {
-            AFL_VERIFY(sourceIdx < SortedSourceIds.size());
-            return GetRangeBySourceId(SortedSourceIds[sourceIdx]);
+        TIntervalsRange GetRangeBySourceSeqNumber(const ui32 seqNumber) const {
+            AFL_VERIFY(seqNumber < SortedSourceIds.size());
+            return GetRangeBySourceId(SortedSourceIds[seqNumber]);
         }
     };
 
     class TIntervalsCursor {
     private:
-        using TSourceIdxByIntervalIdx = std::map<ui32, ui32>;
+        using TSourceSeqNumberByIntervalIdx = std::map<ui32, ui32>;
         YDB_READONLY(ui32, IntervalIdx, 0);
-        YDB_READONLY_DEF(TSourceIdxByIntervalIdx, SourcesByRightInterval);
+        YDB_READONLY_DEF(TSourceSeqNumberByIntervalIdx, SourcesByRightInterval);
         const TSourceIntervals* Owner;
-        ui32 NextSourceIdx = 0;
+        ui32 NextSourceSeqNumber = 0;
 
         void NextImpl(const bool init = false) {
             if (init) {
@@ -205,9 +201,9 @@ private:
                 SourcesByRightInterval.erase(SourcesByRightInterval.begin());
             }
 
-            while (NextSourceIdx != Owner->NumSources() && Owner->GetRangeBySourceIndex(NextSourceIdx).GetFirstIdx() <= IntervalIdx) {
-                SourcesByRightInterval.emplace(Owner->GetRangeBySourceIndex(NextSourceIdx).GetFirstIdx(), NextSourceIdx);
-                ++NextSourceIdx;
+            while (NextSourceSeqNumber != Owner->NumSources() && Owner->GetRangeBySourceSeqNumber(NextSourceSeqNumber).GetFirstIdx() <= IntervalIdx) {
+                SourcesByRightInterval.emplace(Owner->GetRangeBySourceSeqNumber(NextSourceSeqNumber).GetFirstIdx(), NextSourceSeqNumber);
+                ++NextSourceSeqNumber;
             }
 
             AFL_VERIFY(IntervalIdx <= Owner->NumIntervals())("i", IntervalIdx)("num_intervals", Owner->NumIntervals());
@@ -308,6 +304,7 @@ private:
     TSourceIntervals Intervals;
     ui64 FinishedSourcesCount = 0;
     std::deque<std::shared_ptr<TSourceFilterConstructor>> ActiveSources;
+    THashMap<ui64, std::shared_ptr<TSourceFilterConstructor>> ActiveSourceById;
     std::deque<std::shared_ptr<NSimple::IDataSource>> SortedSources;
     TIntervalCounter NotFetchedSourcesCount;
     TIntervalsCursor NextIntervalToMerge;
@@ -316,7 +313,7 @@ private:
     STATEFN(StateMain) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvRequestFilter, Handle);
-            hFunc(TEvDuplicateFilterPartialResult, Handle);
+            hFunc(TEvDuplicateFilterIntervalResult, Handle);
             hFunc(TEvDuplicateFilterDataFetched, Handle);
             hFunc(NActors::TEvents::TEvPoison, Handle);
             default:
@@ -325,7 +322,7 @@ private:
     }
 
     void Handle(const TEvRequestFilter::TPtr&);
-    void Handle(const TEvDuplicateFilterPartialResult::TPtr&);
+    void Handle(const TEvDuplicateFilterIntervalResult::TPtr&);
     void Handle(const TEvDuplicateFilterDataFetched::TPtr&);
     void Handle(const NActors::TEvents::TEvPoison::TPtr&);
 
@@ -334,7 +331,8 @@ private:
     void StartMergingColumns(const TIntervalsCursor& interval) const;
     void FlushFinishedSources() ;
 
-    std::shared_ptr<TSourceFilterConstructor> GetConstructorVerified(const ui32 sourceIdx) const;
+    std::shared_ptr<TSourceFilterConstructor> GetConstructorBySourceId(const ui64 sourceId) const;
+    std::shared_ptr<TSourceFilterConstructor> GetConstructorBySourceSeqNumber(const ui32 seqNumber) const;
 
 public:
     TDuplicateFilterConstructor(const std::deque<std::shared_ptr<NSimple::IDataSource>>& sources);

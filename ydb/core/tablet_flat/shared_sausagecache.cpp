@@ -27,10 +27,11 @@ using namespace NTabletFlatExecutor;
 
 TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
     : Counters(counters)
+    // lru cache counters:
     , FreshBytes(counters->GetCounter("fresh"))
     , StagingBytes(counters->GetCounter("staging"))
     , WarmBytes(counters->GetCounter("warm"))
-
+    // page counters:
     , MemLimitBytes(counters->GetCounter("MemLimitBytes"))
     , ConfigLimitBytes(counters->GetCounter("ConfigLimitBytes"))
     , ActivePages(counters->GetCounter("ActivePages"))
@@ -46,11 +47,11 @@ TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonito
     , CacheMissBytes(counters->GetCounter("CacheMissBytes", true))
     , LoadInFlyPages(counters->GetCounter("LoadInFlyPages"))
     , LoadInFlyBytes(counters->GetCounter("LoadInFlyBytes"))
-
+    // page collection counters:
     , PageCollections(counters->GetCounter("PageCollections"))
     , Owners(counters->GetCounter("Owners"))
     , PageCollectionOwners(counters->GetCounter("PageCollectionOwners"))
-
+    // request counters:
     , PendingRequests(counters->GetCounter("PendingRequests"))
     , SucceedRequests(counters->GetCounter("SucceedRequests", true))
     , FailedRequests(counters->GetCounter("FailedRequests", true))

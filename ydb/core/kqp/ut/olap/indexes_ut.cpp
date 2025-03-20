@@ -92,7 +92,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         {
             auto alterQuery = TStringBuilder() <<
                               R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
-                    FEATURES=`{"column_names" : ["uid"], "false_positive_probability" : 0.05}`);
+                    FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0.01}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -102,7 +102,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             auto alterQuery =
                 TStringBuilder() <<
                 R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id, TYPE=BLOOM_FILTER,
-                    FEATURES=`{"column_names" : ["resource_id"], "false_positive_probability" : 0.05}`);
+                    FEATURES=`{"column_name" : "resource_id", "false_positive_probability" : 0.05}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         {
             auto alterQuery = TStringBuilder() <<
                               R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_ts, TYPE=COUNT_MIN_SKETCH,
-                    FEATURES=`{"column_names" : ['timestamp']}`);
+                    FEATURES=`{"column_names" : ["timestamp"]}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -423,7 +423,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 auto alterQuery =
                     TStringBuilder() << Sprintf(
                         R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
-                    FEATURES=`{"column_names" : ["uid"], "false_positive_probability" : 0.05, "storage_id" : "%s"}`);
+                    FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0.01, "storage_id" : "%s"}`);
                 )",
                         StorageId.data());
                 auto session = tableClient.CreateSession().GetValueSync().GetSession();
@@ -442,7 +442,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 auto alterQuery =
                     TStringBuilder() << Sprintf(
                         R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_resource_id, TYPE=BLOOM_FILTER,
-                    FEATURES=`{"column_names" : ["resource_id"], "false_positive_probability" : 0.05, "storage_id" : "%s"}`);
+                    FEATURES=`{"column_name" : "resource_id", "false_positive_probability" : 0.05, "storage_id" : "%s"}`);
                 )",
                         StorageId.data());
                 auto session = tableClient.CreateSession().GetValueSync().GetSession();
@@ -482,6 +482,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
             ExecuteSQL(R"(SELECT COUNT(*) FROM `/Root/olapStore/olapTable`)", "[[230000u;]]");
 
+            AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0)("val", csController->GetIndexesSkippedNoData().Val());
             AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() == 0);
             AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() == 0);
             csController->WaitCompactions(TDuration::Seconds(5));
@@ -493,6 +494,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                     FROM `/Root/olapStore/olapTable`
                     WHERE resource_id LIKE '%110a151' AND resource_id LIKE '110a%' AND resource_id LIKE '%dd%')",
                     "[[0u;]]");
+                AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0)("val", csController->GetIndexesSkippedNoData().Val());
                 AFL_VERIFY(!csController->GetIndexesApprovedOnSelect().Val());
                 AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val());
             }
@@ -502,6 +504,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                     FROM `/Root/olapStore/olapTable`
                     WHERE resource_id LIKE '%110a151%')",
                     "[[0u;]]");
+                AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0)("val", csController->GetIndexesSkippedNoData().Val());
                 AFL_VERIFY(!csController->GetIndexesApprovedOnSelect().Val());
                 AFL_VERIFY(csController->GetIndexesSkippingOnSelect().Val() - SkipStart == 3);
             }
@@ -615,7 +618,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         {
             auto alterQuery = TStringBuilder() <<
                               R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
-                    FEATURES=`{"column_names" : ["uid"], "false_positive_probability" : 0.05}`);
+                    FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0.05}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -625,7 +628,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         {
             auto alterQuery = TStringBuilder() <<
                               R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
-                    FEATURES=`{"column_names" : ["uid", "resource_id"], "false_positive_probability" : 0.05}`);
+                    FEATURES=`{"column_name" : "resource_id", "false_positive_probability" : 0.05}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -635,7 +638,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         {
             auto alterQuery = TStringBuilder() <<
                               R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
-                    FEATURES=`{"column_names" : ["uid"], "false_positive_probability" : 0.005}`);
+                    FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0.005}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
@@ -645,7 +648,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         {
             auto alterQuery = TStringBuilder() <<
                               R"(ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=index_uid, TYPE=BLOOM_FILTER,
-                    FEATURES=`{"column_names" : ["uid"], "false_positive_probability" : 0.01}`);
+                    FEATURES=`{"column_name" : "uid", "false_positive_probability" : 0.01, "bits_storage_type": "BITSET"}`);
                 )";
             auto session = tableClient.CreateSession().GetValueSync().GetSession();
             auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();

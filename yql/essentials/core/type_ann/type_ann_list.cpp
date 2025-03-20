@@ -3081,6 +3081,53 @@ namespace {
         return ListAutomapArgs(input, output, ctx, "ZipAll");
     }
 
+    IGraphTransformer::TStatus PruneKeysWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+        if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (IsNull(input->Head())) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (IsEmptyList(input->Head())) {
+            output = input->HeadPtr();
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        const TTypeAnnotationNode* itemType = nullptr;
+        if (!EnsureNewSeqType<false, true, true>(input->Head(), ctx.Expr, &itemType)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        auto& keyExtractorLambda = input->ChildRef(1);
+        const auto status = ConvertToLambda(keyExtractorLambda, ctx.Expr, 1);
+        if (status.Level != IGraphTransformer::TStatus::Ok) {
+            return status;
+        }
+
+        if (!UpdateLambdaAllArgumentsTypes(keyExtractorLambda, {itemType}, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!keyExtractorLambda->GetTypeAnn()) {
+            return IGraphTransformer::TStatus::Repeat;
+        }
+
+        if (input->IsCallable("PruneKeys") &&
+            !EnsureHashableKey(keyExtractorLambda->Pos(), keyExtractorLambda->GetTypeAnn(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureEquatableKey(keyExtractorLambda->Pos(), keyExtractorLambda->GetTypeAnn(), ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        input->SetTypeAnn(input->Head().GetTypeAnn());
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     bool ValidateSortDirections(TExprNode& direction, TExprContext& ctx, bool& isTuple) {
         bool isOkAscending = false;
 

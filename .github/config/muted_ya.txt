@@ -52,7 +52,6 @@ ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/tablet_flat/ut TSharedPageCache.Compaction_FlatIndex
 ydb/core/tablet_flat/ut TSharedPageCache.Compaction_ZeroCache_BTreeIndex
 ydb/core/tablet_flat/ut TSharedPageCache.Compaction_ZeroCache_FlatIndex
-ydb/core/tablet_flat/ut TSharedPageCache.S3FIFO
 ydb/core/tx/datashard/ut_incremental_backup IncrementalBackup.ComplexRestoreBackupCollection+WithIncremental
 ydb/core/tx/schemeshard/ut_login_large TSchemeShardLoginLargeTest.RemoveLogin_Many
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.WithData

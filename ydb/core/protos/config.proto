@@ -551,6 +551,7 @@ message TMonitoringConfig {
     optional string MemAllocDumpPathPrefix = 16;
     optional uint32 MaxRequestsPerSecond = 17 [default = 0];
     optional string InactivityTimeout = 18 [default = "2m"];
+    optional bool HideHttpEndpoint = 19 [default = false];
 }
 
 message TRestartsCountConfig {
@@ -1454,6 +1455,12 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 130 }];
+
+        optional uint64 MaxInProgressSyncCount = 27 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous VDisk sync processes; 0 means no limit",
+            MinValue: 0,
+            MaxValue: 1000,
+            DefaultValue: 0 }];
     }
 
     message TTabletControls {
@@ -1589,6 +1596,18 @@ message TImmediateControlsConfig {
         }];
     }
 
+    message TGRpcControls {
+        message TRequestConfig {
+            optional uint64 MaxInFlight = 1 [(ControlOptions) = {
+                Description: "Max in flight requests",
+                MinValue: 0,
+                MaxValue: 1000000,
+                DefaultValue: 0
+            }];
+        }
+        map<string, TRequestConfig> RequestConfigs = 1;
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
@@ -1602,6 +1621,7 @@ message TImmediateControlsConfig {
     optional TBlobStorageControllerControls BlobStorageControllerControls = 11;
     optional TTableServiceControls TableServiceControls = 12;
     optional TTestShardControls TestShardControls = 13;
+    optional TGRpcControls GRpcControls = 14;
 };
 
 message TMeteringConfig {

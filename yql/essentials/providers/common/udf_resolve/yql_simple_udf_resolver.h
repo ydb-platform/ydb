@@ -16,7 +16,7 @@ IUdfResolver::TPtr CreateSimpleUdfResolver(
 bool LoadFunctionsMetadata(const TVector<IUdfResolver::TFunction*>& functions,
     const NKikimr::NMiniKQL::IFunctionRegistry& functionRegistry,
     NUdf::ITypeInfoHelper::TPtr typeInfoHelper,
-    TExprContext& ctx);
+    TExprContext& ctx, NUdf::ELogLevel logLevel);
 
 } // namespace NCommon
 } // namespace NYql

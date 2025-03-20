@@ -1873,7 +1873,7 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
                                     const TForceShardSplitSettings& forceShardSplitSettings,
                                     TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge,
                                     THashSet<TTabletId>& partOwners, ui64& totalSize, float& totalLoad,
-                                    const TTableInfo* mainTableForIndex) const
+                                    const TTableInfo* mainTableForIndex, TString& reason) const
 {
     if (ExpectedPartitionCount + 1 - shardsToMerge.size() <= GetMinPartitionsCount()) {
         return false;
@@ -1904,7 +1904,12 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
     bool canMerge = false;
 
     // Check if we can try merging by size
-    if (IsMergeBySizeEnabled(forceShardSplitSettings) && stats->DataSize + totalSize <= GetSizeToMerge(forceShardSplitSettings)) {
+    const auto sizeToMerge = GetSizeToMerge(forceShardSplitSettings);
+    if (IsMergeBySizeEnabled(forceShardSplitSettings) && stats->DataSize + totalSize <= sizeToMerge) {
+        reason = TStringBuilder() << "merge by size ("
+            << "dataSize: " << stats->DataSize << ", "
+            << "totalSize: " << stats->DataSize + totalSize << ", "
+            << "sizeToMerge: " << sizeToMerge << ")";
         canMerge = true;
     }
 
@@ -1912,6 +1917,7 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
     TInstant now = AppData()->TimeProvider->Now();
     TDuration minUptime = TDuration::Seconds(splitSettings.MergeByLoadMinUptimeSec);
     if (!canMerge && IsMergeByLoadEnabled(mainTableForIndex) && stats->StartTime && stats->StartTime + minUptime < now) {
+        reason = "merge by load";
         canMerge = true;
     }
 
@@ -1936,6 +1942,11 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
 
         if (shardLoad + totalLoad > cpuUsageThreshold *0.7)
             return false;
+
+        reason = TStringBuilder() << "merge by load ("
+            << "shardLoad: " << shardLoad << ", "
+            << "totalLoad: " << shardLoad + totalLoad << ", "
+            << "loadThreshold: " << cpuUsageThreshold * 0.7 << ")";
     }
 
     // Merged shards must not have borrowed parts from the same original tablet
@@ -1956,7 +1967,7 @@ bool TTableInfo::TryAddShardToMerge(const TSplitSettings& splitSettings,
 bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
                                          const TForceShardSplitSettings& forceShardSplitSettings,
                                          TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge,
-                                         const TTableInfo* mainTableForIndex) const
+                                         const TTableInfo* mainTableForIndex, TString& reason) const
 {
     // Don't split/merge backup tables
     if (IsBackup) {
@@ -1989,12 +2000,13 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
     THashSet<TTabletId> partOwners;
 
     // Make sure we can actually merge current shard first
-    if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, shardIdx, shardsToMerge, partOwners, totalSize, totalLoad, mainTableForIndex)) {
+    if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, shardIdx, shardsToMerge, partOwners, totalSize, totalLoad, mainTableForIndex, reason)) {
         return false;
     }
 
+    TString mergeReason;
     for (i64 pi = partitionIdx - 1; pi >= 0; --pi) {
-        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi].ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad, mainTableForIndex)) {
+        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi].ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad, mainTableForIndex, mergeReason)) {
             break;
         }
     }
@@ -2002,7 +2014,7 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
     Reverse(shardsToMerge.begin(), shardsToMerge.end());
 
     for (ui64 pi = partitionIdx + 1; pi < GetPartitions().size(); ++pi) {
-        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi].ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad, mainTableForIndex)) {
+        if (!TryAddShardToMerge(splitSettings, forceShardSplitSettings, GetPartitions()[pi].ShardIdx, shardsToMerge, partOwners, totalSize, totalLoad, mainTableForIndex, mergeReason)) {
             break;
         }
     }
@@ -2013,7 +2025,7 @@ bool TTableInfo::CheckCanMergePartitions(const TSplitSettings& splitSettings,
 bool TTableInfo::CheckSplitByLoad(
         const TSplitSettings& splitSettings, TShardIdx shardIdx,
         ui64 dataSize, ui64 rowCount,
-        const TTableInfo* mainTableForIndex) const
+        const TTableInfo* mainTableForIndex, TString& reason) const
 {
     // Don't split/merge backup tables
     if (IsBackup)
@@ -2066,6 +2078,16 @@ bool TTableInfo::CheckSplitByLoad(
     {
         return false;
     }
+
+    reason = TStringBuilder() << "split by load ("
+        << "rowCount: " << rowCount << ", "
+        << "minRowCount: " << MIN_ROWS_FOR_SPLIT_BY_LOAD << ", "
+        << "dataSize: " << dataSize << ", "
+        << "minDataSize: " << MIN_SIZE_FOR_SPLIT_BY_LOAD << ", "
+        << "shardCount: " << Stats.PartitionStats.size() << ", "
+        << "maxShardCount: " << maxShards << ", "
+        << "cpuUsage: " << stats.GetCurrentRawCpuUsage() << ", "
+        << "cpuUsageThreshold: " << cpuUsageThreshold * 1000000 << ")";
 
     return true;
 }

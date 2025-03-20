@@ -28,6 +28,8 @@ class TJsonQuery : public TViewerPipeClient {
     bool IsBase64Encode = true;
     int LimitRows = 10000;
     int TotalRows = 0;
+    bool CollectDiagnostics = true;
+    TDuration StatsPeriod;
     TDuration KeepAlive = TDuration::MilliSeconds(10000);
     TInstant LastSendTime;
     static constexpr TDuration WakeupPeriod = TDuration::Seconds(1);
@@ -113,6 +115,10 @@ public:
         }
         if (params.Has("output_chunk_max_size")) {
             OutputChunkMaxSize = FromStringWithDefault<ui64>(params.Get("output_chunk_max_size"), OutputChunkMaxSize);
+        }
+        CollectDiagnostics = FromStringWithDefault<bool>(params.Get("collect_diagnostics"), CollectDiagnostics);
+        if (params.Has("stats_period")) {
+            StatsPeriod = TDuration::MilliSeconds(std::clamp<ui64>(FromStringWithDefault<ui64>(params.Get("stats_period"), StatsPeriod.MilliSeconds()), 1000, 600000));
         }
     }
 
@@ -379,6 +385,10 @@ public:
         }
         if (OutputChunkMaxSize) {
             request.SetOutputChunkMaxSize(OutputChunkMaxSize);
+        }
+        request.SetCollectDiagnostics(CollectDiagnostics);
+        if (StatsPeriod) {
+            event->SetProgressStatsPeriod(StatsPeriod);
         }
         ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
         QueryResponse = MakeRequest<NKqp::TEvKqp::TEvQueryResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
@@ -1038,6 +1048,20 @@ public:
                 description: resource pool in which the query will be executed
                 type: string
                 required: false
+              - name: keep_alive
+                in: query
+                description: time of inactivity to send keep-alive in stream (multipart) queries
+                type: integer
+                default: 10000
+              - name: collect_diagnostics
+                in: query
+                description: collect query diagnostics
+                type: boolean
+                default: true
+              - name: stats_period
+                in: query
+                description: time interval for sending periodical query statistics in ms
+                type: integer
             requestBody:
                 description: Executes SQL query
                 required: false

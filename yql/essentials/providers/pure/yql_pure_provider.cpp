@@ -134,7 +134,8 @@ public:
         NUdf::TUniquePtr<NUdf::ILogProvider> logProvider = NUdf::MakeLogProvider(
             [](const NUdf::TStringRef& component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
                 Cerr << Now() << " " << component << " [" << level << "] " << message << "\n";
-            }
+            },
+            State_->Types->RuntimeLogLevel
         );
 
         TComputationPatternOpts patternOpts(alloc.Ref(), env, compFactory, State_->FunctionRegistry,

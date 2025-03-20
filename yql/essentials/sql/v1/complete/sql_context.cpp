@@ -39,7 +39,6 @@ namespace NSQLComplete {
         TCompletionContext Analyze(TCompletionInput input) override {
             auto prefix = input.Text.Head(input.CursorPosition);
             auto tokens = C3.Complete(prefix);
-            FilterIdKeywords(tokens);
             return {
                 .Keywords = SiftedKeywords(tokens),
             };
@@ -65,18 +64,11 @@ namespace NSQLComplete {
             const auto& keywordRules = Grammar->GetKeywordRules();
 
             std::unordered_set<TRuleId> preferredRules;
-            preferredRules.insert(std::begin(keywordRules), std::end(keywordRules));
-            return preferredRules;
-        }
 
-        void FilterIdKeywords(TVector<TSuggestedToken>& tokens) {
-            const auto& keywordRules = Grammar->GetKeywordRules();
-            auto [first, last] = std::ranges::remove_if(tokens, [&](const TSuggestedToken& token) {
-                return AnyOf(token.ParserCallStack, [&](TRuleId rule) {
-                    return Find(keywordRules, rule) != std::end(keywordRules);
-                });
-            });
-            tokens.erase(first, last);
+            // Excludes tokens obtained from keyword rules
+            preferredRules.insert(std::begin(keywordRules), std::end(keywordRules));
+
+            return preferredRules;
         }
 
         TVector<TString> SiftedKeywords(const TVector<TSuggestedToken>& tokens) {

@@ -257,7 +257,8 @@ class LoadSuiteBase:
             except BaseException as e:
                 error = str(e)
                 tb = e.__traceback__
-        first_node_start_time = min([n.start_time for n in YdbCluster.get_cluster_nodes(db_only=False)])
+        nodes_start_time = [n.start_time for n in YdbCluster.get_cluster_nodes(db_only=False)]
+        first_node_start_time = min(nodes_start_time) if len(nodes_start_time) > 0 else 0
         ResultsProcessor.upload_results(
             kind='Load',
             suite=cls.suite(),

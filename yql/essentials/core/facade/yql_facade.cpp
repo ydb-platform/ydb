@@ -24,6 +24,7 @@
 #include <yql/essentials/core/extract_predicate/extract_predicate_dbg.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/gateways_utils/gateways_utils.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_outproc_udf_resolver.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_udf_resolver_with_index.h>
@@ -390,6 +391,14 @@ TProgram::TProgram(
                 if (GatewaysForMerge_) {
                     YQL_ENSURE(LoadedGatewaysConfig_.MergeFromString(*GatewaysForMerge_));
                 }
+                THashMap<TString, TString> clusterMapping;
+                GetClusterMappingFromGateways(LoadedGatewaysConfig_, clusterMapping);
+                auto sqlFlags = ExtractSqlFlags(LoadedGatewaysConfig_);
+                if (auto modules = dynamic_cast<TModuleResolver*>(Modules_.get())) {
+                    modules->SetClusterMapping(clusterMapping);
+                    modules->SetSqlFlags(sqlFlags);
+                }
+
                 GatewaysConfig_ = &LoadedGatewaysConfig_;
             }
         } else if (QContext_.CanWrite() && GatewaysConfig_) {
@@ -486,12 +495,34 @@ IPlanBuilder& TProgram::GetPlanBuilder() {
 
 void TProgram::SetParametersYson(const TString& parameters) {
     Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
-    auto node = NYT::NodeFromYsonString(parameters);
-    YQL_ENSURE(node.IsMap());
-    for (const auto& x : node.AsMap()) {
-        YQL_ENSURE(x.second.IsMap());
-        YQL_ENSURE(x.second.HasKey("Data"));
-        YQL_ENSURE(x.second.Size() == 1);
+    NYT::TNode node;
+    try {
+        try {
+            node = NYT::NodeFromYsonString(parameters);
+        } catch (const std::exception& e) {
+            throw TErrorException(0) << "Invalid parameters: " << e.what();
+        }
+
+        if (!node.IsMap()) {
+            throw TErrorException(0) << "Invalid parameters: expected Map at first level";
+        }
+
+        for (const auto& x : node.AsMap()) {
+            if (!x.second.IsMap()) {
+                throw TErrorException(0) << "Invalid parameters: expected Map at second level";
+            }
+
+            if (!x.second.HasKey("Data")) {
+                throw TErrorException(0) << "Invalid parameters: expected Data key";
+            }
+
+            if (x.second.Size() != 1) {
+                throw TErrorException(0) << "Invalid parameters: expected Map with single element";
+            }
+        }
+    } catch (const std::exception& e) {
+        ParametersIssue_ = ExceptionToIssue(e);
+        return;
     }
 
     OperationOptions_.ParametersYson = node;
@@ -696,8 +727,25 @@ void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& 
     }
 }
 
+bool TProgram::CheckParameters() {
+    if (ParametersIssue_) {
+        if (!ExprCtx_) {
+            ExprCtx_.Reset(new TExprContext(NextUniqueId_));
+        }
+
+        ExprCtx_->AddError(*ParametersIssue_);
+        return false;
+    }
+
+    return true;
+}
+
 bool TProgram::ParseYql() {
     YQL_PROFILE_FUNC(TRACE);
+    if (!CheckParameters()) {
+        return false;
+    }
+
     YQL_ENSURE(SourceSyntax_ == ESourceSyntax::Unknown);
     SourceSyntax_ = ESourceSyntax::Yql;
     SyntaxVersion_ = 1;
@@ -721,6 +769,10 @@ bool TProgram::ParseSql() {
 bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
 {
     YQL_PROFILE_FUNC(TRACE);
+    if (!CheckParameters()) {
+        return false;
+    }
+
     YQL_ENSURE(SourceSyntax_ == ESourceSyntax::Unknown);
     SourceSyntax_ = ESourceSyntax::Sql;
     SyntaxVersion_ = settings.SyntaxVersion;

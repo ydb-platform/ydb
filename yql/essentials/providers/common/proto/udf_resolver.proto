@@ -29,6 +29,7 @@ message TFunctionResult {
     optional string ReturnDoc = 13;
     optional bool SupportsBlocks = 14;
     optional bool IsStrict = 15;
+    repeated string Messages = 16;
 };
 
 message TImport {
@@ -50,6 +51,7 @@ message TImportResult {
 message TResolve {
     repeated TImport Imports = 1;
     repeated TFunction Udfs = 2;
+    optional uint32 RuntimeLogLevel = 3;
 };
 
 message TResolveResult {

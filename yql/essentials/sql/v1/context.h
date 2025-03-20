@@ -332,6 +332,7 @@ namespace NSQLTranslationV1 {
         bool WarnOnAnsiAliasShadowing = true;
         ui32 ResultRowsLimit = 0;
         ui64 ResultSizeLimit = 0;
+        TString RuntimeLogLevel;
         ui32 PragmaGroupByLimit = 1 << 6;
         ui32 PragmaGroupByCubeLimit = 5;
         // if FlexibleTypes=true, emit TypeOrMember callable and resolve Type/Column uncertainty on type annotation stage, otherwise always emit Type

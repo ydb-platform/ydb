@@ -2689,6 +2689,123 @@ TExprNode::TPtr ExpandListHas(const TExprNode::TPtr& input, TExprContext& ctx) {
     return RewriteSearchByKeyForTypesMismatch<true, true>(input, ctx);
 }
 
+TExprNode::TPtr ExpandPruneAdjacentKeys(const TExprNode::TPtr& input, TExprContext& ctx) {
+    const auto type = input->Head().GetTypeAnn();
+    const auto& keyExtractorLambda = input->ChildRef(1);
+
+    YQL_ENSURE(type->GetKind() == ETypeAnnotationKind::List || type->GetKind() == ETypeAnnotationKind::Stream);
+
+    const auto elemType = type->GetKind() == ETypeAnnotationKind::List
+        ? type->Cast<TListExprType>()->GetItemType()
+        : type->Cast<TStreamExprType>()->GetItemType();
+    const auto optionalElemType = *ctx.MakeType<TOptionalExprType>(elemType);
+
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content();
+    return ctx.Builder(input->Pos())
+        .Callable("OrderedFlatMap")
+            .Callable(0, "Fold1Map")
+                .Add(0, input->HeadPtr())
+                .Lambda(1)
+                    .Param("item")
+                    .List(0)
+                        .Callable(0, "Just")
+                            .Arg(0, "item")
+                        .Seal()
+                        .Arg(1, "item")
+                    .Seal()
+                .Seal()
+                .Lambda(2)
+                    .Param("item")
+                    .Param("state")
+                    .List(0)
+                        .Callable(0, "If")
+                            .Callable(0, "AggrEquals")
+                                .Apply(0, keyExtractorLambda)
+                                    .With(0, "item")
+                                .Seal()
+                                .Apply(1, keyExtractorLambda)
+                                    .With(0, "state")
+                                .Seal()
+                            .Seal()
+                            .Callable(1, "Nothing")
+                                .Add(0, ExpandType(input->Pos(), optionalElemType, ctx))
+                            .Seal()
+                            .Callable(2, "Just")
+                                .Arg(0, "item")
+                            .Seal()
+                        .Seal()
+                        .Arg(1, "item")
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Lambda(1)
+                .Param("item")
+                .Arg(0, "item")
+            .Seal()
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr ExpandPruneKeys(const TExprNode::TPtr& input, TExprContext& ctx) {
+    const auto type = input->Head().GetTypeAnn();
+    const auto& keyExtractorLambda = input->ChildRef(1);
+    YQL_ENSURE(type->GetKind() == ETypeAnnotationKind::List || type->GetKind() == ETypeAnnotationKind::Stream);
+
+    auto initHandler = ctx.Builder(input->Pos())
+        .Lambda()
+            .Param("key")
+            .Param("item")
+            .Arg(0, "item")
+        .Seal()
+        .Build();
+    auto updateHandler = ctx.Builder(input->Pos())
+        .Lambda()
+            .Param("key")
+            .Param("item")
+            .Param("state")
+            .Arg(0, "state")
+        .Seal()
+        .Build();
+    auto finishHandler = ctx.Builder(input->Pos())
+        .Lambda()
+            .Param("key")
+            .Param("state")
+            .Callable(0, "Just")
+                .Arg(0, "state")
+            .Seal()
+        .Seal()
+        .Build();
+
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content();
+    if (type->GetKind() == ETypeAnnotationKind::List) {
+        return ctx.Builder(input->Pos())
+            .Callable("CombineByKey")
+                .Add(0, input->HeadPtr())
+                .Lambda(1) // preMap
+                    .Param("item")
+                    .Callable(0, "Just")
+                       .Arg(0, "item")
+                    .Seal()
+                .Seal()
+                .Add(2, keyExtractorLambda)
+                .Add(3, initHandler)
+                .Add(4, updateHandler)
+                .Add(5, finishHandler)
+            .Seal()
+            .Build();
+    } else {
+        return ctx.Builder(input->Pos())
+            .Callable("CombineCore")
+                .Add(0, input->HeadPtr())
+                .Add(1, keyExtractorLambda)
+                .Add(2, initHandler)
+                .Add(3, updateHandler)
+                .Add(4, finishHandler)
+            .Seal()
+            .Build();
+    }
+}
+
 TExprNode::TPtr ExpandPgArrayOp(const TExprNode::TPtr& input, TExprContext& ctx) {
     const bool all = input->Content() == "PgAllResolvedOp";
     auto list = ctx.Builder(input->Pos())
@@ -8675,6 +8792,8 @@ struct TPeepHoleRules {
         {"CheckedDiv", &ExpandCheckedDiv},
         {"CheckedMod", &ExpandCheckedMod},
         {"CheckedMinus", &ExpandCheckedMinus},
+        {"PruneAdjacentKeys", &ExpandPruneAdjacentKeys},
+        {"PruneKeys", &ExpandPruneKeys},
         {"JsonValue", &ExpandJsonValue},
         {"JsonExists", &ExpandJsonExists},
         {"EmptyIterator", &DropDependsOnFromEmptyIterator},

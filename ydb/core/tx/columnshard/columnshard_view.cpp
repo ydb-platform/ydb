@@ -32,7 +32,7 @@ void TTxMonitoring::Complete(const TActorContext& ctx) {
         schemaVersion = item;
     }
     size_t countVersions = std::min(10ul, schemaVersions.size());
-    if (const auto& countVersionsParam = cgi.Get("countVersions")) {
+    if (const auto& countVersionsParam = cgi.Get("CountVersions")) {
         try {
             countVersions = std::min(std::stoul(countVersionsParam), schemaVersions.size());
         } catch (...) {

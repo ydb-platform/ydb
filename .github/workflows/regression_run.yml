@@ -6,10 +6,16 @@ on:
   workflow_dispatch:
 
 jobs:
-  ya_x86_64:
+  main:
     name: Regression-run
-    uses: ./.github/workflows/run_all_tests.yml
+    uses: ./.github/workflows/run_tests.yml
     secrets: inherit
+    strategy:
+      fail-fast: false
+      matrix: 
+         build_preset: ["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]
     with:
+      runner_label: self-hosted
       test_targets: ydb/
+      build_preset: ${{ matrix.build_preset }}
 

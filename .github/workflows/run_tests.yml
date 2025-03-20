@@ -1,4 +1,4 @@
-name: Run all tests
+name: Run tests
 
 on:
   workflow_dispatch:
@@ -29,7 +29,6 @@ on:
         type: string
   workflow_call:
     inputs:
-
       runner_label:
         description: 'Label of the runner to be used'
         required: false
@@ -61,7 +60,7 @@ on:
         type: string
         
 jobs:
-  run_all_tests:
+  run_tests:
     name: Test ${{ github.ref_name }}:${{ inputs.build_preset }}
     timeout-minutes: 600
     runs-on: ${{ inputs.runner_label }}

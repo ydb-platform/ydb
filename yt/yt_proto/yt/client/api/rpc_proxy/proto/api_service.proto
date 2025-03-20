@@ -3180,6 +3180,7 @@ message TJob
     optional bytes archive_features = 29; // YSON
     optional string monitoring_descriptor = 30;
     optional string operation_incarnation = 31;
+    optional NYT.NProto.TGuid allocation_id = 32;
 }
 
 message TListJobsStatistics

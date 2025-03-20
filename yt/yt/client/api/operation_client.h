@@ -391,6 +391,7 @@ struct TJob
     std::optional<ui64> JobCookie;
     NYson::TYsonString ArchiveFeatures;
     std::optional<std::string> OperationIncarnation;
+    std::optional<NScheduler::TAllocationId> AllocationId;
 
     std::optional<bool> IsStale;
 

@@ -71,6 +71,7 @@ class TJsonTabletInfo : public TJsonWhiteboardRequest<TEvWhiteboard::TEvTabletSt
     using TBase = TJsonWhiteboardRequest<TEvWhiteboard::TEvTabletStateRequest, TEvWhiteboard::TEvTabletStateResponse>;
     using TThis = TJsonTabletInfo;
     THashMap<ui64, NKikimrTabletBase::TTabletTypes::EType> Tablets;
+    std::unordered_set<ui64> DeadTablets;
     std::unordered_map<ui64, TString> EndOfRangeKeyPrefix;
     TTabletId HiveId = 0;
     bool IsBase64Encode = true;
@@ -365,6 +366,12 @@ public:
 
     virtual void FilterResponse(NKikimrWhiteboard::TEvTabletStateResponse& response) override {
         if (!Tablets.empty()) {
+            if (ReplyWithDeadTabletsInfo) {
+                DeadTablets.reserve(Tablets.size());
+                for (const auto& [tabletId, tabletType] : Tablets) {
+                    DeadTablets.insert(tabletId);
+                }
+            }
             NKikimrWhiteboard::TEvTabletStateResponse result;
             for (const NKikimrWhiteboard::TTabletStateInfo& info : response.GetTabletStateInfo()) {
                 auto tablet = Tablets.find(info.GetTabletId());
@@ -375,15 +382,15 @@ public:
                     if (itKey != EndOfRangeKeyPrefix.end()) {
                         tabletInfo->SetEndOfRangeKeyPrefix(itKey->second);
                     }
-                    Tablets.erase(tablet->first);
+                    DeadTablets.erase(tablet->first);
                 }
             }
             if (ReplyWithDeadTabletsInfo) {
-                for (auto tablet : Tablets) {
+                for (auto tabletId : DeadTablets) {
                     auto deadTablet = result.MutableTabletStateInfo()->Add();
-                    deadTablet->SetTabletId(tablet.first);
+                    deadTablet->SetTabletId(tabletId);
                     deadTablet->SetState(NKikimrWhiteboard::TTabletStateInfo::Dead);
-                    deadTablet->SetType(tablet.second);
+                    deadTablet->SetType(Tablets[tabletId]);
                     deadTablet->SetHiveId(HiveId);
                     if (FilterTenantId) {
                         deadTablet->MutableTenantId()->CopyFrom(FilterTenantId);

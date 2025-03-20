@@ -3,6 +3,8 @@ ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 ENV(MOTO_SERVER_PATH="contrib/python/moto/bin/moto_server")
 ENV(YDB_ADDITIONAL_LOG_CONFIGS="TX_TIERING:DEBUG")
 
+FORK_TEST_FILES()
+
 TEST_SRCS(
     base.py
     data_correctness.py
@@ -12,7 +14,7 @@ TEST_SRCS(
     unstable_connection.py
 )
 
-SIZE(LARGE)
+SIZE(MEDIUM)
 
 PEERDIR(
     ydb/tests/library

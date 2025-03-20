@@ -1112,7 +1112,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     }
 
     void DropRequests(TCollection& collection, TActorId owner) {
-        for (auto &[_, requests] : collection.PendingRequests) {
+        TVector<TPageId> emptyRequests;
+        for (auto &[pageId, requests] : collection.PendingRequests) {
             for (auto it = requests.begin(); it != requests.end(); ) {
                 if (it->first->Sender == owner) {
                     SendError(*it->first, NKikimrProto::RACE);
@@ -1121,6 +1122,12 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                     ++it;
                 }
             }
+            if (requests.empty()) {
+                emptyRequests.push_back(pageId);
+            }
+        }
+        for (auto pageId : emptyRequests) {
+            collection.PendingRequests.erase(pageId);
         }
     }
 

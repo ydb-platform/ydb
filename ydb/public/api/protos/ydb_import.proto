@@ -2,6 +2,7 @@ syntax = "proto3";
 option cc_enable_arenas = true;
 
 import "ydb/public/api/protos/annotations/validation.proto";
+import "ydb/public/api/protos/ydb_export.proto";
 import "ydb/public/api/protos/ydb_operation.proto";
 
 import "google/protobuf/timestamp.proto";
@@ -39,17 +40,25 @@ message ImportFromS3Settings {
     }
 
     message Item {
-        /* YDB tables in S3 are stored in one or more objects (see ydb_export.proto).
-           The object name begins with 'source_prefix'.
-           This prefix is followed by:
-             * '/data_PartNumber', where 'PartNumber' represents the index of the part, starting at zero;
-             * '/scheme.pb' - object with information about scheme, indexes, etc;
-             * '/permissions.pb' - object with information about ACL and owner.
-        */
-        string source_prefix = 1 [(required) = true];
+        oneof Source {
+            /* YDB database objects in S3 are stored in one or more S3 objects (see ydb_export.proto).
+            The S3 object name begins with a prefix, followed by:
+                * '/data_PartNumber', where 'PartNumber' represents the index of the part, starting at zero;
+                * '/scheme.pb' - object with information about scheme, indexes, etc;
+                * '/permissions.pb' - object with information about ACL and owner.
+            */
 
-        // Database path to a table to import to.
-        string destination_path = 2 [(required) = true];
+            // The S3 object prefix can be either provided explicitly
+            string source_prefix = 1;
+
+            // Or, if the export contains the database objects list, you may specify the database object name, and the S3 prefix will be looked up in the database objects list by the import procedure
+            string source_path = 3;
+        }
+
+        // Database path to a database object to import the item to
+        // Resolved relative to the default destination_path
+        // May be omitted if the item's source_path is specified, in this case will be taken equal to it
+        string destination_path = 2;
     }
 
     string endpoint = 1 [(required) = true];
@@ -57,7 +66,7 @@ message ImportFromS3Settings {
     string bucket = 3 [(required) = true];
     string access_key = 4 [(required) = true];
     string secret_key = 5 [(required) = true];
-    repeated Item items = 6 [(size).ge = 1];
+    repeated Item items = 6; // Empty collection means import of all export objects
     string description = 7 [(length).le = 128];
     uint32 number_of_retries = 8;
 
@@ -76,6 +85,20 @@ message ImportFromS3Settings {
 
     // Skip checksum validation during import
     bool skip_checksum_validation = 12;
+
+    // A default path prefix for all items,
+    // determines that the import works with the list of objects in the SchemaMapping file.
+    // Must be provided to import an encrypted export.
+    string source_prefix = 13;
+
+    // Destination path to restore paths inside database
+    // Default value is database root
+    string destination_path = 14;
+
+    // Settings how data is encrypted.
+    // If encryption_settings field is not specified,
+    // the resulting data is considered not encrypted.
+    Ydb.Export.EncryptionSettings encryption_settings = 15;
 }
 
 message ImportFromS3Result {

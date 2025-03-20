@@ -41,7 +41,7 @@ namespace NYql::NConnector {
         }
 
     private:
-        std::shared_ptr<NYdbGrpc::TServiceConnection<T>> GrpcConnection_;
+        const std::shared_ptr<NYdbGrpc::TServiceConnection<T>> GrpcConnection_;
     };
 
     ///
@@ -87,7 +87,7 @@ namespace NYql::NConnector {
         }
 
     private:
-        std::shared_ptr<NYdbGrpc::TGRpcClientLow> Client_;
+        const std::shared_ptr<NYdbGrpc::TGRpcClientLow> Client_;
         const NYdbGrpc::TGRpcClientConfig GrpcConfig_;
         const std::optional<NYdbGrpc::TTcpKeepAliveSettings> KeepAlive_;
     };
@@ -153,7 +153,7 @@ namespace NYql::NConnector {
     private:
         int Size_;
         std::atomic_long NextSlot_;
-        std::shared_ptr<NYdbGrpc::TGRpcClientLow> Client_;
+        const std::shared_ptr<NYdbGrpc::TGRpcClientLow> Client_;
         const NYdbGrpc::TGRpcClientConfig GrpcConfig_;
         const std::optional<NYdbGrpc::TTcpKeepAliveSettings> KeepAlive_;
         std::vector<std::shared_ptr<NYdbGrpc::TServiceConnection<T>>> Pool_;
@@ -318,16 +318,16 @@ namespace NYql::NConnector {
         /// @brief Make async request to a connector with a streaming response in a Future.
         /// 
         /// @tparam TRequest        Type of a request, e.g.: "NApi::TListSplitsRequest"
-        /// @tparam TResponse       Type of a data in a Response Stream, e.g.: "NApi::TListSplitsResponse" 
-        /// @tparam TRpcCallback    Definition of a callback on the "NApi::Connector::Stub" that takes "TRequest" as an input arg and  
+        /// @tparam TResponse       Type of a data in a Response Stream, e.g.: "NApi::TListSplitsResponse"
+        /// @tparam TRpcCallback    Definition of a callback on the "NApi::Connector::Stub" that takes "TRequest" as an input arg and
         ///                         returns "NYdbGrpc::TStreamRequestReadProcessor" with "TResponse" as stream's data
         ///
-        /// @param[in] kind         Datasource's kind, it is a key to choose which connector will be queried 
-        /// @param[in] request      Request's data 
-        /// @param[in] rpc          Method on a Stub which will be executed 
-        /// @param[in] timeout      How long to wait a response 
+        /// @param[in] kind         Datasource's kind, it is a key to choose which connector will be queried
+        /// @param[in] request      Request's data
+        /// @param[in] rpc          Method on a Stub which will be executed
+        /// @param[in] timeout      How long to wait a response
         ///
-        /// @return                 Future that provides with a streaming response 
+        /// @return                 Future that provides with a streaming response
         ///
         template <
             typename TRequest,

@@ -70,13 +70,13 @@ jobs:
         run: |
           if [[ "${{ inputs.build_preset }}" == "relwithdebinfo" ]]; then
             echo "threads_count=52" >> $GITHUB_ENV
-            echo "timeout=300" >> $GITHUB_ENV
+            echo "timeout=400" >> $GITHUB_ENV
           elif [[ "${{ inputs.build_preset }}" == "release-asan" ]]; then
             echo "threads_count=20" >> $GITHUB_ENV
             echo "timeout=480" >> $GITHUB_ENV
           elif [[ "${{ inputs.build_preset }}" == "release-msan" ]]; then
-            echo "threads_count=20" >> $GITHUB_ENV
-            echo "timeout=480" >> $GITHUB_ENV
+            echo "threads_count=10" >> $GITHUB_ENV
+            echo "timeout=600" >> $GITHUB_ENV
           elif [[ "${{ inputs.build_preset }}" == "release-tsan" ]]; then
             echo "threads_count=10" >> $GITHUB_ENV
             echo "timeout=600" >> $GITHUB_ENV
@@ -104,7 +104,6 @@ jobs:
         timeout-minutes: ${{ fromJson(env.timeout) }}
         uses: ./.github/actions/build_and_test_ya
         with:
-          commit_sha: ${{ github.ref_name }}
           build_preset: ${{ inputs.build_preset }}
           increment: false
           build_target: ${{ inputs.test_targets }}

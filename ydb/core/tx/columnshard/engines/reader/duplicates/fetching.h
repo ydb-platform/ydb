@@ -75,10 +75,9 @@ private:
     }
 
     virtual void DoStart(TReadActionsCollection& nextRead, NCommon::TFetchingResultContext& context) override {
-        auto source = context.GetSource();
-        // TODO: CRIT -> TRACE
-        AFL_CRIT(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicate_filter_manager")("event", "start_fetching_columns")(
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicate_filter_manager")("event", "start_fetching_columns")(
             "column_id", GetEntityId())("column_chunks", ColumnChunksExt.size());
+        auto source = context.GetSource();
         if (ColumnChunksExt.empty()) {
             ColumnChunks.emplace_back(source->GetRecordsCount(), TPortionDataAccessor::TAssembleBlobInfo(source->GetRecordsCount(),
                                                                      source->GetSourceSchema()->GetExternalDefaultValueVerified(GetEntityId())));
@@ -111,7 +110,6 @@ private:
     YDB_READONLY_DEF(TActorId, Owner);
     YDB_READONLY_DEF(std::shared_ptr<TDuplicateFilterConstructor::TSourceFilterConstructor>, Constructor);
     YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, ResultSchema);
-    const NColumnShard::TCounterGuard Guard;
 
 public:
     TColumnFetchingContext(const std::shared_ptr<TDuplicateFilterConstructor::TSourceFilterConstructor>& constructor,

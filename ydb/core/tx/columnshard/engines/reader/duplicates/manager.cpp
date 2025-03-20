@@ -255,8 +255,7 @@ TDuplicateFilterConstructor::TDuplicateFilterConstructor(const std::deque<std::s
 }
 
 void TDuplicateFilterConstructor::StartFetchingColumns(const std::shared_ptr<TSourceFilterConstructor>& source, const ui64 memoryGroupId) const {
-    auto fetchingContext = std::make_shared<TColumnFetchingContext>(
-        source, source->GetSource()->GetContext()->GetCommonContext()->GetCounters().GetReadTasksGuard(), SelfId());
+    auto fetchingContext = std::make_shared<TColumnFetchingContext>(source, SelfId());
 
     auto portion = std::dynamic_pointer_cast<NSimple::TPortionDataSource>(source->GetSource());
     AFL_VERIFY(portion);   // TODO: make a specialization to allow extending fetching behaviour on other source types

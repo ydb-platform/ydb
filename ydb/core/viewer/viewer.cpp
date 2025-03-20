@@ -195,6 +195,7 @@ public:
                 }
             }
         }
+        Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
     }
 
     const TKikimrRunConfig& GetKikimrRunConfig() const override {
@@ -386,11 +387,68 @@ private:
     ui32 CurrentMonitoringPort;
     TString CurrentWorkerName;
 
+    void Handle(TEvents::TEvWakeup::TPtr&) {
+        DeleteOldSharedCacheData();
+        Schedule(TDuration::Seconds(10), new TEvents::TEvWakeup());
+    }
+
+    std::unordered_map<TTabletId, TActorId> TabletPipes;
+
+    static NTabletPipe::TClientConfig GetPipeClientConfig() {
+        return {
+            .RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries()
+        };
+    }
+
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
+        if (ev->Get()->Status != NKikimrProto::OK) {
+            TabletPipes.erase(ev->Get()->TabletId);
+        }
+    }
+
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
+        TabletPipes.erase(ev->Get()->TabletId);
+    }
+
+    void Handle(TEvViewer::TEvUpdateSharedCacheTabletRequest::TPtr& ev) {
+        auto itPipe = TabletPipes.find(ev->Get()->TabletId);
+        if (itPipe == TabletPipes.end()) {
+            auto pipe = NTabletPipe::CreateClient(SelfId(), ev->Get()->TabletId, GetPipeClientConfig());
+            itPipe = TabletPipes.emplace(ev->Get()->TabletId, RegisterWithSameMailbox(pipe)).first;
+        }
+        NTabletPipe::SendData(SelfId(), itPipe->second, ev->Get()->Request.release());
+    }
+
+    void Handle(TEvViewer::TEvUpdateSharedCacheTabletResponse::TPtr& ev) {
+        UpdateSharedCacheData(std::unique_ptr<TEvViewer::TEvUpdateSharedCacheTabletResponse>(ev->Release().Release()));
+    }
+
+    template<typename TEvent>
+    void HandleForUpdateSharedCacheData(TAutoPtr<TEventHandle<TEvent>>& ev) {
+        UpdateSharedCacheData(std::make_unique<TEvViewer::TEvUpdateSharedCacheTabletResponse>(std::shared_ptr<TEvent>(ev->Release().Release())));
+    }
+
+    void PassAway() override {
+        for (const auto& [tabletId, pipe] : TabletPipes) {
+            NTabletPipe::CloseClient(SelfId(), pipe);
+        }
+    }
+
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NMon::TEvHttpInfo, Handle);
             hFunc(NHttp::TEvHttpProxy::TEvHttpIncomingRequest, Handle);
             hFunc(TEvViewer::TEvViewerRequest, Handle);
+            hFunc(TEvViewer::TEvUpdateSharedCacheTabletRequest, Handle);
+            hFunc(TEvViewer::TEvUpdateSharedCacheTabletResponse, Handle);
+            hFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+            hFunc(NSysView::TEvSysView::TEvGetStoragePoolsResponse, HandleForUpdateSharedCacheData);
+            hFunc(NSysView::TEvSysView::TEvGetGroupsResponse, HandleForUpdateSharedCacheData);
+            hFunc(NSysView::TEvSysView::TEvGetVSlotsResponse, HandleForUpdateSharedCacheData);
+            hFunc(NSysView::TEvSysView::TEvGetPDisksResponse, HandleForUpdateSharedCacheData);
+            hFunc(NSysView::TEvSysView::TEvGetStorageStatsResponse, HandleForUpdateSharedCacheData);
+            hFunc(TEvents::TEvWakeup, Handle);
         }
     }
 

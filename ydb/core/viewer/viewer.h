@@ -3,6 +3,7 @@
 #include <ydb/core/tablet/defs.h>
 #include <ydb/core/viewer/json/json.h>
 #include <ydb/core/viewer/protos/viewer.pb.h>
+#include <ydb/core/sys_view/common/events.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/defs.h>
 #include <ydb/library/actors/core/event.h>
@@ -10,6 +11,8 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 namespace NKikimr::NViewer {
+
+using TTabletId = ui64;
 
 inline TActorId MakeViewerID(ui32 node) {
     char x[12] = {'v','i','e','w','e','r'};
@@ -21,7 +24,8 @@ struct TEvViewer {
         // requests
         EvViewerRequest = EventSpaceBegin(TKikimrEvents::ES_VIEWER),
         EvViewerResponse,
-
+        EvUpdateSharedCacheTabletRequest,
+        EvUpdateSharedCacheTabletResponse,
         EvEnd
     };
 
@@ -33,6 +37,45 @@ struct TEvViewer {
 
     struct TEvViewerResponse : TEventPB<TEvViewerResponse, NKikimrViewer::TEvViewerResponse, EvViewerResponse> {
         TEvViewerResponse() = default;
+    };
+
+    struct TEvUpdateSharedCacheTabletRequest : TEventLocal<TEvUpdateSharedCacheTabletRequest, EvUpdateSharedCacheTabletRequest> {
+        TTabletId TabletId;
+        std::unique_ptr<IEventBase> Request;
+
+        TEvUpdateSharedCacheTabletRequest(TTabletId tabletId, std::unique_ptr<IEventBase> request)
+            : TabletId(tabletId)
+            , Request(std::move(request))
+        {}
+    };
+
+    struct TEvUpdateSharedCacheTabletResponse : TEventLocal<TEvUpdateSharedCacheTabletResponse, EvUpdateSharedCacheTabletResponse> {
+        std::variant<
+            std::shared_ptr<NSysView::TEvSysView::TEvGetGroupsResponse>,
+            std::shared_ptr<NSysView::TEvSysView::TEvGetStoragePoolsResponse>,
+            std::shared_ptr<NSysView::TEvSysView::TEvGetVSlotsResponse>,
+            std::shared_ptr<NSysView::TEvSysView::TEvGetPDisksResponse>,
+            std::shared_ptr<NSysView::TEvSysView::TEvGetStorageStatsResponse>> Response;
+
+        TEvUpdateSharedCacheTabletResponse(std::shared_ptr<NSysView::TEvSysView::TEvGetGroupsResponse> response)
+            : Response(std::move(response))
+        {}
+
+        TEvUpdateSharedCacheTabletResponse(std::shared_ptr<NSysView::TEvSysView::TEvGetStoragePoolsResponse> response)
+            : Response(std::move(response))
+        {}
+
+        TEvUpdateSharedCacheTabletResponse(std::shared_ptr<NSysView::TEvSysView::TEvGetVSlotsResponse> response)
+            : Response(std::move(response))
+        {}
+
+        TEvUpdateSharedCacheTabletResponse(std::shared_ptr<NSysView::TEvSysView::TEvGetPDisksResponse> response)
+            : Response(std::move(response))
+        {}
+
+        TEvUpdateSharedCacheTabletResponse(std::shared_ptr<NSysView::TEvSysView::TEvGetStorageStatsResponse> response)
+            : Response(std::move(response))
+        {}
     };
 };
 
@@ -137,6 +180,8 @@ struct TRequestState {
         return Request.index() != 0;
     }
 };
+
+struct TViewerSharedCacheState;
 
 class IViewer {
 public:
@@ -262,6 +307,11 @@ public:
 
     virtual NJson::TJsonValue GetCapabilities() = 0;
     virtual int GetCapabilityVersion(const TString& name) = 0;
+
+    void UpdateSharedCacheData(std::unique_ptr<TEvViewer::TEvUpdateSharedCacheTabletResponse> ev);
+    void DeleteOldSharedCacheData();
+    std::shared_ptr<TViewerSharedCacheState> CreateSharedCacheState();
+    std::shared_ptr<TViewerSharedCacheState> SharedCacheState = CreateSharedCacheState();
 };
 
 void SetupPQVirtualHandlers(IViewer* viewer);

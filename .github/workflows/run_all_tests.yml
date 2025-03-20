@@ -1,6 +1,32 @@
 name: Run all tests
 
 on:
+  workflow_dispatch:
+    inputs:
+      test_targets:
+        description: 'Пути запуска'
+        required: true
+        type: string
+        default: ydb/
+      test_type:
+        description: 'Тип тестов'
+        required: false
+        type: string
+        default: unittest,py3test,py2test,pytest
+      test_size:
+        description: 'Размер тестов'
+        required: false
+        type: string
+        default: small,medium,large
+      additional_ya_make_args:
+        description: 'Дополнительные аргументы для ya make'
+        required: false
+        type: string
+        default: -DDEBUGINFO_LINES_ONLY
+      build_preset:
+        description: 'Build preset type'
+        required: true
+        type: string
   workflow_call:
     inputs:
       test_targets:
@@ -27,6 +53,7 @@ on:
         description: 'Build preset type'
         required: true
         type: string
+        
 
 jobs:
   run_all_tests:

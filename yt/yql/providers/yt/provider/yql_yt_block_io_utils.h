@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yql/essentials/ast/yql_expr.h>
+#include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
 
 namespace NYql {
 
@@ -12,5 +13,7 @@ bool CheckBlockIOSupportedTypes(
     size_t wideFlowLimit,
     bool allowNestedOptionals = true
 );
+
+NNodes::TCoLambda WrapLambdaWithBlockInput(NNodes::TCoLambda lambda, TExprContext& ctx);
 
 }

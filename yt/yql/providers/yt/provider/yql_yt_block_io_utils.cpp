@@ -5,6 +5,8 @@
 
 namespace NYql {
 
+using namespace NNodes;
+
 bool CheckBlockIOSupportedTypes(
     const TTypeAnnotationNode& type,
     const TSet<TString>& supportedTypes,
@@ -40,6 +42,22 @@ bool CheckBlockIOSupportedTypes(
     }
 
     return true;
+}
+
+TCoLambda WrapLambdaWithBlockInput(TCoLambda lambda, TExprContext& ctx) {
+    return Build<TCoLambda>(ctx, lambda.Pos())
+        .Args({"flow"})
+        .Body<TExprApplier>()
+            .Apply(lambda)
+            .With<TCoToFlow>(0)
+                .Input<TCoWideFromBlocks>()
+                    .Input<TCoFromFlow>()
+                        .Input("flow")
+                    .Build()
+                .Build()
+            .Build()
+        .Build()
+        .Done();
 }
 
 }

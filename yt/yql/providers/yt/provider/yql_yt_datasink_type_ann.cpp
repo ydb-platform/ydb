@@ -1294,7 +1294,7 @@ private:
 
         auto mapReduce = TYtMapReduce(input);
 
-        const auto acceptedSettings = EYtSettingType::ReduceBy
+        auto acceptedSettings = EYtSettingType::ReduceBy
             | EYtSettingType::ReduceFilterBy
             | EYtSettingType::SortBy
             | EYtSettingType::Limit
@@ -1306,6 +1306,10 @@ private:
             | EYtSettingType::ReduceInputType
             | EYtSettingType::NoDq
             | EYtSettingType::QLFilter;
+
+        if (hasMapLambda) {
+            acceptedSettings |= EYtSettingType::BlockInputReady | EYtSettingType::BlockInputApplied;
+        }
         if (!ValidateSettings(mapReduce.Settings().Ref(), acceptedSettings, ctx)) {
             return TStatus::Error;
         }
@@ -1343,11 +1347,12 @@ private:
 
         auto itemType = GetInputItemType(mapReduce.Input(), ctx);
         const auto useFlow = NYql::GetSetting(mapReduce.Settings().Ref(), EYtSettingType::Flow);
+        const auto blockInputApplied = NYql::GetSetting(mapReduce.Settings().Ref(), EYtSettingType::BlockInputApplied);
 
         auto& mapLambda = input->ChildRef(TYtMapReduce::idx_Mapper);
         TTypeAnnotationNode::TListType mapDirectOutputTypes;
         if (hasMapLambda) {
-            const auto mapLambdaInputType = MakeInputType(itemType, useFlow, TExprNode::TPtr(), ctx);
+            const auto mapLambdaInputType = MakeInputType(itemType, useFlow, blockInputApplied, ctx);
 
             if (!UpdateLambdaAllArgumentsTypes(mapLambda, {mapLambdaInputType}, ctx)) {
                 return TStatus::Error;

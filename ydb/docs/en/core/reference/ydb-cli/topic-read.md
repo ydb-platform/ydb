@@ -29,7 +29,7 @@ Three command modes are supported:
 
 - If not set, then you need to specify partitions through --partition-ids to read without consumer
 - Message consumption starts from the current offset for this consumer (if the `--timestamp` parameter is not specified).
-If consumer name is not specified, message consumption will start from the first message in partition. 
+If consumer name is not specified, message consumption will start from the first message in partition.
 
 `--format STR`: Output format.
 

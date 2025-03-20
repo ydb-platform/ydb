@@ -91,6 +91,7 @@ TPrivatePageCache::TPage::TWaitQueuePtr TPrivatePageCache::ForgetPageCollection(
         }
     }
 
+<<<<<<< HEAD
     UnlockPageCollection(info->Id);
 
     return ret;
@@ -101,6 +102,8 @@ void TPrivatePageCache::UnlockPageCollection(TLogoBlobID id) {
     Y_ENSURE(it != PageCollections.end(), "trying to unlock unknown page collection. logic flaw?");
     TIntrusivePtr<TInfo> info = it->second;
 
+=======
+>>>>>>> 423557fde0b (cr: unite UnlockPageCollection & ForgetPageCollection)
     // Completely forget page collection
     for (const auto& kv : info->PageMap) {
         auto* page = kv.second.Get();
@@ -118,9 +121,11 @@ void TPrivatePageCache::UnlockPageCollection(TLogoBlobID id) {
     }
 
     info->PageMap.clear();
-    PageCollections.erase(it);
-    ToTouchShared.erase(id);
+    PageCollections.erase(info->Id);
+    ToTouchShared.erase(info->Id);
     --Stats.TotalCollections;
+
+    return ret;
 }
 
 TPrivatePageCache::TInfo* TPrivatePageCache::Info(TLogoBlobID id) {

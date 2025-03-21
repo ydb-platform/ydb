@@ -68,7 +68,7 @@ For each [view](../../../../concepts/datamodel/view.md) in the database, there i
 - The `create_view.sql` file containing the view's definition in plain-text YQL format (as a [CREATE VIEW](../../../../yql/reference/syntax/create-view.md) query)
 - The `permissions.pb` file specifying the view owner and ACL in the [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format
 
-Information about automatic adjustments to object references in view queries during restoration can be found in [{#T}](../view-backup.md).
+The relative positioning of views and the objects they reference is preserved during restoration. For more details, see the article [{#T}](../view-backup.md).
 
 ## Checksums {#checksums}
 

@@ -316,6 +316,7 @@ target_sources(yt-yt-core PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/core/ytree/request_complexity_limiter.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/ytree/request_complexity_limits.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/ytree/serialize.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/core/ytree/size.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/ytree/static_service_dispatcher.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/ytree/system_attribute_provider.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/core/ytree/tree_builder.cpp

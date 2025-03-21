@@ -993,7 +993,7 @@ protected:
         }
 
         std::sort(std::begin(shardsRanges), std::end(shardsRanges), [&](const TShardRangesWithShardId& lhs, const TShardRangesWithShardId& rhs) {
-                return CompareBorders<false, false>(
+                return CompareBorders<true, true>(
                     lhs.Ranges->GetRightBorder().first->GetCells(),
                     rhs.Ranges->GetRightBorder().first->GetCells(),
                     lhs.Ranges->GetRightBorder().second,
@@ -1191,8 +1191,13 @@ protected:
                         settings->SetShardIdHint(*shardsRangesForTask[0].ShardId);
                     }
 
+                    bool hasRanges = false;
                     for (const auto& shardRanges : shardsRangesForTask) {
-                        shardRanges.Ranges->SerializeTo(settings);
+                        hasRanges |= shardRanges.Ranges->HasRanges();
+                    }
+
+                    for (const auto& shardRanges : shardsRangesForTask) {
+                        shardRanges.Ranges->SerializeTo(settings, !hasRanges);
                     }
                 }
             }

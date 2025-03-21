@@ -50,6 +50,7 @@ add_subdirectory(ut_minikql)
 add_subdirectory(ut_minstep)
 add_subdirectory(ut_object_storage_listing)
 add_subdirectory(ut_order)
+add_subdirectory(ut_prefix_kmeans)
 add_subdirectory(ut_range_ops)
 add_subdirectory(ut_read_iterator)
 add_subdirectory(ut_read_table)
@@ -283,6 +284,7 @@ target_sources(core-tx-datashard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/move_table_unit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/operation.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/plan_queue_unit.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/prefix_kmeans.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/prepare_data_tx_in_rs_unit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/prepare_distributed_erase_tx_in_rs_unit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/datashard/prepare_kqp_data_tx_in_rs_unit.cpp

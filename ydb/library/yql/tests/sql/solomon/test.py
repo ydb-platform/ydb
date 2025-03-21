@@ -30,12 +30,14 @@ def read_file(path):
         return f.read()
 
 
-def sanitize_issues(s):
+def sanitize_canondata(s):
     # 2022-08-13T16:11:21Z -> ISOTIME
     # 2022-08-13T16:11:21.549879Z -> ISOTIME
     s = re.sub(r"2\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(.\d+)?Z", "ISOTIME", s)
     # library/cpp/json/json_reader.cpp:420 -> library/cpp/json/json_reader.cpp:xxx
-    return re.sub(r"cpp:\d+", "cpp:xxx", s)
+    s = re.sub(r"cpp:\d+", "cpp:xxx", s)
+    # "_logical_id <hash>" -> "_logical_id 0"
+    return re.sub(r"""("?_logical_id"?) '\d+""", r"""\1 '0""", s)
 
 
 def pytest_generate_tests(metafunc):
@@ -86,10 +88,14 @@ def test(suite, case, cfg, solomon):
 
     if xfail:
         assert yqlrun_res.execution_result.exit_code != 0
-        return [normalize_source_code_path(sanitize_issues(yqlrun_res.std_err))]
+        return [normalize_source_code_path(sanitize_canondata(yqlrun_res.std_err))]
 
+    with open(yqlrun_res.results_file, 'w') as f:
+        f.write(sanitize_canondata(yqlrun_res.results))
     with open(yqlrun_res.opt_file, 'w') as f:
-        f.write(re.sub(r"""("?_logical_id"?) '\d+""", r"""\1 '0""", yqlrun_res.opt).encode('utf-8'))
+        f.write(sanitize_canondata(yqlrun_res.opt))
+    with open(yqlrun_res.plan_file, 'w') as f:
+        f.write(sanitize_canondata(yqlrun_res.plan))
 
     return [yatest.common.canonical_file(yqlrun_res.results_file, local=True),
             yatest.common.canonical_file(yqlrun_res.opt_file, local=True, diff_tool=ASTDIFF_PATH),

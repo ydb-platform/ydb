@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     solomon_accessor_client.cpp
+    solomon_client_utils.cpp
 )
 
 PEERDIR(

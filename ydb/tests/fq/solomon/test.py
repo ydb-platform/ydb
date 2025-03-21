@@ -19,7 +19,7 @@ from test_utils import (
 DATA_PATH = yatest.common.source_path('ydb/library/yql/tests/sql/suites')
 
 
-def sanitize_issues(s):
+def sanitize_canondata(s):
     # 2022-08-13T16:11:21Z -> ISOTIME
     # 2022-08-13T16:11:21.549879Z -> ISOTIME
     s = re.sub(r"2\d{3}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(.\d+)?Z", "ISOTIME", s)
@@ -71,6 +71,9 @@ def test(suite, case, cfg, solomon):
 
     if xfail:
         assert yqlrun_res.execution_result.exit_code != 0
-        return [normalize_source_code_path(sanitize_issues(yqlrun_res.std_err.decode('utf-8')))]
+        return [normalize_source_code_path(sanitize_canondata(yqlrun_res.std_err.decode('utf-8')))]
+
+    with open(yqlrun_res.results_file, 'w') as f:
+        f.write(sanitize_canondata(yqlrun_res.results) + '\n')
 
     return [yatest.common.canonical_file(yqlrun_res.results_file, local=True)]

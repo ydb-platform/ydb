@@ -189,17 +189,15 @@ void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "request_duplicates_filter")("source_id", ev->Get()->GetSource()->GetSourceId());
     const ui32 sourceId = ev->Get()->GetSource()->GetSourceId();
 
-    if (!SortedSources.empty() && sourceId == SortedSources.front()->GetSourceId()) {
-        while (!SortedSources.empty() && Intervals.GetRangeBySourceId(SortedSources.front()->GetSourceId()).GetFirstIdx() <=
-                                             Intervals.GetRangeBySourceId(sourceId).GetLastIdx()) {
-            ActiveSources.emplace_back(std::make_shared<TSourceFilterConstructor>(SortedSources.front(), Intervals));
-            ActiveSourceById.emplace(ActiveSources.back()->GetSource()->GetSourceId(), ActiveSources.back());
-            SortedSources.pop_front();
-            StartFetchingColumns(ActiveSources.back(), ev->Get()->GetSource()->GetMemoryGroupId());
-        }
+    while (!SortedSources.empty() && Intervals.GetRangeBySourceId(SortedSources.front()->GetSourceId()).GetFirstIdx() <=
+                                            Intervals.GetRangeBySourceId(sourceId).GetLastIdx()) {
+        ActiveSources.emplace_back(std::make_shared<TSourceFilterConstructor>(SortedSources.front(), Intervals));
+        ActiveSourceById.emplace(ActiveSources.back()->GetSource()->GetSourceId(), ActiveSources.back());
+        SortedSources.pop_front();
+        StartFetchingColumns(ActiveSources.back(), ev->Get()->GetSource()->GetMemoryGroupId());
     }
 
-    // FIXME: source may not be the first, but they must come in order
+    // FIXME: some sources don't need filters during a scan
     auto constructor = GetConstructorBySourceId(sourceId);
     constructor->SetSubscriber(ev->Get()->GetSubscriber());
     FlushFinishedSources();

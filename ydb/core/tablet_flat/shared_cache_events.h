@@ -20,7 +20,7 @@ namespace NKikimr::NSharedCache {
 
         EvTouch = EvBegin + 512,
         EvUnregister,
-        EvInvalidate,
+        EvDetach,
         EvAttach,
         EvSaveCompactedPages,
         EvRequest,
@@ -37,10 +37,10 @@ namespace NKikimr::NSharedCache {
     struct TEvUnregister : public TEventLocal<TEvUnregister, EvUnregister> {
     };
 
-    struct TEvInvalidate : public TEventLocal<TEvInvalidate, EvInvalidate> {
+    struct TEvDetach : public TEventLocal<TEvDetach, EvDetach> {
         const TLogoBlobID PageCollectionId;
 
-        TEvInvalidate(const TLogoBlobID &pageCollectionId)
+        TEvDetach(const TLogoBlobID &pageCollectionId)
             : PageCollectionId(pageCollectionId)
         {}
     };

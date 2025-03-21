@@ -150,7 +150,6 @@ public:
         const TLogoBlobID Id;
         const TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
         TPageMap<THolder<TPage>> PageMap;
-        ui64 Users;
 
         explicit TInfo(TIntrusiveConstPtr<NPageCollection::IPageCollection> pack);
         TInfo(const TInfo &info);
@@ -165,10 +164,6 @@ public:
     TIntrusivePtr<TInfo> GetPageCollection(TLogoBlobID id) const;
     void RegisterPageCollection(TIntrusivePtr<TInfo> info);
     TPage::TWaitQueuePtr ForgetPageCollection(TIntrusivePtr<TInfo> info);
-
-    void LockPageCollection(TLogoBlobID id);
-    // Return true for page collections removed after unlock.
-    bool UnlockPageCollection(TLogoBlobID id);
 
     TInfo* Info(TLogoBlobID id);
 

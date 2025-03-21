@@ -26,9 +26,11 @@ using namespace NTabletFlatExecutor;
 
 TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
     : Counters(counters)
+    // lru cache counters:
     , FreshBytes(counters->GetCounter("fresh"))
     , StagingBytes(counters->GetCounter("staging"))
     , WarmBytes(counters->GetCounter("warm"))
+    // page counters:
     , MemLimitBytes(counters->GetCounter("MemLimitBytes"))
     , ConfigLimitBytes(counters->GetCounter("ConfigLimitBytes"))
     , ActivePages(counters->GetCounter("ActivePages"))
@@ -44,6 +46,14 @@ TSharedPageCacheCounters::TSharedPageCacheCounters(const TIntrusivePtr<::NMonito
     , CacheMissBytes(counters->GetCounter("CacheMissBytes", true))
     , LoadInFlyPages(counters->GetCounter("LoadInFlyPages"))
     , LoadInFlyBytes(counters->GetCounter("LoadInFlyBytes"))
+    // page collection counters:
+    , PageCollections(counters->GetCounter("PageCollections"))
+    , Owners(counters->GetCounter("Owners"))
+    , PageCollectionOwners(counters->GetCounter("PageCollectionOwners"))
+    // request counters:
+    , PendingRequests(counters->GetCounter("PendingRequests"))
+    , SucceedRequests(counters->GetCounter("SucceedRequests", true))
+    , FailedRequests(counters->GetCounter("FailedRequests", true))
 { }
 
 TSharedPageCacheCounters::TCounterPtr TSharedPageCacheCounters::ReplacementPolicySize(TReplacementPolicy policy) {
@@ -58,6 +68,13 @@ struct TRequest : public TSimpleRefCount<TRequest> {
     {
     }
 
+    void EnsureResponded() const {
+        Y_VERIFY_S(!Sender, "All dropping requests should be responded first but request with"
+            << " owner " << Sender
+            << " page collection " << PageCollection->Label()
+            << " has pending pages " << PagesToRequest);
+    }
+
     const TLogoBlobID Label;
     TActorId Sender;
     NBlockIO::EPriority Priority;
@@ -66,7 +83,7 @@ struct TRequest : public TSimpleRefCount<TRequest> {
     ui64 RequestCookie = 0;
     ui64 PendingBlocks = 0;
     TVector<TEvResult::TLoaded> ReadyPages;
-    TDeque<ui32> PagesToRequest;
+    TDeque<TPageId> PagesToRequest;
     NWilson::TTraceId TraceId;
 };
 
@@ -241,7 +258,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
     TActorId Owner;
     THashMap<TLogoBlobID, TCollection> Collections;
-    THashMap<TActorId, THashSet<TCollection*>> CollectionsOwners;
+    THashMap<TActorId, THashSet<TCollection*>> Owners;
     TIntrusivePtr<NMemory::IMemoryConsumer> MemoryConsumer;
     NSharedCache::TSharedCachePages* SharedCachePages;
 
@@ -370,6 +387,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
     TCollection& AttachCollection(const TLogoBlobID &pageCollectionId, const NPageCollection::IPageCollection &pageCollection, const TActorId &owner) {
         TCollection &collection = Collections[pageCollectionId];
         if (!collection.Id) {
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Added page collection " << pageCollectionId);
+            Counters.PageCollections->Inc();
             Y_ABORT_UNLESS(pageCollectionId);
             collection.Id = pageCollectionId;
             collection.PageMap.resize(pageCollection.Total());
@@ -381,7 +400,16 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
 
         if (collection.Owners.insert(owner).second) {
-            CollectionsOwners[owner].insert(&collection);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Attached page collection " << pageCollectionId
+                << " owner " << owner);
+            Counters.PageCollectionOwners->Inc();
+            auto& ownerCollections = Owners[owner];
+            if (ownerCollections.empty()) {
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Added owner " << owner);
+                Counters.Owners->Inc();
+            }
+            bool inserted = ownerCollections.insert(&collection).second;
+            Y_ABORT_UNLESS(inserted);
         }
 
         return collection;
@@ -409,6 +437,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         Y_ABORT_UNLESS(pageCollectionId);
         Y_ABORT_IF(Collections.contains(pageCollectionId), "Only new collections can save compacted pages");
+        LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Added page collection " << pageCollectionId);
+        Counters.PageCollections->Inc();
         TCollection &collection = Collections[pageCollectionId];
         collection.Id = pageCollectionId;
         collection.PageMap.resize(pageCollection.Total());
@@ -435,8 +465,8 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
 
         TCollection &collection = AttachCollection(pageCollectionId, pageCollection, ev->Sender);
 
-        TStackVec<std::pair<ui32, ui32>> pendingPages; // pageId, reqIdx
-        ui32 pagesToLoad = 0;
+        TStackVec<std::pair<TPageId, ui32>> pendingPages; // pageId, reqIdx
+        ui32 pagesToRequestCount = 0;
 
         TVector<TEvResult::TLoaded> readyPages(::Reserve(msg->Fetch->Pages.size()));
         TVector<ui32> traceLogPagesToWait;
@@ -488,7 +518,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 Evict(Cache.Touch(page));
                 break;
             case PageStateNo:
-                ++pagesToLoad;
+                ++pagesToRequestCount;
                 [[fallthrough]]; // AUTOGENERATED_FALLTHROUGH_FIXME
             case PageStateRequested:
             case PageStateRequestedAsync:
@@ -502,20 +532,19 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
 
         auto request = MakeIntrusive<TRequest>(std::move(msg->Fetch->PageCollection), std::move(msg->Fetch->TraceId));
-
         request->Sender = ev->Sender;
         request->Priority = msg->Priority;
         request->EventCookie = ev->Cookie;
         request->RequestCookie = msg->Fetch->Cookie;
         request->ReadyPages = std::move(readyPages);
+        Counters.PendingRequests->Inc();
 
         if (pendingPages) {
             TVector<ui32> pagesToKeep;
-            TVector<ui32> pagesToRequest;
+            TVector<ui32> pagesToRequest(::Reserve(pagesToRequestCount));
             ui64 pagesToRequestBytes = 0;
-            pagesToRequest.reserve(pagesToLoad);
             if (doTraceLog) {
-                traceLogPagesToWait.reserve(pendingPages.size() - pagesToLoad);
+                traceLogPagesToWait.reserve(pendingPages.size() - pagesToRequestCount);
             }
 
             TRequestQueue::TPagesToRequest *qpages = nullptr;
@@ -764,53 +793,61 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Unregister"
             << " owner " << ev->Sender);
 
-        DropFromQueue(ScanRequests, ev->Sender, ctx);
-        DropFromQueue(AsyncRequests, ev->Sender, ctx);
-
-        RequestFromQueue(AsyncRequests);
-        RequestFromQueue(ScanRequests);
-
-        auto ownerIt = CollectionsOwners.find(ev->Sender);
-        if (ownerIt != CollectionsOwners.end()) {
-            for (auto* collection : ownerIt->second) {
-                collection->Owners.erase(ev->Sender);
-                TryDropExpiredCollection(collection);
-            }
-            CollectionsOwners.erase(ownerIt);
+        auto ownerIt = Owners.find(ev->Sender);
+        if (ownerIt == Owners.end()) {
+            return;
         }
+
+        for (auto* collection : ownerIt->second) {
+            DropRequests(*collection, ev->Sender);
+        }
+        DropRequestsFromQueues(ev->Sender);
+
+        for (auto* collection : ownerIt->second) {
+            bool erased = collection->Owners.erase(ev->Sender);
+            Y_ABORT_UNLESS(erased);
+            LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Unregistered page collection " << collection->Id
+                << " owner " << ev->Sender);
+            Counters.PageCollectionOwners->Dec();
+            TryDropExpiredCollection(*collection);
+        }
+        Owners.erase(ownerIt);
+        LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Removed owner " << ev->Sender);
+        Counters.Owners->Dec();
 
         ProcessGCList();
     }
 
-    void Handle(NSharedCache::TEvInvalidate::TPtr &ev, const TActorContext& ctx) {
+    void Handle(NSharedCache::TEvDetach::TPtr &ev, const TActorContext& ctx) {
         const TLogoBlobID pageCollectionId = ev->Get()->PageCollectionId;
-        auto collectionIt = Collections.find(pageCollectionId);
+        auto collection = Collections.FindPtr(pageCollectionId);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Invalidate page collection " << pageCollectionId
-            << (collectionIt == Collections.end() ? " unknown" : "")
+        LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Detach page collection " << pageCollectionId
+            << (collection ? "" : " unknown")
             << " owner " << ev->Sender);
 
-        if (collectionIt == Collections.end()) {
+        if (!collection || !collection->Owners.erase(ev->Sender)) {
             return;
         }
 
-        auto &collection = collectionIt->second;
+        DropRequests(*collection, ev->Sender);
+        DropRequestsFromQueues(ev->Sender, pageCollectionId);
 
-        DropRequestsFor(ev->Sender, pageCollectionId);
+        auto ownerIt = Owners.find(ev->Sender);
+        Y_ABORT_IF(ownerIt == Owners.end());
+        bool erased = ownerIt->second.erase(collection);
+        Y_ABORT_UNLESS(erased);
+        LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Detached page collection " << collection->Id
+            << " owner " << ev->Sender);
+        Counters.PageCollectionOwners->Dec();
 
-        if (collection.Owners.erase(ev->Sender)) {
-            auto ownerIt = CollectionsOwners.find(ev->Sender);
-            if (ownerIt != CollectionsOwners.end() &&
-                ownerIt->second.erase(&collection) &&
-                ownerIt->second.empty())
-            {
-                CollectionsOwners.erase(ownerIt);
-            }
-
-            if (collection.Owners.empty()) {
-                DropCollection(collectionIt, NKikimrProto::RACE);
-            }
+        if (ownerIt->second.empty()) {
+            Owners.erase(ownerIt);
+            LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Removed owner " << ev->Sender);
+            Counters.Owners->Dec();
         }
+
+        TryDropExpiredCollection(*collection);
 
         ProcessGCList();
     }
@@ -831,23 +868,23 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
             RequestFromQueue(*queue);
         }
 
-        auto collectionIt = Collections.find(msg->Fetch->PageCollection->Label());
-        if (collectionIt == Collections.end())
+        auto collection = Collections.FindPtr(msg->Fetch->PageCollection->Label());
+        if (!collection) {
             return;
+        }
 
         if (msg->Status != NKikimrProto::OK) {
-            DropCollection(collectionIt, msg->Status);
+            DropCollection(*collection, msg->Status);
         } else {
-            TCollection &collection = collectionIt->second;
             for (auto &paged : msg->Blocks) {
-                Y_ABORT_UNLESS(paged.PageId < collection.PageMap.size());
-                auto* page = collection.PageMap[paged.PageId].Get();
+                Y_ABORT_UNLESS(paged.PageId < collection->PageMap.size());
+                auto* page = collection->PageMap[paged.PageId].Get();
                 if (!page || !page->HasMissingBody()) {
                     continue;
                 }
 
                 page->Initialize(std::move(paged.Data));
-                BodyProvided(collection, page);
+                BodyProvided(*collection, page);
                 Evict(Cache.Touch(page));
             }
         }
@@ -855,14 +892,16 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         DoGC();
     }
 
-    void TryDropExpiredCollection(TCollection* pageCollection) {
-        if (!pageCollection->Owners &&
-            !pageCollection->PendingRequests &&
-            pageCollection->PageMap.used() == 0)
+    void TryDropExpiredCollection(TCollection& collection) {
+        // Drop unnecessary collections from memory
+        if (!collection.Owners &&
+            !collection.PendingRequests &&
+            collection.PageMap.used() == 0)
         {
-            // Drop unnecessary collections from memory
-            auto pageCollectionId = pageCollection->Id;
+            auto pageCollectionId = collection.Id;
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Dropping expired page collection " << pageCollectionId);
             Collections.erase(pageCollectionId);
+            Counters.PageCollections->Dec();
         }
     }
 
@@ -935,7 +974,7 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
                 collection->DroppedPages.clear();
             }
 
-            TryDropExpiredCollection(collection);
+            TryDropExpiredCollection(*collection);
         }
 
         for (auto& kv : droppedPages) {
@@ -960,45 +999,65 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         if (pendingRequestsIt == collection.PendingRequests.end()) {
             return;
         }
-        for (auto &xpair : pendingRequestsIt->second) {
-            auto &r = xpair.first;
-            auto &rblock = r->ReadyPages[xpair.second];
-            Y_ABORT_UNLESS(rblock.PageId == page->PageId);
-            rblock.Page = TSharedPageRef::MakeUsed(page, SharedCachePages->GCList);
+        for (auto &[request, index] : pendingRequestsIt->second) {
+            Y_ABORT_UNLESS(request->Sender);
+            auto &readyPage = request->ReadyPages[index];
+            Y_ABORT_UNLESS(readyPage.PageId == page->PageId);
+            readyPage.Page = TSharedPageRef::MakeUsed(page, SharedCachePages->GCList);
 
-            if (--r->PendingBlocks == 0)
-                SendReadyBlocks(*r);
+            if (--request->PendingBlocks == 0)
+                SendReadyBlocks(*request);
         }
         collection.PendingRequests.erase(pendingRequestsIt);
     }
 
-    void SendReadyBlocks(TRequest &wa) {
+    void SendReadyBlocks(TRequest &request) {
+        Y_ABORT_UNLESS(request.Sender);
         /* Do not hold my NPageCollection::IPageCollection, leave std::move(wa.PageCollection) */
 
         TAutoPtr<NSharedCache::TEvResult> result =
-            new NSharedCache::TEvResult(std::move(wa.PageCollection), wa.RequestCookie, NKikimrProto::OK);
-        result->Loaded = std::move(wa.ReadyPages);
+            new NSharedCache::TEvResult(std::move(request.PageCollection), request.RequestCookie, NKikimrProto::OK);
+        result->Loaded = std::move(request.ReadyPages);
 
-        Send(wa.Sender, result.Release(), 0, wa.EventCookie);
-        wa.Sender = TActorId();
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Sending page collection result " << result->Origin->Label()
+            << " owner " << request.Sender
+            << " class " << request.Priority
+            << " pages " << result->Loaded);
+
+        Send(request.Sender, result.Release(), 0, request.EventCookie);
+        Counters.PendingRequests->Dec();
+        Counters.SucceedRequests->Inc();
+        request.Sender = TActorId();
         StatBioReqs += 1;
     }
 
-    void DropCollection(THashMap<TLogoBlobID, TCollection>::iterator collectionIt, NKikimrProto::EReplyStatus blobStorageError) {
+    void SendError(TRequest &request, NKikimrProto::EReplyStatus error) {
+        Y_ABORT_UNLESS(request.Sender);
+
+        TAutoPtr<NSharedCache::TEvResult> result =
+            new NSharedCache::TEvResult(std::move(request.PageCollection), request.RequestCookie, error);
+
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Sending page collection error " << result->Origin->Label()
+            << " owner " << request.Sender
+            << " class " << request.Priority
+            << " error " << error);
+
+        Send(request.Sender, result.Release(), 0, request.EventCookie);
+        Counters.PendingRequests->Dec();
+        Counters.FailedRequests->Inc();
+        request.Sender = TActorId();
+        StatBioReqs += 1;
+    }
+
+    void DropCollection(TCollection &collection, NKikimrProto::EReplyStatus blobStorageError) {
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Drop page collection " << collection.Id);
+
         // decline all pending requests
-        TCollection &collection = collectionIt->second;
-        const TLogoBlobID &pageCollectionId = collectionIt->first;
-
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Drop page collection " << pageCollectionId);
-
-        for (auto &expe : collection.PendingRequests) {
-            for (auto &xpair : expe.second) {
-                auto &x = xpair.first;
-                if (!x->Sender)
-                    continue;
-
-                Send(x->Sender, new NSharedCache::TEvResult(std::move(x->PageCollection), x->RequestCookie, blobStorageError), 0, x->EventCookie);
-                x->Sender = TActorId();
+        for (auto &[_, requests] : collection.PendingRequests) {
+            for (auto &[request, _] : requests) {
+                if (request->Sender) {
+                    SendError(*request, blobStorageError);
+                }
             }
         }
         collection.PendingRequests.clear();
@@ -1046,46 +1105,86 @@ class TSharedPageCache : public TActorBootstrapped<TSharedPageCache> {
         }
 
         for (TActorId owner : collection.Owners) {
-            DropRequestsFor(owner, pageCollectionId);
+            DropRequestsFromQueues(owner, collection.Id);
         }
 
-        if (!collection.Owners && !haveValidPages) {
-            // This collection no longer has anything useful
-            Collections.erase(collectionIt);
+        TryDropExpiredCollection(collection);
+    }
+
+    void DropRequests(TCollection& collection, TActorId owner) {
+        TVector<TPageId> emptyRequests;
+        for (auto &[pageId, requests] : collection.PendingRequests) {
+            for (auto it = requests.begin(); it != requests.end(); ) {
+                if (it->first->Sender == owner) {
+                    SendError(*it->first, NKikimrProto::RACE);
+                    it = requests.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+            if (requests.empty()) {
+                emptyRequests.push_back(pageId);
+            }
+        }
+        for (auto pageId : emptyRequests) {
+            collection.PendingRequests.erase(pageId);
         }
     }
 
-    void DropRequestsFor(TActorId owner, const TLogoBlobID &pageCollectionId) {
-        DropFromQueue(ScanRequests, owner, pageCollectionId);
-        DropFromQueue(AsyncRequests, owner, pageCollectionId);
+    void DropRequestsFromQueues(TActorId owner) {
+        DropRequestsFromQueue(ScanRequests, owner);
+        DropRequestsFromQueue(AsyncRequests, owner);
     }
 
-    void DropFromQueue(TRequestQueue &queue, TActorId ownerId, const TLogoBlobID &pageCollectionId) {
-        auto ownerIt = queue.Requests.find(ownerId);
-        if (ownerIt == queue.Requests.end())
+    void DropRequestsFromQueue(TRequestQueue &queue, TActorId ownerId) {
+        auto it = queue.Requests.find(ownerId);
+        if (it == queue.Requests.end()) {
             return;
+        }
+
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Drop requests from queue"
+            << " owner " << ownerId
+            << " page collections " << it->second.Index.size());
+
+        for (const auto& r : it->second.Listed) {
+            r.Request->EnsureResponded();
+        }
+
+        queue.Requests.erase(it);
+    }
+
+    void DropRequestsFromQueues(TActorId owner, const TLogoBlobID &pageCollectionId) {
+        DropRequestsFromQueue(ScanRequests, owner, pageCollectionId);
+        DropRequestsFromQueue(AsyncRequests, owner, pageCollectionId);
+    }
+
+    void DropRequestsFromQueue(TRequestQueue &queue, TActorId ownerId, const TLogoBlobID &pageCollectionId) {
+        auto ownerIt = queue.Requests.find(ownerId);
+        if (ownerIt == queue.Requests.end()) {
+            return;
+        }
+
         auto &reqsByOwner = ownerIt->second;
         auto reqsIt = reqsByOwner.Index.find(pageCollectionId);
-        if (reqsIt == reqsByOwner.Index.end())
+        if (reqsIt == reqsByOwner.Index.end()) {
             return;
+        }
+
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TABLET_SAUSAGECACHE, "Drop requests from queue"
+            << " owner " << ownerId
+            << " page collection " << pageCollectionId);
 
         if (reqsByOwner.Index.size() == 1) {
+            for (const auto& r : reqsByOwner.Listed) {
+                r.Request->EnsureResponded();
+            }
             queue.Requests.erase(ownerIt);
         } else {
-            for (auto &x : reqsIt->second)
+            for (auto &x : reqsIt->second) {
+                x.Request->EnsureResponded();
                 x.Unlink();
+            }
             reqsByOwner.Index.erase(reqsIt);
-        }
-    }
-
-    void DropFromQueue(TRequestQueue &queue, TActorId ownerId, const TActorContext& ctx) {
-        auto it = queue.Requests.find(ownerId);
-        if (it != queue.Requests.end()) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Drop queues"
-                << " owner " << ownerId
-                << " page collections " << it->second.Index.size());
-
-            queue.Requests.erase(it);
         }
     }
 
@@ -1215,7 +1314,7 @@ public:
     void Bootstrap(const TActorContext& ctx) {
         LOG_NOTICE_S(ctx, NKikimrServices::TABLET_SAUSAGECACHE, "Bootstrap with config " << Config.ShortDebugString());
 
-        MemLimitBytes = Config.HasMemoryLimit() 
+        MemLimitBytes = Config.HasMemoryLimit()
             ? Config.GetMemoryLimit()
             : 128_MB; // soon will be updated by MemoryController
         ActualizeCacheSizeLimit();
@@ -1236,7 +1335,7 @@ public:
             HFunc(NSharedCache::TEvRequest, Handle);
             HFunc(NSharedCache::TEvTouch, Handle);
             HFunc(NSharedCache::TEvUnregister, Handle);
-            HFunc(NSharedCache::TEvInvalidate, Handle);
+            HFunc(NSharedCache::TEvDetach, Handle);
 
             HFunc(NBlockIO::TEvData, Handle);
             HFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
@@ -1274,10 +1373,26 @@ void Out<TVector<ui32>>(IOutputStream& o, const TVector<ui32> &vec) {
 }
 
 template<> inline
+void Out<TDeque<ui32>>(IOutputStream& o, const TDeque<ui32> &vec) {
+    o << "[ ";
+    for (const auto &x : vec)
+        o << x << ' ';
+    o << "]";
+}
+
+template<> inline
 void Out<THashSet<ui32>>(IOutputStream& o, const THashSet<ui32> &vec) {
     o << "[ ";
     for (const auto &x : vec)
         o << x << ' ';
+    o << "]";
+}
+
+template<> inline
+void Out<TVector<NKikimr::NSharedCache::TEvResult::TLoaded>>(IOutputStream& o, const TVector<NKikimr::NSharedCache::TEvResult::TLoaded> &vec) {
+    o << "[ ";
+    for (const auto &x : vec)
+        o << x.PageId << ' ';
     o << "]";
 }
 

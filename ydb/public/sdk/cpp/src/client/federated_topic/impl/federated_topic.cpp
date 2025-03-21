@@ -91,17 +91,19 @@ NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> TFederated
 }
 
 void TFederatedTopicClient::TClusterInfo::AdjustTopicClientSettings(NTopic::TTopicClientSettings& settings) const {
-    if (!Name.empty()) {
-        settings.DiscoveryEndpoint(Endpoint);
-        settings.Database(Path);
+    if (Name.empty()) {
+        return;
     }
+    settings.DiscoveryEndpoint(Endpoint);
+    settings.Database(Path);
 }
 
 void TFederatedTopicClient::TClusterInfo::AdjustTopicPath(std::string& path) const {
-    if (!Name.empty()) {
-        if (path.empty() || path[0] != '/') {
-            path = Path + '/' + path;
-        }
+    if (Name.empty()) {
+        return;
+    }
+    if (path.empty() || path[0] != '/') {
+        path = Path + '/' + path;
     }
 }
 
@@ -127,7 +129,7 @@ std::vector<TAsyncDescribeTopicResult> TFederatedTopicClient::DescribeAllTopics(
         }
         std::string adjustedPath = path;
         info.AdjustTopicPath(adjustedPath);
-        results.emplace_back(topicClients[i].DescribeTopic(path, describeSettings));
+        results.emplace_back(topicClients[i].DescribeTopic(adjustedPath, describeSettings));
     }
     return results;
 }

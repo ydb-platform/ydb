@@ -6,6 +6,7 @@ TAG(ya:fat)
 
 TEST_SRCS(
     test_DML.py
+
 )
 
 PEERDIR(

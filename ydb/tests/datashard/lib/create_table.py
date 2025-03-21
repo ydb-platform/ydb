@@ -1,9 +1,9 @@
 from ydb.tests.stress.oltp_workload.workload import cleanup_type_name
 
 ttl_types = {
-    "Date": "CAST('20{:02}-01-01' AS Date)",
-    "Datetime": "CAST('20{:02}-10-02T11:00:00Z' AS Datetime)",
-    "Timestamp": "CAST(269624{:02}00000000 AS Timestamp)",
+    "Date": "CAST('2{:03}-01-01' AS Date)",
+    "Datetime": "CAST('2{:03}-10-02T11:00:00Z' AS Datetime)",
+    "Timestamp": "CAST(26962{:03}00000000 AS Timestamp)",
     "Uint32": "CAST({}0 AS Uint32)",
     "Uint64": "CAST({}0 AS Uint64)",
     "DyNumber": "CAST('{}E1' AS DyNumber)",
@@ -29,14 +29,14 @@ index_second = {
     "DyNumber": "CAST('{}E1' AS DyNumber)",
     "String": "'String {}'",
     "Utf8": "'Uft8 {}'",
-    "Uuid": "CAST('{:2}345678-e89b-12d3-a456-556642440000' AS UUID)",
-    "Date": "CAST('20{:02}-01-01' AS Date)",
-    "Datetime": "CAST('20{:02}-10-02T11:00:00Z' AS Datetime)",
-    "Timestamp": "CAST(169624{:02}00000000 AS Timestamp)",
+    "Uuid": "CAST('3{:03}5678-e89b-12d3-a456-556642440000' AS UUID)",
+    "Date": "CAST('2{:03}-01-01' AS Date)",
+    "Datetime": "CAST('2{:03}-10-02T11:00:00Z' AS Datetime)",
+    "Timestamp": "CAST(16962{:03}00000000 AS Timestamp)",
     "Interval": "CAST({} AS Interval)",
-    "Date32": "CAST('20{:02}-01-01' AS Date32)",
-    "Datetime64": "CAST('20{:02}-10-02T11:00:00Z' AS Datetime64)",
-    "Timestamp64": "CAST(169624{:02}00000000 AS Timestamp64)",
+    "Date32": "CAST('2{:03}-01-01' AS Date32)",
+    "Datetime64": "CAST('2{:03}-10-02T11:00:00Z' AS Datetime64)",
+    "Timestamp64": "CAST(16962{:03}00000000 AS Timestamp64)",
     "Interval64": "CAST({} AS Interval64)"
 }
 
@@ -57,23 +57,20 @@ pk_types = {
 
     "String": "'String {}'",
     "Utf8": "'Uft8 {}'",
-    "Uuid": "CAST('{:2}345678-e89b-12d3-a456-556642440000' AS UUID)",
+    "Uuid": "CAST('3{:03}5678-e89b-12d3-a456-556642440000' AS UUID)",
 
-    "Date": "CAST('20{:02}-01-01' AS Date)",
-    "Datetime": "CAST('20{:02}-10-02T11:00:00Z' AS Datetime)",
-    "Timestamp": "CAST(169624{:02}00000000 AS Timestamp)",
+    "Date": "CAST('2{:03}-01-01' AS Date)",
+    "Datetime": "CAST('2{:03}-10-02T11:00:00Z' AS Datetime)",
+    "Timestamp": "CAST(16962{:03}00000000 AS Timestamp)",
     "Interval": "CAST({} AS Interval)",
-    "Date32": "CAST('20{:02}-01-01' AS Date32)",
-    "Datetime64": "CAST('20{:02}-10-02T11:00:00Z' AS Datetime64)",
-    "Timestamp64": "CAST(169624{:02}00000000 AS Timestamp64)",
+    "Date32": "CAST('2{:03}-01-01' AS Date32)",
+    "Datetime64": "CAST('2{:03}-10-02T11:00:00Z' AS Datetime64)",
+    "Timestamp64": "CAST(16962{:03}00000000 AS Timestamp64)",
     "Interval64": "CAST({} AS Interval64)"
 }
 non_pk_types = {
     "Float": "CAST('{}.1' AS Float)",
     "Double": "CAST('{}.2' AS Double)",
-}
-
-not_comparable = {
     "Json": "CAST('{{\"another_key\":{}}}' AS Json)",
     "JsonDocument": "CAST('{{\"another_doc_key\":{}}}' AS JsonDocument)",
     "Yson": "CAST('[{}]' AS Yson)"
@@ -84,20 +81,17 @@ index_sync = ["SYNC", "ASYNC"]
 
 
 class TestCreateTables():
-    def create_table(self, ttl: str, table_name: str, index: dict[str, str], unique: str, sync: str) -> str:
-        return f"""
-            CREATE TABLE IF NOT EXISTS {table_name} (
-                    {", ".join(["pk_" + cleanup_type_name(type_name) + " " + type_name for type_name in pk_types.keys()])},
-                    {", ".join(["col_" + cleanup_type_name(type_name) + " " + type_name for type_name in pk_types.keys()])},
-                    {", ".join(["col_" + cleanup_type_name(type_name) + " " + type_name for type_name in non_pk_types.keys()])},
-                    {", ".join(["col_" + cleanup_type_name(type_name) + " " + type_name for type_name in not_comparable.keys()])},
-                    {", ".join(["col_index_" + cleanup_type_name(type_name) + " " + type_name for type_name in index.keys()])},
-                    ttl_{cleanup_type_name(ttl)} {ttl},
-                    PRIMARY KEY(
-                    {", ".join(["pk_" + cleanup_type_name(type_name) for type_name in pk_types.keys()])}),
-                    {", ".join([f"INDEX idx_{cleanup_type_name(type_name)} GLOBAL {unique} {sync} ON (col_index_{cleanup_type_name(type_name)})" for type_name in index.keys()])},
-                    ) WITH (
-                    TTL = Interval("PT1H") ON ttl_{cleanup_type_name(ttl)} {"as SECONDS" if ttl == "Uint32" or ttl == "Uint64" or ttl == "DyNumber" else ""}
-                );
-
-        """
+    def create_table(self, table_name: str, columns: dict[str, dict[str]], unique: str, sync: str):
+        sql_create = f"CREATE TABLE {table_name} ("
+        for prefix in columns.keys():
+            for type_name in columns[prefix]:
+                if prefix != "ttl_" and type_name != "":
+                    sql_create += f"{prefix}{cleanup_type_name(type_name)} {type_name}, "
+        sql_create += f"""PRIMARY KEY(
+                    {", ".join(["pk_" + cleanup_type_name(type_name) for type_name in columns["pk_"]])}),
+                    {", ".join([f"INDEX idx_{cleanup_type_name(type_name)} GLOBAL {unique} {sync} ON (col_index_{cleanup_type_name(type_name)})" for type_name in columns["col_index_"]] if len(columns["col_index_"]) != 0 else "")}
+            )"""
+        if columns["ttl_"][0] != "":
+            sql_create += f"""WITH (
+                    TTL = Interval("PT1H") ON ttl_{cleanup_type_name(columns["ttl_"][0])} {" as SECONDS" if columns["ttl_"] == "Uint32" or columns["ttl_"][0] == "Uint64" or columns["ttl_"] == "DyNumber" else ""})"""
+        return sql_create

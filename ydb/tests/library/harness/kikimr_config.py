@@ -498,8 +498,13 @@ class KikimrConfigGenerator(object):
         self.full_config = dict()
         if self.use_self_management:
             self.yaml_config["domains_config"].pop("security_config")
+            self.yaml_config["default_disk_type"] = "ROT"
+            self.yaml_config["fail_domain_type"] = "rack"
+            self._add_host_config_and_hosts()
+            self.yaml_config.pop("blob_storage_config")
+            self.yaml_config.pop("domains_config")
             self.yaml_config.pop("nameservice_config")
-            # self.yaml_config.pop("blob_storage_config")
+            self.yaml_config["erasure"] = self.yaml_config.pop("static_erasure")
         if self.use_distconf:
             self.yaml_config.pop("domains_config")
             self.yaml_config.pop("channel_profile_config")
@@ -508,7 +513,6 @@ class KikimrConfigGenerator(object):
         if self.simple_config:
             self.yaml_config.pop("feature_flags")
             self.yaml_config.pop("federated_query_config")
-            self.yaml_config.pop("grpc_config")
             self.yaml_config.pop("pqconfig")
             self.yaml_config.pop("pqcluster_discovery_config")
             self.yaml_config.pop("net_classifier_config")
@@ -726,7 +730,7 @@ class KikimrConfigGenerator(object):
 
                 self._pdisks_info.append({'pdisk_path': pdisk_path, 'node_id': node_id, 'disk_size': disk_size,
                                           'pdisk_user_kind': pdisk_user_kind})
-                if not self.use_distconf and pdisk_id == 1 and node_id <= self.static_erasure.min_fail_domains * self._rings_count:
+                if not self.use_distconf and not self.use_self_management and pdisk_id == 1 and node_id <= self.static_erasure.min_fail_domains * self._rings_count:
                     self._add_pdisk_to_static_group(
                         pdisk_id,
                         pdisk_path,

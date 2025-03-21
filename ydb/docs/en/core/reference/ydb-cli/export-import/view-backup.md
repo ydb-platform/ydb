@@ -1,11 +1,6 @@
 # Considerations for restoring views from backups
 
-When restoring [views](../../../concepts/datamodel/view.md) from a backup, it's important to understand that the view's underlying query may be automatically modified to maintain proper object references. This occurs because the backup and restoration process is designed to be "closed" - meaning:
-
-- schema objects' locations are considered relative to the backup root (specified by the `--path` option in the [ydb tools dump](./tools-dump.md#schema-objects) command)
-- references are treated relative to the backup root
-
-When such a "closed" backup is restored, views will reference the newly restored tables rather than the previously existing tables in the target environment, preserving the relative positioning between views and their referenced objects as they existed at backup time.
+During the restoration of [views](../../../concepts/datamodel/view.md) from a backup, the system may automatically adjust the underlying query to ensure object references remain valid. Restored views will reference the restored tables rather than the previously existing tables in the target environment, preserving the relative positioning between views and their referenced objects as they existed at backup time.
 
 ## Examples
 
@@ -13,7 +8,7 @@ When such a "closed" backup is restored, views will reference the newly restored
 
 Let's consider the following scenario:
 
-1. A view is created by the query:
+1. A view is created using the following query:
 
     ```sql
     CREATE VIEW root_view WITH security_invoker = TRUE AS
@@ -44,7 +39,7 @@ As the result of the steps described above, the `root_view` view is restored and
 ydb sql --script 'select * from root_view' --explain
 ```
 
-The output of the command includes the following line: `TableFullScan (Table: root_table, ...`
+The output of the command includes: `TableFullScan (Table: root_table, ...`
 
 ### Restoring database root to a subfolder
 
@@ -75,13 +70,13 @@ As the result of the steps described above, the `a/b/c/my_view` view is restored
 ydb sql --script 'select * from `a/b/c/my_view`' --explain
 ```
 
-The output of the command includes the following line: `TableFullScan (Table: a/b/c/my_table, ...`
+The output of the command includes: `TableFullScan (Table: a/b/c/my_table, ...`
 
 ### Restoring a subfolder to the database root
 
 Let's consider the following scenario:
 
-1. Steps 1 to 3 of the previous scenario [{#T}](#restoring-database-root-to-a-subfolder) are repeated.
+1. The steps 1 to 3 of the previous scenario [{#T}](#restoring-database-root-to-a-subfolder) are repeated.
 2. The `a/b/c` subfolder of the database is backed up:
 
     ```bash
@@ -106,7 +101,7 @@ As the result of the steps described above, the `my_view` view is restored and s
 ydb sql --script 'select * from my_view' --explain
 ```
 
-The output of the command includes the following line: `TableFullScan (Table: my_table, ...`
+The output of the command includes: `TableFullScan (Table: my_table, ...`
 
 ### Restoring database root to the root of a different database
 
@@ -135,10 +130,10 @@ Let's consider the following scenario:
 
     Note the `--database /restored_database` option in the connection string.
 
-As the result of the steps described above, `root_view` is restored, and it selects from `root_table` located in `/restored_database`:
+As the result of the steps described above, the `root_view` view is restored and selects from the `root_table` table located in the `/restored_database`:
 
 ```bash
 ydb --endpoint <endpoint> --database /restored_database sql --script 'select * from root_view' --explain
 ```
 
-The output of the command includes the following line: `TableFullScan (Table: root_table, ...`
+The output of the command includes: `TableFullScan (Table: root_table, ...`

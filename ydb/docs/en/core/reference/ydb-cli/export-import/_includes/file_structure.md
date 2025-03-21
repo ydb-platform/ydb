@@ -53,7 +53,7 @@ For each table in the database, there is a same-named directory in the file stru
   - The `topic_description.pb` file describing the underlying topic in the [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format) format
 
 
-## Files with data {#datafiles}
+### Files with data {#datafiles}
 
 The format of data files is `.csv`, where each row corresponds to a record in the table (except the row with column headings). The urlencoded format is used for rows. For example, the file row for the table with the uint64 and utf8 columns that includes the number 1 and the Russian string "Привет" (translates to English as "Hi"), would look like this:
 

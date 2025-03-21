@@ -1,3 +1,4 @@
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include "write_queue.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
@@ -7,7 +8,7 @@
 namespace NKikimr::NColumnShard {
 
 bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& /* ctx */) {
-    auto overloadStatus = owner->CheckOverloadedWait(PathId);
+    auto overloadStatus = owner->CheckOverloadedWait(PathId.InternalPathId);
     if (overloadStatus != TColumnShard::EOverloadStatus::None) {
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "wait_overload")("status", overloadStatus);
         return false;
@@ -28,7 +29,7 @@ bool TWriteTask::Execute(TColumnShard* owner, const TActorContext& /* ctx */) {
         owner->Counters.GetIndexationCounters().SplitterCounters, owner->Counters.GetCSCounters().WritingCounters, NOlap::TSnapshot::Max(),
         writeOperation->GetActivityChecker(), Behaviour == EOperationBehaviour::NoTxWrite, owner->BufferizationInsertionWriteActorId,
         owner->BufferizationPortionsWriteActorId);
-    ArrowData->SetSeparationPoints(owner->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(PathId)->GetBucketPositions());
+    ArrowData->SetSeparationPoints(owner->GetIndexAs<NOlap::TColumnEngineForLogs>().GetGranulePtrVerified(PathId.InternalPathId)->GetBucketPositions());
     writeOperation->Start(*owner, ArrowData, SourceId, wContext);
     return true;
 }

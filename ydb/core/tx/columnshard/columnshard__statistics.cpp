@@ -285,10 +285,18 @@ void TColumnShard::Handle(NStat::TEvStatistics::TEvStatisticsRequest::TPtr& ev, 
         Send(ev->Sender, response.release(), 0, ev->Cookie);
         return;
     }
+    auto internalPathId = TablesManager.ResolveInternalPathId(TLocalPathId::FromLocalPathIdValue(record.GetTable().GetPathId().GetLocalId()));
+    if (!internalPathId) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("error", "Statistic request for unknown LocalPathId");
+        respRecord.SetStatus(NKikimrStat::TEvStatisticsResponse::STATUS_ERROR);
+    
+        Send(ev->Sender, response.release(), 0, ev->Cookie);
+        return;
+    }
 
     AFL_VERIFY(HasIndex());
     auto index = GetIndexAs<NOlap::TColumnEngineForLogs>();
-    auto spg = index.GetGranuleOptional(record.GetTable().GetPathId().GetLocalId());
+    auto spg = index.GetGranuleOptional(*internalPathId);
     AFL_VERIFY(spg);
 
     std::set<ui32> columnTagsRequested;

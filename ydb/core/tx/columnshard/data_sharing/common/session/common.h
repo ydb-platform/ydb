@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/data_locks/manager/manager.h>
 #include <ydb/core/tx/columnshard/data_sharing/common/context/context.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/conclusion/status.h>
@@ -44,8 +45,8 @@ private:
 
 protected:
     TTransferContext TransferContext;
-    virtual TConclusionStatus DoStart(NColumnShard::TColumnShard& shard, THashMap<ui64, std::vector<TPortionDataAccessor>>&& portions) = 0;
-    virtual THashSet<ui64> GetPathIdsForStart() const = 0;
+    virtual TConclusionStatus DoStart(NColumnShard::TColumnShard& shard, THashMap<NColumnShard::TInternalPathId, std::vector<TPortionDataAccessor>>&& portions) = 0;
+    virtual THashSet<NColumnShard::TInternalPathId> GetPathIdsForStart() const = 0;
 
 public:
     virtual ~TCommonSession() = default;

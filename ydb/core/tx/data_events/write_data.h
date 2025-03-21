@@ -11,6 +11,7 @@
 #include <ydb/library/actors/core/monotonic.h>
 #include <ydb/library/conclusion/result.h>
 #include <ydb/library/formats/arrow/modifier/subset.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <util/generic/guid.h>
 
@@ -36,7 +37,7 @@ public:
 class TWriteMeta: public NColumnShard::TMonitoringObjectsCounter<TWriteMeta>, TNonCopyable {
 private:
     YDB_ACCESSOR(ui64, WriteId, 0);
-    YDB_READONLY(ui64, TableId, 0);
+    YDB_READONLY_DEF(NColumnShard::TUnifiedPathId, PathId);
     YDB_ACCESSOR_DEF(NActors::TActorId, Source);
     YDB_ACCESSOR_DEF(std::optional<ui32>, GranuleShardingVersion);
     YDB_READONLY(TString, Id, TGUID::CreateTimebased().AsUuidString());
@@ -87,10 +88,10 @@ public:
         }
     }
 
-    TWriteMeta(const ui64 writeId, const ui64 tableId, const NActors::TActorId& source, const std::optional<ui32> granuleShardingVersion,
+    TWriteMeta(const ui64 writeId, const NColumnShard::TUnifiedPathId pathId, const NActors::TActorId& source, const std::optional<ui32> granuleShardingVersion,
         const TString& writingIdentifier, const std::shared_ptr<TWriteFlowCounters>& counters)
         : WriteId(writeId)
-        , TableId(tableId)
+        , PathId(pathId)
         , Source(source)
         , GranuleShardingVersion(granuleShardingVersion)
         , Id(writingIdentifier)

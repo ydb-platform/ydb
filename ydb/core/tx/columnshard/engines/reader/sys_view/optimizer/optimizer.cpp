@@ -8,7 +8,7 @@ namespace NKikimr::NOlap::NReader::NSysView::NOptimizer {
 
 bool TStatsIterator::AppendStats(const std::vector<std::unique_ptr<arrow::ArrayBuilder>>& builders, NAbstract::TGranuleMetaView& granule) const {
     for (auto&& i : granule.GetOptimizerTasks()) {
-        NArrow::Append<arrow::UInt64Type>(*builders[0], granule.GetPathId());
+        NArrow::Append<arrow::UInt64Type>(*builders[0], granule.GetPathId().InternalPathId.GetInternalPathIdValue());
         NArrow::Append<arrow::UInt64Type>(*builders[1], ReadMetadata->TabletId);
         NArrow::Append<arrow::UInt64Type>(*builders[2], i.GetTaskId());
         NArrow::Append<arrow::StringType>(*builders[3], HostNameField);

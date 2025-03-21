@@ -2,13 +2,15 @@
 #include <ydb/core/tx/columnshard/subscriber/abstract/subscriber/subscriber.h>
 #include <ydb/core/tx/columnshard/subscriber/events/tables_erased/event.h>
 #include <ydb/core/tx/columnshard/transactions/transactions/tx_finish_async.h>
+#include <ydb/core/tx/columnshard/data_locks/locks/list.h>
 #include <util/string/join.h>
+#include <util/stream/output.h>
 
 namespace NKikimr::NColumnShard {
 
 class TWaitEraseTablesTxSubscriber: public NSubscriber::ISubscriber {
 private:
-    THashSet<ui64> WaitTables;
+    THashSet<TInternalPathId> WaitTables;
     const ui64 TxId;
 public:
     virtual std::set<NSubscriber::EEventType> GetEventTypes() const override {
@@ -33,7 +35,7 @@ public:
         return WaitTables.empty();
     }
 
-    TWaitEraseTablesTxSubscriber(const THashSet<ui64>& waitTables, const ui64 txId)
+    TWaitEraseTablesTxSubscriber(const THashSet<TInternalPathId>& waitTables, const ui64 txId)
         : WaitTables(waitTables)
         , TxId(txId) {
 
@@ -170,9 +172,12 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
             break;
         case NKikimrTxColumnShard::TSchemaTxBody::kEnsureTables:
         {
+            THashSet<TInternalPathId> waitPathIdsToErase;
             for (auto&& i : SchemaTxBody.GetEnsureTables().GetTables()) {
-                if (owner.TablesManager.HasTable(i.GetPathId(), true) && !owner.TablesManager.HasTable(i.GetPathId())) {
-                    WaitPathIdsToErase.emplace(i.GetPathId());
+                if (const auto internalPathId = owner.TablesManager.ResolveInternalPathId(TLocalPathId::FromLocalPathIdValue(i.GetPathId()))) {
+                    if (owner.TablesManager.HasTable(*internalPathId, true)) {
+                        WaitPathIdsToErase.emplace(*internalPathId);
+                    }
                 }
             }
         }

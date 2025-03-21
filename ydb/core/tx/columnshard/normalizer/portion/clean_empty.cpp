@@ -42,7 +42,7 @@ private:
             AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "remove_portion_v1")("path_id", PortionAddress.GetPathId())(
                 "portion_id", PortionAddress.GetPortionId())("chunk", i.DebugString());
             db.Table<NColumnShard::Schema::IndexColumnsV1>()
-                .Key(PortionAddress.GetPathId(), PortionAddress.GetPortionId(), i.GetColumnId(), i.GetChunkIdx())
+                .Key(PortionAddress.GetPathId().GetInternalPathIdValue(), PortionAddress.GetPortionId(), i.GetColumnId(), i.GetChunkIdx())
                 .Delete();
         }
     }
@@ -61,7 +61,7 @@ private:
     virtual void Apply(NIceDb::TNiceDb& db) override {
         AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "remove_portion_v2")("path_id", PortionAddress.GetPathId())(
             "portion_id", PortionAddress.GetPortionId());
-        db.Table<NColumnShard::Schema::IndexColumnsV2>().Key(PortionAddress.GetPathId(), PortionAddress.GetPortionId()).Delete();
+        db.Table<NColumnShard::Schema::IndexColumnsV2>().Key(PortionAddress.GetPathId().GetInternalPathIdValue(), PortionAddress.GetPortionId()).Delete();
     }
 
 public:
@@ -77,7 +77,7 @@ private:
     virtual void Apply(NIceDb::TNiceDb& db) override {
         AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "remove_portion")("path_id", PortionAddress.GetPathId())(
             "portion_id", PortionAddress.GetPortionId());
-        db.Table<NColumnShard::Schema::IndexPortions>().Key(PortionAddress.GetPathId(), PortionAddress.GetPortionId()).Delete();
+        db.Table<NColumnShard::Schema::IndexPortions>().Key(PortionAddress.GetPathId().GetInternalPathIdValue(), PortionAddress.GetPortionId()).Delete();
     }
 
 public:
@@ -133,7 +133,7 @@ bool GetColumnPortionAddresses(NTabletFlatExecutor::TTransactionContext& txc, st
             return false;
         }
         while (!rowset.EndOfSet()) {
-            TPortionAddress address(rowset.GetValue<Schema::IndexColumnsV1::PathId>(), rowset.GetValue<Schema::IndexColumnsV1::PortionId>());
+            TPortionAddress address(TInternalPathId::FromInternalPathIdValue(rowset.GetValue<Schema::IndexColumnsV1::PathId>()), rowset.GetValue<Schema::IndexColumnsV1::PortionId>());
             TChunkAddress cAddress(rowset.GetValue<Schema::IndexColumnsV1::SSColumnId>(), rowset.GetValue<Schema::IndexColumnsV1::ChunkIdx>());
             usedPortions[address].emplace_back(cAddress);
             if (!rowset.Next()) {
@@ -154,7 +154,7 @@ bool GetColumnPortionAddresses(NTabletFlatExecutor::TTransactionContext& txc, st
         }
         while (!rowset.EndOfSet()) {
             TPortionAddress portionAddress(
-                rowset.GetValue<Schema::IndexColumnsV2::PathId>(), rowset.GetValue<Schema::IndexColumnsV2::PortionId>());
+                TInternalPathId::FromInternalPathIdValue(rowset.GetValue<Schema::IndexColumnsV2::PathId>()), rowset.GetValue<Schema::IndexColumnsV2::PortionId>());
             usedPortions.emplace(portionAddress, std::make_shared<TRemoveV2>(portionAddress));
             if (!rowset.Next()) {
                 return false;
@@ -170,7 +170,7 @@ bool GetColumnPortionAddresses(NTabletFlatExecutor::TTransactionContext& txc, st
         }
         while (!rowset.EndOfSet()) {
             TPortionAddress portionAddress(
-                rowset.GetValue<Schema::IndexPortions::PathId>(), rowset.GetValue<Schema::IndexPortions::PortionId>());
+                TInternalPathId::FromInternalPathIdValue(rowset.GetValue<Schema::IndexPortions::PathId>()), rowset.GetValue<Schema::IndexPortions::PortionId>());
             usedPortions.emplace(portionAddress, std::make_shared<TRemovePortion>(portionAddress));
             if (!rowset.Next()) {
                 return false;

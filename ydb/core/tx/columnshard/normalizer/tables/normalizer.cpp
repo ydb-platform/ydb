@@ -6,7 +6,7 @@ namespace NKikimr::NOlap {
 
 class TRemovedTablesNormalizer::TNormalizerResult : public INormalizerChanges {
     struct TPathInfo {
-        ui64 PathId;
+        NColumnShard::TInternalPathId PathId;
         ui64 Step;
         ui64 TxId;
     };
@@ -24,8 +24,8 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         for (auto&& pathInfo: PathIds) {
-            db.Table<Schema::TableVersionInfo>().Key(pathInfo.PathId, pathInfo.Step, pathInfo.TxId).Delete();
-            db.Table<Schema::TableInfo>().Key(pathInfo.PathId).Delete();
+            db.Table<Schema::TableVersionInfo>().Key(pathInfo.PathId.GetInternalPathIdValue(), pathInfo.Step, pathInfo.TxId).Delete();
+            db.Table<Schema::TableInfo>().Key(pathInfo.PathId.GetInternalPathIdValue()).Delete();
         }
         return true;
     }
@@ -64,7 +64,7 @@ public:
         }
 
 
-        std::set<ui64> droppedTables;
+        std::set<NColumnShard::TInternalPathId> droppedTables;
         {
             auto rowset = db.Table<Schema::TableInfo>().Select();
             if (!rowset.IsReady()) {
@@ -76,7 +76,7 @@ public:
                 const NOlap::TSnapshot dropSnapshot(rowset.GetValue<Schema::TableInfo::DropStep>(), rowset.GetValue<Schema::TableInfo::DropTxId>());
 
                 if (dropSnapshot.Valid() && !notEmptyPaths.contains(pathId)) {
-                    droppedTables.emplace(pathId);
+                    droppedTables.emplace(TInternalPathId::FromInternalPathIdValue(pathId));
                 }
 
                 if (!rowset.Next()) {
@@ -97,7 +97,7 @@ public:
             std::vector<TPathInfo> toRemove;
             while (!rowset.EndOfSet()) {
                 TPathInfo pathInfo;
-                pathInfo.PathId = rowset.GetValue<Schema::TableVersionInfo::PathId>();
+                pathInfo.PathId = TInternalPathId::FromInternalPathIdValue(rowset.GetValue<Schema::TableVersionInfo::PathId>());
                 if (droppedTables.contains(pathInfo.PathId)) {
                     pathInfo.Step = rowset.GetValue<Schema::TableVersionInfo::SinceStep>();
                     pathInfo.TxId = rowset.GetValue<Schema::TableVersionInfo::SinceTxId>();

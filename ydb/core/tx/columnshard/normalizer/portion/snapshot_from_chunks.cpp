@@ -1,3 +1,4 @@
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include "snapshot_from_chunks.h"
 #include "normalizer.h"
 
@@ -37,7 +38,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         for (auto&& i : Patches) {
             db.Table<Schema::IndexPortions>()
-                .Key(i.GetPortionInfo().GetPathId(), i.GetPortionInfo().GetPortionId())
+                .Key(i.GetPortionInfo().GetPathId().GetInternalPathIdValue(), i.GetPortionInfo().GetPortionId())
                 .Update(NIceDb::TUpdate<Schema::IndexPortions::MinSnapshotPlanStep>(i.GetSnapshot().GetPlanStep()),
                     NIceDb::TUpdate<Schema::IndexPortions::MinSnapshotTxId>(i.GetSnapshot().GetTxId())
                     );

@@ -36,9 +36,8 @@ public:
     void EraseAborted(const TInsertedData&) override {
     }
 
-    virtual TConclusion<THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() override {
-        THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>> result;
-        return result;
+    virtual TConclusion<THashMap<NColumnShard::TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() override {
+        return THashMap<NColumnShard::TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>>{};
     }
 
     bool Load(TInsertTableAccessor&, const TInstant&) override {
@@ -49,7 +48,7 @@ public:
     }
     virtual void ErasePortion(const NOlap::TPortionInfo& /*portion*/) override {
     }
-    virtual bool LoadPortions(const std::optional<ui64> /*reqPathId*/,
+    virtual bool LoadPortions(const std::optional<NColumnShard::TInternalPathId> /*reqPathId*/,
         const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& /*callback*/) override {
         return true;
     }
@@ -58,7 +57,7 @@ public:
     }
     void EraseColumn(const TPortionInfo&, const TColumnRecord&) override {
     }
-    bool LoadColumns(const std::optional<ui64> /*reqPathId*/, const std::function<void(TColumnChunkLoadContextV2&&)>&) override {
+    bool LoadColumns(const std::optional<NColumnShard::TInternalPathId> /*reqPathId*/, const std::function<void(TColumnChunkLoadContextV2&&)>&) override {
         return true;
     }
 
@@ -66,8 +65,8 @@ public:
     }
     virtual void EraseIndex(const TPortionInfo& /*portion*/, const TIndexChunk& /*row*/) override {
     }
-    virtual bool LoadIndexes(const std::optional<ui64> /*reqPathId*/,
-        const std::function<void(const ui64 /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&&)>& /*callback*/) override {
+    virtual bool LoadIndexes(const std::optional<NColumnShard::TInternalPathId> /*reqPathId*/,
+        const std::function<void(const NColumnShard::TInternalPathId /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&&)>& /*callback*/) override {
         return true;
     }
 
@@ -83,7 +82,8 @@ public:
 Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
     Y_UNIT_TEST(TestInsertCommit) {
         TInsertWriteId writeId = (TInsertWriteId)0;
-        ui64 tableId = 0;
+        const auto& tableId0 = NColumnShard::TInternalPathId::FromInternalPathIdValue(0);
+        const auto& tableId1 = NColumnShard::TInternalPathId::FromInternalPathIdValue(1);
         TString dedupId = "0";
         TUnifiedBlobId blobId1(2222, 1, 1, 100, 2, 0, 1);
 
@@ -92,21 +92,21 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
         ui64 indexSnapshot = 0;
         
         // insert, not commited
-        auto userData1 = std::make_shared<TUserData>(tableId, TBlobRange(blobId1), TLocalHelper::GetMetaProto(), indexSnapshot, std::nullopt);
-        insertTable.RegisterPathInfo(tableId);
+        auto userData1 = std::make_shared<TUserData>(tableId0, TBlobRange(blobId1), TLocalHelper::GetMetaProto(), indexSnapshot, std::nullopt);
+        insertTable.RegisterPathInfo(tableId0);
         bool ok = insertTable.Insert(dbTable, TInsertedData(writeId, userData1));
         UNIT_ASSERT(ok);
 
         // read nothing
-        auto blobs = insertTable.Read(tableId, {}, TSnapshot::Zero(), TLocalHelper::GetMetaSchema(), nullptr);
+        auto blobs = insertTable.Read(tableId0, {}, TSnapshot::Zero(), TLocalHelper::GetMetaSchema(), nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
-        blobs = insertTable.Read(tableId + 1, {}, TSnapshot::Zero(), TLocalHelper::GetMetaSchema(), nullptr);
+        blobs = insertTable.Read(tableId1, {}, TSnapshot::Zero(), TLocalHelper::GetMetaSchema(), nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
 
         // commit
         ui64 planStep = 100;
         ui64 txId = 42;
-        insertTable.Commit(dbTable, planStep, txId, { writeId }, [](ui64) {
+        insertTable.Commit(dbTable, planStep, txId, { writeId }, [](NColumnShard::TInternalPathId) {
             return true;
         });
 //        UNIT_ASSERT_EQUAL(insertTable.GetPathPriorities().size(), 1);
@@ -114,15 +114,15 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
 //        UNIT_ASSERT_EQUAL((*insertTable.GetPathPriorities().begin()->second.begin())->GetCommitted().size(), 1);
 
         // read old snapshot
-        blobs = insertTable.Read(tableId, {}, TSnapshot::Zero(), TLocalHelper::GetMetaSchema(), nullptr);
+        blobs = insertTable.Read(tableId0, {}, TSnapshot::Zero(), TLocalHelper::GetMetaSchema(), nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
-        blobs = insertTable.Read(tableId + 1, {}, TSnapshot::Zero(), TLocalHelper::GetMetaSchema(), nullptr);
+        blobs = insertTable.Read(tableId1, {}, TSnapshot::Zero(), TLocalHelper::GetMetaSchema(), nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
 
         // read new snapshot
-        blobs = insertTable.Read(tableId, {}, TSnapshot(planStep, txId), TLocalHelper::GetMetaSchema(), nullptr);
+        blobs = insertTable.Read(tableId0, {}, TSnapshot(planStep, txId), TLocalHelper::GetMetaSchema(), nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 1);
-        blobs = insertTable.Read(tableId + 1, {}, TSnapshot::Zero(), TLocalHelper::GetMetaSchema(), nullptr);
+        blobs = insertTable.Read(tableId1, {}, TSnapshot::Zero(), TLocalHelper::GetMetaSchema(), nullptr);
         UNIT_ASSERT_EQUAL(blobs.size(), 0);
     }
 }

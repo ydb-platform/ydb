@@ -48,12 +48,12 @@ private:
 
     class TTableKey {
     public:
-        ui64 PathId;
+        NColumnShard::TInternalPathId PathId;
         ui64 Step;
         ui64 TxId;
 
     public:
-        TTableKey(ui64 pathId, ui64 step, ui64 txId)
+        TTableKey(NColumnShard::TInternalPathId pathId, ui64 step, ui64 txId)
             : PathId(pathId)
             , Step(step)
             , TxId(txId) {
@@ -79,7 +79,7 @@ public:
         for (auto& key : TableVersionsToRemove) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "Removing table version in TSchemaVersionNormalizer")("pathId", key.PathId)(
                 "plan_step", key.Step)("tx_id", key.TxId);
-            db.Table<Schema::TableVersionInfo>().Key(key.PathId, key.Step, key.TxId).Delete();
+            db.Table<Schema::TableVersionInfo>().Key(key.PathId.GetInternalPathIdValue(), key.Step, key.TxId).Delete();
         }
         return true;
     }
@@ -164,7 +164,7 @@ public:
                 }
 
                 while (!rowset.EndOfSet()) {
-                    const ui64 pathId = rowset.GetValue<Schema::TableVersionInfo::PathId>();
+                    const auto pathId = NColumnShard::TInternalPathId::FromInternalPathIdValue(rowset.GetValue<Schema::TableVersionInfo::PathId>());
 
                     NKikimrTxColumnShard::TTableVersionInfo versionInfo;
                     Y_ABORT_UNLESS(versionInfo.ParseFromString(rowset.GetValue<Schema::TableVersionInfo::InfoProto>()));

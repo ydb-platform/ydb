@@ -14,12 +14,12 @@ namespace NKikimr::NOlap::NWritingPortions {
 
 class TAggregationId {
 private:
-    const ui64 PathId;
+    const NColumnShard::TInternalPathId PathId;
     const ui64 SchemaVersion;
     const NEvWrite::EModificationType ModificationType;
 
 public:
-    TAggregationId(const ui64 pathId, const ui64 schemaVersion, const NEvWrite::EModificationType mType)
+    TAggregationId(const NColumnShard::TInternalPathId pathId, const ui64 schemaVersion, const NEvWrite::EModificationType mType)
         : PathId(pathId)
         , SchemaVersion(schemaVersion)
         , ModificationType(mType) {
@@ -30,20 +30,20 @@ public:
     }
 
     operator size_t() const {
-        return CombineHashes<ui64>(CombineHashes<ui64>(PathId, SchemaVersion), (ui64)ModificationType);
+        return CombineHashes<ui64>(CombineHashes<ui64>(PathId.GetInternalPathIdValue(), SchemaVersion), (ui64)ModificationType);
     }
 };
 
 class TWriteAggregation {
 private:
-    const ui64 PathId;
+    const NColumnShard::TInternalPathId PathId;
     const NEvWrite::EModificationType ModificationType;
     std::vector<TWriteUnit> Units;
     NOlap::TWritingContext Context;
     ui64 SumSize = 0;
 
 public:
-    TWriteAggregation(const NOlap::TWritingContext& context, const ui64 pathId, const NEvWrite::EModificationType modificationType)
+    TWriteAggregation(const NOlap::TWritingContext& context, const NColumnShard::TInternalPathId pathId, const NEvWrite::EModificationType modificationType)
         : PathId(pathId)
         , ModificationType(modificationType)
         , Context(context) {

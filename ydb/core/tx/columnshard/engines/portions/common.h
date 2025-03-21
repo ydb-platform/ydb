@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/core/formats/arrow/save_load/saver.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 using TColumnSaver = NArrow::NAccessor::TColumnSaver;
@@ -37,7 +38,7 @@ public:
 
 class TFullChunkAddress {
 private:
-    YDB_READONLY(ui64, PathId, 0);
+    YDB_READONLY(NColumnShard::TInternalPathId, PathId, NColumnShard::TInternalPathId{});
     YDB_READONLY(ui64, PortionId, 0);
     YDB_READONLY(ui32, ColumnId, 0);
     YDB_READONLY(ui16, Chunk, 0);
@@ -51,7 +52,7 @@ public:
         return Chunk;
     }
 
-    TFullChunkAddress(const ui64 pathId, const ui64 portionId, const ui32 columnId, const ui16 chunk)
+    TFullChunkAddress(const NColumnShard::TInternalPathId pathId, const ui64 portionId, const ui32 columnId, const ui16 chunk)
         : PathId(pathId)
         , PortionId(portionId)
         , ColumnId(columnId)
@@ -81,6 +82,6 @@ struct ::THash<NKikimr::NOlap::TChunkAddress> {
 template <>
 struct ::THash<NKikimr::NOlap::TFullChunkAddress> {
     inline ui64 operator()(const NKikimr::NOlap::TFullChunkAddress& a) const {
-        return CombineHashes(CombineHashes(((ui64)a.GetEntityId()) << 16 + a.GetChunkIdx(), a.GetPathId()), a.GetPortionId());
+        return CombineHashes(CombineHashes(((ui64)a.GetEntityId()) << 16 + a.GetChunkIdx(), a.GetPathId().GetInternalPathIdValue()), a.GetPortionId());
     }
 };

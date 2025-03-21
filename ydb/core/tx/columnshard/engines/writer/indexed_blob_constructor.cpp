@@ -50,7 +50,7 @@ std::shared_ptr<NKikimr::NOlap::TUserData> TWideSerializedBatch::BuildInsertionU
     auto schemeVersion = GetAggregation().GetSchemaVersion();
     auto tableSchema = owner.GetTablesManager().GetPrimaryIndex()->GetVersionedIndex().GetSchemaVerified(schemeVersion);
 
-    return std::make_shared<NOlap::TUserData>(writeMeta.GetTableId(), blobRange, meta, tableSchema->GetVersion(), SplittedBlobs.GetData());
+    return std::make_shared<NOlap::TUserData>(writeMeta.GetPathId().InternalPathId, blobRange, meta, tableSchema->GetVersion(), SplittedBlobs.GetData());
 }
 
 void TWritingBuffer::InitReadyInstant(const TMonotonic /*instant*/) {

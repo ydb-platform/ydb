@@ -73,7 +73,7 @@ public:
         Buckets.ResetLogic(logic);
     }
 
-    TOptimizerPlanner(const ui64 pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
+    TOptimizerPlanner(const NColumnShard::TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
         const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::shared_ptr<IOptimizationLogic>& logic);
 };
 

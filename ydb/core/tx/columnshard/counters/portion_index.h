@@ -2,6 +2,7 @@
 
 #include "portions.h"
 #include <ydb/core/tx/columnshard/common/portion.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NColumnShard {
 
@@ -30,7 +31,7 @@ public:
 private:
     using TStatsByClass = THashMap<TPortionClass, NOlap::TSimplePortionsGroupInfo>;
     TStatsByClass TotalStats;
-    THashMap<ui64, TStatsByClass> StatsByPathId;
+    THashMap<TInternalPathId, TStatsByClass> StatsByPathId;
 
     static NOlap::TSimplePortionsGroupInfo SelectStats(const TStatsByClass& container, const IStatsSelector& selector) {
         NOlap::TSimplePortionsGroupInfo result;
@@ -50,7 +51,7 @@ public:
         return SelectStats(TotalStats, selector);
     }
 
-    NOlap::TSimplePortionsGroupInfo GetTableStats(const ui64 pathId, const IStatsSelector& selector) const {
+    NOlap::TSimplePortionsGroupInfo GetTableStats(const NColumnShard::TInternalPathId pathId, const IStatsSelector& selector) const {
         if (auto* findTable = StatsByPathId.FindPtr(pathId)) {
             return SelectStats(*findTable, selector);
         }

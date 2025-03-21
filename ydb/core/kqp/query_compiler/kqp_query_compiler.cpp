@@ -697,13 +697,22 @@ private:
         return type;
     }
 
-    void CompileStage(const TDqPhyStage& stage, NKqpProto::TKqpPhyStage& stageProto, TExprContext& ctx,
-        const TMap<ui64, ui32>& stagesMap, TRequestPredictor& rPredictor, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
-    {
+    void CompileStage(
+        const TDqPhyStage& stage,
+        NKqpProto::TKqpPhyStage& stageProto,
+        TExprContext& ctx,
+        const TMap<ui64, ui32>& stagesMap,
+        TRequestPredictor& rPredictor,
+        THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap,
+        THashMap<ui64, NKqpProto::TKqpPhyStage*>& physicalStageByID
+    ) {
         const bool hasEffects = NOpt::IsKqpEffectsStage(stage);
 
         TStagePredictor& stagePredictor = rPredictor.BuildForStage(stage, ctx);
         stagePredictor.Scan(stage.Program().Ptr());
+
+        auto stageSettings = NDq::TDqStageSettings::Parse(stage);
+        stageProto.SetIsShuffleEliminated(stageSettings.IsShuffleEliminated);
 
         for (ui32 inputIndex = 0; inputIndex < stage.Inputs().Size(); ++inputIndex) {
             const auto& input = stage.Inputs().Item(inputIndex);
@@ -717,7 +726,7 @@ private:
                 auto connection = input.Cast<TDqConnection>();
 
                 auto& protoInput = *stageProto.AddInputs();
-                FillConnection(connection, stagesMap, protoInput, ctx, tablesMap);
+                FillConnection(connection, stagesMap, protoInput, ctx, tablesMap, physicalStageByID);
                 protoInput.SetInputIndex(inputIndex);
             }
         }
@@ -883,7 +892,6 @@ private:
 
         stageProto.SetProgramAst(KqpExprToPrettyString(stage.Program(), ctx));
 
-        auto stageSettings = NDq::TDqStageSettings::Parse(stage);
         stageProto.SetStageGuid(stageSettings.Id);
         stageProto.SetIsSinglePartition(NDq::TDqStageSettings::EPartitionMode::Single == stageSettings.PartitionMode);
         stageProto.SetAllowWithSpilling(Config->EnableSpilling);
@@ -897,13 +905,14 @@ private:
         bool hasEffectStage = false;
 
         TMap<ui64, ui32> stagesMap;
+        THashMap<ui64, NKqpProto::TKqpPhyStage*> physicalStageByID;
         THashMap<TStringBuf, THashSet<TStringBuf>> tablesMap;
 
         TRequestPredictor rPredictor;
         for (const auto& stage : tx.Stages()) {
-            auto* protoStage = txProto.AddStages();
-            CompileStage(stage, *protoStage, ctx, stagesMap, rPredictor, tablesMap);
-            hasEffectStage |= protoStage->GetIsEffectsStage();
+            physicalStageByID[stage.Ref().UniqueId()] = txProto.AddStages();
+            CompileStage(stage, *physicalStageByID[stage.Ref().UniqueId()], ctx, stagesMap, rPredictor, tablesMap, physicalStageByID);
+            hasEffectStage |= physicalStageByID[stage.Ref().UniqueId()]->GetIsEffectsStage();
             stagesMap[stage.Ref().UniqueId()] = txProto.StagesSize() - 1;
         }
         for (auto&& i : *txProto.MutableStages()) {
@@ -946,7 +955,7 @@ private:
 
             auto& resultProto = *txProto.AddResults();
             auto& connectionProto = *resultProto.MutableConnection();
-            FillConnection(connection, stagesMap, connectionProto, ctx, tablesMap);
+            FillConnection(connection, stagesMap, connectionProto, ctx, tablesMap, physicalStageByID);
 
             const TTypeAnnotationNode* itemType = nullptr;
             switch (connectionProto.GetTypeCase()) {
@@ -1235,15 +1244,15 @@ private:
             if (const auto inconsistentWrite = settings.InconsistentWrite().Cast(); inconsistentWrite.StringValue() == "true") {
                 settingsProto.SetInconsistentTx(true);
             }
-          
+
             if (const auto streamWrite = settings.StreamWrite().Cast(); streamWrite.StringValue() == "true") {
                 settingsProto.SetEnableStreamWrite(true);
             }
-          
+
             if (const auto isBatch = settings.IsBatch().Cast(); isBatch.StringValue() == "true") {
                 settingsProto.SetIsBatch(true);
             }
-            
+
             settingsProto.SetIsOlap(settings.TableType().Cast().StringValue() == "olap");
             settingsProto.SetPriority(FromString<i64>(settings.Priority().Cast().StringValue()));
 
@@ -1298,10 +1307,14 @@ private:
         }
     }
 
-    void FillConnection(const TDqConnection& connection, const TMap<ui64, ui32>& stagesMap,
-        NKqpProto::TKqpPhyConnection& connectionProto, TExprContext& ctx,
-        THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
-    {
+    void FillConnection(
+        const TDqConnection& connection,
+        const TMap<ui64, ui32>& stagesMap,
+        NKqpProto::TKqpPhyConnection& connectionProto,
+        TExprContext& ctx,
+        THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap,
+        THashMap<ui64, NKqpProto::TKqpPhyStage*>& physicalStageByID
+    ) {
         auto inputStageIndex = stagesMap.FindPtr(connection.Output().Stage().Ref().UniqueId());
         YQL_ENSURE(inputStageIndex, "stage #" << connection.Output().Stage().Ref().UniqueId() << " not found in stages map: "
             << PrintKqpStageOnly(connection.Output().Stage(), ctx));
@@ -1339,7 +1352,7 @@ private:
                         case ETypeAnnotationKind::Optional: {
                             auto optionalType = ty->Cast<TOptionalExprType>()->GetItemType();
                             Y_ENSURE(
-                                optionalType->GetKind() == ETypeAnnotationKind::Data, 
+                                optionalType->GetKind() == ETypeAnnotationKind::Data,
                                 TStringBuilder{} << "Can't retrieve type from optional" << static_cast<std::int64_t>(optionalType->GetKind()) << "for ColumnHashV1 Shuffling"
                             );
                             slot = optionalType->Cast<TDataExprType>()->GetSlot();
@@ -1361,6 +1374,10 @@ private:
         }
 
         if (connection.Maybe<TDqCnMap>()) {
+            auto stageID = connection.Output().Stage().Ref().UniqueId();
+            auto physicalStage = physicalStageByID[stageID];
+            Y_ENSURE(physicalStage != nullptr, TStringBuf{} << "stage#" << stageID);
+            physicalStage->SetIsShuffleEliminated(true);
             connectionProto.MutableMap();
             return;
         }

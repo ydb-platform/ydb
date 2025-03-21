@@ -17,7 +17,6 @@
 
 namespace NKikimr::NColumnShard {
 
-
 template <class TVersionData>
 class TVersionedSchema {
 private:
@@ -313,7 +312,7 @@ public:
     const TTableInfo& GetTable(const TInternalPathId pathId) const;
     ui64 GetMemoryUsage() const;
 
-    bool HasTable(const TInternalPathId internalPathId, const bool withDeleted = false, const std::optional<NOlap::TSnapshot>& minReadSnapshot = {}) const;
+    bool HasTable(const TInternalPathId pathId, const bool withDeleted = false, const std::optional<NOlap::TSnapshot> minReadSnapshot = {}) const;
     bool IsReadyForStartWrite(const TInternalPathId pathId, const bool withDeleted) const;
     bool IsReadyForFinishWrite(const TInternalPathId pathId, const NOlap::TSnapshot& minReadSnapshot) const;
     bool HasPreset(const ui32 presetId) const;

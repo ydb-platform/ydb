@@ -186,7 +186,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
     return true;
 }
 
-bool TTablesManager::HasTable(const TInternalPathId pathId, const bool withDeleted, const std::optional<NOlap::TSnapshot>& minReadSnapshot) const {
+bool TTablesManager::HasTable(const TInternalPathId pathId, const bool withDeleted, const std::optional<NOlap::TSnapshot> minReadSnapshot) const {
     auto it = Tables.find(pathId);
     if (it == Tables.end()) {
         return false;
@@ -242,7 +242,7 @@ void TTablesManager::RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db) {
 
     Schema::SaveTableInfo(db, table.GetPathId());
     const auto pathId = table.GetPathId();
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("method", "RegisterTable")("local_path_id", table.GetPathId())("path_id", pathId);
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("method", "RegisterTable")("path_id", pathId.GetRawValue());
     AFL_VERIFY(Tables.emplace(pathId, std::move(table)).second)("path_id", pathId)("size", Tables.size());
     if (PrimaryIndex) {
         PrimaryIndex->RegisterTable(pathId);

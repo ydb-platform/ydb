@@ -2,7 +2,6 @@
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
-#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NColumnShard::NLoading {
 class TSpecialValuesInitializer;
@@ -13,8 +12,8 @@ namespace NKikimr::NColumnShard {
 class TSpaceWatcher : public TActorBootstrapped<TSpaceWatcher> {
     TColumnShard* Self;
     NActors::TActorId FindSubDomainPathIdActor;
-    std::optional<ui64> SubDomainPathId;
-    std::optional<ui64> WatchingSubDomainPathId;
+    std::optional<NKikimr::TLocalPathId> SubDomainPathId;
+    std::optional<NKikimr::TLocalPathId> WatchingSubDomainPathId;
     bool SubDomainOutOfSpace = false;
 
 public:

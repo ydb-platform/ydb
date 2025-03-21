@@ -67,6 +67,8 @@
 - Файл `create_view.sql`, содержащий определение представления в виде текста YQL-запроса [CREATE VIEW](../../../../yql/reference/syntax/create-view.md)
 - Файл `permissions.pb`, содержащий информацию об ACL представления и его владельце в формате [text protobuf](https://developers.google.com/protocol-buffers/docs/reference/cpp/google.protobuf.text_format)
 
+Информация о том, как при восстановлении автоматически корректируются ссылки на объекты в запросах представлений, содержится в разделе [{#}](../view-backup.md).
+
 ## Контрольные суммы {#checksums}
 
 {% note info %}

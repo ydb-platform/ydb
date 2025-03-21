@@ -119,7 +119,7 @@ public:
             const auto& clusterName = soReadObject.DataSource().Cluster().StringValue();
 
             const auto token = "cluster:default_" + clusterName;
-            YQL_CLOG(INFO, ProviderS3) << "Wrap " << read->Content() << " with token: " << token;
+            YQL_CLOG(INFO, ProviderSolomon) << "Wrap " << read->Content() << " with token: " << token;
 
             auto settings = soReadObject.Object().Settings();
             auto& settingsRef = settings.Ref();
@@ -139,7 +139,7 @@ public:
                         return {};
                     }
                     if (!TInstant::TryParseIso8601(value, from)) {
-                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), "couldn't parse `from`, use Iso8601 format: 2025-03-12T14:40:39Z"));
+                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), "couldn't parse `from`, use Iso8601 format, e.g. 2025-03-12T14:40:39Z"));
                         return {};
                     }
                     continue;
@@ -150,7 +150,7 @@ public:
                         return {};
                     }
                     if (!TInstant::TryParseIso8601(value, to)) {
-                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), "couldn't parse `to`, use Iso8601 format: 2025-03-12T14:40:39Z"));
+                        ctx.AddError(TIssue(ctx.GetPosition(settingsRef.Child(i)->Head().Pos()), "couldn't parse `to`, use Iso8601 format, e.g. 2025-03-12T14:40:39Z"));
                         return {};
                     }
                     continue;

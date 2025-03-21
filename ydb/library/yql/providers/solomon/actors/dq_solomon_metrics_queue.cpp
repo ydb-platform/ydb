@@ -147,7 +147,7 @@ private:
     void HandleUpdateConsumersCount(TEvSolomonProvider::TEvUpdateConsumersCount::TPtr& ev) {
         if (const auto [it, inserted] = UpdatedConsumers.emplace(ev->Sender); inserted) {
             LOG_D("TDqSolomonMetricsQueueActor",
-                "HandleUpdateConsumersCount Reducing ConsumersCount by " << ev->Get()->Record.GetConsumersCountDelta() << ", recieved from " << ev->Sender);
+                "HandleUpdateConsumersCount Reducing ConsumersCount by " << ev->Get()->Record.GetConsumersCountDelta() << ", received from " << ev->Sender);
             ConsumersCount -= ev->Get()->Record.GetConsumersCountDelta();
         }
         Send(ev->Sender, new TEvSolomonProvider::TEvAck(ev->Get()->Record.GetTransportMeta()));

@@ -104,6 +104,7 @@ public:
         , CredentialsProvider(credentialsProvider)
         , SolomonClient(NSo::ISolomonAccessorClient::Make(ReadParams.Source, CredentialsProvider))
     {
+        assert(MaxPointsPerOneMetric != 0);
         Y_UNUSED(counters);
         SOURCE_LOG_D("Init");
         IngressStats.Level = statsLevel;
@@ -223,7 +224,7 @@ public:
         ParsePointsCount(metrics, pointsCount);
 
         SOURCE_LOG_D("HandlePointsCountBatch batch of size " << metrics.size());
-        while (TryRequestData()) {}
+        TryRequestData();
     }
 
     void HandleNewDataBatch(TEvSolomonProvider::TEvNewDataBatch::TPtr& newDataBatch) {
@@ -234,9 +235,10 @@ public:
             SOURCE_LOG_W("Got " << "error data response[" << newDataBatch->Cookie << "] from solomon: " << issues.ToOneLineString());
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, issues, NYql::NDqProto::StatusIds::EXTERNAL_ERROR));
             return;
-        } else if (batch.Response.Status == NSo::EStatus::STATUS_RETRIABLE_ERROR) {
+        }
+        if (batch.Response.Status == NSo::EStatus::STATUS_RETRIABLE_ERROR) {
             MetricsWithTimeRange.emplace_back(batch.Metric, batch.From, batch.To);
-            while (TryRequestData()) {}
+            TryRequestData();
             return;
         }
 
@@ -244,7 +246,7 @@ public:
         CompletedMetricsCount++;
 
         if (!MetricsWithTimeRange.empty()) {
-            while (TryRequestData()) {}
+            TryRequestData();
         } else if (MetricsData.size() >= ComputeActorBatchSize || LastMetricProcessed()) {
             NotifyComputeActorWithData();
         }
@@ -376,9 +378,8 @@ private:
     bool LastMetricProcessed() const {
         if (UseMetricsQueue) {
             return IsMetricsQueueEmpty && CompletedMetricsCount == ListedMetricsCount;
-        } else {
-            return CompletedMetricsCount == 1;
         }
+        return CompletedMetricsCount == 1;
     }
 
     void TryRequestMetrics() {
@@ -423,14 +424,12 @@ private:
         });
     }
 
-    bool TryRequestData() {
+    void TryRequestData() {
         TryRequestPointsCount();
-        if (MetricsWithTimeRange.empty()) {
-            return false;
+        while (!MetricsWithTimeRange.empty()) {
+            RequestData();
+            TryRequestPointsCount();
         }
-
-        RequestData();
-        return true;
     }
 
     void RequestData() {
@@ -486,9 +485,12 @@ private:
 
     std::vector<std::pair<TInstant, TInstant>> SplitTimeIntervalIntoRanges(TInstant from, TInstant to, ui64 pointsCount) const {
         std::vector<std::pair<TInstant, TInstant>> result;
-        result.reserve(pointsCount / MaxPointsPerOneMetric);
+        if (pointsCount == 0) {
+            return result;
+        }
 
-        auto rangeDuration = (to - from);
+        result.reserve(pointsCount / MaxPointsPerOneMetric);
+        auto rangeDuration = to - from;
         for (ui64 i = 0; i < pointsCount; i += MaxPointsPerOneMetric) {
             double start = i;
             double end = std::min(i + MaxPointsPerOneMetric, pointsCount);

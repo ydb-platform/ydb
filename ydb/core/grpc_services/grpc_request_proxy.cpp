@@ -126,15 +126,18 @@ private:
     // otherwice returns false and leave event untouched
     template <typename TEvent>
     bool DeferAndStartUpdate(const TString& database, TAutoPtr<TEventHandle<TEvent>>& ev, IRequestProxyCtx* reqCtx) {
+        Cerr << "grpc_request_proxy: 129" << Endl;
         std::deque<TEventReqHolder>& queue = DeferredEvents[database];
         if (queue.size() >= MAX_DEFERRED_EVENTS_PER_DATABASE) {
+            Cerr << "grpc_request_proxy: 132" << Endl;
             return false;
         }
 
         if (queue.empty()) {
+            Cerr << "grpc_request_proxy: 135" << Endl;
             DoStartUpdate(database);
         }
-
+        Cerr << "grpc_request_proxy: 140" << Endl;
         queue.push_back(TEventReqHolder(ev.Release(), reqCtx));
         return true;
     }
@@ -160,7 +163,7 @@ private:
             Handle(event, ctx);
             return;
         }
-
+        Cerr << "Event: " << event->Get()->GetRequestName() << " grpc_request_proxy: 163" << Endl; 
         auto state = requestBaseCtx->GetAuthState();
 
         if (state.State == NYdbGrpc::TAuthState::AS_FAIL) {
@@ -185,9 +188,10 @@ private:
         // do not check connect rights for the deprecated requests without database
         // remove this along with AllowYdbRequestsWithoutDatabase flag
         bool skipCheckConnectRigths = false;
-
+        Cerr << "Event: " << event->Get()->GetRequestName() << " grpc_request_proxy: 188" << Endl; 
         if (state.State == NYdbGrpc::TAuthState::AS_NOT_PERFORMED) {
             const auto& maybeDatabaseName = requestBaseCtx->GetDatabaseName();
+            Cerr << "Event: " << event->Get()->GetRequestName() << " grpc_request_proxy: 191" << Endl; 
             if (maybeDatabaseName && !maybeDatabaseName.GetRef().empty()) {
                 databaseName = CanonizePath(maybeDatabaseName.GetRef());
             } else {
@@ -201,6 +205,7 @@ private:
                     skipCheckConnectRigths = true;
                 }
             }
+            Cerr << "Event: " << event->Get()->GetRequestName() << " grpc_request_proxy: 205" << Endl; 
             if (databaseName.empty()) {
                 Counters->IncDatabaseUnavailableCounter();
                 requestBaseCtx->ReplyUnauthenticated("Empty database name");
@@ -208,11 +213,14 @@ private:
                 return;
             }
             auto it = Databases.find(databaseName);
+            Cerr << "Event: " << event->Get()->GetRequestName() << " grpc_request_proxy: 213" << Endl; 
             if (it != Databases.end() && it->second.IsDatabaseReady()) {
                 database = &it->second;
             } else {
+                Cerr << "Event: " << event->Get()->GetRequestName() << " grpc_request_proxy: 217" << Endl; 
                 // No given database found, start update if possible
                 if (!DeferAndStartUpdate(databaseName, event, requestBaseCtx)) {
+                    Cerr << "grpc_request_proxy: 220" << Endl; 
                     Counters->IncDatabaseUnavailableCounter();
                     const TString error = "Grpc proxy is not ready to accept request, database unknown";
                     LOG_ERROR(ctx, NKikimrServices::GRPC_SERVER, "Limit for deferred events per database %s reached", databaseName.c_str());
@@ -221,11 +229,11 @@ private:
                     requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::UNAVAILABLE);
                     requestBaseCtx->FinishSpan();
                     return;
-                }
+                } 
                 return;
             }
         }
-
+        Cerr << "Event: " << event->Get()->GetRequestName() << "grpc_request_proxy: 228" << Endl; 
         if (database) {
             if (database->SchemeBoardResult) {
                 const auto& domain = database->SchemeBoardResult->DescribeSchemeResult.GetPathDescription().GetDomainDescription();
@@ -265,7 +273,7 @@ private:
                 requestBaseCtx->FinishSpan();
                 return;
             }
-
+            Cerr << "Event: " << event->Get()->GetRequestName() << " grpc_request_proxy: 268" << Endl; 
             Register(CreateGrpcRequestCheckActor<TEvent>(SelfId(),
                 database->SchemeBoardResult->DescribeSchemeResult,
                 database->SecurityObject,
@@ -281,6 +289,7 @@ private:
         requestBaseCtx->RaiseIssue(issue);
         requestBaseCtx->ReplyWithYdbStatus(Ydb::StatusIds::BAD_REQUEST);
         requestBaseCtx->FinishSpan();
+        Cerr << "Event: " << event->Get()->GetRequestName() << " grpc_request_proxy: 284" << Endl; 
         return;
     }
 
@@ -364,6 +373,7 @@ void TGRpcRequestProxyImpl::Bootstrap(const TActorContext& ctx) {
 }
 
 void TGRpcRequestProxyImpl::ReplayEvents(const TString& databaseName, const TActorContext&) {
+    Cerr << "grpc_request_proxy: 376" << Endl;
     auto itDeferredEvents = DeferredEvents.find(databaseName);
     if (itDeferredEvents != DeferredEvents.end()) {
         std::deque<TEventReqHolder>& queue = itDeferredEvents->second;
@@ -515,12 +525,15 @@ void TGRpcRequestProxyImpl::HandleSchemeBoard(TSchemeBoardEvents::TEvNotifyDelet
 
 void TGRpcRequestProxyImpl::ForgetDatabase(const TString& database) {
     auto itSubscriber = Subscribers.find(database);
+    Cerr << "grpc_request_proxy: 528" << Endl;
     if (itSubscriber != Subscribers.end()) {
         Send(itSubscriber->second, new TEvents::TEvPoisonPill());
         Subscribers.erase(itSubscriber);
     }
+    Cerr << "grpc_request_proxy: 533" << Endl;
     auto itDeferredEvents = DeferredEvents.find(database);
     if (itDeferredEvents != DeferredEvents.end()) {
+        Cerr << "grpc_request_proxy: 536" << Endl;
         auto& queue(itDeferredEvents->second);
         while (!queue.empty()) {
             Counters->IncDatabaseUnavailableCounter();
@@ -538,7 +551,9 @@ void TGRpcRequestProxyImpl::SubscribeToDatabase(const TString& database) {
 
     TActorId subscriberId = Register(CreateSchemeBoardSubscriber(SelfId(), database));
     auto itSubscriber = Subscribers.emplace(database, subscriberId);
+    Cerr << "grpc_request_proxy: 548" << Endl;
     if (!itSubscriber.second) {
+        Cerr << "grpc_request_proxy: 550" << Endl;
         Send(itSubscriber.first->second, new TEvents::TEvPoisonPill());
         itSubscriber.first->second = subscriberId;
     }
@@ -546,6 +561,7 @@ void TGRpcRequestProxyImpl::SubscribeToDatabase(const TString& database) {
 
 void TGRpcRequestProxyImpl::DoStartUpdate(const TString& database) {
     // we will receive update (or delete) upon sucessfull subscription
+    Cerr << "grpc_request_proxy: 556" << Endl;
     SubscribeToDatabase(database);
 }
 

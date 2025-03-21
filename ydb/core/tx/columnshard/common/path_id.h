@@ -1,15 +1,11 @@
 #pragma once
-#include <ydb/library/actors/core/log.h>
 #include <util/system/types.h>
 #include <util/generic/hash.h>
 #include <util/stream/output.h>
-#include <optional>
-
 
 namespace NKikimr::NColumnShard {
-
-
 class TInternalPathId {
+private:
     ui64 PathId;
     explicit TInternalPathId(ui64 pathId)
         : PathId(pathId) {
@@ -19,7 +15,6 @@ public:
     TInternalPathId()
         : PathId(0) {
     }
-
     TInternalPathId(const TInternalPathId&) = default;
     TInternalPathId(TInternalPathId&&) = default;
     TInternalPathId& operator=(const TInternalPathId&) = default;
@@ -41,29 +36,10 @@ public:
 };
 static_assert(sizeof(TInternalPathId)==sizeof(ui64));
 
-
 } //namespace NKikimr::NColumnShard
-
-namespace std {
-
-template<>
-struct hash<NKikimr::NColumnShard::TInternalPathId> {
-    size_t operator()(const NKikimr::NColumnShard::TInternalPathId& p) const {
-        return p.GetInternalPathIdValue();
-    }
-};
-
-} //namespace std
-
 template <>
 struct THash<NKikimr::NColumnShard::TInternalPathId> {
     size_t operator()(const NKikimr::NColumnShard::TInternalPathId& p) const {
-        return p.GetInternalPathIdValue();
+        return THash<ui64>()(p.GetInternalPathIdValue());
     }
 };
-
-void Out(IOutputStream& s, NKikimr::NColumnShard::TInternalPathId v);
-
-
-template<>
-void Out<NKikimr::NColumnShard::TInternalPathId>(IOutputStream& s, TTypeTraits<NKikimr::NColumnShard::TInternalPathId>::TFuncParam v);

@@ -51,11 +51,12 @@ MATCH_RECOGNIZE (
 ```
 
 Here is a brief description of the SQL syntax elements of the `MATCH_RECOGNIZE` command:
+
 * [`DEFINE`](#define): Conditions the rows must meet for each variable: `<variable_1> AS <predicate_1> [ ... , <variable_N> AS <predicate_N> ]`.
 * [`PATTERN`](#pattern): Pattern to search for across the data. It consists of variables and search rules of the pattern described in `<search_pattern>`. `PATTERN` works similarly to [regular expressions](https://en.wikipedia.org/wiki/Regular_expressions).
 * [`MEASURES`](#measures): Specifies the list of output columns. Each column of the `<expression_1> AS <column_name_1> [ ... , <expression_N> AS <column_name_N> ]` list is an independent construct that sets output columns and describes expressions for their computation.
 * [`ONE ROW PER MATCH`](#rows_per_match): Determines the amount of output data for each hit match.
-* [`AFTER MATCH SKIP TO NEXT ROW`](#after_match_skip_to_next_row): Defines the method of moving to the point of the next match search.
+* [`AFTER MATCH SKIP`](#after_match_skip): Defines the method of moving to the point of the next match search.
 * [`ORDER BY`](#order_by): Determines sorting of input data. Pattern search is performed within the data sorted according to the list of columns or expressions listed in `<sort_key_1> [ ... , <sort_key_N> ]`.
 * [`PARTITION BY`](#partition_by) divides the input data flow as per the specified rules in accordance with `<partition_1> [ ... , <partition_N> ]`. Pattern search is performed independently in each part.
 
@@ -334,6 +335,7 @@ PARTITION BY device_id, zone_id
 ## Limitations {#limitations}
 
 Our support for the `MATCH_RECOGNIZE` command will eventually comply with [SQL-2016](https://ru.wikipedia.org/wiki/SQL:2016); currently, however, the following limitations apply:
+
 - [`MEASURES`](#measures). Functions `PREV`/`NEXT` are not supported.
 - - [`AFTER MATCH SKIP`](#after_match_skip). Only the `AFTER MATCH SKIP TO NEXT ROW` and `AFTER MATCH SKIP PAST LAST ROW` modes are supported.
 - [`PATTERN`](#pattern). Union pattern variables are not implemented.

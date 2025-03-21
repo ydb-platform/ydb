@@ -78,10 +78,10 @@ default_tablet_preference:
 || `balancer_inflight` | BalancerInflight | Целое число | Число таблеток, одновременно перезапускающихся в процессе автобалансировки. Не относится к emergency-балансировке. | 1 ||
 || `max_movements_on_auto_balancer` | MaxMovementsOnAutoBalancer | Целое число | Число перемещений таблеток за одну итерацию автобалансировки. Не относится к emergency-балансировке. | 1 ||
 || `continue_auto_balancer` | ContinueAutoBalancer | true/false | При включении следующая итерация балансировки запускается, не дожидаясь окончания `resource_change_reaction_period`. | true ||
-|| `min_period_between_emergency_balance` | MinPeriodBetweenEmergencyBalance | Вещественное число секунд | Аналогично MinPeriodBetweenBalance, но для emergency-балансировки. | 0.1 ||
+|| `min_period_between_emergency_balance` | MinPeriodBetweenEmergencyBalance | Вещественное число секунд | Аналогично `min_period_between_balance`, но для emergency-балансировки. | 0.1 ||
 || `emergency_balancer_inflight` | EmergencyBalancerInfligh | Целое число | Аналогично `balancer_inflight`, но для emergency-балансировки. | 1 ||
-|| `max_movements_on_emergency_balancer` | MaxMovementsOnEmergencyBalancer | Целое число | Аналогично MaxMovementsOnAutoBalancer, но для emergency-балансировки. | 2 ||
-|| `continue_emergency_balancer` | ContinueEmergencyBalancer | true/false | Аналогично ContinueAutoBalancer, но для emergency-балансировки. | true ||
+|| `max_movements_on_emergency_balancer` | MaxMovementsOnEmergencyBalancer | Целое число | Аналогично `max_movements_on_auto_balancer`, но для emergency-балансировки. | 2 ||
+|| `continue_emergency_balancer` | ContinueEmergencyBalancer | true/false | Аналогично `continue_auto_balancer`, но для emergency-балансировки. | true ||
 || `check_move_expediency` | CheckMoveExpediency | true/false | Проверка целесообразности перемещений таблеток. | true ||
 || `object_imbalance_to_balance` | ObjectImbalanceToBalance | Вещественное число | Порог метрики [дисбаланса таблеток одного объекта](../../contributor/hive.md#imbalance). | 0.02 ||
 || `less_system_tablets_moves` | LessSystemTabletMoves | true/false | Минимизация перемещения системных таблеток при автобалансировке. | true ||

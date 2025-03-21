@@ -380,6 +380,73 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
         });
     }
 
+    Y_UNIT_TEST(ReadRangeFromRevision) {
+        MakeSimpleTest([](const std::unique_ptr<etcdserverpb::KV::Stub> &etcd) {
+            Put("kek0", "value7", etcd);
+            Put("kek1", "value6", etcd);
+            Put("kek2", "value5", etcd);
+            UNIT_ASSERT_VALUES_EQUAL(Delete("kek0", etcd), 1LL);
+            UNIT_ASSERT_VALUES_EQUAL(Delete("kek1", etcd), 1LL);
+            Put("kek0", "value4", etcd);
+            Put("kek3", "value3", etcd);
+            const auto first = Put("abc", "first", etcd);
+            Put("kek1", "value9", etcd);
+            UNIT_ASSERT_VALUES_EQUAL(Delete("kek0", etcd), 1LL);
+            UNIT_ASSERT_VALUES_EQUAL(Delete("kek2", etcd), 1LL);
+            Put("kek6", "value2", etcd);
+            Put("kek7", "value1", etcd);
+            const auto second = Put("xyz", "second", etcd);
+            Put("kek8", "value0", etcd);
+            Put("kek7", "unused", etcd);
+
+            {
+                grpc::ClientContext readRangeCtx;
+                etcdserverpb::RangeRequest rangeRequest;
+                rangeRequest.set_key("kek");
+                rangeRequest.set_range_end("kek9");
+                rangeRequest.set_revision(first);
+                rangeRequest.set_sort_target(etcdserverpb::RangeRequest_SortTarget_VALUE);
+                rangeRequest.set_sort_order(etcdserverpb::RangeRequest_SortOrder_DESCEND);
+                etcdserverpb::RangeResponse rangeResponse;
+                UNIT_ASSERT(etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse).ok());
+
+                UNIT_ASSERT(!rangeResponse.more());
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.count(), 3LL);
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs().size(), 3U);
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).key(), "kek2");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(1).key(), "kek0");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(2).key(), "kek3");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).value(), "value5");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(1).value(), "value4");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(2).value(), "value3");
+            }
+
+            {
+                grpc::ClientContext readRangeCtx;
+                etcdserverpb::RangeRequest rangeRequest;
+                rangeRequest.set_key("kek");
+                rangeRequest.set_range_end("kek9");
+                rangeRequest.set_revision(second);
+                rangeRequest.set_sort_target(etcdserverpb::RangeRequest_SortTarget_CREATE);
+                rangeRequest.set_sort_order(etcdserverpb::RangeRequest_SortOrder_DESCEND);
+                etcdserverpb::RangeResponse rangeResponse;
+                UNIT_ASSERT(etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse).ok());
+
+                UNIT_ASSERT(!rangeResponse.more());
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.count(), 4LL);
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs().size(), 4U);
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).key(), "kek7");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(1).key(), "kek6");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(2).key(), "kek1");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(3).key(), "kek3");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).value(), "value1");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(1).value(), "value2");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(2).value(), "value9");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(3).value(), "value3");
+            }
+        });
+    }
+
     Y_UNIT_TEST(UpdateWithGetPrevious) {
         MakeSimpleTest([](const std::unique_ptr<etcdserverpb::KV::Stub> &etcd) {
             {
@@ -567,7 +634,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
          });
     }
 
-    Y_UNIT_TEST(TxnWithoutCompres) {
+    Y_UNIT_TEST(TxnWithoutCompares) {
         MakeSimpleTest([](const std::unique_ptr<etcdserverpb::KV::Stub> &etcd) {
             Put("kk0", "vv0", etcd);
             Put("kk1", "vv1", etcd);

@@ -3,7 +3,7 @@ UNITTEST_FOR(ydb/apps/etcd_proxy/service)
 SIZE(MEDIUM)
 
 SRCS(
-    grpc_service_ut.cpp
+    etcd_service_ut.cpp
 )
 
 PEERDIR(

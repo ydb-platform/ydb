@@ -109,6 +109,12 @@ private:
     YDB_READONLY_DEF(TActorId, Owner);
     YDB_READONLY_DEF(std::shared_ptr<TDuplicateFilterConstructor::TSourceFilterConstructor>, Constructor);
     YDB_READONLY_DEF(std::shared_ptr<ISnapshotSchema>, ResultSchema);
+    bool IsDone = false;
+
+    void OnDone() {
+        AFL_VERIFY(!IsDone);
+        IsDone = true;
+    }
 
 public:
     TColumnFetchingContext(const std::shared_ptr<TDuplicateFilterConstructor::TSourceFilterConstructor>& constructor, const TActorId& owner)
@@ -122,9 +128,10 @@ public:
             std::make_shared<TFilteredSnapshotSchema>(Constructor->GetSource()->GetContext()->GetReadMetadata()->GetResultSchema(), columnIds);
     }
 
-    void OnError(const TString& message) const {
+    void OnError(const TString& message) {
         TActorContext::AsActorContext().Send(
             Owner, new TEvDuplicateFilterDataFetched(Constructor->GetSource()->GetSourceId(), TConclusionStatus::Fail(message)));
+        OnDone();
     }
 
     void SetResourceGuard(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard) {
@@ -135,6 +142,7 @@ public:
         Constructor->SetColumnData(std::move(result));
         TActorContext::AsActorContext().Send(
             Owner, new TEvDuplicateFilterDataFetched(Constructor->GetSource()->GetSourceId(), TConclusionStatus::Success()));
+        OnDone();
     }
 };
 

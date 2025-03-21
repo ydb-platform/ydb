@@ -74,7 +74,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.grpc_ssl_port = port_allocator.grpc_ssl_port
         self.pgwire_port = port_allocator.pgwire_port
         self.sqs_port = None
-        if not (configurator.use_distconf or configurator.simple_config) and configurator.sqs_service_enabled:
+        if not configurator.simple_config and configurator.sqs_service_enabled:
             self.sqs_port = port_allocator.sqs_port
 
         self.__role = role
@@ -420,14 +420,13 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
 
         pools = {}
 
-        if not self.__configurator.use_distconf:
-            for p in self.__configurator.dynamic_storage_pools:
-                self.add_storage_pool(
-                    name=p['name'],
-                    kind=p['kind'],
-                    pdisk_user_kind=p['pdisk_user_kind'],
-                )
-                pools[p['name']] = p['kind']
+        for p in self.__configurator.dynamic_storage_pools:
+            self.add_storage_pool(
+                name=p['name'],
+                kind=p['kind'],
+                pdisk_user_kind=p['pdisk_user_kind'],
+            )
+            pools[p['name']] = p['kind']
 
         if len(pools) > 0:
             self.client.bind_storage_pools(self.domain_name, pools)

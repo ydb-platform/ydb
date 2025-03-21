@@ -332,6 +332,13 @@ void TGetFlowViewCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("view_path", &TThis::ViewPath)
         .Default();
+
+     registrar.ParameterWithUniversalAccessor<bool>(
+        "cache",
+        [] (TThis* command) -> auto& {
+            return command->Options.Cache;
+        })
+        .Optional(/*init*/ false);
 }
 
 void TGetFlowViewCommand::DoExecute(ICommandContextPtr context)

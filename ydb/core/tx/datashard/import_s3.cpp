@@ -421,13 +421,21 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         }
     }
 
+    TChecksumState GetChecksumState() const {
+        TChecksumState checksumState;
+        if (Checksum) {
+            checksumState = Checksum->GetState();
+        }
+        return checksumState;
+    }
+
     void Handle(TEvDataShard::TEvS3DownloadInfo::TPtr& ev) {
         IMPORT_LOG_D("Handle " << ev->Get()->ToString());
 
         const auto& info = ev->Get()->Info;
         if (!info.DataETag) {
             Send(DataShard, new TEvDataShard::TEvStoreS3DownloadInfo(TxId, {
-                ETag, ProcessedBytes, WrittenBytes, WrittenRows
+                ETag, ProcessedBytes, WrittenBytes, WrittenRows, GetChecksumState()
             }));
             return;
         }
@@ -447,11 +455,15 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         ProcessedBytes = info.ProcessedBytes;
         WrittenBytes = info.WrittenBytes;
         WrittenRows = info.WrittenRows;
+        if (Checksum) {
+            Checksum->Continue(info.ChecksumState);
+        }
 
         if (!ContentLength || ProcessedBytes >= ContentLength) {
-            if (CheckChecksum()) {
-                return Finish();
+            if (!CheckChecksum()) {
+                return;
             }
+            return Finish();
         }
 
         Process();
@@ -491,7 +503,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         }
 
         const auto contentLength = result.GetResult().GetContentLength();
-        const auto checksumKey = ChecksumKey(Settings.GetDataKey(DataFormat, CompressionCodec));
+        const auto checksumKey = ChecksumKey(Settings.GetDataKey(DataFormat, ECompressionCodec::None));
         GetObject(checksumKey, std::make_pair(0, contentLength - 1));
     }
 
@@ -603,7 +615,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             << ", size# " << record->ByteSizeLong());
 
         Send(DataShard, new TEvDataShard::TEvS3UploadRowsRequest(TxId, record, {
-            ETag, ProcessedBytes, WrittenBytes, WrittenRows
+            ETag, ProcessedBytes, WrittenBytes, WrittenRows, GetChecksumState()
         }));
     }
 
@@ -703,13 +715,14 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             return true;
         }
 
-        TString gotChecksum = Checksum->Serialize();
+        TString gotChecksum = Checksum->Finalize();
         if (gotChecksum == ExpectedChecksum) {
             return true;
         }
 
-        const TString error = TStringBuilder() << "Checksum mismatch:"
-            << ": expected# " << ExpectedChecksum
+        const TString error = TStringBuilder() << "Checksum mismatch for "
+            << Settings.GetDataKey(DataFormat, ECompressionCodec::None)
+            << " expected# " << ExpectedChecksum
             << ", got# " << gotChecksum;
 
         IMPORT_LOG_E(error);

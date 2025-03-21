@@ -26,7 +26,7 @@ namespace NBoot {
             Y_ABORT_UNLESS(!RefCount(), "TLoadBlobs is still referenced somewhere");
         }
 
-        void Start() noexcept override { }
+        void Start() override { }
 
         void Feed(TLogoBlobID blobId, TString body)
         {

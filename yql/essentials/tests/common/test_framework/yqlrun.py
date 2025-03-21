@@ -116,7 +116,12 @@ class YQLRun(object):
             ]
             if ansi_lexer:
                 cmd.append('--ansi-lexer')
-            env = {'YQL_DETERMINISTIC_MODE': '1'}
+            env = {
+                'YQL_DETERMINISTIC_MODE': '1',
+                # XXX: Using UTC timezone is vital for deterministric
+                # behaviour of ClickHouse datetime machinery.
+                'TZ': 'UTC0'
+            }
             env.update(extra_env)
             for var in [
                 'LLVM_PROFILE_FILE',
@@ -262,7 +267,12 @@ class YQLRun(object):
         if verbose:
             yql_utils.log('prov is ' + self.prov)
 
-        env = {'YQL_DETERMINISTIC_MODE': '1'}
+        env = {
+            'YQL_DETERMINISTIC_MODE': '1',
+            # XXX: Using UTC timezone is vital for deterministric
+            # behaviour of ClickHouse datetime machinery.
+            'TZ': 'UTC0'
+        }
         env.update(extra_env)
         for var in [
             'LLVM_PROFILE_FILE',

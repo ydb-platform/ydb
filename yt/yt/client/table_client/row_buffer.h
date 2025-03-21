@@ -4,9 +4,8 @@
 #include "unversioned_row.h"
 #include "versioned_row.h"
 
-#include <yt/yt/core/misc/memory_usage_tracker.h>
-
 #include <library/cpp/yt/memory/chunked_memory_pool.h>
+#include <library/cpp/yt/memory/memory_usage_tracker.h>
 
 namespace NYT::NTableClient {
 

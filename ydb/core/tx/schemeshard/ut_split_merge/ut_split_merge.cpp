@@ -160,6 +160,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitBySizeTest) {
 
         TTestEnvOptions opts;
         opts.EnableBackgroundCompaction(false);
+        opts.EnableParameterizedDecimal(true);
 
         TTestEnv env(runtime, opts);
 

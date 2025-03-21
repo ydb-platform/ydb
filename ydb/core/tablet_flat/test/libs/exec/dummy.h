@@ -15,7 +15,7 @@ namespace NFake {
         virtual NFake::TEvExecute* OnFinished() = 0;
     };
 
-    class TDummy : public ::NActors::IActorCallback, public TExecuted {
+    class TDummy : public TActor<TDummy>, public TExecuted {
         enum EState {
             Boot    = 1,
             Work    = 2,
@@ -35,7 +35,7 @@ namespace NFake {
 
         TDummy(const TActorId &tablet, TInfo *info, const TActorId& owner,
                 ui32 flags = 0 /* ORed EFlg enum */)
-            : ::NActors::IActorCallback(static_cast<TReceiveFunc>(&TDummy::Inbox), NKikimrServices::TActivity::FAKE_ENV_A)
+            : TActor(&TDummy::Inbox, NKikimrServices::TActivity::FAKE_ENV_A)
             , TTabletExecutedFlat(info, tablet, nullptr)
             , Owner(owner)
             , Flags(flags)
@@ -48,8 +48,11 @@ namespace NFake {
             if (auto *ev = eh->CastAsLocal<NFake::TEvExecute>()) {
                 Y_ABORT_UNLESS(State == EState::Work, "Cannot handle TX now");
 
-                for (auto& f : ev->Funcs) {
-                    Execute(f.Release(), this->ActorContext());
+                for (auto& tx : ev->Txs) {
+                    Execute(tx.Release(), this->ActorContext());
+                }
+                for (auto& lambda : ev->Lambdas) {
+                    std::move(lambda)(Executor(), this->ActorContext());
                 }
             } else if (auto *ev = eh->CastAsLocal<NFake::TEvCompact>()) {
                 Y_ABORT_UNLESS(State == EState::Work, "Cannot handle compaction now");
@@ -72,7 +75,7 @@ namespace NFake {
                      */
 
                     auto ctx(this->ActorContext());
-                    Executor()->DetachTablet(ctx), Detach(ctx);
+                    Executor()->DetachTablet(), Detach(ctx);
                 }
             } else if (State == EState::Boot) {
                 TTabletExecutedFlat::StateInitImpl(eh, SelfId());
@@ -124,10 +127,10 @@ namespace NFake {
                 Send(Owner, new NFake::TEvCompacted(table));
         }
 
-        void DataCleanupComplete(const TActorContext&) override
+        void DataCleanupComplete(ui64 dataCleanupGeneration, const TActorContext&) override
         {
             if (Flags & ui32(EFlg::Clean))
-                Send(Owner, new NFake::TEvDataCleaned());
+                Send(Owner, new NFake::TEvDataCleaned(dataCleanupGeneration));
         }
 
         void SnapshotComplete(

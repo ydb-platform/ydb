@@ -188,6 +188,7 @@ namespace NSchemeShardUT_Private {
 
     // table
     GENERIC_WITH_ATTRS_HELPERS(CreateTable);
+    GENERIC_HELPERS(SimpleCreateTable);
     GENERIC_HELPERS(CreateIndexedTable);
     GENERIC_HELPERS(ConsistentCopyTables);
     GENERIC_HELPERS(AlterTable);

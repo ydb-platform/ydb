@@ -37,10 +37,10 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
         )"), TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
         result.GetIssues().PrintTo(Cerr);
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
+        UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::KIKIMR_LOCKS_INVALIDATED,
             [] (const auto& issue) {
                 return issue.GetMessage().contains("/Root/Test");
-            }));
+            }), result.GetIssues().ToString());
 
         result = session2.ExecuteDataQuery(Q_(R"(
             SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
@@ -241,8 +241,9 @@ Y_UNIT_TEST_SUITE(KqpLocks) {
             }), commitResult.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(MixedTxFail) {
+    Y_UNIT_TEST_TWIN(MixedTxFail, useSink) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
         appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
         appConfig.MutableTableServiceConfig()->SetEnableHtapTx(true);
         auto settings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);

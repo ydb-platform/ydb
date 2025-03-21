@@ -1293,7 +1293,7 @@ namespace NActors {
                                         case EEventAction::PROCESS:
                                             UpdateFinalEventsStatsForEachContext(*ev);
                                             SendInternal(ev.Release(), mbox.first.NodeId - FirstNodeId, false);
-                                            if (checkStopConditions(/* perMessage */ true)) {
+                                            if (AllowBreakOnStopCondition && checkStopConditions(/* perMessage */ true)) {
                                                 stopCondition = true;
                                             }
                                             break;
@@ -1722,6 +1722,9 @@ namespace NActors {
         if (!actor) {
             actor = mailbox->FindAlias(localId);
         }
+        if (!actor && node->LocalServicesActors.contains(actorId)) {
+            actor = node->LocalServicesActors[actorId];
+        }
         return actor;
     }
 
@@ -1731,7 +1734,7 @@ namespace NActors {
 
         IHarmonizer* harmonizer = nullptr;
         if (node) {
-            node->Harmonizer.reset(MakeHarmonizer(GetCycleCountFast()));
+            node->Harmonizer = MakeHarmonizer(GetCycleCountFast());
             harmonizer = node->Harmonizer.get();
         }
 

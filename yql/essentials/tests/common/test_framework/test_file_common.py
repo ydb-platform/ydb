@@ -14,10 +14,10 @@ from yqlrun import YQLRun
 from test_utils import get_parameters_json, replace_vars
 
 
-def get_gateways_config(http_files, yql_http_file_server, force_blocks=False, is_hybrid=False, allow_llvm=True):
+def get_gateways_config(http_files, yql_http_file_server, force_blocks=False, is_hybrid=False, allow_llvm=True, postprocess_func=None):
     config = None
 
-    if http_files or force_blocks or is_hybrid or not allow_llvm:
+    if http_files or force_blocks or is_hybrid or not allow_llvm or postprocess_func is not None:
         config_message = gateways_config_pb2.TGatewaysConfig()
         if http_files:
             schema = config_message.Fs.CustomSchemes.add()
@@ -37,6 +37,8 @@ def get_gateways_config(http_files, yql_http_file_server, force_blocks=False, is
         if not allow_llvm:
             flags = config_message.YqlCore.Flags.add()
             flags.Name = 'LLVM_OFF'
+        if postprocess_func is not None:
+            postprocess_func(config_message)
         config = text_format.MessageToString(config_message)
 
     return config
@@ -86,7 +88,7 @@ def get_sql_query(provider, suite, case, config, data_path=None, template='.sql'
 
 def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
                       yqlrun_binary=None, extra_args=[], force_blocks=False, allow_llvm=True, data_path=None,
-                      run_sql=True):
+                      run_sql=True, cfg_postprocess=None):
     check_provider(provider, config)
 
     sql_query = get_sql_query(provider, suite, case, config, data_path, template='.sql' if run_sql else '.yqls')
@@ -114,7 +116,8 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
         prov=provider,
         keep_temp=not re.search(r"yt\.ReleaseTempData", sql_query),
         binary=yqlrun_binary,
-        gateway_config=get_gateways_config(http_files, yql_http_file_server, force_blocks=force_blocks, is_hybrid=is_hybrid(provider), allow_llvm=allow_llvm),
+        gateway_config=get_gateways_config(http_files, yql_http_file_server, force_blocks=force_blocks, is_hybrid=is_hybrid(provider), allow_llvm=allow_llvm,
+                                           postprocess_func=cfg_postprocess),
         extra_args=extra_args,
         udfs_dir=yql_binary_path('yql/essentials/tests/common/test_framework/udfs_deps')
     )
@@ -153,12 +156,12 @@ def run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
 
 
 def run_file(provider, suite, case, cfg, config, yql_http_file_server, yqlrun_binary=None,
-             extra_args=[], force_blocks=False, allow_llvm=True, data_path=None, run_sql=True):
+             extra_args=[], force_blocks=False, allow_llvm=True, data_path=None, run_sql=True, cfg_postprocess=None):
     if (suite, case, cfg) not in run_file.cache:
         run_file.cache[(suite, case, cfg)] = \
             run_file_no_cache(provider, suite, case, cfg, config, yql_http_file_server,
                               yqlrun_binary, extra_args, force_blocks=force_blocks, allow_llvm=allow_llvm,
-                              data_path=data_path, run_sql=run_sql)
+                              data_path=data_path, run_sql=run_sql, cfg_postprocess=cfg_postprocess)
 
     return run_file.cache[(suite, case, cfg)]
 

@@ -186,6 +186,12 @@ namespace NKikimr::NStorage {
         TIntrusivePtr<TVDiskConfig> vdiskConfig = Cfg->AllVDiskKinds->MakeVDiskConfig(baseInfo);
         vdiskConfig->EnableVDiskCooldownTimeout = Cfg->EnableVDiskCooldownTimeout;
         vdiskConfig->ReplPausedAtStart = Cfg->VDiskReplPausedAtStart;
+        if (Cfg->ReplMaxQuantumBytes) {
+            vdiskConfig->ReplMaxQuantumBytes = *Cfg->ReplMaxQuantumBytes;
+        }
+        if (Cfg->ReplMaxDonorNotReadyCount) {
+            vdiskConfig->ReplMaxDonorNotReadyCount = *Cfg->ReplMaxDonorNotReadyCount;
+        }
         vdiskConfig->EnableVPatch = EnableVPatch;
         vdiskConfig->DefaultHugeGarbagePerMille = DefaultHugeGarbagePerMille;
         vdiskConfig->HugeDefragFreeSpaceBorderPerMille = HugeDefragFreeSpaceBorderPerMille;
@@ -200,7 +206,6 @@ namespace NKikimr::NStorage {
             vdiskConfig->MaxSyncLogChunksInFlight = MaxSyncLogChunksInFlightSSD;
         }
 
-        vdiskConfig->ThrottlingDeviceSpeed = ThrottlingDeviceSpeed;
         vdiskConfig->ThrottlingDryRun = ThrottlingDryRun;
         vdiskConfig->ThrottlingMinLevel0SstCount = ThrottlingMinLevel0SstCount;
         vdiskConfig->ThrottlingMaxLevel0SstCount = ThrottlingMaxLevel0SstCount;
@@ -212,6 +217,8 @@ namespace NKikimr::NStorage {
         vdiskConfig->ThrottlingMaxOccupancyPerMille = ThrottlingMaxOccupancyPerMille;
         vdiskConfig->ThrottlingMinLogChunkCount = ThrottlingMinLogChunkCount;
         vdiskConfig->ThrottlingMaxLogChunkCount = ThrottlingMaxLogChunkCount;
+
+        vdiskConfig->MaxInProgressSyncCount = MaxInProgressSyncCount;
 
         vdiskConfig->CostMetricsParametersByMedia = CostMetricsParametersByMedia;
 
@@ -333,6 +340,7 @@ namespace NKikimr::NStorage {
         if (!inserted) {
             // -- check that configuration did not change
         }
+
         record.Config.CopyFrom(vdisk);
 
         if (vdisk.GetDoDestroy() || vdisk.GetEntityStatus() == NKikimrBlobStorage::EEntityStatus::DESTROY) {

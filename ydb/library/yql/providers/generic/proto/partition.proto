@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+option cc_enable_arenas = true;
+
+package NYql.NGeneric;
+
+import "ydb/library/yql/providers/generic/connector/api/service/protos/connector.proto";
+
+message TPartition {
+    repeated NYql.NConnector.NApi.TSplit splits = 1;
+}

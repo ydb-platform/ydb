@@ -609,7 +609,7 @@ TFuture<TRichYPath> THttpRawBatchRequest::CanonizeYPath(const TRichYPath& path)
         result.Path_ = AddPathPrefix(result.Path_, Context_.Config->Prefix);
     }
 
-    if (result.Path_.find_first_of("<>{}[]") != TString::npos) {
+    if (result.Path_.find_first_of("<>{}[]:") != TString::npos) {
         return AddRequest<TCanonizeYPathResponseParser>(
             "parse_ypath",
             SerializeParamsForParseYPath(result),
@@ -695,8 +695,7 @@ void THttpRawBatchRequest::ParseResponse(
                 if (errorIt == responseNode.end()) {
                     BatchItemList_[i].ResponseParser->SetResponse(Nothing());
                 } else {
-                    TErrorResponse error(400, requestId);
-                    error.SetError(TYtError(errorIt->second));
+                    TErrorResponse error(TYtError(errorIt->second), requestId);
                     if (auto curInterval = IsRetriable(error) ? retryPolicy->OnRetriableError(error) : Nothing()) {
                         YT_LOG_INFO(
                             "Batch subrequest (%s) failed, will retry, error: %s",

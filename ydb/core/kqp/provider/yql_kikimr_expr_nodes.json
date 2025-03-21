@@ -99,7 +99,8 @@
                 {"Index": 2, "Name": "Table", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Filter", "Type": "TCoLambda"},
                 {"Index": 4, "Name": "Update", "Type": "TCoLambda"},
-                {"Index": 5, "Name": "ReturningColumns", "Type": "TCoAtomList"}
+                {"Index": 5, "Name": "ReturningColumns", "Type": "TCoAtomList"},
+                {"Index": 6, "Name": "IsBatch", "Type": "TCoAtom"}
             ]
         },
         {
@@ -111,7 +112,8 @@
                 {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
                 {"Index": 2, "Name": "Table", "Type": "TCoAtom"},
                 {"Index": 3, "Name": "Filter", "Type": "TCoLambda"},
-                {"Index": 4, "Name": "ReturningColumns", "Type": "TCoAtomList"}
+                {"Index": 4, "Name": "ReturningColumns", "Type": "TCoAtomList"},
+                {"Index": 5, "Name": "IsBatch", "Type": "TCoAtom"}
             ]
         },
         {

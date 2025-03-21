@@ -223,6 +223,10 @@ class YtError(Exception):
         """Already exists."""
         return self.contains_code(501)
 
+    def is_authentication_error(self):
+        """Authentication error."""
+        return self.contains_code(900)
+
     def is_access_denied(self):
         """Access denied."""
         return self.contains_code(901)
@@ -358,6 +362,10 @@ class YtError(Exception):
     def is_already_present_in_group(self):
         """Member is already present in group."""
         return self.contains_code(908)
+
+    def is_prerequisite_check_failed(self):
+        """Prerequisite check failed."""
+        return self.contains_code(1000)
 
     def is_prohibited_cross_cell_copy(self):
         """Cross-cell "copy"/"move" command is explicitly disabled."""

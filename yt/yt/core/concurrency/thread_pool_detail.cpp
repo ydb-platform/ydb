@@ -13,7 +13,7 @@ static constexpr auto& Logger = ConcurrencyLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TThreadPoolBase::TThreadPoolBase(TString threadNamePrefix)
+TThreadPoolBase::TThreadPoolBase(std::string threadNamePrefix)
     : ThreadNamePrefix_(std::move(threadNamePrefix))
     , ShutdownCookie_(RegisterShutdownCallback(
         Format("ThreadPool(%v)", ThreadNamePrefix_),
@@ -42,7 +42,7 @@ void TThreadPoolBase::EnsureStarted()
     }
 }
 
-TString TThreadPoolBase::MakeThreadName(int index)
+std::string TThreadPoolBase::MakeThreadName(int index)
 {
     return Format("%v:%v", ThreadNamePrefix_, index);
 }

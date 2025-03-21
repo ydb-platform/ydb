@@ -388,6 +388,16 @@ namespace NKikimr {
             }
         }
 
+        void TChain::ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks) {
+            for (auto& map : {FreeSpace, LockedChunks}) {
+                for (const auto& [chunkIdx, freeSpace] : map) {
+                    if (chunksOfInterest.contains(chunkIdx)) {
+                        chunks.insert(chunkIdx);
+                    }
+                }
+            }
+        }
+
         ////////////////////////////////////////////////////////////////////////////
         // TAllChains
         ////////////////////////////////////////////////////////////////////////////
@@ -662,6 +672,12 @@ namespace NKikimr {
             }
         }
 
+        void TAllChains::ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks) {
+            for (TChain& chain : Chains) {
+                chain.ListChunks(chunksOfInterest, chunks);
+            }
+        }
+
         ////////////////////////////////////////////////////////////////////////////
         // THeap
         ////////////////////////////////////////////////////////////////////////////
@@ -752,11 +768,7 @@ namespace NKikimr {
             return Chains.GetStat();
         }
 
-        std::vector<ui32> THeap::ShredNotify(const std::vector<ui32>& chunksToShred) {
-            std::vector<ui32> chunksToDrop;
-            std::set_intersection(chunksToShred.begin(), chunksToShred.end(), FreeChunks.begin(), FreeChunks.end(),
-                std::back_inserter(chunksToDrop));
-
+        void THeap::ShredNotify(const std::vector<ui32>& chunksToShred) {
             Chains.ShredNotify(chunksToShred);
 
             ForbiddenChunks.insert(chunksToShred.begin(), chunksToShred.end());
@@ -769,8 +781,15 @@ namespace NKikimr {
                     ++it;
                 }
             }
+        }
 
-            return chunksToDrop;
+        void THeap::ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks) {
+            for (const TChunkIdx chunkIdx : FreeChunks) {
+                if (chunksOfInterest.contains(chunkIdx)) {
+                    chunks.insert(chunkIdx);
+                }
+            }
+            Chains.ListChunks(chunksOfInterest, chunks);
         }
 
         //////////////////////////////////////////////////////////////////////////////////////////

@@ -26,7 +26,7 @@ namespace NUtil {
 
         }
 
-        TLogLn Log(ELnLev level_) const noexcept override
+        TLogLn Log(ELnLev level_) const override
         {
             const NActors::NLog::TLevel level{ ui32(level_) };
 
@@ -37,7 +37,7 @@ namespace NUtil {
         }
 
     private:
-        bool ShouldLog(EPrio prio_, ui8 minor) const noexcept
+        bool ShouldLog(EPrio prio_, ui8 minor) const
         {
             /* Minor filtering isn't implemented in levle settings */
 
@@ -48,7 +48,7 @@ namespace NUtil {
             return conf && conf->Satisfies(prio, Comp, 0ull);
         }
 
-        void LogLn(ELnLev level, const TString &line) const noexcept override
+        void LogLn(ELnLev level, const TString &line) const override
         {
             /* Usage of time provider will be possible on complete migration
                 to this logger. Legacy macros based logging takes just Now().

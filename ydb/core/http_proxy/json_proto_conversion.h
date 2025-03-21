@@ -7,7 +7,7 @@
 #include <library/cpp/protobuf/json/proto2json_printer.h>
 #include <library/cpp/string_utils/base64/base64.h>
 #include <ydb/library/naming_conventions/naming_conventions.h>
-#include <ydb-cpp-sdk/client/datastreams/datastreams.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/datastreams/datastreams.h>
 #include <ydb/library/http_proxy/error/error.h>
 #include <contrib/libs/protobuf/src/google/protobuf/message.h>
 #include <contrib/libs/protobuf/src/google/protobuf/reflection.h>

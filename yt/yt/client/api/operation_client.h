@@ -114,11 +114,11 @@ struct TGetJobFailContextOptions
 struct TListOperationsAccessFilter
     : public NYTree::TYsonStruct
 {
-    TString Subject;
+    std::string Subject;
     NYTree::EPermissionSet Permissions;
 
     // This parameter cannot be set from YSON, it must be computed.
-    THashSet<TString> SubjectTransitiveClosure;
+    THashSet<std::string> SubjectTransitiveClosure;
 
     REGISTER_YSON_STRUCT(TListOperationsAccessFilter);
 
@@ -209,6 +209,7 @@ struct TListJobsOptions
     std::optional<bool> WithSpec;
     std::optional<bool> WithCompetitors;
     std::optional<bool> WithMonitoringDescriptor;
+    std::optional<bool> WithInterruptionInfo;
     std::optional<TString> TaskName;
     std::optional<std::string> OperationIncarnation;
 
@@ -303,7 +304,7 @@ struct TOperation
     std::optional<TInstant> StartTime;
     std::optional<TInstant> FinishTime;
 
-    std::optional<TString> AuthenticatedUser;
+    std::optional<std::string> AuthenticatedUser;
 
     NYson::TYsonString BriefSpec;
     NYson::TYsonString Spec;
@@ -319,7 +320,7 @@ struct TOperation
     NYson::TYsonString RuntimeParameters;
 
     std::optional<bool> Suspended;
-    std::optional<TString> SuspendReason;
+    std::optional<std::string> SuspendReason;
 
     NYson::TYsonString Events;
     NYson::TYsonString Result;

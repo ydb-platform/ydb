@@ -4,7 +4,7 @@
 namespace NKikimr {
 namespace NTable {
 
-    IPages::TResult MemTableRefLookup(const TMemTable *memTable, ui64 ref, ui32) noexcept
+    IPages::TResult MemTableRefLookup(const TMemTable *memTable, ui64 ref, ui32)
     {
         const auto &data = memTable->GetBlobs()->Get(ref).Data;
 

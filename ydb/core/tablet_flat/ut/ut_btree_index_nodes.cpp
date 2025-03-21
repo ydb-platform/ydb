@@ -62,7 +62,7 @@ namespace {
         return {index + 10000, index + 100, index + 1000};
     }
 
-    void Dump(TChild meta, const TPartScheme::TGroupInfo& groupInfo, const TStore& store, ui32 level = 0) noexcept
+    void Dump(TChild meta, const TPartScheme::TGroupInfo& groupInfo, const TStore& store, ui32 level = 0)
     {
         TString intend;
         for (size_t i = 0; i < level; i++) {
@@ -99,7 +99,7 @@ namespace {
         dumpChild(node, 0);
 
         for (TRecIdx i : xrange(node.GetKeysCount())) {
-            Cerr << intend << " | > ";
+            Cerr << intend << " | > {";
 
             auto cells = node.GetKeyCellsIter(i, groupInfo.ColsKeyIdx);
             for (TPos pos : xrange(cells.Count())) {
@@ -111,7 +111,7 @@ namespace {
                 Cerr << (pos ? ", " : "") << str;
             }
 
-            Cerr << Endl;
+            Cerr << "}" << Endl;
             dumpChild(node, i + 1);
         }
 

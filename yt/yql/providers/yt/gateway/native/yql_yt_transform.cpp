@@ -74,14 +74,19 @@ TGatewayTransformer::TGatewayTransformer(const TExecContextBase& execCtx, TYtSet
 TCallableVisitFunc TGatewayTransformer::operator()(TInternName internName) {
     auto name = internName.Str();
     const bool small = name.SkipPrefix("Small");
-    if (name == TYtTableContent::CallableName()) {
+    if (name == TYtTableContent::CallableName() || name == TYtBlockTableContent::CallableName()) {
+        bool useBlocks = (name == TYtBlockTableContent::CallableName());
 
         *TableContentFlag_ = true;
         *RemoteExecutionFlag_ = *RemoteExecutionFlag_ || !small;
 
         if (EPhase::Content == Phase_ || EPhase::All == Phase_) {
-            return [&](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
-                YQL_ENSURE(callable.GetInputsCount() == 4, "Expected 4 args");
+            return [&, name, useBlocks](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
+                if (useBlocks) {
+                    YQL_ENSURE(callable.GetInputsCount() == 5, "Expected 5 args");
+                } else {
+                    YQL_ENSURE(callable.GetInputsCount() == 4, "Expected 4 args");
+                }
 
                 const TString cluster(AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().AsStringRef());
                 const TString& server = ExecCtx_.Clusters_->GetServer(cluster);
@@ -90,7 +95,7 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName internName) {
                 auto tx = entry->Tx;
 
                 auto deliveryMode = ForceLocalTableContent_ ? ETableContentDeliveryMode::File : Settings_->TableContentDeliveryMode.Get(cluster).GetOrElse(ETableContentDeliveryMode::Native);
-                bool useSkiff = Settings_->TableContentUseSkiff.Get(cluster).GetOrElse(DEFAULT_USE_SKIFF);
+                bool useSkiff = !useBlocks && Settings_->TableContentUseSkiff.Get(cluster).GetOrElse(DEFAULT_USE_SKIFF);
                 const bool ensureOldTypesOnly = !useSkiff;
                 const ui64 maxChunksForNativeDelivery = Settings_->TableContentMaxChunksForNativeDelivery.Get().GetOrElse(1000ul);
                 TString contentTmpFolder = ForceLocalTableContent_ ? TString() : Settings_->TableContentTmpFolder.Get(cluster).GetOrElse(TString());
@@ -116,6 +121,7 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName internName) {
 
                 THashMap<TString, ui32> structColumns;
                 if (useSkiff) {
+                    YQL_ENSURE(!useBlocks);
                     auto itemType = AS_TYPE(TListType, callable.GetType()->GetReturnType())->GetItemType();
                     TStructType* itemTypeStruct = AS_TYPE(TStructType, itemType);
                     if (itemTypeStruct->GetMembersCount() == 0) {
@@ -151,7 +157,10 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName internName) {
                         refName = res.first->second;
                     }
                     tablesNode.Add(refName);
-                    if (useSkiff) {
+                    if (useBlocks) {
+                        NYT::TNode formatNode("arrow");
+                        formats.push_back(formatNode);
+                    } else if (useSkiff) {
                         formats.push_back(SingleTableSpecToInputSkiff(specNode, structColumns, false, false, false));
                     } else {
                         if (ensureOldTypesOnly && specNode.HasKey(YqlRowSpecAttribute)) {
@@ -304,15 +313,24 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName internName) {
                 }
 
                 TCallableBuilder call(env,
-                    TStringBuilder() << TYtTableContent::CallableName() << TStringBuf("Job"),
+                    TStringBuilder() << name << TStringBuf("Job"),
                     callable.GetType()->GetReturnType());
+                if (useBlocks) {
+                    call.Add(PgmBuilder_.NewDataLiteral<NUdf::EDataSlot::String>(uniqueId));
+                    call.Add(callable.GetInput(4));  // orig struct type
+                    call.Add(PgmBuilder_.NewDataLiteral(tableList->GetItemsCount()));
+                    call.Add(PgmBuilder_.NewDataLiteral<NUdf::EDataSlot::String>(NYT::NodeToYsonString(specNode)));
+                    call.Add(PgmBuilder_.NewDataLiteral(ETableContentDeliveryMode::File == deliveryMode)); // use compression
+                    call.Add(callable.GetInput(3)); // length
+                } else {
+                    call.Add(PgmBuilder_.NewDataLiteral<NUdf::EDataSlot::String>(uniqueId));
+                    call.Add(PgmBuilder_.NewDataLiteral(tableList->GetItemsCount()));
+                    call.Add(PgmBuilder_.NewDataLiteral<NUdf::EDataSlot::String>(NYT::NodeToYsonString(specNode)));
+                    call.Add(PgmBuilder_.NewDataLiteral(useSkiff));
+                    call.Add(PgmBuilder_.NewDataLiteral(ETableContentDeliveryMode::File == deliveryMode)); // use compression
+                    call.Add(callable.GetInput(3)); // length
+                }
 
-                call.Add(PgmBuilder_.NewDataLiteral<NUdf::EDataSlot::String>(uniqueId));
-                call.Add(PgmBuilder_.NewDataLiteral(tableList->GetItemsCount()));
-                call.Add(PgmBuilder_.NewDataLiteral<NUdf::EDataSlot::String>(NYT::NodeToYsonString(specNode)));
-                call.Add(PgmBuilder_.NewDataLiteral(useSkiff));
-                call.Add(PgmBuilder_.NewDataLiteral(ETableContentDeliveryMode::File == deliveryMode)); // use compression
-                call.Add(callable.GetInput(3)); // length
                 return TRuntimeNode(call.Build(), false);
             };
         }

@@ -67,7 +67,7 @@ namespace NTabletFlatExecutor {
 
         }
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "CommitManager{" << Tablet << ":" << Gen << " | "
@@ -94,7 +94,7 @@ namespace NTabletFlatExecutor {
             return NTable::TTxStamp{ Gen, Head };
         }
 
-        TAutoPtr<TLogCommit> Begin(bool sync, ECommit type, NWilson::TTraceId traceId) noexcept
+        TAutoPtr<TLogCommit> Begin(bool sync, ECommit type, NWilson::TTraceId traceId)
         {
             const auto step = Head;
 
@@ -111,7 +111,7 @@ namespace NTabletFlatExecutor {
             return new TLogCommit(sync, step, type, std::move(traceId));
         }
 
-        void Commit(TAutoPtr<TLogCommit> commit) noexcept
+        void Commit(TAutoPtr<TLogCommit> commit)
         {
             if (commit->Step != Tail || (commit->Sync && !Sync)) {
                 Y_Fail(
@@ -130,7 +130,7 @@ namespace NTabletFlatExecutor {
             SendCommitEv(*commit);
         }
 
-        void Confirm(const ui32 step) noexcept
+        void Confirm(const ui32 step)
         {
             if (Back == Max<ui32>() || step != Back || step >= Tail) {
                 Y_Fail(NFmt::Do(*this) << " got unexpected confirm " << step);
@@ -140,7 +140,7 @@ namespace NTabletFlatExecutor {
         }
 
     private:
-        void Switch(ui32 step) noexcept
+        void Switch(ui32 step)
         {
             *Step0 = step;
 
@@ -148,7 +148,7 @@ namespace NTabletFlatExecutor {
             Annex->Switch(step, true /* require step switch */);
         }
 
-        void StatsAccount(const TLogCommit &commit) noexcept
+        void StatsAccount(const TLogCommit &commit)
         {
             ui64 bytes = 0;
 
@@ -160,9 +160,9 @@ namespace NTabletFlatExecutor {
             MonCo->Cumulative()[TMonCo::LOG_EMBEDDED].Increment(commit.Embedded.size());
         }
 
-        void TrackCommitTxs(TLogCommit &commit) noexcept;
+        void TrackCommitTxs(TLogCommit &commit);
 
-        void SendCommitEv(TLogCommit &commit) noexcept
+        void SendCommitEv(TLogCommit &commit)
         {
             const bool snap = (commit.Type == ECommit::Snap);
 

@@ -13,6 +13,7 @@ namespace NSysView {
 constexpr TStringBuf PartitionStatsName = "partition_stats";
 constexpr TStringBuf NodesName = "nodes";
 constexpr TStringBuf QuerySessions = "query_sessions";
+constexpr TStringBuf ResourcePoolsName = "resource_pools";
 
 constexpr TStringBuf TopQueriesByDuration1MinuteName = "top_queries_by_duration_one_minute";
 constexpr TStringBuf TopQueriesByDuration1HourName = "top_queries_by_duration_one_hour";
@@ -48,6 +49,10 @@ constexpr TStringBuf TopPartitions1HourName = "top_partitions_one_hour";
 constexpr TStringBuf PgTablesName = "pg_tables";
 constexpr TStringBuf InformationSchemaTablesName = "tables";
 constexpr TStringBuf PgClassName = "pg_class";
+
+constexpr TStringBuf ResourcePoolClassifiersName = "resource_pool_classifiers";
+
+constexpr TStringBuf ShowCreateName = "show_create";
 
 namespace NAuth {
     constexpr TStringBuf UsersName = "auth_users";
@@ -304,6 +309,7 @@ struct Schema : NIceDb::Schema {
         struct PutTabletLogLatency : Column<13, NScheme::NTypeIds::Interval> {};
         struct PutUserDataLatency : Column<14, NScheme::NTypeIds::Interval> {};
         struct GetFastLatency : Column<15, NScheme::NTypeIds::Interval> {};
+        struct LayoutCorrect : Column<16, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<GroupId>;
         using TColumns = TableColumns<
@@ -319,7 +325,8 @@ struct Schema : NIceDb::Schema {
             SeenOperational,
             PutTabletLogLatency,
             PutUserDataLatency,
-            GetFastLatency>;
+            GetFastLatency,
+            LayoutCorrect>;
     };
 
     struct StoragePools : Table<7> {
@@ -701,6 +708,55 @@ struct Schema : NIceDb::Schema {
     private:
         std::unordered_map<TString, TVector<PgColumn>> columnsStorage;
     };
+
+    struct ResourcePoolClassifiers : Table<20> {
+        struct Name: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Rank: Column<2, NScheme::NTypeIds::Int64> {};
+        struct MemberName: Column<4, NScheme::NTypeIds::Utf8> {};
+        struct ResourcePool: Column<5, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<Name>;
+        using TColumns = TableColumns<
+            Name,
+            Rank,
+            MemberName,
+            ResourcePool>;
+    };
+
+    struct ShowCreate: Table<21> {
+        struct Path: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct Statement: Column<2, NScheme::NTypeIds::Utf8> {};
+        struct PathType: Column<3, NScheme::NTypeIds::Utf8> {};
+
+        using TKey = TableKey<Path, PathType>;
+        using TColumns = TableColumns<
+            Path,
+            Statement,
+            PathType
+        >;
+    };
+
+    struct ResourcePools : Table<22> {
+        struct Name: Column<1, NScheme::NTypeIds::Utf8> {};
+        struct ConcurrentQueryLimit: Column<2, NScheme::NTypeIds::Int32> {};
+        struct QueueSize: Column<3, NScheme::NTypeIds::Int32> {};
+        struct DatabaseLoadCpuThreshold: Column<4, NScheme::NTypeIds::Double> {};
+        struct ResourceWeight: Column<5, NScheme::NTypeIds::Double> {};
+        struct TotalCpuLimitPercentPerNode: Column<6, NScheme::NTypeIds::Double> {};
+        struct QueryCpuLimitPercentPerNode: Column<7, NScheme::NTypeIds::Double> {};
+        struct QueryMemoryLimitPercentPerNode: Column<8, NScheme::NTypeIds::Double> {};
+
+        using TKey = TableKey<Name>;
+        using TColumns = TableColumns<
+            Name,
+            ConcurrentQueryLimit,
+            QueueSize,
+            DatabaseLoadCpuThreshold,
+            ResourceWeight,
+            TotalCpuLimitPercentPerNode,
+            QueryCpuLimitPercentPerNode,
+            QueryMemoryLimitPercentPerNode>;
+    };
 };
 
 bool MaybeSystemViewPath(const TVector<TString>& path);
@@ -720,7 +776,7 @@ public:
     struct TSystemViewPath {
         TVector<TString> Parent;
         TString ViewName;
-        };
+    };
 
     struct TSchema {
         THashMap<NTable::TTag, TSysTables::TTableColumnInfo> Columns;
@@ -731,10 +787,14 @@ public:
 
     virtual TMaybe<TSchema> GetSystemViewSchema(const TStringBuf viewName, ETarget target) const = 0;
 
+    virtual bool IsSystemView(const TStringBuf viewName) const = 0;
+
     virtual TVector<TString> GetSystemViewNames(ETarget target) const = 0;
 };
 
 ISystemViewResolver* CreateSystemViewResolver();
+
+ISystemViewResolver* CreateSystemViewRewrittenResolver();
 
 } // NSysView
 } // NKikimr

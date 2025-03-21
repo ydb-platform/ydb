@@ -27,7 +27,7 @@ private:
     NMiniKQL::TKqpScanComputeContext::TScanData* ScanData = nullptr;
 
     struct TLockHash {
-        bool operator()(const NKikimrDataEvents::TLock& lock) {
+        size_t operator()(const NKikimrDataEvents::TLock& lock) {
             return MultiHash(
                 lock.GetLockId(),
                 lock.GetDataShard(),
@@ -87,6 +87,7 @@ public:
             TBase::OnMemoryLimitExceptionHandler();
         } catch (const yexception& e) {
             InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, NYql::TIssuesIds::DEFAULT_ERROR, e.what());
+            FreeComputeCtxData();
         }
 
         TBase::ReportEventElapsedTime();
@@ -127,7 +128,12 @@ public:
 
     void PollSources(ui64 prevFreeSpace);
 
-    void PassAway() override {
+    void DoTerminateImpl() override {
+        FreeComputeCtxData();
+        TBase::DoTerminateImpl();
+    }
+
+    void FreeComputeCtxData() {
         if (TaskRunner) {
             if (TaskRunner->IsAllocatorAttached()) {
                 ComputeCtx.Clear();
@@ -135,9 +141,8 @@ public:
                 auto guard = TaskRunner->BindAllocator(TBase::GetMkqlMemoryLimit());
                 ComputeCtx.Clear();
             }
+            ScanData = nullptr;
         }
-
-        TBase::PassAway();
     }
 
     void TerminateSources(const NYql::TIssues& issues, bool success) override {

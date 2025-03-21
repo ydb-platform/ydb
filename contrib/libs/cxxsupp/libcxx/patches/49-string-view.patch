@@ -1,5 +1,5 @@
 diff --git a/include/string_view b/include/string_view
-index e8584a6..4df4f02 100644
+index b2a4db4..058ca72 100644
 --- a/include/string_view
 +++ b/include/string_view
 @@ -306,6 +306,8 @@ public:
@@ -20,7 +20,7 @@ index e8584a6..4df4f02 100644
    basic_string_view(nullptr_t) = delete;
  #endif
  
-@@ -666,7 +668,7 @@ public:
+@@ -664,7 +666,7 @@ public:
    }
  #endif
  

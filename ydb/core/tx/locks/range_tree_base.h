@@ -101,7 +101,7 @@ namespace NDataShard {
             }
         };
 
-        int CompareBorders(const TBorder& a, const TBorder& b) const noexcept {
+        int CompareBorders(const TBorder& a, const TBorder& b) const {
             ++Stats_.Comparisons;
             return ComparePrefixBorders(KeyTypes, a.Key, a.Mode, b.Key, b.Mode);
         }

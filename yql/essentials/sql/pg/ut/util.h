@@ -5,6 +5,7 @@
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <yql/essentials/parser/pg_wrapper/interface/config.h>
+#include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 
 enum class EDebugOutput {
     None,
@@ -183,7 +184,14 @@ inline NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslat
     settings.PgParser = true;
     TTestAutoParamBuilderFactory autoParamFactory;
     settings.AutoParamBuilderFactory = &autoParamFactory;
-    auto res = SqlToYql(query, settings);
+
+    NSQLTranslation::TTranslators translators(
+        nullptr,
+        nullptr,
+        NSQLTranslationPG::MakeTranslator()
+    );
+
+    auto res = SqlToYql(translators, query, settings);
     if (debug == EDebugOutput::ToCerr) {
         Err2Str(res, debug);
     }
@@ -206,10 +214,10 @@ inline void VisitAstNodes(const NYql::TAstNode& root, const TAstNodeVisitFunc& v
     }
 }
 
-    
+
 inline TMaybe<const NYql::TAstNode*> MaybeGetQuotedValue(const NYql::TAstNode& node) {
     const bool isQuotedList =
-        node.IsListOfSize(2) && node.GetChild(0)->IsAtom() 
+        node.IsListOfSize(2) && node.GetChild(0)->IsAtom()
         && node.GetChild(0)->GetContent() == "quote";
     if (isQuotedList) {
         return node.GetChild(1);

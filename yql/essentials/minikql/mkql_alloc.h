@@ -41,6 +41,8 @@ constexpr ui32 MaxPageUserData = TAlignedPagePool::POOL_PAGE_SIZE - sizeof(TAllo
 
 static_assert(sizeof(TAllocPageHeader) % MKQL_ALIGNMENT == 0, "Incorrect size of header");
 
+struct TMkqlArrowHeader;
+
 struct TAllocState : public TAlignedPagePool
 {
     struct TListEntry {
@@ -90,6 +92,7 @@ struct TAllocState : public TAlignedPagePool
     TListEntry GlobalPAllocList;
     TListEntry* CurrentPAllocList;
     TListEntry ArrowBlocksRoot;
+    TMkqlArrowHeader* CurrentArrowPages = nullptr; // page arena for small arrow allocations
     std::unordered_set<const void*> ArrowBuffers;
     bool EnableArrowTracking = true;
 
@@ -186,7 +189,9 @@ constexpr size_t ArrowAlignment = 64;
 struct TMkqlArrowHeader {
     TAllocState::TListEntry Entry;
     ui64 Size;
-    char Padding[ArrowAlignment - sizeof(TAllocState::TListEntry) - sizeof(ui64)];
+    ui64 Offset;
+    std::atomic<ui64> UseCount;
+    char Padding[ArrowAlignment - sizeof(TAllocState::TListEntry) - sizeof(ui64) - sizeof(ui64) - sizeof(std::atomic<ui64>)];
 };
 
 static_assert(sizeof(TMkqlArrowHeader) == ArrowAlignment);
@@ -441,7 +446,7 @@ inline void MKQLUnregisterObject(NUdf::TBoxedValue* value) noexcept {
 void* MKQLArrowAllocate(ui64 size);
 void* MKQLArrowReallocate(const void* mem, ui64 prevSize, ui64 size);
 void MKQLArrowFree(const void* mem, ui64 size);
-void MKQLArrowUntrack(const void* mem);
+void MKQLArrowUntrack(const void* mem, ui64 size);
 
 template <const EMemorySubPool MemoryPoolExt = EMemorySubPool::Default>
 struct TWithMiniKQLAlloc {

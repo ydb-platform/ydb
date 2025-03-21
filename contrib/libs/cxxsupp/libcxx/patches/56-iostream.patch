@@ -1,13 +1,13 @@
-diff --git a/include/ostream b/include/ostream
-index 42819ce..51778a2 100644
---- a/include/ostream
-+++ b/include/ostream
-@@ -964,7 +964,7 @@ operator<<(basic_ostream<_CharT, _Traits>& __os, const bitset<_Size>& __x) {
+diff --git a/include/__ostream/basic_ostream.h b/include/__ostream/basic_ostream.h
+index 178359d..4f7e9cf 100644
+--- a/include/__ostream/basic_ostream.h
++++ b/include/__ostream/basic_ostream.h
+@@ -797,7 +797,7 @@ operator<<(basic_ostream<_CharT, _Traits>& __os, const bitset<_Size>& __x) {
                                                           std::use_facet<ctype<_CharT> >(__os.getloc()).widen('1'));
  }
  
 -#if _LIBCPP_STD_VER >= 20
-+#if 0
++#if 0 && _LIBCPP_STD_VER >= 20
  
  #  ifndef _LIBCPP_HAS_NO_WIDE_CHARACTERS
  template <class _Traits>

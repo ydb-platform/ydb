@@ -1,8 +1,38 @@
-#include "ut3/py_test_engine.h"
+#include "py_test_engine.h"
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/string/strip.h>
 
 using namespace NPython;
+
+namespace {
+template <typename TType>
+void TestBadUtf8Encode() {
+#if PY_MAJOR_VERSION == 2
+    // In Python 2, strings can encode single surrogate pairs, so this issue does not occur there.
+    return;
+#endif // PY_MAJOR_VERSION == 2
+
+    TPythonTestEngine engine;
+
+    constexpr char programToRun[] = R"(
+def Test():
+    return "\uDC00"
+)";
+    constexpr char expectedError[] = R"(
+Failed to convert the string to UTF-8 format. Original message is:
+UnicodeEncodeError: 'utf-8' codec can't encode character '\udc00' in position 0: surrogates not allowed
+)";
+
+    UNIT_ASSERT_EXCEPTION_CONTAINS(
+            engine.ToMiniKQL<TType>(
+                 StripString(TString(programToRun)),
+                [](const NUdf::TUnboxedValuePod& value) {
+                    Y_UNUSED(value);
+                }),
+            yexception, StripString(TString(expectedError)));
+}
+} // namespace
 
 Y_UNIT_TEST_SUITE(TPyCastTest) {
     Y_UNIT_TEST(FromPyStrToInt) {
@@ -87,4 +117,11 @@ Y_UNIT_TEST_SUITE(TPyCastTest) {
             yexception, "Cast error object " RETVAL " to Long");
     }
 
-}
+    Y_UNIT_TEST(BadFromPythonUtf8) {
+        TestBadUtf8Encode<NUdf::TUtf8>();
+    }
+
+    Y_UNIT_TEST(BadFromPythonJson) {
+        TestBadUtf8Encode<NUdf::TJson>();
+    }
+} // Y_UNIT_TEST_SUITE(TPyCastTest)

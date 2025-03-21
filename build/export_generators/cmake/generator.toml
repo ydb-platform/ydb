@@ -169,6 +169,17 @@ target_macroses-merge_args="flag"
 add_test_requirements="list"
 add_ytest_requirements="list"
 
+custom_runs="list"
+custom_runs-depends="list"
+custom_runs-env="list"
+custom_runs-command="list"
+custom_runs-outputs="list"
+custom_runs-cwd="str"
+custom_runs-cmake_packages="list"
+custom_runs-cmake_packages-ITEM="dict"
+custom_runs-cmake_packages-name="str"
+custom_runs-cmake_packages-components="list"
+
 [attrs.induced]
 # Induced packages
 packages="list"
@@ -198,12 +209,12 @@ copy=["cmake/FindJNITarget.cmake"]
 add_values=[{attr="includes", values=["cmake/FindJNITarget.cmake"]}]
 
 [[rules]]
-attrs=["target_commands-macro=run_antlr"]
+attrs=["custom_runs-command=run_antlr"]
 copy=["cmake/antlr.cmake"]
 add_values=[{attr="includes", values=["cmake/antlr.cmake"]}]
 
 [[rules]]
-attrs=["target_commands-macro=run_antlr4"]
+attrs=["custom_runs-command=run_antlr4"]
 copy=["cmake/antlr4.cmake"]
 add_values=[{attr="includes", values=["cmake/antlr4.cmake"]}]
 
@@ -318,7 +329,10 @@ attrs=[
     "target_macroses-macro=target_cython_include_directories",
     "target_macroses-macro=set_python_type_for_cython",
 ]
-copy=["cmake/cython.cmake"]
+copy=[
+    "cmake/cython.cmake",
+    "cmake/FindCython.cmake"
+]
 add_values=[{attr="includes", values=["cmake/cython.cmake"]}]
 
 [[rules]]

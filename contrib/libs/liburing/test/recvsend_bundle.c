@@ -292,7 +292,7 @@ static void *recv_fn(void *data)
 		goto err;
 	}
 
-	if (posix_memalign(&buf, 4096, MSG_SIZE * RECV_BIDS))
+	if (posix_memalign(&buf, sysconf(_SC_PAGESIZE), MSG_SIZE * RECV_BIDS))
 		goto err;
 
 	if (!classic_buffers) {
@@ -454,7 +454,7 @@ static int do_send(struct recv_data *rd)
 		return 0;
 	}
 
-	if (posix_memalign(&buf, 4096, MSG_SIZE * nr_msgs))
+	if (posix_memalign(&buf, sysconf(_SC_PAGESIZE), MSG_SIZE * nr_msgs))
 		return 1;
 
 	if (!classic_buffers) {

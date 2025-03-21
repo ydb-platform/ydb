@@ -54,12 +54,12 @@ namespace NTest {
             return Iter->Remap;
         }
 
-        void Make(IPages *env) noexcept
+        void Make(IPages *env)
         {
             Iter = nullptr, Env = env; /* Have to make on each Seek(...) */
         }
 
-        EReady Seek(TRawVals key_, ESeek seek) noexcept
+        EReady Seek(TRawVals key_, ESeek seek)
         {
             const TCelled key(key_, *Scheme->Keys, false);
 
@@ -89,12 +89,12 @@ namespace NTest {
             return Iter->Next(ENext::All);
         }
 
-        EReady Next() noexcept
+        EReady Next()
         {
             return Iter->Next(ENext::All);
         }
 
-        const TRowState& Apply() noexcept
+        const TRowState& Apply()
         {
             return Iter->Row();
         }

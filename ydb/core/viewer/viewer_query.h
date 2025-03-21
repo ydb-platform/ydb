@@ -6,7 +6,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
-#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 namespace NKikimr::NViewer {
 
@@ -17,8 +17,6 @@ using namespace NNodeWhiteboard;
 class TJsonQuery : public TViewerPipeClient {
     using TThis = TJsonQuery;
     using TBase = TViewerPipeClient;
-    TJsonSettings JsonSettings;
-    ui32 Timeout = 60000;
     std::vector<std::vector<Ydb::ResultSet>> ResultSets;
     TString Query;
     TString Action;
@@ -30,6 +28,11 @@ class TJsonQuery : public TViewerPipeClient {
     bool IsBase64Encode = true;
     int LimitRows = 10000;
     int TotalRows = 0;
+    bool CollectDiagnostics = true;
+    TDuration StatsPeriod;
+    TDuration KeepAlive = TDuration::MilliSeconds(10000);
+    TInstant LastSendTime;
+    static constexpr TDuration WakeupPeriod = TDuration::Seconds(1);
 
     enum ESchemaType {
         Classic,
@@ -47,6 +50,7 @@ class TJsonQuery : public TViewerPipeClient {
     NHttp::THttpOutgoingResponsePtr HttpResponse;
     std::vector<bool> ResultSetHasColumns;
     bool ConcurrentResults = false;
+    TString ContentType;
 
 public:
     ESchemaType StringToSchemaType(const TString& schemaStr) {
@@ -65,10 +69,8 @@ public:
         }
     }
 
-    void ParseCgiParameters(const TCgiParameters& params) {
-        JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), false);
-        JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
-        Timeout = FromStringWithDefault<ui32>(params.Get("timeout"), Timeout);
+    void InitConfig(const TCgiParameters& params) {
+        Timeout = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("timeout"), 60000)); // override default timeout to 60 seconds
         if (params.Has("query")) {
             Query = params.Get("query");
         }
@@ -87,6 +89,9 @@ public:
                 Streaming = true;
                 if (params.Has("concurrent_results")) {
                     ConcurrentResults = FromStringWithDefault<bool>(params.Get("concurrent_results"), ConcurrentResults);
+                }
+                if (params.Has("keep_alive")) {
+                    KeepAlive = TDuration::MilliSeconds(FromStringWithDefault<ui32>(params.Get("keep_alive"), KeepAlive.MilliSeconds()));
                 }
             }
         }
@@ -111,26 +116,38 @@ public:
         if (params.Has("output_chunk_max_size")) {
             OutputChunkMaxSize = FromStringWithDefault<ui64>(params.Get("output_chunk_max_size"), OutputChunkMaxSize);
         }
+        CollectDiagnostics = FromStringWithDefault<bool>(params.Get("collect_diagnostics"), CollectDiagnostics);
+        if (params.Has("stats_period")) {
+            StatsPeriod = TDuration::MilliSeconds(std::clamp<ui64>(FromStringWithDefault<ui64>(params.Get("stats_period"), StatsPeriod.MilliSeconds()), 1000, 600000));
+        }
     }
 
     TJsonQuery(IViewer* viewer, NHttp::TEvHttpProxy::TEvHttpIncomingRequest::TPtr& ev)
         : TBase(viewer, ev)
     {
+        InitConfig(Params);
     }
 
     void Bootstrap() override {
         if (NeedToRedirect()) {
             return;
         }
-        ParseCgiParameters(Params);
         if (Query.empty() && Action != "cancel-query") {
             return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Query is empty"), "EmptyQuery");
         }
         if (Streaming) {
             NHttp::THeaders headers(HttpEvent->Get()->Request->Headers);
             TStringBuf accept = headers["Accept"];
-            if (accept.find("multipart/x-mixed-replace") == TString::npos) {
-                return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Multipart request must accept multipart/x-mixed-replace content"), "BadRequest");
+            auto posMixedReplace = accept.find("multipart/x-mixed-replace");
+            auto posFormData = accept.find("multipart/form-data");
+            auto posFirst = std::min(posMixedReplace, posFormData);
+            if (posFirst == TString::npos) {
+                return TBase::ReplyAndPassAway(GetHTTPBADREQUEST("text/plain", "Multipart request must accept multipart content-type"), "BadRequest");
+            }
+            if (posFirst == posMixedReplace) {
+                ContentType = "multipart/x-mixed-replace";
+            } else if (posFirst == posFormData) {
+                ContentType = "multipart/form-data";
             }
         }
         if (Streaming && QueryId.empty()) {
@@ -138,7 +155,11 @@ public:
         }
         Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvSubscribeForCancel(), IEventHandle::FlagTrackDelivery);
         SendKpqProxyRequest();
-        Become(&TThis::StateWork, TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup());
+        Become(&TThis::StateWork);
+        if (Timeout || KeepAlive) {
+            Schedule(WakeupPeriod, new TEvents::TEvWakeup());
+        }
+        LastSendTime = TActivationContext::Now();
     }
 
     void CancelQuery() {
@@ -194,7 +215,7 @@ public:
             hFunc(NKqp::TEvKqpExecuter::TEvStreamData, HandleReply);
             cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
             hFunc(TEvents::TEvUndelivered, Undelivered);
-            cFunc(TEvents::TSystem::Wakeup, HandleTimeout);
+            cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
         }
     }
 
@@ -238,7 +259,7 @@ public:
         }
         CreateSessionResponse = MakeRequest<NKqp::TEvKqp::TEvCreateSessionResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
         if (Streaming) {
-            HttpResponse = HttpEvent->Get()->Request->CreateResponseString(Viewer->GetChunkedHTTPOK(GetRequest(), "multipart/x-mixed-replace;boundary=boundary"));
+            HttpResponse = HttpEvent->Get()->Request->CreateResponseString(Viewer->GetChunkedHTTPOK(GetRequest(), ContentType + ";boundary=boundary"));
             Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(HttpResponse));
         }
     }
@@ -364,6 +385,10 @@ public:
         }
         if (OutputChunkMaxSize) {
             request.SetOutputChunkMaxSize(OutputChunkMaxSize);
+        }
+        request.SetCollectDiagnostics(CollectDiagnostics);
+        if (StatsPeriod) {
+            event->SetProgressStatsPeriod(StatsPeriod);
         }
         ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
         QueryResponse = MakeRequest<NKqp::TEvKqp::TEvQueryResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
@@ -594,7 +619,7 @@ private:
                 NJson::ReadJsonTree(progress.GetQueryPlan(), &(json["plan"]));
             }
             if (progress.HasQueryStats()) {
-                NProtobufJson::Proto2Json(progress.GetQueryStats(), json["stats"]);
+                Proto2Json(progress.GetQueryStats(), json["stats"]);
             }
             StreamJsonResponse(json);
         }
@@ -647,8 +672,15 @@ private:
         ReplyWithJsonAndPassAway(json);
     }
 
-    void HandleTimeout() {
-        ReplyWithError("Timeout executing query");
+    void HandleWakeup() {
+        auto now = TActivationContext::Now();
+        if (Timeout && (now - LastSendTime > Timeout)) {
+            return ReplyWithError("Timeout executing query");
+        }
+        if (KeepAlive && (now - LastSendTime > KeepAlive)) {
+            SendKeepAlive();
+        }
+        Schedule(WakeupPeriod, new TEvents::TEvWakeup());
     }
 
 private:
@@ -821,7 +853,7 @@ private:
                 NJson::ReadJsonTree(response.GetQueryPlan(), &(jsonResponse["plan"]));
             }
             if (response.HasQueryStats()) {
-                NProtobufJson::Proto2Json(response.GetQueryStats(), jsonResponse["stats"]);
+                Proto2Json(response.GetQueryStats(), jsonResponse["stats"]);
             }
         }
         catch (const std::exception& ex) {
@@ -844,6 +876,7 @@ private:
         data << "--boundary\r\nContent-Type: application/json\r\nContent-Length: " << content.Size() << "\r\n\r\n" << content.Str() << "\r\n";
         auto dataChunk = HttpResponse->CreateDataChunk(data);
         Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(dataChunk));
+        LastSendTime = TActivationContext::Now();
     }
 
     void StreamJsonResponse(const NKikimrKqp::TEvExecuterStreamData& data) {
@@ -867,6 +900,19 @@ private:
         auto dataChunk = HttpResponse->CreateDataChunk("--boundary--\r\n");
         dataChunk->SetEndOfData();
         Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingDataChunk(dataChunk));
+        LastSendTime = TActivationContext::Now();
+    }
+
+    void SendKeepAlive() {
+        if (Streaming) {
+            NJson::TJsonValue json;
+            NJson::TJsonValue& jsonMeta = json["meta"];
+            jsonMeta["event"] = "KeepAlive";
+            StreamJsonResponse(json);
+        }
+        if (SessionId) {
+            PingSession();
+        }
     }
 
     void ReplyWithJsonAndPassAway(const NJson::TJsonValue& json, const TString& error = {}) {
@@ -1002,6 +1048,20 @@ public:
                 description: resource pool in which the query will be executed
                 type: string
                 required: false
+              - name: keep_alive
+                in: query
+                description: time of inactivity to send keep-alive in stream (multipart) queries
+                type: integer
+                default: 10000
+              - name: collect_diagnostics
+                in: query
+                description: collect query diagnostics
+                type: boolean
+                default: true
+              - name: stats_period
+                in: query
+                description: time interval for sending periodical query statistics in ms
+                type: integer
             requestBody:
                 description: Executes SQL query
                 required: false
@@ -1019,6 +1079,10 @@ public:
                                 type: object
                                 description: format depends on schema parameter
                         multipart/x-mixed-replace:
+                            schema:
+                                type: object
+                                description: format depends on schema parameter
+                        multipart/form-data:
                             schema:
                                 type: object
                                 description: format depends on schema parameter

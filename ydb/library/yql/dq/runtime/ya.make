@@ -16,6 +16,7 @@ PEERDIR(
     yql/essentials/providers/common/schema/mkql
     yql/essentials/public/udf
     ydb/library/actors/util
+    ydb/library/formats/arrow/hash
 )
 
 SRCS(

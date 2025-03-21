@@ -407,6 +407,42 @@ public:
         return CheckResetMarker(req, code);
     }
 
+    Ydb::Maintenance::MaintenanceTaskResult CheckMaintenanceTaskRefresh(
+            const TString &taskUid,
+            Ydb::StatusIds::StatusCode code) 
+    {
+        auto ev = std::make_unique<NCms::TEvCms::TEvRefreshMaintenanceTaskRequest>();
+
+        auto *req = ev->Record.MutableRequest();
+        req->set_task_uid(taskUid);
+
+        SendToPipe(CmsId, Sender, ev.release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        auto reply = GrabEdgeEventRethrow<NCms::TEvCms::TEvMaintenanceTaskResponse>(handle);
+
+        const auto &rec = reply->Record;
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus(), code);
+        return rec.GetResult();
+    }
+
+    Ydb::Maintenance::GetMaintenanceTaskResult CheckMaintenanceTaskGet(
+        const TString &taskUid,
+        Ydb::StatusIds::StatusCode code) 
+    {
+        auto ev = std::make_unique<NCms::TEvCms::TEvGetMaintenanceTaskRequest>();
+
+        auto *req = ev->Record.MutableRequest();
+        req->set_task_uid(taskUid);
+
+        SendToPipe(CmsId, Sender, ev.release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        auto reply = GrabEdgeEventRethrow<NCms::TEvCms::TEvGetMaintenanceTaskResponse>(handle);
+
+        const auto &rec = reply->Record;
+        UNIT_ASSERT_VALUES_EQUAL(rec.GetStatus(), code);
+        return rec.GetResult();
+    }
+
     template <typename... Ts>
     Ydb::Maintenance::MaintenanceTaskResult CheckMaintenanceTaskCreate(
             const TString &taskUid,

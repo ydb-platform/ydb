@@ -99,6 +99,8 @@ protected:
     }
     virtual void DoOnDataSharingStarted(const ui64 /*tabletId*/, const TString& /*sessionId*/) {
     }
+    virtual void DoOnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr& /*result*/) {
+    }
 
     virtual TDuration DoGetUsedSnapshotLivetime(const TDuration defaultValue) const {
         return defaultValue;
@@ -282,6 +284,10 @@ public:
         DoOnAfterGCAction(shard, action);
     }
 
+    void OnCollectGarbageResult(TEvBlobStorage::TEvCollectGarbageResult::TPtr& result) {
+        DoOnCollectGarbageResult(result);
+    }
+
     bool OnAfterFilterAssembling(const std::shared_ptr<arrow::RecordBatch>& batch) {
         return DoOnAfterFilterAssembling(batch);
     }
@@ -294,6 +300,9 @@ public:
     bool OnWriteIndexStart(const ui64 tabletId, NOlap::TColumnEngineChanges& change) {
         return DoOnWriteIndexStart(tabletId, change);
     }
+    virtual void OnHeaderSelectProcessed(const std::optional<bool> /*result*/) {
+    }
+
     virtual void OnIndexSelectProcessed(const std::optional<bool> /*result*/) {
     }
     TDuration GetMaxReadStaleness() const {

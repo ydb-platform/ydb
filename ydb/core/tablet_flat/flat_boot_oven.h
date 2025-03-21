@@ -26,7 +26,7 @@ namespace NBoot {
 
         }
 
-        TAutoPtr<TSteppedCookieAllocator> Sys(TCookie::EIdx idx) noexcept
+        TAutoPtr<TSteppedCookieAllocator> Sys(TCookie::EIdx idx)
         {
             Acquire(idx);
 
@@ -35,7 +35,7 @@ namespace NBoot {
             return new TSteppedCookieAllocator(Tablet, stamp, TCookie::CookieRange(idx), { Sys1 });
         }
 
-        TAutoPtr<TSteppedCookieAllocator> Data() noexcept
+        TAutoPtr<TSteppedCookieAllocator> Data()
         {
             Acquire(TCookie::EIdx::Raw);
 
@@ -65,7 +65,7 @@ namespace NBoot {
         }
 
     private:
-        void Acquire(TCookie::EIdx idx) noexcept
+        void Acquire(TCookie::EIdx idx)
         {
             const auto mask = ui64(1) << unsigned(idx);
 

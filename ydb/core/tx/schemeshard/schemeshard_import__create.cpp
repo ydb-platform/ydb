@@ -28,16 +28,38 @@ using namespace NTabletFlatExecutor;
 
 namespace {
 
-bool IsWaiting(const TImportInfo::TItem& item) {
-    return item.State == TImportInfo::EState::Waiting;
+using TItem = TImportInfo::TItem;
+using EState = TImportInfo::EState;
+
+bool IsWaiting(const TItem& item) {
+    return item.State == EState::Waiting;
 }
 
-bool IsDoneOrWaiting(const TImportInfo::TItem& item) {
-    return TImportInfo::TItem::IsDone(item) || IsWaiting(item);
+THashMap<EState, int> CountItemsByState(const TVector<TItem>& items) {
+    THashMap<EState, int> counter;
+    for (const auto& item : items) {
+        counter[item.State]++;
+    }
+    return counter;
+}
+
+bool AllDone(const THashMap<EState, int>& stateCounts) {
+    return AllOf(stateCounts, [](const auto& stateCount) { return stateCount.first == EState::Done; });
+}
+
+bool AllWaiting(const THashMap<EState, int>& stateCounts) {
+    return AllOf(stateCounts, [](const auto& stateCount) { return stateCount.first == EState::Waiting; });
+}
+
+bool AllDoneOrWaiting(const THashMap<EState, int>& stateCounts) {
+    return AllOf(stateCounts, [](const auto& stateCount) {
+        return stateCount.first == EState::Done
+            || stateCount.first == EState::Waiting;
+    });
 }
 
 // the item is to be created by query, i.e. it is not a table
-bool IsCreatedByQuery(const TImportInfo::TItem& item) {
+bool IsCreatedByQuery(const TItem& item) {
     return !item.CreationQuery.empty();
 }
 
@@ -321,7 +343,7 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
         if (SchemeResult) {
             OnSchemeResult(txc, ctx);
         } else if (SchemeQueryResult) {
-            OnSchemeQueryPreparation(txc);
+            OnSchemeQueryPreparation(txc, ctx);
         } else if (AllocateResult) {
             OnAllocateResult(txc, ctx);
         } else if (ModifyResult) {
@@ -412,20 +434,20 @@ private:
         TVector<ui32> retriedItems;
         for (ui32 itemIdx : xrange(importInfo->Items.size())) {
             auto& item = importInfo->Items[itemIdx];
-            if (IsWaiting(item) && IsCreatedByQuery(item) && item.ViewCreationRetries == 0) {
+            if (IsWaiting(item) && IsCreatedByQuery(item)) {
                 item.SchemeQueryExecutor = ctx.Register(CreateSchemeQueryExecutor(
                     Self->SelfId(), importInfo->Id, itemIdx, item.CreationQuery, database
                 ));
                 Self->RunningImportSchemeQueryExecutors.emplace(item.SchemeQueryExecutor);
 
                 item.State = EState::CreateSchemeObject;
-                item.ViewCreationRetries++;
                 Self->PersistImportItemState(db, importInfo, itemIdx);
 
                 retriedItems.emplace_back(itemIdx);
             }
         }
         if (!retriedItems.empty()) {
+            importInfo->WaitingViews = std::ssize(retriedItems);
             LOG_D("TImport::TTxProgress: retry view creation"
                 << ": id# " << importInfo->Id
                 << ", retried items# " << JoinSeq(", ", retriedItems)
@@ -507,6 +529,42 @@ private:
         return true;
     }
 
+    bool CreateChangefeed(TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId, TString& error) {
+        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+        auto& item = importInfo->Items.at(itemIdx);
+        item.SubState = ESubState::Proposed;
+
+        LOG_I("TImport::TTxProgress: CreateChangefeed propose"
+            << ": info# " << importInfo->ToString()
+            << ", item# " << item.ToString(itemIdx)
+            << ", txId# " << txId);
+
+        Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
+
+        auto propose = CreateChangefeedPropose(Self, txId, item, error);
+        if (!propose) {
+            return false;
+        }
+
+        Send(Self->SelfId(), std::move(propose));
+        return true;
+    }
+
+    void CreateConsumers(TImportInfo::TPtr importInfo, ui32 itemIdx, TTxId txId) {
+        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+        auto& item = importInfo->Items.at(itemIdx);
+        item.SubState = ESubState::Proposed;
+
+        LOG_I("TImport::TTxProgress: CreateConsumers propose"
+            << ": info# " << importInfo->ToString()
+            << ", item# " << item.ToString(itemIdx)
+            << ", txId# " << txId);
+
+        Y_ABORT_UNLESS(item.WaitTxId == InvalidTxId);
+
+        Send(Self->SelfId(), CreateConsumersPropose(Self, txId, item));
+    }
+
     void AllocateTxId(TImportInfo::TPtr importInfo, ui32 itemIdx) {
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
@@ -567,6 +625,45 @@ private:
         }
 
         return TTxId(ui64((*infoPtr)->Id));
+    }
+
+    TTxId GetActiveCreateChangefeedTxId(TImportInfo::TPtr importInfo, ui32 itemIdx) {
+        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+        const auto& item = importInfo->Items.at(itemIdx);
+
+        Y_ABORT_UNLESS(item.State == EState::CreateChangefeed);
+        Y_ABORT_UNLESS(item.DstPathId);
+
+        if (!Self->PathsById.contains(item.DstPathId)) {
+            return InvalidTxId;
+        }
+
+        auto path = Self->PathsById.at(item.DstPathId);
+        if (path->PathState != NKikimrSchemeOp::EPathStateAlter) {
+            return InvalidTxId;
+        }
+
+        return path->LastTxId;
+    }
+
+    TTxId GetActiveCreateConsumerTxId(TImportInfo::TPtr importInfo, ui32 itemIdx) {
+        Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
+        const auto& item = importInfo->Items.at(itemIdx);
+
+        Y_ABORT_UNLESS(item.State == EState::CreateChangefeed);
+        Y_ABORT_UNLESS(item.ChangefeedState == TImportInfo::TItem::EChangefeedState::CreateConsumers);
+        Y_ABORT_UNLESS(item.StreamImplPathId);
+
+        if (!Self->PathsById.contains(item.StreamImplPathId)) {
+            return InvalidTxId;
+        }
+
+        auto path = Self->PathsById.at(item.StreamImplPathId);
+        if (path->PathState != NKikimrSchemeOp::EPathStateAlter) {
+            return InvalidTxId;
+        }
+
+        return path->LastTxId;
     }
 
     static TString MakeIndexBuildUid(TImportInfo::TPtr importInfo, ui32 itemIdx) {
@@ -737,6 +834,7 @@ private:
                 case EState::CreateSchemeObject:
                 case EState::Transferring:
                 case EState::BuildIndexes:
+                case EState::CreateChangefeed:
                     if (item.WaitTxId == InvalidTxId) {
                         if (!IsCreatedByQuery(item) || item.PreparedCreationQuery) {
                             AllocateTxId(importInfo, itemIdx);
@@ -848,7 +946,8 @@ private:
                 << importInfo->Settings.items(msg.ItemIdx).source_prefix() << NYdb::NDump::NFiles::CreateView().FileName;
 
             NYql::TIssues issues;
-            if (!NYdb::NDump::RewriteCreateViewQuery(item.CreationQuery, database, true, item.DstPathName, source, issues)) {
+            if (!NYdb::NDump::RewriteCreateViewQuery(item.CreationQuery, database, true, item.DstPathName, issues)) {
+                issues.AddIssue(TStringBuilder() << "path: " << source);
                 return CancelAndPersist(db, importInfo, msg.ItemIdx, issues.ToString(), "invalid view creation query");
             }
             item.SchemeQueryExecutor = ctx.Register(CreateSchemeQueryExecutor(
@@ -866,7 +965,7 @@ private:
         }
     }
 
-    void OnSchemeQueryPreparation(TTransactionContext& txc) {
+    void OnSchemeQueryPreparation(TTransactionContext& txc, const TActorContext& ctx) {
         Y_ABORT_UNLESS(SchemeQueryResult);
         const auto& message = *SchemeQueryResult.Get()->Get();
         const TString error = std::holds_alternative<TString>(message.Result) ? std::get<TString>(message.Result) : "";
@@ -899,17 +998,23 @@ private:
         auto& item = importInfo->Items[message.ItemIdx];
         Self->RunningImportSchemeQueryExecutors.erase(std::exchange(item.SchemeQueryExecutor, {}));
 
-        if (message.Status == Ydb::StatusIds::SCHEME_ERROR && item.ViewCreationRetries == 0) {
+        if (message.Status == Ydb::StatusIds::SCHEME_ERROR) {
             // Scheme error happens when the view depends on a table (or a view) that is not yet imported.
             // Instead of tracking view dependencies, we simply retry the creation of the view later.
             item.State = EState::Waiting;
-
-            if (AllOf(importInfo->Items, IsWaiting)) {
-                // All items are waiting? Cancel the import, or we will end up waiting indefinitely.
-                return CancelAndPersist(db, importInfo, message.ItemIdx, error, "creation query failed");
-            }
-
             Self->PersistImportItemState(db, importInfo, message.ItemIdx);
+
+            const auto stateCounts = CountItemsByState(importInfo->Items);
+            if (AllWaiting(stateCounts)) {
+                // Cancel the import, or we will end up waiting indefinitely.
+                return CancelAndPersist(db, importInfo, message.ItemIdx, error, "creation query failed");
+            } else if (AllDoneOrWaiting(stateCounts)) {
+                if (stateCounts.at(EState::Waiting) == importInfo->WaitingViews) {
+                    // No progress has been made since the last view creation retry.
+                    return CancelAndPersist(db, importInfo, message.ItemIdx, error, "creation query failed");
+                }
+                RetryViewsCreation(importInfo, db, ctx);
+            }
             return;
         }
 
@@ -983,6 +1088,19 @@ private:
                 itemIdx = i;
                 break;
 
+            case EState::CreateChangefeed:
+                if (item.ChangefeedState == TImportInfo::TItem::EChangefeedState::CreateChangefeed) {
+                    TString error;
+                    if (!CreateChangefeed(importInfo, i, txId, error)) {
+                        NIceDb::TNiceDb db(txc.DB);
+                        CancelAndPersist(db, importInfo, i, error, "creation changefeed failed");
+                    }
+                } else {
+                    CreateConsumers(importInfo, i, txId);
+                }
+                itemIdx = i;
+                break;
+
             default:
                 break;
             }
@@ -1042,10 +1160,31 @@ private:
                     txId = TTxId(record.GetPathCreateTxId());
                 } else if (item.State == EState::Transferring) {
                     txId = GetActiveRestoreTxId(importInfo, itemIdx);
+                } else if (item.State == EState::CreateChangefeed) {
+                    if (item.ChangefeedState == TImportInfo::TItem::EChangefeedState::CreateChangefeed) {
+                        txId = GetActiveCreateChangefeedTxId(importInfo, itemIdx);
+                    } else {
+                        txId = GetActiveCreateConsumerTxId(importInfo, itemIdx);
+                    }
+
                 }
             }
 
             if (txId == InvalidTxId) {
+
+                if (record.GetStatus() == NKikimrScheme::StatusAlreadyExists && item.State == EState::CreateChangefeed) {
+                    if (item.ChangefeedState == TImportInfo::TItem::EChangefeedState::CreateChangefeed) {
+                        item.ChangefeedState = TImportInfo::TItem::EChangefeedState::CreateConsumers;
+                        AllocateTxId(importInfo, itemIdx);
+                    } else if (++item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size()) {
+                        item.ChangefeedState = TImportInfo::TItem::EChangefeedState::CreateChangefeed;
+                        AllocateTxId(importInfo, itemIdx);
+                    } else {
+                        item.State = EState::Done;
+                    }
+                    return;
+                }
+
                 return CancelAndPersist(db, importInfo, itemIdx, record.GetReason(), "unhappy propose");
             }
 
@@ -1194,6 +1333,10 @@ private:
                 if (item.NextIndexIdx < item.Scheme.indexes_size()) {
                     item.State = EState::BuildIndexes;
                     AllocateTxId(importInfo, itemIdx);
+                } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
+                           AppData()->FeatureFlags.GetEnableChangefeedsImport()) {
+                    item.State = EState::CreateChangefeed;
+                    AllocateTxId(importInfo, itemIdx);
                 } else {
                     item.State = EState::Done;
                 }
@@ -1207,9 +1350,25 @@ private:
             } else {
                 if (++item.NextIndexIdx < item.Scheme.indexes_size()) {
                     AllocateTxId(importInfo, itemIdx);
+                } else if (item.NextChangefeedIdx < item.Changefeeds.changefeeds_size() &&
+                           AppData()->FeatureFlags.GetEnableChangefeedsImport()) {
+                    item.State = EState::CreateChangefeed;
+                    AllocateTxId(importInfo, itemIdx);
                 } else {
                     item.State = EState::Done;
                 }
+            }
+            break;
+
+        case EState::CreateChangefeed:
+            if (item.ChangefeedState == TImportInfo::TItem::EChangefeedState::CreateChangefeed) {
+                item.ChangefeedState = TImportInfo::TItem::EChangefeedState::CreateConsumers;
+                AllocateTxId(importInfo, itemIdx);
+            } else if (++item.NextChangefeedIdx < item.Changefeeds.GetChangefeeds().size()) {
+                item.ChangefeedState = TImportInfo::TItem::EChangefeedState::CreateChangefeed;
+                AllocateTxId(importInfo, itemIdx);
+            } else {
+                item.State = EState::Done;
             }
             break;
 
@@ -1217,10 +1376,11 @@ private:
             return SendNotificationsIfFinished(importInfo);
         }
 
-        if (AllOf(importInfo->Items, &TImportInfo::TItem::IsDone)) {
+        const auto stateCounts = CountItemsByState(importInfo->Items);
+        if (AllDone(stateCounts)) {
             importInfo->State = EState::Done;
             importInfo->EndTime = TAppData::TimeProvider->Now();
-        } else if (AllOf(importInfo->Items, IsDoneOrWaiting)) {
+        } else if (AllDoneOrWaiting(stateCounts)) {
             RetryViewsCreation(importInfo, db, ctx);
         }
 

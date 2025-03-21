@@ -4,7 +4,6 @@
 #include "portions/constructor_portion.h"
 
 #include <ydb/core/protos/config.pb.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/sharding/sharding.h>
 

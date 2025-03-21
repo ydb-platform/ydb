@@ -160,4 +160,8 @@ void DecodeToYson(TMkqlIOCache& specsCache, size_t tableIndex, const NYT::TNode&
 void DecodeToYson(TMkqlIOCache& specsCache, size_t tableIndex, const NYT::TYaMRRow& value, IOutputStream& ysonOut);
 void DecodeToYson(TMkqlIOCache& specsCache, size_t tableIndex, const NKikimr::NUdf::TUnboxedValuePod& value, IOutputStream& ysonOut);
 
+//////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+THolder<NCommon::IBlockReader> MakeBlockReader(NYT::TRawTableReader& source, size_t blockCount, size_t blockSize);
+
 } // NYql

@@ -40,14 +40,14 @@ namespace {
         {
         }
 
-        ui64 AddToQueue(ui32 page, EPage) noexcept override
+        ui64 AddToQueue(ui32 page, EPage) override
         {
             Pages.push_back(page);
 
             return Large->Relation(page).Size;
         }
 
-        TDeque<TScreen::THole> Trace() noexcept
+        TDeque<TScreen::THole> Trace()
         {
             return dynamic_cast<NFwd::TBlobs&>(*Cache).Traced();
         }
@@ -148,7 +148,7 @@ namespace {
         {
         }
 
-        ui64 AddToQueue(TPageId pageId, EPage type) noexcept override
+        ui64 AddToQueue(TPageId pageId, EPage type) override
         {
             Y_ABORT_UNLESS(type == Part->GetPageType(pageId, { }));
 

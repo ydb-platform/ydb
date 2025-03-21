@@ -9216,7 +9216,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
                                                       "PartitionCount: 40 ");
         env.TestWaitNotification(runtime, txId);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Solomon"),
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(40)});
+                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(40),
+                           [](const NKikimrScheme::TEvDescribeSchemeResult& result){
+                                const auto& desc = result.GetPathDescription().GetSolomonDescription();
+                                const auto& boundChannels = desc.GetBoundChannels();
+                                UNIT_ASSERT_VALUES_EQUAL(boundChannels.size(), 4);
+                                UNIT_ASSERT_VALUES_EQUAL(boundChannels[0].GetStoragePoolName(), "pool-1");
+                                UNIT_ASSERT_VALUES_EQUAL(boundChannels[1].GetStoragePoolName(), "pool-1");
+                                UNIT_ASSERT_VALUES_EQUAL(boundChannels[2].GetStoragePoolName(), "pool-1");
+                                UNIT_ASSERT_VALUES_EQUAL(boundChannels[3].GetStoragePoolName(), "pool-1");
+                           }});
 
         // Already exists
         TestCreateSolomon(runtime, ++txId, "/MyRoot", "Name: \"Solomon\" "
@@ -9317,7 +9326,16 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         env.TestWaitNotification(runtime, txId);
 
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Solomon"),
-                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(4)});
+                           {NLs::Finished, NLs::PathsInsideDomain(1), NLs::ShardsInsideDomain(4),
+                           [](const NKikimrScheme::TEvDescribeSchemeResult& result){
+                                const auto& desc = result.GetPathDescription().GetSolomonDescription();
+                                const auto& boundChannels = desc.GetBoundChannels();
+                                UNIT_ASSERT_VALUES_EQUAL(boundChannels.size(), 4);
+                                UNIT_ASSERT_VALUES_EQUAL(boundChannels[0].GetStoragePoolName(), "pool-1");
+                                UNIT_ASSERT_VALUES_EQUAL(boundChannels[1].GetStoragePoolName(), "pool-1");
+                                UNIT_ASSERT_VALUES_EQUAL(boundChannels[2].GetStoragePoolName(), "pool-1");
+                                UNIT_ASSERT_VALUES_EQUAL(boundChannels[3].GetStoragePoolName(), "pool-1");
+                           }});
 
         TestDropSolomon(runtime, ++txId, "/MyRoot", "Solomon");
         env.TestWaitNotification(runtime, txId);
@@ -9428,6 +9446,134 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
 
     Y_UNIT_TEST(UpdateChannelsBindingSolomonShouldUpdate) {
         UpdateChannelsBindingSolomon(true);
+    }
+
+    void UpdateChannelsBindingSolomonStorageConfig() {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime, TTestEnvOptions().AllowUpdateChannelsBindingOfSolomonPartitions(true));
+        ui64 txId = 100;
+
+        auto check = [&](const TString& path, ui64 shards, const THashMap<TString, ui32>& expectedChannels) {
+            NKikimrSchemeOp::TDescribeOptions opts;
+            opts.SetReturnChannelsBinding(true);
+
+            auto makeChannels = [](const auto& boundsChannels) {
+                THashMap<TString, ui32> channels;
+                for (const auto& channel : boundsChannels) {
+                    channels[channel.GetStoragePoolName()]++;
+                }
+                return channels;
+            };
+
+            TestDescribeResult(DescribePath(runtime, path, opts), {
+                NLs::Finished,
+                NLs::ShardsInsideDomain(shards),
+                [&expectedChannels, &makeChannels, &shards] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+                    const auto& desc = record.GetPathDescription().GetSolomonDescription();
+
+                    UNIT_ASSERT_VALUES_EQUAL(shards, desc.PartitionsSize());
+
+                    for (size_t i = 0; i < desc.PartitionsSize(); ++i) {
+                        const auto& partition = desc.GetPartitions(i);
+
+                        THashMap<TString, ui32> channels = makeChannels(partition.GetBoundChannels());
+                        UNIT_ASSERT_VALUES_EQUAL(expectedChannels.size(), channels.size());
+
+                        for (const auto& [name, count] : expectedChannels) {
+                            UNIT_ASSERT_C(channels.contains(name), "Cannot find channel: " << name);
+                            UNIT_ASSERT_VALUES_EQUAL(channels.at(name), count);
+                        }
+                    }
+
+                    THashMap<TString, ui32> volumeChannels = makeChannels(desc.GetBoundChannels());
+                    UNIT_ASSERT_VALUES_EQUAL(expectedChannels.size(), volumeChannels.size());
+
+                    for (const auto& [name, count] : expectedChannels) {
+                        UNIT_ASSERT_C(volumeChannels.contains(name), "Cannot find channel: " << name);
+                        UNIT_ASSERT_VALUES_EQUAL(volumeChannels.at(name), count);
+                    }
+                }
+            });
+        };
+
+        TestCreateSolomon(runtime, ++txId, "/MyRoot", R"(
+            Name: "Solomon"
+            PartitionCount: 1
+            StorageConfig {
+                Channel {
+                    PreferredPoolKind: "pool-kind-1"
+                }
+                Channel {
+                    PreferredPoolKind: "pool-kind-1"
+                }
+                Channel {
+                    PreferredPoolKind: "pool-kind-1"
+                }
+            }
+        )");
+
+        env.TestWaitNotification(runtime, txId);
+        check("/MyRoot/Solomon", 1, {{{"pool-1", 3}}});
+        // case 1: empty alter
+        TestAlterSolomon(runtime, ++txId, "/MyRoot", R"(
+            Name: "Solomon"
+            StorageConfig {
+                Channel {
+                    PreferredPoolKind: "pool-kind-2"
+                }
+                Channel {
+                    PreferredPoolKind: "pool-kind-2"
+                }
+                Channel {
+                    PreferredPoolKind: "pool-kind-2"
+                }
+            }
+        )", {NKikimrScheme::StatusInvalidParameter});
+
+        // case 2: add partition
+        TestAlterSolomon(runtime, ++txId, "/MyRoot", R"(
+            Name: "Solomon"
+            PartitionCount: 2    
+            StorageConfig {
+                Channel {
+                    PreferredPoolKind: "pool-kind-1"
+                }
+                Channel {
+                    PreferredPoolKind: "pool-kind-1"
+                }
+                Channel {
+                    PreferredPoolKind: "pool-kind-1"
+                }
+            }
+        )");
+
+        env.TestWaitNotification(runtime, txId);
+        check("/MyRoot/Solomon", 2, {{"pool-1", 3}});
+
+        // case 3: add partition & update channels binding
+        TestAlterSolomon(runtime, ++txId, "/MyRoot", R"(
+            Name: "Solomon"
+            PartitionCount: 3
+            UpdateChannelsBinding: true
+            StorageConfig {
+                Channel {
+                    PreferredPoolKind: "pool-kind-2"
+                }
+                Channel {
+                    PreferredPoolKind: "pool-kind-2"
+                }
+                Channel {
+                    PreferredPoolKind: "pool-kind-2"
+                }
+            }
+        )");
+
+        env.TestWaitNotification(runtime, txId);
+        check("/MyRoot/Solomon", 3, {{"pool-2", 3}});
+    }
+
+    Y_UNIT_TEST(UpdateChannelsBindingSolomonStorageConfig) {
+        UpdateChannelsBindingSolomonStorageConfig();
     }
 
     Y_UNIT_TEST(RejectAlterSolomon) { //+

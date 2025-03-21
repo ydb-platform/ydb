@@ -11,6 +11,7 @@ PY_SRCS(
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/library/test_meta
     library/python/testing/recipe
     library/recipes/common
     contrib/python/moto

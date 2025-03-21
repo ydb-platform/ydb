@@ -29,8 +29,7 @@
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "GenTable"},
             "Children": [
-                {"Index": 0, "Name": "Name", "Type": "TCoAtom"},
-                {"Index": 1, "Name": "Splits", "Type": "TExprBase"}
+                {"Index": 0, "Name": "Name", "Type": "TCoAtom"}
             ]
         },
         {

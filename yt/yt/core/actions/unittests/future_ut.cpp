@@ -33,6 +33,15 @@ struct TNonAssignable
     const int Value = 0;
 };
 
+// void Foo()
+// {
+//     auto a = NYT::MakeFuture<std::string>({})
+//     .ApplyUnique(BIND([](std::string&&) {
+//         return NYT::MakeFuture(std::make_unique<int>(42));
+//     }))
+//     .GetUnique();
+// }
+
 TEST_F(TFutureTest, NoncopyableGet)
 {
     auto f = MakeFuture<std::unique_ptr<int>>(std::make_unique<int>(1));

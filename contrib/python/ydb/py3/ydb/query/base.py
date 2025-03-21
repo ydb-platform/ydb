@@ -192,4 +192,7 @@ def wrap_execute_query_response(
     elif tx and response_pb.tx_meta and not tx.tx_id:
         tx._move_to_beginned(response_pb.tx_meta.id)
 
-    return convert.ResultSet.from_message(response_pb.result_set, settings)
+    if response_pb.HasField("result_set"):
+        return convert.ResultSet.from_message(response_pb.result_set, settings)
+
+    return None

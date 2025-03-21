@@ -171,8 +171,7 @@ void TSchemaTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
         case NKikimrTxColumnShard::TSchemaTxBody::kEnsureTables:
         {
             for (auto&& i : SchemaTxBody.GetEnsureTables().GetTables()) {
-                AFL_VERIFY(!owner.TablesManager.HasTable(i.GetPathId()));
-                if (owner.TablesManager.HasTable(i.GetPathId(), true)) {
+                if (owner.TablesManager.HasTable(i.GetPathId(), true) && !owner.TablesManager.HasTable(i.GetPathId())) {
                     WaitPathIdsToErase.emplace(i.GetPathId());
                 }
             }

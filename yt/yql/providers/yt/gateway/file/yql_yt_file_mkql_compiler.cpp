@@ -596,6 +596,56 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
             return values;
         });
 
+    compiler.OverrideCallable(TYtBlockTableContent::CallableName(),
+        [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
+            TYtBlockTableContent tableContent(&node);
+
+            auto origItemStructType = (
+                tableContent.Input().Maybe<TYtOutput>()
+                    ? tableContent.Input().Ref().GetTypeAnn()
+                    : tableContent.Input().Ref().GetTypeAnn()->Cast<TTupleExprType>()->GetItems().back()
+            )->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+
+            TMaybe<ui64> itemsCount;
+            if (auto setting = NYql::GetSetting(tableContent.Settings().Ref(), EYtSettingType::ItemsCount)) {
+                itemsCount = FromString<ui64>(setting->Child(1)->Content());
+            }
+            const auto itemType = NCommon::BuildType(node, *origItemStructType, ctx.ProgramBuilder);
+            TRuntimeNode values;
+            if (auto maybeRead = tableContent.Input().Maybe<TYtReadTable>()) {
+                auto read = maybeRead.Cast();
+
+                const bool hasRangesOrSampling = AnyOf(read.Input(), [](const TYtSection& s) {
+                    return NYql::HasSetting(s.Settings().Ref(), EYtSettingType::Sample)
+                        || AnyOf(s.Paths(), [](const TYtPath& p) { return !p.Ranges().Maybe<TCoVoid>(); });
+                });
+                if (hasRangesOrSampling) {
+                    itemsCount.Clear();
+                }
+
+                const bool forceKeyColumns = HasRangesWithKeyColumns(read.Input().Ref());
+                values = BuildTableContentCall(
+                    TYtTableContent::CallableName(),
+                    itemType,
+                    read.DataSource().Cluster().Value(), read.Input().Ref(), itemsCount, ctx, true, THashSet<TString>{"num", "index"}, forceKeyColumns);
+                values = ApplyPathRangesAndSampling(values, itemType, read.Input().Ref(), ctx);
+            } else {
+                auto output = tableContent.Input().Cast<TYtOutput>();
+                values = BuildTableContentCall(
+                    TYtTableContent::CallableName(),
+                    itemType,
+                    GetOutputOp(output).DataSink().Cluster().Value(), output.Ref(), itemsCount, ctx, true);
+            }
+
+            return ctx.ProgramBuilder.WideToBlocks(ctx.ProgramBuilder.FromFlow(ctx.ProgramBuilder.ExpandMap(ctx.ProgramBuilder.ToFlow(values), [&](TRuntimeNode item) -> TRuntimeNode::TList {
+                TRuntimeNode::TList result;
+                for (auto& origItem : origItemStructType->GetItems()) {
+                    result.push_back(ctx.ProgramBuilder.Member(item, origItem->GetName()));
+                }
+                return result;
+            })));
+        });
+
     compiler.AddCallable({TYtSort::CallableName(), TYtCopy::CallableName(), TYtMerge::CallableName()},
         [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
 
@@ -661,15 +711,9 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
             }
 
             if (IsWideBlockType(lambdaInputType)) {
-                // Static assert to ensure backward compatible change: if the
-                // constant below is true, both input and output types of
-                // WideToBlocks callable have to be WideStream; otherwise,
-                // both input and output types have to be WideFlow.
-                // FIXME: When all spots using WideToBlocks are adjusted
-                // to work with WideStream, drop the assertion below.
-                static_assert(!NYql::NBlockStreamIO::WideToBlocks);
-
-                values = ctx.ProgramBuilder.WideToBlocks(values);
+                values = ctx.ProgramBuilder.ToFlow(
+                    ctx.ProgramBuilder.WideToBlocks(
+                        ctx.ProgramBuilder.FromFlow(values)));
             }
 
             NCommon::TMkqlBuildContext innerCtx(ctx, {{arg, values}}, ytMap.Mapper().Ref().UniqueId());
@@ -1122,15 +1166,7 @@ void RegisterDqYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler)
                     ytRead.Input().Ref(), Nothing(), ctx, false, THashSet<TString>{"num", "index"}, forceKeyColumns);
                 values = ApplyPathRangesAndSampling(values, outputType, ytRead.Input().Ref(), ctx);
 
-                // Static assert to ensure backward compatible change: if the
-                // constant below is true, both input and output types of
-                // WideToBlocks callable have to be WideStream; otherwise,
-                // both input and output types have to be WideFlow.
-                // FIXME: When all spots using WideToBlocks are adjusted
-                // to work with WideStream, drop the assertion below.
-                static_assert(!NYql::NBlockStreamIO::WideToBlocks);
-
-                return ctx.ProgramBuilder.FromFlow(ctx.ProgramBuilder.WideToBlocks(ExpandFlow(ctx.ProgramBuilder.ToFlow(values), ctx)));
+                return ctx.ProgramBuilder.WideToBlocks(ctx.ProgramBuilder.FromFlow(ExpandFlow(ctx.ProgramBuilder.ToFlow(values), ctx)));
             }
 
             return TRuntimeNode();

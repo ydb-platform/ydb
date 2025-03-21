@@ -210,7 +210,12 @@ class TestPqRowDispatcher(TestYdsBase):
         query_id = start_yds_query(kikimr, client, sql)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
 
-        self.write_stream(['{"time": 100}', '{"time": 120}'])
+        data = [
+            '{"time": 100}',
+            '{"time": 109}',
+            '{"time": 118}',
+        ]
+        self.write_stream(data)
         assert len(self.read_stream(1, topic_path=self.output_topic)) == 1
         stop_yds_query(client, query_id)
 
@@ -977,6 +982,7 @@ class TestPqRowDispatcher(TestYdsBase):
         wait_actor_count(kikimr, "DQ_PQ_READ_ACTOR", 1)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_SESSION", 1)
         wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_COMPILE_SERVICE", COMPUTE_NODE_COUNT)
+        wait_actor_count(kikimr, "FQ_ROW_DISPATCHER_FORMAT_HANDLER", 1)
         wait_row_dispatcher_sensor_value(kikimr, "ClientsCount", 1)
         wait_row_dispatcher_sensor_value(kikimr, "RowsSent", 1, exact_match=False)
         wait_row_dispatcher_sensor_value(kikimr, "IncomingRequests", 1, exact_match=False)

@@ -78,6 +78,7 @@ YT_DEFINE_ERROR_ENUM(
     ((CannotUseBothAclAndAco)                 (221))
     ((GangOperationsAllowedOnlyInFifoPools)   (222))
     ((OperationLaunchedInNonexistentPool)     (223))
+    ((OperationHasNoController)               (224))
 );
 
 DEFINE_ENUM(EUnavailableChunkAction,
@@ -153,6 +154,7 @@ DEFINE_ENUM(EAbortReason,
     ((OperationIncarnationChanged)     ( 56))
     ((AddressResolveFailed)            ( 57))
     ((UnexpectedNodeJobPhase)          ( 58))
+    ((JobCountChangedByUserRequest)    ( 59))
     ((SchedulingFirst)                 (100))
     ((SchedulingTimeout)               (101))
     ((SchedulingResourceOvercommit)    (102))

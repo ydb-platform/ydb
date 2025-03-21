@@ -1,16 +1,16 @@
 #pragma once
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <src/client/impl/ydb_internal/session_client/session_client.h>
-#include <src/client/impl/ydb_internal/scheme_helpers/helpers.h>
-#include <src/client/impl/ydb_internal/table_helpers/helpers.h>
-#include <src/client/impl/ydb_internal/make_request/make.h>
-#include <src/client/impl/ydb_internal/session_pool/session_pool.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/session_client/session_client.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/scheme_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/table_helpers/helpers.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/session_pool/session_pool.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
-#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
-#include <src/client/common_client/impl/client.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 
 #include "client_session.h"
@@ -19,7 +19,7 @@
 #include "readers.h"
 
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 namespace NTable {
 
 //How ofter run host scan to perform session balancing
@@ -66,6 +66,8 @@ public:
     TFuture<TStatus> RenameTables(Ydb::Table::RenameTablesRequest&& request, const TRenameTablesSettings& settings);
     TFuture<TStatus> DropTable(const std::string& sessionId, const std::string& path, const TDropTableSettings& settings);
     TAsyncDescribeTableResult DescribeTable(const std::string& sessionId, const std::string& path, const TDescribeTableSettings& settings);
+    TAsyncDescribeExternalDataSourceResult DescribeExternalDataSource(const std::string& path, const TDescribeExternalDataSourceSettings& settings);
+    TAsyncDescribeExternalTableResult DescribeExternalTable(const std::string& path, const TDescribeExternalTableSettings& settings);
 
     template<typename TParamsType>
     TAsyncDataQueryResult ExecuteDataQuery(TSession& session, const std::string& query, const TTxControl& txControl,
@@ -313,7 +315,6 @@ public:
     NSdkStats::TAtomicHistogram<::NMonitoring::THistogram> QuerySizeHistogram;
     NSdkStats::TAtomicHistogram<::NMonitoring::THistogram> ParamsSizeHistogram;
     NSdkStats::TAtomicCounter<::NMonitoring::TRate> SessionRemovedDueBalancing;
-    NSdkStats::TAtomicCounter<::NMonitoring::TRate> RequestMigrated;
 
 private:
     NSessionPool::TSessionPool SessionPool_;

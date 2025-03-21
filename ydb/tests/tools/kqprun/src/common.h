@@ -20,16 +20,7 @@ namespace NKqpRun {
 
 constexpr char YQL_TOKEN_VARIABLE[] = "YQL_TOKEN";
 constexpr ui64 DEFAULT_STORAGE_SIZE = 32_GB;
-
-struct TAsyncQueriesSettings {
-    enum class EVerbose {
-        EachQuery,
-        Final,
-    };
-
-    ui64 InFlightLimit = 0;
-    EVerbose Verbose = EVerbose::EachQuery;
-};
+constexpr TDuration TENANT_CREATION_TIMEOUT = TDuration::Seconds(30);
 
 struct TYdbSetupSettings : public NKikimrRun::TServerSettings {
     enum class EVerbose {
@@ -43,6 +34,7 @@ struct TYdbSetupSettings : public NKikimrRun::TServerSettings {
     enum class EHealthCheck {
         None,
         NodesCount,
+        FetchDatabase,
         ScriptRequest,
         Max
     };
@@ -66,7 +58,7 @@ struct TYdbSetupSettings : public NKikimrRun::TServerSettings {
     NKikimr::NMiniKQL::TComputationNodeFactory ComputationFactory;
     TIntrusivePtr<NYql::IYtGateway> YtGateway;
     NKikimrConfig::TAppConfig AppConfig;
-    TAsyncQueriesSettings AsyncQueriesSettings;
+    NKikimrRun::TAsyncQueriesSettings AsyncQueriesSettings;
 };
 
 

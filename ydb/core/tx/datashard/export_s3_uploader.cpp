@@ -168,7 +168,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
         if (!MetadataUploaded) {
             UploadMetadata();
-        } else if (!PermissionsUploaded) {
+        } else if (EnablePermissions && !PermissionsUploaded) {
             UploadPermissions();
         } else if (!SchemeUploaded) {
             UploadScheme();
@@ -224,7 +224,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     }
 
     void UploadPermissions() {
-        Y_ABORT_UNLESS(!PermissionsUploaded);
+        Y_ABORT_UNLESS(EnablePermissions && !PermissionsUploaded);
 
         if (!Permissions) {
             return Finish(false, "Cannot infer permissions");
@@ -241,6 +241,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     }
 
     void UploadChangefeed() {
+        Y_ABORT_UNLESS(!ChangefeedsUploaded);
         if (IndexExportedChangefeed == Changefeeds.size()) {
             ChangefeedsUploaded = true;
             if (Scanner) {
@@ -382,7 +383,11 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
         auto nextStep = [this]() {
             MetadataUploaded = true;
-            UploadPermissions();
+            if (EnablePermissions) {
+                UploadPermissions();
+            } else {
+                UploadScheme();
+            }
         };
 
         if (EnableChecksums) {
@@ -418,7 +423,8 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             return PassAway();
         }
 
-        if (ProxyResolved && SchemeUploaded && MetadataUploaded && PermissionsUploaded && ChangefeedsUploaded) {
+        const bool permissionsDone = !EnablePermissions || PermissionsUploaded;
+        if (ProxyResolved && SchemeUploaded && MetadataUploaded && permissionsDone && ChangefeedsUploaded) {
             this->Send(Scanner, new TEvExportScan::TEvFeed());
         }
     }
@@ -758,6 +764,7 @@ public:
         , MetadataUploaded(ShardNum == 0 ? false : true)
         , PermissionsUploaded(ShardNum == 0 ? false : true)
         , EnableChecksums(task.GetEnableChecksums())
+        , EnablePermissions(task.GetEnablePermissions())
     {
     }
 
@@ -895,6 +902,8 @@ private:
     TMaybe<TString> Error;
 
     bool EnableChecksums;
+    bool EnablePermissions;
+
     TString DataChecksum;
     TString MetadataChecksum;
     TString ChangefeedChecksum;
@@ -910,32 +919,34 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         ? GenYdbScheme(Columns, Task.GetTable())
         : Nothing();
 
-    const auto& persQueues = Task.GetChangefeedUnderlyingTopics();
-    const auto& cdcStreams = Task.GetTable().GetTable().GetCdcStreams();
-    Y_ASSERT(persQueues.size() == cdcStreams.size());
-
-    const int changefeedsCount = cdcStreams.size();
     TVector <TChangefeedExportDescriptions> changefeeds;
-    changefeeds.reserve(changefeedsCount);
+    if (AppData()->FeatureFlags.GetEnableChangefeedsExport()) {
+        const auto& persQueues = Task.GetChangefeedUnderlyingTopics();
+        const auto& cdcStreams = Task.GetTable().GetTable().GetCdcStreams();
+        Y_ASSERT(persQueues.size() == cdcStreams.size());
 
-    for (int i = 0; i < changefeedsCount; ++i) {
-        Ydb::Table::ChangefeedDescription changefeed;
-        const auto& cdcStream = cdcStreams.at(i);
-        FillChangefeedDescription(changefeed, cdcStream);
+        const int changefeedsCount = cdcStreams.size();
+        changefeeds.reserve(changefeedsCount);
 
-        Ydb::Topic::DescribeTopicResult topic;
-        const auto& pq = persQueues.at(i);
-        Ydb::StatusIds::StatusCode status;
-        TString error;
-        FillTopicDescription(topic, pq.GetPersQueueGroup(), pq.GetSelf(), cdcStream.GetName(), status, error);
-        // Unnecessary fields
-        topic.clear_self();
-        topic.clear_topic_stats();
-        
-        changefeeds.emplace_back(changefeed, topic);
+        for (int i = 0; i < changefeedsCount; ++i) {
+            Ydb::Table::ChangefeedDescription changefeed;
+            const auto& cdcStream = cdcStreams.at(i);
+            FillChangefeedDescription(changefeed, cdcStream);
+
+            Ydb::Topic::DescribeTopicResult topic;
+            const auto& pq = persQueues.at(i);
+            Ydb::StatusIds::StatusCode status;
+            TString error;
+            FillTopicDescription(topic, pq.GetPersQueueGroup(), pq.GetSelf(), cdcStream.GetName(), status, error);
+            // Unnecessary fields
+            topic.clear_self();
+            topic.clear_topic_stats();
+            
+            changefeeds.emplace_back(changefeed, topic);
+        }
     }
 
-    auto permissions = (Task.GetShardNum() == 0)
+    auto permissions = (Task.GetEnablePermissions() && Task.GetShardNum() == 0)
         ? GenYdbPermissions(Task.GetTable())
         : Nothing();
 

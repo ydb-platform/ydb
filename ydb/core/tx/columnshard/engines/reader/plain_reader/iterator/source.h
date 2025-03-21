@@ -47,6 +47,41 @@ private:
     virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override;
     virtual void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
     virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
+    virtual TConclusion<bool> DoStartFetchImpl(
+        const NArrow::NSSA::TProcessorContext& /*context*/, const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& /*fetchersExt*/) override {
+        AFL_VERIFY(false);
+        return false;
+    }
+
+    virtual TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> DoStartFetchIndex(
+        const NArrow::NSSA::TProcessorContext& /*context*/, const TFetchIndexContext& /*fetchContext*/) override {
+        AFL_VERIFY(false);
+        return std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>();
+    }
+    virtual TConclusion<NArrow::TColumnFilter> DoCheckIndex(const NArrow::NSSA::TProcessorContext& /*context*/,
+        const TCheckIndexContext& /*fetchContext*/, const std::shared_ptr<arrow::Scalar>& /*value*/) override {
+        AFL_VERIFY(false);
+        return NArrow::TColumnFilter::BuildAllowFilter();
+    }
+    virtual void DoAssembleAccessor(
+        const NArrow::NSSA::TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
+        AFL_VERIFY(false);
+    }
+    virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(
+        const NArrow::NSSA::TProcessorContext& /*context*/, const TDataAddress& /*address*/) override {
+        AFL_VERIFY(false);
+        return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
+    }
+    virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchHeader(
+        const NArrow::NSSA::TProcessorContext& /*context*/, const TFetchHeaderContext& /*fetchContext*/) override {
+        AFL_VERIFY(false);
+        return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
+    }
+    virtual TConclusion<NArrow::TColumnFilter> DoCheckHeader(
+        const NArrow::NSSA::TProcessorContext& /*context*/, const TCheckHeaderContext& /*fetchContext*/) override {
+        AFL_VERIFY(false);
+        return NArrow::TColumnFilter::BuildAllowFilter();
+    }
 
 protected:
     THashMap<ui32, TFetchingInterval*> Intervals;
@@ -54,10 +89,7 @@ protected:
     TAtomic FilterStageFlag = 0;
     bool IsReadyFlag = false;
 
-    virtual bool DoStartFetchingIndexes(
-        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) = 0;
     virtual void DoAbort() = 0;
-    virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexMeta) = 0;
     virtual NJson::TJsonValue DoDebugJsonForMemory() const {
         return NJson::JSON_MAP;
     }
@@ -81,15 +113,6 @@ public:
         return FinishReplaceKey;
     }
 
-    void ApplyIndex(const NIndexes::TIndexCheckerContainer& indexMeta) {
-        return DoApplyIndex(indexMeta);
-    }
-
-    bool StartFetchingIndexes(
-        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) {
-        AFL_VERIFY(indexes);
-        return DoStartFetchingIndexes(sourcePtr, step, indexes);
-    }
     void InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching);
 
     std::shared_ptr<arrow::RecordBatch> GetLastPK() const {
@@ -148,8 +171,8 @@ public:
         , Finish(context->GetReadMetadata()->BuildSortedPosition(finish))
         , StartReplaceKey(start)
         , FinishReplaceKey(finish) {
-        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().IsPortionInPartialUsage(GetStartReplaceKey(), GetFinishReplaceKey());
-        AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::DontUsage);
+        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(GetStartReplaceKey(), GetFinishReplaceKey());
+        AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::NoUsage);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugJson())("finish", Finish.DebugJson());
         if (Start.IsReverseSort()) {
             std::swap(Start, Finish);
@@ -171,11 +194,8 @@ private:
     void NeedFetchColumns(const std::set<ui32>& columnIds, TBlobsAction& blobsAction,
         THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo>& nullBlocks, const std::shared_ptr<NArrow::TColumnFilter>& filter);
 
-    virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexChecker) override;
     virtual bool DoStartFetchingColumns(
         const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) override;
-    virtual bool DoStartFetchingIndexes(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step,
-        const std::shared_ptr<TIndexesSet>& indexes) override;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) override;
     virtual NJson::TJsonValue DoDebugJson() const override {
         NJson::TJsonValue result = NJson::JSON_MAP;
@@ -293,13 +313,6 @@ private:
 
     virtual bool DoStartFetchingColumns(
         const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) override;
-    virtual bool DoStartFetchingIndexes(const std::shared_ptr<IDataSource>& /*sourcePtr*/, const TFetchingScriptCursor& /*step*/,
-        const std::shared_ptr<TIndexesSet>& /*indexes*/) override {
-        return false;
-    }
-    virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& /*indexMeta*/) override {
-        return;
-    }
 
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) override;
     virtual NJson::TJsonValue DoDebugJson() const override {

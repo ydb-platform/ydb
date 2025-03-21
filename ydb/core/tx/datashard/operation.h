@@ -857,7 +857,7 @@ public:
     void SetFinishProposeTs(TMonotonic now) noexcept { FinishProposeTs = now; }
     void SetFinishProposeTs() noexcept;
 
-    NWilson::TTraceId GetTraceId() const noexcept {
+    NWilson::TTraceId GetTraceId() const {
         return OperationSpan.GetTraceId();
     }
 

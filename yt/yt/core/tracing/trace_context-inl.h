@@ -54,7 +54,7 @@ Y_FORCE_INLINE TRequestId TTraceContext::GetRequestId() const
     return RequestId_;
 }
 
-Y_FORCE_INLINE const TString& TTraceContext::GetSpanName() const
+Y_FORCE_INLINE const std::string& TTraceContext::GetSpanName() const
 {
     return SpanName_;
 }
@@ -64,7 +64,7 @@ Y_FORCE_INLINE const std::string& TTraceContext::GetLoggingTag() const
     return LoggingTag_;
 }
 
-Y_FORCE_INLINE const std::optional<TString>& TTraceContext::GetTargetEndpoint() const
+Y_FORCE_INLINE const std::optional<std::string>& TTraceContext::GetTargetEndpoint() const
 {
     return TargetEndpoint_;
 }

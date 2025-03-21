@@ -114,8 +114,14 @@ arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& poo
             const auto& str = value.AsStringRef();
             std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(str.Size(), &pool)));
             std::memcpy(buffer->mutable_data(), str.Data(), str.Size());
-            auto type = (slot == NUdf::EDataSlot::String || slot == NUdf::EDataSlot::Yson || slot == NUdf::EDataSlot::JsonDocument) ? arrow::binary() : arrow::utf8();
-            std::shared_ptr<arrow::Scalar> scalar = std::make_shared<arrow::BinaryScalar>(buffer, type);
+            std::shared_ptr<arrow::Scalar> scalar;
+            if (slot == NUdf::EDataSlot::String || slot == NUdf::EDataSlot::Yson || slot == NUdf::EDataSlot::JsonDocument) {
+                scalar = std::make_shared<arrow::BinaryScalar>(buffer, arrow::binary());
+            } else {
+                // NOTE: Do not use |arrow::BinaryScalar| for utf8 and json types directly.
+                // This is necessary so that the type of the scalar is clearly preserved at runtime.
+                scalar = std::make_shared<arrow::StringScalar>(buffer);
+            }
             return arrow::Datum(scalar);
         }
         case NUdf::EDataSlot::TzDate: {

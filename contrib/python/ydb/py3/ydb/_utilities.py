@@ -161,7 +161,10 @@ class SyncResponseIterator(object):
         return self
 
     def _next(self):
-        return self.wrapper(next(self.it))
+        res = self.wrapper(next(self.it))
+        if res is not None:
+            return res
+        return self._next()
 
     def next(self):
         return self._next()

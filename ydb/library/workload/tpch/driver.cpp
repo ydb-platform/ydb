@@ -3,59 +3,69 @@
 #include <util/generic/map.h>
 #include <util/string/cast.h>
 
-struct TDist {
-    TVector<set_member> Members;
-    long Max = 0;
-};
-
-extern "C" void ReadDistFromResource(const char* name, distribution* target) {
-    static auto distributions = [] () {
-        TMap<TStringBuf, TDist> result;
-        static const auto resource = NResource::Find("dists.dss");
-        TStringBuf in(resource);
-        TStringBuf line;
-        TDist* dist = nullptr;
+class TDistributions {
+public:
+    TDistributions() {
+        const auto resource = NResource::Find("dists.dss");
+        TStringInput in(resource);
+        TString line;
+        TDists::iterator dist = Dists.end();
         while (in.ReadLine(line)) {
             if (line.empty() || line.find('#') != TStringBuf::npos) {
                 continue;
             }
-            if (!dist) {
+            if (dist == Dists.end()) {
                 constexpr TStringBuf prefix = "begin";
-                if (to_lower(TString(line.substr(0, prefix.length()))) == prefix) {
+                if (to_lower(line.substr(0, prefix.length())) == prefix) {
                     const auto pos = line.find_first_of("\t ");
                     if (pos != TStringBuf::npos) {
-                        dist = &result[line.substr(pos + 1)];
+                        const TString key(line.substr(pos + 1));
+                        dist = Dists.emplace(key, TDist()).first;
                     }
                 }
             } else {
                 constexpr TStringBuf prefix = "end";
-                if (to_lower(TString(line.substr(0, prefix.length()))) == prefix) {
-                    dist = nullptr;
+                if (to_lower(line.substr(0, prefix.length())) == prefix) {
+                    dist = Dists.end();
                     continue;
                 }
                 TStringBuf token, weightStr;
-                line.Split('|', token, weightStr);
+                TStringBuf(line).Split('|', token, weightStr);
                 while(weightStr.SkipPrefix(" "));
                 while(weightStr.ChopSuffix(" "));
                 long weight = FromString(weightStr);
                 if (to_lower(TString(token)) == "count") {
-                    dist->Members.reserve(weight);
+                    dist->second.Members.reserve(weight);
                 } else {
-                    dist->Max += weight;
-                    dist->Members.emplace_back();
-                    dist->Members.back().weight = dist->Max;
-                    dist->Members.back().text = const_cast<char*>(token.data());
-                    dist->Members.back().text[token.length()] = '\0';
+                    dist->second.Max += weight;
+                    dist->second.Members.emplace_back();
+                    Strings.emplace_back(token);
+                    dist->second.Members.back().weight = dist->second.Max;
+                    dist->second.Members.back().text = Strings.back().begin();
                 }
             }
         }
-        return result;
-    }();
-
-    if (auto* dist = MapFindPtr(distributions, name)) {
-        target->count = dist->Members.size();
-        target->list = dist->Members.data();
-        target->permute = nullptr;
-        target->max = dist->Max;
     }
+
+    void Fill(const char* name, distribution* target) {
+        if (auto* dist = MapFindPtr(Dists, name)) {
+            target->count = dist->Members.size();
+            target->list = dist->Members.data();
+            target->permute = nullptr;
+            target->max = dist->Max;
+        }
+    }
+
+private:
+    struct TDist {
+        TVector<set_member> Members;
+        long Max = 0;
+    };
+    using TDists = TMap<TString, TDist>;
+    TVector<TString> Strings;
+    TDists Dists;
+};
+
+extern "C" void ReadDistFromResource(const char* name, distribution* target) {
+    Singleton<TDistributions>()->Fill(name, target);
 }

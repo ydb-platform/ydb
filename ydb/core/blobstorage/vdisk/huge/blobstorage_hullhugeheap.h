@@ -150,6 +150,7 @@ namespace NKikimr {
             void RenderHtmlForUsage(IOutputStream &str) const;
             void GetOwnedChunks(TSet<TChunkIdx>& chunks) const;
             void ShredNotify(const std::vector<ui32>& chunksToShred);
+            void ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks);
 
             static TChain Load(IInputStream *s, TString vdiskLogPrefix, ui32 appendBlockSize, ui32 blocksInChunk);
 
@@ -202,6 +203,7 @@ namespace NKikimr {
 
             void FinishRecovery();
             void ShredNotify(const std::vector<ui32>& chunksToShred);
+            void ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks);
 
         private:
             void BuildChains();
@@ -279,7 +281,9 @@ namespace NKikimr {
             // make chunk not available for allocations, it is used for heap defragmentation
             bool LockChunkForAllocation(ui32 chunkId, ui32 slotSize);
             THeapStat GetStat() const;
-            std::vector<ui32> ShredNotify(const std::vector<ui32>& chunksToShred);
+            void ShredNotify(const std::vector<ui32>& chunksToShred);
+            void ListChunks(const THashSet<TChunkIdx>& chunksOfInterest, THashSet<TChunkIdx>& chunks);
+            THashSet<TChunkIdx> GetForbiddenChunks() const { return ForbiddenChunks; }
 
             //////////////////////////////////////////////////////////////////////////////////////////
             // RecoveryMode

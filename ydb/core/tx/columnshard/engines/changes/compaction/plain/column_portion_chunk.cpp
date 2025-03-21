@@ -1,7 +1,7 @@
 #include "column_portion_chunk.h"
 
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
-#include <ydb/library/formats/arrow/common/validation.h>
+#include <ydb/library/formats/arrow/validation/validation.h>
 #include <ydb/core/tx/columnshard/engines/changes/counters/general.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 

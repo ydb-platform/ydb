@@ -9,6 +9,7 @@
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>
+#include <ydb/core/tx/columnshard/counters/portion_index.h>
 #include <ydb/core/tx/columnshard/engines/scheme/tiering/tier_info.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -146,18 +147,59 @@ public:
     }
 };
 
+class TTtlVersions {
+private:
+    THashMap<ui64, std::map<NOlap::TSnapshot, std::optional<NOlap::TTiering>>> Ttl;
+
+    void AddVersion(const ui64 pathId, const NOlap::TSnapshot& snapshot, std::optional<NOlap::TTiering> ttl) {
+        AFL_VERIFY(Ttl[pathId].emplace(snapshot, ttl).second)("snapshot", snapshot);
+    }
+
+public:
+    void AddVersionFromProto(const ui64 pathId, const NOlap::TSnapshot& snapshot, const NKikimrSchemeOp::TColumnDataLifeCycle& ttlSettings) {
+        std::optional<NOlap::TTiering> ttlVersion;
+        if (ttlSettings.HasEnabled()) {
+            NOlap::TTiering deserializedTtl;
+            AFL_VERIFY(deserializedTtl.DeserializeFromProto(ttlSettings.GetEnabled()).IsSuccess());
+            ttlVersion.emplace(std::move(deserializedTtl));
+        }
+        AddVersion(pathId, snapshot, ttlVersion);
+    }
+
+    std::optional<NOlap::TTiering> GetTableTtl(const ui64 pathId, const NOlap::TSnapshot& snapshot = NOlap::TSnapshot::Max()) const {
+        auto findTable = Ttl.FindPtr(pathId);
+        if (!findTable) {
+            return std::nullopt;
+        }
+        const auto findTtl = findTable->upper_bound(snapshot);
+        if (findTtl == findTable->begin()) {
+            return std::nullopt;
+        }
+        return std::prev(findTtl)->second;
+    }
+
+    ui64 GetMemoryUsage() const {
+        ui64 memory = 0;
+        for (const auto& [_, ttlVersions] : Ttl) {
+            memory += ttlVersions.size() * sizeof(NOlap::TTiering);
+        }
+        return memory;
+    }
+};
+
 class TTablesManager {
 private:
     THashMap<ui64, TTableInfo> Tables;
     THashSet<ui32> SchemaPresetsIds;
     THashMap<ui32, NKikimrSchemeOp::TColumnTableSchema> ActualSchemaForPreset;
     std::map<NOlap::TSnapshot, THashSet<ui64>> PathsToDrop;
-    THashMap<ui64, NOlap::TTiering> Ttl;
+    TTtlVersions Ttl;
     std::unique_ptr<NOlap::IColumnEngine> PrimaryIndex;
     std::shared_ptr<NOlap::IStoragesManager> StoragesManager;
     std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     std::unique_ptr<TTableLoadTimeCounters> LoadTimeCounters;
     std::shared_ptr<NOlap::TSchemaObjectsCache> SchemaObjectsCache;
+    std::shared_ptr<TPortionIndexStats> PortionsStats;
     ui64 TabletId = 0;
 
 public:
@@ -165,7 +207,8 @@ public:
 
     TTablesManager(const std::shared_ptr<NOlap::IStoragesManager>& storagesManager,
         const std::shared_ptr<NOlap::NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-        const std::shared_ptr<NOlap::TSchemaObjectsCache>& schemaCache, const ui64 tabletId);
+        const std::shared_ptr<NOlap::TSchemaObjectsCache>& schemaCache, const std::shared_ptr<TPortionIndexStats>& portionsStats,
+        const ui64 tabletId);
 
     const std::unique_ptr<TTableLoadTimeCounters>& GetLoadTimeCounters() const {
         return LoadTimeCounters;
@@ -174,8 +217,21 @@ public:
     bool TryFinalizeDropPathOnExecute(NTable::TDatabase& dbTable, const ui64 pathId) const;
     bool TryFinalizeDropPathOnComplete(const ui64 pathId);
 
-    const THashMap<ui64, NOlap::TTiering>& GetTtl() const {
-        return Ttl;
+    THashMap<ui64, NOlap::TTiering> GetTtl(const NOlap::TSnapshot& snapshot = NOlap::TSnapshot::Max()) const {
+        THashMap<ui64, NOlap::TTiering> ttl;
+        for (const auto& [pathId, info] : Tables) {
+            if (info.IsDropped(snapshot)) {
+                continue;
+            }
+            if (auto tableTtl = Ttl.GetTableTtl(pathId, snapshot)) {
+                ttl.emplace(pathId, std::move(*tableTtl));
+            }
+        }
+        return ttl;
+    }
+
+    std::optional<NOlap::TTiering> GetTableTtl(const ui64 pathId, const NOlap::TSnapshot& snapshot = NOlap::TSnapshot::Max()) const {
+        return Ttl.GetTableTtl(pathId, snapshot);
     }
 
     const std::map<NOlap::TSnapshot, THashSet<ui64>>& GetPathsToDrop() const {

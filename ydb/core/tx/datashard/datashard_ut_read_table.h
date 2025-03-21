@@ -4,7 +4,7 @@
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/read_table.h>
 
-#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 namespace NKikimr {
 namespace NDataShardReadTableTest {
@@ -177,6 +177,9 @@ namespace NDataShardReadTableTest {
                 break;
             case NYdb::EPrimitiveType::Timestamp:
                 out << parser.GetTimestamp();
+                break;
+            case NYdb::EPrimitiveType::Uuid:
+                out << parser.GetUuid().ToString();
                 break;
 
             default:

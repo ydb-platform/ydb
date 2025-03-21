@@ -33,6 +33,8 @@ namespace NKikimr::NBsController {
         void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& /*ev*/);
         void Handle(TEvBlobStorage::TEvGetBlockResult::TPtr& ev);
 
+        bool RequestIsBeingProcessed() const { return static_cast<bool>(ClientId); }
+
     private:
         TBlobStorageController& Self;
         TActorId ConsolePipe;
@@ -47,6 +49,8 @@ namespace NKikimr::NBsController {
         bool CommitInProgress = false;
 
         std::optional<TString> PendingYamlConfig;
+        bool AllowUnknownFields = false;
+
         std::optional<std::optional<TString>> PendingStorageYamlConfig;
 
         void MakeCommitToConsole(TString& config, ui32 configVersion);

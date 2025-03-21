@@ -86,7 +86,7 @@ public:
 
     ~TSampleKScan() final = default;
 
-    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept final {
+    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
 
         LOG_D("Prepare " << Debug());
@@ -96,7 +96,7 @@ public:
         return {EScan::Feed, {}};
     }
 
-    EScan Seek(TLead& lead, ui64 seq) noexcept final {
+    EScan Seek(TLead& lead, ui64 seq) final {
         Y_ABORT_UNLESS(seq == 0);
         LOG_D("Seek " << Debug());
 
@@ -116,7 +116,7 @@ public:
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final {
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) final {
         LOG_T("Feed key " << DebugPrintPoint(KeyTypes, key, *AppData()->TypeRegistry) << " " << Debug());
         ++ReadRows;
         ReadBytes += CountBytes(key, row);
@@ -148,7 +148,7 @@ public:
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final {
+    TAutoPtr<IDestructable> Finish(EAbort abort) final {
         Y_ABORT_UNLESS(Response);
         Response->Record.SetReadRows(ReadRows);
         Response->Record.SetReadBytes(ReadBytes);
@@ -164,11 +164,11 @@ public:
         return nullptr;
     }
 
-    void Describe(IOutputStream& out) const noexcept final {
+    void Describe(IOutputStream& out) const final {
         out << Debug();
     }
 
-    EScan Exhausted() noexcept final {
+    EScan Exhausted() final {
         return EScan::Final;
     }
 

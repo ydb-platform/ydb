@@ -8,8 +8,6 @@
 namespace NYql {
 namespace NFastCheck {
 
-const TSet<TString>& ListChecks();
-
 enum class ESyntax {
     SExpr,
     YQL,
@@ -23,6 +21,12 @@ enum class EMode {
     View
 };
 
+enum EClusterMode {
+    Many,
+    Single,
+    Unknown
+};
+
 struct TCheckFilter {
     bool Include = true;
     TString CheckNameGlob;
@@ -31,6 +35,8 @@ struct TCheckFilter {
 struct TChecksRequest {
     TString Program;
     TString File;
+    EClusterMode ClusterMode = Many;
+    TString ClusterSystem;
     THashMap<TString, TString> ClusterMapping;
     ESyntax Syntax = ESyntax::YQL;
     ui16 SyntaxVersion = 1;
@@ -49,6 +55,8 @@ struct TChecksResponse {
     TVector<TCheckResponse> Checks;
 };
 
+TVector<TCheckFilter> ParseChecks(const TString& checks);
+TSet<TString> ListChecks(const TMaybe<TVector<TCheckFilter>>& filters = Nothing());
 TChecksResponse RunChecks(const TChecksRequest& request);
 
 }

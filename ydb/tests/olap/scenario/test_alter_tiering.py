@@ -7,7 +7,7 @@ from ydb.tests.olap.scenario.helpers import (
     DropTable,
     DropTableStore,
 )
-from helpers.thread_helper import TestThread
+from ydb.tests.olap.common.thread_helper import TestThread, TestThreads
 from helpers.tiering_helper import (
     ObjectStorageParams,
     CreateExternalDataSource,
@@ -35,6 +35,9 @@ from string import ascii_lowercase
 
 
 class TestLoop:
+
+    __test__ = False
+
     def __init__(self, duration: datetime.timedelta):
         self._deadline = datetime.datetime.now() + duration
 
@@ -98,7 +101,7 @@ class TieringTestBase(BaseTestSet):
                 'enable_tiering_in_column_shard',
                 'enable_column_store',
             ],
-            columnshard_config={
+            column_shard_config={
                 'lag_for_compaction_before_tierings_ms': 0,
                 'compaction_actualization_lag_ms': 0,
                 'optimizer_freshness_check_duration_ms': 0,
@@ -313,7 +316,7 @@ class TestAlterTiering(TieringTestBase):
             sth.execute_scheme_query(CreateTable(self.tables[-1]).with_schema(self.schema1).existing_ok())
 
         LOGGER.info('Starting workload threads')
-        threads = []
+        threads: TestThreads = TestThreads()
 
         threads.append(
             TestThread(
@@ -347,10 +350,7 @@ class TestAlterTiering(TieringTestBase):
             )
             threads.append(TestThread(target=self._loop_scan, args=[ctx, table, self.test_duration]))
 
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join()
+        threads.start_and_wait_all()
 
         assert any(self.s3.count_objects(bucket) != 0 for bucket in self.s3_configs)
 

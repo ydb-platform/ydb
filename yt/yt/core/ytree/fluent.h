@@ -78,8 +78,7 @@ namespace NYT::NYTree {
 //   `func` only if `condition` is true;
 // * DoFor(TCollection collection, TFuncAny func) -> TAny, same as Do()
 //   but iterate over `collection` and pass each of its elements as a second
-//   argument to `func`. Instead of passing a collection you may it is possible
-//   to pass two iterators as an argument;
+//   argument to `func`. You may pass two iterators as an argument instead;
 //
 // * DoMap(TFuncMap func) -> TAny, open a map, delegate invocation to a separate
 //   procedure and close map;

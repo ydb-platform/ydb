@@ -356,6 +356,12 @@ def deploy(arguments):
     if kafka_api_port != 0:
         optionals['kafka_api_port'] = kafka_api_port
 
+    enabled_grpc_services = arguments.enabled_grpc_services.copy()  # type: typing.List[str]
+    if 'YDB_GRPC_SERVICES' in os.environ:
+        services = os.environ['YDB_GRPC_SERVICES'].split(",")
+        for service in services:
+            enabled_grpc_services.append(service)
+
     configuration = KikimrConfigGenerator(
         erasure=parse_erasure(arguments),
         binary_paths=[arguments.ydb_binary_path] if arguments.ydb_binary_path else None,
@@ -375,7 +381,7 @@ def deploy(arguments):
         use_log_files=not arguments.dont_use_log_files,
         default_users=default_users(),
         extra_feature_flags=enable_feature_flags,
-        extra_grpc_services=arguments.enabled_grpc_services,
+        extra_grpc_services=enabled_grpc_services,
         generic_connector_config=generic_connector_config(),
         **optionals
     )

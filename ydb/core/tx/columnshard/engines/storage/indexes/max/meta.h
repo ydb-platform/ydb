@@ -1,5 +1,9 @@
 #pragma once
+#include <ydb/core/formats/arrow/arrow_helpers.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/default.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
+
+#include <ydb/library/formats/arrow/switch/switch_type.h>
 
 namespace NKikimr::NOlap::NIndexes::NMax {
 
@@ -8,17 +12,16 @@ public:
     static TString GetClassNameStatic() {
         return "MAX";
     }
+
 private:
     using TBase = TIndexByColumns;
     static inline auto Registrator = TFactory::TRegistrator<TIndexMeta>(GetClassNameStatic());
+
 protected:
     virtual TConclusionStatus DoCheckModificationCompatibility(const IIndexMeta& newMeta) const override {
         Y_UNUSED(newMeta);
         return TConclusionStatus::Fail("max index not modifiable");
     }
-    virtual void DoFillIndexCheckers(
-        const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const override;
-
     virtual TString DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const override;
 
     virtual bool DoDeserializeFromProto(const NKikimrSchemeOp::TOlapIndexDescription& proto) override {
@@ -29,27 +32,21 @@ protected:
             AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("problem", "incorrect column id");
             return false;
         };
-        ColumnIds.emplace(bFilter.GetColumnId());
+        AddColumnId(bFilter.GetColumnId());
         return true;
     }
 
     virtual NJson::TJsonValue DoSerializeDataToJson(const TString& data, const TIndexInfo& indexInfo) const override;
 
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const override {
-        AFL_VERIFY(ColumnIds.size() == 1);
         auto* filterProto = proto.MutableMaxIndex();
-        filterProto->SetColumnId(*ColumnIds.begin());
+        filterProto->SetColumnId(GetColumnId());
     }
 
 public:
     TIndexMeta() = default;
     TIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const ui32& columnId)
-        : TBase(indexId, indexName, { columnId }, storageId) {
-    }
-
-    ui32 GetColumnId() const {
-        AFL_VERIFY(ColumnIds.size() == 1);
-        return *ColumnIds.begin();
+        : TBase(indexId, indexName, columnId, storageId, std::make_shared<TDefaultDataExtractor>()) {
     }
 
     static bool IsAvailableType(const NScheme::TTypeInfo type) {
@@ -77,4 +74,4 @@ public:
     std::shared_ptr<arrow::Scalar> GetMaxScalarVerified(const std::vector<TString>& data, const std::shared_ptr<arrow::DataType>& type) const;
 };
 
-}   // namespace NKikimr::NOlap::NIndexes
+}   // namespace NKikimr::NOlap::NIndexes::NMax

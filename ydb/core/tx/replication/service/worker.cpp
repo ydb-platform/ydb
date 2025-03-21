@@ -3,6 +3,7 @@
 #include "worker.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/services/services.pb.h>
@@ -13,38 +14,29 @@
 
 namespace NKikimr::NReplication::NService {
 
-TEvWorker::TEvData::TRecord::TRecord(ui64 offset, const TString& data, TInstant createTime)
-    : Offset(offset)
-    , Data(data)
-    , CreateTime(createTime)
+TEvWorker::TEvPoll::TEvPoll(bool skipCommit)
+    : SkipCommit(skipCommit)
 {
 }
 
-TEvWorker::TEvData::TRecord::TRecord(ui64 offset, TString&& data, TInstant createTime)
-    : Offset(offset)
-    , Data(std::move(data))
-    , CreateTime(createTime)
-{
+TString TEvWorker::TEvPoll::ToString() const {
+    return TStringBuilder() << ToStringHeader() << " {"
+        << " SkipCommit: " << SkipCommit
+    << " }";
 }
 
-TEvWorker::TEvData::TEvData(const TString& source, const TVector<TRecord>& records)
-    : Source(source)
+TEvWorker::TEvData::TEvData(ui32 partitionId, const TString& source, const TVector<TTopicMessage>& records)
+    : PartitionId(partitionId)
+    , Source(source)
     , Records(records)
 {
 }
 
-TEvWorker::TEvData::TEvData(const TString& source, TVector<TRecord>&& records)
-    : Source(source)
+TEvWorker::TEvData::TEvData(ui32 partitionId, const TString& source, TVector<TTopicMessage>&& records)
+    : PartitionId(partitionId)
+    , Source(source)
     , Records(std::move(records))
 {
-}
-
-void TEvWorker::TEvData::TRecord::Out(IOutputStream& out) const {
-    out << "{"
-        << " Offset: " << Offset
-        << " Data: " << Data.size() << "b"
-        << " CreateTime: " << CreateTime.ToStringUpToSeconds()
-    << " }";
 }
 
 TString TEvWorker::TEvData::ToString() const {
@@ -160,7 +152,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
 
             Writer.Registered();
             if (InFlightData) {
-                Send(Writer, new TEvWorker::TEvData(InFlightData->Source, InFlightData->Records));
+                Send(Writer, new TEvWorker::TEvData(InFlightData->PartitionId, InFlightData->Source, InFlightData->Records));
             }
         } else {
             LOG_W("Handshake from unknown actor"
@@ -181,11 +173,11 @@ class TWorker: public TActorBootstrapped<TWorker> {
         if (InFlightData) {
             const auto& records = InFlightData->Records;
             auto it = MinElementBy(records, [](const auto& record) {
-                return record.CreateTime;
+                return record.GetCreateTime();
             });
 
             if (it != records.end()) {
-                Lag = TlsActivationContext->Now() - it->CreateTime;
+                Lag = TlsActivationContext->Now() - it->GetCreateTime();
             }
         }
 
@@ -205,7 +197,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
         }
 
         Y_ABORT_UNLESS(!InFlightData);
-        InFlightData = MakeHolder<TEvWorker::TEvData>(ev->Get()->Source, ev->Get()->Records);
+        InFlightData = MakeHolder<TEvWorker::TEvData>(ev->Get()->PartitionId, ev->Get()->Source, ev->Get()->Records);
 
         if (Writer) {
             Send(ev->Forward(Writer));

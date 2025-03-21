@@ -58,7 +58,7 @@ namespace NKikimr {
                 !SelfVDiskId.SameDisk(TargetVDisk)) {
                 auto result = std::make_unique<TEvBlobStorage::TEvVSyncFullResult>(NKikimrProto::ERROR, SelfVDiskId,
                     Record.GetCookie(), Now, IFaceMonGroup->SyncFullResMsgsPtr(), nullptr, Ev->GetChannel());
-                SendVDiskResponse(ctx, recipient, result.release(), cookie, HullCtx->VCtx);
+                SendVDiskResponse(ctx, recipient, result.release(), cookie, HullCtx->VCtx, {});
                 Die(ctx);
                 return;
             }
@@ -73,7 +73,7 @@ namespace NKikimr {
                 auto result = std::make_unique<TEvBlobStorage::TEvVSyncFullResult>(NKikimrProto::NODATA, SelfVDiskId,
                     TSyncState(Db->GetVDiskIncarnationGuid(), DbBirthLsn), Record.GetCookie(), Now,
                     IFaceMonGroup->SyncFullResMsgsPtr(), nullptr, Ev->GetChannel());
-                SendVDiskResponse(ctx, recipient, result.release(), cookie, HullCtx->VCtx);
+                SendVDiskResponse(ctx, recipient, result.release(), cookie, HullCtx->VCtx, {});
                 Die(ctx);
                 return;
             }
@@ -132,9 +132,9 @@ namespace NKikimr {
             Become(&TThis::StateFunc);
         }
 
-        void Handle(TEvents::TEvActorDied::TPtr &ev, const TActorContext &ctx) {
+        void Handle(TEvents::TEvGone::TPtr &ev, const TActorContext &ctx) {
             ActiveActors.Erase(ev->Sender);
-            ctx.Send(ParentId, new TEvents::TEvActorDied);
+            ctx.Send(ParentId, new TEvents::TEvGone);
             Die(ctx);
         }
 
@@ -145,7 +145,7 @@ namespace NKikimr {
         }
 
         STRICT_STFUNC(StateFunc,
-            HFunc(TEvents::TEvActorDied, Handle)
+            HFunc(TEvents::TEvGone, Handle)
             HFunc(TEvents::TEvPoisonPill, HandlePoison)
         )
 

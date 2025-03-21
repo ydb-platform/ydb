@@ -32,9 +32,13 @@ struct TSchemeShard::TTxListUsers : TTransactionBase<TSchemeShard> {
             user->SetName(sid.Name);
             user->SetIsEnabled(sid.IsEnabled);
             user->SetIsLockedOut(Self->LoginProvider.IsLockedOut(sid));
-            user->SetCreatedAt(ToInstant(sid.CreatedAt).MilliSeconds());
-            user->SetLastSuccessfulAttemptAt(ToInstant(sid.LastSuccessfulLogin).MilliSeconds());
-            user->SetLastFailedAttemptAt(ToInstant(sid.LastFailedLogin).MilliSeconds());
+            user->SetCreatedAt(ToMicroSeconds(sid.CreatedAt));
+            if (sid.LastSuccessfulLogin != std::chrono::system_clock::time_point()) {
+                user->SetLastSuccessfulAttemptAt(ToMicroSeconds(sid.LastSuccessfulLogin));
+            }
+            if (sid.LastFailedLogin != std::chrono::system_clock::time_point()) {
+                user->SetLastFailedAttemptAt(ToMicroSeconds(sid.LastFailedLogin));
+            }
             user->SetFailedAttemptCount(sid.FailedLoginAttemptCount);
             user->SetPasswordHash(sid.PasswordHash);
         }

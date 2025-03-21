@@ -4,7 +4,9 @@
 
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
+#include <ydb/core/kqp/workload_service/actors/actors.h>
 
+using namespace NKikimrRun;
 
 namespace NKqpRun {
 
@@ -106,131 +108,18 @@ private:
     std::vector<ui64> ResultSetSizes_;
 };
 
-class TAsyncQueryRunnerActor : public NActors::TActor<TAsyncQueryRunnerActor> {
-    using TBase = NActors::TActor<TAsyncQueryRunnerActor>;
-
-    struct TRequestInfo {
-        TInstant StartTime;
-        NThreading::TFuture<TQueryResponse> RequestFuture;
-    };
+class TAsyncQueryRunnerActor : public TAsyncQueryRunnerActorBase<TQueryRequest, TQueryResponse> {
+    using TBase = TAsyncQueryRunnerActorBase<TQueryRequest, TQueryResponse>;
 
 public:
     TAsyncQueryRunnerActor(const TAsyncQueriesSettings& settings)
-        : TBase(&TAsyncQueryRunnerActor::StateFunc)
-        , Settings_(settings)
-    {
-        RunningRequests_.reserve(Settings_.InFlightLimit);
+        : TBase(settings)
+    {}
+
+protected:
+    void RunQuery(TQueryRequest&& request, NThreading::TPromise<TQueryResponse> promise) override {
+        Register(CreateRunScriptActorMock(std::move(request), promise, nullptr));
     }
-
-    STRICT_STFUNC(StateFunc,
-        hFunc(TEvPrivate::TEvStartAsyncQuery, Handle);
-        hFunc(TEvPrivate::TEvAsyncQueryFinished, Handle);
-        hFunc(TEvPrivate::TEvFinalizeAsyncQueryRunner, Handle);
-    )
-
-    void Handle(TEvPrivate::TEvStartAsyncQuery::TPtr& ev) {
-        DelayedRequests_.emplace(std::move(ev));
-        StartDelayedRequests();
-    }
-
-    void Handle(TEvPrivate::TEvAsyncQueryFinished::TPtr& ev) {
-        const ui64 requestId = ev->Get()->RequestId;
-        RequestsLatency_ += TInstant::Now() - RunningRequests_[requestId].StartTime;
-        RunningRequests_.erase(requestId);
-
-        const auto& response = ev->Get()->Result.Response->Get()->Record;
-        const auto status = response.GetYdbStatus();
-
-        if (status == Ydb::StatusIds::SUCCESS) {
-            Completed_++;
-            if (Settings_.Verbose == TAsyncQueriesSettings::EVerbose::EachQuery) {
-                Cout << CoutColors_.Green() << TInstant::Now().ToIsoStringLocal() << " Request #" << requestId << " completed. " << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << Endl;
-            }
-        } else {
-            Failed_++;
-            NYql::TIssues issues;
-            NYql::IssuesFromMessage(response.GetResponse().GetQueryIssues(), issues);
-            Cout << CoutColors_.Red() << TInstant::Now().ToIsoStringLocal() << " Request #" << requestId << " failed " << status << ". " << CoutColors_.Yellow() << GetInfoString() << "\n" << CoutColors_.Red() << "Issues:\n" << issues.ToString() << CoutColors_.Default();
-        }
-
-        if (Settings_.Verbose == TAsyncQueriesSettings::EVerbose::Final && TInstant::Now() - LastReportTime_ > TDuration::Seconds(1)) {
-            Cout << CoutColors_.Green() << TInstant::Now().ToIsoStringLocal() << " Finished " << Failed_ + Completed_ << " requests. " << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << Endl;
-            LastReportTime_ = TInstant::Now();
-        }
-
-        StartDelayedRequests();
-        TryFinalize();
-    }
-
-    void Handle(TEvPrivate::TEvFinalizeAsyncQueryRunner::TPtr& ev) {
-        FinalizePromise_ = ev->Get()->FinalizePromise;
-        if (!TryFinalize()) {
-            Cout << CoutColors_.Yellow() << TInstant::Now().ToIsoStringLocal() << " Waiting for " << DelayedRequests_.size() + RunningRequests_.size() << " async queries..." << CoutColors_.Default() << Endl;
-        }
-    }
-
-private:
-    void StartDelayedRequests() {
-        while (!DelayedRequests_.empty() && (!Settings_.InFlightLimit || RunningRequests_.size() < Settings_.InFlightLimit)) {
-            auto request = std::move(DelayedRequests_.front());
-            DelayedRequests_.pop();
-
-            auto promise = NThreading::NewPromise<TQueryResponse>();
-            Register(CreateRunScriptActorMock(std::move(request->Get()->Request), promise, nullptr));
-            RunningRequests_[RequestId_] = {
-                .StartTime = TInstant::Now(),
-                .RequestFuture = promise.GetFuture().Subscribe([id = RequestId_, this](const NThreading::TFuture<TQueryResponse>& f) {
-                    Send(SelfId(), new TEvPrivate::TEvAsyncQueryFinished(id, std::move(f.GetValue())));
-                })
-            };
-
-            MaxInFlight_ = std::max(MaxInFlight_, RunningRequests_.size());
-            if (Settings_.Verbose == TAsyncQueriesSettings::EVerbose::EachQuery) {
-                Cout << CoutColors_.Cyan() << TInstant::Now().ToIsoStringLocal() << " Request #" << RequestId_ << " started. " << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << "\n";
-            }
-
-            RequestId_++;
-            request->Get()->StartPromise.SetValue();
-        }
-    }
-
-    bool TryFinalize() {
-        if (!FinalizePromise_ || !RunningRequests_.empty()) {
-            return false;
-        }
-
-        if (Settings_.Verbose == TAsyncQueriesSettings::EVerbose::Final) {
-            Cout << CoutColors_.Cyan() << TInstant::Now().ToIsoStringLocal() << " All async requests finished. " << CoutColors_.Yellow() << GetInfoString() << CoutColors_.Default() << "\n";
-        }
-
-        FinalizePromise_->SetValue();
-        PassAway();
-        return true;
-    }
-
-    TString GetInfoString() const {
-        TStringBuilder result = TStringBuilder() << "completed: " << Completed_ << ", failed: " << Failed_ << ", in flight: " << RunningRequests_.size() << ", max in flight: " << MaxInFlight_ << ", spend time: " << TInstant::Now() - StartTime_;
-        if (const auto amountRequests = Completed_ + Failed_) {
-            result << ", average latency: " << RequestsLatency_ / amountRequests;
-        }
-        return result;
-    }
-
-private:
-    const TAsyncQueriesSettings Settings_;
-    const TInstant StartTime_ = TInstant::Now();
-    const NColorizer::TColors CoutColors_ = NColorizer::AutoColors(Cout);
-
-    std::optional<NThreading::TPromise<void>> FinalizePromise_;
-    std::queue<TEvPrivate::TEvStartAsyncQuery::TPtr> DelayedRequests_;
-    std::unordered_map<ui64, TRequestInfo> RunningRequests_;
-    TInstant LastReportTime_ = TInstant::Now();
-
-    ui64 RequestId_ = 1;
-    ui64 MaxInFlight_ = 0;
-    ui64 Completed_ = 0;
-    ui64 Failed_ = 0;
-    TDuration RequestsLatency_;
 };
 
 class TResourcesWaiterActor : public NActors::TActorBootstrapped<TResourcesWaiterActor> {
@@ -254,6 +143,8 @@ public:
     void Bootstrap() {
         Become(&TResourcesWaiterActor::StateFunc);
 
+        Schedule(Settings_.HealthCheckTimeout, new NActors::TEvents::TEvWakeup());
+
         HealthCheckStage_ = EHealthCheck::NodesCount;
         DoHealthCheck();
     }
@@ -264,31 +155,40 @@ public:
             return;
         }
 
+        if (TInstant::Now() - StartTime_ >= Settings_.HealthCheckTimeout) {
+            FailTimeout();
+            return;
+        }
+
         switch (HealthCheckStage_) {
-            case TYdbSetupSettings::EHealthCheck::NodesCount:
+            case EHealthCheck::NodesCount:
                 CheckResourcesPublish();
                 break;
 
-            case TYdbSetupSettings::EHealthCheck::ScriptRequest:
+            case EHealthCheck::FetchDatabase:
+                FetchDatabase();
+                break;
+
+            case EHealthCheck::ScriptRequest:
                 StartScriptQuery();
                 break;
 
-            case TYdbSetupSettings::EHealthCheck::None:
-            case TYdbSetupSettings::EHealthCheck::Max:
+            case EHealthCheck::None:
+            case EHealthCheck::Max:
                 Finish();
                 break;
         }
     }
 
-    void Handle(TEvPrivate::TEvResourcesInfo::TPtr& ev) {
-        const auto nodeCount = ev->Get()->NodeCount;
-        if (nodeCount == Settings_.ExpectedNodeCount) {
+    void Handle(NKikimr::NKqp::NWorkload::TEvFetchDatabaseResponse::TPtr& ev) {
+        const auto status = ev->Get()->Status;
+        if (status == Ydb::StatusIds::SUCCESS) {
             HealthCheckStage_ = EHealthCheck::ScriptRequest;
             DoHealthCheck();
             return;
         }
 
-        Retry(TStringBuilder() << "invalid node count, got " << nodeCount << ", expected " << Settings_.ExpectedNodeCount, true);
+        Retry(TStringBuilder() << "failed to fetch database with status " << status << ", reason:\n" << CoutColors_.Default() << ev->Get()->Issues.ToString(), true);
     }
 
     void Handle(NKikimr::NKqp::TEvKqp::TEvScriptResponse::TPtr& ev) {
@@ -303,7 +203,7 @@ public:
 
     STRICT_STFUNC(StateFunc,
         sFunc(NActors::TEvents::TEvWakeup, DoHealthCheck);
-        hFunc(TEvPrivate::TEvResourcesInfo, Handle);
+        hFunc(NKikimr::NKqp::NWorkload::TEvFetchDatabaseResponse, Handle);
         hFunc(NKikimr::NKqp::TEvKqp::TEvScriptResponse, Handle);
     )
 
@@ -318,10 +218,18 @@ private:
             return;
         }
 
-        ResourceManager_->RequestClusterResourcesInfo(
-        [selfId = SelfId(), actorContext = ActorContext()](TVector<NKikimrKqp::TKqpNodeResources>&& resources) {
-            actorContext.Send(selfId, new TEvPrivate::TEvResourcesInfo(resources.size()));
-        });
+        const size_t nodeCount = ResourceManager_->GetClusterResources().size();
+        if (nodeCount == static_cast<size_t>(Settings_.ExpectedNodeCount)) {
+            HealthCheckStage_ = EHealthCheck::FetchDatabase;
+            DoHealthCheck();
+            return;
+        }
+
+        Retry(TStringBuilder() << "invalid node count, got " << nodeCount << ", expected " << Settings_.ExpectedNodeCount, true);
+    }
+
+    void FetchDatabase() {
+        Register(NKikimr::NKqp::NWorkload::CreateDatabaseFetcherActor(SelfId(), Settings_.Database));
     }
 
     void StartScriptQuery() {
@@ -344,17 +252,22 @@ private:
 
         if (auto delay = RetryState_->GetNextRetryDelay(shortRetry)) {
             if (Settings_.VerboseLevel >= EVerbose::InitLogs) {
-                Cout << CoutColors_.Cyan() << "Retry in " << *delay << " " << message << CoutColors_.Default() << Endl;
+                const TString str = TStringBuilder() << CoutColors_.Cyan() << "Retry for database '" << Settings_.Database << "' in " << *delay << " " << message << CoutColors_.Default();
+                Cout << str << Endl;
             }
             Schedule(*delay, new NActors::TEvents::TEvWakeup());
         } else {
-            Fail(TStringBuilder() << "Health check timeout " << Settings_.HealthCheckTimeout << " exceeded, use --health-check-timeout for increasing it or check out health check logs by using --verbose " << static_cast<ui32>(EVerbose::InitLogs));
+            FailTimeout();
         }
     }
 
     void Finish() {
         Promise_.SetValue();
         PassAway();
+    }
+
+    void FailTimeout() {
+        Fail(TStringBuilder() << "Health check timeout " << Settings_.HealthCheckTimeout << " exceeded for database '" << Settings_.Database << "', use --health-check-timeout for increasing it or check out health check logs by using --verbose " << static_cast<ui32>(EVerbose::InitLogs));
     }
 
     void Fail(const TString& error) {
@@ -368,6 +281,7 @@ private:
 
 private:
     const TWaitResourcesSettings Settings_;
+    const TInstant StartTime_ = TInstant::Now();
     const NColorizer::TColors CoutColors_ = NColorizer::AutoColors(Cout);
     const IRetryPolicy::TPtr RetryPolicy_;
     IRetryPolicy::IRetryState::TPtr RetryState_ = nullptr;
@@ -491,6 +405,20 @@ private:
 };
 
 }  // anonymous namespace
+
+bool TQueryResponse::IsSuccess() const {
+    return GetStatus() == Ydb::StatusIds::SUCCESS;
+}
+
+Ydb::StatusIds::StatusCode TQueryResponse::GetStatus() const {
+    return Response->Get()->Record.GetYdbStatus();
+}
+
+TString TQueryResponse::GetError() const {
+    NYql::TIssues issues;
+    NYql::IssuesFromMessage(Response->Get()->Record.GetResponse().GetQueryIssues(), issues);
+    return issues.ToString();
+}
 
 NActors::IActor* CreateRunScriptActorMock(TQueryRequest request, NThreading::TPromise<TQueryResponse> promise, TProgressCallback progressCallback) {
     return new TRunScriptActorMock(std::move(request), promise, progressCallback);

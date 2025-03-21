@@ -86,7 +86,7 @@ namespace NActors {
         }
 
         ui64 ts = GetCycleCountFast();
-        Harmonizer.reset(MakeHarmonizer(ts));
+        Harmonizer = MakeHarmonizer(ts);
         Harmonizer->SetSharedPool(Shared.get());
 
         Executors.Reset(new TAutoPtr<IExecutorPool>[ExecutorPoolCount]);

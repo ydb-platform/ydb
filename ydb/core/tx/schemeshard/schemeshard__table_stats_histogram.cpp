@@ -95,6 +95,7 @@ TSerializedCellVec ChooseSplitKeyByHistogram(const NKikimrTableStats::THistogram
                 // For integer types we can add 1 to med
                 ui64 val = 0;
                 size_t sz =  keyMed.GetCells()[i].Size();
+                Y_ABORT_UNLESS(sz <= sizeof(ui64));
                 memcpy(&val, keyMed.GetCells()[i].Data(), sz);
                 val++;
                 splitKey[i] = TCell((const char*)&val, sz);
@@ -354,11 +355,12 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
     const TTableInfo* mainTableForIndex = Self->GetMainTableForIndex(tableId);
 
     ESplitReason splitReason = ESplitReason::NO_SPLIT;
-    if (table->ShouldSplitBySize(dataSize, forceShardSplitSettings)) {
+    TString splitReasonMsg;
+    if (table->ShouldSplitBySize(dataSize, forceShardSplitSettings, splitReasonMsg)) {
         splitReason = ESplitReason::SPLIT_BY_SIZE;
     }
 
-    if (splitReason == ESplitReason::NO_SPLIT && table->CheckSplitByLoad(Self->SplitSettings, shardIdx, dataSize, rowCount, mainTableForIndex)) {
+    if (splitReason == ESplitReason::NO_SPLIT && table->CheckSplitByLoad(Self->SplitSettings, shardIdx, dataSize, rowCount, mainTableForIndex, splitReasonMsg)) {
         splitReason = ESplitReason::SPLIT_BY_LOAD;
     }
 
@@ -425,6 +427,10 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
     }
 
     auto request = SplitRequest(Self, txId, tableId, datashardId, splitKey.GetBuffer());
+
+    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "Propose split request : " << request->Record.ShortDebugString()
+        << ", reason: " << splitReasonMsg);
 
     TMemoryChanges memChanges;
     TStorageChanges dbChanges;

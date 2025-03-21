@@ -8,7 +8,7 @@
 
 Перебирает аргументы слева направо и возвращает первый найденный непустой аргумент. Чтобы результат получился гарантированно непустым (не [optional типа](../types/optional.md)), самый правый аргумент должен быть такого типа (зачастую используют литерал). При одном аргументе возвращает его без изменений.
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 COALESCE(T?, ..., T)->T
@@ -19,7 +19,7 @@ COALESCE(T?, ..., T?)->T?
 
 Доступен краткий формат записи в виде оператора `??`. Можно использовать алиас `NVL`.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT COALESCE(
@@ -48,14 +48,14 @@ SELECT NVL(
 
 Возвращает длину строки в байтах. Также эта функция доступна под именем `LEN`.
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 LENGTH(T)->Uint32
 LENGTH(T?)->Uint32?
 ```
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT LENGTH("foo");
@@ -76,7 +76,7 @@ SELECT LEN("bar");
 
 Возвращает подстроку.
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 Substring(String[, Uint32? [, Uint32?]])->String
@@ -95,7 +95,7 @@ Substring(String?[, Uint32? [, Uint32?]])->String?
 Индексация с нуля. Если указанные позиция и длина выходят за пределы строки, возвращает пустую строку.
 Если входная строка является опциональной, то таким же является и результат.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT SUBSTRING("abcdefg", 3, 1); -- d
@@ -114,7 +114,7 @@ SELECT SUBSTRING("abcdefg", NULL, 3); -- abc
 
 Поиск позиции подстроки в строке.
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 Find(String, String[, Uint32?])->Uint32?
@@ -134,7 +134,7 @@ Find(Utf8?, Utf8[, Uint32?])->Uint32?
 
 Возвращает первую найденную позицию подстроки или `NULL`, означающий что искомая подстрока с указанной позиции не найдена.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT FIND("abcdefg_abcdefg", "abc"); -- 0
@@ -152,7 +152,7 @@ SELECT FIND("abcdefg_abcdefg", "abc", 9); -- null
 
 Обратный поиск позиции подстроки в строке, от конца к началу.
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 RFind(String, String[, Uint32?])->Uint32?
@@ -172,7 +172,7 @@ RFind(Utf8?, Utf8[, Uint32?])->Uint32?
 
 Возвращает первую найденную позицию подстроки или `NULL`, означающий, что искомая подстрока с указанной позиции не найдена.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT RFIND("abcdefg_abcdefg", "bcd"); -- 9
@@ -191,7 +191,7 @@ SELECT RFIND("abcdefg_abcdefg", "bcd", 0); -- null
 
 Проверка наличия префикса или суффикса в строке.
 
-### Сигнатуры
+#### Сигнатуры
 
 ```yql
 StartsWith(T str, U prefix)->Bool[?]
@@ -207,7 +207,7 @@ EndsWith(T str, U suffix)->Bool[?]
 Аргументы должны иметь тип `String`/`Utf8` (или опциональный `String`/`Utf8`) либо строковый PostgreSQL тип (`PgText`/`PgBytea`/`PgVarchar`).
 Результатом функции является опциональный Bool, за исключением случая, когда оба аргумента неопциональные – в этом случае возвращается Bool.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT StartsWith("abc_efg", "abc") AND EndsWith("abc_efg", "efg"); -- true
@@ -236,7 +236,7 @@ SELECT StartsWith("abc_efg"u, "abc"p) AND EndsWith("abc_efg", "efg"pv); -- true
 
 Является упрощенной альтернативой для [CASE WHEN ... THEN ... ELSE ... END](../syntax/expressions.md#case).
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 IF(Bool, T, T)->T
@@ -245,7 +245,7 @@ IF(Bool, T)->T?
 
 Аргумент `else_expression` можно не указывать. В этом случае, если условие ложно (`condition_expression` вернул `false`), будет возвращено пустое значение с типом, соответствующим `then_expression` и допускающим значение `NULL`. Таким образом, у результата получится [optional тип данных](../types/optional.md).
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -259,7 +259,7 @@ FROM my_table;
 
 Заменяет значения `NaN` (not a number) в выражениях типа `Float`, `Double` или [Optional](../types/optional.md).
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 NANVL(Float, Float)->Float
@@ -273,7 +273,7 @@ NANVL(Double, Double)->Double
 
 Если один из агрументов `Double`, то в выдаче `Double`, иначе `Float`. Если один из агрументов `Optional`, то и в выдаче `Optional`.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -290,7 +290,7 @@ FROM my_table;
 * `RandomNumber()` — целое число из всего диапазона Uint64;
 * `RandomUuid()` — [Uuid version 4](https://tools.ietf.org/html/rfc4122#section-4.4).
 
-### Сигнатуры
+#### Сигнатуры
 
 ```yql
 Random(T1[, T2, ...])->Double
@@ -319,7 +319,7 @@ RandomUuid(T1[, T2, ...])->Uuid
 * `SELECT RANDOM(some_column), RANDOM(some_column) FROM table;` — разные случайные числа на каждую строку таблицы, но в рамках одной строки — два одинаковых числа;
 * `SELECT RANDOM(some_column), RANDOM(some_column + 1) FROM table;` или `SELECT RANDOM(some_column), RANDOM(other_column) FROM table;` — две колонки, и все с разными числами.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -358,7 +358,7 @@ FROM my_table;
 * `Udf(Foo::Bar, Int32, @@{"device":"AHCI"}@@ as TypeConfig")(1, 2, 'abc')` — Вызов udf `Foo::Bar` с дополнительным типом `Int32` и указанным `TypeConfig`.
 * `Udf(Foo::Bar, "1e9+7" as RunConfig")(1, 'extended' As Precision)` — Вызов udf `Foo::Bar` с указанным `RunConfig` и именоваными параметрами.
 
-### Сигнатуры
+#### Сигнатуры
 
 ```yql
 Udf(Callable[, T1, T2, ..., T_N][, V1 as TypeConfig][,V2 as RunConfig]])->Callable
@@ -366,7 +366,7 @@ Udf(Callable[, T1, T2, ..., T_N][, V1 as TypeConfig][,V2 as RunConfig]])->Callab
 
 Где `T1`, `T2`, и т. д. -- дополнительные (`external`) пользовательские типы.
 
-### Примеры
+#### Примеры
 
 ```yql
 $IsoParser = Udf(DateTime2::ParseIso8601);
@@ -390,7 +390,7 @@ SELECT Udf(Protobuf::TryParse, $config As TypeConfig)("")
 
 `CurrentUtcDate()`, `CurrentUtcDatetime()` и `CurrentUtcTimestamp()` - получение текущей даты и/или времени в UTC. Тип данных результата указан в конце названия функции.
 
-### Сигнатуры
+#### Сигнатуры
 
 ```yql
 CurrentUtcDate(...)->Date
@@ -400,7 +400,7 @@ CurrentUtcTimestamp(...)->Timestamp
 
 Аргументы опциональны и работают по тому же принципу, что и у [RANDOM](#random).
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT CurrentUtcDate();
@@ -415,7 +415,7 @@ SELECT CurrentUtcTimestamp(TableRow()) FROM my_table;
 
 `CurrentTzDate()`, `CurrentTzDatetime()` и `CurrentTzTimestamp()` - получение текущей даты и/или времени в указанной в первом аргументе [IANA временной зоне](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones). Тип данных результата указан в конце названия функции.
 
-### Сигнатуры
+#### Сигнатуры
 
 ```yql
 CurrentTzDate(String, ...)->TzDate
@@ -425,7 +425,7 @@ CurrentTzTimestamp(String, ...)->TzTimestamp
 
 Последующие аргументы опциональны и работают по тому же принципу, что и у [RANDOM](#random).
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT CurrentTzDate("Europe/Moscow");
@@ -439,7 +439,7 @@ SELECT CurrentTzTimestamp("Europe/Moscow", TableRow()) FROM my_table;
 
 Добавление информации о временной зоне к дате/времени, заданных в UTC. При выводе в результате `SELECT` или после `CAST` в `String` будут применены правила временной зоны по вычислению смещения времени.
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 AddTimezone(Date, String)->TzDate
@@ -457,7 +457,7 @@ AddTimezone(Timestamp?, String)->TzTimestamp?
 
 Тип результата - `TzDate`/`TzDatetime`/`TzTimestamp`, в зависимости от типа данных входа.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT AddTimezone(Datetime("2018-02-01T12:00:00Z"), "Europe/Moscow");
@@ -467,7 +467,7 @@ SELECT AddTimezone(Datetime("2018-02-01T12:00:00Z"), "Europe/Moscow");
 
 Удаление информации о временной зоне и перевод в дату/время, заданные в UTC.
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 RemoveTimezone(TzDate)->Date
@@ -484,7 +484,7 @@ RemoveTimezone(TzTimestamp?)->Timestamp?
 
 Тип результата - `Date`/`Datetime`/`Timestamp`, в зависимости от типа данных входа.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT RemoveTimezone(TzDatetime("2018-02-01T12:00:00,Europe/Moscow"));
@@ -495,7 +495,7 @@ SELECT RemoveTimezone(TzDatetime("2018-02-01T12:00:00,Europe/Moscow"));
 
 `Version()` возвращает строку, описывающую текущую версию узла, обрабатывающего запрос. В некоторых случаях, например, во время постепенного обновлений кластера, она может возвращать разные строки в зависимости от того, какой узел обрабатывает запрос. Функция не принимает никаких аргументов.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT Version();
@@ -506,7 +506,7 @@ SELECT Version();
 
 Возвращает минимальный или максимальный среди N аргументов. Эти функции позволяют не использовать стандартную для SQL конструкцию `CASE WHEN a < b THEN a ELSE b END`, которая была бы особенно громоздкой для N больше двух.
 
-### Сигнатуры
+#### Сигнатуры
 
 ```yql
 MIN_OF(T[,T,...})->T
@@ -517,7 +517,7 @@ MAX_OF(T[,T,...})->T
 
 `GREATEST` является синонимом к `MAX_OF`, а `LEAST` — к `MIN_OF`.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT MIN_OF(1, 2, 3);
@@ -543,7 +543,7 @@ SELECT MIN_OF(1, 2, 3);
 * В `AsDict` и `AsDictStrict` в качестве аргументов ожидаются `Tuple` из двух элементов: ключ и значение, соответственно. Если ключи повторяются, в словаре останется только значение для первого ключа.
 * В `AsSet` и `AsSetStrict` в качестве аргументов ожидаются ключи.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -578,7 +578,7 @@ SELECT
 
 Для списка внутри используется функция [AsList](#as-container), словаря - [AsDict](#as-container), множества - [AsSet](#as-container), кортежа - [AsTuple](#as-container), структуры - [AsStruct](#as-container).
 
-### Примеры
+#### Примеры
 
 ```yql
 $name = "computed " || "member name";
@@ -604,7 +604,7 @@ SELECT
 
 `Variant()` создает значение варианта над кортежем или структурой.
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 Variant(T, String, Type<Variant<...>>)->Variant<...>
@@ -616,7 +616,7 @@ Variant(T, String, Type<Variant<...>>)->Variant<...>
 * Строка с именем поля или индексом кортежа
 * Тип варианта
 
-### Пример
+#### Пример
 
 ```yql
 $var_type = Variant<foo: Int32, bar: Bool>;
@@ -630,7 +630,7 @@ SELECT
 
 `AsVariant()` создает значение [варианта над структурой](../types/containers.md) с одним полем. Это значение может быть неявно преобразовано к любому варианту над структурой, в которой совпадает для этого имени поля тип данных и могут быть дополнительные поля с другими именами.
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 AsVariant(T, String)->Variant
@@ -641,7 +641,7 @@ AsVariant(T, String)->Variant
 * Значение
 * Строка с именем поля
 
-### Пример
+#### Пример
 
 ```yql
 SELECT
@@ -652,7 +652,7 @@ SELECT
 
 Обрабатывает возможные значения варианта, представленного структурой или кортежем, с использованием предоставленных функций-обработчиков для каждого из его полей/элементов.
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 Visit(Variant<key1: K1, key2: K2, ...>, K1->R AS key1, K2->R AS key2, ...)->R
@@ -668,7 +668,7 @@ VisitOrDefault(Variant<key1: K1, key2: K2, ...>{Flags:AutoMap}, R, [K1->R AS key
 * Для варианта над кортежем функция принимает сам вариант и по одному обработчику на каждый элемент кортежа в качестве позиционных аргументов.
 * Модификация `VisitOrDefault` принимает дополнительный позиционный аргумент (на втором месте), представляющий значение по умолчанию, и позволяет не указывать некоторые обработчики.
 
-### Пример
+#### Пример
 
 ```yql
 $vartype = Variant<num: Int32, flag: Bool, str: String>;
@@ -690,14 +690,14 @@ SELECT
 
 Возвращает значение гомогенного варианта (т.е. содержащего поля/элементы одного типа).
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 VariantItem(Variant<key1: K, key2: K, ...>{Flags:AutoMap})->K
 VariantItem(Variant<K, K, ...>{Flags:AutoMap})->K
 ```
 
-### Пример
+#### Пример
 
 ```yql
 $vartype1 = Variant<num1: Int32, num2: Int32, num3: Int32>;
@@ -713,14 +713,14 @@ SELECT
 
 Возвращает активное поле (активный индекс) варианта поверх структуры (кортежа).
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 Way(Variant<key1: K1, key2: K2, ...>{Flags:AutoMap})->Utf8
 Way(Variant<K1, K2, ...>{Flags:AutoMap})->Uint32
 ```
 
-### Пример
+#### Пример
 
 ```yql
 $vr = Variant(1, "0", Variant<Int32, String>);
@@ -737,14 +737,14 @@ SELECT Way($vrs); -- "a"
 Создает экзмепляр гомогенного варианта (т.е. содержащего поля/элементы одного типа), причем индекс или поле варианта можно задавать динамически. При несуществующем индексе или имени поля будет возвращен `NULL`.
 Обратная функция - [VariantItem](#variantitem).
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 DynamicVariant(item:T,index:Uint32?,Variant<T, T, ...>)->Optional<Variant<T, T, ...>>
 DynamicVariant(item:T,index:Utf8?,Variant<key1: T, key2: T, ...>)->Optional<Variant<key1: T, key2: T, ...>>
 ```
 
-### Пример
+#### Пример
 
 ```yql
 $dt = Int32;
@@ -761,7 +761,7 @@ SELECT ListMap([(10,'x'u),(20,'z'u),(30,NULL)],($x)->(DynamicVariant($x.0,$x.1,$
 
 `Enum()` создает значение перечисления.
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 Enum(String, Type<Enum<...>>)->Enum<...>
@@ -772,7 +772,7 @@ Enum(String, Type<Enum<...>>)->Enum<...>
 * Строка с именем поля
 * Тип перечисления
 
-### Пример
+#### Пример
 
 ```yql
 $enum_type = Enum<Foo, Bar>;
@@ -785,7 +785,7 @@ SELECT
 
 `AsEnum()` создает значение [перечисления](../types/containers.md) с одним элементом. Это значение может быть неявно преобразовано к любому перечислению, содержащему такое имя.
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 AsEnum(String)->Enum<'tag'>
@@ -795,7 +795,7 @@ AsEnum(String)->Enum<'tag'>
 
 * Строка с именем элемента перечисления
 
-### Пример
+#### Пример
 
 ```yql
 SELECT
@@ -807,7 +807,7 @@ SELECT
 
 Оборачивает значение в [Tagged тип данных](../types/special.md) с указанной меткой с сохранением физического типа данных. `Untag` — обратная операция.
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 AsTagged(T, tagName:String)->Tagged<T,tagName>
@@ -834,7 +834,7 @@ Untag(Tagged<T, tagName>?)->T?
 
 Доступ к текущему имени таблицы, что бывает востребовано при использовании [CONCAT](../syntax/select/concat.md#concat) и других подобных механизмов.
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 TablePath()->String
@@ -850,7 +850,7 @@ TablePath()->String
 
 {% endnote %}
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT TablePath() FROM CONCAT(table_a, table_b);
@@ -865,7 +865,7 @@ WHERE key IN $subquery;
 
 Получить имя таблицы из пути к таблице. Путь можно получить через функцию [TablePath](#tablepath).
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 TableName()->String
@@ -878,7 +878,7 @@ TableName(String, String)->String
 * путь к таблице, по умолчанию используется `TablePath()` (также см. его ограничения);
 * указание системы ("yt"), по правилам которой выделяется имя таблицы. Указание системы нужно только в том случае, если с помощью [USE](../syntax/use.md) не указан текущий кластер.
 
-### Примеры
+#### Примеры
 
 ```yql
 USE hahn;
@@ -889,7 +889,7 @@ SELECT TableName() FROM CONCAT(table_a, table_b);
 
 Доступ к текущему порядковому номеру строки в исходной физической таблице, **начиная с 1** (зависит от реализации хранения).
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 TableRecordIndex()->Uint64
@@ -897,7 +897,7 @@ TableRecordIndex()->Uint64
 
 Аргументов нет. При использовании в сочетании с [CONCAT](../syntax/select/concat.md#concat) и другими подобными механизмами нумерация начинается заново для каждой таблицы на входе. В случае использования в некорректном контексте возвращает 0.
 
-### Пример
+#### Пример
 
 ```yql
 SELECT TableRecordIndex() FROM my_table;
@@ -908,13 +908,13 @@ SELECT TableRecordIndex() FROM my_table;
 
 Получение всей строки таблицы целиком в виде структуры. Аргументов нет. `JoinTableRow` в случае `JOIN`-ов всегда возвращает структуру с префиксами таблиц.
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 TableRow()->Struct
 ```
 
-### Пример
+#### Пример
 
 ```yql
 SELECT TableRow() FROM my_table;
@@ -922,7 +922,7 @@ SELECT TableRow() FROM my_table;
 
 ## FileContent и FilePath {#file-content-path}
 
-### Сигнатуры
+#### Сигнатуры
 
 ```yql
 FilePath(String)->String
@@ -931,7 +931,7 @@ FileContent(String)->String
 
 Аргумент `FileContent` и `FilePath` — строка с алиасом.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT "Content of "
@@ -943,7 +943,7 @@ SELECT "Content of "
 
 Получение пути до корня директории с несколькими «приложенными» файлами с указанным общим префиксом.
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 FolderPath(String)->String
@@ -953,7 +953,7 @@ FolderPath(String)->String
 
 Также см. [PRAGMA File](../syntax/pragma.md#file) и [PRAGMA Folder](../syntax/pragma.md#folder).
 
-### Примеры
+#### Примеры
 
 ```yql
 PRAGMA File("foo/1.txt", "http://url/to/somewhere");
@@ -970,7 +970,7 @@ SELECT FolderPath("foo"); -- в директории по возвращённо
 
 Поддерживается только один формат файла — по одному значению на строку.
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ParseFile(String, String)->List<T>
@@ -987,7 +987,7 @@ ParseFile(String, String)->List<T>
 
 {% endnote %}
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT ListLength(ParseFile("String", "my_file.txt"));
@@ -1008,7 +1008,7 @@ WHERE int_column IN ParseFile("Int64", "my_file.txt");
 
 Если проверка не прошла успешно, то весь запрос завершается с ошибкой.
 
-### Сигнатуры
+#### Сигнатуры
 
 ```yql
 Ensure(T, Bool, String)->T
@@ -1025,7 +1025,7 @@ EnsureConvertibleTo(T, Type<T>, String)->T
 Для проверки условий по финальному результату вычисления Ensure удобно использовать в сочетании с [DISCARD SELECT](../syntax/discard.md).
 
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT Ensure(
@@ -1054,7 +1054,7 @@ SELECT EnsureConvertibleTo(
 
 ## AssumeStrict {#assumestrict}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 AssumeStrict(T)->T
@@ -1066,7 +1066,7 @@ AssumeStrict(T)->T
 
 Если есть уверенность, что при вычислении выражения ошибок времени выполнения на самом деле не возникает, то имеет смысл использовать `AssumeStrict`.
 
-### Пример
+#### Пример
 
 ```yql
 SELECT * FROM T1 AS a JOIN T2 AS b USING(key)
@@ -1080,7 +1080,7 @@ WHERE AssumeStrict(Unwrap(CAST(a.key AS Int32))) == 1;
 
 ## Likely {#likely}
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 Likely(Bool)->Bool
@@ -1090,7 +1090,7 @@ Likely(Bool?)->Bool?
 Функция `Likely` возвращает свой аргумент. Функция является подсказкой оптимизатору и говорит о том, что в большинстве случаев ее аргумент будет иметь значение `True`.
 Например, наличие такой функции в `WHERE` означает что фильтр является слабоселективным.
 
-### Пример
+#### Пример
 
 ```yql
 SELECT * FROM T1 AS a JOIN T2 AS b USING(key)
@@ -1117,7 +1117,7 @@ EvaluateAtom позволяет динамически создать [атом]
 * выражение не должно приводить к запуску MapReduce операций;
 * данный функционал полностью заблокирован в YQL over YDB.
 
-### Примеры
+#### Примеры
 
 ```yql
 $now = CurrentUtcDate();
@@ -1131,7 +1131,7 @@ SELECT EvaluateExpr(
 
 Для простых типов могут быть созданы литералы на основании строковых литералов.
 
-### Синтаксис
+#### Синтаксис
 
 `<Простой тип>( <строка>[, <дополнительные атрибуты>] )`
 
@@ -1151,7 +1151,7 @@ SELECT EvaluateExpr(
 
 {% include [decimal args](../_includes/decimal_args.md) %}
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -1182,7 +1182,7 @@ SELECT
 
 Конвертация [простых типов данных](../types/primitive.md) в строку со своим бинарным представлением и обратно. Числа представляются в [little endian](https://en.wikipedia.org/wiki/Endianness#Little-endian).
 
-### Сигнатуры
+#### Сигнатуры
 
 ```yql
 ToBytes(T)->String
@@ -1192,7 +1192,7 @@ FromBytes(String, Type<T>)->T?
 FromBytes(String?, Type<T>)->T?
 ```
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -1208,7 +1208,7 @@ SELECT
 
 Получение значение байта в строке по индексу от её начала. В случае некорректного индекса возвращается `NULL`.
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 ByteAt(String, Uint32)->Uint8
@@ -1223,7 +1223,7 @@ ByteAt(Utf8?, Uint32)->Uint8?
 1. Строка: `String` или `Utf8`;
 2. Индекс: `Uint32`.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -1237,7 +1237,7 @@ SELECT
 
 `TestBit()`, `ClearBit()`, `SetBit()` и `FlipBit()` - проверить, сбросить, установить или инвертировать бит в беззнаковом числе по указанному порядковому номеру бита.
 
-### Сигнатуры
+#### Сигнатуры
 
 ```yql
 TestBit(T, Uint8)->Bool
@@ -1260,7 +1260,7 @@ FlipBit(T?, Uint8)->T?
 
 TestBit возвращает `true/false`. Остальные функции возвращают копию своего первого аргумента с проведенным соответствующим преобразованием.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -1273,14 +1273,14 @@ SELECT
 
 Абсолютное значение числа.
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 Abs(T)->T
 Abs(T?)->T?
 ```
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT Abs(-123); -- 123
@@ -1291,13 +1291,13 @@ SELECT Abs(-123); -- 123
 
 `Just()` - Изменить тип данных значения на [optional](../types/optional.md) от текущего типа данных (то есть `T` превращается в `T?`).
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 Just(T)->T?
 ```
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -1310,7 +1310,7 @@ SELECT
 
 Если значение не является [optional](../types/optional.md), то функция возвращает свой первый аргумент без изменений.
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 Unwrap(T?)->T
@@ -1325,7 +1325,7 @@ Unwrap(T?, String)->T
 
 Обратная операция — [Just](#optional-ops).
 
-### Примеры
+#### Примеры
 
 ```yql
 $value = Just("value");
@@ -1337,13 +1337,13 @@ SELECT Unwrap($value, "Unexpected NULL for $value");
 
 `Nothing()` - Создать пустое значение указанного [Optional](../types/optional.md) типа данных.
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 Nothing(Type<T?>)->T?
 ```
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT
@@ -1357,7 +1357,7 @@ SELECT
 
 Создать вызываемое значение с заданной сигнатурой из лямбда-функции. Обычно используется для того, чтобы размещать вызываемые значения в контейнерах.
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 Callable(Type<Callable<(...)->T>>, lambda)->Callable<(...)->T>
@@ -1368,7 +1368,7 @@ Callable(Type<Callable<(...)->T>>, lambda)->Callable<(...)->T>
 1. Тип;
 2. Лямбда-функция.
 
-### Примеры
+#### Примеры
 
 ```yql
 $lambda = ($x) -> {
@@ -1390,7 +1390,7 @@ SELECT $callables.0(10), $callables.1(true);
 
 `Unpickle()` — обратная операция (десериализация), где первым аргументом передается тип данных результата, а вторым — строка с результатом `Pickle()` или `StablePickle()`.
 
-### Сигнатуры
+#### Сигнатуры
 
 ```yql
 Pickle(T)->String
@@ -1398,7 +1398,7 @@ StablePickle(T)->String
 Unpickle(Type<T>, String)->T
 ```
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT *
@@ -1416,7 +1416,7 @@ SELECT Unpickle(Int32, $buf);
 
 Преобразует структуру или кортеж, применяя лямбду к каждому элементу.
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 StaticMap(Struct<...>, lambda)->Struct<...>
@@ -1430,7 +1430,7 @@ StaticMap(Tuple<...>, lambda)->Tuple<...>
 
 Результат: структура или кортеж с аналогичным первому аргументу количеством и именованием элементов, а типы данных элементов определяются результатами лямбды.
 
-### Примеры
+#### Примеры
 
 ```yql
 SELECT *
@@ -1451,14 +1451,14 @@ FROM (
 Результататом будет соответственно структура или кортеж.
 Каждый элемент результата – кортеж с соответствующими элементами из аргументов.
 
-### Сигнатура
+#### Сигнатура
 
 ```yql
 StaticZip(Struct, Struct)->Struct
 StaticZip(Tuple, Tuple)->Tuple
 ```
 
-### Примеры
+#### Примеры
 
 ```yql
 $one = <|k1:1, k2:2.0|>;
@@ -1513,7 +1513,7 @@ $f($el_n, ...$f($el_2, $f($f0($init), el_1))...)
 Полученную фабрику можно использовать как второй параметр функции [AGGREGATE_BY](aggregation.md#aggregateby).
 Если агрегационная функция работает на двух колонках вместо одной, как например, [MIN_BY](aggregation.md#minby), то в [AGGREGATE_BY](aggregation.md#aggregateby) первым аргументом передается `Tuple` из двух значений. Подробнее это указано при описании такой агрегационной функции.
 
-### Примеры
+#### Примеры
 
 ```yql
 $factory = AggregationFactory("MIN");
@@ -1531,7 +1531,7 @@ FROM my_table;
 1. Фабрика для агрегационных функций;
 2. Лямбда функция с одним аргументом, преобразующая входной элемент.
 
-### Примеры
+#### Примеры
 
 ```yql
 $f = AggregationFactory("sum");
@@ -1551,7 +1551,7 @@ SELECT ListAggregate([1,2,3], $h); -- 12
 1. Фабрика для агрегационных функций;
 2. Лямбда функция с одним аргументом, преобразующая результат.
 
-### Примеры
+#### Примеры
 
 ```yql
 $f = AggregationFactory("sum");
@@ -1568,7 +1568,7 @@ SELECT ListAggregate([1,2,3], $g); -- 12
 
 1. Фабрика для агрегационных функций.
 
-### Примеры
+#### Примеры
 
 ```yql
 $i = AggregationFactory("AGGREGATE_LIST_DISTINCT");

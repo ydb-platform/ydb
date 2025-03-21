@@ -286,6 +286,8 @@ private:
                 createArgs.UserToken.Reset(MakeIntrusive<NACLib::TUserToken>(msg.GetUserToken()));
             }
 
+            createArgs.Database = msg.GetDatabase();
+
             auto result = CaFactory_->CreateKqpComputeActor(std::move(createArgs));
 
             if (const auto* rmResult = std::get_if<NRm::TKqpRMAllocateResult>(&result)) {
@@ -455,7 +457,6 @@ private:
 
         ptr->InFlightMemoryLimitPerActorBytes = settings.GetInFlightMemoryLimitPerActorBytes();
         ptr->MemoryLimitPerMessageBytes = settings.GetMemoryLimitPerMessageBytes();
-        ptr->MaxBatchesPerMessage = settings.GetMaxBatchesPerMessage();
 
         ptr->StartRetryDelay = TDuration::MilliSeconds(settings.GetStartRetryDelayMs());
         ptr->MaxRetryDelay = TDuration::MilliSeconds(settings.GetMaxRetryDelayMs());

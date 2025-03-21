@@ -74,7 +74,7 @@ namespace NFake {
             }
         }
 
-        void HandleGone(const TActorId &actor) noexcept
+        void HandleGone(const TActorId &actor)
         {
             auto it = Childs.find(actor);
 
@@ -117,7 +117,7 @@ namespace NFake {
             }
         }
 
-        void DoShutDown(bool force) noexcept
+        void DoShutDown(bool force)
         {
             force = force && (State < EState::Shut);
 

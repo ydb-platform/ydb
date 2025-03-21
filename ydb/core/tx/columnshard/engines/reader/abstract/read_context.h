@@ -57,8 +57,14 @@ private:
     std::shared_ptr<TAtomicCounter> AbortionFlag = std::make_shared<TAtomicCounter>(0);
     std::shared_ptr<const TAtomicCounter> ConstAbortionFlag = AbortionFlag;
     const NConveyor::TProcessGuard ConveyorProcessGuard;
+    std::shared_ptr<NArrow::NSSA::IColumnResolver> Resolver;
 
 public:
+    const NArrow::NSSA::IColumnResolver* GetResolver() const {
+        AFL_VERIFY(!!Resolver);
+        return Resolver.get();
+    }
+
     ui64 GetConveyorProcessId() const {
         return ConveyorProcessGuard.GetProcessId();
     }

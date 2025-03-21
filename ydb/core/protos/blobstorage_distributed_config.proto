@@ -31,6 +31,8 @@ message TStorageConfig { // contents of storage metadata
     optional bytes ConfigComposite = 12; // compressed stored storage config YAML (if stored)
     NKikimrConfig.TSelfManagementConfig SelfManagementConfig = 13;
     TStorageConfig PrevConfig = 100; // previous version of StorageConfig (if any)
+    optional bytes CompressedStorageYaml = 14; // compressed storage YAML config (if dual-config is enabled)
+    optional uint64 ExpectedStorageYamlVersion = 15;
 }
 
 message TPDiskMetadataRecord {
@@ -191,10 +193,15 @@ message TEvNodeConfigInvokeOnRoot {
 
     message TFetchStorageConfig {
         bool Manual = 1; // when set to true, distconf returns conventional configuration
+        bool MainConfig = 2;
+        bool StorageConfig = 3;
     }
 
     message TReplaceStorageConfig {
-        string YAML = 1;
+        optional string YAML = 1;
+        optional string StorageYAML = 3;
+        optional bool SwitchDedicatedStorageSection = 4;
+        bool DedicatedStorageSectionConfigMode = 5;
         bool SkipConsoleValidation = 2;
     }
 
@@ -223,6 +230,7 @@ message TEvNodeConfigInvokeOnRootResult {
         NO_QUORUM = 1; // root node did not have quorum of following nodes
         ERROR = 2; // failure during request execution
         RACE = 3; // race in requests with other entities
+        CONTINUE_BSC = 4; // process this request with BSC
     }
 
     message TScepter {
@@ -236,7 +244,12 @@ message TEvNodeConfigInvokeOnRootResult {
     }
 
     message TFetchStorageConfig {
-        string YAML = 1;
+        optional string YAML = 1;
+        optional string StorageYAML = 2;
+    }
+
+    message TReplaceStorageConfig {
+        optional bool AllowEnablingDistconf = 1;
     }
 
     EStatus Status = 1;
@@ -248,6 +261,7 @@ message TEvNodeConfigInvokeOnRootResult {
     oneof Response {
         TQueryConfig QueryConfig = 5;
         TFetchStorageConfig FetchStorageConfig = 10;
+        TReplaceStorageConfig ReplaceStorageConfig = 11;
     }
 }
 

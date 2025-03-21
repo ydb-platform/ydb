@@ -130,7 +130,7 @@ struct TSession {
         }
     }
 
-    void DeleteAtFinalize(const TYtSettings::TConstPtr& config, const TString& cluster, const TString& table) {
+    void DeleteAtFinalize(const TYtSettings::TConstPtr& config, const TString& cluster, const TString& tablePath) {
         if (!ConfigInitDone_) {
             InflightTempTablesLimit_ = config->InflightTempTablesLimit.Get().GetOrElse(Max<ui32>());
             if (GetReleaseTempDataMode(*config) == EReleaseTempDataMode::Never) {
@@ -140,7 +140,7 @@ struct TSession {
         }
 
         auto& tempTables = TempTables_[cluster];
-        tempTables.insert(table);
+        tempTables.insert(tablePath);
         if (tempTables.size() > InflightTempTablesLimit_) {
             ythrow yexception() << "Too many temporary tables registered - limit is " << InflightTempTablesLimit_;
         }
@@ -362,7 +362,8 @@ public:
         TTableInfoResult res;
         try {
             for (const TTableReq& req: options.Tables()) {
-                auto path = Services_->GetTablePath(req.Cluster(), req.Table(), req.Anonymous(), true);
+
+                auto path = Services_->GetTablePath(req.Cluster(), req.Table(), req.Anonymous());
                 const bool exists = NFs::Exists(path) && !ShouldEmulateOutputForMultirun(req);
 
                 res.Data.emplace_back();
@@ -371,31 +372,28 @@ public:
 
                 TYtTableMetaInfo::TPtr metaData = new TYtTableMetaInfo;
                 metaData->DoesExist = exists;
+                res.Data.back().Meta = metaData;
+
                 if (exists) {
+                    auto lockPath = Services_->SnapshotTable(path, req.Cluster(), req.Table(), options.Epoch());
                     try {
-                        LoadTableMetaInfo(req, path, *metaData);
+                        LoadTableMetaInfo(req, lockPath, *metaData);
                     } catch (const TErrorException& e) {
                         throw TErrorException(e.GetCode()) << "Error loading " << req.Cluster() << '.' << req.Table() << " table metadata: " << e.what();
                     } catch (const yexception& e) {
                         throw yexception() << "Error loading " << req.Cluster() << '.' << req.Table() << " table metadata: " << e.what();
                     }
-                }
-                res.Data.back().Meta = metaData;
 
-                if (exists) {
                     TYtTableStatInfo::TPtr statData = new TYtTableStatInfo;
                     statData->Id = req.Table();
                     if (metaData->SqlView.empty()) {
                         try {
-                            LoadTableStatInfo(path, *statData);
+                            LoadTableStatInfo(lockPath, *statData);
                         } catch (const TErrorException& e) {
                             throw TErrorException(e.GetCode()) << "Error loading " << req.Cluster() << '.' << req.Table() << " table stat: " << e.what();
                         } catch (const yexception& e) {
                             throw yexception() << "Error loading " << req.Cluster() << '.' << req.Table() << " table stat: " << e.what();
                         }
-
-                        auto fullTableName = TString(YtProviderName).append('.').append(req.Cluster()).append('.').append(req.Table());
-                        Services_->LockPath(path, fullTableName);
                     }
                     res.Data.back().Stat = statData;
                 }
@@ -524,7 +522,7 @@ public:
                 TFolderResult::TFolderItem item;
                 item.Path = table;
                 item.Type = "table";
-                auto allAttrs = LoadTableAttrs(Services_->GetTablePath(options.Cluster(), table, false, true));
+                auto allAttrs = LoadTableAttrs(Services_->GetTablePath(options.Cluster(), table, false));
                 auto attrs = NYT::TNode::CreateMap();
                 for (const auto& attrName : options.Attributes()) {
                     if (attrName && allAttrs.HasKey(attrName)) {
@@ -711,7 +709,7 @@ public:
             const auto table = op.Output().Item(0);
 
             TYtOutTableInfo tableInfo(table);
-            auto outTablePath = Services_->GetTablePath(cluster, tableInfo.Name, true);
+            auto outTablePath = Services_->GetTmpTablePath(tableInfo.Name);
             TFsQueryCacheItem queryCacheItem(*options.Config(), cluster, Services_->GetTmpDir(), options.OperationHash(), outTablePath);
 
             NYT::TNode outSpec = NYT::TNode::CreateList();
@@ -812,7 +810,7 @@ public:
             auto cluster = TString{publish.DataSink().Cluster().Value()};
 
             bool isAnonymous = NYql::HasSetting(publish.Publish().Settings().Ref(), EYtSettingType::Anonymous);
-            auto destFilePath = Services_->GetTablePath(cluster, publish.Publish().Name().Value(), isAnonymous, true);
+            auto destFilePath = Services_->GetTablePath(cluster, publish.Publish().Name().Value(), isAnonymous);
 
             append = append && NFs::Exists(destFilePath);
 
@@ -887,7 +885,7 @@ public:
 
             {
                 NYT::TNode attrs = NYT::TNode::CreateMap();
-                TString srcFilePath = Services_->GetTablePath(cluster, GetOutTable(publish.Input().Item(0)).Cast<TYtOutTable>().Name().Value(), true);
+                TString srcFilePath = Services_->GetTmpTablePath(GetOutTable(publish.Input().Item(0)).Cast<TYtOutTable>().Name().Value());
                 if (NFs::Exists(srcFilePath + ".attr")) {
                     TIFStream input(srcFilePath + ".attr");
                     attrs = NYT::NodeFromYsonStream(&input);
@@ -924,8 +922,15 @@ public:
                     if (interval || isDuration) {
                         attrs["expiration_timeout"] = isDuration ? duration.MilliSeconds() : interval->MilliSeconds();
                     }
-                    if (options.Config()->NightlyCompress.Get(cluster).GetOrElse(false)) {
-                        attrs["force_nightly_compress"] = true;
+                    const TMaybe<bool> nightlyCompress = options.Config()->NightlyCompress.Get(cluster);
+                    if (nightlyCompress.Defined()) {
+                        if (*nightlyCompress) {
+                            attrs["force_nightly_compress"] = true;
+                        } else {
+                            NYT::TNode compressSettings = NYT::TNode::CreateMap();
+                            compressSettings["enabled"] = false;
+                            attrs["nightly_compression_settings"] = compressSettings;
+                        }
                     }
                 }
 
@@ -1002,7 +1007,7 @@ public:
                 const TString& cluster = i.Cluster;
                 const TString& path = i.Path;
 
-                auto tmpPath = Services_->GetTablePath(cluster, path, true);
+                auto tmpPath = Services_->GetTmpTablePath(path);
 
                 session->CancelDeleteAtFinalize(cluster, tmpPath);
 
@@ -1038,11 +1043,13 @@ public:
         return cluster;
     }
 
-    NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder) const final {
+    NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder, bool temp, bool anonymous) const final {
         Y_UNUSED(sessionId);
         Y_UNUSED(cluster);
         Y_UNUSED(epoch);
         Y_UNUSED(tmpFolder);
+        Y_UNUSED(temp);
+        Y_UNUSED(anonymous);
         return NYT::TRichYPath().Path(table);
     }
 
@@ -1090,7 +1097,7 @@ public:
             TFullResultTableResult res;
 
             TString name = TStringBuilder() << "tmp/" << GetGuidAsString(session->RandomProvider_->GenGuid());
-            TString path = Services_->GetTablePath(cluster, name, true);
+            TString path = Services_->GetTmpTablePath(name);
 
             res.Server = cluster;
             res.Path = path;
@@ -1287,7 +1294,7 @@ private:
             for (auto& tableInfo: GetInputTableInfos(pull.Input())) {
                 writer.OnListItem();
                 if (tableInfo->IsTemp) {
-                    auto outPath = Services_->GetTablePath(cluster, tableInfo->Name, true);
+                    auto outPath = Services_->GetTmpTablePath(tableInfo->Name);
                     session.CancelDeleteAtFinalize(TString{cluster}, outPath);
                 }
                 NYql::WriteTableReference(writer, YtProviderName, cluster, tableInfo->Name, tableInfo->IsTemp, columns);
@@ -1310,7 +1317,7 @@ private:
         for (auto table: op.Output()) {
             TString name = TStringBuilder() << "tmp/" << GetGuidAsString(session.RandomProvider_->GenGuid());
 
-            outTablePaths.push_back(Services_->GetTablePath(cluster, name, true));
+            outTablePaths.push_back(Services_->GetTmpTablePath(name));
 
             outTableInfos.emplace_back(table);
             outTableInfos.back().Name = name;
@@ -1363,7 +1370,7 @@ private:
 
             TYtTableStatInfo::TPtr statInfo = MakeIntrusive<TYtTableStatInfo>();
             statInfo->Id = name;
-            LoadTableStatInfo(Services_->GetTablePath(cluster, name, true), *statInfo);
+            LoadTableStatInfo(Services_->GetTmpTablePath(name), *statInfo);
 
             outStat.emplace_back(statInfo->Id, statInfo);
         }
@@ -1376,7 +1383,7 @@ private:
         YQL_ENSURE(op.Output().Size() == 1U);
 
         const TString name = TStringBuilder() << "tmp/" << GetGuidAsString(session.RandomProvider_->GenGuid());
-        const auto path = Services_->GetTablePath(cluster, name, true);
+        const auto path = Services_->GetTmpTablePath(name);
 
         TFsQueryCacheItem queryCacheItem(*options.Config(), cluster, Services_->GetTmpDir(), options.OperationHash(), path);
         if (queryCacheItem.Lookup(FakeQueue_)) {
@@ -1397,7 +1404,7 @@ private:
         TYtDropTable op(node);
         auto table = op.Table();
         bool isAnonymous = NYql::HasSetting(table.Settings().Ref(), EYtSettingType::Anonymous);
-        auto path = Services_->GetTablePath(op.DataSink().Cluster().Value(), table.Name().Value(), isAnonymous, true);
+        auto path = Services_->GetTablePath(op.DataSink().Cluster().Value(), table.Name().Value(), isAnonymous);
 
         NFs::Remove(path);
         NFs::Remove(path + ".attr");
@@ -1428,7 +1435,7 @@ private:
     void WriteOutTable(const TYtSettings::TConstPtr& config, TSession& session, const TString& cluster,
         const TYtOutTableInfo& outTableInfo, TStringBuf binaryYson) const
     {
-        auto outPath = Services_->GetTablePath(cluster, outTableInfo.Name, true);
+        auto outPath = Services_->GetTmpTablePath(outTableInfo.Name);
         session.DeleteAtFinalize(config, cluster, outPath);
         if (binaryYson) {
             TMemoryInput in(binaryYson);
@@ -1470,6 +1477,7 @@ private:
     TPathStatResult DoPathStat(TPathStatOptions&& options, bool onlyCached) {
         TPathStatResult res;
         res.DataSize.reserve(options.Paths().size());
+        res.Extended.reserve(options.Paths().size());
 
         auto extractSysColumns = [] (NYT::TRichYPath& ytPath) -> TVector<TString> {
             TVector<TString> res;
@@ -1486,12 +1494,15 @@ private:
         };
 
         for (auto& req: options.Paths()) {
-            auto path = Services_->GetTablePath(options.Cluster(), req.Path().Path_, req.IsTemp());
+            auto path = req.IsTemp() && !req.IsAnonymous()
+                ? Services_->GetTmpTablePath(req.Path().Path_)
+                : Services_->GetTableSnapshotPath(options.Cluster(), req.Path().Path_, req.IsAnonymous(), req.Epoch());
 
             const NYT::TNode attrs = LoadTableAttrs(path);
             bool inferSchema = attrs.HasKey("infer_schema") && attrs["infer_schema"].AsBool();
 
             res.DataSize.push_back(0);
+            res.Extended.push_back(Nothing());
             auto ytPath = req.Path();
             if (auto sysColumns = extractSysColumns(ytPath)) {
                 NYT::TNode inputList = LoadTableContent(path);
@@ -1567,12 +1578,10 @@ private:
                                 }
                             }
                         }
-                        res.Extended.push_back(IYtGateway::TPathStatResult::TExtendedResult{
+                        res.Extended.back() = IYtGateway::TPathStatResult::TExtendedResult{
                             .DataWeight = dataWeight,
                             .EstimatedUniqueCounts = estimatedUniqueCounts
-                        });
-                    } else {
-                        res.Extended.push_back(Nothing());
+                        };
                     }
                 }
             } else {
@@ -1581,6 +1590,10 @@ private:
         }
         res.SetSuccess();
         return res;
+    }
+
+    TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& /*options*/) override {
+        ythrow yexception() << "GetClusterConnection should not be called for file gateway";
     }
 
 

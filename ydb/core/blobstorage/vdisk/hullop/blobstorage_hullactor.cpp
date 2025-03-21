@@ -77,7 +77,6 @@ namespace NKikimr {
         // get fresh segment to compact
         TIntrusivePtr<TFreshSegment> freshSegment = rtCtx->LevelIndex->FindFreshSegmentForCompaction();
         Y_ABORT_UNLESS(freshSegment);
-        const ui64 mergeElementsApproximation = freshSegment->ElementsInserted();
 
         // prepare snapshots
         auto barriersSnap = hullDs->Barriers->GetIndexSnapshot();
@@ -91,8 +90,8 @@ namespace NKikimr {
         ui64 lastLsn = freshSegment->GetLastLsn();
         std::unique_ptr<TFreshCompaction> compaction(new TFreshCompaction(
             hullCtx, rtCtx, std::move(hugeBlobCtx), minHugeBlobInBytes, freshSegment, freshSegmentSnap,
-            std::move(barriersSnap), std::move(levelSnap), mergeElementsApproximation, it, firstLsn, lastLsn,
-            TDuration::Max(), {}, allowGarbageCollection));
+            std::move(barriersSnap), std::move(levelSnap), it, firstLsn, lastLsn, TDuration::Max(), {},
+            allowGarbageCollection));
 
         LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
                 VDISKP(hullCtx->VCtx->VDiskLogPrefix,
@@ -228,11 +227,9 @@ namespace NKikimr {
             // set up lsns + find out number of elements to merge
             ui64 firstLsn = ui64(-1);
             ui64 lastLsn = 0;
-            ui64 mergeElementsApproximation = 0;
             for (const auto &seg : vec) {
                 firstLsn = Min(firstLsn, seg->GetFirstLsn());
                 lastLsn = Max(lastLsn, seg->GetLastLsn());
-                mergeElementsApproximation += seg->Elements();
             }
 
             // prepare snapshots
@@ -244,7 +241,7 @@ namespace NKikimr {
 
             std::unique_ptr<TLevelCompaction> compaction(new TLevelCompaction(HullDs->HullCtx, RTCtx, HugeBlobCtx,
                 MinHugeBlobInBytes, nullptr, nullptr, std::move(barriersSnap), std::move(levelSnap),
-                mergeElementsApproximation, it, firstLsn, lastLsn, TDuration::Minutes(2), {}, AllowGarbageCollection));
+                it, firstLsn, lastLsn, TDuration::Minutes(2), {}, AllowGarbageCollection));
             NActors::TActorId actorId = RunInBatchPool(ctx, compaction.release());
             ActiveActors.Insert(actorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
@@ -261,10 +258,10 @@ namespace NKikimr {
                 NKikimrServices::BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "%s: selected compaction %s",
                 PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionTask->ToString().data()));
 
-            FullCompactionState.Compacted(ctx, CompactionTask->FullCompactionInfo);
-
             switch (action) {
                 case NHullComp::ActNothing: {
+                    // notify compaction completed
+                    FullCompactionState.Compacted(ctx, CompactionTask->FullCompactionInfo);
                     // nothing to merge, try later
                     ScheduleCompactionWakeup(ctx);
                     // for now, update storage ratio as it may have changed
@@ -353,8 +350,7 @@ namespace NKikimr {
         }
 
         void ApplyCompactionResult(const TActorContext &ctx, TVector<ui32> chunksAdded, TVector<ui32> reservedChunksLeft,
-                ui64 wId)
-        {
+                ui64 wId) {
             // create new slice
             RTCtx->LevelIndex->SetCompState(TLevelIndexBase::StateWaitCommit);
 
@@ -412,9 +408,6 @@ namespace NKikimr {
 
             // drop prev slice, some snapshot can still have a pointer to it
             prevSlice.Drop();
-
-            // free used resources
-            CompactionTask->Clear();
         }
 
         void LogRemovedHugeBlobs(const TActorContext &ctx, const TDiskPartVec &vec, bool level) const {
@@ -545,6 +538,8 @@ namespace NKikimr {
                     Y_DEBUG_ABORT_UNLESS(RTCtx->LevelIndex->GetCompState() == TLevelIndexBase::StateWaitCommit);
                     RTCtx->LevelIndex->SetCompState(TLevelIndexBase::StateNoComp);
                     RTCtx->LevelIndex->PrevEntryPointLsn = ui64(-1);
+                    FullCompactionState.Compacted(ctx, CompactionTask->FullCompactionInfo);
+                    CompactionTask->Clear();
                     ScheduleCompaction(ctx);
                     break;
                 case THullCommitFinished::CommitFresh:

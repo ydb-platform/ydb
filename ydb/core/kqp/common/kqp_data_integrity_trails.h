@@ -6,6 +6,8 @@
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <ydb/core/data_integrity_trails/data_integrity_trails.h>
+#include <ydb/core/tx/data_events/events.h>
+#include <ydb/core/tx/datashard/datashard.h>
 
 namespace NKikimr {
 namespace NDataIntegrity {
@@ -97,23 +99,110 @@ inline void LogIntegrityTrails(const TString& traceId, NKikimrKqp::EQueryAction 
 }
 
 // DataExecuter
-inline void LogIntegrityTrails(const TString& txType, const TString& traceId, ui64 txId, TMaybe<ui64> shardId, const TActorContext& ctx) {
-    auto log = [](const auto& type, const auto& traceId, const auto& txId, const auto& shardId) {
+inline void LogIntegrityTrails(const TString& txType, const TString& txLocksDebugStr, const TString& traceId, ui64 txId, TMaybe<ui64> shardId, const TActorContext& ctx) {
+    auto log = [](const auto& type, const auto& txLocksDebugStr, const auto& traceId, const auto& txId, const auto& shardId) {
         TStringStream ss;
         LogKeyValue("Component", "Executer", ss);
+        LogKeyValue("Type", "Request", ss);
         LogKeyValue("TraceId", traceId, ss);
         LogKeyValue("PhyTxId", ToString(txId), ss);
+        LogKeyValue("Locks", "[" + txLocksDebugStr + "]", ss);
 
         if (shardId) {
             LogKeyValue("ShardId", ToString(*shardId), ss);
         }
 
-        LogKeyValue("Type", type, ss, /*last*/ true);
+        LogKeyValue("TxType", type, ss, /*last*/ true);
 
         return ss.Str();
     };
 
-    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, log(txType, traceId, txId, shardId));
+    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, log(txType, txLocksDebugStr, traceId, txId, shardId));
+}
+
+inline void LogIntegrityTrails(const TString& state, const TString& traceId, const NEvents::TDataEvents::TEvWriteResult::TPtr& ev, const TActorContext& ctx) {
+    auto log = [](const auto& state, const auto& traceId, const auto& ev) {
+        const auto& record = ev->Get()->Record;
+
+        TStringStream ss;
+        LogKeyValue("Component", "Executer", ss);
+        LogKeyValue("Type", "Response", ss);
+        LogKeyValue("State", state, ss);
+        LogKeyValue("TraceId", traceId, ss);
+        LogKeyValue("PhyTxId", ToString(record.GetTxId()), ss);
+        LogKeyValue("ShardId", ToString(record.GetOrigin()), ss);
+
+        TStringBuilder locksDebugStr;
+        locksDebugStr << "[";
+        for (const auto& lock : record.GetTxLocks()) {
+            locksDebugStr << lock.ShortDebugString() << " ";
+        }
+        locksDebugStr << "]";
+
+        LogKeyValue("Locks", locksDebugStr, ss);
+        LogKeyValue("Status",  NKikimrDataEvents::TEvWriteResult::EStatus_Name(ev->Get()->GetStatus()), ss);
+
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(record.GetIssues(), issues);
+        LogKeyValue("Issues", issues.ToString(), ss, /*last*/ true);
+
+        return ss.Str();
+    };
+
+    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, log(state, traceId, ev));
+}
+
+inline void LogIntegrityTrails(const TString& state, const TString& traceId, const TEvDataShard::TEvProposeTransactionResult::TPtr& ev, const TActorContext& ctx) {
+    auto log = [](const auto& state, const auto& traceId, const auto& ev) {
+        const auto& record = ev->Get()->Record;
+
+        TStringStream ss;
+        LogKeyValue("Component", "Executer", ss);
+        LogKeyValue("Type", "Response", ss);
+        LogKeyValue("State", state, ss);
+        LogKeyValue("TraceId", traceId, ss);
+        LogKeyValue("PhyTxId", ToString(record.GetTxId()), ss);
+        LogKeyValue("ShardId", ToString(record.GetOrigin()), ss);
+
+        TStringBuilder locksDebugStr;
+        locksDebugStr << "[";
+        for (const auto& lock : record.GetTxLocks()) {
+            locksDebugStr << lock.ShortDebugString() << " ";
+        }
+        locksDebugStr << "]";
+
+        LogKeyValue("Locks", locksDebugStr, ss);
+        LogKeyValue("Status",  NKikimrTxDataShard::TEvProposeTransactionResult_EStatus_Name(ev->Get()->GetStatus()), ss);
+        LogKeyValue("Issues", ev->Get()->GetError(), ss, /*last*/ true);
+
+        return ss.Str();
+    };
+
+    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, log(state, traceId, ev));
+}
+
+template <typename TActorResultInfo>
+inline void LogIntegrityTrails(const TString& type, const TString& traceId, ui64 txId, const TActorResultInfo& info, const TActorContext& ctx) {
+    auto log = [](const auto& type, const auto& traceId, const auto& txId, const auto& info) {
+        TStringStream ss;
+        LogKeyValue("Component", "Executer", ss);
+        LogKeyValue("Type", type, ss);
+        LogKeyValue("TraceId", traceId, ss);
+        LogKeyValue("PhyTxId", ToString(txId), ss);
+
+        TStringBuilder locksDebugStr;
+        locksDebugStr << "[";
+        for (const auto& lock : info.GetLocks()) {
+            locksDebugStr << lock.ShortDebugString() << " ";
+        }
+        locksDebugStr << "]";
+
+        LogKeyValue("Locks", locksDebugStr, ss);
+
+        return ss.Str();
+    };
+
+    LOG_INFO_S(ctx, NKikimrServices::DATA_INTEGRITY, log(type, traceId, txId, info));
 }
 
 // WriteActor,BufferActor

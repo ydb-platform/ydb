@@ -293,6 +293,7 @@ class THugeModuleTestActor : public TActorBootstrapped<THugeModuleTestActor> {
 
     STRICT_STFUNC(StateWorking,
         HFunc(TEvHullLogHugeBlob, Handle);
+        cFunc(TEvBlobStorage::EvNotifyChunksDeleted, []{});
     )
 
 public:

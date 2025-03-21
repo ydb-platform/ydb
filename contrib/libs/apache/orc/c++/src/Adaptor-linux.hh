@@ -22,8 +22,8 @@
 #define HAS_PREAD
 #define HAS_STRPTIME
 #define HAS_DIAGNOSTIC_PUSH
-#define HAS_DOUBLE_TO_STRING
-#define HAS_INT64_TO_STRING
+/* #undef HAS_DOUBLE_TO_STRING */
+/* #undef HAS_INT64_TO_STRING */
 #define HAS_PRE_1970
 #define HAS_POST_2038
 #define HAS_STD_ISNAN

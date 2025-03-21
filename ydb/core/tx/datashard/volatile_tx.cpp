@@ -833,10 +833,9 @@ namespace NKikimr::NDataShard {
                 return true;
 
             case EVolatileTxState::Aborting:
-                // Aborting state will not change as long as we're still leader
-                return true;
-                // Ack readset normally as long as we're still a leader
-                return true;
+                // We need to wait until volatile tx abort is committed to send rs acks
+                info->DelayedAcks.push_back(std::move(ack));
+                return false;
         }
 
         ui64 srcTabletId = record.GetTabletSource();
@@ -891,8 +890,10 @@ namespace NKikimr::NDataShard {
         }();
 
         if (!committed) {
+            // We need to wait until volatile tx abort is committed to send rs acks
+            info->DelayedAcks.push_back(std::move(ack));
             AbortWaitingTransaction(info);
-            return true;
+            return false;
         }
 
         NIceDb::TNiceDb db(txc.DB);
@@ -1058,12 +1059,12 @@ namespace NKikimr::NDataShard {
 
     void TVolatileTxManager::ScheduleCommitTx(TVolatileTxInfo* info) {
         Y_DEBUG_ABORT_UNLESS(info && info->State == EVolatileTxState::Committed);
-        Self->EnqueueExecute(new TDataShard::TTxVolatileTxCommit(Self, info));
+        Self->Enqueue(new TDataShard::TTxVolatileTxCommit(Self, info));
     }
 
     void TVolatileTxManager::ScheduleAbortTx(TVolatileTxInfo* info) {
         Y_DEBUG_ABORT_UNLESS(info && info->State == EVolatileTxState::Aborting);
-        Self->EnqueueExecute(new TDataShard::TTxVolatileTxAbort(Self, info));
+        Self->Enqueue(new TDataShard::TTxVolatileTxAbort(Self, info));
     }
 
     bool TVolatileTxManager::RemoveFromCommitOrder(TVolatileTxInfo* info) {

@@ -255,7 +255,7 @@ err:
 }
 
 static int test_io(const char *file, int tc, int read, int sqthread,
-		   int fixed, int nonvec)
+		   int fixed, int nonvec, int hybrid)
 {
 	struct io_uring ring;
 	int ret, ring_flags = 0;
@@ -265,6 +265,9 @@ static int test_io(const char *file, int tc, int read, int sqthread,
 
 	if (sqthread)
 		ring_flags |= IORING_SETUP_SQPOLL;
+
+	if (hybrid)
+		ring_flags |= IORING_SETUP_IOPOLL | IORING_SETUP_HYBRID_IOPOLL;
 
 	ret = t_create_ring(64, &ring, ring_flags);
 	if (ret == T_SETUP_SKIP)
@@ -450,18 +453,19 @@ int main(int argc, char *argv[])
 
 	vecs = t_create_buffers(BUFFERS, BS);
 
-	for (i = 0; i < 16; i++) {
+	for (i = 0; i < 32; i++) {
 		int read = (i & 1) != 0;
 		int sqthread = (i & 2) != 0;
 		int fixed = (i & 4) != 0;
 		int nonvec = (i & 8) != 0;
+		int hybrid = (i & 16) != 0;
 
-		ret = test_io(fname, i, read, sqthread, fixed, nonvec);
+		ret = test_io(fname, i, read, sqthread, fixed, nonvec, hybrid);
 		if (no_pt)
 			break;
 		if (ret) {
-			fprintf(stderr, "test_io failed %d/%d/%d/%d\n",
-				read, sqthread, fixed, nonvec);
+			fprintf(stderr, "test_io failed %d/%d/%d/%d/%d\n",
+				read, sqthread, fixed, nonvec, hybrid);
 			goto err;
 		}
 	}

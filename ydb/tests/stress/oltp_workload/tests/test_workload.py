@@ -1,14 +1,20 @@
 # -*- coding: utf-8 -*-
-import yatest
-
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.stress.oltp_workload.workload import WorkloadRunner
+from ydb.tests.stress.common.common import YdbClient
 
 
 class TestYdbWorkload(object):
     @classmethod
     def setup_class(cls):
-        cls.cluster = KiKiMR(KikimrConfigGenerator())
+        config = KikimrConfigGenerator(
+            extra_feature_flags={
+                "enable_parameterized_decimal": True,
+                "enable_table_datetime64" : True
+            }
+        )
+        cls.cluster = KiKiMR(config)
         cls.cluster.start()
 
     @classmethod
@@ -16,13 +22,7 @@ class TestYdbWorkload(object):
         cls.cluster.stop()
 
     def test(self):
-        workload_path = yatest.common.build_path("ydb/tests/stress/oltp_workload/oltp_workload")
-        yatest.common.execute(
-            [
-                workload_path,
-                "--endpoint", f"grpc://localhost:{self.cluster.nodes[1].grpc_port}",
-                "--database=/Root",
-                "--duration", "120",
-            ],
-            wait=True
-        )
+        client = YdbClient(f'grpc://localhost:{self.cluster.nodes[1].grpc_port}', '/Root', True)
+        client.wait_connection()
+        with WorkloadRunner(client, 'oltp_workload', 120) as runner:
+            runner.run()

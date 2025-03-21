@@ -342,7 +342,7 @@ public:
         return client->GetConnection();
     }
 
-    std::optional<TStringBuf> GetClusterName(bool fetchIfNull) override
+    std::optional<std::string> GetClusterName(bool fetchIfNull) override
     {
         auto [client, _] = GetActiveClient();
         return client->GetClusterName(fetchIfNull);

@@ -56,7 +56,7 @@ However, if you want to match a string against any of the listed expressions (th
 
 When you call `MultiGrep`/`MultiMatch`, regular expressions are passed one per line using [multiline string literals](../../syntax/expressions.md#named-nodes):
 
-### Example
+#### Example
 
 ```yql
 $multi_match = Hyperscan::MultiMatch(@@a.*

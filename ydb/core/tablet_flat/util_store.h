@@ -105,7 +105,7 @@ namespace NUtil {
         };
 
     public:
-        TConcurrentStore() { }
+        TConcurrentStore() noexcept { }
 
         ~TConcurrentStore() noexcept {
             size_t count = Count.exchange(0, std::memory_order_release);

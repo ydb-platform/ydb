@@ -523,7 +523,7 @@ THolder<TEvDataShard::TEvProposeTransactionResult> KqpCompleteTransaction(const 
                     NDq::TDqSerializedBatch outputData;
                     auto fetchStatus = FetchOutput(taskRunner.GetOutputChannel(channel.GetId()).Get(), outputData);
                     MKQL_ENSURE_S(fetchStatus == NUdf::EFetchStatus::Finish);
-                    MKQL_ENSURE_S(outputData.Proto.GetRows() == 0);
+                    MKQL_ENSURE_S(outputData.Proto.GetChunks() == 0);
                 }
             }
         }

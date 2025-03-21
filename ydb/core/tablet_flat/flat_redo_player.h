@@ -15,7 +15,7 @@ namespace NRedo {
     public:
         TReader(TArrayRef<const char> plain): Plain(plain), On(Plain.data()) { }
 
-        TArrayRef<const char> Next() noexcept
+        TArrayRef<const char> Next()
         {
             if (On >= Plain.end()) {
                 return { nullptr, size_t(0) };

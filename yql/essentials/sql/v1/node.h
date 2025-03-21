@@ -1278,7 +1278,7 @@ namespace NSQLTranslationV1 {
     };
 
     struct TAlterDatabaseParameters {
-        TString DbPath;
+        TDeferredAtom DbPath;
         std::optional<TDeferredAtom> Owner;
     };
 
@@ -1324,6 +1324,7 @@ namespace NSQLTranslationV1 {
 
     struct TUserParameters : TRoleParameters {
         TMaybe<TDeferredAtom> Password;
+        bool IsPasswordNull = false;
         bool IsPasswordEncrypted = false;
         std::optional<bool> CanLogin;
         TMaybe<TDeferredAtom> Hash;

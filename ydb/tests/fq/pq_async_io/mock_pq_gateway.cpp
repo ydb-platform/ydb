@@ -148,6 +148,8 @@ public:
         const TString& /*database*/,
         bool /*secure*/) override {}
 
+    void UpdateClusterConfigs(const TPqGatewayConfigPtr& /*config*/) override {};
+
     NYql::ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& /*driver*/, const NYdb::NTopic::TTopicClientSettings& /*settings*/) override {
         return MakeIntrusive<TMockTopicClient>(this);
     }
@@ -161,6 +163,10 @@ public:
 
      void AddEvent(const TString& topic, NYdb::NTopic::TReadSessionEvent::TEvent&& e, size_t size) override {
         GetEventQueue(topic)->Push(std::move(e), size);
+     }
+
+     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const override {
+        return NYdb::NTopic::TTopicClientSettings();
      }
 
 private:

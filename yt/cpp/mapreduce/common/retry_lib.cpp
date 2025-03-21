@@ -203,16 +203,11 @@ static bool IsRetriableChunkError(const TSet<int>& codes)
 
 static TMaybe<TDuration> TryGetBackoffDuration(const TErrorResponse& errorResponse, const TConfigPtr& config)
 {
-    int httpCode = errorResponse.GetHttpCode();
-    if (httpCode / 100 != 4 && !errorResponse.IsFromTrailers()) {
-        return config->RetryInterval;
-    }
-
     auto allCodes = errorResponse.GetError().GetAllErrorCodes();
     using namespace NClusterErrorCodes;
-    if (httpCode == 429
-        || allCodes.count(NSecurityClient::RequestQueueSizeLimitExceeded)
-        || allCodes.count(NRpc::RequestQueueSizeLimitExceeded))
+
+    if (allCodes.count(NSecurityClient::RequestQueueSizeLimitExceeded) ||
+        allCodes.count(NRpc::RequestQueueSizeLimitExceeded))
     {
         // request rate limit exceeded
         return config->RateLimitExceededRetryInterval;
@@ -230,6 +225,7 @@ static TMaybe<TDuration> TryGetBackoffDuration(const TErrorResponse& errorRespon
         NRpc::Unavailable,
         NApi::RetriableArchiveError,
         NSequoiaClient::SequoiaRetriableError,
+        NRpc::TransientFailure,
         Canceled,
     }) {
         if (allCodes.contains(code)) {

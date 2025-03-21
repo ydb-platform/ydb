@@ -4,14 +4,6 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(60)
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
-    SIZE(LARGE)
-    TAG(ya:fat)
-    REQUIREMENTS(ram:16)
-ELSE()
-    SIZE(MEDIUM)
-ENDIF()
-
 PEERDIR(
     contrib/libs/apache/arrow
     ydb/core/base
@@ -28,12 +20,21 @@ PEERDIR(
     yql/essentials/udfs/common/json2
 )
 
+IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+    SIZE(LARGE)
+    TAG(ya:fat)
+    REQUIREMENTS(ram:16)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
+
 YQL_LAST_ABI_VERSION()
 
 SRCS(
     ut_insert_table.cpp
     ut_logs_engine.cpp
     ut_program.cpp
+    ut_script.cpp
     helper.cpp
 )
 

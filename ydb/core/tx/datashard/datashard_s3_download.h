@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ydb/core/protos/checksum.pb.h>
+
 #include <util/generic/maybe.h>
 
 namespace NKikimr {
@@ -10,6 +12,7 @@ struct TS3Download {
     ui64 ProcessedBytes = 0;
     ui64 WrittenBytes = 0;
     ui64 WrittenRows = 0;
+    NKikimrBackup::TChecksumState ChecksumState;
 
     void Out(IOutputStream& out) const {
         out << "{"
@@ -17,6 +20,7 @@ struct TS3Download {
             << " ProcessedBytes: " << ProcessedBytes
             << " WrittenBytes: " << WrittenBytes
             << " WrittenRows: " << WrittenRows
+            << " ChecksumState: " << ChecksumState.ShortDebugString()
         << " }";
     }
 };

@@ -129,7 +129,8 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
                 }
 
                 exportInfo = new TExportInfo(id, uid, TExportInfo::EKind::S3, settings, domainPath.Base()->PathId, request.GetPeerName());
-                exportInfo->EnableChecksums = AppData()->FeatureFlags.GetEnableExportChecksums();
+                exportInfo->EnableChecksums = AppData()->FeatureFlags.GetEnableChecksumsExport();
+                exportInfo->EnablePermissions = AppData()->FeatureFlags.GetEnablePermissionsExport();
                 TString explain;
                 if (!FillItems(exportInfo, settings, explain)) {
                     return Reply(
@@ -359,7 +360,7 @@ private:
 
             item.SchemeUploader = ctx.Register(CreateSchemeUploader(
                 Self->SelfId(), exportInfo->Id, itemIdx, item.SourcePathId,
-                exportSettings, databaseRoot, metadata.Serialize()
+                exportSettings, databaseRoot, metadata.Serialize(), exportInfo->EnablePermissions
             ));
             Self->RunningExportSchemeUploaders.emplace(item.SchemeUploader);
         }

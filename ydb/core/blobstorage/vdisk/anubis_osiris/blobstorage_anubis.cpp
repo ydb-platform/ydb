@@ -68,7 +68,7 @@ namespace NKikimr {
         STRICT_STFUNC(WaitForCandidatesStateFunc,
                       HFunc(TEvAnubisCandidates, Handle)
                       HFunc(NMon::TEvHttpInfo, Handle)
-                      HFunc(TEvents::TEvActorDied, Handle)
+                      HFunc(TEvents::TEvGone, Handle)
                       HFunc(TEvents::TEvPoisonPill, HandlePoison)
                       )
 
@@ -116,7 +116,7 @@ namespace NKikimr {
         STRICT_STFUNC(WaitPeersReply,
                       HFunc(TEvAnubisVGetResult, Handle)
                       HFunc(NMon::TEvHttpInfo, Handle)
-                      HFunc(TEvents::TEvActorDied, Handle)
+                      HFunc(TEvents::TEvGone, Handle)
                       HFunc(TEvents::TEvPoisonPill, HandlePoison)
                       )
 
@@ -151,7 +151,7 @@ namespace NKikimr {
         STRICT_STFUNC(WaitWriteCompletion,
                       HFunc(TEvAnubisOsirisPutResult, Handle)
                       HFunc(NMon::TEvHttpInfo, Handle)
-                      HFunc(TEvents::TEvActorDied, Handle)
+                      HFunc(TEvents::TEvGone, Handle)
                       HFunc(TEvents::TEvPoisonPill, HandlePoison)
                       )
 
@@ -213,7 +213,7 @@ namespace NKikimr {
         // COMMON
         ////////////////////////////////////////////////////////////////////////
         // This handler is called when TAnubisHttpInfoActor is finished
-        void Handle(TEvents::TEvActorDied::TPtr &ev, const TActorContext &ctx) {
+        void Handle(TEvents::TEvGone::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ctx);
             ActiveActors.Erase(ev->Sender);
         }

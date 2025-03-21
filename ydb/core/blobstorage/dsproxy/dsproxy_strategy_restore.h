@@ -65,9 +65,15 @@ public:
             << " optimisticState# " << TBlobStorageGroupInfo::BlobStateToString(*optimisticState));
     }
 
-    std::optional<EStrategyOutcome> SetErrorForUnrecoverableOptimistic(TBlobStorageGroupInfo::EBlobState optimisticState) {
+    std::optional<EStrategyOutcome> SetErrorForUnrecoverableOptimistic(TBlobStorageGroupInfo::EBlobState optimisticState,
+            TBlobState& state, const TBlobStorageGroupInfo& info) {
         switch (optimisticState) {
             case TBlobStorageGroupInfo::EBS_DISINTEGRATED:
+                return EStrategyOutcome::Error(TStringBuilder() << "TRestoreStrategy saw optimisticState# "
+                        << TBlobStorageGroupInfo::BlobStateToString(optimisticState)
+                        << " GroupId# " << info.GroupID
+                        << " BlobId# " << state.Id
+                        << " Reported ErrorReasons# " << state.ReportProblems(info));
             case TBlobStorageGroupInfo::EBS_UNRECOVERABLE_FRAGMENTARY:
             case TBlobStorageGroupInfo::EBS_RECOVERABLE_FRAGMENTARY:
             case TBlobStorageGroupInfo::EBS_RECOVERABLE_DOUBTED:
@@ -122,7 +128,7 @@ public:
         // Look at the current layout and set the status if possible
         TBlobStorageGroupInfo::EBlobState optimisticState = TBlobStorageGroupInfo::EBS_DISINTEGRATED;
         EvaluateRestoreLayout(logCtx, state, info, &optimisticState);
-        if (auto res = SetErrorForUnrecoverableOptimistic(optimisticState)) {
+        if (auto res = SetErrorForUnrecoverableOptimistic(optimisticState, state, info)) {
             return *res;
         }
 

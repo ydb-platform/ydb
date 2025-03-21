@@ -137,8 +137,8 @@ SRCS(
     misc/histogram.cpp
     misc/adjusted_exponential_moving_average.cpp
     misc/id_generator.cpp
+    misc/fair_share_hierarchical_queue.cpp
     misc/linear_probe.cpp
-    misc/memory_usage_tracker.cpp
     misc/relaxed_mpsc_queue.cpp
     misc/parser_helpers.cpp
     misc/pattern_formatter.cpp
@@ -374,6 +374,7 @@ PEERDIR(
     yt/yt/library/profiling
     yt/yt/library/profiling/resource_tracker
     yt/yt/library/tracing
+    yt/yt/library/numeric
 )
 
 IF (OS_WINDOWS)

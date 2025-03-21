@@ -25,7 +25,7 @@ TDefaultInvocationTimePolicy::TDefaultInvocationTimePolicy(
 void TDefaultInvocationTimePolicy::ProcessResult()
 { }
 
-TInstant TDefaultInvocationTimePolicy::KickstartDeadline()
+TInstant TDefaultInvocationTimePolicy::GenerateKickstartDeadline()
 {
     return TInstant::Now() + RandomDuration(Splay);
 }
@@ -54,18 +54,12 @@ void TDefaultInvocationTimePolicy::SetOptions(std::optional<TDuration> period)
 {
     Period = period;
 }
-
-TInstant TDefaultInvocationTimePolicy::NextDeadline()
+TInstant TDefaultInvocationTimePolicy::GenerateNextDeadline()
 {
-    auto randomGenerator = [] {
-        double rand = RandomNumber<double>();
-
-        return 2.0 * rand - 1.0;
-    };
-
-    //! Jitter is divided by 2 for historical reasons.
-    return TInstant::Now() + ApplyJitter(*Period, Jitter / 2.0, randomGenerator);
+    return TInstant::Now() + GenerateDelay();
 }
+
+
 
 bool TDefaultInvocationTimePolicy::IsOutOfBandProhibited()
 {

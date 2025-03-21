@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/base/appdata_fwd.h>
 
 #include <util/generic/string.h>
 #include <util/string/join.h>
@@ -22,10 +23,11 @@ bool TrySplitTablePath(const TString& path, std::pair<TString, TString>& result,
 bool SplitTablePath(const TString& tableName, const TString& database, std::pair<TString, TString>& pathPair,
     TString& error, bool createDir);
 
-TVector<TString> CreateIndexTablePath(const TString& tableName, NYql::TIndexDescription::EType indexType, const TString& indexName);
+TVector<TString> CreateIndexTablePath(const TString& tableName, const NYql::TIndexDescription& index);
 
-bool SetDatabaseForLoginOperation(TString& result, bool getDomainLoginOnly, TMaybe<TString> domainName,
-    const TString& database);
+TString GetDomainDatabase(const TAppData* appData);
+
+TString SelectDatabaseForAlterLoginOperations(const TAppData* appData, const TString& requestDatabase);
 
 void FillCreateExternalTableColumnDesc(NKikimrSchemeOp::TExternalTableDescription& externalTableDesc,
                                        const TString& name,

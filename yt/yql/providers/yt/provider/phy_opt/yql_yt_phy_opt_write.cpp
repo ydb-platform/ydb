@@ -595,6 +595,8 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ReplaceStatWriteTable(T
     auto input = write.Input();
 
     TMaybeNode<TYtOutput> newInput;
+    const ERuntimeClusterSelectionMode selectionMode =
+        State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
 
     if (!IsYtProviderInput(input, false)) {
         if (!EnsurePersistable(input.Ref(), ctx)) {
@@ -603,7 +605,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ReplaceStatWriteTable(T
 
         TString cluster;
         TSyncMap syncList;
-        if (!IsYtCompleteIsolatedLambda(input.Ref(), syncList, cluster, false)) {
+        if (!IsYtCompleteIsolatedLambda(input.Ref(), syncList, cluster, false, selectionMode)) {
             return node;
         }
 
@@ -633,14 +635,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ReplaceStatWriteTable(T
         input = Build<TYtOutput>(ctx, write.Pos())
             .Operation<TYtFill>()
                 .World(ApplySyncListToWorld(ctx.NewWorld(write.Pos()), syncList, ctx))
-                .DataSink<TYtDSink>()
-                    .Category()
-                        .Value(YtProviderName)
-                    .Build()
-                    .Cluster()
-                        .Value(cluster)
-                    .Build()
-                .Build()
+                .DataSink(MakeDataSink(write.Pos(), cluster, ctx))
                 .Output()
                     .Add(outTable.ToExprNode(ctx, write.Pos()).Cast<TYtOutTable>())
                 .Build()
@@ -736,7 +731,10 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Fill(TExprBase node, TE
 
     auto cluster = TString{write.DataSink().Cluster().Value()};
     TSyncMap syncList;
-    if (!IsYtCompleteIsolatedLambda(write.Content().Ref(), syncList, cluster, false)) {
+    const ERuntimeClusterSelectionMode selectionMode =
+        State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+
+    if (!IsYtCompleteIsolatedLambda(write.Content().Ref(), syncList, cluster, false, selectionMode)) {
         return node;
     }
 
@@ -865,7 +863,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Materialize(TExprBase n
 
     auto cluster = materialize.DataSink().Cluster().StringValue();
     TSyncMap syncList;
-    if (!IsYtCompleteIsolatedLambda(content.Ref(), syncList, cluster, false)) {
+    const ERuntimeClusterSelectionMode selectionMode =
+        State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+    if (!IsYtCompleteIsolatedLambda(content.Ref(), syncList, cluster, false, selectionMode)) {
         return node;
     }
 

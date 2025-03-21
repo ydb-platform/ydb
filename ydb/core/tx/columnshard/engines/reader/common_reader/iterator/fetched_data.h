@@ -2,12 +2,14 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/formats/arrow/program/collection.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+#include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/collection.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -18,25 +20,69 @@
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
+class IKernelFetchLogic;
+
 class TFetchedData {
 private:
     using TBlobs = THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo>;
+    using TFetchers = THashMap<ui32, std::shared_ptr<IKernelFetchLogic>>;
+    TFetchers Fetchers;
     YDB_ACCESSOR_DEF(TBlobs, Blobs);
-    YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Table);
-    YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, Filter);
-    YDB_READONLY(bool, UseFilter, false);
+    YDB_READONLY_DEF(std::shared_ptr<NArrow::NAccessor::TAccessorsCollection>, Table);
+    YDB_READONLY_DEF(std::shared_ptr<NIndexes::TIndexesCollection>, Indexes);
+    YDB_READONLY(bool, Aborted, false);
 
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AccessorsGuard;
     std::optional<TPortionDataAccessor> PortionAccessor;
-    bool DataAdded = false;
+    THashMap<NArrow::NSSA::IDataSource::TCheckIndexContext, std::shared_ptr<NIndexes::IIndexMeta>> DataAddrToIndex;
 
 public:
-    TString DebugString() const {
-        return TStringBuilder() << DataAdded;
+    void AddRemapDataToIndex(const NArrow::NSSA::IDataSource::TCheckIndexContext& addr, const std::shared_ptr<NIndexes::IIndexMeta>& index) {
+        AFL_VERIFY(DataAddrToIndex.emplace(addr, index).second);
     }
 
-    TFetchedData(const bool useFilter)
-        : UseFilter(useFilter) {
+    std::shared_ptr<NIndexes::IIndexMeta> GetRemapDataToIndex(const NArrow::NSSA::IDataSource::TCheckIndexContext& addr) const {
+        auto it = DataAddrToIndex.find(addr);
+        AFL_VERIFY(it != DataAddrToIndex.end());
+        return it->second;
+    }
+
+    void AddFetchers(const std::vector<std::shared_ptr<IKernelFetchLogic>>& fetchers);
+    void AddFetcher(const std::shared_ptr<IKernelFetchLogic>& fetcher);
+
+    std::shared_ptr<IKernelFetchLogic> ExtractFetcherOptional(const ui32 entityId) {
+        auto it = Fetchers.find(entityId);
+        if (it == Fetchers.end()) {
+            return nullptr;
+        } else {
+            auto result = it->second;
+            Fetchers.erase(it);
+            return result;
+        }
+    }
+
+    std::shared_ptr<IKernelFetchLogic> ExtractFetcherVerified(const ui32 entityId) {
+        auto result = ExtractFetcherOptional(entityId);
+        AFL_VERIFY(!!result)("column_id", entityId);
+        return result;
+    }
+
+    void Abort() {
+        Aborted = true;
+    }
+
+    bool GetUseFilter() const {
+        return Table->GetFilterUsage();
+    }
+
+    TString DebugString() const {
+        return TStringBuilder() << "OK";
+    }
+
+    TFetchedData(const bool useFilter, const ui32 recordsCount) {
+        Table = std::make_shared<NArrow::NAccessor::TAccessorsCollection>(recordsCount);
+        Table->SetFilterUsage(useFilter);
+        Indexes = std::make_shared<NIndexes::TIndexesCollection>();
     }
 
     void SetAccessorsGuard(std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>&& guard) {
@@ -46,11 +92,7 @@ public:
     }
 
     void SetUseFilter(const bool value) {
-        if (UseFilter == value) {
-            return;
-        }
-        AFL_VERIFY(!DataAdded);
-        UseFilter = value;
+        Table->SetFilterUsage(value);
     }
 
     bool HasPortionAccessor() const {
@@ -68,20 +110,17 @@ public:
     }
 
     ui32 GetFilteredCount(const ui32 recordsCount, const ui32 defLimit) const {
-        if (!Filter) {
-            return std::min(defLimit, recordsCount);
-        }
-        return Filter->GetFilteredCount().value_or(recordsCount);
+        return Table->GetFilteredCount(recordsCount, defLimit);
     }
 
-    void SyncTableColumns(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ISnapshotSchema& schema);
+    void SyncTableColumns(const std::vector<std::shared_ptr<arrow::Field>>& fields, const ISnapshotSchema& schema, const ui32 recordsCount);
 
     std::shared_ptr<NArrow::TColumnFilter> GetAppliedFilter() const {
-        return UseFilter ? Filter : nullptr;
+        return Table->GetAppliedFilter();
     }
 
     std::shared_ptr<NArrow::TColumnFilter> GetNotAppliedFilter() const {
-        return UseFilter ? nullptr : Filter;
+        return Table->GetNotAppliedFilter();
     }
 
     TString ExtractBlob(const TChunkAddress& address) {
@@ -91,6 +130,11 @@ public:
         auto result = it->second.GetData();
         Blobs.erase(it);
         return result;
+    }
+
+    void AddBatch(
+        const std::shared_ptr<NArrow::TGeneralContainer>& container, const NArrow::NSSA::IColumnResolver& resolver, const bool withFilter) {
+        Table->AddBatch(container, resolver, withFilter);
     }
 
     void AddBlobs(THashMap<TChunkAddress, TString>&& blobData) {
@@ -105,89 +149,31 @@ public:
         }
     }
 
-    bool IsEmpty() const {
-        return (Filter && Filter->IsTotalDenyFilter()) || (Table && !Table->num_rows());
+    bool IsEmptyFiltered() const {
+        return Table->IsEmptyFiltered();
     }
 
     void Clear() {
-        Filter = std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildDenyFilter());
-        Table = nullptr;
+        Table->Clear();
     }
 
     void AddFilter(const std::shared_ptr<NArrow::TColumnFilter>& filter) {
-        DataAdded = true;
         if (!filter) {
             return;
         }
-        return AddFilter(*filter);
+        return Table->AddFilter(*filter);
+    }
+
+    std::shared_ptr<NArrow::TGeneralContainer> ToGeneralContainer() const {
+        return Table->ToGeneralContainer();
     }
 
     void CutFilter(const ui32 recordsCount, const ui32 limit, const bool reverse) {
-        auto filter = std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter());
-        ui32 recordsCountImpl = Filter ? Filter->GetFilteredCount().value_or(recordsCount) : recordsCount;
-        if (recordsCountImpl < limit) {
-            return;
-        }
-        if (reverse) {
-            filter->Add(false, recordsCountImpl - limit);
-            filter->Add(true, limit);
-        } else {
-            filter->Add(true, limit);
-            filter->Add(false, recordsCountImpl - limit);
-        }
-        if (Filter) {
-            if (UseFilter) {
-                AddFilter(*filter);
-            } else {
-                AddFilter(Filter->CombineSequentialAnd(*filter));
-            }
-        } else {
-            AddFilter(*filter);
-        }
+        Table->CutFilter(recordsCount, limit, reverse);
     }
 
     void AddFilter(const NArrow::TColumnFilter& filter) {
-        if (UseFilter && Table) {
-            AFL_VERIFY(filter.Apply(Table, 
-                NArrow::TColumnFilter::TApplyContext().SetTrySlices(!HasAppData() || AppDataVerified().ColumnShardConfig.GetUseSlicesFilter())));
-        }
-        if (!Filter) {
-            Filter = std::make_shared<NArrow::TColumnFilter>(filter);
-        } else if (UseFilter) {
-            *Filter = Filter->CombineSequentialAnd(filter);
-        } else {
-            *Filter = Filter->And(filter);
-        }
-    }
-
-    void AddBatch(const std::shared_ptr<NArrow::TGeneralContainer>& table) {
-        DataAdded = true;
-        AFL_VERIFY(table);
-        if (UseFilter) {
-            AddBatch(table->BuildTableVerified());
-        } else {
-            if (!Table) {
-                Table = table;
-            } else {
-                auto mergeResult = Table->MergeColumnsStrictly(*table);
-                AFL_VERIFY(mergeResult.IsSuccess())("error", mergeResult.GetErrorMessage());
-            }
-        }
-    }
-
-    void AddBatch(const std::shared_ptr<arrow::Table>& table) {
-        DataAdded = true;
-        auto tableLocal = table;
-        if (Filter && UseFilter) {
-            AFL_VERIFY(Filter->Apply(tableLocal, 
-                NArrow::TColumnFilter::TApplyContext().SetTrySlices(!HasAppData() || AppDataVerified().ColumnShardConfig.GetUseSlicesFilter())));
-        }
-        if (!Table) {
-            Table = std::make_shared<NArrow::TGeneralContainer>(tableLocal);
-        } else {
-            auto mergeResult = Table->MergeColumnsStrictly(NArrow::TGeneralContainer(tableLocal));
-            AFL_VERIFY(mergeResult.IsSuccess())("error", mergeResult.GetErrorMessage());
-        }
+        Table->AddFilter(filter);
     }
 };
 
@@ -198,10 +184,22 @@ private:
     std::optional<std::deque<TPortionDataAccessor::TReadPage>> PagesToResult;
     std::optional<std::shared_ptr<arrow::Table>> ChunkToReply;
 
+    TFetchedResult() = default;
+
 public:
-    TFetchedResult(std::unique_ptr<TFetchedData>&& data)
-        : Batch(data->GetTable())
-        , NotAppliedFilter(data->GetNotAppliedFilter()) {
+    static std::unique_ptr<TFetchedResult> BuildEmpty() {
+        return std::unique_ptr<TFetchedResult>(new TFetchedResult);
+    }
+
+    TFetchedResult(
+        std::unique_ptr<TFetchedData>&& data, const std::optional<std::set<ui32>>& columnIds, const NArrow::NSSA::IColumnResolver& resolver)
+        : Batch(data->GetAborted() ? nullptr : data->GetTable()->ToGeneralContainer(&resolver, columnIds, false))
+        , NotAppliedFilter(data->GetAborted() ? nullptr : data->GetNotAppliedFilter()) {
+    }
+
+    TFetchedResult(std::unique_ptr<TFetchedData>&& data, const NArrow::NSSA::IColumnResolver& resolver)
+        : Batch(data->GetAborted() ? nullptr : data->GetTable()->ToGeneralContainer(&resolver, {}, false))
+        , NotAppliedFilter(data->GetAborted() ? nullptr : data->GetNotAppliedFilter()) {
     }
 
     TPortionDataAccessor::TReadPage ExtractPageForResult() {

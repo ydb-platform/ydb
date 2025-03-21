@@ -270,7 +270,7 @@ namespace NPage {
         TGarbageStatsAgg& operator=(TGarbageStatsAgg&&) noexcept = default;
 
     private:
-        TGarbageStatsAgg(TVector<TItem>&& items)
+        TGarbageStatsAgg(TVector<TItem>&& items) noexcept
             : Items(std::move(items))
         { }
 

@@ -8,7 +8,7 @@ The table is automatically created upon the first [INSERT INTO](../insert_into.m
 
 {% else %}
 
-The invocation of `CREATE TABLE` creates {% if concept_table %}a [table]({{ concept_table }}){% else %}a table{% endif %} with the specified data schema{% if feature_map_tables %} and primary key columns (`PRIMARY KEY`){% endif %}. {% if feature_secondary_index == true %}It also allows defining secondary indexes on the created table.
+The invocation of `CREATE TABLE` creates {% if concept_table %}a [table]({{ concept_table }}){% else %}a table{% endif %} with the specified data schema{% if feature_map_tables %} and primary key columns (`PRIMARY KEY`){% endif %}.{% if feature_secondary_index == true %} It also allows defining secondary indexes on the created table.
 
 {% endif %}
 

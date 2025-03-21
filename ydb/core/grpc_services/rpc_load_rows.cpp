@@ -252,7 +252,7 @@ private:
             }
 
             // Fill rest of cells with non-key column members
-            if (!FillCellsFromProto(valueCells, ValueColumnPositions, r, errorMessage, valueDataPool)) {
+            if (!FillCellsFromProto(valueCells, ValueColumnPositions, r, errorMessage, valueDataPool, IsInfinityInJsonAllowed())) {
                 return false;
             }
 

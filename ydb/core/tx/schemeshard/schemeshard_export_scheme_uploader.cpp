@@ -104,11 +104,15 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
             return;
         }
         SchemeUploaded = true;
-        UploadPermissions();
+        if (EnablePermissions) {
+            UploadPermissions();
+        } else {
+            UploadMetadata();
+        }
     }
 
     void UploadPermissions() {
-        Y_ABORT_UNLESS(!PermissionsUploaded);
+        Y_ABORT_UNLESS(EnablePermissions && !PermissionsUploaded);
 
         if (!Permissions) {
             return Finish(false, "cannot infer permissions");
@@ -227,7 +231,8 @@ public:
         TPathId sourcePathId,
         const Ydb::Export::ExportToS3Settings& settings,
         const TString& databaseRoot,
-        const TString& metadata
+        const TString& metadata,
+        bool enablePermissions
     )
         : SchemeShard(schemeShard)
         , ExportId(exportId)
@@ -236,6 +241,7 @@ public:
         , ExternalStorageConfig(new TS3ExternalStorageConfig(settings))
         , Retries(settings.number_of_retries())
         , DatabaseRoot(databaseRoot)
+        , EnablePermissions(enablePermissions)
         , Metadata(metadata)
     {
         if (itemIdx < ui32(settings.items_size())) {
@@ -253,7 +259,7 @@ public:
         if (!SchemeUploaded) {
             return UploadScheme();
         }
-        if (!PermissionsUploaded) {
+        if (EnablePermissions && !PermissionsUploaded) {
             return UploadPermissions();
         }
         if (!MetadataUploaded) {
@@ -325,6 +331,7 @@ private:
     TString Scheme;
     bool SchemeUploaded = false;
 
+    bool EnablePermissions = false;
     TString Permissions;
     bool PermissionsUploaded = false;
 
@@ -334,9 +341,11 @@ private:
 }; // TSchemeUploader
 
 IActor* CreateSchemeUploader(TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
-    const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, const TString& metadata
+    const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, const TString& metadata,
+    bool enablePermissions
 ) {
-    return new TSchemeUploader(schemeShard, exportId, itemIdx, sourcePathId, settings, databaseRoot, metadata);
+    return new TSchemeUploader(schemeShard, exportId, itemIdx, sourcePathId, settings, databaseRoot,
+        metadata, enablePermissions);
 }
 
 } // NKikimr::NSchemeShard

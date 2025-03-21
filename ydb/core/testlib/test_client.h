@@ -8,7 +8,7 @@
 #include <ydb/core/driver_lib/run/config.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/public/api/protos/ydb_cms.pb.h>
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 #include <ydb/public/lib/deprecated/client/msgbus_client.h>
 #include <ydb/core/client/server/grpc_server.h>
 #include <ydb/core/scheme/scheme_types_defs.h>
@@ -19,6 +19,8 @@
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
 #include <ydb/library/mkql_proto/protos/minikql.pb.h>
+#include <ydb/core/blobstorage/dsproxy/mock/dsproxy_mock.h>
+#include <ydb/core/blobstorage/dsproxy/mock/model.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
@@ -107,6 +109,7 @@ namespace Tests {
         using TControls = NKikimrConfig::TImmediateControlsConfig;
         using TLoggerInitializer = std::function<void (TTestActorRuntime&)>;
         using TStoragePoolKinds = TDomainsInfo::TDomain::TStoragePoolKinds;
+        using TProxyDSPtr = TIntrusivePtr<NFake::TProxyDS>;
 
         ui16 Port;
         ui16 GrpcPort = 0;
@@ -162,10 +165,13 @@ namespace Tests {
         NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
         NMiniKQL::TComputationNodeFactory ComputationFactory;
         NYql::IYtGateway::TPtr YtGateway;
+        NYql::ISolomonGateway::TPtr SolomonGateway;
+        NYql::TTaskTransformFactory DqTaskTransformFactory;
         bool InitializeFederatedQuerySetupFactory = false;
         TString ServerCertFilePath;
         bool Verbose = true;
         bool UseSectorMap = false;
+        TVector<TProxyDSPtr> ProxyDSMocks;
 
         std::function<IActor*(const TTicketParserSettings&)> CreateTicketParser = NKikimr::CreateTicketParser;
         std::shared_ptr<TGrpcServiceFactory> GrpcServiceFactory;
@@ -218,6 +224,8 @@ namespace Tests {
         TServerSettings& SetCredentialsFactory(NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) { CredentialsFactory = std::move(credentialsFactory); return *this; }
         TServerSettings& SetComputationFactory(NMiniKQL::TComputationNodeFactory computationFactory) { ComputationFactory = std::move(computationFactory); return *this; }
         TServerSettings& SetYtGateway(NYql::IYtGateway::TPtr ytGateway) { YtGateway = std::move(ytGateway); return *this; }
+        TServerSettings& SetSolomonGateway(NYql::ISolomonGateway::TPtr solomonGateway) { SolomonGateway = std::move(solomonGateway); return *this; }
+        TServerSettings& SetDqTaskTransformFactory(NYql::TTaskTransformFactory value) { DqTaskTransformFactory = std::move(value); return *this; }
         TServerSettings& SetInitializeFederatedQuerySetupFactory(bool value) { InitializeFederatedQuerySetupFactory = value; return *this; }
         TServerSettings& SetVerbose(bool value) { Verbose = value; return *this; }
         TServerSettings& SetUseSectorMap(bool value) { UseSectorMap = value; return *this; }
@@ -255,6 +263,11 @@ namespace Tests {
             return *this;
         }
 
+        TServerSettings& SetProxyDSMocks(const TVector<TProxyDSPtr>& proxyDSMocks) {
+            ProxyDSMocks = proxyDSMocks;
+            return *this;
+        }
+
         template <typename TService, typename...TParams>
         TServerSettings& RegisterGrpcService(
             const TString& name,
@@ -283,12 +296,14 @@ namespace Tests {
             AppConfig->MutableHiveConfig()->SetMinScatterToBalance(100);
             AppConfig->MutableHiveConfig()->SetObjectImbalanceToBalance(100);
             AppConfig->MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
+            AppConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
             FeatureFlags.SetEnableSeparationComputeActorsFromRead(true);
             FeatureFlags.SetEnableWritePortionsOnInsert(true);
             FeatureFlags.SetEnableFollowerStats(true);
             FeatureFlags.SetEnableColumnStore(true);
         }
 
+        TServerSettings() = default;
         TServerSettings(const TServerSettings& settings) = default;
         TServerSettings& operator=(const TServerSettings& settings) = default;
     private:
@@ -516,6 +531,7 @@ namespace Tests {
             return CreateColumnTable(parent, table);
         }
 #endif
+        NMsgBusProxy::EResponseStatus CreateTopic(const TString& parent, const NKikimrSchemeOp::TPersQueueGroupDescription& topic);
         NMsgBusProxy::EResponseStatus CreateSolomon(const TString& parent, const TString& name, ui32 parts = 4, ui32 channelProfile = 0);
         NMsgBusProxy::EResponseStatus StoreTableBackup(const TString& parent, const NKikimrSchemeOp::TBackupTask& task);
         NMsgBusProxy::EResponseStatus DeleteTopic(const TString& parent, const TString& name);
@@ -707,7 +723,7 @@ namespace Tests {
         ui32 Availabe() const;
         ui32 Capacity() const;
 
-        void CreateTenant(Ydb::Cms::CreateDatabaseRequest request, ui32 nodes = 1, TDuration timeout = TDuration::Seconds(30));
+        void CreateTenant(Ydb::Cms::CreateDatabaseRequest request, ui32 nodes = 1, TDuration timeout = TDuration::Seconds(30), bool acceptAlreadyExist = false);
 
     private:
         TVector<ui32>& Nodes(const TString &name);

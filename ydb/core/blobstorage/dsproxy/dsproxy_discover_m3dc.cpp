@@ -113,7 +113,7 @@ public:
         Y_ABORT_UNLESS(record.HasStatus());
 
         // ensure response came from our VDisk
-        Y_ABORT_UNLESS(record.HasVDiskID() && VDiskIDFromVDiskID(record.GetVDiskID()) == VDiskId);
+        Y_ABORT_UNLESS(record.HasVDiskID() && VDiskIDFromVDiskID(record.GetVDiskID()).SameExceptGeneration(VDiskId));
 
         // apply record according to the returned status
         switch (NKikimrProto::EReplyStatus status = record.GetStatus()) {

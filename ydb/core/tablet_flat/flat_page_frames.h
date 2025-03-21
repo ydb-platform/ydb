@@ -37,7 +37,7 @@ namespace NPage {
                 return Refer < 0;
             }
 
-            ui32 AbsRef(const ui32 page) const noexcept
+            ui32 AbsRef(const ui32 page) const
             {
                 Y_ABORT_UNLESS(Refer < 0 || page >= ui32(Refer));
 
@@ -106,7 +106,7 @@ namespace NPage {
             return page < +Records.size() ? Records[page] : End;
         }
 
-        ui32 Lower(ui64 row, ui32 begin, ui32 end) const noexcept
+        ui32 Lower(ui64 row, ui32 begin, ui32 end) const
         {
             begin = Min(begin, Stats_.Items);
             end = Min(end, Stats_.Items);

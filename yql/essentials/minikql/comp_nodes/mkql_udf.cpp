@@ -15,6 +15,16 @@ namespace NMiniKQL {
 
 namespace {
 
+constexpr size_t TypeDiffLimit = 1000;
+
+TString TruncateTypeDiff(const TString& s) {
+    if (s.size() < TypeDiffLimit) {
+        return s;
+    }
+
+    return s.substr(0,TypeDiffLimit) + "...";
+}
+
 template<class TValidatePolicy, class TValidateMode>
 class TSimpleUdfWrapper: public TMutableComputationNode<TSimpleUdfWrapper<TValidatePolicy,TValidateMode>> {
 using TBaseComputation = TMutableComputationNode<TSimpleUdfWrapper<TValidatePolicy,TValidateMode>>;
@@ -41,10 +51,17 @@ public:
         TFunctionTypeInfo funcInfo;
         const auto status = ctx.HolderFactory.GetFunctionRegistry()->FindFunctionTypeInfo(
             ctx.TypeEnv, ctx.TypeInfoHelper, ctx.CountersProvider, FunctionName, UserType->IsVoid() ? nullptr : UserType,
-            TypeConfig, flags, Pos, ctx.SecureParamsProvider, &funcInfo);
+            TypeConfig, flags, Pos, ctx.SecureParamsProvider, ctx.LogProvider, &funcInfo);
 
-        MKQL_ENSURE(status.IsOk(), status.GetError());
-        MKQL_ENSURE(funcInfo.Implementation, "UDF implementation is not set for function " << FunctionName);
+        if (!status.IsOk()) {
+            UdfTerminate((TStringBuilder() << Pos << " Failed to find UDF function " << FunctionName << ", reason: "
+                << status.GetError()).c_str());
+        }
+
+        if (!funcInfo.Implementation) {
+            UdfTerminate((TStringBuilder() << Pos << " UDF implementation is not set for function " << FunctionName).c_str());
+        }
+
         NUdf::TUnboxedValue udf(NUdf::TUnboxedValuePod(funcInfo.Implementation.Release()));
         TValidate<TValidatePolicy,TValidateMode>::WrapCallable(CallableType, udf, TStringBuilder() << "FunctionWithConfig<" << FunctionName << ">");
         return udf.Release();
@@ -188,15 +205,21 @@ private:
         TFunctionTypeInfo funcInfo;
         const auto status = ctx.HolderFactory.GetFunctionRegistry()->FindFunctionTypeInfo(
             ctx.TypeEnv, ctx.TypeInfoHelper, ctx.CountersProvider, FunctionName, UserType->IsVoid() ? nullptr : UserType,
-            TypeConfig, flags, Pos, ctx.SecureParamsProvider, &funcInfo);
+            TypeConfig, flags, Pos, ctx.SecureParamsProvider, ctx.LogProvider, &funcInfo);
 
-        MKQL_ENSURE(status.IsOk(), status.GetError());
-        MKQL_ENSURE(funcInfo.Implementation, "UDF implementation is not set for function " << FunctionName);
+        if (!status.IsOk()) {
+            UdfTerminate((TStringBuilder() << Pos << " Failed to find UDF function " << FunctionName << ", reason: "
+                << status.GetError()).c_str());
+        }
+
+        if (!funcInfo.Implementation) {
+            UdfTerminate((TStringBuilder() << Pos << " UDF implementation is not set for function " << FunctionName).c_str());
+        }
+
         udf =  NUdf::TUnboxedValuePod(funcInfo.Implementation.Release());
     }
 
     void Wrap(NUdf::TUnboxedValue& callable) const {
-        MKQL_ENSURE(bool(callable), "Returned empty value in function: " << FunctionName);
         TValidate<TValidatePolicy,TValidateMode>::WrapCallable(CallableType, callable, TStringBuilder() << "FunctionWithConfig<" << FunctionName << ">");
     }
 
@@ -268,18 +291,29 @@ IComputationNode* WrapUdf(TCallable& callable, const TComputationNodeFactoryCont
 
     const auto status = ctx.FunctionRegistry.FindFunctionTypeInfo(
         ctx.Env, ctx.TypeInfoHelper, ctx.CountersProvider, funcName, userType->IsVoid() ? nullptr : userType,
-        typeConfig, flags, pos, ctx.SecureParamsProvider, &funcInfo);
+        typeConfig, flags, pos, ctx.SecureParamsProvider, ctx.LogProvider, &funcInfo);
 
-    MKQL_ENSURE(status.IsOk(), status.GetError());
-    MKQL_ENSURE(funcInfo.FunctionType->IsConvertableTo(*callable.GetType()->GetReturnType(), true),
-                "Function '" << funcName << "' type mismatch, expected return type: " << PrintNode(callable.GetType()->GetReturnType(), true) <<
-                ", actual:" << PrintNode(funcInfo.FunctionType, true));
-    MKQL_ENSURE(funcInfo.Implementation, "UDF implementation is not set for function " << funcName);
+    if (!status.IsOk()) {
+        UdfTerminate((TStringBuilder() << pos << " Failed to find UDF function " << funcName << ", reason: "
+            << status.GetError()).c_str());
+    }
+
+    if (!funcInfo.FunctionType->IsConvertableTo(*callable.GetType()->GetReturnType(), true)) {
+        TString diff = TStringBuilder() << "type mismatch, expected return type: " << PrintNode(callable.GetType()->GetReturnType(), true) <<
+                ", actual:" << PrintNode(funcInfo.FunctionType, true);
+        UdfTerminate((TStringBuilder() << pos << " UDF Function '" << funcName << "' " << TruncateTypeDiff(diff)).c_str());
+    }
+
+    if (!funcInfo.Implementation) {
+        UdfTerminate((TStringBuilder() << pos << " UDF implementation is not set for function " << funcName).c_str());
+    }
 
     const auto runConfigType = funcInfo.RunConfigType;
-    const bool typesMatch = runConfigType->IsSameType(*runCfgNode.GetStaticType());
-    MKQL_ENSURE(typesMatch, "RunConfig '" << funcName << "' type mismatch, expected: " << PrintNode(runCfgNode.GetStaticType(), true) <<
-                ", actual: " << PrintNode(runConfigType, true));
+    if (!runConfigType->IsSameType(*runCfgNode.GetStaticType())) {
+        TString diff = TStringBuilder() << "run config type mismatch, expected: " << PrintNode(runCfgNode.GetStaticType(), true) <<
+                ", actual:" << PrintNode(runConfigType, true);
+        UdfTerminate((TStringBuilder() << pos << " UDF Function '" << funcName << "' " << TruncateTypeDiff(diff)).c_str());
+    }
 
     if (runConfigType->IsVoid()) {
         if (ctx.ValidateMode == NUdf::EValidateMode::None && funcInfo.ModuleIR && funcInfo.IRFunctionName) {
@@ -319,11 +353,21 @@ IComputationNode* WrapScriptUdf(TCallable& callable, const TComputationNodeFacto
     TFunctionTypeInfo funcInfo;
     const auto status = ctx.FunctionRegistry.FindFunctionTypeInfo(
         ctx.Env, ctx.TypeInfoHelper, ctx.CountersProvider, funcName, userType,
-        typeConfig, flags, pos, ctx.SecureParamsProvider, &funcInfo);
-    MKQL_ENSURE(status.IsOk(), status.GetError());
-    MKQL_ENSURE(funcInfo.Implementation, "UDF implementation is not set");
+        typeConfig, flags, pos, ctx.SecureParamsProvider, ctx.LogProvider, &funcInfo);
 
-    MKQL_ENSURE(!funcInfo.FunctionType, "Function type info is exist for same kind script, it's better use it");
+    if (!status.IsOk()) {
+        UdfTerminate((TStringBuilder() << pos << " Failed to find UDF function " << funcName << ", reason: "
+            << status.GetError()).c_str());
+    }
+
+    if (!funcInfo.Implementation) {
+        UdfTerminate((TStringBuilder() << pos << " UDF implementation is not set for function " << funcName).c_str());
+    }
+
+    if (funcInfo.FunctionType) {
+        UdfTerminate((TStringBuilder() << pos << " UDF function type exists for function " << funcName).c_str());
+    }
+
     const auto callableType = callable.GetType();
     MKQL_ENSURE(callableType->GetKind() == TType::EKind::Callable, "Expected callable type in callable type info");
     const auto callableResultType = callableType->GetReturnType();

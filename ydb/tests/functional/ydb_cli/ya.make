@@ -17,7 +17,7 @@ ENV(YDB_ENABLE_COLUMN_TABLES="true")
 
 IF (SANITIZER_TYPE)
     SIZE(LARGE)
-    TAG(ya:fat)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
 ELSE()
     SIZE(MEDIUM)
 ENDIF()
@@ -30,6 +30,7 @@ DEPENDS(
 PEERDIR(
     contrib/python/pyarrow
     ydb/tests/library
+    ydb/tests/library/fixtures
     ydb/tests/oss/canonical
     ydb/tests/oss/ydb_sdk_import
 )

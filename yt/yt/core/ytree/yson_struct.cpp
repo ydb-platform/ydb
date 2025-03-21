@@ -55,7 +55,7 @@ void TYsonStructBase::SetUnrecognizedStrategy(EUnrecognizedStrategy strategy)
     InstanceUnrecognizedStrategy_ = strategy;
 }
 
-THashSet<TString> TYsonStructBase::GetRegisteredKeys() const
+THashSet<std::string> TYsonStructBase::GetRegisteredKeys() const
 {
     return Meta_->GetRegisteredKeys();
 }
@@ -128,17 +128,17 @@ void TYsonStructBase::SetDefaults()
     Meta_->SetDefaultsOfInitializedStruct(this);
 }
 
-void TYsonStructBase::SaveParameter(const TString& key, IYsonConsumer* consumer) const
+void TYsonStructBase::SaveParameter(const std::string& key, IYsonConsumer* consumer) const
 {
     Meta_->GetParameter(key)->Save(this, consumer);
 }
 
-void TYsonStructBase::LoadParameter(const TString& key, const NYTree::INodePtr& node)
+void TYsonStructBase::LoadParameter(const std::string& key, const NYTree::INodePtr& node)
 {
     Meta_->LoadParameter(this, key, node);
 }
 
-void TYsonStructBase::ResetParameter(const TString& key)
+void TYsonStructBase::ResetParameter(const std::string& key)
 {
     Meta_->GetParameter(key)->SetDefaultsInitialized(this);
 }
@@ -148,7 +148,7 @@ int TYsonStructBase::GetParameterCount() const
     return Meta_->GetParameterMap().size();
 }
 
-std::vector<TString> TYsonStructBase::GetAllParameterAliases(const TString& key) const
+std::vector<std::string> TYsonStructBase::GetAllParameterAliases(const std::string& key) const
 {
     auto parameter = Meta_->GetParameter(key);
     auto result = parameter->GetAliases();
@@ -181,7 +181,7 @@ void TYsonStruct::InitializeRefCounted()
     }
 }
 
-bool TYsonStruct::IsSet(const TString& key) const
+bool TYsonStruct::IsSet(const std::string& key) const
 {
     return SetFields_[Meta_->GetParameter(key)->GetFieldIndex()];
 }
@@ -200,7 +200,7 @@ TCompactBitmap* TYsonStructLite::GetSetFieldsBitmap()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-bool TYsonStructLiteWithFieldTracking::IsSet(const TString& key) const
+bool TYsonStructLiteWithFieldTracking::IsSet(const std::string& key) const
 {
     return SetFields_[Meta_->GetParameter(key)->GetFieldIndex()];
 }

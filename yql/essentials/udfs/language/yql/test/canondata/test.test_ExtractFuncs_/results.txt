@@ -1,0 +1,104 @@
+[
+    {
+        "Write" = [
+            {
+                "Type" = [
+                    "ListType";
+                    [
+                        "StructType";
+                        [
+                            [
+                                "q";
+                                [
+                                    "DataType";
+                                    "String"
+                                ]
+                            ];
+                            [
+                                "column1";
+                                [
+                                    "OptionalType";
+                                    [
+                                        "ListType";
+                                        [
+                                            "TupleType";
+                                            [
+                                                [
+                                                    "DataType";
+                                                    "String"
+                                                ];
+                                                [
+                                                    "DataType";
+                                                    "String"
+                                                ];
+                                                [
+                                                    "DataType";
+                                                    "Uint64"
+                                                ]
+                                            ]
+                                        ]
+                                    ]
+                                ]
+                            ]
+                        ]
+                    ]
+                ];
+                "Data" = [
+                    [
+                        "select f()";
+                        [
+                            [
+                                [
+                                    "FUNC";
+                                    "f";
+                                    "1"
+                                ]
+                            ]
+                        ]
+                    ];
+                    [
+                        "select f::g()";
+                        [
+                            [
+                                [
+                                    "MODULE";
+                                    "f";
+                                    "1"
+                                ];
+                                [
+                                    "MODULE_FUNC";
+                                    "f::g";
+                                    "1"
+                                ]
+                            ]
+                        ]
+                    ];
+                    [
+                        "select javascript::y()";
+                        [
+                            [
+                                [
+                                    "MODULE";
+                                    "javascript";
+                                    "1"
+                                ]
+                            ]
+                        ]
+                    ];
+                    [
+                        "select python3::x()";
+                        [
+                            [
+                                [
+                                    "MODULE";
+                                    "python3";
+                                    "1"
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            }
+        ]
+    }
+]

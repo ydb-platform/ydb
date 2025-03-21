@@ -1,11 +1,11 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb-cpp-sdk/client/types/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 
-#include <ydb-cpp-sdk/client/types/s3_settings.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/s3_settings.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 namespace NImport {
 
 /// Common
@@ -17,6 +17,7 @@ enum class EImportProgress {
     Done = 4,
     Cancellation = 5,
     Cancelled = 6,
+    CreateChangefeeds = 7,
 
     Unknown = std::numeric_limits<int>::max(),
 };

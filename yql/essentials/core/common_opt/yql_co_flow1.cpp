@@ -1413,6 +1413,52 @@ TExprNode::TPtr OptimizeFlatMap(const TExprNode::TPtr& node, TExprContext& ctx, 
 void RegisterCoFlowCallables1(TCallableOptimizerMap& map) {
     using namespace std::placeholders;
 
+    map["PruneKeys"] = map["PruneAdjacentKeys"] = [](const TExprNode::TPtr& node, TExprContext& ctx, TOptimizeContext& optCtx) {
+        if (!optCtx.IsSingleUsage(node->Head())) {
+            return node;
+        }
+
+        TCoPruneKeysBase pruneKeys(node);
+        TCoLambda keyExtractorLambda = pruneKeys.Extractor();
+        TSet<TStringBuf> columns;
+
+        if (!HaveFieldsSubset(keyExtractorLambda.Ref().Child(1), *keyExtractorLambda.Ref().Child(0)->Child(0), columns, *optCtx.ParentsMap)) {
+            return node;
+        }
+
+        if (auto maybeFlatmap = TExprBase(node->HeadPtr()).Maybe<TCoFlatMapBase>()) {
+            auto flatmap = maybeFlatmap.Cast();
+
+            auto checkAllPruneExtractorPassthroughLambda = [&columns](const TCoLambda& lambda) {
+                TMaybe<THashSet<TStringBuf>> passthroughFields;
+                if (IsPassthroughLambda(lambda, &passthroughFields) && passthroughFields) {
+                    for (const auto& column : columns) {
+                        if (!passthroughFields->contains(column)) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+                return false;
+            };
+
+            if (checkAllPruneExtractorPassthroughLambda(flatmap.Lambda())) {
+                YQL_CLOG(DEBUG, Core) << node->Content() << " Over Flatmap";
+                return ctx.Builder(flatmap.Pos())
+                    .Callable(flatmap.CallableName())
+                        .Callable(0, pruneKeys.CallableName())
+                            .Add(0, flatmap.Input().Ptr())
+                            .Add(1, ctx.DeepCopyLambda(keyExtractorLambda.Ref()))
+                        .Seal()
+                        .Add(1, flatmap.Lambda().Ptr())
+                    .Seal()
+                    .Build();
+            }
+        }
+
+        return node;
+    };
+
     map["FlatMap"] = std::bind(&OptimizeFlatMap<false>, _1, _2, _3);
     map["OrderedFlatMap"] = std::bind(&OptimizeFlatMap<true>, _1, _2, _3);
 

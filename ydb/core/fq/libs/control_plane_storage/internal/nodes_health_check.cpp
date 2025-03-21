@@ -1,8 +1,16 @@
 #include "utils.h"
 
+#include <ydb/core/fq/libs/control_plane_storage/ydb_control_plane_storage_impl.h>
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
 
 namespace NFq {
+
+NYql::TIssues TControlPlaneStorageBase::ValidateRequest(TEvControlPlaneStorage::TEvNodesHealthCheckRequest::TPtr& ev) const {
+    const auto& request = ev->Get()->Request;
+    const auto& node = request.node();
+
+    return ValidateNodesHealthCheck(request.tenant(), node.instance_id(), node.hostname());
+}
 
 void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealthCheckRequest::TPtr& ev)
 {
@@ -29,8 +37,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvNodesHealth
 
     CPS_LOG_T("NodesHealthCheckRequest: {" << request.DebugString() << "}");
 
-    NYql::TIssues issues = ValidateNodesHealthCheck(tenant, instanceId, hostName);
-    if (issues) {
+    if (const auto& issues = ValidateRequest(ev)) {
         CPS_LOG_W("NodesHealthCheckRequest: {" << request.DebugString() << "} validation FAILED: " << issues.ToOneLineString());
         const TDuration delta = TInstant::Now() - startTime;
         SendResponseIssues<TEvControlPlaneStorage::TEvNodesHealthCheckResponse>(ev->Sender, issues, ev->Cookie, delta, requestCounters);

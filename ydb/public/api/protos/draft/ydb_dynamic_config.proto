@@ -228,3 +228,17 @@ message ResolveAllConfigResult {
     // Verbose resolved configs
     repeated ResolvedConfig configs = 2;
 }
+
+message FetchStartupConfigRequest {
+    Ydb.Operations.OperationParams operation_params = 1;
+}
+
+message FetchStartupConfigResponse {
+    // Result of request will be inside operation.
+    Ydb.Operations.Operation operation = 1;
+}
+
+message FetchStartupConfigResult {
+    // YAML document with generated dynamic config
+    string config = 1;
+}

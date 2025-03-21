@@ -41,7 +41,7 @@ namespace {
 
 ui64 GetMaxMemoryMaps() {
     ui64 maxMapCount = 0;
-#if defined(_unix_)
+#if defined(_unix_) && !defined(_darwin_)
     maxMapCount = FromString<ui64>(Strip(TFileInput("/proc/sys/vm/max_map_count").ReadAll()));
 #endif
     return maxMapCount;
@@ -111,7 +111,7 @@ private:
 
     void FreePage(void* addr) {
         auto res = T::Munmap(addr, PageSize);
-        Y_DEBUG_ABORT_UNLESS(0 == res, "Munmap failed: %s", LastSystemErrorText());
+        Y_DEBUG_ABORT_UNLESS(0 == res, "Madvise failed: %s", LastSystemErrorText());
     }
 
 private:
@@ -251,7 +251,46 @@ inline int TSystemMmap::Munmap(void* addr, size_t size)
 {
     Y_DEBUG_ABORT_UNLESS(AlignUp(addr, SYS_PAGE_SIZE) == addr, "Got unaligned address");
     Y_DEBUG_ABORT_UNLESS(AlignUp(size, SYS_PAGE_SIZE) == size, "Got unaligned size");
-    return ::munmap(addr, size);
+
+    if (size > MaxMidSize) {
+        return ::munmap(addr, size);
+    }
+
+    // Unlock memory in case somewhere was called `mlockall(MCL_FUTURE)`.
+    if (::munlock(addr, size) == -1) {
+        switch(LastSystemError()) {
+            case EAGAIN: [[fallthrough]];
+                // The memory region was probably not locked - skip,
+                // also since we can't distinguish from other kernel problems that may cause EAGAIN (not enough memory for structures?)
+                // we rely on the failure of the following `madvise()` call.
+
+            case EPERM: [[fallthrough]];
+                // The most common case we get this error if we have no privileges, but also ignored error when called `mlockall()`
+                // somewhere earlier. So ignore this.
+
+            case EINVAL:
+                // Something wrong with `addr` and `size` - we'll see the same error from the following `madvise()` call.
+                break;
+
+            case ENOMEM:
+                // Locking or unlocking a region would result in the total number of mappings with distinct attributes
+                // (e.g., locked versus unlocked) exceeding the allowed maximum.
+                // NOTE: `madvise(MADV_DONTNEED)` can't return ENOMEM.
+                return -1;
+        }
+    }
+
+    /**
+        There is at least a couple of drawbacks of using madvise instead of munmap:
+        - more potential for use-after-free and memory corruption since we still may access unneeded regions by mistake,
+        - actual RSS memory may be freed later after kernel gets some memory-pressure, and it may confuse system monitoring tools.
+
+        But also there is a huge advantage: the number of memory maps used by process doesn't increase because of the "holes".
+
+        The main source of the growth of number of memory regions is a clean-up of freed pages from page pools.
+        Now we can safely invoke `TAlignedPagePool::DoCleanupGlobalFreeList()` whenever we want it.
+     */
+    return ::madvise(addr, size, MADV_DONTNEED);
 }
 #endif
 
@@ -460,6 +499,7 @@ void TAlignedPagePoolImpl<T>::ReturnPage(void* addr) noexcept {
 #if defined(ALLOW_DEFAULT_ALLOCATOR)
     if (Y_UNLIKELY(IsDefaultAllocator)) {
         ReturnBlock(addr, POOL_PAGE_SIZE);
+        AllPages.erase(addr);
         return;
     }
 #endif
@@ -743,6 +783,40 @@ void* GetAlignedPage(ui64 size) {
 }
 
 template<typename TMmap>
+void* GetAlignedPage() {
+    const auto size = TAlignedPagePool::POOL_PAGE_SIZE;
+    auto& globalPool = TGlobalPools<TMmap, false>::Instance();
+
+    if (auto* page = globalPool.Get(0).GetPage()) {
+        return page;
+    }
+
+    auto allocSize = size * 2;
+    void* unalignedPtr = globalPool.DoMmap(allocSize);
+    if (Y_UNLIKELY(MAP_FAILED == unalignedPtr)) {
+        TStringStream mmaps;
+        const auto lastError = LastSystemError();
+        if (lastError == ENOMEM) {
+            mmaps << GetMemoryMapsString();
+        }
+
+        ythrow yexception() << "Mmap failed to allocate " << allocSize << " bytes: "
+            << LastSystemErrorText(lastError) << mmaps.Str();
+    }
+
+    void* page = AlignUp(unalignedPtr, size);
+
+    // Unmap unaligned prefix before offset and tail after aligned page
+    const size_t offset = (intptr_t)page - (intptr_t)unalignedPtr;
+    if (Y_UNLIKELY(offset)) {
+        globalPool.DoMunmap(unalignedPtr, offset);
+        globalPool.DoMunmap((ui8*)page + size, size - offset);
+    }
+
+    return page;
+}
+
+template<typename TMmap>
 void ReleaseAlignedPage(void* mem, ui64 size) {
     size = AlignUp(size, SYS_PAGE_SIZE);
     if (size < TAlignedPagePool::POOL_PAGE_SIZE) {
@@ -758,6 +832,11 @@ void ReleaseAlignedPage(void* mem, ui64 size) {
     }
 
     TGlobalPools<TMmap, true>::Instance().DoMunmap(mem, size);
+}
+
+template<typename TMmap>
+void ReleaseAlignedPage(void* ptr) {
+    TGlobalPools<TMmap, false>::Instance().PushPage(0, ptr);
 }
 
 template<typename TMmap>
@@ -782,14 +861,22 @@ template void* GetAlignedPage<>(ui64);
 template void* GetAlignedPage<TFakeAlignedMmap>(ui64);
 template void* GetAlignedPage<TFakeUnalignedMmap>(ui64);
 
+template void* GetAlignedPage<>();
+template void* GetAlignedPage<TFakeAlignedMmap>();
+template void* GetAlignedPage<TFakeUnalignedMmap>();
+
 template void ReleaseAlignedPage<>(void*,ui64);
 template void ReleaseAlignedPage<TFakeAlignedMmap>(void*,ui64);
 template void ReleaseAlignedPage<TFakeUnalignedMmap>(void*,ui64);
 
+template void ReleaseAlignedPage<>(void*);
+template void ReleaseAlignedPage<TFakeAlignedMmap>(void*);
+template void ReleaseAlignedPage<TFakeUnalignedMmap>(void*);
+
 size_t GetMemoryMapsCount() {
     size_t lineCount = 0;
     TString line;
-#if defined(_unix_)
+#if defined(_unix_) && !defined(_darwin_)
     TFileInput file("/proc/self/maps");
     while (file.ReadLine(line)) ++lineCount;
 #endif

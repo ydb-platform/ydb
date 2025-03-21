@@ -41,6 +41,11 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         if (!appConfig) {
             appConfig.emplace();
         }
+        appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("ClickHouse");
+        appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("PostgreSQL");
+        appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("MySQL");
+        appConfig->MutableQueryServiceConfig()->AddAvailableExternalDataSources("Ydb");
 
         auto settings = TKikimrSettings();
 
@@ -58,6 +63,10 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             appConfig->GetQueryServiceConfig().GetGeneric(),
             appConfig->GetQueryServiceConfig().GetYt(),
             nullptr,
+            appConfig->GetQueryServiceConfig().GetSolomon(),
+            nullptr,
+            nullptr,
+            NYql::NDq::CreateReadActorFactoryConfig(appConfig->GetQueryServiceConfig().GetS3()),
             nullptr);
 
         settings

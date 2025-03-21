@@ -322,6 +322,7 @@ JOIN_SRCS(
     system/sys_alloc.cpp
     system/sysstat.cpp
     system/tempfile.cpp
+    system/thread.cpp
     system/tls.cpp
     system/type_name.cpp
     system/unaligned_mem.cpp
@@ -335,7 +336,6 @@ JOIN_SRCS(
     all_system_4.cpp
     system/mem_info.cpp
     system/sem.cpp
-    system/thread.cpp
     system/types.cpp
 )
 ENDIF()

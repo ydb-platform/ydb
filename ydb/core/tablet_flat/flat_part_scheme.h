@@ -103,7 +103,7 @@ namespace NTable {
             }
         }
 
-        const TGroupInfo& GetLayout(NPage::TGroupId groupId) const noexcept
+        const TGroupInfo& GetLayout(NPage::TGroupId groupId) const
         {
             Y_ABORT_UNLESS(groupId.Index < Groups.size(), "Group is out of range");
 

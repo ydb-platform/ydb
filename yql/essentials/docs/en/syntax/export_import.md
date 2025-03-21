@@ -24,7 +24,7 @@ The file linked by the [PRAGMA Library](pragma.md#library) must be attached to t
 
 {% endnote %}
 
-### Examples
+#### Examples
 
 my_lib.sql:
 

@@ -1672,24 +1672,44 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         return ctx.ProgramBuilder.MapJoinCore(list, dict, joinKind, leftKeyColumns, leftRenames, rightRenames, returnType);
     });
 
+    AddCallable("BlockStorage", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto stream = MkqlBuildExpr(node.Head(), ctx);
+        const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        return ctx.ProgramBuilder.BlockStorage(stream, returnType);
+    });
+
+    AddCallable("BlockMapJoinIndex", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto blockStorage = MkqlBuildExpr(node.Head(), ctx);
+        const auto itemType = node.Child(1)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TMultiExprType>();
+
+        std::vector<ui32> keyColumns;
+        node.Child(2)->ForEachChild([&](const TExprNode& child){ keyColumns.emplace_back(*GetWideBlockFieldPosition(*itemType, child.Content())); });
+
+        const bool any = HasSetting(node.Tail(), "any");
+
+        const auto itemMkqlType = BuildType(*node.Child(1), *itemType, ctx.ProgramBuilder);
+        const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
+        return ctx.ProgramBuilder.BlockMapJoinIndex(blockStorage, itemMkqlType, keyColumns, any, returnType);
+    });
+
     AddCallable("BlockMapJoinCore", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto leftStream = MkqlBuildExpr(node.Head(), ctx);
-        const auto rightStream = MkqlBuildExpr(*node.Child(1), ctx);
-        const auto joinKind = GetJoinKind(node, node.Child(2)->Content());
+        const auto rightBlockStorage = MkqlBuildExpr(*node.Child(1), ctx);
 
         const auto leftItemType = node.Head().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>();
-        const auto rightItemType = node.Child(1U)->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>();
+        const auto rightItemType = node.Child(2)->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TMultiExprType>();
+
+        const auto joinKind = GetJoinKind(node, node.Child(3)->Content());
 
         std::vector<ui32> leftKeyColumns, leftKeyDrops, rightKeyColumns, rightKeyDrops;
-        node.Child(3)->ForEachChild([&](const TExprNode& child){ leftKeyColumns.emplace_back(*GetWideBlockFieldPosition(*leftItemType, child.Content())); });
-        node.Child(4)->ForEachChild([&](const TExprNode& child){ leftKeyDrops.emplace_back(*GetWideBlockFieldPosition(*leftItemType, child.Content())); });
-        node.Child(5)->ForEachChild([&](const TExprNode& child){ rightKeyColumns.emplace_back(*GetWideBlockFieldPosition(*rightItemType, child.Content())); });
-        node.Child(6)->ForEachChild([&](const TExprNode& child){ rightKeyDrops.emplace_back(*GetWideBlockFieldPosition(*rightItemType, child.Content())); });
+        node.Child(4)->ForEachChild([&](const TExprNode& child){ leftKeyColumns.emplace_back(*GetWideBlockFieldPosition(*leftItemType, child.Content())); });
+        node.Child(5)->ForEachChild([&](const TExprNode& child){ leftKeyDrops.emplace_back(*GetWideBlockFieldPosition(*leftItemType, child.Content())); });
+        node.Child(6)->ForEachChild([&](const TExprNode& child){ rightKeyColumns.emplace_back(*GetWideBlockFieldPosition(*rightItemType, child.Content())); });
+        node.Child(7)->ForEachChild([&](const TExprNode& child){ rightKeyDrops.emplace_back(*GetWideBlockFieldPosition(*rightItemType, child.Content())); });
 
-        bool rightAny = HasSetting(node.Tail(), "rightAny");
-
+        const auto rightItemMkqlType = BuildType(*node.Child(2), *rightItemType, ctx.ProgramBuilder);
         const auto returnType = BuildType(node, *node.GetTypeAnn(), ctx.ProgramBuilder);
-        return ctx.ProgramBuilder.BlockMapJoinCore(leftStream, rightStream, joinKind, leftKeyColumns, leftKeyDrops, rightKeyColumns, rightKeyDrops, rightAny, returnType);
+        return ctx.ProgramBuilder.BlockMapJoinCore(leftStream, rightBlockStorage, rightItemMkqlType, joinKind, leftKeyColumns, leftKeyDrops, rightKeyColumns, rightKeyDrops, returnType);
     });
 
     AddCallable({"GraceJoinCore", "GraceSelfJoinCore"}, [](const TExprNode& node, TMkqlBuildContext& ctx) {
@@ -2216,22 +2236,12 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
     AddCallable("EmptyList", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         Y_UNUSED(node);
-        if (RuntimeVersion < 11) {
-            return ctx.ProgramBuilder.NewEmptyList(ctx.ProgramBuilder.NewVoid().GetStaticType());
-        } else {
-            return TRuntimeNode(ctx.ProgramBuilder.GetTypeEnvironment().GetEmptyListLazy(), true);
-        }
+        return TRuntimeNode(ctx.ProgramBuilder.GetTypeEnvironment().GetEmptyListLazy(), true);
     });
 
     AddCallable("EmptyDict", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         Y_UNUSED(node);
-        if (RuntimeVersion < 11) {
-           auto voidType = ctx.ProgramBuilder.NewVoid().GetStaticType();
-           auto dictType = ctx.ProgramBuilder.NewDictType(voidType, voidType, false);
-           return ctx.ProgramBuilder.NewDict(dictType, {});
-        } else {
-           return TRuntimeNode(ctx.ProgramBuilder.GetTypeEnvironment().GetEmptyDictLazy(), true);
-        }
+        return TRuntimeNode(ctx.ProgramBuilder.GetTypeEnvironment().GetEmptyDictLazy(), true);
     });
 
     AddCallable("SourceOf", [](const TExprNode& node, TMkqlBuildContext& ctx) {

@@ -67,7 +67,7 @@ namespace NPageCollection {
             return largeGlobId;
         }
 
-        static inline const NBlockCodecs::ICodec* Lz4() noexcept
+        static inline const NBlockCodecs::ICodec* Lz4()
         {
             auto **lz4 = FastTlsSingleton<const NBlockCodecs::ICodec*>();
 

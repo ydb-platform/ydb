@@ -246,7 +246,7 @@ class TestTsConfigExtends:
     def create_ts_config_with_data_once(self, path):
         cfg = TsConfig(path=path)
 
-        if path == "/foo/./base-tsconfig.json":
+        if path == "/foo/base-tsconfig.json":
             cfg.data = {"extends": "./extends/recursive/tsconfig.json"}
         else:
             cfg.data = {}
@@ -269,7 +269,7 @@ class TestTsConfigExtends:
 
         paths = cfg_main.inline_extend({})
 
-        assert paths == ["./extends/tsconfig.json"]
+        assert paths == ["/foo/extends/tsconfig.json"]
 
     def test_extends_single_without_dot(self, monkeypatch):
         monkeypatch.setattr(TsConfig, "load", self.create_empty_ts_config)
@@ -279,7 +279,7 @@ class TestTsConfigExtends:
 
         paths = cfg_main.inline_extend({"extends": "dir/extends"})
 
-        assert paths == ["dir/extends/tsconfig.json"]
+        assert paths == ["/foo/dir/extends/tsconfig.json"]
 
     def test_extends_array(self, monkeypatch):
         monkeypatch.setattr(TsConfig, "load", self.create_empty_ts_config)
@@ -289,7 +289,7 @@ class TestTsConfigExtends:
 
         paths = cfg_main.inline_extend({"extends": "dir/extends"})
 
-        assert paths == ["dir/extends/tsconfig1.json", "dir/extends/tsconfig2.json"]
+        assert paths == ["/foo/dir/extends/tsconfig1.json", "/foo/dir/extends/tsconfig2.json"]
 
     def test_extends_empty_array(self):
         cfg_main = TsConfig(path="/foo/tsconfig.json")
@@ -307,4 +307,4 @@ class TestTsConfigExtends:
 
         paths = cfg_main.inline_extend({})
 
-        assert paths == ["./base-tsconfig.json", "./extends/recursive/tsconfig.json"]
+        assert paths == ["/foo/base-tsconfig.json", "/foo/extends/recursive/tsconfig.json"]

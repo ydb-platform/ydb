@@ -14,9 +14,6 @@
 #include <ydb/tests/tools/kqprun/runlib/utils.h>
 #include <ydb/tests/tools/kqprun/src/kqp_runner.h>
 
-#include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
-#include <yql/essentials/public/udf/udf_static_registry.h>
-
 #include <yt/yql/providers/yt/gateway/file/yql_yt_file.h>
 #include <yt/yql/providers/yt/gateway/file/yql_yt_file_comp_nodes.h>
 #include <yt/yql/providers/yt/lib/yt_download/yt_download.h>
@@ -44,6 +41,7 @@ struct TExecutionOptions {
     bool UseTemplates = false;
 
     ui32 LoopCount = 1;
+    TDuration QueryDelay;
     TDuration LoopDelay;
     bool ContinueAfterFail = false;
 
@@ -100,11 +98,12 @@ struct TExecutionOptions {
         };
     }
 
-    TRequestOptions GetScriptQueryOptions(size_t index, size_t queryId, TInstant startTime) const {
+    TRequestOptions GetScriptQueryOptions(size_t index, size_t loopId, size_t queryId, TInstant startTime) const {
         Y_ABORT_UNLESS(index < ScriptQueries.size());
 
         TString sql = ScriptQueries[index];
         if (UseTemplates) {
+            SubstGlobal(sql, "${LOOP_ID}", ToString(loopId));
             SubstGlobal(sql, "${QUERY_ID}", ToString(queryId));
         }
 
@@ -270,12 +269,12 @@ private:
 };
 
 
-void RunArgumentQuery(size_t index, size_t queryId, TInstant startTime, const TExecutionOptions& executionOptions, TKqpRunner& runner) {
+void RunArgumentQuery(size_t index, size_t loopId, size_t queryId, TInstant startTime, const TExecutionOptions& executionOptions, TKqpRunner& runner) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
 
     switch (executionOptions.GetExecutionCase(index)) {
         case TExecutionOptions::EExecutionCase::GenericScript: {
-            if (!runner.ExecuteScript(executionOptions.GetScriptQueryOptions(index, queryId, startTime))) {
+            if (!runner.ExecuteScript(executionOptions.GetScriptQueryOptions(index, loopId, queryId, startTime))) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Script execution failed";
             }
             Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Fetching script results..." << colors.Default() << Endl;
@@ -292,21 +291,21 @@ void RunArgumentQuery(size_t index, size_t queryId, TInstant startTime, const TE
         }
 
         case TExecutionOptions::EExecutionCase::GenericQuery: {
-            if (!runner.ExecuteQuery(executionOptions.GetScriptQueryOptions(index, queryId, startTime))) {
+            if (!runner.ExecuteQuery(executionOptions.GetScriptQueryOptions(index, loopId, queryId, startTime))) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Query execution failed";
             }
             break;
         }
 
         case TExecutionOptions::EExecutionCase::YqlScript: {
-            if (!runner.ExecuteYqlScript(executionOptions.GetScriptQueryOptions(index, queryId, startTime))) {
+            if (!runner.ExecuteYqlScript(executionOptions.GetScriptQueryOptions(index, loopId, queryId, startTime))) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Yql script execution failed";
             }
             break;
         }
 
         case TExecutionOptions::EExecutionCase::AsyncQuery: {
-            runner.ExecuteQueryAsync(executionOptions.GetScriptQueryOptions(index, queryId, startTime));
+            runner.ExecuteQueryAsync(executionOptions.GetScriptQueryOptions(index, loopId, queryId, startTime));
             break;
         }
     }
@@ -327,24 +326,25 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TKqpRunner& r
     const size_t numberLoops = executionOptions.LoopCount;
     for (size_t queryId = 0; queryId < numberQueries * numberLoops || numberLoops == 0; ++queryId) {
         size_t id = queryId % numberQueries;
-        if (id == 0 && queryId > 0) {
-            Sleep(executionOptions.LoopDelay);
+        if (queryId > 0) {
+            Sleep(id == 0 ? executionOptions.LoopDelay : executionOptions.QueryDelay);
         }
 
         const TInstant startTime = TInstant::Now();
+        const size_t loopId = queryId / numberQueries;
         if (executionOptions.GetExecutionCase(id) != TExecutionOptions::EExecutionCase::AsyncQuery) {
             Cout << colors.Yellow() << startTime.ToIsoStringLocal() << " Executing script";
             if (numberQueries > 1) {
                 Cout << " " << id;
             }
             if (numberLoops != 1) {
-                Cout << ", loop " << queryId / numberQueries;
+                Cout << ", loop " << loopId;
             }
             Cout << "..." << colors.Default() << Endl;
         }
 
         try {
-            RunArgumentQuery(id, queryId, startTime, executionOptions, runner);
+            RunArgumentQuery(id, loopId, queryId, startTime, executionOptions, runner);
         } catch (const yexception& exception) {
             if (executionOptions.ContinueAfterFail) {
                 Cerr << colors.Red() <<  CurrentExceptionMessage() << colors.Default() << Endl;
@@ -399,59 +399,18 @@ void RunScript(const TExecutionOptions& executionOptions, const TRunnerOptions& 
 }
 
 
-TIntrusivePtr<NKikimr::NMiniKQL::IMutableFunctionRegistry> CreateFunctionRegistry(const TString& udfsDirectory, TVector<TString> udfsPaths, bool excludeLinkedUdfs) {
-    if (!udfsDirectory.empty() || !udfsPaths.empty()) {
-        NColorizer::TColors colors = NColorizer::AutoColors(Cout);
-        Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Fetching udfs..." << colors.Default() << Endl;
-    }
-
-    NKikimr::NMiniKQL::FindUdfsInDir(udfsDirectory, &udfsPaths);
-    auto functionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(&PrintBackTrace, NKikimr::NMiniKQL::CreateBuiltinRegistry(), false, udfsPaths)->Clone();
-
-    if (excludeLinkedUdfs) {
-        for (const auto& wrapper : NYql::NUdf::GetStaticUdfModuleWrapperList()) {
-            auto [name, ptr] = wrapper();
-            if (!functionRegistry->IsLoadedUdfModule(name)) {
-                functionRegistry->AddModule(TString(NKikimr::NMiniKQL::StaticModulePrefix) + name, name, std::move(ptr));
-            }
-        }
-    } else {
-        NKikimr::NMiniKQL::FillStaticModules(*functionRegistry);
-    }
-
-    return functionRegistry;
-}
-
-
 class TMain : public TMainBase {
-    inline static const TString YqlToken = GetEnv(YQL_TOKEN_VARIABLE);
-    inline static IOutputStream* ProfileAllocationsOutput = nullptr;
-    inline static NColorizer::TColors CoutColors = NColorizer::AutoColors(Cout);
+    using EVerbose = TYdbSetupSettings::EVerbose;
 
+    inline static const TString YqlToken = GetEnv(YQL_TOKEN_VARIABLE);
+
+    TDuration PingPeriod;
     TExecutionOptions ExecutionOptions;
     TRunnerOptions RunnerOptions;
 
     std::unordered_map<TString, TString> Templates;
     THashMap<TString, TString> TablesMapping;
-    TVector<TString> UdfsPaths;
-    TString UdfsDirectory;
-    bool ExcludeLinkedUdfs = false;
     bool EmulateYt = false;
-
-#ifdef PROFILE_MEMORY_ALLOCATIONS
-public:
-    static void FinishProfileMemoryAllocations() {
-        if (ProfileAllocationsOutput) {
-            NAllocProfiler::StopAllocationSampling(*ProfileAllocationsOutput);
-        } else {
-            TString output;
-            TStringOutput stream(output);
-            NAllocProfiler::StopAllocationSampling(stream);
-
-            Cout << CoutColors.Red() << "Warning: profile memory allocations output is not specified, please use flag `--profile-output` for writing profile info (dump size " << NKikimr::NBlobDepot::FormatByteSize(output.size()) << ")" << CoutColors.Default() << Endl;
-        }
-    }
-#endif
 
 protected:
     void RegisterOptions(NLastGetopt::TOpts& options) override {
@@ -472,6 +431,10 @@ protected:
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 ExecutionOptions.ScriptQueries.emplace_back(LoadFile(option->CurVal()));
             });
+
+        options.AddLongOption("sql", "Script query SQL text to execute (typically DML query)")
+            .RequiredArgument("str")
+            .AppendTo(&ExecutionOptions.ScriptQueries);
 
         options.AddLongOption("templates", "Enable templates for -s and -p queries, such as ${YQL_TOKEN} and ${QUERY_ID}")
             .NoArgument()
@@ -528,18 +491,6 @@ protected:
                     ythrow yexception() << "Bad format of app configuration";
                 }
             });
-
-        options.AddLongOption('u', "udf", "Load shared library with UDF by given path")
-            .RequiredArgument("file")
-            .EmplaceTo(&UdfsPaths);
-
-        options.AddLongOption("udfs-dir", "Load all shared libraries with UDFs found in given directory")
-            .RequiredArgument("directory")
-            .StoreResult(&UdfsDirectory);
-
-        options.AddLongOption("exclude-linked-udfs", "Exclude linked udfs when same udf passed from -u or --udfs-dir")
-            .NoArgument()
-            .SetFlag(&ExcludeLinkedUdfs);
 
         // Outputs
 
@@ -635,10 +586,6 @@ protected:
                 RunnerOptions.ScriptQueryTimelineFiles.emplace_back(file);
             });
 
-        options.AddLongOption("profile-output", "File with profile memory allocations output (use '-' to write in stdout)")
-            .RequiredArgument("file")
-            .StoreMappedResultT<TString>(&ProfileAllocationsOutput, &GetDefaultOutput);
-
         // Pipeline settings
 
         TChoices<TExecutionOptions::EExecutionCase> executionCase({
@@ -660,11 +607,11 @@ protected:
             .DefaultValue(0)
             .StoreResult(&RunnerOptions.YdbSettings.AsyncQueriesSettings.InFlightLimit);
 
-        options.AddLongOption("verbose", TStringBuilder() << "Common verbose level (max level " << static_cast<ui32>(TYdbSetupSettings::EVerbose::Max) - 1 << ")")
+        options.AddLongOption("verbose", TStringBuilder() << "Common verbose level (max level " << static_cast<ui32>(EVerbose::Max) - 1 << ")")
             .RequiredArgument("uint")
-            .DefaultValue(static_cast<ui8>(TYdbSetupSettings::EVerbose::Info))
+            .DefaultValue(static_cast<ui8>(EVerbose::Info))
             .StoreMappedResultT<ui8>(&RunnerOptions.YdbSettings.VerboseLevel, [](ui8 value) {
-                return static_cast<TYdbSetupSettings::EVerbose>(std::min(value, static_cast<ui8>(TYdbSetupSettings::EVerbose::Max)));
+                return static_cast<EVerbose>(std::min(value, static_cast<ui8>(EVerbose::Max)));
             });
 
         TChoices<TAsyncQueriesSettings::EVerbose> verbose({
@@ -676,6 +623,11 @@ protected:
             .DefaultValue("each-query")
             .Choices(verbose.GetChoices())
             .StoreMappedResultT<TString>(&RunnerOptions.YdbSettings.AsyncQueriesSettings.Verbose, verbose);
+
+        options.AddLongOption("ping-period", "Query ping period in milliseconds")
+            .RequiredArgument("uint")
+            .DefaultValue(1000)
+            .StoreMappedResultT<ui64>(&PingPeriod, &TDuration::MilliSeconds<ui64>);
 
         TChoices<NKikimrKqp::EQueryAction> scriptAction({
             {"execute", NKikimrKqp::QUERY_ACTION_EXECUTE},
@@ -712,6 +664,11 @@ protected:
             .RequiredArgument("uint")
             .DefaultValue(0)
             .StoreMappedResultT<ui64>(&ExecutionOptions.LoopDelay, &TDuration::MilliSeconds<ui64>);
+
+        options.AddLongOption("query-delay", "Delay in milliseconds between queries starts")
+            .RequiredArgument("uint")
+            .DefaultValue(0)
+            .StoreMappedResultT<ui64>(&ExecutionOptions.QueryDelay, &TDuration::MilliSeconds<ui64>);
 
         options.AddLongOption("continue-after-fail", "Don't not stop requests execution after fails")
             .NoArgument()
@@ -751,7 +708,7 @@ protected:
 
         options.AddLongOption('H', "health-check", TStringBuilder() << "Level of health check before start (max level " << static_cast<ui32>(TYdbSetupSettings::EHealthCheck::Max) - 1 << ")")
             .RequiredArgument("uint")
-            .DefaultValue(static_cast<ui8>(TYdbSetupSettings::EHealthCheck::NodesCount))
+            .DefaultValue(static_cast<ui8>(TYdbSetupSettings::EHealthCheck::FetchDatabase))
             .StoreMappedResultT<ui8>(&RunnerOptions.YdbSettings.HealthCheckLevel, [](ui8 value) {
                 return static_cast<TYdbSetupSettings::EHealthCheck>(std::min(value, static_cast<ui8>(TYdbSetupSettings::EHealthCheck::Max)));
             });
@@ -836,14 +793,16 @@ protected:
         }
 
         RunnerOptions.YdbSettings.YqlToken = YqlToken;
-        RunnerOptions.YdbSettings.FunctionRegistry = CreateFunctionRegistry(UdfsDirectory, UdfsPaths, ExcludeLinkedUdfs).Get();
+        RunnerOptions.YdbSettings.FunctionRegistry = CreateFunctionRegistry().Get();
 
         auto& appConfig = RunnerOptions.YdbSettings.AppConfig;
+        auto& queryService = *appConfig.MutableQueryServiceConfig();
         if (ExecutionOptions.ResultsRowsLimit) {
-            appConfig.MutableQueryServiceConfig()->SetScriptResultRowsLimit(ExecutionOptions.ResultsRowsLimit);
+            queryService.SetScriptResultRowsLimit(ExecutionOptions.ResultsRowsLimit);
         }
+        queryService.SetProgressStatsPeriodMs(PingPeriod.MilliSeconds());
 
-        FillLogConfig(*appConfig.MutableLogConfig());
+        SetupLogsConfig();
 
         if (EmulateYt) {
             const auto& fileStorageConfig = appConfig.GetQueryServiceConfig().GetFileStorage();
@@ -856,7 +815,7 @@ protected:
         }
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
-        if (RunnerOptions.YdbSettings.VerboseLevel >= 1) {
+        if (RunnerOptions.YdbSettings.VerboseLevel >= EVerbose::Info) {
             Cout << CoutColors.Cyan() << "Starting profile memory allocations" << CoutColors.Default() << Endl;
         }
         NAllocProfiler::StartAllocationSampling(true);
@@ -869,7 +828,7 @@ protected:
         RunScript(ExecutionOptions, RunnerOptions);
 
 #ifdef PROFILE_MEMORY_ALLOCATIONS
-        if (RunnerOptions.YdbSettings.VerboseLevel >= 1) {
+        if (RunnerOptions.YdbSettings.VerboseLevel >= EVerbose::Info) {
             Cout << CoutColors.Cyan() << "Finishing profile memory allocations" << CoutColors.Default() << Endl;
         }
         FinishProfileMemoryAllocations();
@@ -892,18 +851,15 @@ private:
             }
         }
     }
+
+    void SetupLogsConfig() {
+        auto& logConfig = *RunnerOptions.YdbSettings.AppConfig.MutableLogConfig();
+        if (DefaultLogPriority) {
+            logConfig.SetDefaultLevel(*DefaultLogPriority);
+        }
+        ModifyLogPriorities(LogPriorities, logConfig);
+    }
 };
-
-#ifdef PROFILE_MEMORY_ALLOCATIONS
-void InterruptHandler(int) {
-    NColorizer::TColors colors = NColorizer::AutoColors(Cerr);
-
-    Cout << colors.Red() << "Execution interrupted, finishing profile memory allocations..." << colors.Default() << Endl;
-    TMain::FinishProfileMemoryAllocations();
-
-    abort();
-}
-#endif
 
 }  // anonymous namespace
 
@@ -911,10 +867,6 @@ void InterruptHandler(int) {
 
 int main(int argc, const char* argv[]) {
     SetupSignalActions();
-
-#ifdef PROFILE_MEMORY_ALLOCATIONS
-    signal(SIGINT, &NKqpRun::InterruptHandler);
-#endif
 
     try {
         NKqpRun::TMain().Run(argc, argv);

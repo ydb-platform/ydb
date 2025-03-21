@@ -606,8 +606,9 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
     app.SetEnableParameterizedDecimal(opts.EnableParameterizedDecimal_);
     app.SetEnableTopicAutopartitioningForCDC(opts.EnableTopicAutopartitioningForCDC_);
     app.SetEnableBackupService(opts.EnableBackupService_);
-    app.SetEnableExportChecksums(true);
+    app.SetEnableChecksumsExport(opts.EnableChecksumsExport_);
     app.SetEnableTopicTransfer(opts.EnableTopicTransfer_);
+    app.SetEnablePermissionsExport(opts.EnablePermissionsExport_);
 
     app.ColumnShardConfig.SetDisabledOnSchemeShard(false);
 

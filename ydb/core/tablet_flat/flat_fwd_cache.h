@@ -119,7 +119,7 @@ namespace NFwd {
             }
         }
 
-        TResult Get(IPageLoadingQueue *head, TPageId pageId, EPage type, ui64 lower) noexcept override
+        TResult Get(IPageLoadingQueue *head, TPageId pageId, EPage type, ui64 lower) override
         {
             if (type == EPage::FlatIndex) {
                 Y_ABORT_UNLESS(pageId == IndexPage.PageId);
@@ -153,14 +153,14 @@ namespace NFwd {
             return {Pages.at(PagesBeginOffset).Touch(pageId, Stat), grow, true};
         }
 
-        void Forward(IPageLoadingQueue *head, ui64 upper) noexcept override
+        void Forward(IPageLoadingQueue *head, ui64 upper) override
         {
             while (Iter && Iter->GetRowId() < EndRowId && OnHold + OnFetch < upper) {
                 RequestNextPage(head);
             }
         }
 
-        void Fill(NPageCollection::TLoadedPage& page, NSharedCache::TSharedPageRef sharedPageRef, EPage type) noexcept override
+        void Fill(NPageCollection::TLoadedPage& page, NSharedCache::TSharedPageRef sharedPageRef, EPage type) override
         {
             Stat.Saved += page.Data.size();
             
@@ -186,7 +186,7 @@ namespace NFwd {
         }
 
     private:
-        void DropPagesBefore(TPageId pageId) noexcept
+        void DropPagesBefore(TPageId pageId)
         {
             while (PagesBeginOffset < Pages.size()) {
                 auto &page = Pages.at(PagesBeginOffset);
@@ -209,7 +209,7 @@ namespace NFwd {
             }
         }
 
-        void ShrinkPages() noexcept
+        void ShrinkPages()
         {
             while (PagesBeginOffset && Pages.front().Ready()) {
                 Pages.pop_front();
@@ -217,7 +217,7 @@ namespace NFwd {
             }
         }
 
-        void AdvanceNextPage(TPageId pageId) noexcept
+        void AdvanceNextPage(TPageId pageId)
         {
             Y_ABORT_UNLESS(Iter);
             Y_ABORT_UNLESS(Iter->GetPageId() <= pageId);
@@ -229,7 +229,7 @@ namespace NFwd {
             Y_ABORT_UNLESS(Iter->GetPageId() == pageId);
         }
 
-        void RequestNextPage(IPageLoadingQueue *head) noexcept
+        void RequestNextPage(IPageLoadingQueue *head)
         {
             Y_ABORT_UNLESS(Iter);
 
@@ -316,7 +316,7 @@ namespace NFwd {
             }
         }
 
-        TResult Get(IPageLoadingQueue *head, TPageId pageId, EPage type, ui64 lower) noexcept override
+        TResult Get(IPageLoadingQueue *head, TPageId pageId, EPage type, ui64 lower) override
         {
             auto levelId = GetLevel(pageId, type);
             auto& level = Levels[levelId];
@@ -340,7 +340,7 @@ namespace NFwd {
             return {level.Pages.at(level.PagesBeginOffset).Touch(pageId, Stat), grow, true};
         }
 
-        void Forward(IPageLoadingQueue *head, ui64 upper) noexcept override
+        void Forward(IPageLoadingQueue *head, ui64 upper) override
         {
             for (auto& level : Levels) {
                 if (level.Pages.empty()) {
@@ -353,7 +353,7 @@ namespace NFwd {
             }
         }
 
-        void Fill(NPageCollection::TLoadedPage& page, NSharedCache::TSharedPageRef sharedPageRef, EPage type) noexcept override
+        void Fill(NPageCollection::TLoadedPage& page, NSharedCache::TSharedPageRef sharedPageRef, EPage type) override
         {
             Stat.Saved += page.Data.size();
               
@@ -393,7 +393,7 @@ namespace NFwd {
             }
         }
 
-        void DropPagesBefore(TLevel& level, TPageId pageId) noexcept
+        void DropPagesBefore(TLevel& level, TPageId pageId)
         {
             while (level.PagesBeginOffset < level.Pages.size()) {
                 auto &page = level.Pages.at(level.PagesBeginOffset);
@@ -417,7 +417,7 @@ namespace NFwd {
             }
         }
 
-        void AdvancePending(ui32 levelId) noexcept
+        void AdvancePending(ui32 levelId)
         {
             auto& level = Levels[levelId];
 
@@ -448,7 +448,7 @@ namespace NFwd {
             }
         }
 
-        void ShrinkPages(TLevel& level) noexcept
+        void ShrinkPages(TLevel& level)
         {
             while (level.PagesBeginOffset && level.Pages.front().Ready()) {
                 level.Pages.pop_front();
@@ -459,7 +459,7 @@ namespace NFwd {
             }
         }
 
-        ui64 GetDataSize(TLevel& level) noexcept
+        ui64 GetDataSize(TLevel& level)
         {
             if (&level == &Levels.back()) {
                 return 
@@ -475,7 +475,7 @@ namespace NFwd {
             }
         }
 
-        void AdvanceNextPage(TLevel& level, TPageId pageId) noexcept
+        void AdvanceNextPage(TLevel& level, TPageId pageId)
         {
             auto& queue = level.Queue;
 
@@ -489,7 +489,7 @@ namespace NFwd {
             Y_ABORT_UNLESS(queue.front().PageId == pageId);
         }
 
-        void RequestNextPage(TLevel& level, IPageLoadingQueue *head) noexcept
+        void RequestNextPage(TLevel& level, IPageLoadingQueue *head)
         {
             Y_ABORT_UNLESS(!level.Queue.empty());
             auto pageId = level.Queue.front().PageId;

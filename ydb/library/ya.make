@@ -7,6 +7,7 @@ RECURSE(
     arrow_parquet
     backup
     benchmarks
+    breakpad
     chunks_limiter
     folder_service
     formats
@@ -27,6 +28,7 @@ RECURSE(
     query_actor
     schlab
     security
+    signal_backtrace
     table_creator
     testlib
     time_series_vec

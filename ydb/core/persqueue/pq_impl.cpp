@@ -183,6 +183,8 @@ private:
         auto partResp = responseRecord.MutablePartitionResponse()->MutableCmdReadResult();
 
         partResp->SetMaxOffset(readResult.GetMaxOffset());
+        partResp->SetStartOffset(readResult.GetStartOffset());
+        partResp->SetEndOffset(readResult.GetEndOffset());
         partResp->SetSizeLag(readResult.GetSizeLag());
         partResp->SetWaitQuotaTimeMs(partResp->GetWaitQuotaTimeMs() + readResult.GetWaitQuotaTimeMs());
 
@@ -865,6 +867,7 @@ NKikimrPQ::TPQTabletConfig TPersQueue::MakeSupportivePartitionConfig() const
     partitionConfig.MutableReadRuleServiceTypes()->Clear();
     partitionConfig.MutableReadRuleVersions()->Clear();
     partitionConfig.MutableReadRuleGenerations()->Clear();
+    partitionConfig.MutableConsumers()->Clear();
 
     return partitionConfig;
 }
@@ -4639,7 +4642,6 @@ TActorId TPersQueue::GetPartitionQuoter(const TPartitionId& partition) {
             partition,
             SelfId(),
             TabletID(),
-            IsLocalDC,
             *Counters
         ));
     }

@@ -36,6 +36,7 @@ public:
             {T::PutTabletLogLatency::ColumnId, {E::kInfoFieldNumber, V::kPutTabletLogLatencyFieldNumber}},
             {T::PutUserDataLatency::ColumnId, {E::kInfoFieldNumber, V::kPutUserDataLatencyFieldNumber}},
             {T::GetFastLatency::ColumnId, {E::kInfoFieldNumber, V::kGetFastLatencyFieldNumber}},
+            {T::LayoutCorrect::ColumnId, {E::kInfoFieldNumber, V::kLayoutCorrectFieldNumber}},
         };
         return fieldMap;
     }

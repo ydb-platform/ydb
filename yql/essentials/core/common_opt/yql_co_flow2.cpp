@@ -1572,8 +1572,8 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 }
             }
 
-            if (self.Input().Ref().IsCallable(TCoGroupingCore::CallableName())) {
-                auto groupingCore = self.Input().Cast<TCoGroupingCore>();
+            if (const auto maybeGroupingCore = TMaybeNode<TCoGroupingCore>(&SkipCallables(self.Input().Ref(), {"ToFlow"}))) {
+                auto groupingCore = maybeGroupingCore.Cast();
                 const TExprNode* extract = nullptr;
                 // Find pattern: (FlatMap (GroupingCore ...) (lambda (x) ( ... (ExtractMembers (Nth x '1) ...))))
                 const auto arg = self.Lambda().Args().Arg(0).Raw();
@@ -1606,11 +1606,18 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                                 .Build()
                             .Build()
                             .Done();
+                        TExprBase flatMapInput = groupingCore;
+                        if (auto toFlow = self.Input().Maybe<TCoToFlow>()) {
+                            flatMapInput = Build<TCoToFlow>(ctx, self.Input().Pos())
+                                .InitFrom(toFlow.Cast())
+                                .Input(flatMapInput)
+                                .Done();
+                        }
 
                         YQL_CLOG(DEBUG, Core) << "Pull out " << extract->Content() << " from " << node->Content() << " to " << groupingCore.Ref().Content() << " handler";
                         return Build<TCoFlatMapBase>(ctx, node->Pos())
                             .CallableName(node->Content())
-                            .Input(groupingCore)
+                            .Input(flatMapInput)
                             .Lambda(ctx.DeepCopyLambda(self.Lambda().Ref()))
                             .Done().Ptr();
                     }
@@ -1874,7 +1881,14 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
         }
 
         if (self.Input().Maybe<TCoSortBase>()) {
-            if (auto res = ApplyExtractMembersToSort(self.Input().Ptr(), self.Members().Ptr(), *optCtx.ParentsMap, ctx, {})) {
+            if (auto res = ApplyExtractMembersToSortOrPruneKeys(self.Input().Ptr(), self.Members().Ptr(), *optCtx.ParentsMap, ctx, {})) {
+                return res;
+            }
+            return node;
+        }
+
+        if (self.Input().Ptr()->IsCallable("PruneKeys") || self.Input().Ptr()->IsCallable("PruneAdjacentKeys")) {
+            if (auto res = ApplyExtractMembersToSortOrPruneKeys(self.Input().Ptr(), self.Members().Ptr(), *optCtx.ParentsMap, ctx, {})) {
                 return res;
             }
             return node;
@@ -2653,7 +2667,12 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             return ctx.RenameNode(node->Head(), "Top");
         }
 
-        if (node->Head().IsCallable({"Sort", "AssumeSorted"})) {
+        static const char optName[] = "UnorderedOverSortImproved";
+        YQL_ENSURE(optCtx.Types);
+        const bool optEnabled = IsOptimizerEnabled<optName>(*optCtx.Types) && !IsOptimizerDisabled<optName>(*optCtx.Types);
+
+        if (!optEnabled && node->Head().IsCallable({"Sort", "AssumeSorted"})) {
+            // if optEnabled this action is performed in yql_co_simple1.cpp (without multiusage check)
             YQL_CLOG(DEBUG, Core) << node->Content() << " absorbs " << node->Head().Content();
             return ctx.ChangeChild(*node, 0U, node->Head().HeadPtr());
         }

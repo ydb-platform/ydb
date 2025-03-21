@@ -18,17 +18,11 @@ namespace NActors {
 
     class IEventBase
         : TNonCopyable {
-    protected:
-        // for compatibility with virtual actors
-        virtual bool DoExecute(IActor* actor, std::unique_ptr<IEventHandle> eventPtr);
-
     public:
         // actual typing is performed by IEventHandle
 
         virtual ~IEventBase() {
         }
-
-        bool Execute(IActor* actor, std::unique_ptr<IEventHandle> eventPtr);
 
         virtual TString ToStringHeader() const = 0;
         virtual TString ToString() const {

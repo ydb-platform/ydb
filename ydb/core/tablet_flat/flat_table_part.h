@@ -30,7 +30,7 @@ namespace NTable {
 
         virtual ~TColdPart() = default;
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out << "ColdPart{" << Label << " eph " << Epoch << "}";
         }
@@ -63,7 +63,7 @@ namespace NTable {
                 return !FlatGroups.empty();
             }
 
-            const TBtreeIndexMeta& GetBTree(TGroupId groupId) const noexcept {
+            const TBtreeIndexMeta& GetBTree(TGroupId groupId) const {
                 if (groupId.IsHistoric()) {
                     Y_ABORT_UNLESS(groupId.Index < BTreeHistoric.size());
                     return BTreeHistoric[groupId.Index];
@@ -73,7 +73,7 @@ namespace NTable {
                 }
             }
 
-            TPageId GetFlat(TGroupId groupId) const noexcept {
+            TPageId GetFlat(TGroupId groupId) const {
                 if (groupId.IsHistoric()) {
                     Y_ABORT_UNLESS(groupId.Index < FlatHistoric.size());
                     return FlatHistoric[groupId.Index];
@@ -136,7 +136,7 @@ namespace NTable {
 
         virtual ~TPart() = default;
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "Part{" << Label << " eph " << Epoch << ", "
@@ -153,8 +153,8 @@ namespace NTable {
          */
         virtual TIntrusiveConstPtr<TPart> CloneWithEpoch(TEpoch epoch) const = 0;
 
-        virtual ui64 DataSize() const = 0;
-        virtual ui64 BackingSize() const = 0;
+        virtual ui64 DataSize() const noexcept = 0;
+        virtual ui64 BackingSize() const noexcept = 0;
         virtual ui64 GetPageSize(NPage::TPageId pageId, NPage::TGroupId groupId) const = 0;
         virtual ui64 GetPageSize(ELargeObj lob, ui64 ref) const = 0;
         virtual NPage::EPage GetPageType(NPage::TPageId pageId, NPage::TGroupId groupId) const = 0;
@@ -213,7 +213,7 @@ namespace NTable {
 
         virtual ~TTxStatusPart() = default;
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "TxStatus{" << Label << " epoch " << Epoch << ", "

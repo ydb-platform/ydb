@@ -55,7 +55,7 @@ namespace NFwd {
             return Data ? &Data : nullptr;
         }
 
-        ui32 Settle(NPageCollection::TLoadedPage &page, NSharedCache::TSharedPageRef ref) noexcept
+        ui32 Settle(NPageCollection::TLoadedPage &page, NSharedCache::TSharedPageRef ref)
         {
             const auto was = std::exchange(Fetch, EFetch::Done);
 
@@ -75,7 +75,7 @@ namespace NFwd {
             return Data.size();
         }
 
-        const TSharedData* Touch(TPageId pageId, TStat &stat) noexcept
+        const TSharedData* Touch(TPageId pageId, TStat &stat)
         {
             if (PageId != pageId || (!Data && Fetch == EFetch::Done)) {
                 Y_ABORT("Touching page that doesn't fit to this action");
@@ -89,7 +89,7 @@ namespace NFwd {
             return Plain();
         }
 
-        TSharedData Release() noexcept
+        TSharedData Release()
         {
             Fetch = Max(Fetch, EFetch::Drop);
 

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/common/simple/reattach.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider.h>
 #include <ydb/core/util/ulid.h>
@@ -43,11 +44,21 @@ public:
     virtual bool AddLock(ui64 shardId, const NKikimrDataEvents::TLock& lock) = 0;
 
     virtual void BreakLock(ui64 shardId) = 0;
+    virtual TVector<NKikimrDataEvents::TLock> GetLocks() const = 0;
+    virtual TVector<NKikimrDataEvents::TLock> GetLocks(ui64 shardId) const = 0;
 
     virtual TTableInfo GetShardTableInfo(ui64 shardId) const = 0;
 
-    virtual TVector<NKikimrDataEvents::TLock> GetLocks() const = 0;
-    virtual TVector<NKikimrDataEvents::TLock> GetLocks(ui64 shardId) const = 0;
+    virtual bool ShouldReattach(ui64 shardId, TInstant now) = 0;
+    virtual void Reattached(ui64 shardId) = 0;
+    virtual void SetRestarting(ui64 shardId) = 0;
+
+    struct TReattachState {
+        TReattachInfo ReattachInfo;
+        ui64 Cookie = 0;
+    };
+
+    virtual TReattachState& GetReattachState(ui64 shardId) = 0;
 
     virtual EShardState GetState(ui64 shardId) const = 0;
     virtual void SetError(ui64 shardId) = 0;
@@ -57,11 +68,7 @@ public:
 
     virtual void SetTopicOperations(NTopic::TTopicOperations&& topicOperations) = 0;
     virtual const NTopic::TTopicOperations& GetTopicOperations() const = 0;
-
-    virtual void SetAllowVolatile(bool allowVolatile) = 0;
-
     virtual void BuildTopicTxs(NTopic::TTopicOperationTransactions& txs) = 0;
-
     virtual bool HasTopics() const = 0;
 
     virtual bool IsTxPrepared() const = 0;
@@ -74,6 +81,7 @@ public:
     virtual bool IsEmpty() const = 0;
     virtual bool HasLocks() const = 0;
 
+    virtual void SetAllowVolatile(bool allowVolatile) = 0;
     virtual bool IsVolatile() const = 0;
 
     virtual bool HasSnapshot() const = 0;
@@ -86,6 +94,8 @@ public:
     virtual ui64 GetShardsCount() const = 0;
 
     virtual bool NeedCommit() const = 0;
+
+    virtual ui64 GetCoordinator() const = 0;
 
     virtual void StartPrepare() = 0;
 

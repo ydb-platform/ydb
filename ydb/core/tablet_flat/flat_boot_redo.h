@@ -29,7 +29,7 @@ namespace NBoot {
         }
 
     private: /* IStep, boot logic DSL actor interface   */
-        void Start() noexcept override
+        void Start() override
         {
             if (auto logl = Env->Logger()->Log(ELnLev::Info)) {
                 const auto last = Queue ? Queue.back().Stamp + 1 : 0;
@@ -46,7 +46,7 @@ namespace NBoot {
             Flush();
         }
 
-        void HandleStep(TIntrusivePtr<IStep> step) noexcept override
+        void HandleStep(TIntrusivePtr<IStep> step) override
         {
             auto *load = step->ConsumeAs<TLoadBlobs>(Pending);
 
@@ -59,7 +59,7 @@ namespace NBoot {
         }
 
     private:
-        void Flush() noexcept
+        void Flush()
         {
             for (TLogEntry *head = nullptr; Queue && *(head = &Queue[0]); ) {
                 auto index = TCookie(head->LargeGlobId.Lead.Cookie()).Index();
@@ -80,7 +80,7 @@ namespace NBoot {
             }
         }
 
-        void Apply(ui64 stamp, const TLogEntry &entry, TString redo) noexcept
+        void Apply(ui64 stamp, const TLogEntry &entry, TString redo)
         {
             const auto begin_ = Back->DatabaseImpl->Serial();
 

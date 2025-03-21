@@ -23,6 +23,9 @@
             "name": "/local/base_dynumber_insert_from_table_sql_plan/ResultTableDyNumber",
             "reads": [
                 {
+                    "lookup_by": [
+                        "Key"
+                    ],
                     "type": "Lookup"
                 }
             ],

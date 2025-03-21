@@ -10,7 +10,7 @@ As with other binary operators, if the data on either side is `NULL`, the result
 
 Don't confuse this operator with a logical "or": in SQL, it's denoted by the `OR` keyword. It's also not worth doing concatenation using `+`.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT "fo" || "o";
@@ -38,7 +38,7 @@ All other characters are literals that represent themselves.
 
 The most popular way to use the `LIKE` and `REGEXP` keywords is to filter a table using the statements with the `WHERE` clause. However, there are no restrictions on using templates in this context: you can use them in most of contexts involving strings, for example, with concatenation by using `||`.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT * FROM my_table
@@ -161,7 +161,7 @@ The operators in the table are listed in descending order of precedence.
 
 Matching an empty value (`NULL`). Since `NULL` is a special value [equal to nothing](../types/optional.md#null_expr), the ordinary [comparison operators](#comparison-operators) can't be used to match it.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT key FROM my_table
@@ -188,7 +188,7 @@ For values of composite types, these rules are used recursively.
 
 Checking whether a value is in a range. It's equivalent to two conditions with `>=` and `<=` (range boundaries are included). Can be used with the `NOT` prefix to support inversion.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT * FROM my_table
@@ -215,7 +215,7 @@ The `COMPACT` modifier must be used with care. Since the hash table is built in-
 
 It is prefirable to add large lists of values to your query by URLs and use the [ParseFile](../builtins/basic.md#parsefile) function.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT column IN (1, 2, 3)
@@ -251,7 +251,7 @@ Can be used in the following scenarios:
 * Using named arguments in function calls.
 * To specify the target type in the case of explicit type casting, see [CAST](#cast).
 
-### Examples
+#### Examples
 
 ```yql
 SELECT key AS k FROM my_table;
@@ -278,7 +278,7 @@ For more information about casting rules, see [here](../types/cast.md).
 
 {% include [decimal_args](../_includes/decimal_args.md) %}
 
-### Examples
+#### Examples
 
 {% include [cast_examples](../_includes/cast_examples.md) %}
 
@@ -287,7 +287,7 @@ For more information about casting rules, see [here](../types/cast.md).
 
 Performs a bitwise conversion of an integer value to the specified integer type. The conversion is always successful, but may lose precision or high-order bits.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -306,7 +306,7 @@ The `ELSE` branch is mandatory in the `CASE` expression. Expressions in `WHEN` a
 
 Since its syntax is quite sophisticated, it's often more convenient to use the built-in function [IF](../builtins/basic.md#if).
 
-### Examples
+#### Examples
 
 ```yql
 SELECT
@@ -384,7 +384,7 @@ If named expression substitution results in completely identical subgraphs in th
 
 {% endnote %}
 
-### Examples
+#### Examples
 
 ```yql
 $multiplier = 712;
@@ -496,7 +496,7 @@ Only use pure expressions inside the lambda body (those might also be other lamb
 
 One or more of the last lambda parameters can be marked with a question mark as optional: if they haven't been specified when calling lambda, they are assigned the `NULL` value.
 
-### Examples
+#### Examples
 
 ```yql
 $f = ($y) -> {
@@ -530,7 +530,7 @@ For accessing the values inside containers:
 
 When using this syntax to access containers within table columns, be sure to specify the full column name, including the table name or table alias separated by a dot (see the first example below).
 
-### Examples
+#### Examples
 
 ```yql
 SELECT

@@ -26,10 +26,16 @@ ci:
           filters:
             - abs-paths:
                 - build/export_generators/ide-gradle/**
+                - build/ymake.core.conf
+                - build/ymake_conf.py
                 - build/conf/**
                 - build/internal/conf/**
+                - build/platform/**
+                - build/scripts/**
                 - devtools/ya/ide/gradle/**
                 - devtools/ya/build/sem_graph/**
+                - devtools/ya/ide/tests_gradle/test_prjs/**
+                - devtools/yexport/ci/gradle_cmake_docker/**
 
   on-demand-auto:
     - abs-paths: build/export_generators/ide-gradle/**

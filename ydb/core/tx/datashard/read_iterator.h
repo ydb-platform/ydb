@@ -218,6 +218,9 @@ public:
     TActorId ScanActorId;
     // temporary storage for forwarded events until scan has started
     std::vector<std::unique_ptr<IEventHandle>> ScanPendingEvents;
+
+    // May be used to cancel enqueued transactions
+    ui64 EnqueuedLocalTxId = 0;
 };
 
 using TReadIteratorsMap = THashMap<TReadIteratorId, TReadIteratorState, TReadIteratorId::THash>;

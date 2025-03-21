@@ -17,15 +17,13 @@ void TRetrylessWriter::DoFinish()
         return;
     }
     Running_ = false;
-
-    BufferedOutput_->Finish();
-    Request_->Finish()->GetResponse();
+    Output_->Finish();
 }
 
 void TRetrylessWriter::DoWrite(const void* buf, size_t len)
 {
     try {
-        BufferedOutput_->Write(buf, len);
+        Output_->Write(buf, len);
     } catch (...) {
         Running_ = false;
         throw;

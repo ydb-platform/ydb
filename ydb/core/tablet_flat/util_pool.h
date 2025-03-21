@@ -140,19 +140,19 @@ namespace NKikimr::NUtil {
             return ptr;
         }
 
-        void BeginTransaction() noexcept {
+        void BeginTransaction() {
             Y_ABORT_UNLESS(!RollbackState_);
             auto& state = RollbackState_.emplace();
             state.Chunk = Current;
             state.Ptr = Current->Ptr;
         }
 
-        void CommitTransaction() noexcept {
+        void CommitTransaction() {
             Y_ABORT_UNLESS(RollbackState_);
             RollbackState_.reset();
         }
 
-        void RollbackTransaction() noexcept {
+        void RollbackTransaction() {
             Y_ABORT_UNLESS(RollbackState_);
             auto& state = *RollbackState_;
             DoRollback(state.Chunk, state.Ptr);

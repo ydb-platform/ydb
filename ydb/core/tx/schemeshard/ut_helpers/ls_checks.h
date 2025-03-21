@@ -169,6 +169,7 @@ namespace NLs {
     TCheckFunc StreamAwsRegion(const TString& value);
     TCheckFunc StreamInitialScanProgress(ui32 total, ui32 completed);
     TCheckFunc RetentionPeriod(const TDuration& value);
+    TCheckFunc ConsumerExist(const TString& name);
 
     TCheckFunc HasBackupInFly(ui64 txId);
     void NoBackupInFly(const NKikimrScheme::TEvDescribeSchemeResult& record);

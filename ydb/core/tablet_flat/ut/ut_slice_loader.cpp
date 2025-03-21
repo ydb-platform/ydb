@@ -22,7 +22,7 @@ using TPageCollectionProtoHelper = NTabletFlatExecutor::TPageCollectionProtoHelp
 using TCache = NTabletFlatExecutor::TPrivatePageCache::TInfo;
 
 namespace {
-    NPage::TConf PageConf() noexcept
+    NPage::TConf PageConf()
     {
         NPage::TConf conf{ true, 2 * 1024 };
 
@@ -78,24 +78,24 @@ namespace {
             return Part->Store->PageCollectionPagesCount(Room);
         }
 
-        NPageCollection::TInfo Page(ui32 page) const noexcept override
+        NPageCollection::TInfo Page(ui32 page) const override
         {
             const auto array = Part->Store->PageCollectionArray(Room);
 
             return { array.at(page).size(), ui32(EPage::Undef) };
         }
 
-        NPageCollection::TBorder Bounds(ui32) const noexcept override
+        NPageCollection::TBorder Bounds(ui32) const override
         {
             Y_ABORT("Unexpected Bounds(...) call");
         }
 
-        NPageCollection::TGlobId Glob(ui32) const noexcept override
+        NPageCollection::TGlobId Glob(ui32) const override
         {
             Y_ABORT("Unexpected Glob(...) call");
         }
 
-        bool Verify(ui32, TArrayRef<const char>) const noexcept override
+        bool Verify(ui32, TArrayRef<const char>) const override
         {
             Y_ABORT("Unexpected Verify(...) call");
         }

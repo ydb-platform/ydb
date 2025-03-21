@@ -269,6 +269,7 @@ namespace NSQLTranslationV1 {
         TVector<TNodePtr>&& terms,
         bool distinct,
         TVector<TNodePtr>&& without,
+        bool forceWithout,
         bool selectStream,
         const TWriteSettings& settings,
         TColumnsSets&& uniqueSets,
@@ -317,6 +318,7 @@ namespace NSQLTranslationV1 {
     TNodePtr BuildWriteTable(TPosition pos, const TString& label, const TTableRef& table, EWriteColumnMode mode, TNodePtr options,
         TScopedStatePtr scoped);
     TNodePtr BuildAnalyze(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TAnalyzeParams& params, TScopedStatePtr scoped);
+    TNodePtr BuildShowCreate(TPosition pos, const TTableRef& table, TScopedStatePtr scoped);
     TNodePtr BuildAlterSequence(TPosition pos, const TString& service, const TDeferredAtom& cluster, const TString& id, const TSequenceParameters& params, TScopedStatePtr scoped);
     TSourcePtr TryMakeSourceFromExpression(TPosition pos, TContext& ctx, const TString& currService, const TDeferredAtom& currCluster,
         TNodePtr node, const TString& view = {});

@@ -542,6 +542,12 @@ struct TOperationSpecBase
 
     /// How many jobs can fail before operation is failed.
     FLUENT_FIELD_OPTION(ui64, MaxFailedJobCount);
+
+    // Arbitrary structured information related to the operation.
+    FLUENT_FIELD_OPTION(TNode, Annotations);
+
+    // Similar to Annotations, shown on the operation page. Recommends concise, human-readable entries to prevent clutter.
+    FLUENT_FIELD_OPTION(TNode, Description);
 };
 
 ///
@@ -2450,13 +2456,13 @@ struct TOperationProgress
 /// @brief Brief operation progress (numbers of jobs in these states).
 struct TOperationBriefProgress
 {
-    ui64 Aborted = 0;
-    ui64 Completed = 0;
-    ui64 Failed = 0;
-    ui64 Lost = 0;
-    ui64 Pending = 0;
-    ui64 Running = 0;
-    ui64 Total = 0;
+    i64 Aborted = 0;
+    i64 Completed = 0;
+    i64 Failed = 0;
+    i64 Lost = 0;
+    i64 Pending = 0;
+    i64 Running = 0;
+    i64 Total = 0;
 };
 
 ///
@@ -2743,6 +2749,10 @@ enum class EJobType : int
     RemoveChunk       /* "remove_chunk" */,
     RepairChunk       /* "repair_chunk" */,
     SealChunk         /* "seal_chunk" */,
+    ShallowMerge      /* "shallow_merge" */,
+    MergeChunks       /* "merge_chunks" */,
+    AutotomizeChunk   /* "autotomize_chunk" */,
+    ReincarnateChunk  /* "reincarnate_chunk" */,
 };
 
 ///
@@ -2878,6 +2888,10 @@ struct TListJobsOptions
     ///
     /// @brief Return only jobs with monitoring descriptor.
     FLUENT_FIELD_OPTION(bool, WithMonitoringDescriptor);
+
+    ///
+    /// @brief Return only jobs with interruption info.
+    FLUENT_FIELD_OPTION(bool, WithInterruptionInfo);
 
     ///
     /// @brief Return only jobs with given operation incarnation.

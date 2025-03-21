@@ -17,6 +17,9 @@ public:
     TString Token;
     TString TokenFile;
     TString CaCertsFile;
+    TString ClientCertFile;
+    TString ClientCertPrivateKeyFile;
+    TString ClientCertPrivateKeyPasswordFile;
 
     virtual void Config(TConfig& config) override;
     virtual void Parse(TConfig& config) override;
@@ -27,6 +30,7 @@ protected:
     void ParseToken(TString& token, TString& tokenFile, const TString& envName, bool useDefaultToken = false);
     bool ParseProtocol(TConfig& config, TString& message);
     virtual void ParseCaCerts(TConfig& config);
+    virtual void ParseClientCert(TConfig& config);
     virtual void ParseCredentials(TConfig& config);
     virtual void ParseAddress(TConfig& config) = 0;
 };

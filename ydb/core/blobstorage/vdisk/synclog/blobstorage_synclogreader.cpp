@@ -177,7 +177,7 @@ namespace NKikimr {
                     FragmentWriter.Finish(result->Record.MutableData());
                 }
 
-                SendVDiskResponse(ctx, Ev->Sender, result.release(), Ev->Cookie, SlCtx->VCtx);
+                SendVDiskResponse(ctx, Ev->Sender, result.release(), Ev->Cookie, SlCtx->VCtx, {});
                 ctx.Send(ParentId, new TEvSyncLogReadFinished(SourceVDisk));
                 Die(ctx);
             }

@@ -226,7 +226,7 @@ IComputationNode* WrapDiscard(TCallable& callable, const TComputationNodeFactory
     if (type->IsFlow()) {
         if (const auto wide = dynamic_cast<IComputationWideFlowNode*>(flow)) {
             auto flowType = AS_TYPE(TFlowType, callable.GetInput(0U).GetStaticType());
-            if (RuntimeVersion > 35 && flowType->GetItemType()->IsMulti() || flowType->GetItemType()->IsTuple()) {
+            if (flowType->GetItemType()->IsMulti() || flowType->GetItemType()->IsTuple()) {
                 return new TDiscardWideFlowWrapper(wide, GetWideComponentsCount(flowType));
             }
             return new TDiscardWideFlowWrapper(wide, 0U);

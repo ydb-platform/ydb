@@ -2,3 +2,8 @@ sync_dir
 
 *.log
 *.sql
+*.conf
+*.parquet
+*.json
+*.svg
+*.txt

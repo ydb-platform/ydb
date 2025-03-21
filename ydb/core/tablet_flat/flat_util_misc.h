@@ -48,7 +48,7 @@ namespace NUtil {
     };
 
     template <typename TVal>
-    TVal SubSafe(TVal &val, TVal sub) noexcept
+    TVal SubSafe(TVal &val, TVal sub)
     {
         Y_ABORT_UNLESS(val >= sub, "Counter is underflowed");
 
@@ -56,7 +56,7 @@ namespace NUtil {
     }
 
     template<typename TVal, typename TBase>
-    TVal* ExactCast(TBase *base) noexcept
+    TVal* ExactCast(TBase *base)
     {
         bool same = (typeid(*base) == typeid(TVal));
 

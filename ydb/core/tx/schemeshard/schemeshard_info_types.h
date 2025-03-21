@@ -10,7 +10,7 @@
 
 #include <ydb/core/tx/message_seqno.h>
 #include <ydb/core/tx/datashard/datashard.h>
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/base/feature_flags.h>
@@ -105,7 +105,7 @@ struct TSplitSettings {
     TForceShardSplitSettings GetForceShardSplitSettings() const {
         return TForceShardSplitSettings{
             .ForceShardSplitDataSize = ui64(ForceShardSplitDataSize),
-            .DisableForceShardSplit = true,
+            .DisableForceShardSplit = ui64(DisableForceShardSplit) != 0,
         };
     }
 };
@@ -685,17 +685,17 @@ public:
                             const TForceShardSplitSettings& forceShardSplitSettings,
                             TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge,
                             THashSet<TTabletId>& partOwners, ui64& totalSize, float& totalLoad,
-                            const TTableInfo* mainTableForIndex) const;
+                            const TTableInfo* mainTableForIndex, TString& reason) const;
 
     bool CheckCanMergePartitions(const TSplitSettings& splitSettings,
                                  const TForceShardSplitSettings& forceShardSplitSettings,
                                  TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge,
-                                 const TTableInfo* mainTableForIndex) const;
+                                 const TTableInfo* mainTableForIndex, TString& reason) const;
 
     bool CheckSplitByLoad(
             const TSplitSettings& splitSettings, TShardIdx shardIdx,
             ui64 dataSize, ui64 rowCount,
-            const TTableInfo* mainTableForIndex) const;
+            const TTableInfo* mainTableForIndex, TString& reason) const;
 
     bool IsSplitBySizeEnabled(const TForceShardSplitSettings& params) const {
         // Respect unspecified SizeToSplit when force shard splits are disabled
@@ -818,16 +818,30 @@ public:
         return stats.DataSize >= params.ForceShardSplitDataSize;
     }
 
-    bool ShouldSplitBySize(ui64 dataSize, const TForceShardSplitSettings& params) const {
+    bool ShouldSplitBySize(ui64 dataSize, const TForceShardSplitSettings& params, TString& reason) const {
         if (!IsSplitBySizeEnabled(params)) {
             return false;
         }
         // When shard is over the maximum size we split even when over max partitions
         if (dataSize >= params.ForceShardSplitDataSize && !params.DisableForceShardSplit) {
+            reason = TStringBuilder() << "force split by size ("
+                << "dataSize: " << dataSize << ", "
+                << "maxDataSize: " << params.ForceShardSplitDataSize << ")";
+
             return true;
         }
         // Otherwise we split when we may add one more partition
-        return Partitions.size() < GetMaxPartitionsCount() && dataSize >= GetShardSizeToSplit(params);
+        if (Partitions.size() < GetMaxPartitionsCount() && dataSize >= GetShardSizeToSplit(params)) {
+            reason = TStringBuilder() << "split by size ("
+                << "partitionCount: " << Partitions.size() << ", "
+                << "maxPartitionCount: " << GetMaxPartitionsCount() << ", "
+                << "dataSize: " << dataSize << ", "
+                << "maxDataSize: " << GetShardSizeToSplit(params) << ")";
+
+            return true;
+        }
+
+        return false;
     }
 
     bool NeedRecreateParts() const {
@@ -2736,6 +2750,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     TInstant EndTime = TInstant::Zero();
 
     bool EnableChecksums = false;
+    bool EnablePermissions = false;
 
     explicit TExportInfo(
             const ui64 id,
@@ -2828,6 +2843,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         CreateSchemeObject,
         Transferring,
         BuildIndexes,
+        CreateChangefeed,
         Done = 240,
         Cancellation = 250,
         Cancelled = 251,
@@ -2844,6 +2860,11 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
             Subscribed,
         };
 
+        enum class EChangefeedState: ui8 {
+            CreateChangefeed = 0,
+            CreateConsumers,
+        };
+
         TString DstPathName;
         TPathId DstPathId;
         Ydb::Table::CreateTableRequest Scheme;
@@ -2851,15 +2872,18 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         TMaybe<NKikimrSchemeOp::TModifyScheme> PreparedCreationQuery;
         TMaybeFail<Ydb::Scheme::ModifyPermissionsRequest> Permissions;
         NBackup::TMetadata Metadata;
+        NKikimrSchemeOp::TImportTableChangefeeds Changefeeds;
 
         EState State = EState::GetScheme;
         ESubState SubState = ESubState::AllocateTxId;
+        EChangefeedState ChangefeedState = EChangefeedState::CreateChangefeed;
         TTxId WaitTxId = InvalidTxId;
         TActorId SchemeGetter;
         TActorId SchemeQueryExecutor;
         int NextIndexIdx = 0;
+        int NextChangefeedIdx = 0;
         TString Issue;
-        int ViewCreationRetries = 0;
+        TPathId StreamImplPathId;
 
         TItem() = default;
 
@@ -2890,6 +2914,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     EState State = EState::Invalid;
     TString Issue;
     TVector<TItem> Items;
+    int WaitingViews = 0;
 
     TSet<TActorId> Subscribers;
 
@@ -3079,12 +3104,12 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         };
         ui32 Level = 1;
 
-        ui32 Parent = 0;
-        ui32 ParentEnd = 0;  // included
-
         EState State = Sample;
 
-        ui32 ChildBegin = 1;  // included
+        NTableIndex::TClusterId Parent = 0;
+        NTableIndex::TClusterId ParentEnd = 0;  // included
+
+        NTableIndex::TClusterId ChildBegin = 1;  // included
 
         TString ToStr() const {
             return TStringBuilder()
@@ -3094,8 +3119,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
                 << ", State = " << State << " }";
         }
 
-        static ui32 BinPow(ui32 k, ui32 l) {
-            ui32 r = 1;
+        static NTableIndex::TClusterId BinPow(NTableIndex::TClusterId k, ui32 l) {
+            NTableIndex::TClusterId r = 1;
             while (l != 0) {
                 if (l % 2 != 0) {
                     r *= k;
@@ -3146,7 +3171,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             return true;
         }
 
-        void Set(ui32 level, ui32 parent, ui32 state) {
+        void Set(ui32 level, NTableIndex::TClusterId parent, ui32 state) {
             // TODO(mbkkt) make it without cycles
             while (Level < level) {
                 NextLevel();
@@ -3189,24 +3214,24 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             return name;
         }
 
-        std::pair<ui32, ui32> RangeToBorders(const TSerializedTableRange& range) const {
+        std::pair<NTableIndex::TClusterId, NTableIndex::TClusterId> RangeToBorders(const TSerializedTableRange& range) const {
             Y_ASSERT(ParentEnd != 0);
-            const ui32 maxParent = ParentEnd;
-            const ui32 levelSize = TKMeans::BinPow(K, Level - 1);
+            const NTableIndex::TClusterId maxParent = ParentEnd;
+            const NTableIndex::TClusterId levelSize = TKMeans::BinPow(K, Level - 1);
             Y_ASSERT(levelSize <= maxParent);
-            const ui32 minParent = maxParent - levelSize + 1;
-            const ui32 parentFrom = [&, from = range.From.GetCells()] {
+            const NTableIndex::TClusterId minParent = maxParent - levelSize + 1;
+            const NTableIndex::TClusterId parentFrom = [&, from = range.From.GetCells()] {
                 if (!from.empty()) {
                     if (!from[0].IsNull()) {
-                        return from[0].AsValue<ui32>() + static_cast<ui32>(from.size() == 1);
+                        return from[0].AsValue<NTableIndex::TClusterId>() + static_cast<NTableIndex::TClusterId>(from.size() == 1);
                     }
                 }
                 return minParent;
             }();
-            const ui32 parentTo = [&, to = range.To.GetCells()] {
+            const NTableIndex::TClusterId parentTo = [&, to = range.To.GetCells()] {
                 if (!to.empty()) {
                     if (!to[0].IsNull()) {
-                        return to[0].AsValue<ui32>() - static_cast<ui32>(to.size() != 1 && to[1].IsNull());
+                        return to[0].AsValue<NTableIndex::TClusterId>() - static_cast<NTableIndex::TClusterId>(to.size() != 1 && to[1].IsNull());
                     }
                 }
                 return maxParent;
@@ -3229,7 +3254,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
                 auto str = TStringBuilder{} << "{ count: " << cells.size();
                 if (Parent != 0) {
                     Y_ASSERT(Level != 0);
-                    str << ", parent: " << cells[0].AsValue<ui32>();
+                    str << ", parent: " << cells[0].AsValue<NTableIndex::TClusterId>();
                     if (cells.size() != 1 && cells[1].IsNull()) {
                         str << ", pk: null";
                     }
@@ -3405,11 +3430,11 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
     }
 
     struct TClusterShards {
-        ui32 From = std::numeric_limits<ui32>::max();
+        NTableIndex::TClusterId From = std::numeric_limits<NTableIndex::TClusterId>::max();
         TShardIdx Local = InvalidShardIdx;
         std::vector<TShardIdx> Global;
     };
-    TMap<ui32, TClusterShards> Cluster2Shards;
+    TMap<NTableIndex::TClusterId, TClusterShards> Cluster2Shards;
 
     void AddParent(const TSerializedTableRange& range, TShardIdx shard);
 

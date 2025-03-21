@@ -1,7 +1,7 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/scheme/scheme.h>
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 #include <optional>
 
@@ -14,11 +14,11 @@ namespace Ydb::Replication {
     class DescribeReplicationResult_Stats;
 }
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
     class TProtoAccessor;
 }
 
-namespace NYdb::inline V3::NReplication {
+namespace NYdb::inline Dev::NReplication {
 
 class TDescribeReplicationResult;
 using TAsyncDescribeReplicationResult = NThreading::TFuture<TDescribeReplicationResult>;
@@ -163,7 +163,7 @@ private:
 };
 
 class TDescribeReplicationResult: public NScheme::TDescribePathResult {
-    friend class NYdb::V3::TProtoAccessor;
+    friend class NYdb::TProtoAccessor;
     const Ydb::Replication::DescribeReplicationResult& GetProto() const;
 
 public:
@@ -188,4 +188,4 @@ private:
     std::shared_ptr<TImpl> Impl_;
 };
 
-} // namespace NYdb::V3::NReplication
+} // namespace NYdb::NReplication

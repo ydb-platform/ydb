@@ -1,17 +1,19 @@
-#include <ydb-cpp-sdk/client/iam_private/iam.h>
+#include "common/iam.h"
 
-#include <src/client/iam/common/iam.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam_private/iam.h>
 
 #include <ydb/public/api/client/yc_private/iam/iam_token_service.pb.h>
 #include <ydb/public/api/client/yc_private/iam/iam_token_service.grpc.pb.h>
 
-namespace NYdb::inline V3 {
+using namespace yandex::cloud::priv::iam::v1;
+
+namespace NYdb::inline Dev {
 
 TCredentialsProviderFactoryPtr CreateIamJwtCredentialsProviderFactoryImplPrivate(TIamJwtParams&& jwtParams) {
     return std::make_shared<TIamJwtCredentialsProviderFactory<
-                    yandex::cloud::priv::iam::v1::CreateIamTokenRequest,
-                    yandex::cloud::priv::iam::v1::CreateIamTokenResponse,
-                    yandex::cloud::priv::iam::v1::IamTokenService
+                    CreateIamTokenRequest,
+                    CreateIamTokenResponse,
+                    IamTokenService
                 >>(std::move(jwtParams));
 }
 
@@ -23,6 +25,14 @@ TCredentialsProviderFactoryPtr CreateIamJwtFileCredentialsProviderFactoryPrivate
 TCredentialsProviderFactoryPtr CreateIamJwtParamsCredentialsProviderFactoryPrivate(const TIamJwtContent& params) {
     TIamJwtParams jwtParams = { params, ParseJwtParams(params.JwtContent) };
     return CreateIamJwtCredentialsProviderFactoryImplPrivate(std::move(jwtParams));
+}
+
+TCredentialsProviderFactoryPtr CreateIamServiceCredentialsProviderFactory(const TIamServiceParams& params) {
+    return std::make_shared<TIamServiceCredentialsProviderFactory<
+                    CreateIamTokenForServiceRequest,
+                    CreateIamTokenResponse,
+                    IamTokenService
+                >>(std::move(params));
 }
 
 }

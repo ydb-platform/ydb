@@ -42,6 +42,11 @@ struct ITransactionParticipant
         bool stronglyOrdered,
         const std::vector<TCellId>& cellIdsToSyncWith,
         const NRpc::TAuthenticationIdentity& identity) = 0;
+    virtual TFuture<void> MakeTransactionReadyToCommit(
+        TTransactionId transactionId,
+        TTimestamp commitTimestamp,
+        NApi::TClusterTag commitTimestampClusterTag,
+        const NRpc::TAuthenticationIdentity& identity) = 0;
     virtual TFuture<void> CommitTransaction(
         TTransactionId transactionId,
         TTimestamp commitTimestamp,

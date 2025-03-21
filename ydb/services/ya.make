@@ -2,8 +2,8 @@ RECURSE(
     auth
     backup
     bg_tasks
-    bsconfig
     cms
+    config
     datastreams
     deprecated/persqueue_v0
     discovery

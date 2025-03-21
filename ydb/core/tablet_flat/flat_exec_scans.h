@@ -66,7 +66,7 @@ namespace NTabletFlatExecutor {
             TOne& operator=(const TOne&) = delete;
             TOne& operator=(TOne&&) = delete;
 
-            void Describe(IOutputStream &out, bool full = true) const noexcept
+            void Describe(IOutputStream &out, bool full = true) const
             {
                 out << "Scan{" << Serial << " on " << Table;
 
@@ -129,7 +129,7 @@ namespace NTabletFlatExecutor {
 
         }
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "Scans{serial " << Serial << ", " << Tables.size() << " tbl"
@@ -182,7 +182,7 @@ namespace NTabletFlatExecutor {
             return one.Serial;
         }
 
-        TAcquired Acquired(ui64 task, TResource *cookie) noexcept
+        TAcquired Acquired(ui64 task, TResource *cookie)
         {
             auto *one = Lookup(CheckedCast<TCookie*>(cookie)->Serial, false);
 
@@ -214,14 +214,14 @@ namespace NTabletFlatExecutor {
             return Start(one, conf);
         }
 
-        void Drop() noexcept
+        void Drop()
         {
             while (Tables) {
                 Drop(Tables.begin()->first);
             }
         }
 
-        TVector<THolder<TScanSnapshot>> Drop(ui32 table) noexcept
+        TVector<THolder<TScanSnapshot>> Drop(ui32 table)
         {
             TVector<THolder<TScanSnapshot>> snapshots;
 
@@ -240,7 +240,7 @@ namespace NTabletFlatExecutor {
             return snapshots;
         }
 
-        TCancelled Cancel(ui64 serial) noexcept
+        TCancelled Cancel(ui64 serial)
         {
             auto *one = Lookup(serial, false);
 
@@ -261,7 +261,7 @@ namespace NTabletFlatExecutor {
             return cancelled;
         }
 
-        bool CancelSystem(ui64 serial) noexcept
+        bool CancelSystem(ui64 serial)
         {
             auto *one = Lookup(serial, false);
 
@@ -276,7 +276,7 @@ namespace NTabletFlatExecutor {
             return Cancel(*one, EState::Forget);
         }
 
-        TScanOutcome Release(ui64 serial, EAbort &code, TAutoPtr<IDestructable> &result) noexcept
+        TScanOutcome Release(ui64 serial, EAbort &code, TAutoPtr<IDestructable> &result)
         {
             auto *one = Lookup(serial, true);
 
@@ -294,7 +294,7 @@ namespace NTabletFlatExecutor {
         }
 
     private:
-        TOne& Make(ui32 table, TAutoPtr<IScan> scan, EType type, const TScanOptions& options, THolder<TScanSnapshot> snapshot) noexcept
+        TOne& Make(ui32 table, TAutoPtr<IScan> scan, EType type, const TScanOptions& options, THolder<TScanSnapshot> snapshot)
         {
             /* odd NOps used to mark compactions (system scans) */
 
@@ -361,7 +361,7 @@ namespace NTabletFlatExecutor {
             return one.Serial;
         }
 
-        bool Cancel(TOne &one, EState state) noexcept
+        bool Cancel(TOne &one, EState state)
         {
             if (one.State == EState::Task || one.State == EState::Ready) {
                 TAutoPtr<IDestructable> result;
@@ -411,7 +411,7 @@ namespace NTabletFlatExecutor {
             return outcome;
         }
 
-        TOne* Lookup(ui64 serial, bool require) noexcept
+        TOne* Lookup(ui64 serial, bool require)
         {
             auto *one = Scans.FindPtr(serial);
 
@@ -422,7 +422,7 @@ namespace NTabletFlatExecutor {
             return one;
         }
 
-        TString MakeLabelFor(const TOne &one) const noexcept
+        TString MakeLabelFor(const TOne &one) const
         {
             TStringStream out;
 

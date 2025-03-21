@@ -83,8 +83,8 @@ DEFINE_ENUM(EEnumYsonStorageType,
 
 ////////////////////////////////////////////////////////////////////////////////
 
-DECLARE_REFCOUNTED_CLASS(TProtobufInteropConfig);
-DECLARE_REFCOUNTED_CLASS(TProtobufInteropDynamicConfig);
+DECLARE_REFCOUNTED_STRUCT(TProtobufInteropConfig);
+DECLARE_REFCOUNTED_STRUCT(TProtobufInteropDynamicConfig);
 
 ////////////////////////////////////////////////////////////////////////////////
 

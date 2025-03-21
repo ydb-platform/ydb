@@ -32,7 +32,7 @@ Simple Usage
 ~~~~~~~~~~~~
 
 In the simplest case, initialize the Flask-Cors extension with default arguments in order to allow CORS for all domains on all routes.
-See the full list of options in the `documentation <https://flask-cors.corydolphin.com/en/latest/api.html#extension>`__.
+See the full list of options in the `documentation <https://flask-cors.readthedocs.io/en/latest/api.html#extension>`__.
 
 .. code:: python
 
@@ -51,7 +51,7 @@ Resource specific CORS
 ^^^^^^^^^^^^^^^^^^^^^^
 
 Alternatively, you can specify CORS options on a resource and origin level of granularity by passing a dictionary as the `resources` option, mapping paths to a set of options.
-See the full list of options in the `documentation <https://flask-cors.corydolphin.com/en/latest/api.html#extension>`__.
+See the full list of options in the `documentation <https://flask-cors.readthedocs.io/en/latest/api.html#extension>`__.
 
 .. code:: python
 
@@ -67,7 +67,7 @@ Route specific CORS via decorator
 
 This extension also exposes a simple decorator to decorate flask routes with.
 Simply add ``@cross_origin()`` below a call to Flask's ``@app.route(..)`` to allow CORS on a given route.
-See the full list of options in the `decorator documentation <https://flask-cors.corydolphin.com/en/latest/api.html#decorator>`__.
+See the full list of options in the `decorator documentation <https://flask-cors.readthedocs.io/en/latest/api.html#decorator>`__.
 
 .. code:: python
 
@@ -79,7 +79,7 @@ See the full list of options in the `decorator documentation <https://flask-cors
 Documentation
 -------------
 
-For a full list of options, please see the full `documentation <https://flask-cors.corydolphin.com/en/latest/api.html>`__
+For a full list of options, please see the full `documentation <https://flask-cors.readthedocs.io/en/latest/api.html>`__
 
 Troubleshooting
 ---------------
@@ -91,14 +91,12 @@ If things aren't working as you expect, enable logging to help understand what i
     logging.getLogger('flask_cors').level = logging.DEBUG
 
 
-Tests
------
 
-A simple set of tests is included in ``test/``.
-To run, install nose, and simply invoke ``nosetests`` or ``python setup.py test`` to exercise the tests.
+Set Up Your Development Environment
+---
+The development environment uses `uv` for Python version management as well as dependency management.
+There are helpful Makefile targets to do everything you need. Use `make test` to get started!
 
-If nosetests does not work for you, due to it no longer working with newer python versions.
-You can use pytest to run the tests instead.
 
 Contributing
 ------------

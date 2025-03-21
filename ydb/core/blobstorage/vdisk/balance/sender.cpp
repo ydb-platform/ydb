@@ -45,7 +45,6 @@ namespace {
                     [&](TRope&& data) {
                         // part is already in memory, no need to read it from disk
                         Y_DEBUG_ABORT_UNLESS(item.PartsMask.CountBits() == 1);
-                        Result[i].PartsData.reserve(1);
                         Result[i].PartsData.emplace_back(std::move(data));
                         ++Responses;
                     },

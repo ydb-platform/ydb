@@ -1,8 +1,6 @@
 #include "sql_call_expr.h"
 #include "sql_expression.h"
 
-#include <yql/essentials/parser/proto_ast/gen/v1/SQLv1Lexer.h>
-
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
 namespace NSQLTranslationV1 {

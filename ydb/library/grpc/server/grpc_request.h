@@ -601,8 +601,9 @@ public:
                  typename TBase::TStreamRequestCallback requestCallback,
                  const char* name,
                  TLoggerPtr logger,
-                 ICounterBlockPtr counters)
-        : TBase{server, service, cq, std::move(cb), std::move(requestCallback), name, std::move(logger), std::move(counters), nullptr}
+                 ICounterBlockPtr counters,
+                 IGRpcRequestLimiterPtr limiter = nullptr)
+        : TBase{server, service, cq, std::move(cb), std::move(requestCallback), name, std::move(logger), std::move(counters), std::move(limiter)}
     {
     }
 };

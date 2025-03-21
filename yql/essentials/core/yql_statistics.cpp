@@ -57,7 +57,22 @@ std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) 
             tmp.pop_back();
             tmp.pop_back();
         }
-        os << tmp;
+        os << "[" << tmp << "]";
+    }
+
+    if (s.ShuffledByColumns) {
+        os << ", shuffled by: ";
+
+        std::string tmp;
+        for (const auto& c: s.ShuffledByColumns->Data) {
+            tmp.append(c.RelName).append(".").append(c.AttributeName).append(", ");
+        }
+
+        if (!tmp.empty()) {
+            tmp.pop_back();
+            tmp.pop_back();
+        }
+        os << "[" << tmp << "]";
     }
     os << ", Sel: " << s.Selectivity;
     os << ", Storage: " << ConvertToStatisticsTypeString(s.StorageType);

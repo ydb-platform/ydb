@@ -1,8 +1,8 @@
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
-#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 const Ydb::Type& TProtoAccessor::GetProto(const TType& type) {
     return type.GetProto();
@@ -124,6 +124,8 @@ NImport::EImportProgress TProtoAccessor::FromProto(Ydb::Import::ImportProgress::
         return NImport::EImportProgress::TransferData;
     case Ydb::Import::ImportProgress::PROGRESS_BUILD_INDEXES:
         return NImport::EImportProgress::BuildIndexes;
+    case Ydb::Import::ImportProgress::PROGRESS_CREATE_CHANGEFEEDS:
+        return NImport::EImportProgress::CreateChangefeeds;
     case Ydb::Import::ImportProgress::PROGRESS_DONE:
         return NImport::EImportProgress::Done;
     case Ydb::Import::ImportProgress::PROGRESS_CANCELLATION:

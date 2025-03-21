@@ -74,6 +74,7 @@ protected:
     i64 MaxClockSkewWithPeerUs;
     ui32 MaxClockSkewPeerId;
     float MaxNetworkUtilization = 0.0;
+    ui64 SumNetworkWriteThroughput = 0;
     NKikimrWhiteboard::TSystemStateInfo SystemStateInfo;
     THolder<NTracing::ITraceCollection> TabletIntrospectionData;
 
@@ -568,6 +569,7 @@ protected:
         }
         // TODO: need better way to calculate network utilization
         MaxNetworkUtilization = std::max(MaxNetworkUtilization, ev->Get()->Record.GetUtilization());
+        SumNetworkWriteThroughput += nodeStateInfo.GetWriteThroughput();
         nodeStateInfo.MergeFrom(ev->Get()->Record);
         nodeStateInfo.SetChangeTime(currentChangeTime);
     }
@@ -719,6 +721,9 @@ protected:
         auto& endpoint = *SystemStateInfo.AddEndpoints();
         endpoint.SetName(ev->Get()->Name);
         endpoint.SetAddress(ev->Get()->Address);
+        std::sort(SystemStateInfo.MutableEndpoints()->begin(), SystemStateInfo.MutableEndpoints()->end(), [](const auto& a, const auto& b) {
+            return a.GetName() < b.GetName();
+        });
         SystemStateInfo.SetChangeTime(ctx.Now().MilliSeconds());
     }
 
@@ -836,48 +841,51 @@ protected:
         }
     }
 
+    static std::unordered_set<TTabletId> BuildIndex(const ::google::protobuf::RepeatedField<::NProtoBuf::uint64>& array) {
+        std::unordered_set<TTabletId> result;
+        result.reserve(array.size());
+        for (auto id : array) {
+            result.insert(id);
+        }
+        return result;
+    }
+
     void Handle(TEvWhiteboard::TEvTabletStateRequest::TPtr &ev, const TActorContext &ctx) {
         auto now = TMonotonic::Now();
         const auto& request = ev->Get()->Record;
         auto matchesFilter = [
             changedSince = request.has_changedsince() ? request.changedsince() : 0,
+            filterTabletId = BuildIndex(request.filtertabletid()),
             filterTenantId = request.has_filtertenantid() ? NKikimr::TSubDomainKey(request.filtertenantid()) : NKikimr::TSubDomainKey()
         ](const NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo) {
             return tabletStateInfo.changetime() >= changedSince
+                && (filterTabletId.empty() || filterTabletId.count(tabletStateInfo.tabletid()))
                 && (!filterTenantId || filterTenantId == NKikimr::TSubDomainKey(tabletStateInfo.tenantid()));
         };
         std::unique_ptr<TEvWhiteboard::TEvTabletStateResponse> response = std::make_unique<TEvWhiteboard::TEvTabletStateResponse>();
         auto& record = response->Record;
         if (request.format() == "packed5") {
-            TEvWhiteboard::TEvTabletStateResponsePacked5* ptr = response->AllocatePackedResponse(TabletStateInfo.size());
+            std::vector<const NKikimrWhiteboard::TTabletStateInfo*> matchedTablets;
             for (const auto& [tabletId, tabletInfo] : TabletStateInfo) {
                 if (matchesFilter(tabletInfo)) {
-                    ptr->TabletId = tabletInfo.tabletid();
-                    ptr->FollowerId = tabletInfo.followerid();
-                    ptr->Generation = tabletInfo.generation();
-                    ptr->Type = tabletInfo.type();
-                    ptr->State = tabletInfo.state();
-                    ++ptr;
+                    matchedTablets.push_back(&tabletInfo);
                 }
+            }
+            TEvWhiteboard::TEvTabletStateResponsePacked5* ptr = response->AllocatePackedResponse(matchedTablets.size());
+            for (auto tabletInfo : matchedTablets) {
+                ptr->TabletId = tabletInfo->tabletid();
+                ptr->FollowerId = tabletInfo->followerid();
+                ptr->Generation = tabletInfo->generation();
+                ptr->Type = tabletInfo->type();
+                ptr->State = tabletInfo->state();
+                ++ptr;
             }
         } else {
             if (request.groupby().empty()) {
-                if (request.filtertabletid_size() == 0) {
-                    for (const auto& pr : TabletStateInfo) {
-                        if (matchesFilter(pr.second)) {
-                            NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo = *record.add_tabletstateinfo();
-                            Copy(tabletStateInfo, pr.second, request);
-                        }
-                    }
-                } else {
-                    for (auto tabletId : request.filtertabletid()) {
-                        auto it = TabletStateInfo.find({tabletId, 0});
-                        if (it != TabletStateInfo.end()) {
-                            if (matchesFilter(it->second)) {
-                                NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo = *record.add_tabletstateinfo();
-                                Copy(tabletStateInfo, it->second, request);
-                            }
-                        }
+                for (const auto& pr : TabletStateInfo) {
+                    if (matchesFilter(pr.second)) {
+                        NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo = *record.add_tabletstateinfo();
+                        Copy(tabletStateInfo, pr.second, request);
                     }
                 }
             } else if (request.groupby() == "Type,State" || request.groupby() == "NodeId,Type,State") { // the only supported group-by for now
@@ -1091,6 +1099,7 @@ protected:
     }
 
     void Handle(TEvPrivate::TEvUpdateRuntimeStats::TPtr &, const TActorContext &ctx) {
+        static constexpr TDuration UPDATE_PERIOD = TDuration::Seconds(15);
         {
             NKikimrWhiteboard::TSystemStateInfo systemStatsUpdate;
             TVector<double> loadAverage = GetLoadAverage();
@@ -1116,8 +1125,13 @@ protected:
             MaxNetworkUtilization = 0;
         }
 
+        {
+            SystemStateInfo.SetNetworkWriteThroughput(SumNetworkWriteThroughput / UPDATE_PERIOD.Seconds());
+            SumNetworkWriteThroughput = 0;
+        }
+
         UpdateSystemState(ctx);
-        ctx.Schedule(TDuration::Seconds(15), new TEvPrivate::TEvUpdateRuntimeStats());
+        ctx.Schedule(UPDATE_PERIOD, new TEvPrivate::TEvUpdateRuntimeStats());
     }
 
     void Handle(TEvPrivate::TEvCleanupDeadTablets::TPtr &, const TActorContext &ctx) {

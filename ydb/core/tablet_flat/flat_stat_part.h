@@ -199,7 +199,7 @@ private:
         }
     }
 
-    ui64 CountUnscreenedRows(TRowId beginRowId, TRowId endRowId) noexcept {
+    ui64 CountUnscreenedRows(TRowId beginRowId, TRowId endRowId) {
         if (!Screen) {
             // Include all rows
             return endRowId - beginRowId;
@@ -227,7 +227,7 @@ private:
         return rowCount;
     }
 
-    void AddBlobsSize(TChanneledDataSize& stats, const TFrames* frames, ELargeObj lob, ui32 &prevPage) noexcept {
+    void AddBlobsSize(TChanneledDataSize& stats, const TFrames* frames, ELargeObj lob, ui32 &prevPage) {
         const auto row = GetLastRowId();
         const auto end = GetCurrentRowId();
 

@@ -38,16 +38,16 @@ public:
 
     NArrow::TColumnFilter BuildFilter(const arrow::Datum& data) const;
 
-    bool IsPortionInUsage(const TPortionInfo& info) const;
+    bool IsUsed(const TPortionInfo& info) const;
     bool CheckPoint(const NArrow::TReplaceKey& point) const;
 
     enum class EUsageClass {
-        DontUsage,
+        NoUsage,
         PartialUsage,
         FullUsage
     };
 
-    EUsageClass IsPortionInPartialUsage(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const;
+    EUsageClass GetUsageClass(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const;
 
     std::set<ui32> GetColumnIds(const TIndexInfo& indexInfo) const;
     TString DebugString() const;

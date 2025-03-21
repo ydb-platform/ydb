@@ -204,6 +204,15 @@
             ]
         },
         {
+            "Name": "TYtBlockTableContent",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "YtBlockTableContent"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
             "Name": "TYtLength",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "YtLength"},

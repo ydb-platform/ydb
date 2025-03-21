@@ -1136,7 +1136,7 @@ TYPED_TEST(TRpcTest, CustomMetadata)
 
 TYPED_TEST(TGrpcTest, SendMessageLimit)
 {
-    THashMap<TString, NYTree::INodePtr> arguments;
+    THashMap<std::string, NYTree::INodePtr> arguments;
     arguments["grpc.max_send_message_length"] = NYT::NYTree::ConvertToNode(1);
     TTestProxy proxy(this->CreateChannel(std::nullopt, std::move(arguments)));
     auto req = proxy.SomeCall();

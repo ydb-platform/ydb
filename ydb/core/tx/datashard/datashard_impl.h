@@ -52,6 +52,7 @@
 #include <ydb/core/protos/tx.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
+#include <ydb/core/protos/checksum.pb.h>
 #include <ydb/core/protos/counters_datashard.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 
@@ -234,6 +235,8 @@ class TDataShard
     class TTxUpdateFollowerReadEdge;
     class TTxRemoveSchemaSnapshots;
     class TTxCleanupUncommitted;
+    class TTxDataCleanup;
+    class TTxCompleteDataCleanup;
 
     template <typename T> friend class TTxDirectBase;
     class TTxUploadRows;
@@ -787,9 +790,18 @@ class TDataShard
             struct ProcessedBytes :  Column<4, NScheme::NTypeIds::Uint64> {};
             struct WrittenBytes :    Column<5, NScheme::NTypeIds::Uint64> {};
             struct WrittenRows :     Column<6, NScheme::NTypeIds::Uint64> {};
+            struct ChecksumState :   Column<7, NScheme::NTypeIds::String> { using Type = NKikimrBackup::TChecksumState; };
 
             using TKey = TableKey<TxId>;
-            using TColumns = TableColumns<TxId, SchemeETag, DataETag, ProcessedBytes, WrittenBytes, WrittenRows>;
+            using TColumns = TableColumns<
+                TxId,
+                SchemeETag,
+                DataETag,
+                ProcessedBytes,
+                WrittenBytes,
+                WrittenRows,
+                ChecksumState
+            >;
         };
 
         struct ChangeRecords : Table<17> {
@@ -1157,6 +1169,8 @@ class TDataShard
             // Last known in-memory state actor
             Sys_InMemoryStateActorId = 45,
             Sys_InMemoryStateGeneration = 46,
+
+            Sys_DataCleanupCompletedGeneration = 47,
 
             // reserved
             SysPipeline_Flags = 1000,
@@ -1752,6 +1766,11 @@ public:
         return value != 0;
     }
 
+    bool GetUseNewPrecharge() const {
+        ui64 value = ReadIteratorKeysExtBlobsPrecharge;
+        return value != 0;
+    }
+
     template <typename T>
     void ReleaseCache(T& tx) {
         ReleaseTxCache(tx.GetTxCacheUsage());
@@ -1777,6 +1796,7 @@ public:
     void SnapshotComplete(TIntrusivePtr<NTabletFlatExecutor::TTableSnapshotContext> snapContext, const TActorContext &ctx) override;
     void CompactionComplete(ui32 tableId, const TActorContext &ctx) override;
     void CompletedLoansChanged(const TActorContext &ctx) override;
+    void DataCleanupComplete(ui64 dataCleanupGeneration, const TActorContext &ctx) override;
 
     void ReplyCompactionWaiters(
         ui32 tableId,
@@ -2806,6 +2826,8 @@ private:
 
     TControlWrapper ChangeRecordDebugPrint;
 
+    TControlWrapper ReadIteratorKeysExtBlobsPrecharge;
+
     // Set of InRS keys to remove from local DB.
     THashSet<TReadSetKey> InRSToRemove;
     TIntrusivePtr<TThrRefBase> DataShardSysTables;
@@ -2972,6 +2994,8 @@ private:
     // from the front
     THashMap<ui32, TCompactionWaiterList> CompactionWaiters;
 
+    TMap<ui64, TActorId> DataCleanupWaiters;
+
     struct TCompactBorrowedWaiter : public TThrRefBase {
         TCompactBorrowedWaiter(TActorId actorId, TLocalPathId requestedTable)
             : ActorId(actorId)
@@ -3022,6 +3046,8 @@ private:
     ui32 StatisticsScanTableId = 0;
     ui64 StatisticsScanId = 0;
 
+    ui64 CurrentDataCleanupGeneration = 0;
+
 public:
     auto& GetLockChangeRecords() {
         return LockChangeRecords;
@@ -3067,6 +3093,8 @@ protected:
         TRACE_EVENT(NKikimrServices::TX_DATASHARD);
         StateInitImpl(ev, SelfId());
     }
+
+    using TTabletExecutedFlat::Enqueue;
 
     void Enqueue(STFUNC_SIG) override {
         ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateInit unhandled event type: " << ev->GetTypeRewrite()

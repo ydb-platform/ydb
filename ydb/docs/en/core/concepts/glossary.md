@@ -280,6 +280,10 @@ An access subject can be a [user](#access-user) or a [group](#access-group).
 
 An **[access right](../security/authorization.md#right)** is an entity that represents permission for an [access subject](#access-subject) to perform a specific set of operations in a cluster or database on a specific [access object](#access-object).
 
+### Access right inheritance {#access-right-inheritance}
+
+**Access right inheritance** refers to the mechanism by which [access rights](#access-right) are automatically passed down from parent [access objects](#access-object) to child access objects within a database structure. This ensures that permissions granted at a higher level in the hierarchy are applied to all sub-levels beneath it, unless [explicitly overridden](../reference/ydb-cli/commands/scheme-permissions.md#clear-inheritance).
+
 ### Access control list {#access-control-list}
 
 An **access control list** or **ACL** is a list of all [rights](#access-right) granted to [access subjects](#access-subject) (users and groups) for a specific [access object](#access-object).
@@ -295,6 +299,12 @@ A **[user](../security/authorization.md#user)** is an individual utilizing {{ yd
 ### Group {#access-group}
 
 A **[group](../security/authorization.md#group)** or **access group** is a named collection of [users](#access-user) with identical [access rights](#access-right) to certain [access objects](#access-object).
+
+### Role {#access-role}
+
+A **role** is a named collection of [access rights](#access-right) that can be granted to [users](#access-user) or [groups](#access-group).
+
+Roles in {{ ydb-short-name }} are implemented as [groups](#access-group) that are created during the initial cluster deployment and granted a set of [access rights](#access-right) on the root of the cluster scheme.
 
 ### SID {#access-sid}
 
@@ -459,11 +469,15 @@ The **Mediator** is a system tablet that distributes the transactions planned by
 
 #### Hive {#hive}
 
-A **Hive** is a system tablet responsible for launching and managing other tablets. Its responsibilities include moving tablets between nodes in case of [node](#node) failure or overload.
+A **Hive** is a system tablet responsible for launching and managing other tablets. It also moves tablets between nodes in case of [node](#node) failures or overload. You can learn more about Hive in a [dedicated article](../contributor/hive.md).
 
 #### Cluster management system {#cms}
 
 The **cluster management system** or **CMS** is a system tablet responsible for managing the information about the current [{{ ydb-short-name }} cluster](#cluster) state. This information is used to perform cluster rolling restarts without affecting user workloads, maintenance, cluster re-configuration, etc.
+
+#### Node Broker {#node-broker}
+
+The **Node Broker** is a system tablet that registers [dynamic nodes](#dynamic-node) in the cluster.
 
 ### Slot {#slot}
 

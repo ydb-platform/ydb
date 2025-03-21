@@ -13,12 +13,12 @@ SIZE(MEDIUM)
 
 DEPENDS(
     ydb/apps/ydbd
-    ydb/apps/ydb
-    ydb/tests/stress/oltp_workload
 )
 
 PEERDIR(
     ydb/tests/library
+    ydb/tests/stress/oltp_workload/workload
+    ydb/tests/stress/common
 )
 
 

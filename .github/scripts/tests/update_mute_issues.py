@@ -1,7 +1,7 @@
 import os
 import re
 import requests
-from github import Github
+from github import Github #pip3 install PyGithub
 from urllib.parse import quote, urlencode
 
 

@@ -44,6 +44,12 @@ public:
 protected:
     void ProceedToScan() override {
         TBase::Become(&TUsersScan::StateScan);
+
+        //NOTE: here is the earliest point when Base::DatabaseOwner is already set
+        bool isClusterAdmin = IsAdministrator(AppData(), UserToken.Get());
+        bool isDatabaseAdmin = (AppData()->FeatureFlags.GetEnableDatabaseAdmin() && IsDatabaseAdministrator(UserToken.Get(), TBase::DatabaseOwner));
+        IsAdmin = isClusterAdmin || isDatabaseAdmin;
+
         if (TBase::AckReceived) {
             StartScan();
         }
@@ -97,9 +103,9 @@ protected:
         SortBatch(users, [](const auto* left, const auto* right) {
             return left->GetName() < right->GetName();
         });
-        
+
         TVector<TCell> cells(::Reserve(Columns.size()));
-        
+
         for (const auto* user : users) {
             for (auto& column : Columns) {
                 switch (column.Tag) {
@@ -156,7 +162,7 @@ protected:
 
 private:
     bool CanAccessUser(const TString& user) {
-        if (IsAdministrator(AppData(), UserToken.Get())) {
+        if (IsAdmin) {
             return true;
         }
 
@@ -165,6 +171,7 @@ private:
 
 private:
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
+    bool IsAdmin = false;
 };
 
 THolder<NActors::IActor> CreateUsersScan(const NActors::TActorId& ownerId, ui32 scanId, const TTableId& tableId,

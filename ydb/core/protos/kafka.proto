@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package NKafka;
+
+message TWorkerState {
+    repeated TProtocol protocols = 1;
+
+    message TProtocol {
+        string protocol_name = 1;
+        bytes metadata       = 2;
+    }
+}

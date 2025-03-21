@@ -158,7 +158,38 @@ security_config:
   register_dynamic_node_allowed_sids: <список SID'ов с правами регистрации узлов баз данных в кластере>
 ```
 
-### Настройки режима аутентификации {#security-auth}
+Каждый клиент State Storage (например, таблетка DataShard) использует `nto_select` узлов для записи копий его данных в State Storage. Если State Storage состоит из большего количества узлов чем `nto_select`, то разные узлы могут быть использованы для разных клиентов, поэтому необходимо обеспечить, чтобы любое подмножество из `nto_select` узлов в пределах State Storage отвечало критериям отказоустойчивости.
+
+Для `nto_select` должны использоваться нечетные числа, так как использование четных чисел не улучшает отказоустойчивость по сравнению с ближайшим меньшим нечетным числом.
+
+### Конфигурация безопасности {#security}
+
+В разделе `domains_config.security_config` задаются режимы [аутентификации](../../security/authentication.md), первичная конфигурация локальных [пользователей](../../concepts/glossary.md#access-user) и [групп](../../concepts/glossary.md#access-group) и их [права](../../concepts/glossary.md#access-right).
+
+```yaml
+domains_config:
+  ...
+  security_config:
+    # настройка режима аутентификации
+    enforce_user_token_requirement: false
+    enforce_user_token_check_requirement: false
+    default_user_sids: <аутентификационный токен для анонимных запросов>
+    all_authenticated_users: <имя группы всех аутентифицированных пользователей>
+    all_users_group: <имя группы всех пользователей>
+
+    # первичные настройки безопасности
+    default_users: <список пользователей по умолчанию>
+    default_groups: <список групп по умолчанию>
+    default_access: <список прав по умолчанию на корне кластера>
+
+    # настройки привилегий
+    viewer_allowed_sids: <список SID'ов с правами просмотра состояния кластера>
+    monitoring_allowed_sids: <список SID'ов с правами просмотра и изменения состояния кластера>
+    administration_allowed_sids: <список SID'ов с доступом администратора кластера>
+    register_dynamic_node_allowed_sids: <список SID'ов с правами регистрации узлов баз данных в кластере>
+```
+
+#### Настройки режима аутентификации {#security-auth}
 
 #|
 || Параметр | Описание ||

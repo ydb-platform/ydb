@@ -73,7 +73,7 @@ TMaybeNode<TYtSection> MaterializeSectionIfRequired(TExprBase world, TYtSection 
                 .Paths()
                     .Add(path)
                 .Build()
-                .Settings(NYql::RemoveSetting(section.Settings().Ref(), EYtSettingType::Sample, ctx))
+                .Settings(NYql::RemoveSettings(section.Settings().Ref(), EYtSettingType::Sample | EYtSettingType::SysColumns, ctx))
                 .Done();
     }
 
@@ -89,7 +89,7 @@ TMaybeNode<TYtSection> UpdateSectionWithRange(TExprBase world, TYtSection sectio
     TVector<TYtPath> skippedPaths;
     if (auto limiter = TTableLimiter(range)) {
         if (auto materialized = MaterializeSectionIfRequired(world, section, dataSink, outRowSpec, keepSortness,
-            {NYql::KeepOnlySettings(section.Settings().Ref(), EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::SysColumns, ctx)}, state, ctx))
+            {NYql::KeepOnlySettings(section.Settings().Ref(), EYtSettingType::Take | EYtSettingType::Skip, ctx)}, state, ctx))
         {
             if (!allowMaterialize || state->Types->EvaluationInProgress) {
                 // Keep section as is
@@ -533,6 +533,9 @@ IGraphTransformer::TStatus UpdateTableContentMemoryUsage(const TExprNode::TPtr& 
                                         if (info->Table->Meta->IsDynamic) {
                                             useItemsCount = false;
                                         }
+                                        if (!info->Table->Cluster) {
+                                            info->Table->Cluster = maybeRead.Cast().DataSource().Cluster().StringValue();
+                                        }
                                         records.push_back(tableRecord);
                                         tableInfos.push_back(info);
                                     }
@@ -553,7 +556,7 @@ IGraphTransformer::TStatus UpdateTableContentMemoryUsage(const TExprNode::TPtr& 
                                 }
                             }
                             if (!hasNotCalculated && !tableInfos.empty()) {
-                                if (auto dataSizes = EstimateDataSize(TString{maybeRead.Cast().DataSource().Cluster().Value()}, tableInfos, Nothing(), *state, ctx)) {
+                                if (auto dataSizes = EstimateDataSize(tableInfos, Nothing(), *state, ctx)) {
                                     YQL_ENSURE(dataSizes->size() == records.size());
                                     for (size_t i: xrange(records.size())) {
                                         for (auto& factor: factors) {

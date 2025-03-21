@@ -1,5 +1,4 @@
 pragma yt.UseQLFilter;
-PRAGMA yt.UseSkiff='false';
 
 select 
     `escaping []\``,

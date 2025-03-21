@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yt/yql/providers/yt/provider/yql_yt_gateway.h>
+#include <yt/yql/providers/yt/fmr/worker/impl/yql_yt_worker_impl.h>
 
 #include <yql/essentials/tools/yql_facade_run/yql_facade_run.h>
 #include <yql/essentials/core/cbo/cbo_optimizer_new.h>
@@ -32,6 +33,9 @@ protected:
     size_t NumThreads_ = 1;
     bool KeepTemp_ = false;
     TString DefYtServer_;
+    NFmr::IFmrWorker::TPtr FmrWorker_;
+    TString FmrCoordinatorServerUrl_;
+    bool DisableLocalFmrWorker_ = false;
 };
 
 } // NYql

@@ -74,13 +74,23 @@ public:
 
     TRefCountedTrackerStatistics::TNamedSlotStatistics GetStatistics() const;
 
-    TNamedSlot& operator += (const TLocalSlot& rhs)
+    #define REF_COUNTED_TRACKER_NO_TSAN
+    #if defined(__has_feature)
+        #if __has_feature(thread_sanitizer)
+            #undef REF_COUNTED_TRACKER_NO_TSAN
+            #define REF_COUNTED_TRACKER_NO_TSAN __attribute__((no_sanitize("thread")))
+        #endif
+    #endif
+
+    TNamedSlot& REF_COUNTED_TRACKER_NO_TSAN operator += (const TLocalSlot& rhs)
     {
         #define XX(name) name ## _ += rhs.name;
         ENUMERATE_SLOT_FIELDS()
         #undef XX
         return *this;
     }
+
+    #undef REF_COUNTED_TRACKER_NO_TSAN
 
     TNamedSlot& operator += (const TGlobalSlot& rhs)
     {

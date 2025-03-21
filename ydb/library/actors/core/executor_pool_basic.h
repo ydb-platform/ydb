@@ -174,6 +174,8 @@ namespace NActors {
         IHarmonizer *Harmonizer;
         ui64 SoftProcessingDurationTs = 0;
         bool HasOwnSharedThread = false;
+        ui16 MaxLocalQueueSize = 0;
+        ui16 MinLocalQueueSize = 0;
 
         const i16 Priority = 0;
         const ui32 ActorSystemIndex = NActors::TActorTypeOperator::GetActorSystemIndex();
@@ -232,6 +234,7 @@ namespace NActors {
         TMailbox* GetReadyActivation(ui64 revolvingReadCounter) override;
         TMailbox* GetReadyActivationCommon(ui64 revolvingReadCounter);
         TMailbox* GetReadyActivationShared(ui64 revolvingReadCounter);
+        TMailbox* GetReadyActivationRingQueue(ui64 revolvingReadCounter);
         TMailbox* GetReadyActivationLocalQueue(ui64 revolvingReadCounter);
 
         void Schedule(TInstant deadline, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
@@ -239,11 +242,13 @@ namespace NActors {
         void Schedule(TDuration delta, TAutoPtr<IEventHandle> ev, ISchedulerCookie* cookie, TWorkerId workerId) override;
 
         void ScheduleActivationEx(TMailbox* mailbox, ui64 revolvingWriteCounter) override;
-        void ScheduleActivationExCommon(TMailbox* mailbox, ui64 revolvingWriteCounter, TAtomic semaphoreValue);
+        void ScheduleActivationExCommon(TMailbox* mailbox, ui64 revolvingWriteCounter, std::optional<TAtomic> semaphoreValue);
         void ScheduleActivationExLocalQueue(TMailbox* mailbox, ui64 revolvingWriteCounter);
 
         void SetLocalQueueSize(ui16 size);
-
+        ui16 GetLocalQueueSize() const;
+        ui16 GetMaxLocalQueueSize() const;
+        ui16 GetMinLocalQueueSize() const;
         void Prepare(TActorSystem* actorSystem, NSchedulerQueue::TReader** scheduleReaders, ui32* scheduleSz) override;
         void Start() override;
         void PrepareStop() override;

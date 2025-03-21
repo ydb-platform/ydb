@@ -38,7 +38,7 @@ bool TDatabase::TChangeCounter::operator<(const TChangeCounter& rhs) const {
     return Epoch < rhs.Epoch;
 }
 
-TDatabase::TDatabase(TDatabaseImpl *databaseImpl) noexcept
+TDatabase::TDatabase(TDatabaseImpl *databaseImpl)
     : DatabaseImpl(databaseImpl ? databaseImpl : new TDatabaseImpl(0, new TScheme, nullptr))
 {
 
@@ -51,12 +51,12 @@ const TScheme& TDatabase::GetScheme() const noexcept
     return *DatabaseImpl->Scheme;
 }
 
-TIntrusiveConstPtr<TRowScheme> TDatabase::GetRowScheme(ui32 table) const noexcept
+TIntrusiveConstPtr<TRowScheme> TDatabase::GetRowScheme(ui32 table) const
 {
     return Require(table)->GetScheme();
 }
 
-TAutoPtr<TTableIter> TDatabase::Iterate(ui32 table, TRawVals key, TTagsRef tags, ELookup mode) const noexcept
+TAutoPtr<TTableIter> TDatabase::Iterate(ui32 table, TRawVals key, TTagsRef tags, ELookup mode) const
 {
     CheckReadAllowed(table);
 
@@ -89,7 +89,7 @@ TAutoPtr<TTableIter> TDatabase::Iterate(ui32 table, TRawVals key, TTagsRef tags,
 TAutoPtr<TTableIter> TDatabase::IterateExact(ui32 table, TRawVals key, TTagsRef tags,
         TRowVersion snapshot,
         const ITransactionMapPtr& visible,
-        const ITransactionObserverPtr& observer) const noexcept
+        const ITransactionObserverPtr& observer) const
 {
     CheckReadAllowed(table);
 
@@ -141,7 +141,7 @@ namespace {
 TAutoPtr<TTableIter> TDatabase::IterateRange(ui32 table, const TKeyRange& range, TTagsRef tags,
         TRowVersion snapshot,
         const ITransactionMapPtr& visible,
-        const ITransactionObserverPtr& observer) const noexcept
+        const ITransactionObserverPtr& observer) const
 {
     CheckReadAllowed(table);
 
@@ -168,7 +168,7 @@ TAutoPtr<TTableIter> TDatabase::IterateRange(ui32 table, const TKeyRange& range,
 TAutoPtr<TTableReverseIter> TDatabase::IterateRangeReverse(ui32 table, const TKeyRange& range, TTagsRef tags,
         TRowVersion snapshot,
         const ITransactionMapPtr& visible,
-        const ITransactionObserverPtr& observer) const noexcept
+        const ITransactionObserverPtr& observer) const
 {
     CheckReadAllowed(table);
 
@@ -196,7 +196,7 @@ template<>
 TAutoPtr<TTableIter> TDatabase::IterateRangeGeneric<TTableIter>(ui32 table, const TKeyRange& range, TTagsRef tags,
         TRowVersion snapshot,
         const ITransactionMapPtr& visible,
-        const ITransactionObserverPtr& observer) const noexcept
+        const ITransactionObserverPtr& observer) const
 {
     return IterateRange(table, range, tags, snapshot, visible, observer);
 }
@@ -205,7 +205,7 @@ template<>
 TAutoPtr<TTableReverseIter> TDatabase::IterateRangeGeneric<TTableReverseIter>(ui32 table, const TKeyRange& range, TTagsRef tags,
         TRowVersion snapshot,
         const ITransactionMapPtr& visible,
-        const ITransactionObserverPtr& observer) const noexcept
+        const ITransactionObserverPtr& observer) const
 {
     return IterateRangeReverse(table, range, tags, snapshot, visible, observer);
 }
@@ -213,7 +213,7 @@ TAutoPtr<TTableReverseIter> TDatabase::IterateRangeGeneric<TTableReverseIter>(ui
 EReady TDatabase::Select(ui32 table, TRawVals key, TTagsRef tags, TRowState &row, ui64 flg,
         TRowVersion snapshot,
         const ITransactionMapPtr& visible,
-        const ITransactionObserverPtr& observer) const noexcept
+        const ITransactionObserverPtr& observer) const
 {
     TSelectStats stats;
     return Select(table, key, tags, row, stats, flg, snapshot, visible, observer);
@@ -222,7 +222,7 @@ EReady TDatabase::Select(ui32 table, TRawVals key, TTagsRef tags, TRowState &row
 EReady TDatabase::Select(ui32 table, TRawVals key, TTagsRef tags, TRowState &row, TSelectStats& stats, ui64 flg,
         TRowVersion snapshot,
         const ITransactionMapPtr& visible,
-        const ITransactionObserverPtr& observer) const noexcept
+        const ITransactionObserverPtr& observer) const
 {
     TempIterators.clear();
     CheckReadAllowed(table);
@@ -244,7 +244,7 @@ EReady TDatabase::Select(ui32 table, TRawVals key, TTagsRef tags, TRowState &row
 TSelectRowVersionResult TDatabase::SelectRowVersion(
         ui32 table, TRawVals key, ui64 readFlags,
         const ITransactionMapPtr& visible,
-        const ITransactionObserverPtr& observer) const noexcept
+        const ITransactionObserverPtr& observer) const
 {
     return Require(table)->SelectRowVersion(key, Env, readFlags, visible, observer);
 }
@@ -252,7 +252,7 @@ TSelectRowVersionResult TDatabase::SelectRowVersion(
 TSelectRowVersionResult TDatabase::SelectRowVersion(
         ui32 table, TArrayRef<const TCell> key, ui64 readFlags,
         const ITransactionMapPtr& visible,
-        const ITransactionObserverPtr& observer) const noexcept
+        const ITransactionObserverPtr& observer) const
 {
     return Require(table)->SelectRowVersion(key, Env, readFlags, visible, observer);
 }
@@ -530,23 +530,19 @@ void TDatabase::UpdateApproximateFreeSharesByChannel(const THashMap<ui32, float>
     }
 }
 
-void TDatabase::SetTableObserver(ui32 table, TIntrusivePtr<ITableObserver> ptr) noexcept
+void TDatabase::SetTableObserver(ui32 table, TIntrusivePtr<ITableObserver> ptr)
 {
     Require(table)->SetTableObserver(std::move(ptr));
 }
 
-TDatabase::TChangeCounter TDatabase::Head(ui32 table) const noexcept
+TDatabase::TChangeCounter TDatabase::Head(ui32 table) const
 {
     if (table == Max<ui32>()) {
-        return { DatabaseImpl->Serial(), TEpoch::Max() };
+        return { DatabaseImpl->StableSerial(), TEpoch::Max() };
     } else {
         auto &wrap = DatabaseImpl->Get(table, true);
 
-        // We return numbers as they have been at the start of transaction,
-        // but possibly after schema changes or memtable flushes.
-        auto serial = wrap.DataModified && !wrap.EpochSnapshot ? wrap.SerialBackup : wrap.Serial;
-        auto head = wrap.EpochSnapshot ? *wrap.EpochSnapshot : wrap->Head();
-        return { serial, head };
+        return { wrap.StableSerial(), wrap.StableHead() };
     }
 }
 
@@ -572,9 +568,14 @@ TEpoch TDatabase::TxSnapTable(ui32 table)
     return DatabaseImpl->FlushTable(table);
 }
 
-TAutoPtr<TSubset> TDatabase::Subset(ui32 table, TArrayRef<const TLogoBlobID> bundle, TEpoch before) const
+TAutoPtr<TSubset> TDatabase::CompactionSubset(ui32 table, TEpoch before, TArrayRef<const TLogoBlobID> bundle) const
 {
-    return Require(table)->Subset(bundle, before);
+    return Require(table)->CompactionSubset(before, bundle);
+}
+
+TAutoPtr<TSubset> TDatabase::PartSwitchSubset(ui32 table, TEpoch before, TArrayRef<const TLogoBlobID> bundle, TArrayRef<const TLogoBlobID> txStatus) const
+{
+    return Require(table)->PartSwitchSubset(before, bundle, txStatus);
 }
 
 TAutoPtr<TSubset> TDatabase::Subset(ui32 table, TEpoch before, TRawVals from, TRawVals to) const
@@ -617,14 +618,13 @@ void TDatabase::ReplaceSlices(ui32 table, TBundleSlicesMap slices)
     return DatabaseImpl->ReplaceSlices(table, std::move(slices));
 }
 
-void TDatabase::Replace(ui32 table, TArrayRef<const TPartView> partViews, const TSubset &subset)
+void TDatabase::Replace(
+    ui32 table,
+    const TSubset& subset,
+    TArrayRef<const TPartView> newParts,
+    TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>> newTxStatus)
 {
-    return DatabaseImpl->Replace(table, partViews, subset);
-}
-
-void TDatabase::ReplaceTxStatus(ui32 table, TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>> txStatus, const TSubset &subset)
-{
-    return DatabaseImpl->ReplaceTxStatus(table, txStatus, subset);
+    return DatabaseImpl->Replace(table, subset, newParts, newTxStatus);
 }
 
 void TDatabase::Merge(ui32 table, TPartView partView)
@@ -640,6 +640,11 @@ void TDatabase::Merge(ui32 table, TIntrusiveConstPtr<TColdPart> part)
 void TDatabase::Merge(ui32 table, TIntrusiveConstPtr<TTxStatusPart> txStatus)
 {
     return DatabaseImpl->Merge(table, std::move(txStatus));
+}
+
+void TDatabase::MergeDone(ui32 table)
+{
+    return DatabaseImpl->MergeDone(table);
 }
 
 TAlter& TDatabase::Alter()
@@ -804,17 +809,17 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
     return { std::move(Change), std::move(onPersistent) };
 }
 
-TTable* TDatabase::Require(ui32 table) const noexcept
+TTable* TDatabase::Require(ui32 table) const
 {
     return DatabaseImpl->Get(table, true).Self.Get();
 }
 
-TTable* TDatabase::RequireForUpdate(ui32 table) const noexcept
+TTable* TDatabase::RequireForUpdate(ui32 table) const
 {
     return DatabaseImpl->GetForUpdate(table).Self.Get();
 }
 
-void TDatabase::CheckReadAllowed(ui32 table) const noexcept
+void TDatabase::CheckReadAllowed(ui32 table) const
 {
     Y_ABORT_UNLESS(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
     if (NoMoreUnprechargedReadsFlag) [[unlikely]] {
@@ -824,7 +829,7 @@ void TDatabase::CheckReadAllowed(ui32 table) const noexcept
     }
 }
 
-void TDatabase::CheckPrechargeAllowed(ui32 table, TRawVals minKey, TRawVals maxKey) const noexcept
+void TDatabase::CheckPrechargeAllowed(ui32 table, TRawVals minKey, TRawVals maxKey) const
 {
     Y_ABORT_UNLESS(!NoMoreReadsFlag, "Trying to precharge after reads prohibited, table %u", table);
     if (NoMoreUnprechargedReadsFlag) [[unlikely]] {

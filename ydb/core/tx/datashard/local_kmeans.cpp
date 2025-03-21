@@ -86,8 +86,8 @@ class TLocalKMeansScanBase: public TActor<TLocalKMeansScanBase>, public NTable::
 protected:
     using EState = NKikimrTxDataShard::TEvLocalKMeansRequest;
 
-    ui32 Parent = 0;
-    ui32 Child = 0;
+    NTableIndex::TClusterId Parent = 0;
+    NTableIndex::TClusterId Child = 0;
 
     ui32 Round = 0;
     ui32 MaxRounds = 0;
@@ -156,7 +156,7 @@ public:
         return NKikimrServices::TActivity::LOCAL_KMEANS_SCAN_ACTOR;
     }
 
-    TLocalKMeansScanBase(ui64 buildId, const TUserTable& table, TLead&& lead, ui32 parent, ui32 child,
+    TLocalKMeansScanBase(ui64 buildId, const TUserTable& table, TLead&& lead, NTableIndex::TClusterId parent, NTableIndex::TClusterId child,
                          const NKikimrTxDataShard::TEvLocalKMeansRequest& request,
                          std::shared_ptr<TResult> result)
         : TActor{&TThis::StateWork}
@@ -180,7 +180,7 @@ public:
         // upload types
         if (Ydb::Type type; State <= EState::KMEANS) {
             TargetTypes = std::make_shared<NTxProxy::TUploadTypes>(3);
-            type.set_type_id(Ydb::Type::UINT32);
+            type.set_type_id(NTableIndex::ClusterIdType);
             (*TargetTypes)[0] = {NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type};
             (*TargetTypes)[1] = {NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, type};
             type.set_type_id(Ydb::Type::STRING);
@@ -189,7 +189,7 @@ public:
         NextTypes = MakeUploadTypes(table, UploadState, embedding, data);
     }
 
-    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept final
+    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
     {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
         LOG_D("Prepare " << Debug());
@@ -198,7 +198,7 @@ public:
         return {EScan::Feed, {}};
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final
+    TAutoPtr<IDestructable> Finish(EAbort abort) final
     {
         LOG_D("Finish " << Debug());
 
@@ -230,7 +230,7 @@ public:
         return nullptr;
     }
 
-    void Describe(IOutputStream& out) const noexcept final
+    void Describe(IOutputStream& out) const final
     {
         out << Debug();
     }
@@ -243,7 +243,7 @@ public:
             << " ReadBuf size: " << ReadBuf.Size() << " WriteBuf size: " << WriteBuf.Size() << " ";
     }
 
-    EScan PageFault() noexcept final
+    EScan PageFault() final
     {
         LOG_T("PageFault " << Debug());
 
@@ -382,7 +382,7 @@ class TLocalKMeansScan final: public TLocalKMeansScanBase, private TCalculation<
     std::vector<TAggregatedCluster> AggregatedClusters;
 
 public:
-    TLocalKMeansScan(ui64 buildId, const TUserTable& table, TLead&& lead, ui32 parent, ui32 child, NKikimrTxDataShard::TEvLocalKMeansRequest& request,
+    TLocalKMeansScan(ui64 buildId, const TUserTable& table, TLead&& lead, NTableIndex::TClusterId parent, NTableIndex::TClusterId child, NKikimrTxDataShard::TEvLocalKMeansRequest& request,
                      std::shared_ptr<TResult> result)
         : TLocalKMeansScanBase{buildId, table, std::move(lead), parent, child, request, std::move(result)}
     {
@@ -390,7 +390,7 @@ public:
         LOG_D("Create " << Debug());
     }
 
-    EScan Seek(TLead& lead, ui64 seq) noexcept final
+    EScan Seek(TLead& lead, ui64 seq) final
     {
         LOG_D("Seek " << Debug());
         if (State == UploadState) {
@@ -442,7 +442,7 @@ public:
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
     {
         LOG_T("Feed " << Debug());
         ++ReadRows;
@@ -545,7 +545,7 @@ private:
         return true;
     }
 
-    EScan FeedSample(const TRow& row) noexcept
+    EScan FeedSample(const TRow& row)
     {
         Y_ASSERT(row.Size() == 1);
         const auto embedding = row.Get(0).AsRef();
@@ -572,7 +572,7 @@ private:
         return MaxProbability != 0 ? EScan::Feed : EScan::Reset;
     }
 
-    EScan FeedKMeans(const TRow& row) noexcept
+    EScan FeedKMeans(const TRow& row)
     {
         Y_ASSERT(row.Size() == 1);
         const ui32 pos = FeedEmbedding(*this, Clusters, row, 0);
@@ -580,7 +580,7 @@ private:
         return EScan::Feed;
     }
 
-    EScan FeedUploadMain2Build(TArrayRef<const TCell> key, const TRow& row) noexcept
+    EScan FeedUploadMain2Build(TArrayRef<const TCell> key, const TRow& row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos > K) {
@@ -590,7 +590,7 @@ private:
         return FeedUpload();
     }
 
-    EScan FeedUploadMain2Posting(TArrayRef<const TCell> key, const TRow& row) noexcept
+    EScan FeedUploadMain2Posting(TArrayRef<const TCell> key, const TRow& row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos > K) {
@@ -600,7 +600,7 @@ private:
         return FeedUpload();
     }
 
-    EScan FeedUploadBuild2Build(TArrayRef<const TCell> key, const TRow& row) noexcept
+    EScan FeedUploadBuild2Build(TArrayRef<const TCell> key, const TRow& row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos > K) {
@@ -610,7 +610,7 @@ private:
         return FeedUpload();
     }
 
-    EScan FeedUploadBuild2Posting(TArrayRef<const TCell> key, const TRow& row) noexcept
+    EScan FeedUploadBuild2Posting(TArrayRef<const TCell> key, const TRow& row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos > K) {

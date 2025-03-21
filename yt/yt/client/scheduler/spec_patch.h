@@ -26,6 +26,7 @@ DEFINE_REFCOUNTED_TYPE(TSpecPatch)
 
 void ToProto(NProto::TSpecPatch* protoPatch, const TSpecPatchPtr& patch);
 void FromProto(TSpecPatchPtr patch, const NProto::TSpecPatch* protoPatch);
+void FromProto(TSpecPatchPtr* patch, const NProto::TSpecPatch& protoPatch);
 
 void FormatValue(TStringBuilderBase* builder, const TSpecPatchPtr& patch, TStringBuf spec);
 

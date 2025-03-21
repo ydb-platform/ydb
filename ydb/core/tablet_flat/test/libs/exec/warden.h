@@ -122,7 +122,7 @@ namespace NFake {
             }
         }
 
-        void StartGroup(ui32 group) noexcept
+        void StartGroup(ui32 group)
         {
             if (auto logl = Logger->Log(ELnLev::Info))
                 logl << "Starting storage for BS group " << group;
@@ -132,7 +132,7 @@ namespace NFake {
             Sys->RegisterLocalService(MakeBlobStorageProxyID(group), actor);
         }
 
-        void TryToDie() noexcept
+        void TryToDie()
         {
             if (Shutting && Alive == 0) {
                 if (auto logl = Logger->Log(ELnLev::Info))

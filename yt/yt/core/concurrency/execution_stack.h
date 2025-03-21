@@ -80,4 +80,4 @@ std::shared_ptr<TExecutionStack> CreateExecutionStack(EExecutionStackKind kind);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} // namespace NTY::NConcurrency
+} // namespace NYT::NConcurrency

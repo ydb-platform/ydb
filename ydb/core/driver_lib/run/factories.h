@@ -19,6 +19,8 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <ydb/library/yql/providers/pq/cm_client/client.h>
 
+#include <ydb/library/yaml_config/yaml_config.h>
+
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/wilson/wilson_uploader.h>
 
@@ -61,6 +63,8 @@ struct TModuleFactories {
     std::vector<NKikimr::NMiniKQL::TComputationNodeFactory> AdditionalComputationNodeFactories;
 
     std::unique_ptr<NWilson::IGrpcSigner>(*WilsonGrpcSignerFactory)(const NKikimrConfig::TTracingConfig::TBackendConfig::TAuthConfig&);
+
+    std::unique_ptr<NYamlConfig::IConfigSwissKnife> ConfigSwissKnife;
 
     ~TModuleFactories();
 };

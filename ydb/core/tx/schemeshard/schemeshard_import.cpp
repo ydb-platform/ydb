@@ -73,6 +73,9 @@ void TSchemeShard::FromXxportInfo(NKikimrImport::TImport& import, const TImportI
         case TImportInfo::EState::BuildIndexes:
             import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_BUILD_INDEXES);
             break;
+        case TImportInfo::EState::CreateChangefeed:
+            import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_CREATE_CHANGEFEEDS);
+            break;
         case TImportInfo::EState::Done:
             import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_DONE);
             break;
@@ -163,6 +166,7 @@ void TSchemeShard::PersistImportItemState(NIceDb::TNiceDb& db, const TImportInfo
         NIceDb::TUpdate<Schema::ImportItems::State>(static_cast<ui8>(item.State)),
         NIceDb::TUpdate<Schema::ImportItems::WaitTxId>(item.WaitTxId),
         NIceDb::TUpdate<Schema::ImportItems::NextIndexIdx>(item.NextIndexIdx),
+        NIceDb::TUpdate<Schema::ImportItems::NextChangefeedIdx>(item.NextChangefeedIdx),
         NIceDb::TUpdate<Schema::ImportItems::Issue>(item.Issue)
     );
 }
@@ -188,6 +192,10 @@ void TSchemeShard::PersistImportItemScheme(NIceDb::TNiceDb& db, const TImportInf
     }
     db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
         NIceDb::TUpdate<Schema::ImportItems::Metadata>(item.Metadata.Serialize())
+    );
+
+    db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
+        NIceDb::TUpdate<Schema::ImportItems::Changefeeds>(item.Changefeeds)
     );
 }
 

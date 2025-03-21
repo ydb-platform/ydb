@@ -1,20 +1,22 @@
 #include "ut_utils/topic_sdk_test_setup.h"
 
-#include <ydb-cpp-sdk/client/topic/client.h>
-#include <ydb-cpp-sdk/client/table/table.h>
-#include <src/client/persqueue_public/ut/ut_utils/ut_utils.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/ut_utils.h>
 
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/core/persqueue/key.h>
 #include <ydb/core/persqueue/blob.h>
 #include <ydb/core/persqueue/events/global.h>
+#include <ydb/core/persqueue/pq_l2_service.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
 
 #include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
 
 #include <library/cpp/logger/stream.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/streams/bzip2/bzip2.h>
 
 namespace NYdb::NTopic::NTests {
 
@@ -93,6 +95,8 @@ protected:
                                TDuration stabilizationWindow,
                                ui64 downUtilizationPercent,
                                ui64 upUtilizationPercent);
+    void SetPartitionWriteSpeed(const std::string& topicPath,
+                                size_t bytesPerSeconds);
 
     void WriteToTopicWithInvalidTxId(bool invalidTxId);
 
@@ -147,6 +151,9 @@ protected:
     void RestartLongTxService();
     void RestartPQTablet(const TString& topicPath, ui32 partition);
     void DumpPQTabletKeys(const TString& topicName, ui32 partition);
+    void PQTabletPrepareFromResource(const TString& topicPath,
+                                     ui32 partitionId,
+                                     const TString& resourceName);
 
     void DeleteSupportivePartition(const TString& topicName,
                                    ui32 partition);
@@ -237,6 +244,8 @@ protected:
     virtual bool GetEnableHtapTx() const;
     virtual bool GetAllowOlapDataQuery() const;
 
+    size_t GetPQCacheRenameKeysCount();
+
 private:
     template<class E>
     E ReadEvent(TTopicReadSessionPtr reader, NTable::TTransaction& tx);
@@ -248,6 +257,8 @@ private:
                           ui32 partition);
     std::vector<std::string> GetTabletKeys(const TActorId& actorId,
                                            ui64 tabletId);
+    std::vector<std::string> GetPQTabletDataKeys(const TActorId& actorId,
+                                                 ui64 tabletId);
     NPQ::TWriteId GetTransactionWriteId(const TActorId& actorId,
                                         ui64 tabletId);
     void SendLongTxLockStatus(const TActorId& actorId,
@@ -501,6 +512,18 @@ void TFixture::AlterAutoPartitioning(const TString& topicPath,
             .EndAlterAutoPartitioningSettings()
         .EndAlterTopicPartitioningSettings()
         ;
+
+    auto result = client.AlterTopic(topicPath, settings).GetValueSync();
+    UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+}
+
+void TFixture::SetPartitionWriteSpeed(const std::string& topicPath,
+                                      size_t bytesPerSeconds)
+{
+    NTopic::TTopicClient client(GetDriver());
+    NTopic::TAlterTopicSettings settings;
+
+    settings.SetPartitionWriteSpeedBytesPerSecond(bytesPerSeconds);
 
     auto result = client.AlterTopic(topicPath, settings).GetValueSync();
     UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
@@ -1082,6 +1105,43 @@ std::vector<std::string> TFixture::GetTabletKeys(const TActorId& actorId,
     }
 
     return keys;
+}
+
+std::vector<std::string> TFixture::GetPQTabletDataKeys(const TActorId& actorId,
+                                                       ui64 tabletId)
+{
+    using namespace NKikimr::NPQ;
+
+    std::vector<std::string> keys;
+
+    for (const auto& key : GetTabletKeys(actorId, tabletId)) {
+        if (key.empty() ||
+            ((std::tolower(key.front()) != TKeyPrefix::TypeData) &&
+             (std::tolower(key.front()) != TKeyPrefix::TypeTmpData))) {
+            continue;
+        }
+
+        keys.push_back(key);
+    }
+
+    return keys;
+}
+
+size_t TFixture::GetPQCacheRenameKeysCount()
+{
+    using namespace NKikimr::NPQ;
+
+    auto& runtime = Setup->GetRuntime();
+    TActorId edge = runtime.AllocateEdgeActor();
+
+    auto request = MakeHolder<TEvPqCache::TEvCacheKeysRequest>();
+
+    runtime.Send(MakePersQueueL2CacheID(), edge, request.Release());
+
+    TAutoPtr<IEventHandle> handle;
+    auto* result = runtime.GrabEdgeEvent<TEvPqCache::TEvCacheKeysResponse>(handle);
+
+    return result->RenamedKeys;
 }
 
 void TFixture::RestartLongTxService()
@@ -1798,6 +1858,51 @@ void TFixture::DumpPQTabletKeys(const TString& topicName)
     auto keys = GetTabletKeys(edge, tabletId);
     for (const auto& key : keys) {
         Cerr << key << Endl;
+    }
+}
+
+void TFixture::PQTabletPrepareFromResource(const TString& topicPath,
+                                           ui32 partitionId,
+                                           const TString& resourceName)
+{
+    auto& runtime = Setup->GetRuntime();
+    TActorId edge = runtime.AllocateEdgeActor();
+    ui64 tabletId = GetTopicTabletId(edge, "/Root/" + topicPath, partitionId);
+
+    auto request = MakeHolder<TEvKeyValue::TEvRequest>();
+    size_t count = 0;
+
+    for (TStringStream stream(NResource::Find(resourceName)); true; ++count) {
+        TString key, encoded;
+
+        if (!stream.ReadTo(key, ' ')) {
+            break;
+        }
+        encoded = stream.ReadLine();
+
+        auto decoded = Base64Decode(encoded);
+        TStringInput decodedStream(decoded);
+        TBZipDecompress decompressor(&decodedStream);
+
+        auto* cmd = request->Record.AddCmdWrite();
+        cmd->SetKey(key);
+        cmd->SetValue(decompressor.ReadAll());
+    }
+
+    runtime.SendToPipe(tabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());
+
+    TAutoPtr<IEventHandle> handle;
+    auto* response = runtime.GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+    UNIT_ASSERT(response);
+    UNIT_ASSERT(response->Record.HasStatus());
+    UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NMsgBusProxy::MSTATUS_OK);
+
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.WriteResultSize(), count);
+
+    for (size_t i = 0; i < response->Record.WriteResultSize(); ++i) {
+        const auto &result = response->Record.GetWriteResult(i);
+        UNIT_ASSERT(result.HasStatus());
+        UNIT_ASSERT_EQUAL(result.GetStatus(), NKikimrProto::OK);
     }
 }
 
@@ -2579,6 +2684,55 @@ Y_UNIT_TEST_F(WriteToTopic_Demo_48, TFixture)
     UNIT_ASSERT_GT(topicDescription.GetTotalPartitionsCount(), 2);
 }
 
+Y_UNIT_TEST_F(WriteToTopic_Demo_50, TFixture)
+{
+    // We write to the topic in the transaction. When a transaction is committed, the keys in the blob
+    // cache are renamed.
+    CreateTopic("topic_A", TEST_CONSUMER);
+    CreateTopic("topic_B", TEST_CONSUMER);
+
+    TString message(128_KB, 'x');
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_1, message);
+    WaitForAcks("topic_A", TEST_MESSAGE_GROUP_ID_1);
+
+    auto session = CreateTableSession();
+
+    // tx #1
+    // After the transaction commit, there will be no large blobs in the batches.  The number of renames
+    // will not change in the cache.
+    auto tx = BeginTx(session);
+
+    WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, message, &tx);
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID_3, message, &tx);
+
+    UNIT_ASSERT_VALUES_EQUAL(GetPQCacheRenameKeysCount(), 0);
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    Sleep(TDuration::Seconds(5));
+
+    UNIT_ASSERT_VALUES_EQUAL(GetPQCacheRenameKeysCount(), 0);
+
+    // tx #2
+    // After the commit, the party will rename one big blob
+    tx = BeginTx(session);
+
+    for (unsigned i = 0; i < 80; ++i) {
+        WriteToTopic("topic_A", TEST_MESSAGE_GROUP_ID_2, message, &tx);
+    }
+
+    WriteToTopic("topic_B", TEST_MESSAGE_GROUP_ID_3, message, &tx);
+
+    UNIT_ASSERT_VALUES_EQUAL(GetPQCacheRenameKeysCount(), 0);
+
+    CommitTx(tx, EStatus::SUCCESS);
+
+    Sleep(TDuration::Seconds(5));
+
+    UNIT_ASSERT_VALUES_EQUAL(GetPQCacheRenameKeysCount(), 1);
+}
+
 class TFixtureSinks : public TFixture {
 protected:
     void CreateRowTable(const TString& path);
@@ -2914,9 +3068,6 @@ Y_UNIT_TEST_F(Sinks_Olap_WriteToTopicAndTable_3, TFixtureSinks)
 
 Y_UNIT_TEST_F(Write_Random_Sized_Messages_In_Wide_Transactions, TFixture)
 {
-    // Consumes a lot of memory. Temporarily disabled
-    return;
-
     // The test verifies the simultaneous execution of several transactions. There is a topic
     // with PARTITIONS_COUNT partitions. In each transaction, the test writes to all the partitions.
     // The size of the messages is random. Such that both large blobs in the body and small ones in
@@ -2924,9 +3075,11 @@ Y_UNIT_TEST_F(Write_Random_Sized_Messages_In_Wide_Transactions, TFixture)
     // will make sure that when committing transactions, the division into blocks is taken into account.
 
     const size_t PARTITIONS_COUNT = 20;
-    const size_t TXS_COUNT = 100;
+    const size_t TXS_COUNT = 10;
 
     CreateTopic("topic_A", TEST_CONSUMER, PARTITIONS_COUNT);
+
+    SetPartitionWriteSpeed("topic_A", 50'000'000);
 
     std::vector<NTable::TSession> sessions;
     std::vector<NTable::TTransaction> transactions;
@@ -2966,6 +3119,155 @@ Y_UNIT_TEST_F(Write_Random_Sized_Messages_In_Wide_Transactions, TFixture)
         const auto& result = futures[i].GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
+}
+
+Y_UNIT_TEST_F(Write_Only_Big_Messages_In_Wide_Transactions, TFixture)
+{
+    // The test verifies the simultaneous execution of several transactions. There is a topic `topic_A` and
+    // it contains a `PARTITIONS_COUNT' of partitions. In each transaction, the test writes to all partitions.
+    // The size of the messages is chosen so that only large blobs are recorded in the transaction and there
+    // are no records in the head. Thus, we verify that transaction bundling is working correctly.
+
+    const size_t PARTITIONS_COUNT = 20;
+    const size_t TXS_COUNT = 100;
+
+    CreateTopic("topic_A", TEST_CONSUMER, PARTITIONS_COUNT);
+
+    SetPartitionWriteSpeed("topic_A", 50'000'000);
+
+    std::vector<NTable::TSession> sessions;
+    std::vector<NTable::TTransaction> transactions;
+
+    // We open TXS_COUNT transactions and write messages to the topic.
+    for (size_t i = 0; i < TXS_COUNT; ++i) {
+        sessions.push_back(CreateTableSession());
+        auto& session = sessions.back();
+
+        transactions.push_back(BeginTx(session));
+        auto& tx = transactions.back();
+
+        for (size_t j = 0; j < PARTITIONS_COUNT; ++j) {
+            TString sourceId = TEST_MESSAGE_GROUP_ID;
+            sourceId += "_";
+            sourceId += ToString(i);
+            sourceId += "_";
+            sourceId += ToString(j);
+
+            WriteToTopic("topic_A", sourceId, TString(6'500'000, 'x'), &tx, j);
+
+            WaitForAcks("topic_A", sourceId);
+        }
+    }
+
+    // We are doing an asynchronous commit of transactions. They will be executed simultaneously.
+    std::vector<NTable::TAsyncCommitTransactionResult> futures;
+
+    for (size_t i = 0; i < TXS_COUNT; ++i) {
+        futures.push_back(transactions[i].Commit());
+    }
+
+    // All transactions must be completed successfully.
+    for (size_t i = 0; i < TXS_COUNT; ++i) {
+        futures[i].Wait();
+        const auto& result = futures[i].GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+}
+
+Y_UNIT_TEST_F(Transactions_Conflict_On_SeqNo, TFixture)
+{
+    const ui32 PARTITIONS_COUNT = 20;
+    const size_t TXS_COUNT = 100;
+
+    CreateTopic("topic_A", TEST_CONSUMER, PARTITIONS_COUNT);
+
+    SetPartitionWriteSpeed("topic_A", 50'000'000);
+
+    auto tableSession = CreateTableSession();
+    std::vector<std::shared_ptr<NTopic::ISimpleBlockingWriteSession>> topicWriteSessions;
+
+    for (ui32 i = 0; i < PARTITIONS_COUNT; ++i) {
+        TString sourceId = TEST_MESSAGE_GROUP_ID;
+        sourceId += "_";
+        sourceId += ToString(i);
+
+        NTopic::TTopicClient client(GetDriver());
+        NTopic::TWriteSessionSettings options;
+        options.Path("topic_A");
+        options.ProducerId(sourceId);
+        options.MessageGroupId(sourceId);
+        options.PartitionId(i);
+        options.Codec(ECodec::RAW);
+
+        auto session = client.CreateSimpleBlockingWriteSession(options);
+
+        topicWriteSessions.push_back(std::move(session));
+    }
+
+    std::vector<NTable::TSession> sessions;
+    std::vector<NTable::TTransaction> transactions;
+
+    for (size_t i = 0; i < TXS_COUNT; ++i) {
+        sessions.push_back(CreateTableSession());
+        auto& session = sessions.back();
+
+        transactions.push_back(BeginTx(session));
+        auto& tx = transactions.back();
+
+        for (size_t j = 0; j < PARTITIONS_COUNT; ++j) {
+            TString sourceId = TEST_MESSAGE_GROUP_ID;
+            sourceId += "_";
+            sourceId += ToString(j);
+
+            for (size_t k = 0, count = RandomNumber<size_t>(20) + 1; k < count; ++k) {
+                const std::string data(RandomNumber<size_t>(1'000) + 100, 'x');
+                NTopic::TWriteMessage params(data);
+                params.Tx(tx);
+
+                topicWriteSessions[j]->Write(std::move(params));
+            }
+        }
+    }
+
+    std::vector<NTable::TAsyncCommitTransactionResult> futures;
+
+    for (size_t i = 0; i < TXS_COUNT; ++i) {
+        futures.push_back(transactions[i].Commit());
+    }
+
+    // Some transactions should end with the error `ABORTED`
+    size_t successCount = 0;
+
+    for (size_t i = 0; i < TXS_COUNT; ++i) {
+        futures[i].Wait();
+        const auto& result = futures[i].GetValueSync();
+        switch (result.GetStatus()) {
+        case EStatus::SUCCESS:
+            ++successCount;
+            break;
+        case EStatus::ABORTED:
+            break;
+        default:
+            UNIT_FAIL("unexpected status: " << static_cast<const NYdb::TStatus&>(result));
+            break;
+        }
+    }
+
+    UNIT_ASSERT_VALUES_UNEQUAL(successCount, TXS_COUNT);
+}
+
+Y_UNIT_TEST_F(The_Transaction_Starts_On_One_Version_And_Ends_On_The_Other, TFixture)
+{
+    // In the test, we check the compatibility between versions `24-4-2` and `24-4-*/25-1-*`. To do this, the data
+    // obtained on the `24-4-2` version is loaded into the PQ tablets.
+
+    CreateTopic("topic_A", TEST_CONSUMER, 2);
+
+    PQTabletPrepareFromResource("topic_A", 0, "topic_A_partition_0_v24-4-2.dat");
+    PQTabletPrepareFromResource("topic_A", 1, "topic_A_partition_1_v24-4-2.dat");
+
+    RestartPQTablet("topic_A", 0);
+    RestartPQTablet("topic_A", 1);
 }
 
 }

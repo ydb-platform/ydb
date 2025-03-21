@@ -56,7 +56,7 @@ namespace TEvConsole {
         EvGetAllMetadataRequest,
         EvGetNodeLabelsRequest,
         EvIsYamlReadOnlyRequest,
-
+        EvFetchStartupConfigRequest,
         // responses
         EvCreateTenantResponse = EvCreateTenantRequest + 1024,
         EvAlterTenantResponse,
@@ -102,6 +102,7 @@ namespace TEvConsole {
         EvGenericError,
 
         EvIsYamlReadOnlyResponse,
+        EvFetchStartupConfigResponse,
 
         EvEnd
     };
@@ -224,6 +225,10 @@ namespace TEvConsole {
     struct TEvResolveAllConfigRequest : public TEventShortDebugPB<TEvResolveAllConfigRequest, NKikimrConsole::TResolveAllConfigRequest, EvResolveAllConfigRequest> {};
 
     struct TEvResolveAllConfigResponse : public TEventShortDebugPB<TEvResolveAllConfigResponse, NKikimrConsole::TResolveAllConfigResponse, EvResolveAllConfigResponse> {};
+
+    struct TEvFetchStartupConfigRequest : public TEventShortDebugPB<TEvFetchStartupConfigRequest, NKikimrConsole::TFetchStartupConfigRequest, EvFetchStartupConfigRequest> {};
+
+    struct TEvFetchStartupConfigResponse : public TEventShortDebugPB<TEvFetchStartupConfigResponse, NKikimrConsole::TFetchStartupConfigResponse, EvFetchStartupConfigResponse> {};
 
     struct TEvUnauthorized : public TEventShortDebugPB<TEvUnauthorized, NKikimrConsole::TUnauthorized, EvUnauthorized> {};
 

@@ -115,10 +115,7 @@ private:
 protected:
     std::optional<ui64> UsedRawBytes;
 
-    virtual bool DoStartFetchingIndexes(
-        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) = 0;
     virtual void DoAbort() = 0;
-    virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexMeta) = 0;
     virtual NJson::TJsonValue DoDebugJsonForMemory() const {
         return NJson::JSON_MAP;
     }
@@ -188,12 +185,33 @@ public:
         };
     };
 
-    class TCompareFinishForScanSequence {
+    class TCompareKeyForScanSequence {
+    private:
+        const TReplaceKeyAdapter Key;
+        const ui32 SourceId;
+
     public:
-        bool operator()(const std::shared_ptr<IDataSource>& l, const std::shared_ptr<IDataSource>& r) const {
-            const std::partial_ordering compareResult = l->GetFinish().Compare(r->GetFinish());
+        TCompareKeyForScanSequence(const TReplaceKeyAdapter& key, const ui32 sourceId)
+            : Key(key)
+            , SourceId(sourceId) {
+        }
+
+        static TCompareKeyForScanSequence FromStart(const std::shared_ptr<IDataSource>& src) {
+            return TCompareKeyForScanSequence(src->GetStart(), src->GetSourceId());
+        }
+
+        static TCompareKeyForScanSequence FromFinish(const std::shared_ptr<IDataSource>& src) {
+            return TCompareKeyForScanSequence(src->GetFinish(), src->GetSourceId());
+        }
+
+        static TCompareKeyForScanSequence BorderStart(const std::shared_ptr<IDataSource>& src) {
+            return TCompareKeyForScanSequence(src->GetStart(), 0);
+        }
+
+        bool operator<(const TCompareKeyForScanSequence& item) const {
+            const std::partial_ordering compareResult = Key.Compare(item.Key);
             if (compareResult == std::partial_ordering::equivalent) {
-                return l->GetSourceId() < r->GetSourceId();
+                return SourceId < item.SourceId;
             } else {
                 return compareResult == std::partial_ordering::less;
             }
@@ -212,15 +230,6 @@ public:
     virtual ui64 GetPathId() const = 0;
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const = 0;
 
-    void ApplyIndex(const NIndexes::TIndexCheckerContainer& indexMeta) {
-        return DoApplyIndex(indexMeta);
-    }
-
-    bool StartFetchingIndexes(
-        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) {
-        AFL_VERIFY(indexes);
-        return DoStartFetchingIndexes(sourcePtr, step, indexes);
-    }
     void InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching);
 
     virtual ui64 GetIndexRawBytes(const std::set<ui32>& indexIds) const = 0;
@@ -254,9 +263,9 @@ public:
         : TBase(sourceId, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions)
         , Start(context->GetReadMetadata()->IsDescSorted() ? finish : start, context->GetReadMetadata()->IsDescSorted())
         , Finish(context->GetReadMetadata()->IsDescSorted() ? start : finish, context->GetReadMetadata()->IsDescSorted()) {
-        StageData = std::make_unique<TFetchedData>(true);
-        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().IsPortionInPartialUsage(start, finish);
-        AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::DontUsage);
+        StageData = std::make_unique<TFetchedData>(true, recordsCount);
+        UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(start, finish);
+        AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::NoUsage);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugString())(
             "finish", Finish.DebugString());
         Y_ABORT_UNLESS(Start.Compare(Finish) != std::partial_ordering::greater);
@@ -279,12 +288,28 @@ private:
         UsedRawBytes = StageData->GetPortionAccessor().GetColumnRawBytes(GetContext()->GetAllUsageColumns()->GetColumnIds(), false);
     }
 
-    virtual void DoApplyIndex(const NIndexes::TIndexCheckerContainer& indexChecker) override;
     virtual bool DoStartFetchingColumns(
         const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) override;
-    virtual bool DoStartFetchingIndexes(
-        const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const std::shared_ptr<TIndexesSet>& indexes) override;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) override;
+
+    std::shared_ptr<NIndexes::TSkipIndex> SelectOptimalIndex(
+        const std::vector<std::shared_ptr<NIndexes::TSkipIndex>>& indexes, const NArrow::NSSA::EIndexCheckOperation op) const;
+
+    virtual TConclusion<bool> DoStartFetchImpl(
+        const NArrow::NSSA::TProcessorContext& context, const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& fetchersExt) override;
+
+    virtual TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> DoStartFetchIndex(
+        const NArrow::NSSA::TProcessorContext& context, const TFetchIndexContext& fetchContext) override;
+    virtual TConclusion<NArrow::TColumnFilter> DoCheckIndex(const NArrow::NSSA::TProcessorContext& context,
+        const TCheckIndexContext& fetchContext, const std::shared_ptr<arrow::Scalar>& value) override;
+    virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchHeader(
+        const NArrow::NSSA::TProcessorContext& context, const TFetchHeaderContext& fetchContext) override;
+    virtual TConclusion<NArrow::TColumnFilter> DoCheckHeader(
+        const NArrow::NSSA::TProcessorContext& context, const TCheckHeaderContext& fetchContext) override;
+    virtual void DoAssembleAccessor(const NArrow::NSSA::TProcessorContext& context, const ui32 columnId, const TString& subColumnName) override;
+    virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(
+        const NArrow::NSSA::TProcessorContext& context, const TDataAddress& addr) override;
+
     virtual NJson::TJsonValue DoDebugJson() const override {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("type", "portion");
@@ -316,6 +341,33 @@ private:
     virtual bool DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) override;
 
 public:
+    virtual TString GetEntityStorageId(const ui32 entityId) const override {
+        return Portion->GetEntityStorageId(entityId, Schema->GetIndexInfo());
+    }
+
+    virtual TString GetColumnStorageId(const ui32 columnId) const override {
+        return Portion->GetColumnStorageId(columnId, Schema->GetIndexInfo());
+    }
+
+    virtual TBlobRange RestoreBlobRange(const TBlobRangeLink16& rangeLink) const override {
+        return Portion->RestoreBlobRange(rangeLink);
+    }
+
+    virtual const std::shared_ptr<ISnapshotSchema>& GetSourceSchema() const override {
+        return Schema;
+    }
+
+    virtual std::optional<TSnapshot> GetDataSnapshot() const override {
+        if (Portion->HasInsertWriteId()) {
+            if (Portion->HasCommitSnapshot()) {
+                return Portion->GetCommitSnapshotVerified();
+            } else if (GetContext()->GetReadMetadata()->IsMyUncommitted(Portion->GetInsertWriteIdVerified())) {
+                return GetContext()->GetReadMetadata()->GetRequestSnapshot();
+            }
+        }
+        return std::nullopt;
+    }
+
     virtual ui64 PredictAccessorsSize(const std::set<ui32>& entityIds) const override {
         return Portion->GetApproxChunksCount(entityIds.size()) * sizeof(TColumnRecord);
     }

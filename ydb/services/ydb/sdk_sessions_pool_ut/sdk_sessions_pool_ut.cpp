@@ -1,6 +1,6 @@
 #include "ydb_common_ut.h"
 
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 
 #include <util/thread/pool.h>

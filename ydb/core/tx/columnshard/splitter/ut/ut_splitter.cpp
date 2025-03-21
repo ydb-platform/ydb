@@ -26,7 +26,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
     protected:
         virtual NKikimr::NArrow::NAccessor::TColumnSaver DoGetColumnSaver(const ui32 columnId) const override {
             return NKikimr::NArrow::NAccessor::TColumnSaver(
-                nullptr, std::make_shared<NSerialization::TNativeSerializer>(arrow::ipc::IpcOptions::Defaults()));
+                std::make_shared<NSerialization::TNativeSerializer>(arrow::ipc::IpcOptions::Defaults()));
         }
 
     public:
@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(Splitter) {
         }
 
         NKikimr::NArrow::NAccessor::TColumnLoader GetColumnLoader(const ui32 columnId) const {
-            return NKikimr::NArrow::NAccessor::TColumnLoader(nullptr, NSerialization::TSerializerContainer::GetDefaultSerializer(),
+            return NKikimr::NArrow::NAccessor::TColumnLoader(NSerialization::TSerializerContainer::GetDefaultSerializer(),
                 NKikimr::NArrow::NAccessor::TConstructorContainer::GetDefaultConstructor(), GetField(columnId), nullptr, columnId);
         }
 
@@ -139,9 +139,12 @@ Y_UNIT_TEST_SUITE(Splitter) {
                     ui32 count = 0;
                     for (auto&& c : e.second) {
                         auto slice = arr->Slice(count + portionShift, c->GetRecordsCountVerified());
-                        auto readBatch = Schema->GetColumnLoader(e.first).ApplyRawVerified(c->GetData());
-                        AFL_VERIFY(slice->length() == readBatch->num_rows());
-                        Y_ABORT_UNLESS(readBatch->column(0)->RangeEquals(*slice, 0, readBatch->num_rows(), 0, arrow::EqualOptions::Defaults()));
+                        auto readBatchArray = Schema->GetColumnLoader(e.first).ApplyVerified(c->GetData(), c->GetRecordsCountVerified());
+                        std::shared_ptr<arrow::ChunkedArray> chunkedArray = readBatchArray->GetChunkedArray();
+                        AFL_VERIFY(chunkedArray->num_chunks() == 1);
+                        AFL_VERIFY(slice->length() == chunkedArray->length());
+                        Y_ABORT_UNLESS(
+                            chunkedArray->chunk(0)->RangeEquals(*slice, 0, chunkedArray->length(), 0, arrow::EqualOptions::Defaults()));
                         count += c->GetRecordsCountVerified();
                         AFL_VERIFY(entitiesByRecordsCount[count].emplace(e.first).second);
                         AFL_VERIFY(entitiesByRecordsCount[count].size() <= (ui32)batch->num_columns());

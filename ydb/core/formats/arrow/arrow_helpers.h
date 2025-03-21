@@ -1,6 +1,5 @@
 #pragma once
 #include "process_columns.h"
-#include <ydb/core/formats/factory.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <library/cpp/json/writer/json_value.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/api.h>
@@ -12,6 +11,37 @@
 
 namespace NKikimr::NArrow {
 
+template <class TArray, class TValue>
+std::optional<ui32> FindUpperOrEqualPosition(const TArray& arr, const TValue val) {
+    if (!arr.length()) {
+        return std::nullopt;
+    }
+    TValue left = arr.Value(0);
+    TValue right = arr.Value(arr.length() - 1);
+    if (val < left) {
+        return 0;
+    } else if (right < val) {
+        return std::nullopt;
+    } else if (val == left) {
+        return 0;
+    }
+    ui32 idxLeft = 0;
+    ui32 idxRight = arr.length() - 1;
+    while (idxRight - idxLeft > 1) {
+        const ui32 idxMiddle = 0.5 * (idxRight + idxLeft);
+        Y_ABORT_UNLESS(idxMiddle != idxRight);
+        Y_ABORT_UNLESS(idxMiddle != idxLeft);
+        const TValue middle = arr.Value(idxMiddle);
+        if (middle < val) {
+            idxLeft = idxMiddle;
+        } else if (val < middle) {
+            idxRight = idxMiddle;
+        } else {
+            idxRight = idxMiddle;
+        }
+    }
+    return idxRight;
+}
 arrow::Result<std::shared_ptr<arrow::DataType>> GetArrowType(NScheme::TTypeInfo typeInfo);
 arrow::Result<std::shared_ptr<arrow::DataType>> GetCSVArrowType(NScheme::TTypeInfo typeId);
 
@@ -40,7 +70,11 @@ void DedupSortedBatch(const std::shared_ptr<arrow::RecordBatch>& batch,
                        const std::shared_ptr<arrow::Schema>& sortingKey,
                        std::vector<std::shared_ptr<arrow::RecordBatch>>& out);
 
-std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::RecordBatch> original);
-std::shared_ptr<arrow::Table> ReallocateBatch(const std::shared_ptr<arrow::Table>& original, arrow::MemoryPool* pool = arrow::default_memory_pool());
+[[nodiscard]] std::shared_ptr<arrow::RecordBatch> ReallocateBatch(std::shared_ptr<arrow::RecordBatch> original);
+[[nodiscard]] std::shared_ptr<arrow::Table> ReallocateBatch(
+    const std::shared_ptr<arrow::Table>& original, arrow::MemoryPool* pool = arrow::default_memory_pool());
+[[nodiscard]] std::shared_ptr<arrow::ChunkedArray> ReallocateArray(
+    const std::shared_ptr<arrow::ChunkedArray>& original, arrow::MemoryPool* pool = arrow::default_memory_pool());
+[[nodiscard]] std::shared_ptr<arrow::Array> ReallocateArray(const std::shared_ptr<arrow::Array>& arr, arrow::MemoryPool* pool = arrow::default_memory_pool());
 
 }

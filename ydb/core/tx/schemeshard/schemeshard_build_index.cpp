@@ -293,7 +293,7 @@ void TSchemeShard::PersistBuildIndexForget(NIceDb::TNiceDb& db, const TIndexBuil
     }
 
     if (info.IsBuildVectorIndex()) {
-        db.Table<Schema::KMeansTreeState>().Key(info.Id).Delete();
+        db.Table<Schema::KMeansTreeProgress>().Key(info.Id).Delete();
         PersistBuildIndexSampleForget(db, info);
     }
 }

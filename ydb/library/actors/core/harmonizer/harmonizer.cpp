@@ -179,11 +179,11 @@ void THarmonizer::ProcessNeedyState() {
             ProcessingBudget -= 1.0;
             LWPROBE_WITH_DEBUG(HarmonizeOperation, needyPoolIdx, pool.Pool->GetName(), "increase by needs", threadCount + 1, pool.DefaultFullThreadCount, pool.MaxFullThreadCount);
         }
-        if constexpr (NFeatures::IsLocalQueues()) {
+        if (pool.MaxLocalQueueSize) {
             bool needToExpandLocalQueue = ProcessingBudget < 1.0 || threadCount >= pool.MaxFullThreadCount;
             needToExpandLocalQueue &= (bool)pool.BasicPool;
             needToExpandLocalQueue &= (pool.MaxFullThreadCount > 1);
-            needToExpandLocalQueue &= (pool.LocalQueueSize < NFeatures::TLocalQueuesFeatureFlags::MAX_LOCAL_QUEUE_SIZE);
+            needToExpandLocalQueue &= (pool.LocalQueueSize < pool.MaxLocalQueueSize);
             if (needToExpandLocalQueue) {
                 pool.BasicPool->SetLocalQueueSize(++pool.LocalQueueSize);
             }
@@ -258,8 +258,8 @@ void THarmonizer::ProcessHoggishState() {
         if (threadCount == pool.MinFullThreadCount && Shared && SharedInfo.ForeignThreadsAllowed[hoggishPoolIdx] != 0) {
             Shared->SetForeignThreadSlots(hoggishPoolIdx, 0);
         }
-        if (pool.BasicPool && pool.LocalQueueSize > NFeatures::TLocalQueuesFeatureFlags::MIN_LOCAL_QUEUE_SIZE) {
-            pool.LocalQueueSize = std::min<ui16>(NFeatures::TLocalQueuesFeatureFlags::MIN_LOCAL_QUEUE_SIZE, pool.LocalQueueSize / 2);
+        if (pool.BasicPool && pool.LocalQueueSize > pool.MinLocalQueueSize) {
+            pool.LocalQueueSize = std::min<ui16>(pool.MinLocalQueueSize, pool.LocalQueueSize / 2);
             pool.BasicPool->SetLocalQueueSize(pool.LocalQueueSize);
         }
         HARMONIZER_DEBUG_PRINT("poolIdx", hoggishPoolIdx, "threadCount", threadCount, "pool.MinFullThreadCount", pool.MinFullThreadCount, "freeCpu", freeCpu);
@@ -389,6 +389,9 @@ void THarmonizer::AddPool(IExecutorPool* pool, TSelfPingInfo *pingInfo) {
     if (poolInfo.BasicPool) {
         poolInfo.WaitingStats.reset(new TWaitingStats<ui64>());
         poolInfo.MovingWaitingStats.reset(new TWaitingStats<double>());
+        poolInfo.MinLocalQueueSize = poolInfo.BasicPool->GetMinLocalQueueSize();
+        poolInfo.MaxLocalQueueSize = poolInfo.BasicPool->GetMaxLocalQueueSize();
+        poolInfo.LocalQueueSize = poolInfo.MinLocalQueueSize;
     }
     PriorityOrder.clear();
 }
@@ -398,8 +401,8 @@ void THarmonizer::Enable(bool enable) {
     IsDisabled = enable;
 }
 
-IHarmonizer* MakeHarmonizer(ui64 ts) {
-    return new THarmonizer(ts);
+std::unique_ptr<IHarmonizer> MakeHarmonizer(ui64 ts) {
+    return std::make_unique<THarmonizer>(ts);
 }
 
 TPoolHarmonizerStats THarmonizer::GetPoolStats(i16 poolId) const {

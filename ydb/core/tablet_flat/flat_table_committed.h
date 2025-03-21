@@ -211,6 +211,10 @@ namespace NTable {
             return State_ && !State_->empty();
         }
 
+        bool Contains(ui64 txId) const {
+            return State_ && State_->contains(txId);
+        }
+
         const TRowVersion* Find(ui64 txId) const {
             if (State_) {
                 return State_->Find(txId);

@@ -10,9 +10,9 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 
-#include <src/util/random/fast.h>
-#include <src/util/system/cpu_id.h>
-#include <ydb-cpp-sdk/util/system/platform.h>
+#include <ydb/public/sdk/cpp/src/util/random/fast.h>
+#include <ydb/public/sdk/cpp/src/util/system/cpu_id.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/util/system/platform.h>
 
 #include <array>
 

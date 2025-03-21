@@ -1236,8 +1236,6 @@ WITH (
 
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
         }
-
-
     }
 
     Y_UNIT_TEST(QueryStats) {
@@ -2582,6 +2580,7 @@ WITH (
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
+
             UNIT_ASSERT_VALUES_EQUAL(children.size(), 31);
 
             THashSet<TString> names;
@@ -2600,6 +2599,7 @@ WITH (
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
+
             UNIT_ASSERT_VALUES_EQUAL(children.size(), 25);
 
             THashSet<TString> names;
@@ -3051,6 +3051,99 @@ WITH (
             auto expected = R"([
                 [["user3"];[%true];[%false];#;#;[0u]];
                 [["user4"];[%true];[%false];#;#;[0u]];
+            ])";
+
+            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+        }
+    }
+
+    Y_UNIT_TEST(AuthUsers_LockUnlock) {
+        NKikimrProto::TAuthConfig authConfig;
+        auto accountLockout = authConfig.MutableAccountLockout();
+        accountLockout->SetAttemptResetDuration("3s");
+        TTestEnv env(1, 4, {.AuthConfig = authConfig});
+        SetupAuthEnvironment(env);
+
+        TTableClient client(env.GetDriver());
+
+        env.GetClient().CreateUser("/Root", "user1", "password1");
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT Sid, IsEnabled, IsLockedOut, LastSuccessfulAttemptAt, LastFailedAttemptAt, FailedAttemptCount
+                FROM `Root/.sys/auth_users`
+            )").GetValueSync();
+
+            auto expected = R"([
+                [["user1"];[%true];[%false];#;#;[0u]];
+            ])";
+
+            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+        }
+
+
+        {
+            auto loginResult = env.GetClient().Login(*(env.GetServer().GetRuntime()), "user1", "password1");
+            UNIT_ASSERT_EQUAL(loginResult.GetError(), "");
+        }
+
+        {
+            for (size_t i = 0; i < 4; i++) {
+                auto loginResult = env.GetClient().Login(*(env.GetServer().GetRuntime()), "user1", "wrongPassword");
+                UNIT_ASSERT_EQUAL(loginResult.GetError(), "Invalid password");
+            }
+        }
+
+        // After some attempts login with wrong password user must be locked out. Flag IsLockedOut must be true
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT Sid, IsEnabled, IsLockedOut, FailedAttemptCount
+                FROM `Root/.sys/auth_users`
+            )").GetValueSync();
+
+            auto expected = R"([
+                [["user1"];[%true];[%true];[4u]];
+            ])";
+
+            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+        }
+
+        // Check that user is locked out and cannot login
+        {
+            auto loginResult = env.GetClient().Login(*(env.GetServer().GetRuntime()), "user1", "password1");
+            UNIT_ASSERT_EQUAL(loginResult.GetError(), "User user1 is not permitted to log in");
+        }
+
+        Sleep(TDuration::Seconds(5));
+
+        // User can login after 5 seconds. Flag IsLockedOut is false
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT Sid, IsEnabled, IsLockedOut, FailedAttemptCount
+                FROM `Root/.sys/auth_users`
+            )").GetValueSync();
+
+            auto expected = R"([
+                [["user1"];[%true];[%false];[4u]];
+            ])";
+
+            NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
+        }
+
+        // User can login
+        {
+            auto loginResult = env.GetClient().Login(*(env.GetServer().GetRuntime()), "user1", "password1");
+            UNIT_ASSERT_EQUAL(loginResult.GetError(), "");
+        }
+
+        // Check that FailedAttemptCount is reset
+        {
+            auto it = client.StreamExecuteScanQuery(R"(
+                SELECT Sid, IsEnabled, IsLockedOut, FailedAttemptCount
+                FROM `Root/.sys/auth_users`
+            )").GetValueSync();
+
+            auto expected = R"([
+                [["user1"];[%true];[%false];[0u]];
             ])";
 
             NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));

@@ -3016,7 +3016,27 @@ TProtobufElementResolveResult GetProtobufElementFromField(
     };
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NDetail {
+
+////////////////////////////////////////////////////////////////////////////////
+
+std::string_view GetProtobufElementTypeName(const NYson::TProtobufElement& element)
+{
+    return Visit(element,
+        [&] <CProtobufElement T> (const std::unique_ptr<T>&) {
+            return GetProtobufElementTypeName<T>();
+        });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NDetail
 
 TProtobufElementResolveResult ResolveProtobufElementByYPath(
     const TProtobufMessageType* rootType,

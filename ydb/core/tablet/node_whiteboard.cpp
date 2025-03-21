@@ -841,14 +841,25 @@ protected:
         }
     }
 
+    static std::unordered_set<TTabletId> BuildIndex(const ::google::protobuf::RepeatedField<::NProtoBuf::uint64>& array) {
+        std::unordered_set<TTabletId> result;
+        result.reserve(array.size());
+        for (auto id : array) {
+            result.insert(id);
+        }
+        return result;
+    }
+
     void Handle(TEvWhiteboard::TEvTabletStateRequest::TPtr &ev, const TActorContext &ctx) {
         auto now = TMonotonic::Now();
         const auto& request = ev->Get()->Record;
         auto matchesFilter = [
             changedSince = request.has_changedsince() ? request.changedsince() : 0,
+            filterTabletId = BuildIndex(request.filtertabletid()),
             filterTenantId = request.has_filtertenantid() ? NKikimr::TSubDomainKey(request.filtertenantid()) : NKikimr::TSubDomainKey()
         ](const NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo) {
             return tabletStateInfo.changetime() >= changedSince
+                && (filterTabletId.empty() || filterTabletId.count(tabletStateInfo.tabletid()))
                 && (!filterTenantId || filterTenantId == NKikimr::TSubDomainKey(tabletStateInfo.tenantid()));
         };
         std::unique_ptr<TEvWhiteboard::TEvTabletStateResponse> response = std::make_unique<TEvWhiteboard::TEvTabletStateResponse>();
@@ -871,22 +882,10 @@ protected:
             }
         } else {
             if (request.groupby().empty()) {
-                if (request.filtertabletid_size() == 0) {
-                    for (const auto& pr : TabletStateInfo) {
-                        if (matchesFilter(pr.second)) {
-                            NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo = *record.add_tabletstateinfo();
-                            Copy(tabletStateInfo, pr.second, request);
-                        }
-                    }
-                } else {
-                    for (auto tabletId : request.filtertabletid()) {
-                        auto it = TabletStateInfo.find({tabletId, 0});
-                        if (it != TabletStateInfo.end()) {
-                            if (matchesFilter(it->second)) {
-                                NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo = *record.add_tabletstateinfo();
-                                Copy(tabletStateInfo, it->second, request);
-                            }
-                        }
+                for (const auto& pr : TabletStateInfo) {
+                    if (matchesFilter(pr.second)) {
+                        NKikimrWhiteboard::TTabletStateInfo& tabletStateInfo = *record.add_tabletstateinfo();
+                        Copy(tabletStateInfo, pr.second, request);
                     }
                 }
             } else if (request.groupby() == "Type,State" || request.groupby() == "NodeId,Type,State") { // the only supported group-by for now

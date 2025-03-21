@@ -21,6 +21,11 @@ namespace NYT::NYTree {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// Infers value format (microseconds/nanoseconds) and returns unix time.
+TInstant ConvertRawValueToUnixTime(ui64 value);
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <class T>
 NYson::EYsonType GetYsonType(const T&);
 NYson::EYsonType GetYsonType(const NYson::TYsonString& yson);

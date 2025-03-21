@@ -47,13 +47,19 @@ private:
     virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override;
     virtual void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
     virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
-    virtual TConclusion<bool> DoStartFetchIndex(const NArrow::NSSA::TProcessorContext& /*context*/, const TFetchIndexContext& /*fetchContext*/) override {
+    virtual TConclusion<bool> DoStartFetchImpl(
+        const NArrow::NSSA::TProcessorContext& /*context*/, const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& /*fetchersExt*/) override {
         AFL_VERIFY(false);
         return false;
     }
+
+    virtual TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> DoStartFetchIndex(
+        const NArrow::NSSA::TProcessorContext& /*context*/, const TFetchIndexContext& /*fetchContext*/) override {
+        AFL_VERIFY(false);
+        return std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>();
+    }
     virtual TConclusion<NArrow::TColumnFilter> DoCheckIndex(const NArrow::NSSA::TProcessorContext& /*context*/,
-        const TFetchIndexContext& /*fetchContext*/,
-        const std::shared_ptr<arrow::Scalar>& /*value*/) override {
+        const TCheckIndexContext& /*fetchContext*/, const std::shared_ptr<arrow::Scalar>& /*value*/) override {
         AFL_VERIFY(false);
         return NArrow::TColumnFilter::BuildAllowFilter();
     }
@@ -61,18 +67,18 @@ private:
         const NArrow::NSSA::TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
         AFL_VERIFY(false);
     }
-    virtual TConclusion<bool> DoStartFetchData(
-        const NArrow::NSSA::TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
+    virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(
+        const NArrow::NSSA::TProcessorContext& /*context*/, const TDataAddress& /*address*/) override {
         AFL_VERIFY(false);
-        return false;
+        return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
     }
-    virtual TConclusion<bool> DoStartFetchHeader(
+    virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchHeader(
         const NArrow::NSSA::TProcessorContext& /*context*/, const TFetchHeaderContext& /*fetchContext*/) override {
         AFL_VERIFY(false);
-        return false;
+        return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
     }
     virtual TConclusion<NArrow::TColumnFilter> DoCheckHeader(
-        const NArrow::NSSA::TProcessorContext& /*context*/, const TFetchHeaderContext& /*fetchContext*/) override {
+        const NArrow::NSSA::TProcessorContext& /*context*/, const TCheckHeaderContext& /*fetchContext*/) override {
         AFL_VERIFY(false);
         return NArrow::TColumnFilter::BuildAllowFilter();
     }

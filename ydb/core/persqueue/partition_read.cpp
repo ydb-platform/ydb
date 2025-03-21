@@ -51,6 +51,10 @@ void TPartition::SendReadingFinished(const TString& consumer) {
 }
 
 void TPartition::FillReadFromTimestamps(const TActorContext& ctx) {
+    if (IsSupportive()) {
+        return;
+    }
+
     TSet<TString> hasReadRule;
 
     for (auto& [consumer, userInfo] : UsersInfoStorage->GetAll()) {

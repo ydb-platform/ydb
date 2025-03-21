@@ -12,6 +12,8 @@
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/minikql/mkql_utils.h>
+#include <yql/essentials/public/udf/udf_log.h>
+#include <yql/essentials/utils/time_provider.h>
 
 #include <library/cpp/getopt/last_getopt.h>
 
@@ -147,9 +149,17 @@ void ResolveUDFs() {
         }
     }
 
+    NYql::TFunctionResult* udfRes = nullptr;
+
+    auto logProvider = NUdf::MakeLogProvider(
+        [&](const NUdf::TStringRef& component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
+            udfRes->AddMessages(TStringBuilder() << NYql::GetTimeProvider()->Now() << " " << component << " [" << level << "] " << message);
+        },
+        static_cast<NUdf::ELogLevel>(inMsg.GetRuntimeLogLevel()));
+
     for (size_t i = 0; i < inMsg.UdfsSize(); ++i) {
         auto& udf = inMsg.GetUdfs(i);
-        auto udfRes = outMsg.AddUdfs();
+        udfRes = outMsg.AddUdfs();
         try {
             TProgramBuilder pgmBuilder(env, *newRegistry);
             TType* mkqlUserType = nullptr;
@@ -165,7 +175,7 @@ void ResolveUDFs() {
 
             TFunctionTypeInfo funcInfo;
             auto status = newRegistry->FindFunctionTypeInfo(env, typeInfoHelper, nullptr,
-                udf.GetName(), mkqlUserType, udf.GetTypeConfig(), NUdf::IUdfModule::TFlags::TypesOnly, {}, nullptr, nullptr, &funcInfo);
+                udf.GetName(), mkqlUserType, udf.GetTypeConfig(), NUdf::IUdfModule::TFlags::TypesOnly, {}, nullptr, logProvider.Get(), &funcInfo);
             if (!status.IsOk()) {
                 udfRes->SetError(TStringBuilder() << "Failed to find UDF function: " << udf.GetName()
                     << ", reason: " << status.GetError());
@@ -265,6 +275,7 @@ int main(int argc, char **argv) {
         TString user;
         TString group;
         bool printAsProto = true;
+        NUdf::ELogLevel logLevel = NUdf::ELogLevel::Info;
 
         NLastGetopt::TOpts opts = NLastGetopt::TOpts::Default();
         opts.AddLongOption('L', "list", "List UDF modules in specified directory")
@@ -297,6 +308,16 @@ int main(int argc, char **argv) {
         opts.AddLongOption('F', "filter-syscalls", "Filter syscalls")
             .Optional()
             .NoArgument();
+
+        opts.AddLongOption("log-level", "Runtime log level, available values: " + NUdf::LogLevelAvailables())
+            .Handler1T<TString>([&](const TString& level) {
+                auto res = NUdf::TryLevelFromString(level);
+                if (!res) {
+                    throw yexception() << "Invalid log level: " << level;
+                }
+
+                logLevel = *res;
+            });
 
         opts.SetFreeArgsNum(0);
 
@@ -492,9 +513,9 @@ int main(int argc, char **argv) {
             NFs::EnsureExists(path);
             TFileStat fstat(path);
             if (fstat.IsDir()) {
-                NUdfResolver::DiscoverInDir(path, Cout, printAsProto);
+                NUdfResolver::DiscoverInDir(path, Cout, printAsProto, logLevel);
             } else {
-                NUdfResolver::DiscoverInFile(path, Cout, printAsProto);
+                NUdfResolver::DiscoverInFile(path, Cout, printAsProto, logLevel);
             }
             return 0;
         }

@@ -102,23 +102,48 @@ public:
 
 private:
     TStatus HandleKiRead(TKiReadBase node, TExprContext& ctx) override {
+        bool sysViewRewritten = false;
+        TExprBase currentNode(node);
+        if (auto maybeReadTable = currentNode.Maybe<TKiReadTable>()) {
+            auto readTable = maybeReadTable.Cast();
+            for (auto setting : readTable.Settings()) {
+                auto name = setting.Name().Value();
+                if (name == "sysViewRewritten") {
+                    sysViewRewritten = true;
+                }
+            }
+        }
+
         auto cluster = node.DataSource().Cluster();
         TKikimrKey key(ctx);
         if (!key.Extract(node.TableKey().Ref())) {
             return TStatus::Error;
         }
 
-        return HandleKey(cluster, key);
+        return HandleKey(cluster, key, sysViewRewritten);
     }
 
     TStatus HandleRead(TExprBase node, TExprContext& ctx) override {
+        bool sysViewRewritten = false;
+        if (auto maybeRead = node.Maybe<TCoRead>()) {
+            auto read = maybeRead.Cast();
+            for (auto arg : read.FreeArgs()) {
+                if (auto maybeTuple = arg.Maybe<TCoNameValueTuple>()) {
+                    auto tuple = maybeTuple.Cast();
+                    if (tuple.Ref().Child(0)->Content() == "sysViewRewritten") {
+                        sysViewRewritten = true;
+                    }
+                }
+            }
+        }
+
         auto cluster = node.Ref().Child(1)->Child(1)->Content();
         TKikimrKey key(ctx);
         if (!key.Extract(*node.Ref().Child(2))) {
             return TStatus::Error;
         }
 
-        return HandleKey(cluster, key);
+        return HandleKey(cluster, key, sysViewRewritten);
     }
 
     TStatus HandleLength(TExprBase node, TExprContext& ctx) override {
@@ -134,12 +159,12 @@ private:
     }
 
 private:
-    TStatus HandleKey(const TStringBuf& cluster, const TKikimrKey& key) {
+    TStatus HandleKey(const TStringBuf& cluster, const TKikimrKey& key, bool sysViewRewritten = false) {
         switch (key.GetKeyType()) {
             case TKikimrKey::Type::Table:
             case TKikimrKey::Type::TableScheme: {
                 auto& table = SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(),
-                    key.GetTablePath());
+                    key.GetTablePath(), ETableType::Table, sysViewRewritten);
 
                 if (key.GetKeyType() == TKikimrKey::Type::TableScheme) {
                     table.RequireStats();
@@ -238,6 +263,7 @@ public:
                             .WithAuthInfo(table.GetNeedAuthInfo())
                             .WithExternalSourceFactory(ExternalSourceFactory)
                             .WithReadAttributes(readAttrs ? std::move(*readAttrs) : THashMap<TString, TString>{})
+                            .WithSysViewRewritten(table.GetSysViewRewritten())
             );
 
             futures.push_back(future.Apply([result, queryType]

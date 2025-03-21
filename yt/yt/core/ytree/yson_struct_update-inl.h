@@ -48,6 +48,22 @@ struct TUnwrapYsonStructIntrusivePtr<TIntrusivePtr<T>>
 
 ////////////////////////////////////////////////////////////////////////////////
 
+template <class TValue, class... Args>
+TCallback<void(const TValue&, const TValue&)> WrapUserCallback(TCallback<void(Args...)> callback)
+{
+    return BIND_NO_PROPAGATE([callback = std::move(callback)] (const TValue& oldValue, const TValue& newValue) {
+        if constexpr (sizeof...(Args) == 2) {
+            callback(oldValue, newValue);
+        } else if constexpr (sizeof...(Args) == 1) {
+            callback(newValue);
+        } else {
+            static_assert(TDependentFalse<Args...>, "Wrong number of arguments");
+        }
+    });
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <class TValue>
 TFieldConfigurator<TValue>& TFieldConfigurator<TValue>::Validator(TCallback<void(const TValue&, const TValue&)> validator)
 {
@@ -57,12 +73,26 @@ TFieldConfigurator<TValue>& TFieldConfigurator<TValue>::Validator(TCallback<void
 }
 
 template <class TValue>
+TFieldConfigurator<TValue>& TFieldConfigurator<TValue>::Validator(TCallback<void(TValue, TValue)> validator)
+{
+    VerifyEmptyValidator();
+    Validator_ = WrapUserCallback<TValue>(std::move(validator));
+    return *this;
+}
+
+template <class TValue>
 TFieldConfigurator<TValue>& TFieldConfigurator<TValue>::Validator(TCallback<void(const TValue&)> validator)
 {
     VerifyEmptyValidator();
-    Validator_ = BIND_NO_PROPAGATE([validator = std::move(validator)] (const TValue& /*oldValue*/, const TValue& newValue) {
-        validator(std::move(newValue));
-    });
+    Validator_ = WrapUserCallback<TValue>(std::move(validator));
+    return *this;
+}
+
+template <class TValue>
+TFieldConfigurator<TValue>& TFieldConfigurator<TValue>::Validator(TCallback<void(TValue)> validator)
+{
+    VerifyEmptyValidator();
+    Validator_ = WrapUserCallback<TValue>(std::move(validator));
     return *this;
 }
 
@@ -75,12 +105,26 @@ TFieldConfigurator<TValue>& TFieldConfigurator<TValue>::Updater(TCallback<void(c
 }
 
 template <class TValue>
+TFieldConfigurator<TValue>& TFieldConfigurator<TValue>::Updater(TCallback<void(TValue, TValue)> updater)
+{
+    VerifyEmptyUpdater();
+    Updater_ = WrapUserCallback<TValue>(std::move(updater));
+    return *this;
+}
+
+template <class TValue>
 TFieldConfigurator<TValue>& TFieldConfigurator<TValue>::Updater(TCallback<void(const TValue&)> updater)
 {
     VerifyEmptyUpdater();
-    Updater_ = BIND_NO_PROPAGATE([updater = std::move(updater)] (const TValue& /*oldValue*/, const TValue& newValue) {
-        updater(std::move(newValue));
-    });
+    Updater_ = WrapUserCallback<TValue>(std::move(updater));
+    return *this;
+}
+
+template <class TValue>
+TFieldConfigurator<TValue>& TFieldConfigurator<TValue>::Updater(TCallback<void(TValue)> updater)
+{
+    VerifyEmptyUpdater();
+    Updater_ = WrapUserCallback<TValue>(std::move(updater));
     return *this;
 }
 

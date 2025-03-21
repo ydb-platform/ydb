@@ -152,7 +152,6 @@ class KikimrConfigGenerator(object):
             extra_grpc_services=None,  # list[str]
             hive_config=None,
             datashard_config=None,
-            columnshard_config=None,
             enforce_user_token_requirement=False,
             default_user_sid=None,
             pg_compatible_expirement=False,
@@ -285,8 +284,6 @@ class KikimrConfigGenerator(object):
             self.yaml_config['pqconfig']['client_service_type'] = []
             for service_type in pq_client_service_types:
                 self.yaml_config['pqconfig']['client_service_type'].append({'name': service_type})
-        if column_shard_config:
-            self.yaml_config["column_shard_config"] = column_shard_config
 
         self.yaml_config['grpc_config']['services'].extend(extra_grpc_services)
 
@@ -353,8 +350,6 @@ class KikimrConfigGenerator(object):
 
         if datashard_config:
             self.yaml_config["data_shard_config"] = datashard_config
-        if columnshard_config:
-            self.yaml_config["column_shard_config"] = columnshard_config
 
         if column_shard_config:
             self.yaml_config["column_shard_config"] = column_shard_config

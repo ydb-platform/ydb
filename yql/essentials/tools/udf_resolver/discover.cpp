@@ -5,6 +5,7 @@
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
 #include <yql/essentials/minikql/mkql_utils.h>
+#include <yql/essentials/utils/time_provider.h>
 
 #include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
 #include <yql/essentials/providers/common/proto/udf_resolver.pb.h>
@@ -47,18 +48,26 @@ NYql::TResolveResult DoDiscover(const NYql::TResolve& inMsg, IMutableFunctionReg
         }
     }
 
+    NYql::TFunctionResult* udfRes = nullptr;
+
+    auto logProvider = NUdf::MakeLogProvider(
+        [&](const NUdf::TStringRef& component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
+            udfRes->AddMessages(TStringBuilder() << NYql::GetTimeProvider()->Now() << " " << component << " [" << level << "] " << message);
+        },
+        static_cast<NUdf::ELogLevel>(inMsg.GetRuntimeLogLevel()));
+
     for (const auto& module : functionRegistry.GetAllModuleNames()) {
         const auto& functions = functionRegistry.GetModuleFunctions(module);
         for (auto& f : functions) {
             const TString funcName = NKikimr::NMiniKQL::FullName(module, f.first);
-            auto udfRes = outMsg.AddUdfs();
+            udfRes = outMsg.AddUdfs();
             udfRes->SetName(funcName);
             udfRes->SetIsTypeAwareness(f.second.IsTypeAwareness);
 
             TFunctionTypeInfo funcInfo;
             if (!f.second.IsTypeAwareness) {
                 auto status = functionRegistry.FindFunctionTypeInfo(env, typeInfoHelper,
-                    nullptr, funcName, nullptr, nullptr, NUdf::IUdfModule::TFlags::TypesOnly, {}, nullptr, nullptr, &funcInfo);
+                    nullptr, funcName, nullptr, nullptr, NUdf::IUdfModule::TFlags::TypesOnly, {}, nullptr, logProvider.Get(), &funcInfo);
 
                 if (!status.IsOk()) {
                     udfRes->SetError("Failed to resolve signature, error: " + status.GetError());
@@ -94,8 +103,9 @@ void Print(const NYql::TResolveResult& result, IOutputStream& out, bool printAsP
     out << "UDF count: " << result.UdfsSize() << Endl;
 }
 
-void DiscoverInFiles(const TVector<TString>& udfPaths, IOutputStream& out, bool printAsProto) {
+void DiscoverInFiles(const TVector<TString>& udfPaths, IOutputStream& out, bool printAsProto, NYql::NUdf::ELogLevel logLevel) {
     NYql::TResolve inMsg;
+    inMsg.SetRuntimeLogLevel(static_cast<ui32>(logLevel));
     for (auto& path : udfPaths) {
         auto import = inMsg.AddImports();
         import->SetPath(path);
@@ -112,14 +122,14 @@ void DiscoverInFiles(const TVector<TString>& udfPaths, IOutputStream& out, bool 
 
 }
 
-void DiscoverInDir(const TString& dir, IOutputStream& out, bool printAsProto) {
+void DiscoverInDir(const TString& dir, IOutputStream& out, bool printAsProto, NYql::NUdf::ELogLevel logLevel) {
     TVector<TString> udfPaths;
     NMiniKQL::FindUdfsInDir(dir, &udfPaths);
-    DiscoverInFiles(udfPaths, out, printAsProto);
+    DiscoverInFiles(udfPaths, out, printAsProto, logLevel);
 }
 
-void DiscoverInFile(const TString& filePath, IOutputStream& out, bool printAsProto) {
-    DiscoverInFiles({ filePath }, out, printAsProto);
+void DiscoverInFile(const TString& filePath, IOutputStream& out, bool printAsProto, NYql::NUdf::ELogLevel logLevel) {
+    DiscoverInFiles({ filePath }, out, printAsProto, logLevel);
 }
 
 void Discover(IInputStream& in, IOutputStream& out, bool printAsProto) {

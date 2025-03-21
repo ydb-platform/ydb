@@ -3,11 +3,12 @@
 #include <util/stream/file.h>
 
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_job_impl.h>
-#include <yt/yql/providers/yt/fmr/job/impl/yql_yt_output_stream.h>
-#include <yt/yql/providers/yt/fmr/job/impl/yql_yt_raw_table_reader.h>
+#include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_reader.h>
+#include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_writer.h>
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
 #include <yt/yql/providers/yt/fmr/table_data_service/interface/table_data_service.h>
-#include <yt/yql/providers/yt/fmr/yt_service/interface/yql_yt_yt_service.h>
+#include <yt/yql/providers/yt/fmr/utils/parse_records.h>
+#include <yt/yql/providers/yt/fmr/yt_service/impl/yql_yt_yt_service_impl.h>
 
 #include <yql/essentials/utils/log/log.h>
 
@@ -35,21 +36,13 @@ public:
 
             YQL_CLOG(DEBUG, FastMapReduce) << "Downloading " << cluster << '.' << path;
 
-            ui64 rowsCount;
-            auto get_yt_table_res = GetYtTableStream(ytTable, rowsCount, clusterConnection);
-            auto err = std::get_if<TError>(&get_yt_table_res);
-            if (err) {
-                return *err;
-            }
-            auto inputStream = std::get_if<THolder<IInputStream>>(&get_yt_table_res);
-            TFmrOutputStream outputStream = TFmrOutputStream(tableId, partId, TableDataService_);
+            auto ytTableReader = YtService_->MakeReader(ytTable, clusterConnection); // TODO - pass YtReader settings from Gateway
+            auto tableDataServiceWriter = TFmrTableDataServiceWriter(tableId, partId, TableDataService_, Settings_.FmrTableDataServiceWriterSettings);
 
-            TransferData(inputStream->get(), &outputStream);
-            outputStream.Flush();
+            ParseRecords(*ytTableReader, tableDataServiceWriter, Settings_.ParseRecordSettings.BlockCount, Settings_.ParseRecordSettings.BlockSize);
+            tableDataServiceWriter.Flush();
 
-            TTableStats stats = outputStream.GetStats();
-            stats.Rows = rowsCount;
-
+            TTableStats stats = tableDataServiceWriter.GetStats();
             auto statistics = TStatistics({{output, stats}});
             return statistics;
         } catch (...) {
@@ -67,16 +60,10 @@ public:
 
             YQL_CLOG(DEBUG, FastMapReduce) << "Uploading " << cluster << '.' << path;
 
-            auto res = GetFmrTableStream(params.Input);
-            auto err = std::get_if<TError>(&res);
-            if (err) {
-                return *err;
-            }
-            auto inputStream = std::get_if<THolder<IInputStream>>(&res);
-
-            // How to raise if not found
-
-            YtService_->Upload(ytTable, *inputStream->get(), clusterConnection);
+            auto tableDataServiceReader = TFmrTableDataServiceReader(tableId, tableRanges, TableDataService_, Settings_.FmrTableDataServiceReaderSettings);
+            auto ytTableWriter = YtService_->MakeWriter(ytTable, clusterConnection); // TODO - pass YtReader settings from Gateway
+            ParseRecords(tableDataServiceReader, *ytTableWriter, Settings_.ParseRecordSettings.BlockCount, Settings_.ParseRecordSettings.BlockSize);
+            ytTableWriter->Flush();
 
             return TStatistics();
         } catch (...) {
@@ -92,72 +79,33 @@ public:
 
             YQL_CLOG(DEBUG, FastMapReduce) << "Merging " << inputs.size() << " inputs";
 
-            TFmrOutputStream outputStream(output.TableId, output.PartId, TableDataService_);
-
-            ui32 totalRowsCount = 0;
-
+            auto tableDataServiceWriter = TFmrTableDataServiceWriter(output.TableId, output.PartId, TableDataService_, Settings_.FmrTableDataServiceWriterSettings);
             for (const auto& inputTableRef : inputs) {
                 if (CancelFlag_->load()) {
                     return TError("Canceled");
                 }
-                ui64 rowsCount = 0; // TMP Todo get rows count from input stats
-                auto res = GetTableInputStream(inputTableRef, rowsCount, clusterConnection);
-                totalRowsCount += rowsCount;
-
-                auto err = std::get_if<TError>(&res);
-                if (err) {
-                    return *err;
-                }
-                auto inputStream = std::get_if<THolder<IInputStream>>(&res);
-                TransferData(inputStream->get(), &outputStream);
+                auto inputTableReader = GetTableInputStream(inputTableRef, clusterConnection);
+                ParseRecords(*inputTableReader, tableDataServiceWriter, Settings_.ParseRecordSettings.BlockCount, Settings_.ParseRecordSettings.BlockSize);
             }
-            outputStream.Flush();
-
-            TTableStats stats = outputStream.GetStats();
-            stats.Rows = totalRowsCount;
-
-            return TStatistics({{output, stats}});
+            tableDataServiceWriter.Flush();
+            return TStatistics({{output, tableDataServiceWriter.GetStats()}});
         } catch (...) {
             return TError(CurrentExceptionMessage());
         }
+        return TError{"not implemented yet"};
     }
 
 private:
-    std::variant<THolder<IInputStream>, TError> GetTableInputStream(const TTaskTableRef& tableRef, ui64& rowsCount, const TClusterConnection& clusterConnection) {
+    NYT::TRawTableReaderPtr GetTableInputStream(const TTaskTableRef& tableRef, const TClusterConnection& clusterConnection) {
         auto ytTable = std::get_if<TYtTableRef>(&tableRef);
         auto fmrTable = std::get_if<TFmrTableInputRef>(&tableRef);
         if (ytTable) {
-            return GetYtTableStream(*ytTable, rowsCount, clusterConnection);
+            return YtService_->MakeReader(*ytTable, clusterConnection); // TODO - pass YtReader settings from Gateway
         } else if (fmrTable) {
-            return GetFmrTableStream(*fmrTable);
+            return MakeIntrusive<TFmrTableDataServiceReader>(fmrTable->TableId, fmrTable->TableRanges, TableDataService_, Settings_.FmrTableDataServiceReaderSettings);
         } else {
             ythrow yexception() << "Unsupported table type";
         }
-    }
-
-    std::variant<THolder<IInputStream>, TError> GetYtTableStream(const TYtTableRef& ytTable, ui64& rowsCount, const TClusterConnection& clusterConnection) {
-        auto res = YtService_->Download(ytTable, rowsCount, clusterConnection);
-        auto* err = std::get_if<TError>(&res);
-        if (err) {
-            return *err;
-        }
-        auto tableFile = std::get_if<THolder<TTempFileHandle>>(&res);
-        // Временно. Тут надо будет менять на стрим, когда переделаем возвращаемое значение в YtService
-        auto tableContent = TString(TFileInput(tableFile->Get()->Name()).ReadAll());
-        TStringStream stream;
-        stream << tableContent;
-        return MakeHolder<TStringStream>(stream);;
-    }
-
-    std::variant<THolder<IInputStream>, TError> GetFmrTableStream(const TFmrTableInputRef& fmrTable) {
-
-        auto settings = TFmrRawTableReaderSettings(Settings_.ReadAheadChunks);
-        return MakeHolder<TFmrRawTableReader>(TFmrRawTableReader(
-            fmrTable.TableId,
-            fmrTable.TableRanges,
-            TableDataService_,
-            settings
-        ));
     }
 
 private:

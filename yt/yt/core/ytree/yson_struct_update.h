@@ -49,15 +49,19 @@ class TFieldConfigurator
 public:
     // Registers validator that accepts old and new values as arguments.
     TFieldConfigurator& Validator(TCallback<void(const TValue&, const TValue&)> validator);
+    TFieldConfigurator& Validator(TCallback<void(TValue, TValue)> validator);
 
     // Registers validator that accepts only new value as an argument.
     TFieldConfigurator& Validator(TCallback<void(const TValue&)> validator);
+    TFieldConfigurator& Validator(TCallback<void(TValue)> validator);
 
     // Registers updater that accepts old and new values as arguments.
     TFieldConfigurator& Updater(TCallback<void(const TValue&, const TValue&)> updater);
+    TFieldConfigurator& Updater(TCallback<void(TValue, TValue)> updater);
 
     // Registers updater that accepts only new value as an argument.
     TFieldConfigurator& Updater(TCallback<void(const TValue&)> updater);
+    TFieldConfigurator& Updater(TCallback<void(TValue)> updater);
 
     // Registers nested YsonStruct to be updated recursively.
     template <CYsonStructDerived TUnwrappedValue>

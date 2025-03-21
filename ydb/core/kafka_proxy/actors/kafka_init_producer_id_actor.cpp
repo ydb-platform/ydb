@@ -152,7 +152,11 @@ namespace NKafka {
                 case UPDATE:
                     OnSuccessfullProducerStateUpdate(ev, ctx);
                     break;
+<<<<<<< HEAD
                 case DELETE_REQ:
+=======
+                case DELETE:
+>>>>>>> upstream/main
                     SendInsertRequest(ctx);
                     break;
                 default:
@@ -211,7 +215,11 @@ namespace NKafka {
     void TKafkaInitProducerIdActor::SendDeleteByTransactionalIdRequest(const TActorContext& ctx) {
         Kqp->SendYqlRequest(GetYqlWithTableName(NInitProducerIdSql::DELETE_BY_TRANSACTIONAL_ID), BuildSelectOrDeleteByTransactionalIdParams(), ++KqpReqCookie, ctx, false);
         
+<<<<<<< HEAD
         LastSentToKqpRequest = EInitProducerIdKqpRequests::DELETE_REQ;
+=======
+        LastSentToKqpRequest = EInitProducerIdKqpRequests::DELETE;
+>>>>>>> upstream/main
     }
 
     // params builders
@@ -329,7 +337,11 @@ namespace NKafka {
                 return "INSERT";
             case UPDATE:
                 return "UPDATE";
+<<<<<<< HEAD
             case DELETE_REQ:
+=======
+            case DELETE:
+>>>>>>> upstream/main
                 return "DELETE";
             case NO_REQUEST:
                 return "NO_REQUEST";

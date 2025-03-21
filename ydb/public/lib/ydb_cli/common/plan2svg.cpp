@@ -540,6 +540,15 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                         MemberRefs.emplace_back(cteRef, std::make_pair<std::shared_ptr<TStage>, ui32>(std::move(stageCopy), stage->Operators.size()));
                     }
                     name = "Reference";
+                } else if (name == "PartitionByKey") {
+                    if (auto* inputNode = subNode.GetValueByPath("Input")) {
+                        auto referenceName = inputNode->GetStringSafe();
+                        references.insert(referenceName);
+                        info = referenceName;
+                        auto cteRef = "CTE " + referenceName;
+                        auto stageCopy = stage;
+                        MemberRefs.emplace_back(cteRef, std::make_pair<std::shared_ptr<TStage>, ui32>(std::move(stageCopy), stage->Operators.size()));
+                    }
                 } else if (name == "Limit") {
                     if (auto* limitNode = subNode.GetValueByPath("Limit")) {
                         info = limitNode->GetStringSafe();
@@ -670,6 +679,24 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     builder << ParseColumns(subNode.GetValueByPath("ReadColumns"));
                     info = builder;
                     externalOperator = true;
+                } else if (name == "TablePointLookup" || name == "TableRangeScan") {
+                    auto connection = std::make_shared<TConnection>(*stage, "Table", stage->PlanNodeId);
+                    stage->Connections.push_back(connection);
+                    Stages.push_back(std::make_shared<TStage>("External"));
+                    connection->FromStage = Stages.back();
+                    Stages.back()->External = true;
+                    TStringBuilder builder;
+                    if (auto* tableNode = subNode.GetValueByPath("Table")) {
+                        auto table = tableNode->GetStringSafe();
+                        auto n = table.find_last_of('/');
+                        if (n != table.npos) {
+                            table = table.substr(n + 1);
+                        }
+                        builder << table;
+                        info = table;
+                    }
+                    builder << ParseColumns(subNode.GetValueByPath("ReadColumns"));
+                    Stages.back()->Operators.emplace_back(name, builder);
                 } else if (name == "TopSort" || name == "Top") {
                     TStringBuilder builder;
                     if (auto* limitNode = subNode.GetValueByPath("Limit")) {
@@ -920,9 +947,10 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
             }
 
             if (planNodeType == "Connection") {
+
                 if (subNodeType == "TableLookup") {
                     // "TableLookup" => "Table" + "Lookup"
-                    auto connection = std::make_shared<TConnection>(*stage, "Lookup", stage->PlanNodeId);
+                    auto connection = std::make_shared<TConnection>(*stage, "Table", stage->PlanNodeId);
                     stage->Connections.push_back(connection);
                     Stages.push_back(std::make_shared<TStage>("External"));
                     connection->FromStage = Stages.back();
@@ -938,8 +966,27 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     }
                     builder << ParseColumns(plan.GetValueByPath("Columns")) << " by " << ParseColumns(plan.GetValueByPath("LookupKeyColumns"));
                     Stages.back()->Operators.emplace_back("TableLookup", builder);
-                    subNodeType = "Table";
+                    subNodeType = "Lookup";
+                } else if (subNodeType == "TableLookupJoin") {
+                    auto connection = std::make_shared<TConnection>(*stage, "Table", stage->PlanNodeId);
+                    stage->Connections.push_back(connection);
+                    Stages.push_back(std::make_shared<TStage>("External"));
+                    connection->FromStage = Stages.back();
+                    Stages.back()->External = true;
+                    TStringBuilder builder;
+                    if (auto* tableNode = plan.GetValueByPath("Table")) {
+                        auto table = tableNode->GetStringSafe();
+                        auto n = table.find_last_of('/');
+                        if (n != table.npos) {
+                            table = table.substr(n + 1);
+                        }
+                        builder << table;
+                    }
+                    builder << ParseColumns(plan.GetValueByPath("Columns")) << " by " << ParseColumns(plan.GetValueByPath("LookupKeyColumns"));
+                    Stages.back()->Operators.emplace_back("TableLookupJoin", builder);
+                    subNodeType = "LookupJoin";
                 }
+
                 auto* keyColumnsNode = plan.GetValueByPath("KeyColumns");
                 auto* sortColumnsNode = plan.GetValueByPath("SortColumns");
                 if (auto* subNode = plan.GetValueByPath("Plans")) {
@@ -1850,15 +1897,16 @@ void TPlan::PrintSvg(ui64 maxTime, ui32& offsetY, TStringBuilder& background, TS
             }
 
             TString mark;
-            if (c->NodeType == "HashShuffle")    mark = "H";
-            else if (c->NodeType == "Merge")     mark = "Me";
-            else if (c->NodeType == "Map")       mark = "Ma";
-            else if (c->NodeType == "UnionAll")  mark = "U";
-            else if (c->NodeType == "Broadcast") mark = "B";
-            else if (c->NodeType == "External")  mark = "E";
-            else if (c->NodeType == "Table")     mark = "T";
-            else if (c->NodeType == "Lookup")    mark = "L";
-            else                                 mark = "?";
+            if (c->NodeType == "HashShuffle")     mark = "H";
+            else if (c->NodeType == "Merge")      mark = "Me";
+            else if (c->NodeType == "Map")        mark = "Ma";
+            else if (c->NodeType == "UnionAll")   mark = "U";
+            else if (c->NodeType == "Broadcast")  mark = "B";
+            else if (c->NodeType == "External")   mark = "E";
+            else if (c->NodeType == "Table")      mark = "T";
+            else if (c->NodeType == "Lookup")     mark = "L";
+            else if (c->NodeType == "LookupJoin") mark = "LJ";
+            else                                  mark = "?";
 
             canvas
                 << "<g><title>Connection: " << c->NodeType;

@@ -19,8 +19,7 @@ static constexpr auto& Logger = ApiLogger;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-// NB: After the cluster name is actually set, the value never changes. Thus, it is safe to return TStringBuf.
-std::optional<TStringBuf> TClusterAwareClientBase::GetClusterName(bool fetchIfNull)
+std::optional<std::string> TClusterAwareClientBase::GetClusterName(bool fetchIfNull)
 {
     {
         auto guard = ReaderGuard(SpinLock_);
@@ -46,7 +45,7 @@ std::optional<TStringBuf> TClusterAwareClientBase::GetClusterName(bool fetchIfNu
     return ClusterName_;
 }
 
-std::optional<TString> TClusterAwareClientBase::FetchClusterNameFromMasterCache()
+std::optional<std::string> TClusterAwareClientBase::FetchClusterNameFromMasterCache()
 {
     TGetNodeOptions options;
     options.ReadFrom = EMasterChannelKind::MasterCache;
@@ -56,7 +55,7 @@ std::optional<TString> TClusterAwareClientBase::FetchClusterNameFromMasterCache(
             ClusterNamePath);
         return {};
     }
-    return ConvertTo<TString>(clusterNameYsonOrError.Value());
+    return ConvertTo<std::string>(clusterNameYsonOrError.Value());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

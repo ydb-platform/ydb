@@ -4,9 +4,13 @@
 
 #include "protobuf_interop_options.h"
 
+#include <yt/yt/core/misc/mpl.h>
+
 #include <yt/yt/core/ypath/public.h>
 
 #include <yt/yt/core/ytree/public.h>
+
+#include <library/cpp/yt/misc/variant.h>
 
 #include <variant>
 
@@ -59,6 +63,15 @@ using TProtobufElement = std::variant<
     std::unique_ptr<TProtobufAnyElement>
 >;
 
+template <class T>
+concept CProtobufElement = NMpl::COneOf<T,
+    TProtobufMessageElement,
+    TProtobufScalarElement,
+    TProtobufAttributeDictionaryElement,
+    TProtobufRepeatedElement,
+    TProtobufMapElement,
+    TProtobufAnyElement>;
+
 struct TProtobufMessageElement
 {
     const TProtobufMessageType* Type;
@@ -109,6 +122,11 @@ TProtobufElementResolveResult ResolveProtobufElementByYPath(
     const TProtobufMessageType* rootType,
     const NYPath::TYPathBuf path,
     const TResolveProtobufElementByYPathOptions& options = {});
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <CProtobufElement TElementType>
+const TElementType& GetProtobufElementOrThrow(const NYson::TProtobufElement& element);
 
 ////////////////////////////////////////////////////////////////////////////////
 

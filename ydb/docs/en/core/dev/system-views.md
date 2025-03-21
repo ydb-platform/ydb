@@ -10,6 +10,7 @@ DB system views contain:
 * [Top queries by certain characteristics](#top-queries).
 * [Query details](#query-metrics).
 * [History of overloaded partitions](#top-overload-partitions).
+* [Access control entities](#auth).
 
 {% note info %}
 
@@ -29,8 +30,8 @@ Cumulative fields (`RowReads`, `RowUpdates`, and so on) store the accumulated va
 
 Table structure:
 
-| Field | Description |
---- | ---
+| Column | Description |
+|--------|-------------|
 | `OwnerId` | ID of the SchemeShard serving the table.<br/>Type: `Uint64`.<br/>Key: `0`. |
 | `PathId` | ID of the SchemeShard path.<br/>Type: `Uint64`.<br/>Key: `1`. |
 | `PartIdx` | Partition sequence number.<br/>Type: `Uint64`.<br/>Key: `2`. |
@@ -99,10 +100,10 @@ Fields that provide information about the used CPU time (...`CPUTime`) are expre
 
 Query text limit is 10 KB.
 
-All tables have the same set of fields:
+All tables have the same structure:
 
-| Field | Description |
---- | ---
+| Column | Description |
+|--------|-------------|
 | `IntervalEnd` | The end of a one-minute or one-hour interval.<br/>Type: `Timestamp`.<br/>Key: `0`. |
 | `Rank` | Rank of a top query.<br/>Type: `Uint32`.<br/>Key: `1`. |
 | `QueryText` | Query text.<br/>Type: `Utf8`. |
@@ -180,8 +181,8 @@ Restrictions:
 
 Table structure:
 
-| Field | Description |
----|---
+| Column | Description |
+|--------|-------------|
 | `IntervalEnd` | The end of a one-minute interval.<br/>Type: `Timestamp`.<br/>Key: `0`. |
 | `Rank` | Query rank within an interval (by the SumCPUTime field).<br/>Type: `Uint32`.<br/>Key: `1`. |
 | `QueryText` | Query text.<br/>Type: `Utf8`. |
@@ -248,10 +249,10 @@ The following system views (tables) store the history of points in time when the
 
 These tables contain partitions with peak loads of more than 70% (`CPUCores` > 0.7). Partitions within a single interval are ranked by peak load value.
 
-Both tables have the same set of fields:
+All tables have the same structure:
 
-| Field | Description |
---- | ---
+| Column | Description |
+|--------|-------------|
 | `IntervalEnd` | The end of a one-minute or one-hour interval.<br/>Type: `Timestamp`.<br/>Key: `0`. |
 | `Rank` | Partition rank within an interval (by CPUCores).<br/>Type: `Uint32`.<br/>Key: `1`. |
 | `TabletId` | ID of the tablet serving the partition.<br/>Type: `Uint64`. |
@@ -299,3 +300,109 @@ ORDER BY IntervalEnd desc, CPUCores desc
 ```
 
 * `"YYYY-MM-DDTHH:MM:SS.UUUUUUZ"`: Time in the UTC 0 zone (`YYYY` stands for year, `MM`, for month, `DD`, for date, `hh`, for hours, `mm`, for minutes, `ss`, for seconds, and `uuuuuu`, for microseconds). For example, `"2023-01-26T13:00:00.000000Z"`.
+
+## Access control entities {#auth}
+
+The following system views store data for analyzing various [access control entities](../security/authorization.md).
+
+### Auth users
+
+The `auth_users` view lists internal {{ ydb-short-name }} [users](../concepts/glossary.md#access-user). It does not include users authenticated through external systems such as LDAP.
+
+This view can be fully accessed by administrators, while regular users can only view their own details.
+
+Table structure:
+
+| Column | Description |
+|--------|-------------|
+| `Sid` | [SID](../concepts/glossary.md#sid) of the user.<br />Type: `Utf8`.<br />Key: `0`. |
+| `IsEnabled` | Indicates if login is allowed; used for explicit administrator block. Independent of `IsLockedOut`.<br />Type: `Bool`. |
+| `IsLockedOut` | Automatically locked out due to exceeding failed login attempts. Independent of `IsEnabled`.<br />Type: `Bool`. |
+| `CreatedAt` | Timestamp of user creation.<br />Type: `Timestamp`. |
+| `LastSuccessfulAttemptAt` | Timestamp of the last successful login attempt.<br />Type: `Timestamp`. |
+| `LastFailedAttemptAt` | Timestamp of the last failed login attempt.<br />Type: `Timestamp`. |
+| `FailedAttemptCount` | Number of failed login attempts.<br />Type: `Uint32`. |
+| `PasswordHash` | JSON string containing password hash, salt, and hash algorithm.<br />Type: `Utf8`. |
+
+### Auth groups
+
+The `auth_groups` view lists [access groups](../concepts/glossary.md#access-group).
+
+This view can be accessed only by administrators.
+
+Table structure:
+
+| Column | Description |
+|--------|-------------|
+| `Sid` | [SID](../concepts/glossary.md#sid) of the group.<br />Type: `Utf8`.<br />Key: `0`. |
+
+### Auth group members
+
+The `auth_group_members` view lists membership details within [access groups](../concepts/glossary.md#access-group).
+
+This view can be accessed only by administrators.
+
+Table structure:
+
+| Column | Description |
+|--------|-------------|
+| `GroupSid` | SID of the group.<br />Type: `Utf8`.<br />Key: `0`. |
+| `MemberSid` | SID of the group member.<br />Type: `Utf8`.<br />Key: `1`. |
+
+### Auth permissions
+
+The auth permissions views list assigned [access rights](../concepts/glossary.md#access-right).
+
+Contains two views:
+
+* `auth_permissions`: Directly assigned access rights.
+* `auth_effective_permissions`: Effective access rights, accounting for [inheritance](../concepts/glossary.md#access-right-inheritance).
+
+A user can view an [access object](../concepts/glossary.md#access-object) in the results if they have the `ydb.granular.describe_schema` permission on it.
+
+Table structure:
+
+| Column | Description |
+|--------|-------------|
+| `Path` | Path to the access object.<br />Type: `Utf8`.<br />Key: `0`. |
+| `Sid` | SID of the [access subject](../concepts/glossary.md#access-subject).<br />Type: `Utf8`.<br />Key: `1`. |
+| `Permission` | Name of the {{ ydb-short-name }} [access right](../yql/reference/syntax/grant.md#permissions-list).<br />Type: `Utf8`.<br />Key: `2`. |
+
+#### Example queries
+
+All the directly assigned permissions for the table located at the path `my_table`:
+
+```yql
+SELECT *
+FROM `.sys/auth_permissions`
+WHERE Path = "my_table"
+```
+
+All the effective permissions for the table located at the path `my_table`, including inherited permissions:
+
+```yql
+SELECT *
+FROM `.sys/auth_effective_permissions`
+WHERE Path = "my_table"
+```
+
+All permissions directly assigned to the user identified as `user3`:
+
+```yql
+SELECT *
+FROM `.sys/auth_permissions`
+WHERE Sid = "user3"
+```
+
+### Auth owners
+
+The `auth_owners` view lists details of [access objects](../concepts/glossary.md#access-object) [ownership](../concepts/glossary.md#access-owner).
+
+A user can view an [access object](../concepts/glossary.md#access-object) in the results if they have the `ydb.granular.describe_schema` permission on it.
+
+Table structure:
+
+| Column | Description |
+|--------|-------------|
+| `Path` | Path to the access object.<br />Type: `Utf8`.<br />Key: `0`. |
+| `Sid` | SID of the access object owner.<br />Type: `Utf8`. |

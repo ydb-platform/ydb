@@ -1145,12 +1145,15 @@ class TestFiles:
         'grut/libs/bigrt/common',
         'grut/libs/bigrt/data',
         'grut/libs/bigrt/event_filter',
+        'grut/libs/bigrt/graph',
         'grut/libs/bigrt/info_keepers',
         'grut/libs/bigrt/processor',
         'grut/libs/bigrt/profile',
         'grut/libs/bigrt/profiles',
         'grut/libs/bigrt/queue_info_config',
+        'grut/libs/bigrt/resharder/compute_shard_number',
         'grut/libs/bigrt/server',
+        'grut/libs/bigrt/transaction',
         'grut/libs/shooter',
     )
 

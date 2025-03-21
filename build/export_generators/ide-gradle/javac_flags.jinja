@@ -1,12 +1,34 @@
+{%- set javac_flags = [] -%}
 {%- if target.javac.flags|length -%}
 {#-     skip errorprone options -#}
 {%-     set javac_flags = target.javac.flags|reject('startsWith', '-Xep:')|reject('startsWith', '-XepOpt:') -%}
-{%-     if javac_flags|length and javac_flags != ['-parameters'] %}
+{%-     if (javac_flags|length == 1) and (javac_flags|first == '-parameters') -%}
+{%-         set javac_flags = [] -%}
+{%-     endif -%}
+{%- endif -%}
+{%- if javac_flags|length or has_errorprone %}
 
 tasks.withType<JavaCompile> {
+{%-     if javac_flags|length -%}
 {%-         for javac_flag in javac_flags %}
     options.compilerArgs.add("{{ javac_flag }}")
-{%-         endfor %}
+{%-         endfor -%}
+{%-     endif -%}
+
+{%-     if has_errorprone -%}
+{%-         set ep_flags = target.javac.flags|select('startsWith', '-Xep:') -%}
+{%-         if ep_flags|length or ep_opts|length -%}
+{%-         if ep_flags|length %}
+    options.errorprone.checks.set(
+        mapOf(
+{%-             for ep_flag in ep_flags -%}
+{%-                 set key_and_value = split(ep_flag|replace('-Xep:', ''), ':', 2) %}
+            "{{ key_and_value[0] }}" to CheckSeverity.{{ key_and_value[1] }},
+{%-             endfor %}
+        )
+    )
+{%          endif -%}
+{%-     endif -%}
+{%- endif %}
 }
-{%      endif -%}
-{%- endif -%}
+{%  endif -%}

@@ -4297,6 +4297,13 @@
             "uri": "https://{canondata_backend}/1937367/e7b738910596b51d0b9e27369e0446763f8c5243/resource.tar.gz#test_sql2yql.test_match_recognize-all_rows_per_match_/sql.yql"
         }
     ],
+    "test_sql2yql.test[match_recognize-drop_out_of_order]": [
+        {
+            "checksum": "19427791c46fea905173e746b249327b",
+            "size": 3758,
+            "uri": "https://{canondata_backend}/1925821/2a3a2338e987941f2df67cb78565cfd9f0e92479/resource.tar.gz#test_sql2yql.test_match_recognize-drop_out_of_order_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[match_recognize-greedy_quantifiers]": [
         {
             "checksum": "71abe51c07a68e660a2a53cd2f973e2b",
@@ -4512,6 +4519,13 @@
             "checksum": "0aa6714197f0bcdec3b64fca1b8ce5d8",
             "size": 4706,
             "uri": "https://{canondata_backend}/1942173/99e88108149e222741552e7e6cddef041d6a2846/resource.tar.gz#test_sql2yql.test_order_by-tuple01_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[params-bad_dict]": [
+        {
+            "checksum": "de90a977f1e3e94ae2c6cb438cbf68cf",
+            "size": 1052,
+            "uri": "https://{canondata_backend}/1946324/70c05a25360e59ed701e167d489f84e1b53fece9/resource.tar.gz#test_sql2yql.test_params-bad_dict_/sql.yql"
         }
     ],
     "test_sql2yql.test[params-dict]": [
@@ -6971,6 +6985,13 @@
             "uri": "https://{canondata_backend}/1942173/99e88108149e222741552e7e6cddef041d6a2846/resource.tar.gz#test_sql2yql.test_select-null_check_/sql.yql"
         }
     ],
+    "test_sql2yql.test[select-prune_keys]": [
+        {
+            "checksum": "55346f77548ef19f9a09d2f1d3f6f466",
+            "size": 17765,
+            "uri": "https://{canondata_backend}/1871182/906a4c4e540bb8746f8d7595500d4d1c9f664846/resource.tar.gz#test_sql2yql.test_select-prune_keys_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[select-result_label]": [
         {
             "checksum": "77393e1875cdffd6504971730f13b85c",
@@ -7074,6 +7095,13 @@
             "checksum": "7b52e62f76aceb26c896d539c9d3ece6",
             "size": 1148,
             "uri": "https://{canondata_backend}/1942173/99e88108149e222741552e7e6cddef041d6a2846/resource.tar.gz#test_sql2yql.test_udf-generic_udf_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[udf-logger_resolve]": [
+        {
+            "checksum": "30cab5ebc3fbccd46acd58ad689db4d1",
+            "size": 1145,
+            "uri": "https://{canondata_backend}/1942278/9db37083b795a3b23a916345e41eb37f06a87a0a/resource.tar.gz#test_sql2yql.test_udf-logger_resolve_/sql.yql"
         }
     ],
     "test_sql2yql.test[udf-named_args]": [
@@ -10419,6 +10447,11 @@
             "uri": "file://test_sql_format.test_match_recognize-all_rows_per_match_/formatted.sql"
         }
     ],
+    "test_sql_format.test[match_recognize-drop_out_of_order]": [
+        {
+            "uri": "file://test_sql_format.test_match_recognize-drop_out_of_order_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[match_recognize-greedy_quantifiers]": [
         {
             "uri": "file://test_sql_format.test_match_recognize-greedy_quantifiers_/formatted.sql"
@@ -10572,6 +10605,11 @@
     "test_sql_format.test[order_by-tuple01]": [
         {
             "uri": "file://test_sql_format.test_order_by-tuple01_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[params-bad_dict]": [
+        {
+            "uri": "file://test_sql_format.test_params-bad_dict_/formatted.sql"
         }
     ],
     "test_sql_format.test[params-dict]": [
@@ -10874,6 +10912,11 @@
             "uri": "file://test_sql_format.test_select-null_check_/formatted.sql"
         }
     ],
+    "test_sql_format.test[select-prune_keys]": [
+        {
+            "uri": "file://test_sql_format.test_select-prune_keys_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[select-result_label]": [
         {
             "uri": "file://test_sql_format.test_select-result_label_/formatted.sql"
@@ -10947,6 +10990,11 @@
     "test_sql_format.test[udf-generic_udf]": [
         {
             "uri": "file://test_sql_format.test_udf-generic_udf_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[udf-logger_resolve]": [
+        {
+            "uri": "file://test_sql_format.test_udf-logger_resolve_/formatted.sql"
         }
     ],
     "test_sql_format.test[udf-named_args]": [

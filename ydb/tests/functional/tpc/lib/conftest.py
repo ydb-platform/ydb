@@ -21,6 +21,11 @@ class FunctionalTestBase:
         if memory_controller_config:
             config_generator.yaml_config["memory_controller_config"] = memory_controller_config
 
+        config_generator.yaml_config['actor_system_config'] = {
+            'use_auto_config': True,
+            'cpu_count': 16
+        }
+
         cls.cluster = KiKiMR(configurator=config_generator)
         cls.cluster.start()
         node = cls.cluster.nodes[1]

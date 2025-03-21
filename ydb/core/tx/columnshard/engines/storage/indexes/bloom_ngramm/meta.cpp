@@ -2,7 +2,6 @@
 #include "meta.h"
 
 #include <ydb/core/formats/arrow/hash/calcer.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom/bits_storage.h>
 #include <ydb/core/tx/program/program.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 
@@ -61,26 +60,27 @@ private:
         static void BuildHashesImpl(
             const ui8* data, const ui32 dataSize, const std::optional<NRequest::TLikePart::EOperation> op, TActor& actor) {
             TBuffer fakeString;
+            fakeString.Reserve(CharsCount * 2);
             if (!op || op == NRequest::TLikePart::EOperation::StartsWith || op == NRequest::TLikePart::EOperation::Equals) {
-                for (ui32 c = 1; c <= CharsCount; ++c) {
-                    fakeString.Clear();
-                    fakeString.Fill('\0', CharsCount - c);
-                    fakeString.Append((const char*)data, std::min((ui32)c, dataSize));
-                    if (fakeString.size() < CharsCount) {
-                        fakeString.Fill('\0', CharsCount - fakeString.size());
-                    }
+                fakeString.Clear();
+                fakeString.Fill('\0', CharsCount - 1);
+                fakeString.Append((const char*)data, std::min(CharsCount - 1, dataSize));
+                for (ui32 c = 0; c + CharsCount <= fakeString.Size(); ++c) {
                     THashesCountSelector<HashesCount, CharsCount>::BuildHashes((const ui8*)fakeString.data(), actor);
                 }
             }
-            ui32 c = 0;
-            for (; c + CharsCount <= dataSize; ++c) {
+            for (ui32 c = 0; c + CharsCount <= dataSize; ++c) {
                 THashesCountSelector<HashesCount, CharsCount>::BuildHashes(data + c, actor);
             }
             if (!op || op == NRequest::TLikePart::EOperation::EndsWith || op == NRequest::TLikePart::EOperation::Equals) {
-                for (; c < dataSize; ++c) {
-                    fakeString.Clear();
-                    fakeString.Append((const char*)data + c, dataSize - c);
-                    fakeString.Fill('\0', CharsCount - fakeString.size());
+                fakeString.Clear();
+                if (dataSize < CharsCount) {
+                    fakeString.Append((const char*)data, dataSize);
+                } else {
+                    fakeString.Append((const char*)data + dataSize - CharsCount + 1, CharsCount - 1);
+                }
+                fakeString.Fill('\0', CharsCount - 1);
+                for (ui32 c = 0; c + CharsCount <= fakeString.Size(); ++c) {
                     THashesCountSelector<HashesCount, CharsCount>::BuildHashes((const ui8*)fakeString.data(), actor);
                 }
             }
@@ -178,14 +178,18 @@ public:
 
 class TVectorInserter {
 private:
-    TDynBitMap& Values;
+    TDynBitMap Values;
     const ui32 Size;
 
 public:
-    TVectorInserter(TDynBitMap& values)
-        : Values(values)
-        , Size(values.Size()) {
-        AFL_VERIFY(values.Size());
+    TDynBitMap ExtractBits() {
+        return std::move(Values);
+    }
+
+    TVectorInserter(const ui32 bitsSize)
+        : Size(bitsSize) {
+        AFL_VERIFY(bitsSize);
+        Values.Reserve(bitsSize);
     }
 
     void operator()(const ui64 hash) {
@@ -193,16 +197,16 @@ public:
     }
 };
 
+template <ui64 BitsSize>
 class TVectorInserterPower2 {
 private:
-    TDynBitMap& Values;
-    const ui32 SizeMask;
+    TBitMapOps<TFixedBitMapTraits<BitsSize, ui64>> Values;
+    static constexpr ui32 SizeMask = BitsSize - 1;
+    static_assert(((BitsSize - 1) & BitsSize) == 0);
 
 public:
-    TVectorInserterPower2(TDynBitMap& values)
-        : Values(values)
-        , SizeMask(values.Size() - 1) {
-        AFL_VERIFY(values.Size());
+    TBitMapOps<TFixedBitMapTraits<BitsSize, ui64>> ExtractBits() {
+        return std::move(Values);
     }
 
     void operator()(const ui64 hash) {
@@ -210,11 +214,53 @@ public:
     }
 };
 
+namespace {
+
+template <ui64 Size>
+class TBitmapDetector {
+private:
+    const TSkipBitmapIndex* Meta;
+    const ui32 ExtSize;
+    static constexpr ui64 NextSize = Size >> 1;
+
+public:
+    TBitmapDetector(const TSkipBitmapIndex* meta, const ui32 size)
+        : Meta(meta)
+        , ExtSize(size) {
+        AFL_VERIFY(ExtSize <= Size);
+    }
+
+    template <class TFiller>
+    TString Detector(const TFiller& filler) const {
+        if (ExtSize == Size) {
+            TVectorInserterPower2<Size> inserter;
+            filler(inserter);
+            return Meta->GetBitsStorageConstructor()->Build(inserter.ExtractBits())->SerializeToString();
+        } else {
+            return TBitmapDetector<NextSize>(Meta, ExtSize).Detector(filler);
+        }
+    }
+};
+
+template <>
+class TBitmapDetector<0> {
+public:
+    TBitmapDetector(const TSkipBitmapIndex* /*meta*/, const ui32 /*size*/) {
+        AFL_VERIFY(false);
+    }
+
+    template <class TFiller>
+    static TString Detector(const TFiller& /*filler*/) {
+        AFL_VERIFY(false);
+        return "";
+    }
+};
+}   // namespace
+
 TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const {
     AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
     TNGrammBuilder builder(HashesCount);
 
-    TDynBitMap bitMap;
     ui32 size = FilterSizeBytes * 8;
     if ((size & (size - 1)) == 0) {
         ui32 recordsCountBase = RecordsCount;
@@ -225,8 +271,7 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 rec
     } else {
         size *= ((recordsCount <= RecordsCount) ? 1.0 : (1.0 * recordsCount / RecordsCount));
     }
-    bitMap.Reserve(size * 8);
-
+    size = std::max<ui32>(16, size);
     const auto doFillFilter = [&](auto& inserter) {
         for (reader.Start(); reader.IsCorrect();) {
             AFL_VERIFY(reader.GetColumnsCount() == 1);
@@ -245,23 +290,35 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 rec
     };
 
     if ((size & (size - 1)) == 0) {
-        TVectorInserterPower2 inserter(bitMap);
-        doFillFilter(inserter);
-    } else {
-        TVectorInserter inserter(bitMap);
-        doFillFilter(inserter);
+        if (size == 1024) {
+            return TBitmapDetector<1024>(this, 1024).Detector(doFillFilter);
+        } else if (size == 2048) {
+            return TBitmapDetector<2048>(this, 2048).Detector(doFillFilter);
+        } else if (size == 4096) {
+            return TBitmapDetector<4096>(this, 4096).Detector(doFillFilter);
+        } else if (size == 4096 * 2) {
+            return TBitmapDetector<4096 * 2>(this, 4096 * 2).Detector(doFillFilter);
+        } else if (size == 4096 * 4) {
+            return TBitmapDetector<4096 * 4>(this, 4096 * 4).Detector(doFillFilter);
+        } else if (size == 4096 * 8) {
+            return TBitmapDetector<4096 * 8>(this, 4096 * 8).Detector(doFillFilter);
+        } else if (size == 4096 * 16) {
+            return TBitmapDetector<4096 * 16>(this, 4096 * 16).Detector(doFillFilter);
+        }
     }
-    return TFixStringBitsStorage(bitMap).GetData();
+    TVectorInserter inserter(size);
+    doFillFilter(inserter);
+    return GetBitsStorageConstructor()->Build(inserter.ExtractBits())->SerializeToString();
 }
 
-bool TIndexMeta::DoCheckValue(
-    const TString& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value, const EOperation op) const {
-    TFixStringBitsStorage bits(data);
+bool TIndexMeta::DoCheckValueImpl(
+    const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value, const EOperation op) const {
     AFL_VERIFY(!category);
     AFL_VERIFY(value->type->id() == arrow::utf8()->id() || value->type->id() == arrow::binary()->id())("id", value->type->ToString());
     bool result = true;
+    const ui32 bitsCount = data.GetBitsCount();
     const auto predSet = [&](const ui64 hashSecondary) {
-        if (!bits.Get(hashSecondary % bits.GetSizeBits())) {
+        if (!data.Get(hashSecondary % bitsCount)) {
             result = false;
         }
     };

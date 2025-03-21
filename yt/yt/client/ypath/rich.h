@@ -161,8 +161,8 @@ public:
     void SetCluster(const std::string& value);
 
     // "clusters"
-    std::optional<std::vector<TString>> GetClusters() const;
-    void SetClusters(const std::vector<TString>& value);
+    std::optional<std::vector<std::string>> GetClusters() const;
+    void SetClusters(const std::vector<std::string>& value);
 
     // "create"
     bool GetCreate() const;

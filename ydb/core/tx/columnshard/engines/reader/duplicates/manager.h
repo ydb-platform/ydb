@@ -184,7 +184,7 @@ private:
 
     class TIntervalsCursor {
     private:
-        using TSourceSeqNumberByIntervalIdx = std::map<ui32, ui32>;
+        using TSourceSeqNumberByIntervalIdx = std::multimap<ui32, ui32>;
         YDB_READONLY(ui32, IntervalIdx, 0);
         YDB_READONLY_DEF(TSourceSeqNumberByIntervalIdx, SourcesByRightInterval);
         const TSourceIntervals* Owner;
@@ -329,7 +329,7 @@ private:
     void AbortConstruction(const TString& reason);
     void StartFetchingColumns(const std::shared_ptr<TSourceFilterConstructor>& source, const ui64 memoryGroupId) const;
     void StartMergingColumns(const TIntervalsCursor& interval) const;
-    void FlushFinishedSources() ;
+    void FlushFinishedSources();
 
     std::shared_ptr<TSourceFilterConstructor> GetConstructorBySourceId(const ui64 sourceId) const;
     std::shared_ptr<TSourceFilterConstructor> GetConstructorBySourceSeqNumber(const ui32 seqNumber) const;

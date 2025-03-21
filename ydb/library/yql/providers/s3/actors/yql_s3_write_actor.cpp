@@ -82,25 +82,18 @@ struct TEvPrivate {
         TEvUploadError(const TString& message, const TString& requestId, const TString& responseBody, const IHTTPGateway::TResult& result)
             : Status(NDqProto::StatusIds::INTERNAL_ERROR)
         {
-            BuildIssues(message, requestId, responseBody, result);
-        }
-
-        TEvUploadError(const TString& message, const TString& requestId, const TString& responseBody, const IHTTPGateway::TResult& result, const TS3Result& s3Result) {
-            if (s3Result.IsError) {
-                if (s3Result.Parsed) {
-                    Status = StatusFromS3ErrorCode(s3Result.S3ErrorCode);
-                    Issues.AddIssue(TStringBuilder() << "Error code: " << s3Result.S3ErrorCode);
-                    Issues.AddIssue(TStringBuilder() << "Error message: " << s3Result.ErrorMessage);
-                } else {
-                    Status = NDqProto::StatusIds::INTERNAL_ERROR;
-                    Issues.AddIssue(TStringBuilder() << "Failed to parse s3 response: " << s3Result.ErrorMessage);
+            if (responseBody) {
+                if (const TS3Result s3Result(responseBody); s3Result.IsError) {
+                    if (s3Result.Parsed) {
+                        Status = StatusFromS3ErrorCode(s3Result.S3ErrorCode);
+                        Issues.AddIssue(TStringBuilder() << "Error code: " << s3Result.S3ErrorCode);
+                        Issues.AddIssue(TStringBuilder() << "Error message: " << s3Result.ErrorMessage);
+                    } else {
+                        Issues.AddIssue(TStringBuilder() << "Failed to parse s3 response: " << s3Result.ErrorMessage);
+                    }
+                    Issues = NS3Util::AddParentIssue("S3 issues", TIssues(Issues));
                 }
-                Issues = NS3Util::AddParentIssue("S3 issues", TIssues(Issues));
             }
-            BuildIssues(message, requestId, responseBody, result);
-        }
-
-        void BuildIssues(const TString& message, const TString& requestId, const TString& responseBody, const IHTTPGateway::TResult& result) {
             Issues.AddIssues(NS3Util::AddParentIssue("Http geteway issues", TIssues(result.Issues)));
             if (result.CurlResponseCode != CURLE_OK) {
                 Issues.AddIssue(TStringBuilder() << "CURL response code: " << curl_easy_strerror(result.CurlResponseCode));
@@ -285,9 +278,9 @@ private:
             const TS3Result s3Result(body);
             const auto& root = s3Result.GetRootNode();
             if (s3Result.IsError) {
-                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError("Create upload operation failed", requestId, body, result, s3Result)));
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError("Create upload operation failed", requestId, body, result)));
             } else if (root.Name() != "InitiateMultipartUploadResult") {
-                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(TStringBuilder() << "Unexpected response on create upload: " << root.Name(), requestId, body, result, s3Result)));
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(TStringBuilder() << "Unexpected response on create upload: " << root.Name(), requestId, body, result)));
             } else {
                 const NXml::TNamespacesForXPath nss(1U, {"s3", "http://s3.amazonaws.com/doc/2006-03-01/"});
                 actorSystem->Send(new IEventHandle(selfId, selfId, new TEvPrivate::TEvUploadStarted(root.Node("s3:UploadId", false, nss).Value<TString>())));
@@ -309,7 +302,7 @@ private:
         if (const NHttp::THeaders headers(headerStr); headers.Has("Etag")) {
             actorSystem->Send(new IEventHandle(selfId, selfId, new TEvPrivate::TEvUploadPartFinished(size, index, TString(headers.Get("Etag")))));
         } else {
-            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError("Part upload failed", requestId, body, response, TS3Result(body))));
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError("Part upload failed", requestId, body, response)));
         }
     }
 
@@ -324,9 +317,9 @@ private:
             const TS3Result s3Result(body);
             const auto& root = s3Result.GetRootNode();
             if (s3Result.IsError) {
-                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError("Multipart upload operation failed", requestId, body, result, s3Result)));
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError("Multipart upload operation failed", requestId, body, result)));
             } else if (root.Name() != "CompleteMultipartUploadResult") {
-                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(TStringBuilder() << "Unexpected response on finish multipart upload: " << root.Name(), requestId, body, result, s3Result)));
+                actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError(TStringBuilder() << "Unexpected response on finish multipart upload: " << root.Name(), requestId, body, result)));
             } else {
                 actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadFinished(key, url, sentSize)));
             }
@@ -351,7 +344,7 @@ private:
         }
 
         if (result.Content.HttpResponseCode >= 300) {
-            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError("Upload operation failed", requestId, body, result, TS3Result(body))));
+            actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError("Upload operation failed", requestId, body, result)));
         } else {
             actorSystem->Send(new IEventHandle(selfId, selfId, new TEvPrivate::TEvUploadFinished(key, url, sentSize)));
             actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadFinished(key, url, sentSize)));

@@ -70,16 +70,16 @@ protected:
     std::shared_ptr<NTxProxy::TUploadTypes> LevelTypes;
     std::shared_ptr<NTxProxy::TUploadTypes> PostingTypes;
     std::shared_ptr<NTxProxy::TUploadTypes> PrefixTypes;
-    std::shared_ptr<NTxProxy::TUploadTypes> CurrTypes;
+    std::shared_ptr<NTxProxy::TUploadTypes> UploadTypes;
 
     const TString LevelTable;
     const TString PostingTable;
     const TString PrefixTable;
-    TString CurrTable;
+    TString UploadTable;
 
     TBufferData PostingBuf;
     TBufferData PrefixBuf;
-    TBufferData WriteBuf;
+    TBufferData UploadBuf;
 
     NTable::TPos EmbeddingPos = 0;
     NTable::TPos DataPos = 1;
@@ -218,24 +218,24 @@ public:
     TString Debug() const
     {
         return TStringBuilder() << " TPrefixKMeansScan Id: " << BuildId << " Parent: " << Parent << " Child: " << Child
-            << " CurrTable: " << CurrTable << " K: " << K << " Clusters: " << Clusters.size()
+            << " UploadTable: " << UploadTable << " K: " << K << " Clusters: " << Clusters.size()
             << " State: " << State << " Round: " << Round << " / " << MaxRounds
-            << " PostingBuf size: " << PostingBuf.Size() << " PrefixBuf size: " << PrefixBuf.Size() << " WriteBuf size: " << WriteBuf.Size() << " ";
+            << " PostingBuf size: " << PostingBuf.Size() << " PrefixBuf size: " << PrefixBuf.Size() << " UploadBuf size: " << UploadBuf.Size() << " ";
     }
 
     EScan PageFault() noexcept final
     {
         LOG_T("PageFault " << Debug());
 
-        if (!WriteBuf.IsEmpty()) {
+        if (!UploadBuf.IsEmpty()) {
             return EScan::Feed;
         }
 
         if (!PostingBuf.IsEmpty()) {
-            PostingBuf.FlushTo(WriteBuf);
+            PostingBuf.FlushTo(UploadBuf);
             InitUpload(PostingTable, PostingTypes);
         } else if (!PrefixBuf.IsEmpty()) {
-            PrefixBuf.FlushTo(WriteBuf);
+            PrefixBuf.FlushTo(UploadBuf);
             InitUpload(PrefixTable, PrefixTypes);
         }
 
@@ -258,7 +258,7 @@ protected:
     {
         LOG_T("Retry upload " << Debug());
 
-        if (!WriteBuf.IsEmpty()) {
+        if (!UploadBuf.IsEmpty()) {
             RetryUpload();
         }
     }
@@ -279,14 +279,14 @@ protected:
         UploadStatus.StatusCode = ev->Get()->Status;
         UploadStatus.Issues = ev->Get()->Issues;
         if (UploadStatus.IsSuccess()) {
-            UploadRows += WriteBuf.GetRows();
-            UploadBytes += WriteBuf.GetBytes();
-            WriteBuf.Clear();
+            UploadRows += UploadBuf.GetRows();
+            UploadBytes += UploadBuf.GetBytes();
+            UploadBuf.Clear();
             if (PostingBuf.IsReachLimits(Limits)) {
-                PostingBuf.FlushTo(WriteBuf);
+                PostingBuf.FlushTo(UploadBuf);
                 InitUpload(PostingTable, PostingTypes);
             } else if (PrefixBuf.IsReachLimits(Limits)) {
-                PrefixBuf.FlushTo(WriteBuf);
+                PrefixBuf.FlushTo(UploadBuf);
                 InitUpload(PrefixTable, PrefixTypes);
             }
 
@@ -312,14 +312,14 @@ protected:
         if (!postingDone && !PrefixBuf.IsReachLimits(Limits)) {
             return EScan::Feed;
         }
-        if (!WriteBuf.IsEmpty()) {
+        if (!UploadBuf.IsEmpty()) {
             return EScan::Sleep;
         }
         if (postingDone) {
-            PostingBuf.FlushTo(WriteBuf);
+            PostingBuf.FlushTo(UploadBuf);
             InitUpload(PostingTable, PostingTypes);
         } else {
-            PrefixBuf.FlushTo(WriteBuf);
+            PrefixBuf.FlushTo(UploadBuf);
             InitUpload(PrefixTable, PrefixTypes);
         }
         return EScan::Feed;
@@ -332,9 +332,9 @@ protected:
 
     void UploadImpl()
     {
-        Y_ASSERT(!WriteBuf.IsEmpty());
+        Y_ASSERT(!UploadBuf.IsEmpty());
         auto actor = NTxProxy::CreateUploadRowsInternal(
-            this->SelfId(), CurrTable, CurrTypes, WriteBuf.GetRowsData(),
+            this->SelfId(), UploadTable, UploadTypes, UploadBuf.GetRowsData(),
             NTxProxy::EUploadRowsMode::WriteToTableShadow, true /*writeToPrivateTable*/);
 
         Uploader = this->Register(actor);
@@ -343,8 +343,8 @@ protected:
     void InitUpload(std::string_view table, std::shared_ptr<NTxProxy::TUploadTypes> types)
     {
         RetryCount = 0;
-        CurrTable = table;
-        CurrTypes = std::move(types);
+        UploadTable = table;
+        UploadTypes = std::move(types);
         UploadImpl();
     }
 
@@ -357,14 +357,14 @@ protected:
 
     void UploadSample()
     {
-        Y_ASSERT(WriteBuf.IsEmpty());
+        Y_ASSERT(UploadBuf.IsEmpty());
         std::array<TCell, 2> pk;
         std::array<TCell, 1> data;
         for (NTable::TPos pos = 0; const auto& row : Clusters) {
             pk[0] = TCell::Make(Parent);
             pk[1] = TCell::Make(Child + pos);
             data[0] = TCell{row};
-            WriteBuf.AddRow({}, TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
+            UploadBuf.AddRow({}, TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
             ++pos;
         }
         InitUpload(LevelTable, LevelTypes);
@@ -426,7 +426,7 @@ public:
             if (State == UploadState) {
                 // TODO: it's a little suboptimal to wait here
                 // better is wait after MoveToNextKey but before UploadSample
-                if (!WriteBuf.IsEmpty()) {
+                if (!UploadBuf.IsEmpty()) {
                     return EScan::Sleep;
                 }
                 if (MoveToNextKey()) {
@@ -434,12 +434,12 @@ public:
                     continue;
                 }
                 if (!PostingBuf.IsEmpty()) {
-                    PostingBuf.FlushTo(WriteBuf);
+                    PostingBuf.FlushTo(UploadBuf);
                     InitUpload(PostingTable, PostingTypes);
                     return EScan::Sleep;
                 }
                 if (!PrefixBuf.IsEmpty()) {
-                    PrefixBuf.FlushTo(WriteBuf);
+                    PrefixBuf.FlushTo(UploadBuf);
                     InitUpload(PrefixTable, PrefixTypes);
                     return EScan::Sleep;
                 }

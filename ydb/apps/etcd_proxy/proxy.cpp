@@ -210,13 +210,7 @@ int TProxy::ImportDatabase() {
     const auto driver = NYdb::TDriver(config);
     auto client = NYdb::NTable::TTableClient(driver);
 
-    if (const auto res = client.BulkUpsert(Database + "/huidig", std::move(value)).ExtractValueSync(); !res.IsSuccess()) {
-        std::cout << res.GetIssues().ToString() << std::endl;
-        return 1;
-    }
-
-    const auto& param = NYdb::TParamsBuilder().AddParam("$Prefix").String(ImportPrefix_).Build().Build();
-    if (const auto res = Stuff->Client->ExecuteQuery("insert into `verhaal` select * from `huidig` where startswith(`key`,$Prefix);", NYdb::NQuery::TTxControl::NoTx(), param).ExtractValueSync(); !res.IsSuccess()) {
+    if (const auto res = client.BulkUpsert(Database + "/content", std::move(value)).ExtractValueSync(); !res.IsSuccess()) {
         std::cout << res.GetIssues().ToString() << std::endl;
         return 1;
     }

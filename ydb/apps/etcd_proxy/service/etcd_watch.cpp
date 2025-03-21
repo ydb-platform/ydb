@@ -166,9 +166,9 @@ private:
 
         std::ostringstream sql;
         if (WithPrevious) {
-            sql << "select * from (select max_by(TableRow(), `modified`) from `verhaal` where " << revName << " > `modified` and " << where.view() << " group by `key`) flatten columns union all" << std::endl;
+            sql << "select * from (select max_by(TableRow(), `modified`) from `content` where " << revName << " > `modified` and " << where.view() << " group by `key`) flatten columns union all" << std::endl;
         }
-        sql << "select * from `verhaal` where " << revName << " <= `modified` and " << where.view() << " order by `modified` asc;" << std::endl;
+        sql << "select * from `content` where " << revName << " <= `modified` and " << where.view() << " order by `modified` asc;" << std::endl;
 //      std::cout << std::endl << sql.view() << std::endl;
 
         const auto my = this->SelfId();
@@ -590,9 +590,11 @@ private:
         const auto& revName = AddParam("Revision", params, Revision);
 
         sql << "$Leases = select 0L as `lease` union all select `id` as `lease` from `leases` where unwrap(interval('PT1S') * `ttl` + `updated`) > CurrentUtcDatetime(`id`);" << std::endl;
-        sql << "$Victims = select `key`, `value`, `created`, `modified`, `version`, `lease` from `huidig` as h left only join $Leases as l using(`lease`);" << std::endl;
+        sql << "$Victims = select `key`, `value`, `created`, `modified`, `version`, `lease` from (";
+        MakeSimpleSlice(sql, params);
+        sql << ") as h left only join $Leases as l using(`lease`);" << std::endl;
 
-        sql << "insert into `verhaal`" << std::endl;
+        sql << "insert into `content`" << std::endl;
         sql << "select `key`, `created`, " << revName << " as `modified`, 0L as `version`, `value`, `lease` from $Victims;" << std::endl;
 
         if constexpr (NotifyWatchtower) {
@@ -601,7 +603,6 @@ private:
             sql << "select count(*) from $Victims;" << std::endl;
         }
 
-        sql << "delete from `huidig` on select `key` from $Victims;" << std::endl;
         sql << "delete from `leases` where `id` not in $Leases;" << std::endl;
 
         const auto my = this->SelfId();

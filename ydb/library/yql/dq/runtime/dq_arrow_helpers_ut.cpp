@@ -17,9 +17,9 @@
 #include <ydb/library/formats/arrow/simple_builder/array.h>
 #include <ydb/library/formats/arrow/simple_builder/batch.h>
 #include <ydb/library/formats/arrow/simple_builder/filler.h>
-#include <ydb/library/formats/arrow/size_calcer.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
+#include <yql/essentials/minikql/computation/mkql_block_reader.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_value_builder.h>
 #include <yql/essentials/minikql/mkql_node.h>
@@ -68,26 +68,23 @@ NUdf::TUnboxedValue GetValueOfBasicType(TType* type, ui64 value) {
     }
 }
 
-ui64 GetDatumSize(const arrow::Datum& datum) {
-    if (datum.is_scalar()) {
-        return GetArrayMemorySize(ARROW_RESULT(arrow::MakeArrayFromScalar(*datum.scalar(), 1))->data());
-    }
-    if (datum.is_array()) {
-        return GetArrayDataSize(datum.make_array());
-    }
-
-    UNIT_FAIL("Expected scalar or array");
-    return 0;
+ui64 GetScalarDatumSize(const arrow::Datum& datum) {
+    UNIT_ASSERT_C(datum.is_scalar(), "Expected scalar datum");
+    return NUdf::GetSizeOfArrayDataInBytes(*ARROW_RESULT(arrow::MakeArrayFromScalar(*datum.scalar(), 1))->data());
 }
 
 struct TBlockColumn {
+    using TPtr = std::shared_ptr<TBlockColumn>;
+
     arrow::Datum Datum;
     TBlockType* Type;
+    std::unique_ptr<IBlockReader> BlockReader;
     ui64 Size = 0;
 };
 
 struct TBlockValue {
     TUnboxedValueVector Values;
+    std::vector<std::unique_ptr<IBlockReader>> BlockReaders;
     const TMultiType* Type;
     ui64 ArraysSize = 0;
     ui64 ScalarsSize = 0;
@@ -377,57 +374,62 @@ struct TTestContext {
     }
 
     template <typename TDataSlot, typename TScalar, typename TFiller>
-    TBlockColumn CreateBlockColumn(std::optional<ui64> numberRows, TFiller& arrayFiller, std::function<TScalar()> scalarFiller) {
-        TBlockType* type = TBlockType::Create(TDataType::Create(NUdf::TDataType<TDataSlot>::Id, TypeEnv), numberRows ? TBlockType::EShape::Many : TBlockType::EShape::Scalar, TypeEnv);
-        arrow::Datum datum;
+    TBlockColumn::TPtr CreateBlockColumn(std::optional<ui64> numberRows, TFiller& arrayFiller, std::function<TScalar()> scalarFiller) {
+        TBlockColumn result = {
+            .Type = TBlockType::Create(TDataType::Create(NUdf::TDataType<TDataSlot>::Id, TypeEnv), numberRows ? TBlockType::EShape::Many : TBlockType::EShape::Scalar, TypeEnv)
+        };
+
         if (numberRows) {
-            datum = std::make_shared<NConstruction::TSimpleArrayConstructor<TFiller>>("field", arrayFiller)->BuildArray(*numberRows);
+            result.Datum = std::make_shared<NConstruction::TSimpleArrayConstructor<TFiller>>("field", arrayFiller)->BuildArray(*numberRows);
+            result.BlockReader = MakeBlockReader(TTypeInfoHelper(), result.Type->GetItemType());
+            result.Size = result.BlockReader->GetDataWeight(*result.Datum.array());
         } else {
-            datum = arrow::Datum(std::make_shared<TScalar>(scalarFiller()));
+            result.Datum = arrow::Datum(std::make_shared<TScalar>(scalarFiller()));
+            result.Size = GetScalarDatumSize(result.Datum);
         }
-        return {.Datum = datum, .Type = type, .Size = GetDatumSize(datum)};
+
+        return std::make_shared<TBlockColumn>(std::move(result));
     }
 
-    TBlockColumn CreateStringBlockColumn(std::optional<ui64> numberRows) {
+    TBlockColumn::TPtr CreateStringBlockColumn(std::optional<ui64> numberRows) {
         NConstruction::TStringPoolFiller stringGenerator(8, 512);
         return CreateBlockColumn<char*, arrow::StringScalar>(numberRows, stringGenerator, [&]() {
             return arrow::StringScalar(stringGenerator.GetValue(0).to_string());
         });
     }
 
-    TBlockColumn CreateIntBlockColumn(std::optional<ui64> numberRows) {
+    TBlockColumn::TPtr CreateIntBlockColumn(std::optional<ui64> numberRows) {
         NConstruction::TIntSeqFiller<arrow::Int32Type> intGenerator;
         return CreateBlockColumn<i32, arrow::Int32Scalar>(numberRows, intGenerator, [&]() {
             return arrow::Int32Scalar(intGenerator.GetValue(0));
         });
     }
 
-    TBlockValue ComposeBlockColumns(std::vector<TBlockColumn> columns, ui64 numberRows) {
-        ui64 arraysSize = 0;
-        ui64 scalarsSize = 0;
-        TUnboxedValueVector columnValues;
+    TBlockValue ComposeBlockColumns(std::vector<TBlockColumn::TPtr> columns, ui64 numberRows) {
+        TBlockValue result;
         std::vector<TType* const> columnTypes;
-        columnValues.reserve(columns.size() + 1);
+        result.Values.reserve(columns.size() + 1);
+        result.BlockReaders.reserve(columns.size());
         columnTypes.reserve(columns.size() + 1);
         for (auto& column : columns) {
-            if (column.Datum.is_scalar()) {
-                scalarsSize += column.Size;
+            if (column->Datum.is_scalar()) {
+                result.ScalarsSize += column->Size;
             } else {
-                arraysSize += column.Size;
+                result.ArraysSize += column->Size;
             }
 
-            columnValues.emplace_back(HolderFactory.CreateArrowBlock(std::move(column.Datum)));
-            columnTypes.emplace_back(column.Type);
+            result.Values.emplace_back(HolderFactory.CreateArrowBlock(std::move(column->Datum)));
+            result.BlockReaders.emplace_back(std::move(column->BlockReader));
+            columnTypes.emplace_back(column->Type);
         }
 
         auto lengtDatum = arrow::Datum(std::make_shared<arrow::UInt64Scalar>(numberRows));
-        scalarsSize += GetDatumSize(lengtDatum);
-        columnValues.emplace_back(HolderFactory.CreateArrowBlock(std::move(lengtDatum)));
+        result.ScalarsSize += GetScalarDatumSize(lengtDatum);
+        result.Values.emplace_back(HolderFactory.CreateArrowBlock(std::move(lengtDatum)));
         columnTypes.emplace_back(TBlockType::Create(TDataType::Create(NUdf::TDataType<ui64>::Id, TypeEnv), TBlockType::EShape::Scalar, TypeEnv));
 
-        const TMultiType* multiType = TMultiType::Create(columnTypes.size(), columnTypes.data(), TypeEnv);
-
-        return {.Values = std::move(columnValues), .Type = multiType, .ArraysSize = arraysSize, .ScalarsSize = scalarsSize};
+        result.Type = TMultiType::Create(columnTypes.size(), columnTypes.data(), TypeEnv);
+        return result;
     }
 };
 
@@ -1081,15 +1083,15 @@ Y_UNIT_TEST_SUITE(TestArrowBlockSplitter) {
                 if (initialDatum.is_scalar()) {
                     UNIT_ASSERT_C(splittedDatum.is_scalar(), columnSuffix);
                     UNIT_ASSERT_C(initialDatum.Equals(splittedDatum), columnSuffix);
-                    itemSize += GetArrayMemorySize(ARROW_RESULT(arrow::MakeArrayFromScalar(*splittedDatum.scalar(), 1))->data());
+                    itemSize += GetScalarDatumSize(splittedDatum);
                 } else {
                     UNIT_ASSERT_C(splittedDatum.is_array(), columnSuffix);
 
                     const auto splittedArray = splittedDatum.make_array();
                     UNIT_ASSERT_VALUES_EQUAL_C(splittedSize, splittedArray->length(), columnSuffix);
-                    UNIT_ASSERT_VALUES_EQUAL_C(0, splittedArray->offset(), columnSuffix);
+                    UNIT_ASSERT_VALUES_EQUAL_C(rowsCount, splittedArray->offset(), columnSuffix);
                     UNIT_ASSERT_C(splittedArray->Equals(initialDatum.make_array()->Slice(rowsCount, splittedSize)), columnSuffix);
-                    itemSize += GetArrayMemorySize(splittedArray->data());
+                    itemSize += initialItem.BlockReaders[i]->GetDataWeight(*splittedArray->data());
                 }
             }
             UNIT_ASSERT_LE_C(itemSize, sizeLimit, batchSuffix);

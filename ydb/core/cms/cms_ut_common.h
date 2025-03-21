@@ -91,6 +91,7 @@ struct TTestEnvOpts {
     bool EnableSentinel;
     bool EnableCMSRequestPriorities;
     bool EnableSingleCompositeActionGroup;
+    bool EnableDynamicGroups;
 
     using TNodeLocationCallback = std::function<TNodeLocation(ui32)>;
     TNodeLocationCallback NodeLocationCallback;
@@ -112,6 +113,7 @@ struct TTestEnvOpts {
         , EnableSentinel(false)
         , EnableCMSRequestPriorities(true)
         , EnableSingleCompositeActionGroup(true)
+        , EnableDynamicGroups(false)
     {
     }
 
@@ -135,6 +137,10 @@ struct TTestEnvOpts {
         return *this;
     }
 
+    TTestEnvOpts& WithDynamicGroups() {
+        EnableDynamicGroups = true;
+        return *this;
+    }
 };
 
 class TCmsTestEnv : public TTestBasicRuntime {
@@ -333,6 +339,8 @@ public:
     }
 
     void CheckBSCUpdateRequests(std::set<ui32> expectedNodes, NKikimrBlobStorage::EDriveStatus expectedStatus);
+
+    void CheckBSCUpdateDriveRequests(std::set<std::pair<ui32, ui32>> expectedDrives, NKikimrBlobStorage::EDriveStatus expectedStatus);
 
     void CheckWalleStoreTaskIsFailed(NCms::TEvCms::TEvStoreWalleTask *req);
 

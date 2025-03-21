@@ -180,6 +180,56 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
         UNIT_ASSERT_VALUES_UNEQUAL(refreshResult.last_refresh_time().seconds(), createResult.last_refresh_time().seconds());
         UNIT_ASSERT_VALUES_UNEQUAL(refreshResult.last_refresh_time().nanos(), createResult.last_refresh_time().nanos());
     }
+
+    Y_UNIT_TEST(RequestReplaceDevicePDisk) {
+        std::function<void(Ydb::Maintenance::ActionScope_PDisk*, NCms::TPDiskID&)> pdiskIdFn = [](Ydb::Maintenance::ActionScope_PDisk* pdisk, NCms::TPDiskID& pdiskId) {
+            auto* id = pdisk->mutable_pdisk_id();
+            id->set_node_id(pdiskId.NodeId);
+            id->set_pdisk_id(pdiskId.DiskId);
+        };
+
+        std::function<void(Ydb::Maintenance::ActionScope_PDisk*, NCms::TPDiskID&)> pdiskLocationFn = [](Ydb::Maintenance::ActionScope_PDisk* pdisk, NCms::TPDiskID& pdiskId) {
+            auto* location = pdisk->mutable_pdisk_location();
+            location->set_host("::1"); // All nodes live on this host.
+            location->set_path("/" + std::to_string(pdiskId.NodeId) + "/pdisk-" + std::to_string(pdiskId.DiskId) + ".data");
+        };
+
+        // put both functions in vector, iterate over it and call each function
+        for (auto pdiskFn : {pdiskIdFn, pdiskLocationFn}) {
+            TTestEnvOpts envOpts(8);
+            envOpts.WithSentinel();
+
+            TCmsTestEnv env(envOpts);
+
+            auto req = std::make_unique<NKikimr::NCms::TEvCms::TEvCreateMaintenanceTaskRequest>();
+
+            Ydb::Maintenance::CreateMaintenanceTaskRequest* rec = req->Record.MutableRequest();
+
+            req->Record.SetUserSID("user");
+
+            auto* options = rec->mutable_task_options();
+            options->set_availability_mode(::Ydb::Maintenance::AVAILABILITY_MODE_STRONG);
+
+            auto* actionGroup = rec->add_action_groups();
+            auto* action = actionGroup->Addactions();
+            auto* lockAction = action->mutable_lock_action();
+
+            auto* scope = lockAction->mutable_scope();
+
+            auto* pdisk = scope->mutable_pdisk();
+            auto disk = env.PDiskId(0);
+            pdiskFn(pdisk, disk);
+            lockAction->mutable_duration()->set_seconds(60);
+
+            env.SendToCms(req.release());
+
+            auto response = env.GrabEdgeEvent<NCms::TEvCms::TEvMaintenanceTaskResponse>();
+
+            UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), Ydb::StatusIds_StatusCode_SUCCESS);
+
+            env.CheckRequest("user", "user-r-1", false, NKikimrCms::TStatus::TStatus::WRONG_REQUEST);
+        }
+    }
 }
 
 } // namespace NKikimr::NCmsTest 

@@ -68,6 +68,7 @@ SRCS(
     database_basic_sausage_metainfo.proto
     datashard_config.proto
     datashard_load.proto
+    datashard_s3_download_state.proto
     db_metadata_cache.proto
     drivemodel.proto
     export.proto

@@ -73,12 +73,13 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         // Returns data (points to internal buffer) or error
         virtual EDataStatus TryGetData(TStringBuf& data, TString& error) = 0;
         // Clears internal buffer & makes it ready for another Feed() and TryGetData()
-        virtual void Confirm() = 0;
+        virtual void Confirm(TS3DownloadState& state) = 0;
         // Bytes that were read from S3 and put into controller. In terms of input bytes
         virtual ui64 PendingBytes() const = 0;
         // Bytes that controller has given to processing. In terms of input bytes
         virtual ui64 ReadyBytes() const = 0;
         virtual std::pair<ui64, ui64> NextRange(ui64 contentLength, ui64 processedBytes) const = 0;
+        virtual bool RestoreFromState(const TS3DownloadState& state, TString& error) = 0;
     };
 
     class TReadController: public IReadController {
@@ -98,6 +99,11 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             const ui64 start = processedBytes + PendingBytes();
             const ui64 end = Min(SumWithSaturation(start, RangeSize), contentLength) - 1;
             return std::make_pair(start, end);
+        }
+
+        bool RestoreFromState(const TS3DownloadState& state, TString& error) override {
+            Y_UNUSED(state, error);
+            return true;
         }
 
     protected:
@@ -154,7 +160,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             return READY_DATA;
         }
 
-        void Confirm() override {
+        void Confirm(TS3DownloadState& state) override {
+            Y_UNUSED(state);
             Buffer.ChopHead(Pos);
             Pos = 0;
         }
@@ -259,7 +266,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             return READY_DATA;
         }
 
-        void Confirm() override {
+        void Confirm(TS3DownloadState& state) override {
+            Y_UNUSED(state);
             Buffer.ChopHead(ReadyOutputPos);
             ReadyOutputPos = 0;
 
@@ -321,10 +329,11 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             }
         }
 
-        void Confirm() override {
+        void Confirm(TS3DownloadState& state) override {
+            state.SetEncryptedDeserializerState(Deserializer.GetState());
             FeedUnprocessedBytes -= ReadyInputBytes;
             ReadyInputBytes = 0;
-            return DataController->Confirm();
+            return DataController->Confirm(state);
         }
 
         ui64 PendingBytes() const override {
@@ -337,6 +346,18 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
 
         std::pair<ui64, ui64> NextRange(ui64 contentLength, ui64 processedBytes) const override {
             return DataController->NextRange(contentLength, processedBytes);
+        }
+
+        bool RestoreFromState(const TS3DownloadState& state, TString& error) override {
+            if (const TString& deserializerState = state.GetEncryptedDeserializerState()) {
+                try {
+                    Deserializer = NBackup::TEncryptedFileDeserializer::RestoreFromState(deserializerState);
+                } catch (const std::exception& ex) {
+                    error = ex.what();
+                    return false;
+                }
+            }
+            return DataController->RestoreFromState(state, error);
         }
 
     private:
@@ -469,18 +490,16 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             return HeadObject(Settings.GetDataKey(DataFormat, CompressionCodec));
         }
 
-        THolder<IReadController> reader;
         switch (CompressionCodec) {
         case NBackupRestoreTraits::ECompressionCodec::None:
-            reader.Reset(new TReadControllerRaw(ReadBatchSize, ReadBufferSizeLimit));
+            Reader.Reset(new TReadControllerRaw(ReadBatchSize, ReadBufferSizeLimit));
             break;
         case NBackupRestoreTraits::ECompressionCodec::Zstd:
-            reader.Reset(new TReadControllerZstd(ReadBatchSize, ReadBufferSizeLimit));
+            Reader.Reset(new TReadControllerZstd(ReadBatchSize, ReadBufferSizeLimit));
             break;
         case NBackupRestoreTraits::ECompressionCodec::Invalid:
             Y_ABORT("unreachable");
         }
-        Reader = std::move(reader);
 
         ETag = result.GetResult().GetETag();
         ContentLength = result.GetResult().GetContentLength();
@@ -507,7 +526,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         const auto& info = ev->Get()->Info;
         if (!info.DataETag) {
             Send(DataShard, new TEvDataShard::TEvStoreS3DownloadInfo(TxId, {
-                ETag, ProcessedBytes, WrittenBytes, WrittenRows, GetChecksumState()
+                ETag, ProcessedBytes, WrittenBytes, WrittenRows, GetChecksumState(), State
             }));
             return;
         }
@@ -528,8 +547,14 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         ReadBytes = ProcessedBytes;
         WrittenBytes = info.WrittenBytes;
         WrittenRows = info.WrittenRows;
+        DownloadState = info.DownloadState;
         if (Checksum) {
             Checksum->Continue(info.ChecksumState);
+        }
+        if (TString restoreErr; !Reader->RestoreFromState(DownloadState, restoreErr)) {
+            const TString error = TStringBuilder() << "Failed to restore reader state: " << restoreErr;
+            IMPORT_LOG_E(error);
+            return Finish(false, error);
         }
 
         if (!ContentLength || ProcessedBytes >= ContentLength) {
@@ -633,7 +658,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             WrittenRows += std::exchange(PendingRows, 0);
         }
 
-        Reader->Confirm();
+        DownloadState.Clear();
+        Reader->Confirm(DownloadState);
         UploadRows();
     }
 
@@ -689,7 +715,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             << ", size# " << record->ByteSizeLong());
 
         Send(DataShard, new TEvDataShard::TEvS3UploadRowsRequest(TxId, record, {
-            ETag, ProcessedBytes, WrittenBytes, WrittenRows, GetChecksumState()
+            ETag, ProcessedBytes, WrittenBytes, WrittenRows, GetChecksumState(), DownloadState
         }));
     }
 
@@ -961,6 +987,7 @@ private:
     ui64 WrittenRows = 0;
     ui64 PendingBytes = 0;
     ui64 PendingRows = 0;
+    TS3DownloadState DownloadState;
 
     const ui32 ReadBatchSize;
     const ui64 ReadBufferSizeLimit;

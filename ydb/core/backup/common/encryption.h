@@ -199,6 +199,9 @@ public:
     TEncryptedFileDeserializer(TEncryptionKey key, TEncryptionIV expectedIV); // Decrypt file with key. Check that IV in header is equal to expectedIV
     ~TEncryptedFileDeserializer();
 
+    TEncryptedFileDeserializer& operator=(TEncryptedFileDeserializer&&) = default;
+    TEncryptedFileDeserializer& operator=(const TEncryptedFileDeserializer&) = default;
+
     // Adds buffer with input data.
     void AddData(TBuffer data, bool last);
 

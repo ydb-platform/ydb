@@ -49,6 +49,29 @@ void TFederatedTopicClient::TImpl::InitObserver() {
     }
 }
 
+IOutputStream& operator<<(IOutputStream& out, NTopic::TTopicClientSettings const& settings) {
+    out << "{"
+        << " Database: " << settings.Database_
+        << " DiscoveryEndpoint: " << settings.DiscoveryEndpoint_
+        << " DiscoveryMode: " << (settings.DiscoveryMode_ ? (int)*settings.DiscoveryMode_ : -1)
+        << " }";
+    return out;
+}
+
+IOutputStream& operator<<(IOutputStream& out, NTopic::TDescribeTopicSettings const& settings) {
+    out << "{"
+        << " TraceId: " << settings.TraceId_
+        << " ClientTimeout: " << settings.ClientTimeout_
+        << " CancelAfter: " << settings.CancelAfter_
+        << " ForgetAfter: " << settings.ForgetAfter_
+        << " OperationTimeout: " << settings.OperationTimeout_
+        << " IncludeLocation: " << settings.IncludeLocation_
+        << " IncludeStats: " << settings.IncludeStats_
+        << " RequestType: " << settings.RequestType_
+        << " }";
+    return out;
+}
+
 NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> TFederatedTopicClient::TImpl::GetAllClusterInfo() {
     InitObserver();
     return Observer->WaitForFirstState().Apply(

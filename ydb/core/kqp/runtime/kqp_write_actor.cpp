@@ -237,12 +237,13 @@ public:
         , Counters(counters)
         , TableWriteActorSpan(TWilsonKqp::TableWriteActor, NWilson::TTraceId(traceId), "TKqpTableWriteActor")
     {
-        AFL_ENSURE(MessageSettings.InFlightMemoryLimitPerActorBytes >= MessageSettings.MemoryLimitPerMessageBytes);
         LogPrefix = TStringBuilder() << "Table: `" << TablePath << "` (" << TableId << "), " << "SessionActorId: " << sessionActorId;
         ShardedWriteController = CreateShardedWriteController(
             TShardedWriteControllerSettings {
                 .MemoryLimitTotal = MessageSettings.InFlightMemoryLimitPerActorBytes,
-                .MemoryLimitPerMessage = MessageSettings.MemoryLimitPerMessageBytes,
+                .MemoryLimitPerMessage = std::min(
+                    MessageSettings.InFlightMemoryLimitPerActorBytes,
+                    MessageSettings.MemoryLimitPerMessageBytes),
                 .Inconsistent = InconsistentTx,
             },
             Alloc);
@@ -266,11 +267,13 @@ public:
                 NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
                 TStringBuilder() << "Memory limit exception"
                     << ", current limit is " << Alloc->GetLimit() << " bytes.");
+            return;
         } catch (...) {
             RuntimeError(
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR,
                 NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
                 CurrentExceptionMessage());
+            return;
         }
 
         Become(&TKqpTableWriteActor::StateProcessing);
@@ -394,11 +397,13 @@ public:
                 NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
                 TStringBuilder() << "Memory limit exception"
                     << ", current limit is " << Alloc->GetLimit() << " bytes.");
+            return;
         } catch (...) {
             RuntimeError(
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR,
                 NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
                 CurrentExceptionMessage());
+            return;
         }
     }
 
@@ -429,7 +434,7 @@ public:
     }
 
     void Handle(TEvPrivate::TEvResolveRequestPlanned::TPtr&) {
-        Resolve();
+        RetryResolve();
     }
 
     void ResolveTable() {
@@ -870,13 +875,16 @@ public:
         UpdateShards();
     }
 
-    void Flush() {
+    bool Flush() {
         for (const auto& shardInfo : ShardedWriteController->GetPendingShards()) {
-            SendDataToShard(shardInfo.ShardId);
+            if (!SendDataToShard(shardInfo.ShardId)) {
+                return false;
+            }
         }
+        return true;
     }
 
-    void SendDataToShard(const ui64 shardId) {
+    bool SendDataToShard(const ui64 shardId) {
         YQL_ENSURE(Mode != EMode::COMMIT);
 
         const auto metadata = ShardedWriteController->GetMessageMetadata(shardId);
@@ -893,7 +901,7 @@ public:
                     << "ShardId=" << shardId
                     << " for table '" << TablePath
                     << "': retry limit exceeded.");
-            return;
+            return false;
         }
 
         const bool isPrepare = metadata->IsFinal && Mode == EMode::PREPARE;
@@ -982,6 +990,8 @@ public:
                     0,
                     metadata->Cookie));
         }
+
+        return true;
     }
 
     void RetryShard(const ui64 shardId, const std::optional<ui64> ifCookieEqual) {
@@ -1028,6 +1038,7 @@ public:
                         << "State of operation is unknown. "
                         << "Error writing to table `" << TablePath << "`"
                         << ". Transaction state unknown for tablet " << ev->Get()->TabletId << ".");
+                return;
             } else {
                 TxManager->SetError(ev->Get()->TabletId);
                 RuntimeError(
@@ -1037,6 +1048,7 @@ public:
                         << "Kikimr cluster or one of its subsystems was unavailable. "
                         << "Error writing to table `" << TablePath << "`"
                         << ": can't deliver message to tablet " << ev->Get()->TabletId << ".");
+                return;
             }
         }
     }
@@ -1080,6 +1092,7 @@ public:
                     << "ShardId=" << shardId
                     << " for table '" << TablePath
                     << "': attach transaction failed.");
+            return;
         } else {
             RuntimeError(
                 NYql::NDqProto::StatusIds::UNDETERMINED,
@@ -1088,6 +1101,7 @@ public:
                     << "ShardId=" << shardId
                     << " for table '" << TablePath
                     << "': attach transaction failed.");
+            return;
         }
     }
 
@@ -1369,12 +1383,14 @@ public:
                 TStringBuilder() << "Memory limit exception"
                     << ", current limit is " << Alloc->GetLimit() << " bytes.",
                 {});
+            return;
         } catch (...) {
             RuntimeError(
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR,
                 NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
                 CurrentExceptionMessage(),
                 {});
+            return;
         }
     }
 
@@ -1445,12 +1461,14 @@ private:
                 TStringBuilder() << "Memory limit exception"
                     << ", current limit is " << Alloc->GetLimit() << " bytes.",
                 {});
+            return;
         } catch (...) {
             RuntimeError(
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR,
                 NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
                 CurrentExceptionMessage(),
                 {});
+            return;
         }
 
         Process();
@@ -1475,7 +1493,9 @@ private:
             }
 
             if (Closed || outOfMemory) {
-                WriteTableActor->Flush();
+                if (!WriteTableActor->Flush()) {
+                    return;
+                }
             }
 
             if (Closed && WriteTableActor->IsFinished()) {
@@ -1489,12 +1509,14 @@ private:
                 TStringBuilder() << "Memory limit exception"
                     << ", current limit is " << Alloc->GetLimit() << " bytes.",
                 {});
+            return;
         } catch (...) {
             RuntimeError(
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR,
                 NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
                 CurrentExceptionMessage(),
                 {});
+            return;
         }
     }
 
@@ -1709,12 +1731,14 @@ public:
                 TStringBuilder() << "Memory limit exception"
                     << ", current limit is " << Alloc->GetLimit() << " bytes.",
                 {});
+            return;
         } catch (...) {
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR,
                 NYql::TIssuesIds::KIKIMR_INTERNAL_ERROR,
                 CurrentExceptionMessage(),
                 {});
+            return;
         }
     }
 
@@ -1788,9 +1812,11 @@ public:
         Process();
     }
 
-    void Process() {
+    bool Process() {
         ProcessRequestQueue();
-        ProcessWrite();
+        if (!ProcessWrite()) {
+            return false;
+        }
         ProcessAckQueue();
 
         if (State == EState::FLUSHING) {
@@ -1802,6 +1828,7 @@ public:
                 OnFlushed();
             }
         }
+        return true;
     }
 
     void ProcessRequestQueue() {
@@ -1849,7 +1876,7 @@ public:
         }
     }
 
-    void ProcessWrite() {
+    bool ProcessWrite() {
         const bool outOfMemory = GetTotalFreeSpace() <= 0;
         const bool needToFlush = outOfMemory
             || State == EState::FLUSHING
@@ -1863,20 +1890,23 @@ public:
                 NYql::TIssuesIds::KIKIMR_PRECONDITION_FAILED,
                 TStringBuilder() << "Stream write queries aren't allowed.",
                 {});
-            return;
+            return false;
         }
 
         if (needToFlush) {
             CA_LOG_D("Flush data");
             for (auto& [_, info] : WriteInfos) {
                 if (info.WriteTableActor->IsReady()) {
-                    info.WriteTableActor->Flush();
+                    if (!info.WriteTableActor->Flush()) {
+                        return false;
+                    }
                 }
             }
         }
+        return true;
     }
 
-    void Flush() {
+    bool Flush() {
         Counters->BufferActorFlushes->Inc();
         BufferWriteActorState = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, BufferWriteActor.GetTraceId(),
             "BufferWriteActorState::Flushing", NWilson::EFlags::AUTO_END);
@@ -1888,10 +1918,10 @@ public:
         for (auto& [_, queue] : DataQueues) {
             YQL_ENSURE(queue.empty());
         }
-        Process();
+        return Process();
     }
 
-    void Prepare(const ui64 txId) {
+    bool Prepare(const ui64 txId) {
         BufferWriteActorState = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, BufferWriteActor.GetTraceId(),
             "BufferWriteActorState::Preparing", NWilson::EFlags::AUTO_END);
         OperationStartTime = TInstant::Now();
@@ -1907,12 +1937,15 @@ public:
             info.WriteTableActor->SetPrepare(txId);
         }
         Close();
-        Process();
+        if (!Process()) {
+            return false;
+        }
         SendToExternalShards(false);
         SendToTopics(false);
+        return true;
     }
 
-    void ImmediateCommit() {
+    bool ImmediateCommit() {
         Counters->BufferActorImmediateCommits->Inc();
         BufferWriteActorState = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, BufferWriteActor.GetTraceId(),
             "BufferWriteActorState::Committing", NWilson::EFlags::AUTO_END);
@@ -1929,8 +1962,11 @@ public:
             info.WriteTableActor->SetImmediateCommit();
         }
         Close();
-        Process();
+        if (!Process()) {
+            return false;
+        }
         SendToTopics(true);
+        return true;
     }
 
     void DistributedCommit() {
@@ -2306,12 +2342,14 @@ public:
                 NYql::TIssuesIds::KIKIMR_OPERATION_STATE_UNKNOWN,
                 TStringBuilder() << "State of operation is unknown. Failed to deviler message.",
                 {});
+            return;
         } else {
             ReplyErrorAndDie(
                 NYql::NDqProto::StatusIds::UNAVAILABLE,
                 NYql::TIssuesIds::KIKIMR_TEMPORARILY_UNAVAILABLE,
                 TStringBuilder() << "Kikimr cluster or one of its subsystems was unavailable. Failed to deviler message.",
                 {});
+            return;
         }
     }
 
@@ -2464,7 +2502,7 @@ public:
                 NYql::TIssuesIds::KIKIMR_DISK_SPACE_EXHAUSTED,
                 TStringBuilder() << "Disk space exhausted. " << getPathes() << ".",
                 getIssues());
-                return;
+            return;
         }
         case NKikimrDataEvents::TEvWriteResult::STATUS_OUT_OF_SPACE: {
             CA_LOG_W("Got OUT_OF_SPACE for tables."
@@ -2914,6 +2952,7 @@ private:
             RuntimeError(
                 CurrentExceptionMessage(),
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+            return;
         }
     }
 

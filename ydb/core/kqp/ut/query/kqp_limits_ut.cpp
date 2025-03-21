@@ -97,6 +97,50 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         }
     }
 
+    Y_UNIT_TEST_TWIN(StreamWrite, Allowed) {
+        auto app = NKikimrConfig::TAppConfig();
+        app.MutableTableServiceConfig()->SetEnableOltpSink(true);
+        app.MutableTableServiceConfig()->SetEnableStreamWrite(Allowed);
+        app.MutableTableServiceConfig()->MutableWriteActorSettings()->SetInFlightMemoryLimitPerActorBytes(64);
+
+        auto settings = TKikimrSettings()
+            .SetAppConfig(app)
+            .SetWithSampleTables(false);
+
+        TKikimrRunner kikimr(settings);
+
+        auto db = kikimr.GetQueryClient();
+        
+        {
+            auto result = db.ExecuteQuery(R"(
+                CREATE TABLE `/Root/DataShard` (
+                    Col1 Uint64 NOT NULL,
+                    Col2 String NOT NULL,
+                    Col3 Int32 NOT NULL,
+                    PRIMARY KEY (Col1)
+                )
+                WITH (UNIFORM_PARTITIONS = 2, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);)",
+                NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        {
+            auto result = db.ExecuteQuery(R"(
+                UPSERT INTO `/Root/DataShard` (Col1, Col2, Col3) VALUES
+                    (10u, "test1", 10), (20u, "test2", 11), (30u, "test3", 12), (40u, "test", 13);
+            )", NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            result.GetIssues().PrintTo(Cerr);
+            if (!Allowed) {
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::PRECONDITION_FAILED);
+                UNIT_ASSERT_C(
+                    result.GetIssues().ToString().contains("Stream write queries aren't allowed."),
+                    result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            }
+        }
+    }
+
     Y_UNIT_TEST(KqpMkqlMemoryLimitException) {
         TKikimrRunner kikimr;
         CreateLargeTable(kikimr, 10, 10, 1'000'000, 1);

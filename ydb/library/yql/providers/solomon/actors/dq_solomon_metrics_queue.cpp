@@ -48,7 +48,7 @@ public:
 
         struct TEvNextListingChunkReceived : public NActors::TEventLocal<TEvNextListingChunkReceived, EvNextListingChunkReceived> {
             NSo::TListMetricsResponse Response;
-            TEvNextListingChunkReceived(NSo::TListMetricsResponse&& response)
+            explicit TEvNextListingChunkReceived(NSo::TListMetricsResponse&& response)
                 : Response(std::move(response)) {}
         };
 

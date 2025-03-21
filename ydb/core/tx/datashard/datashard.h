@@ -349,6 +349,9 @@ namespace TEvDataShard {
         EvForceDataCleanup,
         EvForceDataCleanupResult,
 
+        EvPrefixKMeansRequest,
+        EvPrefixKMeansResponse,
+
         EvEnd
     };
 
@@ -1512,6 +1515,18 @@ namespace TEvDataShard {
         : public TEventPB<TEvLocalKMeansResponse,
                           NKikimrTxDataShard::TEvLocalKMeansResponse,
                           TEvDataShard::EvLocalKMeansResponse> {
+    };
+
+    struct TEvPrefixKMeansRequest
+        : public TEventPB<TEvPrefixKMeansRequest,
+                          NKikimrTxDataShard::TEvPrefixKMeansRequest,
+                          TEvDataShard::EvPrefixKMeansRequest> {
+    };
+
+    struct TEvPrefixKMeansResponse
+        : public TEventPB<TEvPrefixKMeansResponse,
+                          NKikimrTxDataShard::TEvPrefixKMeansResponse,
+                          TEvDataShard::EvPrefixKMeansResponse> {
     };
 
     struct TEvKqpScan

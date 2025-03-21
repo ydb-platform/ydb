@@ -24,6 +24,7 @@ ydb admin cluster config replace --help
 Имя | Описание
 ---|---
 `-f`, `--filename` | Путь к файлу, содержащему конфигурацию.
+`--allow-unknown-fields` | Разрешить наличие неизвестных полей в конфигурации (по умолчанию: 0).
 `--ignore-local-validation` | Игнорировать базовую валидацию конфигурации на стороне клиента (по умолчанию: 0).
 
 ## Примеры {#examples}
@@ -38,4 +39,10 @@ ydb admin cluster config replace --filename сonfig.yaml
 
 ```bash
 ydb admin cluster config replace -f config.yaml --ignore-local-validation
+```
+
+Загрузите файл динамиической конфигурации на кластер, игнорируя проверку конфигурации на неизвестные поля:
+
+```bash
+ydb admin cluster config replace -f config.yaml --allow-unknown-fields
 ```

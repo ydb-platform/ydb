@@ -4131,6 +4131,7 @@ private:
         const TString& mapInputType,
         size_t mapDirectOutputs,
         const TExpressionResorceUsage& mapExtraUsage,
+        bool mapBlockInput,
         TString reduceLambda,
         const TString& reduceInputType,
         const TExpressionResorceUsage& reduceExtraUsage,
@@ -4143,7 +4144,7 @@ private:
         const bool testRun = execCtx->Config_->GetLocalChainTest();
         TFuture<bool> ret = testRun ? MakeFuture<bool>(false) : execCtx->LookupQueryCacheAsync();
         return ret.Apply([reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs,
-                          mapExtraUsage, reduceLambda, reduceInputType, reduceExtraUsage,
+                          mapExtraUsage, mapBlockInput, reduceLambda, reduceInputType, reduceExtraUsage,
                           intermediateMeta, intermediateSchema, intermediateStreams, inputQueryExpr, execCtx, testRun]
                          (const auto& f) mutable
         {
@@ -4250,6 +4251,7 @@ private:
             mapJob->SetTableNames(tables);
             mapJob->SetRowOffsets(rowOffsets);
             mapJob->SetUseSkiff(useSkiff, TMkqlIOSpecs::ESystemField::RowIndex);
+            mapJob->SetUseBlockInput(mapBlockInput);
             mapJob->SetYamrInput(execCtx->YamrInput);
 
             auto reduceJob = MakeIntrusive<TYqlUserJob>();
@@ -4532,6 +4534,7 @@ private:
         const bool useNativeTypes = execCtx->Options_.Config()->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES);
         const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
         const auto useIntermediateStreams = execCtx->Options_.Config()->UseIntermediateStreams.Get().GetOrElse(DEFAULT_USE_INTERMEDIATE_STREAMS);
+        const bool mapBlockInput = NYql::HasSetting(mapReduce.Settings().Ref(), EYtSettingType::BlockInputApplied);
 
         NYT::TNode intermediateMeta;
         NYT::TNode intermediateSchema;
@@ -4637,13 +4640,13 @@ private:
 
         const TString inputQueryExpr = GenerateInputQueryWhereExpression(mapReduce.Settings().Ref());
 
-        return execCtx->Session_->Queue_->Async([reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs, mapExtraUsage,
+        return execCtx->Session_->Queue_->Async([reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs, mapExtraUsage, mapBlockInput,
             reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, useIntermediateStreams, inputQueryExpr, execCtx]()
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->MakeUserFiles();
             if (mapLambda) {
-                return ExecMapReduce(reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs, mapExtraUsage,
+                return ExecMapReduce(reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs, mapExtraUsage, mapBlockInput,
                     reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, inputQueryExpr, execCtx);
             } else {
                 return ExecMapReduce(reduceBy, sortBy, limit, sortLimitBy, reduceLambda, reduceInputType, reduceExtraUsage, intermediateSchema,

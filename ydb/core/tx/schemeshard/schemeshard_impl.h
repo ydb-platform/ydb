@@ -1550,6 +1550,8 @@ private:
     NKikimrSubDomains::TProcessingParams CreateRootProcessingParams(const TActorContext &ctx);
     static NTabletPipe::TClientConfig GetPipeClientConfig();
 
+    static bool IsLoginCacheEnabled();
+
 public:
     static const NKikimrConfig::TDomainsConfig& GetDomainsConfig();
 

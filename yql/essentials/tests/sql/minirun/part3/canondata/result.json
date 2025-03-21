@@ -195,6 +195,20 @@
             "uri": "https://{canondata_backend}/1881367/948e93b5cacfa4a732bc9d920d6546ab3f25aba9/resource.tar.gz#test.test_bigdate-const_interval64-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[bigdate-date_tz_implicit_casts-default.txt-Debug]": [
+        {
+            "checksum": "af8f65aa083f5cde0a4bb4f078e10bc9",
+            "size": 1306,
+            "uri": "https://{canondata_backend}/1936947/d9fc1c1289e163d90287579127b30a378edfb34d/resource.tar.gz#test.test_bigdate-date_tz_implicit_casts-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[bigdate-date_tz_implicit_casts-default.txt-Results]": [
+        {
+            "checksum": "619f9a0210499a1f34d5209cd7d1d77a",
+            "size": 3137,
+            "uri": "https://{canondata_backend}/1942278/584acca05dd7d7e8eec1b57cf050b7123a65c1ca/resource.tar.gz#test.test_bigdate-date_tz_implicit_casts-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[bigdate-output_interval64-default.txt-Debug]": [
         {
             "checksum": "298089b9382a0a77c9e268c9f0e95b3a",
@@ -416,6 +430,20 @@
             "checksum": "f2cdd3b825351d6128c6ae02b8652cfc",
             "size": 4178,
             "uri": "https://{canondata_backend}/1946324/15d61515f724d2d343da00780ff2c6ac72278fb3/resource.tar.gz#test.test_datetime-date_diff_sub-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[datetime-date_tz_implicit_casts-default.txt-Debug]": [
+        {
+            "checksum": "a12a2924c35fe2b445a4dcd5754c3a3e",
+            "size": 2810,
+            "uri": "https://{canondata_backend}/1936947/d9fc1c1289e163d90287579127b30a378edfb34d/resource.tar.gz#test.test_datetime-date_tz_implicit_casts-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[datetime-date_tz_implicit_casts-default.txt-Results]": [
+        {
+            "checksum": "69877e6b31258394712a217a32aa3104",
+            "size": 9381,
+            "uri": "https://{canondata_backend}/1942278/584acca05dd7d7e8eec1b57cf050b7123a65c1ca/resource.tar.gz#test.test_datetime-date_tz_implicit_casts-default.txt-Results_/results.txt"
         }
     ],
     "test.test[expr-between-default.txt-Debug]": [

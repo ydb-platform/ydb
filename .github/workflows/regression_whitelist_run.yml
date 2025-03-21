@@ -15,7 +15,6 @@ jobs:
       matrix: 
          build_preset: ["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]
     with:
-      runner_label: auto-provisioned
       test_targets: ydb/tests/sql/ ydb/tests/stress ydb/tests/functional/tpc ydb/tests/functional/benchmarks_init
       build_preset: ${{ matrix.build_preset }}
 

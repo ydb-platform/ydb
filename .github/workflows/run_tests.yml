@@ -1,39 +1,13 @@
 name: Run tests
 
 on:
-  workflow_dispatch:
-    inputs:
-      test_targets:
-        description: 'Пути запуска'
-        required: true
-        type: string
-        default: ydb/
-      test_type:
-        description: 'Тип тестов'
-        required: false
-        type: string
-        default: unittest,py3test,py2test,pytest
-      test_size:
-        description: 'Размер тестов'
-        required: false
-        type: string
-        default: small,medium,large
-      additional_ya_make_args:
-        description: 'Дополнительные аргументы для ya make'
-        required: false
-        type: string
-        default: -DDEBUGINFO_LINES_ONLY
-      build_preset:
-        description: 'Build preset type'
-        required: true
-        type: string
   workflow_call:
     inputs:
       runner_label:
         description: 'Label of the runner to be used'
         required: false
         type: string
-        default: auto-provisioned
+        default: self-hosted
       test_targets:
         description: 'Пути запуска'
         required: true
@@ -62,7 +36,7 @@ on:
 jobs:
   run_tests:
     name: Test ${{ github.ref_name }}:${{ inputs.build_preset }}
-    timeout-minutes: 600
+    timeout-minutes: 1200
     runs-on: ${{ inputs.runner_label }}
     steps:
       - name: Set variables based on build_preset
@@ -70,16 +44,16 @@ jobs:
         run: |
           if [[ "${{ inputs.build_preset }}" == "relwithdebinfo" ]]; then
             echo "threads_count=52" >> $GITHUB_ENV
-            echo "timeout=400" >> $GITHUB_ENV
+            echo "timeout=1200" >> $GITHUB_ENV
           elif [[ "${{ inputs.build_preset }}" == "release-asan" ]]; then
             echo "threads_count=20" >> $GITHUB_ENV
-            echo "timeout=480" >> $GITHUB_ENV
+            echo "timeout=1200" >> $GITHUB_ENV
           elif [[ "${{ inputs.build_preset }}" == "release-msan" ]]; then
-            echo "threads_count=10" >> $GITHUB_ENV
-            echo "timeout=600" >> $GITHUB_ENV
+            echo "threads_count=5" >> $GITHUB_ENV
+            echo "timeout=1200" >> $GITHUB_ENV
           elif [[ "${{ inputs.build_preset }}" == "release-tsan" ]]; then
             echo "threads_count=10" >> $GITHUB_ENV
-            echo "timeout=600" >> $GITHUB_ENV
+            echo "timeout=1200" >> $GITHUB_ENV
           else
             echo "Unknown build_preset value."
             exit 1

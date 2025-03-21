@@ -36,7 +36,7 @@ struct TDqOutputChannelSettings {
     NDqProto::EDataTransportVersion TransportVersion = NDqProto::EDataTransportVersion::DATA_TRANSPORT_UV_PICKLE_1_0;
     IDqChannelStorage::TPtr ChannelStorage;
     TCollectStatsLevel Level = TCollectStatsLevel::None;
-    TMaybe<ui8> BlockMinFillPercentage;
+    TMaybe<ui8> ArrayBufferMinFillPercentage;
     TMutable MutableSettings;
 };
 

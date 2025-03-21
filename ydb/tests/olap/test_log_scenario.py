@@ -126,7 +126,7 @@ class TestLogScenario(object):
     def test(self):
         """As per https://github.com/ydb-platform/ydb/issues/13530"""
 
-        wait_time: int = int(get_external_param("wait_minutes", "3")) * 60
+        wait_time: int = int(get_external_param("wait_minutes", "1")) * 60
         self.table_name: str = "log"
 
         ydb_workload: YdbWorkloadLog = YdbWorkloadLog(endpoint=self.ydb_client.endpoint, database=self.ydb_client.database, table_name=self.table_name)

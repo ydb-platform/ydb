@@ -269,7 +269,7 @@ private:
 
     static void OnUploadsCreated(TActorSystem* actorSystem, TActorId selfId, TActorId parentId, const TString& requestId, IHTTPGateway::TResult&& result) {
         const TString body = result.Content.Extract();
-        if (result.Issues || result.CurlResponseCode != CURLE_OK) {
+        if (result.Issues) {
             actorSystem->Send(new IEventHandle(parentId, selfId, new TEvPrivate::TEvUploadError("Create upload response issues is not empty", requestId, body, result)));
             return;
         }

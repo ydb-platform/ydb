@@ -143,6 +143,8 @@ protected:
         TMaybe<NMsgBusProxy::EResponseStatus> Status;
         TMaybe<NPersQueue::NErrorCode::EErrorCode> ErrorCode;
         TMaybe<ui64> Offset;
+        TMaybe<bool> AlreadyWritten;
+        TMaybe<ui64> SeqNo;
     };
 
     struct TErrorMatcher {
@@ -679,7 +681,6 @@ void TPartitionFixture::WaitProxyResponse(const TProxyResponseMatcher& matcher)
 {
     auto event = Ctx->Runtime->GrabEdgeEvent<TEvPQ::TEvProxyResponse>();
     UNIT_ASSERT(event != nullptr);
-
     if (matcher.Cookie) {
         UNIT_ASSERT_VALUES_EQUAL(*matcher.Cookie, event->Cookie);
     }
@@ -698,6 +699,18 @@ void TPartitionFixture::WaitProxyResponse(const TProxyResponseMatcher& matcher)
         UNIT_ASSERT(event->Response->HasPartitionResponse());
         UNIT_ASSERT(event->Response->GetPartitionResponse().HasCmdGetClientOffsetResult());
         UNIT_ASSERT_VALUES_EQUAL(*matcher.Offset, event->Response->GetPartitionResponse().GetCmdGetClientOffsetResult().GetOffset());
+    }
+    if (matcher.AlreadyWritten) {
+        UNIT_ASSERT(event->Response->HasPartitionResponse());
+        UNIT_ASSERT_VALUES_EQUAL(event->Response->GetPartitionResponse().CmdWriteResultSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(*matcher.AlreadyWritten,
+                                 event->Response->GetPartitionResponse().GetCmdWriteResult(0).GetAlreadyWritten());
+    }
+    if (matcher.SeqNo) {
+        UNIT_ASSERT(event->Response->HasPartitionResponse());
+        UNIT_ASSERT_VALUES_EQUAL(event->Response->GetPartitionResponse().CmdWriteResultSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(*matcher.SeqNo,
+                                 event->Response->GetPartitionResponse().GetCmdWriteResult(0).GetSeqNo());
     }
 }
 
@@ -1174,6 +1187,8 @@ void TPartitionFixture::ShadowPartitionCountersTest(bool isFirstClass) {
                 return TTestActorRuntimeBase::EEventAction::DROP;
             } else if (auto* msg = ev->CastAsLocal<TEvPQ::TEvConsumed>()) {
                 return TTestActorRuntimeBase::EEventAction::DROP;
+            } else if (auto* msg = ev->CastAsLocal<TEvPQ::TEvProxyResponse>()) {
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
             }
             return TTestActorRuntimeBase::EEventAction::PROCESS;
     });
@@ -2658,7 +2673,7 @@ Y_UNIT_TEST_F(DataTxCalcPredicateOk, TPartitionTxTestHelper)
     WaitProxyResponse({.Cookie=cookie});
 
     Cerr << "Wait third predicate result " << Endl;
-    auto tx3 = MakeAndSendWriteTx({{"src1", {1, 10}}, {"SourceId", {6, 10}}});
+    auto tx3 = MakeAndSendWriteTx({{"src1", {12, 20}}, {"SourceId", {6, 10}}});
     WaitWriteInfoRequest(tx3, true);
     WaitTxPredicateReply(tx3);
     SendTxCommit(tx3);
@@ -2865,12 +2880,56 @@ Y_UNIT_TEST_F(ConflictingTxProceedAfterRollback, TPartitionTxTestHelper) {
     WaitImmediateTxComplete(immTx, true);
 }
 
-Y_UNIT_TEST_F(ConflictingSrcIdTxInDifferentBatches, TPartitionTxTestHelper) {
+Y_UNIT_TEST_F(ConflictingSrcIdForTxInDifferentBatches, TPartitionTxTestHelper) {
     TTxBatchingTestParams params {.WriterSessions{"src1"}};
     Init(std::move(params));
 
-    auto tx1 = MakeAndSendWriteTx({{"src1", {1, 3}}, {"src2", {5, 10}}});
-    auto immTx = MakeAndSendImmediateTx({{"src2", {11, 12}}});
+    auto tx1 = MakeAndSendWriteTx({{"src1", {1, 5}}});
+    auto tx2 = MakeAndSendWriteTx({{"src1", {6, 10}}});
+    auto tx3 = MakeAndSendWriteTx({{"src1", {2, 11}}});
+    auto tx4 = MakeAndSendWriteTx({{"src1", {8, 15}}});
+
+    WaitWriteInfoRequest(tx1, true);
+    WaitWriteInfoRequest(tx2, true);
+    WaitWriteInfoRequest(tx3, true);
+    WaitWriteInfoRequest(tx4, true);
+    WaitTxPredicateReply(tx1);
+
+    Cerr << "Wait batch of 1 completion\n";
+    SendTxCommit(tx1);
+    WaitBatchCompletion(1);
+    Cerr << "Expect no KV request\n";
+    ExpectNoKvRequest();
+    WaitTxPredicateReply(tx2);
+    SendTxCommit(tx2);
+
+    Cerr << "Waif or tx 3 predicate failure\n";
+    WaitTxPredicateFailure(tx3);
+    Cerr << "Waif or tx 4 predicate failure\n";
+    WaitTxPredicateFailure(tx4);
+
+
+    Cerr << "Wait batch of 3 completion\n";
+    WaitBatchCompletion(1); // Immediate Tx 2 - 4.
+    Cerr << "Expect no KV request\n";
+    ExpectNoKvRequest();
+    SendTxRollback(tx3);
+    SendTxRollback(tx4);
+    WaitBatchCompletion(2); // Immediate Tx 2 - 4.
+
+    ExpectNoCommitDone();
+    WaitKvRequest();
+    SendKvResponse();
+    Cerr << "Wait for commits\n";
+    WaitCommitDone(tx1);
+    WaitCommitDone(tx2);
+}
+
+Y_UNIT_TEST_F(ConflictingSrcIdTxAndWritesDifferentBatches, TPartitionTxTestHelper) {
+    TTxBatchingTestParams params {.WriterSessions{"src1"}, .EndOffset = 1};
+    Init(std::move(params));
+
+    auto tx1 = MakeAndSendWriteTx({{"src1", {1, 3}},});
     auto tx2 = MakeAndSendWriteTx({{"src1", {2, 4}}});
     auto tx3 = MakeAndSendWriteTx({{"src1", {4, 6}}});
     AddAndSendNormalWrite("src1", 1, 1);
@@ -2879,7 +2938,6 @@ Y_UNIT_TEST_F(ConflictingSrcIdTxInDifferentBatches, TPartitionTxTestHelper) {
 
 
     WaitWriteInfoRequest(tx1, true);
-    WaitWriteInfoRequest(immTx, true);
     WaitWriteInfoRequest(tx2, true);
     WaitWriteInfoRequest(tx3, true);
     WaitTxPredicateReply(tx1);
@@ -2892,15 +2950,18 @@ Y_UNIT_TEST_F(ConflictingSrcIdTxInDifferentBatches, TPartitionTxTestHelper) {
     WaitTxPredicateReply(tx3);
     SendTxRollback(tx2);
     SendTxCommit(tx3);
-    WaitBatchCompletion(3); // Immediate Tx, Tx 2 & 3.
+    WaitBatchCompletion(2); // Tx 2 & 3.
     ExpectNoCommitDone();
     WaitKvRequest();
     SendKvResponse();
     WaitCommitDone(tx1);
-    WaitImmediateTxComplete(immTx, true);
     WaitCommitDone(tx3);
     WaitBatchCompletion(3);
     WaitKvRequest();
+    SendKvResponse();
+    WaitProxyResponse({.AlreadyWritten=true, .SeqNo=1});
+    WaitProxyResponse({.AlreadyWritten=false, .SeqNo=7});
+    WaitProxyResponse({.AlreadyWritten=true, .SeqNo=7});
 }
 
 Y_UNIT_TEST_F(ConflictingSrcIdForTxWithHead, TPartitionTxTestHelper) {
@@ -2928,6 +2989,11 @@ Y_UNIT_TEST_F(ConflictingSrcIdForTxWithHead, TPartitionTxTestHelper) {
     Cerr << "Wait 2nd KV request\n";
     WaitKvRequest();
     SendKvResponse();
+    WaitProxyResponse({.AlreadyWritten=true, .SeqNo=8});
+    WaitProxyResponse({.AlreadyWritten=true, .SeqNo=10});
+    WaitProxyResponse({.AlreadyWritten=false, .SeqNo=11});
+
+    //WaitProxyResponse()
 }
 
 class TBatchingConditionsTest {

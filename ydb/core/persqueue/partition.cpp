@@ -2508,19 +2508,17 @@ void TPartition::CommitWriteOperations(TTransaction& t)
 
             WriteInflightSize += msg.Msg.Data.size();
             ExecRequest(msg, *Parameters, PersistRequest.Get());
-
-            auto& info = TxSourceIdForPostPersist[blob.SourceId];
-            info.SeqNo = blob.SeqNo;
-            info.Offset = NewHead.Offset;
         }
     }
     for (const auto& [srcId, info] : t.WriteInfo->SrcIdInfo) {
-
         auto& sourceIdBatch = Parameters->SourceIdBatch;
         auto sourceId = sourceIdBatch.GetSource(srcId);
         sourceId.Update(info.SeqNo, info.Offset + oldHeadOffset, CurrentTimestamp);
-
+        auto& persistInfo = TxSourceIdForPostPersist[srcId];
+        persistInfo.SeqNo = info.SeqNo;
+        persistInfo.Offset = info.Offset + oldHeadOffset;
     }
+
     Parameters->FirstCommitWriteOperations = false;
 
     WriteInfosApplied.emplace_back(std::move(t.WriteInfo));

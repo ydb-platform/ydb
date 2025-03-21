@@ -51,7 +51,7 @@ TString TOverlay::Encode() const
     NProto::TOverlay plain;
 
     if (Screen) {
-        Y_ABORT_UNLESS(Screen->Size() > 0,
+        Y_ENSURE(Screen->Size() > 0,
             "Cannot serialize a screen with 0 holes");
 
         Screen->Validate();
@@ -63,7 +63,7 @@ TString TOverlay::Encode() const
     }
 
     if (Slices) {
-        Y_ABORT_UNLESS(Slices->size() > 0,
+        Y_ENSURE(Slices->size() > 0,
             "Cannot serialize a run with 0 slices");
 
         Slices->Validate();
@@ -94,11 +94,11 @@ TOverlay TOverlay::Decode(TArrayRef<const char> opaque, TArrayRef<const char> op
         }
 
         if (!ok) {
-            Y_Fail("Failed to parse part overlay");
+            Y_TABLET_ERROR("Failed to parse part overlay");
         }
 
         if (plain.ScreenSize() & 1) {
-            Y_Fail("Overlay has invalid screen size " << plain.ScreenSize());
+            Y_TABLET_ERROR("Overlay has invalid screen size " << plain.ScreenSize());
         }
 
         TScreen::TVec holes;
@@ -143,23 +143,23 @@ void TOverlay::Validate() const
 
     while (screen) {
         if (!slices) {
-            Y_ABORT("Found screen hole [%lu,%lu) that has no matching slices", screen->Begin, screen->End);
+            Y_TABLET_ERROR("Found screen hole [" << screen->Begin << "," << screen->End << ") that has no matching slices");
         }
 
         if (screen->End == Max<TRowId>()) {
             if (slices.HasNext()) {
                 auto mid = *slices;
                 ++slices;
-                Y_ABORT("Found screen hole [%lu,+inf) that does not match slices [%lu,%lu) and [%lu,%lu)",
-                    screen->Begin, mid.Begin, mid.End, slices->Begin, slices->End);
+                Y_TABLET_ERROR("Found screen hole [" << screen->Begin << ",+inf) that does not match slices ["
+                    << mid.Begin << "," << mid.End << ") and [" << slices->Begin << "," << slices->End << ")");
             }
             if (screen->Begin != slices->Begin) {
-                Y_ABORT("Found screen hole [%lu,+inf) that does not match slice [%lu,%lu)",
-                    screen->Begin, slices->Begin, slices->End);
+                Y_TABLET_ERROR("Found screen hole [" << screen->Begin << ",+inf) that does not match slice ["
+                    << slices->Begin << "," << slices->End << ")");
             }
         } else if (!(*screen == *slices)) {
-            Y_ABORT("Found screen hole [%lu,%lu) that does not match slice [%lu,%lu)",
-                screen->Begin, screen->End, slices->Begin, slices->End);
+            Y_TABLET_ERROR("Found screen hole [" << screen->Begin << "," << screen->End << ") that does not match slice ["
+                << slices->Begin << "," << slices->End << ")");
         }
 
         ++screen;
@@ -167,7 +167,7 @@ void TOverlay::Validate() const
     }
 
     if (slices) {
-        Y_ABORT("Found slice [%lu,%lu) that has no matching screen holes", slices->Begin, slices->End);
+        Y_TABLET_ERROR("Found slice [" << slices->Begin << "," << slices->End << ") that has no matching screen holes");
     }
 }
 
@@ -176,19 +176,19 @@ void TOverlay::ApplyDelta(TArrayRef<const char> rawDelta)
     NProto::TOverlayDelta plain;
 
     if (!ParseFromStringNoSizeLimit(plain, rawDelta)) {
-        Y_Fail("Failed to parse overlay delta");
+        Y_TABLET_ERROR("Failed to parse overlay delta");
     }
 
     if (auto removedSlices = SlicesFromProto(plain.GetRemovedSlices())) {
         TIntrusiveConstPtr<TSlices> removed = new TSlices(std::move(removedSlices));
         if (!TSlices::SupersetByRowId(Slices, removed)) {
-            Y_Fail("Removing slices that are not a subset of existing slices");
+            Y_TABLET_ERROR("Removing slices that are not a subset of existing slices");
         }
 
         Slices = TSlices::Subtract(Slices, removed);
 
         if (Slices->empty()) {
-            Y_Fail("Removing slices produced an empty result");
+            Y_TABLET_ERROR("Removing slices produced an empty result");
         }
 
         Screen = Slices->ToScreen();
@@ -203,7 +203,7 @@ TString TOverlay::EncodeRemoveSlices(const TIntrusiveConstPtr<TSlices>& slices)
 {
     NProto::TOverlayDelta plain;
 
-    Y_ABORT_UNLESS(slices, "Cannot encode an empty remove slices");
+    Y_ENSURE(slices, "Cannot encode an empty remove slices");
 
     SlicesToProto(*slices, plain.MutableRemovedSlices());
 
@@ -216,7 +216,7 @@ TString TOverlay::EncodeChangeSlices(TConstArrayRef<TSlice> slices)
 {
     NProto::TOverlayDelta plain;
 
-    Y_ABORT_UNLESS(slices, "Cannot encode an empty change slices");
+    Y_ENSURE(slices, "Cannot encode an empty change slices");
 
     SlicesToProto(slices, plain.MutableChangedSlices());
 
@@ -233,7 +233,7 @@ TString TOverlay::MaybeUnsplitSlices(const TString& opaque, size_t maxSize)
 
     NProto::TOverlay proto;
     if (!ParseFromStringNoSizeLimit(proto, opaque)) {
-        Y_Fail("Unexpected failure to parse part overlay");
+        Y_TABLET_ERROR("Unexpected failure to parse part overlay");
     }
 
     TVector<TSlice> slices = SlicesFromProto(proto.GetSlices());
@@ -271,7 +271,7 @@ TString TOverlay::MaybeUnsplitSlices(const TString& opaque, size_t maxSize)
 
     TString modified;
     if (!proto.SerializeToString(&modified)) {
-        Y_Fail("Unexpected failure to serialize part overlay");
+        Y_TABLET_ERROR("Unexpected failure to serialize part overlay");
     }
 
     return modified;

@@ -235,20 +235,19 @@ void TSlices::Validate() const
     for (const auto& bounds : *this) {
         TRowId begin = bounds.BeginRowId();
         TRowId end = bounds.EndRowId();
-        Y_ABORT_UNLESS(std::exchange(lastEnd, end) <= begin,
+        Y_ENSURE(std::exchange(lastEnd, end) <= begin,
             "Slices not sorted or have intersections, search may not work correctly");
-        Y_ABORT_UNLESS(begin < end,
-            "Sanity check: slice [%" PRIu64 ",%" PRIu64 ") has no rows, search may not work correctly",
-            begin, end);
+        Y_ENSURE(begin < end,
+            "Sanity check: slice [" << begin << "," << end << ") has no rows, search may not work correctly");
         if (!bounds.FirstKey.GetCells()) {
-            Y_ABORT_UNLESS(bounds.FirstInclusive, "Sanity check: slice has FirstKey == -inf, but it is not included");
-            Y_ABORT_UNLESS(bounds.FirstRowId == 0, "Sanity check: slice has FirstKey == -inf, but FirstRowId != 0");
+            Y_ENSURE(bounds.FirstInclusive, "Sanity check: slice has FirstKey == -inf, but it is not included");
+            Y_ENSURE(bounds.FirstRowId == 0, "Sanity check: slice has FirstKey == -inf, but FirstRowId != 0");
         }
         if (!bounds.LastKey.GetCells()) {
-            Y_ABORT_UNLESS(!bounds.LastInclusive, "Sanity check: slice has LastKey == +inf, but it is included");
-            Y_ABORT_UNLESS(bounds.LastRowId == Max<TRowId>(), "Sanity check: slice has LastKey == +inf, but LastRowId != +inf");
+            Y_ENSURE(!bounds.LastInclusive, "Sanity check: slice has LastKey == +inf, but it is included");
+            Y_ENSURE(bounds.LastRowId == Max<TRowId>(), "Sanity check: slice has LastKey == +inf, but LastRowId != +inf");
         } else {
-            Y_ABORT_UNLESS(bounds.LastRowId != Max<TRowId>(), "Sanity check: slice has LastRowId == +inf, but LastKey != +inf");
+            Y_ENSURE(bounds.LastRowId != Max<TRowId>(), "Sanity check: slice has LastRowId == +inf, but LastKey != +inf");
         }
     }
 }
@@ -418,7 +417,7 @@ TIntrusiveConstPtr<TSlices> TSlices::Merge(
             return;
         }
         auto& last = r.back();
-        Y_ABORT_UNLESS(!TSlice::LessByFirstRowId(slice, last), "Invalid merge order");
+        Y_ENSURE(!TSlice::LessByFirstRowId(slice, last), "Invalid merge order");
         if (last.LastRowId < slice.LastRowId ||
             last.LastRowId == slice.LastRowId && !last.LastInclusive && slice.LastInclusive)
         {
@@ -516,13 +515,13 @@ TIntrusiveConstPtr<TSlices> TSlices::Cut(
 
 TIntrusiveConstPtr<TSlices> TSlices::Replace(TIntrusiveConstPtr<TSlices> run, TConstArrayRef<TSlice> slices)
 {
-    Y_ABORT_UNLESS(run && !run->empty());
-    Y_ABORT_UNLESS(slices);
+    Y_ENSURE(run && !run->empty());
+    Y_ENSURE(slices);
 
     TVector<TSlice> result(Reserve(run->size() - 1 + slices.size()));
 
-    Y_ABORT_UNLESS(ValidateSlices(*run), "TSlices::Replace got invalid source slices");
-    Y_ABORT_UNLESS(ValidateSlices(slices), "TSlices::Replace got invalid new slices");
+    Y_ENSURE(ValidateSlices(*run), "TSlices::Replace got invalid source slices");
+    Y_ENSURE(ValidateSlices(slices), "TSlices::Replace got invalid new slices");
 
     auto it = run->begin();
     auto next = slices.begin();
@@ -536,23 +535,20 @@ TIntrusiveConstPtr<TSlices> TSlices::Replace(TIntrusiveConstPtr<TSlices> run, TC
 
         // Remove slices matching the full removed range
         ui64 first = it->BeginRowId();
-        Y_ABORT_UNLESS(it->BeginRowId() == removed->Begin,
-            "Cannot remove range [%" PRIu64 ",%" PRIu64 ") -- found slice [%" PRIu64 ",%" PRIu64 ")",
-            removed->Begin, removed->End,
-            it->BeginRowId(), it->EndRowId());
+        Y_ENSURE(it->BeginRowId() == removed->Begin,
+            "Cannot remove range [" << removed->Begin << "," << removed->End
+            << ") -- found slice [" << it->BeginRowId() << "," << it->EndRowId() << ")");
         ui64 last = (it++)->EndRowId();
         while (it != run->end() && it->EndRowId() <= removed->End) {
-            Y_ABORT_UNLESS(last == it->BeginRowId(),
-                "Cannot remove range [%" PRIu64 ",%" PRIu64 ") -- found range [%" PRIu64 ",%" PRIu64 ") and slice [%" PRIu64 ",%" PRIu64 ")",
-                removed->Begin, removed->End,
-                first, last,
-                it->BeginRowId(), it->EndRowId());
+            Y_ENSURE(last == it->BeginRowId(),
+                "Cannot remove range [" << removed->Begin << "," << removed->End
+                << ") -- found range [" << first << "," << last
+                << ") and slice [" << it->BeginRowId() << "," << it->EndRowId() << ")");
             last = (it++)->EndRowId();
         }
-        Y_ABORT_UNLESS(last == removed->End,
-            "Cannot remove range [%" PRIu64 ",%" PRIu64 ") -- found range [%" PRIu64 ",%" PRIu64 ")",
-            removed->Begin, removed->End,
-            first, last);
+        Y_ENSURE(last == removed->End,
+            "Cannot remove range [" << removed->Begin << "," << removed->End
+            << ") -- found range [" << first << "," << last << ")");
 
         // Add slices matching the full removed range
         while (next != slices.end() && next->EndRowId() <= removed->End) {
@@ -562,19 +558,17 @@ TIntrusiveConstPtr<TSlices> TSlices::Replace(TIntrusiveConstPtr<TSlices> run, TC
         ++removed;
     }
 
-    Y_ABORT_UNLESS(!removed,
-        "Cannot remove range [%" PRIu64 ",%" PRIu64 ") -- out of source slices",
-        removed->Begin, removed->End);
+    Y_ENSURE(!removed,
+        "Cannot remove range [" << removed->Begin << "," << removed->End << ") -- out of source slices");
 
-    Y_ABORT_UNLESS(next == slices.end(),
-        "Cannot process slice [%" PRIu64 ",%" PRIu64 ") -- rows out of sync",
-        next->BeginRowId(), next->EndRowId());
+    Y_ENSURE(next == slices.end(),
+        "Cannot process slice [" << next->BeginRowId() << "," << next->EndRowId() << ") -- rows out of sync");
 
     while (it != run->end()) {
         result.emplace_back(*it++);
     }
 
-    Y_ABORT_UNLESS(ValidateSlices(result), "TSlices::Replace produced invalid slices");
+    Y_ENSURE(ValidateSlices(result), "TSlices::Replace produced invalid slices");
 
     result.shrink_to_fit();
     return new TSlices(std::move(result));
@@ -591,7 +585,7 @@ TLevels::iterator TLevels::AddLevel()
 
 TLevels::TAddResult TLevels::Add(TIntrusiveConstPtr<TPart> part, const TSlice& slice)
 {
-    Y_VERIFY_S(part->Epoch >= MaxEpoch,
+    Y_ENSURE(part->Epoch >= MaxEpoch,
             "Adding part " << part->Label.ToString() << " (epoch " << part->Epoch << ") to levels with max epoch " << MaxEpoch);
     MaxEpoch = part->Epoch;
 
@@ -632,7 +626,7 @@ void TLevels::AddContiguous(TIntrusiveConstPtr<TPart> part, const TIntrusiveCons
         return;
     }
 
-    Y_VERIFY_S(part->Epoch >= MaxEpoch,
+    Y_ENSURE(part->Epoch >= MaxEpoch,
             "Adding part " << part->Label.ToString() << " (epoch " << part->Epoch << ") to levels with max epoch " << MaxEpoch);
     MaxEpoch = part->Epoch;
 

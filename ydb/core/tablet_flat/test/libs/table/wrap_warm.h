@@ -63,7 +63,7 @@ namespace NTest {
 
         const TRowState& Apply()
         {
-            Y_ABORT_UNLESS(*this, "Iterator isn't ready");
+            Y_ENSURE(*this, "Iterator isn't ready");
 
             return State;
         }

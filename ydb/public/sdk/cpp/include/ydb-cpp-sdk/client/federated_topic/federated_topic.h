@@ -539,6 +539,12 @@ public:
     //! Discover all clusters for federated topic
     NThreading::TFuture<std::vector<TClusterInfo>> GetAllClusterInfo();
 
+    static std::vector<NTopic::TTopicClient> GetAllTopicClients(const TDriver& driver, const std::vector<TClusterInfo>& clusterInfos, NTopic::TTopicClientSettings& clientSettings);
+
+    static std::vector<TAsyncDescribeTopicResult> DescribeAllTopics(const std::string& path, std::vector<NTopic::TTopicClient> &topicClients, const std::vector<TClusterInfo>& clusterInfos, NTopic::TDescribeTopicSettings& describeSettings);
+
+    static std::vector<std::shared_ptr<NTopic::IReadSession>> CreateAllTopicsReadSessions(std::vector<NTopic::TTopicClient>& topicClients, const std::vector<TClusterInfo>& clusterInfos, std::vector<NTopic::TReadSessionSettings>& readSettings);
+
 protected:
     void OverrideCodec(NTopic::ECodec codecId, std::unique_ptr<NTopic::ICodec>&& codecImpl);
 

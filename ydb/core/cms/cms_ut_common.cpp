@@ -955,39 +955,6 @@ void TCmsTestEnv::CheckBSCUpdateRequests(std::set<ui32> expectedNodes,
     );
 }
 
-
-void TCmsTestEnv::CheckBSCUpdateDriveRequests(std::set<std::pair<ui32, ui32>> expectedDrives,
-                                         NKikimrBlobStorage::EDriveStatus expectedStatus)
-{
-    using TBSCRequests = std::map<NKikimrBlobStorage::EDriveStatus, std::set<std::pair<ui32, ui32>>>;
-
-    TBSCRequests expectedRequests = { {expectedStatus, expectedDrives} };
-    TBSCRequests actualRequests;
-
-    TDispatchOptions options;
-    options.FinalEvents.emplace_back([&](IEventHandle& ev) {
-        if (ev.GetTypeRewrite() == TEvBlobStorage::TEvControllerConfigRequest::EventType) {
-            const auto& request = ev.Get<TEvBlobStorage::TEvControllerConfigRequest>()->Record;
-            bool foundUpdateDriveCommand = false;
-            for (const auto& command : request.GetRequest().GetCommand()) {
-                if (command.HasUpdateDriveStatus()) {
-                    foundUpdateDriveCommand = true;
-                    const auto& update = command.GetUpdateDriveStatus();
-                    actualRequests[update.GetStatus()].insert(std::make_pair<ui32, ui32>(update.GetHostKey().GetNodeId(), update.GetPDiskId()));
-                }
-            }
-            return foundUpdateDriveCommand;
-        }
-        return false;
-    });
-    DispatchEvents(options, TDuration::Minutes(1));
-
-    UNIT_ASSERT_C(
-        actualRequests == expectedRequests,
-        TStringBuilder() << "Sentinel sent wrong update requests to BSC"
-    );
-}
-
 void TCmsTestEnv::CheckWalleStoreTaskIsFailed(NCms::TEvCms::TEvStoreWalleTask* req)
 {
     TString TaskId = req->Task.TaskId;

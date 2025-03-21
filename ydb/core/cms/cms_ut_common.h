@@ -340,8 +340,6 @@ public:
 
     void CheckBSCUpdateRequests(std::set<ui32> expectedNodes, NKikimrBlobStorage::EDriveStatus expectedStatus);
 
-    void CheckBSCUpdateDriveRequests(std::set<std::pair<ui32, ui32>> expectedDrives, NKikimrBlobStorage::EDriveStatus expectedStatus);
-
     void CheckWalleStoreTaskIsFailed(NCms::TEvCms::TEvStoreWalleTask *req);
 
     template <typename... Ts>

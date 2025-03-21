@@ -186,11 +186,8 @@ namespace NKikimr::NStorage {
             UpdateFingerprint(config);
         }
 
-        if (auto error = ValidateConfigUpdate(*Self->StorageConfig, *config)) {
-            STLOG(PRI_DEBUG, BS_NODE, NWDC78, "StartProposition config validation failed", (SelfId, SelfId()),
-                (Error, *error), (Config, config));
-            return FinishWithError(TResult::ERROR, TStringBuilder()
-                << "StartProposition config validation failed: " << *error);
+        if (!CheckConfigUpdate(*config)) {
+            return;
         }
 
         Self->CurrentProposedStorageConfig.emplace(std::move(*config));
@@ -215,6 +212,16 @@ namespace NKikimr::NStorage {
         IssueScatterTask(std::move(task), done);
 
         Self->RootState = ERootState::IN_PROGRESS; // forbid any concurrent activity
+    }
+
+    bool TInvokeRequestHandlerActor::CheckConfigUpdate(const NKikimrBlobStorage::TStorageConfig& proposed) {
+        if (auto error = ValidateConfigUpdate(*Self->StorageConfig, proposed)) {
+            STLOG(PRI_DEBUG, BS_NODE, NWDC78, "Config update validation failed", (SelfId, SelfId()),
+                (Error, *error), (ProposedConfig, proposed));
+            FinishWithError(TResult::ERROR, TStringBuilder() << "Config update validation failed: " << *error);
+            return false;
+        }
+        return true;
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

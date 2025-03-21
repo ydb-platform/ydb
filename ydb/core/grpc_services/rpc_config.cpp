@@ -167,12 +167,6 @@ public:
 
     bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) override {
         const auto& request = *GetProtoRequest();
-        if (request.dry_run()) {
-            status = Ydb::StatusIds::BAD_REQUEST;
-            issues.AddIssue("DryRun is not supported yet.");
-            return false;
-        }
-
         auto* csk = AppData()->ConfigSwissKnife;
 
         if (csk && !csk->VerifyReplaceRequest(request, status, issues)) {
@@ -201,6 +195,7 @@ public:
             cmd->SetSwitchDedicatedStorageSection(*shim.SwitchDedicatedStorageSection);
         }
         cmd->SetDedicatedStorageSectionConfigMode(shim.DedicatedConfigMode);
+        cmd->SetDryRun(GetProtoRequest()->dry_run());
     }
 
     void FillDistconfResult(NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult& /*record*/,
@@ -232,7 +227,8 @@ public:
             shim.SwitchDedicatedStorageSection,
             shim.DedicatedConfigMode,
             request->allow_unknown_fields() || request->bypass_checks(),
-            request->bypass_checks());
+            request->bypass_checks(),
+            request->dry_run());
     }
 
 private:

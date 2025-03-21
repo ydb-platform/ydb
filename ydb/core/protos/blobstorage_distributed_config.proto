@@ -203,6 +203,9 @@ message TEvNodeConfigInvokeOnRoot {
         optional bool SwitchDedicatedStorageSection = 4;
         bool DedicatedStorageSectionConfigMode = 5;
         bool SkipConsoleValidation = 2;
+        bool DryRun = 6;
+        bool AllowUnknownFields = 7;
+        bool BypassMetadataChecks = 8;
     }
 
     message TBootstrapCluster {
@@ -231,6 +234,7 @@ message TEvNodeConfigInvokeOnRootResult {
         ERROR = 2; // failure during request execution
         RACE = 3; // race in requests with other entities
         CONTINUE_BSC = 4; // process this request with BSC
+        DRY_RUN_SUCCESS = 5; // dry run succeeded
     }
 
     message TScepter {

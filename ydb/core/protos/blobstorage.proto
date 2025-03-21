@@ -1451,6 +1451,7 @@ message TEvControllerReplaceConfigRequest {
     // console flags
     optional bool AllowUnknownFields = 8;
     optional bool BypassMetadataChecks = 9;
+    optional bool DryRun = 10;
 }
 
 message TEvControllerReplaceConfigResponse {
@@ -1527,6 +1528,7 @@ message TEvControllerDistconfRequest {
     optional bytes CompressedStorageConfig = 3; // if used has provided storage config
     optional bool DedicatedConfigMode = 4; // as provided in used command
     optional uint64 ExpectedStorageConfigVersion = 5;
+    optional bool DryRun = 6;
 }
 
 message TEvControllerDistconfResponse {

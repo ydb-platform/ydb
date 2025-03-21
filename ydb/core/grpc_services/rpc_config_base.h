@@ -198,7 +198,8 @@ protected:
         if (auto status = record.GetStatus(); status == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::CONTINUE_BSC) {
             // continue with BSC
             CreatePipe();
-        } else if (status != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
+        } else if (status != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK &&
+                   status != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::DRY_RUN_SUCCESS) {
             self->Reply(Ydb::StatusIds::INTERNAL_ERROR, record.GetErrorReason(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
                 self->ActorContext());
         } else {

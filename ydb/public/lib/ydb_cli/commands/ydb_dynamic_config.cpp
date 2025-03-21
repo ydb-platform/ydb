@@ -192,7 +192,7 @@ TCommandConfigReplace::TCommandConfigReplace(bool allowEmptyDatabase)
 void TCommandConfigReplace::Config(TConfig& config) {
     TYdbCommand::Config(config);
     config.Opts->AddLongOption('f', "filename", "Filename of the file containing configuration")
-        .Required().RequiredArgument("[config.yaml]").StoreResult(&Filename);
+        .RequiredArgument("[config.yaml]").StoreResult(&Filename);
     config.Opts->AddLongOption("ignore-local-validation", "Ignore local config applicability checks")
         .NoArgument().SetFlag(&IgnoreCheck);
     config.Opts->AddLongOption("dry-run", "Check config applicability")
@@ -201,6 +201,14 @@ void TCommandConfigReplace::Config(TConfig& config) {
         .NoArgument().SetFlag(&AllowUnknownFields);
     config.Opts->AddLongOption("force", "Ignore metadata on config replacement")
         .NoArgument().SetFlag(&Force);
+    config.Opts->AddLongOption("dedicated-cluster-yaml", "Path to dedicated cluster section of configuration")
+        .RequiredArgument("[cluster.yaml]").StoreResult(&ClusterYamlPath);
+    config.Opts->AddLongOption("dedicated-storage-yaml", "Path to dedicated storage section of configuration")
+        .RequiredArgument("[storage.yaml]").StoreResult(&StorageYamlPath);
+    config.Opts->AddLongOption("enable-dedicated-storage-section", "Turn on dedicated storage section in stored configuration")
+        .StoreTrue(&EnableDedicatedStorageSection);
+    config.Opts->AddLongOption("disable-dedicated-storage-section", "Turn off dedicated storage section in stored configuration")
+        .StoreTrue(&DisableDedicatedStorageSection);
     config.AllowEmptyDatabase = AllowEmptyDatabase;
     config.SetFreeArgsNum(0);
 }
@@ -208,17 +216,36 @@ void TCommandConfigReplace::Config(TConfig& config) {
 void TCommandConfigReplace::Parse(TConfig& config) {
     TClientCommand::Parse(config);
 
-    if (Filename == "") {
-        ythrow yexception() << "Must specify non-empty -f (--filename)";
+    if (EnableDedicatedStorageSection && DisableDedicatedStorageSection) {
+        ythrow yexception() << "Can't provide both --enable-dedicated-storage-section and --disable-dedicated-storage-section";
+    } else if (Filename && (ClusterYamlPath || StorageYamlPath)) {
+        ythrow yexception() << "Can't provide -f (--filename) with either --dedicated-cluster-yaml or --dedicated-storage-yaml";
+    } else if (EnableDedicatedStorageSection && (!ClusterYamlPath || !StorageYamlPath)) {
+        ythrow yexception() << "Must provide both --dedicated-cluster-yaml and --dedicated-storage-yaml when using --enable-dedicated-storage-section";
+    } else if (DisableDedicatedStorageSection && StorageYamlPath) {
+        ythrow yexception() << "Can't provide --disable-dedicated-storage-section with --dedicated-storage-yaml";
     }
 
-   const auto configStr = Filename == "-" ? Cin.ReadAll() : TFileInput(Filename).ReadAll();
+    if (ClusterYamlPath) {
+        ClusterYaml.emplace(ClusterYamlPath == "-" ? Cin.ReadAll() : TFileInput(ClusterYamlPath).ReadAll());
+        DedicatedConfigMode = true;
+    }
+    if (StorageYamlPath) {
+        StorageYaml.emplace(StorageYamlPath == "-" ? Cin.ReadAll() : TFileInput(StorageYamlPath).ReadAll());
+        DedicatedConfigMode = true;
+    }
+    if (Filename && !DedicatedConfigMode) {
+        ClusterYaml.emplace(Filename == "-" ? Cin.ReadAll() : TFileInput(Filename).ReadAll());
+    }
+    if (EnableDedicatedStorageSection) {
+        SwitchDedicatedStorageSection.emplace(true);
+    } else if (DisableDedicatedStorageSection) {
+        SwitchDedicatedStorageSection.emplace(false);
+    }
 
-    DynamicConfig = configStr;
-
-    if (!IgnoreCheck) {
-        NYamlConfig::GetMainMetadata(configStr);
-        auto tree = NFyaml::TDocument::Parse(configStr);
+    if (!IgnoreCheck && ClusterYaml) {
+        NYamlConfig::GetMainMetadata(ClusterYaml.value());
+        auto tree = NFyaml::TDocument::Parse(ClusterYaml.value());
         const auto resolved = NYamlConfig::ResolveAll(tree);
         Y_UNUSED(resolved); // we can't check it better without ydbd
     }
@@ -242,23 +269,49 @@ int TCommandConfigReplace::Run(TConfig& config) {
         settings.AllowUnknownFields();
     }
 
-    auto status = client.ReplaceConfig(DynamicConfig, settings).GetValueSync();
+    auto status = [&]() {
+        if (SwitchDedicatedStorageSection && !*SwitchDedicatedStorageSection) {
+            if (!ClusterYaml) {
+                ythrow yexception() << "Cluster config is required when disabling dedicated storage section";
+            }
+            return client.ReplaceConfigDisableDedicatedStorageSection(ClusterYaml.value(), settings).GetValueSync();
+        } else if (SwitchDedicatedStorageSection && *SwitchDedicatedStorageSection) {
+            if (!ClusterYaml || !StorageYaml) {
+                ythrow yexception() << "Both cluster and storage configs are required when enabling dedicated storage section";
+            }
+            return client.ReplaceConfigEnableDedicatedStorageSection(ClusterYaml.value(), StorageYaml.value(), settings).GetValueSync();
+        } else if (DedicatedConfigMode) {
+            if (!ClusterYaml || !StorageYaml) {
+                ythrow yexception() << "Both cluster and storage configs are required when using dedicated config mode";
+            }
+            return client.ReplaceConfig(ClusterYaml.value(), StorageYaml.value(), settings).GetValueSync();
+        } else {
+            if (!ClusterYaml) {
+                ythrow yexception() << "Cluster config is required when not using dedicated config mode";
+            }
+            return client.ReplaceConfig(ClusterYaml.value(), settings).GetValueSync();
+        }
+    }();
 
     if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED) {
         Cerr << "Warning: Fallback to DynamicConfig API" << Endl;
+
+        if (!ClusterYaml) {
+            ythrow yexception() << "Can't use DynamicConfig API without cluster config";
+        }
 
         auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
 
         status = [&]() {
             if (Force) {
                 return client.SetConfig(
-                    DynamicConfig,
+                    ClusterYaml.value(),
                     DryRun,
                     AllowUnknownFields).GetValueSync();
             }
 
             return client.ReplaceConfig(
-                DynamicConfig,
+                ClusterYaml.value(),
                 DryRun,
                 AllowUnknownFields).GetValueSync();
         }();

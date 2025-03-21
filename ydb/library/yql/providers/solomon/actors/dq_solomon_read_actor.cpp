@@ -316,10 +316,18 @@ public:
                 NUdf::TUnboxedValue* items = nullptr;
                 auto value = HolderFactory.CreateDirectArrayHolder(ReadParams.Source.GetSystemColumns().size() + ReadParams.Source.GetLabelNames().size(), items);
 
-                // convert ms to sec
-                items[Index[SOLOMON_SCHEME_TS]] = NUdf::TUnboxedValuePod((ui64)timestamps[i] / 1000);
-                items[Index[SOLOMON_SCHEME_VALUE]] = NUdf::TUnboxedValuePod(values[i]);
-                items[Index[SOLOMON_SCHEME_TYPE]] = NKikimr::NMiniKQL::MakeString(type);
+                if (auto it = Index.find(SOLOMON_SCHEME_VALUE); it != Index.end()) {
+                    items[it->second] = NUdf::TUnboxedValuePod(values[i]);
+                }
+
+                if (auto it = Index.find(SOLOMON_SCHEME_TYPE); it != Index.end()) {
+                    items[it->second] = NKikimr::NMiniKQL::MakeString(type);
+                }
+
+                if (auto it = Index.find(SOLOMON_SCHEME_TS); it != Index.end()) {
+                    // convert ms to sec
+                    items[it->second] = NUdf::TUnboxedValuePod((ui64)timestamps[i] / 1000);
+                }
 
                 if (auto it = Index.find(SOLOMON_SCHEME_LABELS); it != Index.end()) {
                     items[it->second] = dictValue;

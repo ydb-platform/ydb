@@ -526,7 +526,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         const auto& info = ev->Get()->Info;
         if (!info.DataETag) {
             Send(DataShard, new TEvDataShard::TEvStoreS3DownloadInfo(TxId, {
-                ETag, ProcessedBytes, WrittenBytes, WrittenRows, GetChecksumState(), State
+                ETag, ProcessedBytes, WrittenBytes, WrittenRows, GetChecksumState(), DownloadState
             }));
             return;
         }

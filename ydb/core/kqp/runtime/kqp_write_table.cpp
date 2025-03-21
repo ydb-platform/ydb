@@ -41,7 +41,7 @@ public:
 
     bool IsEmpty() const override {
         YQL_ENSURE(!Extracted);
-        return Data ? Data->num_rows() == 0 : 0;
+        return !Data || Data->num_rows() == 0;
     }
 
     TRecordBatchPtr Extract() {

@@ -91,43 +91,53 @@ NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> TFederated
 }
 
 void TFederatedTopicClient::TClusterInfo::AdjustTopicClientSettings(NTopic::TTopicClientSettings& settings) const {
-    if (!Name.empty()) {
-        settings.DiscoveryEndpoint(Endpoint);
-        settings.Database(Path);
+    if (Name.empty()) {
+        return;
     }
+    settings.DiscoveryEndpoint(Endpoint);
+    settings.Database(Path);
 }
 
 void TFederatedTopicClient::TClusterInfo::AdjustTopicPath(std::string& path) const {
-    if (!Name.empty()) {
-        if (path.empty() || path[0] != '/') {
-            path = Path + '/' + path;
-        }
+    if (Name.empty()) {
+        return;
     }
+    if (path.empty() || path[0] != '/') {
+        path = Path + '/' + path;
+    }
+}
+
+bool TFederatedTopicClient::TClusterInfo::IsAvailableForRead() const {
+    return Status == TClusterInfo::EStatus::AVAILABLE || Status == TClusterInfo::EStatus::READ_ONLY;
+}
+
+bool TFederatedTopicClient::TClusterInfo::IsAvailableForWrite() const {
+    return Status == TClusterInfo::EStatus::AVAILABLE;
 }
 
 std::vector<NTopic::TTopicClient> TFederatedTopicClient::GetAllTopicClients(const TDriver& driver, const std::vector<TClusterInfo>& clusterInfos, NTopic::TTopicClientSettings& clientSettings) {
     std::vector<NTopic::TTopicClient> clients;
     clients.reserve(clusterInfos.size());
-    for (auto &info: clusterInfos) {
+    for (auto& info: clusterInfos) {
         info.AdjustTopicClientSettings(clientSettings);
         clients.emplace_back(driver, clientSettings);
     }
     return clients;
 }
 
-std::vector<TAsyncDescribeTopicResult> TFederatedTopicClient::DescribeAllTopics(const std::string& path, std::vector<NTopic::TTopicClient> &topicClients, const std::vector<TClusterInfo>& clusterInfos, NTopic::TDescribeTopicSettings& describeSettings) {
+std::vector<TAsyncDescribeTopicResult> TFederatedTopicClient::DescribeAllTopics(const std::string& path, std::vector<NTopic::TTopicClient>& topicClients, const std::vector<TClusterInfo>& clusterInfos, NTopic::TDescribeTopicSettings& describeSettings) {
     Y_ENSURE(topicClients.size() == clusterInfos.size());
     std::vector<TAsyncDescribeTopicResult> results;
     results.reserve(topicClients.size());
     for (size_t i = 0; i < topicClients.size(); ++i) {
         const auto& info = clusterInfos[i];
-        if (!(info.Status == TClusterInfo::EStatus::AVAILABLE || info.Status == TClusterInfo::EStatus::READ_ONLY)) {
+        if (!info.IsAvailableForRead()) {
             results.emplace_back(NThreading::MakeErrorFuture<NTopic::TDescribeTopicResult>(std::exception_ptr())); // FIXME
             continue;
         }
         std::string adjustedPath = path;
         info.AdjustTopicPath(adjustedPath);
-        results.emplace_back(topicClients[i].DescribeTopic(path, describeSettings));
+        results.emplace_back(topicClients[i].DescribeTopic(adjustedPath, describeSettings));
     }
     return results;
 }
@@ -137,7 +147,7 @@ std::vector<std::shared_ptr<NTopic::IReadSession>> TFederatedTopicClient::Create
     readSessions.reserve(topicClients.size());
     for (size_t i = 0; i < topicClients.size(); ++i) {
         const auto& info = clusterInfos[i];
-        if (!(info.Status == TClusterInfo::EStatus::AVAILABLE || info.Status == TClusterInfo::EStatus::READ_ONLY)) {
+        if (!info.IsAvailableForRead()) {
             readSessions.emplace_back();
             continue;
         }

@@ -117,7 +117,6 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             output = result.stdout.decode()
             
-            # Выведем результаты netstat для порта, если он существует
             port_lines = [line for line in output.split('\n') if str(port) in line]
             if port_lines:
                 for line in port_lines:

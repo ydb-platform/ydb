@@ -43,8 +43,17 @@ public:
         if (histogram.ResponseTimes.empty()) {
             return os << histogram.Name << ": empty";
         }
-        int idx = histogram.ResponseTimes.size() * 0.99;
-        return os << histogram.Name << ": 99% " << histogram.ResponseTimes[idx].ToString();
+        return os << histogram.Name
+                << ": 10% " << histogram.Percentile(0.10)
+                << " 30% " << histogram.Percentile(0.30)
+                << " 50% " << histogram.Percentile(0.50)
+                << " 90% " << histogram.Percentile(0.90)
+                << " 99% " << histogram.Percentile(0.99);
+    }
+
+private:
+    TString Percentile(double percentile) {
+        return ResponseTimes[percentile * ResponseTimes.size()].ToString();
     }
 
 private:

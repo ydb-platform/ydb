@@ -58,9 +58,8 @@ public:
         THashMap<ui32, ui64> Counters;
     };
 
-    virtual TConclusion<THashMap<NColumnShard::TLocalPathId, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() override {
-        THashMap<ui64, std::map<TSnapshot, TGranuleShardingInfo>> result;
-        return result;
+    virtual TConclusion<THashMap<NColumnShard::TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() override {
+        return THashMap<NColumnShard::TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>>{};
     }
 
     void Insert(const TInsertedData& data) override {
@@ -613,7 +612,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         TTestDbWrapper db;
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(ydbSchema, key);
 
-        NColumnShard::TInternalPathId pathId = 1;
+        const auto& pathId =  NColumnShard::TInternalPathId::FromInternalPathIdValue(1);
         ui32 step = 1000;
 
         TSnapshot indexSnapshot(1, 1);
@@ -711,7 +710,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(testColumns, testKey);
         ;
 
-        NColumnShard::TInternalPathId pathId = 1;
+        const auto& pathId =  NColumnShard::TInternalPathId::FromInternalPathIdValue(1);
         ui32 step = 1000;
 
         // inserts
@@ -790,7 +789,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
         csDefaultControllerGuard->SetOverrideTasksActualizationLag(TDuration::Zero());
 
-        NColumnShard::TInternalPathId pathId = 1;
+        const auto pathId = NColumnShard::TInternalPathId::FromInternalPathIdValue(1);
         ui32 step = 1000;
 
         // insert

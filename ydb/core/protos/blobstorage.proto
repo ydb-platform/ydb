@@ -1448,6 +1448,7 @@ message TEvControllerReplaceConfigRequest {
     optional bool SkipConsoleValidation = 5;
     optional bool SwitchDedicatedStorageSection = 6;
     optional bool DedicatedConfigMode = 7;
+    optional bool SwitchEnableConfigV2 = 10; // if set, overrides EnableConfigV2 field in BSC
     // console flags
     optional bool AllowUnknownFields = 8;
     optional bool BypassMetadataChecks = 9;
@@ -1466,6 +1467,7 @@ message TEvControllerReplaceConfigResponse {
     }
     optional EStatus Status = 1;
     optional string ErrorReason = 2;
+    optional bool DisabledConfigV2 = 3; // set along with InvalidRequest when Configuration V2 is disabled and BSC can't process this query
 }
 
 message TEvControllerValidateConfigRequest {
@@ -1510,6 +1512,7 @@ message TEvControllerFetchConfigResponse {
     optional string ClusterYaml = 1;
     optional string StorageYaml = 2;
     optional string ErrorReason = 3;
+    optional bool DisabledConfigV2 = 4;
 }
 
 message TEvControllerDistconfRequest {

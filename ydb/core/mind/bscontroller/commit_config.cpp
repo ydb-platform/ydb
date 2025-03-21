@@ -15,6 +15,7 @@ namespace NKikimr::NBsController {
         std::optional<NKikimrBlobStorage::TStorageConfig> StorageConfig;
         std::optional<ui64> ExpectedStorageYamlConfigVersion;
         std::unique_ptr<IEventHandle> Handle;
+        std::optional<bool> SwitchEnableConfigV2;
 
         ui64 GenerationOnStart = 0;
         TString FingerprintOnStart;
@@ -23,13 +24,15 @@ namespace NKikimr::NBsController {
         TTxCommitConfig(TBlobStorageController *controller, std::optional<TYamlConfig>&& yamlConfig,
                 std::optional<std::optional<TString>>&& storageYamlConfig,
                 std::optional<NKikimrBlobStorage::TStorageConfig>&& storageConfig,
-                std::optional<ui64> expectedStorageYamlConfigVersion, std::unique_ptr<IEventHandle> handle)
+                std::optional<ui64> expectedStorageYamlConfigVersion, std::unique_ptr<IEventHandle> handle,
+                std::optional<bool> switchEnableConfigV2)
             : TTransactionBase(controller)
             , YamlConfig(std::move(yamlConfig))
             , StorageYamlConfig(std::move(storageYamlConfig))
             , StorageConfig(std::move(storageConfig))
             , ExpectedStorageYamlConfigVersion(expectedStorageYamlConfigVersion)
             , Handle(std::move(handle))
+            , SwitchEnableConfigV2(switchEnableConfigV2)
         {}
 
         TTxType GetTxType() const override { return NBlobStorageController::TXTYPE_COMMIT_CONFIG; }
@@ -52,6 +55,9 @@ namespace NKikimr::NBsController {
             }
             if (ExpectedStorageYamlConfigVersion) {
                 row.Update<Schema::State::ExpectedStorageYamlConfigVersion>(*ExpectedStorageYamlConfigVersion);
+            }
+            if (SwitchEnableConfigV2) {
+                row.Update<Schema::State::EnableConfigV2>(*SwitchEnableConfigV2);
             }
             return true;
         }
@@ -104,6 +110,9 @@ namespace NKikimr::NBsController {
             if (update && Self->StorageYamlConfig) {
                 update->SetStorageConfigVersion(NYamlConfig::GetStorageMetadata(*Self->StorageYamlConfig).Version.value_or(0));
             }
+            if (SwitchEnableConfigV2) {
+                Self->EnableConfigV2 = *SwitchEnableConfigV2;
+            }
 
             if (Handle) {
                 TActivationContext::Send(Handle.release());
@@ -126,9 +135,10 @@ namespace NKikimr::NBsController {
     ITransaction* TBlobStorageController::CreateTxCommitConfig(std::optional<TYamlConfig>&& yamlConfig,
             std::optional<std::optional<TString>>&& storageYamlConfig,
             std::optional<NKikimrBlobStorage::TStorageConfig>&& storageConfig,
-            std::optional<ui64> expectedStorageYamlConfigVersion, std::unique_ptr<IEventHandle> handle) {
+            std::optional<ui64> expectedStorageYamlConfigVersion, std::unique_ptr<IEventHandle> handle,
+            std::optional<bool> switchEnableConfigV2) {
         return new TTxCommitConfig(this, std::move(yamlConfig), std::move(storageYamlConfig), std::move(storageConfig),
-            expectedStorageYamlConfigVersion, std::move(handle));
+            expectedStorageYamlConfigVersion, std::move(handle), switchEnableConfigV2);
     }
 
 } // namespace NKikimr::NBsController

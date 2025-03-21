@@ -15,6 +15,8 @@ struct TReplaceConfigSettings : public NYdb::TOperationRequestSettings<TReplaceC
     FLUENT_SETTING_FLAG(DryRun);
     FLUENT_SETTING_FLAG(AllowUnknownFields);
     FLUENT_SETTING_FLAG(BypassChecks);
+    FLUENT_SETTING_FLAG(EnableConfigV2);
+    FLUENT_SETTING_FLAG(DisableConfigV2);
 };
 
 enum class EFetchAllConfigsTransform {

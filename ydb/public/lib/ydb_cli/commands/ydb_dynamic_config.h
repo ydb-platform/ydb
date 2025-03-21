@@ -37,6 +37,8 @@ private:
     bool Force = false;
     bool DryRun = false;
     bool AllowUnknownFields = false;
+    bool EnableConfigV2 = false;
+    bool DisableConfigV2 = false;
     TString DynamicConfig;
     TString Filename;
     bool AllowEmptyDatabase = false;

@@ -391,21 +391,13 @@ RewriteInputForConstraint(const TExprBase& inputRows, const THashSet<TStringBuf>
         const THashSet<TString> indexKeyColumns = CreateKeyColumnSetToRead(indexes);
         const THashSet<TString> indexDataColumns = CreateDataColumnSetToRead(indexes);
 
-        for (const auto& x : indexKeyColumns) {
-            columns.push_back(Build<TCoAtom>(ctx, pos).Value(x).Done());
-        }
+        THashSet<TString> columnsToReadInPrecomputeLookupDict;
+        columnsToReadInPrecomputeLookupDict.insert(indexKeyColumns.begin(), indexKeyColumns.end());
+        columnsToReadInPrecomputeLookupDict.insert(indexDataColumns.begin(), indexDataColumns.end());
+        columnsToReadInPrecomputeLookupDict.insert(mainPk.begin(), mainPk.end());
+        columnsToReadInPrecomputeLookupDict.insert(checkDefaults.begin(), checkDefaults.end());
 
-        for (const auto& x : indexDataColumns) {
-            // Handle the case of multiple indexes
-            // one of them has 'foo' as data column but for another one foo is just indexed column
-            if (indexKeyColumns.contains(x))
-                continue;
-            columns.push_back(Build<TCoAtom>(ctx, pos).Value(x).Done());
-        }
-
-        for (const auto& x : mainPk) {
-            if (indexKeyColumns.contains(x))
-                continue;
+        for (const auto& x : columnsToReadInPrecomputeLookupDict) {
             columns.push_back(Build<TCoAtom>(ctx, pos).Value(x).Done());
         }
 

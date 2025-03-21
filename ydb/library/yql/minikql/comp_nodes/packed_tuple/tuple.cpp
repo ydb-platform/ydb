@@ -1555,6 +1555,20 @@ void TTupleLayout::TupleDeepCopy(
     }
 }
 
+ui32 TTupleLayout::GetTupleVarSize(const ui8* inTuple) const {
+    ui32 result = 0;
+    for (const auto& col: VariableColumns) {
+        ui32 size = ReadUnaligned<ui8>(inTuple + col.Offset);
+        if (size == 255) { // overflow buffer used
+            const auto prefixSize = col.DataSize - 1 - 2 * sizeof(ui32);
+            const auto overflowSize = ReadUnaligned<ui32>(inTuple + col.Offset + 1 + 1 * sizeof(ui32));
+            size = prefixSize + overflowSize;
+        }
+        result += size;
+    }
+    return result;
+}
+
 } // namespace NPackedTuple
 } // namespace NMiniKQL
 } // namespace NKikimr

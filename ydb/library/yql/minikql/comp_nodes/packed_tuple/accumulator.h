@@ -64,7 +64,7 @@ public:
 };
 
 // Simple radix partitioning algorithm using software prefetching technique to improve performance.
-// Suitable when number of buckets small (<= 16) or very big (>= 1024)
+// Suitable when number of buckets small (<= 32) or very big (> 1024)
 class TAccumulatorImpl: public TAccumulator {
 public:
     TAccumulatorImpl(
@@ -92,6 +92,47 @@ private:
     bool NoAllocations_{false};                                          // Do not allocate any memory for buckets
     std::vector<TBuffer, TMKQLAllocator<TBuffer>> PackedTupleBuckets_;   // Buckets for packed tuples
     std::vector<TBuffer, TMKQLAllocator<TBuffer>> OverflowBuckets_;      // Buckets for overflow buffers
+};
+
+// Simple radix partitioning algorithm using software buffer technique to improve performance.
+class TSMBAccumulatorImpl: public TAccumulator {
+public:
+    TSMBAccumulatorImpl(
+        const TTupleLayout* layout, ui32 log2Buckets,
+        std::vector<TBuffer, TMKQLAllocator<TBuffer>>&& packedTupleBuckets,
+        std::vector<TBuffer, TMKQLAllocator<TBuffer>>&& overflowBuckets);
+
+    TSMBAccumulatorImpl(const TTupleLayout* layout, ui32 log2Buckets);
+
+    ~TSMBAccumulatorImpl() = default;
+
+    void AddData(const ui8* data, const ui8* overflow, ui32 nItems) override;
+
+    TBucketRef GetBucket(ui32 bucket) const override;
+
+    void Detach(std::vector<TBucket, TMKQLAllocator<TBucket>>& buckets) override;
+
+private:
+    static constexpr ui64 MB = 1024 * 1024;
+
+private:
+    using THugePageBuffer = std::vector<ui8, TMKQLHugeAllocator<ui8>>;
+
+private:
+    std::pair<ui64, ui64> GetCounters(ui32 bucket, ui64 maxBytesPerPartition);
+
+private:
+    ui32 NBuckets_{0};                                                   // Number of buckets
+    ui32 PMask_{0};                                                      // Mask used for partitioning tuples 
+    ui32 BitsCount_{0};                                                  // Bits count to write buckets number in binary
+    const TTupleLayout* Layout_;                                         // Tuple layout
+    std::vector<ui64, TMKQLAllocator<ui64>> PackedTupleBucketSizes_;     // Sizes for filled part of packed tuple buckets
+    std::vector<ui64, TMKQLAllocator<ui64>> OverflowBucketSizes_;        // Sizes for filled part of overflow buckets
+    bool NoAllocations_{false};                                          // Do not allocate any memory for buckets
+    std::vector<TBuffer, TMKQLAllocator<TBuffer>> PackedTupleBuckets_;   // Buckets for packed tuples
+    std::vector<TBuffer, TMKQLAllocator<TBuffer>> OverflowBuckets_;      // Buckets for overflow buffers
+    THugePageBuffer PackedTupleSMB_;                                     // SMB for packed tuples
+    THugePageBuffer OverflowSMB_;                                        // SMB for overflow
 };
 
 

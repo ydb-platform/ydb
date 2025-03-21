@@ -137,6 +137,8 @@ struct TTupleLayout {
         const ui8* inTuple, const ui8* inOverflow,
         ui8* outTuple, ui8* outOverflow, ui64& outOverflowSize) const;
 
+    ui32 GetTupleVarSize(const ui8* inTuple) const;
+
     bool KeysEqual(const ui8 *lhsRow, const ui8 *lhsOverflow, const ui8 *rhsRow, const ui8 *rhsOverflow) const;
 };
 

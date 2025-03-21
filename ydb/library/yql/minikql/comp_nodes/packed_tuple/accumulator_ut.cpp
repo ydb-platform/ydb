@@ -28,7 +28,6 @@ static volatile bool IsVerbose = true;
 
 namespace {
 
-#if 0
 TVector<TString> GenerateValues(size_t level) {
     constexpr size_t alphaSize = 'Z' - 'A' + 1;
     if (level == 1) {
@@ -48,8 +47,7 @@ TVector<TString> GenerateValues(size_t level) {
 }
 
 static const TVector<TString> threeLetterValues = GenerateValues(3);
-#endif
-#if 0
+
 bool RunFixSizedAccumulatorBench(ui64 nTuples, ui64 nCols, ui64 log2Buckets) {
     auto nBuckets = 1 << log2Buckets;
     CTEST << "============ BENCH BEGIN ============" << Endl;
@@ -152,8 +150,7 @@ bool RunFixSizedAccumulatorBench(ui64 nTuples, ui64 nCols, ui64 log2Buckets) {
 
     return accum->GetBucket(0).NTuples > 0;
 }
-#endif
-#if 0
+
 bool RunVarSizedAccumulatorBench(ui64 nTuples, ui64 nCols, ui64 log2Buckets) {
     auto nBuckets = 1 << log2Buckets;
     CTEST << "============ BENCH BEGIN ============" << Endl;
@@ -277,8 +274,8 @@ bool RunVarSizedAccumulatorBench(ui64 nTuples, ui64 nCols, ui64 log2Buckets) {
 
     return accum->GetBucket(0).NTuples > 0;
 }
-#endif
-}
+
+} // namespace
 
 Y_UNIT_TEST_SUITE(Accumulator) {
 
@@ -401,10 +398,13 @@ Y_UNIT_TEST(AddVarSizedDataToAccumulator) {
     auto accum = TAccumulator::Create(tl.Get(), 5);
     accum->AddData(res.data(), overflow.data(), NTuples);
 
+    ui32 total = 0;
     for (ui32 i = 0; i < 32; ++i) {
         auto info = accum->GetBucket(i);
         UNIT_ASSERT(info.NTuples <= 1);
+        total += info.NTuples;
     }
+    UNIT_ASSERT(total == 2);
 } // Y_UNIT_TEST(AddVarSizedDataToAccumulator)
 
 Y_UNIT_TEST(AccumulatorFuzz) {
@@ -475,7 +475,6 @@ Y_UNIT_TEST(AccumulatorFuzz) {
     }
 } // Y_UNIT_TEST(AccumulatorFuzz)
 
-#if 0
 Y_UNIT_TEST(BenchAccumulator_VariateNTuples) {
     Cerr << ">>>>>>>>>>>>>>>>>>>>>>> BenchAccumulator_VariateNTuples <<<<<<<<<<<<<<<<<<<<<<<<<<<<" << Endl;
     UNIT_ASSERT(RunFixSizedAccumulatorBench(1e5, 2, 3));
@@ -484,9 +483,7 @@ Y_UNIT_TEST(BenchAccumulator_VariateNTuples) {
     UNIT_ASSERT(RunFixSizedAccumulatorBench(1e8, 2, 3));
     Cerr << ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" << Endl << " " << Endl;
 } // Y_UNIT_TEST(BenchAccumulator_VariateNTuples)
-#endif
 
-#if 0
 Y_UNIT_TEST(BenchAccumulator_VariateNColumns) {
     Cerr << ">>>>>>>>>>>>>>>>>>>>>>> BenchAccumulator_VariateNColumns <<<<<<<<<<<<<<<<<<<<<<<<<<<<" << Endl;
     UNIT_ASSERT(RunFixSizedAccumulatorBench(1e7,  1, 3));
@@ -498,9 +495,7 @@ Y_UNIT_TEST(BenchAccumulator_VariateNColumns) {
     UNIT_ASSERT(RunFixSizedAccumulatorBench(1e7, 32, 3));
     Cerr << ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" << Endl << " " << Endl;
 } // Y_UNIT_TEST(BenchAccumulator_VariateNColumns)
-#endif
 
-#if 0
 Y_UNIT_TEST(BenchAccumulator_VariateNBuckets) {
     Cerr << ">>>>>>>>>>>>>>>>>>>>>>> BenchAccumulator_VariateNBuckets <<<<<<<<<<<<<<<<<<<<<<<<<<<<" << Endl;
     UNIT_ASSERT(RunFixSizedAccumulatorBench(1e7, 4,  2));
@@ -517,9 +512,7 @@ Y_UNIT_TEST(BenchAccumulator_VariateNBuckets) {
     UNIT_ASSERT(RunFixSizedAccumulatorBench(1e7, 4, 13));
     Cerr << ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" << Endl << " " << Endl;
 } // Y_UNIT_TEST(BenchAccumulator_VariateNBuckets)
-#endif
 
-#if 0
 Y_UNIT_TEST(VarSized_BenchAccumulator_VariateNTuples) {
     Cerr << ">>>>>>>>>>>>>>>>>>>>>>> VarSized_BenchAccumulator_VariateNTuples <<<<<<<<<<<<<<<<<<<<<<<<<<<<" << Endl;
     UNIT_ASSERT(RunVarSizedAccumulatorBench(1e5, 2, 3));
@@ -528,9 +521,7 @@ Y_UNIT_TEST(VarSized_BenchAccumulator_VariateNTuples) {
     UNIT_ASSERT(RunVarSizedAccumulatorBench(4e7, 2, 3));
     Cerr << ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" << Endl << " " << Endl;
 } // Y_UNIT_TEST(VarSized_BenchAccumulator_VariateNTuples)
-#endif
 
-#if 0
 Y_UNIT_TEST(VarSized_BenchAccumulator_VariateNColumns) {
     Cerr << ">>>>>>>>>>>>>>>>>>>>>>> VarSized_BenchAccumulator_VariateNColumns <<<<<<<<<<<<<<<<<<<<<<<<<<<<" << Endl;
     UNIT_ASSERT(RunVarSizedAccumulatorBench(1e7,  1, 3));
@@ -539,9 +530,7 @@ Y_UNIT_TEST(VarSized_BenchAccumulator_VariateNColumns) {
     UNIT_ASSERT(RunVarSizedAccumulatorBench(1e7,  8, 3));
     Cerr << ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" << Endl << " " << Endl;
 } // Y_UNIT_TEST(VarSized_BenchAccumulator_VariateNColumns)
-#endif
 
-#if 0
 Y_UNIT_TEST(VarSized_BenchAccumulator_VariateNBuckets) {
     Cerr << ">>>>>>>>>>>>>>>>>>>>>>> VarSized_BenchAccumulator_VariateNBuckets <<<<<<<<<<<<<<<<<<<<<<<<<<<<" << Endl;
     UNIT_ASSERT(RunVarSizedAccumulatorBench(1e7, 2,  2));
@@ -558,7 +547,7 @@ Y_UNIT_TEST(VarSized_BenchAccumulator_VariateNBuckets) {
     UNIT_ASSERT(RunVarSizedAccumulatorBench(1e7, 2, 13));
     Cerr << ">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<" << Endl << " " << Endl;
 } // Y_UNIT_TEST(VarSized_BenchAccumulator_VariateNBuckets)
-#endif
+
 } // Y_UNIT_TEST_SUITE(Accumulator)
 
 

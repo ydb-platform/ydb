@@ -22,6 +22,12 @@ extern const TJobTraceId NullJobTraceId;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+YT_DEFINE_STRONG_TYPEDEF(TAllocationId, TGuid);
+
+constexpr TAllocationId NullAllocationId{};
+
+////////////////////////////////////////////////////////////////////////////////
+
 using NJobTrackerClient::TJobId;
 using NJobTrackerClient::TOperationId;
 

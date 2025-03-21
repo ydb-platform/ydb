@@ -377,7 +377,7 @@ struct TComputeMemoryLimits {
     ui64 MinMemFreeSize = 30_MB;
     ui64 OutputChunkMaxSize = GetDqExecutionSettings().FlowControl.MaxOutputChunkSize;
     ui64 ChunkSizeLimit = 48_MB;
-    TMaybe<ui8> ArrayBufferMinFillPercentage; // Used by DqOutputHashPartitionConsumer
+    TMaybe<ui8> ArrayBufferMinFillPercentage; // Used by DqOutputHashPartitionConsumer and DqOutputChannel
 
     IMemoryQuotaManager::TPtr MemoryQuotaManager;
 };

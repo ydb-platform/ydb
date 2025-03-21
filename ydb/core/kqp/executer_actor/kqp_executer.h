@@ -1,6 +1,7 @@
 #pragma once
 
 #include <library/cpp/lwtrace/shuttle.h>
+#include <ydb/core/kqp/common/batch/batch_operation_settings.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/kqp_event_ids.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
@@ -35,6 +36,9 @@ struct TEvKqpExecuter {
         ui64 ResultRowsBytes = 0;
 
         THashSet<ui32> ParticipantNodes;
+
+        TVector<TSerializedCellVec> BatchEndRows;
+        TVector<ui32> BatchKeyIds;
 
         enum class EExecutionType {
             Data,
@@ -115,7 +119,8 @@ IActor* CreateKqpExecuter(IKqpGateway::TExecPhysicalRequest&& request, const TSt
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, TPreparedQueryHolder::TConstPtr preparedQuery, const TActorId& creator,
     const TIntrusivePtr<TUserRequestContext>& userRequestContext, ui32 statementResultIndex,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    const TShardIdToTableInfoPtr& shardIdToTableInfo, const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId);
+    const TShardIdToTableInfoPtr& shardIdToTableInfo, const IKqpTransactionManagerPtr& txManager, const TActorId bufferActorId,
+    TMaybe<TBatchOperationSettings> batchOperationSettings = Nothing());
 
 IActor* CreateKqpSchemeExecuter(
     TKqpPhyTxHolder::TConstPtr phyTx, NKikimrKqp::EQueryType queryType, const TActorId& target,

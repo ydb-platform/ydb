@@ -22,6 +22,7 @@
 #include <ydb/library/wilson_ids/wilson.h>
 
 #include <util/generic/intrlist.h>
+#include <util/string/vector.h>
 
 namespace {
 
@@ -804,9 +805,17 @@ public:
         auto& record = ev->Record;
 
         state->FillEvRead(*ev, KeyColumnTypes, Settings->GetReverse());
-        for (const auto& column : Settings->GetColumns()) {
+
+        auto columnsSize = static_cast<size_t>(Settings->GetColumns().size());
+        for (size_t i = 0; i < columnsSize; ++i) {
+            const auto& column = Settings->GetColumns()[i];
             if (!IsSystemColumn(column.GetId())) {
                 record.AddColumns(column.GetId());
+
+                if (Settings->HasIsBatch() && Settings->GetIsBatch() && column.HasIsPrimary() && column.GetIsPrimary()) {
+                    KeyColumnIndexes.push_back(i);
+                    KeyColumnIds.push_back(column.GetId());
+                }
             }
         }
 
@@ -1032,6 +1041,25 @@ public:
 
         ui64 seqNo = ev->Get()->Record.GetSeqNo();
         Reads[id].RegisterMessage(*ev->Get());
+
+        if (Settings->HasIsBatch() && Settings->GetIsBatch() && KeyColumnIndexes.size() == KeyColumnTypes.size()) {
+            for (size_t row = 0; row < ev->Get()->GetRowsCount(); ++row) {
+                auto cells = ev->Get()->GetCells(row);
+                if (BatchMaxRow.empty()) {
+                    BatchMaxRow = TOwnedCellVec::Make(cells);
+                    continue;
+                }
+
+                for (size_t i = 0; i < KeyColumnIndexes.size(); ++i) {
+                    auto keyIdx = KeyColumnIndexes[i];
+                    NScheme::TTypeInfoOrder typeOrder(KeyColumnTypes[i], NScheme::EOrder::Ascending);
+                    if (CompareTypedCells(BatchMaxRow[keyIdx], cells[keyIdx], typeOrder) < 0) {
+                        BatchMaxRow = TOwnedCellVec::Make(cells);
+                        break;
+                    }
+                }
+            }
+        }
 
 
         ReceivedRowCount += ev->Get()->GetRowsCount();
@@ -1482,6 +1510,18 @@ public:
         for (auto& lock : BrokenLocks) {
             resultInfo.AddLocks()->CopyFrom(lock);
         }
+        if (!BatchMaxRow.empty()) {
+            std::vector<TCell> keyRow;
+            for (size_t idx : KeyColumnIndexes) {
+                keyRow.push_back(BatchMaxRow[idx]);
+            }
+
+            TConstArrayRef<TCell> keyRef(keyRow);
+            resultInfo.SetBatchMaxKey(TSerializedCellVec::Serialize(keyRef));
+            for (auto id : KeyColumnIds) {
+                resultInfo.AddBatchKeyIds(id);
+            }
+        }
         result.PackFrom(resultInfo);
         return result;
     }
@@ -1544,6 +1584,8 @@ private:
 
     TVector<TResultColumn> ResultColumns;
     TVector<NScheme::TTypeInfo> KeyColumnTypes;
+    TVector<size_t> KeyColumnIndexes;
+    TVector<ui32> KeyColumnIds;
 
     NMiniKQL::TBytesStatistics BytesStats;
     ui64 ReceivedRowCount = 0;
@@ -1601,6 +1643,8 @@ private:
     THashMap<TString, TDuplicationStats> DuplicateCheckStats;
     TVector<TResultColumn> DuplicateCheckExtraColumns;
     TVector<ui32> DuplicateCheckColumnRemap;
+
+    TOwnedCellVec BatchMaxRow;
 };
 
 

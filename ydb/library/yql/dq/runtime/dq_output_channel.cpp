@@ -44,8 +44,7 @@ public:
         , MaxStoredBytes(settings.MaxStoredBytes)
         , MaxChunkBytes(settings.MaxChunkBytes)
         , ChunkSizeLimit(settings.ChunkSizeLimit)
-        , ArrayBufferMinFillPercentage(settings.ArrayBufferMinFillPercentage ? *settings.ArrayBufferMinFillPercentage : 75)
-        , BlockSplitter(NArrow::CreateBlockSplitter(OutputType, ChunkSizeLimit * ArrayBufferMinFillPercentage / 100))
+        , ArrayBufferMinFillPercentage(settings.ArrayBufferMinFillPercentage)
         , LogFunc(logFunc)
     {
         PopStats.Level = settings.Level;
@@ -53,6 +52,10 @@ public:
         PopStats.ChannelId = channelId;
         PopStats.DstStageId = dstStageId;
         UpdateSettings(settings.MutableSettings);
+
+        if (Packer.IsBlock() && ArrayBufferMinFillPercentage && *ArrayBufferMinFillPercentage > 0) {
+            BlockSplitter = NArrow::CreateBlockSplitter(OutputType, ChunkSizeLimit * *ArrayBufferMinFillPercentage / 100);
+        }
     }
 
     ui64 GetChannelId() const override {
@@ -416,7 +419,7 @@ public:
     void UpdateSettings(const TDqOutputChannelSettings::TMutable& settings) override {
         IsLocalChannel = settings.IsLocalChannel;
         if (Packer.IsBlock()) {
-            Packer.SetMinFillPercentage(IsLocalChannel ? Nothing() : TMaybe<ui8>(ArrayBufferMinFillPercentage));
+            Packer.SetMinFillPercentage(IsLocalChannel ? Nothing() : ArrayBufferMinFillPercentage);
         }
     }
 
@@ -430,8 +433,8 @@ private:
     const ui64 MaxStoredBytes;
     const ui64 MaxChunkBytes;
     const ui64 ChunkSizeLimit;
-    const ui8 ArrayBufferMinFillPercentage;
-    const NArrow::IBlockSplitter::TPtr BlockSplitter;
+    const TMaybe<ui8> ArrayBufferMinFillPercentage;
+    NArrow::IBlockSplitter::TPtr BlockSplitter;
     bool IsLocalChannel = false;
     TLogFunc LogFunc;
 

@@ -7,6 +7,7 @@
 #include "flat_sausage_slicer.h"
 #include "flat_executor_gclogic.h"
 #include "flat_executor_counters.h"
+#include "util_fmt_abort.h"
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/tablet_flat/flat_executor.pb.h>
@@ -78,7 +79,7 @@ namespace NTabletFlatExecutor {
 
         void Start(IOps *ops, TActorId owner, ui32 *step0, TMonCo *monCo)
         {
-            Y_ABORT_UNLESS(!std::exchange(Ops, ops), "Commit manager is already started");
+            Y_ENSURE(!std::exchange(Ops, ops), "Commit manager is already started");
 
             Step0 = step0;
             Owner = owner;
@@ -99,9 +100,9 @@ namespace NTabletFlatExecutor {
             const auto step = Head;
 
             if (Sync && sync) {
-                Y_Fail(NFmt::Do(*this) << " tried to start nested commit");
+                Y_TABLET_ERROR(NFmt::Do(*this) << " tried to start nested commit");
             } else if (Sync && !sync) {
-                Y_Fail(NFmt::Do(*this) << " tried to detach sync commit");
+                Y_TABLET_ERROR(NFmt::Do(*this) << " tried to detach sync commit");
             } else if (sync) {
                 Sync = true;
             } else {
@@ -114,7 +115,7 @@ namespace NTabletFlatExecutor {
         void Commit(TAutoPtr<TLogCommit> commit)
         {
             if (commit->Step != Tail || (commit->Sync && !Sync)) {
-                Y_Fail(
+                Y_TABLET_ERROR(
                     NFmt::Do(*this) << " got unordered " << NFmt::Do(*commit));
             } else if (commit->Step == Head) {
                 Sync = false, Switch(Head += 1); /* sync ~ moves head forward */
@@ -133,7 +134,7 @@ namespace NTabletFlatExecutor {
         void Confirm(const ui32 step)
         {
             if (Back == Max<ui32>() || step != Back || step >= Tail) {
-                Y_Fail(NFmt::Do(*this) << " got unexpected confirm " << step);
+                Y_TABLET_ERROR(NFmt::Do(*this) << " got unexpected confirm " << step);
             } else {
                 Back = (Back + 1 == Tail) ? Max<ui32>() : Back + 1;
             }

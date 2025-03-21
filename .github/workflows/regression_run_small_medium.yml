@@ -7,7 +7,7 @@ on:
 
 jobs:
   main:
-    name: Regression-run Small Medium
+    name: Regression-run_Small_and_Medium
     uses: ./.github/workflows/run_tests.yml
     secrets: inherit
     strategy:

@@ -2,6 +2,7 @@
 
 #include "flat_sausage_misc.h"
 #include "flat_sausage_solid.h"
+#include "util_fmt_abort.h"
 #include <util/generic/deque.h>
 
 namespace NKikimr {
@@ -76,7 +77,7 @@ namespace NPageCollection {
                     if (was == Glob.Group || was == TLargeGlobId::InvalidGroup) {
 
                     } else if (it != bound.Lo.Blob) {
-                        Y_ABORT("Page placed over different groups");
+                        Y_TABLET_ERROR("Page placed over different groups");
                     } else if (from < Queue.size()) {
                         /* Have to do each grow over the same group */
 

@@ -3,6 +3,7 @@
 #include "world.h"
 
 #include <ydb/core/tablet_flat/util_basics.h>
+#include <ydb/core/tablet_flat/util_fmt_abort.h>
 #include <ydb/core/tablet_flat/util_fmt_line.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/log_iface.h>
@@ -23,7 +24,7 @@ namespace NFake {
 
         void Put(TInstant stamp, ui32 level, EComp comp, TArrayRef<const char> line)
         {
-            Y_ABORT_UNLESS(line.size() < 8192 * 16, "Too large log line");
+            Y_ENSURE(line.size() < 8192 * 16, "Too large log line");
 
             static const char scaleMajor[] = "^^*CEWNIDT.";
             static const char scaleMinor[] = "0123456789.";
@@ -133,7 +134,7 @@ namespace NFake {
                     Send(TWorld::Where(EPath::Root), new NFake::TEvTerm);
 
             } else {
-                Y_ABORT("Test runtime env logger got an unknown event");
+                Y_TABLET_ERROR("Test runtime env logger got an unknown event");
             }
         }
 

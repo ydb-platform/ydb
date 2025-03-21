@@ -49,6 +49,59 @@ void TFederatedTopicClient::TImpl::InitObserver() {
     }
 }
 
+IOutputStream& operator<<(IOutputStream& out, NTopic::TTopicClientSettings const& settings) {
+    out << "{"
+        << " Database: " << settings.Database_
+        << " DiscoveryEndpoint: " << settings.DiscoveryEndpoint_
+        << " DiscoveryMode: " << (settings.DiscoveryMode_ ? (int)*settings.DiscoveryMode_ : -1)
+        << " }";
+    return out;
+}
+
+IOutputStream& operator<<(IOutputStream& out, NTopic::TDescribeTopicSettings const& settings) {
+    out << "{"
+        << " TraceId: " << settings.TraceId_
+        << " ClientTimeout: " << settings.ClientTimeout_
+        << " CancelAfter: " << settings.CancelAfter_
+        << " ForgetAfter: " << settings.ForgetAfter_
+        << " OperationTimeout: " << settings.OperationTimeout_
+        << " IncludeLocation: " << settings.IncludeLocation_
+        << " IncludeStats: " << settings.IncludeStats_
+        << " RequestType: " << settings.RequestType_
+        << " }";
+    return out;
+}
+
+NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> TFederatedTopicClient::TImpl::GetAllClusterInfo() {
+    InitObserver();
+    return Observer->WaitForFirstState().Apply(
+            [observer = Observer] (const auto &) {
+                auto state = observer->GetState();
+                std::vector<TClusterInfo> result;
+                result.reserve(state->DbInfos.size());
+                for (const auto& db: state->DbInfos) {
+                    auto& dbinfo = result.emplace_back();
+                    switch(db->status()) {
+#define TRANSLATE_STATUS(NAME) \
+                    case TDbInfo::Status::DatabaseInfo_Status_##NAME: \
+                        dbinfo.Status = TClusterInfo::EStatus::NAME; \
+                        break
+                    TRANSLATE_STATUS(STATUS_UNSPECIFIED);
+                    TRANSLATE_STATUS(AVAILABLE);
+                    TRANSLATE_STATUS(READ_ONLY);
+                    TRANSLATE_STATUS(UNAVAILABLE);
+                    default:
+                        Y_ENSURE(false /* impossible status */);
+                    }
+#undef TRANSLATE_STATUS
+                    dbinfo.Name = db->name();
+                    dbinfo.Endpoint = db->endpoint();
+                    dbinfo.Path = db->path();
+                }
+                return std::move(result);
+            });
+}
+
 auto TFederatedTopicClient::TImpl::GetSubsessionHandlersExecutor() -> NTopic::IExecutor::TPtr {
     with_lock (Lock) {
         if (!SubsessionHandlersExecutor) {

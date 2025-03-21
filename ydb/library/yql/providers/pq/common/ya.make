@@ -3,6 +3,7 @@ LIBRARY()
 SRCS(
     pq_meta_fields.cpp
     yql_names.cpp
+    pq_partition_key.cpp
 )
 
 PEERDIR(

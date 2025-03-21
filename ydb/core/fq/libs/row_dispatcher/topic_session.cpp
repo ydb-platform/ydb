@@ -226,6 +226,7 @@ private:
     const TString Endpoint;
     const TString Database;
     const TActorId RowDispatcherActorId;
+    const TString Cluster;
     const ui32 PartitionId;
     const NYdb::TDriver Driver;
     const NYql::IPqGateway::TPtr PqGateway;
@@ -267,6 +268,7 @@ public:
         const NConfig::TRowDispatcherConfig& config,
         TActorId rowDispatcherActorId,
         TActorId compileServiceActorId,
+        const TString& cluster,
         ui32 partitionId,
         NYdb::TDriver driver,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
@@ -349,6 +351,7 @@ TTopicSession::TTopicSession(
     const NConfig::TRowDispatcherConfig& config,
     TActorId rowDispatcherActorId,
     TActorId compileServiceActorId,
+    const TString& cluster,
     ui32 partitionId,
     NYdb::TDriver driver,
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
@@ -362,6 +365,7 @@ TTopicSession::TTopicSession(
     , Endpoint(endpoint)
     , Database(database)
     , RowDispatcherActorId(rowDispatcherActorId)
+    , Cluster(cluster)
     , PartitionId(partitionId)
     , Driver(std::move(driver))
     , PqGateway(pqGateway)
@@ -556,6 +560,24 @@ void TTopicSession::CloseTopicSession() {
 }
 
 void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
+    auto minTime = Self.GetMinStartingMessageTimestamp();
+    auto &messages = event.GetMessages();
+    auto oldsize = messages.size();
+
+    if (!messages.empty()) {
+        Self.LastMessageOffset = messages.back().GetOffset();
+    }
+    messages.erase(std::remove_if(messages.begin(), messages.end(),
+                [minTime](const auto &message) {
+                    return message.GetWriteTime() < minTime;
+                }), messages.end());
+    if (messages.size() < oldsize) {
+        LOG_ROW_DISPATCHER_TRACE("Skipped " << (oldsize - messages.size()) << "/" << oldsize << " received messages (before " << minTime << ")");
+    }
+    if (messages.empty()) {
+        return;
+    }
+        
     ui64 dataSize = 0;
     auto& messages = event.GetMessages();
 
@@ -658,6 +680,9 @@ void TTopicSession::SendData(TClientsInfo& info) {
     do {
         auto event = std::make_unique<TEvRowDispatcher::TEvMessageBatch>();
         event->Record.SetPartitionId(PartitionId);
+        if (Cluster) {
+            event->Record.SetCluster(Cluster);
+        }
         event->ReadActorId = info.ReadActorId;
 
         ui64 batchSize = 0;
@@ -850,6 +875,9 @@ void TTopicSession::SendDataArrived(TClientsInfo& info) {
     Metrics.InFlyAsyncInputData->Set(1);
     auto event = std::make_unique<TEvRowDispatcher::TEvNewDataArrived>();
     event->Record.SetPartitionId(PartitionId);
+    if (Cluster) {
+        event->Record.SetCluster(Cluster);
+    }
     event->ReadActorId = info.ReadActorId;
     Send(RowDispatcherActorId, event.release());
 }
@@ -871,11 +899,12 @@ void TTopicSession::SendStatistics() {
     commonStatistic.ReadEvents = Statistics.Events;
     commonStatistic.LastReadedOffset = LastMessageOffset;
 
-    sessionStatistic.SessionKey = TTopicSessionParams{ReadGroup, Endpoint, Database, TopicPath, PartitionId};
+    sessionStatistic.SessionKey = TTopicSessionParams{ReadGroup, Endpoint, Database, TopicPath, Cluster, PartitionId};
     sessionStatistic.Clients.reserve(Clients.size());
     for (const auto& [readActorId, infoPtr] : Clients) {
         auto& info = *infoPtr;
         TTopicSessionClientStatistic clientStatistic;
+        // XXX FIXME Cluster?
         clientStatistic.PartitionId = PartitionId;
         clientStatistic.ReadActorId = readActorId;
         clientStatistic.QueuedRows = info.QueuedRows;
@@ -925,7 +954,11 @@ bool TTopicSession::CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr&
 }
 
 TMaybe<ui64> TTopicSession::GetOffset(const NFq::NRowDispatcherProto::TEvStartSession& settings) {
+    // FIXME replace with hashmap?
     for (auto p : settings.GetOffsets()) {
+        if (p.GetCluster() != Cluster) {
+            continue;
+        }
         if (p.GetPartitionId() != PartitionId) {
             continue;
         }
@@ -952,6 +985,7 @@ std::unique_ptr<IActor> NewTopicSession(
     const NConfig::TRowDispatcherConfig& config,
     TActorId rowDispatcherActorId,
     TActorId compileServiceActorId,
+    const TString& cluster,
     ui32 partitionId,
     NYdb::TDriver driver,
     std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
@@ -959,7 +993,25 @@ std::unique_ptr<IActor> NewTopicSession(
     const ::NMonitoring::TDynamicCounterPtr& countersRoot,
     const NYql::IPqGateway::TPtr& pqGateway,
     ui64 maxBufferSize) {
-    return std::unique_ptr<IActor>(new TTopicSession(readGroup, topicPath, endpoint, database, config, rowDispatcherActorId, compileServiceActorId, partitionId, std::move(driver), credentialsProviderFactory, counters, countersRoot, pqGateway, maxBufferSize));
+    return std::unique_ptr<IActor>(new TTopicSession(readGroup, topicPath, endpoint, database, config, rowDispatcherActorId, compileServiceActorId, cluster, partitionId, std::move(driver), credentialsProviderFactory, counters, countersRoot, pqGateway, maxBufferSize));
+}
+
+std::unique_ptr<IActor> NewTopicSession(
+    const TString& readGroup,
+    const TString& topicPath,
+    const TString& endpoint,
+    const TString& database,
+    const NConfig::TRowDispatcherConfig& config,
+    TActorId rowDispatcherActorId,
+    TActorId compileServiceActorId,
+    ui32 partitionId,
+    NYdb::TDriver driver,
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory,
+    const ::NMonitoring::TDynamicCounterPtr& counters,
+    const ::NMonitoring::TDynamicCounterPtr& countersRoot,
+    const NYql::IPqGateway::TPtr& pqGateway,
+    ui64 maxBufferSize) {
+    return NewTopicSession(readGroup, topicPath, endpoint, database, config, rowDispatcherActorId, compileServiceActorId, "", partitionId, std::move(driver), credentialsProviderFactory, counters, countersRoot, pqGateway, maxBufferSize);
 }
 
 }  // namespace NFq

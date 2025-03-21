@@ -62,7 +62,9 @@ public:
     void UpdateClusterConfigs(const TPqGatewayConfigPtr& config) override;
 
     ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& driver, const NYdb::NTopic::TTopicClientSettings& settings) override;
+    IFederatedTopicClient::TPtr GetFederatedTopicClient(const NYdb::TDriver& driver, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& settings) override;
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const override;
+    NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const override;
 
     using TClusterNPath = std::pair<TString, TString>;
 private:

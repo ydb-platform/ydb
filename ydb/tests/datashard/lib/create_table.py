@@ -9,7 +9,6 @@ ttl_types = {
     "DyNumber": "CAST('{}E1' AS DyNumber)",
 }
 
-
 # Отсюда убраны uint16 и int16 потому что при поиске по данным индексам выдает ошибку
 # ydb/core/kqp/provider/yql_kikimr_provider.cpp:685 FillLiteralProtoImpl(): requirement false failed, message: Unexpected type slot Int16 (или Uint16)
 index_first = {
@@ -81,7 +80,7 @@ index_sync = ["SYNC", "ASYNC"]
 
 
 class TestCreateTables():
-    def create_table(self, table_name: str, columns: dict[str, dict[str]], unique: str, sync: str):
+    def create_table(self, table_name: str, columns: dict[str, dict[str]], unique: str, sync: str) -> str:
         sql_create = f"CREATE TABLE {table_name} ("
         for prefix in columns.keys():
             for type_name in columns[prefix]:
@@ -91,7 +90,20 @@ class TestCreateTables():
                     {", ".join(["pk_" + cleanup_type_name(type_name) for type_name in columns["pk_"]])}),
                     {", ".join([f"INDEX idx_{cleanup_type_name(type_name)} GLOBAL {unique} {sync} ON (col_index_{cleanup_type_name(type_name)})" for type_name in columns["col_index_"]] if len(columns["col_index_"]) != 0 else "")}
             )"""
-        if columns["ttl_"][0] != "":
-            sql_create += f"""WITH (
-                    TTL = Interval("PT1H") ON ttl_{cleanup_type_name(columns["ttl_"][0])} {" as SECONDS" if columns["ttl_"] == "Uint32" or columns["ttl_"][0] == "Uint64" or columns["ttl_"] == "DyNumber" else ""})"""
         return sql_create
+
+    def create_ttl(self, ttl: str, inteval: dict[str, str], time: str, table_name: str) -> str:
+        sql_ttl = f"""
+        ALTER TABLE {table_name} SET ( TTL =
+        """
+        lenght_inteval = len(inteval)
+        count = 1
+        for pt in inteval.keys():
+            sql_ttl += f"""
+                Interval("{pt}" {inteval[pt] if inteval[pt] == "" or inteval[pt] == "DELETE" else f"TO EXTERNAL DATA SOURCE {inteval[pt]}"}
+                {", " if count != lenght_inteval else " "}
+            """
+        sql_ttl += f"""
+            ON {ttl} {f"AS {time}" if time != "" else ""} );
+        """
+        return sql_ttl

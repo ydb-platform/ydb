@@ -127,7 +127,6 @@ struct TTestContext {
 
     static bool RequestTimeoutFilter(TTestActorRuntimeBase& runtime, TAutoPtr<IEventHandle>& event, TDuration duration, TInstant& deadline) {
         if (event->GetTypeRewrite() == TEvents::TSystem::Wakeup) {
-            Cerr << "Captured TEvents::TSystem::Wakeup to " << runtime.FindActorName(event->GetRecipientRewrite()) << Endl;
             if (runtime.FindActorName(event->GetRecipientRewrite()) == "PERSQUEUE_ANS_ACTOR") {
                 return true;
             }

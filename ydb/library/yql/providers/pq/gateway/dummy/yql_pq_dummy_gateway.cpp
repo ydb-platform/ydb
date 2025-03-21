@@ -8,6 +8,23 @@
 
 namespace NYql {
 
+struct TDummyFederatedTopicClient : public IFederatedTopicClient {
+    TDummyFederatedTopicClient(const NYdb::NTopic::TFederatedTopicClientSettings& settings = {}):
+        FederatedClientSettings_(settings) {}
+
+    NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> GetAllTopicClusters() override {
+        std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo> dbInfo;
+        dbInfo.emplace_back(
+                "", "dummy", "/Root",
+                NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo::EStatus::AVAILABLE);
+        return NThreading::MakeFuture(std::move(dbInfo));
+    }
+
+    ~TDummyFederatedTopicClient() {}
+private:
+    NYdb::NFederatedTopic::TFederatedTopicClientSettings FederatedClientSettings_;
+};
+
 NThreading::TFuture<void> TDummyPqGateway::OpenSession(const TString& sessionId, const TString& username) {
     with_lock (Mutex) {
         Y_ENSURE(sessionId);
@@ -66,6 +83,13 @@ IPqGateway::TPtr CreatePqFileGateway() {
 
 ITopicClient::TPtr TDummyPqGateway::GetTopicClient(const NYdb::TDriver&, const NYdb::NTopic::TTopicClientSettings&) {
     return MakeIntrusive<TFileTopicClient>(Topics);
+}
+
+IFederatedTopicClient::TPtr TDummyPqGateway::GetFederatedTopicClient(const NYdb::TDriver&, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& settings) {
+    return MakeIntrusive<TDummyFederatedTopicClient>(settings);
+}
+NYdb::NFederatedTopic::TFederatedTopicClientSettings TDummyPqGateway::GetFederatedTopicClientSettings() const {
+    return {};
 }
 
 void TDummyPqGateway::UpdateClusterConfigs(

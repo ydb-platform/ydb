@@ -106,6 +106,21 @@ class TMockPqGateway : public IMockPqGateway {
 
         TMockPqGateway* Self;
     };
+
+    struct TMockFederatedTopicClient : public IFederatedTopicClient {
+        TMockFederatedTopicClient() {}
+
+        NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> GetAllTopicClusters() override {
+            std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo> dbInfo;
+            dbInfo.emplace_back(
+                    "", "dummy", "/Root",
+                    NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo::EStatus::AVAILABLE);
+            return NThreading::MakeFuture(std::move(dbInfo));
+        }
+
+        ~TMockFederatedTopicClient() override {}
+    };
+
 public:
 
     TMockPqGateway(
@@ -152,6 +167,14 @@ public:
 
     NYql::ITopicClient::TPtr GetTopicClient(const NYdb::TDriver& /*driver*/, const NYdb::NTopic::TTopicClientSettings& /*settings*/) override {
         return MakeIntrusive<TMockTopicClient>(this);
+    }
+
+    IFederatedTopicClient::TPtr GetFederatedTopicClient(const NYdb::TDriver& /*driver*/, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& /*settings*/) override {
+        return MakeIntrusive<TMockFederatedTopicClient>();
+    }
+
+    NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const override {
+        return {};
     }
 
     std::shared_ptr<TQueue> GetEventQueue(const TString& topic) {

@@ -4,7 +4,7 @@ During the restoration of [views](../../../concepts/datamodel/view.md) from a ba
 
 ## Examples
 
-### Restoring database root to the same path
+### Restoring the database root to the same path
 
 Let's consider the following scenario:
 
@@ -41,7 +41,7 @@ ydb sql --script 'select * from root_view' --explain
 
 The output of the command includes: `TableFullScan (Table: root_table, ...`
 
-### Restoring database root to a subfolder
+### Restoring the database root to a subfolder
 
 Let's consider the following scenario:
 
@@ -103,7 +103,7 @@ ydb sql --script 'select * from my_view' --explain
 
 The output of the command includes: `TableFullScan (Table: my_table, ...`
 
-### Restoring database root to the root of a different database
+### Restoring the database root to the root of a different database
 
 Let's consider the following scenario:
 

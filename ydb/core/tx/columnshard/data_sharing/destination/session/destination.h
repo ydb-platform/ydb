@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/data_sharing/protos/sessions.pb.h>
 #include <ydb/core/tx/columnshard/engines/scheme/schema_version.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <ydb/library/conclusion/result.h>
 

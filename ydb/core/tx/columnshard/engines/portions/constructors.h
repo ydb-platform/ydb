@@ -1,5 +1,6 @@
 #pragma once
 #include "constructor_accessor.h"
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 

@@ -7,6 +7,7 @@
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/event_local.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 class IGranuleDataAccessor;

@@ -10,6 +10,7 @@
 
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/common/scalars.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/counters/common_data.h>
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/counters/portion_index.h>

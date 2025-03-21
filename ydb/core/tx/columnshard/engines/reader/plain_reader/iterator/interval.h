@@ -3,6 +3,7 @@
 #include "merge.h"
 
 #include <ydb/core/tx/columnshard/resource_subscriber/task.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap::NReader::NPlain {
 

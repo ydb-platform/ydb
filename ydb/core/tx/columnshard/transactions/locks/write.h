@@ -1,5 +1,6 @@
 #pragma once
 #include "abstract.h"
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap::NTxInteractions {
 

@@ -5,6 +5,7 @@
 #include <ydb/core/tx/columnshard/bg_tasks/abstract/control.h>
 #include <ydb/core/tx/columnshard/bg_tasks/abstract/task.h>
 #include <ydb/core/tx/columnshard/export/common/identifier.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/core/tx/columnshard/export/protos/task.pb.h>
 

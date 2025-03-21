@@ -8,6 +8,7 @@
 #include <ydb/core/tx/columnshard/counters/common/object_counter.h>
 #include <ydb/core/tx/columnshard/engines/defs.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/data_events/write_data.h>
 

@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/engines/writer/indexed_blob_constructor.h>
 #include <ydb/core/tx/columnshard/operations/slice_builder/pack_builder.h>
 #include <ydb/core/tx/columnshard/operations/write.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 

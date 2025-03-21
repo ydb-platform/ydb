@@ -258,7 +258,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             }
 
             UNIT_ASSERT(pathids.size() == 1);
-            auto pathId = *pathids.begin();
+            const auto& pathId = *pathids.begin();
 
             shard = 0;
             for (auto&& i : csController->GetShardActualIds()) {

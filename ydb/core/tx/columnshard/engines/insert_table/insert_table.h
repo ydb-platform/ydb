@@ -8,12 +8,12 @@
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/columnshard/counters/common_data.h>
 #include <ydb/core/tx/columnshard/counters/insert_table.h>
-
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 class TPKRangesFilter;
 class IDbWrapper;
-    
+
 class TInsertTableAccessor {
 protected:
     TInsertionSummary Summary;

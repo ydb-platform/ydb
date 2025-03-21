@@ -8,6 +8,7 @@
 #include "scheme/versions/versioned_index.h"
 
 #include <ydb/core/tx/columnshard/common/reverse_accessor.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/counters/common_data.h>
 #include <ydb/core/tx/columnshard/resource_subscriber/container.h>
 #include <ydb/core/tx/columnshard/tx_reader/abstract.h>

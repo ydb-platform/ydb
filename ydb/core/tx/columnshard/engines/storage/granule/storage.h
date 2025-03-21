@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/counters/engine_logs.h>
 #include <ydb/core/tx/columnshard/data_accessor/events.h>
 #include <ydb/core/tx/columnshard/data_accessor/manager.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 

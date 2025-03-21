@@ -1,5 +1,4 @@
 #pragma once
-#include <ydb/core/tx/columnshard/common/path_id.h>
 #include "defs.h"
 
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
@@ -8,7 +7,7 @@
 #include <ydb/core/tx/columnshard/engines/insert_table/insert_table.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/operations/write.h>
-
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <type_traits>
 

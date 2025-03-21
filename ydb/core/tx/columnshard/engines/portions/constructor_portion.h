@@ -3,6 +3,7 @@
 #include "portion_info.h"
 
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <ydb/library/accessor/accessor.h>
 

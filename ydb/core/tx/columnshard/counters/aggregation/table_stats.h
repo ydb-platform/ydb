@@ -3,6 +3,7 @@
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/columnshard/counters/counters_manager.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 
 namespace NKikimr::NColumnShard {

@@ -16,6 +16,7 @@
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tablet/tablet_counters.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 
 #include <library/cpp/time_provider/time_provider.h>

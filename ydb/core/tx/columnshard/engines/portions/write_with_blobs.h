@@ -5,6 +5,7 @@
 
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/splitter/blob_info.h>
 
 #include <ydb/library/accessor/accessor.h>

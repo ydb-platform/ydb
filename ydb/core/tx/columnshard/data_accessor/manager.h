@@ -5,6 +5,7 @@
 #include "abstract/collector.h"
 
 #include <ydb/services/bg_tasks/abstract/interface.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap::NDataAccessorControl {
 

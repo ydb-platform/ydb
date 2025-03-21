@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/data_sharing/destination/session/destination.h>
 #include <ydb/core/tx/columnshard/data_sharing/manager/shared_blobs.h>
 #include <ydb/core/tx/columnshard/engines/scheme/schema_version.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap::NDataSharing {
 

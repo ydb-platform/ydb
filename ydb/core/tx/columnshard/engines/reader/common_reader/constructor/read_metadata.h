@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/stats.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <ydb/library/formats/arrow/replace_key.h>
 

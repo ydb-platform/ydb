@@ -1,8 +1,8 @@
 #pragma once
-#include <ydb/core/tx/columnshard/common/path_id.h>
 #include "engines/changes/abstract/compaction_info.h"
 #include "engines/portions/meta.h"
 #include <ydb/core/tx/columnshard/counters/counters_manager.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 class TColumnEngineChanges;

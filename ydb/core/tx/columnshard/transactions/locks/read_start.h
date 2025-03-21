@@ -1,6 +1,7 @@
 #pragma once
 #include "abstract.h"
 #include <ydb/core/tx/columnshard/engines/predicate/filter.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap::NTxInteractions {
 

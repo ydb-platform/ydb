@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/data_accessor/abstract/collector.h>
 #include <ydb/core/tx/columnshard/data_accessor/request.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <library/cpp/cache/cache.h>
 

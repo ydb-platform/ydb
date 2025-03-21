@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/data_accessor/abstract/manager.h>
 #include <ydb/core/tx/columnshard/tx_reader/abstract.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap::NDataAccessorControl::NInMem {
 class TManager: public IMetadataMemoryManager {

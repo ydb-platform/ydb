@@ -2,6 +2,7 @@
 #include <ydb/core/tx/columnshard/engines/column_engine.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/storage/actualizer/counters/counters.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 class TVersionedIndex;

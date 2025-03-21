@@ -1,6 +1,7 @@
 #pragma once
 #include "abstract.h"
 #include "counters.h"
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 

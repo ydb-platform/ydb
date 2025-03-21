@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NColumnShard {
 

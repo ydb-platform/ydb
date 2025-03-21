@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 #include <ydb/core/tx/columnshard/data_sharing/common/session/common.h>
 #include <ydb/core/tx/columnshard/engines/scheme/schema_version.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NIceDb {
 class TNiceDb;

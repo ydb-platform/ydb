@@ -2,6 +2,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/sbuckets/counters/counters.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/sbuckets/index/index.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets {
 

@@ -18,9 +18,9 @@ public:
     TInternalPathId(const TInternalPathId&) = default;
     TInternalPathId(TInternalPathId&&) = default;
     TInternalPathId& operator=(const TInternalPathId&) = default;
-    TInternalPathId& operator=(TInternalPathId&) = default;
+    TInternalPathId& operator=(TInternalPathId&&) = default;
 
-    static TInternalPathId FromRawInternalPathIdValue(ui64 pathId) {
+    static TInternalPathId FromRawInternalPathIdValue(const ui64 pathId) {
         return TInternalPathId(pathId);
     }
 

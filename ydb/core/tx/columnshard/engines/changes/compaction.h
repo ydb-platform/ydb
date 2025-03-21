@@ -2,6 +2,7 @@
 
 #include <ydb/core/tx/columnshard/engines/changes/abstract/compaction_info.h>
 #include <ydb/core/tx/columnshard/engines/changes/with_appended.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 

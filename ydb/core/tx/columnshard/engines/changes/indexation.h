@@ -6,6 +6,7 @@
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/engines/insert_table/committed.h>
 #include <ydb/core/tx/columnshard/engines/insert_table/inserted.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <util/generic/hash.h>
 

@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/storage/granule/granule.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap::NReader::NSysView::NAbstract {
 

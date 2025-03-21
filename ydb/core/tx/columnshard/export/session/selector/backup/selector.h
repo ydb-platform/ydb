@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/export/session/selector/abstract/selector.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
 namespace NKikimr::NOlap::NExport {

@@ -1,6 +1,6 @@
 #pragma once
-#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/subscriber/abstract/events/event.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <util/generic/hash_set.h>
 
 namespace NKikimr::NColumnShard::NSubscriber {

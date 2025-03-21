@@ -2,6 +2,7 @@
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/tablet/ext_tx_base.h>
 #include <ydb/core/tx/columnshard/data_sharing/source/session/source.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap::NDataSharing {
 

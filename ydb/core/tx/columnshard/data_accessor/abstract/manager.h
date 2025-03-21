@@ -3,6 +3,7 @@
 
 #include <ydb/core/tx/columnshard/common/blob.h>
 #include <ydb/core/tx/columnshard/tx_reader/abstract.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 class TGranuleMeta;

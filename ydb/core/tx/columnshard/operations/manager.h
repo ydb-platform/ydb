@@ -3,6 +3,7 @@
 
 #include <ydb/core/tx/columnshard/transactions/locks/abstract.h>
 #include <ydb/core/tx/locks/sys_tables.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap::NTxInteractions {
 class TManager;

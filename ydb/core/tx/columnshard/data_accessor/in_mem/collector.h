@@ -14,7 +14,7 @@ private:
         const std::vector<ui64>& remove) override;
 
 public:
-    TCollector(const NColumnShard::TInternalPathId pathId)
+    TCollector(const TInternalPathId pathId)
         : TBase(pathId) {
     }
 };

@@ -53,7 +53,7 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
     ctx.Send(writeMeta.GetSource(), event.release(), 0, cookie);
 }
 
-TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedWait(const NColumnShard::TInternalPathId pathId) const {
+TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedWait(const TInternalPathId pathId) const {
     if (InsertTable && InsertTable->IsOverloadedByCommitted(pathId)) {
         return EOverloadStatus::InsertTable;
     }
@@ -64,7 +64,7 @@ TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedWait(const NColumnSha
     return EOverloadStatus::None;
 }
 
-TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedImmediate(const NColumnShard::TInternalPathId /* pathId */) const {
+TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedImmediate(const TInternalPathId /* pathId */) const {
     if (IsAnyChannelYellowStop()) {
         return EOverloadStatus::Disk;
     }

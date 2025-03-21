@@ -19,13 +19,13 @@ private:
     using TBase = TCommonSession;
     const TTabletId SelfTabletId;
     std::shared_ptr<TSourceCursor> Cursor;
-    YDB_READONLY_DEF(std::set<NColumnShard::TInternalPathId>, PathIds);
+    YDB_READONLY_DEF(std::set<TInternalPathId>, PathIds);
     TTabletId DestinationTabletId = TTabletId(0);
 
 protected:
-    virtual TConclusionStatus DoStart(NColumnShard::TColumnShard& shard, THashMap<NColumnShard::TInternalPathId, std::vector<TPortionDataAccessor>>&& portions) override;
-    virtual THashSet<NColumnShard::TInternalPathId> GetPathIdsForStart() const override {
-        THashSet<NColumnShard::TInternalPathId> result;
+    virtual TConclusionStatus DoStart(NColumnShard::TColumnShard& shard, THashMap<TInternalPathId, std::vector<TPortionDataAccessor>>&& portions) override;
+    virtual THashSet<TInternalPathId> GetPathIdsForStart() const override {
+        THashSet<TInternalPathId> result;
         for (auto&& i : PathIds) {
             result.emplace(i);
         }
@@ -38,7 +38,7 @@ public:
         , SelfTabletId(selfTabletId) {
     }
 
-    TSourceSession(const TString& sessionId, const TTransferContext& transfer, const TTabletId selfTabletId, const std::set<NColumnShard::TInternalPathId>& pathIds, const TTabletId destTabletId)
+    TSourceSession(const TString& sessionId, const TTransferContext& transfer, const TTabletId selfTabletId, const std::set<TInternalPathId>& pathIds, const TTabletId destTabletId)
         : TBase(sessionId, "source_base", transfer)
         , SelfTabletId(selfTabletId)
         , PathIds(pathIds)
@@ -66,7 +66,7 @@ public:
 
     void SaveCursorToDatabase(NIceDb::TNiceDb& db);
 
-    void StartCursor(const NColumnShard::TColumnShard& shard, THashMap<NColumnShard::TInternalPathId, std::vector<TPortionDataAccessor>>&& portions, std::vector<NOlap::TSchemaPresetVersionInfo>&& schemeHistory);
+    void StartCursor(const NColumnShard::TColumnShard& shard, THashMap<TInternalPathId, std::vector<TPortionDataAccessor>>&& portions, std::vector<NOlap::TSchemaPresetVersionInfo>&& schemeHistory);
 
     [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> AckFinished(NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& selfPtr);
     [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> AckData(NColumnShard::TColumnShard* self, const ui32 receivedPackIdx, const std::shared_ptr<TSourceSession>& selfPtr);

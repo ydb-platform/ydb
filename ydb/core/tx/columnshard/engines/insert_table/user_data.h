@@ -24,20 +24,20 @@ private:
     };
 
     std::shared_ptr<TBlobStorageGuard> BlobDataGuard;
-    YDB_READONLY(NColumnShard::TInternalPathId, PathId, NColumnShard::TInternalPathId{});
+    YDB_READONLY_DEF(TInternalPathId, PathId);
     YDB_READONLY(ui64, SchemaVersion, 0);
 
 public:
     TUserData() = delete;
-    TUserData(const NColumnShard::TInternalPathId pathId, const TBlobRange& blobRange, const NKikimrTxColumnShard::TLogicalMetadata& proto, const ui64 schemaVersion,
+    TUserData(const TInternalPathId pathId, const TBlobRange& blobRange, const NKikimrTxColumnShard::TLogicalMetadata& proto, const ui64 schemaVersion,
         const std::optional<TString>& blobData);
 
-    static std::shared_ptr<TUserData> Build(const NColumnShard::TInternalPathId pathId, const TBlobRange& blobRange, const NKikimrTxColumnShard::TLogicalMetadata& proto, const ui64 schemaVersion,
+    static std::shared_ptr<TUserData> Build(const TInternalPathId pathId, const TBlobRange& blobRange, const NKikimrTxColumnShard::TLogicalMetadata& proto, const ui64 schemaVersion,
         const std::optional<TString>& blobData) {
         return std::make_shared<TUserData>(pathId, blobRange, proto, schemaVersion, blobData);
     }
 
-    static std::shared_ptr<TUserData> Build(const NColumnShard::TInternalPathId pathId, const TUnifiedBlobId& blobId, const NKikimrTxColumnShard::TLogicalMetadata& proto, const ui64 schemaVersion,
+    static std::shared_ptr<TUserData> Build(const TInternalPathId pathId, const TUnifiedBlobId& blobId, const NKikimrTxColumnShard::TLogicalMetadata& proto, const ui64 schemaVersion,
         const std::optional<TString>& blobData) {
         return std::make_shared<TUserData>(pathId, TBlobRange(blobId), proto, schemaVersion, blobData);
     }
@@ -81,7 +81,7 @@ public:
         return UserData->GetTxVolume();
     }
 
-    NColumnShard::TInternalPathId GetPathId() const {
+    TInternalPathId GetPathId() const {
         return UserData->GetPathId();
     }
 

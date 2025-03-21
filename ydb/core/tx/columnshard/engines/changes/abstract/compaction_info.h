@@ -14,7 +14,7 @@ class TGranuleMeta;
 
 class TPlanCompactionInfo {
 private:
-    NColumnShard::TInternalPathId PathId;
+    TInternalPathId PathId;
     TMonotonic StartTime = TMonotonic::Now();
     TPositiveControlInteger Count;
 
@@ -30,11 +30,11 @@ public:
         return StartTime;
     }
 
-    TPlanCompactionInfo(const NColumnShard::TInternalPathId pathId)
+    TPlanCompactionInfo(const TInternalPathId pathId)
         : PathId(pathId) {
     }
 
-    NColumnShard::TInternalPathId GetPathId() const {
+    TInternalPathId GetPathId() const {
         return PathId;
     }
 };

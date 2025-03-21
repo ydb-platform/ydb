@@ -13,7 +13,7 @@
 
 namespace NKikimr::NColumnShard {
 
-TWriteOperation::TWriteOperation(const NColumnShard::TInternalPathId& pathId, const TOperationWriteId writeId, const ui64 lockId, const ui64 cookie,
+TWriteOperation::TWriteOperation(const TInternalPathId& pathId, const TOperationWriteId writeId, const ui64 lockId, const ui64 cookie,
     const EOperationStatus& status, const TInstant createdAt, const std::optional<ui32> granuleShardingVersionId,
     const NEvWrite::EModificationType mType, const bool writePortions)
     : PathId(pathId)
@@ -52,7 +52,7 @@ void TWriteOperation::CommitOnExecute(
 
     if (!WritePortions) {
         THashSet<TInsertWriteId> insertWriteIds(InsertWriteIds.begin(), InsertWriteIds.end());
-        auto pathExists = [&](NColumnShard::TInternalPathId pathId) {
+        auto pathExists = [&](TInternalPathId pathId) {
             return owner.TablesManager.HasTable(pathId);
         };
         if (insertWriteIds.size()) {

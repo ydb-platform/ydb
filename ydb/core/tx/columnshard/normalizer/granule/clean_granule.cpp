@@ -21,7 +21,7 @@ namespace {
         TString Metadata;
         ui64 Offset;
         ui32 Size;
-        NColumnShard::TInternalPathId PathId;
+        TInternalPathId PathId;
 
         template <class TRowSet>
         TChunkData(const TRowSet& rowset) {
@@ -40,7 +40,7 @@ namespace {
             Metadata = rowset.template GetValue<Schema::IndexColumns::Metadata>();
             Offset = rowset.template GetValue<Schema::IndexColumns::Offset>();
             Size = rowset.template GetValue<Schema::IndexColumns::Size>();
-            PathId = NColumnShard::TInternalPathId::FromRawInternalPathIdValue(rowset.template GetValue<Schema::IndexColumns::PathId>());
+            PathId = TInternalPathId::FromRawInternalPathIdValue(rowset.template GetValue<Schema::IndexColumns::PathId>());
         }
     };
 }

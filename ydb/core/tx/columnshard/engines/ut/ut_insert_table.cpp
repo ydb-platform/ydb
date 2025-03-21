@@ -36,8 +36,8 @@ public:
     void EraseAborted(const TInsertedData&) override {
     }
 
-    virtual TConclusion<THashMap<NColumnShard::TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() override {
-        return THashMap<NColumnShard::TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>>{};
+    virtual TConclusion<THashMap<TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() override {
+        return THashMap<TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>>{};
     }
 
     bool Load(TInsertTableAccessor&, const TInstant&) override {
@@ -48,7 +48,7 @@ public:
     }
     virtual void ErasePortion(const NOlap::TPortionInfo& /*portion*/) override {
     }
-    virtual bool LoadPortions(const std::optional<NColumnShard::TInternalPathId> /*reqPathId*/,
+    virtual bool LoadPortions(const std::optional<TInternalPathId> /*reqPathId*/,
         const std::function<void(NOlap::TPortionInfoConstructor&&, const NKikimrTxColumnShard::TIndexPortionMeta&)>& /*callback*/) override {
         return true;
     }
@@ -57,7 +57,7 @@ public:
     }
     void EraseColumn(const TPortionInfo&, const TColumnRecord&) override {
     }
-    bool LoadColumns(const std::optional<NColumnShard::TInternalPathId> /*reqPathId*/, const std::function<void(TColumnChunkLoadContextV2&&)>&) override {
+    bool LoadColumns(const std::optional<TInternalPathId> /*reqPathId*/, const std::function<void(TColumnChunkLoadContextV2&&)>&) override {
         return true;
     }
 
@@ -65,8 +65,8 @@ public:
     }
     virtual void EraseIndex(const TPortionInfo& /*portion*/, const TIndexChunk& /*row*/) override {
     }
-    virtual bool LoadIndexes(const std::optional<NColumnShard::TInternalPathId> /*reqPathId*/,
-        const std::function<void(const NColumnShard::TInternalPathId /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&&)>& /*callback*/) override {
+    virtual bool LoadIndexes(const std::optional<TInternalPathId> /*reqPathId*/,
+        const std::function<void(const TInternalPathId /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&&)>& /*callback*/) override {
         return true;
     }
 
@@ -82,8 +82,8 @@ public:
 Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
     Y_UNIT_TEST(TestInsertCommit) {
         TInsertWriteId writeId = (TInsertWriteId)0;
-        const auto& tableId0 = NColumnShard::TInternalPathId::FromRawInternalPathIdValue(0);
-        const auto& tableId1 = NColumnShard::TInternalPathId::FromRawInternalPathIdValue(0);
+        const auto& tableId0 = TInternalPathId::FromRawInternalPathIdValue(0);
+        const auto& tableId1 = TInternalPathId::FromRawInternalPathIdValue(0);
         TString dedupId = "0";
         TUnifiedBlobId blobId1(2222, 1, 1, 100, 2, 0, 1);
 
@@ -106,7 +106,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
         // commit
         ui64 planStep = 100;
         ui64 txId = 42;
-        insertTable.Commit(dbTable, planStep, txId, { writeId }, [](NColumnShard::TInternalPathId) {
+        insertTable.Commit(dbTable, planStep, txId, { writeId }, [](TInternalPathId) {
             return true;
         });
 //        UNIT_ASSERT_EQUAL(insertTable.GetPathPriorities().size(), 1);

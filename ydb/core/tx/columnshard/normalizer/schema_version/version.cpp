@@ -48,12 +48,12 @@ private:
 
     class TTableKey {
     public:
-        NColumnShard::TInternalPathId PathId;
+        TInternalPathId PathId;
         ui64 Step;
         ui64 TxId;
 
     public:
-        TTableKey(NColumnShard::TInternalPathId pathId, ui64 step, ui64 txId)
+        TTableKey(TInternalPathId pathId, ui64 step, ui64 txId)
             : PathId(pathId)
             , Step(step)
             , TxId(txId) {
@@ -164,7 +164,7 @@ public:
                 }
 
                 while (!rowset.EndOfSet()) {
-                    const auto pathId = NColumnShard::TInternalPathId::FromRawInternalPathIdValue(rowset.GetValue<Schema::TableVersionInfo::PathId>());
+                    const auto pathId = TInternalPathId::FromRawInternalPathIdValue(rowset.GetValue<Schema::TableVersionInfo::PathId>());
 
                     NKikimrTxColumnShard::TTableVersionInfo versionInfo;
                     Y_ABORT_UNLESS(versionInfo.ParseFromString(rowset.GetValue<Schema::TableVersionInfo::InfoProto>()));

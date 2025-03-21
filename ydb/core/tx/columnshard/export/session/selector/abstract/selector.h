@@ -36,7 +36,7 @@ public:
         DoSerializeToProto(proto);
     }
 
-    virtual NColumnShard::TInternalPathId GetPathId() const = 0;
+    virtual TInternalPathId GetPathId() const = 0;
     virtual TString GetClassName() const = 0;
 };
 

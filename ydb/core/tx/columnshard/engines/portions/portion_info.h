@@ -77,7 +77,7 @@ private:
     std::optional<TSnapshot> CommitSnapshot;
     std::optional<TInsertWriteId> InsertWriteId;
 
-    NColumnShard::TInternalPathId PathId = NColumnShard::TInternalPathId{};
+    TInternalPathId PathId;
     ui64 PortionId = 0;   // Id of independent (overlayed by PK) portion of data in pathId
     TSnapshot MinSnapshotDeprecated = TSnapshot::Zero();   // {PlanStep, TxId} is min snapshot for {Granule, Portion}
     TSnapshot RemoveSnapshot = TSnapshot::Zero();
@@ -234,7 +234,7 @@ public:
 
     void SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;
 
-    NColumnShard::TInternalPathId GetPathId() const {
+    TInternalPathId GetPathId() const {
         return PathId;
     }
 
@@ -335,7 +335,7 @@ public:
         ShardingVersion.reset();
     }
 
-    void SetPathId(const NColumnShard::TInternalPathId pathId) {
+    void SetPathId(const TInternalPathId pathId) {
         PathId = pathId;
     }
 

@@ -19,14 +19,14 @@ namespace {
 
 class TGranulesNormalizer::TNormalizerResult : public INormalizerChanges {
     std::vector<TChunkData> Chunks;
-    THashMap<ui64, NColumnShard::TInternalPathId> Granule2Path;
+    THashMap<ui64, TInternalPathId> Granule2Path;
 
 private:
     void AddChunk(TChunkData&& chunk) {
         Chunks.push_back(std::move(chunk));
     }
 
-    TNormalizerResult(const THashMap<ui64, NColumnShard::TInternalPathId>& g2p)
+    TNormalizerResult(const THashMap<ui64, TInternalPathId>& g2p)
         : Granule2Path(g2p)
     {}
 
@@ -71,7 +71,7 @@ public:
             }
 
             while (!rowset.EndOfSet()) {
-                const auto pathId = NColumnShard::TInternalPathId::FromRawInternalPathIdValue(rowset.GetValue<Schema::IndexGranules::PathId>());
+                const auto pathId = TInternalPathId::FromRawInternalPathIdValue(rowset.GetValue<Schema::IndexGranules::PathId>());
                 ui64 granuleId = rowset.GetValue<Schema::IndexGranules::Granule>();
                 Y_ABORT_UNLESS(granuleId != 0);
                 granule2Path[granuleId] = pathId;

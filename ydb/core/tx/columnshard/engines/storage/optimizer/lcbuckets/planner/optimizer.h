@@ -139,7 +139,7 @@ public:
         return result;
     }
 
-    TOptimizerPlanner(const NColumnShard::TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
+    TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
         const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::vector<TLevelConstructorContainer>& levelConstructors);
 };
 

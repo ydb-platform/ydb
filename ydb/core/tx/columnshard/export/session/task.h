@@ -20,7 +20,7 @@ public:
         return "CS::EXPORT";
     }
 private:
-    TIdentifier Identifier = TIdentifier(NColumnShard::TInternalPathId{});
+    TIdentifier Identifier = TIdentifier(TInternalPathId{});
     YDB_READONLY_DEF(TSelectorContainer, Selector);
     YDB_READONLY_DEF(TStorageInitializerContainer, StorageInitializer);
     YDB_READONLY_DEF(NArrow::NSerialization::TSerializerContainer, Serializer);

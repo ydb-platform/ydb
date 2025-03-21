@@ -228,7 +228,7 @@ public:
         return DoStartFetchingAccessor(sourcePtr, step);
     }
 
-    virtual NColumnShard::TInternalPathId GetPathId() const = 0;
+    virtual TInternalPathId GetPathId() const = 0;
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const = 0;
 
     void InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetching);
@@ -335,7 +335,7 @@ private:
         return result;
     }
     virtual void DoAbort() override;
-    virtual NColumnShard::TInternalPathId GetPathId() const override {
+    virtual TInternalPathId GetPathId() const override {
         return Portion->GetPathId();
     }
 

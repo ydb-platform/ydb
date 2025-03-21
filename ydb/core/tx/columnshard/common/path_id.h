@@ -34,9 +34,17 @@ public:
 
     auto operator<=>(const TInternalPathId&) const = default;
 };
+
 static_assert(sizeof(TInternalPathId)==sizeof(ui64));
 
 } //namespace NKikimr::NColumnShard
+
+namespace NKikimr::NOlap {
+
+using TInternalPathId = NColumnShard::TInternalPathId;
+
+} //namespace NKikimr::NOlap
+
 template <>
 struct THash<NKikimr::NColumnShard::TInternalPathId> {
     size_t operator()(const NKikimr::NColumnShard::TInternalPathId& p) const {

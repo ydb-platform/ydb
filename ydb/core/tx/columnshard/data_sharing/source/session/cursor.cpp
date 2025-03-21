@@ -9,7 +9,7 @@
 namespace NKikimr::NOlap::NDataSharing {
 
 void TSourceCursor::BuildSelection(const std::shared_ptr<IStoragesManager>& storagesManager, const TVersionedIndex& index) {
-    THashMap<NColumnShard::TInternalPathId, NEvents::TPathIdData> result;
+    THashMap<TInternalPathId, NEvents::TPathIdData> result;
     auto itCurrentPath = PortionsForSend.find(StartPathId);
     AFL_VERIFY(itCurrentPath != PortionsForSend.end());
     auto itPortion = itCurrentPath->second.find(StartPortionId);
@@ -139,7 +139,7 @@ NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic TSourceCursor:
 
 NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic& proto,
     const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic& protoStatic) {
-    StartPathId = NColumnShard::TInternalPathId::FromRawInternalPathIdValue(proto.GetStartPathId());
+    StartPathId = TInternalPathId::FromRawInternalPathIdValue(proto.GetStartPathId());
     StartPortionId = proto.GetStartPortionId();
     PackIdx = proto.GetPackIdx();
     NextSchemasIntervalBegin = proto.GetNextSchemasIntervalBegin();
@@ -162,7 +162,7 @@ NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColu
         LinksModifiedTablets.emplace((TTabletId)i);
     }
     for (auto&& i : protoStatic.GetPathHashes()) {
-        PathPortionHashes.emplace(NColumnShard::TInternalPathId::FromRawInternalPathIdValue(i.GetPathId()), i.GetHash());
+        PathPortionHashes.emplace(TInternalPathId::FromRawInternalPathIdValue(i.GetPathId()), i.GetHash());
     }
 
     for (auto&& i : protoStatic.GetSchemeHistory()) {
@@ -176,7 +176,7 @@ NKikimr::TConclusionStatus TSourceCursor::DeserializeFromProto(const NKikimrColu
     return TConclusionStatus::Success();
 }
 
-TSourceCursor::TSourceCursor(const TTabletId selfTabletId, const std::set<NColumnShard::TInternalPathId>& pathIds, const TTransferContext transferContext)
+TSourceCursor::TSourceCursor(const TTabletId selfTabletId, const std::set<TInternalPathId>& pathIds, const TTransferContext transferContext)
     : SelfTabletId(selfTabletId)
     , TransferContext(transferContext)
     , PathIds(pathIds) {
@@ -194,10 +194,10 @@ void TSourceCursor::SaveToDatabase(NIceDb::TNiceDb& db, const TString& sessionId
 }
 
 bool TSourceCursor::Start(const std::shared_ptr<IStoragesManager>& storagesManager,
-    THashMap<NColumnShard::TInternalPathId, std::vector<TPortionDataAccessor>>&& portions, std::vector<NOlap::TSchemaPresetVersionInfo>&& schemeHistory, const TVersionedIndex& index) {
+    THashMap<TInternalPathId, std::vector<TPortionDataAccessor>>&& portions, std::vector<NOlap::TSchemaPresetVersionInfo>&& schemeHistory, const TVersionedIndex& index) {
     SchemeHistory = std::move(schemeHistory);
     AFL_VERIFY(!IsStartedFlag);
-    std::map<NColumnShard::TInternalPathId, std::map<ui32, TPortionDataAccessor>> local;
+    std::map<TInternalPathId, std::map<ui32, TPortionDataAccessor>> local;
     NArrow::NHash::NXX64::TStreamStringHashCalcer hashCalcer(0);
     for (auto&& i : portions) {
         hashCalcer.Start();

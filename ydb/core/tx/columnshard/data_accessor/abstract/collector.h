@@ -36,7 +36,7 @@ public:
 
 class IGranuleDataAccessor {
 private:
-    const NColumnShard::TInternalPathId PathId;
+    const TInternalPathId PathId;
 
     virtual void DoAskData(
         const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<IAccessorCallback>& callback, const TString& consumer) = 0;
@@ -46,11 +46,11 @@ private:
 public:
     virtual ~IGranuleDataAccessor() = default;
 
-    NColumnShard::TInternalPathId GetPathId() const {
+    TInternalPathId GetPathId() const {
         return PathId;
     }
 
-    IGranuleDataAccessor(const NColumnShard::TInternalPathId pathId)
+    IGranuleDataAccessor(const TInternalPathId pathId)
         : PathId(pathId) {
     }
 

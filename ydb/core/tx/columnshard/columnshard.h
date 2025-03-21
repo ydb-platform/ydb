@@ -98,7 +98,7 @@ namespace TEvColumnShard {
 
     struct TEvInternalScan: public TEventLocal<TEvInternalScan, EvInternalScan> {
     private:
-        YDB_READONLY(NColumnShard::TInternalPathId, PathId, NColumnShard::TInternalPathId{});
+        YDB_READONLY_DEF(NColumnShard::TInternalPathId, PathId);
         YDB_READONLY(NOlap::TSnapshot, Snapshot, NOlap::TSnapshot::Zero());
         YDB_READONLY_DEF(std::optional<ui64>, LockId);
         YDB_ACCESSOR(bool, Reverse, false);

@@ -38,7 +38,7 @@ public:
 
 class TFullChunkAddress {
 private:
-    YDB_READONLY(NColumnShard::TInternalPathId, PathId, NColumnShard::TInternalPathId{});
+    YDB_READONLY_DEF(TInternalPathId, PathId);
     YDB_READONLY(ui64, PortionId, 0);
     YDB_READONLY(ui32, ColumnId, 0);
     YDB_READONLY(ui16, Chunk, 0);
@@ -52,7 +52,7 @@ public:
         return Chunk;
     }
 
-    TFullChunkAddress(const NColumnShard::TInternalPathId pathId, const ui64 portionId, const ui32 columnId, const ui16 chunk)
+    TFullChunkAddress(const TInternalPathId pathId, const ui64 portionId, const ui32 columnId, const ui16 chunk)
         : PathId(pathId)
         , PortionId(portionId)
         , ColumnId(columnId)

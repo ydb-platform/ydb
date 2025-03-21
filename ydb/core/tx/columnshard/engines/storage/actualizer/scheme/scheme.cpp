@@ -137,7 +137,7 @@ void TSchemeActualizer::Refresh(const TAddExternalContext& externalContext) {
     }
 }
 
-TSchemeActualizer::TSchemeActualizer(const NColumnShard::TInternalPathId pathId, const TVersionedIndex& versionedIndex)
+TSchemeActualizer::TSchemeActualizer(const TInternalPathId pathId, const TVersionedIndex& versionedIndex)
     : PathId(pathId)
     , VersionedIndex(versionedIndex) {
     Y_UNUSED(PathId);

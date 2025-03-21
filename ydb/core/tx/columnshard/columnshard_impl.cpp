@@ -476,7 +476,7 @@ void TColumnShard::RunDropTable(const NKikimrTxColumnShard::TDropTable& dropProt
     NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
 
-    const auto pathId =  NColumnShard::TInternalPathId::FromRawInternalPathIdValue(dropProto.GetPathId());
+    const auto pathId =  TInternalPathId::FromRawInternalPathIdValue(dropProto.GetPathId());
     if (!TablesManager.HasTable(pathId)) {
         LOG_S_DEBUG("DropTable for unknown or deleted pathId: " << pathId << " at tablet " << TabletID());
         return;
@@ -1271,7 +1271,7 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvSendDataFromSource::T
     // in current implementation the next loop will crash if schemas will be sent in the same package with the data, so adding this verify to ensure consistent behaviour
     AFL_VERIFY(ev->Get()->Record.GetPathIdData().empty() || ev->Get()->Record.GetSchemeHistory().empty())("reason", "can not send schemas and data in the same package");
 
-    THashMap<NColumnShard::TInternalPathId, NOlap::NDataSharing::NEvents::TPathIdData> dataByPathId;
+    THashMap<TInternalPathId, NOlap::NDataSharing::NEvents::TPathIdData> dataByPathId;
     TBlobGroupSelector dsGroupSelector(Info());
     for (auto&& i : ev->Get()->Record.GetPathIdData()) {
         auto data = NOlap::NDataSharing::NEvents::TPathIdData::BuildFromProto(i, TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>().GetVersionedIndex(), dsGroupSelector);
@@ -1425,7 +1425,7 @@ class TTxAskPortionChunks: public TTransactionBase<TColumnShard> {
 private:
     using TBase = TTransactionBase<TColumnShard>;
     std::shared_ptr<NOlap::NDataAccessorControl::IAccessorCallback> FetchCallback;
-    THashMap<NColumnShard::TInternalPathId, std::vector<NOlap::TPortionInfo::TConstPtr>> PortionsByPath;
+    THashMap<TInternalPathId, std::vector<NOlap::TPortionInfo::TConstPtr>> PortionsByPath;
     std::vector<TPortionConstructorV2> FetchedAccessors;
     const TString Consumer;
     THashMap<NOlap::TPortionAddress, TPortionConstructorV2> Constructors;
@@ -1592,7 +1592,7 @@ void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs:
     Execute(new TTxRemoveSharedBlobs(this, blobs, NActors::ActorIdFromProto(ev->Get()->Record.GetSourceActorId()), ev->Get()->Record.GetStorageId()), ctx);
 }
 
-void TColumnShard::ActivateTiering(const NColumnShard::TInternalPathId pathId, const THashSet<NTiers::TExternalStorageId>& usedTiers) {
+void TColumnShard::ActivateTiering(const TInternalPathId pathId, const THashSet<NTiers::TExternalStorageId>& usedTiers) {
     AFL_VERIFY(Tiers);
     Tiers->ActivateTiers(usedTiers);
     OnTieringModified(pathId);
@@ -1612,7 +1612,7 @@ void TColumnShard::Enqueue(STFUNC_SIG) {
     }
 }
 
-void TColumnShard::OnTieringModified(const std::optional<NColumnShard::TInternalPathId> pathId) {
+void TColumnShard::OnTieringModified(const std::optional<TInternalPathId> pathId) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "OnTieringModified")("path_id", pathId);
     StoragesManager->OnTieringModified(Tiers);
     if (TablesManager.HasPrimaryIndex()) {

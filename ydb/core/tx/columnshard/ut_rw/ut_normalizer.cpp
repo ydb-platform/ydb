@@ -54,7 +54,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         std::vector<TPortionRecord> portion2Key;
-        std::optional<NColumnShard::TInternalPathId> pathId;
+        std::optional<TInternalPathId> pathId;
         {
             auto rowset = db.Table<Schema::IndexColumns>().Select();
             UNIT_ASSERT(rowset.IsReady());
@@ -206,7 +206,7 @@ public:
         }
 
         struct TKey {
-            NColumnShard::TInternalPathId PathId;
+            TInternalPathId PathId;
             ui64 Step;
             ui64 TxId;
         };

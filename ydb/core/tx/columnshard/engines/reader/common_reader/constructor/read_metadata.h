@@ -17,7 +17,7 @@ class TReadMetadata: public TReadMetadataBase {
     using TBase = TReadMetadataBase;
 
 private:
-    const NColumnShard::TInternalPathId PathId;
+    const TInternalPathId PathId;
     std::shared_ptr<TAtomicCounter> BrokenWithCommitted = std::make_shared<TAtomicCounter>();
     std::shared_ptr<NColumnShard::TLockSharingInfo> LockSharingInfo;
 
@@ -110,7 +110,7 @@ public:
         return GetProgram().HasProcessingColumnIds();
     }
 
-    NColumnShard::TInternalPathId GetPathId() const {
+    TInternalPathId GetPathId() const {
         return PathId;
     }
 

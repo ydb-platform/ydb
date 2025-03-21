@@ -6,7 +6,6 @@
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/engines/insert_table/committed.h>
 #include <ydb/core/tx/columnshard/engines/insert_table/inserted.h>
-#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <util/generic/hash.h>
 
@@ -40,7 +39,7 @@ protected:
         return NDataLocks::ELockCategory::Compaction;
     }
 public:
-    THashMap<NColumnShard::TInternalPathId, NArrow::NMerger::TIntervalPositions> PathToGranule;   // pathId -> positions (sorted by pk)
+    THashMap<TInternalPathId, NArrow::NMerger::TIntervalPositions> PathToGranule;   // pathId -> positions (sorted by pk)
 public:
     TInsertColumnEngineChanges(std::vector<NOlap::TCommittedData>&& dataToIndex, const TSaverContext& saverContext)
         : TBase(saverContext, NBlobOperations::EConsumer::INDEXATION)
@@ -59,7 +58,6 @@ public:
     virtual TString TypeString() const override {
         return StaticTypeName();
     }
-    std::optional<ui64> AddPathIfNotExists(NColumnShard::TInternalPathId pathId);
 };
 
 }   // namespace NKikimr::NOlap

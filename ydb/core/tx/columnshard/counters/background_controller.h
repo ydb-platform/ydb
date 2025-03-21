@@ -9,13 +9,13 @@ namespace NKikimr::NColumnShard {
 
 class TBackgroundControllerCounters {
 private:
-    THashMap<NColumnShard::TInternalPathId, TInstant> LastCompactionFinishByPathId;
+    THashMap<TInternalPathId, TInstant> LastCompactionFinishByPathId;
     TInstant LastCompactionFinish;
 
 public:
-    void OnCompactionFinish(NColumnShard::TInternalPathId pathId);
+    void OnCompactionFinish(TInternalPathId pathId);
 
-    void FillStats(NColumnShard::TInternalPathId pathId, ::NKikimrTableStats::TTableStats& output) const {
+    void FillStats(TInternalPathId pathId, ::NKikimrTableStats::TTableStats& output) const {
         output.SetLastFullCompactionTs(GetLastCompactionFinishInstant(pathId).value_or(TInstant::Zero()).Seconds());
     }
 
@@ -24,7 +24,7 @@ public:
     }
 
 private:
-    std::optional<TInstant> GetLastCompactionFinishInstant(const NColumnShard::TInternalPathId pathId) const {
+    std::optional<TInstant> GetLastCompactionFinishInstant(const TInternalPathId pathId) const {
         auto findInstant = LastCompactionFinishByPathId.FindPtr(pathId);
         if (!findInstant) {
             return std::nullopt;

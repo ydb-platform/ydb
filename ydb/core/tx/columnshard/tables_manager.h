@@ -236,7 +236,7 @@ public:
         return Ttl.GetTableTtl(pathId, snapshot);
     }
 
-    const std::map<NOlap::TSnapshot, THashSet<NColumnShard::TInternalPathId>>& GetPathsToDrop() const {
+    const std::map<NOlap::TSnapshot, THashSet<TInternalPathId>>& GetPathsToDrop() const {
         return PathsToDrop;
     }
 
@@ -318,7 +318,7 @@ public:
     bool IsReadyForFinishWrite(const TInternalPathId pathId, const NOlap::TSnapshot& minReadSnapshot) const;
     bool HasPreset(const ui32 presetId) const;
 
-    void DropTable(const NColumnShard::TInternalPathId pathId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db);
+    void DropTable(const TInternalPathId pathId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db);
     void DropPreset(const ui32 presetId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db);
 
     void RegisterTable(TTableInfo&& table, NIceDb::TNiceDb& db);

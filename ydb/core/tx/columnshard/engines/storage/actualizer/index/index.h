@@ -21,7 +21,7 @@ private:
     std::shared_ptr<TTieringActualizer> TieringActualizer;
     std::shared_ptr<TSchemeActualizer> SchemeActualizer;
 
-    const NColumnShard::TInternalPathId PathId;
+    const TInternalPathId PathId;
     const TVersionedIndex& VersionedIndex;
     std::shared_ptr<IStoragesManager> StoragesManager;
 
@@ -33,7 +33,7 @@ public:
     }
 
     void Start();
-    TGranuleActualizationIndex(const NColumnShard::TInternalPathId pathId, const TVersionedIndex& versionedIndex, const std::shared_ptr<IStoragesManager>& storagesManager);
+    TGranuleActualizationIndex(const TInternalPathId pathId, const TVersionedIndex& versionedIndex, const std::shared_ptr<IStoragesManager>& storagesManager);
 
     void ExtractActualizationTasks(TTieringProcessContext& tasksContext, const NActualizer::TExternalTasksContext& externalContext) const;
 

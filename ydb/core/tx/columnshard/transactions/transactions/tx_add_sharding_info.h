@@ -8,7 +8,7 @@ class TTxAddShardingInfo : public NTabletFlatExecutor::TTransactionBase<TColumnS
 private:
     using TBase = NTabletFlatExecutor::TTransactionBase<TColumnShard>;
     NSharding::TGranuleShardingLogicContainer GranuleShardingLogic;
-    const NColumnShard::TInternalPathId PathId;
+    const TInternalPathId PathId;
     const ui64 ShardingVersion;
     std::optional<NOlap::TSnapshot> SnapshotVersion;
 
@@ -17,7 +17,7 @@ public:
         SnapshotVersion = ss;
     }
 
-    TTxAddShardingInfo(TColumnShard& owner, const NSharding::TGranuleShardingLogicContainer& granuleShardingLogic, const NColumnShard::TInternalPathId pathId, const ui64 version)
+    TTxAddShardingInfo(TColumnShard& owner, const NSharding::TGranuleShardingLogicContainer& granuleShardingLogic, const TInternalPathId pathId, const ui64 version)
         : TBase(&owner)
         , GranuleShardingLogic(granuleShardingLogic)
         , PathId(pathId)

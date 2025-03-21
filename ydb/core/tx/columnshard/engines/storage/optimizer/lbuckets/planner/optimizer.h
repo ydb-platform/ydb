@@ -1265,7 +1265,7 @@ public:
         return Buckets.GetBucketPositions();
     }
 
-    TOptimizerPlanner(const NColumnShard::TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<arrow::Schema>& primaryKeysSchema)
+    TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<arrow::Schema>& primaryKeysSchema)
         : TBase(pathId)
         , Counters(std::make_shared<TCounters>())
         , Buckets(primaryKeysSchema, storagesManager, Counters)

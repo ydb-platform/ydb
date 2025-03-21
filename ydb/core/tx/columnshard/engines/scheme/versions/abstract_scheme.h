@@ -91,7 +91,7 @@ public:
         const std::shared_ptr<NArrow::TGeneralContainer>& batch, const std::set<ui32>& restoreColumnIds) const;
     [[nodiscard]] TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> PrepareForModification(
         const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType) const;
-    [[nodiscard]] TConclusion<TWritePortionInfoWithBlobsResult> PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr, const NColumnShard::TInternalPathId pathId,
+    [[nodiscard]] TConclusion<TWritePortionInfoWithBlobsResult> PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr, const TInternalPathId pathId,
         const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType,
         const std::shared_ptr<IStoragesManager>& storagesManager,
         const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters) const;

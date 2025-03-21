@@ -67,7 +67,7 @@ void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortion
 }
 
 TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto) {
-    PathId = NColumnShard::TInternalPathId::FromRawInternalPathIdValue(proto.GetPathId());
+    PathId = TInternalPathId::FromRawInternalPathIdValue(proto.GetPathId());
     PortionId = proto.GetPortionId();
     SchemaVersion = proto.GetSchemaVersion();
     {

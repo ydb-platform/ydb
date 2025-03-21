@@ -44,7 +44,7 @@ bool TGranuleColumnsReader::DoPrecharge(NTabletFlatExecutor::TTransactionContext
 bool TGranuleIndexesReader::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     TDbWrapper db(txc.DB, &*DsGroupSelector);
     Context->ClearIndexes();
-    return db.LoadIndexes(Self->GetPathId(), [&](const NColumnShard::TInternalPathId /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&& loadContext) {
+    return db.LoadIndexes(Self->GetPathId(), [&](const TInternalPathId /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&& loadContext) {
         Context->Add(std::move(loadContext));
     });
 }

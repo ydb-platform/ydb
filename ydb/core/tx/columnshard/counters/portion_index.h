@@ -51,7 +51,7 @@ public:
         return SelectStats(TotalStats, selector);
     }
 
-    NOlap::TSimplePortionsGroupInfo GetTableStats(const NColumnShard::TInternalPathId pathId, const IStatsSelector& selector) const {
+    NOlap::TSimplePortionsGroupInfo GetTableStats(const TInternalPathId pathId, const IStatsSelector& selector) const {
         if (auto* findTable = StatsByPathId.FindPtr(pathId)) {
             return SelectStats(*findTable, selector);
         }

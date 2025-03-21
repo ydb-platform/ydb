@@ -12,7 +12,7 @@ private:
     THashMap<TString, std::vector<std::shared_ptr<TPortionInfo>>> StoragePortions;
     std::vector<TPortionInfo::TConstPtr> PortionsToDrop;
     TRemovePortionsChange PortionsToRemove;
-    THashSet<NColumnShard::TInternalPathId> TablesToDrop;
+    THashSet<TInternalPathId> TablesToDrop;
 
 protected:
     virtual void OnDataAccessorsInitialized(const TDataAccessorsInitializationContext& /*context*/) override {
@@ -54,7 +54,7 @@ public:
         : TBase(storagesManager, NBlobOperations::EConsumer::CLEANUP_PORTIONS) {
     }
 
-    void AddTableToDrop(const NColumnShard::TInternalPathId pathId) {
+    void AddTableToDrop(const TInternalPathId pathId) {
         TablesToDrop.emplace(pathId);
     }
 

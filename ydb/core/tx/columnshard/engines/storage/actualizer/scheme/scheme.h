@@ -12,7 +12,7 @@ private:
     const TSchemeCounters Counters;
     THashMap<TRWAddress, THashSet<ui64>> PortionsToActualizeScheme;
     std::shared_ptr<ISnapshotSchema> TargetSchema;
-    const NColumnShard::TInternalPathId PathId;
+    const TInternalPathId PathId;
     const TVersionedIndex& VersionedIndex;
 
     class TFindActualizationInfo {
@@ -64,7 +64,7 @@ protected:
 public:
     void Refresh(const TAddExternalContext& externalContext);
 
-    TSchemeActualizer(const NColumnShard::TInternalPathId pathId, const TVersionedIndex& versionedIndex);
+    TSchemeActualizer(const TInternalPathId pathId, const TVersionedIndex& versionedIndex);
 };
 
 }

@@ -26,8 +26,8 @@ private:
     NColumnShard::TConcreteScanCounters::TScanIntervalStateGuard IntervalStateGuard;
 
 public:
-    std::set<NColumnShard::TInternalPathId> GetPathIds() const {
-        std::set<NColumnShard::TInternalPathId> result;
+    std::set<TInternalPathId> GetPathIds() const {
+        std::set<TInternalPathId> result;
         for (auto&& i : Sources) {
             result.emplace(i.second->GetPathId());
         }

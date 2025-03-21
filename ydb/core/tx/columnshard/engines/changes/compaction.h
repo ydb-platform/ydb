@@ -30,7 +30,7 @@ protected:
         return NDataLocks::ELockCategory::Compaction;
     }
     virtual std::shared_ptr<NDataLocks::ILock> DoBuildDataLockImpl() const override {
-        const THashSet<NColumnShard::TInternalPathId> pathIds = { GranuleMeta->GetPathId() };
+        const THashSet<TInternalPathId> pathIds = { GranuleMeta->GetPathId() };
         return std::make_shared<NDataLocks::TListTablesLock>(TypeString() + "::" + GetTaskIdentifier(), pathIds, GetLockCategory());
     }
 

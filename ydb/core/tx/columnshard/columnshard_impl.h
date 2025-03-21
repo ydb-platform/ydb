@@ -338,8 +338,8 @@ class TColumnShard: public TActor<TColumnShard>, public NTabletFlatExecutor::TTa
         putStatus.OnYellowChannels(Executor());
     }
 
-    void ActivateTiering(const NColumnShard::TInternalPathId pathId, const THashSet<NTiers::TExternalStorageId>& tiers);
-    void OnTieringModified(const std::optional<NColumnShard::TInternalPathId> pathId = {});
+    void ActivateTiering(const TInternalPathId pathId, const THashSet<NTiers::TExternalStorageId>& tiers);
+    void OnTieringModified(const std::optional<TInternalPathId> pathId = {});
 
     std::shared_ptr<TAtomicCounter> TabletActivityImpl = std::make_shared<TAtomicCounter>(0);
 

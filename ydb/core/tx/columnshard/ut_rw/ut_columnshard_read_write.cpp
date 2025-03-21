@@ -2264,7 +2264,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     auto activities = batchStats->GetColumnByName("Activity");
                     AFL_VERIFY(activities);
 
-                    const auto pathId = NColumnShard::TInternalPathId::FromRawInternalPathIdValue(static_cast<arrow::UInt64Array&>(*paths).Value(i));
+                    const auto pathId = TInternalPathId::FromRawInternalPathIdValue(static_cast<arrow::UInt64Array&>(*paths).Value(i));
                     auto kind = static_cast<arrow::StringArray&>(*kinds).Value(i);
                     const TString kindStr(kind.data(), kind.size());
                     ui64 numRows = static_cast<arrow::UInt64Array&>(*rows).Value(i);
@@ -2484,9 +2484,9 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     ++compactionsHappened;
                     TStringBuilder sb;
                     sb << "Compaction old portions:";
-                    std::optional<NColumnShard::TInternalPathId> srcPathId;
+                    std::optional<TInternalPathId> srcPathId;
                     for (const auto& portionInfo : compact->GetSwitchedPortions()) {
-                        const NColumnShard::TInternalPathId pathId = portionInfo->GetPathId();
+                        const TInternalPathId pathId = portionInfo->GetPathId();
                         UNIT_ASSERT(!srcPathId || *srcPathId == pathId);
                         srcPathId = pathId;
                         oldPortions.insert(portionInfo->GetPortionId());

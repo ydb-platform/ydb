@@ -8,7 +8,7 @@ namespace NKikimr::NOlap::NReader::NSysView::NAbstract {
 class TGranuleMetaView {
 private:
     using TPortions = std::deque<std::shared_ptr<TPortionInfo>>;
-    YDB_READONLY_DEF(NColumnShard::TInternalPathId, PathId);
+    YDB_READONLY_DEF(TInternalPathId, PathId);
     YDB_READONLY_DEF(TPortions, Portions);
     YDB_READONLY_DEF(std::vector<NStorageOptimizer::TTaskDescription>, OptimizerTasks);
 public:

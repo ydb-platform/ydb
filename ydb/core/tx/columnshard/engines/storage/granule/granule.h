@@ -126,7 +126,7 @@ private:
     void RebuildAdditiveMetrics() const;
 
     mutable bool AllowInsertionFlag = false;
-    const NColumnShard::TInternalPathId PathId;
+    const TInternalPathId PathId;
     std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     const NColumnShard::TGranuleDataCounters Counters;
     NColumnShard::TEngineLogsCounters::TPortionsInfoGuard PortionInfoGuard;
@@ -365,7 +365,7 @@ public:
         return result;
     }
 
-    NColumnShard::TInternalPathId GetPathId() const {
+    TInternalPathId GetPathId() const {
         return PathId;
     }
 
@@ -385,7 +385,7 @@ public:
 
     bool ErasePortion(const ui64 portion);
 
-    explicit TGranuleMeta(const NColumnShard::TInternalPathId pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters,
+    explicit TGranuleMeta(const TInternalPathId pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters,
         const TVersionedIndex& versionedIndex);
 
     bool Empty() const noexcept {

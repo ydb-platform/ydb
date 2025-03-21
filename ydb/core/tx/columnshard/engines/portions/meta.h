@@ -128,11 +128,11 @@ public:
 
 class TPortionAddress {
 private:
-    YDB_READONLY(NColumnShard::TInternalPathId, PathId, NColumnShard::TInternalPathId{});
+    YDB_READONLY_DEF(TInternalPathId, PathId);
     YDB_READONLY(ui64, PortionId, 0);
 
 public:
-    TPortionAddress(const NColumnShard::TInternalPathId pathId, const ui64 portionId)
+    TPortionAddress(const TInternalPathId pathId, const ui64 portionId)
         : PathId(pathId)
         , PortionId(portionId) {
     }

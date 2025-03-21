@@ -20,17 +20,17 @@ class TSharedBlobsManager;
 
 class TSourceCursor {
 private:
-    std::map<NColumnShard::TInternalPathId, std::map<ui32, TPortionDataAccessor>> PortionsForSend;
-    THashMap<NColumnShard::TInternalPathId, NEvents::TPathIdData> PreviousSelected;
-    THashMap<NColumnShard::TInternalPathId, NEvents::TPathIdData> Selected;
+    std::map<TInternalPathId, std::map<ui32, TPortionDataAccessor>> PortionsForSend;
+    THashMap<TInternalPathId, NEvents::TPathIdData> PreviousSelected;
+    THashMap<TInternalPathId, NEvents::TPathIdData> Selected;
     THashMap<TTabletId, TTaskForTablet> Links;
     std::vector<NOlap::TSchemaPresetVersionInfo> SchemeHistory;
-    YDB_READONLY(NColumnShard::TInternalPathId, StartPathId, NColumnShard::TInternalPathId{});
+    YDB_READONLY(TInternalPathId, StartPathId, TInternalPathId{});
     YDB_READONLY(ui64, StartPortionId, 0);
     YDB_READONLY(ui64, PackIdx, 0);
     TTabletId SelfTabletId;
     TTransferContext TransferContext;
-    std::optional<NColumnShard::TInternalPathId> NextPathId = NColumnShard::TInternalPathId{};
+    std::optional<TInternalPathId> NextPathId = TInternalPathId{};
     std::optional<ui64> NextPortionId = 0;
 
     // Begin/End of the next slice of SchemeHistory
@@ -39,8 +39,8 @@ private:
 
     THashSet<TTabletId> LinksModifiedTablets;
     ui64 AckReceivedForPackIdx = 0;
-    std::set<NColumnShard::TInternalPathId> PathIds;
-    THashMap<NColumnShard::TInternalPathId, TString> PathPortionHashes;
+    std::set<TInternalPathId> PathIds;
+    THashMap<TInternalPathId, TString> PathPortionHashes;
     bool IsStartedFlag = false;
     bool IsStaticSaved = false;
     void BuildSelection(const std::shared_ptr<IStoragesManager>& storagesManager, const TVersionedIndex& index);
@@ -93,7 +93,7 @@ public:
         LinksModifiedTablets.emplace(tabletId);
     }
 
-    const THashMap<NColumnShard::TInternalPathId, NEvents::TPathIdData> GetPreviousSelected() const {
+    const THashMap<TInternalPathId, NEvents::TPathIdData> GetPreviousSelected() const {
         return PreviousSelected;
     }
 
@@ -101,7 +101,7 @@ public:
         return TArrayRef<const NOlap::TSchemaPresetVersionInfo>(SchemeHistory.data() + NextSchemasIntervalBegin, NextSchemasIntervalEnd - NextSchemasIntervalBegin);
     }
 
-    const THashMap<NColumnShard::TInternalPathId, NEvents::TPathIdData>& GetSelected() const {
+    const THashMap<TInternalPathId, NEvents::TPathIdData>& GetSelected() const {
         return Selected;
     }
 
@@ -116,11 +116,11 @@ public:
         return NextSchemasIntervalBegin < SchemeHistory.size() || Selected.size();
     }
 
-    TSourceCursor(const TTabletId selfTabletId, const std::set<NColumnShard::TInternalPathId>& pathIds, const TTransferContext transferContext);
+    TSourceCursor(const TTabletId selfTabletId, const std::set<TInternalPathId>& pathIds, const TTransferContext transferContext);
 
     void SaveToDatabase(class NIceDb::TNiceDb& db, const TString& sessionId);
 
-    bool Start(const std::shared_ptr<IStoragesManager>& storagesManager, THashMap<NColumnShard::TInternalPathId, std::vector<TPortionDataAccessor>>&& portions,
+    bool Start(const std::shared_ptr<IStoragesManager>& storagesManager, THashMap<TInternalPathId, std::vector<TPortionDataAccessor>>&& portions,
         std::vector<NOlap::TSchemaPresetVersionInfo>&& schemeHistory, const TVersionedIndex& index);
     [[nodiscard]] TConclusionStatus DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorDynamic& proto,
         const NKikimrColumnShardDataSharingProto::TSourceSession::TCursorStatic& protoStatic);

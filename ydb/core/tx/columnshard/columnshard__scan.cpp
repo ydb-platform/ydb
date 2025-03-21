@@ -3,7 +3,6 @@
 #include "columnshard_impl.h"
 #include "engines/reader/transaction/tx_scan.h"
 #include "engines/reader/transaction/tx_internal_scan.h"
-#include "ydb/core/kqp/compute_actor/kqp_compute_events.h"
 
 #include <ydb/core/protos/kqp.pb.h>
 #include <ydb/core/base/appdata_fwd.h>

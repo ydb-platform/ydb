@@ -18,7 +18,7 @@ public:
         return PortionAddress;
     }
 
-    NColumnShard::TInternalPathId GetPathId() const {
+    TInternalPathId GetPathId() const {
         return PortionAddress.GetPathId();
     }
 
@@ -136,7 +136,7 @@ TConclusion<std::vector<INormalizerTask::TPtr>> TNormalizer::DoInit(
         }
 
         while (!rowset.EndOfSet()) {
-            AFL_VERIFY(readyPortions.emplace(TPortionAddress(NColumnShard::TInternalPathId::FromRawInternalPathIdValue(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PathId>()),
+            AFL_VERIFY(readyPortions.emplace(TPortionAddress(TInternalPathId::FromRawInternalPathIdValue(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PathId>()),
                 rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PortionId>())).second);
             if (!rowset.Next()) {
                 return TConclusionStatus::Fail("Not ready");

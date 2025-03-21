@@ -234,7 +234,7 @@ TConclusionStatus TLeakedBlobsNormalizer::LoadPortionBlobIds(
     }
     if (Indexes.empty()) {
         THashMap<ui64, std::vector<TIndexChunkLoadContext>> indexesLocal;
-        if (!wrapper.LoadIndexes(std::nullopt, [&](const NColumnShard::TInternalPathId /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&& indexChunk) {
+        if (!wrapper.LoadIndexes(std::nullopt, [&](const TInternalPathId /*pathId*/, const ui64 /*portionId*/, TIndexChunkLoadContext&& indexChunk) {
                 const ui64 portionId = indexChunk.GetPortionId();
                 indexesLocal[portionId].emplace_back(std::move(indexChunk));
             })) {

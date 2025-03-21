@@ -14,7 +14,7 @@ public:
 private:
     TSnapshot Snapshot = TSnapshot::Zero();
     TString TableName;
-    NColumnShard::TInternalPathId TablePathId;
+    TInternalPathId TablePathId;
     static inline const TFactory::TRegistrator<TBackupSelector> Registrator = TFactory::TRegistrator<TBackupSelector>(GetClassNameStatic());
 
     TConclusionStatus Validate() const {
@@ -38,7 +38,7 @@ protected:
             return result;
         }
         TableName = proto.GetBackup().GetTableName();
-        TablePathId = NColumnShard::TInternalPathId::FromRawInternalPathIdValue(proto.GetBackup().GetTablePathId());
+        TablePathId = TInternalPathId::FromRawInternalPathIdValue(proto.GetBackup().GetTablePathId());
         return Validate();
     }
 
@@ -51,7 +51,7 @@ protected:
     TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TBackupTask& proto) {
         Snapshot = TSnapshot(proto.GetSnapshotStep(), proto.GetSnapshotTxId());
         TableName = proto.GetTableName();
-        TablePathId = NColumnShard::TInternalPathId::FromRawInternalPathIdValue(proto.GetTableId());
+        TablePathId = TInternalPathId::FromRawInternalPathIdValue(proto.GetTableId());
         return Validate();
     }
 public:
@@ -61,7 +61,7 @@ public:
 
     }
 
-    virtual NColumnShard::TInternalPathId GetPathId() const override {
+    virtual TInternalPathId GetPathId() const override {
         return TablePathId;
     }
 

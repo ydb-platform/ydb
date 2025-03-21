@@ -62,14 +62,14 @@ class TInsertedPortions {
 private:
     YDB_ACCESSOR_DEF(std::vector<TWriteResult>, WriteResults);
     YDB_ACCESSOR_DEF(std::vector<TInsertedPortion>, Portions);
-    YDB_READONLY(NColumnShard::TInternalPathId, PathId, NColumnShard::TInternalPathId{});
+    YDB_READONLY(TInternalPathId, PathId, TInternalPathId{});
 
 public:
     TInsertedPortions(std::vector<TWriteResult>&& writeResults, std::vector<TInsertedPortion>&& portions)
         : WriteResults(std::move(writeResults))
         , Portions(std::move(portions)) {
         AFL_VERIFY(WriteResults.size());
-        std::optional<NColumnShard::TInternalPathId> pathId;
+        std::optional<TInternalPathId> pathId;
         for (auto&& i : WriteResults) {
             i.GetWriteMeta().OnStage(NEvWrite::EWriteStage::Finished);
             AFL_VERIFY(!i.GetWriteMeta().HasLongTxId());

@@ -17,13 +17,13 @@ private:
     std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAddSharding;
     NKikimrTxColumnShard::TSchemaTxBody SchemaTxBody;
     THashSet<TActorId> NotifySubscribers;
-    THashSet<NColumnShard::TInternalPathId> WaitPathIdsToErase;
+    THashSet<TInternalPathId> WaitPathIdsToErase;
 
     virtual void DoOnTabletInit(TColumnShard& owner) override;
 
     template <class TInfoProto>
-    THashSet<NColumnShard::TInternalPathId> GetNotErasedTableIds(const TColumnShard& owner, const TInfoProto& tables) const {
-        THashSet<NColumnShard::TInternalPathId> result;
+    THashSet<TInternalPathId> GetNotErasedTableIds(const TColumnShard& owner, const TInfoProto& tables) const {
+        THashSet<TInternalPathId> result;
         for (auto&& i : tables) {
             const auto& pathId = TInternalPathId::FromRawInternalPathIdValue(i.GetPathId());
             if (owner.TablesManager.HasTable(pathId, true)) {

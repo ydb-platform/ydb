@@ -110,8 +110,8 @@ public:
         const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const ui64 presetId, TIndexInfo&& schema,
         const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters);
 
-    void OnTieringModified(const std::optional<NOlap::TTiering>& ttl, const NColumnShard::TInternalPathId pathId) override;
-    void OnTieringModified(const THashMap<NColumnShard::TInternalPathId, NOlap::TTiering>& ttl) override;
+    void OnTieringModified(const std::optional<NOlap::TTiering>& ttl, const TInternalPathId pathId) override;
+    void OnTieringModified(const THashMap<TInternalPathId, NOlap::TTiering>& ttl) override;
 
     virtual std::shared_ptr<TVersionedIndex> CopyVersionedIndexPtr() const override {
         return std::make_shared<TVersionedIndex>(VersionedIndex);
@@ -125,7 +125,7 @@ public:
         return LastSnapshot;
     }
 
-    virtual void DoRegisterTable(const NColumnShard::TInternalPathId pathId) override;
+    virtual void DoRegisterTable(const TInternalPathId pathId) override;
     void DoFetchDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request) const override {
         GranulesStorage->FetchDataAccessors(request);
     }
@@ -136,7 +136,7 @@ public:
 public:
     virtual std::shared_ptr<ITxReader> BuildLoader(const std::shared_ptr<IBlobGroupSelector>& dsGroupSelector) override;
     bool FinishLoading();
-    bool StartActualization(const THashMap<NColumnShard::TInternalPathId, TTiering>& specialPathEviction);
+    bool StartActualization(const THashMap<TInternalPathId, TTiering>& specialPathEviction);
 
     virtual bool IsOverloadedByMetadata(const ui64 limit) const override {
         return limit < TGranulesStat::GetSumMetadataMemoryPortionsSize();
@@ -146,16 +146,16 @@ public:
         return GranulesStorage->CollectMetadataRequests();
     }
     std::shared_ptr<TInsertColumnEngineChanges> StartInsert(std::vector<TCommittedData>&& dataToIndex) noexcept override;
-    ui64 GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::set<NColumnShard::TInternalPathId>& pathIds,
+    ui64 GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager, const std::set<TInternalPathId>& pathIds,
         const std::optional<ui64> waitingPriority) noexcept override;
     std::shared_ptr<TColumnEngineChanges> StartCompaction(const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
-    std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const TSnapshot& snapshot, const THashSet<NColumnShard::TInternalPathId>& pathsToDrop,
+    std::shared_ptr<TCleanupPortionsColumnEngineChanges> StartCleanupPortions(const TSnapshot& snapshot, const THashSet<TInternalPathId>& pathsToDrop,
         const std::shared_ptr<NDataLocks::TManager>& dataLocksManager) noexcept override;
-    std::shared_ptr<TCleanupTablesColumnEngineChanges> StartCleanupTables(const THashSet<NColumnShard::TInternalPathId>& pathsToDrop) noexcept override;
-    std::vector<std::shared_ptr<TTTLColumnEngineChanges>> StartTtl(const THashMap<NColumnShard::TInternalPathId, TTiering>& pathEviction,
+    std::shared_ptr<TCleanupTablesColumnEngineChanges> StartCleanupTables(const THashSet<TInternalPathId>& pathsToDrop) noexcept override;
+    std::vector<std::shared_ptr<TTTLColumnEngineChanges>> StartTtl(const THashMap<TInternalPathId, TTiering>& pathEviction,
         const std::shared_ptr<NDataLocks::TManager>& locksManager, const ui64 memoryUsageLimit) noexcept override;
 
-    void ReturnToIndexes(const THashMap<NColumnShard::TInternalPathId, THashSet<ui64>>& portions) const {
+    void ReturnToIndexes(const THashMap<TInternalPathId, THashSet<ui64>>& portions) const {
         return GranulesStorage->ReturnToIndexes(portions);
     }
     virtual bool ApplyChangesOnTxCreate(std::shared_ptr<TColumnEngineChanges> indexChanges, const TSnapshot& snapshot) noexcept override;
@@ -167,47 +167,47 @@ public:
     void RegisterOldSchemaVersion(const TSnapshot& snapshot, const ui64 presetId, const TSchemaInitializationData& schema) override;
 
     std::shared_ptr<TSelectInfo> Select(
-        NColumnShard::TInternalPathId pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter, const bool withUncommitted) const override;
+        TInternalPathId pathId, TSnapshot snapshot, const TPKRangesFilter& pkRangesFilter, const bool withUncommitted) const override;
 
-    bool IsPortionExists(const NColumnShard::TInternalPathId pathId, const ui64 portionId) const {
+    bool IsPortionExists(const TInternalPathId pathId, const ui64 portionId) const {
         return !!GranulesStorage->GetPortionOptional(pathId, portionId);
     }
 
-    virtual bool ErasePathId(const NColumnShard::TInternalPathId pathId) override {
+    virtual bool ErasePathId(const TInternalPathId pathId) override {
         if (HasDataInPathId(pathId)) {
             return false;
         }
         return GranulesStorage->EraseTable(pathId);
     }
 
-    virtual bool HasDataInPathId(const NColumnShard::TInternalPathId pathId) const override {
+    virtual bool HasDataInPathId(const TInternalPathId pathId) const override {
         auto g = GetGranuleOptional(pathId);
         return g && g->GetPortions().size();
     }
 
-    bool IsGranuleExists(const NColumnShard::TInternalPathId pathId) const {
+    bool IsGranuleExists(const TInternalPathId pathId) const {
         return !!GetGranuleOptional(pathId);
     }
 
-    const TGranuleMeta& GetGranuleVerified(const NColumnShard::TInternalPathId pathId) const {
+    const TGranuleMeta& GetGranuleVerified(const TInternalPathId pathId) const {
         return *GetGranulePtrVerified(pathId);
     }
 
-    TGranuleMeta& MutableGranuleVerified(const NColumnShard::TInternalPathId pathId) const {
+    TGranuleMeta& MutableGranuleVerified(const TInternalPathId pathId) const {
         return *GetGranulePtrVerified(pathId);
     }
 
-    std::shared_ptr<TGranuleMeta> GetGranulePtrVerified(const NColumnShard::TInternalPathId pathId) const {
+    std::shared_ptr<TGranuleMeta> GetGranulePtrVerified(const TInternalPathId pathId) const {
         auto result = GetGranuleOptional(pathId);
         AFL_VERIFY(result)("path_id", pathId);
         return result;
     }
 
-    std::shared_ptr<TGranuleMeta> GetGranuleOptional(const NColumnShard::TInternalPathId pathId) const {
+    std::shared_ptr<TGranuleMeta> GetGranuleOptional(const TInternalPathId pathId) const {
         return GranulesStorage->GetGranuleOptional(pathId);
     }
 
-    std::vector<std::shared_ptr<TGranuleMeta>> GetTables(const std::optional<NColumnShard::TInternalPathId> pathIdFrom, const std::optional<NColumnShard::TInternalPathId> pathIdTo) const {
+    std::vector<std::shared_ptr<TGranuleMeta>> GetTables(const std::optional<TInternalPathId> pathIdFrom, const std::optional<TInternalPathId> pathIdTo) const {
         return GranulesStorage->GetTables(pathIdFrom, pathIdTo);
     }
 

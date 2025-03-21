@@ -7,7 +7,7 @@ namespace NKikimr::NOlap::NTxInteractions {
 
 class TEvReadStartWriter: public ITxEventWriter {
 private:
-    YDB_READONLY(NColumnShard::TInternalPathId, PathId, NColumnShard::TInternalPathId{});
+    YDB_READONLY(TInternalPathId, PathId, TInternalPathId{});
     YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, Schema);
     YDB_READONLY_DEF(std::shared_ptr<TPKRangesFilter>, Filter);
     YDB_READONLY_DEF(THashSet<ui64>, LockIdsForCheck);
@@ -23,7 +23,7 @@ private:
     virtual std::shared_ptr<ITxEvent> DoBuildEvent() override;
 
 public:
-    TEvReadStartWriter(const NColumnShard::TInternalPathId pathId, const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<TPKRangesFilter>& filter,
+    TEvReadStartWriter(const TInternalPathId pathId, const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<TPKRangesFilter>& filter,
         const THashSet<ui64>& lockIdsForCheck)
         : PathId(pathId)
         , Schema(schema)
@@ -43,7 +43,7 @@ public:
     }
 
 private:
-    YDB_READONLY(NColumnShard::TInternalPathId, PathId, NColumnShard::TInternalPathId{});
+    YDB_READONLY(TInternalPathId, PathId, TInternalPathId{});
     YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, Schema);
     YDB_READONLY_DEF(std::shared_ptr<TPKRangesFilter>, Filter);
 
@@ -59,7 +59,7 @@ public:
     }
 
     TEvReadStart() = default;
-    TEvReadStart(const NColumnShard::TInternalPathId pathId, const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<TPKRangesFilter>& filter)
+    TEvReadStart(const TInternalPathId pathId, const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<TPKRangesFilter>& filter)
         : PathId(pathId)
         , Schema(schema)
         , Filter(filter) {

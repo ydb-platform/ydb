@@ -14,7 +14,7 @@ class TBackgroundController {
 private:
     THashMap<TString, TMonotonic> ActiveIndexationTasks;
 
-    using TCurrentCompaction = THashMap<NColumnShard::TInternalPathId, NOlap::TPlanCompactionInfo>;
+    using TCurrentCompaction = THashMap<TInternalPathId, NOlap::TPlanCompactionInfo>;
     TCurrentCompaction ActiveCompactionInfo;
     std::optional<ui64> WaitingCompactionPriority;
 

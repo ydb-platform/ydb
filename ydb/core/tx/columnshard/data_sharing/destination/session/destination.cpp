@@ -13,7 +13,7 @@
 namespace NKikimr::NOlap::NDataSharing {
 
 NKikimr::TConclusionStatus TDestinationSession::DataReceived(
-    THashMap<NColumnShard::TInternalPathId, NEvents::TPathIdData>&& data, TColumnEngineForLogs& index, const std::shared_ptr<IStoragesManager>& /*manager*/) {
+    THashMap<TInternalPathId, NEvents::TPathIdData>&& data, TColumnEngineForLogs& index, const std::shared_ptr<IStoragesManager>& /*manager*/) {
     auto guard = index.GranulesStorage->GetStats()->StartPackModification();
     for (auto&& i : data) {
         auto it = PathIds.find(i.first);
@@ -55,7 +55,7 @@ void TDestinationSession::SendCurrentCursorAck(const NColumnShard::TColumnShard&
             NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false),
                 new TEvPipeCache::TEvForward(ev.release(), (ui64)cursor.GetTabletId(), true), IEventHandle::FlagTrackDelivery, GetRuntimeId());
         } else {
-            std::set<NColumnShard::TInternalPathId> pathIdsBase;
+            std::set<TInternalPathId> pathIdsBase;
             for (auto&& i : PathIds) {
                 pathIdsBase.emplace(i.first);
             }
@@ -69,7 +69,7 @@ void TDestinationSession::SendCurrentCursorAck(const NColumnShard::TColumnShard&
 }
 
 NKikimr::TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> TDestinationSession::ReceiveData(NColumnShard::TColumnShard* self,
-    THashMap<NColumnShard::TInternalPathId, NEvents::TPathIdData>&& data, std::vector<NOlap::TSchemaPresetVersionInfo>&& schemas, const ui32 receivedPackIdx, const TTabletId sourceTabletId,
+    THashMap<TInternalPathId, NEvents::TPathIdData>&& data, std::vector<NOlap::TSchemaPresetVersionInfo>&& schemas, const ui32 receivedPackIdx, const TTabletId sourceTabletId,
     const std::shared_ptr<TDestinationSession>& selfPtr) {
     auto result = GetCursorVerified(sourceTabletId).ReceiveData(receivedPackIdx);
     if (!result) {
@@ -106,14 +106,14 @@ NKikimr::TConclusionStatus TDestinationSession::DeserializeDataFromProto(
     }
 
     for (auto&& i : proto.GetPathIds()) {
-        auto g = index.GetGranuleOptional(NColumnShard::TInternalPathId::FromRawInternalPathIdValue(i.GetDestPathId()));
+        auto g = index.GetGranuleOptional(TInternalPathId::FromRawInternalPathIdValue(i.GetDestPathId()));
         if (!g) {
             return TConclusionStatus::Fail("Incorrect remapping into undefined path id: " + ::ToString(i.GetDestPathId()));
         }
         if (!i.GetSourcePathId() || !i.GetDestPathId()) {
             return TConclusionStatus::Fail("PathIds remapping contains incorrect ids: " + i.DebugString());
         }
-        if (!PathIds.emplace(NColumnShard::TInternalPathId::FromRawInternalPathIdValue(i.GetSourcePathId()), NColumnShard::TInternalPathId::FromRawInternalPathIdValue(i.GetDestPathId())).second) {
+        if (!PathIds.emplace(TInternalPathId::FromRawInternalPathIdValue(i.GetSourcePathId()), TInternalPathId::FromRawInternalPathIdValue(i.GetDestPathId())).second) {
             return TConclusionStatus::Fail("PathIds contains duplicated values.");
         }
     }
@@ -161,7 +161,7 @@ NKikimr::TConclusionStatus TDestinationSession::DeserializeCursorFromProto(
 }
 
 TConclusionStatus TDestinationSession::DoStart(
-    NColumnShard::TColumnShard& shard, THashMap<NColumnShard::TInternalPathId, std::vector<TPortionDataAccessor>>&& portions) {
+    NColumnShard::TColumnShard& shard, THashMap<TInternalPathId, std::vector<TPortionDataAccessor>>&& portions) {
     AFL_VERIFY(IsConfirmed());
     NYDBTest::TControllers::GetColumnShardController()->OnDataSharingStarted(shard.TabletID(), GetSessionId());
     THashMap<TString, THashSet<TUnifiedBlobId>> local;

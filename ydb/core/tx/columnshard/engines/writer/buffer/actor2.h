@@ -15,12 +15,12 @@ namespace NKikimr::NOlap::NWritingPortions {
 
 class TAggregationId {
 private:
-    const NColumnShard::TInternalPathId PathId;
+    const TInternalPathId PathId;
     const ui64 SchemaVersion;
     const NEvWrite::EModificationType ModificationType;
 
 public:
-    TAggregationId(const NColumnShard::TInternalPathId pathId, const ui64 schemaVersion, const NEvWrite::EModificationType mType)
+    TAggregationId(const TInternalPathId pathId, const ui64 schemaVersion, const NEvWrite::EModificationType mType)
         : PathId(pathId)
         , SchemaVersion(schemaVersion)
         , ModificationType(mType) {
@@ -37,14 +37,14 @@ public:
 
 class TWriteAggregation {
 private:
-    const NColumnShard::TInternalPathId PathId;
+    const TInternalPathId PathId;
     const NEvWrite::EModificationType ModificationType;
     std::vector<TWriteUnit> Units;
     NOlap::TWritingContext Context;
     ui64 SumSize = 0;
 
 public:
-    TWriteAggregation(const NOlap::TWritingContext& context, const NColumnShard::TInternalPathId pathId, const NEvWrite::EModificationType modificationType)
+    TWriteAggregation(const NOlap::TWritingContext& context, const TInternalPathId pathId, const NEvWrite::EModificationType modificationType)
         : PathId(pathId)
         , ModificationType(modificationType)
         , Context(context) {

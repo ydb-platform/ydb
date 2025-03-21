@@ -73,16 +73,16 @@ class TDestinationSession: public TCommonSession {
 private:
     using TBase = TCommonSession;
     YDB_READONLY_DEF(TInitiatorControllerContainer, InitiatorController);
-    using TPathIdsRemapper = THashMap<NColumnShard::TInternalPathId, NColumnShard::TInternalPathId>;
+    using TPathIdsRemapper = THashMap<TInternalPathId, TInternalPathId>;
     YDB_READONLY_DEF(TPathIdsRemapper, PathIds);
     YDB_READONLY_FLAG(Confirmed, false);
     THashMap<TTabletId, TSourceCursorForDestination> Cursors;
     THashMap<TString, THashSet<TUnifiedBlobId>> CurrentBlobIds;
 
 protected:
-    virtual TConclusionStatus DoStart(NColumnShard::TColumnShard& shard, THashMap<NColumnShard::TInternalPathId, std::vector<TPortionDataAccessor>>&& portions) override;
-    virtual THashSet<NColumnShard::TInternalPathId> GetPathIdsForStart() const override {
-        THashSet<NColumnShard::TInternalPathId> result;
+    virtual TConclusionStatus DoStart(NColumnShard::TColumnShard& shard, THashMap<TInternalPathId, std::vector<TPortionDataAccessor>>&& portions) override;
+    virtual THashSet<TInternalPathId> GetPathIdsForStart() const override {
+        THashSet<TInternalPathId> result;
         for (auto&& i : PathIds) {
             result.emplace(i.first);
         }
@@ -113,7 +113,7 @@ public:
         ConfirmedFlag = true;
     }
 
-    [[nodiscard]] TConclusionStatus DataReceived(THashMap<NColumnShard::TInternalPathId, NEvents::TPathIdData>&& data, TColumnEngineForLogs& index, const std::shared_ptr<IStoragesManager>& manager);
+    [[nodiscard]] TConclusionStatus DataReceived(THashMap<TInternalPathId, NEvents::TPathIdData>&& data, TColumnEngineForLogs& index, const std::shared_ptr<IStoragesManager>& manager);
 
     ui32 GetSourcesInProgressCount() const;
     void SendCurrentCursorAck(const NColumnShard::TColumnShard& shard, const std::optional<TTabletId> tabletId);
@@ -124,7 +124,7 @@ public:
 
     [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> AckInitiatorFinished(NColumnShard::TColumnShard* self, const std::shared_ptr<TDestinationSession>& selfPtr);
 
-    [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> ReceiveData(NColumnShard::TColumnShard* self, THashMap<NColumnShard::TInternalPathId, NEvents::TPathIdData>&& data,
+    [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> ReceiveData(NColumnShard::TColumnShard* self, THashMap<TInternalPathId, NEvents::TPathIdData>&& data,
         std::vector<NOlap::TSchemaPresetVersionInfo>&& schemas, const ui32 receivedPackIdx, const TTabletId sourceTabletId, const std::shared_ptr<TDestinationSession>& selfPtr);
 
     NKikimrColumnShardDataSharingProto::TDestinationSession::TFullCursor SerializeCursorToProto() const;

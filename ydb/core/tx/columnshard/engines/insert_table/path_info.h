@@ -40,7 +40,7 @@ public:
 
 class TPathInfo: public TMoveOnly {
 private:
-    const NColumnShard::TInternalPathId PathId =  NColumnShard::TInternalPathId{};
+    const TInternalPathId PathId;
     TSet<TCommittedData> Committed;
     YDB_READONLY(i64, CommittedSize, 0);
     YDB_READONLY(i64, InsertedSize, 0);
@@ -61,9 +61,9 @@ public:
 
     void AddInsertedSize(const i64 size, const ui64 overloadLimit);
 
-    explicit TPathInfo(TInsertionSummary& summary, const NColumnShard::TInternalPathId pathId);
+    explicit TPathInfo(TInsertionSummary& summary, const TInternalPathId pathId);
 
-    NColumnShard::TInternalPathId GetPathId() const {
+    TInternalPathId GetPathId() const {
         return PathId;
     }
 

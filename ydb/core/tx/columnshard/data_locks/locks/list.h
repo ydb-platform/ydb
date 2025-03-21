@@ -10,7 +10,7 @@ class TListPortionsLock: public ILock {
 private:
     using TBase = ILock;
     THashSet<TPortionAddress> Portions;
-    THashSet<NColumnShard::TInternalPathId> Granules;
+    THashSet<TInternalPathId> Granules;
 protected:
     virtual std::optional<TString> DoIsLocked(
         const TPortionInfo& portion, const ELockCategory /*category*/, const THashSet<TString>& /*excludedLocks*/) const override {
@@ -101,7 +101,7 @@ public:
 class TListTablesLock: public ILock {
 private:
     using TBase = ILock;
-    THashSet<NColumnShard::TInternalPathId> Tables;
+    THashSet<TInternalPathId> Tables;
 protected:
     virtual std::optional<TString> DoIsLocked(
         const TPortionInfo& portion, const ELockCategory /*category*/, const THashSet<TString>& /*excludedLocks*/) const override {
@@ -121,7 +121,7 @@ protected:
         return Tables.empty();
     }
 public:
-    TListTablesLock(const TString& lockName, const THashSet<NColumnShard::TInternalPathId>& tables, const ELockCategory category, const bool readOnly = false)
+    TListTablesLock(const TString& lockName, const THashSet<TInternalPathId>& tables, const ELockCategory category, const bool readOnly = false)
         : TBase(lockName, category, readOnly)
         , Tables(tables)
     {

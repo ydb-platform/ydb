@@ -54,7 +54,7 @@ bool TPathInfo::AddCommitted(TCommittedData&& data, const bool load) {
     return result;
 }
 
-TPathInfo::TPathInfo(TInsertionSummary& summary, const NColumnShard::TInternalPathId pathId)
+TPathInfo::TPathInfo(TInsertionSummary& summary, const TInternalPathId pathId)
     : PathId(pathId)
     , Summary(&summary)
     , PathIdCounters(Summary->GetCounters().GetPathIdCounters())

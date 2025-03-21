@@ -6,7 +6,7 @@ namespace NKikimr::NOlap {
 
 class TRemovedTablesNormalizer::TNormalizerResult : public INormalizerChanges {
     struct TPathInfo {
-        NColumnShard::TInternalPathId PathId;
+        TInternalPathId PathId;
         ui64 Step;
         ui64 TxId;
     };
@@ -64,7 +64,7 @@ public:
         }
 
 
-        std::set<NColumnShard::TInternalPathId> droppedTables;
+        std::set<TInternalPathId> droppedTables;
         {
             auto rowset = db.Table<Schema::TableInfo>().Select();
             if (!rowset.IsReady()) {

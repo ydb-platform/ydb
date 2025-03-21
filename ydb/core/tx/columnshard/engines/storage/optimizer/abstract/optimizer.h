@@ -81,7 +81,7 @@ public:
 
 class IOptimizerPlanner {
 private:
-    const NColumnShard::TInternalPathId PathId;
+    const TInternalPathId PathId;
     YDB_READONLY(TInstant, ActualizationInstant, TInstant::Zero());
 
 protected:
@@ -104,7 +104,7 @@ protected:
     }
 
 public:
-    IOptimizerPlanner(const NColumnShard::TInternalPathId pathId)
+    IOptimizerPlanner(const TInternalPathId pathId)
         : PathId(pathId) {
     }
 
@@ -170,12 +170,12 @@ class IOptimizerPlannerConstructor {
 public:
     class TBuildContext {
     private:
-        YDB_READONLY(NColumnShard::TInternalPathId, PathId, NColumnShard::TInternalPathId{});
+        YDB_READONLY(TInternalPathId, PathId, TInternalPathId{});
         YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, Storages);
         YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, PKSchema);
 
     public:
-        TBuildContext(const NColumnShard::TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema)
+        TBuildContext(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema)
             : PathId(pathId)
             , Storages(storages)
             , PKSchema(pkSchema) {

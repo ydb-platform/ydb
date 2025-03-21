@@ -199,7 +199,7 @@ public:
         return *result;
     }
 
-    TWriteOperation::TPtr RegisterOperation(const NColumnShard::TInternalPathId& pathId, const ui64 lockId, const ui64 cookie, const std::optional<ui32> granuleShardingVersionId,
+    TWriteOperation::TPtr RegisterOperation(const TInternalPathId& pathId, const ui64 lockId, const ui64 cookie, const std::optional<ui32> granuleShardingVersionId,
         const NEvWrite::EModificationType mType, const bool portionsWriting);
     bool RegisterLock(const ui64 lockId, const ui64 generationId) {
         if (LockFeatures.contains(lockId)) {
@@ -225,7 +225,7 @@ public:
         }
     }
 
-    bool HasReadLocks(const NColumnShard::TInternalPathId pathId) const {
+    bool HasReadLocks(const TInternalPathId pathId) const {
         return InteractionsContext.HasReadIntervals(pathId);
     }
 

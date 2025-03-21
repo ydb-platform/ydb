@@ -29,7 +29,7 @@ public:
         , Executor(*executor) {
     }
 
-    void FillTableStats(NColumnShard::TInternalPathId pathId, ::NKikimrTableStats::TTableStats& tableStats) {
+    void FillTableStats(TInternalPathId pathId, ::NKikimrTableStats::TTableStats& tableStats) {
         Counters.FillTableStats(pathId, tableStats);
 
         auto activeStats = Counters.GetPortionIndexCounters()->GetTableStats(pathId, TPortionIndexStats::TActivePortions());

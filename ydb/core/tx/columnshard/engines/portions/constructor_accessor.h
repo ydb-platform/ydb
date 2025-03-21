@@ -141,7 +141,7 @@ private:
     }
 
 public:
-    TPortionAccessorConstructor(const NColumnShard::TInternalPathId pathId)
+    TPortionAccessorConstructor(const TInternalPathId pathId)
         : PortionInfo(pathId)
     {
 

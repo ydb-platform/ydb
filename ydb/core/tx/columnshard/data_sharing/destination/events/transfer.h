@@ -18,7 +18,7 @@ namespace NKikimr::NOlap::NDataSharing::NEvents {
 
 class TPathIdData {
 private:
-    YDB_READONLY(NColumnShard::TInternalPathId, PathId, NColumnShard::TInternalPathId{}); //TODO LocalPathId?
+    YDB_READONLY_DEF(TInternalPathId, PathId);
     YDB_ACCESSOR_DEF(std::vector<TPortionDataAccessor>, Portions);
 
     TPathIdData() = default;
@@ -28,7 +28,7 @@ private:
         if (!proto.HasPathId()) {
             return TConclusionStatus::Fail("no path id in proto");
         }
-        PathId = NColumnShard::TInternalPathId::FromRawInternalPathIdValue(proto.GetPathId());
+        PathId = TInternalPathId::FromRawInternalPathIdValue(proto.GetPathId());
         for (auto&& portionProto : proto.GetPortions()) {
             const auto schema = versionedIndex.GetSchemaVerified(portionProto.GetSchemaVersion());
             TConclusion<TPortionDataAccessor> portion = TPortionDataAccessor::BuildFromProto(portionProto, schema->GetIndexInfo(), groupSelector);
@@ -41,7 +41,7 @@ private:
     }
 
 public:
-    TPathIdData(const NColumnShard::TInternalPathId pathId, const std::vector<TPortionDataAccessor>& portions)
+    TPathIdData(const TInternalPathId pathId, const std::vector<TPortionDataAccessor>& portions)
         : PathId(pathId)
         , Portions(portions) {
     }
@@ -52,7 +52,7 @@ public:
     THashMap<TTabletId, TTaskForTablet> BuildLinkTabletTasks(const std::shared_ptr<IStoragesManager>& storages, const TTabletId selfTabletId,
         const TTransferContext& context, const TVersionedIndex& index);
 
-    void InitPortionIds(ui64* lastPortionId, const std::optional<NColumnShard::TInternalPathId> pathId = {}) {
+    void InitPortionIds(ui64* lastPortionId, const std::optional<TInternalPathId> pathId = {}) {
         AFL_VERIFY(lastPortionId);
         for (auto&& i : Portions) {
             i.MutablePortionInfo().SetPortionId(++*lastPortionId);
@@ -86,7 +86,7 @@ struct TEvSendDataFromSource: public NActors::TEventPB<TEvSendDataFromSource, NK
     TEvSendDataFromSource() = default;
 
     TEvSendDataFromSource(
-        const TString& sessionId, const ui32 packIdx, const TTabletId sourceTabletId, const THashMap<NColumnShard::TInternalPathId, TPathIdData>& pathIdData, TArrayRef<const NOlap::TSchemaPresetVersionInfo> schemas) {
+        const TString& sessionId, const ui32 packIdx, const TTabletId sourceTabletId, const THashMap<TInternalPathId, TPathIdData>& pathIdData, TArrayRef<const NOlap::TSchemaPresetVersionInfo> schemas) {
         Record.SetSessionId(sessionId);
         Record.SetPackIdx(packIdx);
         Record.SetSourceTabletId((ui64)sourceTabletId);

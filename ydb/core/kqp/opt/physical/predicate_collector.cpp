@@ -89,14 +89,14 @@ bool IsMemberColumn(const TExprBase& node, const TExprNode* lambdaArg) {
 bool IsGoodTypeForArithmeticPushdown(const TTypeAnnotationNode& type, bool allowOlapApply) {
     const auto fatures = NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
     return NUdf::EDataTypeFeatures::NumericType & fatures
-        || (allowOlapApply && (NUdf::EDataTypeFeatures::BigDateType & fatures) && !(NUdf::EDataTypeFeatures::TzDateType & fatures));
+        || (allowOlapApply && (NUdf::EDataTypeFeatures::ExtDateType & fatures) && !(NUdf::EDataTypeFeatures::TzDateType & fatures));
 }
 
 bool IsGoodTypeForComparsionPushdown(const TTypeAnnotationNode& type, bool allowOlapApply) {
     const auto fatures = NUdf::GetDataTypeInfo(RemoveOptionality(type).Cast<TDataExprType>()->GetSlot()).Features;
     return (NUdf::EDataTypeFeatures::CanCompare  & fatures)
         && (((NUdf::EDataTypeFeatures::NumericType | NUdf::EDataTypeFeatures::StringType) & fatures) ||
-            (allowOlapApply && (NUdf::EDataTypeFeatures::BigDateType & fatures) && !(NUdf::EDataTypeFeatures::TzDateType & fatures)));
+            (allowOlapApply && (NUdf::EDataTypeFeatures::ExtDateType & fatures) && !(NUdf::EDataTypeFeatures::TzDateType & fatures)));
 }
 
 [[maybe_unused]]

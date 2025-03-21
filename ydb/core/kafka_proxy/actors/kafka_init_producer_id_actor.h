@@ -24,7 +24,7 @@ namespace NKafka {
                 SELECT,
                 INSERT,
                 UPDATE,
-                DELETE,
+                DELETE_REQ, // we can't call it DELETE, cause DELETE macros is already defined in contrib/restricted/cprocsp/include/cpcsp/CSP_WinDef.h
                 BEGIN_TRANSACTION
             };
 

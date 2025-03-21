@@ -6,7 +6,7 @@ namespace NKikimr::NOlap::NTxInteractions {
 
 class TEvReadFinishedWriter: public ITxEventWriter {
 private:
-    YDB_READONLY(TInternalPathId, PathId, TInternalPathId{});
+    YDB_READONLY_DEF(TInternalPathId, PathId)
     TTxConflicts Conflicts;
 
     virtual bool DoCheckInteraction(

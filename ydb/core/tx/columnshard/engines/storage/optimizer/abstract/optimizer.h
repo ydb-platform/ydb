@@ -170,7 +170,7 @@ class IOptimizerPlannerConstructor {
 public:
     class TBuildContext {
     private:
-        YDB_READONLY(TInternalPathId, PathId, TInternalPathId{});
+        YDB_READONLY_DEF(TInternalPathId, PathId);
         YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, Storages);
         YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, PKSchema);
 

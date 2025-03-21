@@ -926,7 +926,7 @@ struct Schema : NIceDb::Schema {
 namespace NKikimr::NOlap {
 class TPortionLoadContext {
 private:
-    YDB_READONLY(TInternalPathId, PathId, TInternalPathId{});
+    YDB_READONLY_DEF(TInternalPathId, PathId)
     YDB_READONLY(ui64, PortionId, 0);
     YDB_READONLY_DEF(NKikimrTxColumnShard::TIndexPortionMeta, MetaProto);
     YDB_READONLY_DEF(std::optional<NOlap::TSnapshot>, DeprecatedMinSnapshot);
@@ -950,7 +950,7 @@ class TColumnChunkLoadContext {
 private:
     YDB_READONLY_DEF(TBlobRange, BlobRange);
     TChunkAddress Address;
-    YDB_READONLY(TInternalPathId, PathId, TInternalPathId{});
+    YDB_READONLY_DEF(TInternalPathId, PathId)
     YDB_READONLY(ui64, PortionId, 0);
     YDB_READONLY_DEF(NKikimrTxColumnShard::TIndexColumnMeta, MetaProto);
     YDB_READONLY(TSnapshot, RemoveSnapshot, TSnapshot::Zero());
@@ -1007,7 +1007,7 @@ class TColumnChunkLoadContextV1 {
 private:
     TChunkAddress Address;
     YDB_READONLY_DEF(TBlobRangeLink16, BlobRange);
-    YDB_READONLY(TInternalPathId, PathId, TInternalPathId{});
+    YDB_READONLY_DEF(TInternalPathId, PathId)
     YDB_READONLY(ui64, PortionId, 0);
     YDB_READONLY_DEF(NKikimrTxColumnShard::TIndexColumnMeta, MetaProto);
 
@@ -1060,7 +1060,7 @@ public:
 
 class TColumnChunkLoadContextV2 {
 private:
-YDB_READONLY(TInternalPathId, PathId, TInternalPathId{});
+YDB_READONLY_DEF(TInternalPathId, PathId)
 YDB_READONLY(ui64, PortionId, 0);
     YDB_READONLY_DEF(TString, MetadataProto);
 
@@ -1095,7 +1095,7 @@ class TIndexChunkLoadContext {
 private:
     YDB_READONLY_DEF(std::optional<TBlobRange>, BlobRange);
     YDB_READONLY_DEF(std::optional<TString>, BlobData);
-    YDB_READONLY(TInternalPathId, PathId, TInternalPathId{});
+    YDB_READONLY_DEF(TInternalPathId, PathId)
     YDB_READONLY(ui64, PortionId, 0);
     TChunkAddress Address;
     const ui32 RecordsCount;

@@ -13,7 +13,6 @@ bool TOperationsManager::Load(NTabletFlatExecutor::TTransactionContext& txc) {
         }
 
         while (!rowset.EndOfSet()) {
-            //TODO move this blocl to TWriteOperation::LoadFromDb
             const TOperationWriteId writeId = (TOperationWriteId)rowset.GetValue<Schema::Operations::WriteId>();
             const ui64 createdAtSec = rowset.GetValue<Schema::Operations::CreatedAt>();
             const ui64 lockId = rowset.GetValue<Schema::Operations::LockId>();

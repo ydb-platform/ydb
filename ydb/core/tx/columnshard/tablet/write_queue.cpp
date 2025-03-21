@@ -1,4 +1,3 @@
-#include <ydb/core/tx/columnshard/common/path_id.h>
 #include "write_queue.h"
 
 #include <ydb/core/tx/columnshard/columnshard_impl.h>

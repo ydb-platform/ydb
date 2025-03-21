@@ -62,7 +62,7 @@ class TInsertedPortions {
 private:
     YDB_ACCESSOR_DEF(std::vector<TWriteResult>, WriteResults);
     YDB_ACCESSOR_DEF(std::vector<TInsertedPortion>, Portions);
-    YDB_READONLY(TInternalPathId, PathId, TInternalPathId{});
+    YDB_READONLY_DEF(TInternalPathId, PathId);
 
 public:
     TInsertedPortions(std::vector<TWriteResult>&& writeResults, std::vector<TInsertedPortion>&& portions)

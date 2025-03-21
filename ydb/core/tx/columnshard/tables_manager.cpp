@@ -40,7 +40,6 @@ bool TTablesManager::FillMonitoringReport(NTabletFlatExecutor::TTransactionConte
     json.InsertValue("tables_count", Tables.size());
     json.InsertValue("presets_count", SchemaPresetsIds.size());
     json.InsertValue("to_drop_count", PathsToDrop.size());
-    //json.InsertValue("to_move_count", PathToMove ? 1 : 0);
     return true;
 }
 

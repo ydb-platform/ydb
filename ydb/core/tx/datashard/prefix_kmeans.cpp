@@ -234,7 +234,7 @@ public:
         if (!PostingBuf.IsEmpty()) {
             PostingBuf.FlushTo(WriteBuf);
             InitUpload(PostingTable, PostingTypes);
-        } else if (!PostingBuf.IsEmpty()) {
+        } else if (!PrefixBuf.IsEmpty()) {
             PrefixBuf.FlushTo(WriteBuf);
             InitUpload(PrefixTable, PrefixTypes);
         }

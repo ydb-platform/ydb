@@ -140,7 +140,7 @@ public:
 
     template <class TRow>
     bool InitFromDB(const TRow& rowset) {
-        PathId = TInternalPathId::FromRawInternalPathIdValue(rowset.template GetValue<Schema::TableInfo::PathId>());
+        PathId = TInternalPathId::FromRawValue(rowset.template GetValue<Schema::TableInfo::PathId>());
         if (rowset.template HaveValue<Schema::TableInfo::DropStep>() && rowset.template HaveValue<Schema::TableInfo::DropTxId>()) {
             DropVersion.emplace(
                 rowset.template GetValue<Schema::TableInfo::DropStep>(), rowset.template GetValue<Schema::TableInfo::DropTxId>());

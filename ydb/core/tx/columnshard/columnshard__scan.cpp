@@ -30,7 +30,7 @@ void TColumnShard::Handle(TEvDataShard::TEvKqpScan::TPtr& ev, const TActorContex
         return;
     }
 
-    const auto pathId = TInternalPathId::FromRawInternalPathIdValue(record.GetLocalPathId());
+    const auto pathId = TInternalPathId::FromRawValue(record.GetLocalPathId());
     Counters.GetColumnTablesCounters()->GetPathIdCounter(pathId)->OnReadEvent();
     ScanTxInFlight.insert({txId, TAppData::TimeProvider->Now()});
     Counters.GetTabletCounters()->SetCounter(COUNTER_SCAN_IN_FLY, ScanTxInFlight.size());

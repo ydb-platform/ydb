@@ -38,20 +38,20 @@ protected:
             return result;
         }
         TableName = proto.GetBackup().GetTableName();
-        TablePathId = TInternalPathId::FromRawInternalPathIdValue(proto.GetBackup().GetTablePathId());
+        TablePathId = TInternalPathId::FromRawValue(proto.GetBackup().GetTablePathId());
         return Validate();
     }
 
     virtual void DoSerializeToProto(NKikimrColumnShardExportProto::TSelectorContainer& proto) const override {
         *proto.MutableBackup()->MutableSnapshot() = Snapshot.SerializeToProto();
-        proto.MutableBackup()->SetTablePathId(TablePathId.GetRawInternalPathIdValue());
+        proto.MutableBackup()->SetTablePathId(TablePathId.GetRawValue());
         proto.MutableBackup()->SetTableName(TableName);
     }
 
     TConclusionStatus DeserializeFromProto(const NKikimrSchemeOp::TBackupTask& proto) {
         Snapshot = TSnapshot(proto.GetSnapshotStep(), proto.GetSnapshotTxId());
         TableName = proto.GetTableName();
-        TablePathId = TInternalPathId::FromRawInternalPathIdValue(proto.GetTableId());
+        TablePathId = TInternalPathId::FromRawValue(proto.GetTableId());
         return Validate();
     }
 public:

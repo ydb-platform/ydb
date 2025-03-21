@@ -2264,7 +2264,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     auto activities = batchStats->GetColumnByName("Activity");
                     AFL_VERIFY(activities);
 
-                    const auto pathId = TInternalPathId::FromRawInternalPathIdValue(static_cast<arrow::UInt64Array&>(*paths).Value(i));
+                    const auto pathId = TInternalPathId::FromRawValue(static_cast<arrow::UInt64Array&>(*paths).Value(i));
                     auto kind = static_cast<arrow::StringArray&>(*kinds).Value(i);
                     const TString kindStr(kind.data(), kind.size());
                     ui64 numRows = static_cast<arrow::UInt64Array&>(*rows).Value(i);
@@ -2277,7 +2277,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     Cerr << "[" << __LINE__ << "] " << activity << " " << table.Pk[0].GetType().GetTypeId() << " " << pathId << " " << kindStr
                          << " " << numRows << " " << numBytes << " " << numRawBytes << "\n";
 
-                    if (pathId.GetRawInternalPathIdValue() == tableId) {
+                    if (pathId.GetRawValue() == tableId) {
                         if (kindStr == ::ToString(NOlap::NPortion::EProduced::COMPACTED) ||
                             kindStr == ::ToString(NOlap::NPortion::EProduced::SPLIT_COMPACTED) || numBytes > (4LLU << 20)) {
                             sumCompactedBytes += numBytes;

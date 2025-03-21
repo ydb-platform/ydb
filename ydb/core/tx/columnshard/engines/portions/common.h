@@ -82,6 +82,6 @@ struct ::THash<NKikimr::NOlap::TChunkAddress> {
 template <>
 struct ::THash<NKikimr::NOlap::TFullChunkAddress> {
     inline ui64 operator()(const NKikimr::NOlap::TFullChunkAddress& a) const {
-        return CombineHashes(CombineHashes(((ui64)a.GetEntityId()) << 16 + a.GetChunkIdx(), a.GetPathId().GetRawInternalPathIdValue()), a.GetPortionId());
+        return CombineHashes(CombineHashes(((ui64)a.GetEntityId()) << 16 + a.GetChunkIdx(), a.GetPathId().GetRawValue()), a.GetPortionId());
     }
 };

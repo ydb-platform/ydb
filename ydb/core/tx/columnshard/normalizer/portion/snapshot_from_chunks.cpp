@@ -38,7 +38,7 @@ public:
         NIceDb::TNiceDb db(txc.DB);
         for (auto&& i : Patches) {
             db.Table<Schema::IndexPortions>()
-                .Key(i.GetPortionInfo().GetPathId().GetRawInternalPathIdValue(), i.GetPortionInfo().GetPortionId())
+                .Key(i.GetPortionInfo().GetPathId().GetRawValue(), i.GetPortionInfo().GetPortionId())
                 .Update(NIceDb::TUpdate<Schema::IndexPortions::MinSnapshotPlanStep>(i.GetSnapshot().GetPlanStep()),
                     NIceDb::TUpdate<Schema::IndexPortions::MinSnapshotTxId>(i.GetSnapshot().GetTxId())
                     );

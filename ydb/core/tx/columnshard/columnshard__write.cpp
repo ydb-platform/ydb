@@ -179,7 +179,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     Counters.GetCSCounters().OnStartWriteRequest();
 
     const auto& record = Proto(ev->Get());
-    const auto pathId = TInternalPathId::FromRawInternalPathIdValue(record.GetTableId());
+    const auto pathId = TInternalPathId::FromRawValue(record.GetTableId());
     const ui64 writeId = record.GetWriteId();
     const ui64 cookie = ev->Cookie;
     const TString dedupId = record.GetDedupId();
@@ -551,7 +551,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
-    const auto pathId = TInternalPathId::FromRawInternalPathIdValue(operation.GetTableId().GetTableId());
+    const auto pathId = TInternalPathId::FromRawValue(operation.GetTableId().GetTableId());
 
     if (!TablesManager.IsReadyForStartWrite(pathId, false)) {
         sendError("table not writable", NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR);

@@ -307,12 +307,12 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         tieringHelper.WriteSampleData();
         csController->WaitCompactions(TDuration::Seconds(5));
         THashSet<NColumnShard::TInternalPathId> pathsToLock{
-            NColumnShard::TInternalPathId::FromRawInternalPathIdValue(0),
-            NColumnShard::TInternalPathId::FromRawInternalPathIdValue(1),
-            NColumnShard::TInternalPathId::FromRawInternalPathIdValue(2),
-            NColumnShard::TInternalPathId::FromRawInternalPathIdValue(3),
-            NColumnShard::TInternalPathId::FromRawInternalPathIdValue(4),
-            NColumnShard::TInternalPathId::FromRawInternalPathIdValue(5),
+            NColumnShard::TInternalPathId::FromRawValue(0),
+            NColumnShard::TInternalPathId::FromRawValue(1),
+            NColumnShard::TInternalPathId::FromRawValue(2),
+            NColumnShard::TInternalPathId::FromRawValue(3),
+            NColumnShard::TInternalPathId::FromRawValue(4),
+            NColumnShard::TInternalPathId::FromRawValue(5),
         };
         csController->RegisterLock("table", std::make_shared<NOlap::NDataLocks::TListTablesLock>("table", std::move(pathsToLock), NOlap::NDataLocks::ELockCategory::Compaction));
         {

@@ -24,7 +24,7 @@ bool TGranuleOnlyPortionsReader::DoExecute(NTabletFlatExecutor::TTransactionCont
 
 bool TGranuleOnlyPortionsReader::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     NIceDb::TNiceDb db(txc.DB);
-    return db.Table<NColumnShard::Schema::IndexPortions>().Prefix(Self->GetPathId().GetRawInternalPathIdValue()).Select().IsReady();
+    return db.Table<NColumnShard::Schema::IndexPortions>().Prefix(Self->GetPathId().GetRawValue()).Select().IsReady();
 }
 
 bool TGranuleColumnsReader::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
@@ -38,7 +38,7 @@ bool TGranuleColumnsReader::DoExecute(NTabletFlatExecutor::TTransactionContext& 
 
 bool TGranuleColumnsReader::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     NIceDb::TNiceDb db(txc.DB);
-    return db.Table<NColumnShard::Schema::IndexColumnsV2>().Prefix(Self->GetPathId().GetRawInternalPathIdValue()).Select().IsReady();
+    return db.Table<NColumnShard::Schema::IndexColumnsV2>().Prefix(Self->GetPathId().GetRawValue()).Select().IsReady();
 }
 
 bool TGranuleIndexesReader::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
@@ -51,7 +51,7 @@ bool TGranuleIndexesReader::DoExecute(NTabletFlatExecutor::TTransactionContext& 
 
 bool TGranuleIndexesReader::DoPrecharge(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     NIceDb::TNiceDb db(txc.DB);
-    return db.Table<NColumnShard::Schema::IndexIndexes>().Prefix(Self->GetPathId().GetRawInternalPathIdValue()).Select().IsReady();
+    return db.Table<NColumnShard::Schema::IndexIndexes>().Prefix(Self->GetPathId().GetRawValue()).Select().IsReady();
 }
 
 bool TGranuleFinishAccessorsLoading::DoExecute(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) {

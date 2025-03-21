@@ -153,6 +153,6 @@ public:
 template <>
 struct THash<NKikimr::NOlap::TPortionAddress> {
     inline ui64 operator()(const NKikimr::NOlap::TPortionAddress& x) const noexcept {
-        return CombineHashes(x.GetPortionId(), x.GetPathId().GetRawInternalPathIdValue());
+        return CombineHashes(x.GetPortionId(), x.GetPathId().GetRawValue());
     }
 };

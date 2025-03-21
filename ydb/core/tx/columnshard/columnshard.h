@@ -279,7 +279,7 @@ namespace TEvColumnShard {
             Record.SetOrigin(origin);
             Record.SetTxInitiator(0);
             Record.SetWriteId(writeId);
-            Record.SetTableId(writeMeta.GetPathId().GetRawInternalPathIdValue());
+            Record.SetTableId(writeMeta.GetPathId().GetRawValue());
             Record.SetDedupId(writeMeta.GetDedupId());
             Record.SetStatus(status);
         }

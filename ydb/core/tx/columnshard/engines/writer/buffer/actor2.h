@@ -31,7 +31,7 @@ public:
     }
 
     operator size_t() const {
-        return CombineHashes<ui64>(CombineHashes<ui64>(PathId.GetRawInternalPathIdValue(), SchemaVersion), (ui64)ModificationType);
+        return CombineHashes<ui64>(CombineHashes<ui64>(PathId.GetRawValue(), SchemaVersion), (ui64)ModificationType);
     }
 };
 

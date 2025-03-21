@@ -75,7 +75,7 @@ bool TTxBlobsWritingFinished::DoExecute(TTransactionContext& txc, const TActorCo
             lock.SetDataShard(Self->TabletID());
             lock.SetGeneration(info.GetGeneration());
             lock.SetCounter(info.GetInternalGenerationCounter());
-            lock.SetPathId(writeMeta.GetPathId().GetRawInternalPathIdValue());
+            lock.SetPathId(writeMeta.GetPathId().GetRawValue());
             auto ev = NEvents::TDataEvents::TEvWriteResult::BuildCompleted(Self->TabletID(), operation->GetLockId(), lock);
             Results.emplace_back(std::move(ev), writeMeta.GetSource(), operation->GetCookie());
         }

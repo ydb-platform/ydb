@@ -25,7 +25,7 @@ private:
     THashSet<TInternalPathId> GetNotErasedTableIds(const TColumnShard& owner, const TInfoProto& tables) const {
         THashSet<TInternalPathId> result;
         for (auto&& i : tables) {
-            const auto& pathId = TInternalPathId::FromRawInternalPathIdValue(i.GetPathId());
+            const auto& pathId = TInternalPathId::FromRawValue(i.GetPathId());
             if (owner.TablesManager.HasTable(pathId, true)) {
                 result.emplace(pathId);
             }
@@ -74,7 +74,7 @@ private:
                 return false;
             }
             TxAddSharding = owner.TablesManager.CreateAddShardingInfoTx(
-                owner, TInternalPathId::FromRawInternalPathIdValue(SchemaTxBody.GetGranuleShardingInfo().GetPathId()), SchemaTxBody.GetGranuleShardingInfo().GetVersionId(), infoContainer);
+                owner, TInternalPathId::FromRawValue(SchemaTxBody.GetGranuleShardingInfo().GetPathId()), SchemaTxBody.GetGranuleShardingInfo().GetVersionId(), infoContainer);
         }
         return true;
     }

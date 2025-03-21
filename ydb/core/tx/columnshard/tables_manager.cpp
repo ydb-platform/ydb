@@ -114,7 +114,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db) {
         }
 
         while (!rowset.EndOfSet()) {
-            const auto pathId =  TInternalPathId::FromRawInternalPathIdValue(rowset.GetValue<Schema::TableVersionInfo::PathId>());
+            const auto pathId =  TInternalPathId::FromRawValue(rowset.GetValue<Schema::TableVersionInfo::PathId>());
             Y_ABORT_UNLESS(Tables.contains(pathId));
             NOlap::TSnapshot version(
                 rowset.GetValue<Schema::TableVersionInfo::SinceStep>(), rowset.GetValue<Schema::TableVersionInfo::SinceTxId>());

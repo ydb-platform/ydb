@@ -15,7 +15,7 @@ TWriteController::TWriteController(const TActorId& exportActorId, const std::vec
     const TCursor& cursor, const TTabletId tabletId, const TInternalPathId p)
     : ExportActorId(exportActorId) 
 {
-    const auto pathId = p.GetRawInternalPathIdValue();
+    const auto pathId = p.GetRawValue();
     for (auto&& i : blobsToWrite) {
         auto blobId = TUnifiedBlobId((ui64)tabletId, (pathId << 24) >> 40, pathId >> 40, cursor.GetChunkIdx(), pathId & Max<ui8>(), Max<ui32>(), i.size());
         AFL_VERIFY((((ui64)blobId.GetLogoBlobId().Step() >> 8) << 40) + ((ui64)blobId.GetLogoBlobId().Generation() << 8) + blobId.GetLogoBlobId().Channel() == pathId);

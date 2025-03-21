@@ -9,7 +9,7 @@
 #include <ydb/library/yql/dq/actors/compute/dq_checkpoints_states.h>
 #include <ydb/library/yql/dq/actors/compute/dq_source_watermark_tracker.h>
 #include <ydb/library/yql/dq/actors/common/retry_queue.h>
-#include <ydb-cpp-sdk/client/federated_topic/federated_topic.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
 
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>
 #include <yql/essentials/minikql/mkql_alloc.h>

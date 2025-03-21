@@ -7,7 +7,7 @@
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/common/pq_partition_key.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/topic_session_stats.h>
-#include <ydb-cpp-sdk/client/federated_topic/federated_topic.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/public/purecalc/common/fwd.h>

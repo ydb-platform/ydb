@@ -1,6 +1,8 @@
 #include "update.h"
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/library/yql/minikql/mkql_type_ops.h>
+#include <ydb/core/tx/schemeshard/schemeshard_utils.h>
+#include <yql/essentials/minikql/mkql_type_ops.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/scheme_types/scheme_type_registry.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
@@ -53,6 +55,10 @@ bool TOlapColumnBase::ParseFromRequest(const NKikimrSchemeOp::TOlapColumnDescrip
         return false;
     }
     Name = columnSchema.GetName();
+    if (!IsValidColumnName(Name, false)) {
+        errors.AddError(Sprintf("Invalid name for column '%s'", Name.data()));
+        return false;
+    }
     NotNullFlag = columnSchema.GetNotNull();
     TypeName = columnSchema.GetType();
     StorageId = columnSchema.GetStorageId();

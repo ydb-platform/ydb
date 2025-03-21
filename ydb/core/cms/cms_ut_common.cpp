@@ -263,7 +263,8 @@ void GenerateExtendedInfo(TTestActorRuntime &runtime, NKikimrBlobStorage::TBaseC
         ui32 groupId;
 
         if (createDynamicGroups) {
-            groupId = ((i % pdisks) == 0) ? i : (i | (1 << 31));
+            TGroupID fullGroupId(i == 0 ? EGroupConfigurationType::Static : EGroupConfigurationType::Dynamic, 1, i);
+            groupId = fullGroupId.GetRaw();
         } else {
             groupId = i;
         }

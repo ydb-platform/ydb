@@ -42,7 +42,7 @@ public:
         , HolderFactory(holderFactory)
         , TransportVersion(transportVersion)
         , MaxStoredBytes(settings.MaxStoredBytes)
-        , MaxChunkBytes(settings.MaxChunkBytes)
+        , MaxChunkBytes(std::min(settings.MaxChunkBytes, settings.ChunkSizeLimit / 2))
         , ChunkSizeLimit(settings.ChunkSizeLimit)
         , ArrayBufferMinFillPercentage(settings.ArrayBufferMinFillPercentage)
         , LogFunc(logFunc)
@@ -54,7 +54,7 @@ public:
         UpdateSettings(settings.MutableSettings);
 
         if (Packer.IsBlock() && ArrayBufferMinFillPercentage && *ArrayBufferMinFillPercentage > 0) {
-            BlockSplitter = NArrow::CreateBlockSplitter(OutputType, ChunkSizeLimit * *ArrayBufferMinFillPercentage / 100);
+            BlockSplitter = NArrow::CreateBlockSplitter(OutputType, (ChunkSizeLimit - MaxChunkBytes) * *ArrayBufferMinFillPercentage / 100);
         }
     }
 
@@ -114,9 +114,6 @@ public:
         PackerCurrentRowCount += rows;
 
         if (!IsLocalChannel && BlockSplitter && BlockSplitter->ShouldSplitItem(values, width)) {
-            if (Packer.PackedSizeEstimate()) {
-                TryPack(/* force */ true);
-            }
             for (auto&& block : BlockSplitter->SplitItem(values, width)) {
                 DoPushBlock(std::move(block));
             }
@@ -137,7 +134,7 @@ public:
         }
 
         PackerCurrentChunkCount++;
-        TryPack(/* force */ false);
+        TryPack();
     }
 
     void DoPushBlock(std::vector<arrow::Datum>&& data) {
@@ -149,13 +146,13 @@ public:
         Packer.AddWideItem(outputValues.data(), outputValues.size());
 
         PackerCurrentChunkCount++;
-        TryPack(/* force */ false);
+        TryPack();
     }
 
     // Pack and spill data batch if enough data (>= Max Chunk Bytes) or force = true
-    void TryPack(bool force) {
+    void TryPack() {
         size_t packerSize = Packer.PackedSizeEstimate();
-        if (packerSize >= MaxChunkBytes || force && packerSize) {
+        if (packerSize >= MaxChunkBytes) {
             Data.emplace_back();
             Data.back().Buffer = FinishPackAndCheckSize();
             if (PushStats.CollectBasic()) {

@@ -26,7 +26,7 @@ public:
             Response = std::make_unique<TEvDataShard::TEvForceDataCleanupResult>(
                 record.GetDataCleanupGeneration(),
                 Self->TabletID(),
-                NKikimrTxDataShard::TEvForceDataCleanupResult::FAILED);
+                NKikimrTxDataShard::TEvForceDataCleanupResult::WRONG_SHARD_STATE);
             return true;
         }
 
@@ -38,7 +38,7 @@ public:
             Response = std::make_unique<TEvDataShard::TEvForceDataCleanupResult>(
                 record.GetDataCleanupGeneration(),
                 Self->TabletID(),
-                NKikimrTxDataShard::TEvForceDataCleanupResult::FAILED);
+                NKikimrTxDataShard::TEvForceDataCleanupResult::BORROWED);
             return true;
         }
 

@@ -5,6 +5,7 @@
 #include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/storage_helpers.h>
 
 using namespace NKikimr;
@@ -236,26 +237,11 @@ Y_UNIT_TEST_SUITE(TestDataErasure) {
         UNIT_ASSERT(BlobStorageContains(dsProxies, value));
 
         // catch and hold borrow returns
-        TVector<THolder<IEventHandle>> borrowReturns;
-        auto prevObserver = runtime.SetObserverFunc([&borrowReturns](TAutoPtr<IEventHandle>& ev) {
-            switch (ev->GetTypeRewrite()) {
-                case TEvDataShard::TEvReturnBorrowedPart::EventType: {
-                    borrowReturns.emplace_back(ev.Release());
-                    return TTestActorRuntime::EEventAction::DROP;
-                }
-            }
-            return TTestActorRuntime::EEventAction::PROCESS;
-        });
+        TBlockEvents<TEvDataShard::TEvReturnBorrowedPart> borrowReturns(runtime);
 
         TestCopyTable(runtime, schemeshardId, ++txId, "/MyRoot/Database1", "SimpleCopy", "/MyRoot/Database1/Simple");
 
-        {
-            TDispatchOptions options;
-            options.CustomFinalCondition = [&borrowReturns]() {
-                return borrowReturns.size() >= 1;
-            };
-            runtime.DispatchEvents(options);
-        }
+        runtime.WaitFor("borrow return", [&borrowReturns]{ return borrowReturns.size() >= 1; });
 
         // data cleanup should not be finished due to holded borrow returns
         {
@@ -271,10 +257,7 @@ Y_UNIT_TEST_SUITE(TestDataErasure) {
         }
 
         // return borrow
-        runtime.SetObserverFunc(prevObserver);
-        for (auto& ev : borrowReturns) {
-            runtime.Send(ev.Release(), 0, true);
-        }
+        borrowReturns.Stop().Unblock();
 
         TDispatchOptions options;
         options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerShredResponse, 3));

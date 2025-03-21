@@ -328,7 +328,7 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
             runtime.SendToPipe(tableShards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries());
 
             auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
-            UNIT_ASSERT_EQUAL(ev->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvForceDataCleanupResult::FAILED);
+            UNIT_ASSERT_EQUAL(ev->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvForceDataCleanupResult::BORROWED);
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTabletId(), tableShards.at(0));
             UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetDataCleanupGeneration(), dataCleanupGeneration);
         }

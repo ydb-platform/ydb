@@ -32,14 +32,15 @@ public:
     {}
 
     bool ExecuteWithRetries(std::function<Ydb::StatusIds::StatusCode()> queryRunner) {
+        RetryState_ = nullptr;
         while (true) {
             const auto status = queryRunner();
             if (status == Ydb::StatusIds::SUCCESS) {
                 return true;
             }
 
-            if (!RetryPolicy_) {
-                SetupRetryPolicy();
+            if (!RetryState_) {
+                SetupRetryState();
             }
 
             if (const auto delay = RetryState_->GetNextRetryDelay(status)) {
@@ -327,20 +328,21 @@ private:
         Cout << CoutColors_.Default() << Endl;
     }
 
-    void SetupRetryPolicy() {
-        const auto retryFunc = [this](Ydb::StatusIds::StatusCode status) {
-            if (Options_.RetryableStatuses.contains(status)) {
-                return ERetryErrorClass::ShortRetry;
-            }
-            return ERetryErrorClass::NoRetry;
-        };
-
-        RetryPolicy_ = IRetryPolicy::GetExponentialBackoffPolicy(
-            retryFunc,
-            RETRY_PERIOD,
-            RETRY_PERIOD,
-            TDuration::Seconds(1)
-        );
+    void SetupRetryState() {
+        if (!RetryPolicy_) {
+            const auto retryFunc = [this](Ydb::StatusIds::StatusCode status) {
+                if (Options_.RetryableStatuses.contains(status)) {
+                    return ERetryErrorClass::ShortRetry;
+                }
+                return ERetryErrorClass::NoRetry;
+            };
+            RetryPolicy_ = IRetryPolicy::GetExponentialBackoffPolicy(
+                retryFunc,
+                RETRY_PERIOD,
+                RETRY_PERIOD,
+                TDuration::Seconds(1)
+            );
+        }
         RetryState_ = RetryPolicy_->CreateRetryState();
     }
 

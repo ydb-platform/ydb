@@ -48,128 +48,56 @@ namespace {
         return static_cast<TRoaringWrapper*>(arg.AsBoxed().Get())->Roaring;
     }
 
-    class TRoaringOrWithBinary: public TBoxedValue {
+    template <typename Derived>
+    class TRoaringOperationBase : public TBoxedValue {
     public:
-        TRoaringOrWithBinary() {
-        }
+        TRoaringOperationBase() = default;
 
         static TStringRef Name() {
-            return TStringRef::Of("OrWithBinary");
+            return TStringRef(TStringBuilder() << Derived::GetBaseName() << (Derived::UseBinary() ? "WithBinary" : ""));
         }
 
     private:
         TUnboxedValue Run(const IValueBuilder* valueBuilder,
-                          const TUnboxedValuePod* args) const override {
+                        const TUnboxedValuePod* args) const override {
             Y_UNUSED(valueBuilder);
-            auto binaryString = args[1].AsStringRef();
-            auto bitmap = DeserializePortable(binaryString);
+            auto* left = GetBitmapFromArg(args[0]);
+            auto* right = Derived::GetRightBitmap(args[1]);
+            Derived::PerformOperation(left, right);
 
-            roaring_bitmap_or_inplace(GetBitmapFromArg(args[0]), bitmap);
-            roaring_bitmap_free(bitmap);
-
+            if (Derived::UseBinary()) {
+                roaring_bitmap_free(right);
+            }
             return args[0];
         }
     };
 
-    class TRoaringAndWithBinary: public TBoxedValue {
-    public:
-        TRoaringAndWithBinary() {
-        }
-
-        static TStringRef Name() {
-            return TStringRef::Of("AndWithBinary");
-        }
-
-    private:
-        TUnboxedValue Run(const IValueBuilder* valueBuilder,
-                          const TUnboxedValuePod* args) const override {
-            Y_UNUSED(valueBuilder);
-            auto binaryString = args[1].AsStringRef();
-            auto bitmap = DeserializePortable(binaryString);
-
-            roaring_bitmap_and_inplace(GetBitmapFromArg(args[0]), bitmap);
-            roaring_bitmap_free(bitmap);
-
-            return args[0];
-        }
+    // Operation implementations
+    #define DEFINE_ROARING_OP(ClassName, OpName, OpFunc, UseBin) \
+    class ClassName : public TRoaringOperationBase<ClassName> { \
+    public: \
+        static constexpr bool UseBinary() { return UseBin; } \
+        static const char* GetBaseName() { return OpName; } \
+        \
+        static roaring_bitmap_t* GetRightBitmap(const TUnboxedValuePod& arg) { \
+            if constexpr (UseBin) { \
+                return DeserializePortable(arg.AsStringRef()); \
+            } else { \
+                return GetBitmapFromArg(arg); \
+            } \
+        } \
+        \
+        static void PerformOperation(roaring_bitmap_t* left, roaring_bitmap_t* right) { \
+            OpFunc(left, right); \
+        } \
     };
 
-    class TRoaringAnd: public TBoxedValue {
-    public:
-        TRoaringAnd() {
-        }
-
-        static TStringRef Name() {
-            return TStringRef::Of("And");
-        }
-
-    private:
-        TUnboxedValue Run(const IValueBuilder* valueBuilder,
-                          const TUnboxedValuePod* args) const override {
-            Y_UNUSED(valueBuilder);
-            roaring_bitmap_and_inplace(GetBitmapFromArg(args[0]), GetBitmapFromArg(args[1]));
-            return args[0];
-        }
-    };
-
-    class TRoaringAndNotWithBinary: public TBoxedValue {
-    public:
-        TRoaringAndNotWithBinary() {
-        }
-
-        static TStringRef Name() {
-            return TStringRef::Of("AndNotWithBinary");
-        }
-
-    private:
-        TUnboxedValue Run(const IValueBuilder* valueBuilder,
-                          const TUnboxedValuePod* args) const override {
-            Y_UNUSED(valueBuilder);
-            auto binaryString = args[1].AsStringRef();
-            auto bitmap = DeserializePortable(binaryString);
-
-            roaring_bitmap_andnot_inplace(GetBitmapFromArg(args[0]), bitmap);
-            roaring_bitmap_free(bitmap);
-
-            return args[0];
-        }
-    };
-
-    class TRoaringAndNot: public TBoxedValue {
-    public:
-        TRoaringAndNot() {
-        }
-
-        static TStringRef Name() {
-            return TStringRef::Of("AndNot");
-        }
-
-    private:
-        TUnboxedValue Run(const IValueBuilder* valueBuilder,
-                          const TUnboxedValuePod* args) const override {
-            Y_UNUSED(valueBuilder);
-            roaring_bitmap_andnot_inplace(GetBitmapFromArg(args[0]), GetBitmapFromArg(args[1]));
-            return args[0];
-        }
-    };
-
-    class TRoaringOr: public TBoxedValue {
-    public:
-        TRoaringOr() {
-        }
-
-        static TStringRef Name() {
-            return TStringRef::Of("Or");
-        }
-
-    private:
-        TUnboxedValue Run(const IValueBuilder* valueBuilder,
-                          const TUnboxedValuePod* args) const override {
-            Y_UNUSED(valueBuilder);
-            roaring_bitmap_or_inplace(GetBitmapFromArg(args[0]), GetBitmapFromArg(args[1]));
-            return args[0];
-        }
-    };
+    DEFINE_ROARING_OP(TRoaringOrWithBinary,        "Or",     roaring_bitmap_or_inplace,     true)
+    DEFINE_ROARING_OP(TRoaringOr,                  "Or",     roaring_bitmap_or_inplace,     false)
+    DEFINE_ROARING_OP(TRoaringAndWithBinary,       "And",    roaring_bitmap_and_inplace,    true)
+    DEFINE_ROARING_OP(TRoaringAnd,                 "And",    roaring_bitmap_and_inplace,    false)
+    DEFINE_ROARING_OP(TRoaringAndNotWithBinary,    "AndNot", roaring_bitmap_andnot_inplace, true)
+    DEFINE_ROARING_OP(TRoaringAndNot,              "AndNot", roaring_bitmap_andnot_inplace, false)
 
     class TRoaringUint32List: public TBoxedValue {
     public:

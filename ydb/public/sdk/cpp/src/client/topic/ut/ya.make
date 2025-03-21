@@ -40,4 +40,9 @@ SRCS(
     trace_ut.cpp
 )
 
+RESOURCE(
+    ydb/public/sdk/cpp/src/client/topic/ut/resources/topic_A_partition_0_v24-4-2.dat topic_A_partition_0_v24-4-2.dat
+    ydb/public/sdk/cpp/src/client/topic/ut/resources/topic_A_partition_1_v24-4-2.dat topic_A_partition_1_v24-4-2.dat
+)
+
 END()

@@ -1405,6 +1405,23 @@
             "uri": "https://{canondata_backend}/1937429/f07d607c2797952b0e405c5e49adc94025f9df81/resource.tar.gz#test.test_seq_mode-shared_subquery_expr-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[udf-logger_resolve--Debug]": [
+        {
+            "checksum": "df551ab2d87bb2dec98cc1e869a6b915",
+            "size": 503,
+            "uri": "https://{canondata_backend}/1936273/e131662f629dddf3480e2361346c89c0c6c938f2/resource.tar.gz#test.test_udf-logger_resolve--Debug_/opt.yql"
+        }
+    ],
+    "test.test[udf-logger_resolve--Results]": [
+        {
+            "checksum": "6bf5504398cb6997843ff2b80cb76c01",
+            "size": 653,
+            "uri": "https://{canondata_backend}/1936273/e131662f629dddf3480e2361346c89c0c6c938f2/resource.tar.gz#test.test_udf-logger_resolve--Results_/results.txt"
+        },
+        {
+            "uri": "file://test.test_udf-logger_resolve--Results_/extracted"
+        }
+    ],
     "test.test[udf-sqlproject_grounds-default.txt-Debug]": [
         {
             "checksum": "e3bc4f97fbe2d5b316824ae1df155a07",

@@ -16,13 +16,18 @@ struct IMiniKQLFactory {
     virtual TAutoPtr<ITransaction> Make(TEvTablet::TEvLocalReadColumns::TPtr&) = 0;
 };
 
-class TTabletExecutedFlat : public NFlatExecutorSetup::ITablet {
+class TTabletExecutedFlat
+    : public NFlatExecutorSetup::ITablet
+    , public IActorExceptionHandler
+{
 protected:
     using IExecutor = NFlatExecutorSetup::IExecutor;
 
     TTabletExecutedFlat(TTabletStorageInfo *info, const TActorId &tablet, IMiniKQLFactory *factory);
     IExecutor* Executor() const { return Executor0; }
     const TInstant StartTime() const { return StartTime0; }
+
+    bool OnUnhandledException(const std::exception&) override;
 
     void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx);
     void Execute(TAutoPtr<ITransaction> transaction);

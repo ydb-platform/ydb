@@ -972,12 +972,17 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
             TKikimrKey key(ctx);
             YQL_ENSURE(key.Extract(content.TableKey().Ref()));
 
-            auto showCreateValue = Build<TCoNameValueTuple>(ctx, node.Pos())
+            auto sysViewRewrittenValue = Build<TCoNameValueTuple>(ctx, node.Pos())
                 .Name()
-                    .Build("showCreateTable")
+                    .Build("sysViewRewritten")
                 .Value<TCoAtom>()
                     .Value(key.GetTablePath())
                     .Build()
+                .Done();
+
+            auto showCreateTableValue = Build<TCoNameValueTuple>(ctx, node.Pos())
+                .Name()
+                    .Build("showCreateTable")
                 .Done();
 
             auto showCreateTableRead = Build<TCoRead>(ctx, node.Pos())
@@ -992,7 +997,8 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
                     .Add(newKey)
                     .Add(ctx.NewCallable(node.Pos(), "Void", {}))
                     .Add(ctx.NewList(node.Pos(), {}))
-                    .Add(showCreateValue)
+                    .Add(sysViewRewrittenValue)
+                    .Add(showCreateTableValue)
                 .Build()
             .Done().Ptr();
 
@@ -1009,13 +1015,20 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
                 auto right = rightMaybe.Cast();
                 if (auto maybeRead = right.Input().Maybe<TCoRead>()) {
                     auto read = maybeRead.Cast();
+                    bool isSysViewRewritten = false;
+                    bool isShowCreateTable = false;
                     for (auto arg : read.FreeArgs()) {
                         if (auto tuple = arg.Maybe<TCoNameValueTuple>()) {
                             auto name = tuple.Cast().Name().Value();
-                            if (name == "showCreateTable") {
-                                showCreateTableRightReplaces[input.Get()] = nullptr;
+                            if (name == "sysViewRewritten") {
+                                isSysViewRewritten = true;
+                            } else if (name == "showCreateTable") {
+                                isShowCreateTable = true;
                             }
                         }
+                    }
+                    if (isShowCreateTable && isSysViewRewritten) {
+                        showCreateTableRightReplaces[input.Get()] = nullptr;
                     }
                 }
             }
@@ -1030,7 +1043,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
             for (auto arg : read.FreeArgs()) {
                 if (auto tuple = arg.Maybe<TCoNameValueTuple>()) {
                     auto name = tuple.Cast().Name().Value();
-                    if (name == "showCreateTable") {
+                    if (name == "sysViewRewritten") {
                         tablePath = tuple.Cast().Value().Cast().Cast<TCoAtom>().StringValue();
                     }
                 }
@@ -1109,7 +1122,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
             .Repeat(TExprStep::LoadTablesMetadata)
             .Repeat(TExprStep::RewriteIO);
 
-        return ctx.ReplaceNodes(std::move(resNode.Ptr()), showCreateTableRightReplaces);;
+        return ctx.ReplaceNodes(std::move(resNode.Ptr()), showCreateTableRightReplaces);
     }
 
     TKiExploreTxResults txExplore;

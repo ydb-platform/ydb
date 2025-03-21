@@ -7,6 +7,7 @@
 namespace NKikimr::NOlap::NReader::NCommon {
 
 void TBlobsFetcherTask::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) {
+    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("fbf"));
     Source->MutableStageData().AddBlobs(Source->DecodeBlobAddresses(ExtractBlobsData()));
     AFL_VERIFY(Step.Next());
     auto task = std::make_shared<TStepAction>(Source, std::move(Step), Context->GetCommonContext()->GetScanActorId());
@@ -14,6 +15,7 @@ void TBlobsFetcherTask::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSu
 }
 
 bool TBlobsFetcherTask::DoOnError(const TString& storageId, const TBlobRange& range, const IBlobsReadingAction::TErrorStatus& status) {
+    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("ebf"));
     AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("error_on_blob_reading", range.ToString())(
         "scan_actor_id", Context->GetCommonContext()->GetScanActorId())("status", status.GetErrorMessage())("status_code", status.GetStatus())(
         "storage_id", storageId);
@@ -31,9 +33,11 @@ TBlobsFetcherTask::TBlobsFetcherTask(const std::vector<std::shared_ptr<IBlobsRea
     , Step(step)
     , Context(context)
     , Guard(Context->GetCommonContext()->GetCounters().GetFetchBlobsGuard()) {
+    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("sbf"));
 }
 
 void TColumnsFetcherTask::DoOnDataReady(const std::shared_ptr<NResourceBroker::NSubscribe::TResourcesGuard>& /*resourcesGuard*/) {
+    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("cf_reply"));
     const TMonotonic start = TMonotonic::Now();
     NBlobOperations::NRead::TCompositeReadBlobs blobsData = ExtractBlobsData();
     blobsData.Merge(std::move(ProvidedBlobs));
@@ -46,12 +50,14 @@ void TColumnsFetcherTask::DoOnDataReady(const std::shared_ptr<NResourceBroker::N
     }
     AFL_VERIFY(blobsData.IsEmpty());
     if (readActions.IsEmpty()) {
+        FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("cf_finished"));
         for (auto&& i : DataFetchers) {
             Source->MutableStageData().AddFetcher(i.second);
         }
         auto task = std::make_shared<TStepAction>(Source, std::move(Cursor), Source->GetContext()->GetCommonContext()->GetScanActorId());
         NConveyor::TScanServiceOperator::SendTaskToExecute(task, Source->GetContext()->GetCommonContext()->GetConveyorProcessId());
     } else {
+        FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("cf_next"));
         std::shared_ptr<TColumnsFetcherTask> nextReadTask = std::make_shared<TColumnsFetcherTask>(
             std::move(readActions), DataFetchers, Source, std::move(Cursor), GetTaskCustomer(), GetExternalTaskId());
         NActors::TActivationContext::AsActorContext().Register(new NOlap::NBlobOperations::NRead::TActor(nextReadTask));

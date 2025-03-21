@@ -1,0 +1,34 @@
+{
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+            ["f2";["OptionalType";["DataType";"String"]]];
+            ["val";["OptionalType";["DataType";"Int32"]]]]
+        ];
+    };
+
+    "schema" = <"strict" = %true; "unique_keys" = %false>
+    [
+        {
+            "name" = "f2";
+            "type" = "string";
+            "type_v3" = {"type_name" = "optional"; item = "string"}
+        };
+        {
+            "name" = "val";
+            "type" = "int64";
+            "type_v3" = {"type_name" = "optional"; item = "int64"}
+        };
+    ];
+    "extended_stats" = [
+        {
+            "column_name" = "f2";
+            "data_weight" = 32;
+            "num_unique_vals" = 4;
+        };
+        {
+            "column_name" = "val";
+            "data_weight" = 24;
+            "num_unique_vals" = 5;
+        };
+    ]
+}

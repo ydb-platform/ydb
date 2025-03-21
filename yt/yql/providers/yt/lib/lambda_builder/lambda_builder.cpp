@@ -22,7 +22,8 @@ TLambdaBuilder::TLambdaBuilder(const NKikimr::NMiniKQL::IFunctionRegistry* funct
         const TIntrusivePtr<ITimeProvider>& timeProvider,
         NKikimr::NMiniKQL::IStatsRegistry* jobStats,
         NKikimr::NUdf::ICountersProvider* counters,
-        const NKikimr::NUdf::ISecureParamsProvider* secureParamsProvider)
+        const NKikimr::NUdf::ISecureParamsProvider* secureParamsProvider,
+        const NKikimr::NUdf::ILogProvider* logProvider)
     : FunctionRegistry(functionRegistry)
     , Alloc(alloc)
     , RandomProvider(randomProvider)
@@ -30,6 +31,7 @@ TLambdaBuilder::TLambdaBuilder(const NKikimr::NMiniKQL::IFunctionRegistry* funct
     , JobStats(jobStats)
     , Counters(counters)
     , SecureParamsProvider(secureParamsProvider)
+    , LogProvider(logProvider)
     , Env(env)
 {
 }
@@ -180,7 +182,9 @@ THolder<IComputationGraph> TLambdaBuilder::BuildGraph(
     TString serialized;
 
     TComputationPatternOpts patternOpts(Alloc.Ref(), GetTypeEnvironment());
-    patternOpts.SetOptions(factory, FunctionRegistry, validateMode, validatePolicy, optLLVM, graphPerProcess, JobStats, Counters, SecureParamsProvider);
+    patternOpts.SetOptions(factory, FunctionRegistry, validateMode, validatePolicy,
+        optLLVM, graphPerProcess, JobStats, Counters,
+        SecureParamsProvider, LogProvider);
     auto preparePatternFunc = [&]() {
         if (serialized) {
             auto tupleRunTimeNodes = DeserializeRuntimeNode(serialized, GetTypeEnvironment());
@@ -201,7 +205,8 @@ THolder<IComputationGraph> TLambdaBuilder::BuildGraph(
     auto pattern = preparePatternFunc();
     YQL_ENSURE(pattern);
 
-    const TComputationOptsFull computeOpts(JobStats, Alloc.Ref(), GetTypeEnvironment(), *randomProvider, *timeProvider, validatePolicy, SecureParamsProvider, Counters);
+    const TComputationOptsFull computeOpts(JobStats, Alloc.Ref(), GetTypeEnvironment(), *randomProvider, *timeProvider,
+        validatePolicy, SecureParamsProvider, Counters, LogProvider);
     auto graph = pattern->Clone(computeOpts);
     return MakeHolder<TComputationGraphProxy>(std::move(pattern), std::move(graph));
 }

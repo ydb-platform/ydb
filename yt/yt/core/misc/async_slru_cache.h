@@ -2,13 +2,14 @@
 
 #include "public.h"
 #include "cache_config.h"
-#include "memory_usage_tracker.h"
 
 #include <yt/yt/core/actions/future.h>
 
 #include <yt/yt/core/profiling/timing.h>
 
 #include <yt/yt/library/profiling/sensor.h>
+
+#include <library/cpp/yt/memory/memory_usage_tracker.h>
 
 #include <library/cpp/yt/threading/atomic_object.h>
 #include <library/cpp/yt/threading/rw_spin_lock.h>

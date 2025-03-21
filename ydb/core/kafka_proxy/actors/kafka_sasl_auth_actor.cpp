@@ -182,13 +182,25 @@ void TKafkaSaslAuthActor::SendDescribeRequest(const TActorContext& ctx) {
     entry.Operation = NKikimr::NSchemeCache::TSchemeCacheNavigate::OpPath;
     entry.SyncVersion = false;
     schemeCacheRequest->ResultSet.emplace_back(entry);
+    schemeCacheRequest->DatabaseName = CanonizePath(DatabasePath);
     ctx.Send(NKikimr::MakeSchemeCacheID(), MakeHolder<NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
 }
 
 void TKafkaSaslAuthActor::Handle(NKikimr::TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev, const TActorContext& ctx) {
     const NKikimr::NSchemeCache::TSchemeCacheNavigate* navigate = ev->Get()->Request.Get();
     if (navigate->ErrorCount) {
-        SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "", TStringBuilder() << "Database with path '" << DatabasePath << "' doesn't exists", ctx);
+        switch(navigate->ResultSet.front().Status) {
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::RootUnknown:
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathErrorUnknown:
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotTable:
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::PathNotPath:
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::TableCreationNotComplete:
+                return SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "", TStringBuilder() << "Database with path '" << DatabasePath << "' doesn't exists", ctx);
+            case NSchemeCache::TSchemeCacheNavigate::EStatus::AccessDenied:
+                return SendResponseAndDie(EKafkaErrors::SASL_AUTHENTICATION_FAILED, "", TStringBuilder() << "Database with path '" << DatabasePath << "' access denied", ctx);
+            default:
+                return SendResponseAndDie(EKafkaErrors::BROKER_NOT_AVAILABLE, "", TStringBuilder() << "Internal error with navigate status " << navigate->ResultSet.front().Status, ctx);
+        }
         return;
     }
     Y_ABORT_UNLESS(navigate->ResultSet.size() == 1);

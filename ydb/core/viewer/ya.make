@@ -72,6 +72,7 @@ SRCS(
     viewer_describe.h
     viewer_describe_topic.h
     viewer_feature_flags.h
+    viewer_topic_data.cpp
     viewer_graph.h
     viewer_healthcheck.h
     viewer_helper.h
@@ -595,6 +596,7 @@ PEERDIR(
     ydb/public/api/grpc
     ydb/public/sdk/cpp/adapters/issue
     ydb/public/sdk/cpp/src/client/types
+    ydb/services/lib/auth
     contrib/libs/yaml-cpp
 )
 

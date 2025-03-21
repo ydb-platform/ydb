@@ -347,6 +347,23 @@ namespace NActors {
         void DoActorInit() { LastUsageTimestamp = GetCycleCountFast(); }
     };
 
+    /**
+     * Optional interface for actors with exception handling
+     */
+    class IActorExceptionHandler {
+    protected:
+        ~IActorExceptionHandler() = default;
+
+    public:
+        /**
+         * Called when actor's event handler throws an std::exception subclass
+         *
+         * The implementation is supposed to return true for handled exceptions
+         * and false to rethrow (which will likely result in a process crash).
+         */
+        virtual bool OnUnhandledException(const std::exception&) = 0;
+    };
+
     class IActor
         : protected IActorOps
         , public TActorUsageImpl<ActorLibCollectUsageStats>
@@ -547,16 +564,7 @@ namespace NActors {
             return SelfActorId;
         }
 
-        void Receive(TAutoPtr<IEventHandle>& ev) {
-#ifndef NDEBUG
-            if (ev->Flags & IEventHandle::FlagDebugTrackReceive) {
-                YaDebugBreak();
-            }
-#endif
-            ++HandledEvents;
-            LastReceiveTimestamp = TActivationContext::Monotonic();
-            (this->*StateFunc_)(ev);
-        }
+        void Receive(TAutoPtr<IEventHandle>& ev);
 
         TActorContext ActorContext() const {
             return TActivationContext::ActorContextFor(SelfId());

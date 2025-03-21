@@ -2423,4 +2423,52 @@ TExprNode::TPtr KeepWorld(TExprNode::TPtr node, const TExprNode& src, TExprConte
     }
 }
 
+TOperationProgress::EOpBlockStatus DetermineProgramBlockStatus(const TExprNode& root) {
+    auto pRoot = &root;
+
+    // TODO: remove after block IO transition to Stream
+    if (pRoot->IsCallable("ToFlow")) {
+        pRoot = &pRoot->Head();
+    }
+
+    if (pRoot->IsCallable("WideFromBlocks")) {
+        // Assume Full block status even if block output is not applied
+        pRoot = &pRoot->Head();
+    }
+
+    auto rootType = pRoot->GetTypeAnn();
+    YQL_ENSURE(rootType);
+
+    auto status = IsWideSequenceBlockType(*rootType) ? TOperationProgress::EOpBlockStatus::Full : TOperationProgress::EOpBlockStatus::None;
+    bool stop = false;
+    VisitExpr(*pRoot, [&](const TExprNode& node) {
+        if (stop || node.IsLambda()) {
+            return false;
+        }
+
+        const TTypeAnnotationNode* nodeType = node.GetTypeAnn();
+        YQL_ENSURE(nodeType);
+
+        if (nodeType->GetKind() != ETypeAnnotationKind::Stream && nodeType->GetKind() != ETypeAnnotationKind::Flow) {
+            return false;
+        }
+
+        const bool isBlock = IsWideSequenceBlockType(*nodeType);
+        if (status == TOperationProgress::EOpBlockStatus::Full && !isBlock ||
+            status == TOperationProgress::EOpBlockStatus::None && isBlock)
+        {
+            status = TOperationProgress::EOpBlockStatus::Partial;
+        }
+
+        if (status == TOperationProgress::EOpBlockStatus::Partial) {
+            stop = true;
+            return false;
+        }
+
+        return true;
+    });
+
+    return status;
+}
+
 }

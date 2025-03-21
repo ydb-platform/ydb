@@ -665,12 +665,12 @@ void TRichYPath::SetCluster(const std::string& value)
     Attributes().Set("cluster", value);
 }
 
-std::optional<std::vector<TString>> TRichYPath::GetClusters() const
+std::optional<std::vector<std::string>> TRichYPath::GetClusters() const
 {
-    return FindAttribute<std::vector<TString>>(*this, "clusters");
+    return FindAttribute<std::vector<std::string>>(*this, "clusters");
 }
 
-void TRichYPath::SetClusters(const std::vector<TString>& value)
+void TRichYPath::SetClusters(const std::vector<std::string>& value)
 {
     Attributes().Set("clusters", value);
 }

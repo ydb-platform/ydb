@@ -128,11 +128,11 @@ struct TRecordBatch
 
     i32 LastOffsetDelta = 0;
     // BaseTimestamp in v2 and ... TODO in v1.
-    i64 FirstTimestamp = 0;
-    i64 MaxTimestamp = 0;
+    i64 FirstTimestamp = -1;
+    i64 MaxTimestamp = -1;
 
-    i64 ProducerId = 0;
-    i16 ProducerEpoch = 0;
+    i64 ProducerId = -1;
+    i16 ProducerEpoch = -1;
     // Same as BaseSequence in v2 and TODO.
     i32 BaseSequence = 0;
 
@@ -250,7 +250,7 @@ struct TRspMetadata
 {
     i32 ThrottleTimeMs = 0;
     std::vector<TRspMetadataBroker> Brokers;
-    std::optional<TString> ClusterId;
+    std::optional<std::string> ClusterId;
     i32 ControllerId = 0;
     std::vector<TRspMetadataTopic> Topics;
     std::vector<TTaggedField> TagBuffer;
@@ -366,6 +366,25 @@ struct TReqHeartbeat
 };
 
 struct TRspHeartbeat
+{
+    NKafka::EErrorCode ErrorCode = NKafka::EErrorCode::None;
+
+    void Serialize(IKafkaProtocolWriter* writer, int apiVersion) const;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TReqLeaveGroup
+{
+    static constexpr ERequestType RequestType = ERequestType::LeaveGroup;
+
+    TGroupId GroupId;
+    TMemberId MemberId;
+
+    void Deserialize(IKafkaProtocolReader* reader, int apiVersion);
+};
+
+struct TRspLeaveGroup
 {
     NKafka::EErrorCode ErrorCode = NKafka::EErrorCode::None;
 

@@ -22,6 +22,7 @@ public:
     friend class TTxPersistSubDomainOutOfSpace;
     friend class TTxPersistSubDomainPathId;
     friend class NKikimr::NColumnShard::NLoading::TSpecialValuesInitializer;
+    friend class TTxMonitoring;
 
 public:
     TSpaceWatcher(TColumnShard* self)

@@ -16,6 +16,8 @@ struct TTaskInfo {
     TString Owner;
     TSet<TString> Permissions;
     bool HasSingleCompositeActionGroup = false;
+    TInstant CreateTime;
+    TInstant LastRefreshTime;
 
     TString ToString() const {
         return TStringBuilder() << "{"
@@ -24,6 +26,8 @@ struct TTaskInfo {
             << " Owner: " << Owner
             << " Permissions: [" << JoinSeq(", ", Permissions) << "]"
             << " HasSingleCompositeActionGroup: " << HasSingleCompositeActionGroup
+            << " CreateTime: " << CreateTime
+            << " LastRefreshTime: " << LastRefreshTime
             << " }";
     }
 };

@@ -401,7 +401,8 @@ TRuntimeNode BuildDqYtInputCall(
                 YQL_ENSURE(tableName, "Unaccounted anonymous table: " << pathInfo.Table->Name);
             }
 
-            NYT::TRichYPath richYPath = state->Gateway->GetRealTable(state->SessionId, clusterName, tableName, pathInfo.Table->Epoch.GetOrElse(0), tmpFolder);
+            NYT::TRichYPath richYPath = state->Gateway->GetRealTable(state->SessionId, clusterName, tableName,
+                pathInfo.Table->Epoch.GetOrElse(0), tmpFolder, pathInfo.Table->IsTemp, pathInfo.Table->IsAnonymous);
             pathInfo.FillRichYPath(richYPath);
             auto pathNode = NYT::PathToNode(richYPath);
 

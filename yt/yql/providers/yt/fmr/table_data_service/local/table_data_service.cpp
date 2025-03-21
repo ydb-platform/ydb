@@ -1,4 +1,5 @@
 #include "table_data_service.h"
+#include <yt/yql/providers/yt/fmr/utils/table_data_service_key.h>
 
 namespace NYql::NFmr {
 

@@ -359,6 +359,7 @@ public:
     TActorId TabletMigrator;
 
     ui32 MaxCdcInitialScanShardsInFlight = 10;
+    ui32 MaxRestoreBuildIndexShardsInFlight = 0;
 
     TDuration StatsMaxExecuteTime;
     TDuration StatsBatchTimeout;
@@ -1548,6 +1549,8 @@ private:
     const TDomainsInfo::TDomain& GetDomainDescription(const TActorContext &ctx) const;
     NKikimrSubDomains::TProcessingParams CreateRootProcessingParams(const TActorContext &ctx);
     static NTabletPipe::TClientConfig GetPipeClientConfig();
+
+    static bool IsLoginCacheEnabled();
 
 public:
     static const NKikimrConfig::TDomainsConfig& GetDomainsConfig();

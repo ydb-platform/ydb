@@ -281,7 +281,7 @@ namespace {
 
     void TDump::Key(TCellsRef key, const TPartScheme &scheme)
     {
-        Out << "(";
+        Out << "{";
 
         for (auto off : xrange(key.size())) {
             TString str;
@@ -291,7 +291,7 @@ namespace {
             Out << (off ? ", " : "") << str;
         }
 
-        Out << ")";
+        Out << "}";
     }
 
     void TDump::BTreeIndexNode(const TPart &part, NPage::TBtreeIndexNode::TChild meta, ui32 level)

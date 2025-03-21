@@ -551,6 +551,7 @@ message TMonitoringConfig {
     optional string MemAllocDumpPathPrefix = 16;
     optional uint32 MaxRequestsPerSecond = 17 [default = 0];
     optional string InactivityTimeout = 18 [default = "2m"];
+    optional bool HideHttpEndpoint = 19 [default = false];
 }
 
 message TRestartsCountConfig {
@@ -1227,6 +1228,12 @@ message TImmediateControlsConfig {
             MinValue: 0,
             MaxValue: 134217728,
             DefaultValue: 0 }];
+
+        optional uint64 ReadIteratorKeysExtBlobsPrecharge = 21 [(ControlOptions) = {
+          Description: "Enable new precharge for DataShard read iterator",
+          MinValue: 0,
+          MaxValue: 1,
+          DefaultValue: 0 }];
     }
 
     message TTxLimitControls {
@@ -1448,6 +1455,12 @@ message TImmediateControlsConfig {
             MinValue: 1,
             MaxValue: 1000,
             DefaultValue: 130 }];
+
+        optional uint64 MaxInProgressSyncCount = 27 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous VDisk sync processes; 0 means no limit",
+            MinValue: 0,
+            MaxValue: 1000,
+            DefaultValue: 0 }];
     }
 
     message TTabletControls {
@@ -1583,6 +1596,18 @@ message TImmediateControlsConfig {
         }];
     }
 
+    message TGRpcControls {
+        message TRequestConfig {
+            optional uint64 MaxInFlight = 1 [(ControlOptions) = {
+                Description: "Max in flight requests",
+                MinValue: 0,
+                MaxValue: 1000000,
+                DefaultValue: 0
+            }];
+        }
+        map<string, TRequestConfig> RequestConfigs = 1;
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
@@ -1596,6 +1621,7 @@ message TImmediateControlsConfig {
     optional TBlobStorageControllerControls BlobStorageControllerControls = 11;
     optional TTableServiceControls TableServiceControls = 12;
     optional TTestShardControls TestShardControls = 13;
+    optional TGRpcControls GRpcControls = 14;
 };
 
 message TMeteringConfig {
@@ -1781,11 +1807,15 @@ message THiveConfig {
 }
 
 message THealthCheckConfig {
-    optional uint32 NodeRestartsPerPeriodYellowThreshold = 1 [default = 10];
-    optional uint32 NodeRestartsPerPeriodOrangeThreshold = 2 [default = 30];
-    optional uint64 NodesTimeDifferenceUsYellowThreshold = 3 [default = 5000];
-    optional uint64 NodesTimeDifferenceUsOrangeThreshold = 4 [default = 25000];
-    optional uint32 TabletsRestartsPerPeriodOrangeThreshold = 5 [default = 30];
+    message TThresholds {
+        optional uint32 NodeRestartsYellow = 1 [default = 10]; // per period, see HiveConfig.NodeRestartWatchPeriod
+        optional uint32 NodeRestartsOrange = 2 [default = 30]; // per period, see HiveConfig.NodeRestartWatchPeriod
+        optional uint64 NodesTimeDifferenceYellow = 3 [default = 5000]; // microseconds
+        optional uint64 NodesTimeDifferenceOrange = 4 [default = 25000]; // microseconds
+        optional uint32 TabletsRestartsOrange = 5 [default = 30]; // per period, see HiveConfig.TabletRestartWatchPeriod
+    }
+    optional TThresholds Thresholds = 1;
+    optional uint32 Timeout = 2 [default = 20000]; // milliseconds
 }
 
 message TBlobCacheConfig {
@@ -1883,6 +1913,10 @@ message TSchemeShardConfig {
 
     // number of shards per table
     optional uint32 MaxCdcInitialScanShardsInFlight = 5 [default = 32];
+
+    // number of shards per table
+    // 0 means default - NKikimrIndexBuilder.TIndexBuildSettings.max_shards_in_flight
+    optional uint32 MaxRestoreBuildIndexShardsInFlight = 6 [default = 1000];
 }
 
 message TCompactionConfig {

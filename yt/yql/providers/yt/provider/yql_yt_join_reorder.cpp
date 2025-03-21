@@ -58,12 +58,10 @@ public:
     TJoinReorderer(
         TYtJoinNodeOp::TPtr op,
         const TYtState::TPtr& state,
-        const TString& cluster,
         TExprContext& ctx,
         bool debug = false)
         : Root(op)
         , State(state)
-        , Cluster(cluster)
         , Ctx(ctx)
         , Debug(debug)
     {
@@ -78,7 +76,7 @@ public:
         std::shared_ptr<IBaseOptimizerNode> tree;
         TOptimizerLinkSettings linkSettings;
         std::shared_ptr<IProviderContext> providerCtx;
-        BuildOptimizerJoinTree(State, Cluster, tree, providerCtx, linkSettings, Root, Ctx);
+        BuildOptimizerJoinTree(State, tree, providerCtx, linkSettings, Root, Ctx);
         auto ytCtx = std::static_pointer_cast<TYtProviderContext>(providerCtx);
 
         std::function<void(const TString& str)> log;
@@ -139,7 +137,6 @@ public:
 private:
     TYtJoinNodeOp::TPtr Root;
     const TYtState::TPtr& State;
-    TString Cluster;
     TExprContext& Ctx;
     bool Debug;
 };
@@ -177,9 +174,8 @@ class TOptimizerTreeBuilder
 {
 public:
     TOptimizerLinkSettings LinkSettings;
-    TOptimizerTreeBuilder(TYtState::TPtr state, const TString& cluster, std::shared_ptr<IBaseOptimizerNode>& tree, std::shared_ptr<IProviderContext>& providerCtx, TYtJoinNodeOp::TPtr inputTree, TExprContext& ctx)
+    TOptimizerTreeBuilder(TYtState::TPtr state, std::shared_ptr<IBaseOptimizerNode>& tree, std::shared_ptr<IProviderContext>& providerCtx, TYtJoinNodeOp::TPtr inputTree, TExprContext& ctx)
         : State(state)
-        , Cluster(cluster)
         , Tree(tree)
         , OutProviderCtx(providerCtx)
         , InputTree(inputTree)
@@ -258,7 +254,7 @@ private:
         }
         TRelSizeInfo leftSizeInfo;
         TRelSizeInfo rightSizeInfo;
-        PopulateJoinStrategySizeInfo(leftSizeInfo, rightSizeInfo, State, Cluster, Ctx, op);
+        PopulateJoinStrategySizeInfo(leftSizeInfo, rightSizeInfo, State, Ctx, op);
 
         auto left = ProcessNode(op->Left, leftSizeInfo);
         auto right = ProcessNode(op->Right, rightSizeInfo);
@@ -374,7 +370,7 @@ private:
 
         TSet<TString> requestedColumns;
         IYtGateway::TPathStatResult result;
-        auto status = TryEstimateDataSize(result, requestedColumns, Cluster, paths, columns, *State, Ctx);
+        auto status = TryEstimateDataSize(result, requestedColumns, paths, columns, *State, Ctx);
         YQL_ENSURE(status != IGraphTransformer::TStatus::Error);
         if (status != IGraphTransformer::TStatus::Ok) {
             YQL_CLOG(WARN, ProviderYt) << "Unable to read path stats that must be already present in cache";
@@ -434,7 +430,6 @@ private:
     }
 
     TYtState::TPtr State;
-    const TString Cluster;
     std::shared_ptr<IBaseOptimizerNode>& Tree;
     std::shared_ptr<IProviderContext>& OutProviderCtx;
     THashMap<TString, THashSet<TString>> RelJoinColumns;
@@ -517,9 +512,9 @@ bool AreSimilarTrees(TYtJoinNode::TPtr node1, TYtJoinNode::TPtr node2) {
     }
 }
 
-void BuildOptimizerJoinTree(TYtState::TPtr state, const TString& cluster, std::shared_ptr<IBaseOptimizerNode>& tree, std::shared_ptr<IProviderContext>& providerCtx, TOptimizerLinkSettings& linkSettings, TYtJoinNodeOp::TPtr op, TExprContext& ctx)
+void BuildOptimizerJoinTree(TYtState::TPtr state, std::shared_ptr<IBaseOptimizerNode>& tree, std::shared_ptr<IProviderContext>& providerCtx, TOptimizerLinkSettings& linkSettings, TYtJoinNodeOp::TPtr op, TExprContext& ctx)
 {
-    TOptimizerTreeBuilder builder(state, cluster, tree, providerCtx, op, ctx);
+    TOptimizerTreeBuilder builder(state, tree, providerCtx, op, ctx);
     builder.Do();
     linkSettings = builder.LinkSettings;
 }
@@ -529,13 +524,13 @@ TYtJoinNode::TPtr BuildYtJoinTree(std::shared_ptr<IBaseOptimizerNode> node, TExp
     return BuildYtJoinTree(node, scope, ctx, pos);
 }
 
-TYtJoinNodeOp::TPtr OrderJoins(TYtJoinNodeOp::TPtr op, const TYtState::TPtr& state, const TString& cluster, TExprContext& ctx, bool debug)
+TYtJoinNodeOp::TPtr OrderJoins(TYtJoinNodeOp::TPtr op, const TYtState::TPtr& state, TExprContext& ctx, bool debug)
 {
     if (state->Types->CostBasedOptimizer == ECostBasedOptimizerType::Disable || op->CostBasedOptPassed) {
         return op;
     }
 
-    auto result = TJoinReorderer(op, state, cluster, ctx, debug).Do();
+    auto result = TJoinReorderer(op, state, ctx, debug).Do();
     if (!debug && AreSimilarTrees(result, op)) {
         return op;
     }

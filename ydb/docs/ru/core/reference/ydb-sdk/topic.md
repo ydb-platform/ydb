@@ -24,6 +24,10 @@
 
   [Примеры на GitHub](https://github.com/ydb-platform/ydb-python-sdk/tree/main/examples/topic)
 
+- C#
+  
+  [Примеры на GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples/src/Topic)
+
 
 {% endlist %}
 
@@ -93,6 +97,45 @@
 
   В обоих примерах кода выше используется блок ([try-with-resources](https://docs.oracle.com/javase/tutorial/essential/exceptions/tryResourceClose.html)).
   Это позволяет автоматически закрывать клиент и транспорт при выходе из этого блока, т.к. оба являются наследниками `AutoCloseable`.
+
+- C#
+
+  Для работы с топиками нужно создать экземпляр драйвера {{ ydb-short-name }}.
+
+  Драйвер {{ ydb-short-name }} отвечает за взаимодействие приложения и {{ ydb-short-name }} на транспортном уровне. Драйвер должен существовать на всем протяжении жизненного цикла работы с топиками и должен быть инициализирован перед созданием клиента.
+
+  Фрагмент кода приложения для инициализации драйвера {{ ydb-short-name }}:
+
+  ```c#
+  var config = new DriverConfig(
+      endpoint: "grpc://localhost:2136",
+      database: "/local"
+  );
+
+  await using var driver = await Driver.CreateInitialized(
+      config: config,
+      loggerFactory: loggerFactory
+  );
+  ```
+  
+  В этом примере используется анонимная аутентификация. Подробнее про [соединение с базой данных](../../concepts/connect.md) и [аутентификацию](../../security/authentication.md).
+
+  Фрагмент кода приложения для создания различных клиентов к топикам:
+
+  ```c#
+  var topicClient = new TopicClient(driver);
+
+  await using var writer = new WriterBuilder<string>(driver, topicName)
+  {
+      ProducerId = "ProducerId_Example"
+  }.Build();
+  
+  await using var reader = new ReaderBuilder<string>(driver)
+  {
+      ConsumerName = "Consumer_Example",
+      SubscribeSettings = { new SubscribeSettings(topicName) }
+  }.Build();
+  ```
 
 {% endlist %}
 
@@ -165,6 +208,23 @@
                           .setMinActivePartitions(3)
                           .build())
                   .build());
+  ```
+  
+- C#
+
+  Пример создания топика со списком поддерживаемых кодеков и минимальным количеством партиций:
+
+  ```c#
+  await topicClient.CreateTopic(new CreateTopicSettings
+  {
+      Path = topicName,
+      Consumers = { new Consumer("Consumer_Example") },
+      SupportedCodecs = { Codec.Raw, Codec.Gzip },
+      PartitioningSettings = new PartitioningSettings
+      {
+          MinActivePartitions = 3
+      }
+  });
   ```
 
 {% endlist %}
@@ -325,6 +385,12 @@
   ```java
   topicClient.dropTopic(topicPath);
   ```
+  
+- C#
+
+  ```c#
+  await topicClient.DropTopic(topicName);
+  ```
 
 {% endlist %}
 
@@ -436,6 +502,15 @@
               logger.error("Init failed with ex: ", ex);
               return null;
           });
+  ```
+  
+- C#
+
+  ```c#
+  await using var writer = new WriterBuilder<string>(driver, topicName)
+  {
+      ProducerId = "ProducerId_Example"
+  }.Build();
   ```
 
 {% endlist %}
@@ -576,6 +651,14 @@
   }
   ```
 
+- C#
+
+  Асинхронная запись сообщения в топик.
+
+  ```c#
+  var asyncWriteTask = writer.WriteAsync("Hello, Example YDB Topics!"); // Task<WriteResult>
+  ```
+
 {% endlist %}
 
 ### Запись сообщений с подтверждением о сохранении на сервере
@@ -686,6 +769,23 @@
                 }
             }
         });
+  ```
+  
+- С#
+
+  Асинхронная запись сообщения в топик. В случае переполнения внутреннего буфера будет ожидать, когда буфер освободится для повторной отправки.
+
+  ```c#
+  await writer.WriteAsync("Hello, Example YDB Topics!");
+  ```
+
+  В случае, если сервер недоступен, сообщения могут накапливаться в очереди в ожидании отправки. Для управления временем ожидания можно использовать токен отмены (`CancellationToken`). Однако, при таком подходе существует вероятность того, что пользователь может отменить отправку уже подтвержденного сообщения.
+
+  ```c#
+  var writeCts = new CancellationTokenSource();
+  writeCts.CancelAfter(TimeSpan.FromSeconds(3));
+  
+  await writer.WriteAsync("Hello, Example YDB Topics!", writeCts.Token);
   ```
 
 {% endlist %}
@@ -855,6 +955,15 @@
   message = reader.receive_message()
   for meta_key, meta_value in message.metadata_items.items():
       print(f"{meta_key}: {meta_value}")
+  ```
+
+- C#
+
+  ```c#
+  await writer.WriteAsync(
+      new Ydb.Sdk.Services.Topic.Writer.Message<string>("Hello, Example YDB Topics!")
+          { Metadata = { new Metadata("meta-key", "meta-value"u8.ToArray()) } }
+  );
   ```
 
 {% endlist %}
@@ -1165,6 +1274,16 @@
           });
   ```
 
+- С#
+
+  ```c#
+  await using var reader = new ReaderBuilder<string>(driver)
+  {
+      ConsumerName = "Consumer_Example",
+      SubscribeSettings = { new SubscribeSettings(topicName) }
+  }.Build(); 
+  ```
+
 {% endlist %}
 
 Вы также можете использовать расширенный вариант создания подключения, чтобы указать несколько топиков и задать параметры чтения. Следующий код создаст подключение к топикам `my-topic` и `my-specific-topic` через читателя `my-consumer`:
@@ -1224,6 +1343,20 @@
                   .build())
           .build();
   ```
+  
+- C#
+
+  ```c#
+  await using var reader = new ReaderBuilder<string>(driver)
+  {
+      ConsumerName = "Consumer_Example",
+      SubscribeSettings =
+      {
+          new SubscribeSettings(topicName),
+          new SubscribeSettings(topicName + "_another") { ReadFrom = DateTime.Now }
+      }
+  }.Build();
+  ```
 
 {% endlist %}
 
@@ -1249,15 +1382,19 @@
 
 - Go
 
-  SDK получает данные с сервера партиями и буферизирует их. В зависимости от задач клиентский код может читать сообщения из буфера по одному или пакетами.
+  {% include [_includes/reading_messages_common.md](_includes/reading_messages_common.md) %}
 
 - Python
 
-  SDK получает данные с сервера партиями и буферизирует их. В зависимости от задач клиентский код может читать сообщения из буфера по одному или пакетами.
+  {% include [_includes/reading_messages_common.md](_includes/reading_messages_common.md) %}
 
 - Java
 
-  SDK получает данные с сервера партиями и буферизирует их. В зависимости от задач клиентский код может читать сообщения из буфера по одному или пакетами.
+  {% include [_includes/reading_messages_common.md](_includes/reading_messages_common.md) %}
+
+- C#
+
+  {% include [_includes/reading_messages_common.md](_includes/reading_messages_common.md) %}
 
 {% endlist %}
 
@@ -1308,6 +1445,23 @@
 - Java (async)
 
   В асинхронном клиенте нет возможности читать сообщения по одному.
+
+- C#
+
+  ```c#
+  try
+  {
+      while (!readerCts.IsCancellationRequested)
+      {
+          var message = await reader.ReadAsync(readerCts.Token);
+
+          logger.LogInformation("Received message: [{MessageData}]", message.Data);
+      }
+  }
+  catch (OperationCanceledException)
+  {
+  }
+  ```
 
 {% endlist %}
 
@@ -1374,6 +1528,26 @@
               process(message);
           }
       }
+  }
+  ```
+  
+- C#
+
+  ```c#
+  try
+  {
+      while (!readerCts.IsCancellationRequested)
+      {
+          var batchMessages = await reader.ReadBatchAsync(readerCts.Token);
+
+          foreach (var message in batchMessages.Batch)
+          {
+              logger.LogInformation("Received message: [{MessageData}]", message.Data);    
+          }
+      }
+  }
+  catch (OperationCanceledException)
+  {
   }
   ```
 
@@ -1445,6 +1619,32 @@
                  logger.info("message committed successfully");
              }
          });
+  ```
+  
+- C#
+
+  ```c#
+  try
+  {
+      while (!readerCts.IsCancellationRequested)
+      {
+          var message = await reader.ReadAsync(readerCts.Token);
+
+          logger.LogInformation("Received message: [{MessageData}]", message.Data);
+
+          try
+          {
+              await message.CommitAsync();
+          }
+          catch (ReaderException e)
+          {
+              logger.LogError(e, "Failed to commit a message");
+          }
+      }
+  }
+  catch (OperationCanceledException)
+  {
+  }
   ```
 
 {% endlist %}
@@ -1524,6 +1724,35 @@
                      logger.info("message batch committed successfully");
                  }
              });
+  }
+  ```
+  
+- С#
+
+  ```c#
+  try
+  {
+      while (!readerCts.IsCancellationRequested)
+      {
+          var batchMessages = await reader.ReadBatchAsync(readerCts.Token);
+
+          foreach (var message in batchMessages.Batch)
+          {
+              logger.LogInformation("Received message: [{MessageData}]", message.Data);    
+          }
+
+          try
+          {
+              await batchMessages.CommitBatchAsync();
+          }
+          catch (ReaderException e)
+          {
+              logger.LogError(e, "Failed to commit a message");
+          }
+      }
+  }
+  catch (OperationCanceledException)
+  {
   }
   ```
 

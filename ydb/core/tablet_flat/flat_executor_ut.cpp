@@ -523,7 +523,7 @@ class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFl
 
     void Handle(TEvents::TEvPoison::TPtr &, const TActorContext &ctx) {
         Become(&TThis::StateBroken);
-        Executor()->DetachTablet(ctx), Detach(ctx); /* see TDummy tablet */
+        Executor()->DetachTablet(), Detach(ctx); /* see TDummy tablet */
         ctx.Send(Sender, new TEvents::TEvGone);
     }
 
@@ -7351,6 +7351,42 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_LowPriorityTxs) {
                 }});
             }});
         }});
+    }
+}
+
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_Exceptions) {
+    struct TTxExecuteThrowException : public ITransaction {
+        bool Execute(TTransactionContext&, const TActorContext&) override {
+            throw std::runtime_error("test");
+        }
+
+        void Complete(const TActorContext&) override {
+            // not reached
+        }
+    };
+
+    Y_UNIT_TEST(TestTabletExecuteExceptionDirect) {
+        TMyEnvBase env;
+        env->GetAppData().FeatureFlags.SetEnableTabletRestartOnUnhandledExceptions(true);
+
+        env.FireDummyTablet();
+
+        env.SendAsync(new NFake::TEvExecute([&](auto* x, const auto& ctx) {
+            x->Execute(new TTxExecuteThrowException, ctx);
+        }));
+        env.WaitForGone();
+    }
+
+    Y_UNIT_TEST(TestTabletExecuteExceptionEnqueue) {
+        TMyEnvBase env;
+        env->GetAppData().FeatureFlags.SetEnableTabletRestartOnUnhandledExceptions(true);
+
+        env.FireDummyTablet();
+
+        env.SendAsync(new NFake::TEvExecute([&](auto* x, const auto&) {
+            x->Enqueue(new TTxExecuteThrowException);
+        }));
+        env.WaitForGone();
     }
 }
 

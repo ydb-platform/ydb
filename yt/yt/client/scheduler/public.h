@@ -22,6 +22,12 @@ extern const TJobTraceId NullJobTraceId;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+YT_DEFINE_STRONG_TYPEDEF(TAllocationId, TGuid);
+
+constexpr TAllocationId NullAllocationId{};
+
+////////////////////////////////////////////////////////////////////////////////
+
 using NJobTrackerClient::TJobId;
 using NJobTrackerClient::TOperationId;
 
@@ -154,6 +160,7 @@ DEFINE_ENUM(EAbortReason,
     ((OperationIncarnationChanged)     ( 56))
     ((AddressResolveFailed)            ( 57))
     ((UnexpectedNodeJobPhase)          ( 58))
+    ((JobCountChangedByUserRequest)    ( 59))
     ((SchedulingFirst)                 (100))
     ((SchedulingTimeout)               (101))
     ((SchedulingResourceOvercommit)    (102))

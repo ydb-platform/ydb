@@ -312,6 +312,7 @@ struct TExecutorCaches {
 class TExecutor
     : public TActor<TExecutor>
     , public NFlatExecutorSetup::IExecutor
+    , public IActorExceptionHandler
     , private NTable::ICompactionBackend
     , private ILoadBlob
 {
@@ -633,7 +634,7 @@ public:
     // IExecutor interface
     void Boot(TEvTablet::TEvBoot::TPtr &ev, const TActorContext &ctx) override;
     void Restored(TEvTablet::TEvRestored::TPtr &ev, const TActorContext &ctx) override;
-    void DetachTablet(const TActorContext &ctx) override;
+    void DetachTablet() override;
     ui64 DoExecute(TAutoPtr<ITransaction> transaction, ETxMode mode);
     void Execute(TAutoPtr<ITransaction> transaction, const TActorContext &ctx) override;
     ui64 Enqueue(TAutoPtr<ITransaction> transaction) override;
@@ -704,6 +705,8 @@ public:
 
     TExecutor(NFlatExecutorSetup::ITablet *owner, const TActorId& ownerActorId);
     ~TExecutor();
+
+    bool OnUnhandledException(const std::exception&) override;
 
     STFUNC(StateInit);
     STFUNC(StateBoot);

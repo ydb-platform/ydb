@@ -75,6 +75,7 @@ namespace NActors {
         Y_ABORT_UNLESS(!CancelFlag);
         Y_ABORT_UNLESS(!AbortFlag);
         Y_ABORT_UNLESS(size >= 0);
+        NSan::CheckMemIsInitialized(data, size);
         while (size) {
             if (const size_t bytesToAppend = Min<size_t>(size, SizeRemain)) {
                 const void *produce = data;
@@ -222,11 +223,15 @@ namespace NActors {
     }
 
     bool TAllocChunkSerializer::WriteRope(const TRope *rope) {
+        for (auto iter = rope->Begin(); iter.Valid(); iter.AdvanceToNextContiguousBlock()) {
+            NSan::CheckMemIsInitialized(iter.ContiguousData(), iter.ContiguousSize());
+        }
         Buffers->Append(TRope(*rope));
         return true;
     }
 
     bool TAllocChunkSerializer::WriteString(const TString *s) {
+        NSan::CheckMemIsInitialized(s->data(), s->size());
         Buffers->Append(*s);
         return true;
     }

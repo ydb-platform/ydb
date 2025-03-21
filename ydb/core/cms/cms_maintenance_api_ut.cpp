@@ -116,6 +116,70 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
         const auto &a = response.action_group_states(0).action_states(0);
         UNIT_ASSERT_VALUES_EQUAL(a.status(), ActionState::ACTION_STATUS_PERFORMED);
     }
+
+    Y_UNIT_TEST(CreateTime) {
+        TCmsTestEnv env(8);
+
+        // Move time to make it different from initial time
+        env.AdvanceCurrentTime(TDuration::MilliSeconds(5500));
+
+        // Create sets create time
+        auto createResult = env.CheckMaintenanceTaskCreate("task-1", Ydb::StatusIds::SUCCESS,
+            MakeActionGroup(
+                MakeLockAction(env.GetNodeId(0), TDuration::Minutes(10))
+            ),
+            MakeActionGroup(
+                MakeLockAction(env.GetNodeId(1), TDuration::Minutes(10))
+            )
+        );
+        UNIT_ASSERT_VALUES_UNEQUAL(createResult.create_time().seconds(), 0);
+        UNIT_ASSERT_VALUES_UNEQUAL(createResult.create_time().nanos(), 0);
+
+        // Move time to make it different from create time
+        env.AdvanceCurrentTime(TDuration::MilliSeconds(5500));
+
+        // Get doesn't update create time
+        auto getResult = env.CheckMaintenanceTaskGet("task-1", Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(getResult.create_time().seconds(), createResult.create_time().seconds());
+        UNIT_ASSERT_VALUES_EQUAL(getResult.create_time().nanos(), createResult.create_time().nanos());
+
+        // Refresh doesn't update create time
+        auto refreshResult = env.CheckMaintenanceTaskRefresh("task-1", Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(refreshResult.create_time().seconds(), createResult.create_time().seconds());
+        UNIT_ASSERT_VALUES_EQUAL(refreshResult.create_time().nanos(), createResult.create_time().nanos());
+    }
+
+    Y_UNIT_TEST(LastRefreshTime) {
+        TCmsTestEnv env(8);
+
+        // Move time to make it different from initial time
+        env.AdvanceCurrentTime(TDuration::MilliSeconds(5500));
+
+        // Create includes refresh, so create sets last refresh time
+        auto createResult = env.CheckMaintenanceTaskCreate("task-1", Ydb::StatusIds::SUCCESS,
+            MakeActionGroup(
+                MakeLockAction(env.GetNodeId(0), TDuration::Minutes(10))
+            ),
+            MakeActionGroup(
+                MakeLockAction(env.GetNodeId(1), TDuration::Minutes(10))
+            )
+        );
+        UNIT_ASSERT_VALUES_UNEQUAL(createResult.last_refresh_time().seconds(), 0);
+        UNIT_ASSERT_VALUES_UNEQUAL(createResult.last_refresh_time().nanos(), 0);
+
+        // Move time to make it different from create time
+        env.AdvanceCurrentTime(TDuration::MilliSeconds(5500));
+
+        // Get doesn't update last refresh time
+        auto getResult = env.CheckMaintenanceTaskGet("task-1", Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL(getResult.last_refresh_time().seconds(), createResult.last_refresh_time().seconds());
+        UNIT_ASSERT_VALUES_EQUAL(getResult.last_refresh_time().nanos(), createResult.last_refresh_time().nanos());
+
+        // Refresh updates last refresh time
+        auto refreshResult = env.CheckMaintenanceTaskRefresh("task-1", Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_UNEQUAL(refreshResult.last_refresh_time().seconds(), createResult.last_refresh_time().seconds());
+        UNIT_ASSERT_VALUES_UNEQUAL(refreshResult.last_refresh_time().nanos(), createResult.last_refresh_time().nanos());
+    }
 }
 
 } // namespace NKikimr::NCmsTest 

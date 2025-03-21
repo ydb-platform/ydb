@@ -2,6 +2,7 @@
 #include "flat_executor.h"
 #include "flat_executor_counters.h"
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/counters.h>
 #include <library/cpp/monlib/service/pages/templates.h>
 
 namespace NKikimr {
@@ -15,6 +16,28 @@ TTabletExecutedFlat::TTabletExecutedFlat(TTabletStorageInfo *info, const TActorI
     , Executor0(nullptr)
     , StartTime0(TAppData::TimeProvider->Now())
 {}
+
+bool TTabletExecutedFlat::OnUnhandledException(const std::exception& e) {
+    if (AppData()->FeatureFlags.GetEnableTabletRestartOnUnhandledExceptions()) {
+        // Tablets have a weird inheritence where subclass is always an actor,
+        // but we don't know the exact type at compile time. This dynamic_cast
+        // is expected to always succeed.
+        if (auto* actor = dynamic_cast<IActor*>(this)) {
+            auto ctx = TActivationContext::ActorContextFor(actor->SelfId());
+            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TABLET_EXECUTOR,
+                "Tablet " << TabletID() << " unhandled exception " << TypeName(e) << ": " << e.what()
+                << '\n' << TBackTrace::FromCurrentException().PrintToString());
+
+            GetServiceCounters(AppData(ctx)->Counters, "tablets")->GetCounter("alerts_broken", true)->Inc();
+
+            HandlePoison(ctx);
+            return true;
+        }
+    }
+
+    // Exception will propagate and cause the process to crash
+    return false;
+}
 
 IExecutor* TTabletExecutedFlat::CreateExecutor(const TActorContext &ctx) {
     if (!Executor()) {
@@ -123,9 +146,9 @@ void TTabletExecutedFlat::OnTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, const
     ctx.Send(Tablet(), new TEvTablet::TEvTabletStopped());
 }
 
-void TTabletExecutedFlat::HandlePoison(const TActorContext &ctx) {
+void TTabletExecutedFlat::HandlePoison(const TActorContext& ctx) {
     if (Executor0) {
-        Executor0->DetachTablet(ExecutorCtx(ctx));
+        Executor0->DetachTablet();
         Executor0 = nullptr;
     }
 
@@ -142,7 +165,7 @@ void TTabletExecutedFlat::HandleTabletStop(TEvTablet::TEvTabletStop::TPtr &ev, c
 
 void TTabletExecutedFlat::HandleTabletDead(TEvTablet::TEvTabletDead::TPtr &ev, const TActorContext &ctx) {
     if (Executor0) {
-        Executor0->DetachTablet(ExecutorCtx(ctx));
+        Executor0->DetachTablet();
         Executor0 = nullptr;
     }
 

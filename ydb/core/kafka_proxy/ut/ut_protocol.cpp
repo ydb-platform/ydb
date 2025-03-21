@@ -5,6 +5,7 @@
 #include <ydb/core/kafka_proxy/kafka_messages.h>
 #include <ydb/core/kafka_proxy/kafka_constants.h>
 #include <ydb/core/kafka_proxy/actors/actors.h>
+#include <ydb/core/kafka_proxy/kafka_transactional_producers_initializers.h>
 
 #include <ydb/services/ydb/ydb_common_ut.h>
 #include <ydb/services/ydb/ydb_keys_ut.h>
@@ -131,6 +132,7 @@ public:
         if (enableNativeKafkaBalancing) {
             KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableKafkaNativeBalancing(true);
         }
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableKafkaTransactions(true);
 
         TClient client(*(KikimrServer->ServerSettings));
         if (secure) {
@@ -2087,6 +2089,119 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             UNIT_ASSERT_VALUES_EQUAL(noMasterSyncResponse->ErrorCode, (TKafkaInt16)EKafkaErrors::REBALANCE_IN_PROGRESS);
         }
 
+    }
+
+    Y_UNIT_TEST(InitProducerId_withoutTransactionalIdShouldReturnRandomInt) {
+        TInsecureTestServer testServer;
+
+        TKafkaTestClient kafkaClient(testServer.Port);
+
+        auto resp1 = kafkaClient.InitProducerId();
+        auto resp2 = kafkaClient.InitProducerId();
+
+        // validate first response
+        UNIT_ASSERT_VALUES_EQUAL(resp1->ErrorCode, EKafkaErrors::NONE_ERROR);
+        UNIT_ASSERT_GT(resp1->ProducerId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(resp1->ProducerEpoch, 0);
+        // validate second response
+        UNIT_ASSERT_VALUES_EQUAL(resp2->ErrorCode, EKafkaErrors::NONE_ERROR);
+        UNIT_ASSERT_GT(resp2->ProducerId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(resp2->ProducerEpoch, 0);
+        // validate different values for different responses
+        UNIT_ASSERT_VALUES_UNEQUAL(resp1->ProducerId, resp2->ProducerId);
+    }
+
+    Y_UNIT_TEST(InitProducerId_forNewTransactionalIdShouldReturnRandomInt) {
+        TInsecureTestServer testServer;
+
+        TKafkaTestClient kafkaClient(testServer.Port);
+
+        // use random transactional id for each request top avoid parallel execution problems
+        auto resp1 = kafkaClient.InitProducerId(TStringBuilder() << "my-tx-producer-" << RandomNumber<ui64>());
+        auto resp2 = kafkaClient.InitProducerId(TStringBuilder() << "my-tx-producer-" << RandomNumber<ui64>());
+
+        // validate first response
+        UNIT_ASSERT_VALUES_EQUAL(resp1->ErrorCode, EKafkaErrors::NONE_ERROR);
+        UNIT_ASSERT_GT(resp1->ProducerId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(resp1->ProducerEpoch, 0);
+        // validate second response
+        UNIT_ASSERT_VALUES_EQUAL(resp2->ErrorCode, EKafkaErrors::NONE_ERROR);
+        UNIT_ASSERT_GT(resp2->ProducerId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(resp2->ProducerEpoch, 0);
+        // validate different values for different responses
+        UNIT_ASSERT_VALUES_UNEQUAL(resp1->ProducerId, resp2->ProducerId);
+    }
+
+    Y_UNIT_TEST(InitProducerId_forSqlInjectionShouldReturnWithoutDropingDatabase) {
+        TInsecureTestServer testServer;
+
+        TKafkaTestClient kafkaClient(testServer.Port);
+
+        auto resp1 = kafkaClient.InitProducerId("; DROP TABLE kafka_transactional_producers");
+
+        // validate first response
+        UNIT_ASSERT_VALUES_EQUAL(resp1->ErrorCode, EKafkaErrors::NONE_ERROR);
+        UNIT_ASSERT_GT(resp1->ProducerId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(resp1->ProducerEpoch, 0);
+    }
+
+    Y_UNIT_TEST(InitProducerId_forPreviouslySeenTransactionalIdShouldReturnSameProducerIdAndIncrementEpoch) {
+        TInsecureTestServer testServer;
+
+        TKafkaTestClient kafkaClient(testServer.Port);
+        // use random transactional id for each request top avoid parallel execution problems
+        auto transactionalId = TStringBuilder() << "my-tx-producer-" << RandomNumber<ui64>();
+
+        auto resp1 = kafkaClient.InitProducerId(transactionalId);
+        auto resp2 = kafkaClient.InitProducerId(transactionalId);
+
+        // validate first response
+        UNIT_ASSERT_VALUES_EQUAL(resp1->ErrorCode, EKafkaErrors::NONE_ERROR);
+        UNIT_ASSERT_GT(resp1->ProducerId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(resp1->ProducerEpoch, 0);
+        // validate second response
+        UNIT_ASSERT_VALUES_EQUAL(resp2->ErrorCode, EKafkaErrors::NONE_ERROR);
+        UNIT_ASSERT_VALUES_EQUAL(resp2->ProducerId, resp1->ProducerId);
+        UNIT_ASSERT_VALUES_EQUAL(resp2->ProducerEpoch, 1);
+    }
+
+    Y_UNIT_TEST(InitProducerId_forPreviouslySeenTransactionalIdShouldReturnNewProducerIdIfEpochOverflown) {
+        return; // mute test till implementation
+        TInsecureTestServer testServer;
+        ui16 maxEpoch = std::numeric_limits<ui16>::max();
+
+        TKafkaTestClient kafkaClient(testServer.Port);
+        // use random transactional id for each request top avoid parallel execution problems
+        auto transactionalId = TStringBuilder() << "my-tx-producer-" << RandomNumber<ui64>();
+        
+        // this first request will init table
+        auto resp1 = kafkaClient.InitProducerId(transactionalId);
+        // update epoch to be last available
+        NYdb::NTable::TTableClient tableClient(*testServer.Driver);
+        TValueBuilder rows;
+        rows.BeginList();
+        rows.AddListItem()
+            .BeginStruct()
+                .AddMember("transactional_id").Utf8(transactionalId)
+                .AddMember("producer_id").Int64(resp1->ProducerId)
+                .AddMember("producer_epoch").Int16(std::numeric_limits<i16>::max() - 1)
+            .EndStruct();
+        rows.EndList();
+        auto upsertResult = tableClient.BulkUpsert(NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant()->GetStorageTablePath().c_str(), rows.Build()).GetValueSync();
+        UNIT_ASSERT_EQUAL(upsertResult.GetStatus(), EStatus::SUCCESS);
+        
+        auto resp2 = kafkaClient.InitProducerId(transactionalId);
+
+        // validate first response
+        UNIT_ASSERT_VALUES_EQUAL(resp1->ErrorCode, EKafkaErrors::NONE_ERROR);
+        UNIT_ASSERT_GT(resp1->ProducerId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(resp1->ProducerEpoch, maxEpoch);
+        // validate second response
+        UNIT_ASSERT_VALUES_EQUAL(resp2->ErrorCode, EKafkaErrors::NONE_ERROR);
+        UNIT_ASSERT_GT(resp2->ProducerId, 0);
+        UNIT_ASSERT_VALUES_EQUAL(resp2->ProducerEpoch, 0);
+        // new producer.id should be given
+        UNIT_ASSERT_VALUES_UNEQUAL(resp1->ProducerId, resp2->ProducerId);
     }
 
 } // Y_UNIT_TEST_SUITE(KafkaProtocol)

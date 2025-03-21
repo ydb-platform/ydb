@@ -66,7 +66,7 @@ public:
         return Executor_->GetClient(0)->GetConnection();
     }
 
-    std::optional<TStringBuf> GetClusterName(bool fetchIfNull = true) override
+    std::optional<std::string> GetClusterName(bool fetchIfNull = true) override
     {
         Y_UNUSED(fetchIfNull);
         return {};

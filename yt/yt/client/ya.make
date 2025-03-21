@@ -221,6 +221,7 @@ PEERDIR(
     yt/yt/library/numeric
     yt/yt/library/quantile_digest
     yt/yt_proto/yt/client
+    library/cpp/digest/crc32c
     library/cpp/json
     library/cpp/string_utils/base64
     contrib/libs/pfr

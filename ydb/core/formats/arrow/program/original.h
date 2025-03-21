@@ -8,20 +8,49 @@ namespace NKikimr::NArrow::NSSA {
 class TOriginalColumnDataProcessor: public IResourceProcessor {
 private:
     using TBase = IResourceProcessor;
-    const ui32 ColumnId;
 
-    YDB_ACCESSOR_DEF(TString, ColumnName);
-    YDB_ACCESSOR_DEF(TString, SubColumnName);
+    THashMap<ui32, IDataSource::TDataAddress> DataAddresses;
+    THashMap<ui32, IDataSource::TFetchIndexContext> IndexContext;
+    THashMap<ui32, IDataSource::TFetchHeaderContext> HeaderContext;
 
     virtual bool HasSubColumns() const override {
-        return !!SubColumnName;
+        for (auto&& i : IndexContext) {
+            if (i.second.GetOperationsBySubColumn().HasSubColumns()) {
+                return true;
+            }
+        }
+        for (auto&& i : HeaderContext) {
+            if (i.second.GetSubColumnNames().size()) {
+                return true;
+            }
+        }
+        for (auto&& i : DataAddresses) {
+            if (i.second.GetSubColumnNames(false).size()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     virtual NJson::TJsonValue DoDebugJson() const override {
         NJson::TJsonValue result = NJson::JSON_MAP;
-        result.InsertValue("col", ColumnName);
-        if (!!SubColumnName) {
-            result.InsertValue("sub", SubColumnName);
+        if (DataAddresses.size()) {
+            auto& arrAddr = result.InsertValue("data", NJson::JSON_ARRAY);
+            for (auto&& i : DataAddresses) {
+                arrAddr.AppendValue(i.second.DebugJson());
+            }
+        }
+        if (IndexContext.size()) {
+            auto& indexesArr = result.InsertValue("indexes", NJson::JSON_ARRAY);
+            for (auto&& i : IndexContext) {
+                indexesArr.AppendValue(i.second.DebugJson());
+            }
+        }
+        if (HeaderContext.size()) {
+            auto& headersArr = result.InsertValue("headers", NJson::JSON_ARRAY);
+            for (auto&& i : HeaderContext) {
+                headersArr.AppendValue(i.second.DebugJson());
+            }
         }
         return result;
     }
@@ -33,36 +62,90 @@ private:
     }
 
     virtual ui64 DoGetWeight() const override {
-        return SubColumnName ? 5 : 10;
+        ui64 w = 0;
+        for (auto&& i : DataAddresses) {
+            w += i.second.GetWeight();
+        }
+        for (auto&& i : IndexContext) {
+            w += i.second.GetWeight();
+        }
+        for (auto&& i : HeaderContext) {
+            w += i.second.GetWeight();
+        }
+        return w;
     }
 
 public:
-    TOriginalColumnDataProcessor(const ui32 outputId, const ui32 columnId, const TString& columnName, const TString& subColumnName)
-        : TBase({}, { outputId }, EProcessorType::FetchOriginalData)
-        , ColumnId(columnId)
-        , ColumnName(columnName)
-        , SubColumnName(subColumnName) {
-        AFL_VERIFY(!!ColumnName);
+    void Add(const IDataSource::TDataAddress& dataAddress) {
+        auto it = DataAddresses.find(dataAddress.GetColumnId());
+        if (it == DataAddresses.end()) {
+            DataAddresses.emplace(dataAddress.GetColumnId(), dataAddress);
+        } else {
+            it->second.MergeFrom(dataAddress);
+        }
+    }
+
+    const THashMap<ui32, IDataSource::TDataAddress>& GetDataAddresses() const {
+        return DataAddresses;
+    }
+    const THashMap<ui32, IDataSource::TFetchIndexContext>& GetIndexContext() const {
+        return IndexContext;
+    }
+    const THashMap<ui32, IDataSource::TFetchHeaderContext>& GetHeaderContext() const {
+        return HeaderContext;
+    }
+
+    void Add(const IDataSource::TFetchIndexContext& indexContext) {
+        auto it = IndexContext.find(indexContext.GetColumnId());
+        if (it == IndexContext.end()) {
+            IndexContext.emplace(indexContext.GetColumnId(), indexContext);
+        } else {
+            it->second.MergeFrom(indexContext);
+        }
+    }
+
+    void Add(const IDataSource::TFetchHeaderContext& indexContext) {
+        auto it = HeaderContext.find(indexContext.GetColumnId());
+        if (it == HeaderContext.end()) {
+            HeaderContext.emplace(indexContext.GetColumnId(), indexContext);
+        } else {
+            it->second.MergeFrom(indexContext);
+        }
+    }
+
+    explicit TOriginalColumnDataProcessor(const std::vector<ui32>& outputIds)
+        : TBase({}, TColumnChainInfo::BuildVector(outputIds), EProcessorType::FetchOriginalData) {
+    }
+
+    TOriginalColumnDataProcessor(const ui32 outputId, const IDataSource::TDataAddress& address)
+        : TBase({}, TColumnChainInfo::BuildVector({ outputId }), EProcessorType::FetchOriginalData) {
+        DataAddresses.emplace(address.GetColumnId(), address);
+    }
+
+    TOriginalColumnDataProcessor(const ui32 outputId, const IDataSource::TFetchIndexContext& indexContext)
+        : TBase({}, TColumnChainInfo::BuildVector({ outputId }), EProcessorType::FetchOriginalData) {
+        IndexContext.emplace(indexContext.GetColumnId(), indexContext);
+    }
+
+    TOriginalColumnDataProcessor(const ui32 outputId, const IDataSource::TFetchHeaderContext& indexContext)
+        : TBase({}, TColumnChainInfo::BuildVector({ outputId }), EProcessorType::FetchOriginalData) {
+        HeaderContext.emplace(indexContext.GetColumnId(), indexContext);
     }
 };
 
 class TOriginalColumnAccessorProcessor: public IResourceProcessor {
 private:
     using TBase = IResourceProcessor;
-    YDB_READONLY(ui32, ColumnId, 0);
-    YDB_READONLY_DEF(TString, SubColumnName);
+    IDataSource::TDataAddress DataAddress;
     virtual TConclusion<EExecutionResult> DoExecute(const TProcessorContext& context, const TExecutionNodeContext& nodeContext) const override;
 
     virtual bool HasSubColumns() const override {
-        return !!SubColumnName;
+        return DataAddress.GetSubColumnNames(false).size();
     }
 
     virtual NJson::TJsonValue DoDebugJson() const override {
         NJson::TJsonValue result = NJson::JSON_MAP;
-        result.InsertValue("col", ColumnId);
-        if (!!SubColumnName) {
-            result.InsertValue("sub", SubColumnName);
-        }
+        result.InsertValue("address", DataAddress.DebugJson());
         return result;
     }
 
@@ -71,14 +154,17 @@ private:
     }
 
     virtual ui64 DoGetWeight() const override {
-        return SubColumnName ? 2 : 5;
+        return DataAddress.GetSubColumnNames(false).size() ? 2 : 5;
     }
 
 public:
-    TOriginalColumnAccessorProcessor(const ui32 inputId, const ui32 outputId, const ui32 columnId, const TString& subColumnName)
-        : TBase({ inputId }, { outputId }, EProcessorType::AssembleOriginalData)
-        , ColumnId(columnId)
-        , SubColumnName(subColumnName) {
+    const IDataSource::TDataAddress& GetDataAddress() const {
+        return DataAddress;
+    }
+
+    TOriginalColumnAccessorProcessor(const ui32 inputId, const ui32 outputId, const IDataSource::TDataAddress& address)
+        : TBase(TColumnChainInfo::BuildVector({ inputId }), TColumnChainInfo::BuildVector({ outputId }), EProcessorType::AssembleOriginalData)
+        , DataAddress(address) {
     }
 };
 

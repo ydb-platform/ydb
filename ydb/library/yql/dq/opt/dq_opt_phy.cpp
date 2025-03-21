@@ -2716,14 +2716,14 @@ TMaybeNode<TDqJoin> DqFlipJoin(const TDqJoin& join, TExprContext& ctx) {
 
 
 TExprBase DqBuildJoin(
-    const TExprBase& node, 
-    TExprContext& ctx, 
+    const TExprBase& node,
+    TExprContext& ctx,
     IOptimizationContext& optCtx,
-    const TParentsMap& parentsMap, 
-    bool allowStageMultiUsage, 
-    bool pushLeftStage, 
-    EHashJoinMode hashJoin, 
-    bool shuffleMapJoin, 
+    const TParentsMap& parentsMap,
+    bool allowStageMultiUsage,
+    bool pushLeftStage,
+    EHashJoinMode hashJoin,
+    bool shuffleMapJoin,
     bool useGraceCoreForMap,
     bool shuffleElimination,
     bool shuffleEliminationWithMap,

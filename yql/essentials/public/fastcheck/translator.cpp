@@ -6,6 +6,7 @@
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
 
 namespace NYql {
 namespace NFastCheck {
@@ -41,7 +42,8 @@ private:
         NSQLTranslation::TTranslationSettings settings;
         settings.Arena = &arena;
         settings.PgParser = true;
-        settings.ClusterMapping = request.ClusterMapping;
+        FillClusters(request, settings);
+
         auto astRes = NSQLTranslationPG::PGToYql(request.Program, settings);
         return TCheckResponse{
             .CheckName = GetCheckName(),
@@ -56,7 +58,7 @@ private:
         NSQLTranslation::TTranslationSettings settings;
         settings.Arena = &arena;
         settings.File = request.File;
-        settings.ClusterMapping = request.ClusterMapping;
+        FillClusters(request, settings);
         settings.EmitReadsForExists = true;
         settings.Antlr4Parser = true;
         settings.AnsiLexer = request.IsAnsiLexer;
@@ -101,6 +103,36 @@ private:
         res.Success = astRes.IsOk();
         res.Issues = astRes.Issues;
         return res;
+    }
+
+    void FillClusters(const TChecksRequest& request, NSQLTranslation::TTranslationSettings& settings) {
+        if (!request.ClusterSystem.empty()) {
+            Y_ENSURE(AnyOf(Providers, [&](const auto& p) { return p == request.ClusterSystem; }),
+                "Invalid ClusterSystem value: " + request.ClusterSystem);
+        }
+
+        switch (request.ClusterMode) {
+        case EClusterMode::Many:
+            for (const auto& x : request.ClusterMapping) {
+                Y_ENSURE(AnyOf(Providers, [&](const auto& p) { return p == x.second; }),
+                    "Invalid system: " + x.second);
+            }
+
+            settings.ClusterMapping = request.ClusterMapping;
+            settings.DynamicClusterProvider = request.ClusterSystem;
+            break;
+        case EClusterMode::Single:
+            Y_ENSURE(!request.ClusterSystem.empty(), "Missing ClusterSystem parameter");
+            settings.DefaultCluster = "single";
+            settings.ClusterMapping["single"] = request.ClusterSystem;
+            settings.DynamicClusterProvider = request.ClusterSystem;
+            break;
+        case EClusterMode::Unknown:
+            settings.DefaultCluster = "single";
+            settings.ClusterMapping["single"] = UnknownProviderName;
+            settings.DynamicClusterProvider = UnknownProviderName;
+            break;
+        }
     }
 };
 

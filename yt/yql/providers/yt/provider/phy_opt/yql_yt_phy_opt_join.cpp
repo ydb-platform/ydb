@@ -347,7 +347,6 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::EarlyMergeJoin(TExprBas
 
 TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::RuntimeEquiJoin(TExprBase node, TExprContext& ctx) const {
     auto equiJoin = node.Cast<TYtEquiJoin>();
-    auto cluster = equiJoin.DataSink().Cluster().StringValue();
 
     const bool tryReorder = State_->Types->CostBasedOptimizer != ECostBasedOptimizerType::Disable
         && equiJoin.Input().Size() > 2
@@ -369,12 +368,12 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::RuntimeEquiJoin(TExprBa
 
     if (tryReorder) {
         YQL_CLOG(INFO, ProviderYt) << "Collecting cbo stats for equiJoin";
-        auto collectStatus = CollectCboStats(cluster, *tree, State_, ctx);
+        auto collectStatus = CollectCboStats(*tree, State_, ctx);
         if (collectStatus == TStatus::Repeat) {
             return ExportYtEquiJoin(equiJoin, *tree, ctx, State_);
         }
 
-        const auto optimizedTree = OrderJoins(tree, State_, cluster, ctx);
+        const auto optimizedTree = OrderJoins(tree, State_, ctx);
         if (optimizedTree != tree) {
             return ExportYtEquiJoin(equiJoin, *optimizedTree, ctx, State_);
         }

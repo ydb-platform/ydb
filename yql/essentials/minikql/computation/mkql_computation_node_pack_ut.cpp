@@ -662,9 +662,14 @@ protected:
         ui64 Len = 0;
         bool LegacyStruct = false;
         bool TrimBlock = false;
+        TMaybe<ui8> MinFillPercentage;
 
         TString ToString() const {
-            return TStringBuilder() << "Offset: " << Offset << ", Len: " << Len << ", LegacyStruct: " << LegacyStruct << ", TrimBlock: " << TrimBlock;
+            auto result = TStringBuilder() << "Offset: " << Offset << ", Len: " << Len << ", LegacyStruct: " << LegacyStruct << ", TrimBlock: " << TrimBlock;
+            if (MinFillPercentage) {
+                result << ", MinFillPercentage: " << ui64(*MinFillPercentage);
+            }
+            return result;
         }
     };
 
@@ -749,7 +754,6 @@ protected:
             auto builder4 = MakeArrayBuilder(TTypeInfoHelper(), tzDateType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(tzDateType)), nullptr);
             auto builder5 = MakeArrayBuilder(TTypeInfoHelper(), nullType, *ArrowPool_, CalcBlockLen(CalcMaxBlockItemSize(nullType)), nullptr);
 
-
             for (ui32 i = 0; i < blockLen; ++i) {
                 TBlockItem b1(i);
                 builder1->Add(b1);
@@ -790,24 +794,28 @@ protected:
                 datums.emplace_back(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen)));
             }
 
+            const ui32 blockLenIndex = legacyStruct ? 2 : 6;
             if (offset != 0 || len != blockLen) {
                 for (auto& datum : datums) {
                     if (datum.is_array()) {
                         datum = NYql::NUdf::DeepSlice(datum.array(), offset, len);
                     }
                 }
+                datums[blockLenIndex] = arrow::Datum(std::make_shared<arrow::UInt64Scalar>(len));
             }
+
+            const auto trimmerFactory = [&](ui32 index) {
+                const TType* columnType = legacyStruct ? static_cast<const TStructType*>(rowType)->GetMemberType(index)
+                                                       : static_cast<const TMultiType*>(rowType)->GetElementType(index);
+                return MakeBlockTrimmer(NMiniKQL::TTypeInfoHelper(), static_cast<const TBlockType*>(columnType)->GetItemType(), ArrowPool_);
+            };
             if (args.TrimBlock) {
                 for (ui32 index = 0; index < datums.size(); ++index) {
                     auto& datum = datums[index];
                     if (!datum.is_array()) {
                         continue;
                     }
-
-                    const TType* columnType = legacyStruct ? static_cast<const TStructType*>(rowType)->GetMemberType(index)
-                                                           : static_cast<const TMultiType*>(rowType)->GetElementType(index);
-                    const auto trimmer = MakeBlockTrimmer(NMiniKQL::TTypeInfoHelper(), static_cast<const TBlockType*>(columnType)->GetItemType(), ArrowPool_);
-                    datum = trimmer->Trim(datum.array());
+                    datum = trimmerFactory(index)->Trim(datum.array());
                 }
             }
             TUnboxedValueVector columns;
@@ -815,7 +823,7 @@ protected:
                 columns.emplace_back(HolderFactory.CreateArrowBlock(std::move(datum)));
             }
 
-            TValuePackerType packer(false, rowType, ArrowPool_);
+            TValuePackerType packer(false, rowType, ArrowPool_, args.MinFillPercentage);
             if (legacyStruct) {
                 TUnboxedValueVector columnsCopy = columns;
                 NUdf::TUnboxedValue row = HolderFactory.VectorAsArray(columnsCopy);
@@ -842,13 +850,24 @@ protected:
 
             UNIT_ASSERT_VALUES_EQUAL(unpackedColumns.size(), columns.size());
             if (legacyStruct) {
-                UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(unpackedColumns[2]).GetDatum().scalar_as<arrow::UInt64Scalar>().value, blockLen);
+                UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(unpackedColumns[2]).GetDatum().scalar_as<arrow::UInt64Scalar>().value, len);
                 UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(unpackedColumns[3]).GetDatum().scalar_as<arrow::BinaryScalar>().value->ToString(), testScalarString);
             } else {
-                UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(unpackedColumns.back()).GetDatum().scalar_as<arrow::UInt64Scalar>().value, blockLen);
+                UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(unpackedColumns.back()).GetDatum().scalar_as<arrow::UInt64Scalar>().value, len);
                 UNIT_ASSERT_VALUES_EQUAL(TArrowBlock::From(unpackedColumns[2]).GetDatum().scalar_as<arrow::BinaryScalar>().value->ToString(), testScalarString);
             }
 
+            if (args.MinFillPercentage) {
+                for (size_t i = 0; i < unpackedColumns.size(); ++i) {
+                    auto datum = TArrowBlock::From(unpackedColumns[i]).GetDatum();
+                    if (datum.is_scalar()) {
+                        continue;
+                    }
+                    const auto unpackedSize = NUdf::GetSizeOfArrayDataInBytes(*datum.array());
+                    const auto trimmedSize = NUdf::GetSizeOfArrayDataInBytes(*trimmerFactory(i)->Trim(datum.array()));
+                    UNIT_ASSERT_GE_C(trimmedSize, unpackedSize * *args.MinFillPercentage / 100, "column: " << i);
+                }
+            }
 
             auto reader1 = MakeBlockReader(TTypeInfoHelper(), ui32Type);
             auto reader2 = MakeBlockReader(TTypeInfoHelper(), optStrType);
@@ -914,7 +933,8 @@ protected:
                 {.Offset = 19, .Len = 623}
             }),
             MakeIntrusive<TArgsDispatcher<bool>>(args.LegacyStruct, std::vector<bool>{false, true}),
-            MakeIntrusive<TArgsDispatcher<bool>>(args.TrimBlock, std::vector<bool>{false, true})
+            MakeIntrusive<TArgsDispatcher<bool>>(args.TrimBlock, std::vector<bool>{false, true}),
+            MakeIntrusive<TArgsDispatcher<TMaybe<ui8>>>(args.MinFillPercentage, std::vector<TMaybe<ui8>>{Nothing(), 90})
         });
     }
 

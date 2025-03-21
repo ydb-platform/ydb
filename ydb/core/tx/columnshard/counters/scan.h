@@ -152,6 +152,8 @@ private:
     NMonitoring::TDynamicCounters::TCounterPtr NotIndexBlobs;
     NMonitoring::TDynamicCounters::TCounterPtr RecordsAcceptedByIndex;
     NMonitoring::TDynamicCounters::TCounterPtr RecordsDeniedByIndex;
+    NMonitoring::TDynamicCounters::TCounterPtr RecordsAcceptedByHeader;
+    NMonitoring::TDynamicCounters::TCounterPtr RecordsDeniedByHeader;
     std::shared_ptr<TSubColumnCounters> SubColumnCounters;
 
 public:
@@ -168,6 +170,12 @@ public:
     }
     void OnDeniedByIndex(const ui32 recordsCount) const {
         RecordsDeniedByIndex->Add(recordsCount);
+    }
+    void OnAcceptedByHeader(const ui32 recordsCount) const {
+        RecordsAcceptedByHeader->Add(recordsCount);
+    }
+    void OnDeniedByHeader(const ui32 recordsCount) const {
+        RecordsDeniedByHeader->Add(recordsCount);
     }
     NMonitoring::TDynamicCounters::TCounterPtr AcceptedByIndex;
     NMonitoring::TDynamicCounters::TCounterPtr DeniedByIndex;

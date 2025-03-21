@@ -54,6 +54,7 @@
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_outproc_udf_resolver.h>
+#include <yql/essentials/providers/common/udf_resolve/yql_udf_resolver_with_index.h>
 #include <ydb/library/yql/dq/comp_nodes/yql_common_dq_factory.h>
 #include <ydb/library/yql/dq/transform/yql_common_dq_transform.h>
 #include <yql/essentials/minikql/mkql_function_registry.h>
@@ -130,6 +131,7 @@
 using namespace NKikimr;
 using namespace NYql;
 
+
 struct TRunOptions {
     bool Sql = false;
     bool Pg = false;
@@ -154,6 +156,9 @@ struct TRunOptions {
     bool UseMetaFromGraph = false;
     bool WithFinalIssues = false;
     bool ValidateResultFormat = false;
+    bool ScanUdfs = false;
+    bool Replay = false;
+    TVector<TString> UdfsPaths;
 };
 
 class TStoreMappingFunctor: public NLastGetopt::IOptHandler {
@@ -547,7 +552,6 @@ int RunMain(int argc, const char* argv[])
     TString errFile;
     TString paramsFile;
     TString fileStorageCfg;
-    TVector<TString> udfsPaths;
     TString udfsDir;
     TMaybe<TString> dqHost;
     TMaybe<int> dqPort;
@@ -613,6 +617,7 @@ int RunMain(int argc, const char* argv[])
         .Optional()
         .StoreResult(&memLimit);
     opts.AddLongOption("pg", "Program has PG syntax").NoArgument().SetFlag(&runOptions.Pg);
+    opts.AddLongOption("scan-udfs", "Scan specified udfs with external udf resolver to use static function registry").NoArgument().SetFlag(&runOptions.ScanUdfs);
     opts.AddLongOption('t', "table", "table@file").AppendTo(&tablesMappingList);
     opts.AddLongOption('C', "cluster", "set cluster to service mapping").RequiredArgument("name@service").Handler(new TStoreMappingFunctor(&clusterMapping));
     opts.AddLongOption('u', "user", "MR user")
@@ -638,7 +643,7 @@ int RunMain(int argc, const char* argv[])
         .Optional()
         .StoreResult(&fileStorageCfg);
     opts.AddLongOption("udf", "Load shared library with UDF by given path")
-        .AppendTo(&udfsPaths);
+        .AppendTo(&runOptions.UdfsPaths);
     opts.AddLongOption("udfs-dir", "Load all shared libraries with UDFs found"
                                    " in given directory")
         .StoreResult(&udfsDir);
@@ -744,7 +749,7 @@ int RunMain(int argc, const char* argv[])
     opts.AddLongOption("qstorage-dir", "directory for QStorage").StoreResult(&qStorageDir).DefaultValue(".");
     opts.AddLongOption("op-id", "QStorage operation id").StoreResult(&opId).DefaultValue("dummy_op");
     opts.AddLongOption("capture", "write query metadata to QStorage").NoArgument();
-    opts.AddLongOption("replay", "read query metadata from QStorage").NoArgument();
+    opts.AddLongOption("replay", "read query metadata from QStorage").NoArgument().SetFlag(&runOptions.Replay);
 
     opts.AddLongOption("dq-host", "Dq Host");
     opts.AddLongOption("dq-port", "Dq Port");
@@ -810,12 +815,8 @@ int RunMain(int argc, const char* argv[])
     }
 
     if (res.Has("replay")) {
-        try {
-            qStorage = MakeFileQStorage(qStorageDir);
-            qContext = TQContext(qStorage->MakeReader(opId, {}));
-        } catch (...) {
-            throw yexception() << "QPlayer replay is probably broken. Exception: " << CurrentExceptionMessage();
-        }
+        qStorage = MakeFileQStorage(qStorageDir);
+        qContext = TQContext(qStorage->MakeReader(opId, {}));
     } else if (res.Has("capture")) {
         qStorage = MakeFileQStorage(qStorageDir);
         qContext = TQContext(qStorage->MakeWriter(opId, {}));
@@ -919,8 +920,8 @@ int RunMain(int argc, const char* argv[])
     FillUsedFiles(filesMappingList, dataTable);
     FillUsedUrls(urlMappingList, dataTable);
 
-    NMiniKQL::FindUdfsInDir(udfsDir, &udfsPaths);
-    auto funcRegistry = NMiniKQL::CreateFunctionRegistry(&NYql::NBacktrace::KikimrBackTrace, NMiniKQL::CreateBuiltinRegistry(), false, udfsPaths)->Clone();
+    NMiniKQL::FindUdfsInDir(udfsDir, &runOptions.UdfsPaths);
+    auto funcRegistry = NMiniKQL::CreateFunctionRegistry(&NYql::NBacktrace::KikimrBackTrace, NMiniKQL::CreateBuiltinRegistry(), false, runOptions.UdfsPaths)->Clone();
     NKikimr::NMiniKQL::FillStaticModules(*funcRegistry);
 
     TGatewaysConfig gatewaysConfig;
@@ -1177,6 +1178,8 @@ int RunMain(int argc, const char* argv[])
     progFactory.AddUserDataTable(std::move(dataTable));
     progFactory.SetModules(moduleResolver);
     IUdfResolver::TPtr udfResolverImpl;
+    TUdfIndex::TPtr udfIndex;
+
     if (udfResolver) {
         udfResolverImpl = NCommon::CreateOutProcUdfResolver(funcRegistry.Get(), storage,
             udfResolver, {}, {}, udfResolverFilterSyscalls, {});
@@ -1184,6 +1187,21 @@ int RunMain(int argc, const char* argv[])
         udfResolverImpl = NCommon::CreateSimpleUdfResolver(funcRegistry.Get(), storage, true);
     }
 
+    if (runOptions.ScanUdfs) {
+        if (!runOptions.Replay && !udfResolver) {
+            Cerr << "--udf-resolver must be filled when using --scan-udfs without --replay\n";
+            return 1;
+        }
+
+        udfIndex = new TUdfIndex();
+        if (!runOptions.Replay) {
+            LoadRichMetadataToUdfIndex(*udfResolverImpl, runOptions.UdfsPaths, false, TUdfIndex::EOverrideMode::RaiseError, *udfIndex);
+        }
+
+        udfResolverImpl = NCommon::CreateUdfResolverWithIndex(udfIndex, udfResolverImpl, storage);
+    }
+
+    progFactory.SetUdfIndex(udfIndex, new TUdfIndexPackageSet());
     progFactory.SetUdfResolver(udfResolverImpl);
     progFactory.SetFileStorage(storage);
     progFactory.SetUrlPreprocessing(new TUrlPreprocessing(gatewaysConfig));

@@ -1428,8 +1428,6 @@ message TEvControllerProposeConfigResponse {
 
 message TEvControllerConsoleCommitRequest {
     optional string YAML = 1;
-    optional bool AllowUnknownFields = 2;
-    optional bool BypassMetadataChecks = 3;
 }
 
 message TEvControllerConsoleCommitResponse {

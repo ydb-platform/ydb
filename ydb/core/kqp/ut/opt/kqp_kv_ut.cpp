@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
+#include <ydb/core/tx/datashard/datashard.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 #include <yql/essentials/parser/pg_wrapper/interface/codec.h>
 #include <yql/essentials/utils/log/log.h>
@@ -366,6 +367,89 @@ Y_UNIT_TEST_SUITE(KqpKv) {
         CompareYson(Sprintf("[[%du;%du]]", valueToReturn_1, valueToReturn_2), TString{res});
     }
 
+    Y_UNIT_TEST_TWIN(ReadRows_ExternalBlobs, NewPrecharge) {
+        NKikimrConfig::TImmediateControlsConfig controls;
+
+        if (NewPrecharge) {
+            controls.MutableDataShardControls()->SetReadIteratorKeysExtBlobsPrecharge(1);
+        }
+
+        NKikimrConfig::TFeatureFlags flags;
+        flags.SetEnablePublicApiExternalBlobs(true);
+        auto settings = TKikimrSettings()
+            .SetFeatureFlags(flags)
+            .SetWithSampleTables(false)
+            .SetControls(controls);
+        auto kikimr = TKikimrRunner{settings};
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        const auto tableName = "/Root/TestTable";
+        const auto keyColumnName_1 = "blob_id";
+        const auto keyColumnName_2 = "chunk_num";
+        const auto dataColumnName = "data";
+
+        TTableBuilder builder;
+        builder
+            .BeginStorageSettings()
+                .SetExternal("test")
+                .SetStoreExternalBlobs(true)
+            .EndStorageSettings();
+        builder.AddNonNullableColumn(keyColumnName_1, EPrimitiveType::Uuid);
+        builder.AddNonNullableColumn(keyColumnName_2, EPrimitiveType::Int32);
+        builder.SetPrimaryKeyColumns({keyColumnName_1, keyColumnName_2});
+        builder.AddNullableColumn(dataColumnName, EPrimitiveType::String);
+
+        auto result = session.CreateTable(tableName, builder.Build()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        TString largeValue(1_MB, 'L');
+        
+        NYdb::TValueBuilder rows;
+        rows.BeginList();
+        for (int i = 0; i < 10; i++) {
+            rows.AddListItem()
+                .BeginStruct()
+                    .AddMember(keyColumnName_1).Uuid(NYdb::TUuidValue("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"))
+                    .AddMember(keyColumnName_2).Int32(i)
+                    .AddMember(dataColumnName).String(largeValue)
+                .EndStruct();
+        }
+        rows.EndList();
+
+        auto upsertResult = db.BulkUpsert(tableName, rows.Build()).GetValueSync();
+        UNIT_ASSERT_C(upsertResult.IsSuccess(), upsertResult.GetIssues().ToString());
+
+        NYdb::TValueBuilder keys;
+        keys.BeginList();
+        for (int i = 0; i < 10; i++) {
+            keys.AddListItem()
+                .BeginStruct()
+                    .AddMember(keyColumnName_1).Uuid(NYdb::TUuidValue("65df1ec1-a97d-47b2-ae56-3c023da6ee8c"))
+                    .AddMember(keyColumnName_2).Int32(i)
+                .EndStruct();
+        }
+        keys.EndList();
+
+        auto server = &kikimr.GetTestServer();
+
+        WaitForCompaction(server, tableName);
+
+        auto selectResult = db.ReadRows(tableName, keys.Build()).GetValueSync();
+
+        UNIT_ASSERT_C(selectResult.IsSuccess(), selectResult.GetIssues().ToString());
+
+        TResultSetParser parser{selectResult.GetResultSet()};
+        UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 10);
+
+        UNIT_ASSERT(parser.TryNextRow());
+
+        auto val = parser.GetValue(0);
+        TValueParser valParser(val);
+        TUuidValue v = valParser.GetUuid();
+        Cout << v.ToString() << Endl;
+    }
+    
     TVector<::ReadRowsPgParam> readRowsPgParams
     {
         {.TypeId = BOOLOID, .TypeMod={}, .ValueContent="t"},

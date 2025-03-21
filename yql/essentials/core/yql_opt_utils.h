@@ -1,6 +1,7 @@
 #pragma once
 
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/yql_execution.h>
 #include <yql/essentials/core/yql_graph_transformer.h>
 #include <yql/essentials/core/yql_opt_window.h>
 #include <yql/essentials/core/yql_type_annotation.h>
@@ -191,5 +192,7 @@ bool IsOptimizerDisabled(const TTypeAnnotationContext& types) {
 }
 
 extern const char KeepWorldOptName[];
+
+TOperationProgress::EOpBlockStatus DetermineProgramBlockStatus(const TExprNode& root);
 
 }

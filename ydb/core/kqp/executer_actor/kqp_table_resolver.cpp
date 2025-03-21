@@ -4,9 +4,8 @@
 #include <ydb/core/base/cputime.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/sys_view/common/schema.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-
-
 
 namespace NKikimr::NKqp {
 
@@ -35,7 +34,8 @@ public:
         , TxId(txId)
         , UserToken(userToken)
         , Transactions(transactions)
-        , TasksGraph(tasksGraph) {}
+        , TasksGraph(tasksGraph)
+        , SystemViewRewrittenResolver(NSysView::CreateSystemViewRewrittenResolver()) {}
 
     void Bootstrap() {
         ResolveKeys();
@@ -173,6 +173,10 @@ private:
 
                     stageInfo.Meta.ShardKey = ExtractKey(stageInfo.Meta.TableId, stageInfo.Meta.TableConstInfo, operation);
 
+                    if (SystemViewRewrittenResolver->IsSystemView(stageInfo.Meta.TableId.SysViewInfo)) {
+                        continue;
+                    }
+
                     if (stageInfo.Meta.TableKind == ETableKind::Olap) {
                         if (TableRequestIds.find(stageInfo.Meta.TableId) == TableRequestIds.end()) {
                             auto& entry = requestNavigate->ResultSet.emplace_back();
@@ -276,6 +280,8 @@ private:
     bool ShouldTerminate = false;
     TMaybe<ui32> GotUnexpectedEvent;
     TDuration CpuTime;
+
+    THolder<NSysView::ISystemViewResolver> SystemViewRewrittenResolver;
 };
 
 } // anonymous namespace

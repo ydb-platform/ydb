@@ -117,6 +117,7 @@ Y_FORCE_INLINE bool AddCell(TOutValue& row, NScheme::TTypeInfo type, const TCell
         val.set_bytes_value(cell.Data(), cell.Size());
         break;
     }
+    case NUdf::TDataType<NUdf::TUuid>::Id:
     case NUdf::TDataType<NUdf::TDecimal>::Id: {
         struct TCellData {
             ui64 Low;

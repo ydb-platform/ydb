@@ -601,7 +601,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
         result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
-        UNIT_ASSERT_C(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
+        UNIT_ASSERT_C(HasIssue(result.GetIssues(), useSink ? NYql::TIssuesIds::KIKIMR_BAD_REQUEST : NYql::TIssuesIds::DEFAULT_ERROR,
             [&](const auto& issue) {
                 if (useSink) {
                     return issue.GetMessage().contains("Row key size of")
@@ -637,7 +637,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
         } else {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
         }
-        UNIT_ASSERT(HasIssue(result.GetIssues(), NYql::TIssuesIds::DEFAULT_ERROR,
+        UNIT_ASSERT(HasIssue(result.GetIssues(), useSink ? NYql::TIssuesIds::KIKIMR_BAD_REQUEST : NYql::TIssuesIds::DEFAULT_ERROR,
                 [] (const auto& issue) {
                     return issue.GetMessage().contains("larger than the allowed threshold");
             }));

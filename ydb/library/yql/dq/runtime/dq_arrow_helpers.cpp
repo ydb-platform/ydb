@@ -989,7 +989,7 @@ class TBlockSplitter : public IBlockSplitter {
             Length -= numberRows;
             UpdateArraysSize();
 
-            return TItem(*this, Length, numberRows);
+            return TItem(*this, Offset + Length, numberRows);
         }
 
     private:

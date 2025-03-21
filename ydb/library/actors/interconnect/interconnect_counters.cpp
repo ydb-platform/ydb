@@ -233,7 +233,7 @@ namespace {
         }
 
         void UpdatePingTimeHistogram(ui64 value) override {
-            PingTimeHistogram->Collect(value);
+            PingTimeHistogram->Collect((i64)value);
         }
 
         void UpdateOutputChannelTraffic(ui16 channel, ui64 value) override {

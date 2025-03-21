@@ -68,7 +68,7 @@ public:
     }
 
     void ReportThrottleDelay(const TDuration& duration) override {
-        ThrottleDelayHistogram_->Collect(duration.MilliSeconds());
+        ThrottleDelayHistogram_->Collect(duration.MillisecondsFloat());
     }
 };
 

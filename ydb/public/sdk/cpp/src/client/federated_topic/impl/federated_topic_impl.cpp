@@ -75,7 +75,7 @@ NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> TFederated
                     dbinfo.Endpoint = db->endpoint();
                     dbinfo.Path = db->path();
                 }
-                return std::move(result);
+                return result;
             });
 }
 

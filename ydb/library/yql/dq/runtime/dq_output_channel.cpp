@@ -415,7 +415,9 @@ public:
 
     void UpdateSettings(const TDqOutputChannelSettings::TMutable& settings) override {
         IsLocalChannel = settings.IsLocalChannel;
-        Packer.SetMinFillPercentage(IsLocalChannel ? Nothing() : TMaybe<ui8>(ArrayBufferMinFillPercentage));
+        if (Packer.IsBlock()) {
+            Packer.SetMinFillPercentage(IsLocalChannel ? Nothing() : TMaybe<ui8>(ArrayBufferMinFillPercentage));
+        }
     }
 
 private:

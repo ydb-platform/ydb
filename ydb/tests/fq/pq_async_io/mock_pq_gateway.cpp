@@ -78,7 +78,12 @@ class TMockPqGateway : public IMockPqGateway {
         NYdb::TAsyncStatus AlterTopic(const TString& /*path*/, const NYdb::NTopic::TAlterTopicSettings& /*settings*/ = {}) override {return NYdb::TAsyncStatus{};}
         NYdb::TAsyncStatus DropTopic(const TString& /*path*/, const NYdb::NTopic::TDropTopicSettings& /*settings*/ = {}) override {return NYdb::TAsyncStatus{};}
         NYdb::NTopic::TAsyncDescribeTopicResult DescribeTopic(const TString& /*path*/, 
-            const NYdb::NTopic::TDescribeTopicSettings& /*settings*/ = {}) override {return NYdb::NTopic::TAsyncDescribeTopicResult{};}
+            const NYdb::NTopic::TDescribeTopicSettings& /*settings*/ = {}) override {
+            NYdb::TStatus success(NYdb::EStatus::SUCCESS, {});
+            Ydb::Topic::DescribeTopicResult describe;
+            describe.Addpartitions();
+            return NThreading::MakeFuture(NYdb::NTopic::TDescribeTopicResult(std::move(success), std::move(describe)));
+        }
 
         NYdb::NTopic::TAsyncDescribeConsumerResult DescribeConsumer(const TString& /*path*/, const TString& /*consumer*/, 
             const NYdb::NTopic::TDescribeConsumerSettings& /*settings*/ = {}) override {return NYdb::NTopic::TAsyncDescribeConsumerResult{};}

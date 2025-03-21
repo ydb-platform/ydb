@@ -7,7 +7,7 @@
 
 namespace NYql::NDq {
 
-template <typename TPartitionKey>
+template <typename TPartitionKey, typename TPartitionKeyHash = std::hash<TPartitionKey>>
 struct TDqSourceWatermarkTracker {
 public:
     TDqSourceWatermarkTracker(
@@ -136,7 +136,7 @@ private:
     const bool IdlePartitionsEnabled;
     const TDuration LateArrivalDelay;
 
-    THashMap<TPartitionKey, TPartitionState> Data;
+    THashMap<TPartitionKey, TPartitionState, TPartitionKeyHash> Data;
     TMaybe<TInstant> Watermark;
     TInstant LastTimeNotifiedAt; // last system time when tracker received notification for any partition
     TMaybe<TInstant> NextIdlenessCheckAt;

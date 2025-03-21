@@ -2,6 +2,8 @@
 
 #include <yql/essentials/utils/yql_panic.h>
 
+#include <library/cpp/threading/future/wait/wait.h>
+
 namespace NYql {
 
 namespace {
@@ -11,6 +13,17 @@ NPq::NConfigurationManager::TClientOptions GetCmClientOptions(const NYql::TPqClu
         .SetEndpoint(cfg.GetConfigManagerEndpoint())
         .SetCredentialsProviderFactory(credentialsProviderFactory)
         .SetEnableSsl(cfg.GetUseSsl());
+
+    return opts;
+}
+
+NYdb::NFederatedTopic::TFederatedTopicClientSettings GetYdbFederatedPqClientOptions(const TString& database, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
+    NYdb::NFederatedTopic::TFederatedTopicClientSettings opts;
+    opts
+        .DiscoveryEndpoint(cfg.GetEndpoint())
+        .Database(database)
+        .SslCredentials(NYdb::TSslCredentials(cfg.GetUseSsl()))
+        .CredentialsProviderFactory(credentialsProviderFactory);
 
     return opts;
 }
@@ -46,12 +59,12 @@ const NPq::NConfigurationManager::IClient::TPtr& TPqSession::GetConfigManagerCli
     return client;
 }
 
-NYdb::NTopic::TTopicClient& TPqSession::GetYdbPqClient(const TString& cluster, const TString& database, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
+NYdb::NFederatedTopic::TFederatedTopicClient& TPqSession::GetYdbPqClient(const TString& cluster, const TString& database, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
     const auto clientIt = ClusterYdbPqClients.find(cluster);
     if (clientIt != ClusterYdbPqClients.end()) {
         return clientIt->second;
     }
-    return ClusterYdbPqClients.emplace(cluster, NYdb::NTopic::TTopicClient(YdbDriver, GetYdbPqClientOptions(database, cfg, credentialsProviderFactory))).first->second;
+    return ClusterYdbPqClients.emplace(cluster, NYdb::NFederatedTopic::TFederatedTopicClient(YdbDriver, GetYdbFederatedPqClientOptions(database, cfg, credentialsProviderFactory))).first->second;
 }
 
 NYdb::NDataStreams::V1::TDataStreamsClient& TPqSession::GetDsClient(const TString& cluster, const TString& database, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
@@ -85,14 +98,45 @@ NPq::NConfigurationManager::TAsyncDescribePathResult TPqSession::DescribePath(co
             return client->DescribePath(path);
         }
 
-        return GetYdbPqClient(cluster, database, *config, credentialsProviderFactory).DescribeTopic(path).Apply([cluster, path, database](const NYdb::NTopic::TAsyncDescribeTopicResult& describeTopicResultFuture) {
-            const NYdb::NTopic::TDescribeTopicResult& describeTopicResult = describeTopicResultFuture.GetValue();
-            if (!describeTopicResult.IsSuccess()) {
-                throw yexception() << "Failed to describe topic `" << cluster << "`.`" << path << "` in the database `" << database << "`: " << describeTopicResult.GetIssues().ToString();
+        auto futureClusterInfo = GetYdbPqClient(cluster, database, *config, credentialsProviderFactory).GetAllClusterInfo();
+        return futureClusterInfo.Apply([
+                futureClusterInfo, ydbDriver = YdbDriver, credentialsProviderFactory,
+                cluster, database, path,
+                topicSettings = GetYdbPqClientOptions(database, *config, credentialsProviderFactory)
+        ](const auto &) mutable {
+            auto allClustersInfo = futureClusterInfo.ExtractValue();
+            std::vector<NYdb::NTopic::TAsyncDescribeTopicResult> results;
+            results.reserve(allClustersInfo.size());
+            Y_ENSURE(!allClustersInfo.empty());
+            std::vector<std::string> paths;
+            paths.reserve(allClustersInfo.size());
+            for (auto &clusterInfo: allClustersInfo) {
+                auto& clusterTopicPath = paths.emplace_back(path);
+                clusterInfo.AdjustTopicPath(clusterTopicPath);
+                clusterInfo.AdjustTopicClientSettings(topicSettings);
+                results.emplace_back(NYdb::NTopic::TTopicClient(ydbDriver, topicSettings).DescribeTopic(clusterTopicPath));
             }
-            NPq::NConfigurationManager::TTopicDescription desc(path);
-            desc.PartitionsCount = describeTopicResult.GetTopicDescription().GetTotalPartitionsCount();
-            return NPq::NConfigurationManager::TDescribePathResult::Make<NPq::NConfigurationManager::TTopicDescription>(std::move(desc));
+            auto allFutureDescribes = NThreading::WaitAll(results);
+            return allFutureDescribes.Apply([results = std::move(results), paths = std::move(paths), allClustersInfo = std::move(allClustersInfo), cluster, database, path](const auto& ) mutable {
+                ui32 partitions = 0;
+                yexception ex;
+                TMutex mutex;
+                for (size_t i = 0; i != results.size(); ++i) {
+                    auto& futureDescribe = results[i];
+                    auto describeTopicResult = futureDescribe.ExtractValue();
+                    if (!describeTopicResult.IsSuccess()) {
+                        ex << "Failed to describe topic `" << cluster << "`.`" << path << "` (name '" << allClustersInfo[i].Name << "' endpoint '" << allClustersInfo[i].Endpoint << "' path '" << paths[i] << "') in the database `" << database << "`: " << describeTopicResult.GetIssues().ToString();
+                        continue;
+                    }
+                    partitions = std::max(partitions, describeTopicResult.GetTopicDescription().GetTotalPartitionsCount());
+                }
+                if (!partitions) {
+                    throw ex;
+                }
+                NPq::NConfigurationManager::TTopicDescription desc(path);
+                desc.PartitionsCount = partitions;
+                return NPq::NConfigurationManager::TDescribePathResult::Make<NPq::NConfigurationManager::TTopicDescription>(std::move(desc));
+            });
         });
     }
 }

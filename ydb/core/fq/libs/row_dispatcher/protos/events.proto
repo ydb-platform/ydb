@@ -13,12 +13,14 @@ message TEvGetAddressRequest {
     NYql.NPq.NProto.TDqPqTopicSource Source = 1;
     repeated uint32 PartitionId = 2 [deprecated=true];
     repeated uint32 PartitionIds = 3;
+    // Actor handles all clusters for Federated
 }
 
 message TEvPartitionAddress {
     repeated uint32 PartitionId = 1 [deprecated=true];
     NActorsProto.TActorId ActorId = 2;
     repeated uint32 PartitionIds = 3;
+    // Actor handles all clusters for Federated
 }
 
 message TEvGetAddressResponse {
@@ -26,8 +28,16 @@ message TEvGetAddressResponse {
 }
 
 message TPartitionOffset {
+    string Cluster = 3;
     uint32 PartitionId = 1;
     uint64 Offset = 2;
+}
+
+message TFederatedClusterEndpoint {
+    string Name = 1;
+    string Endpoint = 2;
+    string Path = 3;
+    uint64 PartitionsCount = 4;
 }
 
 message TEvStartSession {
@@ -39,6 +49,7 @@ message TEvStartSession {
     string QueryId = 6;
     repeated uint32 PartitionIds = 7;
     repeated TPartitionOffset Offsets = 8;
+    repeated TFederatedClusterEndpoint FederatedEndpoints = 9;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 
@@ -48,11 +59,13 @@ message TEvStartSessionAck {
 }
 
 message TEvGetNextBatch {
+    string Cluster = 2;
     uint32 PartitionId = 1;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 
 message TEvNewDataArrived {
+    string Cluster = 2;
     uint32 PartitionId = 1;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
@@ -72,12 +85,14 @@ message TEvMessage {
 
 message TEvMessageBatch {
     repeated TEvMessage Messages = 1;
+    string Cluster = 4;
     uint32 PartitionId = 2;
     uint64 NextMessageOffset = 3;
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 
 message TPartitionStatistics {
+    string Cluster = 3;
     uint32 PartitionId = 1;
     uint64 NextMessageOffset = 2;
 }
@@ -105,11 +120,13 @@ message TEvSessionError {
 
 message TEvHeartbeat {
     uint32 PartitionId = 1;
+    // Actor handles all clusters for Federated case
     optional NYql.NDqProto.TMessageTransportMeta TransportMeta = 100;
 }
 
 message TEvNoSession {
     uint32 PartitionId = 1;
+    // Actor handles all clusters for Federated case
 }
 
 message TEvGetInternalStateRequest {

@@ -34,6 +34,7 @@ struct TTestActorFactory : public NFq::NRowDispatcher::IActorFactory {
         const NConfig::TRowDispatcherConfig& /*config*/,
         NActors::TActorId /*rowDispatcherActorId*/,
         NActors::TActorId /*compileServiceActorId*/,
+        const TString& /*cluster*/,
         ui32 /*partitionId*/,
         NYdb::TDriver /*driver*/,
         std::shared_ptr<NYdb::ICredentialsProviderFactory> /*credentialsProviderFactory*/,
@@ -138,12 +139,14 @@ public:
         return settings;
     }
 
-    void MockAddSession(const NYql::NPq::NProto::TDqPqTopicSource& source, const std::set<ui32>& partitionIds, TActorId readActorId, ui64 generation = 1) {
+    void MockAddSession(const NYql::NPq::NProto::TDqPqTopicSource& source, const THashSet<ui32>& partitionIds, TActorId readActorId, ui64 generation = 1) {
         auto event = new NFq::TEvRowDispatcher::TEvStartSession(
             source,
             partitionIds,
             "Token",
             {},         // readOffset,
+            {{"","","",NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo::EStatus::AVAILABLE}},
+            {*std::max_element(partitionIds.begin(), partitionIds.end()) + 1},
             0,          // StartingMessageTimestamp;
             "QueryId");
         event->Record.MutableTransportMeta()->SetSeqNo(1);

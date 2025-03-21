@@ -108,14 +108,14 @@ void TFederatedTopicClient::TClusterInfo::AdjustTopicPath(std::string& path) con
 std::vector<NTopic::TTopicClient> TFederatedTopicClient::GetAllTopicClients(const TDriver& driver, const std::vector<TClusterInfo>& clusterInfos, NTopic::TTopicClientSettings& clientSettings) {
     std::vector<NTopic::TTopicClient> clients;
     clients.reserve(clusterInfos.size());
-    for (auto &info: clusterInfos) {
+    for (auto& info: clusterInfos) {
         info.AdjustTopicClientSettings(clientSettings);
         clients.emplace_back(driver, clientSettings);
     }
     return clients;
 }
 
-std::vector<TAsyncDescribeTopicResult> TFederatedTopicClient::DescribeAllTopics(const std::string& path, std::vector<NTopic::TTopicClient> &topicClients, const std::vector<TClusterInfo>& clusterInfos, NTopic::TDescribeTopicSettings& describeSettings) {
+std::vector<TAsyncDescribeTopicResult> TFederatedTopicClient::DescribeAllTopics(const std::string& path, std::vector<NTopic::TTopicClient>& topicClients, const std::vector<TClusterInfo>& clusterInfos, NTopic::TDescribeTopicSettings& describeSettings) {
     Y_ENSURE(topicClients.size() == clusterInfos.size());
     std::vector<TAsyncDescribeTopicResult> results;
     results.reserve(topicClients.size());

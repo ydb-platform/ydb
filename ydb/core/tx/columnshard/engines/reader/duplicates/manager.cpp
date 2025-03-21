@@ -218,15 +218,6 @@ void TDuplicateFilterConstructor::Handle(const TEvDuplicateFilterIntervalResult:
         GetConstructorBySourceId(sourceId)->SetFilter(ev->Get()->GetIntervalIdx(), std::move(filter));
     }
 
-    while (!ActiveSources.empty() && ActiveSources.front()->IsReady()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "build_duplicates_filter")(
-            "source_id", ActiveSources.front()->GetSource()->GetSourceId());
-        ActiveSources.front()->Finish();
-        AFL_VERIFY(ActiveSourceById.erase(ActiveSources.front()->GetSource()->GetSourceId()));
-        ActiveSources.pop_front();
-        ++FinishedSourcesCount;
-    }
-
     FlushFinishedSources();
 }
 
@@ -300,6 +291,15 @@ void TDuplicateFilterConstructor::StartMergingColumns(const TIntervalsCursor& in
 }
 
 void TDuplicateFilterConstructor::FlushFinishedSources() {
+    while (!ActiveSources.empty() && ActiveSources.front()->IsReady()) {
+        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "build_duplicates_filter")(
+            "source_id", ActiveSources.front()->GetSource()->GetSourceId());
+        ActiveSources.front()->Finish();
+        AFL_VERIFY(ActiveSourceById.erase(ActiveSources.front()->GetSource()->GetSourceId()));
+        ActiveSources.pop_front();
+        ++FinishedSourcesCount;
+    }
+
     if (ActiveSources.empty() && SortedSources.empty()) {
         AFL_VERIFY(NotFetchedSourcesCount.IsAllZeros());
         PassAway();

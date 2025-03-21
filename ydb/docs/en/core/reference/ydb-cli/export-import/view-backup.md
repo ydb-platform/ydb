@@ -76,7 +76,7 @@ The output of the command includes: `TableFullScan (Table: a/b/c/my_table, ...`
 
 Let's consider the following scenario:
 
-1. The steps 1 to 3 of the previous scenario [{#T}](#restoring-database-root-to-a-subfolder) are repeated.
+1. The steps 1 to 3 of the previous scenario [{#T}](#restoring-the-database-root-to-a-subfolder) are repeated.
 2. The `a/b/c` subfolder of the database is backed up:
 
     ```bash

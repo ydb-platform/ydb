@@ -534,6 +534,9 @@ public:
         void AdjustTopicClientSettings(NTopic::TTopicClientSettings& settings) const;
         //! Prepend Database for federated clusters
         void AdjustTopicPath(std::string& path) const;
+        //! Usable for at least read operations
+        bool IsAvailableForRead() const;
+        bool IsAvailableForWrite() const;
     };
 
     //! Discover all clusters for federated topic

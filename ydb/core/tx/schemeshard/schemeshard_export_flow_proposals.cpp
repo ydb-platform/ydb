@@ -328,5 +328,26 @@ TString ExportItemPathName(const TString& exportPathName, ui32 itemIdx) {
     return TStringBuilder() << exportPathName << "/" << itemIdx;
 }
 
+void PrepareDroppingDir(TSchemeShard* ss, TExportInfo::TPtr exportInfo, NIceDb::TNiceDb& db, bool isAutoDropping) {
+    exportInfo->WaitTxId = InvalidTxId;
+    exportInfo->State = isAutoDropping ? TExportInfo::EState::AutoDropping : TExportInfo::EState::Dropping;
+    ss->PersistExportState(db, exportInfo);
+
+    for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
+        auto& item = exportInfo->Items.at(itemIdx);
+
+        item.WaitTxId = InvalidTxId;
+        item.State = TExportInfo::EState::Dropped;
+        const TPath itemPath = TPath::Resolve(ExportItemPathName(ss, exportInfo, itemIdx), ss);
+        if (itemPath.IsResolved() && !itemPath.IsDeleted()) {
+            item.State = TExportInfo::EState::Dropping;
+        }
+
+        ss->PersistExportItemState(db, exportInfo, itemIdx);
+        if (isAutoDropping)
+            exportInfo->PendingDropItems.push_back(itemIdx);
+    }
+}
+
 } // NSchemeShard
 } // NKikimr

@@ -4930,6 +4930,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvDataShard::TEvSampleKResponse, Handle);
         HFuncTraced(TEvDataShard::TEvReshuffleKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvLocalKMeansResponse, Handle);
+        HFuncTraced(TEvDataShard::TEvPrefixKMeansResponse, Handle);
         HFuncTraced(TEvIndexBuilder::TEvUploadSampleKResponse, Handle);
         // } // NIndexBuilder
 

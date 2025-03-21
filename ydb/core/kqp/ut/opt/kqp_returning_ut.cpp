@@ -174,7 +174,7 @@ Y_UNIT_TEST(ReplaceSerial) {
 
 Y_UNIT_TEST(ReturningSerial) {
     NKikimrConfig::TAppConfig appConfig;
-    auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
+    auto serverSettings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(false);
     TKikimrRunner kikimr(serverSettings);
 
     auto client = kikimr.GetTableClient();
@@ -197,6 +197,55 @@ Y_UNIT_TEST(ReturningSerial) {
 
     auto resultCreate = session.ExecuteSchemeQuery(queryCreate).GetValueSync();
     UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
+
+   {
+        const auto query = Q_(R"(
+            --!syntax_v1
+            INSERT INTO ReturningTable (key) VALUES(20000) RETURNING *
+        )");
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+
+        CompareYson(R"([[20000;#]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+
+   {
+        const auto query = Q_(R"(
+            --!syntax_v1
+            UPSERT INTO ReturningTable (key) VALUES(20000) RETURNING *
+        )");
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+
+        CompareYson(R"([[20000;#]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    {
+        const auto query = Q_(R"(
+            --!syntax_v1
+            UPSERT INTO ReturningTable (key, value) VALUES(20000, 100) RETURNING *
+        )");
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+
+        CompareYson(R"([[20000;[100]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    {
+        const auto query = Q_(R"(
+            --!syntax_v1
+            UPSERT INTO ReturningTable (key) VALUES(20000) RETURNING *
+        )");
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT(result.IsSuccess());
+
+        CompareYson(R"([[20000;[100]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
 
     {
         const auto query = Q_(R"(

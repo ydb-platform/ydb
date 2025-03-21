@@ -33,20 +33,14 @@ class TestReadUpdateWriteLoad(BaseTestSet):
     def _loop_upsert(self, ctx: TestContext, size_kib: int):
         sth = ScenarioTestHelper(ctx)
         count_keys = math.ceil(size_kib / 100)
-        keys_range = self.range_allocator.allocate_range(count_keys)
         hist = TimeHistogram("Write")
-
-        batch: List[Dict[str, Any]] = []
-        for key in range(keys_range.left, keys_range.right):
-            value = random_string(100 * 1024)  # 100 KiB
-            batch.append({"key": key, "value": value})
-            if len(batch) == 200:  # 20 MiB
-                hist.timeit(lambda: sth.bulk_upsert_data(self.big_table_name, self.big_table_schema, batch))
-                batch.clear()
-            if (key - keys_range.left + 1) * 100 >= size_kib:
-                if len(batch) > 0:
-                    hist.timeit(lambda: sth.bulk_upsert_data(self.big_table_name, self.big_table_schema, batch))
-                break
+        for j in range(0, count_keys, 200):
+            keys_range = self.range_allocator.allocate_range(min(count_keys - j, 200))
+            batch: List[Dict[str, Any]] = []
+            for key in range(keys_range.left, keys_range.right):
+                value = random_string(100 * 1024)  # 100 KiB
+                batch.append({"key": key, "value": value})
+            hist.timeit(lambda: sth.bulk_upsert_data(self.big_table_name, self.big_table_schema, batch))
         print(hist, file=sys.stderr)
 
     def _loop_random_read(self, ctx: TestContext, finished: threading.Event):
@@ -67,7 +61,6 @@ class TestReadUpdateWriteLoad(BaseTestSet):
     def _loop_random_update(self, ctx: TestContext, finished: threading.Event):
         sth = ScenarioTestHelper(ctx)
         hist = TimeHistogram("Update")
-
         while not finished.is_set():
             batch: List[Dict[str, Any]] = []
             write_to = random.randint(0, self.range_allocator.get_border)
@@ -75,12 +68,7 @@ class TestReadUpdateWriteLoad(BaseTestSet):
             for key in range(write_from, write_to):
                 value = random_string(100 * 1024)  # 100 KiB
                 batch.append({"key": key, "value": value})
-                if len(batch) == 200:  # 20 MiB
-                    hist.timeit(lambda: sth.bulk_upsert_data(self.big_table_name, self.big_table_schema, batch))
-                    batch.clear()
-                if key == write_to - 1:
-                    if len(batch) > 0:
-                        hist.timeit(lambda: sth.bulk_upsert_data(self.big_table_name, self.big_table_schema, batch))
+            hist.timeit(lambda: sth.bulk_upsert_data(self.big_table_name, self.big_table_schema, batch))
         print(hist, file=sys.stderr)
 
     def _progress_tracker(self, finished: threading.Event):

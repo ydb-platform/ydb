@@ -3147,8 +3147,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(SingleShardRead) {
-        std::unique_ptr<TKikimrRunner> Kikimr;
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
         auto kikimr = std::make_unique<TKikimrRunner>(settings);
         Tests::NCommon::TLoggerInit(*kikimr).Initialize();
         auto queryClient = kikimr->GetQueryClient();
@@ -3180,7 +3183,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         }
         auto tableClient = kikimr->GetTableClient();
         auto tableClientSession = tableClient.GetSession().GetValueSync().GetSession();
-        auto result = tableClientSession.DescribeTable("/Root/Test", NYdb::NTable::TDescribeTableSettings{}.WithKeyShardBoundary(true).WithShardNodesInfo(true).WithPartitionStatistics(true).WithTableStatistics(true)).ExtractValueSync();
+        auto result = tableClientSession.DescribeTable("/Root/Test", NYdb::NTable::TDescribeTableSettings{}.WithKeyShardBoundary(true).WithPartitionStatistics(true).WithTableStatistics(true)).ExtractValueSync();
         UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
         //TODO USE shard ids from the table description. Not avaiable now
         {

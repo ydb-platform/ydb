@@ -11,6 +11,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/query_stats/stats.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/tx/tx.h>
 
 #include <variant>
 
@@ -1755,8 +1756,6 @@ struct TReadTableSettings : public TRequestSettings<TReadTableSettings> {
     FLUENT_SETTING_OPTIONAL(bool, ReturnNotNullAsOptional);
 };
 
-using TPrecommitTransactionCallback = std::function<TAsyncStatus ()>;
-
 //! Represents all session operations
 //! Session is transparent logic representation of connection
 class TSession {
@@ -1897,17 +1896,19 @@ TAsyncStatus TTableClient::RetryOperation(
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Represents data transaction
-class TTransaction {
+class TTransaction : public ITransactionBase {
     friend class TTableClient;
 public:
-    const std::string& GetId() const;
+    const std::string& GetId() const override;
+    const std::string& GetSessionId() const override;
+
     bool IsActive() const;
 
     TAsyncCommitTransactionResult Commit(const TCommitTxSettings& settings = TCommitTxSettings());
     TAsyncStatus Rollback(const TRollbackTxSettings& settings = TRollbackTxSettings());
 
     TSession GetSession() const;
-    void AddPrecommitCallback(TPrecommitTransactionCallback cb);
+    void AddPrecommitCallback(TPrecommitTransactionCallback cb) override;
 
 private:
     TTransaction(const TSession& session, const std::string& txId);

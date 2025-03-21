@@ -359,7 +359,7 @@ private:
     void SendMetrics(const NActors::TActorId& consumer, const NDqProto::TMessageTransportMeta& transportMeta) {
         YQL_ENSURE(!MaybeIssues.Defined());
         std::vector<NSo::MetricQueue::TMetric> result;
-        result.reserve(std::min(BatchCountLimit, Metrics.size()));
+        result.reserve(std::min<ui64>(BatchCountLimit, Metrics.size()));
         while (!Metrics.empty() && result.size() < BatchCountLimit) {
             result.push_back(Metrics.back());
             Metrics.pop_back();

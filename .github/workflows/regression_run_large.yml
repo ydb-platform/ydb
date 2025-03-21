@@ -7,7 +7,7 @@ on:
 
 jobs:
   main:
-    name: Regression-run Large
+    name: Regression-run_Large
     uses: ./.github/workflows/run_tests.yml
     secrets: inherit
     strategy:

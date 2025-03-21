@@ -20,7 +20,7 @@ TFairShareHierarchyLevel<TTag>::TFairShareHierarchyLevel(TTag tag, double weight
     : Tag_(std::move(tag))
     , Weight_(weight)
 {
-    YT_VERIFY(weight > 0.0);
+    YT_VERIFY(weight >= 0.0);
 }
 
 template <typename TTag>
@@ -33,6 +33,19 @@ template <typename TTag>
 double TFairShareHierarchyLevel<TTag>::GetWeight() const
 {
     return Weight_;
+}
+
+template <typename TTag>
+std::vector<TFairShareHierarchyLevel<TTag>> CreateHierarchyLevels(const std::vector<std::pair<TTag, double>>& tags)
+{
+    std::vector<TFairShareHierarchyLevel<TTag>> levels;
+    levels.reserve(tags.size());
+
+    for (const auto& tag : tags) {
+        levels.emplace_back(tag.first, tag.second);
+    }
+
+    return levels;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

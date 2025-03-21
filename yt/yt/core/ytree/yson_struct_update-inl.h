@@ -49,6 +49,11 @@ struct TUnwrapYsonStructIntrusivePtr<TIntrusivePtr<T>>
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TValue, class... Args>
+requires
+    requires (const TValue& val)
+        { [] (Args...) {} (val); } ||
+    requires (const TValue& val)
+        { [] (Args...) {} (val, val); }
 TCallback<void(const TValue&, const TValue&)> WrapUserCallback(TCallback<void(Args...)> callback)
 {
     return BIND_NO_PROPAGATE([callback = std::move(callback)] (const TValue& oldValue, const TValue& newValue) {

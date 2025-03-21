@@ -1,7 +1,6 @@
 #pragma once
 
-#include <ydb/core/protos/checksum.pb.h>
-#include <ydb/core/protos/datashard_s3_download_state.pb.h>
+#include <ydb/core/protos/datashard_backup.pb.h>
 
 #include <util/generic/maybe.h>
 
@@ -14,7 +13,7 @@ struct TS3Download {
     ui64 WrittenBytes = 0;
     ui64 WrittenRows = 0;
     NKikimrBackup::TChecksumState ChecksumState;
-    TS3DownloadState DownloadState;
+    NKikimrBackup::TS3DownloadState DownloadState;
 
     void Out(IOutputStream& out) const {
         out << "{"

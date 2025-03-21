@@ -26,7 +26,6 @@
 #include "scan_common.h"
 #include "volatile_tx.h"
 
-#include <ydb/core/protos/datashard_s3_download_state.pb.h>
 #include <ydb/core/tx/time_cast/time_cast.h>
 #include <ydb/core/tx/tx_processing.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -53,7 +52,7 @@
 #include <ydb/core/protos/tx.pb.h>
 #include <ydb/core/protos/tx_datashard.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
-#include <ydb/core/protos/checksum.pb.h>
+#include <ydb/core/protos/datashard_backup.pb.h>
 #include <ydb/core/protos/counters_datashard.pb.h>
 #include <ydb/core/protos/table_stats.pb.h>
 
@@ -792,7 +791,7 @@ class TDataShard
             struct WrittenBytes :    Column<5, NScheme::NTypeIds::Uint64> {};
             struct WrittenRows :     Column<6, NScheme::NTypeIds::Uint64> {};
             struct ChecksumState :   Column<7, NScheme::NTypeIds::String> { using Type = NKikimrBackup::TChecksumState; };
-            struct DownloadState :   Column<8, NScheme::NTypeIds::String> { using Type = TS3DownloadState; };
+            struct DownloadState :   Column<8, NScheme::NTypeIds::String> { using Type = NKikimrBackup::TS3DownloadState; };
 
             using TKey = TableKey<TxId>;
             using TColumns = TableColumns<

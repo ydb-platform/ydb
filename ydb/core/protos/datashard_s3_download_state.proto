@@ -1,9 +1,0 @@
-syntax = "proto3";
-option java_package = "ru.yandex.kikimr.proto";
-option cc_enable_arenas = true;
-
-package NKikimr.NDataShard;
-
-message TS3DownloadState {
-    bytes EncryptedDeserializerState = 1;
-}

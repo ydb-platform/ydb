@@ -265,6 +265,7 @@ PEERDIR(
     ydb/core/kqp/runtime
     ydb/core/persqueue/writer
     ydb/core/protos
+    ydb/core/scheme
     ydb/core/tablet
     ydb/core/tablet_flat
     ydb/core/tx/long_tx_service/public

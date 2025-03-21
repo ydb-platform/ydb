@@ -22,6 +22,7 @@ public:
         CdcDataChange,
         CdcHeartbeat,
         IncrementalRestore,
+        CdcSchemaChange,
     };
 
 public:

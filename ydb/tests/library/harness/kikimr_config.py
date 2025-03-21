@@ -175,7 +175,6 @@ class KikimrConfigGenerator(object):
             extra_grpc_services = []
 
         self.use_log_files = use_log_files
-        self.use_distconf = use_distconf
         self.use_self_management = use_self_management
         self.simple_config = simple_config
         self.suppress_version_check = suppress_version_check
@@ -254,27 +253,11 @@ class KikimrConfigGenerator(object):
         self.__bs_cache_file_path = bs_cache_file_path
 
         self.yaml_config = _load_default_yaml(self.__node_ids, self.domain_name, self.static_erasure, self.__additional_log_configs)
-        if self.use_distconf:
-            self.yaml_config["erasure"] = self.yaml_config.pop("static_erasure")
 
         security_config_root = self.yaml_config["domains_config"]
         if self.use_self_management:
             self.yaml_config["self_management_config"] = dict()
             self.yaml_config["self_management_config"]["enabled"] = True
-
-        if self.use_distconf:
-            if "security_config" in self.yaml_config["domains_config"]:
-                self.yaml_config["security_config"] = self.yaml_config["domains_config"]["security_config"]
-            self.yaml_config["default_disk_type"] = "ROT"
-            security_config_root = self.yaml_config
-
-            self.yaml_config["self_management_config"] = dict()
-            self.yaml_config["self_management_config"]["enabled"] = True
-
-            if erasure == Erasure.MIRROR_3_DC:
-                self.yaml_config["fail_domain_type"] = "rack"
-            else:
-                self.yaml_config["fail_domain_type"] = "disk"
 
         if overrided_actor_system_config:
             self.yaml_config["actor_system_config"] = overrided_actor_system_config
@@ -344,39 +327,36 @@ class KikimrConfigGenerator(object):
         if enable_audit_log:
             self.__set_enable_audit_log()
 
-        if not self.use_distconf:
-            self.naming_config = config_pb2.TAppConfig()
-            dc_it = itertools.cycle(self._dcs)
-            rack_it = itertools.count(start=1)
-            body_it = itertools.count(start=1)
-            self.yaml_config["nameservice_config"] = {"node": []}
-            for node_id in self.__node_ids:
-                dc, rack, body = next(dc_it), next(rack_it), next(body_it)
-                ic_port = self.port_allocator.get_node_port_allocator(node_id).ic_port
-                node = self.naming_config.NameserviceConfig.Node.add(
-                    NodeId=node_id,
-                    Address="::1",
-                    Port=ic_port,
-                    Host="localhost",
-                )
+        self.naming_config = config_pb2.TAppConfig()
+        dc_it = itertools.cycle(self._dcs)
+        rack_it = itertools.count(start=1)
+        body_it = itertools.count(start=1)
+        self.yaml_config["nameservice_config"] = {"node": []}
+        for node_id in self.__node_ids:
+            dc, rack, body = next(dc_it), next(rack_it), next(body_it)
+            ic_port = self.port_allocator.get_node_port_allocator(node_id).ic_port
+            node = self.naming_config.NameserviceConfig.Node.add(
+                NodeId=node_id,
+                Address="::1",
+                Port=ic_port,
+                Host="localhost",
+            )
 
-                node.WalleLocation.DataCenter = str(dc)
-                node.WalleLocation.Rack = str(rack)
-                node.WalleLocation.Body = body
-                self.yaml_config["nameservice_config"]["node"].append(
-                    dict(
-                        node_id=node_id,
-                        address="::1", port=ic_port,
-                        host='localhost',
-                        walle_location=dict(
-                            data_center=str(dc),
-                            rack=str(rack),
-                            body=body,
-                        )
+            node.WalleLocation.DataCenter = str(dc)
+            node.WalleLocation.Rack = str(rack)
+            node.WalleLocation.Body = body
+            self.yaml_config["nameservice_config"]["node"].append(
+                dict(
+                    node_id=node_id,
+                    address="::1", port=ic_port,
+                    host='localhost',
+                    walle_location=dict(
+                        data_center=str(dc),
+                        rack=str(rack),
+                        body=body,
                     )
                 )
-        else:
-            self._add_host_config_and_hosts()
+            )
 
         if auth_config_path:
             self.yaml_config["auth_config"] = _load_yaml_config(auth_config_path)
@@ -505,11 +485,6 @@ class KikimrConfigGenerator(object):
             self.yaml_config.pop("domains_config")
             self.yaml_config.pop("nameservice_config")
             self.yaml_config["erasure"] = self.yaml_config.pop("static_erasure")
-        if self.use_distconf:
-            self.yaml_config.pop("domains_config")
-            self.yaml_config.pop("channel_profile_config")
-            self.yaml_config.pop("system_tablets")
-            self.yaml_config.pop("security_config")
         if self.simple_config:
             self.yaml_config.pop("feature_flags")
             self.yaml_config.pop("federated_query_config")
@@ -730,7 +705,7 @@ class KikimrConfigGenerator(object):
 
                 self._pdisks_info.append({'pdisk_path': pdisk_path, 'node_id': node_id, 'disk_size': disk_size,
                                           'pdisk_user_kind': pdisk_user_kind})
-                if not self.use_distconf and not self.use_self_management and pdisk_id == 1 and node_id <= self.static_erasure.min_fail_domains * self._rings_count:
+                if not self.use_self_management and pdisk_id == 1 and node_id <= self.static_erasure.min_fail_domains * self._rings_count:
                     self._add_pdisk_to_static_group(
                         pdisk_id,
                         pdisk_path,

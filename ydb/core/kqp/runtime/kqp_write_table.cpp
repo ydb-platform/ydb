@@ -4,6 +4,7 @@
 #include <util/generic/yexception.h>
 #include <ydb/core/engine/mkql_keys.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
+#include <ydb/core/kqp/runtime/kqp_arrow_memory_pool.h>
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
@@ -47,6 +48,8 @@ public:
     TRecordBatchPtr Extract() {
         YQL_ENSURE(!Extracted);
         Extracted = true;
+        SerializedMemory = 0;
+        Memory = 0;
         return std::move(Data);
     }
 
@@ -54,34 +57,25 @@ public:
         return std::dynamic_pointer_cast<void>(Extract());
     }
 
-    void ResetAlloc() override {
-        if (Alloc && Memory > 0) {
-            TGuard guard(*Alloc);
-            Alloc->Ref().OffloadFree(Memory);
-        }
-        Alloc = nullptr;
+    void UntrackAlloc() override {
+        Y_ABORT_UNLESS(false); // Write to CS doesn't need to move data between allocators.
     }
 
     TIntrusivePtr<IDataBatch> WithAlloc(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) && override {
-        if (Alloc == alloc) {
-            ResetAlloc();
-        }
+        Y_ABORT_UNLESS(Alloc == alloc); // Write to CS doesn't need to move data between allocators.
         return MakeIntrusive<TColumnBatch>(Extract(), alloc);
     }
 
     explicit TColumnBatch(const TRecordBatchPtr& data, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc = nullptr)
         : Data(data)
         , SerializedMemory(NArrow::GetBatchDataSize(Data))
-        , Memory(NArrow::GetBatchMemorySize(Data)) {
-        if (alloc && Memory > 0) {
-            TGuard guard(*alloc);
-            alloc->Ref().OffloadAlloc(Memory);
-        }
-        Alloc = std::move(alloc);
+        , Memory(NArrow::GetBatchMemorySize(Data))
+        , Alloc(alloc) {
     }
 
     ~TColumnBatch() {
-        ResetAlloc();
+        TGuard guard(*Alloc);
+        Data.reset();   
     }
 
 private:
@@ -134,7 +128,7 @@ public:
         return std::reinterpret_pointer_cast<void>(r);
     }
 
-    void ResetAlloc() override {
+    void UntrackAlloc() override {
         if (Alloc && Memory > 0) {
             TGuard guard(*Alloc);
             Alloc->Ref().OffloadFree(Memory);
@@ -144,7 +138,7 @@ public:
 
     TIntrusivePtr<IDataBatch> WithAlloc(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) && override {
         if (Alloc == alloc) {
-            ResetAlloc();
+            UntrackAlloc();
         }
         return MakeIntrusive<TRowBatch>(Extract(), alloc);
     }
@@ -169,7 +163,7 @@ public:
     }
 
     ~TRowBatch() {
-        ResetAlloc();
+        UntrackAlloc();
     }
 
 private:
@@ -272,7 +266,7 @@ TVector<NScheme::TTypeInfo> BuildKeyColumnTypes(
     return keyColumnTypes;
 }
 
-class TRowBuilder {
+class TRowBuilder { // TODO: Use Pool like scheme cells batch
 private:
     struct TCellInfo {
         NScheme::TTypeInfo Type;
@@ -416,17 +410,24 @@ public:
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
             : Columns(BuildColumns(inputColumns))
             , WriteIndex(std::move(writeIndex))
-            , BatchBuilder(
+            , BatchBuilder(std::make_unique<NArrow::TArrowBatchBuilder>(
                 arrow::Compression::UNCOMPRESSED,
-                BuildNotNullColumns(inputColumns))
+                BuildNotNullColumns(inputColumns),
+                NKikimr::NMiniKQL::GetArrowMemoryPool()))
             , Alloc(std::move(alloc)) {
         TString err;
-        if (!BatchBuilder.Start(BuildBatchBuilderColumns(WriteIndex, inputColumns), 0, 0, err)) {
+        if (!BatchBuilder->Start(BuildBatchBuilderColumns(WriteIndex, inputColumns), 0, 0, err)) {
             yexception() << "Failed to start batch builder: " + err;
         }
     }
 
+    ~TColumnDataBatcher() {
+        TGuard guard(*Alloc);
+        BatchBuilder.reset();
+    }
+
     void AddData(const NMiniKQL::TUnboxedValueBatch& data) override {
+        TGuard guard(*Alloc);
         TRowBuilder rowBuilder(Columns.size());
         data.ForEachRow([&](const auto& row) {
             for (size_t index = 0; index < Columns.size(); ++index) {
@@ -436,22 +437,23 @@ public:
                     row.GetElement(index),
                     Columns[index].PTypeMod);
             }
-            BatchBuilder.AddRow(rowBuilder.Build());
+            BatchBuilder->AddRow(rowBuilder.Build());
         });
     }
 
     i64 GetMemory() const override {
-        return BatchBuilder.Bytes();
+        return BatchBuilder->Bytes();
     }
 
     IDataBatchPtr Build() override {
-        return MakeIntrusive<TColumnBatch>(BatchBuilder.FlushBatch(true), Alloc);
+        TGuard guard(*Alloc);
+        return MakeIntrusive<TColumnBatch>(BatchBuilder->FlushBatch(true), Alloc);
     }
 
 private:
     const TVector<TSysTables::TTableColumnInfo> Columns;
     const std::vector<ui32> WriteIndex;
-    NArrow::TArrowBatchBuilder BatchBuilder;
+    std::unique_ptr<NArrow::TArrowBatchBuilder> BatchBuilder;
 
     std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 };
@@ -490,6 +492,12 @@ public:
         Sharding = shardingConclusion.DetachResult();
     }
 
+    ~TColumnShardPayloadSerializer() {
+        TGuard guard(*Alloc);
+        UnpreparedBatches.clear();
+        Batches.clear();
+    }
+
     void AddData(IDataBatchPtr&& batch) override {
         YQL_ENSURE(!Closed);
         AddBatch(std::move(batch));
@@ -507,7 +515,9 @@ public:
     }
 
     void ShardAndFlushBatch(const TRecordBatchPtr& unshardedBatch, bool force) {
-        for (auto [shardId, shardBatch] : Sharding->SplitByShardsToArrowBatches(unshardedBatch)) {
+        TGuard guard(*Alloc);
+        for (auto [shardId, shardBatch] : Sharding->SplitByShardsToArrowBatches(
+                                                    unshardedBatch, NKikimr::NMiniKQL::GetArrowMemoryPool())) {
             const i64 shardBatchMemory = NArrow::GetBatchDataSize(shardBatch);
             YQL_ENSURE(shardBatchMemory != 0);
 

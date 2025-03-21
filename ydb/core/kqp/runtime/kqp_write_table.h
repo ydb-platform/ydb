@@ -19,8 +19,8 @@ public:
 
     virtual std::shared_ptr<void> ExtractBatch() = 0;
 
-    virtual void SetAlloc(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) = 0;
     virtual void ResetAlloc() = 0;
+    virtual TIntrusivePtr<IDataBatch> WithAlloc(std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) && = 0;
 };
 
 using IDataBatchPtr = TIntrusivePtr<IDataBatch>;

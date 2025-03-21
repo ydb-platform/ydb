@@ -56,6 +56,7 @@ public:
           hFunc(TEvPQ::TEvGetFullDirectReadData, HandleGetData)
           hFunc(TEvPQProxy::TEvDirectReadDataSessionConnected, HandleCreateClientSession)
           hFunc(TEvPQProxy::TEvDirectReadDataSessionDead, HandleDestroyClientSession)
+          hFunc(TEvPQProxy::TEvDirectReadDestroyPartitionSession, HandlePartitionSessionReleased)
     )
 
 private:
@@ -110,6 +111,17 @@ private:
             );
         }
         AssignByProxy.erase(assignIter);
+    }
+
+    void HandlePartitionSessionReleased(TEvPQProxy::TEvDirectReadDestroyPartitionSession::TPtr& ev) {
+        auto assignIter = AssignByProxy.find(ev->Sender);
+        if (assignIter.IsEnd())
+            return;
+        if (!assignIter->second.contains(ev->Get()->ReadKey.PartitionSessionId))
+            return;
+
+        assignIter->second.erase(ev->Get()->ReadKey.PartitionSessionId);
+        ServerSessions.erase(ev->Get()->ReadKey);
     }
 
     void HandleRegister(TEvPQ::TEvRegisterDirectReadSession::TPtr& ev) {

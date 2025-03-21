@@ -19,10 +19,13 @@ namespace {
 }
 
 Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
-    Y_UNIT_TEST_TWIN(Upsert, LogEnabled) {
+    Y_UNIT_TEST_QUAD(Upsert, LogEnabled, UseSink) {
         TStringStream ss;
         {
+            NKikimrConfig::TAppConfig appConfig;
+            appConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
             TKikimrSettings serverSettings;
+            serverSettings.SetAppConfig(appConfig);
             serverSettings.LogStream = &ss;
             TKikimrRunner kikimr(serverSettings);
 
@@ -44,8 +47,13 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         }
 
-        // check executer logs
-        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), LogEnabled ? 2 : 0);
+        if (UseSink) {
+            // check write actor logs
+            UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: WriteActor"), LogEnabled ? 1 : 0);
+        } else {
+            // check executer logs
+            UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), LogEnabled ? 2 : 0);
+        }
         // check session actor logs
         UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY DEBUG: Component: SessionActor"), LogEnabled ? 2 : 0);
         // check grpc logs
@@ -54,49 +62,13 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: DataShard"), LogEnabled ? 2 : 0);
     }
 
-    Y_UNIT_TEST(UpsertEvWrite) {
+    Y_UNIT_TEST_QUAD(UpsertEvWriteQueryService, isOlap, useOltpSink) {
         TStringStream ss;
         {
             NKikimrConfig::TAppConfig AppConfig;
-            AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
-            TKikimrSettings serverSettings = TKikimrSettings().SetAppConfig(AppConfig);
-            serverSettings.LogStream = &ss;
-            TKikimrRunner kikimr(serverSettings);
-            kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::DATA_INTEGRITY, NLog::PRI_TRACE);
-            
-            auto db = kikimr.GetTableClient();
-            auto session = db.CreateSession().GetValueSync().GetSession();
+            AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(useOltpSink);
+            AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(isOlap);
 
-            auto result = session.ExecuteDataQuery(R"(
-                --!syntax_v1
-
-                UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES
-                    (3u, "Value3"),
-                    (101u, "Value101"),
-                    (201u, "Value201");
-            )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        // check write actor logs
-        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: WriteActor"), 1);
-        // check session actor logs
-        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY DEBUG: Component: SessionActor"), 2);
-        // check grpc logs
-        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY TRACE: Component: Grpc"), 2);
-        // check datashard logs
-        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: DataShard"), 2);
-    }
-
-    Y_UNIT_TEST_TWIN(UpsertEvWriteQueryService, isOlap) {
-        TStringStream ss;
-        {
-            NKikimrConfig::TAppConfig AppConfig;
-            if (!isOlap) {
-                AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(true);
-            } else {
-                AppConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
-            }
             TKikimrSettings serverSettings = TKikimrSettings().SetAppConfig(AppConfig);
             serverSettings.LogStream = &ss;
             TKikimrRunner kikimr(serverSettings);
@@ -132,8 +104,13 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         }
 
         if (!isOlap) {
-            // check write actor logs
-            UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: WriteActor"), 1);
+            if (useOltpSink) {
+                // check write actor logs
+                UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: WriteActor"), 1);
+            } else {
+                // check executer logs
+                UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), 2);
+            }
             // check session actor logs
             UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY DEBUG: Component: SessionActor"), 2);
             // check grpc logs
@@ -143,8 +120,13 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         } else {
             // check write actor logs
             UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: WriteActor"), 3);
-            // check executer logs
-            UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), 11);
+            if (useOltpSink) {
+                // check executer logs
+                UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), 1);
+            } else {
+                // check executer logs
+                UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), 11);
+            }
             // check session actor logs
             UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY DEBUG: Component: SessionActor"), 2);
             // check grpc logs
@@ -215,10 +197,13 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: DataShard"), 0);
     }
 
-    Y_UNIT_TEST(BrokenReadLock) {
+    Y_UNIT_TEST_TWIN(BrokenReadLock, UseSink) {
         TStringStream ss;
         {
+            NKikimrConfig::TAppConfig AppConfig;
+            AppConfig.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
             TKikimrSettings serverSettings;
+            serverSettings.SetAppConfig(AppConfig);
             serverSettings.LogStream = &ss;
             TKikimrRunner kikimr(serverSettings);
             kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::DATA_INTEGRITY, NLog::PRI_TRACE);

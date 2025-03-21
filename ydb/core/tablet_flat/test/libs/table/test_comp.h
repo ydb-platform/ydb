@@ -23,12 +23,12 @@ namespace NTest {
                 Conf.NoErased = false; /* Need all technical rows */
             }
 
-            IPages* MakeEnv() noexcept override
+            IPages* MakeEnv() override
             {
                 return Env;
             }
 
-            TPartView LoadPart(const TIntrusiveConstPtr<TColdPart>&) noexcept override {
+            TPartView LoadPart(const TIntrusiveConstPtr<TColdPart>&) override {
                 Y_ABORT("not supported in test scans");
             }
 
@@ -130,12 +130,12 @@ namespace NTest {
         }
 
     private:
-        virtual TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) noexcept override
+        virtual TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) override
         {
             Y_ABORT("IScan::Prepare(...) isn't used in test env compaction");
         }
 
-        EScan Seek(TLead &lead, ui64 seq) noexcept override
+        EScan Seek(TLead &lead, ui64 seq) override
         {
             Y_ABORT_UNLESS(seq < 2, "Test IScan impl Got too many Seek() calls");
 
@@ -144,31 +144,31 @@ namespace NTest {
             return seq == 0 ? EScan::Feed : EScan::Final;
         }
 
-        EScan BeginKey(TArrayRef<const TCell> key) noexcept override
+        EScan BeginKey(TArrayRef<const TCell> key) override
         {
             Writer->BeginKey(key);
 
             return Failed = 0, EScan::Feed;
         }
 
-        EScan BeginDeltas() noexcept override
+        EScan BeginDeltas() override
         {
             return Failed = 0, EScan::Feed;
         }
 
-        EScan Feed(const TRow &row, ui64 txId) noexcept override
+        EScan Feed(const TRow &row, ui64 txId) override
         {
             Writer->AddKeyDelta(row, txId);
 
             return Failed = 0, EScan::Feed;
         }
 
-        EScan EndDeltas() noexcept override
+        EScan EndDeltas() override
         {
             return Failed = 0, EScan::Feed;
         }
 
-        EScan Feed(const TRow &row, TRowVersion &rowVersion) noexcept override
+        EScan Feed(const TRow &row, TRowVersion &rowVersion) override
         {
             if (RemovedRowVersions) {
                 rowVersion = RemovedRowVersions.AdjustDown(rowVersion);
@@ -179,19 +179,19 @@ namespace NTest {
             return Failed = 0, EScan::Feed;
         }
 
-        EScan EndKey() noexcept override
+        EScan EndKey() override
         {
             Writer->EndKey();
 
             return Failed = 0, EScan::Feed;
         }
 
-        TAutoPtr<IDestructable> Finish(EAbort) noexcept override
+        TAutoPtr<IDestructable> Finish(EAbort) override
         {
             Y_ABORT("IScan::Finish(...) shouldn't be called in test env");
         }
 
-        void Describe(IOutputStream &out) const noexcept override
+        void Describe(IOutputStream &out) const override
         {
             out << "Compact{test env}";
         }

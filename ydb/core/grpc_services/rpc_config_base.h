@@ -13,8 +13,9 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
-#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/core/cms/console/console.h>
 
 namespace NKikimr::NGRpcService {
 
@@ -182,21 +183,22 @@ protected:
 
     void Handle(TEvNodeWardenStorageConfig::TPtr ev) {
         auto *self = Self();
-        if (ev->Get()->Config->GetGeneration() || self->IsDistconfEnableQuery()) { // distconf (will be) enabled
+        if (ev->Get()->SelfManagementEnabled || self->IsDistconfEnableQuery()) { // distconf (will be) enabled
             auto ev = std::make_unique<NStorage::TEvNodeConfigInvokeOnRoot>();
             self->FillDistconfQuery(*ev);
             self->Send(MakeBlobStorageNodeWardenID(self->SelfId().NodeId()), ev.release());
         } else { // classic BSC
-            BSCTabletId = MakeBSControllerID();
             CreatePipe();
-            SendGetInterfaceVersion();
         }
     }
 
     void Handle(NStorage::TEvNodeConfigInvokeOnRootResult::TPtr ev) {
         auto *self = Self();
         auto& record = ev->Get()->Record;
-        if (record.GetStatus() != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
+        if (auto status = record.GetStatus(); status == NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::CONTINUE_BSC) {
+            // continue with BSC
+            CreatePipe();
+        } else if (status != NKikimrBlobStorage::TEvNodeConfigInvokeOnRootResult::OK) {
             self->Reply(Ydb::StatusIds::INTERNAL_ERROR, record.GetErrorReason(), NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
                 self->ActorContext());
         } else {
@@ -216,15 +218,13 @@ protected:
 
     void CreatePipe() {
         auto *self = Self();
-        BSCPipeClient = self->Register(NTabletPipe::CreateClient(self->SelfId(), BSCTabletId, GetPipeConfig()));
-    }
+        BSCPipeClient = self->Register(NTabletPipe::CreateClient(self->SelfId(), MakeBSControllerID(), GetPipeConfig()));
 
-    void SendGetInterfaceVersion() {
         auto req = std::make_unique<TEvBlobStorage::TEvControllerConfigRequest>();
         auto& record = req->Record;
         auto *request = record.MutableRequest();
         request->AddCommand()->MutableGetInterfaceVersion();
-        NTabletPipe::SendData(Self()->SelfId(), BSCPipeClient, req.release(), 0, TBase::Span_.GetTraceId());
+        NTabletPipe::SendData(self->SelfId(), BSCPipeClient, req.release(), 0, TBase::Span_.GetTraceId());
         State = EState::GET_INTERFACE_VERSION;
     }
 
@@ -351,6 +351,37 @@ protected:
             NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, self->ActorContext());
     }
 
+    TActorId ConsolePipe;
+
+    STFUNC(StateConsoleFunc) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NConsole::TEvConsole::TEvGenericError, HandleConsole);
+            hFunc(TEvTabletPipe::TEvClientDestroyed, HandleConsole);
+            hFunc(TEvTabletPipe::TEvClientConnected, HandleConsole);
+            default:
+                return TBase::StateFuncBase(ev);
+        }
+    }
+
+    void HandleConsole(NConsole::TEvConsole::TEvGenericError::TPtr& ev) {
+        auto *self = Self();
+        self->Reply(ev->Get()->Record.GetYdbStatus(), ev->Get()->Record.GetIssues(), self->ActorContext());
+    }
+    
+    void HandleConsole(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
+        auto *self = Self();
+        self->Reply(Ydb::StatusIds::UNAVAILABLE, "Connection to Console was lost",
+                   NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, self->ActorContext());
+    }
+
+    void HandleConsole(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
+        if (ev->Get()->Status != NKikimrProto::OK) {
+            auto *self = Self();
+            self->Reply(Ydb::StatusIds::UNAVAILABLE, "Failed to connect to Console",
+                       NKikimrIssues::TIssuesIds::SHARD_NOT_AVAILABLE, self->ActorContext());
+        }
+    }
+
     virtual bool ValidateRequest(Ydb::StatusIds::StatusCode& status, NYql::TIssues& issues) = 0;
     virtual std::unique_ptr<IEventBase> ProcessControllerQuery() = 0;
 
@@ -365,7 +396,6 @@ private:
     };
 
     EState State = EState::UNKNOWN;
-    ui64 BSCTabletId = 0;
     TActorId BSCPipeClient;
     ui32 InterfaceVersion = 0;
 };

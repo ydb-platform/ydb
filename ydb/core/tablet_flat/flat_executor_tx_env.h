@@ -20,12 +20,12 @@ namespace NTabletFlatExecutor {
         { }
 
     protected: /* NTable::IPages, page collection backend implementation */
-        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) noexcept override
+        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) override
         {
             return NTable::MemTableRefLookup(memTable, ref, tag);
         }
 
-        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override
+        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) override
         {
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
@@ -45,22 +45,22 @@ namespace NTabletFlatExecutor {
             return Lookup(partStore->PageCollections.at(groupId.Index).Get(), pageId);
         }
 
-        void EnableReadMissingReferences() noexcept {
+        void EnableReadMissingReferences() {
             ReadMissingReferences = true;
         }
 
-        void DisableReadMissingReferences() noexcept {
+        void DisableReadMissingReferences() {
             ReadMissingReferences = false;
             MissingReferencesSize_ = 0;
         }
 
-        ui64 MissingReferencesSize() const noexcept
+        ui64 MissingReferencesSize() const
         { 
             return MissingReferencesSize_;
         }
 
     private:
-        const TSharedData* Lookup(TPrivatePageCache::TInfo *info, TPageId pageId) noexcept
+        const TSharedData* Lookup(TPrivatePageCache::TInfo *info, TPageId pageId)
         {
             return Cache.Lookup(pageId, info);
         }
@@ -136,7 +136,7 @@ namespace NTabletFlatExecutor {
 
         using TPageCollectionReadEnv::TPageCollectionReadEnv;
 
-        bool HasChanges() const noexcept
+        bool HasChanges() const
         {
             return
                 DropSnap
@@ -148,7 +148,7 @@ namespace NTabletFlatExecutor {
         }
 
     protected:
-        void OnRollbackChanges() noexcept override {
+        void OnRollbackChanges() override {
             MakeSnap.clear();
             DropSnap.Reset();
             BorrowUpdates.clear();
@@ -212,17 +212,17 @@ namespace NTabletFlatExecutor {
             LoanConfirmation.insert(std::make_pair(bundle, TLoanConfirmation{borrow}));
         }
 
-        void EnableReadMissingReferences() noexcept override
+        void EnableReadMissingReferences() override
         {
             TPageCollectionReadEnv::EnableReadMissingReferences();
         }
 
-        void DisableReadMissingReferences() noexcept override
+        void DisableReadMissingReferences() override
         {
             TPageCollectionReadEnv::DisableReadMissingReferences();
         }
 
-        ui64 MissingReferencesSize() const noexcept override
+        ui64 MissingReferencesSize() const override
         {
             return TPageCollectionReadEnv::MissingReferencesSize();
         }

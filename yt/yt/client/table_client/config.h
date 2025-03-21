@@ -148,6 +148,7 @@ struct TChunkWriterConfig
     i64 MaxDataWeightBetweenBlocks;
 
     double SampleRate;
+    bool UseOriginalDataWeightInSamples;
 
     bool EnableLargeColumnarStatistics;
 

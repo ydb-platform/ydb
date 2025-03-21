@@ -1,3 +1,5 @@
+#include "ydb_grpc_helpers.h"
+
 #include <ydb/public/api/grpc/ydb_cms_v1.grpc.pb.h>
 
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
@@ -78,7 +80,7 @@ public:
         auto forwardRequest = std::make_unique<TEvPrivate::TEvCreateDatabaseRequest>();
         forwardRequest->Request.mutable_serverless_resources()->set_shared_database_path(request.BasePath);
         forwardRequest->Request.set_path(request.Path);
-        forwardRequest->Token = CredentialsProvider->GetAuthInfo();
+        SetYdbRequestToken(*forwardRequest, CredentialsProvider->GetAuthInfo());
         TEvPrivate::TEvCreateDatabaseRequest::TPtr forwardEvent = (NActors::TEventHandle<TEvPrivate::TEvCreateDatabaseRequest>*)new IEventHandle(SelfId(), SelfId(), forwardRequest.release(), 0, Cookie);
         MakeCall<TCreateDatabaseGrpcRequest>(std::move(forwardEvent));
         Requests[Cookie++] = ev;
@@ -119,7 +121,7 @@ public:
 
     void Handle(TEvYdbCompute::TEvListDatabasesRequest::TPtr& ev) {
         auto forwardRequest = std::make_unique<TEvPrivate::TEvListDatabasesRequest>();
-        forwardRequest->Token = CredentialsProvider->GetAuthInfo();
+        SetYdbRequestToken(*forwardRequest, CredentialsProvider->GetAuthInfo());
         TEvPrivate::TEvListDatabasesRequest::TPtr forwardEvent = (NActors::TEventHandle<TEvPrivate::TEvListDatabasesRequest>*)new IEventHandle(SelfId(), SelfId(), forwardRequest.release(), 0, Cookie);
         MakeCall<TListDatabasesGrpcRequest>(std::move(forwardEvent));
         Requests[Cookie++] = ev;

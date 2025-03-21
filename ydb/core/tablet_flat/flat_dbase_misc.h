@@ -12,7 +12,7 @@ namespace NTable {
 
     struct TDbStats {
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             const ui64 sys = Parts.FlatIndexBytes + Parts.BTreeIndexBytes + Parts.ByKeyBytes + Parts.OtherBytes;
 

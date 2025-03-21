@@ -53,7 +53,7 @@ TExecutorBootLogic::~TExecutorBootLogic()
     Y_ABORT_UNLESS(Steps->Alone(), "Bootlogic is still has pending IStep()s");
 }
 
-void TExecutorBootLogic::Describe(IOutputStream &out) const noexcept
+void TExecutorBootLogic::Describe(IOutputStream &out) const
 {
     return Steps->Describe(out);
 }
@@ -118,7 +118,7 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::ReceiveBoot(
     return CheckCompletion();
 }
 
-void TExecutorBootLogic::PrepareEnv(bool follower, ui32 gen, TExecutorCaches caches) noexcept
+void TExecutorBootLogic::PrepareEnv(bool follower, ui32 gen, TExecutorCaches caches)
 {
     BootTimestamp = AppData()->MonotonicTimeProvider->Now();
 
@@ -184,8 +184,7 @@ NBoot::TSpawned TExecutorBootLogic::LoadPages(NBoot::IStep *step, TAutoPtr<NPage
         NSharedCache::MakeSharedPageCacheId(),
         new NSharedCache::TEvRequest(
             NBlockIO::EPriority::Fast,
-            req,
-            SelfId),
+            req),
         0, (ui64)EPageCollectionRequest::BootLogic);
 
     return NBoot::TSpawned(true);
@@ -301,7 +300,7 @@ TExecutorBootLogic::EOpResult TExecutorBootLogic::Receive(::NActors::IEventHandl
     return CheckCompletion();
 }
 
-TAutoPtr<NBoot::TResult> TExecutorBootLogic::ExtractState() noexcept {
+TAutoPtr<NBoot::TResult> TExecutorBootLogic::ExtractState() {
     Y_ABORT_UNLESS(Result_->Database, "Looks like booting hasn't been done");
     return Result_;
 }

@@ -140,6 +140,8 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Mux(TExprBase node, TEx
     bool allAreTableContents = true;
     bool hasContents = false;
     TString resultCluster;
+    const ERuntimeClusterSelectionMode selectionMode =
+        State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
     TMaybeNode<TYtDSource> dataSource;
     for (auto child: mux.Input().Cast<TExprList>()) {
         bool isTable = IsYtProviderInput(child);
@@ -244,7 +246,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Mux(TExprBase node, TEx
                 return node;
             }
             TSyncMap syncList;
-            if (!IsYtCompleteIsolatedLambda(child.Ref(), syncList, resultCluster, false)) {
+            if (!IsYtCompleteIsolatedLambda(child.Ref(), syncList, resultCluster, false, selectionMode)) {
                 return node;
             }
 
@@ -322,7 +324,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::TakeOrSkip(TExprBase no
 
     auto cluster = TString{GetClusterName(input)};
     TSyncMap syncList;
-    if (!IsYtCompleteIsolatedLambda(countBase.Count().Ref(), syncList, cluster, false)) {
+    const ERuntimeClusterSelectionMode selectionMode =
+        State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+    if (!IsYtCompleteIsolatedLambda(countBase.Count().Ref(), syncList, cluster, false, selectionMode)) {
         return node;
     }
 
@@ -567,6 +571,8 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Extend(TExprBase node, 
     }
 
     const bool useNativeDescSort = State_->Configuration->UseNativeDescSort.Get().GetOrElse(DEFAULT_USE_NATIVE_DESC_SORT);
+    const ERuntimeClusterSelectionMode selectionMode =
+        State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
     TExprNode::TListType newExtendParts;
     for (auto child: extend) {
         if (!IsYtProviderInput(child)) {
@@ -574,7 +580,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Extend(TExprBase node, 
                 return node;
             }
             TSyncMap syncList;
-            if (!IsYtCompleteIsolatedLambda(child.Ref(), syncList, resultCluster, false)) {
+            if (!IsYtCompleteIsolatedLambda(child.Ref(), syncList, resultCluster, false, selectionMode)) {
                 return node;
             }
 

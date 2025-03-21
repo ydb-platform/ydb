@@ -3,10 +3,10 @@
 namespace NYql {
 
 TTaskTransformFactory CreateCompositeTaskTransformFactory(TVector<TTaskTransformFactory> factories) {
-    return [factories = std::move(factories)] (const THashMap<TString, TString>& taskParams, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry) -> NKikimr::NMiniKQL::TCallableVisitFuncProvider {
+    return [factories = std::move(factories)] (const TTaskTransformArguments& args, const NKikimr::NMiniKQL::IFunctionRegistry* funcRegistry) -> NKikimr::NMiniKQL::TCallableVisitFuncProvider {
         TVector<NKikimr::NMiniKQL::TCallableVisitFuncProvider> funcProviders;
         for (auto& factory: factories) {
-            funcProviders.push_back(factory(taskParams, funcRegistry));
+            funcProviders.push_back(factory(args, funcRegistry));
         }
         return [funcProviders = std::move(funcProviders)] (const NKikimr::NMiniKQL::TInternName& name) -> NKikimr::NMiniKQL::TCallableVisitFunc {
             for (auto& provider: funcProviders) {

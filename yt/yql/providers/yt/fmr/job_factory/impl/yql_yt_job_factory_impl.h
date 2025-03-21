@@ -6,9 +6,14 @@
 
 namespace NYql::NFmr {
 
+struct TJobResult {
+    ETaskStatus TaskStatus;
+    TStatistics Stats;
+};
+
 struct TFmrJobFactorySettings {
     ui32 NumThreads = 3;
-    std::function<ETaskStatus(TTask::TPtr, std::shared_ptr<std::atomic<bool>>)> Function;
+    std::function<TJobResult(TTask::TPtr, std::shared_ptr<std::atomic<bool>>)> Function;
 };
 
 IFmrJobFactory::TPtr MakeFmrJobFactory(const TFmrJobFactorySettings& settings);

@@ -50,7 +50,7 @@ namespace NWriter {
             return std::exchange(Blobs, { });
         }
 
-        TVector<TResult> Results() noexcept
+        TVector<TResult> Results()
         {
             for (auto &blocks : Blocks) {
                 Y_ABORT_UNLESS(!*blocks, "Bundle writer has unflushed data");
@@ -59,7 +59,7 @@ namespace NWriter {
             return std::move(Results_);
         }
 
-        NPageCollection::TLargeGlobId WriteExtra(TArrayRef<const char> body) noexcept
+        NPageCollection::TLargeGlobId WriteExtra(TArrayRef<const char> body)
         {
             return Put(/* data cookieRange */ 1, ExtraChannel, body, Groups[0].MaxBlobSize);
         }
@@ -70,7 +70,7 @@ namespace NWriter {
             return Blocks.at(group)->Write(std::move(page), type);
         }
 
-        TPageId WriteOuter(TSharedData page) noexcept override
+        TPageId WriteOuter(TSharedData page) override
         {
             return
                 Blocks.back()->Write(std::move(page), EPage::Opaque);
@@ -81,7 +81,7 @@ namespace NWriter {
             Blocks[0]->WriteInplace(page, body);
         }
 
-        NPageCollection::TGlobId WriteLarge(TString blob, ui64 ref) noexcept override
+        NPageCollection::TGlobId WriteLarge(TString blob, ui64 ref) override
         {
             ui8 bestChannel = ChannelsShares.Select(BlobsChannels);
             
@@ -93,7 +93,7 @@ namespace NWriter {
             return glob;
         }
 
-        void Finish(TString overlay) noexcept override
+        void Finish(TString overlay) override
         {
             auto &result = Results_.emplace_back();
 
@@ -113,19 +113,19 @@ namespace NWriter {
             result.Overlay = overlay;
         }
 
-        NPageCollection::TCookieAllocator& CookieRange(ui32 cookieRange) noexcept override
+        NPageCollection::TCookieAllocator& CookieRange(ui32 cookieRange) override
         {
             Y_ABORT_UNLESS(cookieRange == 0 || cookieRange == 1, "Invalid cookieRange requested");
 
             return cookieRange == 0 ? Banks.Meta : Banks.Data;
         }
 
-        void Put(NPageCollection::TGlob&& glob) noexcept override
+        void Put(NPageCollection::TGlob&& glob) override
         {
             Blobs.emplace_back(std::move(glob));
         }
 
-        NPageCollection::TLargeGlobId Put(ui32 cookieRange, ui8 channel, TArrayRef<const char> body, ui32 block) noexcept override
+        NPageCollection::TLargeGlobId Put(ui32 cookieRange, ui8 channel, TArrayRef<const char> body, ui32 block) override
         {
             const auto largeGlobId = CookieRange(cookieRange).Do(channel, body.size(), block);
 

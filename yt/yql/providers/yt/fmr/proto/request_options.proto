@@ -43,8 +43,6 @@ message TFmrError {
     optional string OperationId = 5;
 }
 
-message TStatistics {}
-
 message TYtTableRef {
     string Path = 1;
     string Cluster = 2;
@@ -54,30 +52,91 @@ message TFmrTableRef {
     string TableId = 1;
 }
 
-message TTableRef {
-    oneof TableRef {
+message TTableRange {
+    string PartId = 1;
+    uint64 MinChunk = 2;
+    uint64 MaxChunk = 3;
+}
+
+message TFmrTableInputRef {
+    string TableId = 1;
+    repeated TTableRange TableRanges = 2;
+}
+
+message TFmrTableOutputRef {
+    string TableId = 1;
+    string PartId = 2;
+}
+
+message TTableStats {
+    uint64 Chunks = 1;
+    uint64 Rows = 2;
+    uint64 DataWeight = 3;
+}
+
+message TFmrStatisticsObject {
+    TFmrTableOutputRef Table = 1;
+    TTableStats Statistic = 2;
+}
+
+message TStatistics {
+    repeated TFmrStatisticsObject OutputTables = 1;
+}
+
+message TOperationTableRef {
+    oneof OperationTableRef {
         TYtTableRef YtTableRef = 1;
         TFmrTableRef FmrTableRef = 2;
     }
 }
 
-message TUploadTaskParams {
+message TTaskTableRef {
+    oneof TaskTableRef {
+        TYtTableRef YtTableRef = 1;
+        TFmrTableInputRef FmrTableInputRef = 2;
+    }
+}
+
+message TUploadOperationParams {
     TFmrTableRef Input = 1;
     TYtTableRef Output = 2;
 }
 
-message TDownloadTaskParams {
+message TUploadTaskParams {
+    TFmrTableInputRef Input = 1;
+    TYtTableRef Output = 2;
+}
+
+message TDownloadOperationParams {
     TYtTableRef Input = 1;
     TFmrTableRef Output = 2;
 }
 
-message TMergeTaskParams {
-    repeated TTableRef Input = 1;
+message TDownloadTaskParams {
+    TYtTableRef Input = 1;
+    TFmrTableOutputRef Output = 2;
+}
+
+message TMergeOperationParams {
+    repeated TOperationTableRef Input = 1;
     TFmrTableRef Output = 2;
 }
 
+message TMergeTaskParams {
+    repeated TTaskTableRef Input = 1;
+    TFmrTableOutputRef Output = 2;
+}
+
+message TOperationParams {
+    oneof TOperationParams {
+        TUploadOperationParams UploadOperationParams = 1;
+        TDownloadOperationParams DownloadOperationParams = 2;
+        TMergeOperationParams MergeOperationParams = 3;
+    }
+}
+
 message TTaskParams {
-    oneof TaskParams {
+    oneof TTaskParams {
         TUploadTaskParams UploadTaskParams = 1;
         TDownloadTaskParams DownloadTaskParams = 2;
         TMergeTaskParams MergeTaskParams = 3;
@@ -103,5 +162,5 @@ message TTaskState {
     ETaskStatus TaskStatus = 1;
     string TaskId = 2;
     optional TFmrError TaskErrorMessage = 3;
+    TStatistics Stats = 4;
 }
-

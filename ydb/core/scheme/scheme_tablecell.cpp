@@ -224,7 +224,7 @@ TOwnedCellVec::TInit TOwnedCellVec::AllocateFromSerialized(std::string_view data
         TCellHeader cellHeader;
         const char* src;
         if (!reader.Read(&cellHeader) || !reader.Skip(cellHeader.CellSize(), &src)) {
-            Y_ABORT("Unexpected failure to deserialize cell data a second time");
+            Y_ENSURE(false, "Unexpected failure to deserialize cell data a second time");
         }
         size_t cellSize = cellHeader.CellSize();
         if (cellHeader.IsNull()) {
@@ -360,7 +360,7 @@ namespace {
     constexpr size_t CellMatrixHeaderSize = sizeof(ui32) + sizeof(ui16);
 
     Y_FORCE_INLINE void SerializeCellMatrix(TConstArrayRef<TCell> cells, ui32 rowCount, ui16 colCount, TString& resultBuffer, TVector<TCell>* resultCells) {
-        Y_ABORT_UNLESS(cells.size() == (size_t)rowCount * (size_t)colCount);
+        Y_ENSURE(cells.size() == (size_t)rowCount * (size_t)colCount);
 
         if (!SerializeCellVecInit(cells, resultBuffer, resultCells))
             return;
@@ -533,18 +533,18 @@ TSerializedCellMatrix::TSerializedCellMatrix(TConstArrayRef<TCell> cells, ui32 r
 }
 
 const TCell& TSerializedCellMatrix::GetCell(ui32 row, ui16 column) const {
-    Y_ABORT_UNLESS(row < RowCount && column < ColCount);
+    Y_ENSURE(row < RowCount && column < ColCount);
     return Cells.at(CalcIndex(row, column));
 }
 
 
 void TSerializedCellMatrix::GetSubmatrix(ui32 firstRow, ui32 lastRow, ui16 firstColumn, ui16 lastColumn, TVector<TCell>& resultCells) const {
-    Y_ABORT_UNLESS(firstColumn < ColCount &&
-                   lastColumn < ColCount &&
-                   firstRow < RowCount &&
-                   lastRow < RowCount &&
-                   firstColumn <= lastColumn &&
-                   firstRow <= lastRow);
+    Y_ENSURE(firstColumn < ColCount &&
+             lastColumn < ColCount &&
+             firstRow < RowCount &&
+             lastRow < RowCount &&
+             firstColumn <= lastColumn &&
+             firstRow <= lastRow);
 
     ui32 rowCount = (lastRow - firstRow + 1);
     ui16 colCount = (lastColumn - firstColumn + 1);

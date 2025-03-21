@@ -60,84 +60,273 @@ TFmrTableRef FmrTableRefFromProto(const NProto::TFmrTableRef protoFmrTableRef) {
     return fmrTableRef;
 }
 
-NProto::TTableRef TableRefToProto(const TTableRef& tableRef) {
-    NProto::TTableRef protoTableRef;
-    if (auto* ytTableRefPtr = std::get_if<TYtTableRef>(&tableRef)) {
-        NProto::TYtTableRef protoYtTableRef = YtTableRefToProto(*ytTableRefPtr);
-        protoTableRef.MutableYtTableRef()->Swap(&protoYtTableRef);
-    } else {
-        auto* fmrTableRefPtr = std::get_if<TFmrTableRef>(&tableRef);
-        NProto::TFmrTableRef protoFmrTableRef = FmrTableRefToProto(*fmrTableRefPtr);
-        protoTableRef.MutableFmrTableRef()->Swap(&protoFmrTableRef);
-    }
-    return protoTableRef;
+NProto::TTableRange TableRangeToProto(const TTableRange& tableRange) {
+    NProto::TTableRange protoTableRange;
+    protoTableRange.SetPartId(tableRange.PartId);
+    protoTableRange.SetMinChunk(tableRange.MinChunk);
+    protoTableRange.SetMaxChunk(tableRange.MaxChunk);
+    return protoTableRange;
 }
 
-TTableRef TableRefFromProto(const NProto::TTableRef& protoTableRef) {
-    std::variant<TYtTableRef, TFmrTableRef> tableRef;
-    if (protoTableRef.HasYtTableRef()) {
-        tableRef = YtTableRefFromProto(protoTableRef.GetYtTableRef());
+TTableRange TableRangeFromProto(const NProto::TTableRange& protoTableRange) {
+    return TTableRange {
+        .PartId = protoTableRange.GetPartId(),
+        .MinChunk = protoTableRange.GetMinChunk(),
+        .MaxChunk = protoTableRange.GetMaxChunk()
+    };
+}
+
+NProto::TFmrTableInputRef FmrTableInputRefToProto(const TFmrTableInputRef& fmrTableInputRef) {
+    NProto::TFmrTableInputRef protoFmrTableInputRef;
+    protoFmrTableInputRef.SetTableId(fmrTableInputRef.TableId);
+    for (auto& tableRange: fmrTableInputRef.TableRanges) {
+        NProto::TTableRange protoTableRange = TableRangeToProto(tableRange);
+        auto* curTableRange = protoFmrTableInputRef.AddTableRanges();
+        curTableRange->Swap(&protoTableRange);
+    }
+    return protoFmrTableInputRef;
+}
+
+TFmrTableInputRef FmrTableInputRefFromProto(const NProto::TFmrTableInputRef& protoFmrTableInputRef) {
+    TFmrTableInputRef fmrTableInputRef;
+    fmrTableInputRef.TableId = protoFmrTableInputRef.GetTableId();
+    std::vector<TTableRange> tableRanges;
+    for (size_t i = 0; i < protoFmrTableInputRef.TableRangesSize(); ++i) {
+        TTableRange tableRange = TableRangeFromProto(protoFmrTableInputRef.GetTableRanges(i));
+        tableRanges.emplace_back(tableRange);
+    }
+    fmrTableInputRef.TableRanges = tableRanges;
+    return fmrTableInputRef;
+}
+
+NProto::TFmrTableOutputRef FmrTableOutputRefToProto(const TFmrTableOutputRef& fmrTableOutputRef) {
+    NProto::TFmrTableOutputRef protoFmrTableOutputRef;
+    protoFmrTableOutputRef.SetTableId(fmrTableOutputRef.TableId);
+    protoFmrTableOutputRef.SetPartId(fmrTableOutputRef.PartId);
+    return protoFmrTableOutputRef;
+}
+
+TFmrTableOutputRef FmrTableOutputRefFromProto(const NProto::TFmrTableOutputRef& protoFmrTableOutputRef) {
+    return TFmrTableOutputRef{
+        .TableId = protoFmrTableOutputRef.GetTableId(),
+        .PartId = protoFmrTableOutputRef.GetPartId()
+    };
+}
+
+NProto::TTableStats TableStatsToProto(const TTableStats& tableStats) {
+    NProto::TTableStats protoTableStats;
+    protoTableStats.SetChunks(tableStats.Chunks);
+    protoTableStats.SetRows(tableStats.Rows);
+    protoTableStats.SetDataWeight(tableStats.DataWeight);
+    return protoTableStats;
+}
+
+TTableStats TableStatsFromProto(const NProto::TTableStats& protoTableStats) {
+    return TTableStats {
+        .Chunks = protoTableStats.GetChunks(),
+        .Rows = protoTableStats.GetRows(),
+        .DataWeight = protoTableStats.GetDataWeight()
+    };
+}
+
+NProto::TStatistics StatisticsToProto(const TStatistics& stats) {
+    NProto::TStatistics protoStatistics;
+    for (auto& [fmrTableOutputRef, tableStat]: stats.OutputTables) {
+        NProto::TFmrTableOutputRef protoFmrTableOutputref = FmrTableOutputRefToProto(fmrTableOutputRef);
+        NProto::TTableStats protoStats = TableStatsToProto(tableStat);
+        NProto::TFmrStatisticsObject statTableObject;
+        statTableObject.MutableTable()->Swap(&protoFmrTableOutputref);
+        statTableObject.MutableStatistic()->Swap(&protoStats);
+        auto* curOutputTable = protoStatistics.AddOutputTables();
+        curOutputTable->Swap(&statTableObject);
+    }
+    return protoStatistics;
+}
+
+TStatistics StatisticsFromProto(const NProto::TStatistics& protoStats) {
+    std::unordered_map<TFmrTableOutputRef, TTableStats> outputTables;
+    for (size_t i = 0; i < protoStats.OutputTablesSize(); ++i) {
+        NProto::TFmrStatisticsObject protoStatTableObject = protoStats.GetOutputTables(i);
+        TFmrTableOutputRef fmrTableOutputRef = FmrTableOutputRefFromProto(protoStatTableObject.GetTable());
+        TTableStats tableStats = TableStatsFromProto(protoStatTableObject.GetStatistic());
+        outputTables[fmrTableOutputRef] = tableStats;
+    }
+    return TStatistics{.OutputTables = outputTables};
+}
+
+NProto::TOperationTableRef OperationTableRefToProto(const TOperationTableRef& operationTableRef) {
+    NProto::TOperationTableRef protoOperationTableRef;
+    if (auto* ytTableRefPtr = std::get_if<TYtTableRef>(&operationTableRef)) {
+        NProto::TYtTableRef protoYtTableRef = YtTableRefToProto(*ytTableRefPtr);
+        protoOperationTableRef.MutableYtTableRef()->Swap(&protoYtTableRef);
     } else {
-        tableRef = FmrTableRefFromProto(protoTableRef.GetFmrTableRef());
+        auto* fmrTableRefPtr = std::get_if<TFmrTableRef>(&operationTableRef);
+        NProto::TFmrTableRef protoFmrTableRef = FmrTableRefToProto(*fmrTableRefPtr);
+        protoOperationTableRef.MutableFmrTableRef()->Swap(&protoFmrTableRef);
+    }
+    return protoOperationTableRef;
+}
+
+TOperationTableRef OperationTableRefFromProto(const NProto::TOperationTableRef& protoOperationTableRef) {
+    std::variant<TYtTableRef, TFmrTableRef> tableRef;
+    if (protoOperationTableRef.HasYtTableRef()) {
+        tableRef = YtTableRefFromProto(protoOperationTableRef.GetYtTableRef());
+    } else {
+        tableRef = FmrTableRefFromProto(protoOperationTableRef.GetFmrTableRef());
     }
     return {tableRef};
 }
 
+NProto::TTaskTableRef TaskTableRefToProto(const TTaskTableRef& taskTableRef) {
+    NProto::TTaskTableRef protoTaskTableRef;
+    if (auto* ytTableRefPtr = std::get_if<TYtTableRef>(&taskTableRef)) {
+        NProto::TYtTableRef protoYtTableRef = YtTableRefToProto(*ytTableRefPtr);
+        protoTaskTableRef.MutableYtTableRef()->Swap(&protoYtTableRef);
+    } else {
+        auto* fmrTableInputRefPtr = std::get_if<TFmrTableInputRef>(&taskTableRef);
+        NProto::TFmrTableInputRef protoFmrTableInputRef = FmrTableInputRefToProto(*fmrTableInputRefPtr);
+        protoTaskTableRef.MutableFmrTableInputRef()->Swap(&protoFmrTableInputRef);
+    }
+    return protoTaskTableRef;
+
+}
+
+TTaskTableRef TaskTableRefFromProto(const NProto::TTaskTableRef& protoTaskTableRef) {
+    std::variant<TYtTableRef, TFmrTableInputRef> tableRef;
+    if (protoTaskTableRef.HasYtTableRef()) {
+        tableRef = YtTableRefFromProto(protoTaskTableRef.GetYtTableRef());
+    } else {
+        tableRef = FmrTableInputRefFromProto(protoTaskTableRef.GetFmrTableInputRef());
+    }
+    return {tableRef};
+}
+
+NProto::TUploadOperationParams UploadOperationParamsToProto(const TUploadOperationParams& uploadOperationParams) {
+    NProto::TUploadOperationParams protoUploadOperationParams;
+    auto input = FmrTableRefToProto(uploadOperationParams.Input);
+    auto output = YtTableRefToProto(uploadOperationParams.Output);
+    protoUploadOperationParams.MutableInput()->Swap(&input);
+    protoUploadOperationParams.MutableOutput()->Swap(&output);
+    return protoUploadOperationParams;
+}
+
 NProto::TUploadTaskParams UploadTaskParamsToProto(const TUploadTaskParams& uploadTaskParams) {
     NProto::TUploadTaskParams protoUploadTaskParams;
-    auto input = FmrTableRefToProto(uploadTaskParams.Input);
+    auto input = FmrTableInputRefToProto(uploadTaskParams.Input);
     auto output = YtTableRefToProto(uploadTaskParams.Output);
     protoUploadTaskParams.MutableInput()->Swap(&input);
     protoUploadTaskParams.MutableOutput()->Swap(&output);
     return protoUploadTaskParams;
 }
 
+TUploadOperationParams UploadOperationParamsFromProto(const NProto::TUploadOperationParams& protoUploadOperationParams) {
+    TUploadOperationParams uploadOperationParams;
+    uploadOperationParams.Input = FmrTableRefFromProto(protoUploadOperationParams.GetInput());
+    uploadOperationParams.Output = YtTableRefFromProto(protoUploadOperationParams.GetOutput());
+    return uploadOperationParams;
+}
+
 TUploadTaskParams UploadTaskParamsFromProto(const NProto::TUploadTaskParams& protoUploadTaskParams) {
     TUploadTaskParams uploadTaskParams;
-    uploadTaskParams.Input = FmrTableRefFromProto(protoUploadTaskParams.GetInput());
+    uploadTaskParams.Input = FmrTableInputRefFromProto(protoUploadTaskParams.GetInput());
     uploadTaskParams.Output = YtTableRefFromProto(protoUploadTaskParams.GetOutput());
     return uploadTaskParams;
+}
+
+NProto::TDownloadOperationParams DownloadOperationParamsToProto(const TDownloadOperationParams& downloadOperationParams) {
+    NProto::TDownloadOperationParams protoDownloadOperationParams;
+    auto input = YtTableRefToProto(downloadOperationParams.Input);
+    auto output = FmrTableRefToProto(downloadOperationParams.Output);
+    protoDownloadOperationParams.MutableInput()->Swap(&input);
+    protoDownloadOperationParams.MutableOutput()->Swap(&output);
+    return protoDownloadOperationParams;
 }
 
 NProto::TDownloadTaskParams DownloadTaskParamsToProto(const TDownloadTaskParams& downloadTaskParams) {
     NProto::TDownloadTaskParams protoDownloadTaskParams;
     auto input = YtTableRefToProto(downloadTaskParams.Input);
-    auto output = FmrTableRefToProto(downloadTaskParams.Output);
+    auto output = FmrTableOutputRefToProto(downloadTaskParams.Output);
     protoDownloadTaskParams.MutableInput()->Swap(&input);
     protoDownloadTaskParams.MutableOutput()->Swap(&output);
     return protoDownloadTaskParams;
 }
 
+TDownloadOperationParams DownloadOperationParamsFromProto(const NProto::TDownloadOperationParams& protoDownloadOperationParams) {
+    TDownloadOperationParams downloadOperationParams;
+    downloadOperationParams.Input = YtTableRefFromProto(protoDownloadOperationParams.GetInput());
+    downloadOperationParams.Output = FmrTableRefFromProto(protoDownloadOperationParams.GetOutput());
+    return downloadOperationParams;
+}
+
 TDownloadTaskParams DownloadTaskParamsFromProto(const NProto::TDownloadTaskParams& protoDownloadTaskParams) {
     TDownloadTaskParams downloadTaskParams;
     downloadTaskParams.Input = YtTableRefFromProto(protoDownloadTaskParams.GetInput());
-    downloadTaskParams.Output = FmrTableRefFromProto(protoDownloadTaskParams.GetOutput());
+    downloadTaskParams.Output = FmrTableOutputRefFromProto(protoDownloadTaskParams.GetOutput());
     return downloadTaskParams;
+}
+
+NProto::TMergeOperationParams MergeOperationParamsToProto(const TMergeOperationParams& mergeOperationParams) {
+    NProto::TMergeOperationParams protoMergeOperationParams;
+    for (size_t i = 0; i < mergeOperationParams.Input.size(); ++i) {
+        auto inputTable = OperationTableRefToProto(mergeOperationParams.Input[i]);
+        auto* curInput = protoMergeOperationParams.AddInput();
+        curInput->Swap(&inputTable);
+    }
+    auto outputTable = FmrTableRefToProto(mergeOperationParams.Output);
+    protoMergeOperationParams.MutableOutput()->Swap(&outputTable);
+    return protoMergeOperationParams;
 }
 
 NProto::TMergeTaskParams MergeTaskParamsToProto(const TMergeTaskParams& mergeTaskParams) {
     NProto::TMergeTaskParams protoMergeTaskParams;
-    std::vector<NProto::TTableRef> inputTables;
     for (size_t i = 0; i < mergeTaskParams.Input.size(); ++i) {
-        auto inputTable = TableRefToProto(mergeTaskParams.Input[i]);
+        auto inputTable = TaskTableRefToProto(mergeTaskParams.Input[i]);
         auto* curInput = protoMergeTaskParams.AddInput();
         curInput->Swap(&inputTable);
     }
-    auto outputTable = FmrTableRefToProto(mergeTaskParams.Output);
+    auto outputTable = FmrTableOutputRefToProto(mergeTaskParams.Output);
     protoMergeTaskParams.MutableOutput()->Swap(&outputTable);
     return protoMergeTaskParams;
 }
 
+TMergeOperationParams MergeOperationParamsFromProto(const NProto::TMergeOperationParams& protoMergeOperationParams) {
+    TMergeOperationParams mergeOperationParams;
+    std::vector<TOperationTableRef> input;
+    for (size_t i = 0; i < protoMergeOperationParams.InputSize(); ++i) {
+        TOperationTableRef inputTable = OperationTableRefFromProto(protoMergeOperationParams.GetInput(i));
+        input.emplace_back(inputTable);
+    }
+    mergeOperationParams.Input = input;
+    mergeOperationParams.Output = FmrTableRefFromProto(protoMergeOperationParams.GetOutput());
+    return mergeOperationParams;
+}
+
 TMergeTaskParams MergeTaskParamsFromProto(const NProto::TMergeTaskParams& protoMergeTaskParams) {
     TMergeTaskParams mergeTaskParams;
-    std::vector<TTableRef> input;
+    std::vector<TTaskTableRef> input;
     for (size_t i = 0; i < protoMergeTaskParams.InputSize(); ++i) {
-        TTableRef inputTable = TableRefFromProto(protoMergeTaskParams.GetInput(i));
+        TTaskTableRef inputTable = TaskTableRefFromProto(protoMergeTaskParams.GetInput(i));
         input.emplace_back(inputTable);
     }
     mergeTaskParams.Input = input;
-    mergeTaskParams.Output = FmrTableRefFromProto(protoMergeTaskParams.GetOutput());
+    mergeTaskParams.Output = FmrTableOutputRefFromProto(protoMergeTaskParams.GetOutput());
     return mergeTaskParams;
+}
+
+NProto::TOperationParams OperationParamsToProto(const TOperationParams& operationParams) {
+    NProto::TOperationParams protoOperationParams;
+    if (auto* uploadOperationParamsPtr = std::get_if<TUploadOperationParams>(&operationParams)) {
+        NProto::TUploadOperationParams protoUploadOperationParams = UploadOperationParamsToProto(*uploadOperationParamsPtr);
+        protoOperationParams.MutableUploadOperationParams()->Swap(&protoUploadOperationParams);
+    } else if (auto* downloadOperationParamsPtr = std::get_if<TDownloadOperationParams>(&operationParams)) {
+        NProto::TDownloadOperationParams protoDownloadOperationParams = DownloadOperationParamsToProto(*downloadOperationParamsPtr);
+        protoOperationParams.MutableDownloadOperationParams()->Swap(&protoDownloadOperationParams);
+    } else {
+        auto* mergeOperationParamsPtr = std::get_if<TMergeOperationParams>(&operationParams);
+        NProto::TMergeOperationParams protoMergeOperationParams = MergeOperationParamsToProto(*mergeOperationParamsPtr);
+        protoOperationParams.MutableMergeOperationParams()->Swap(&protoMergeOperationParams);
+    }
+    return protoOperationParams;
 }
 
 NProto::TTaskParams TaskParamsToProto(const TTaskParams& taskParams) {
@@ -154,6 +343,18 @@ NProto::TTaskParams TaskParamsToProto(const TTaskParams& taskParams) {
         protoTaskParams.MutableMergeTaskParams()->Swap(&protoMergeTaskParams);
     }
     return protoTaskParams;
+}
+
+TOperationParams OperationParamsFromProto(const NProto::TOperationParams& protoOperationParams) {
+    TOperationParams operationParams;
+    if (protoOperationParams.HasDownloadOperationParams()) {
+        operationParams = DownloadOperationParamsFromProto(protoOperationParams.GetDownloadOperationParams());
+    } else if (protoOperationParams.HasUploadOperationParams()) {
+        operationParams = UploadOperationParamsFromProto(protoOperationParams.GetUploadOperationParams());
+    } else {
+        operationParams = MergeOperationParamsFromProto(protoOperationParams.GetMergeOperationParams());
+    }
+    return operationParams;
 }
 
 TTaskParams TaskParamsFromProto(const NProto::TTaskParams& protoTaskParams) {
@@ -220,6 +421,8 @@ NProto::TTaskState TaskStateToProto(const TTaskState& taskState) {
         auto fmrError = FmrErrorToProto(*taskState.TaskErrorMessage);
         protoTaskState.MutableTaskErrorMessage()->Swap(&fmrError);
     }
+    auto protoStatistics = StatisticsToProto(taskState.Stats);
+    protoTaskState.MutableStats()->Swap(&protoStatistics);
     return protoTaskState;
 }
 
@@ -230,6 +433,7 @@ TTaskState TaskStateFromProto(const NProto::TTaskState& protoTaskState) {
     if (protoTaskState.HasTaskErrorMessage()) {
         taskState.TaskErrorMessage = FmrErrorFromProto(protoTaskState.GetTaskErrorMessage());
     }
+    taskState.Stats = StatisticsFromProto(protoTaskState.GetStats());
     return taskState;
 }
 

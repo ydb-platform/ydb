@@ -51,7 +51,7 @@ namespace {
     }
 }
 
-void TDependencyTracker::UpdateSchema(const TPathId& tableId, const TUserTable& tableInfo) noexcept {
+void TDependencyTracker::UpdateSchema(const TPathId& tableId, const TUserTable& tableInfo) {
     auto& state = Tables[tableId.LocalPathId];
     state.PlannedReads.SetKeyTypes(tableInfo.KeyColumnTypes);
     state.PlannedWrites.SetKeyTypes(tableInfo.KeyColumnTypes);
@@ -59,19 +59,19 @@ void TDependencyTracker::UpdateSchema(const TPathId& tableId, const TUserTable& 
     state.ImmediateWrites.SetKeyTypes(tableInfo.KeyColumnTypes);
 }
 
-void TDependencyTracker::RemoveSchema(const TPathId& tableId) noexcept {
+void TDependencyTracker::RemoveSchema(const TPathId& tableId) {
     Tables.erase(tableId.LocalPathId);
 }
 
-void TDependencyTracker::ClearTmpRead() noexcept {
+void TDependencyTracker::ClearTmpRead() {
     TmpRead.clear();
 }
 
-void TDependencyTracker::ClearTmpWrite() noexcept {
+void TDependencyTracker::ClearTmpWrite() {
     TmpWrite.clear();
 }
 
-void TDependencyTracker::AddPlannedReads(const TOperation::TPtr& op, const TKeys& reads) noexcept {
+void TDependencyTracker::AddPlannedReads(const TOperation::TPtr& op, const TKeys& reads) {
     for (const auto& read : reads) {
         auto it = Tables.find(read.TableId);
         Y_ABORT_UNLESS(it != Tables.end());
@@ -80,7 +80,7 @@ void TDependencyTracker::AddPlannedReads(const TOperation::TPtr& op, const TKeys
     }
 }
 
-void TDependencyTracker::AddPlannedWrites(const TOperation::TPtr& op, const TKeys& writes) noexcept {
+void TDependencyTracker::AddPlannedWrites(const TOperation::TPtr& op, const TKeys& writes) {
     for (const auto& write : writes) {
         auto it = Tables.find(write.TableId);
         Y_ABORT_UNLESS(it != Tables.end());
@@ -89,7 +89,7 @@ void TDependencyTracker::AddPlannedWrites(const TOperation::TPtr& op, const TKey
     }
 }
 
-void TDependencyTracker::AddImmediateReads(const TOperation::TPtr& op, const TKeys& reads) noexcept {
+void TDependencyTracker::AddImmediateReads(const TOperation::TPtr& op, const TKeys& reads) {
     for (const auto& read : reads) {
         auto it = Tables.find(read.TableId);
         Y_ABORT_UNLESS(it != Tables.end());
@@ -98,7 +98,7 @@ void TDependencyTracker::AddImmediateReads(const TOperation::TPtr& op, const TKe
     }
 }
 
-void TDependencyTracker::AddImmediateWrites(const TOperation::TPtr& op, const TKeys& writes) noexcept {
+void TDependencyTracker::AddImmediateWrites(const TOperation::TPtr& op, const TKeys& writes) {
     for (const auto& write : writes) {
         auto it = Tables.find(write.TableId);
         Y_ABORT_UNLESS(it != Tables.end());
@@ -107,7 +107,7 @@ void TDependencyTracker::AddImmediateWrites(const TOperation::TPtr& op, const TK
     }
 }
 
-void TDependencyTracker::FlushPlannedReads() noexcept {
+void TDependencyTracker::FlushPlannedReads() {
     while (!DelayedPlannedReads.Empty()) {
         TOperation::TPtr op = DelayedPlannedReads.PopFront();
         auto reads = op->RemoveDelayedKnownReads();
@@ -115,7 +115,7 @@ void TDependencyTracker::FlushPlannedReads() noexcept {
     }
 }
 
-void TDependencyTracker::FlushPlannedWrites() noexcept {
+void TDependencyTracker::FlushPlannedWrites() {
     while (!DelayedPlannedWrites.Empty()) {
         TOperation::TPtr op = DelayedPlannedWrites.PopFront();
         auto writes = op->RemoveDelayedKnownWrites();
@@ -123,7 +123,7 @@ void TDependencyTracker::FlushPlannedWrites() noexcept {
     }
 }
 
-void TDependencyTracker::FlushImmediateReads() noexcept {
+void TDependencyTracker::FlushImmediateReads() {
     while (!DelayedImmediateReads.Empty()) {
         TOperation::TPtr op = DelayedImmediateReads.PopFront();
         auto reads = op->RemoveDelayedKnownReads();
@@ -131,7 +131,7 @@ void TDependencyTracker::FlushImmediateReads() noexcept {
     }
 }
 
-void TDependencyTracker::FlushImmediateWrites() noexcept {
+void TDependencyTracker::FlushImmediateWrites() {
     while (!DelayedImmediateWrites.Empty()) {
         TOperation::TPtr op = DelayedImmediateWrites.PopFront();
         auto writes = op->RemoveDelayedKnownWrites();
@@ -146,7 +146,7 @@ const TDependencyTracker::TDependencyTrackingLogic& TDependencyTracker::GetTrack
     return MvccLogic;
 }
 
-void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOperation::TPtr& op) const noexcept {
+void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOperation::TPtr& op) const {
     if (op->IsUsingSnapshot()) {
         return;
     }
@@ -600,7 +600,7 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::AddOperation(const TOpera
     }
 }
 
-void TDependencyTracker::TMvccDependencyTrackingLogic::RemoveOperation(const TOperation::TPtr& op) const noexcept {
+void TDependencyTracker::TMvccDependencyTrackingLogic::RemoveOperation(const TOperation::TPtr& op) const {
     if (Parent.LastSnapshotOp == op) {
         Parent.LastSnapshotOp = nullptr;
     }
@@ -643,11 +643,11 @@ void TDependencyTracker::TMvccDependencyTrackingLogic::RemoveOperation(const TOp
     }
 }
 
-void TDependencyTracker::TFollowerDependencyTrackingLogic::AddOperation(const TOperation::TPtr&) const noexcept {
+void TDependencyTracker::TFollowerDependencyTrackingLogic::AddOperation(const TOperation::TPtr&) const {
     // all follower operations are readonly and don't conflict
 }
 
-void TDependencyTracker::TFollowerDependencyTrackingLogic::RemoveOperation(const TOperation::TPtr&) const noexcept {
+void TDependencyTracker::TFollowerDependencyTrackingLogic::RemoveOperation(const TOperation::TPtr&) const {
     // all follower operations are readonly and don't conflict
 }
 

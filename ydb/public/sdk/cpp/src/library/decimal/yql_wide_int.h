@@ -6,7 +6,9 @@
 #include <tuple>
 #include <cmath>
 
-namespace NYdb::NDecimal {
+namespace NYdb {
+inline namespace Dev {
+namespace NDecimal {
 
 #ifndef _win_
 typedef __int128 i128_t;
@@ -341,4 +343,6 @@ template<> struct TPairOf<ui64> { typedef ui128_t Type; };
 #endif
 template<typename T> struct TPairOf {};
 
+}
+}
 }

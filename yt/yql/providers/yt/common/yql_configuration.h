@@ -1,5 +1,7 @@
 #pragma once
 
+#include "yql_yt_settings.h"
+
 #include <yql/essentials/public/udf/udf_data_type.h>
 
 #include <util/system/types.h>
@@ -67,7 +69,10 @@ const TSet<NUdf::EDataSlot> DEFAULT_BLOCK_READER_SUPPORTED_DATA_TYPES =
         NUdf::EDataSlot::Int64, NUdf::EDataSlot::Uint64,
         NUdf::EDataSlot::Bool, NUdf::EDataSlot::Double,
         NUdf::EDataSlot::String, NUdf::EDataSlot::Json,
-        NUdf::EDataSlot::Yson, NUdf::EDataSlot::Utf8
+        NUdf::EDataSlot::Yson, NUdf::EDataSlot::Utf8,
+        NUdf::EDataSlot::Date, NUdf::EDataSlot::Datetime,
+        NUdf::EDataSlot::Timestamp, NUdf::EDataSlot::Interval,
+        NUdf::EDataSlot::Float,
     };
 const TSet<TString> DEFAULT_BLOCK_INPUT_SUPPORTED_TYPES = {"tuple"};
 const TSet<NUdf::EDataSlot> DEFAULT_BLOCK_INPUT_SUPPORTED_DATA_TYPES =
@@ -78,7 +83,9 @@ const TSet<NUdf::EDataSlot> DEFAULT_BLOCK_INPUT_SUPPORTED_DATA_TYPES =
         NUdf::EDataSlot::Int64, NUdf::EDataSlot::Uint64,
         NUdf::EDataSlot::Bool, NUdf::EDataSlot::Double,
         NUdf::EDataSlot::String, NUdf::EDataSlot::Utf8,
-        NUdf::EDataSlot::Yson
+        NUdf::EDataSlot::Yson, NUdf::EDataSlot::Float,
+        NUdf::EDataSlot::Date, NUdf::EDataSlot::Datetime,
+        NUdf::EDataSlot::Timestamp, NUdf::EDataSlot::Interval,
     };
 const TSet<TString> DEFAULT_BLOCK_OUTPUT_SUPPORTED_TYPES = {};
 const TSet<NUdf::EDataSlot> DEFAULT_BLOCK_OUTPUT_SUPPORTED_DATA_TYPES =
@@ -117,5 +124,9 @@ constexpr bool DEFAULT_USE_QL_FILTER = false;
 constexpr bool DEFAULT_PRUNE_QL_FILTER_LAMBDA = true;
 
 constexpr bool DEFAULT_DROP_UNUSED_KEYS_FROM_KEY_FILTER = false;
+
+constexpr bool DEFAULT_REPORT_EQUIJOIN_STATS = false;
+
+constexpr ERuntimeClusterSelectionMode DEFAULT_RUNTIME_CLUSTER_SELECTION = NYql::ERuntimeClusterSelectionMode::Disable;
 
 } // NYql

@@ -10,8 +10,8 @@
 
 Создайте рабочую директорию и выполните в ней из командной строки команду клонирования репозитория с GitHub:
 
-```bash
-git clone https://github.com/ydb-platform/ydb-go-examples/
+``` bash
+git clone https://github.com/ydb-platform/ydb-go-sdk.git
 ```
 
 Далее из этой же рабочей директории выполните команду запуска тестового приложения, которая будет отличаться в зависимости от того, к какой базе данных необходимо подключиться.
@@ -24,227 +24,209 @@ git clone https://github.com/ydb-platform/ydb-go-examples/
 
 ```go
 import (
-  // общие импорты из стандартной библиотеки
-  "context"
-  "log"
-  "path"
+ "context"
+ "log"
+ "path"
 
-  // импорты пакетов ydb-go-sdk
-  "github.com/ydb-platform/ydb-go-sdk/v3"
-  "github.com/ydb-platform/ydb-go-sdk/v3/table" // для работы с table-сервисом
-  "github.com/ydb-platform/ydb-go-sdk/v3/table/options" // для работы с table-сервисом
-  "github.com/ydb-platform/ydb-go-sdk/v3/table/result" // для работы с table-сервисом
-  "github.com/ydb-platform/ydb-go-sdk/v3/table/result/named" // для работы с table-сервисом
-  "github.com/ydb-platform/ydb-go-sdk/v3/table/types" // для работы с типами YDB и значениями
-  "github.com/ydb-platform/ydb-go-sdk-auth-environ" // для аутентификации с использованием перменных окружения
-  "github.com/ydb-platform/ydb-go-yc" // для работы с YDB в Яндекс Облаке
+ "github.com/ydb-platform/ydb-go-sdk/v3"
+ "github.com/ydb-platform/ydb-go-sdk/v3/query"
 )
 ```
 
-Фрагмент кода приложения для инициализации драйвера:
+Для взаимодействия с {{ ydb-short-name }} необходимо создать экземляр {{ ydb-short-name }}-драйвера:
+
 
 ```go
-ctx := context.Background()
-// строка подключения
-dsn := "grpcs://ydb.serverless.yandexcloud.net:2135/?database=/ru-central1/b1g8skpblkos03malf3s/etn01f8gv9an9sedo9fu"
-// IAM-токен
-token := "t1.9euelZrOy8aVmZKJm5HGjceMkMeVj-..."
-// создаем объект подключения db, является входной точкой для сервисов YDB
-db, err := ydb.Open(ctx, dsn,
-//  yc.WithInternalCA(), // используем сертификаты Яндекс Облака
-  ydb.WithAccessTokenCredentials(token), // аутентификация с помощью токена
-//  ydb.WithAnonymousCredentials(), // анонимная аутентификация (например, в docker ydb)
-//  yc.WithMetadataCredentials(token), // аутентификация изнутри виртуальной машины в Яндекс Облаке или из Яндекс Функции
-//  yc.WithServiceAccountKeyFileCredentials("~/.ydb/sa.json"), // аутентификация в Яндекс Облаке с помощью файла сервисного аккаунта
-//  environ.WithEnvironCredentials(ctx), // аутентификация с использованием переменных окружения
-)
+db, err := ydb.Open(context.Background(), "grpc://localhost:2136/local")
 if err != nil {
   // обработка ошибки подключения
 }
-// закрытие драйвера по окончании работы программы обязательно
+
+// При заверщении работы с базой (например, выходе из программы) закройте драйвер
+defer db.Close(context.Background())
+```
+
+Метод `ydb.Open` возвращает в случае успеха экземпляр драйвера, который выполняет ряд служебных функций, таких как актуализация сведений о кластере {{ ydb-short-name }} и клиентская балансировка.
+
+Метод `ydb.Open` принимает два обязательных аргумента:
+
+* контекст;
+* строка подключения к {{ ydb-short-name }}.
+
+Также доступно множество опций подключения, позволяющих переопределить значения по умолчанию.
+
+По умолчанию используется анонимная аутентификация. А подключение к кластеру {{ ydb-short-name }} с использованием токена будет иметь следующий вид:
+
+```go
+db, err := ydb.Open(context.Background(), clusterEndpoint,
+ ydb.WithAccessTokenCredentials(token),
+)
+```
+
+Полный список провайдеров аутентификации приведён в [документации ydb-go-sdk](https://github.com/ydb-platform/ydb-go-sdk?tab=readme-ov-file#credentials-) и в разделе [рецептов](../../../recipes/ydb-sdk/auth.md).
+
+В конце работы приложения для очистки ресурсов следует закрыть драйвер:
+
+```go
 defer db.Close(ctx)
 ```
 
-Объект `db` является входной точкой для работы с сервисами `YDB`.
-Для работы сервисом таблиц следует использовать клиента table-сервиса `db.Table()`.
-Клиент table-сервиса предоставляет `API` для выполнения запросов над таблицами.
-Наиболее востребован метод `db.Table().Do(ctx, op)`, который реализует фоновое создание сессий и повторные попытки выполнить пользовательскую операцию `op`, в которую пользовательскому коду отдается подготовленная сессия.
-Сессия имеет исчерпывающее `API`, позволяющее выполнять `DDL`, `DML`, `DQL` и `TCL` запросы.
+Объект `db` является входной точкой для работы с {{ ydb-short-name }}, а для запросов к таблицам используется Query-сервис `db.Query()`.
+
+Выполнение YQL-запросов осуществляется на специальных объектах — сессиях `query.Session`. Сессии хранят контекст выполнения запросов (например, транзакции) и позволяют осуществлять серверную балансировку нагрузки на узлы кластера {{ ydb-short-name }}.
+
+Клиент Query-сервиса предоставляет API для выполнения запросов к таблицам:
+
+* Метод `db.Query().Do(ctx, op)` реализует фоновое создание сессий и повторные попытки выполнить пользовательскую операцию `op func(ctx context.Context, s query.Session) error`, в которую пользовательскому коду передаётся подготовленная сессия `query.Session`.
+* Метод `db.Query().DoTx(ctx, op)` принимает пользовательскую операцию `op func(ctx context.Context, tx query.TxActor) error`, в которую пользовательскому коду передаётся подготовленная (заранее открытая) транзакция `query.TxActor`. Автоматическое выполнение `Commit` транзакции происходит, если из пользовательской операции возвращается `nil`. В случае возврата ошибки для текущей транзакции автоматически вызывается `Rollback`.
+* Метод `db.Query().Exec` является вспомогательным и предназначен для выполнения единичного запроса **без результата** с автоматическими повторными попытками. Метод `Exec` возвращает `nil` в случае успешного выполнения запроса и ошибку, если операция не удалась.
+* Метод `db.Query().Query` является вспомогательным и предназначен для выполнения единичного запроса с повторными попытками при необходимости. Текст запроса может содержать несколько выражений с результатами. Метод `Query` возвращает, в случае успеха, материализованный результат запроса (все данные уже прочитаны с сервера и доступны в локальной памяти) `query.Result` и позволяет итерироваться по вложенным спискам строк `query.ResultSet`. Для широких SQL-запросов, возвращающих большое количество строк, материализация результата может привести к проблеме [OOM](https://en.wikipedia.org/wiki/Out_of_memory).
+* Метод `db.Query().QueryResultSet` является вспомогательным и предназначен для выполнения единичного запроса с повторными попытками при необходимости. В запросе должно быть ровно одно выражение, возвращающее результат (дополнительно могут присутствовать выражения, не возвращающие результат, например `UPSERT`). Метод `QueryResultSet` возвращает, в случае успеха, материализованный список результатов `query.ResultSet`. Для широких SQL-запросов, возвращающих большое количество строк, материализация результата может привести к проблеме [OOM](https://en.wikipedia.org/wiki/Out_of_memory).
+* Метод `db.Query().QueryRow` является вспомогательным и предназначен для выполнения единичного запроса с повторными попытками при необходимости. Метод `QueryRow` возвращает, в случае успеха, единственную строку `query.Row`.
 
 {% include [steps/02_create_table.md](../_includes/steps/02_create_table.md) %}
 
-Для создания строковых таблиц используется метод `table.Session.CreateTable()`:
+Пример запроса без возвращаемого результата (создание таблицы):
 
 ```go
-err = db.Table().Do(ctx,
-  func(ctx context.Context, s table.Session) (err error) {
-    return s.CreateTable(ctx, path.Join(db.Name(), "series"),
-      options.WithColumn("series_id", types.TypeUint64),  // not null column
-      options.WithColumn("title", types.Optional(types.TypeUTF8)),
-      options.WithColumn("series_info", types.Optional(types.TypeUTF8)),
-      options.WithColumn("release_date", types.Optional(types.TypeDate)),
-      options.WithColumn("comment", types.Optional(types.TypeUTF8)),
-      options.WithPrimaryKeyColumn("series_id"),
-    )
-  },
-)
-if err != nil {
-  // обработка ситуации, когда не удалось выполнить запрос
-}
-```
+import "github.com/ydb-platform/ydb-go-sdk/v3/query"
 
-Метод `table.Session.CreateTable()` не позволяет создавать колоночные таблицы. Это можно сделать с помощью метода `table.Session.Execute()`, который выполняет YQL-запросы.
+err = db.Query().Exec(ctx, `
+ CREATE TABLE IF NOT EXISTS series (
+  series_id Bytes,
+  title Text,
+  series_info Text,
+  release_date Date,
+  comment Text,
 
-Если вы создали строковую таблицу и хотите вывести информацию о её структуре и убедиться, что она успешно создалась, воспользуйтесь методом `table.Session.DescribeTable()`:
-
-```go
-err = db.Table().Do(ctx,
-  func(ctx context.Context, s table.Session) (err error) {
-    desc, err := s.DescribeTable(ctx, path.Join(db.Name(), "series"))
-    if err != nil {
-      return
-    }
-    log.Printf("> describe table: %s\n", tableName)
-    for _, c := range desc.Columns {
-      log.Printf("  > column, name: %s, %s\n", c.Type, c.Name)
-    }
-    return
-  },
-)
-if err != nil {
-  // обработка ситуации, когда не удалось выполнить запрос
-}
-```
-
-{% include [steps/04_query_processing.md](../_includes/steps/04_query_processing.md) %}
-
-Для выполнения YQL-запросов используется метод `table.Session.Execute()`.
-SDK позволяет в явном виде контролировать выполнение транзакций и настраивать необходимый режим выполнения транзакций с помощью структуры `table.TxControl`.
-
-```go
-var (
-  readTx = table.TxControl(
-    table.BeginTx(
-      table.WithOnlineReadOnly(),
-    ),
-    table.CommitTx(),
-  )
-)
-err := db.Table().Do(ctx,
-  func(ctx context.Context, s table.Session) (err error) {
-    var (
-      res   result.Result
-      id    uint64 // переменная для required результатов
-      title *string // указатель - для опциональных результатов
-      date  *time.Time // указатель - для опциональных результатов
-    )
-    _, res, err = s.Execute(
-      ctx,
-      readTx,
-      `
-        DECLARE $seriesID AS Uint64;
-        SELECT
-          series_id,
-          title,
-          release_date
-        FROM
-          series
-        WHERE
-          series_id = $seriesID;
-      `,
-      table.NewQueryParameters(
-        table.ValueParam("$seriesID", types.Uint64Value(1)), // подстановка в условие запроса
-      ),
-    )
-    if err != nil {
-      return err
-    }
-    defer res.Close() // закрытие result'а обязательно
-    log.Printf("> select_simple_transaction:\n")
-    for res.NextResultSet(ctx) {
-      for res.NextRow() {
-        // в ScanNamed передаем имена колонок из строки сканирования,
-        // адреса (и типы данных), куда следует присвоить результаты запроса
-        err = res.ScanNamed(
-          named.Optional("series_id", &id),
-          named.Optional("title", &title),
-          named.Optional("release_date", &date),
-        )
-        if err != nil {
-          return err
-        }
-        log.Printf(
-          "  > %d %s %s\n",
-          id, *title, *date,
-        )
-      }
-    }
-    return res.Err()
-  },
+  PRIMARY KEY(series_id)
+ )`, query.WithTxControl(query.NoTx()),
 )
 if err != nil {
   // обработка ошибки выполнения запроса
 }
 ```
 
-{% include [scan_query.md](../_includes/steps/08_scan_query.md) %}
+{% include [steps/04_query_processing.md](../_includes/steps/04_query_processing.md) %}
 
-Для выполнения scan-запросов используется метод `table.Session.StreamExecuteScanQuery()`.
+Для выполнения YQL-запросов и чтения результатов используются методы `query.Session.Query`, `query.Session.QueryResultSet` и `query.Session.QueryRow`.
+
+SDK позволяет явно контролировать выполнение транзакций и настраивать необходимый режим выполнения транзакций с помощью структуры `query.TxControl`.
 
 ```go
-var (
-  query = `
-    DECLARE $series AS List<UInt64>;
-    SELECT series_id, season_id, title, first_aired
-    FROM seasons
-    WHERE series_id IN $series
-  `
-  res result.StreamResult
+readTx := query.TxControl(
+ query.BeginTx(
+  query.WithSnapshotReadOnly(),
+ ),
+ query.CommitTx(),
 )
-err = c.Do(ctx,
-  func(ctx context.Context, s table.Session) (err error) {
-    res, err = s.StreamExecuteScanQuery(ctx, query,
-      table.NewQueryParameters(
-        table.ValueParam("$series",
-          types.ListValue(
-            types.Uint64Value(1),
-            types.Uint64Value(10),
-          ),
-        ),
-      ),
-    )
-    if err != nil {
-      return err
-    }
-    defer res.Close() // закрытие result'а обязательно
-    var (
-      seriesID uint64
-      seasonID uint64
-      title    string
-      date     time.Time
-    )
-    log.Print("\n> scan_query_select:")
-    for res.NextResultSet(ctx) {
-      if err = res.Err(); err != nil {
-        return err
-      }
-      for res.NextRow() {
-        // named.OptionalWithDefault позволяет "развернуть" опциональные
-        // результаты или использовать дефолтное значение типа go
-        err = res.ScanNamed(
-          named.Required("series_id", &seriesID),
-          named.OptionalWithDefault("season_id", &seasonID),
-          named.OptionalWithDefault("title", &title),
-          named.OptionalWithDefault("first_aired", &date),
-        )
-        if err != nil {
-          return err
-        }
-        log.Printf("#  Season, SeriesId: %d, SeasonId: %d, Title: %s, Air date: %s", seriesID, seasonID, title, date)
-      }
-    }
-    return res.Err()
-  },
+row, err := db.Query().QueryRow(ctx,`
+ DECLARE $seriesID AS Uint64;
+ SELECT
+   series_id,
+   title,
+   release_date
+ FROM
+   series
+ WHERE
+   series_id = $seriesID;`,
+ query.WithParameters(
+  ydb.ParamsBuilder().Param("$seriesID").Uint64(1).Build(),
+ ),
+ query.WithTxControl(readTx),
+)
+if err != nil {
+  // обработка ошибки выполнения запроса
+}
+```
+
+Для получения данных строки `query.Row` можно использовать следующие методы:
+
+* `query.Row.ScanStruct` — по названиям колонок, зафиксированным в тегах структуры.
+* `query.Row.ScanNamed` — по названиям колонок.
+* `query.Row.Scan` — по порядку колонок.
+
+{% list tabs %}
+
+- ScanStruct
+
+  ```go
+  var info struct {
+   SeriesID    string    `sql:"series_id"`
+   Title       string    `sql:"title"`
+   ReleaseDate time.Time `sql:"release_date"`
+  }
+  err = row.ScanStruct(&info)
+  if err != nil {
+    // обработка ошибки выполнения запроса
+  }
+  ```
+
+- ScanNamed
+
+  ```go
+  var seriesID, title string
+  var releaseDate time.Time
+  err = row.ScanNamed(query.Named("series_id", &seriesID), query.Named("title", &title), query.Named("release_date", &releaseDate))
+  if err != nil {
+    // обработка ошибки выполнения запроса
+  }
+  ```
+
+- Scan
+
+  ```go
+  var seriesID, title string
+  var releaseDate time.Time
+  err = row.Scan(&seriesID, &title, &releaseDate)
+  if err != nil {
+    // обработка ошибки выполнения запроса
+  }
+  ```
+  
+ {% endlist %}
+
+{% include [scan_query.md](../_includes/steps/08_scan_query.md) %}
+
+{% note warning %}
+
+Если ожидаемый объём данных от запроса велик, не следует пытаться загружать их полностью в оперативную память с помощью вспомогательных методов, таких как `query.Client.Query` и `query.Client.QueryResultSet`. Эти методы возвращают уже материализованный результат, при котором все данные запроса загружены с сервера в локальную память клиентского приложения. При большом количестве возвращаемых строк материализация результата может привести к проблеме [OOM](https://en.wikipedia.org/wiki/Out_of_memory).
+
+Для таких запросов следует использовать методы `query.TxActor.Query` или `query.TxActor.QueryResultSet` на сессии или транзакции, которые предоставляют итератор по результату без полной материализации. Сессия `query.Session` доступна только из метода `query.Client.Do`, реализующего механизмы повторных попыток при ошибках. Нужно учитывать, что чтение может быть прервано в любой момент, и в таком случае весь процесс выполнения запроса начнётся заново. То есть функция, переданная в `Do`, может вызываться более одного раза.
+
+{% endnote %}
+
+
+```go
+err = db.Query().Do(ctx,
+ func(ctx context.Context, s query.Session) error {
+  rows, err := s.QueryResultSet(ctx,`
+   SELECT series_id, season_id, title, first_aired
+   FROM seasons`,
+  )
+  if err != nil {
+   return err
+  }
+  defer rows.Close(ctx)
+  for row, err := range rows.Rows(ctx) {
+   if err != nil {
+    return err
+   }
+   var info struct {
+    SeriesID    string    `sql:"series_id"`
+    SeasonID    string    `sql:"season_id"`
+    Title       string    `sql:"title"`
+    FirstAired  time.Time `sql:"first_aired"`
+   }
+   err = row.ScanStruct(&info)
+   if err != nil {
+    return err
+   }
+   fmt.Printf("%+v\n", info)
+  }
+  return nil
+ },
+ query.WithIdempotent(),
 )
 if err != nil {
   // обработка ошибки выполнения запроса

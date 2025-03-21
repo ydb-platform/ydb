@@ -260,7 +260,7 @@ public:
     {}
     ~TDummyScan() {}
 
-    void Describe(IOutputStream &out) const noexcept override
+    void Describe(IOutputStream &out) const override
     {
         out << "DummyScan";
     }
@@ -279,7 +279,7 @@ public:
     }
 
 private:
-    TInitialState Prepare(IDriver *driver, TIntrusiveConstPtr<TScheme> scheme) noexcept override
+    TInitialState Prepare(IDriver *driver, TIntrusiveConstPtr<TScheme> scheme) override
     {
         Driver = driver;
         Scheme = std::move(scheme);
@@ -295,7 +295,7 @@ private:
         }
     }
 
-    EScan Seek(TLead &lead, ui64 seq) noexcept override
+    EScan Seek(TLead &lead, ui64 seq) override
     {
         if (seq && Abort == EAbort::None)
             return EScan::Final;
@@ -307,7 +307,7 @@ private:
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow &) noexcept override
+    EScan Feed(TArrayRef<const TCell> key, const TRow &) override
     {
         Y_ABORT_UNLESS(key[0].AsValue<ui64>() == ExpectedRowId);
         ++ExpectedRowId;
@@ -315,12 +315,12 @@ private:
         return EScan::Feed;
     }
 
-    EScan PageFault() noexcept override {
+    EScan PageFault() override {
         PageFaults++;
         return EScan::Feed;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept override
+    TAutoPtr<IDestructable> Finish(EAbort abort) override
     {
         Y_ABORT_UNLESS((int)Abort == (int)abort);
 
@@ -497,11 +497,14 @@ class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFl
     }
 
     void Handle(NFake::TEvExecute::TPtr &ev, const TActorContext &ctx) {
-        for (auto& f : ev->Get()->Funcs) {
-            if (auto* tx = dynamic_cast<ITransactionWithExecutor*>(f.Get())) {
-                tx->Executor = Executor();
+        for (auto& tx : ev->Get()->Txs) {
+            if (auto* e = dynamic_cast<ITransactionWithExecutor*>(tx.Get())) {
+                e->Executor = Executor();
             }
-            Execute(f.Release(), ctx);
+            Execute(tx.Release(), ctx);
+        }
+        for (auto& lambda : ev->Get()->Lambdas) {
+            std::move(lambda)(Executor(), ctx);
         }
     }
 
@@ -520,7 +523,7 @@ class TTestFlatTablet : public TActor<TTestFlatTablet>, public TTabletExecutedFl
 
     void Handle(TEvents::TEvPoison::TPtr &, const TActorContext &ctx) {
         Become(&TThis::StateBroken);
-        Executor()->DetachTablet(ctx), Detach(ctx); /* see TDummy tablet */
+        Executor()->DetachTablet(), Detach(ctx); /* see TDummy tablet */
         ctx.Send(Sender, new TEvents::TEvGone);
     }
 
@@ -852,7 +855,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_BackgroundCompactions) {
             SendEv(MakeResourceBrokerID(), event.Release());
         }
 
-        static TCompactionPolicy* MakeCompactionPolicy() noexcept
+        static TCompactionPolicy* MakeCompactionPolicy()
         {
             auto *policy = new TCompactionPolicy();
             policy->InMemSizeToSnapshot = 40 * 1024 *1024;
@@ -1020,7 +1023,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_PostponedScan) {
             SendSync(new TEvents::TEvPoison, false, true);
         }
 
-        static TCompactionPolicy* MakeCompactionPolicy() noexcept
+        static TCompactionPolicy* MakeCompactionPolicy()
         {
             auto *policy = new TCompactionPolicy();
             policy->InMemSizeToSnapshot = 40 * 1024 *1024;
@@ -1413,7 +1416,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_ResourceProfile) {
             SendSync(new TEvents::TEvPoison, false, true);
         }
 
-        static TCompactionPolicy* MakeCompactionPolicy() noexcept
+        static TCompactionPolicy* MakeCompactionPolicy()
         {
             auto *policy = new TCompactionPolicy();
             policy->InMemSizeToSnapshot = 40 * 1024 *1024;
@@ -3597,23 +3600,23 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Follower) {
     struct TEmptyScan : public NTable::IScan {
         TEmptyScan() = default;
 
-        void Describe(IOutputStream& out) const noexcept override {
+        void Describe(IOutputStream& out) const override {
             out << "TEmptyScan{}";
         }
 
-        TInitialState Prepare(NTable::IDriver*, TIntrusiveConstPtr<TScheme>) noexcept override {
+        TInitialState Prepare(NTable::IDriver*, TIntrusiveConstPtr<TScheme>) override {
             return {EScan::Final, {}};
         }
 
-        EScan Seek(TLead&, ui64) noexcept override {
+        EScan Seek(TLead&, ui64) override {
             Y_ABORT("unreachable");
         }
 
-        EScan Feed(TArrayRef<const TCell>, const TRow&) noexcept override {
+        EScan Feed(TArrayRef<const TCell>, const TRow&) override {
             Y_ABORT("unreachable");
         }
 
-        TAutoPtr<IDestructable> Finish(EAbort) noexcept override {
+        TAutoPtr<IDestructable> Finish(EAbort) override {
             delete this;
             return nullptr;
         }
@@ -6285,13 +6288,22 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         env->Send(MakeSharedPageCacheId(), TActorId{}, new NMemory::TEvConsumerLimit(0));
     }
 
+    void SetupEnvironment(TMyEnvBase &env, std::optional<bool> bTreeIndex = {}) {
+        env->SetLogPriority(NKikimrServices::TABLET_SAUSAGECACHE, NActors::NLog::PRI_TRACE);
+        env->SetLogPriority(NKikimrServices::TABLET_EXECUTOR, NActors::NLog::PRI_TRACE);
+
+        if (bTreeIndex.has_value()) {
+            auto &appData = env->GetAppData();
+            appData.FeatureFlags.SetEnableLocalDBBtreeIndex(bTreeIndex.value());
+            appData.FeatureFlags.SetEnableLocalDBFlatIndex(!bTreeIndex.value());
+        }
+    }
+
     Y_UNIT_TEST(TestNonSticky_FlatIndex) {
         TMyEnvBase env;
         TRowsModel rows;
 
-        auto &appData = env->GetAppData();
-        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(false);
-        appData.FeatureFlags.SetEnableLocalDBFlatIndex(true);
+        SetupEnvironment(env, false);
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
         ZeroSharedCache(env);
@@ -6326,9 +6338,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         TMyEnvBase env;
         TRowsModel rows;
 
-        auto &appData = env->GetAppData();
-        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(true);
-        appData.FeatureFlags.SetEnableLocalDBFlatIndex(false);
+        SetupEnvironment(env, true);
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
         ZeroSharedCache(env);
@@ -6363,6 +6373,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         TMyEnvBase env;
         TRowsModel rows;
 
+        SetupEnvironment(env);
+
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
         ZeroSharedCache(env);
 
@@ -6395,9 +6407,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         TMyEnvBase env;
         TRowsModel rows;
 
-        auto &appData = env->GetAppData();
-        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(false);
-        appData.FeatureFlags.SetEnableLocalDBFlatIndex(true);
+        SetupEnvironment(env, false);
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
         ZeroSharedCache(env);
@@ -6432,9 +6442,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         TMyEnvBase env;
         TRowsModel rows;
 
-        auto &appData = env->GetAppData();
-        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(true);
-        appData.FeatureFlags.SetEnableLocalDBFlatIndex(false);
+        SetupEnvironment(env, true);
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
         ZeroSharedCache(env);
@@ -6469,6 +6477,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         TMyEnvBase env;
         TRowsModel rows;
 
+        SetupEnvironment(env);
+
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
         ZeroSharedCache(env);
 
@@ -6501,9 +6511,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         TMyEnvBase env;
         TRowsModel rows;
 
-        auto &appData = env->GetAppData();
-        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(false);
-        appData.FeatureFlags.SetEnableLocalDBFlatIndex(true);
+        SetupEnvironment(env, false);
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
         ZeroSharedCache(env);
@@ -6540,9 +6548,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         TMyEnvBase env;
         TRowsModel rows;
 
-        auto &appData = env->GetAppData();
-        appData.FeatureFlags.SetEnableLocalDBBtreeIndex(true);
-        appData.FeatureFlags.SetEnableLocalDBFlatIndex(false);
+        SetupEnvironment(env, true);
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
         ZeroSharedCache(env);
@@ -6579,6 +6585,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
         TMyEnvBase env;
         TRowsModel rows;
 
+        SetupEnvironment(env);
+
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
         ZeroSharedCache(env);
 
@@ -6611,6 +6619,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
     Y_UNIT_TEST(TestAlterAddFamilySticky) {
         TMyEnvBase env;
         TRowsModel rows;
+
+        SetupEnvironment(env);
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
         ZeroSharedCache(env);
@@ -6646,6 +6656,8 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_StickyPages) {
     Y_UNIT_TEST(TestAlterAddFamilyPartiallySticky) {
         TMyEnvBase env;
         TRowsModel rows;
+
+        SetupEnvironment(env);
 
         env.FireDummyTablet(ui32(NFake::TDummy::EFlg::Comp));
         ZeroSharedCache(env);
@@ -7038,7 +7050,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Reboot) {
         IActor *tabletActor = nullptr; // save tablet to get its actor id and avoid using tablet resolver which has outdated info
         while (true) {
             struct TReassignedStarter : NFake::TStarter {
-                NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channelsCount) noexcept override {
+                NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channelsCount) override {
                     auto *info = TStarter::MakeTabletInfo(tablet, channelsCount);
                     info->Channels[1].History.emplace_back(3, 3);
                     return info;
@@ -7129,6 +7141,252 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_Gc) {
         env->SimulateSleep(TDuration::MilliSeconds(10));
         UNIT_ASSERT_C(gcBarriers.size() >= 2, gcBarriers.size());
         UNIT_ASSERT_C(gcBarriers[0] <= gcBarriers[1], "unexpected barrier decrease");
+    }
+}
+
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_LowPriorityTxs) {
+    struct TTxState {
+        int Executed = 0;
+        int Completed = 0;
+        int Destroyed = 0;
+    };
+
+    struct TSimpleTx : public ITransaction {
+        TTxState& State;
+
+        TSimpleTx(TTxState& state)
+            : State(state)
+        {}
+
+        bool Execute(TTransactionContext&, const TActorContext&) override {
+            ++State.Executed;
+            return true;
+        }
+
+        void Complete(const TActorContext&) override {
+            ++State.Completed;
+        }
+
+        ~TSimpleTx() {
+            ++State.Destroyed;
+        }
+    };
+
+    struct TAllocatingTx : public ITransaction {
+        TTxState& State;
+
+        TAllocatingTx(TTxState& state)
+            : State(state)
+        {}
+
+        bool Execute(TTransactionContext& txc, const TActorContext&) override {
+            ++State.Executed;
+            // Keep requesting 2GB more...
+            txc.RequestMemory(2ULL * 1024 * 1024 * 1024);
+            return false;
+        }
+
+        void Complete(const TActorContext&) override {
+            ++State.Completed;
+        }
+
+        ~TAllocatingTx() {
+            ++State.Destroyed;
+        }
+    };
+
+    Y_UNIT_TEST(TestEnqueueCancel) {
+        TMyEnvBase env;
+
+        env.FireDummyTablet();
+
+        TTxState tx1, tx2, tx3;
+        ui64 id1 = 0;
+        ui64 id2 = 0;
+        ui64 id3 = 0;
+        env.SendSync(new NFake::TEvExecute{[&](auto*, const auto& ctx) {
+            ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto* x, const auto& ctx) {
+                id1 = x->EnqueueLowPriority(new TSimpleTx(tx1));
+                Y_ABORT_UNLESS(tx1.Executed == 0);
+                id2 = x->Enqueue(new TSimpleTx(tx2));
+                Y_ABORT_UNLESS(tx2.Executed == 0);
+                id3 = x->Enqueue(new TSimpleTx(tx3));
+                Y_ABORT_UNLESS(tx3.Executed == 0);
+                // Validate this new mailbox event is handled after tx3 is executed and destroyed, i.e. it's high priority
+                ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto*, const auto&) {
+                    Y_ABORT_UNLESS(tx3.Executed == 1);
+                    Y_ABORT_UNLESS(tx3.Destroyed == 1);
+                }});
+            }});
+            ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto* x, const auto&) {
+                Y_ABORT_UNLESS(id1 != 0);
+                Y_ABORT_UNLESS(tx1.Executed == 0);
+                Y_ABORT_UNLESS(tx1.Destroyed == 0);
+                bool ok = x->CancelTransaction(id1);
+                Y_ABORT_UNLESS(ok);
+                Y_ABORT_UNLESS(tx1.Destroyed == 1);
+            }});
+            ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto* x, const auto&) {
+                Y_ABORT_UNLESS(id2 != 0);
+                Y_ABORT_UNLESS(tx2.Executed == 0);
+                Y_ABORT_UNLESS(tx2.Destroyed == 0);
+                bool ok = x->CancelTransaction(id2);
+                Y_ABORT_UNLESS(ok);
+                Y_ABORT_UNLESS(tx2.Destroyed == 1);
+            }});
+            ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto*, const auto& ctx) {
+                ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto*, const auto& ctx) {
+                    ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+                }});
+            }});
+        }});
+    }
+
+    Y_UNIT_TEST(TestLowPriority) {
+        TMyEnvBase env;
+
+        env.FireDummyTablet();
+
+        TTxState tx1, tx2;
+        ui64 id1 = 0;
+        ui64 id2 = 0;
+        env.SendSync(new NFake::TEvExecute{[&](auto*, const auto& ctx) {
+            ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto* x, const auto& ctx) {
+                id1 = x->EnqueueLowPriority(new TSimpleTx(tx1));
+                Y_ABORT_UNLESS(tx1.Executed == 0);
+                id2 = x->EnqueueLowPriority(new TSimpleTx(tx2));
+                Y_ABORT_UNLESS(tx2.Executed == 0);
+                ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto*, const auto& ctx) {
+                    Y_ABORT_UNLESS(tx1.Executed == 1);
+                    Y_ABORT_UNLESS(tx1.Completed == 1);
+                    Y_ABORT_UNLESS(tx1.Destroyed == 1);
+                    Y_ABORT_UNLESS(tx2.Executed == 0);
+                    Y_ABORT_UNLESS(tx2.Destroyed == 0);
+                    ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto*, const auto& ctx) {
+                        Y_ABORT_UNLESS(tx2.Executed == 1);
+                        Y_ABORT_UNLESS(tx2.Completed == 1);
+                        Y_ABORT_UNLESS(tx2.Destroyed == 1);
+                        ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+                    }});
+                }});
+            }});
+        }});
+    }
+
+    Y_UNIT_TEST(TestLowPriorityCancel) {
+        TMyEnvBase env;
+
+        env.FireDummyTablet();
+
+        TTxState tx1, tx2;
+        ui64 id1 = 0;
+        ui64 id2 = 0;
+        env.SendSync(new NFake::TEvExecute{[&](auto*, const auto& ctx) {
+            ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto* x, const auto& ctx) {
+                id1 = x->EnqueueLowPriority(new TSimpleTx(tx1));
+                Y_ABORT_UNLESS(tx1.Executed == 0);
+                id2 = x->EnqueueLowPriority(new TSimpleTx(tx2));
+                Y_ABORT_UNLESS(tx2.Executed == 0);
+                // The next new mailbox event is supposed to execute after tx1 is executed, but before tx2
+                ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto* x, const auto& ctx) {
+                    Y_ABORT_UNLESS(tx1.Executed == 1);
+                    Y_ABORT_UNLESS(tx1.Destroyed == 1);
+                    bool ok1 = x->CancelTransaction(id1);
+                    Y_ABORT_UNLESS(!ok1); // cannot cancel executed transaction
+                    Y_ABORT_UNLESS(tx2.Executed == 0);
+                    Y_ABORT_UNLESS(tx2.Destroyed == 0);
+                    bool ok2 = x->CancelTransaction(id2);
+                    Y_ABORT_UNLESS(ok2);
+                    Y_ABORT_UNLESS(tx2.Executed == 0);
+                    Y_ABORT_UNLESS(tx2.Destroyed == 1);
+                    ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto*, const auto& ctx) {
+                        ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+                    }});
+                }});
+            }});
+            ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto*, const auto&) {
+                Y_ABORT_UNLESS(id1 != 0);
+                Y_ABORT_UNLESS(tx1.Executed == 0);
+                Y_ABORT_UNLESS(tx1.Destroyed == 0);
+            }});
+            ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto*, const auto&) {
+                Y_ABORT_UNLESS(id2 != 0);
+                Y_ABORT_UNLESS(tx2.Executed == 0);
+                Y_ABORT_UNLESS(tx2.Destroyed == 0);
+            }});
+        }});
+    }
+
+    Y_UNIT_TEST(TestLowPriorityAllocatingCancel) {
+        TMyEnvBase env;
+
+        env.FireDummyTablet();
+
+        TTxState tx1, tx2;
+        ui64 id1 = 0;
+        ui64 id2 = 0;
+        env.SendSync(new NFake::TEvExecute{[&](auto*, const auto& ctx) {
+            ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto* x, const auto& ctx) {
+                id1 = x->EnqueueLowPriority(new TAllocatingTx(tx1));
+                id2 = x->EnqueueLowPriority(new TSimpleTx(tx2));
+                ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto* x, const auto& ctx) {
+                    Y_ABORT_UNLESS(tx1.Executed == 1);
+                    Y_ABORT_UNLESS(tx1.Destroyed == 0);
+                    bool ok = x->CancelTransaction(id1);
+                    Y_ABORT_UNLESS(ok);
+                    // Transaction is requesting more memory and cannot be destroyed
+                    Y_ABORT_UNLESS(tx1.Destroyed == 0);
+                    ctx.Send(ctx.SelfID, new NFake::TEvExecute{[&](auto*, const auto&) {
+                        Y_ABORT_UNLESS(tx2.Executed == 1);
+                        Y_ABORT_UNLESS(tx2.Completed == 1);
+                        Y_ABORT_UNLESS(tx2.Destroyed == 1);
+                    }});
+                    ctx.Schedule(TDuration::MilliSeconds(1), new NFake::TEvExecute{[&](auto*, const auto& ctx) {
+                        // We should observe tx1 destroyed eventually, not executing again
+                        Y_ABORT_UNLESS(tx1.Executed == 1);
+                        Y_ABORT_UNLESS(tx1.Completed == 0);
+                        Y_ABORT_UNLESS(tx1.Destroyed == 1);
+                        ctx.Send(ctx.SelfID, new NFake::TEvReturn);
+                    }});
+                }});
+            }});
+        }});
+    }
+}
+
+Y_UNIT_TEST_SUITE(TFlatTableExecutor_Exceptions) {
+    struct TTxExecuteThrowException : public ITransaction {
+        bool Execute(TTransactionContext&, const TActorContext&) override {
+            throw std::runtime_error("test");
+        }
+
+        void Complete(const TActorContext&) override {
+            // not reached
+        }
+    };
+
+    Y_UNIT_TEST(TestTabletExecuteExceptionDirect) {
+        TMyEnvBase env;
+        env->GetAppData().FeatureFlags.SetEnableTabletRestartOnUnhandledExceptions(true);
+
+        env.FireDummyTablet();
+
+        env.SendAsync(new NFake::TEvExecute([&](auto* x, const auto& ctx) {
+            x->Execute(new TTxExecuteThrowException, ctx);
+        }));
+        env.WaitForGone();
+    }
+
+    Y_UNIT_TEST(TestTabletExecuteExceptionEnqueue) {
+        TMyEnvBase env;
+        env->GetAppData().FeatureFlags.SetEnableTabletRestartOnUnhandledExceptions(true);
+
+        env.FireDummyTablet();
+
+        env.SendAsync(new NFake::TEvExecute([&](auto* x, const auto&) {
+            x->Enqueue(new TTxExecuteThrowException);
+        }));
+        env.WaitForGone();
     }
 }
 

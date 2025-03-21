@@ -113,10 +113,10 @@ mk_w_date (void * row, ds_key_t index)
     r->d_fy_year = r->d_year;
     r->d_fy_quarter_seq = r->d_quarter_seq;
     r->d_fy_week_seq = r->d_week_seq;
-    if (r->d_dow >= MAXINT) {
-      INTERNAL("Int overflow for d_dow");
+    if (r->d_dow >= 7) {
+      INTERNAL("weekday_names array overflow");
       exit(EXIT_FAILURE);
-   }
+    }
     r->d_day_name = weekday_names[r->d_dow + 1];
     dist_member (&r->d_holiday, "calendar", day_index, 8);
     if ((r->d_dow == 5) || (r->d_dow == 6))
@@ -294,10 +294,10 @@ vld_w_date(int nTable, ds_key_t kRow, int *Permutation)
     r->d_fy_year = r->d_year;
     r->d_fy_quarter_seq = r->d_quarter_seq;
     r->d_fy_week_seq = r->d_week_seq;
-    if (r->d_dow >= MAXINT) {
-      INTERNAL("Int overflow for d_dow");
+    if (r->d_dow >= 7) {
+      INTERNAL("weekday_names array overflow");
       exit(EXIT_FAILURE);
-   }
+    }
     r->d_day_name = weekday_names[r->d_dow + 1];
     dist_member (&r->d_holiday, "calendar", day_index, 8);
     if ((r->d_dow == 5) || (r->d_dow == 6))

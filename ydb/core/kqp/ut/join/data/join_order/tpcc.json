@@ -1,14 +1,20 @@
 {
-  "op_name":"InnerJoin (MapJoin)",
+  "op_name":"HashShuffle",
   "args":
     [
       {
-        "op_name":"TableLookup",
-        "table":"test\/tpcc\/stock"
-      },
-      {
-        "op_name":"TableRangeScan",
-        "table":"test\/tpcc\/order_line"
+        "op_name":"InnerJoin (MapJoin)",
+        "args":
+          [
+            {
+              "op_name":"TableLookup",
+              "table":"test\/tpcc\/stock"
+            },
+            {
+              "op_name":"TableRangeScan",
+              "table":"test\/tpcc\/order_line"
+            }
+          ]
       }
     ]
 }

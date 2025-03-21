@@ -26,7 +26,7 @@ namespace NBoot {
         }
 
     private: /* IStep, boot logic DSL actor interface   */
-        void Start() noexcept override
+        void Start() override
         {
             for (auto slot: xrange(Queue.size()))
                 if (const auto &largeGlobId = Queue.at(slot).LargeGlobId)
@@ -35,7 +35,7 @@ namespace NBoot {
             Flush();
         }
 
-        void HandleStep(TIntrusivePtr<IStep> step) noexcept override
+        void HandleStep(TIntrusivePtr<IStep> step) override
         {
             auto *load = step->ConsumeAs<TLoadBlobs>(Pending);
 
@@ -48,7 +48,7 @@ namespace NBoot {
         }
 
     private:
-        void Flush() noexcept
+        void Flush()
         {
             for (TBody *head = nullptr; Queue && *(head = &Queue[0]); ) {
                 Apply(head->LargeGlobId.Lead, Codec->Decode(head->Body));
@@ -63,7 +63,7 @@ namespace NBoot {
             }
         }
 
-        void Apply(const TLogoBlobID &label, TArrayRef<const char> body) noexcept
+        void Apply(const TLogoBlobID &label, TArrayRef<const char> body)
         {
             TProtoBox<NKikimrExecutorFlat::TBorrowedPart> proto(body);
 

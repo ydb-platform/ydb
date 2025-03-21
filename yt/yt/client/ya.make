@@ -131,7 +131,6 @@ SRCS(
     table_client/row_buffer.cpp
     table_client/schema.cpp
     table_client/schema_serialization_helpers.cpp
-    table_client/schemaless_buffered_dynamic_table_writer.cpp
     table_client/schemaless_dynamic_table_writer.cpp
     table_client/serialize.cpp
     table_client/table_upload_options.cpp
@@ -222,6 +221,7 @@ PEERDIR(
     yt/yt/library/numeric
     yt/yt/library/quantile_digest
     yt/yt_proto/yt/client
+    library/cpp/digest/crc32c
     library/cpp/json
     library/cpp/string_utils/base64
     contrib/libs/pfr

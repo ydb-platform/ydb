@@ -32,7 +32,7 @@ namespace NFwd {
             for (auto &it: Pages) it.Release();
         }
 
-        TResult Get(IPageLoadingQueue *head, ui32 ref, EPage, ui64 lower) noexcept override
+        TResult Get(IPageLoadingQueue *head, ui32 ref, EPage, ui64 lower) override
         {
             Y_ABORT_UNLESS(ref >= Lower, "Cannot handle backward blob reads");
 
@@ -49,12 +49,12 @@ namespace NFwd {
             return { page.Touch(ref, Stat), more, page.Size < Edge[page.Tag] };
         }
 
-        void Forward(IPageLoadingQueue *head, ui64 upper) noexcept override
+        void Forward(IPageLoadingQueue *head, ui64 upper) override
         {
             Preload(head, upper);
         }
 
-        void Fill(NPageCollection::TLoadedPage& page, NSharedCache::TSharedPageRef sharedPageRef, EPage) noexcept override
+        void Fill(NPageCollection::TLoadedPage& page, NSharedCache::TSharedPageRef sharedPageRef, EPage) override
         {
             if (!Pages || page.PageId < Pages.front().PageId) {
                 Y_ABORT("Blobs fwd cache got page below queue");
@@ -71,25 +71,25 @@ namespace NFwd {
             Shrink(false /* do not drop loading pages */);
         }
 
-        TDeque<TScreen::THole> Traced() noexcept
+        TDeque<TScreen::THole> Traced()
         {
             Rewind(Max<TPageId>()).Shrink(true /* complete trace */);
 
             return Trace ? Trace->Unwrap() : TDeque<TScreen::THole>{ };
         }
 
-        TIntrusiveConstPtr<NPage::TFrames> GetFrames() const noexcept
+        TIntrusiveConstPtr<NPage::TFrames> GetFrames() const
         {
             return Frames;
         }
 
-        TIntrusiveConstPtr<TSlices> GetSlices() const noexcept
+        TIntrusiveConstPtr<TSlices> GetSlices() const
         {
             return Filter.GetSlices();
         }
 
     private:
-        TPage& Lookup(ui32 ref) noexcept
+        TPage& Lookup(ui32 ref)
         {
             const auto end = Pages.begin() + Offset;
 
@@ -104,7 +104,7 @@ namespace NFwd {
             }
         }
 
-        ui32 FrameTo(TPageId ref) noexcept
+        ui32 FrameTo(TPageId ref)
         {
             if (ref >= Lower && ref < Upper) {
                 return Lookup(ref).Tag;
@@ -120,7 +120,7 @@ namespace NFwd {
             }
         }
 
-        ui32 FrameTo(TPageId ref, NPage::TFrames::TEntry rel) noexcept
+        ui32 FrameTo(TPageId ref, NPage::TFrames::TEntry rel)
         {
             Lower = Min(ref, rel.AbsRef(ref));
             Upper = ref + 1; /* will be extended eventually */
@@ -128,7 +128,7 @@ namespace NFwd {
             return rel.Tag;
         }
 
-        TBlobs& Preload(IPageLoadingQueue *head, ui64 upper) noexcept
+        TBlobs& Preload(IPageLoadingQueue *head, ui64 upper)
         {
             auto until = [this, upper]() { return OnHold + OnFetch < upper; };
 
@@ -160,7 +160,7 @@ namespace NFwd {
             return *this;
         }
 
-        TPageId Propagate(const TPageId base) noexcept
+        TPageId Propagate(const TPageId base)
         {
             if (Pages && base <= Pages.back().PageId) {
                 return Lookup(base).Refer;
@@ -182,7 +182,7 @@ namespace NFwd {
             }
         }
 
-        TBlobs& Rewind(TPageId until) noexcept
+        TBlobs& Rewind(TPageId until)
         {
             for (; Offset < Pages.size(); Offset++) {
                 auto &page = Pages.at(Offset);
@@ -202,7 +202,7 @@ namespace NFwd {
             return *this;
         }
 
-        TBlobs& Shrink(bool force = false) noexcept
+        TBlobs& Shrink(bool force = false)
         {
             for (; Offset && (Pages[0].Ready() || force); Offset--) {
 

@@ -1,0 +1,77 @@
+--- a/include/boost/iostreams/copy.hpp	(index)
++++ b/include/boost/iostreams/copy.hpp	(working tree)
+@@ -158,8 +158,9 @@ public:
+         return copy_impl( src_, snk_, buffer_size_, 
+                           is_direct<Source>(), is_direct<Sink>() );
+     }
++    copy_operation(const copy_operation& other) = default;
+ private:
+-    copy_operation& operator=(const copy_operation&);
++    BOOST_DELETED_FUNCTION(copy_operation& operator=(const copy_operation&));
+     Source&          src_;
+     Sink&            snk_;
+     std::streamsize  buffer_size_;
+--- a/include/boost/iostreams/detail/adapter/concept_adapter.hpp	(index)
++++ b/include/boost/iostreams/detail/adapter/concept_adapter.hpp	(working tree)
+@@ -67,6 +67,8 @@ public:
+     explicit concept_adapter(const T& t) : t_(t)
+     { BOOST_STATIC_ASSERT(!is_std_io<T>::value); }
+ 
++    concept_adapter(concept_adapter const& other) = default;
++
+     T& operator*() { return t_; }
+     T* operator->() { return &t_; }
+ 
+--- a/include/boost/iostreams/detail/functional.hpp
++++ b/include/boost/iostreams/detail/functional.hpp
+@@ -36,6 +36,7 @@ public:
+     device_close_operation(T& t, BOOST_IOS::openmode which) 
+         : t_(t), which_(which) 
+         { }
++    device_close_operation(const device_close_operation&) = default;
+     void operator()() const { boost::iostreams::close(t_, which_); }
+ private:
+     BOOST_DELETED_FUNCTION(device_close_operation& operator=(const device_close_operation&))
+@@ -50,6 +51,7 @@ public:
+     filter_close_operation(T& t, Sink& snk, BOOST_IOS::openmode which)
+         : t_(t), snk_(snk), which_(which)
+         { }
++    filter_close_operation(const filter_close_operation&) = default;
+     void operator()() const { boost::iostreams::close(t_, snk_, which_); }
+ private:
+     BOOST_DELETED_FUNCTION(filter_close_operation& operator=(const filter_close_operation&))
+@@ -76,6 +78,7 @@ class device_close_all_operation {
+ public:
+     typedef void result_type;
+     device_close_all_operation(T& t) : t_(t) { }
++    device_close_all_operation(const device_close_all_operation& ohter) = default;
+     void operator()() const { detail::close_all(t_); }
+ private:
+     BOOST_DELETED_FUNCTION(device_close_all_operation& operator=(const device_close_all_operation&))
+@@ -114,6 +117,7 @@ public:
+         : t_(t), which_(which) 
+         { }
+     void operator()() const { t_.close(which_); }
++    member_close_operation(member_close_operation const& other) = default;
+ private:
+     BOOST_DELETED_FUNCTION(member_close_operation& operator=(const member_close_operation&))
+     T&                   t_;
+@@ -131,6 +135,7 @@ template<typename T>
+ class reset_operation {
+ public:
+     reset_operation(T& t) : t_(t) { }
++    reset_operation(reset_operation const& other) = default;
+     void operator()() const { t_.reset(); }
+ private:
+     BOOST_DELETED_FUNCTION(reset_operation& operator=(const reset_operation&))
+--- a/include/boost/iostreams/device/mapped_file.hpp	(index)
++++ b/include/boost/iostreams/device/mapped_file.hpp	(working tree)
+@@ -136,6 +136,8 @@ struct basic_mapped_file_params
+         : base_type(other), path(other.path)
+         { }
+ 
++    basic_mapped_file_params& operator=(const basic_mapped_file_params& other) = default;
++
+     // Templated copy constructor
+     template<typename PathT>
+     basic_mapped_file_params(const basic_mapped_file_params<PathT>& other)

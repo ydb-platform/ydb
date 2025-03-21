@@ -621,11 +621,15 @@ namespace NKikimr::NPDisk {
                 const size_t bytesToWrite = payload.size();
 
                 ui64 rawDeviceSize = 0;
-                try {
-                    bool isBlockDevice = false;
-                    DetectFileParameters(Cfg->Path, rawDeviceSize, isBlockDevice);
-                } catch (const std::exception&) {
-                    rawDeviceSize = 0;
+                if (Cfg->SectorMap) {
+                    rawDeviceSize = Cfg->SectorMap->GetDeviceSize();
+                } else {
+                    try {
+                        bool isBlockDevice = false;
+                        DetectFileParameters(Cfg->Path, rawDeviceSize, isBlockDevice);
+                    } catch (const std::exception&) {
+                        rawDeviceSize = 0;
+                    }
                 }
 
                 const ui64 deviceSizeInBytes = rawDeviceSize & ~ui64(DefaultSectorSize - 1);

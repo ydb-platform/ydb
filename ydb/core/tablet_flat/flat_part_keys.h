@@ -67,12 +67,12 @@ namespace NTable {
             return RowId;
         }
 
-        TSerializedCellVec GetKey() const noexcept
+        TSerializedCellVec GetKey() const
         {
             return TSerializedCellVec(Key);
         }
 
-        bool SeekRow(TRowId rowId) noexcept
+        bool SeekRow(TRowId rowId)
         {
             if (RowId != rowId) {
                 if (rowId == Max<TRowId>()) {
@@ -108,7 +108,7 @@ namespace NTable {
             return true;
         }
 
-        bool SeekLastRow() noexcept
+        bool SeekLastRow()
         {
             auto hasLast = Index->SeekLast();
             if (hasLast == EReady::Page) {
@@ -125,7 +125,7 @@ namespace NTable {
             return true;
         }
 
-        bool LoadPage(TPageId pageId) noexcept
+        bool LoadPage(TPageId pageId)
         {
             Y_ABORT_UNLESS(pageId != Max<TPageId>(), "Unexpected seek to an invalid page id");
             if (PageId != pageId) {
@@ -139,7 +139,7 @@ namespace NTable {
             return true;
         }
 
-        void LoadRow(TRowId rowId) noexcept
+        void LoadRow(TRowId rowId)
         {
             if (RowId != rowId) {
                 auto it = Page->Begin() + (rowId - Page.BaseRow());

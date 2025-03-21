@@ -1766,6 +1766,11 @@ public:
         return value != 0;
     }
 
+    bool GetUseNewPrecharge() const {
+        ui64 value = ReadIteratorKeysExtBlobsPrecharge;
+        return value != 0;
+    }
+
     template <typename T>
     void ReleaseCache(T& tx) {
         ReleaseTxCache(tx.GetTxCacheUsage());
@@ -2821,6 +2826,8 @@ private:
 
     TControlWrapper ChangeRecordDebugPrint;
 
+    TControlWrapper ReadIteratorKeysExtBlobsPrecharge;
+
     // Set of InRS keys to remove from local DB.
     THashSet<TReadSetKey> InRSToRemove;
     TIntrusivePtr<TThrRefBase> DataShardSysTables;
@@ -3086,6 +3093,8 @@ protected:
         TRACE_EVENT(NKikimrServices::TX_DATASHARD);
         StateInitImpl(ev, SelfId());
     }
+
+    using TTabletExecutedFlat::Enqueue;
 
     void Enqueue(STFUNC_SIG) override {
         ALOG_WARN(NKikimrServices::TX_DATASHARD, "TDataShard::StateInit unhandled event type: " << ev->GetTypeRewrite()

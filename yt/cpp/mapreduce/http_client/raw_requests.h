@@ -48,6 +48,13 @@ NHttpClient::IHttpResponsePtr SkyShareTable(
     const std::vector<TYPath>& tablePaths,
     const TSkyShareTableOptions& options);
 
+std::unique_ptr<IOutputStream> WriteTable(
+    const TClientContext& context,
+    const TTransactionId& transactionId,
+    const TRichYPath& path,
+    const TMaybe<TFormat>& format,
+    const TTableWriterOptions& options);
+
 void InsertRows(
     const TClientContext& context,
     const TYPath& path,

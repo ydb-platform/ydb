@@ -48,7 +48,7 @@ namespace NFwd {
             return PageLoadingLogic.Get();
         }
 
-        ui64 AddToQueue(TPageId pageId, EPage type) noexcept override
+        ui64 AddToQueue(TPageId pageId, EPage type) override
         {
             if (IsIndexPage(type)) {
                 return AddToQueue(pageId, type, IndexPageCollection, IndexFetch);
@@ -109,7 +109,7 @@ namespace NFwd {
                 AddPartView(one);
         }
 
-        void AddCold(const TPartView& partView) noexcept
+        void AddCold(const TPartView& partView)
         {
             auto r = ColdParts.insert(partView.Part.Get());
             Y_ABORT_UNLESS(r.second, "Cannot add a duplicate cold part");
@@ -117,7 +117,7 @@ namespace NFwd {
             AddPartView(partView);
         }
 
-        bool MayProgress() const noexcept
+        bool MayProgress() const
         {
             return Pending == 0;
         }
@@ -134,12 +134,12 @@ namespace NFwd {
             return Get(GetQueue(part, groupId), pageId, type).Page;
         }
 
-        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) noexcept override
+        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) override
         {
             return MemTable->Locate(memTable, ref, tag);
         }
 
-        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override
+        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) override
         {
             if ((lob != ELargeObj::Extern && lob != ELargeObj::Outer) || (ref >> 32)) {
                 Y_Fail("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}");
@@ -179,7 +179,7 @@ namespace NFwd {
             }
         }
 
-        IPages* Reset() noexcept
+        IPages* Reset()
         {
             /* Current version of cache works only on forward iterations over
                 parts and cannot handle backward jumps. This call is temporary
@@ -203,7 +203,7 @@ namespace NFwd {
             return this;
         }
 
-        TStat Stats() const noexcept
+        TStat Stats() const
         {
             auto aggr = [](auto &&stat, const TPartGroupLoadingQueue &q) {
                 return stat += q->Stat;
@@ -212,7 +212,7 @@ namespace NFwd {
             return std::accumulate(GroupQueues.begin(), GroupQueues.end(), Total, aggr);
         }
 
-        TAutoPtr<TFetch> GrabFetches() noexcept
+        TAutoPtr<TFetch> GrabFetches()
         {
             while (FetchingQueues) {
                 auto queue = FetchingQueues.Front();
@@ -238,7 +238,7 @@ namespace NFwd {
             return nullptr;
         }
 
-        TAutoPtr<TSeen> GrabTraces() noexcept
+        TAutoPtr<TSeen> GrabTraces()
         {
             TDeque<TSieve> sieves(PartGroupQueues.size() - ColdParts.size() + 1);
 
@@ -273,7 +273,7 @@ namespace NFwd {
         }
 
     private:
-        TResult Get(TPartGroupLoadingQueue &queue, TPageId pageId, EPage type) noexcept
+        TResult Get(TPartGroupLoadingQueue &queue, TPageId pageId, EPage type)
         {
             auto got = queue->Get(&queue, pageId, type, Conf.AheadLo);
 
@@ -289,7 +289,7 @@ namespace NFwd {
             return { got.Need, got.Page };
         }
 
-        void AddPartView(const TPartView& partView) noexcept
+        void AddPartView(const TPartView& partView)
         {
             const auto *part = partView.Part.Get();
 
@@ -311,13 +311,13 @@ namespace NFwd {
             }
         }
 
-        TPartGroupLoadingQueue& GetQueue(const TPart *part, TGroupId groupId) noexcept
+        TPartGroupLoadingQueue& GetQueue(const TPart *part, TGroupId groupId)
         {
             ui16 room = (groupId.Historic ? part->GroupsCount + 2 : 0) + groupId.Index;
             return GetQueue(part, room);
         }
 
-        TPartGroupLoadingQueue& GetQueue(const TPart *part, ui16 room) noexcept
+        TPartGroupLoadingQueue& GetQueue(const TPart *part, ui16 room)
         {
             auto it = PartGroupQueues.FindPtr(part);
             Y_ABORT_UNLESS(it, "NFwd cache trying to access part outside of subset");
@@ -329,7 +329,7 @@ namespace NFwd {
             return *queue;
         }
 
-        TPartGroupLoadingQueue* Settle(TGroupPages pages, ui32 partIndex) noexcept
+        TPartGroupLoadingQueue* Settle(TGroupPages pages, ui32 partIndex)
         {
             if (pages.PageLoadingLogic || pages.IndexPageCollection || pages.GroupPageCollection) {
                 const ui64 cookie = (ui64(GroupQueues.size()) << 32) | ui32(Salt + Epoch);
@@ -344,7 +344,7 @@ namespace NFwd {
             }
         }
 
-        TGroupPages MakeCache(const TPart *part, NPage::TGroupId groupId, TIntrusiveConstPtr<TSlices> slices) noexcept
+        TGroupPages MakeCache(const TPart *part, NPage::TGroupId groupId, TIntrusiveConstPtr<TSlices> slices)
         {
             auto *partStore = CheckedCast<const TPartStore*>(part);
 
@@ -355,7 +355,7 @@ namespace NFwd {
                 partStore->PageCollections[groupId.Index]->PageCollection};
         }
 
-        TGroupPages MakeExtern(const TPart *part, TIntrusiveConstPtr<TSlices> bounds) const noexcept
+        TGroupPages MakeExtern(const TPart *part, TIntrusiveConstPtr<TSlices> bounds) const
         {
             if (auto blobs = part->Blobs) {
                 /* Should always materialize key columns to values since
@@ -384,7 +384,7 @@ namespace NFwd {
             }
         }
 
-        TGroupPages MakeOuter(const TPart *part, TIntrusiveConstPtr<TSlices> bounds) const noexcept
+        TGroupPages MakeOuter(const TPart *part, TIntrusiveConstPtr<TSlices> bounds) const
         {
             if (auto small = part->Small) {
                 auto *partStore = CheckedCast<const TPartStore*>(part);

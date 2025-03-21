@@ -1,4 +1,4 @@
-#include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/credentials.h>
 
 #include <library/cpp/cgiparam/cgiparam.h>
 #include <library/cpp/http/misc/httpcodes.h>
@@ -20,7 +20,7 @@
 #define INV_ARG "Invalid argument for " PROV_ERR
 #define EXCH_ERR "Exchange token error in " PROV_ERR
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 namespace {
 

@@ -1,14 +1,14 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/types/fwd.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fwd.h>
 
 #include "credentials.h"
 
-#include <ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
 
 #include <util/datetime/base.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 constexpr TDuration DEFAULT_JWT_TOKEN_TTL = TDuration::Hours(1);
 

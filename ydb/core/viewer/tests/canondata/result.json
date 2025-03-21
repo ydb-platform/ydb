@@ -1512,7 +1512,6 @@
                     },
                     {
                         "ACL": "",
-                        "ChildrenExist": false,
                         "CreateFinished": true,
                         "CreateStep": "not-zero-number-text",
                         "CreateTxId": "not-zero-number-text",
@@ -1526,7 +1525,6 @@
                     },
                     {
                         "ACL": "",
-                        "ChildrenExist": false,
                         "CreateFinished": true,
                         "CreateStep": "not-zero-number-text",
                         "CreateTxId": "not-zero-number-text",
@@ -1540,7 +1538,6 @@
                     },
                     {
                         "ACL": "",
-                        "ChildrenExist": false,
                         "CreateFinished": true,
                         "CreateStep": "not-zero-number-text",
                         "CreateTxId": "not-zero-number-text",
@@ -1768,7 +1765,6 @@
                 },
                 "Self": {
                     "ACL": "",
-                    "ChildrenExist": true,
                     "CreateFinished": true,
                     "CreateStep": "0",
                     "CreateTxId": "not-zero-number-text",
@@ -1849,7 +1845,6 @@
                 },
                 "Self": {
                     "ACL": "",
-                    "ChildrenExist": false,
                     "CreateFinished": true,
                     "CreateStep": "0",
                     "CreateTxId": "not-zero-number-text",
@@ -1946,7 +1941,6 @@
                 },
                 "Self": {
                     "ACL": "",
-                    "ChildrenExist": true,
                     "CreateFinished": true,
                     "CreateStep": "0",
                     "CreateTxId": "not-zero-number-text",
@@ -2187,7 +2181,7 @@
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
-                        "TotalSessions": 0
+                        "TotalSessions": "number"
                     },
                     "UptimeSeconds": "number",
                     "VDisks": [
@@ -2532,7 +2526,7 @@
                         "Tenants": [
                             "/Root/dedicated_db"
                         ],
-                        "TotalSessions": 0
+                        "TotalSessions": "number"
                     },
                     "Tablets": [
                         {
@@ -2732,7 +2726,7 @@
                         "Tenants": [
                             "/Root/shared_db"
                         ],
-                        "TotalSessions": 0
+                        "TotalSessions": "number"
                     },
                     "Tablets": [
                         {
@@ -2932,7 +2926,7 @@
                         "Tenants": [
                             "/Root/shared_db"
                         ],
-                        "TotalSessions": 0
+                        "TotalSessions": "number"
                     },
                     "Tablets": [
                         {
@@ -2975,7 +2969,7 @@
     "test.test_viewer_nodes_issue_14992": {
         "response_group": {
             "FieldsAvailable": "0000000110111110111111100000111",
-            "FieldsRequired": "0000000001000000010000000000101",
+            "FieldsRequired": "0000000001100000010000000000101",
             "FoundNodes": "3",
             "MaximumDisksPerNode": "1",
             "Nodes": [
@@ -3047,7 +3041,7 @@
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
-                        "TotalSessions": 0
+                        "TotalSessions": "number"
                     },
                     "UptimeSeconds": "number"
                 },
@@ -3117,7 +3111,7 @@
                         "Tenants": [
                             "/Root/shared_db"
                         ],
-                        "TotalSessions": 0
+                        "TotalSessions": "number"
                     },
                     "UptimeSeconds": "number"
                 },
@@ -3187,7 +3181,7 @@
                         "Tenants": [
                             "/Root/dedicated_db"
                         ],
-                        "TotalSessions": 0
+                        "TotalSessions": "number"
                     },
                     "UptimeSeconds": "number"
                 }
@@ -3196,7 +3190,7 @@
         },
         "response_group_by": {
             "FieldsAvailable": "0000000110111110111111100000111",
-            "FieldsRequired": "0000000001000000010000000000101",
+            "FieldsRequired": "0000000001100000010000000000101",
             "FoundNodes": "3",
             "MaximumDisksPerNode": "1",
             "NodeGroups": [
@@ -3250,7 +3244,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/dedicated_db": {
             "result": [
@@ -3268,7 +3262,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/serverless_db": {
             "result": [
@@ -3286,7 +3280,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/shared_db": {
             "result": [
@@ -3304,7 +3298,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         }
     },
     "test.test_viewer_query_issue_13757": {
@@ -3327,7 +3321,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/dedicated_db": {
             "result": [
@@ -3348,7 +3342,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/serverless_db": {
             "result": [
@@ -3369,7 +3363,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/shared_db": {
             "result": [
@@ -3390,7 +3384,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         }
     },
     "test.test_viewer_query_issue_13945": {
@@ -3410,7 +3404,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/dedicated_db": {
             "result": [
@@ -3428,7 +3422,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/serverless_db": {
             "result": [
@@ -3446,7 +3440,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         },
         "/Root/shared_db": {
             "result": [
@@ -3464,7 +3458,7 @@
                     ]
                 }
             ],
-            "version": 7
+            "version": 8
         }
     },
     "test.test_viewer_sysinfo": {
@@ -3535,7 +3529,7 @@
                 "Tenants": [
                     "/Root/shared_db"
                 ],
-                "TotalSessions": 0
+                "TotalSessions": "number"
             },
             {
                 "ChangeTime": "not-zero-number-text",
@@ -3601,7 +3595,7 @@
                 "Tenants": [
                     "/Root/dedicated_db"
                 ],
-                "TotalSessions": 0
+                "TotalSessions": "number"
             },
             {
                 "ChangeTime": "not-zero-number-text",
@@ -3665,7 +3659,7 @@
                 "Roles": "not-empty-array",
                 "StartTime": "not-zero-number-text",
                 "SystemState": 1,
-                "TotalSessions": 0
+                "TotalSessions": "number"
             }
         ]
     },
@@ -4949,5 +4943,75 @@
     },
     "test.test_wait_for_cluster_ready": {
         "wait_good": true
+    },
+    "test.test_topic_data": {
+        "response_read": {
+            "Messages": [
+                {
+                    "Codec": 0, "StorageSize": 9, "SeqNo": 1, "Message": "bWVzc2FnZS0w", "OriginalSize": 9, "Offset": 0
+                },
+                {
+                    "Codec": 0, "StorageSize": 9, "SeqNo": 2, "Message": "bWVzc2FnZS0x", "OriginalSize": 9, "Offset": 1
+                },
+                {
+                    "Codec": 0, "StorageSize": 9, "SeqNo": 3, "Message": "bWVzc2FnZS0y", "OriginalSize": 9, "Offset": 2
+                },
+                {
+                    "Codec": 0, "StorageSize": 9, "SeqNo": 4, "Message": "bWVzc2FnZS0z", "OriginalSize": 9, "Offset": 3
+                },
+                {
+                    "Codec": 0, "StorageSize": 9, "SeqNo": 5, "Message": "bWVzc2FnZS00", "OriginalSize": 9, "Offset": 4
+                }
+            ],
+            "StartOffset": 0,
+            "EndOffset": 21,
+            "Truncated": true
+        },
+        "response_metadata": {
+            "Messages": [
+                {
+                    "Codec": 1, "StorageSize": 37, "SeqNo": 11,
+                    "MessageMetadata": [
+                        {"Value": "value1", "Key": "key1"},
+                        {"Value": "value2", "Key": "key2"}],
+                    "Message": "bWVzc2FnZV93aXRoX21ldGE=", "OriginalSize": 17, "Offset": 10
+                }
+            ],
+            "StartOffset": 0,
+            "EndOffset": 21,
+            "Truncated": true
+        },
+        "response_compressed": {
+            "Messages": [
+                {
+                    "Codec": 1, "StorageSize": 38, "SeqNo": 12, "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTA=", "OriginalSize": 20, "Offset": 11
+                },
+                {
+                    "Codec": 1, "StorageSize": 38, "SeqNo": 13, "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTE=", "OriginalSize": 20, "Offset": 12
+                },
+                {
+                    "Codec": 1, "StorageSize": 38, "SeqNo": 14, "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTI=", "OriginalSize": 20, "Offset": 13
+                },
+                {
+                    "Codec": 1, "StorageSize": 38, "SeqNo": 15, "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTM=", "OriginalSize": 20, "Offset": 14
+                },
+                {
+                    "Codec": 1, "StorageSize": 38, "SeqNo": 16, "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTQ=", "OriginalSize": 20, "Offset": 15
+                }
+            ],
+            "StartOffset": 0,
+            "EndOffset": 21,
+            "Truncated": true
+        },
+        "response_not_truncated": {
+            "Messages": [
+                {
+                    "Codec": 1, "StorageSize": 38, "SeqNo": 21, "Message": "Y29tcHJlc3NlZC1tZXNzYWdlLTk=",  "OriginalSize": 20, "Offset": 20
+                }
+            ],
+            "StartOffset": 0,
+            "EndOffset": 21,
+            "Truncated": false
+        }
     }
 }

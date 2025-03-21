@@ -103,7 +103,7 @@ public:
         TargetTypes = MakeUploadTypes(table, UploadState, embedding, data);
     }
 
-    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept final
+    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
     {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
         LOG_D("Prepare " << Debug());
@@ -112,7 +112,7 @@ public:
         return {EScan::Feed, {}};
     }
 
-    EScan Seek(TLead& lead, ui64 seq) noexcept final
+    EScan Seek(TLead& lead, ui64 seq) final
     {
         LOG_D("Seek " << Debug());
         if (seq == 0) {
@@ -134,7 +134,7 @@ public:
         return EScan::Final;
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final
+    TAutoPtr<IDestructable> Finish(EAbort abort) final
     {
         LOG_D("Finish " << Debug());
 
@@ -163,7 +163,7 @@ public:
         return nullptr;
     }
 
-    void Describe(IOutputStream& out) const noexcept final
+    void Describe(IOutputStream& out) const final
     {
         out << Debug();
     }
@@ -175,7 +175,7 @@ public:
             << " ReadBuf size: " << ReadBuf.Size() << " WriteBuf size: " << WriteBuf.Size() << " ";
     }
 
-    EScan PageFault() noexcept final
+    EScan PageFault() final
     {
         LOG_T("PageFault " << Debug());
 
@@ -288,7 +288,7 @@ public:
         LOG_D("Create " << Debug());
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
     {
         LOG_T("Feed " << Debug());
         ++ReadRows;
@@ -308,7 +308,7 @@ public:
     }
 
 private:
-    EScan FeedUploadMain2Build(TArrayRef<const TCell> key, const TRow& row) noexcept
+    EScan FeedUploadMain2Build(TArrayRef<const TCell> key, const TRow& row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos > K) {
@@ -318,7 +318,7 @@ private:
         return FeedUpload();
     }
 
-    EScan FeedUploadMain2Posting(TArrayRef<const TCell> key, const TRow& row) noexcept
+    EScan FeedUploadMain2Posting(TArrayRef<const TCell> key, const TRow& row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos > K) {
@@ -328,7 +328,7 @@ private:
         return FeedUpload();
     }
 
-    EScan FeedUploadBuild2Build(TArrayRef<const TCell> key, const TRow& row) noexcept
+    EScan FeedUploadBuild2Build(TArrayRef<const TCell> key, const TRow& row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos > K) {
@@ -338,7 +338,7 @@ private:
         return FeedUpload();
     }
 
-    EScan FeedUploadBuild2Posting(TArrayRef<const TCell> key, const TRow& row) noexcept
+    EScan FeedUploadBuild2Posting(TArrayRef<const TCell> key, const TRow& row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos > K) {

@@ -50,7 +50,7 @@ namespace NTable {
             return Rop;
         }
 
-        bool Touch(ERowOp op) noexcept
+        bool Touch(ERowOp op)
         {
             Y_ABORT_UNLESS(!(Rop == ERowOp::Erase || Rop == ERowOp::Reset),
                 "Sequence for row state is already finalized");
@@ -68,7 +68,7 @@ namespace NTable {
             }
         }
 
-        void Set(TPos on, TCellOp code, const TCell &cell) noexcept
+        void Set(TPos on, TCellOp code, const TCell &cell)
         {
             Y_ABORT_UNLESS(State[on] == ECellOp::Empty, "Updating cell that already has a value assigned");
 
@@ -101,7 +101,7 @@ namespace NTable {
             }
         }
 
-        void Merge(const TRowState& other) noexcept {
+        void Merge(const TRowState& other) {
             Y_ABORT_UNLESS(!(Rop == ERowOp::Erase || Rop == ERowOp::Reset),
                 "Sequence for row state is already finalized");
 

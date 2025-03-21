@@ -153,6 +153,9 @@ void TChunkWriterConfig::Register(TRegistrar registrar)
         .InRange(0.0, 0.001)
         .Default(0.0001);
 
+    registrar.Parameter("use_original_data_weight_in_samples", &TThis::UseOriginalDataWeightInSamples)
+        .Default(false);
+
     registrar.Parameter("chunk_indexes", &TThis::ChunkIndexes)
         .DefaultNew();
 

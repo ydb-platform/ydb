@@ -1,7 +1,7 @@
 import time
 import logging
-from .base import TllTieringTestBase, ColumnTableHelper
-
+from .base import TllTieringTestBase
+from ydb.tests.olap.common.column_table_helper import ColumnTableHelper
 from ydb.tests.library.test_meta import link_test_case
 
 logger = logging.getLogger(__name__)

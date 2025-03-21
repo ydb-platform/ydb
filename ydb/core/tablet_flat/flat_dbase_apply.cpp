@@ -408,7 +408,7 @@ bool TSchemeModifier::SetCompactionPolicy(ui32 tid, const NKikimrCompaction::TCo
     return true;
 }
 
-void TSchemeModifier::PreserveTable(ui32 tid) noexcept
+void TSchemeModifier::PreserveTable(ui32 tid)
 {
     if (RollbackState && !RollbackState->Tables.contains(tid)) {
         auto it = Scheme.Tables.find(tid);
@@ -420,14 +420,14 @@ void TSchemeModifier::PreserveTable(ui32 tid) noexcept
     }
 }
 
-void TSchemeModifier::PreserveExecutor() noexcept
+void TSchemeModifier::PreserveExecutor()
 {
     if (RollbackState && !RollbackState->Executor) {
         RollbackState->Executor = Scheme.Executor;
     }
 }
 
-void TSchemeModifier::PreserveRedo() noexcept
+void TSchemeModifier::PreserveRedo()
 {
     if (RollbackState && !RollbackState->Redo) {
         RollbackState->Redo = Scheme.Redo;

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 #include <chrono>
 #include <unordered_map>
@@ -15,7 +15,7 @@ namespace Ydb::RateLimiter {
     class MeteringConfig_Metric;
 } // namespace Ydb::RateLimiter
 
-namespace NYdb::inline V3::NRateLimiter {
+namespace NYdb::inline Dev::NRateLimiter {
 
 struct TReplicatedBucketSettings {
     using TSelf = TReplicatedBucketSettings;
@@ -320,4 +320,4 @@ private:
     std::shared_ptr<TImpl> Impl_;
 };
 
-} // namespace NYdb::V3::NRateLimiter
+} // namespace NYdb::NRateLimiter

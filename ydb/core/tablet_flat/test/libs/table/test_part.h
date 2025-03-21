@@ -37,12 +37,12 @@ namespace NTest {
 
         }
 
-        ui64 DataSize() const override
+        ui64 DataSize() const noexcept override
         {
             return Store->PageCollectionBytes(0);
         }
 
-        ui64 BackingSize() const override
+        ui64 BackingSize() const noexcept override
         {
             return Store->PageCollectionBytes(0) + Store->PageCollectionBytes(Store->GetOuterRoom());
         }
@@ -88,12 +88,12 @@ namespace NTest {
 
     class TTestEnv: public IPages {
     public:
-        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) noexcept override
+        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) override
         {
             return MemTableRefLookup(memTable, ref, tag);
         }
 
-        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) noexcept override
+        TResult Locate(const TPart *part, ui64 ref, ELargeObj lob) override
         {
             auto* partStore = CheckedCast<const TPartStore*>(part);
 
@@ -123,24 +123,24 @@ namespace NTest {
     };
 
     struct TPartEggs {
-        const TIntrusiveConstPtr<TPartStore>& At(size_t num) const noexcept
+        const TIntrusiveConstPtr<TPartStore>& At(size_t num) const
         {
             return Parts.at(num);
         }
 
-        const TIntrusiveConstPtr<TPartStore>& Lone() const noexcept
+        const TIntrusiveConstPtr<TPartStore>& Lone() const
         {
             Y_ABORT_UNLESS(Parts.size() == 1, "Need egg with one part inside");
 
             return Parts[0];
         }
 
-        bool NoResult() const noexcept
+        bool NoResult() const
         {
             return Written == nullptr;  /* compaction was aborted */
         }
 
-        TPartView ToPartView() const noexcept
+        TPartView ToPartView() const
         {
             return { Lone(), nullptr, Lone()->Slices };
         }
@@ -150,7 +150,7 @@ namespace NTest {
         TVector<TIntrusiveConstPtr<TPartStore>> Parts;
     };
 
-    TString DumpPart(const TPartStore&, ui32 depth = 10) noexcept;
+    TString DumpPart(const TPartStore&, ui32 depth = 10);
 
     namespace IndexTools {
         using TGroupId = NPage::TGroupId;

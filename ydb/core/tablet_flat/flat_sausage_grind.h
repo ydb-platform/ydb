@@ -62,14 +62,14 @@ namespace NPageCollection {
             State.resize(Group.size(), 0);
         }
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "Cookies{" << Tablet << ":" << Gen << ":" << Step
                 << " cookieRange[" << CookieRange.Head << " +" << Span << "]}";
         }
 
-        ui32 GroupBy(ui8 channel) const noexcept
+        ui32 GroupBy(ui8 channel) const
         {
             return Group[Locate(channel)];
         }
@@ -79,7 +79,7 @@ namespace NPageCollection {
             return (ui64(Gen) << 32) | Step;
         }
 
-        TGlobId Do(ui8 channel, ui32 bytes) noexcept
+        TGlobId Do(ui8 channel, ui32 bytes)
         {
             const auto slot = Locate(channel);
 
@@ -90,7 +90,7 @@ namespace NPageCollection {
             return { lead, Group[slot] };
         }
 
-        TLargeGlobId Do(ui8 cnl, ui32 bytes, ui32 lim) noexcept
+        TLargeGlobId Do(ui8 cnl, ui32 bytes, ui32 lim)
         {
             const auto slot = Locate(cnl);
 
@@ -105,7 +105,7 @@ namespace NPageCollection {
         }
 
     private:
-        ui8 Locate(ui8 channel) const noexcept
+        ui8 Locate(ui8 channel) const
         {
             auto slot = Slots[channel];
 
@@ -114,7 +114,7 @@ namespace NPageCollection {
             return slot;
         }
 
-        ui32 Allocate(ui8 slot, ui32 num, bool gap) noexcept
+        ui32 Allocate(ui8 slot, ui32 num, bool gap)
         {
             auto &value = State.at(slot);
 
@@ -148,7 +148,7 @@ namespace NPageCollection {
     public:
         using TCookieAllocator::TCookieAllocator;
 
-        void Switch(const ui32 step, bool strict) noexcept
+        void Switch(const ui32 step, bool strict)
         {
             if (step == Max<ui32>()) {
                 Y_Fail(NFmt::Do(*this) << " is out of steps capacity");

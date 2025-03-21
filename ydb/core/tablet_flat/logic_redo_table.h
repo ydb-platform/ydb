@@ -18,7 +18,7 @@ namespace NRedo {
             Bytes = 0;
         }
 
-        TOverhead* Push(ui32 table, TEntry* entry) noexcept
+        TOverhead* Push(ui32 table, TEntry* entry)
         {
             if (Trace && Trace.back() == entry) {
                 Y_Fail(NFmt::Do(*entry) << " is dublicated in table trace");
@@ -34,7 +34,7 @@ namespace NRedo {
             return this;
         }
 
-        TOverhead* Cut(TTxStamp stamp, TGCBlobDelta &gc, ui64 &largeGlobIds) noexcept
+        TOverhead* Cut(TTxStamp stamp, TGCBlobDelta &gc, ui64 &largeGlobIds)
         {
             if (!Trace || stamp < Trace.front()->Stamp) {
                 return nullptr;

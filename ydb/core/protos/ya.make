@@ -86,6 +86,7 @@ SRCS(
     import.proto
     index_builder.proto
     kesus.proto
+    kafka.proto
     key.proto
     kqp.proto
     kqp_physical.proto

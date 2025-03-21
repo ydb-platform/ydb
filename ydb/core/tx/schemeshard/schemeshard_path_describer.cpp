@@ -176,7 +176,10 @@ void TPathDescriber::FillChildDescr(NKikimrSchemeOp::TDirEntry* descr, TPathElem
         descr->SetCreateStep(ui64(pathEl->StepCreated));
     }
 
-    descr->SetChildrenExist(pathEl->GetAliveChildren() > 0);
+    if (pathEl->PathType != NKikimrSchemeOp::EPathTypeSubDomain
+        && pathEl->PathType != NKikimrSchemeOp::EPathTypeExtSubDomain) {
+        descr->SetChildrenExist(pathEl->GetAliveChildren() > 0);
+    }
 
     if (pathEl->PathType == NKikimrSchemeOp::EPathTypePersQueueGroup) {
         auto it = Self->Topics.FindPtr(pathEl->PathId);

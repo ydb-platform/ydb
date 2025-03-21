@@ -193,10 +193,10 @@ DECLARE_REFCOUNTED_STRUCT(TShuffleHandle)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-inline const TString ClusterNamePath("//sys/@cluster_name");
-inline const TString HttpProxiesPath("//sys/http_proxies");
-inline const TString RpcProxiesPath("//sys/rpc_proxies");
-inline const TString GrpcProxiesPath("//sys/grpc_proxies");
+inline const NYPath::TYPath ClusterNamePath("//sys/@cluster_name");
+inline const NYPath::TYPath HttpProxiesPath("//sys/http_proxies");
+inline const NYPath::TYPath RpcProxiesPath("//sys/rpc_proxies");
+inline const NYPath::TYPath GrpcProxiesPath("//sys/grpc_proxies");
 inline const TString AliveNodeName("alive");
 inline const TString BannedAttributeName("banned");
 inline const TString RoleAttributeName("role");

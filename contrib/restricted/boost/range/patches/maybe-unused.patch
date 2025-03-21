@@ -1,0 +1,11 @@
+--- a/include/boost/range/detail/any_iterator_buffer.hpp	(index)
++++ b/include/boost/range/detail/any_iterator_buffer.hpp	(working tree)
+@@ -97,7 +97,7 @@ namespace boost
+     {
+         BOOST_STATIC_ASSERT(( StackBufferSize > 0 ));
+     public:
+-        void* allocate(std::size_t bytes)
++        void* allocate([[maybe_unused]] std::size_t bytes)
+         {
+             BOOST_ASSERT( bytes <= m_buffer.size() );
+             return m_buffer.data();

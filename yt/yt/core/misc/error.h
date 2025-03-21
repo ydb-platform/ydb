@@ -45,6 +45,13 @@ constexpr int ErrorSerializationDepthLimit = 16;
 ////////////////////////////////////////////////////////////////////////////////
 
 void Serialize(
+    const TErrorCode& errorCode,
+    NYson::IYsonConsumer* consumer);
+void Deserialize(
+    TErrorCode& errorCode,
+    const NYTree::INodePtr& node);
+
+void Serialize(
     const TError& error,
     NYson::IYsonConsumer* consumer,
     const std::function<void(NYson::IYsonConsumer*)>* valueProducer = nullptr,

@@ -61,8 +61,9 @@ THeartbeatResponse HeartbeatResponseFromProto(const NProto::THeartbeatResponse& 
 NProto::TStartOperationRequest StartOperationRequestToProto(const TStartOperationRequest& startOperationRequest) {
     NProto::TStartOperationRequest protoStartOperationRequest;
     protoStartOperationRequest.SetTaskType(static_cast<NProto::ETaskType>(startOperationRequest.TaskType));
-    auto protoTaskParams = TaskParamsToProto(startOperationRequest.TaskParams);
-    protoStartOperationRequest.MutableTaskParams()->Swap(&protoTaskParams);
+    auto protoOperationParams = OperationParamsToProto(startOperationRequest.OperationParams);
+    protoStartOperationRequest.MutableOperationParams()->Swap(&protoOperationParams);
+
     protoStartOperationRequest.SetSessionId(startOperationRequest.SessionId);
     if (startOperationRequest.IdempotencyKey) {
         protoStartOperationRequest.SetIdempotencyKey(*startOperationRequest.IdempotencyKey);
@@ -76,7 +77,7 @@ NProto::TStartOperationRequest StartOperationRequestToProto(const TStartOperatio
 TStartOperationRequest StartOperationRequestFromProto(const NProto::TStartOperationRequest& protoStartOperationRequest) {
     TStartOperationRequest startOperationRequest;
     startOperationRequest.TaskType = static_cast<ETaskType>(protoStartOperationRequest.GetTaskType());
-    startOperationRequest.TaskParams = TaskParamsFromProto(protoStartOperationRequest.GetTaskParams());
+    startOperationRequest.OperationParams = OperationParamsFromProto(protoStartOperationRequest.GetOperationParams());
     startOperationRequest.SessionId = protoStartOperationRequest.GetSessionId();
     if (protoStartOperationRequest.HasIdempotencyKey()) {
         startOperationRequest.IdempotencyKey = protoStartOperationRequest.GetIdempotencyKey();
@@ -131,6 +132,40 @@ NProto::TDeleteOperationResponse DeleteOperationResponseToProto(const TDeleteOpe
 
 TDeleteOperationResponse DeleteOperationResponseFromProto(const NProto::TDeleteOperationResponse& protoDeleteOperationResponse) {
     return TDeleteOperationResponse{.Status = static_cast<EOperationStatus>(protoDeleteOperationResponse.GetStatus())};
+}
+
+NProto::TGetFmrTableInfoRequest GetFmrTableInfoRequestToProto(const TGetFmrTableInfoRequest& getFmrTableInfoRequest) {
+    NProto::TGetFmrTableInfoRequest protoRequest;
+    protoRequest.SetTableId(getFmrTableInfoRequest.TableId);
+    return protoRequest;
+}
+
+TGetFmrTableInfoRequest GetFmrTableInfoRequestFromProto(const NProto::TGetFmrTableInfoRequest& protoGetFmrTableInfoRequest) {
+    return TGetFmrTableInfoRequest{.TableId = protoGetFmrTableInfoRequest.GetTableId()};
+}
+
+NProto::TGetFmrTableInfoResponse GetFmrTableInfoResponseToProto(const TGetFmrTableInfoResponse& getFmrTableInfoResponse) {
+    NProto::TGetFmrTableInfoResponse protoGetFmrTableInfoResponse;
+    NProto::TTableStats protoTableStats = TableStatsToProto(getFmrTableInfoResponse.TableStats);
+    protoGetFmrTableInfoResponse.MutableTableStats()->Swap(&protoTableStats);
+    for (auto& errorMessage: getFmrTableInfoResponse.ErrorMessages) {
+        auto* curError = protoGetFmrTableInfoResponse.AddErrorMessages();
+        auto protoError = FmrErrorToProto(errorMessage);
+        curError->Swap(&protoError);
+    }
+    return protoGetFmrTableInfoResponse;
+}
+
+TGetFmrTableInfoResponse GetFmrTableInfoResponseFromProto(const NProto::TGetFmrTableInfoResponse& protoGetFmrTableInfoResponse) {
+    TGetFmrTableInfoResponse getFmrTableInfoResponse;
+    getFmrTableInfoResponse.TableStats = TableStatsFromProto(protoGetFmrTableInfoResponse.GetTableStats());
+    std::vector<TFmrError> errorMessages;
+    for (size_t i = 0; i < protoGetFmrTableInfoResponse.ErrorMessagesSize(); ++i) {
+        TFmrError errorMessage = FmrErrorFromProto(protoGetFmrTableInfoResponse.GetErrorMessages(i));
+        errorMessages.emplace_back(errorMessage);
+    }
+    getFmrTableInfoResponse.ErrorMessages = errorMessages;
+    return getFmrTableInfoResponse;
 }
 
 } // namespace NYql::NFmr

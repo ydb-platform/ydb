@@ -3387,6 +3387,8 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
         }
     }
 
+    TString lowerName = to_lower(name);
+
     TString moduleResource;
     if (ctx.Settings.ModuleMapping.contains(ns)) {
         moduleResource = ctx.Settings.ModuleMapping.at(ns);
@@ -3445,15 +3447,15 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
     } else if (ns == "hyperscan" || ns == "pcre" || ns == "pire" || ns.StartsWith("re2")) {
         TString moduleName(nameSpace);
         moduleName.to_title();
-        if ((args.size() == 1 || args.size() == 2) && (name.StartsWith("Multi") || (ns.StartsWith("re2") && name == "Capture"))) {
+        if ((args.size() == 1 || args.size() == 2) && (lowerName.StartsWith("multi") || (ns.StartsWith("re2") && lowerName == "capture"))) {
             TVector<TNodePtr> multiArgs{
-                ns.StartsWith("re2") && name == "Capture" ? MakePair(pos, args) : args[0],
+                ns.StartsWith("re2") && lowerName == "capture" ? MakePair(pos, args) : args[0],
                 new TCallNodeImpl(pos, "Void", 0, 0, {}),
                 args[0]
             };
             auto fullName = moduleName + "." + name;
             return new TYqlTypeConfigUdf(pos, fullName, multiArgs, multiArgs.size() + 1);
-        } else if (!(ns.StartsWith("re2") && name == "Options")) {
+        } else if (!(ns.StartsWith("re2") && lowerName == "options")) {
             auto newArgs = args;
             if (ns.StartsWith("re2")) {
                 // convert run config is tuple of string and optional options
@@ -3844,11 +3846,13 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
 
         ns = "yson";
         nameSpace = "Yson";
-        if (name == "Serialize") {
+        if (lowerName == "serialize") {
             name = "SerializeJson";
+            lowerName = to_lower(name);
         }
-        else if (name == "Parse") {
+        else if (lowerName == "parse") {
             name = "ParseJson";
+            lowerName = to_lower(name);
         }
     }
 
@@ -3858,17 +3862,18 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
     }
 
     if (ns.StartsWith("yson")) {
-        if (name == "ConvertTo" && usedArgs.size() > 1) {
+        if (lowerName == "convertto" && usedArgs.size() > 1) {
             customUserType = usedArgs[1];
             usedArgs.erase(usedArgs.begin() + 1);
         }
 
-        if (name == "Serialize") {
+        if (lowerName == "serialize") {
             if (usedArgs) {
                 usedArgs.resize(1U);
             }
-        } else if (ctx.PragmaYsonFast && name == "SerializeJsonEncodeUtf8") {
+        } else if (ctx.PragmaYsonFast && lowerName == "serializejsonencodeutf8") {
             name = "SerializeJson";
+            lowerName = to_lower(name);
             if (usedArgs.size() < 2U) {
                 usedArgs.emplace_back(BuildYsonOptionsNode(pos, ctx.PragmaYsonAutoConvert, ctx.PragmaYsonStrict, ctx.PragmaYsonFast));
             }
@@ -3877,20 +3882,21 @@ TNodePtr BuildBuiltinFunc(TContext& ctx, TPosition pos, TString name, const TVec
             encodeUtf8->SetLabel("EncodeUtf8");
             namedArgs = BuildStructure(pos, {encodeUtf8});
             usedArgs = {positionalArgs, namedArgs};
-        } else if (name.StartsWith("From")) {
+        } else if (lowerName.StartsWith("from")) {
             name = "From";
-        } else if (name == "GetLength" || name.StartsWith("ConvertTo") || name.StartsWith("Parse") || name.StartsWith("SerializeJson")) {
+            lowerName = to_lower(name);
+        } else if (lowerName == "getlength" || lowerName.StartsWith("convertto") || lowerName.StartsWith("parse") || lowerName.StartsWith("serializejson")) {
             if (usedArgs.size() < 2U) {
                 usedArgs.emplace_back(BuildYsonOptionsNode(pos, ctx.PragmaYsonAutoConvert, ctx.PragmaYsonStrict, ctx.PragmaYsonFast));
             }
-        } else if (name == "Contains" || name.StartsWith("Lookup") || name.StartsWith("YPath")) {
+        } else if (lowerName == "contains" || lowerName.StartsWith("lookup") || lowerName.StartsWith("ypath")) {
             if (usedArgs.size() < 3U) {
                 usedArgs.push_back(BuildYsonOptionsNode(pos, ctx.PragmaYsonAutoConvert, ctx.PragmaYsonStrict, ctx.PragmaYsonFast));
             }
         }
     }
 
-    if (ns == "datetime2" && name == "Update") {
+    if (ns == "datetime2" && lowerName == "update") {
         if (namedArgs) {
             TStructNode* castedNamedArgs = namedArgs->GetStructNode();
             Y_DEBUG_ABORT_UNLESS(castedNamedArgs);

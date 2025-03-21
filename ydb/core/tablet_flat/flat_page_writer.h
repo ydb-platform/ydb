@@ -34,14 +34,14 @@ namespace NPage {
         }
 
         template<typename T>
-        T* ExtraAs() noexcept
+        T* ExtraAs()
         {
             Y_ABORT_UNLESS(sizeof(T) == Extra, "Cannot cast extra block to T");
 
             return TDeref<T>::At(Blob.mutable_data(), Prefix - Extra);
         }
 
-        void Grow(size_t more, size_t least, float factor) noexcept
+        void Grow(size_t more, size_t least, float factor)
         {
             if (Blob) {
                 size_t desired = BytesUsed() + more;
@@ -55,7 +55,7 @@ namespace NPage {
             }
         }
 
-        void Open(size_t more, size_t least, ui32 rows = 0) noexcept
+        void Open(size_t more, size_t least, ui32 rows = 0)
         {
             Y_ABORT_UNLESS(!Blob, "TDataPageBuilder is already has live page");
 
@@ -64,12 +64,12 @@ namespace NPage {
             Resize(PageBytes);
         }
 
-        bool Overflow(size_t more, ui32 rows) const noexcept
+        bool Overflow(size_t more, ui32 rows) const
         {
             return Blob && Deltas.empty() && ((BytesUsed() + more) > PageBytes || (Offsets.size() + rows > PageRows));
         }
 
-        TSharedData Close() noexcept
+        TSharedData Close()
         {
             Y_ABORT_UNLESS(Deltas.empty());
 
@@ -107,7 +107,7 @@ namespace NPage {
             return Reset();
         }
 
-        TSharedData Reset() noexcept
+        TSharedData Reset()
         {
             Tail = nullptr;
             Deltas.clear();
@@ -137,7 +137,7 @@ namespace NPage {
             return Tail ? (Blob.size() - BytesUsed()) : 0;
         }
 
-        void Zero(size_t size) noexcept
+        void Zero(size_t size)
         {
             auto *from = Advance(size);
             std::fill(from, Tail, 0);
@@ -154,7 +154,7 @@ namespace NPage {
             return !Deltas.empty();
         }
 
-        void PushDelta(TPgSize recordSize) noexcept
+        void PushDelta(TPgSize recordSize)
         {
             Y_DEBUG_ABORT_UNLESS(recordSize > 0);
 
@@ -170,7 +170,7 @@ namespace NPage {
             Deltas.push_back(offset);
         }
 
-        void PushOffset(TPgSize recordSize) noexcept
+        void PushOffset(TPgSize recordSize)
         {
             if (Deltas.empty()) {
                 Y_DEBUG_ABORT_UNLESS(recordSize > 0);
@@ -236,7 +236,7 @@ namespace NPage {
         }
 
     private:
-        void Resize(size_t bytes) noexcept
+        void Resize(size_t bytes)
         {
             Y_ABORT_UNLESS(bytes > Prefix, "Too few bytes for page");
 
@@ -253,17 +253,17 @@ namespace NPage {
             }
         }
 
-        size_t Offset(const void *base = nullptr) const noexcept
+        size_t Offset(const void *base = nullptr) const
         {
             return Tail - (const char*)(base ? base : Blob.begin());
         }
 
-        void Write(const char *buf, size_t size) noexcept
+        void Write(const char *buf, size_t size)
         {
             std::copy(buf, buf + size, Advance(size));
         }
 
-        char* Advance(size_t size) noexcept
+        char* Advance(size_t size)
         {
             size_t offset = Tail - Blob.mutable_begin();
             size_t available = Blob.size() - offset;
@@ -374,7 +374,7 @@ namespace NPage {
             return ret;
         }
 
-        void Add(const TSizeInfo& more, TCellsRef key, const TRowState& row, ISaver &saver, bool finalRow, TRowVersion minVersion, TRowVersion maxVersion, ui64 txId) noexcept
+        void Add(const TSizeInfo& more, TCellsRef key, const TRowState& row, ISaver &saver, bool finalRow, TRowVersion minVersion, TRowVersion maxVersion, ui64 txId)
         {
             if (more.Overflow) {
                 LastRecord = nullptr;
@@ -393,20 +393,20 @@ namespace NPage {
             }
         }
 
-        void FlushDeltas() noexcept
+        void FlushDeltas()
         {
             DataPageBuilder.PushOffset(0);
             BlobRowId = ++RowId;
         }
 
-        void Flush(ISaver &saver) noexcept
+        void Flush(ISaver &saver)
         {
             LastRecord = nullptr;
             if (auto flesh = DataPageBuilder.Close())
                 saver.Save(flesh, GroupId);
         }
 
-        void Reset() noexcept
+        void Reset()
         {
             BlobRowId = RowId = 0;
             DataPageBuilder.Reset();
@@ -422,14 +422,14 @@ namespace NPage {
             return RowId - 1;
         }
 
-        NPage::TDataPage::TRecord& GetLastRecord() const noexcept
+        NPage::TDataPage::TRecord& GetLastRecord() const
         {
             Y_ABORT_UNLESS(LastRecord != nullptr);
             return *LastRecord;
         }
 
     private:
-        void Put(TCellsRef key, const TRowState& row, ISaver &saver, bool finalRow, TRowVersion minVersion, TRowVersion maxVersion, ui64 txId, TPgSize recordSize) noexcept
+        void Put(TCellsRef key, const TRowState& row, ISaver &saver, bool finalRow, TRowVersion minVersion, TRowVersion maxVersion, ui64 txId, TPgSize recordSize)
         {
             const bool isErased = !maxVersion.IsMax();
             const bool isVersioned = !minVersion.IsMin();
@@ -508,7 +508,7 @@ namespace NPage {
             LastRecord = isDelta ? nullptr : &rec;
         }
 
-        TLargeObj SaveBlob(TCellOp cellOp, ui32 pin, const TCell &cell, ISaver &saver, bool isDelta) noexcept
+        TLargeObj SaveBlob(TCellOp cellOp, ui32 pin, const TCell &cell, ISaver &saver, bool isDelta)
         {
             if (cellOp == ELargeObj::GlobId) {
                 return saver.Save(BlobRowId, pin, cell.AsValue<NPageCollection::TGlobId>());
@@ -569,7 +569,7 @@ namespace NPage {
             return DataPageBuilder.BytesUsed();
         }
 
-        TPgSize CalcSize(TCellsRef key) const noexcept
+        TPgSize CalcSize(TCellsRef key) const
         {
             Y_ABORT_UNLESS(key.size() == GroupInfo.KeyTypes.size());
 
@@ -584,30 +584,30 @@ namespace NPage {
             return ret;
         }
 
-        void Add(TPgSize more, TCellsRef key, TRowId row, TPageId page) noexcept
+        void Add(TPgSize more, TCellsRef key, TRowId row, TPageId page)
         {
             DataPageBuilder.Grow(more, MinSize, 1.42);
 
             return Put(key, row, page, more);
         }
 
-        void Add(TCellsRef key, TRowId row, TPageId page) noexcept
+        void Add(TCellsRef key, TRowId row, TPageId page)
         {
             return Add(CalcSize(key), key, row, page);
         }
 
-        TSharedData Flush() noexcept
+        TSharedData Flush()
         {
             return DataPageBuilder.Close();
         }
 
-        void Reset() noexcept
+        void Reset()
         {
             DataPageBuilder.Reset();
         }
 
     private:
-        void Put(TCellsRef key, TRowId row, TPageId page, TPgSize recordSize) noexcept
+        void Put(TCellsRef key, TRowId row, TPageId page, TPgSize recordSize)
         {
             DataPageBuilder.PushOffset(recordSize);
 

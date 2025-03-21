@@ -141,6 +141,18 @@ namespace NKikimr {
                 , VersionInfo(std::move(versionInfo))
             {}
 
+            TString ToString() const override {
+                return TStringBuilder() << ToStringHeader() << " {"
+                    << " TabletId: " << TabletId
+                    << " Status: " << Status
+                    << " ServerId: " << ServerId
+                    << " Leader: " << Leader
+                    << " Dead: " << Dead
+                    << " Generation: " << Generation
+                    << " VersionInfo: " << VersionInfo
+                << " }";
+            }
+
             const ui64 TabletId;
             const NKikimrProto::EReplyStatus Status;
             const TActorId ClientId;
@@ -172,6 +184,14 @@ namespace NKikimr {
                 , ClientId(clientId)
                 , ServerId(serverId)
             {}
+
+            TString ToString() const override {
+                return TStringBuilder() << ToStringHeader() << " {"
+                    << " TabletId: " << TabletId
+                    << " ClientId: " << ClientId
+                    << " ServerId: " << ServerId
+                << " }";
+            }
 
             const ui64 TabletId;
             const TActorId ClientId;

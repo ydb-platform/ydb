@@ -151,13 +151,15 @@ Table = namedtuple('Table', (
     'yqlrun_file',
     'attr',
     'format',
-    'exists'
+    'exists',
+    'cluster'
 ))
 
 
 def new_table(full_name, file_path=None, yqlrun_file=None, content=None, res_dir=None,
               attr=None, format_name='yson', def_attr=None, should_exist=False, src_file_alternative=None):
     assert '.' in full_name, 'expected name like cedar.Input'
+    cluster = full_name.split('.')[0]
     name = '.'.join(full_name.split('.')[1:])
 
     if res_dir is None:
@@ -231,7 +233,8 @@ def new_table(full_name, file_path=None, yqlrun_file=None, content=None, res_dir
         new_yqlrun_file,
         attr,
         format_name,
-        exists
+        exists,
+        cluster
     )
 
 
@@ -461,6 +464,14 @@ def get_tables(suite, cfg, data_path, def_attr=None):
                 res_dir=res_dir
             ))
     return in_tables, out_tables
+
+
+def get_table_clusters(suite, cfg, data_path):
+    in_tables, out_tables = get_tables(suite, cfg, data_path)
+    clusters = set()
+    for t in in_tables + out_tables:
+        clusters.add(t.cluster)
+    return clusters
 
 
 def get_supported_providers(cfg):

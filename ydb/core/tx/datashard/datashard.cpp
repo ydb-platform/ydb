@@ -159,6 +159,7 @@ TDataShard::TDataShard(const TActorId &tablet, TTabletStorageInfo *info)
     , EnableLeaderLeases(1, 0, 1)
     , MinLeaderLeaseDurationUs(250000, 1000, 5000000)
     , ChangeRecordDebugPrint(0, 0, 1)
+    , ReadIteratorKeysExtBlobsPrecharge(0, 0, 1)
     , DataShardSysTables(InitDataShardSysTables(this))
     , ChangeSenderActivator(info->TabletID)
     , ChangeExchangeSplitter(this)
@@ -349,6 +350,8 @@ void TDataShard::IcbRegister() {
 
         appData->Icb->RegisterSharedControl(CdcInitialScanReadAheadLo, "DataShardControls.CdcInitialScanReadAheadLo");
         appData->Icb->RegisterSharedControl(CdcInitialScanReadAheadHi, "DataShardControls.CdcInitialScanReadAheadHi");
+
+        appData->Icb->RegisterSharedControl(ReadIteratorKeysExtBlobsPrecharge, "DataShardControls.ReadIteratorKeysExtBlobsPrecharge");
 
         IcbRegistered = true;
     }

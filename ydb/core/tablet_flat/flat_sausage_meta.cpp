@@ -41,7 +41,7 @@ size_t TMeta::BackingSize() const noexcept
     return Steps ? Steps.back() : 0;
 }
 
-TBorder TMeta::Bounds(ui32 begin, ui32 end) const noexcept
+TBorder TMeta::Bounds(ui32 begin, ui32 end) const
 {
     Y_ABORT_UNLESS(begin <= end && Max(begin, end) < Header->Pages);
 
@@ -50,7 +50,7 @@ TBorder TMeta::Bounds(ui32 begin, ui32 end) const noexcept
     return TAlign(Steps).Lookup(offset, Index[end].Page - offset);
 }
 
-TInfo TMeta::Page(ui32 page) const noexcept
+TInfo TMeta::Page(ui32 page) const
 {
     Y_ABORT_UNLESS(page < Header->Pages,
             "Requested page %" PRIu32 " out of %" PRIu32 " total pages",
@@ -59,19 +59,19 @@ TInfo TMeta::Page(ui32 page) const noexcept
     return { GetPageSize(page), Extra[page].Type };
 }
 
-ui32 TMeta::GetPageType(ui32 pageId) const noexcept
+ui32 TMeta::GetPageType(ui32 pageId) const
 {
     Y_DEBUG_ABORT_UNLESS(pageId < Header->Pages);
     return Extra[pageId].Type;
 }
 
-ui32 TMeta::GetPageChecksum(ui32 pageId) const noexcept
+ui32 TMeta::GetPageChecksum(ui32 pageId) const
 {
     Y_DEBUG_ABORT_UNLESS(pageId < Header->Pages);
     return Extra[pageId].Crc32;
 }
 
-ui64 TMeta::GetPageSize(ui32 pageId) const noexcept
+ui64 TMeta::GetPageSize(ui32 pageId) const
 {
     Y_DEBUG_ABORT_UNLESS(pageId < Header->Pages);
 
@@ -79,7 +79,7 @@ ui64 TMeta::GetPageSize(ui32 pageId) const noexcept
     return Index[pageId].Page - begin;
 }
 
-TStringBuf TMeta::GetPageInplaceData(ui32 pageId) const noexcept
+TStringBuf TMeta::GetPageInplaceData(ui32 pageId) const
 {
     Y_DEBUG_ABORT_UNLESS(pageId < Header->Pages);
 

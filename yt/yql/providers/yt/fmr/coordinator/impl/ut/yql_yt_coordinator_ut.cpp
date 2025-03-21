@@ -44,28 +44,28 @@ private:
 };
 
 
-TDownloadTaskParams downloadTaskParams{
+TDownloadOperationParams downloadOperationParams{
     .Input = TYtTableRef{"Path","Cluster"},
     .Output = TFmrTableRef{"TableId"}
 };
 
-TStartOperationRequest CreateOperationRequest(ETaskType taskType = ETaskType::Download, TTaskParams taskParams = downloadTaskParams) {
+TStartOperationRequest CreateOperationRequest(ETaskType taskType = ETaskType::Download, TOperationParams operationParams = downloadOperationParams) {
     return TStartOperationRequest{
         .TaskType = taskType,
-        .TaskParams = taskParams,
+        .OperationParams = operationParams,
         .IdempotencyKey = "IdempotencyKey",
         .ClusterConnection = TClusterConnection{.TransactionId = "transaction_id", .YtServerName = "hahn.yt.yandex.net", .Token = "token"}
     };
 }
 
 std::vector<TStartOperationRequest> CreateSeveralOperationRequests(
-    ETaskType taskType = ETaskType::Download, TTaskParams taskParams = downloadTaskParams, int numRequests = 10)
+    ETaskType taskType = ETaskType::Download, TOperationParams operationParams = downloadOperationParams, int numRequests = 10)
 {
     std::vector<TStartOperationRequest> startOperationRequests(numRequests);
     for (int i = 0; i < numRequests; ++i) {
         startOperationRequests[i] = TStartOperationRequest{
             .TaskType = taskType,
-            .TaskParams = taskParams,
+            .OperationParams = operationParams,
             .IdempotencyKey = "IdempotencyKey_" + ToString(i),
             .ClusterConnection = TClusterConnection{.TransactionId = "transaction_id", .YtServerName = "hahn", .Token = "token"}
         };
@@ -76,9 +76,9 @@ std::vector<TStartOperationRequest> CreateSeveralOperationRequests(
 auto defaultTaskFunction = [] (TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
     while (!cancelFlag->load()) {
         Sleep(TDuration::Seconds(4));
-        return ETaskStatus::Completed;
+        return TJobResult{.TaskStatus = ETaskStatus::Completed, .Stats = TStatistics()};
     }
-    return ETaskStatus::Failed;
+    return TJobResult{.TaskStatus = ETaskStatus::Failed, .Stats = TStatistics()};
 };
 
 Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
@@ -172,7 +172,7 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
             auto startOperationResponse = coordinator->StartOperation(request).GetValueSync();
             downloadOperationIds.emplace_back(startOperationResponse.OperationId);
         }
-        auto uploadOperationRequest = CreateOperationRequest(ETaskType::Upload, TUploadTaskParams{});
+        auto uploadOperationRequest = CreateOperationRequest(ETaskType::Upload, TUploadOperationParams{});
         auto uploadOperationResponse = coordinator->StartOperation(uploadOperationRequest).GetValueSync();
         auto uploadOperationId = uploadOperationResponse.OperationId;
 
@@ -187,12 +187,12 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
                     return ETaskStatus::Completed;
                 }, task->TaskParams);
                 if (taskStatus == ETaskStatus::Failed) {
-                    return taskStatus;
+                    return TJobResult{.TaskStatus = ETaskStatus::Failed, .Stats = TStatistics()};
                 }
                 Sleep(TDuration::Seconds(1));
-                return ETaskStatus::Completed;
+                return TJobResult{.TaskStatus = ETaskStatus::Completed, .Stats = TStatistics()};
             }
-            return ETaskStatus::Failed;
+            return TJobResult{.TaskStatus = ETaskStatus::Failed, .Stats = TStatistics()};
         };
 
         TFmrJobFactorySettings settings{.NumThreads = 10, .Function = func};
@@ -245,7 +245,7 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
         auto startOperationResponse = coordinator->StartOperation(downloadRequest).GetValueSync();
         TString firstOperationId = startOperationResponse.OperationId;
 
-        Sleep(TDuration::Seconds(2));
+        Sleep(TDuration::Seconds(3));
         auto secondStartOperationResponse = coordinator->StartOperation(downloadRequest).GetValueSync();
         EOperationStatus secondOperationStatus = secondStartOperationResponse.Status;
         TString secondOperationId = secondStartOperationResponse.OperationId;
@@ -264,10 +264,10 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
                 Sleep(TDuration::Seconds(1));
                 ++numIterations;
                 if (numIterations == 100) {
-                    return ETaskStatus::Completed;
+                    return TJobResult{.TaskStatus = ETaskStatus::Completed, .Stats = TStatistics()};
                 }
             }
-            return ETaskStatus::Failed;
+            return TJobResult{.TaskStatus = ETaskStatus::Failed, .Stats = TStatistics()};
         };
         TFmrJobFactorySettings settings{.NumThreads =3, .Function=func};
         auto factory = MakeFmrJobFactory(settings);
@@ -298,7 +298,7 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
                 Sleep(TDuration::Seconds(2));
                 throw std::runtime_error{"Function crashed"};
             }
-            return ETaskStatus::Failed;
+            return TJobResult{.TaskStatus = ETaskStatus::Failed, .Stats = TStatistics()};
         };
 
         TFmrJobFactorySettings settings{.NumThreads = 3, .Function = func};
@@ -316,6 +316,35 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
         auto& error = errorMessages[0];
         UNIT_ASSERT_NO_DIFF(error.ErrorMessage, "Function crashed");
         UNIT_ASSERT_VALUES_EQUAL(error.Component, EFmrComponent::Job);
+    }
+
+    Y_UNIT_TEST(GetFmrTableInfo) {
+        auto coordinator = MakeFmrCoordinator();
+        TTableStats tableStats = {.Chunks = 1, .Rows = 2, .DataWeight = 3};
+        TString tableId = "test_table";
+        TFmrTableOutputRef fmrTableOutputRef{.TableId = tableId, .PartId = "test_part_id"};
+        std::unordered_map<TFmrTableOutputRef, TTableStats> outputTables{{fmrTableOutputRef, tableStats}};
+        auto func = [&] (TTask::TPtr /*task*/, std::shared_ptr<std::atomic<bool>> cancelFlag) {
+            while (!cancelFlag->load()) {
+                return TJobResult{.TaskStatus = ETaskStatus::Completed, .Stats = TStatistics{
+                    .OutputTables = outputTables
+                }};
+            }
+            return TJobResult{.TaskStatus = ETaskStatus::Failed, .Stats = TStatistics()};
+        };
+        TFmrJobFactorySettings settings{.NumThreads = 3, .Function = func};
+
+        auto factory = MakeFmrJobFactory(settings);
+        TFmrWorkerSettings workerSettings{.WorkerId = 0, .RandomProvider = CreateDeterministicRandomProvider(1)};
+        auto worker = MakeFmrWorker(coordinator, factory, workerSettings);
+        worker->Start();
+        coordinator->StartOperation(CreateOperationRequest()).GetValueSync();
+        Sleep(TDuration::Seconds(3));
+        auto response = coordinator->GetFmrTableInfo({tableId}).GetValueSync();
+        worker->Stop();
+        UNIT_ASSERT_VALUES_EQUAL(response.TableStats.Chunks, tableStats.Chunks);
+        UNIT_ASSERT_VALUES_EQUAL(response.TableStats.Rows, tableStats.Rows);
+        UNIT_ASSERT_VALUES_EQUAL(response.TableStats.DataWeight, tableStats.DataWeight);
     }
 }
 

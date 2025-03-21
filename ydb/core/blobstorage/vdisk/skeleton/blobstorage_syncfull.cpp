@@ -52,6 +52,9 @@ namespace NKikimr {
 
         friend class TActorBootstrapped<THullSyncFullActor>;
 
+        constexpr static TDuration MaxProcessingTime = TDuration::MilliSeconds(5);  // half of a quota for mailbox
+        constexpr static ui32 TimerIterations = 1024;
+
         void Serialize(const TActorContext &ctx,
                        TString *buf,
                        const TKeyLogoBlob &key,
@@ -89,6 +92,7 @@ namespace NKikimr {
 
         static const ui32 EmptyFlag = 0x1;
         static const ui32 MsgFullFlag = 0x2;
+        static const ui32 LongProcessing = 0x4;
 
         void Bootstrap(const TActorContext &ctx) {
             LogoBlobFilter.BuildBarriersEssence(FullSnap.BarriersSnap);
@@ -98,14 +102,14 @@ namespace NKikimr {
                 case NKikimrBlobStorage::LogoBlobs:
                     Stage = NKikimrBlobStorage::LogoBlobs;
                     pres = Process(ctx, FullSnap.LogoBlobsSnap, KeyLogoBlob, LogoBlobFilter);
-                    if (pres & MsgFullFlag)
+                    if (pres & (MsgFullFlag | LongProcessing))
                         break;
                     Y_ABORT_UNLESS(pres & EmptyFlag);
                     [[fallthrough]];
                 case NKikimrBlobStorage::Blocks:
                     Stage = NKikimrBlobStorage::Blocks;
                     pres = Process(ctx, FullSnap.BlocksSnap, KeyBlock, FakeFilter);
-                    if (pres & MsgFullFlag)
+                    if (pres & (MsgFullFlag | LongProcessing))
                         break;
                     Y_ABORT_UNLESS(pres & EmptyFlag);
                     [[fallthrough]];
@@ -137,6 +141,7 @@ namespace NKikimr {
                 ::NKikimr::TLevelIndexSnapshot<TKey, TMemRec> &snapshot,
                 TKey &key,
                 const TFilter &filter) {
+            THPTimer timer; 
             // reserve some space for data
             TString *data = Result->Record.MutableData();
             if (data->capacity() < Config->MaxResponseSize) {
@@ -147,8 +152,24 @@ namespace NKikimr {
             using TIndexForwardIterator = typename TLevelIndexSnapshot::TIndexForwardIterator;
             TIndexForwardIterator it(HullCtx, &snapshot);
             it.Seek(key);
+
             // copy data until we have some space
-            while (it.Valid() && (data->size() + NSyncLog::MaxRecFullSize <= data->capacity())) {
+            ui32 result = 0;
+            ui32 timerIterations = TimerIterations;
+            while (it.Valid()) {
+                if (data->size() + NSyncLog::MaxRecFullSize > data->capacity()) {
+                    result |= MsgFullFlag;
+                    break;
+                }
+
+                if (--timerIterations == 0) {
+                    if (TDuration::Seconds(timer.Passed()) > MaxProcessingTime) {
+                        result |= LongProcessing;
+                        break;
+                    }
+                    timerIterations = TimerIterations;
+                }
+
                 key = it.GetCurKey();
                 if (filter.Check(key, it.GetMemRec(), HullCtx->AllowKeepFlags, true /*allowGarbageCollection*/))
                     Serialize(ctx, data, key, it.GetMemRec());
@@ -156,11 +177,9 @@ namespace NKikimr {
             }
             // key points to the last seen key
 
-            ui32 result = 0;
             if (!it.Valid())
                 result |= EmptyFlag;
-            if (data->size() + NSyncLog::MaxRecFullSize > data->capacity())
-                result |= MsgFullFlag;
+
             return result;
         }
 

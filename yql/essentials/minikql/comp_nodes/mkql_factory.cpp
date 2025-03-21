@@ -219,7 +219,6 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"Invoke", &WrapInvoke},
         {"Udf", &WrapUdf},
         {"ScriptUdf", &WrapScriptUdf},
-        {"Apply", &WrapApply},
         {"Apply2", &WrapApply},
         {"Callable", &WrapCallable},
         {"Size", &WrapSize},

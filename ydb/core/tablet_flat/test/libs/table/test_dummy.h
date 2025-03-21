@@ -8,12 +8,12 @@ namespace NTable {
 
     class TDummyEnv: public IPages {
     public:
-        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) noexcept override
+        TResult Locate(const TMemTable *memTable, ui64 ref, ui32 tag) override
         {
             return MemTableRefLookup(memTable, ref, tag);
         }
 
-        TResult Locate(const TPart*, ui64, ELargeObj) noexcept override
+        TResult Locate(const TPart*, ui64, ELargeObj) override
         {
             Y_ABORT("Dummy env cannot deal with storage");
         }

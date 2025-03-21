@@ -51,6 +51,14 @@ There are also special scoped pragmas with the scope defined by the same rules a
 
 Automatically run [COMMIT](commit.md) after every statement.
 
+### RuntimeLogLevel {#runtime-log-level}
+
+| Value type | Default |
+| --- | --- |
+| String, one of `Trace`, `Debug`, `Info`, `Notice`, `Warn`, `Error`, `Fatal` | `Info` |
+
+Allows you to change the logging level of calculations (for example, for UDFs) during query execution or at the stage of declaring the UDF signature.
+
 ### TablePathPrefix {#table-path-prefix}
 
 | Value type | Default |

@@ -13,7 +13,7 @@
 #include <ydb/library/actors/core/mon.h>
 #include <ydb/library/actors/http/http.h>
 #include <yql/essentials/public/issue/yql_issue.h>
-#include <ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
 
 #include "mon.h"
 

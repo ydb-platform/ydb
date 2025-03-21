@@ -4,8 +4,8 @@ import sys
 import time
 import logging
 
-from .base import TllTieringTestBase, ColumnTableHelper
-
+from .base import TllTieringTestBase
+from ydb.tests.olap.common.column_table_helper import ColumnTableHelper
 from ydb.tests.library.test_meta import link_test_case
 
 logger = logging.getLogger(__name__)
@@ -82,7 +82,7 @@ class TestUnavailableS3(TllTieringTestBase):
             )
         """)
 
-        assert self.wait_for(get_stat, 30), "initial eviction"
+        assert self.wait_for(get_stat, 60), "initial eviction"
 
         print("!!! simulating S3 hang up -- sending SIGSTOP", file=sys.stderr)
         os.kill(self.s3_pid, signal.SIGSTOP)

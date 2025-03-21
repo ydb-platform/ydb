@@ -21,7 +21,7 @@ namespace NTest {
 
         }
 
-        TRow Make(ui64, bool hole) noexcept override
+        TRow Make(ui64, bool hole) override
         {
             const ui64 up = hole ? 0 : 1;
 
@@ -52,7 +52,7 @@ namespace NTest {
             return Seq++, *row;
         }
 
-        void Describe(IOutputStream &out) const noexcept override
+        void Describe(IOutputStream &out) const override
         {
             out
                 << "Std{"
@@ -76,7 +76,7 @@ namespace NTest {
                     .Key({ 0, 1 });
         }
 
-        ui64 Base(const TRow &row) const noexcept override
+        ui64 Base(const TRow &row) const override
         {
             auto *up = row.Get(NTable::TTag(2));
 

@@ -587,8 +587,6 @@ class Build(object):
         if self.pic:
             emit('PIC', 'yes')
 
-        emit('COMPILER_ID', self.tc.type.upper())
-
         if self.is_valgrind:
             emit('WITH_VALGRIND', 'yes')
 
@@ -1116,12 +1114,13 @@ class Compiler(object):
         self.tc = tc
 
     def print_compiler(self):
-        # CLANG and CLANG_VER variables
+        # CLANG and CLANG{VER} variables
         emit(self.compiler_variable, 'yes')
         cv = self.tc.compiler_version
         if '.' in cv:
             cv = cv[:cv.index('.')]
-        emit('{}_VER'.format(self.compiler_variable), cv)
+        emit('COMPILER_ID', self.tc.type.upper())
+        emit('COMPILER_VERSION', cv)
         if self.tc.is_xcode:
             emit('XCODE', 'yes')
 
@@ -2395,7 +2394,7 @@ class Cuda(object):
             if not self.cuda_version.from_user:
                 return False
 
-        if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2', '12.6'):
+        if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2', '12.6', '12.8'):
             return True
         elif self.cuda_version.value in ('10.2', '11.4.19') and target.is_linux_armv8:
             return True

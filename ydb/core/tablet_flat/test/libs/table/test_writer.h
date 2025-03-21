@@ -31,7 +31,7 @@ namespace NTest {
 
         }
 
-        TIntrusiveConstPtr<TPartStore> Load(const TLogoBlobID token) noexcept
+        TIntrusiveConstPtr<TPartStore> Load(const TLogoBlobID token)
         {
             using NPage::TFrames;
             using NPage::TExtBlobs;
@@ -120,7 +120,7 @@ namespace NTest {
         }
 
     private:
-        TStore::TEggs RootedEggs(const NProto::TLayout &lay) const noexcept
+        TStore::TEggs RootedEggs(const NProto::TLayout &lay) const
         {
             const auto undef = Max<NPage::TPageId>();
 
@@ -192,34 +192,34 @@ namespace NTest {
                 { new TWriteStats(written), std::move(scheme), std::move(Parts) };
         }
 
-        TStore& Back() noexcept
+        TStore& Back()
         {
             return Store ? *Store : *(Store = new TStore(Groups, NextGlobOffset));
         }
 
     private:
-        TPageId WriteOuter(TSharedData blob) noexcept override
+        TPageId WriteOuter(TSharedData blob) override
         {
             return Back().WriteOuter(blob);
         }
 
-        TPageId Write(TSharedData page, EPage type, ui32 group) noexcept override
+        TPageId Write(TSharedData page, EPage type, ui32 group) override
         {
             return Back().Write(page, type, group);
         }
 
-        void WriteInplace(TPageId page, TArrayRef<const char> body) noexcept override
+        void WriteInplace(TPageId page, TArrayRef<const char> body) override
         {
             Back().WriteInplace(page, body);
         }
 
-        NPageCollection::TGlobId WriteLarge(TString blob, ui64 ref) noexcept override
+        NPageCollection::TGlobId WriteLarge(TString blob, ui64 ref) override
         {
             Growth->Pass(ref);
             return Back().WriteLarge(TSharedData::Copy(blob));
         }
 
-        void Finish(TString overlay) noexcept override
+        void Finish(TString overlay) override
         {
             Y_ABORT_UNLESS(Store, "Finish called without any writes");
 
@@ -403,7 +403,7 @@ namespace NTest {
             return Pages.Flush(std::move(Scheme), Writer->Finish());
         }
 
-        ui64 GetDataBytes(ui32 room) noexcept
+        ui64 GetDataBytes(ui32 room)
         {
             return Pages.Back().GetDataBytes(room);
         }

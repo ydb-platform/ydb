@@ -317,6 +317,9 @@ IComputationNode* WrapYtTableFile(NMiniKQL::TCallable& callable, const TComputat
             NYT::Deserialize(richYPath, NYT::NodeFromYsonString(TString(AS_VALUE(TDataLiteral, tuple->GetValue(0))->AsValue().AsStringRef())));
 
             const bool isTemporary = AS_VALUE(TDataLiteral, tuple->GetValue(1))->AsValue().Get<bool>();
+            const bool isAnonymous = AS_VALUE(TDataLiteral, tuple->GetValue(5))->AsValue().Get<bool>();
+            const ui32 epoch = AS_VALUE(TDataLiteral, tuple->GetValue(6))->AsValue().Get<ui32>();
+
             auto tableMeta = NYT::NodeFromYsonString(TString(AS_VALUE(TDataLiteral, tuple->GetValue(2))->AsValue().AsStringRef()));
             TMkqlIOSpecs::TSpecInfo specInfo;
             TMkqlIOSpecs::LoadSpecInfo(true, tableMeta, codecCtx, specInfo);
@@ -334,7 +337,14 @@ IComputationNode* WrapYtTableFile(NMiniKQL::TCallable& callable, const TComputat
             }
 
             inputAttrs.Add(tableMeta);
-            auto path = services->GetTablePath(cluster, richYPath.Path_, isTemporary, noLocks);
+            TString path;
+            if (isTemporary && !isAnonymous) {
+                path = services->GetTmpTablePath(richYPath.Path_);
+            } else if (noLocks) {
+                path = services->GetTablePath(cluster, richYPath.Path_, isAnonymous);
+            } else {
+                path = services->GetTableSnapshotPath(cluster, richYPath.Path_, isAnonymous, epoch);
+            }
             tableNames.push_back(isTemporary ? TString() : richYPath.Path_);
             tablePaths.emplace_back(path, TColumnsInfo{richYPath.Columns_, richYPath.RenameColumns_});
             if (!richYPath.Columns_ && !isTemporary && specInfo.StrictSchema) {

@@ -81,7 +81,7 @@ private:
     const TDuration LeaseDuration;
 };
 
-void TExecutorBootLogic::StartLeaseWaiter(TMonotonic bootTimestamp, const TEvTablet::TDependencyGraph& graph) noexcept
+void TExecutorBootLogic::StartLeaseWaiter(TMonotonic bootTimestamp, const TEvTablet::TDependencyGraph& graph)
 {
     TActorId leaseHolder;
     TDuration leaseDuration;

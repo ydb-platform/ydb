@@ -33,6 +33,7 @@ __pycache__/
 
 # MacOS specific
 .DS_Store
+*.dSYM
 
 # clangd cache
 /.cache

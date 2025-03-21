@@ -56,7 +56,7 @@ namespace NTest {
         }
 
         template<typename TEnv>
-        TAutoPtr<TEnv> Displace(TAutoPtr<IPages> env) noexcept
+        TAutoPtr<TEnv> Displace(TAutoPtr<IPages> env)
         {
             auto *origin = std::exchange(Env, env).Release();
             auto *casted = dynamic_cast<TEnv*>(origin);

@@ -366,4 +366,12 @@ ui32 ISnapshotSchema::GetIndexesCount() const {
     return GetIndexInfo().GetIndexes().size();
 }
 
+NIndexes::TIndexMetaContainer ISnapshotSchema::GetIndexVerified(const ui32 indexId) const {
+    return GetIndexInfo().GetIndexVerified(indexId);
+}
+
+NIndexes::TIndexMetaContainer ISnapshotSchema::GetIndexOptional(const ui32 indexId) const {
+    return GetIndexInfo().GetIndexOptional(indexId);
+}
+
 }   // namespace NKikimr::NOlap

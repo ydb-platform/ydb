@@ -139,7 +139,7 @@ public:
         }
         downloadedSuccessfully.Wait(); // blocking until download to fmr finishes
 
-        TUploadTaskParams uploadTaskParams{
+        TUploadOperationParams uploadOperationParams{
             .Input = TFmrTableRef{fmrTableId},
             .Output = TYtTableRef{outputPath, cluster}
         };
@@ -151,7 +151,7 @@ public:
 
         TStartOperationRequest uploadRequest{
             .TaskType = ETaskType::Upload,
-            .TaskParams = uploadTaskParams,
+            .OperationParams = uploadOperationParams,
             .SessionId = sessionId,
             .IdempotencyKey=idempotencyKey,
             .NumRetries=1,
@@ -186,7 +186,7 @@ public:
     {
         YQL_LOG_CTX_SCOPE(TStringBuf("Gateway"), __FUNCTION__);
         TString fmrTableId = fmrTableRef.TableId;
-        TDownloadTaskParams downloadTaskParams{
+        TDownloadOperationParams downloadOperationParams{
             .Input = ytTableRef,
             .Output = {fmrTableId}
         };
@@ -197,7 +197,7 @@ public:
         YQL_ENSURE(clusterConnection.Success());
         TStartOperationRequest downloadRequest{
             .TaskType = ETaskType::Download,
-            .TaskParams = downloadTaskParams,
+            .OperationParams = downloadOperationParams,
             .SessionId = sessionId,
             .IdempotencyKey = idempotencyKey,
             .NumRetries=1,

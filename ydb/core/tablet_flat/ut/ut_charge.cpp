@@ -108,7 +108,7 @@ namespace {
             UNIT_ASSERT(NTest::IndexTools::CountMainPages(*Eggs.Lone()) == 9);
         }
 
-        NTest::TPartEggs MakeEggs(bool groups, bool history) noexcept
+        NTest::TPartEggs MakeEggs(bool groups, bool history)
         {
             NPage::TConf conf{ true, 8192 };
 

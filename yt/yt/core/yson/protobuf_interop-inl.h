@@ -17,6 +17,50 @@ const TProtobufMessageType* ReflectProtobufMessageType()
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace NDetail {
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <CProtobufElement TElementType>
+consteval std::string_view GetProtobufElementTypeName();
+
+#define MAP_PROTOBUF_ELEMENT_TYPE_NAME(elementType, name) \
+template <> \
+consteval std::string_view GetProtobufElementTypeName<elementType>() \
+{ \
+    return name##sv; \
+}
+
+MAP_PROTOBUF_ELEMENT_TYPE_NAME(TProtobufMessageElement, "message")
+MAP_PROTOBUF_ELEMENT_TYPE_NAME(TProtobufScalarElement, "scalar")
+MAP_PROTOBUF_ELEMENT_TYPE_NAME(TProtobufAttributeDictionaryElement, "attributeDictionary")
+MAP_PROTOBUF_ELEMENT_TYPE_NAME(TProtobufRepeatedElement, "repeated")
+MAP_PROTOBUF_ELEMENT_TYPE_NAME(TProtobufMapElement, "map")
+MAP_PROTOBUF_ELEMENT_TYPE_NAME(TProtobufAnyElement, "any")
+
+#undef MAP_PROTOBUF_ELEMENT_TYPE_NAME
+
+std::string_view GetProtobufElementTypeName(const NYson::TProtobufElement& element);
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NDetail
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <CProtobufElement TElementType>
+const TElementType& GetProtobufElementOrThrow(const NYson::TProtobufElement& element)
+{
+    const auto* result = std::get_if<std::unique_ptr<TElementType>>(&element);
+    THROW_ERROR_EXCEPTION_UNLESS(result,
+        "Expected protobuf element of type %Qv, but got of type %Qv",
+        NDetail::GetProtobufElementTypeName<TElementType>(),
+        NDetail::GetProtobufElementTypeName(element));
+    return *result->get();
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 template <class ProtoType, class Type, bool UseParseOptionsInSerialize>
 static const void* DoRegisterIntermediateProtoInteropRepresentation()
 {

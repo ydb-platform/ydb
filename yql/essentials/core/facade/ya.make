@@ -35,6 +35,7 @@ PEERDIR(
     yql/essentials/providers/common/provider
     yql/essentials/providers/common/udf_resolve
     yql/essentials/providers/common/arrow_resolve
+    yql/essentials/providers/common/gateways_utils
     yql/essentials/providers/config
     yql/essentials/providers/result/provider
 )

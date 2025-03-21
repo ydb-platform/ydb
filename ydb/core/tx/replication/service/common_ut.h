@@ -1,12 +1,12 @@
 #pragma once
 
-#include "worker.h"
+#include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
 
 namespace NKikimr::NReplication::NService {
 
-struct TRecord: public TEvWorker::TEvData::TRecord {
+struct TRecord: public TTopicMessage {
     explicit TRecord(ui64 offset, const TString& data)
-        : TEvWorker::TEvData::TRecord(offset, data, TInstant::Zero(), "MessageGroupId", "ProducerId", 42)
+        : TTopicMessage(offset, data)
     {}
 };
 

@@ -55,6 +55,8 @@ public:
                 "DataCleanup of tablet# " << Self->TabletID()
                 << ": expired snapshots removed");
         }
+        Self->OutReadSets.Cleanup(db, ctx);
+
         Self->Executor()->CleanupData(Ev->Get()->Record.GetDataCleanupGeneration());
         Self->DataCleanupWaiters.insert({Ev->Get()->Record.GetDataCleanupGeneration(), Ev->Sender});
         return true;

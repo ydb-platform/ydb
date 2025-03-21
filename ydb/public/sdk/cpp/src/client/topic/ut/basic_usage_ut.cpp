@@ -1,15 +1,15 @@
 #include "ut_utils/managed_executor.h"
 #include "ut_utils/topic_sdk_test_setup.h"
-#include <src/client/persqueue_public/ut/ut_utils/ut_utils.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/ut_utils.h>
 
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
  
-#include <src/client/persqueue_public/persqueue.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
 
-#include <src/client/topic/impl/common.h>
-#include <src/client/topic/common/executor_impl.h>
-#include <src/client/persqueue_public/impl/write_session.h>
-#include <src/client/topic/impl/write_session.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
+#include <ydb/public/sdk/cpp/src/client/topic/common/executor_impl.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/impl/write_session.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/write_session.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <library/cpp/testing/unittest/tests_data.h>

@@ -5,9 +5,8 @@ SRCS(
 )
 
 PEERDIR(
-    library/cpp/yson
-    library/cpp/yson/node
     yt/cpp/mapreduce/client
+    yt/cpp/mapreduce/common
     yt/yql/providers/yt/fmr/yt_service/interface
 )
 

@@ -1,3 +1,5 @@
+#include "ydb_grpc_helpers.h"
+
 #include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
 
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
@@ -64,7 +66,7 @@ public:
     void Handle(TEvYdbCompute::TEvCpuLoadRequest::TPtr& ev) {
         auto forwardRequest = std::make_unique<TEvPrivate::TEvSelfCheckRequest>();
         forwardRequest->Request.set_return_verbose_status(true);
-        forwardRequest->Token = CredentialsProvider->GetAuthInfo();
+        SetYdbRequestToken(*forwardRequest, CredentialsProvider->GetAuthInfo());
         TEvPrivate::TEvSelfCheckRequest::TPtr forwardEvent = (NActors::TEventHandle<TEvPrivate::TEvSelfCheckRequest>*)new IEventHandle(SelfId(), SelfId(), forwardRequest.release(), 0, Cookie);
         MakeCall<TSelfCheckGrpcRequest>(std::move(forwardEvent));
         Requests[Cookie++] = ev;

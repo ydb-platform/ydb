@@ -14,6 +14,9 @@ PEERDIR(
 
 RESOURCE(
     select_queries.sql workload_logs_select_queries.sql
+
+    # Temporary disabled GROUP BY and DISNINCT queries
+    # select_queries_original.sql workload_logs_select_queries.sql
 )
 
 GENERATE_ENUM_SERIALIZATION(log.h)

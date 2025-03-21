@@ -412,12 +412,14 @@ public:
 
     TColumnDataBatcher(
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-        std::vector<ui32> writeIndex)
+        std::vector<ui32> writeIndex,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc)
             : Columns(BuildColumns(inputColumns))
             , WriteIndex(std::move(writeIndex))
             , BatchBuilder(
                 arrow::Compression::UNCOMPRESSED,
-                BuildNotNullColumns(inputColumns)) {
+                BuildNotNullColumns(inputColumns))
+            , Alloc(std::move(alloc)) {
         TString err;
         if (!BatchBuilder.Start(BuildBatchBuilderColumns(WriteIndex, inputColumns), 0, 0, err)) {
             yexception() << "Failed to start batch builder: " + err;
@@ -443,18 +445,19 @@ public:
     }
 
     IDataBatchPtr Build() override {
-        return MakeIntrusive<TColumnBatch>(BatchBuilder.FlushBatch(true));
+        return MakeIntrusive<TColumnBatch>(BatchBuilder.FlushBatch(true), Alloc);
     }
 
 private:
     const TVector<TSysTables::TTableColumnInfo> Columns;
     const std::vector<ui32> WriteIndex;
     NArrow::TArrowBatchBuilder BatchBuilder;
+
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 };
 
 class TColumnShardPayloadSerializer : public IPayloadSerializer {
     using TRecordBatchPtr = std::shared_ptr<arrow::RecordBatch>;
-    using TBatch = TColumnBatch;
 
     struct TUnpreparedBatch {
         ui64 TotalDataSize = 0;
@@ -465,9 +468,11 @@ public:
     TColumnShardPayloadSerializer(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-        const std::vector<ui32> writeIndex) // key columns then value columns
+        const std::vector<ui32> writeIndex,
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) // key columns then value columns
             : Columns(BuildColumns(inputColumns))
-            , WriteColumnIds(BuildWriteColumnIds(inputColumns, writeIndex)) {
+            , WriteColumnIds(BuildWriteColumnIds(inputColumns, writeIndex))
+            , Alloc(std::move(alloc)) {
         YQL_ENSURE(schemeEntry.ColumnTableInfo);
         const auto& description = schemeEntry.ColumnTableInfo->Description;
         YQL_ENSURE(description.HasSchema());
@@ -491,7 +496,7 @@ public:
     }
 
     void AddBatch(IDataBatchPtr&& batch) override {
-        auto columnshardBatch = dynamic_cast<TBatch*>(batch.Get());
+        auto columnshardBatch = dynamic_cast<TColumnBatch*>(batch.Get());
         YQL_ENSURE(columnshardBatch);
         if (columnshardBatch->IsEmpty()) {
             return;
@@ -562,7 +567,7 @@ public:
                 toPrepare.push_back(batch);
             }
 
-            auto batch = MakeIntrusive<TBatch>(NArrow::CombineBatches(toPrepare));
+            auto batch = MakeIntrusive<TColumnBatch>(NArrow::CombineBatches(toPrepare), Alloc);
             Batches[shardId].emplace_back(batch);
             Memory += batch->GetMemory();
             YQL_ENSURE(batch->GetMemory() != 0);
@@ -643,6 +648,8 @@ private:
 
     const TVector<TSysTables::TTableColumnInfo> Columns;
     const std::vector<ui32> WriteColumnIds;
+
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
     THashMap<ui64, TUnpreparedBatch> UnpreparedBatches;
     TBatches Batches;
@@ -950,9 +957,9 @@ IPayloadSerializerPtr CreateColumnShardPayloadSerializer(
         const NSchemeCache::TSchemeCacheNavigate::TEntry& schemeEntry,
         const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
         const std::vector<ui32> writeIndex,
-        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> /*alloc*/) {
+        std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
     return MakeIntrusive<TColumnShardPayloadSerializer>(
-        schemeEntry, inputColumns, std::move(writeIndex));
+        schemeEntry, inputColumns, std::move(writeIndex), std::move(alloc));
 }
 
 IPayloadSerializerPtr CreateDataShardPayloadSerializer(
@@ -968,8 +975,8 @@ IPayloadSerializerPtr CreateDataShardPayloadSerializer(
 }
 
 IDataBatcherPtr CreateColumnDataBatcher(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
-        std::vector<ui32> writeIndex, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> /*alloc*/) {
-    return MakeIntrusive<TColumnDataBatcher>(inputColumns, std::move(writeIndex) /*, std::move(alloc)*/);
+        std::vector<ui32> writeIndex, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc) {
+    return MakeIntrusive<TColumnDataBatcher>(inputColumns, std::move(writeIndex), std::move(alloc));
 }
 
 IDataBatcherPtr CreateRowDataBatcher(const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,

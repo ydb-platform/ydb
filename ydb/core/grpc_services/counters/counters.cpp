@@ -354,7 +354,7 @@ TYdbCounterBlock::TYdbCounterBlock(const ::NMonitoring::TDynamicCounterPtr& coun
         {
             auto h = NMonitoring::ExplicitHistogram(
                 NMonitoring::TBucketBounds{
-                    5, 10, 50, 100, 250, 500,
+                    0, 5, 10, 50, 100, 250, 500,
                     1000, 5000, 10000, 20000, 60000});
             ClientTimeoutHisto = subgroup->GetHistogram("TimeoutMs", std::move(h));
         }

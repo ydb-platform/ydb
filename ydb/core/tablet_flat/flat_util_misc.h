@@ -50,7 +50,7 @@ namespace NUtil {
     template <typename TVal>
     TVal SubSafe(TVal &val, TVal sub)
     {
-        Y_ABORT_UNLESS(val >= sub, "Counter is underflowed");
+        Y_ENSURE(val >= sub, "Counter is underflowed");
 
         return val -= Min(val, sub);
     }

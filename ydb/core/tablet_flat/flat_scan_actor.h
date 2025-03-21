@@ -6,6 +6,7 @@
 #include "flat_scan_spent.h"
 #include "flat_bio_events.h"
 #include "flat_fwd_env.h"
+#include "util_fmt_abort.h"
 #include "util_fmt_logger.h"
 #include "util_fmt_desc.h"
 #include "shared_sausagecache.h"
@@ -155,15 +156,15 @@ namespace NOps {
             void Handle(TEvPrivate::TEvBlobLoaded::TPtr& ev) {
                 auto* msg = ev->Get();
                 ui64 slot = ev->Cookie;
-                Y_ABORT_UNLESS(slot < PageCollections.size());
-                Y_ABORT_UNLESS(slot < PageCollectionLoaders.size());
-                Y_ABORT_UNLESS(!PageCollections[slot]);
+                Y_ENSURE(slot < PageCollections.size());
+                Y_ENSURE(slot < PageCollectionLoaders.size());
+                Y_ENSURE(!PageCollections[slot]);
                 auto& loader = PageCollectionLoaders[slot];
                 if (loader.Apply(msg->BlobId, std::move(msg->Body))) {
                     TIntrusiveConstPtr<NPageCollection::IPageCollection> pack =
                         new NPageCollection::TPageCollection(Part->LargeGlobIds[slot], loader.ExtractSharedData());
                     PageCollections[slot] = new TPrivatePageCache::TInfo(std::move(pack));
-                    Y_ABORT_UNLESS(PageCollectionsLeft > 0);
+                    Y_ENSURE(PageCollectionsLeft > 0);
                     if (0 == --PageCollectionsLeft) {
                         PageCollectionLoaders.clear();
                         StartLoader();
@@ -173,7 +174,7 @@ namespace NOps {
 
         private:
             void StartLoader() {
-                Y_ABORT_UNLESS(!Loader);
+                Y_ENSURE(!Loader);
                 Loader.emplace(
                     std::move(PageCollections),
                     Part->Legacy,
@@ -211,10 +212,10 @@ namespace NOps {
                     return PassAway();
                 }
 
-                Y_ABORT_UNLESS(ReadsLeft > 0);
+                Y_ENSURE(ReadsLeft > 0);
                 --ReadsLeft;
 
-                Y_ABORT_UNLESS(Loader);
+                Y_ENSURE(Loader);
                 Loader->Save(msg->Cookie, msg->Loaded);
 
                 if (ReadsLeft == 0) {
@@ -309,7 +310,7 @@ namespace NOps {
             if (itLoader == ColdPartLoaders.end()) {
                 // Create a loader for this new part
                 TIntrusiveConstPtr<TColdPartStore> partStore = dynamic_cast<TColdPartStore*>(const_cast<TColdPart*>(part.Get()));
-                Y_VERIFY_S(partStore, "Cannot load unsupported part " << NFmt::Do(*part));
+                Y_ENSURE(partStore, "Cannot load unsupported part " << NFmt::Do(*part));
                 ColdPartLoaders[label] = RegisterWithSameMailbox(new TColdPartLoader(SelfId(), std::move(partStore), Args.ReadPrio));
             }
 
@@ -323,7 +324,7 @@ namespace NOps {
 
         void Touch(EScan scan) override
         {
-            Y_ABORT_UNLESS(Depth == 0, "Touch(..) is used from invalid context");
+            Y_ENSURE(Depth == 0, "Touch(..) is used from invalid context");
 
             switch (scan) {
                 case EScan::Feed:
@@ -345,7 +346,7 @@ namespace NOps {
                     return Spent->Alter(/* resources not available */ false);
             }
 
-            Y_ABORT("Scan actor got an unexpected EScan value");
+            Y_TABLET_ERROR("Scan actor got an unexpected EScan value");
         }
 
         void Registered(TActorSystem *sys, const TActorId &owner) override
@@ -374,7 +375,7 @@ namespace NOps {
 
         void Bootstrap()
         {
-            Y_ABORT_UNLESS(!Spent, "Talble scan actor bootstrapped twice");
+            Y_ENSURE(!Spent, "Talble scan actor bootstrapped twice");
 
             Spent = new TSpent(TAppData::TimeProvider.Get());
 
@@ -450,7 +451,7 @@ namespace NOps {
             TGuard<ui64, NUtil::TIncDecOps<ui64>> guard(Depth);
 
             Y_DEBUG_ABORT_UNLESS(MayProgress(), "React called with non-ready cache");
-            Y_ABORT_UNLESS(Scan, "Table scan op has been finalized");
+            Y_ENSURE(Scan, "Table scan op has been finalized");
 
             TStatState stat(Seen, Skipped);
             ui64 processed = 0;
@@ -516,7 +517,7 @@ namespace NOps {
 
         void Handle(TEvContinue::TPtr&)
         {
-            Y_ABORT_UNLESS(ContinueInFly);
+            Y_ENSURE(ContinueInFly);
 
             ContinueInFly = false;
 
@@ -527,7 +528,7 @@ namespace NOps {
 
         void Handle(TEvPrivate::TEvLoadBlob::TPtr& ev)
         {
-            Y_ABORT_UNLESS(ev->Sender);
+            Y_ENSURE(ev->Sender);
             auto* msg = ev->Get();
 
             auto& req = BlobQueueRequests.emplace_back();
@@ -550,11 +551,11 @@ namespace NOps {
 
         void OnBlobLoaded(const TLogoBlobID& id, TString body, uintptr_t cookie) override
         {
-            Y_ABORT_UNLESS(cookie >= BlobQueueRequestsOffset);
+            Y_ENSURE(cookie >= BlobQueueRequestsOffset);
             size_t idx = cookie - BlobQueueRequestsOffset;
-            Y_ABORT_UNLESS(idx < BlobQueueRequests.size());
+            Y_ENSURE(idx < BlobQueueRequests.size());
             auto& req = BlobQueueRequests[idx];
-            Y_ABORT_UNLESS(req.Sender);
+            Y_ENSURE(req.Sender);
             Send(req.Sender, new TEvPrivate::TEvBlobLoaded(id, std::move(body)), 0, req.Cookie);
             req.Sender = {};
             while (!BlobQueueRequests.empty() && !BlobQueueRequests.front().Sender) {
@@ -580,7 +581,7 @@ namespace NOps {
             partView = std::move(msg->Part);
 
             auto* partStore = partView.As<TPartStore>();
-            Y_ABORT_UNLESS(partStore);
+            Y_ENSURE(partStore);
 
             Cache->AddCold(partView);
 
@@ -653,7 +654,7 @@ namespace NOps {
 
             /* Each Flatten should have its trace on the same position */
 
-            Y_ABORT_UNLESS(!trace || trace->Sieve.size() == Subset.Flatten.size() + 1);
+            Y_ENSURE(!trace || trace->Sieve.size() == Subset.Flatten.size() + 1);
 
             /* After invocation of Finish(...) scan object is left on its
                 own and it has to handle self deletion if required. */

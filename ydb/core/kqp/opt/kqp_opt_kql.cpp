@@ -15,11 +15,55 @@ using namespace NYql::NNodes;
 
 namespace {
 
+TVector<TString> GetMissingInputColumnsForReturning(
+    const TKiWriteTable& write, const TCoAtomList& inputColumns)
+{
+    auto returnColumns = write.ReturningColumns().Cast<TCoAtomList>();
+    if (returnColumns.Ref().ChildrenSize() == 0) {
+        return {};
+    }
+
+    THashSet<TStringBuf> currentInput;
+    for (const auto& name : inputColumns) {
+        currentInput.insert(name.Value());
+    }
+
+    TVector<TString> result;
+    for(const auto& returnCol : returnColumns) {
+        if (!currentInput.contains(returnCol.Value())) {
+            result.push_back(TString(returnCol.Value()));
+        }
+    }
+
+    return result;
+}
+
 // Replace absent input columns to NULL to perform REPLACE via UPSERT
-std::pair<TExprBase, TCoAtomList> CreateRowsToReplace(const TExprBase& input,
+std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithAbsentNullColumns(const TKiWriteTable& write, const TExprBase& input,
     const TCoAtomList& inputColumns, const TKikimrTableDescription& tableDesc,
     TPositionHandle pos, TExprContext& ctx)
 {
+    TVector<TString> maybeMissingColumnsToReplace;
+    const auto op = GetTableOp(write);
+    if (op == TYdbOperation::Replace) {
+        for(const auto&[name, _]: tableDesc.Metadata->Columns) {
+            maybeMissingColumnsToReplace.push_back(name);
+        }
+    }
+
+    if (op == TYdbOperation::InsertAbort || op == TYdbOperation::InsertRevert || op == TYdbOperation::Upsert) {
+        maybeMissingColumnsToReplace = GetMissingInputColumnsForReturning(write, inputColumns);
+        if (maybeMissingColumnsToReplace.size() > 0) {
+            for(const auto& inputCol: inputColumns) {
+                maybeMissingColumnsToReplace.push_back(TString(inputCol.Value()));
+            }
+        }
+    }
+
+    if (maybeMissingColumnsToReplace.size() == 0) {
+        return {input, inputColumns};
+    }
+
     THashSet<TStringBuf> inputColumnsSet;
     for (const auto& name : inputColumns) {
         inputColumnsSet.insert(name.Value());
@@ -32,7 +76,7 @@ std::pair<TExprBase, TCoAtomList> CreateRowsToReplace(const TExprBase& input,
     TVector<TCoAtom> writeColumns;
     TVector<TExprBase> writeMembers;
 
-    for (const auto& [name, _] : tableDesc.Metadata->Columns) {
+    for (const auto& name : maybeMissingColumnsToReplace) {
         TMaybeNode<TExprBase> memberValue;
         if (tableDesc.GetKeyColumnIndex(name) || inputColumnsSet.contains(name)) {
             memberValue = Build<TCoMember>(ctx, pos)
@@ -228,11 +272,7 @@ std::pair<TExprBase, TCoAtomList> BuildWriteInput(const TKiWriteTable& write, co
         input = BuildKqlSequencer(input, table, inputCols, autoIncrement, pos, ctx);
     }
 
-    const bool isWriteReplace = (GetTableOp(write) == TYdbOperation::Replace);
-    if (isWriteReplace) {
-        // TODO: don't need it for sinks (can be disabled when secondary indexes are supported inside write actor)
-        std::tie(input, inputCols) = CreateRowsToReplace(input, inputCols, table, write.Pos(), ctx);
-    }
+    std::tie(input, inputCols) = ExtendInputRowsWithAbsentNullColumns(write, input, inputCols, table, write.Pos(), ctx);
 
     auto baseInput = Build<TKqpWriteConstraint>(ctx, pos)
         .Input(input)
@@ -242,6 +282,24 @@ std::pair<TExprBase, TCoAtomList> BuildWriteInput(const TKiWriteTable& write, co
     return {baseInput, inputCols};
 }
 
+
+TCoAtomList ExtendGenerateOnInsertColumnsList(const TKiWriteTable& write, TCoAtomList& generateColumnsIfInsert, const TCoAtomList& inputColumns, const TCoAtomList& autoincrement, TExprContext& ctx) {
+    auto inputCols = BuildUpsertInputColumns(inputColumns, autoincrement, write.Pos(), ctx);
+    auto maybeMissingColumnsToReplace = GetMissingInputColumnsForReturning(write, inputCols);
+    TVector<TExprNode::TPtr> result;
+    result.reserve(generateColumnsIfInsert.Ref().ChildrenSize() + maybeMissingColumnsToReplace.size());
+    for(const auto& item: generateColumnsIfInsert) {
+        result.push_back(item.Ptr());
+    }
+
+    for(auto& name: maybeMissingColumnsToReplace) {
+        auto atom = TCoAtom(ctx.NewAtom(write.Pos(), name));
+        result.push_back(atom.Ptr());
+    }
+
+    return Build<TCoAtomList>(ctx, write.Pos()).Add(result).Done();
+}
+
 TExprBase BuildUpsertTable(const TKiWriteTable& write, const TCoAtomList& inputColumns,
     const TCoAtomList& autoincrement, const bool isSink,
     const TKikimrTableDescription& table, TExprContext& ctx)
@@ -249,8 +307,10 @@ TExprBase BuildUpsertTable(const TKiWriteTable& write, const TCoAtomList& inputC
     auto generateColumnsIfInsertNode = GetSetting(write.Settings().Ref(), "generate_columns_if_insert");
     YQL_ENSURE(generateColumnsIfInsertNode);
     TCoAtomList generateColumnsIfInsert = TCoNameValueTuple(generateColumnsIfInsertNode).Value().Cast<TCoAtomList>();
-
     auto settings = FilterSettings(write.Settings().Ref(), {"AllowInconsistentWrites"}, ctx);
+
+    generateColumnsIfInsert = ExtendGenerateOnInsertColumnsList(write, generateColumnsIfInsert, inputColumns, autoincrement, ctx);
+
     settings = AddSetting(*settings, write.Pos(), "Mode", Build<TCoAtom>(ctx, write.Pos()).Value("upsert").Done().Ptr(), ctx);
     const auto [input, columns] = BuildWriteInput(write, table, inputColumns, autoincrement, isSink, write.Pos(), ctx);
     if (generateColumnsIfInsert.Ref().ChildrenSize() > 0) {
@@ -285,6 +345,8 @@ TExprBase BuildUpsertTableWithIndex(const TKiWriteTable& write, const TCoAtomLis
     auto generateColumnsIfInsertNode = GetSetting(write.Settings().Ref(), "generate_columns_if_insert");
     YQL_ENSURE(generateColumnsIfInsertNode);
     TCoAtomList generateColumnsIfInsert = TCoNameValueTuple(generateColumnsIfInsertNode).Value().Cast<TCoAtomList>();
+
+    generateColumnsIfInsert = ExtendGenerateOnInsertColumnsList(write, generateColumnsIfInsert, inputColumns, autoincrement, ctx);
 
     auto effect = Build<TKqlUpsertRowsIndex>(ctx, write.Pos())
         .Table(BuildTableMeta(table, write.Pos(), ctx))

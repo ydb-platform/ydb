@@ -421,12 +421,12 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         }
     }
 
-    TChecksumState GetChecksumState() const {
-        TChecksumState checksumState;
+    TS3DownloadState GetDownloadState() const {
+        TS3DownloadState downloadState;
         if (Checksum) {
-            checksumState = Checksum->GetState();
+            Checksum->GetState(downloadState);
         }
-        return checksumState;
+        return downloadState;
     }
 
     void Handle(TEvDataShard::TEvS3DownloadInfo::TPtr& ev) {
@@ -435,7 +435,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         const auto& info = ev->Get()->Info;
         if (!info.DataETag) {
             Send(DataShard, new TEvDataShard::TEvStoreS3DownloadInfo(TxId, {
-                ETag, ProcessedBytes, WrittenBytes, WrittenRows, GetChecksumState()
+                ETag, ProcessedBytes, WrittenBytes, WrittenRows, GetDownloadState()
             }));
             return;
         }
@@ -456,7 +456,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         WrittenBytes = info.WrittenBytes;
         WrittenRows = info.WrittenRows;
         if (Checksum) {
-            Checksum->Continue(info.ChecksumState);
+            Checksum->Continue(info.DownloadState);
         }
 
         if (!ContentLength || ProcessedBytes >= ContentLength) {
@@ -615,7 +615,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             << ", size# " << record->ByteSizeLong());
 
         Send(DataShard, new TEvDataShard::TEvS3UploadRowsRequest(TxId, record, {
-            ETag, ProcessedBytes, WrittenBytes, WrittenRows, GetChecksumState()
+            ETag, ProcessedBytes, WrittenBytes, WrittenRows, GetDownloadState()
         }));
     }
 

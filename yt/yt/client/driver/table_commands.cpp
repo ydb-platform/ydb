@@ -298,7 +298,8 @@ void TWriteTableCommand::DoExecuteImpl(const ICommandContextPtr& context)
     TWritingValueConsumer valueConsumer(
         schemalessWriter,
         ConvertTo<TTypeConversionConfigPtr>(context->GetInputFormat().Attributes()),
-        MaxRowBufferSize);
+        MaxRowBufferSize,
+        context->Request().MemoryUsageTracker);
 
     TTableOutput output(CreateParserForFormat(
         context->GetInputFormat(),

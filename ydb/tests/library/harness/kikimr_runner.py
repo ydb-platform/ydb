@@ -450,12 +450,10 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         self.__format_disks(node_id)
         self._nodes[node_id].start()
         
-        # Добавляем проверку портов после запуска
-        time.sleep(3)  # Даем небольшую паузу, чтобы порты успели начать слушаться
+        time.sleep(3)
         ports_status = self._nodes[node_id].check_ports()
         logger.info(f"Node {node_id} port status after start: {ports_status}")
         
-        # Проверяем, что основные порты слушаются
         if not ports_status["grpc_port"]:
             logger.warning(f"Node {node_id} grpc port {self._nodes[node_id].grpc_port} is not listening!")
         if not ports_status["mon_port"]:

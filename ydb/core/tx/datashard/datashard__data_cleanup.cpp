@@ -30,6 +30,18 @@ public:
             return true;
         }
 
+        if (Self->Executor()->HasLoanedParts()) {
+            LOG_WARN_S(ctx, NKikimrServices::TX_DATASHARD,
+                "DataCleanup of tablet# " << Self->TabletID()
+                << ": has borrowed parts"
+                << ", requested from " << Ev->Sender);
+            Response = std::make_unique<TEvDataShard::TEvForceDataCleanupResult>(
+                record.GetDataCleanupGeneration(),
+                Self->TabletID(),
+                NKikimrTxDataShard::TEvForceDataCleanupResult::FAILED);
+            return true;
+        }
+
         NIceDb::TNiceDb db(txc.DB);
         ui64 lastGen = 0;
         if (!Self->SysGetUi64(db, Schema::Sys_DataCleanupCompletedGeneration, lastGen)) {

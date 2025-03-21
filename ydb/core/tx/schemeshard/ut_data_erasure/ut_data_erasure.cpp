@@ -5,6 +5,7 @@
 #include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
+#include <ydb/core/testlib/storage_helpers.h>
 
 using namespace NKikimr;
 using namespace NSchemeShardUT_Private;
@@ -181,5 +182,113 @@ Y_UNIT_TEST_SUITE(TestDataErasure) {
         RunDataErasure(1);
         RunDataErasure(2);
         RunDataErasure(3);
+    }
+
+    Y_UNIT_TEST(DataErasureWithCopyTable) {
+        TTestBasicRuntime runtime;
+
+        TVector<TIntrusivePtr<NFake::TProxyDS>> dsProxies {
+            MakeIntrusive<NFake::TProxyDS>(TGroupId::FromValue(0)),
+        };
+
+        TTestEnv env(runtime, TTestEnvOptions()
+            .NChannels(4)
+            .EnablePipeRetries(true)
+            .EnableSystemViews(false)
+            .DSProxies(dsProxies));
+
+        runtime.SetLogPriority(NKikimrServices::TX_PROXY, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+
+        auto info = CreateTestTabletInfo(MakeBSControllerID(), TTabletTypes::BSController);
+        CreateTestBootstrapper(runtime, info, [](const TActorId &tablet, TTabletStorageInfo *info) -> IActor* {
+            return new TFakeBSController(tablet, info);
+        });
+
+        runtime.GetAppData().FeatureFlags.SetEnableDataErasure(true);
+        auto& dataErasureConfig = runtime.GetAppData().DataErasureConfig;
+        dataErasureConfig.SetDataErasureIntervalSeconds(50);
+        dataErasureConfig.SetBlobStorageControllerRequestIntervalSeconds(10);
+
+        auto sender = runtime.AllocateEdgeActor();
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        ui64 txId = 100;
+
+        auto schemeshardId = CreateTestSubdomain(runtime, env, &txId, "Database1");
+        auto shards = GetTableShards(runtime, schemeshardId, "/MyRoot/Database1/Simple");
+        TString value(size_t(100 * 1024), 't');
+        WriteRow(runtime, schemeshardId, ++txId, "/MyRoot/Database1/Simple", 0, 1, value);
+
+        auto tableVersion = TestDescribeResult(DescribePath(runtime, schemeshardId, "/MyRoot/Database1/Simple"), {NLs::PathExist});
+        {
+            const auto result = CompactTable(runtime, shards.at(0), tableVersion.PathId);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::OK);
+        }
+        {
+            const auto result = CompactTable(runtime, shards.at(1), tableVersion.PathId);
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NKikimrTxDataShard::TEvCompactTableResult::NOT_NEEDED);
+        }
+
+        DeleteRow(runtime, schemeshardId, ++txId, "/MyRoot/Database1/Simple", 0, 1);
+
+        // BlobStorage should contain deleted value yet
+        UNIT_ASSERT(BlobStorageContains(dsProxies, value));
+
+        // catch and hold borrow returns
+        TVector<THolder<IEventHandle>> borrowReturns;
+        auto prevObserver = runtime.SetObserverFunc([&borrowReturns](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case TEvDataShard::TEvReturnBorrowedPart::EventType: {
+                    borrowReturns.emplace_back(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        TestCopyTable(runtime, schemeshardId, ++txId, "/MyRoot/Database1", "SimpleCopy", "/MyRoot/Database1/Simple");
+
+        {
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&borrowReturns]() {
+                return borrowReturns.size() >= 1;
+            };
+            runtime.DispatchEvents(options);
+        }
+
+        // data cleanup should not be finished due to holded borrow returns
+        {
+            auto request = MakeHolder<TEvSchemeShard::TEvDataErasureInfoRequest>();
+            runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
+
+            TAutoPtr<IEventHandle> handle;
+            auto response = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvDataErasureInfoResponse>(handle);
+
+            UNIT_ASSERT_EQUAL_C(response->Record.GetGeneration(), 1, response->Record.GetGeneration());
+            UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NKikimrScheme::TEvDataErasureInfoResponse::IN_PROGRESS_TENANT);
+            UNIT_ASSERT(BlobStorageContains(dsProxies, value));
+        }
+
+        // return borrow
+        runtime.SetObserverFunc(prevObserver);
+        for (auto& ev : borrowReturns) {
+            runtime.Send(ev.Release(), 0, true);
+        }
+
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvBlobStorage::EvControllerShredResponse, 3));
+        runtime.DispatchEvents(options);
+
+        // data cleanup should be finished after returned borrows
+        {
+            auto request = MakeHolder<TEvSchemeShard::TEvDataErasureInfoRequest>();
+            runtime.SendToPipe(TTestTxConfig::SchemeShard, sender, request.Release(), 0, GetPipeConfigWithRetries());
+            TAutoPtr<IEventHandle> handle;
+            auto response = runtime.GrabEdgeEventRethrow<TEvSchemeShard::TEvDataErasureInfoResponse>(handle);
+            UNIT_ASSERT_EQUAL_C(response->Record.GetGeneration(), 1, response->Record.GetGeneration());
+            UNIT_ASSERT_EQUAL(response->Record.GetStatus(), NKikimrScheme::TEvDataErasureInfoResponse::COMPLETED);
+            UNIT_ASSERT(!BlobStorageContains(dsProxies, value));
+        }
     }
 }

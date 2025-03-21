@@ -55,7 +55,7 @@ class DistConfKiKiMRTest(object):
                                              separate_node_configs=cls.separate_node_configs,
                                              use_distconf=False,
                                              simple_config=True,
-                                             use_self_management=True,
+                                             use_self_management=False,
                                              extra_grpc_services=['config'],
                                              additional_log_configs=log_configs)
 

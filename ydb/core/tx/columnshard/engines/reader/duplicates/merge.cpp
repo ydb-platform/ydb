@@ -21,6 +21,7 @@ TConclusionStatus TBuildDuplicateFilters::DoExecute(const std::shared_ptr<ITask>
                                                                   "filter", filters[i].GetRecordsCountVerified());
         result.emplace(Sources[i].GetSourceId(), std::move(filters[i]));
     }
+    AFL_VERIFY(result.size() == Sources.size())("result", result.size())("sources", Sources.size());
     TActorContext::AsActorContext().Send(Owner, new TEvDuplicateFilterIntervalResult(std::move(result), IntervalIdx));
     return TConclusionStatus::Success();
 }

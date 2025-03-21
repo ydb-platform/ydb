@@ -1,4 +1,4 @@
-name: Regression-run
+name: Regression-run Small Medium
 
 on:
   schedule:
@@ -7,7 +7,7 @@ on:
 
 jobs:
   main:
-    name: Regression-run
+    name: Regression-run Small Medium
     uses: ./.github/workflows/run_tests.yml
     secrets: inherit
     strategy:
@@ -16,5 +16,6 @@ jobs:
          build_preset: ["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]
     with:
       test_targets: ydb/
+      test_size: small,medium
       build_preset: ${{ matrix.build_preset }}
 

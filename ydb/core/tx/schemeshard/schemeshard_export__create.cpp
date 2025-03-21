@@ -665,6 +665,7 @@ private:
             SendNotificationsIfFinished(exportInfo);
             break;
 
+        case EState::AutoDropping:
         case EState::Dropping:
             if (!exportInfo->AllItemsAreDropped()) {
                 for (ui32 itemIdx : xrange(exportInfo->Items.size())) {
@@ -749,6 +750,7 @@ private:
             }
             break;
 
+        case EState::AutoDropping:
         case EState::Dropping:
             if (exportInfo->PendingDropItems) {
                 itemIdx = PopFront(exportInfo->PendingDropItems);
@@ -925,6 +927,7 @@ private:
             Self->PersistExportItemState(db, exportInfo, itemIdx);
             break;
 
+        case EState::AutoDropping:
         case EState::Dropping:
             if (!exportInfo->AllItemsAreDropped()) {
                 Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
@@ -1140,14 +1143,16 @@ private:
                 }
             }
             if (!itemHasIssues && AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
-                exportInfo->State = EState::Done;
                 exportInfo->EndTime = TAppData::TimeProvider->Now();
+                PrepareDroppingDir(Self, exportInfo, db, true);
+                AllocateTxId(exportInfo);
             }
 
             Self->PersistExportItemState(db, exportInfo, itemIdx);
             break;
         }
 
+        case EState::AutoDropping:
         case EState::Dropping:
             if (!exportInfo->AllItemsAreDropped()) {
                 Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
@@ -1162,6 +1167,13 @@ private:
                 }
             } else {
                 SendNotificationsIfFinished(exportInfo, true); // for tests
+
+                if (exportInfo->State == EState::AutoDropping) {
+                    exportInfo->State = EState::Done;
+                    exportInfo->WaitTxId = InvalidTxId;
+                    AllocateTxId(exportInfo);
+                    break;
+                }
 
                 if (exportInfo->Uid) {
                     Self->ExportsByUid.erase(exportInfo->Uid);

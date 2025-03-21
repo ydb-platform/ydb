@@ -308,17 +308,17 @@ protected:
 
     EScan FeedUpload()
     {
-        const bool postingDone = PostingBuf.IsReachLimits(Limits);
-        if (!postingDone && !PrefixBuf.IsReachLimits(Limits)) {
+        if (!PostingBuf.IsReachLimits(Limits) && !PrefixBuf.IsReachLimits(Limits)) {
             return EScan::Feed;
         }
         if (!UploadBuf.IsEmpty()) {
             return EScan::Sleep;
         }
-        if (postingDone) {
+        if (PostingBuf.IsReachLimits(Limits)) {
             PostingBuf.FlushTo(UploadBuf);
             InitUpload(PostingTable, PostingTypes);
         } else {
+            Y_ASSERT(PrefixBuf.IsReachLimits(Limits));
             PrefixBuf.FlushTo(UploadBuf);
             InitUpload(PrefixTable, PrefixTypes);
         }

@@ -1256,118 +1256,204 @@ TString TSchemeShard::PathToString(TPathElement::TPtr item) {
     return path.PathString();
 }
 
-bool TSchemeShard::CheckApplyIf(const NKikimrSchemeOp::TModifyScheme &scheme, TString &errStr) {
+bool TSchemeShard::CheckApplyIf(const NKikimrSchemeOp::TModifyScheme& scheme, TString& errStr, std::optional<const TPath> path) {
     const auto& conditions = scheme.GetApplyIf();
 
-    for(const auto& item: conditions) {
-        if (!item.HasPathId()) {
-            continue;
-        }
-        TLocalPathId localPathId = item.GetPathId();
-        const auto pathId = TPathId(TabletID(), localPathId);
+    for (const auto& item: conditions) {
+        if (item.HasPathId()) {
+            TLocalPathId localPathId = item.GetPathId();
+            const auto pathId = TPathId(TabletID(), localPathId);
 
-        if (!PathsById.contains(pathId)) {
-            errStr = TStringBuilder()
-                << "fail user constraint: ApplyIf section:"
-                << " no path with id " << pathId;
-            return false;
-        }
-        const TPathElement::TPtr pathEl = PathsById.at(pathId);
-
-        if (pathEl->Dropped()) {
-            errStr = TStringBuilder()
-                << "fail user constraint: ApplyIf section:"
-                << " path with id " << pathId << " has been dropped";
-            return false;
-        }
-
-        if (item.HasPathVersion()) {
-            const auto requiredVersion = item.GetPathVersion();
-            arc_ui64 actualVersion;
-            auto path = TPath::Init(pathId, this);
-            auto pathVersion = GetPathVersion(path);
-
-            if (item.HasCheckEntityVersion() && item.GetCheckEntityVersion()) {
-                switch(path.Base()->PathType) {
-                    case NKikimrSchemeOp::EPathTypePersQueueGroup:
-                        actualVersion = pathVersion.GetPQVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeSubDomain:
-                    case NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain:
-                        actualVersion = pathVersion.GetSubDomainVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathTypeTable:
-                        actualVersion = pathVersion.GetTableSchemaVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeBlockStoreVolume:
-                        actualVersion = pathVersion.GetBSVVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeFileStore:
-                        actualVersion = pathVersion.GetFileStoreVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeKesus:
-                        actualVersion = pathVersion.GetKesusVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeRtmrVolume:
-                        actualVersion = pathVersion.GetRTMRVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeSolomonVolume:
-                        actualVersion = pathVersion.GetSolomonVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeTableIndex:
-                        actualVersion = pathVersion.GetTableIndexVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeColumnStore:
-                        actualVersion = pathVersion.GetColumnStoreVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeColumnTable:
-                        actualVersion = pathVersion.GetColumnTableVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeCdcStream:
-                        actualVersion = pathVersion.GetCdcStreamVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeSequence:
-                        actualVersion = pathVersion.GetSequenceVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeReplication:
-                    case NKikimrSchemeOp::EPathType::EPathTypeTransfer:
-                        actualVersion = pathVersion.GetReplicationVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeExternalTable:
-                        actualVersion = pathVersion.GetExternalTableVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeExternalDataSource:
-                        actualVersion = pathVersion.GetExternalDataSourceVersion();
-                        break;
-                    case NKikimrSchemeOp::EPathType::EPathTypeView:
-                        actualVersion = pathVersion.GetViewVersion();
-                        break;
-                    default:
-                        actualVersion = pathVersion.GetGeneralVersion();
-                        break;
-                }
-            } else {
-                actualVersion = pathVersion.GetGeneralVersion();
-            }
-
-            if (requiredVersion != actualVersion) {
+            if (!PathsById.contains(pathId)) {
                 errStr = TStringBuilder()
-                    << "fail user constraint in ApplyIf section:"
-                    //FIXME: revert to misspelled text as there is dependency on it in the nbs code.
-                    // Dependency on text should be replaced by introducing special error code.
-                    << " path version mistmach, path with id " << pathEl->PathId
-                    << " has actual version " << actualVersion
-                    << " but version " << requiredVersion << " was required";
+                    << "fail user constraint: ApplyIf section:"
+                    << " no path with id " << pathId;
                 return false;
             }
+            const TPathElement::TPtr pathEl = PathsById.at(pathId);
+
+            if (pathEl->Dropped()) {
+                errStr = TStringBuilder()
+                    << "fail user constraint: ApplyIf section:"
+                    << " path with id " << pathId << " has been dropped";
+                return false;
+            }
+
+            if (item.HasPathVersion()) {
+                const auto requiredVersion = item.GetPathVersion();
+                arc_ui64 actualVersion;
+                auto path = TPath::Init(pathId, this);
+                auto pathVersion = GetPathVersion(path);
+
+                if (item.HasCheckEntityVersion() && item.GetCheckEntityVersion()) {
+                    switch(path.Base()->PathType) {
+                        case NKikimrSchemeOp::EPathTypePersQueueGroup:
+                            actualVersion = pathVersion.GetPQVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeSubDomain:
+                        case NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain:
+                            actualVersion = pathVersion.GetSubDomainVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathTypeTable:
+                            actualVersion = pathVersion.GetTableSchemaVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeBlockStoreVolume:
+                            actualVersion = pathVersion.GetBSVVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeFileStore:
+                            actualVersion = pathVersion.GetFileStoreVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeKesus:
+                            actualVersion = pathVersion.GetKesusVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeRtmrVolume:
+                            actualVersion = pathVersion.GetRTMRVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeSolomonVolume:
+                            actualVersion = pathVersion.GetSolomonVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeTableIndex:
+                            actualVersion = pathVersion.GetTableIndexVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeColumnStore:
+                            actualVersion = pathVersion.GetColumnStoreVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeColumnTable:
+                            actualVersion = pathVersion.GetColumnTableVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeCdcStream:
+                            actualVersion = pathVersion.GetCdcStreamVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeSequence:
+                            actualVersion = pathVersion.GetSequenceVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeReplication:
+                        case NKikimrSchemeOp::EPathType::EPathTypeTransfer:
+                            actualVersion = pathVersion.GetReplicationVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeExternalTable:
+                            actualVersion = pathVersion.GetExternalTableVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeExternalDataSource:
+                            actualVersion = pathVersion.GetExternalDataSourceVersion();
+                            break;
+                        case NKikimrSchemeOp::EPathType::EPathTypeView:
+                            actualVersion = pathVersion.GetViewVersion();
+                            break;
+                        default:
+                            actualVersion = pathVersion.GetGeneralVersion();
+                            break;
+                    }
+                } else {
+                    actualVersion = pathVersion.GetGeneralVersion();
+                }
+
+                if (requiredVersion != actualVersion) {
+                    errStr = TStringBuilder()
+                        << "fail user constraint in ApplyIf section:"
+                        //FIXME: revert to misspelled text as there is dependency on it in the nbs code.
+                        // Dependency on text should be replaced by introducing special error code.
+                        << " path version mistmach, path with id " << pathEl->PathId
+                        << " has actual version " << actualVersion
+                        << " but version " << requiredVersion << " was required";
+                    return false;
+                }
+            }
+
+            if (item.HasLockedTxId()) {
+                const auto lockOwnerTxId = TTxId(item.GetLockedTxId());
+    
+                TString lockErr = "fail user constraint in ApplyIf section:";
+                if (!CheckLocks(pathId, lockOwnerTxId, lockErr)) {
+                    errStr = lockErr;
+                    return false;
+                }
+            }
         }
 
-        if (item.HasLockedTxId()) {
-            const auto lockOwnerTxId = TTxId(item.GetLockedTxId());
+        if (!item.GetPathTypes().empty()) {
+            if (!path.has_value()) {
+                errStr = TStringBuilder()
+                    << "fail in ApplyIf section:"
+                    << " argument `path` is undefined,"
+                    << " but ApplyIf has non-empty field `PathTypes.`";
 
-            TString lockErr = "fail user constraint in ApplyIf section:";
-            if (!CheckLocks(pathId, lockOwnerTxId, lockErr)) {
-                errStr = lockErr;
+                return false;
+            }
+
+            bool allowed = false;
+
+            for (const auto& type : item.GetPathTypes()) {
+                const auto check = path.value().Check();
+
+                switch (type) {
+                    case NKikimrSchemeOp::EPathType::EPathTypeSubDomain:
+                        check.IsSubDomain();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain:
+                        check.IsExternalSubDomain();
+                        break;
+                    case NKikimrSchemeOp::EPathTypePersQueueGroup:
+                        check.IsPQGroup();
+                        break;
+                    case NKikimrSchemeOp::EPathTypeTable:
+                        check.IsTable();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeBlockStoreVolume:
+                        check.IsBlockStoreVolume();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeFileStore:
+                        check.IsFileStore();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeKesus:
+                        check.IsKesus();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeRtmrVolume:
+                        check.IsRtmrVolume();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeSolomonVolume:
+                        check.IsSolomon();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeTableIndex:
+                        check.IsTableIndex();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeColumnStore:
+                        check.IsOlapStore();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeColumnTable:
+                        check.IsColumnTable();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeCdcStream:
+                        check.IsCdcStream();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeSequence:
+                        check.IsSequence();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeReplication:
+                        check.IsReplication();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeTransfer:
+                        check.IsTransfer();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeExternalTable:
+                        check.IsExternalTable();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeExternalDataSource:
+                        check.IsExternalDataSource();
+                        break;
+                    case NKikimrSchemeOp::EPathType::EPathTypeView:
+                        check.IsView();
+                        break;
+                }
+
+                allowed |= static_cast<bool>(check);
+            }
+
+            if (!allowed) {
+                errStr = TStringBuilder()
+                    << "fail in ApplyIf section:"
+                    << " path is not database";
+
                 return false;
             }
         }

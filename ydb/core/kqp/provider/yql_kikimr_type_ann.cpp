@@ -209,6 +209,11 @@ private:
                 return TStatus::Ok;
             }
 
+            case TKikimrKey::Type::Database:
+            {
+                return TStatus::Ok;
+            }
+
             case TKikimrKey::Type::Role:
             {
                 return TStatus::Ok;
@@ -1897,6 +1902,29 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleModifyPermissions(TKiModifyPermissions node, TExprContext&) override {
+        node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
+        return TStatus::Ok;
+    }
+
+    virtual TStatus HandleAlterDatabase(NNodes::TKiAlterDatabase node, TExprContext& ctx) override {
+        const THashSet<TString> supportedSettings = {
+            "owner"
+        };
+
+        for (const auto& setting : node.Settings()) {
+            auto name = setting.Name().Value();
+
+            if (!supportedSettings.contains(name)) {
+                ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
+                    TStringBuilder() << "Unknown create user setting: " << name));
+                return TStatus::Error;
+            }
+
+            if (!EnsureAtom(setting.Value().Ref(), ctx)) {
+                return TStatus::Error;
+            }
+        }
+
         node.Ptr()->SetTypeAnn(node.World().Ref().GetTypeAnn());
         return TStatus::Ok;
     }

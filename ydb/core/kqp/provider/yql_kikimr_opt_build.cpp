@@ -688,6 +688,17 @@ bool ExploreNode(TExprBase node, TExprContext& ctx, const TKiDataSink& dataSink,
         return true;
     }
 
+    if (auto maybeAlterDatabase = node.Maybe<TKiAlterDatabase>()) {
+        auto alterDatabase = maybeAlterDatabase.Cast();
+        if (!checkDataSink(alterDatabase.DataSink())) {
+            return false;
+        }
+
+        txRes.Ops.insert(node.Raw());
+        txRes.AddTableOperation(BuildYdbOpNode(cluster, TYdbOperation::AlterDatabase, alterDatabase.Pos(), ctx));
+        return true;
+    }
+
     if (node.Maybe<TCoCommit>()) {
         return true;
     }

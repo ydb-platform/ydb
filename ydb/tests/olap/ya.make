@@ -8,10 +8,12 @@ PY3TEST()
         test_log_scenario.py
     )
 
-    REQUIREMENTS(ram:25)
-
-    SIZE(LARGE)
-    TAG(ya:fat)
+    IF (SANITIZER_TYPE OR WITH_VALGRIND)
+        SIZE(LARGE)
+        TAG(ya:fat)
+    ELSE()
+        SIZE(MEDIUM)
+    ENDIF()
 
     DEPENDS(
         ydb/apps/ydb

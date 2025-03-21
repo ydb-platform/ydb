@@ -42,7 +42,7 @@ public:
 
             db.Table<Schema::IndexColumns>().Key(key.Index, key.GranuleId, key.ColumnIdx,
             key.PlanStep, key.TxId, key.PortionId, key.Chunk).Update(
-                NIceDb::TUpdate<Schema::IndexColumns::PathId>(granuleIt->second.GetInternalPathIdValue())
+                NIceDb::TUpdate<Schema::IndexColumns::PathId>(granuleIt->second.GetRawInternalPathIdValue())
             );
         }
         return true;
@@ -71,7 +71,7 @@ public:
             }
 
             while (!rowset.EndOfSet()) {
-                const auto pathId = NColumnShard::TInternalPathId::FromInternalPathIdValue(rowset.GetValue<Schema::IndexGranules::PathId>());
+                const auto pathId = NColumnShard::TInternalPathId::FromRawInternalPathIdValue(rowset.GetValue<Schema::IndexGranules::PathId>());
                 ui64 granuleId = rowset.GetValue<Schema::IndexGranules::Granule>();
                 Y_ABORT_UNLESS(granuleId != 0);
                 granule2Path[granuleId] = pathId;

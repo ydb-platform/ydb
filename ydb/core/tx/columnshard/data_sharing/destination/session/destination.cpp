@@ -106,14 +106,14 @@ NKikimr::TConclusionStatus TDestinationSession::DeserializeDataFromProto(
     }
 
     for (auto&& i : proto.GetPathIds()) {
-        auto g = index.GetGranuleOptional(NColumnShard::TInternalPathId::FromInternalPathIdValue(i.GetDestPathId()));
+        auto g = index.GetGranuleOptional(NColumnShard::TInternalPathId::FromRawInternalPathIdValue(i.GetDestPathId()));
         if (!g) {
             return TConclusionStatus::Fail("Incorrect remapping into undefined path id: " + ::ToString(i.GetDestPathId()));
         }
         if (!i.GetSourcePathId() || !i.GetDestPathId()) {
             return TConclusionStatus::Fail("PathIds remapping contains incorrect ids: " + i.DebugString());
         }
-        if (!PathIds.emplace(NColumnShard::TInternalPathId::FromInternalPathIdValue(i.GetSourcePathId()), NColumnShard::TInternalPathId::FromInternalPathIdValue(i.GetDestPathId())).second) {
+        if (!PathIds.emplace(NColumnShard::TInternalPathId::FromRawInternalPathIdValue(i.GetSourcePathId()), NColumnShard::TInternalPathId::FromRawInternalPathIdValue(i.GetDestPathId())).second) {
             return TConclusionStatus::Fail("PathIds contains duplicated values.");
         }
     }
@@ -129,8 +129,8 @@ NKikimrColumnShardDataSharingProto::TDestinationSession TDestinationSession::Ser
     TBase::SerializeToProto(result);
     for (auto&& i : PathIds) {
         auto* pathIdRemap = result.AddPathIds();
-        pathIdRemap->SetSourcePathId(i.first.GetInternalPathIdValue());
-        pathIdRemap->SetDestPathId(i.second.GetInternalPathIdValue());
+        pathIdRemap->SetSourcePathId(i.first.GetRawInternalPathIdValue());
+        pathIdRemap->SetDestPathId(i.second.GetRawInternalPathIdValue());
     }
     return result;
 }

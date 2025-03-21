@@ -20,7 +20,7 @@ public:
     TInternalPathId& operator=(const TInternalPathId&) = default;
     TInternalPathId& operator=(TInternalPathId&) = default;
 
-    static TInternalPathId FromInternalPathIdValue(ui64 pathId) {
+    static TInternalPathId FromRawInternalPathIdValue(ui64 pathId) {
         return TInternalPathId(pathId);
     }
 
@@ -28,7 +28,7 @@ public:
         return PathId != 0;
     }
 
-    ui64 GetInternalPathIdValue() const {
+    ui64 GetRawInternalPathIdValue() const {
         return PathId;
     }
 
@@ -40,6 +40,6 @@ static_assert(sizeof(TInternalPathId)==sizeof(ui64));
 template <>
 struct THash<NKikimr::NColumnShard::TInternalPathId> {
     size_t operator()(const NKikimr::NColumnShard::TInternalPathId& p) const {
-        return THash<ui64>()(p.GetInternalPathIdValue());
+        return THash<ui64>()(p.GetRawInternalPathIdValue());
     }
 };

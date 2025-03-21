@@ -520,8 +520,8 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(ydbSchema, key);
 
         std::vector<NColumnShard::TInternalPathId> paths = { 
-            NColumnShard::TInternalPathId::FromInternalPathIdValue(1),
-            NColumnShard::TInternalPathId::FromInternalPathIdValue(2)
+            NColumnShard::TInternalPathId::FromRawInternalPathIdValue(1),
+            NColumnShard::TInternalPathId::FromRawInternalPathIdValue(2)
         };
 
         TString testBlob = MakeTestBlob();
@@ -612,7 +612,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         TTestDbWrapper db;
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(ydbSchema, key);
 
-        const auto& pathId =  NColumnShard::TInternalPathId::FromInternalPathIdValue(1);
+        const auto& pathId =  NColumnShard::TInternalPathId::FromRawInternalPathIdValue(1);
         ui32 step = 1000;
 
         TSnapshot indexSnapshot(1, 1);
@@ -710,7 +710,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         TIndexInfo tableInfo = NColumnShard::BuildTableInfo(testColumns, testKey);
         ;
 
-        const auto& pathId =  NColumnShard::TInternalPathId::FromInternalPathIdValue(1);
+        const auto& pathId =  NColumnShard::TInternalPathId::FromRawInternalPathIdValue(1);
         ui32 step = 1000;
 
         // inserts
@@ -789,7 +789,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestLogs) {
         auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
         csDefaultControllerGuard->SetOverrideTasksActualizationLag(TDuration::Zero());
 
-        const auto pathId = NColumnShard::TInternalPathId::FromInternalPathIdValue(1);
+        const auto pathId = NColumnShard::TInternalPathId::FromRawInternalPathIdValue(1);
         ui32 step = 1000;
 
         // insert

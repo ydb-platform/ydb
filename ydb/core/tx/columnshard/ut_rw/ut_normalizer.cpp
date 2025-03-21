@@ -76,7 +76,7 @@ public:
                 key.Offset = rowset.GetValue<Schema::IndexColumns::Offset>();
                 key.Size = rowset.GetValue<Schema::IndexColumns::Size>();
 
-                pathId = TInternalPathId::FromInternalPathIdValue(rowset.GetValue<Schema::IndexColumns::PathId>());
+                pathId = TInternalPathId::FromRawInternalPathIdValue(rowset.GetValue<Schema::IndexColumns::PathId>());
 
                 portion2Key.emplace_back(std::move(key));
 
@@ -140,14 +140,14 @@ public:
 
             while (!rowset.EndOfSet()) {
                 NOlap::TPortionAddress addr(
-                    TInternalPathId::FromInternalPathIdValue(rowset.GetValue<Schema::IndexPortions::PathId>()), rowset.GetValue<Schema::IndexPortions::PortionId>());
+                    TInternalPathId::FromRawInternalPathIdValue(rowset.GetValue<Schema::IndexPortions::PathId>()), rowset.GetValue<Schema::IndexPortions::PortionId>());
                 portions.emplace_back(addr);
                 UNIT_ASSERT(rowset.Next());
             }
         }
 
         for (auto&& key : portions) {
-            db.Table<Schema::IndexPortions>().Key(key.GetPathId().GetInternalPathIdValue(), key.GetPortionId()).Delete();
+            db.Table<Schema::IndexPortions>().Key(key.GetPathId().GetRawInternalPathIdValue(), key.GetPortionId()).Delete();
         }
     }
 };
@@ -218,7 +218,7 @@ public:
 
             while (!rowset.EndOfSet()) {
                 TKey key;
-                key.PathId = TInternalPathId::FromInternalPathIdValue(rowset.GetValue<Schema::TableVersionInfo::PathId>());
+                key.PathId = TInternalPathId::FromRawInternalPathIdValue(rowset.GetValue<Schema::TableVersionInfo::PathId>());
                 key.Step = rowset.GetValue<Schema::TableVersionInfo::SinceStep>();
                 key.TxId = rowset.GetValue<Schema::TableVersionInfo::SinceTxId>();
                 versions.emplace_back(key);
@@ -227,7 +227,7 @@ public:
         }
 
         for (auto&& key : versions) {
-            db.Table<Schema::TableVersionInfo>().Key(key.PathId.GetInternalPathIdValue(), key.Step, key.TxId).Delete();
+            db.Table<Schema::TableVersionInfo>().Key(key.PathId.GetRawInternalPathIdValue(), key.Step, key.TxId).Delete();
         }
     }
 };

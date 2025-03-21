@@ -60,7 +60,7 @@ TConclusion<bool> TPortionsNormalizer::DoInitImpl(const TNormalizationController
         }
 
         while (!rowset.EndOfSet()) {
-            TPortionAddress portionAddr(TInternalPathId::FromInternalPathIdValue(rowset.GetValue<Schema::IndexPortions::PathId>()), rowset.GetValue<Schema::IndexPortions::PortionId>());
+            TPortionAddress portionAddr(TInternalPathId::FromRawInternalPathIdValue(rowset.GetValue<Schema::IndexPortions::PathId>()), rowset.GetValue<Schema::IndexPortions::PortionId>());
             KnownPortions.insert(portionAddr);
             if (!rowset.Next()) {
                 return TConclusionStatus::Fail("Not ready");

@@ -785,7 +785,7 @@ struct Schema : NIceDb::Schema {
     }
 
     static void SaveTableInfo(NIceDb::TNiceDb& db, const NColumnShard::TInternalPathId pathId) {
-        db.Table<TableInfo>().Key(pathId.GetInternalPathIdValue()).Update();
+        db.Table<TableInfo>().Key(pathId.GetRawInternalPathIdValue()).Update();
     }
 
 
@@ -796,24 +796,24 @@ struct Schema : NIceDb::Schema {
     {
         TString serialized;
         Y_ABORT_UNLESS(info.SerializeToString(&serialized));
-        db.Table<TableVersionInfo>().Key(pathId.GetInternalPathIdValue(), version.GetPlanStep(), version.GetTxId()).Update(
+        db.Table<TableVersionInfo>().Key(pathId.GetRawInternalPathIdValue(), version.GetPlanStep(), version.GetTxId()).Update(
             NIceDb::TUpdate<TableVersionInfo::InfoProto>(serialized));
     }
 
     static void SaveTableDropVersion(
             NIceDb::TNiceDb& db, NColumnShard::TInternalPathId pathId, ui64 dropStep, ui64 dropTxId)
     {
-        db.Table<TableInfo>().Key(pathId.GetInternalPathIdValue()).Update(
+        db.Table<TableInfo>().Key(pathId.GetRawInternalPathIdValue()).Update(
             NIceDb::TUpdate<TableInfo::DropStep>(dropStep),
             NIceDb::TUpdate<TableInfo::DropTxId>(dropTxId));
     }
 
     static void EraseTableVersionInfo(NIceDb::TNiceDb& db, NColumnShard::TInternalPathId pathId, const NOlap::TSnapshot& version) {
-        db.Table<TableVersionInfo>().Key(pathId.GetInternalPathIdValue(), version.GetPlanStep(), version.GetTxId()).Delete();
+        db.Table<TableVersionInfo>().Key(pathId.GetRawInternalPathIdValue(), version.GetPlanStep(), version.GetTxId()).Delete();
     }
 
     static void EraseTableInfo(NIceDb::TNiceDb& db, NColumnShard::TInternalPathId pathId) {
-        db.Table<TableInfo>().Key(pathId.GetInternalPathIdValue()).Delete();
+        db.Table<TableInfo>().Key(pathId.GetRawInternalPathIdValue()).Delete();
     }
 
     static void SaveLongTxWrite(NIceDb::TNiceDb& db, const TInsertWriteId writeId, const ui32 writePartId, const NLongTxService::TLongTxId& longTxId, const std::optional<ui32> granuleShardingVersion) {
@@ -836,7 +836,7 @@ struct Schema : NIceDb::Schema {
 
     static void InsertTable_Upsert(NIceDb::TNiceDb& db, const EInsertTableIds recType, const TInsertedData& data) {
         db.Table<InsertTable>()
-            .Key((ui8)recType, 0, (ui64)data.GetInsertWriteId(), data.GetPathId().GetInternalPathIdValue(), "")
+            .Key((ui8)recType, 0, (ui64)data.GetInsertWriteId(), data.GetPathId().GetRawInternalPathIdValue(), "")
             .Update(NIceDb::TUpdate<InsertTable::BlobId>(data.GetBlobRange().GetBlobId().ToStringLegacy()),
                 NIceDb::TUpdate<InsertTable::BlobRangeOffset>(data.GetBlobRange().Offset),
                 NIceDb::TUpdate<InsertTable::InsertWriteId>((ui64)data.GetInsertWriteId()),
@@ -847,7 +847,7 @@ struct Schema : NIceDb::Schema {
 
     static void InsertTable_Upsert(NIceDb::TNiceDb& db, const TCommittedData& data) {
         db.Table<InsertTable>()
-            .Key((ui8)EInsertTableIds::Committed, data.GetSnapshot().GetPlanStep(), data.GetSnapshot().GetTxId(), data.GetPathId().GetInternalPathIdValue(),
+            .Key((ui8)EInsertTableIds::Committed, data.GetSnapshot().GetPlanStep(), data.GetSnapshot().GetTxId(), data.GetPathId().GetRawInternalPathIdValue(),
                 data.GetDedupId())
             .Update(NIceDb::TUpdate<InsertTable::BlobId>(data.GetBlobRange().GetBlobId().ToStringLegacy()),
                 NIceDb::TUpdate<InsertTable::InsertWriteId>((ui64)data.GetInsertWriteId()),
@@ -858,12 +858,12 @@ struct Schema : NIceDb::Schema {
     }
 
     static void InsertTable_Erase(NIceDb::TNiceDb& db, EInsertTableIds recType, const TInsertedData& data) {
-        db.Table<InsertTable>().Key((ui8)recType, 0, (ui64)data.GetInsertWriteId(), data.GetPathId().GetInternalPathIdValue(), "").Delete();
+        db.Table<InsertTable>().Key((ui8)recType, 0, (ui64)data.GetInsertWriteId(), data.GetPathId().GetRawInternalPathIdValue(), "").Delete();
     }
 
     static void InsertTable_Erase(NIceDb::TNiceDb& db, const TCommittedData& data) {
         db.Table<InsertTable>()
-            .Key((ui8)EInsertTableIds::Committed, data.GetSnapshot().GetPlanStep(), data.GetSnapshot().GetTxId(), data.GetPathId().GetInternalPathIdValue(), data.GetDedupId())
+            .Key((ui8)EInsertTableIds::Committed, data.GetSnapshot().GetPlanStep(), data.GetSnapshot().GetTxId(), data.GetPathId().GetRawInternalPathIdValue(), data.GetDedupId())
             .Delete();
     }
 
@@ -935,7 +935,7 @@ private:
 public:
     template <class TSource>
     TPortionLoadContext(const TSource& rowset) {
-        PathId = NColumnShard::TInternalPathId::FromInternalPathIdValue(rowset.template GetValue<NColumnShard::Schema::IndexPortions::PathId>());
+        PathId = NColumnShard::TInternalPathId::FromRawInternalPathIdValue(rowset.template GetValue<NColumnShard::Schema::IndexPortions::PathId>());
         PortionId = rowset.template GetValue<NColumnShard::Schema::IndexPortions::PortionId>();
         const TString metadata = rowset.template GetValue<NColumnShard::Schema::IndexPortions::Metadata>();
         AFL_VERIFY(rowset.template HaveValue<NColumnShard::Schema::IndexPortions::MinSnapshotPlanStep>() == rowset.template HaveValue<NColumnShard::Schema::IndexPortions::MinSnapshotTxId>());
@@ -995,7 +995,7 @@ public:
         BlobRange.BlobId = NOlap::TUnifiedBlobId(dsGroupSelector->GetGroup(logoBlobId), logoBlobId);
         BlobRange.Offset = rowset.template GetValue<NColumnShard::Schema::IndexColumns::Offset>();
         BlobRange.Size = rowset.template GetValue<NColumnShard::Schema::IndexColumns::Size>();
-        PathId = NColumnShard::TInternalPathId::FromInternalPathIdValue(rowset.template GetValue<NColumnShard::Schema::IndexColumns::PathId>());
+        PathId = NColumnShard::TInternalPathId::FromRawInternalPathIdValue(rowset.template GetValue<NColumnShard::Schema::IndexColumns::PathId>());
         PortionId = rowset.template GetValue<NColumnShard::Schema::IndexColumns::Portion>();
         AFL_VERIFY(BlobRange.BlobId.IsValid() && BlobRange.Size)("event", "incorrect blob")("blob", BlobRange.ToString());
 
@@ -1052,7 +1052,7 @@ public:
               rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::Size>())
     {
         AFL_VERIFY(Address.GetColumnId())("event", "incorrect address")("address", Address.DebugString());
-        PathId = NColumnShard::TInternalPathId::FromInternalPathIdValue(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::PathId>());
+        PathId = NColumnShard::TInternalPathId::FromRawInternalPathIdValue(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::PathId>());
         PortionId = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::PortionId>();
         const TString metadata = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV1::Metadata>();
         AFL_VERIFY(MetaProto.ParseFromArray(metadata.data(), metadata.size()))("event", "cannot parse metadata as protobuf");
@@ -1068,7 +1068,7 @@ YDB_READONLY(ui64, PortionId, 0);
 public:
     template <class TSource>
     TColumnChunkLoadContextV2(const TSource& rowset) {
-        PathId = NColumnShard::TInternalPathId::FromInternalPathIdValue(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PathId>());
+        PathId = NColumnShard::TInternalPathId::FromRawInternalPathIdValue(rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PathId>());
         PortionId = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::PortionId>();
         MetadataProto = rowset.template GetValue<NColumnShard::Schema::IndexColumnsV2::Metadata>();
     }
@@ -1136,7 +1136,7 @@ public:
 
     template <class TSource>
     TIndexChunkLoadContext(const TSource& rowset, const IBlobGroupSelector* dsGroupSelector)
-        : PathId(NColumnShard::TInternalPathId::FromInternalPathIdValue(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::PathId>()))
+        : PathId(NColumnShard::TInternalPathId::FromRawInternalPathIdValue(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::PathId>()))
         , PortionId(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::PortionId>())
         , Address(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::IndexId>(), rowset.template GetValue<NColumnShard::Schema::IndexIndexes::ChunkIdx>())
         , RecordsCount(rowset.template GetValue<NColumnShard::Schema::IndexIndexes::RecordsCount>())
@@ -1218,14 +1218,14 @@ public:
 
     void Remove(NIceDb::TNiceDb& db) const {
         AFL_VERIFY(ParsedFlag);
-        db.Table<NColumnShard::Schema::InsertTable>().Key((ui8)RecType, PlanStep, WriteTxId, PathId.GetInternalPathIdValue(), DedupId).Delete();
+        db.Table<NColumnShard::Schema::InsertTable>().Key((ui8)RecType, PlanStep, WriteTxId, PathId.GetRawInternalPathIdValue(), DedupId).Delete();
     }
 
     void Upsert(NIceDb::TNiceDb& db) const {
         AFL_VERIFY(ParsedFlag);
         using namespace NColumnShard;
         db.Table<Schema::InsertTable>()
-            .Key((ui8)RecType, PlanStep, WriteTxId, PathId.GetInternalPathIdValue(), DedupId)
+            .Key((ui8)RecType, PlanStep, WriteTxId, PathId.GetRawInternalPathIdValue(), DedupId)
             .Update(NIceDb::TUpdate<Schema::InsertTable::BlobId>(BlobIdString),
                 NIceDb::TUpdate<Schema::InsertTable::BlobRangeOffset>(RangeOffset),
                 NIceDb::TUpdate<Schema::InsertTable::BlobRangeSize>(RangeSize), NIceDb::TUpdate<Schema::InsertTable::Meta>(MetadataString),
@@ -1243,7 +1243,7 @@ public:
         AFL_VERIFY(WriteTxId);
         InsertWriteId = (TInsertWriteId)rowset.template GetValueOrDefault<Schema::InsertTable::InsertWriteId>(WriteTxId);
 
-        PathId = NColumnShard::TInternalPathId::FromInternalPathIdValue(rowset.template GetValue<Schema::InsertTable::PathId>());
+        PathId = NColumnShard::TInternalPathId::FromRawInternalPathIdValue(rowset.template GetValue<Schema::InsertTable::PathId>());
         DedupId = rowset.template GetValue<Schema::InsertTable::DedupId>();
         SchemaVersion = rowset.template GetValueOrDefault<Schema::InsertTable::SchemaVersion>(0);
         BlobIdString = rowset.template GetValue<Schema::InsertTable::BlobId>();

@@ -24,8 +24,8 @@ public:
         NIceDb::TNiceDb db(txc.DB);
 
         for (auto&& pathInfo: PathIds) {
-            db.Table<Schema::TableVersionInfo>().Key(pathInfo.PathId.GetInternalPathIdValue(), pathInfo.Step, pathInfo.TxId).Delete();
-            db.Table<Schema::TableInfo>().Key(pathInfo.PathId.GetInternalPathIdValue()).Delete();
+            db.Table<Schema::TableVersionInfo>().Key(pathInfo.PathId.GetRawInternalPathIdValue(), pathInfo.Step, pathInfo.TxId).Delete();
+            db.Table<Schema::TableInfo>().Key(pathInfo.PathId.GetRawInternalPathIdValue()).Delete();
         }
         return true;
     }
@@ -76,7 +76,7 @@ public:
                 const NOlap::TSnapshot dropSnapshot(rowset.GetValue<Schema::TableInfo::DropStep>(), rowset.GetValue<Schema::TableInfo::DropTxId>());
 
                 if (dropSnapshot.Valid() && !notEmptyPaths.contains(pathId)) {
-                    droppedTables.emplace(TInternalPathId::FromInternalPathIdValue(pathId));
+                    droppedTables.emplace(TInternalPathId::FromRawInternalPathIdValue(pathId));
                 }
 
                 if (!rowset.Next()) {
@@ -97,7 +97,7 @@ public:
             std::vector<TPathInfo> toRemove;
             while (!rowset.EndOfSet()) {
                 TPathInfo pathInfo;
-                pathInfo.PathId = TInternalPathId::FromInternalPathIdValue(rowset.GetValue<Schema::TableVersionInfo::PathId>());
+                pathInfo.PathId = TInternalPathId::FromRawInternalPathIdValue(rowset.GetValue<Schema::TableVersionInfo::PathId>());
                 if (droppedTables.contains(pathInfo.PathId)) {
                     pathInfo.Step = rowset.GetValue<Schema::TableVersionInfo::SinceStep>();
                     pathInfo.TxId = rowset.GetValue<Schema::TableVersionInfo::SinceTxId>();

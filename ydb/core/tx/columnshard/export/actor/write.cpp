@@ -16,8 +16,8 @@ TWriteController::TWriteController(const TActorId& exportActorId, const std::vec
     : ExportActorId(exportActorId) 
 {
     for (auto&& i : blobsToWrite) {
-        auto blobId = TUnifiedBlobId((ui64)tabletId, (pathId.GetInternalPathIdValue() << 24) >> 40, pathId.GetInternalPathIdValue() >> 40, cursor.GetChunkIdx(), pathId.GetInternalPathIdValue() & Max<ui8>(), Max<ui32>(), i.size());
-        AFL_VERIFY((((ui64)blobId.GetLogoBlobId().Step() >> 8) << 40) + ((ui64)blobId.GetLogoBlobId().Generation() << 8) + blobId.GetLogoBlobId().Channel() == pathId.GetInternalPathIdValue());
+        auto blobId = TUnifiedBlobId((ui64)tabletId, (pathId.GetRawInternalPathIdValue() << 24) >> 40, pathId.GetRawInternalPathIdValue() >> 40, cursor.GetChunkIdx(), pathId.GetRawInternalPathIdValue() & Max<ui8>(), Max<ui32>(), i.size());
+        AFL_VERIFY((((ui64)blobId.GetLogoBlobId().Step() >> 8) << 40) + ((ui64)blobId.GetLogoBlobId().Generation() << 8) + blobId.GetLogoBlobId().Channel() == pathId.GetRawInternalPathIdValue());
         auto info = NOlap::TBlobWriteInfo::BuildWriteTask(i, writeAction, blobId);
         AddWriteTask(std::move(info));
     }

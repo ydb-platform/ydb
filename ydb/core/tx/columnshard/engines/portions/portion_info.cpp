@@ -55,7 +55,7 @@ ui64 TPortionInfo::GetApproxChunksCount(const ui32 schemaColumnsCount) const {
 }
 
 void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const {
-    proto.SetPathId(PathId.GetInternalPathIdValue());
+    proto.SetPathId(PathId.GetRawInternalPathIdValue());
     proto.SetPortionId(PortionId);
     proto.SetSchemaVersion(GetSchemaVersionVerified());
     *proto.MutableMinSnapshotDeprecated() = MinSnapshotDeprecated.SerializeToProto();
@@ -67,7 +67,7 @@ void TPortionInfo::SerializeToProto(NKikimrColumnShardDataSharingProto::TPortion
 }
 
 TConclusionStatus TPortionInfo::DeserializeFromProto(const NKikimrColumnShardDataSharingProto::TPortionInfo& proto) {
-    PathId = NColumnShard::TInternalPathId::FromInternalPathIdValue(proto.GetPathId());
+    PathId = NColumnShard::TInternalPathId::FromRawInternalPathIdValue(proto.GetPathId());
     PortionId = proto.GetPortionId();
     SchemaVersion = proto.GetSchemaVersion();
     {

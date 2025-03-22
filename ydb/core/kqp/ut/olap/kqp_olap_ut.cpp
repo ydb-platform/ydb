@@ -3356,5 +3356,33 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
             CompareYson("[[[\"aa\"];10u;\"n1\"];[[\"cc\"];30u;\"n3\"]]", FormatResultSetYson(result.GetResultSet(0)));
         }
     }
+
+    Y_UNIT_TEST(CountWithPredicate) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        auto runnerSettings = TKikimrSettings().SetAppConfig(appConfig).SetWithSampleTables(true);
+
+        TTestHelper testHelper(runnerSettings);
+        auto client = testHelper.GetKikimr().GetQueryClient();
+
+        TVector<TTestHelper::TColumnSchema> schema = {
+            TTestHelper::TColumnSchema().SetName("time").SetType(NScheme::NTypeIds::Timestamp).SetNullable(false),
+            TTestHelper::TColumnSchema().SetName("class").SetType(NScheme::NTypeIds::Utf8).SetNullable(false),
+        };
+
+        TTestHelper::TColumnTable testTable;
+        testTable.SetName("/Root/ColumnTableTest").SetPrimaryKey({ "time", "class" }).SetSchema(schema);
+        testHelper.CreateTable(testTable);
+
+        auto ts = TInstant::Now();
+        {
+            TTestHelper::TUpdatesBuilder tableInserter(testTable.GetArrowSchema(schema));
+            tableInserter.AddRow().Add(100).Add("test");
+            tableInserter.AddRow().Add(ts.MicroSeconds() * 2).Add("test");
+            testHelper.BulkUpsert(testTable, tableInserter);
+        }
+
+        testHelper.ReadData("SELECT COUNT(*) FROM `/Root/ColumnTableTest` WHERE time > CurrentUtcTimestamp()", "[[1u]]");
+    }
 }
 }

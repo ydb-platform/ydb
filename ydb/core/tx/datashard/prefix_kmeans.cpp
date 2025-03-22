@@ -67,18 +67,19 @@ protected:
     std::vector<ui64> ClusterSizes;
 
     // Upload
-    std::shared_ptr<NTxProxy::TUploadTypes> InitTargetTypes;
-    std::shared_ptr<NTxProxy::TUploadTypes> InitNextTypes;
+    std::shared_ptr<NTxProxy::TUploadTypes> LevelTypes;
+    std::shared_ptr<NTxProxy::TUploadTypes> PostingTypes;
+    std::shared_ptr<NTxProxy::TUploadTypes> PrefixTypes;
+    std::shared_ptr<NTxProxy::TUploadTypes> UploadTypes;
 
-    std::shared_ptr<NTxProxy::TUploadTypes> TargetTypes;
-    std::shared_ptr<NTxProxy::TUploadTypes> NextTypes;
+    const TString LevelTable;
+    const TString PostingTable;
+    const TString PrefixTable;
+    TString UploadTable;
 
-    const TString TargetTable;
-    const TString NextTable;
-    TString CurrTable;
-
-    TBufferData ReadBuf;
-    TBufferData WriteBuf;
+    TBufferData PostingBuf;
+    TBufferData PrefixBuf;
+    TBufferData UploadBuf;
 
     NTable::TPos EmbeddingPos = 0;
     NTable::TPos DataPos = 1;
@@ -100,7 +101,7 @@ protected:
     TActorId ResponseActorId;
     TAutoPtr<TEvDataShard::TEvPrefixKMeansResponse> Response;
 
-    ui32 PrefixColulmns;
+    ui32 PrefixColumns;
     TSerializedCellVec Key;
     bool HasNextKey = false;
 
@@ -125,30 +126,50 @@ public:
         , Lead{std::move(lead)}
         , BuildId{request.GetId()}
         , Rng{request.GetSeed()}
-        , TargetTable{request.GetLevelName()}
-        , NextTable{request.GetPostingName()}
+        , LevelTable{request.GetLevelName()}
+        , PostingTable{request.GetPostingName()}
+        , PrefixTable{request.GetPrefixName()}
         , ResponseActorId{responseActorId}
         , Response{std::move(response)}
-        , PrefixColulmns{request.GetPrefixColumns()}
+        , PrefixColumns{request.GetPrefixColumns()}
     {
         const auto& embedding = request.GetEmbeddingColumn();
         const auto& data = request.GetDataColumns();
         // scan tags
         UploadScan = MakeUploadTags(table, embedding, data, EmbeddingPos, DataPos, KMeansScan);
         // upload types
-        if (Ydb::Type type; State <= EState::KMEANS) {
-            TargetTypes = std::make_shared<NTxProxy::TUploadTypes>(3);
+        {
+            Ydb::Type type;
+            LevelTypes = std::make_shared<NTxProxy::TUploadTypes>(3);
             type.set_type_id(NTableIndex::ClusterIdType);
-            (*TargetTypes)[0] = {NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type};
-            (*TargetTypes)[1] = {NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, type};
+            (*LevelTypes)[0] = {NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type};
+            (*LevelTypes)[1] = {NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, type};
             type.set_type_id(Ydb::Type::STRING);
-            (*TargetTypes)[2] = {NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn, type};
+            (*LevelTypes)[2] = {NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn, type};
         }
-        NextTypes = MakeUploadTypes(table, UploadState, embedding, data, PrefixColulmns);
+        PostingTypes = MakeUploadTypes(table, UploadState, embedding, data, PrefixColumns);
+        {
+            auto types = GetAllTypes(table);
 
-        InitTargetTypes = TargetTypes;
-        InitNextTypes = NextTypes;
-        CurrTable = TargetTable;
+            PrefixTypes = std::make_shared<NTxProxy::TUploadTypes>();
+            PrefixTypes->reserve(1 + PrefixColumns);
+
+            Ydb::Type type;
+            type.set_type_id(NTableIndex::ClusterIdType);
+            PrefixTypes->emplace_back(NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, type);
+
+            auto addType = [&](const auto& column) {
+                auto it = types.find(column);
+                if (it != types.end()) {
+                    NScheme::ProtoFromTypeInfo(it->second, type);
+                    PrefixTypes->emplace_back(it->first, type);
+                    types.erase(it);
+                }
+            };
+            for (const auto& column : table.KeyColumnIds | std::views::take(PrefixColumns)) {
+                addType(table.Columns.at(column).Name);
+            }
+        }
     }
 
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept final
@@ -197,18 +218,25 @@ public:
     TString Debug() const
     {
         return TStringBuilder() << " TPrefixKMeansScan Id: " << BuildId << " Parent: " << Parent << " Child: " << Child
-            << " CurrTable: " << CurrTable << " K: " << K << " Clusters: " << Clusters.size()
+            << " UploadTable: " << UploadTable << " K: " << K << " Clusters: " << Clusters.size()
             << " State: " << State << " Round: " << Round << " / " << MaxRounds
-            << " ReadBuf size: " << ReadBuf.Size() << " WriteBuf size: " << WriteBuf.Size() << " ";
+            << " PostingBuf size: " << PostingBuf.Size() << " PrefixBuf size: " << PrefixBuf.Size() << " UploadBuf size: " << UploadBuf.Size() << " ";
     }
 
     EScan PageFault() noexcept final
     {
         LOG_T("PageFault " << Debug());
 
-        if (!ReadBuf.IsEmpty() && WriteBuf.IsEmpty()) {
-            ReadBuf.FlushTo(WriteBuf);
-            Upload(false);
+        if (!UploadBuf.IsEmpty()) {
+            return EScan::Feed;
+        }
+
+        if (!PostingBuf.IsEmpty()) {
+            PostingBuf.FlushTo(UploadBuf);
+            InitUpload(PostingTable, PostingTypes);
+        } else if (!PrefixBuf.IsEmpty()) {
+            PrefixBuf.FlushTo(UploadBuf);
+            InitUpload(PrefixTable, PrefixTypes);
         }
 
         return EScan::Feed;
@@ -230,8 +258,8 @@ protected:
     {
         LOG_T("Retry upload " << Debug());
 
-        if (!WriteBuf.IsEmpty()) {
-            Upload(true);
+        if (!UploadBuf.IsEmpty()) {
+            RetryUpload();
         }
     }
 
@@ -251,12 +279,15 @@ protected:
         UploadStatus.StatusCode = ev->Get()->Status;
         UploadStatus.Issues = ev->Get()->Issues;
         if (UploadStatus.IsSuccess()) {
-            UploadRows += WriteBuf.GetRows();
-            UploadBytes += WriteBuf.GetBytes();
-            WriteBuf.Clear();
-            if (!ReadBuf.IsEmpty() && ReadBuf.IsReachLimits(Limits)) {
-                ReadBuf.FlushTo(WriteBuf);
-                Upload(false);
+            UploadRows += UploadBuf.GetRows();
+            UploadBytes += UploadBuf.GetBytes();
+            UploadBuf.Clear();
+            if (PostingBuf.IsReachLimits(Limits)) {
+                PostingBuf.FlushTo(UploadBuf);
+                InitUpload(PostingTable, PostingTypes);
+            } else if (PrefixBuf.IsReachLimits(Limits)) {
+                PrefixBuf.FlushTo(UploadBuf);
+                InitUpload(PrefixTable, PrefixTypes);
             }
 
             Driver->Touch(EScan::Feed);
@@ -277,14 +308,20 @@ protected:
 
     EScan FeedUpload()
     {
-        if (!ReadBuf.IsReachLimits(Limits)) {
+        if (!PostingBuf.IsReachLimits(Limits) && !PrefixBuf.IsReachLimits(Limits)) {
             return EScan::Feed;
         }
-        if (!WriteBuf.IsEmpty()) {
+        if (!UploadBuf.IsEmpty()) {
             return EScan::Sleep;
         }
-        ReadBuf.FlushTo(WriteBuf);
-        Upload(false);
+        if (PostingBuf.IsReachLimits(Limits)) {
+            PostingBuf.FlushTo(UploadBuf);
+            InitUpload(PostingTable, PostingTypes);
+        } else {
+            Y_ASSERT(PrefixBuf.IsReachLimits(Limits));
+            PrefixBuf.FlushTo(UploadBuf);
+            InitUpload(PrefixTable, PrefixTypes);
+        }
         return EScan::Feed;
     }
 
@@ -293,39 +330,44 @@ protected:
         return Rng.GenRand64();
     }
 
-    void Upload(bool isRetry)
+    void UploadImpl()
     {
-        if (isRetry) {
-            ++RetryCount;
-        } else {
-            RetryCount = 0;
-            if (State != EState::KMEANS && NextTypes) {
-                TargetTypes = std::exchange(NextTypes, {});
-                CurrTable = NextTable;
-            }
-        }
-
+        Y_ASSERT(!UploadBuf.IsEmpty());
         auto actor = NTxProxy::CreateUploadRowsInternal(
-            this->SelfId(), CurrTable, TargetTypes, WriteBuf.GetRowsData(),
+            this->SelfId(), UploadTable, UploadTypes, UploadBuf.GetRowsData(),
             NTxProxy::EUploadRowsMode::WriteToTableShadow, true /*writeToPrivateTable*/);
 
         Uploader = this->Register(actor);
     }
 
+    void InitUpload(std::string_view table, std::shared_ptr<NTxProxy::TUploadTypes> types)
+    {
+        RetryCount = 0;
+        UploadTable = table;
+        UploadTypes = std::move(types);
+        UploadImpl();
+    }
+
+    void RetryUpload()
+    {
+        ++RetryCount;
+        UploadImpl();
+    }
+
+
     void UploadSample()
     {
-        Y_ASSERT(ReadBuf.IsEmpty());
-        Y_ASSERT(WriteBuf.IsEmpty());
+        Y_ASSERT(UploadBuf.IsEmpty());
         std::array<TCell, 2> pk;
         std::array<TCell, 1> data;
         for (NTable::TPos pos = 0; const auto& row : Clusters) {
             pk[0] = TCell::Make(Parent);
             pk[1] = TCell::Make(Child + pos);
             data[0] = TCell{row};
-            WriteBuf.AddRow({}, TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
+            UploadBuf.AddRow({}, TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
             ++pos;
         }
-        Upload(false);
+        InitUpload(LevelTable, LevelTypes);
     }
 };
 
@@ -356,15 +398,12 @@ class TPrefixKMeansScan final: public TPrefixKMeansScanBase, private TCalculatio
         // TODO(mbkkt) Upper or Lower doesn't matter here, because we seek to (prefix, inf)
         // so we can choose Lower if it's faster.
         // Exact seek with Lower also possible but needs to rewrite some code in Feed
-        Lead.To(Key.GetCells().subspan(0, PrefixColulmns), NTable::ESeek::Upper);
+        Lead.To(Key.GetCells().subspan(0, PrefixColumns), NTable::ESeek::Upper);
         Key = {};
         MaxProbability = std::numeric_limits<ui64>::max();
         MaxRows.clear();
         Clusters.clear();
         ClusterSizes.clear();
-        TargetTypes = InitTargetTypes;
-        NextTypes = InitNextTypes;
-        CurrTable = TargetTable;
         HasNextKey = false;
         AggregatedClusters.clear();
         return true;
@@ -385,17 +424,24 @@ public:
         ui64 zeroSeq = 0;
         while (true) {
             if (State == UploadState) {
-                if (!WriteBuf.IsEmpty()) {
-                    return EScan::Sleep;
-                }
-                if (!ReadBuf.IsEmpty()) {
-                    ReadBuf.FlushTo(WriteBuf);
-                    Upload(false);
+                // TODO: it's a little suboptimal to wait here
+                // better is wait after MoveToNextKey but before UploadSample
+                if (!UploadBuf.IsEmpty()) {
                     return EScan::Sleep;
                 }
                 if (MoveToNextKey()) {
                     zeroSeq = seq;
                     continue;
+                }
+                if (!PostingBuf.IsEmpty()) {
+                    PostingBuf.FlushTo(UploadBuf);
+                    InitUpload(PostingTable, PostingTypes);
+                    return EScan::Sleep;
+                }
+                if (!PrefixBuf.IsEmpty()) {
+                    PrefixBuf.FlushTo(UploadBuf);
+                    InitUpload(PrefixTable, PrefixTypes);
+                    return EScan::Sleep;
                 }
                 return EScan::Final;
             }
@@ -439,7 +485,13 @@ public:
         LOG_T("Feed " << Debug());
         if (!Key) {
             Key = TSerializedCellVec{key};
-        } else if (!TCellVectorsEquals{}(Key.GetCells().subspan(0, PrefixColulmns), key.subspan(0, PrefixColulmns))) {
+
+            auto pk = TSerializedCellVec::Serialize(Key.GetCells().subspan(0, PrefixColumns));
+            std::array<TCell, 1> cells;
+            cells[0] = TCell::Make(Parent);
+            TSerializedCellVec::UnsafeAppendCells(cells, pk);
+            PrefixBuf.AddRow({}, TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize({}));
+        } else if (!TCellVectorsEquals{}(Key.GetCells().subspan(0, PrefixColumns), key.subspan(0, PrefixColumns))) {
             HasNextKey = true;
             return EScan::Reset;
         }
@@ -581,7 +633,7 @@ private:
         if (pos > K) {
             return EScan::Feed;
         }
-        AddRowBuild2Build(ReadBuf, Child + pos, key, row, PrefixColulmns);
+        AddRowBuild2Build(PostingBuf, Child + pos, key, row, PrefixColumns);
         return FeedUpload();
     }
 
@@ -591,7 +643,7 @@ private:
         if (pos > K) {
             return EScan::Feed;
         }
-        AddRowBuild2Posting(ReadBuf, Child + pos, key, row, DataPos, PrefixColulmns);
+        AddRowBuild2Posting(PostingBuf, Child + pos, key, row, DataPos, PrefixColumns);
         return FeedUpload();
     }
 };

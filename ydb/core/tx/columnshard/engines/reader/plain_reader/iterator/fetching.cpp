@@ -109,7 +109,6 @@ TConclusion<bool> TBuildFakeSpec::DoExecuteInplace(const std::shared_ptr<IDataSo
     }
     source->MutableStageData().AddBatch(std::make_shared<NArrow::TGeneralContainer>(
         arrow::RecordBatch::Make(TIndexInfo::ArrowSchemaSnapshot(), source->GetRecordsCount(), columns)));
-    source->BuildStageResult(source);
     return true;
 }
 

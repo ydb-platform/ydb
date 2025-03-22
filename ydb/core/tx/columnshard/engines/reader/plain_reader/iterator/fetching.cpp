@@ -98,7 +98,6 @@ TConclusion<bool> TBuildFakeSpec::DoExecuteInplace(const std::shared_ptr<IDataSo
             std::make_shared<NArrow::NAccessor::TTrivialArray>(
                 NArrow::TThreadSimpleArraysCache::GetConst(f->type(), NArrow::DefaultScalar(f->type()), source->GetRecordsCount())), true);
     }
-    source->BuildStageResult(source);
     return true;
 }
 

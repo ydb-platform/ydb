@@ -439,6 +439,18 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
         auto columnIt = metadata.Columns.find(name);
         Y_ENSURE(columnIt != metadata.Columns.end());
 
+        if (columnIt->second.IsDefaultFromSequence()) {
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Default value from sequence specified for column `" << columnIt->second.Name << "` is not supported in cases of column tables";
+            return false;
+        }
+
+        if (columnIt->second.IsDefaultFromLiteral()) {
+            code = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Default value from literal specified for column `" << columnIt->second.Name << "` is not supported in cases of column tables";
+            return false;
+        }
+
         NKikimrSchemeOp::TOlapColumnDescription& columnDesc = *schema.AddColumns();
         columnDesc.SetName(columnIt->second.Name);
         columnDesc.SetType(columnIt->second.Type);

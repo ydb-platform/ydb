@@ -111,7 +111,6 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/bootstrapper.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/change_exchange.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/channel_purpose.proto
-  ${PROJECT_SOURCE_DIR}/ydb/core/protos/checksum.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/cms.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/compaction.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/compile_service_config.proto
@@ -148,6 +147,7 @@ target_proto_messages(ydb-core-protos PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/database_basic_sausage_metainfo.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/datashard_config.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/datashard_load.proto
+  ${PROJECT_SOURCE_DIR}/ydb/core/protos/datashard_backup.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/db_metadata_cache.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/drivemodel.proto
   ${PROJECT_SOURCE_DIR}/ydb/core/protos/export.proto
@@ -303,9 +303,6 @@ target_sources(ydb-core-protos PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/core/protos/channel_purpose.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/channel_purpose.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/channel_purpose.grpc.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/core/protos/checksum.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/core/protos/checksum.deps.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/core/protos/checksum.grpc.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/cms.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/cms.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/cms.grpc.pb.h
@@ -414,6 +411,9 @@ target_sources(ydb-core-protos PRIVATE
   ${PROJECT_BINARY_DIR}/ydb/core/protos/datashard_load.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/datashard_load.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/datashard_load.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/datashard_backup.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/datashard_backup.deps.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/core/protos/datashard_backup.grpc.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/db_metadata_cache.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/db_metadata_cache.deps.pb.h
   ${PROJECT_BINARY_DIR}/ydb/core/protos/db_metadata_cache.grpc.pb.h

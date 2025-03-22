@@ -300,6 +300,8 @@ ORDER BY IntervalEnd desc, CPUCores desc
 
 * `"YYYY-MM-DDTHH:MM:SS.UUUUUUZ"` — время в зоне UTC 0 (`YYYY` — год, `MM` — месяц, `DD` — число, `hh` — часы, `mm` — минуты, `ss` — секунды, `uuuuuu` — микросекунды). Например, `"2023-01-26T13:00:00.000000Z"`.
 
+{% if feature_resource_pool %}
+
 ## Информация о пулах ресурсов {#resource_pools}
 
 Системное представление `resource_pools` содержит информацию о [настройках](../yql/reference/syntax/create-resource-pool.md#parameters) [пулов ресурсов](../concepts/glossary.md#resource-pool).
@@ -341,6 +343,10 @@ WHERE Name = "default";
 --- | --- | --- | --- | --- | --- | --- | --- | ---
 1 | default | -1 | -1 | -1 | -1 | -1 | -1 | -1
 
+{% endif %}
+
+{% if feature_resource_pool_classifier %}
+
 ## Информация о классификаторах пулов ресурсов {#resource_pools_classifiers}
 
 Системное представление `resource_pools_classifiers` содержит информацию о [настройках](../yql/reference/syntax/create-resource-pool-classifier.md#parameters) [классификаторов пулов ресурсов](../concepts/glossary.md#resource-pool-classifier).
@@ -373,3 +379,5 @@ WHERE Name = "olap";
 \# | Name | Rank | MemberName | ResourcePool
 --- | --- | --- | --- | ---
 1 | olap | 1000 | olap_group@builtin | olap
+
+{% endif %}

@@ -86,6 +86,10 @@ namespace NKikimr {
             return TRcBuf(TRcBuf::Piece, Data.data() + offset, len, Data);
         }
 
+        void Move(ui32 offset) {
+            Data = TRcBuf(TRcBuf::Piece, Data.data() + offset, Data.size() - offset, Data);
+        }
+
         template<typename T>
         const T *DataPtr(ui32 offset, ui32 len = sizeof(T)) const {
             Y_VERIFY_S(IsReadable(offset, len), "returned data is corrupt (or was never written) at offset# " << offset

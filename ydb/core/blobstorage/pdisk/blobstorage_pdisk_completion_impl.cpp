@@ -318,6 +318,8 @@ void TCompletionChunkRead::Exec(TActorSystem *actorSystem) {
     auto execSpan = Span.CreateChild(TWilson::PDiskDetailed, "PDisk.CompletionChunkRead.Exec");
     THolder<TEvChunkReadResult> result = MakeHolder<TEvChunkReadResult>(NKikimrProto::OK,
         Read->ChunkIdx, Read->Offset, Read->Cookie, PDisk->GetStatusFlags(Read->Owner, Read->OwnerGroupType), "");
+
+    CommonBuffer.Move(Read->Offset % 4096);
     result->Data = std::move(CommonBuffer);
     CommonBuffer.Clear();
     //Y_VERIFY(result->Data.IsDetached());

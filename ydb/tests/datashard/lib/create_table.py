@@ -86,7 +86,7 @@ class TestCreateTables():
             for type_name in columns[prefix]:
                 if prefix != "ttl_" or type_name != "":
                     sql_create += f"{prefix}{cleanup_type_name(type_name)} {type_name}, "
-        sql_create += """PRIMARY KEY( """
+        sql_create += "PRIMARY KEY( "
         for prefix in pk_colums.keys():
             for type_name in pk_colums[prefix]:
                 if prefix != "ttl_" or type_name != "":
@@ -101,7 +101,7 @@ class TestCreateTables():
         return sql_create
 
     def create_ttl(self, ttl: str, inteval: dict[str, str], time: str, table_name: str) -> str:
-        sql_ttl = f""" ALTER TABLE {table_name} SET ( TTL = """
+        sql_ttl = f" ALTER TABLE {table_name} SET ( TTL = "
         lenght_inteval = len(inteval)
         count = 1
         for pt in inteval.keys():

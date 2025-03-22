@@ -1,12 +1,12 @@
 from ydb.tests.stress.oltp_workload.workload import cleanup_type_name
 
 ttl_types = {
+    "DyNumber": "CAST('3742656{:03}' AS DyNumber)",
+    "Uint32": "CAST(3742656{:03} AS Uint32)",
+    "Uint64": "CAST(3742656{:03} AS Uint64)",
     "Date": "CAST('2{:03}-01-01' AS Date)",
     "Datetime": "CAST('2{:03}-10-02T11:00:00Z' AS Datetime)",
     "Timestamp": "CAST(26962{:03}00000000 AS Timestamp)",
-    "Uint32": "CAST({}0 AS Uint32)",
-    "Uint64": "CAST({}0 AS Uint64)",
-    "DyNumber": "CAST('{}E1' AS DyNumber)",
 }
 
 # Отсюда убраны uint16 и int16 потому что при поиске по данным индексам выдает ошибку
@@ -80,30 +80,33 @@ index_sync = ["SYNC", "ASYNC"]
 
 
 class TestCreateTables():
-    def create_table(self, table_name: str, columns: dict[str, dict[str]], unique: str, sync: str) -> str:
+    def create_table(self, table_name: str, columns: dict[str, dict[str]], pk_colums: dict[str, dict[str]], index_colums: dict[str, dict[str]], unique: str, sync: str) -> str:
         sql_create = f"CREATE TABLE {table_name} ("
         for prefix in columns.keys():
             for type_name in columns[prefix]:
-                if prefix != "ttl_" and type_name != "":
+                if prefix != "ttl_" or type_name != "":
                     sql_create += f"{prefix}{cleanup_type_name(type_name)} {type_name}, "
-        sql_create += f"""PRIMARY KEY(
-                    {", ".join(["pk_" + cleanup_type_name(type_name) for type_name in columns["pk_"]])}),
-                    {", ".join([f"INDEX idx_{cleanup_type_name(type_name)} GLOBAL {unique} {sync} ON (col_index_{cleanup_type_name(type_name)})" for type_name in columns["col_index_"]] if len(columns["col_index_"]) != 0 else "")}
-            )"""
+        sql_create += """PRIMARY KEY( """
+        for prefix in pk_colums.keys():
+            for type_name in pk_colums[prefix]:
+                if prefix != "ttl_" or type_name != "":
+                    sql_create += f"{prefix}{cleanup_type_name(type_name)},"
+        sql_create = sql_create[:-1]
+        sql_create += ")"
+        for prefix in index_colums.keys():
+            for type_name in index_colums[prefix]:
+                if prefix != "ttl_" or type_name != "":
+                    sql_create += f", INDEX idx_{prefix}{cleanup_type_name(type_name)} GLOBAL {unique} {sync} ON ({prefix}{cleanup_type_name(type_name)})"
+        sql_create += ")"
         return sql_create
 
     def create_ttl(self, ttl: str, inteval: dict[str, str], time: str, table_name: str) -> str:
-        sql_ttl = f"""
-        ALTER TABLE {table_name} SET ( TTL =
-        """
+        sql_ttl = f""" ALTER TABLE {table_name} SET ( TTL = """
         lenght_inteval = len(inteval)
         count = 1
         for pt in inteval.keys():
-            sql_ttl += f"""
-                Interval("{pt}" {inteval[pt] if inteval[pt] == "" or inteval[pt] == "DELETE" else f"TO EXTERNAL DATA SOURCE {inteval[pt]}"}
-                {", " if count != lenght_inteval else " "}
-            """
-        sql_ttl += f"""
-            ON {ttl} {f"AS {time}" if time != "" else ""} );
-        """
+            sql_ttl += f"""Interval("{pt}") {inteval[pt] if inteval[pt] == "" or inteval[pt] == "DELETE" else f"TO EXTERNAL DATA SOURCE {inteval[pt]}"}
+                {", " if count != lenght_inteval else " "}"""
+            count += 1
+        sql_ttl += f""" ON {ttl} {f"AS {time}" if time != "" else ""} ); """
         return sql_ttl

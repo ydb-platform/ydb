@@ -149,6 +149,8 @@ public:
         .SetStreamingEnabled(true));
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetColumnarStatistics);
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, PartitionTables);
+    DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, ReadTablePartition,
+        .SetStreamingEnabled(true));
 
     // File caching
     DEFINE_RPC_PROXY_METHOD(NRpcProxy::NProto, GetFileFromCache);

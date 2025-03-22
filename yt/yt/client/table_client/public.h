@@ -275,6 +275,8 @@ using TKeyColumnTypes = TCompactVector<EValueType, 16>;
 
 class TColumnFilter;
 
+using TColumnNameFilter = std::optional<std::vector<std::string>>;
+
 struct TUnversionedValue;
 using TUnversionedValueRange = TRange<TUnversionedValue>;
 using TMutableUnversionedValueRange = TMutableRange<TUnversionedValue>;

@@ -2328,4 +2328,14 @@ bool IsYtTableSuitableForArrowInput(NNodes::TExprBase tableNode, std::function<v
     return true;
 }
 
+TMaybeNode<TCoLambda> GetMapLambda(const TYtWithUserJobsOpBase& op) {
+    if (auto map = op.Maybe<TYtMap>()) {
+        return map.Cast().Mapper();
+    } else if (auto maybeLambda = op.Maybe<TYtMapReduce>().Mapper().Maybe<TCoLambda>()) {
+        return maybeLambda.Cast();
+    }
+
+    return {};
+}
+
 } // NYql

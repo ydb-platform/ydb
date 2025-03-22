@@ -46,7 +46,7 @@ namespace NTable {
 
         TResult Place(ui32 table, TTag, TArrayRef<const char> data) override
         {
-            Y_ABORT_UNLESS(Lookup(table) && data.size() >= Family->Large);
+            Y_ENSURE(Lookup(table) && data.size() >= Family->Large);
 
             auto blob = NPage::TLabelWrapper::Wrap(data, EPage::Opaque, 0);
 
@@ -67,7 +67,7 @@ namespace NTable {
                 Family = Scheme.DefaultFamilyFor(Table);
                 Room = Scheme.DefaultRoomFor(Table);
 
-                Y_ABORT_UNLESS(bool(Family) == bool(Room));
+                Y_ENSURE(bool(Family) == bool(Room));
             }
 
             return nullptr != Family; /* table may be created with data tx */

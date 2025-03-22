@@ -412,28 +412,28 @@ TString GenerateInputQuery(const TRichYPath& path, const TString& whereExpressio
     return result;
 }
 
-void SetInputQuerySpec(NYT::TNode& spec, const TString& inputQuery, bool useSystemColumns) {
+void SetInputQuerySpec(NYT::TNode& spec, const TString& inputQuery, const TYtSettings::TConstPtr& config, bool useSystemColumns) {
     spec["input_query"] = inputQuery;
     spec["input_query_filter_options"]["enable_chunk_filter"] = true;
-    spec["input_query_filter_options"]["enable_row_filter"] = true;
+    spec["input_query_filter_options"]["enable_row_filter"] = config->PruneQLFilterLambda.Get().GetOrElse(DEFAULT_PRUNE_QL_FILTER_LAMBDA);
     if (useSystemColumns) {
         spec["input_query_options"]["use_system_columns"] = true;
     }
 }
 
-void PrepareInputQueryForMerge(NYT::TNode& spec, TVector<TRichYPath>& paths, const TString& whereExpression) {
+void PrepareInputQueryForMerge(NYT::TNode& spec, TVector<TRichYPath>& paths, const TString& whereExpression, const TYtSettings::TConstPtr& config) {
     // YQL-19382
     if (whereExpression) {
         YQL_ENSURE(paths.size() == 1, "YtQLFilter: multiple inputs are not supported");
         auto& path = paths[0];
         const TString inputQuery = GenerateInputQuery(path, whereExpression, /*useSystemColumns*/ false);
         path.Columns_.Clear();
-        SetInputQuerySpec(spec, inputQuery, /*useSystemColumns*/ false);
+        SetInputQuerySpec(spec, inputQuery, config, /*useSystemColumns*/ false);
     }
 }
 
 template <typename T>
-void PrepareInputQueryForMap(NYT::TNode& spec, T& specWithPaths, const TString& whereExpression, bool useSystemColumns) {
+void PrepareInputQueryForMap(NYT::TNode& spec, T& specWithPaths, const TString& whereExpression, const TYtSettings::TConstPtr& config, bool useSystemColumns) {
     // YQL-19382
     if (whereExpression) {
         const auto& inputs = specWithPaths.GetInputs();
@@ -444,7 +444,7 @@ void PrepareInputQueryForMap(NYT::TNode& spec, T& specWithPaths, const TString& 
             path.Columns_.Clear();
             specWithPaths.SetInput(0, path);
         }
-        SetInputQuerySpec(spec, inputQuery, useSystemColumns);
+        SetInputQuerySpec(spec, inputQuery, config, useSystemColumns);
     }
 }
 
@@ -3675,7 +3675,7 @@ private:
                     spec["schema_inference_mode"] = "from_output"; // YTADMINREQ-17692
                 }
 
-                PrepareInputQueryForMerge(spec, mergeOpSpec.Inputs_, inputQueryExpr);
+                PrepareInputQueryForMerge(spec, mergeOpSpec.Inputs_, inputQueryExpr, execCtx->Options_.Config());
 
                 return execCtx->RunOperation([entry, mergeOpSpec = std::move(mergeOpSpec), spec = std::move(spec)](){
                     return entry->Tx->Merge(mergeOpSpec, TOperationOptions().StartOperationMode(TOperationOptions::EStartOperationMode::AsyncPrepare).Spec(spec));
@@ -3864,7 +3864,7 @@ private:
                 spec["job_count"] = static_cast<i64>(*jobCount);
             }
 
-            PrepareInputQueryForMap(spec, mapOpSpec, inputQueryExpr, /*useSystemColumns*/ useSkiff);
+            PrepareInputQueryForMap(spec, mapOpSpec, inputQueryExpr, execCtx->Options_.Config(), /*useSystemColumns*/ useSkiff);
 
             TOperationOptions opOpts;
             FillOperationOptions(opOpts, execCtx, entry);
@@ -4131,6 +4131,7 @@ private:
         const TString& mapInputType,
         size_t mapDirectOutputs,
         const TExpressionResorceUsage& mapExtraUsage,
+        bool mapBlockInput,
         TString reduceLambda,
         const TString& reduceInputType,
         const TExpressionResorceUsage& reduceExtraUsage,
@@ -4143,7 +4144,7 @@ private:
         const bool testRun = execCtx->Config_->GetLocalChainTest();
         TFuture<bool> ret = testRun ? MakeFuture<bool>(false) : execCtx->LookupQueryCacheAsync();
         return ret.Apply([reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs,
-                          mapExtraUsage, reduceLambda, reduceInputType, reduceExtraUsage,
+                          mapExtraUsage, mapBlockInput, reduceLambda, reduceInputType, reduceExtraUsage,
                           intermediateMeta, intermediateSchema, intermediateStreams, inputQueryExpr, execCtx, testRun]
                          (const auto& f) mutable
         {
@@ -4250,6 +4251,7 @@ private:
             mapJob->SetTableNames(tables);
             mapJob->SetRowOffsets(rowOffsets);
             mapJob->SetUseSkiff(useSkiff, TMkqlIOSpecs::ESystemField::RowIndex);
+            mapJob->SetUseBlockInput(mapBlockInput);
             mapJob->SetYamrInput(execCtx->YamrInput);
 
             auto reduceJob = MakeIntrusive<TYqlUserJob>();
@@ -4364,7 +4366,7 @@ private:
                 spec["mapper"]["output_streams"] = intermediateStreams;
             }
 
-            PrepareInputQueryForMap(spec, mapReduceOpSpec, inputQueryExpr, /*useSystemColumns*/ useSkiff);
+            PrepareInputQueryForMap(spec, mapReduceOpSpec, inputQueryExpr, execCtx->Options_.Config(), /*useSystemColumns*/ useSkiff);
 
             TOperationOptions opOpts;
             FillOperationOptions(opOpts, execCtx, entry);
@@ -4512,7 +4514,7 @@ private:
                 spec["reducer"]["enable_input_table_index"] = true;
             }
 
-            PrepareInputQueryForMap(spec, mapReduceOpSpec, inputQueryExpr, /*useSystemColumns*/ useSkiff);
+            PrepareInputQueryForMap(spec, mapReduceOpSpec, inputQueryExpr, execCtx->Options_.Config(), /*useSystemColumns*/ useSkiff);
 
             TOperationOptions opOpts;
             FillOperationOptions(opOpts, execCtx, entry);
@@ -4532,6 +4534,7 @@ private:
         const bool useNativeTypes = execCtx->Options_.Config()->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES);
         const auto nativeTypeCompat = execCtx->Options_.Config()->NativeYtTypeCompatibility.Get(execCtx->Cluster_).GetOrElse(NTCF_LEGACY);
         const auto useIntermediateStreams = execCtx->Options_.Config()->UseIntermediateStreams.Get().GetOrElse(DEFAULT_USE_INTERMEDIATE_STREAMS);
+        const bool mapBlockInput = NYql::HasSetting(mapReduce.Settings().Ref(), EYtSettingType::BlockInputApplied);
 
         NYT::TNode intermediateMeta;
         NYT::TNode intermediateSchema;
@@ -4637,13 +4640,13 @@ private:
 
         const TString inputQueryExpr = GenerateInputQueryWhereExpression(mapReduce.Settings().Ref());
 
-        return execCtx->Session_->Queue_->Async([reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs, mapExtraUsage,
+        return execCtx->Session_->Queue_->Async([reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs, mapExtraUsage, mapBlockInput,
             reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, useIntermediateStreams, inputQueryExpr, execCtx]()
         {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
             execCtx->MakeUserFiles();
             if (mapLambda) {
-                return ExecMapReduce(reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs, mapExtraUsage,
+                return ExecMapReduce(reduceBy, sortBy, limit, sortLimitBy, mapLambda, mapInputType, mapDirectOutputs, mapExtraUsage, mapBlockInput,
                     reduceLambda, reduceInputType, reduceExtraUsage, intermediateMeta, intermediateSchema, intermediateStreams, inputQueryExpr, execCtx);
             } else {
                 return ExecMapReduce(reduceBy, sortBy, limit, sortLimitBy, reduceLambda, reduceInputType, reduceExtraUsage, intermediateSchema,

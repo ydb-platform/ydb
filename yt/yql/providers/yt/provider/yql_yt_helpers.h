@@ -143,4 +143,6 @@ bool HasYtRowNumber(const TExprNode& node);
 
 bool IsYtTableSuitableForArrowInput(NNodes::TExprBase table, std::function<void(const TString&)> unsupportedHandler);
 
+NNodes::TMaybeNode<NNodes::TCoLambda> GetMapLambda(const NNodes::TYtWithUserJobsOpBase& op);
+
 }

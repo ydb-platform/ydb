@@ -2329,7 +2329,8 @@ message TEvForceDataCleanup {
 message TEvForceDataCleanupResult {
     enum EStatus {
         OK = 0;
-        FAILED = 1;
+        WRONG_SHARD_STATE = 1;
+        BORROWED = 2;
     };
     optional uint64 DataCleanupGeneration = 1; // from corresponding request (or greater)
     optional uint64 TabletId = 2;

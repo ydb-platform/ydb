@@ -1348,6 +1348,15 @@ namespace NSchemeShardUT_Private {
         return result.GetValue().GetStruct(0).GetOptional().GetOptional().GetStruct(0).GetOptional().GetUint64();
     }
 
+    TVector<ui64> GetTableShards(TTestActorRuntime& runtime, ui64 schemeShard,  const TString& path) {
+        TVector<ui64> shards;
+        const auto tableDescription = DescribePath(runtime, schemeShard, path, true);
+        for (const auto& part : tableDescription.GetPathDescription().GetTablePartitions()) {
+            shards.emplace_back(part.GetDatashardId());
+        }
+        return shards;
+    }
+
     NLs::TCheckFunc ShardsIsReady(TTestActorRuntime& runtime) {
         return [&] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
             TVector<ui64> datashards;
@@ -2386,11 +2395,12 @@ namespace NSchemeShardUT_Private {
     }
 
     NKikimrTxDataShard::TEvCompactTableResult CompactTable(
-        TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId, bool compactBorrowed)
+        TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId, bool compactBorrowed, bool compactSinglePartedShards)
     {
         auto sender = runtime.AllocateEdgeActor();
         auto request = MakeHolder<TEvDataShard::TEvCompactTable>(tableId.PathId);
         request->Record.SetCompactBorrowed(compactBorrowed);
+        request->Record.SetCompactSinglePartedShards(compactSinglePartedShards);
         runtime.SendToPipe(shardId, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
         auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCompactTableResult>(sender);
@@ -2492,8 +2502,18 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT_C(evResponse->Get()->Record.GetStatus() == NKikimrTxDataShard::TError::OK, "Status: " << evResponse->Get()->Record.GetStatus() << " Issues: " << evResponse->Get()->Record.GetErrorDescription());
     }
 
-    void WriteRow(TTestActorRuntime& runtime, const ui64 txId, const TString& tablePath, int partitionIdx, const ui32 key, const TString& value, bool successIsExpected) {
-        auto tableDesc = DescribePath(runtime, tablePath, true, true);
+    void WriteOp(
+        TTestActorRuntime& runtime,
+        ui64 schemeshardId,
+        const ui64 txId,
+        const TString& tablePath,
+        int partitionIdx,
+        NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType,
+        const std::vector<ui32>& columnIds,
+        TSerializedCellMatrix&& data,
+        bool successIsExpected)
+    {
+        auto tableDesc = DescribePath(runtime, schemeshardId, tablePath, true, true);
         const auto& pathDesc = tableDesc.GetPathDescription();
         TTableId tableId(pathDesc.GetSelf().GetSchemeshardId(), pathDesc.GetSelf().GetPathId(), pathDesc.GetTable().GetTableSchemaVersion());
 
@@ -2503,15 +2523,9 @@ namespace NSchemeShardUT_Private {
 
         const auto& sender = runtime.AllocateEdgeActor();
 
-        std::vector<ui32> columnIds{1, 2};
-
-        TVector<TCell> cells{TCell((const char*)&key, sizeof(ui32)), TCell(value.c_str(), value.size())};
-
-        TSerializedCellMatrix matrix(cells, 1, 2);
-
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
-        ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(matrix.ReleaseBuffer()));
-        evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
+        ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(data.ReleaseBuffer()));
+        evWrite->AddOperation(operationType, tableId, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
 
         ForwardToTablet(runtime, datashardTabletId, sender, evWrite.release());
 
@@ -2519,6 +2533,32 @@ namespace NSchemeShardUT_Private {
         auto status = ev->Get()->Record.GetStatus();
 
         UNIT_ASSERT_C(successIsExpected == (status == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED), "Status: " << ev->Get()->Record.GetStatus() << " Issues: " << ev->Get()->Record.GetIssues());
+    }
+
+    void WriteRow(TTestActorRuntime& runtime, ui64 schemeshardId, const ui64 txId, const TString& tablePath, int partitionIdx, const ui32 key, const TString& value, bool successIsExpected) {
+        std::vector<ui32> columnIds{1, 2};
+
+        TVector<TCell> cells{TCell((const char*)&key, sizeof(ui32)), TCell(value.c_str(), value.size())};
+        TSerializedCellMatrix matrix(cells, 1, 2);
+
+        WriteOp(runtime, schemeshardId, txId, tablePath, partitionIdx, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, columnIds, std::move(matrix), successIsExpected);
+    }
+
+    void WriteRow(TTestActorRuntime& runtime, const ui64 txId, const TString& tablePath, int partitionIdx, const ui32 key, const TString& value, bool successIsExpected) {
+        WriteRow(runtime, TTestTxConfig::SchemeShard, txId, tablePath, partitionIdx, key, value, successIsExpected);
+    }
+
+    void DeleteRow(TTestActorRuntime& runtime, ui64 schemeshardId, const ui64 txId, const TString& tablePath, int partitionIdx, const ui32 key, bool successIsExpected) {
+        std::vector<ui32> columnIds{1};
+
+        TVector<TCell> cells{TCell((const char*)&key, sizeof(ui32))};
+        TSerializedCellMatrix matrix(cells, 1, 1);
+
+        WriteOp(runtime, schemeshardId, txId, tablePath, partitionIdx, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE, columnIds, std::move(matrix), successIsExpected);
+    }
+
+    void DeleteRow(TTestActorRuntime& runtime, const ui64 txId, const TString& tablePath, int partitionIdx, const ui32 key, bool successIsExpected) {
+        DeleteRow(runtime, TTestTxConfig::SchemeShard, txId, tablePath, partitionIdx, key, successIsExpected);
     }
 
     void SendNextValRequest(TTestActorRuntime& runtime, const TActorId& sender, const TString& path) {

@@ -11,6 +11,7 @@
 #include "transaction.h"
 
 #include <yt/yt/client/api/helpers.h>
+#include <yt/yt/client/api/table_partition_reader.h>
 
 #include <yt/yt/client/chaos_client/replication_card_serialization.h>
 
@@ -1738,12 +1739,41 @@ TFuture<NApi::TMultiTablePartitions> TClient::PartitionTables(
     req->set_adjust_data_weight_per_partition(options.AdjustDataWeightPerPartition);
 
     req->set_enable_key_guarantee(options.EnableKeyGuarantee);
+    req->set_enable_cookies(options.EnableCookies);
 
     ToProto(req->mutable_transactional_options(), options);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPartitionTablesPtr& rsp) {
         return FromProto<TMultiTablePartitions>(*rsp);
     }));
+}
+
+TFuture<ITablePartitionReaderPtr> TClient::CreateTablePartitionReader(
+    const TTablePartitionCookiePtr& cookie,
+    const TReadTablePartitionOptions& /*options*/)
+{
+    YT_VERIFY(cookie);
+
+    auto proxy = CreateApiServiceProxy();
+    auto req = proxy.ReadTablePartition();
+    InitStreamingRequest(*req);
+
+    NProto::ToProto(req->mutable_cookie(), cookie);
+
+    return NRpc::CreateRpcClientInputStream(std::move(req))
+        .ApplyUnique(BIND([] (IAsyncZeroCopyInputStreamPtr&& inputStream) -> TFuture<ITablePartitionReaderPtr>{
+            return inputStream->Read().Apply(BIND([=] (const TSharedRef& metaRef) {
+                // Actually we don't have any metadata in first version but we can have it in future. Just parse empty proto.
+                NApi::NRpcProxy::NProto::TRspReadTablePartitionMeta meta;
+                if (!TryDeserializeProto(&meta, metaRef)) {
+                    THROW_ERROR_EXCEPTION("Failed to deserialize partition table reader meta information");
+                }
+
+                auto rowBatchReader = New<TRowBatchReader>(std::move(inputStream), /*isStreamWithStatistics*/ false);
+
+                return NApi::CreateTablePartitionReader(rowBatchReader, /*schemas*/ {}, /*columnFilters=*/ {});
+            }));
+        }));
 }
 
 TFuture<void> TClient::TruncateJournal(

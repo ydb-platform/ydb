@@ -516,6 +516,11 @@ public:
         const TPartitionTablesOptions& options),
         (override));
 
+    MOCK_METHOD(TFuture<ITablePartitionReaderPtr>, CreateTablePartitionReader, (
+        const TTablePartitionCookiePtr& partition,
+        const TReadTablePartitionOptions& options),
+        (override));
+
     MOCK_METHOD(TFuture<void>, TruncateJournal, (
         const NYPath::TYPath& path,
         i64 rowCount,

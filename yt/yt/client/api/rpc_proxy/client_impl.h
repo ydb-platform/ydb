@@ -347,6 +347,10 @@ public:
         const std::vector<NYPath::TRichYPath>& paths,
         const NApi::TPartitionTablesOptions& options) override;
 
+    TFuture<ITablePartitionReaderPtr> CreateTablePartitionReader(
+        const TTablePartitionCookiePtr& tablePartitionDescriptor,
+        const TReadTablePartitionOptions& options) override;
+
     TFuture<void> TruncateJournal(
         const NYPath::TYPath& path,
         i64 rowCount,

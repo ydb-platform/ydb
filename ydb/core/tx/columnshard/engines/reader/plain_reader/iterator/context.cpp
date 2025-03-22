@@ -76,6 +76,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
             NCommon::TFetchingScriptBuilder acc(*this);
             acc.SetBranchName("FAKE");
             acc.AddStep(std::make_shared<TBuildFakeSpec>());
+            acc.AddStep(std::make_shared<NCommon::TBuildStageResultStep>());
             return std::move(acc).Build();
         }
     }
@@ -157,6 +158,8 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
         if (needSnapshots || GetFFColumns()->Cross(*GetSpecColumns())) {
             acc.AddAssembleStep(*GetSpecColumns(), "SPEC", EStageFeaturesIndexes::Filter, false);
             acc.AddStep(std::make_shared<TSnapshotFilter>());
+        } else if (GetProgramInputColumns()->Cross(*GetSpecColumns())) {
+            acc.AddStep(std::make_shared<TBuildFakeSpec>());
         }
         acc.AddFetchingStep(*GetFFColumns(), EStageFeaturesIndexes::Fetching);
         acc.AddAssembleStep(*GetFFColumns(), "LAST", EStageFeaturesIndexes::Fetching, !exclusiveSource);

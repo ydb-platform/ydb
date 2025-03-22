@@ -136,6 +136,8 @@ private:
         request.set_dry_run(settings.DryRun_);
         request.set_allow_unknown_fields(settings.AllowUnknownFields_);
         request.set_bypass_checks(settings.BypassChecks_);
+        request.set_enable_config_v2(settings.EnableConfigV2_);
+        request.set_disable_config_v2(settings.DisableConfigV2_);
     }
 };
 

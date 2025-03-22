@@ -97,6 +97,12 @@ message ReplaceConfigRequest {
     //         or overwrite other users changes in case of race
     // Behaviour identical to deprecated DynConfig.SetConfig() call
     bool bypass_checks = 8;
+
+    // Enable configuration v2 during this operation, if it is not already enabled
+    bool enable_config_v2 = 9;
+
+    // Disable configuration v2 during this operation
+    bool disable_config_v2 = 10;
 }
 
 message ReplaceConfigResponse {

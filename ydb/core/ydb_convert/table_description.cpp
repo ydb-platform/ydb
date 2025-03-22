@@ -740,6 +740,18 @@ bool FillColumnDescriptionImpl(TColumnTable& out, const google::protobuf::Repeat
         if (!column.Getfamily().empty()) {
             columnDesc->SetColumnFamilyName(column.Getfamily());
         }
+
+        if (column.has_from_literal()) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Default value from literal specified for column `" << column.name() << "` is not supported in cases of column tables";
+            return false;
+        }
+
+        if (column.has_from_sequence()) {
+            status = Ydb::StatusIds::BAD_REQUEST;
+            error = TStringBuilder() << "Default value from sequence specified for column `" << column.name() << "` is not supported in cases of column tables";
+            return false;
+        }
     }
 
     return true;

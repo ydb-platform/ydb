@@ -324,6 +324,9 @@ public:
         return *StageData;
     }
 
+    virtual const NArrow::TReplaceKey& GetMinPK() const = 0;
+    virtual const NArrow::TReplaceKey& GetMaxPK() const = 0;
+
     TFetchedData& MutableStageData() {
         AFL_VERIFY(StageData);
         return *StageData;
@@ -341,6 +344,13 @@ public:
     TFetchedResult& MutableStageResult() {
         AFL_VERIFY(!!StageResult);
         return *StageResult;
+    }
+
+    template <typename T>
+    std::shared_ptr<T> GetContextAsVerified() const {
+        auto context = std::dynamic_pointer_cast<T>(Context);
+        AFL_VERIFY(context);
+        return context;
     }
 };
 

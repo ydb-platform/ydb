@@ -157,23 +157,24 @@ public:
         Table->Clear();
     }
 
-    void AddFilter(const std::shared_ptr<NArrow::TColumnFilter>& filter) {
+    void AddFilter(const std::shared_ptr<NArrow::TColumnFilter>& filter, const bool sequential = true) {
         if (!filter) {
             return;
         }
-        return Table->AddFilter(*filter);
+        return Table->AddFilter(*filter, sequential);
     }
 
-    std::shared_ptr<NArrow::TGeneralContainer> ToGeneralContainer() const {
-        return Table->ToGeneralContainer();
+    std::shared_ptr<NArrow::TGeneralContainer> ToGeneralContainer(
+    const NArrow::NSSA::IColumnResolver* resolver = nullptr) const {
+        return Table->ToGeneralContainer(resolver);
     }
 
     void CutFilter(const ui32 recordsCount, const ui32 limit, const bool reverse) {
         Table->CutFilter(recordsCount, limit, reverse);
     }
 
-    void AddFilter(const NArrow::TColumnFilter& filter) {
-        Table->AddFilter(filter);
+    void AddFilter(const NArrow::TColumnFilter& filter, const bool sequential = true) {
+        Table->AddFilter(filter, sequential);
     }
 };
 

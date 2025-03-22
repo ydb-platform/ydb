@@ -243,7 +243,8 @@ public:
         , DoubleFreeCanary(ReferenceCanary)
     {
         size_t tailroom = AlignUp<size_t>(read->Size + read->Offset % 4096, 4096) - read->Size;
-        CommonBuffer = TBufferWithGaps(read->Offset, read->Size, tailroom);
+        CommonBuffer = TBufferWithGaps(read->Offset, read->Size + read->Offset % 4096, tailroom);
+        //Y_VERIFY(false);
     }
 
     void Exec(TActorSystem *actorSystem) override;

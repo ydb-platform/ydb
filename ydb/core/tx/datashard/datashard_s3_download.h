@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/protos/checksum.pb.h>
+#include <ydb/core/protos/datashard_backup.pb.h>
 
 #include <util/generic/maybe.h>
 
@@ -13,6 +13,7 @@ struct TS3Download {
     ui64 WrittenBytes = 0;
     ui64 WrittenRows = 0;
     NKikimrBackup::TChecksumState ChecksumState;
+    NKikimrBackup::TS3DownloadState DownloadState;
 
     void Out(IOutputStream& out) const {
         out << "{"
@@ -21,6 +22,7 @@ struct TS3Download {
             << " WrittenBytes: " << WrittenBytes
             << " WrittenRows: " << WrittenRows
             << " ChecksumState: " << ChecksumState.ShortDebugString()
+            << " DownloadState: " << DownloadState.ShortDebugString()
         << " }";
     }
 };

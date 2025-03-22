@@ -826,6 +826,8 @@ TEncryptedFileDeserializer::TEncryptedFileDeserializer()
 
 TEncryptedFileDeserializer::~TEncryptedFileDeserializer() = default;
 
+TEncryptedFileDeserializer& TEncryptedFileDeserializer::operator=(TEncryptedFileDeserializer&&) = default;
+
 void TEncryptedFileDeserializer::AddData(TBuffer data, bool last) {
     Impl->AddData(std::move(data), last);
 }

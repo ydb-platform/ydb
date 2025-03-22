@@ -6,7 +6,7 @@ namespace NKikimr::NOlap::NTxInteractions {
 
 class TEvWriteWriter: public ITxEventWriter {
 private:
-    YDB_READONLY_DEF(TInternalPathId, PathId)
+    YDB_READONLY_DEF(TInternalPathId, PathId);
     YDB_READONLY_DEF(std::shared_ptr<arrow::RecordBatch>, RecordBatch);
 
     virtual bool DoCheckInteraction(

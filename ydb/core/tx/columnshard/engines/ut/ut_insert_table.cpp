@@ -83,7 +83,7 @@ Y_UNIT_TEST_SUITE(TColumnEngineTestInsertTable) {
     Y_UNIT_TEST(TestInsertCommit) {
         TInsertWriteId writeId = (TInsertWriteId)0;
         const auto& tableId0 = TInternalPathId::FromRawValue(0);
-        const auto& tableId1 = TInternalPathId::FromRawValue(0);
+        const auto& tableId1 = TInternalPathId::FromRawValue(1);
         TString dedupId = "0";
         TUnifiedBlobId blobId1(2222, 1, 1, 100, 2, 0, 1);
 

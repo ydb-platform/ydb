@@ -1054,7 +1054,7 @@ void TColumnShard::SetupCleanupPortions() {
     }
 
     const NOlap::TSnapshot minReadSnapshot = GetMinReadSnapshot();
-    auto pathsToDrop = TablesManager.GetPathsToDrop(minReadSnapshot);
+    const auto& pathsToDrop = TablesManager.GetPathsToDrop(minReadSnapshot);
 
     auto changes = TablesManager.MutablePrimaryIndex().StartCleanupPortions(minReadSnapshot, pathsToDrop, DataLocksManager);
     if (!changes) {

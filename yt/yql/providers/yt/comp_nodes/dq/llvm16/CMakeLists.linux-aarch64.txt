@@ -49,6 +49,7 @@ target_link_libraries(comp_nodes-dq-llvm16 PUBLIC
   essentials-public-udf
   libs-apache-arrow
   contrib-libs-flatbuffers
+  parser-pg_wrapper-interface
   yt-yt-client
   yt-client-arrow
   yt-lib-yt_rpc_helpers

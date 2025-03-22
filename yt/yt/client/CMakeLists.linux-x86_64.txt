@@ -85,6 +85,8 @@ target_sources(yt-yt-client PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/yt/client/api/sticky_transaction_pool.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/api/options.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/api/shuffle_client.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/client/api/table_partition_reader.cpp
+  ${PROJECT_SOURCE_DIR}/yt/yt/client/api/private.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/api/rpc_proxy/address_helpers.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/api/rpc_proxy/public.cpp
   ${PROJECT_SOURCE_DIR}/yt/yt/client/api/rpc_proxy/config.cpp

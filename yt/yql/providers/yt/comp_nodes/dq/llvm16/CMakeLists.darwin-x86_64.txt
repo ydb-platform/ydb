@@ -47,6 +47,7 @@ target_link_libraries(comp_nodes-dq-llvm16 PUBLIC
   essentials-public-udf
   libs-apache-arrow
   contrib-libs-flatbuffers
+  parser-pg_wrapper-interface
 )
 
 target_sources(comp_nodes-dq-llvm16 PRIVATE

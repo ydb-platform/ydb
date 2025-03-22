@@ -202,7 +202,7 @@ void TOperationsManager::LinkTransactionOnExecute(const ui64 lockId, const ui64 
 void TOperationsManager::LinkTransactionOnComplete(const ui64 /*lockId*/, const ui64 /*txId*/) {
 }
 
-TWriteOperation::TPtr TOperationsManager::RegisterOperation(const TInternalPathId& pathId, const ui64 lockId, const ui64 cookie,
+TWriteOperation::TPtr TOperationsManager::RegisterOperation(const TInternalPathId pathId, const ui64 lockId, const ui64 cookie,
     const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType, const bool portionsWriting) {
     auto writeId = BuildNextOperationWriteId();
     auto operation = std::make_shared<TWriteOperation>(pathId, writeId, lockId, cookie, EOperationStatus::Draft, AppData()->TimeProvider->Now(),

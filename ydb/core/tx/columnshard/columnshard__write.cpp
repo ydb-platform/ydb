@@ -255,9 +255,8 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
         overloadStatus = CheckOverloadedWait(pathId);
     }
     if (overloadStatus != EOverloadStatus::None) {
-        const auto& writeMeta = writeData.GetWriteMeta();
         std::unique_ptr<NActors::IEventBase> result = std::make_unique<TEvColumnShard::TEvWriteResult>(
-            TabletID(), writeMeta, NKikimrTxColumnShard::EResultStatus::OVERLOADED);
+            TabletID(),  writeData.GetWriteMeta(), NKikimrTxColumnShard::EResultStatus::OVERLOADED);
         OverloadWriteFail(overloadStatus, writeData.GetWriteMeta(), writeData.GetSize(), cookie, std::move(result), ctx);
         Counters.GetCSCounters().OnFailedWriteResponse(EWriteFailReason::Overload);
     } else {

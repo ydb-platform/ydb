@@ -13,7 +13,7 @@
 
 namespace NKikimr::NColumnShard {
 
-TWriteOperation::TWriteOperation(const TInternalPathId& pathId, const TOperationWriteId writeId, const ui64 lockId, const ui64 cookie,
+TWriteOperation::TWriteOperation(const TInternalPathId pathId, const TOperationWriteId writeId, const ui64 lockId, const ui64 cookie,
     const EOperationStatus& status, const TInstant createdAt, const std::optional<ui32> granuleShardingVersionId,
     const NEvWrite::EModificationType mType, const bool writePortions)
     : PathId(pathId)

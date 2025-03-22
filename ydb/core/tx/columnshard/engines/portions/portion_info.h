@@ -3,6 +3,7 @@
 #include "common.h"
 #include "index_chunk.h"
 #include "meta.h"
+
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/common/blob.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
@@ -88,7 +89,7 @@ private:
     TRuntimeFeatures RuntimeFeatures = 0;
 
     void FullValidation() const {
-        AFL_VERIFY(!!PathId);
+        AFL_VERIFY(PathId);
         AFL_VERIFY(PortionId);
         AFL_VERIFY(MinSnapshotDeprecated.Valid());
         Meta.FullValidation();
@@ -302,7 +303,7 @@ public:
     }
 
     bool ValidSnapshotInfo() const {
-        return MinSnapshotDeprecated.Valid() && !!PathId && PortionId;
+        return MinSnapshotDeprecated.Valid() && PathId && PortionId;
     }
 
     TString DebugString(const bool withDetails = false) const;

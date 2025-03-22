@@ -70,7 +70,7 @@ public:
         *Activity = 0;
     }
 
-    TWriteOperation(const TInternalPathId& pathId, const TOperationWriteId writeId, const ui64 lockId, const ui64 cookie, const EOperationStatus& status,
+    TWriteOperation(const TInternalPathId pathId, const TOperationWriteId writeId, const ui64 lockId, const ui64 cookie, const EOperationStatus& status,
         const TInstant createdAt, const std::optional<ui32> granuleShardingVersionId, const NEvWrite::EModificationType mType,
         const bool writePortions);
 
@@ -90,6 +90,7 @@ public:
     void Out(IOutputStream& out) const {
         out << "write_id=" << (ui64)WriteId << ";lock_id=" << LockId;
     }
+
     void ToProto(NKikimrTxColumnShard::TInternalOperationData& proto) const;
     void FromProto(const NKikimrTxColumnShard::TInternalOperationData& proto);
 };

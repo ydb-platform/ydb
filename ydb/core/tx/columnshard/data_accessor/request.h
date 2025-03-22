@@ -127,7 +127,7 @@ public:
         return sb;
     }
 
-    explicit TPathFetchingState(const TInternalPathId pathId)
+    TPathFetchingState(const TInternalPathId pathId)
         : PathId(pathId) {
     }
 
@@ -290,7 +290,7 @@ public:
         auto it = PathIdStatus.find(portion->GetPathId());
         if (it == PathIdStatus.end()) {
             PreparingCount.Inc();
-            it = PathIdStatus.emplace(portion->GetPathId(), TPathFetchingState{portion->GetPathId()}).first;
+            it = PathIdStatus.emplace(portion->GetPathId(), portion->GetPathId()).first;
         }
         it->second.AddPortion(portion);
     }
@@ -299,7 +299,7 @@ public:
         return FetchStage == 2;
     }
 
-    void AddError(const  TInternalPathId pathId, const TString& errorMessage) {
+    void AddError(const TInternalPathId pathId, const TString& errorMessage) {
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("error", errorMessage)("event", "ErrorOnFetching")("path_id", pathId);
         AFL_VERIFY(FetchStage <= 1);
         auto itStatus = PathIdStatus.find(pathId);

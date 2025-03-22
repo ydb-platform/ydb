@@ -15,7 +15,7 @@ NKikimr::TConclusionStatus TMetadataFromStore::DoFillMetadata(const NColumnShard
         return TConclusionStatus::Success();
     }
 
-    THashSet< TInternalPathId> pathIds;
+    THashSet<TInternalPathId> pathIds;
     AFL_VERIFY(read.PKRangesFilter);
     for (auto&& filter : *read.PKRangesFilter) {
         const auto fromPathId = TInternalPathId::FromRawValue(*filter.GetPredicateFrom().Get<arrow::UInt64Array>(0, 0, 1));

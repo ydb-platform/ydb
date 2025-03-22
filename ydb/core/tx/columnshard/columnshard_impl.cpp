@@ -476,7 +476,7 @@ void TColumnShard::RunDropTable(const NKikimrTxColumnShard::TDropTable& dropProt
     NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);
 
-    const auto pathId =  TInternalPathId::FromRawValue(dropProto.GetPathId());
+    const auto pathId = TInternalPathId::FromRawValue(dropProto.GetPathId());
     if (!TablesManager.HasTable(pathId)) {
         LOG_S_DEBUG("DropTable for unknown or deleted pathId: " << pathId << " at tablet " << TabletID());
         return;

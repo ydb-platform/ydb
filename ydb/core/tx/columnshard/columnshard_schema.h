@@ -1060,8 +1060,8 @@ public:
 
 class TColumnChunkLoadContextV2 {
 private:
-YDB_READONLY_DEF(TInternalPathId, PathId)
-YDB_READONLY(ui64, PortionId, 0);
+    YDB_READONLY_DEF(TInternalPathId, PathId);
+    YDB_READONLY(ui64, PortionId, 0);
     YDB_READONLY_DEF(TString, MetadataProto);
 
 public:

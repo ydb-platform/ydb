@@ -7,7 +7,7 @@ namespace NKikimr::NOlap::NTxInteractions {
 
 class TEvReadStartWriter: public ITxEventWriter {
 private:
-    YDB_READONLY_DEF(TInternalPathId, PathId)
+    YDB_READONLY_DEF(TInternalPathId, PathId);
     YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, Schema);
     YDB_READONLY_DEF(std::shared_ptr<TPKRangesFilter>, Filter);
     YDB_READONLY_DEF(THashSet<ui64>, LockIdsForCheck);
@@ -43,7 +43,7 @@ public:
     }
 
 private:
-    YDB_READONLY_DEF(TInternalPathId, PathId)
+    YDB_READONLY_DEF(TInternalPathId, PathId);
     YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, Schema);
     YDB_READONLY_DEF(std::shared_ptr<TPKRangesFilter>, Filter);
 

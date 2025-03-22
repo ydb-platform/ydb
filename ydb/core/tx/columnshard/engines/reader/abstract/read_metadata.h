@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/engines/insert_table/insert_table.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/description.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/versioned_index.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 class TPortionInfo;
@@ -170,7 +171,7 @@ public:
         return ResultIndexSchema->GetIndexInfo();
     }
 
-    void InitShardingInfo(const ui64 pathId) {
+    void InitShardingInfo(const TInternalPathId pathId) {
         AFL_VERIFY(!RequestShardingInfo);
         RequestShardingInfo = IndexVersionsPointer->GetShardingInfoOptional(pathId, RequestSnapshot);
     }

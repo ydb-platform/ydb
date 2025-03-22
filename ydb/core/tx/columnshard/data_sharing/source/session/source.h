@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 #include <ydb/core/tx/columnshard/data_sharing/common/session/common.h>
 #include <ydb/core/tx/columnshard/engines/scheme/schema_version.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NIceDb {
 class TNiceDb;
@@ -18,13 +19,13 @@ private:
     using TBase = TCommonSession;
     const TTabletId SelfTabletId;
     std::shared_ptr<TSourceCursor> Cursor;
-    YDB_READONLY_DEF(std::set<ui64>, PathIds);
+    YDB_READONLY_DEF(std::set<TInternalPathId>, PathIds);
     TTabletId DestinationTabletId = TTabletId(0);
 
 protected:
-    virtual TConclusionStatus DoStart(NColumnShard::TColumnShard& shard, THashMap<ui64, std::vector<TPortionDataAccessor>>&& portions) override;
-    virtual THashSet<ui64> GetPathIdsForStart() const override {
-        THashSet<ui64> result;
+    virtual TConclusionStatus DoStart(NColumnShard::TColumnShard& shard, THashMap<TInternalPathId, std::vector<TPortionDataAccessor>>&& portions) override;
+    virtual THashSet<TInternalPathId> GetPathIdsForStart() const override {
+        THashSet<TInternalPathId> result;
         for (auto&& i : PathIds) {
             result.emplace(i);
         }
@@ -37,7 +38,7 @@ public:
         , SelfTabletId(selfTabletId) {
     }
 
-    TSourceSession(const TString& sessionId, const TTransferContext& transfer, const TTabletId selfTabletId, const std::set<ui64>& pathIds, const TTabletId destTabletId)
+    TSourceSession(const TString& sessionId, const TTransferContext& transfer, const TTabletId selfTabletId, const std::set<TInternalPathId>& pathIds, const TTabletId destTabletId)
         : TBase(sessionId, "source_base", transfer)
         , SelfTabletId(selfTabletId)
         , PathIds(pathIds)
@@ -65,7 +66,7 @@ public:
 
     void SaveCursorToDatabase(NIceDb::TNiceDb& db);
 
-    void StartCursor(const NColumnShard::TColumnShard& shard, THashMap<ui64, std::vector<TPortionDataAccessor>>&& portions, std::vector<NOlap::TSchemaPresetVersionInfo>&& schemeHistory);
+    void StartCursor(const NColumnShard::TColumnShard& shard, THashMap<TInternalPathId, std::vector<TPortionDataAccessor>>&& portions, std::vector<NOlap::TSchemaPresetVersionInfo>&& schemeHistory);
 
     [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> AckFinished(NColumnShard::TColumnShard* self, const std::shared_ptr<TSourceSession>& selfPtr);
     [[nodiscard]] TConclusion<std::unique_ptr<NTabletFlatExecutor::ITransaction>> AckData(NColumnShard::TColumnShard* self, const ui32 receivedPackIdx, const std::shared_ptr<TSourceSession>& selfPtr);
@@ -78,7 +79,7 @@ public:
         TBase::SerializeToProto(result);
         result.SetDestinationTabletId((ui64)DestinationTabletId);
         for (auto&& i : PathIds) {
-            result.AddPathIds(i);
+            result.AddPathIds(i.GetRawValue());
         }
         return result;
     }

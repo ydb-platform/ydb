@@ -7,6 +7,7 @@
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/action.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/predicate/range.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/columns_set.h>
@@ -103,7 +104,7 @@ public:
         return DoStartFetchingAccessor(sourcePtr, step);
     }
 
-    virtual ui64 GetPathId() const = 0;
+    virtual TInternalPathId GetPathId() const = 0;
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const = 0;
 
     const NArrow::TReplaceKey& GetStartReplaceKey() const {
@@ -221,7 +222,7 @@ private:
         return result;
     }
     virtual void DoAbort() override;
-    virtual ui64 GetPathId() const override {
+    virtual TInternalPathId GetPathId() const override {
         return Portion->GetPathId();
     }
 
@@ -321,8 +322,8 @@ private:
         result.InsertValue("info", CommittedBlob.DebugString());
         return result;
     }
-    virtual ui64 GetPathId() const override {
-        return 0;
+    virtual TInternalPathId GetPathId() const override {
+        return TInternalPathId{};
     }
 
     virtual bool DoAddTxConflict() override {

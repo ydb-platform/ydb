@@ -3,6 +3,7 @@
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_metadata.h>
 #include <ydb/core/tx/columnshard/engines/reader/common/stats.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <ydb/library/formats/arrow/replace_key.h>
 
@@ -16,7 +17,7 @@ class TReadMetadata: public TReadMetadataBase {
     using TBase = TReadMetadataBase;
 
 private:
-    const ui64 PathId;
+    const TInternalPathId PathId;
     std::shared_ptr<TAtomicCounter> BrokenWithCommitted = std::make_shared<TAtomicCounter>();
     std::shared_ptr<NColumnShard::TLockSharingInfo> LockSharingInfo;
 
@@ -109,7 +110,7 @@ public:
         return GetProgram().HasProcessingColumnIds();
     }
 
-    ui64 GetPathId() const {
+    TInternalPathId GetPathId() const {
         return PathId;
     }
 

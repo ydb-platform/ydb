@@ -5,6 +5,7 @@
 #include "abstract/collector.h"
 
 #include <ydb/services/bg_tasks/abstract/interface.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap::NDataAccessorControl {
 
@@ -35,7 +36,7 @@ class IDataAccessorsManager {
 private:
     virtual void DoAskData(const std::shared_ptr<TDataAccessorsRequest>& request) = 0;
     virtual void DoRegisterController(std::unique_ptr<IGranuleDataAccessor>&& controller, const bool update) = 0;
-    virtual void DoUnregisterController(const ui64 pathId) = 0;
+    virtual void DoUnregisterController(const TInternalPathId pathId) = 0;
     virtual void DoAddPortion(const TPortionDataAccessor& accessor) = 0;
     virtual void DoRemovePortion(const TPortionInfo::TConstPtr& portion) = 0;
     const NActors::TActorId TabletActorId;
@@ -66,7 +67,7 @@ public:
         AFL_VERIFY(controller);
         return DoRegisterController(std::move(controller), update);
     }
-    void UnregisterController(const ui64 pathId) {
+    void UnregisterController(const TInternalPathId pathId) {
         return DoUnregisterController(pathId);
     }
 };
@@ -90,7 +91,7 @@ private:
     virtual void DoRegisterController(std::unique_ptr<IGranuleDataAccessor>&& controller, const bool update) override {
         NActors::TActivationContext::Send(ActorId, std::make_unique<TEvRegisterController>(std::move(controller), update));
     }
-    virtual void DoUnregisterController(const ui64 pathId) override {
+    virtual void DoUnregisterController(const TInternalPathId pathId) override {
         NActors::TActivationContext::Send(ActorId, std::make_unique<TEvUnregisterController>(pathId));
     }
     virtual void DoAddPortion(const TPortionDataAccessor& accessor) override {
@@ -112,7 +113,7 @@ public:
 class TLocalManager: public IDataAccessorsManager {
 private:
     using TBase = IDataAccessorsManager;
-    THashMap<ui64, std::unique_ptr<IGranuleDataAccessor>> Managers;
+    THashMap<TInternalPathId, std::unique_ptr<IGranuleDataAccessor>> Managers;
     THashMap<ui64, std::vector<std::shared_ptr<TDataAccessorsRequest>>> RequestsByPortion;
     TAccessorSignals Counters;
     const std::shared_ptr<IAccessorCallback> AccessorCallback;
@@ -140,7 +141,7 @@ private:
 
     virtual void DoAskData(const std::shared_ptr<TDataAccessorsRequest>& request) override;
     virtual void DoRegisterController(std::unique_ptr<IGranuleDataAccessor>&& controller, const bool update) override;
-    virtual void DoUnregisterController(const ui64 pathId) override {
+    virtual void DoUnregisterController(const TInternalPathId pathId) override {
         AFL_VERIFY(Managers.erase(pathId));
     }
     virtual void DoAddPortion(const TPortionDataAccessor& accessor) override;

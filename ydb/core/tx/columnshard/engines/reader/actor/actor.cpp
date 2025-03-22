@@ -93,6 +93,14 @@ void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResu
 
 void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev) {
     auto g = Stats->MakeGuard("ack");
+
+    if (ev->Get()->FreeSpace == 0 && ev->Get()->MaxChunksCount == 0) {
+        if (!AckReceivedInstant) {
+            LastResultInstant = TMonotonic::Now();
+        }
+        return;
+    }
+
     AFL_VERIFY(!AckReceivedInstant);
     AckReceivedInstant = TMonotonic::Now();
 

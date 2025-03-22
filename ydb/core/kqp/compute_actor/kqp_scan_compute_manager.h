@@ -105,6 +105,12 @@ public:
         return !ActorId.has_value();
     }
 
+    void Ping() {
+        if (ActorId) {
+            NActors::TActivationContext::AsActorContext().Send(*ActorId, new TEvKqpCompute::TEvScanDataAck(0, 0, 0), IEventHandle::FlagTrackDelivery, TabletId);
+        }
+    }
+
     void Start(const TActorId& actorId) {
         AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "start_scanner")("actor_id", actorId);
         AFL_ENSURE(!ActorId);
@@ -281,6 +287,12 @@ public:
         AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "abort_all_scanners")("error_message", errorMessage);
         for (auto&& itTablet : ShardScanners) {
             itTablet.second->Stop(true, errorMessage);
+        }
+    }
+
+    void PingAllScanners() {
+        for (auto&& itTablet : ShardScanners) {
+            itTablet.second->Ping();
         }
     }
 

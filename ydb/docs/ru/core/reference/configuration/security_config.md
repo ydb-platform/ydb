@@ -1,28 +1,31 @@
 # Секция `security_config`
 
-В разделе `domains_config.security_config` файла конфигурации {{ ydb-short-name }} задаются режимы [аутентификации](../../security/authentication.md), первичная конфигурация локальных [пользователей](../../concepts/glossary.md#access-user) и [групп](../../concepts/glossary.md#access-group) и их [права](../../concepts/glossary.md#access-right).
+В разделе `security_config` файла конфигурации {{ ydb-short-name }} задаются режимы [аутентификации](../../security/authentication.md), первичная конфигурация локальных [пользователей](../../concepts/glossary.md#access-user) и [групп](../../concepts/glossary.md#access-group) и их [права](../../concepts/glossary.md#access-right).
 
 ```yaml
-domains_config:
-  ...
-  security_config:
-    # настройка режима аутентификации
-    enforce_user_token_requirement: false
-    enforce_user_token_check_requirement: false
-    default_user_sids: <аутентификационный токен для анонимных запросов>
-    all_authenticated_users: <имя группы всех аутентифицированных пользователей>
-    all_users_group: <имя группы всех пользователей>
+security_config:
+  # настройка режима аутентификации
+  enforce_user_token_requirement: false
+  enforce_user_token_check_requirement: false
+  default_user_sids: <аутентификационный токен для анонимных запросов>
+  all_authenticated_users: <имя группы всех аутентифицированных пользователей>
+  all_users_group: <имя группы всех пользователей>
 
-    # первичные настройки безопасности
-    default_users: <список пользователей по умолчанию>
-    default_groups: <список групп по умолчанию>
-    default_access: <список прав по умолчанию на корне кластера>
+  # первичные настройки безопасности
+  default_users: <список пользователей по умолчанию>
+  default_groups: <список групп по умолчанию>
+  default_access: <список прав по умолчанию на корне кластера>
 
-    # настройки привилегий
-    viewer_allowed_sids: <список SID'ов с правами просмотра состояния кластера>
-    monitoring_allowed_sids: <список SID'ов с правами просмотра и изменения состояния кластера>
-    administration_allowed_sids: <список SID'ов с доступом администратора кластера>
-    register_dynamic_node_allowed_sids: <список SID'ов с правами регистрации узлов баз данных в кластере>
+  # настройки привилегий
+  viewer_allowed_sids: <список SID'ов с правами просмотра состояния кластера>
+  monitoring_allowed_sids: <список SID'ов с правами просмотра и изменения состояния кластера>
+  administration_allowed_sids: <список SID'ов с доступом администратора кластера>
+  register_dynamic_node_allowed_sids: <список SID'ов с правами регистрации узлов баз данных в кластере>
+
+  # настройки встроенной настройки безопасности
+  disable_builtin_security: false
+  disable_builtin_groups: false
+  disable_builtin_access: false
 ```
 
 [//]: # (TODO: wait for pull/9387, dynamic_node_registration to add info about "register_dynamic_node_allowed_sids: <список SID'ов с правами подключения динамических нод в кластер>")
@@ -214,3 +217,26 @@ default_access:
 
 - оператор должен состоять (прямо или через группы) во `viewer_allowed_sids` и в `monitoring_allowed_sids`;
 - полноценный администратор должен состоять во `viewer_allowed_sids`, `monitoring_allowed_sids` и в `administration_allowed_sids`.
+
+## Настройки встроенной настройки безопасности
+
+Флаги `disable_builtin_security`, `disable_builtin_groups`, `disable_builtin_access` влияют на настройку кластера, осуществляемую только при первом старте кластера {{ ydb-short-name }}.
+
+#|
+|| Параметр | Описание ||
+|| `disable_builtin_security` | Не выполнять [встроенную настройку безопасности](../../security/builtin-security.md).
+Встроенная настройка включает автоматическое создание суперпользователя `root`, набора встроенных пользовательских групп и выдачу прав доступа этим группам на корне кластера.
+
+Эфемерный флаг, не попадает в конфигурацию, сохраняемую в кластере.
+
+Значение по умолчанию: `false`.
+    ||
+|| `disable_builtin_groups` | Отказаться от создания [встроенных групп](../../security/builtin-security.md), даже если явные группы по умолчанию ([`security_config.default_groups`](security_config.md)) не заданы.
+
+Значение по умолчанию: `false`
+    ||
+|| `disable_builtin_access` | Отказаться от добавления прав на корне кластера для [встроенных групп](../../security/builtin-security.md), даже если явные права по умолчанию ([`security_config.default_access`](security_config.md)) не заданы.
+
+Значение по умолчанию: `false`
+    ||
+|#

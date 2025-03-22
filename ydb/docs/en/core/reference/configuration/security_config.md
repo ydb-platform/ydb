@@ -1,27 +1,30 @@
 # `security_config` section
 
-The `domains_config.security_config` section defines [authentication](../../security/authentication.md) modes, the initial configuration of local [users](../../concepts/glossary.md#access-user) and [groups](../../concepts/glossary.md#access-group), and their [access rights](../../concepts/glossary.md#access-right).
+The `security_config` section defines [authentication](../../security/authentication.md) modes, the initial configuration of local [users](../../concepts/glossary.md#access-user) and [groups](../../concepts/glossary.md#access-group), and their [access rights](../../concepts/glossary.md#access-right).
 
 ```yaml
-domains_config:
-  ...
-  security_config:
-    # authentication mode configuration
-    enforce_user_token_requirement: false
-    enforce_user_token_check_requirement: false
-    default_user_sids: <authentication token for anonymous requests>
-    all_authenticated_users: <group name for all authenticated users>
-    all_users_group: <group name for all users>
+security_config:
+  # authentication mode configuration
+  enforce_user_token_requirement: false
+  enforce_user_token_check_requirement: false
+  default_user_sids: <authentication token for anonymous requests>
+  all_authenticated_users: <group name for all authenticated users>
+  all_users_group: <group name for all users>
 
-    # initial security configuration
-    default_users: <default user list>
-    default_groups: <default group list>
-    default_access: <default access rights on the cluster scheme root>
+  # initial security configuration
+  default_users: <default user list>
+  default_groups: <default group list>
+  default_access: <default access rights on the cluster scheme root>
 
-    # access list configuration
-    viewer_allowed_sids: <list of SIDs that are allowed to view the cluster state>
-    monitoring_allowed_sids: <list of SIDs that are allowed to monitor and change the cluster state>
-    administration_allowed_sids: <list of SIDs that are allowed cluster administration>
+  # access list configuration
+  viewer_allowed_sids: <list of SIDs that are allowed to view the cluster state>
+  monitoring_allowed_sids: <list of SIDs that are allowed to monitor and change the cluster state>
+  administration_allowed_sids: <list of SIDs that are allowed cluster administration>
+
+  # built-in security configuration
+  disable_builtin_security: false
+  disable_builtin_groups: false
+  disable_builtin_access: false
 ```
 
 [//]: # (TODO: wait for pull/9387, dynamic_node_registration to add info about "register_dynamic_node_allowed_sids: <list of SIDs that are allowed to add database nodes to the cluster>")
@@ -210,3 +213,26 @@ For example:
 
 - An operator (the SID of the user or the group to which the user belongs) must be added to `viewer_allowed_sids` and `monitoring_allowed_sids`.
 - An administrator must be added to `viewer_allowed_sids`, `monitoring_allowed_sids`, and `administration_allowed_sids`.
+
+## Built-in security configuration
+
+The `disable_builtin_security`, `disable_builtin_groups`, and `disable_builtin_access` flags affect the built-in security configuration that occurs when {{ ydb-short-name }} starts for the first time.
+
+#|
+|| Parameter | Description ||
+|| `disable_builtin_security` | Disable the [built-in security configuration](../../security/builtin-security.md).
+Built-in security configuration automatically creates a `root` superuser, a set of built-in user groups, and grants access rights to these groups at the root of the cluster.
+
+This flag is not saved in the cluster configuration.
+
+Default value: `false`.
+    ||
+|| `disable_builtin_groups` | Do not create [built-in user groups](../../security/builtin-security.md) even if the default user groups are not specified in the [`security_config.default_groups`](security_config.md) parameter.
+
+Default value: `false`
+    ||
+|| `disable_builtin_access` | Do not add access rights at the root of the cluster scheme for the [built-in user groups](../../security/builtin-security.md) even if the default access rights are not specified in the [`security_config.default_access`](security_config.md) parameter.
+
+Default value: `false`
+    ||
+|#

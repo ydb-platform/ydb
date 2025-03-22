@@ -268,31 +268,6 @@ domains_config:
        ssid: 1
 
 
-- `block-4-2` + Auth
-
-   ```yaml
-   domains_config:
-     domain:
-     - name: Root
-       storage_pool_types:
-       - kind: ssd
-         pool_config:
-           box_id: 1
-           erasure_species: block-4-2
-           kind: ssd
-           pdisk_filter:
-           - property:
-             - type: SSD
-           vdisk_kind: Default
-     state_storage:
-     - ring:
-         node: [1, 2, 3, 4, 5, 6, 7, 8]
-         nto_select: 5
-       ssid: 1
-     security_config:
-       enforce_user_token_requirement: true
-
-
 - `mirror-3-dc`
 
    ```yaml

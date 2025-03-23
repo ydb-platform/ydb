@@ -872,8 +872,6 @@ public:
         return CellVectors.empty();
     }
 
-    void Clear();
-
     using iterator = TVector<TConstArrayRef<TCell>>::iterator;
     using const_iterator = TVector<TConstArrayRef<TCell>>::const_iterator;
 

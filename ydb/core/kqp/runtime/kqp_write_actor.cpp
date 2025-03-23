@@ -2984,7 +2984,7 @@ private:
         auto ev = std::make_unique<TEvBufferWrite>();
 
         ev->Data = Batcher->Build();
-        ev->Data->UntrackAlloc();
+        ev->Data->DetachAlloc();
         ev->Close = Closed;
 
         if (!WriteToken.IsEmpty()) {

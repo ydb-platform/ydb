@@ -848,6 +848,8 @@ class TOwnedCellVecBatch {
 public:
     TOwnedCellVecBatch();
 
+    TOwnedCellVecBatch(std::unique_ptr<TMemoryPool> pool);
+
     TOwnedCellVecBatch(const TOwnedCellVecBatch& rhs) = delete;
 
     TOwnedCellVecBatch & operator=(const TOwnedCellVecBatch& rhs) = delete;
@@ -869,6 +871,8 @@ public:
     bool empty() const {
         return CellVectors.empty();
     }
+
+    void Clear();
 
     using iterator = TVector<TConstArrayRef<TCell>>::iterator;
     using const_iterator = TVector<TConstArrayRef<TCell>>::const_iterator;

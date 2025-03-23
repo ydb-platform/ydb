@@ -39,12 +39,12 @@ using IDataBatcherPtr = TIntrusivePtr<IDataBatcher>;
 IDataBatcherPtr CreateRowDataBatcher(
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
     std::vector<ui32> writeIndex,
-    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc = nullptr);
 
 IDataBatcherPtr CreateColumnDataBatcher(
     const TConstArrayRef<NKikimrKqp::TKqpColumnMetadataProto> inputColumns,
     std::vector<ui32> writeIndex,
-    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc);
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc = nullptr);
 
 class IShardedWriteController : public TThrRefBase {
 public:

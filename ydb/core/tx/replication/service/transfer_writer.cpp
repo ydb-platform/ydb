@@ -322,7 +322,7 @@ public:
     }
 
     NKqp::IDataBatcherPtr CreateDataBatcher() override {
-        return NKqp::CreateColumnDataBatcher(Scheme.ColumnsMetadata, Scheme.WriteIndex, nullptr);
+        return NKqp::CreateColumnDataBatcher(Scheme.ColumnsMetadata, Scheme.WriteIndex);
     }
 
     bool Flush() override {
@@ -381,7 +381,7 @@ public:
     {}
 
     NKqp::IDataBatcherPtr CreateDataBatcher() override {
-        return NKqp::CreateRowDataBatcher(ColumnsMetadata, WriteIndex, nullptr);
+        return NKqp::CreateRowDataBatcher(ColumnsMetadata, WriteIndex);
     }
 
     bool Flush() override {

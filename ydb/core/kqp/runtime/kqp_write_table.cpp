@@ -332,7 +332,7 @@ TVector<NScheme::TTypeInfo> BuildKeyColumnTypes(
     return keyColumnTypes;
 }
 
-class TRowBuilder { // TODO: Use Pool like scheme cells batch
+class TRowBuilder {
 private:
     struct TCellInfo {
         NScheme::TTypeInfo Type;

@@ -52,7 +52,11 @@ void TFederatedTopicClient::TImpl::InitObserver() {
 NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> TFederatedTopicClient::TImpl::GetAllClusterInfo() {
     InitObserver();
     return Observer->WaitForFirstState().Apply(
-            [observer = Observer] (const auto &) {
+            [weakObserver = std::weak_ptr(Observer)] (const auto &) {
+                auto observer = weakObserver.lock();
+                if (!observer) {
+                    throw yexception() << "Lost observer"; // TODO better message?
+                }
                 auto state = observer->GetState();
                 std::vector<TClusterInfo> result;
                 result.reserve(state->DbInfos.size());

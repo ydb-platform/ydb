@@ -37,7 +37,8 @@ public:
     }
 
     virtual TConclusion<THashMap<TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() override {
-        return THashMap<TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>>{};
+        THashMap<TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>> result;
+        return result;
     }
 
     bool Load(TInsertTableAccessor&, const TInstant&) override {

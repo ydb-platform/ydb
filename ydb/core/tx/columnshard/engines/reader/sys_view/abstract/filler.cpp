@@ -19,7 +19,7 @@ NKikimr::TConclusionStatus TMetadataFromStore::DoFillMetadata(const NColumnShard
     AFL_VERIFY(read.PKRangesFilter);
     for (auto&& filter : *read.PKRangesFilter) {
         const auto fromPathId = TInternalPathId::FromRawValue(*filter.GetPredicateFrom().Get<arrow::UInt64Array>(0, 0, 1));
-        const auto toPathId =  TInternalPathId::FromRawValue(*filter.GetPredicateTo().Get<arrow::UInt64Array>(0, 0, Max<ui64>()));
+        const auto toPathId = TInternalPathId::FromRawValue(*filter.GetPredicateTo().Get<arrow::UInt64Array>(0, 0, Max<ui64>()));
         auto pathInfos = logsIndex->GetTables(fromPathId, toPathId);
         for (auto&& pathInfo : pathInfos) {
             if (pathIds.emplace(pathInfo->GetPathId()).second) {

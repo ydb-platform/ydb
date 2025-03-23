@@ -59,7 +59,8 @@ public:
     };
 
     virtual TConclusion<THashMap<TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() override {
-        return THashMap<TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>>{};
+        HashMap<TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>> result;
+        return result;
     }
 
     void Insert(const TInsertedData& data) override {

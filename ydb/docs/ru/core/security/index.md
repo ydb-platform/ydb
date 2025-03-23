@@ -12,7 +12,7 @@
 
     [Права доступа](./authorization.md#right) в {{ ydb-short-name }} привязываются к [объекту доступа](../concepts/glossary.md#access-object) с помощью [списков прав](../concepts/glossary.md#access-control-list). Формат списков прав описан в статье [{#T}](./short-access-control-notation.md).
 
-    Для управления дополнительными возможностями [субъекта доступа](#access-subject) в контекстах, не связанных с [объектами схемы](#scheme-object), используется [списки разрешений](../concepts/glossary.md#access-level).
+    Для управления дополнительными возможностями [субъекта доступа](../concepts/glossary.md#access-subject) в контекстах, не связанных с [объектами схемы](../concepts/glossary.md#scheme-object), используется [списки разрешений](../concepts/glossary.md#access-level).
 
     По умолчанию при первом запуске кластера {{ ydb-short-name }} выполняется [встроенная настройка безопасности](./builtin-security.md), которая добавляет в систему [суперпользователя](./builtin-security.md#superuser), а также реализует набор [ролей](./builtin-security.md#role) безопасности для удобного управления пользователями.
 

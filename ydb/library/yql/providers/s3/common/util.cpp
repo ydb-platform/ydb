@@ -30,7 +30,7 @@ char* UrlEscape(char* to, const char* from) {
 
 }
 
-TIssues AddParentIssue(const TStringBuilder& prefix, TIssues&& issues) {
+TIssues AddParentIssue(const TString& prefix, TIssues&& issues) {
     if (!issues) {
         return TIssues{};
     }
@@ -39,6 +39,10 @@ TIssues AddParentIssue(const TStringBuilder& prefix, TIssues&& issues) {
         result.AddSubIssue(MakeIntrusive<TIssue>(issue));
     }
     return TIssues{result};
+}
+
+TIssues AddParentIssue(const TStringBuilder& prefix, TIssues&& issues) {
+    return AddParentIssue(TString(prefix), std::move(issues));
 }
 
 TString UrlEscapeRet(const TStringBuf from) {

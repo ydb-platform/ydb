@@ -119,6 +119,8 @@ struct TProcessorSchema : NIceDb::Schema {
 
     RESULT_PARTITION_TABLE(TopPartitionsOneMinute, 17)
     RESULT_PARTITION_TABLE(TopPartitionsOneHour, 18)
+    RESULT_PARTITION_TABLE(TopPartitionsByTliOneMinute, 20)
+    RESULT_PARTITION_TABLE(TopPartitionsByTliOneHour, 21)
 
 #undef RESULT_PARTITION_TABLE
 
@@ -141,7 +143,9 @@ struct TProcessorSchema : NIceDb::Schema {
         IntervalPartitionTops,
         IntervalPartitionFollowerTops,
         TopPartitionsOneMinute,
-        TopPartitionsOneHour
+        TopPartitionsOneHour,
+        TopPartitionsByTliOneMinute,
+        TopPartitionsByTliOneHour
     >;
 
     using TSettings = SchemaSettings<

@@ -391,6 +391,10 @@ struct Schema : NIceDb::Schema {
 
         struct ByKeyFilterSize : Column<34, NScheme::NTypeIds::Uint64> {};
 
+        struct LocksAcquired : Column<35, NScheme::NTypeIds::Uint64> {};
+        struct LocksWholeShard : Column<36, NScheme::NTypeIds::Uint64> {};
+        struct LocksBroken : Column<37, NScheme::NTypeIds::Uint64> {};
+
         using TKey = TableKey<TableOwnerId, TableLocalId, PartitionId>;
         using TColumns = TableColumns<
             TableOwnerId,
@@ -426,7 +430,10 @@ struct Schema : NIceDb::Schema {
             FullCompactionTs,
             MemDataSize,
             StoragePoolsStats,
-            ByKeyFilterSize
+            ByKeyFilterSize,
+            LocksAcquired,
+            LocksWholeShard,
+            LocksBroken
         >;
     };
 

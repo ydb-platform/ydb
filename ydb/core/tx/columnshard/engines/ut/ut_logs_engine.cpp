@@ -59,7 +59,7 @@ public:
     };
 
     virtual TConclusion<THashMap<TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>>> LoadGranulesShardingInfo() override {
-        HashMap<TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>> result;
+        THashMap<TInternalPathId, std::map<TSnapshot, TGranuleShardingInfo>> result;
         return result;
     }
 

@@ -852,7 +852,7 @@ public:
 
     TOwnedCellVecBatch & operator=(const TOwnedCellVecBatch& rhs) = delete;
 
-    TOwnedCellVecBatch(const TOwnedCellVecBatch&& rhs) = default;
+    TOwnedCellVecBatch(TOwnedCellVecBatch&& rhs) = default;
 
     TOwnedCellVecBatch & operator=(TOwnedCellVecBatch&& rhs) = default;
 
@@ -878,6 +878,14 @@ public:
     }
 
     iterator end() {
+        return CellVectors.end();
+    }
+
+    const_iterator begin() const {
+        return CellVectors.begin();
+    }
+
+    const_iterator end() const {
         return CellVectors.end();
     }
 

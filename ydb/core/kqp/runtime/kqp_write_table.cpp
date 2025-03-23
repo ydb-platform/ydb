@@ -99,7 +99,7 @@ public:
                 cells.push_back(cell);
             }
         }
-        return TSerializedCellMatrix::Serialize(cells, Rows.size(), !IsEmpty() ? Rows.front().size() : 0);
+        return TSerializedCellMatrix::Serialize(cells, Rows.Size(), !IsEmpty() ? Rows.front().size() : 0);
     }
 
     i64 GetSerializedMemory() const override {
@@ -117,14 +117,14 @@ public:
         return Rows.empty();
     }
 
-    std::vector<TOwnedCellVec> Extract() {
+    TOwnedCellVecBatch Extract() {
         YQL_ENSURE(!Extracted);
         Extracted = true;
         return std::move(Rows);
     }
 
     std::shared_ptr<void> ExtractBatch() override {
-        auto r = std::make_shared<std::vector<TOwnedCellVec>>(std::move(Extract()));
+        auto r = std::make_shared<TOwnedCellVecBatch>(std::move(Extract()));
         return std::reinterpret_pointer_cast<void>(r);
     }
 
@@ -144,15 +144,16 @@ public:
     }
 
     TRowBatch(
-            std::vector<TOwnedCellVec>&& rows,
+            TOwnedCellVecBatch&& rows,
             std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc = nullptr)
         : Rows(std::move(rows)) {
         SerializedMemory = GetCellMatrixHeaderSize();
         Memory = 0;
         for (const auto& row : Rows) {
             YQL_ENSURE(row.size() == Rows.front().size());
-            SerializedMemory += GetCellHeaderSize() * rows.size() + row.DataSize();
-            Memory += row.DataSize();
+            const auto size = EstimateSize(row);
+            SerializedMemory += GetCellHeaderSize() * rows.Size() + size;
+            Memory += size;
         }
 
         if (alloc && Memory > 0) {
@@ -167,7 +168,7 @@ public:
     }
 
 private:
-    std::vector<TOwnedCellVec> Rows;
+    TOwnedCellVecBatch Rows;
     i64 SerializedMemory = 0;
     i64 Memory = 0;
     bool Extracted = false;
@@ -281,7 +282,7 @@ public:
 
     TRowBuilder& AddCell(
             const size_t index,
-            const NScheme::TTypeInfo type,
+            const NScheme::TTypeInfo& type,
             const NUdf::TUnboxedValuePod& value,
             const TString& typeMod) {
         CellsInfo[index].Type = type;
@@ -311,31 +312,18 @@ public:
         return *this;
     }
 
-    size_t DataSize() const {
-        size_t result = 0;
-        for (const auto& cellInfo : CellsInfo) {
-            result += GetCellSize(cellInfo);
-        }
-        return result;
-    }
-
-    TOwnedCellVec Build() {
-        const auto size = DataSize();
+    TConstArrayRef<TCell> BuildCells() {
         Cells.clear();
         Cells.reserve(CellsInfo.size());
-        Data.resize(size);
-        char* ptr = Data.data();
-
+        
         for (const auto& cellInfo : CellsInfo) {
-            Cells.emplace_back(BuildCell(cellInfo, ptr));
+            Cells.emplace_back(BuildCell(cellInfo));
         }
-
-        AFL_ENSURE(ptr == Data.data() + size);
-        return TOwnedCellVec(Cells);
+        return Cells;
     }
 
 private:
-    TCell BuildCell(const TCellInfo& cellInfo, char*& dataPtr) {
+    TCell BuildCell(const TCellInfo& cellInfo) {
         if (!cellInfo.Value) {
             return TCell();
         }
@@ -348,11 +336,7 @@ private:
             {
                 auto intValue = cellInfo.Value.GetInt128();
                 constexpr auto valueSize = sizeof(intValue);
-
-                char* initialPtr = dataPtr;
-                std::memcpy(initialPtr, reinterpret_cast<const char*>(&intValue), valueSize);
-                dataPtr += valueSize;
-                return TCell(initialPtr, valueSize);
+                return TCell(reinterpret_cast<const char*>(&intValue), valueSize);
             }
         }
 
@@ -362,42 +346,13 @@ private:
             ? NYql::NUdf::TStringRef(cellInfo.PgBinaryValue)
             : cellInfo.Value.AsStringRef();
 
-        if (!isPg && TCell::CanInline(ref.Size())) {
-            return TCell(ref.Data(), ref.Size());
-        } else {
-            char* initialPtr = dataPtr;
-            std::memcpy(initialPtr, ref.Data(), ref.Size());
-            dataPtr += ref.Size();
-            return TCell(initialPtr, ref.Size());
-        }
-    }
-
-    size_t GetCellSize(const TCellInfo& cellInfo) const {
-        if (!cellInfo.Value) {
-            return 0;
-        }
-
-        switch(cellInfo.Type.GetTypeId()) {
-    #define MAKE_PRIMITIVE_TYPE_CELL_CASE_SIZE(type, layout) \
-        case NUdf::TDataType<type>::Id:
-            KNOWN_FIXED_VALUE_TYPES(MAKE_PRIMITIVE_TYPE_CELL_CASE_SIZE)
-            return 0;
-        case NUdf::TDataType<NUdf::TDecimal>::Id:
-            return sizeof(cellInfo.Value.GetInt128());
-        }
-
-        const bool isPg = cellInfo.Type.GetTypeId() == NScheme::NTypeIds::Pg;
-
-        const auto ref = isPg
-            ? NYql::NUdf::TStringRef(cellInfo.PgBinaryValue)
-            : cellInfo.Value.AsStringRef();
-
-        return (!isPg && TCell::CanInline(ref.Size())) ? 0 : ref.Size();
+        return TCell(ref.Data(), ref.Size());
     }
 
     TVector<TCellInfo> CellsInfo;
     TVector<TCell> Cells;
-    TVector<char> Data;
+
+    TOwnedCellVecBatch Batch;
 };
 
 class TColumnDataBatcher : public IDataBatcher {
@@ -437,7 +392,7 @@ public:
                     row.GetElement(index),
                     Columns[index].PTypeMod);
             }
-            BatchBuilder->AddRow(rowBuilder.Build());
+            BatchBuilder->AddRow(rowBuilder.BuildCells());
         });
     }
 
@@ -675,11 +630,11 @@ class TRowsBatcher {
     private:
         i64 Memory;
         i64 MemorySerialized;
-        TVector<TOwnedCellVec> Rows;
+        TOwnedCellVecBatch Rows;
 
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 
-        TVector<TOwnedCellVec> Extract() {
+        TOwnedCellVecBatch Extract() {
             if (Memory > 0) {
                 TGuard guard(*Alloc);
                 Alloc->Ref().OffloadFree(Memory);
@@ -712,7 +667,8 @@ class TRowsBatcher {
             Memory += memory;
             MemorySerialized += memorySerialized;
 
-            Rows.emplace_back(std::move(row));
+            //Rows.emplace_back(std::move(row));
+            Rows.Append(row);
 
             return memory;
         }
@@ -753,7 +709,7 @@ public:
 
             return res;
         }
-        return MakeIntrusive<TRowBatch>(TVector<TOwnedCellVec>{}, Alloc);
+        return MakeIntrusive<TRowBatch>(TOwnedCellVecBatch{}, Alloc);
     }
 
     void AddRow(TOwnedCellVec&& row) {
@@ -804,8 +760,8 @@ public:
                     row.GetElement(index),
                     Columns[index].PTypeMod);
             }
-            auto rowWithData = rowBuilder.Build();
-            RowBatcher.AddRow(std::move(rowWithData));
+            auto rowWithData = rowBuilder.BuildCells();
+            RowBatcher.AddRow(TOwnedCellVec(rowWithData));
         });
     }
 
@@ -881,7 +837,7 @@ public:
 
         for (auto& row : rows) {
             AddRow(
-                std::move(row),
+                TOwnedCellVec(row),
                 Partitioning);
         }
     }
@@ -1586,7 +1542,7 @@ private:
     }
 
     void ReshardData() {
-        YQL_ENSURE(!Settings.Inconsistent);
+        YQL_ENSURE(Settings.Inconsistent);
         for (auto& [_, shardInfo] : ShardsInfo.GetShards()) {
             for (size_t index = 0; index < shardInfo.Size(); ++index) {
                 auto& batch = shardInfo.GetBatch(index);

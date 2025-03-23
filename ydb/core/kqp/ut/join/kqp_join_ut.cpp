@@ -138,6 +138,72 @@ static void CreateLeftJoinSampleTables(TSession session) {
     UNIT_ASSERT_C(res2.IsSuccess(), res2.GetIssues().ToString());
 }
 
+static void CreateLeftJoinPropagationSampleTables(TSession session) {
+    auto res = session.ExecuteSchemeQuery(R"(
+        CREATE TABLE `/Root/Join1_1` (
+            Key1 Int32,
+            Key2 String,
+            Fk1 String,
+            Value String,
+            PRIMARY KEY (Key1, Key2)
+        );
+        CREATE TABLE `/Root/Join1_2` (
+            Key String,
+            Value Int32, PRIMARY KEY (Key)
+        );
+        CREATE TABLE `/Root/Join1_3` (
+            Key String, 
+            Value Int32, PRIMARY KEY (Key)
+        );
+        CREATE TABLE `/Root/Join1_4` (
+            Key String not null,
+            Value Int32, PRIMARY KEY (Key)
+        );
+        CREATE TABLE `/Root/Join1_5` (
+            Key String not null,
+            Value Int32, PRIMARY KEY (Key)
+        );
+        CREATE TABLE `/Root/Join1_6` (
+             Key String not null,
+             Value Int32, PRIMARY KEY (Key)
+         );
+    )").ExtractValueSync();
+    UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+
+    auto res2 = session.ExecuteDataQuery(R"(
+        REPLACE INTO `/Root/Join1_1` (Key1, Key2, Fk1, Value) VALUES
+            (101, "One",    NULL,   "no_right_key_1"),
+            (102, "Two",   NULL,   "no_right_key_2"),
+            (103, "Three", "Name1", "Value1"),
+            (104, "One", "Name2", "Value2"),
+            (104, "Two", "Name2", "Value3"),
+            (105, "One", "Name3", "no_right_key_3"),
+            (106, "One", "Name4", NULL),
+            (106, "Two", "Name4", "Value4");
+
+        REPLACE INTO `/Root/Join1_2` (Key, Value) VALUES
+            ("Name1", 1001),
+            ("Name2", 1002),
+            ("Name4", NULL);
+         REPLACE INTO `/Root/Join1_3` (Key, Value) VALUES
+            ("Name2", 12345);
+         REPLACE INTO `/Root/Join1_4` (Key, Value) VALUES
+            ("Name1", 1001),
+            ("Name2", 1002),
+            ("Name4", NULL);
+         REPLACE INTO `/Root/Join1_5` (Key, Value) VALUES
+            ("Name1", 1001),
+            ("Name2", 1002),
+            ("Name4", NULL);
+         REPLACE INTO `/Root/Join1_6` (Key, Value) VALUES
+            ("Name1", 1001),
+            ("Name2", 1002),
+            ("Name4", NULL);
+
+    )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+    UNIT_ASSERT_C(res2.IsSuccess(), res2.GetIssues().ToString());
+}
+
 static void CreateRightSemiJoinSampleTables(TSession& session) {
     UNIT_ASSERT(session.ExecuteSchemeQuery(R"(
         CREATE TABLE `/Root/RSJ_SimpleKey_1` (
@@ -509,6 +575,31 @@ Y_UNIT_TEST_SUITE(KqpJoin) {
             FormatResultSetYson(result.GetResultSet(0)));
     }
 
+    Y_UNIT_TEST(LeftJoinPushdownPredicatePropagate) {
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        CreateLeftJoinPropagationSampleTables(session);
+        auto result = session.ExecuteDataQuery(Q_(R"(
+            PRAGMA FilterPushdownOverJoinOptionalSide;
+            SELECT t1.Fk1
+
+            FROM `/Root/Join1_1` as t1
+            LEFT JOIN `/Root/Join1_2` AS t2
+            ON t1.Fk1 = t2.Key
+            INNER JOIN `/Root/Join1_3` AS t3
+            on t2.Key = t3.Key
+            INNER JOIN `/Root/Join1_4` AS t4
+            on t2.Key = t4.Key
+            where
+            t2.Value > 1001
+
+        )"), TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+ 
     Y_UNIT_TEST(LeftJoinPushdownPredicate_Simple) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();

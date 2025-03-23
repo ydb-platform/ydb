@@ -18,6 +18,8 @@ namespace NYql::NConnector {
     ///
     /// Connection Factory which always returns an exact connection
     ///
+    /// TODO: check connection healthiness
+    ///
     template<typename T>
     class TSingleConnectionFactory final : public IConnectionFactory<T> {
     public:
@@ -160,27 +162,24 @@ namespace NYql::NConnector {
     };
 
     ///
-    ///  Create factory based on a value in a config file
+    ///  Create a factory based on a value in a config file
     ///
     std::unique_ptr<IConnectionFactory<NApi::Connector>> CreateFactoryForConnector(
-        const NYql::EConnectionFactory& factory,
+        NYql::EConnectionFactory factory,
         std::shared_ptr<NYdbGrpc::TGRpcClientLow> client,
         const NYdbGrpc::TGRpcClientConfig& grpcConfig,
         const NYdbGrpc::TTcpKeepAliveSettings& keepAlive) {
-        IConnectionFactory<NApi::Connector> * ptr = nullptr;
 
         switch (factory) {
             case SINGLE:
-                ptr = new TSingleConnectionFactory<NApi::Connector>(client, grpcConfig, keepAlive);
-                break;
+                return std::make_unique<TSingleConnectionFactory<NApi::Connector>>(
+                    client, grpcConfig, keepAlive);
             
             case NEW_FOR_EACH_REQUEST:
             default:
-                ptr = new TNewOnEachRequestConnectionFactory<NApi::Connector>(client, grpcConfig, keepAlive);
-                break;
+                return std::make_unique<TNewOnEachRequestConnectionFactory<NApi::Connector>>(
+                    client, grpcConfig, keepAlive);
         }
-
-        return std::unique_ptr<IConnectionFactory<NApi::Connector>>(ptr);
     }
 
     /*
@@ -239,8 +238,6 @@ namespace NYql::NConnector {
         ~TClientGRPC() {
             GrpcClient_->Stop(true);
         }
-
-    public: 
         
         virtual TDescribeTableAsyncResult DescribeTable(const NApi::TDescribeTableRequest& request, TDuration timeout = {}) override {
             auto kind = request.Getdata_source_instance().Getkind();
@@ -322,7 +319,7 @@ namespace NYql::NConnector {
                 .Interval = 10
             };
 
-            uint count = 0;
+            size_t count = 0;
             auto cfg = ConnectorConfigToGrpcConfig(
                 config.GetConnector(), count++);
 
@@ -351,12 +348,11 @@ namespace NYql::NConnector {
             }
         }
 
-        std::shared_ptr<NYdbGrpc::TServiceConnection<NApi::Connector>> GetConnection(const NYql::EGenericDataSourceKind& kind) const {
-            if (FactoryForKind_.contains(kind)) {
-                return FactoryForKind_.at(kind)->Create();
-            }
+        std::shared_ptr<NYdbGrpc::TServiceConnection<NApi::Connector>> GetConnection(NYql::EGenericDataSourceKind kind) const {
+            auto itr = FactoryForKind_.find(kind);
 
-            return DefaultFactory_->Create();
+            return FactoryForKind_.end() == itr ? 
+                DefaultFactory_->Create() : itr->second->Create();
         }
 
         template<typename TResponse>
@@ -413,7 +409,7 @@ namespace NYql::NConnector {
             return promise.GetFuture();
         }
 
-        NYdbGrpc::TGRpcClientConfig ConnectorConfigToGrpcConfig(const TGenericConnectorConfig& config, uint order) const {
+        NYdbGrpc::TGRpcClientConfig ConnectorConfigToGrpcConfig(const TGenericConnectorConfig& config, size_t order) const {
             auto cfg = NYdbGrpc::TGRpcClientConfig(); 
 
             // Connector's name. If order equals zero it means config belongs "TGenericGatewayConfig.Connector"

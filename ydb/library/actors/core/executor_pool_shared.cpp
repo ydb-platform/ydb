@@ -488,8 +488,7 @@ namespace NActors {
                 }
             }
         }
-        EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Activation, "no 
- threads");
+        EXECUTOR_POOL_SHARED_DEBUG(EDebugLevel::Activation, "no threads");
         return false;
     }
 

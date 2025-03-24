@@ -942,8 +942,101 @@ R"(CREATE TABLE `test_show_create` (
     PRIMARY KEY (`BoolValue`, `Int32Value`, `Uint32Value`, `Int64Value`, `Uint64Value`, `StringValue`, `Utf8Value`)
 )
 WITH (PARTITION_AT_KEYS = ((FALSE), (FALSE, 1, 2), (TRUE, 1, 1, 1, 1, 'str'), (TRUE, 1, 1, 100, 0, 'str', 'utf')));
-)",
-        true);
+)"
+        );
+    }
+
+    Y_UNIT_TEST(ShowCreateTablePartitionByHash) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateTableChecker checker(env);
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64 NOT NULL,
+                Key2 String NOT NULL,
+                Value String,
+                PRIMARY KEY (Key1, Key2)
+            )
+            PARTITION BY HASH(Key1, Key2)
+            WITH (
+                STORE = COLUMN
+            );
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key1` Uint64 NOT NULL,
+    `Key2` String NOT NULL,
+    `Value` String,
+    PRIMARY KEY (`Key1`, `Key2`)
+)
+PARTITION BY HASH (`Key1`, `Key2`)
+WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+)"
+        );
+    }
+
+    Y_UNIT_TEST(ShowCreateTableColumn) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateTableChecker checker(env);
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 Int64 NOT NULL,
+                Key2 Utf8 NOT NULL,
+                Key3 Int32 NOT NULL,
+                Value1 Utf8 FAMILY Family1,
+                Value2 Int16 FAMILY Family2,
+                Value3 String FAMILY Family2,
+                PRIMARY KEY (Key1, Key2, Key3),
+                FAMILY default (
+                    COMPRESSION = "zstd"
+                ),
+                FAMILY Family1 (
+                    COMPRESSION = "off"
+                ),
+                FAMILY Family2 (
+                    COMPRESSION = "lz4"
+                )
+            )
+            PARTITION BY HASH(`Key1`, `Key2`)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 100
+            );
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key1` Int64 NOT NULL,
+    `Key2` Utf8 NOT NULL,
+    `Key3` Int32 NOT NULL,
+    `Value1` Utf8,
+    `Value2` Int16,
+    `Value3` String,
+    FAMILY `default` (COMPRESSION = 'zstd'),
+    FAMILY `Family1` (COMPRESSION = 'off'),
+    FAMILY `Family2` (COMPRESSION = 'lz4'),
+    PRIMARY KEY (`Key1`, `Key2`, `Key3`)
+)
+PARTITION BY HASH (`Key1`, `Key2`)
+WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 100
+);
+)"
+        );
     }
 
     Y_UNIT_TEST(ShowCreateTablePartitionSettings) {

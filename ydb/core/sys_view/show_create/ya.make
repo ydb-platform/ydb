@@ -11,6 +11,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/kqp/runtime
     ydb/core/protos
+    ydb/core/tx/columnshard/engines/scheme/defaults/protos
     ydb/core/sys_view/common
     ydb/core/tx/schemeshard
     ydb/core/tx/tx_proxy

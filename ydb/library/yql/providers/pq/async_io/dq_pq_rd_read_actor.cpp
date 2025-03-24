@@ -1112,14 +1112,14 @@ void TDqPqRdReadActor::StartClusterDiscovery() {
         auto federatedClusters = future.ExtractValue();
         if (federatedClusters.empty()) {
             federatedClusters.emplace_back(
-                "", 
+                "",
                 discoveryEndpoint,
                 database,
                 NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo::EStatus::AVAILABLE);
         }
         auto describeTopicFutures = std::make_shared<std::vector<NYdb::NTopic::TAsyncDescribeTopicResult>>();
         describeTopicFutures->reserve(federatedClusters.size());
-        
+
         for (auto &info: federatedClusters) {
             info.AdjustTopicClientSettings(clientSettings);
             NYdb::NTopic::TTopicClient topicClient(driver, clientSettings);

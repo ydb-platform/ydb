@@ -750,7 +750,7 @@ TString TRowDispatcher::GetInternalState() {
         str << "  " << consumer->QueryId << " " << LeftPad(readActorId, 32) << " Generation " << consumer->Generation <<  "\n";
         str << "    partitions: "; 
         for (const auto& [partitionKey, info] : consumer->Partitions) {
-            str << partitionKey << ","; 
+            str << partitionKey << ",";
         }
         str << "\n    retry queue: ";
         consumer->EventsQueue.PrintInternalState(str);

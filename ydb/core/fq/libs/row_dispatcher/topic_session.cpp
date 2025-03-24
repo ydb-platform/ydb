@@ -577,7 +577,7 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
     if (messages.empty()) {
         return;
     }
-        
+
     ui64 dataSize = 0;
     auto& messages = event.GetMessages();
 

@@ -432,12 +432,18 @@ private:
         }
         const bool initialWrite = NYql::HasSetting(settings, EYtSettingType::Initial);
         const bool monotonicKeys = NYql::HasSetting(settings, EYtSettingType::MonotonicKeys);
-        TString columnGroups;
+        TString columnGroup;
+        TSet<TString> columnGroupAlts;
         if (auto setting = NYql::GetSetting(settings, EYtSettingType::ColumnGroups)) {
             if (!ValidateColumnGroups(*setting, *itemType->Cast<TStructExprType>(), ctx)) {
                 return TStatus::Error;
             }
-            columnGroups.assign(setting->Tail().Content());
+            columnGroup = setting->Tail().Content();
+            columnGroupAlts.insert(columnGroup);
+            TString exandedSpec;
+            if (ExpandDefaultColumnGroup(setting->Tail().Content(), *itemType->Cast<TStructExprType>(), exandedSpec)) {
+                columnGroupAlts.insert(std::move(exandedSpec));
+            }
         }
 
         if (!initialWrite && mode != EYtWriteMode::Append) {
@@ -472,15 +478,6 @@ private:
                 << "Insert with "
                 << ToString(EYtSettingType::MonotonicKeys).Quote()
                 << " setting cannot be used with a non-existent table"));
-            return TStatus::Error;
-        }
-
-        if (initialWrite && !replaceMeta && columnGroups != description.ColumnGroupSpec) {
-            ctx.AddError(TIssue(pos, TStringBuilder()
-                << "Insert with "
-                << (outTableInfo.Epoch.GetOrElse(0) ? "different " : "")
-                << ToString(EYtSettingType::ColumnGroups).Quote()
-                << " to existing table is not allowed"));
             return TStatus::Error;
         }
 
@@ -581,6 +578,14 @@ private:
                     << GetTypeDiff(*description.RowType, *itemType)));
                 return TStatus::Error;
             }
+
+            if (!columnGroupAlts.empty() && !AnyOf(columnGroupAlts, [&](const auto& grp) { return description.ColumnGroupSpecAlts.contains(grp); })) {
+                ctx.AddError(TIssue(pos, TStringBuilder()
+                    << "Insert with different "
+                    << ToString(EYtSettingType::ColumnGroups).Quote()
+                    << " to existing table is not allowed"));
+                return TStatus::Error;
+            }
         }
 
         if (auto commitEpoch = outTableInfo.CommitEpoch.GetOrElse(0)) {
@@ -601,13 +606,18 @@ private:
                     nextRowSpec->SetType(itemType->Cast<TStructExprType>(), State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
                     YQL_CLOG(INFO, ProviderYt) << "Saving column order: " << FormatColumnOrder(contentColumnOrder, 10);
                     nextRowSpec->SetColumnOrder(contentColumnOrder);
+
+                    nextDescription.ColumnGroupSpec = columnGroup;
+                    nextDescription.ColumnGroupSpecAlts = columnGroupAlts;
                 } else {
                     nextRowSpec->CopyType(*description.RowSpec);
-                }
-
-                if (!replaceMeta) {
                     nextRowSpec->StrictSchema = !description.RowSpec || description.RowSpec->StrictSchema;
+
                     nextMetadata->Attrs = meta->Attrs;
+
+                    nextDescription.ColumnGroupSpec = description.ColumnGroupSpec;
+                    nextDescription.ColumnGroupSpecAlts = description.ColumnGroupSpecAlts;
+                    nextDescription.ColumnGroupSpecInherited = true;
                 }
             }
             else {
@@ -627,9 +637,17 @@ private:
                 }
             }
 
-            if (initialWrite) {
-                nextDescription.ColumnGroupSpec = columnGroups;
-            } else if (columnGroups != nextDescription.ColumnGroupSpec) {
+            if (!columnGroupAlts.empty()) {
+                nextDescription.ColumnGroupSpecInherited = false;
+                if (!AnyOf(columnGroupAlts, [&](const auto& grp) { return nextDescription.ColumnGroupSpecAlts.contains(grp); })) {
+                    ctx.AddError(TIssue(pos, TStringBuilder()
+                        << "All appends within the same commit should have the equal "
+                        << ToString(EYtSettingType::ColumnGroups).Quote()
+                        << " value"));
+                    return TStatus::Error;
+                }
+                nextDescription.ColumnGroupSpecAlts.insert(columnGroupAlts.begin(), columnGroupAlts.end());
+            } else if (!nextDescription.ColumnGroupSpecInherited && !nextDescription.ColumnGroupSpecAlts.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder()
                     << "All appends within the same commit should have the equal "
                     << ToString(EYtSettingType::ColumnGroups).Quote()
@@ -980,23 +998,33 @@ private:
             outGroup = setting->Tail().Content();
         }
 
-        TStringBuf inputColGroupSpec;
+        bool diffGroups = false;
         const auto& path = copy.Input().Item(0).Paths().Item(0);
         if (auto table = path.Table().Maybe<TYtTable>()) {
             if (auto tableDesc = State_->TablesData->FindTable(copy.DataSink().Cluster().StringValue(), TString{TYtTableInfo::GetTableLabel(table.Cast())}, TEpochInfo::Parse(table.Cast().Epoch().Ref()))) {
-                inputColGroupSpec = tableDesc->ColumnGroupSpec;
+                diffGroups = tableDesc->ColumnGroupSpecAlts.empty() != outGroup.empty() || (!outGroup.empty() && !tableDesc->ColumnGroupSpecAlts.contains(outGroup));
+                if (diffGroups && !outGroup.empty() && !tableDesc->ColumnGroupSpecAlts.empty()) {
+                    TString expanded;
+                    if (ExpandDefaultColumnGroup(outGroup, *GetSeqItemType(*copy.Output().Item(0).Ref().GetTypeAnn()).Cast<TStructExprType>(), expanded)) {
+                        diffGroups = !tableDesc->ColumnGroupSpecAlts.contains(expanded);
+                    }
+                }
             }
         } else if (auto out = path.Table().Maybe<TYtOutput>()) {
+            TStringBuf inGroup;
             if (auto setting = NYql::GetSetting(GetOutputOp(out.Cast()).Output().Item(FromString<ui32>(out.Cast().OutIndex().Value())).Settings().Ref(), EYtSettingType::ColumnGroups)) {
-                inputColGroupSpec = setting->Tail().Content();
+                inGroup = setting->Tail().Content();
             }
+            diffGroups = inGroup != outGroup;
         } else if (auto outTable = path.Table().Maybe<TYtOutTable>()) {
+            TStringBuf inGroup;
             if (auto setting = NYql::GetSetting(outTable.Cast().Settings().Ref(), EYtSettingType::ColumnGroups)) {
-                inputColGroupSpec = setting->Tail().Content();
+                inGroup = setting->Tail().Content();
             }
+            diffGroups = inGroup != outGroup;
         }
 
-        if (outGroup != inputColGroupSpec) {
+        if (diffGroups) {
             ctx.AddError(TIssue(ctx.GetPosition(copy.Output().Item(0).Settings().Pos()), TStringBuilder() << TYtCopy::CallableName()
                 << " has input/output tables with different " << EYtSettingType::ColumnGroups << " values"));
             return TStatus::Error;

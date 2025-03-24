@@ -24,6 +24,22 @@ namespace NKikimr::NBlobDepot {
             }
             DIV_CLASS("panel panel-info") {
                 DIV_CLASS("panel-heading") {
+                   s << "Debugging";
+                }
+                DIV_CLASS("panel-body") {
+                    KEYVALUE_TABLE({
+                        KEYVALUE_P("LoadRestartTx", LoadRestartTx);
+                        KEYVALUE_P("LoadRunSuccessorTx", LoadRunSuccessorTx);
+                        KEYVALUE_P("LoadProcessingCycles", CyclesToDuration(LoadProcessingCycles));
+                        KEYVALUE_P("LoadFinishTxCycles", CyclesToDuration(LoadFinishTxCycles));
+                        KEYVALUE_P("LoadRestartTxCycles", CyclesToDuration(LoadRestartTxCycles));
+                        KEYVALUE_P("LoadRunSuccessorTxCycles", CyclesToDuration(LoadRunSuccessorTxCycles));
+                        KEYVALUE_P("LoadTotalCycles", CyclesToDuration(LoadTotalCycles));
+                    })
+                }
+            }
+            DIV_CLASS("panel panel-info") {
+                DIV_CLASS("panel-heading") {
                     s << "Uncertainty resolver";
                 }
                 DIV_CLASS("panel-body") {

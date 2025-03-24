@@ -629,7 +629,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
     Y_UNIT_TEST_TWIN(TooBigKey, useSink) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableOltpSink(useSink);
-        appConfig.MutableTableServiceConfig()->MutableWriteActorSettings()->SetInFlightMemoryLimitPerActorBytes(512 * 1024 * 1024) // for ASAN
+        appConfig.MutableTableServiceConfig()->MutableWriteActorSettings()->SetInFlightMemoryLimitPerActorBytes(512 * 1024 * 1024); // for ASAN
 
         TKikimrRunner kikimr(appConfig);
         auto db = kikimr.GetTableClient();

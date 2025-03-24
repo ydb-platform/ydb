@@ -488,7 +488,7 @@ public:
         if (!Prefix) {
             Prefix = TSerializedCellVec{key.subspan(0, PrefixColumns)};
 
-            // write {Parent, ...Prefix} row to PrefixBuf:
+            // write {Prefix..., Parent} row to PrefixBuf:
             auto pk = TSerializedCellVec::Serialize(Prefix.GetCells());
             std::array<TCell, 1> cells;
             cells[0] = TCell::Make(Parent);

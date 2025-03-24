@@ -141,9 +141,6 @@ bool TDataShard::TTxWrite::Execute(TTransactionContext& txc, const TActorContext
     } catch (const TNotReadyTabletException&) {
         LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "TX [" << 0 << " : " << TxId << "] can't prepare (tablet's not ready) at tablet " << Self->TabletID());
         return false;
-    } catch (const TMemoryLimitExceededException& ex) {
-        LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Unexpected TMemoryLimitExceededException");
-        throw;
     }
 
     return true;

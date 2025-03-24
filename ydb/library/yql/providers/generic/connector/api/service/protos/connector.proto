@@ -181,7 +181,7 @@ message TSelect {
 
     // For schemaless data sources, when it's hard for us to infer schema for the query result,
     // user can supply the schema himself.
-    // This fields was used for some outdated experiments. Never try to fill them.
+    // This field was used for some outdated experiments with S3 connector. Never try to fill them.
     TSchema predefined_schema = 6 [deprecated = true];
 }
 

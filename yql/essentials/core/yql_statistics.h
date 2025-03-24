@@ -2,6 +2,7 @@
 
 #include "yql_cost_function.h"
 #include <yql/essentials/core/minsketch/count_min_sketch.h>
+#include <yql/essentials/core/cbo/cbo_interesting_orderings.h>
 
 #include <library/cpp/json/json_reader.h>
 
@@ -87,6 +88,7 @@ struct TOptimizerStatistics {
     TIntrusivePtr<TSortColumns> SortColumns;
     std::shared_ptr<IProviderStatistics> Specific;
     std::shared_ptr<TVector<TString>> Labels = {};
+    NDq::TOrderingsStateMachine::TLogicalOrderings LogicalOrderings;
 
     TOptimizerStatistics(TOptimizerStatistics&&) = default;
     TOptimizerStatistics& operator=(TOptimizerStatistics&&) = default;

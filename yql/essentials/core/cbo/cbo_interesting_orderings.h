@@ -266,8 +266,14 @@ public:
         TFDSet AppliedFDs{};
     };
 
-    TLogicalOrderings CreateState() { // TODO : THINK ABOUT IT createstate + setordering in one func
+    TLogicalOrderings CreateState() {
         return TLogicalOrderings(&DFSM);
+    }
+
+    TLogicalOrderings CreateState(std::size_t orderingIdx) {
+        auto state = TLogicalOrderings(&DFSM);
+        state.SetOrdering(orderingIdx);
+        return state;
     }
 
 public:

@@ -8485,3 +8485,14 @@ Y_UNIT_TEST_SUITE(OlapPartitionCount) {
         UNIT_ASSERT_STRING_CONTAINS(res.Issues.ToString(), "PARTITION_COUNT can be used only with STORE=COLUMN");
     }
 }
+
+Y_UNIT_TEST_SUITE(Crashes) {
+    Y_UNIT_TEST(IncorrectCorrQuery) {
+        NYql::TAstParseResult res = SqlToYql(R"sql(
+            use plato;
+            SELECT COUNT(DISTINCT EXISTS (SELECT 1 FROM t1 AS t2)) FROM Input AS t1
+        )sql");
+
+        UNIT_ASSERT_C(res.IsOk(), res.Issues.ToString());
+    }
+}

@@ -4521,16 +4521,18 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
             COUNTER_PQ_STATS_BATCH_LATENCY)
     , AllowDataColumnForIndexTable(0, 0, 1)
     , LoginProvider(NLogin::TPasswordComplexity({
-        .MinLength = AppData()->AuthConfig.GetPasswordComplexity().GetMinLength(),
-        .MinLowerCaseCount = AppData()->AuthConfig.GetPasswordComplexity().GetMinLowerCaseCount(),
-        .MinUpperCaseCount = AppData()->AuthConfig.GetPasswordComplexity().GetMinUpperCaseCount(),
-        .MinNumbersCount = AppData()->AuthConfig.GetPasswordComplexity().GetMinNumbersCount(),
-        .MinSpecialCharsCount = AppData()->AuthConfig.GetPasswordComplexity().GetMinSpecialCharsCount(),
-        .SpecialChars = AppData()->AuthConfig.GetPasswordComplexity().GetSpecialChars(),
-        .CanContainUsername = AppData()->AuthConfig.GetPasswordComplexity().GetCanContainUsername()
-    }), {.AttemptThreshold = AppData()->AuthConfig.GetAccountLockout().GetAttemptThreshold(),
-         .AttemptResetDuration = AppData()->AuthConfig.GetAccountLockout().GetAttemptResetDuration()
-    })
+            .MinLength = AppData()->AuthConfig.GetPasswordComplexity().GetMinLength(),
+            .MinLowerCaseCount = AppData()->AuthConfig.GetPasswordComplexity().GetMinLowerCaseCount(),
+            .MinUpperCaseCount = AppData()->AuthConfig.GetPasswordComplexity().GetMinUpperCaseCount(),
+            .MinNumbersCount = AppData()->AuthConfig.GetPasswordComplexity().GetMinNumbersCount(),
+            .MinSpecialCharsCount = AppData()->AuthConfig.GetPasswordComplexity().GetMinSpecialCharsCount(),
+            .SpecialChars = AppData()->AuthConfig.GetPasswordComplexity().GetSpecialChars(),
+            .CanContainUsername = AppData()->AuthConfig.GetPasswordComplexity().GetCanContainUsername()
+        }), {
+            .AttemptThreshold = AppData()->AuthConfig.GetAccountLockout().GetAttemptThreshold(),
+            .AttemptResetDuration = AppData()->AuthConfig.GetAccountLockout().GetAttemptResetDuration()
+        },
+        IsLoginCacheEnabled, {})
 {
     TabletCountersPtr.Reset(new TProtobufTabletCounters<
                             ESimpleCounters_descriptor,
@@ -4567,6 +4569,10 @@ NTabletPipe::TClientConfig TSchemeShard::GetPipeClientConfig() {
         .MaxRetryTime = TDuration::Seconds(2),
     };
     return config;
+}
+
+bool TSchemeShard::IsLoginCacheEnabled() {
+    return AppData()->FeatureFlags.GetEnableLoginCache();
 }
 
 void TSchemeShard::FillTableSchemaVersion(ui64 tableSchemaVersion, NKikimrSchemeOp::TTableDescription* tableDescr) const {
@@ -4924,6 +4930,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvDataShard::TEvSampleKResponse, Handle);
         HFuncTraced(TEvDataShard::TEvReshuffleKMeansResponse, Handle);
         HFuncTraced(TEvDataShard::TEvLocalKMeansResponse, Handle);
+        HFuncTraced(TEvDataShard::TEvPrefixKMeansResponse, Handle);
         HFuncTraced(TEvIndexBuilder::TEvUploadSampleKResponse, Handle);
         // } // NIndexBuilder
 

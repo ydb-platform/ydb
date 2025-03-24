@@ -27,7 +27,7 @@ TTable::~TTable() { }
 
 void TTable::PrepareRollback()
 {
-    Y_ABORT_UNLESS(!RollbackState);
+    Y_ENSURE(!RollbackState);
     auto& state = RollbackState.emplace(Epoch);
     state.Annexed = Annexed;
     state.Scheme = Scheme;
@@ -40,7 +40,7 @@ void TTable::PrepareRollback()
 
 void TTable::RollbackChanges()
 {
-    Y_ABORT_UNLESS(RollbackState, "PrepareRollback needed to rollback changes");
+    Y_ENSURE(RollbackState, "PrepareRollback needed to rollback changes");
     auto& state = *RollbackState;
 
     CommitOps.clear();
@@ -80,16 +80,16 @@ void TTable::RollbackChanges()
 
     if (Epoch != state.Epoch) {
         // We performed a snapshot, roll it back
-        Y_ABORT_UNLESS(MutableBackup, "Previous mem table missing");
+        Y_ENSURE(MutableBackup, "Previous mem table missing");
         Mutable = std::move(MutableBackup);
     } else if (!state.MutableExisted) {
         // New memtable doesn't need rollback
         Mutable = nullptr;
     } else if (state.MutableUpdated) {
-        Y_ABORT_UNLESS(Mutable, "Mutable was updated, but it is missing");
+        Y_ENSURE(Mutable, "Mutable was updated, but it is missing");
         Mutable->RollbackChanges();
     }
-    Y_ABORT_UNLESS(!MutableBackup);
+    Y_ENSURE(!MutableBackup);
 
     Epoch = state.Epoch;
     Annexed = state.Annexed;
@@ -104,7 +104,7 @@ void TTable::RollbackChanges()
 
 void TTable::CommitChanges(TArrayRef<const TMemGlob> blobs)
 {
-    Y_ABORT_UNLESS(RollbackState, "PrepareRollback needed to rollback changes");
+    Y_ENSURE(RollbackState, "PrepareRollback needed to rollback changes");
     auto& state = *RollbackState;
 
     for (auto& op : CommitOps) {
@@ -127,7 +127,7 @@ void TTable::CommitChanges(TArrayRef<const TMemGlob> blobs)
             Mutable->CommitBlobs(blobs);
         }
         // We performed a snapshot, move it to Frozen
-        Y_ABORT_UNLESS(MutableBackup, "Mem table snaphot missing");
+        Y_ENSURE(MutableBackup, "Mem table snaphot missing");
         Frozen.insert(MutableBackup);
         Stat_.FrozenWaste += MutableBackup->GetWastedMem();
         Stat_.FrozenSize += MutableBackup->GetUsedMem();
@@ -140,17 +140,17 @@ void TTable::CommitChanges(TArrayRef<const TMemGlob> blobs)
             Mutable->CommitBlobs(blobs);
         }
     } else if (state.MutableUpdated) {
-        Y_ABORT_UNLESS(Mutable, "Mutable was updated, but it is missing");
+        Y_ENSURE(Mutable, "Mutable was updated, but it is missing");
         Mutable->CommitChanges(blobs);
     }
-    Y_ABORT_UNLESS(!MutableBackup);
+    Y_ENSURE(!MutableBackup);
 
     RollbackState.reset();
 }
 
 void TTable::CommitNewTable(TArrayRef<const TMemGlob> blobs)
 {
-    Y_ABORT_UNLESS(!RollbackState, "CommitBlobs must only be used for new tables without rollback");
+    Y_ENSURE(!RollbackState, "CommitBlobs must only be used for new tables without rollback");
 
     if (Mutable && blobs) {
         Mutable->CommitBlobs(blobs);
@@ -164,7 +164,7 @@ void TTable::SetScheme(const TScheme::TTableInfo &table)
     Levels.Reset();
     ErasedKeysCache.Reset();
 
-    Y_ABORT_UNLESS(!Mutable && table.Columns);
+    Y_ENSURE(!Mutable && table.Columns);
 
     if (RollbackState) {
         // Make sure we don't populate erase cache with keys based on a schema
@@ -185,7 +185,7 @@ void TTable::SetScheme(const TScheme::TTableInfo &table)
     /* This restriction is required for external blobs inverted index, for
         details read NPage::TFrames and NFwd blobs cache implementation. */
 
-    Y_ABORT_UNLESS(Scheme->Cols.size() <= ui32(-Min<i16>()), "Too many columns in row");
+    Y_ENSURE(Scheme->Cols.size() <= ui32(-Min<i16>()), "Too many columns in row");
 
     EraseCacheEnabled = table.EraseCacheEnabled;
     EraseCacheConfig = { };
@@ -231,7 +231,7 @@ TAutoPtr<TSubset> TTable::CompactionSubset(TEpoch head, TArrayRef<const TLogoBlo
             continue;
         }
         auto* p = Flatten.FindPtr(token);
-        Y_VERIFY_S(p, "Cannot find part " << token);
+        Y_ENSURE(p, "Cannot find part " << token);
         subset->Flatten.push_back(*p);
     }
 
@@ -268,14 +268,14 @@ TAutoPtr<TSubset> TTable::PartSwitchSubset(TEpoch head, TArrayRef<const TLogoBlo
             continue;
         }
         auto* p = Flatten.FindPtr(token);
-        Y_VERIFY_S(p, "Cannot find part " << token);
+        Y_ENSURE(p, "Cannot find part " << token);
         subset->Flatten.push_back(*p);
     }
 
     subset->TxStatus.reserve(txStatus.size());
     for (const TLogoBlobID &token : txStatus) {
         auto* p = TxStatus.FindPtr(token);
-        Y_VERIFY_S(p, "Cannot find tx status " << token);
+        Y_ENSURE(p, "Cannot find tx status " << token);
         subset->TxStatus.push_back(*p);
     }
 
@@ -347,7 +347,7 @@ bool TTable::HasBorrowed(ui64 selfTabletId) const
 TAutoPtr<TSubset> TTable::ScanSnapshot(TRowVersion snapshot)
 {
     if (RollbackState) {
-        Y_ABORT_UNLESS(Epoch == RollbackState->Epoch &&
+        Y_ENSURE(Epoch == RollbackState->Epoch &&
             RollbackState->MutableExisted == bool(Mutable) &&
             !RollbackState->MutableUpdated,
             "Cannot take scan snapshot of a modified table");
@@ -390,7 +390,7 @@ TAutoPtr<TSubset> TTable::Unwrap()
 
     Replace(*subset, { }, { });
 
-    Y_ABORT_UNLESS(!(Flatten || Frozen || Mutable || TxStatus));
+    Y_ENSURE(!(Flatten || Frozen || Mutable || TxStatus));
 
     return subset;
 }
@@ -409,12 +409,12 @@ TBundleSlicesMap TTable::LookupSlices(TArrayRef<const TLogoBlobID> bundles) cons
 
 void TTable::ReplaceSlices(TBundleSlicesMap slices)
 {
-    Y_ABORT_UNLESS(!RollbackState, "Cannot perform this in a transaction");
+    Y_ENSURE(!RollbackState, "Cannot perform this in a transaction");
 
     for (auto &kv : slices) {
         auto it = Flatten.find(kv.first);
-        Y_ABORT_UNLESS(it != Flatten.end(), "Got an unknown TPart in ReplaceSlices");
-        Y_ABORT_UNLESS(kv.second && *kv.second, "Got an empty TPart in ReplaceSlices");
+        Y_ENSURE(it != Flatten.end(), "Got an unknown TPart in ReplaceSlices");
+        Y_ENSURE(kv.second && *kv.second, "Got an empty TPart in ReplaceSlices");
         it->second.Slices = std::move(kv.second);
         it->second.Screen = it->second.Slices->ToScreen();
     }
@@ -430,14 +430,14 @@ void TTable::Replace(
     TArrayRef<const TPartView> newParts,
     TArrayRef<const TIntrusiveConstPtr<TTxStatusPart>> newTxStatus)
 {
-    Y_ABORT_UNLESS(!RollbackState, "Cannot perform this in a transaction");
+    Y_ENSURE(!RollbackState, "Cannot perform this in a transaction");
 
     for (const auto& partView : newParts) {
-        Y_ABORT_UNLESS(partView, "Replace(...) shouldn't get empty parts");
-        Y_ABORT_UNLESS(!partView.Screen, "Replace(...) shouldn't get screened parts");
-        Y_ABORT_UNLESS(partView.Slices && *partView.Slices, "Got parts without slices");
+        Y_ENSURE(partView, "Replace(...) shouldn't get empty parts");
+        Y_ENSURE(!partView.Screen, "Replace(...) shouldn't get screened parts");
+        Y_ENSURE(partView.Slices && *partView.Slices, "Got parts without slices");
         if (Flatten.contains(partView->Label) || ColdParts.contains(partView->Label)) {
-            Y_Fail("Duplicate bundle " << partView->Label);
+            Y_TABLET_ERROR("Duplicate bundle " << partView->Label);
         }
     }
 
@@ -457,7 +457,7 @@ void TTable::Replace(
         removingOld = true;
         const auto found = Frozen.erase(memTable.MemTable);
 
-        Y_ABORT_UNLESS(found == 1, "Got an unknown TMemTable table in TSubset");
+        Y_ENSURE(found == 1, "Got an unknown TMemTable table in TSubset");
 
         NUtil::SubSafe(Stat_.FrozenWaste, memTable->GetWastedMem());
         NUtil::SubSafe(Stat_.FrozenSize, memTable->GetUsedMem());
@@ -467,7 +467,7 @@ void TTable::Replace(
         for (const auto &pr : memTable.MemTable->GetTxIdStats()) {
             const ui64 txId = pr.first;
             auto& count = TxDataRefs.at(txId);
-            Y_ABORT_UNLESS(count > 0);
+            Y_ENSURE(count > 0);
             if (0 == --count) {
                 checkTxDataRefs.push_back(txId);
             }
@@ -476,7 +476,7 @@ void TTable::Replace(
         for (const auto &pr : memTable.MemTable->GetCommittedTransactions()) {
             const ui64 txId = pr.first;
             auto& count = TxStatusRefs.at(txId);
-            Y_ABORT_UNLESS(count > 0);
+            Y_ENSURE(count > 0);
             if (0 == --count) {
                 checkTxStatusRefs.push_back(txId);
             }
@@ -484,7 +484,7 @@ void TTable::Replace(
 
         for (ui64 txId : memTable.MemTable->GetRemovedTransactions()) {
             auto& count = TxStatusRefs.at(txId);
-            Y_ABORT_UNLESS(count > 0);
+            Y_ENSURE(count > 0);
             if (0 == --count) {
                 checkTxStatusRefs.push_back(txId);
             }
@@ -493,25 +493,25 @@ void TTable::Replace(
 
     for (auto &part : subset.Flatten) {
         removingOld = true;
-        Y_ABORT_UNLESS(part.Slices && *part.Slices,
+        Y_ENSURE(part.Slices && *part.Slices,
             "Got an empty TPart subset in TSubset");
 
         auto it = Flatten.find(part->Label);
-        Y_ABORT_UNLESS(it != Flatten.end(), "Got an unknown TPart table in TSubset");
+        Y_ENSURE(it != Flatten.end(), "Got an unknown TPart table in TSubset");
         auto& existing = it->second;
 
-        Y_ABORT_UNLESS(existing.Slices && *existing.Slices,
+        Y_ENSURE(existing.Slices && *existing.Slices,
             "Existing table part has an unexpected empty bounds run");
 
         if (!TSlices::EqualByRowId(existing.Slices, part.Slices)) {
             if (!TSlices::SupersetByRowId(existing.Slices, part.Slices)) {
-                Y_Fail("Removing unexpected subset " << NFmt::Do(*part.Slices)
+                Y_TABLET_ERROR("Removing unexpected subset " << NFmt::Do(*part.Slices)
                     << " from existing " << NFmt::Do(*existing.Slices));
             }
 
             auto left = TSlices::Subtract(existing.Slices, part.Slices);
             if (left->empty()) {
-                Y_Fail("Empty result after removing " << NFmt::Do(*part.Slices)
+                Y_TABLET_ERROR("Empty result after removing " << NFmt::Do(*part.Slices)
                     << " from existing " << NFmt::Do(*existing.Slices));
             }
 
@@ -524,7 +524,7 @@ void TTable::Replace(
             for (const auto& item : existing->TxIdStats->GetItems()) {
                 const ui64 txId = item.GetTxId();
                 auto& count = TxDataRefs.at(txId);
-                Y_ABORT_UNLESS(count > 0);
+                Y_ENSURE(count > 0);
                 if (0 == --count) {
                     checkTxDataRefs.push_back(txId);
                 }
@@ -543,22 +543,22 @@ void TTable::Replace(
     for (auto &part : subset.ColdParts) {
         removingOld = true;
         auto it = ColdParts.find(part->Label);
-        Y_ABORT_UNLESS(it != ColdParts.end(), "Got an unknown TColdPart in TSubset");
+        Y_ENSURE(it != ColdParts.end(), "Got an unknown TColdPart in TSubset");
         ColdParts.erase(it);
     }
 
     for (auto& part : subset.TxStatus) {
         removingOld = true;
-        Y_ABORT_UNLESS(part, "Unexpected empty TTxStatusPart in TSubset");
+        Y_ENSURE(part, "Unexpected empty TTxStatusPart in TSubset");
 
         auto it = TxStatus.find(part->Label);
-        Y_ABORT_UNLESS(it != TxStatus.end());
+        Y_ENSURE(it != TxStatus.end());
         TxStatus.erase(it);
 
         for (auto& item : part->TxStatusPage->GetCommittedItems()) {
             const ui64 txId = item.GetTxId();
             auto& count = TxStatusRefs.at(txId);
-            Y_ABORT_UNLESS(count > 0);
+            Y_ENSURE(count > 0);
             if (0 == --count) {
                 checkTxStatusRefs.push_back(txId);
             }
@@ -566,7 +566,7 @@ void TTable::Replace(
         for (auto& item : part->TxStatusPage->GetRemovedItems()) {
             const ui64 txId = item.GetTxId();
             auto& count = TxStatusRefs.at(txId);
-            Y_ABORT_UNLESS(count > 0);
+            Y_ENSURE(count > 0);
             if (0 == --count) {
                 checkTxStatusRefs.push_back(txId);
             }
@@ -576,11 +576,11 @@ void TTable::Replace(
     for (const auto &partView : newParts) {
         addingNew = true;
         if (Mutable && partView->Epoch >= Mutable->Epoch) {
-            Y_Fail("Replace with " << NFmt::Do(*partView) << " after mutable epoch " << Mutable->Epoch);
+            Y_TABLET_ERROR("Replace with " << NFmt::Do(*partView) << " after mutable epoch " << Mutable->Epoch);
         }
 
         if (Frozen && partView->Epoch >= (*Frozen.begin())->Epoch) {
-            Y_Fail("Replace with " << NFmt::Do(*partView) << " after frozen epoch " << (*Frozen.begin())->Epoch);
+            Y_TABLET_ERROR("Replace with " << NFmt::Do(*partView) << " after frozen epoch " << (*Frozen.begin())->Epoch);
         }
 
         Epoch = Max(Epoch, partView->Epoch + 1);
@@ -590,17 +590,17 @@ void TTable::Replace(
 
     for (const auto& txStatus : newTxStatus) {
         if (Mutable && txStatus->Epoch >= Mutable->Epoch) {
-            Y_Fail("Replace with " << NFmt::Do(*txStatus) << " after mutable epoch " << Mutable->Epoch);
+            Y_TABLET_ERROR("Replace with " << NFmt::Do(*txStatus) << " after mutable epoch " << Mutable->Epoch);
         }
 
         if (Frozen && txStatus->Epoch >= (*Frozen.begin())->Epoch) {
-            Y_Fail("Replace with " << NFmt::Do(*txStatus) << " after frozen epoch " << (*Frozen.begin())->Epoch);
+            Y_TABLET_ERROR("Replace with " << NFmt::Do(*txStatus) << " after frozen epoch " << (*Frozen.begin())->Epoch);
         }
 
         Epoch = Max(Epoch, txStatus->Epoch + 1);
 
         auto res = TxStatus.emplace(txStatus->Label, txStatus);
-        Y_ABORT_UNLESS(res.second, "Unexpected failure to add a new TTxStatusPart");
+        Y_ENSURE(res.second, "Unexpected failure to add a new TTxStatusPart");
 
         for (auto& item : txStatus->TxStatusPage->GetCommittedItems()) {
             const ui64 txId = item.GetTxId();
@@ -614,7 +614,7 @@ void TTable::Replace(
 
     for (ui64 txId : checkTxDataRefs) {
         auto it = TxDataRefs.find(txId);
-        Y_ABORT_UNLESS(it != TxDataRefs.end());
+        Y_ENSURE(it != TxDataRefs.end());
         if (it->second == 0) {
             // Transaction no longer has any known rows
             TxDataRefs.erase(it);
@@ -628,7 +628,7 @@ void TTable::Replace(
 
     for (ui64 txId : checkTxStatusRefs) {
         auto it = TxStatusRefs.find(txId);
-        Y_ABORT_UNLESS(it != TxStatusRefs.end());
+        Y_ENSURE(it != TxStatusRefs.end());
         if (it->second == 0) {
             // This transaction no longer has any known status
             TxStatusRefs.erase(it);
@@ -655,17 +655,17 @@ void TTable::Replace(
 
 void TTable::Merge(TPartView partView)
 {
-    Y_ABORT_UNLESS(!RollbackState, "Cannot perform this in a transaction");
+    Y_ENSURE(!RollbackState, "Cannot perform this in a transaction");
 
-    Y_ABORT_UNLESS(partView, "Merge(...) shouldn't get empty part");
-    Y_ABORT_UNLESS(partView.Slices, "Merge(...) shouldn't get parts without slices");
+    Y_ENSURE(partView, "Merge(...) shouldn't get empty part");
+    Y_ENSURE(partView.Slices, "Merge(...) shouldn't get parts without slices");
 
     if (Mutable && partView->Epoch >= Mutable->Epoch) {
-        Y_Fail("Merge " << NFmt::Do(*partView) << " after mutable epoch " << Mutable->Epoch);
+        Y_TABLET_ERROR("Merge " << NFmt::Do(*partView) << " after mutable epoch " << Mutable->Epoch);
     }
 
     if (Frozen && partView->Epoch >= (*Frozen.begin())->Epoch) {
-        Y_Fail("Merge " << NFmt::Do(*partView) << " after frozen epoch " << (*Frozen.begin())->Epoch);
+        Y_TABLET_ERROR("Merge " << NFmt::Do(*partView) << " after frozen epoch " << (*Frozen.begin())->Epoch);
     }
 
     auto it = Flatten.find(partView->Label);
@@ -675,7 +675,7 @@ void TTable::Merge(TPartView partView)
 
         AddSafe(std::move(partView));
     } else if (it->second->Epoch != partView->Epoch) {
-        Y_ABORT("Got the same labeled parts with different epoch");
+        Y_TABLET_ERROR("Got the same labeled parts with different epoch");
     } else {
         Levels.Reset();
         it->second.Screen = TScreen::Join(it->second.Screen, partView.Screen);
@@ -689,23 +689,23 @@ void TTable::Merge(TPartView partView)
 
 void TTable::Merge(TIntrusiveConstPtr<TColdPart> part)
 {
-    Y_ABORT_UNLESS(!RollbackState, "Cannot perform this in a transaction");
+    Y_ENSURE(!RollbackState, "Cannot perform this in a transaction");
 
-    Y_ABORT_UNLESS(part, "Merge(...) shouldn't get empty parts");
+    Y_ENSURE(part, "Merge(...) shouldn't get empty parts");
 
     if (Mutable && part->Epoch >= Mutable->Epoch) {
-        Y_Fail("Merge " << NFmt::Do(*part) << " after mutable epoch " << Mutable->Epoch);
+        Y_TABLET_ERROR("Merge " << NFmt::Do(*part) << " after mutable epoch " << Mutable->Epoch);
     }
 
     if (Frozen && part->Epoch >= (*Frozen.begin())->Epoch) {
-        Y_Fail("Merge " << NFmt::Do(*part) << " after frozen epoch " << (*Frozen.begin())->Epoch);
+        Y_TABLET_ERROR("Merge " << NFmt::Do(*part) << " after frozen epoch " << (*Frozen.begin())->Epoch);
     }
 
     auto it = Flatten.find(part->Label);
-    Y_VERIFY_S(it == Flatten.end(), "Merge " << NFmt::Do(*part) << " when a loaded part already exists");
+    Y_ENSURE(it == Flatten.end(), "Merge " << NFmt::Do(*part) << " when a loaded part already exists");
 
     auto itCold = ColdParts.find(part->Label);
-    Y_VERIFY_S(itCold == ColdParts.end(), "Merge " << NFmt::Do(*part) << " when another cold part already exists");
+    Y_ENSURE(itCold == ColdParts.end(), "Merge " << NFmt::Do(*part) << " when another cold part already exists");
 
     const auto label = part->Label;
 
@@ -721,9 +721,9 @@ void TTable::Merge(TIntrusiveConstPtr<TColdPart> part)
 
 void TTable::Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus)
 {
-    Y_ABORT_UNLESS(!RollbackState, "Cannot perform this in a transaction");
+    Y_ENSURE(!RollbackState, "Cannot perform this in a transaction");
 
-    Y_ABORT_UNLESS(txStatus, "Unexpected empty TTxStatusPart");
+    Y_ENSURE(txStatus, "Unexpected empty TTxStatusPart");
 
     for (auto& item : txStatus->TxStatusPage->GetCommittedItems()) {
         const ui64 txId = item.GetTxId();
@@ -753,17 +753,17 @@ void TTable::Merge(TIntrusiveConstPtr<TTxStatusPart> txStatus)
     }
 
     if (Mutable && txStatus->Epoch >= Mutable->Epoch) {
-        Y_Fail("Merge " << NFmt::Do(*txStatus) << " after mutable epoch " << Mutable->Epoch);
+        Y_TABLET_ERROR("Merge " << NFmt::Do(*txStatus) << " after mutable epoch " << Mutable->Epoch);
     }
 
     if (Frozen && txStatus->Epoch >= (*Frozen.begin())->Epoch) {
-        Y_Fail("Merge " << NFmt::Do(*txStatus) << " after frozen epoch " << (*Frozen.begin())->Epoch);
+        Y_TABLET_ERROR("Merge " << NFmt::Do(*txStatus) << " after frozen epoch " << (*Frozen.begin())->Epoch);
     }
 
     Epoch = Max(Epoch, txStatus->Epoch + 1);
 
     auto res = TxStatus.emplace(txStatus->Label, txStatus);
-    Y_ABORT_UNLESS(res.second, "Unexpected failure to add a new TTxStatusPart");
+    Y_ENSURE(res.second, "Unexpected failure to add a new TTxStatusPart");
 
     // Note: Merge is called when borrowing data, but new tx status may commit
     // or rollback some transactions, and erase cache already accounts for that
@@ -778,7 +778,7 @@ void TTable::MergeDone()
 const TLevels& TTable::GetLevels() const
 {
     if (!Levels) {
-        Y_ABORT_UNLESS(ColdParts.empty(), "Cannot construct Levels with cold parts");
+        Y_ENSURE(ColdParts.empty(), "Cannot construct Levels with cold parts");
         TVector<const TPartView*> parts; // TPartView* avoids expensive atomic ops
         parts.reserve(Flatten.size());
         for (const auto& kv : Flatten) {
@@ -813,7 +813,7 @@ ui64 TTable::GetSearchHeight() const
 
 TVector<TIntrusiveConstPtr<TMemTable>> TTable::GetMemTables() const
 {
-    Y_ABORT_UNLESS(!RollbackState, "Cannot perform this in a transaction");
+    Y_ENSURE(!RollbackState, "Cannot perform this in a transaction");
 
     TVector<TIntrusiveConstPtr<TMemTable>> vec(Frozen.begin(), Frozen.end());
 
@@ -829,12 +829,12 @@ TEpoch TTable::Snapshot()
         Annexed = Mutable->GetBlobs()->Tail();
 
         if (RollbackState) {
-            Y_ABORT_UNLESS(
+            Y_ENSURE(
                 RollbackState->Epoch == Mutable->Epoch &&
                 RollbackState->MutableExisted &&
                 !RollbackState->MutableUpdated,
                 "Cannot snapshot a modified table");
-            Y_ABORT_UNLESS(!MutableBackup, "Another mutable backup already exists");
+            Y_ENSURE(!MutableBackup, "Another mutable backup already exists");
             MutableBackup = std::move(Mutable);
         } else {
             Frozen.insert(Mutable);
@@ -847,7 +847,7 @@ TEpoch TTable::Snapshot()
         Mutable = nullptr; /* have to make new TMemTable on next update */
 
         if (++Epoch == TEpoch::Max()) {
-            Y_ABORT("Table epoch counter has reached infinity value");
+            Y_TABLET_ERROR("Table epoch counter has reached infinity value");
         }
     }
 
@@ -857,7 +857,7 @@ TEpoch TTable::Snapshot()
 void TTable::AddSafe(TPartView partView)
 {
     if (partView) {
-        Y_ABORT_UNLESS(partView->Epoch < Epoch, "Cannot add part above head epoch");
+        Y_ENSURE(partView->Epoch < Epoch, "Cannot add part above head epoch");
 
         Stat_.Parts.Add(partView);
         Stat_.PartsPerTablet[partView->Label.TabletID()].Add(partView);
@@ -880,7 +880,7 @@ void TTable::AddSafe(TPartView partView)
         }
 
         bool done = Flatten.emplace(partView->Label, std::move(partView)).second;
-        Y_ABORT_UNLESS(done);
+        Y_ENSURE(done);
     }
 }
 
@@ -945,7 +945,7 @@ EReady TTable::Precharge(TRawVals minKey_, TRawVals maxKey_, TTagsRef tags,
 
 void TTable::Update(ERowOp rop, TRawVals key, TOpsRef ops, TArrayRef<const TMemGlob> apart, TRowVersion rowVersion)
 {
-    Y_ABORT_UNLESS(!(ops && TCellOp::HaveNoOps(rop)), "Given ERowOp can't have ops");
+    Y_ENSURE(!(ops && TCellOp::HaveNoOps(rop)), "Given ERowOp can't have ops");
 
     if (ErasedKeysCache && rop != ERowOp::Erase) {
         const TCelled cells(key, *Scheme->Keys, true);
@@ -987,8 +987,8 @@ void TTable::AddTxDataRef(ui64 txId)
 void TTable::RemoveTxDataRef(ui64 txId)
 {
     auto it = TxDataRefs.find(txId);
-    Y_ABORT_UNLESS(it != TxDataRefs.end());
-    Y_ABORT_UNLESS(it->second > 0);
+    Y_ENSURE(it != TxDataRefs.end());
+    Y_ENSURE(it->second > 0);
     if (0 == --it->second) {
         // This was the last reference
         TxDataRefs.erase(it);
@@ -1026,8 +1026,8 @@ void TTable::AddTxStatusRef(ui64 txId)
 void TTable::RemoveTxStatusRef(ui64 txId)
 {
     auto it = TxStatusRefs.find(txId);
-    Y_ABORT_UNLESS(it != TxStatusRefs.end());
-    Y_ABORT_UNLESS(it->second > 0);
+    Y_ENSURE(it != TxStatusRefs.end());
+    Y_ENSURE(it->second > 0);
     if (0 == --it->second) {
         // This was the last reference
         TxStatusRefs.erase(it);
@@ -1204,7 +1204,7 @@ TAutoPtr<TTableIter> TTable::Iterate(TRawVals key_, TTagsRef tags, IPages* env, 
         const ITransactionMapPtr& visible,
         const ITransactionObserverPtr& observer) const
 {
-    Y_ABORT_UNLESS(ColdParts.empty(), "Cannot iterate with cold parts");
+    Y_ENSURE(ColdParts.empty(), "Cannot iterate with cold parts");
 
     const TCelled key(key_, *Scheme->Keys, false);
     const ui64 limit = seek == ESeek::Exact ? 1 : Max<ui64>();
@@ -1256,7 +1256,7 @@ TAutoPtr<TTableReverseIter> TTable::IterateReverse(TRawVals key_, TTagsRef tags,
         const ITransactionMapPtr& visible,
         const ITransactionObserverPtr& observer) const
 {
-    Y_ABORT_UNLESS(ColdParts.empty(), "Cannot iterate with cold parts");
+    Y_ENSURE(ColdParts.empty(), "Cannot iterate with cold parts");
 
     const TCelled key(key_, *Scheme->Keys, false);
     const ui64 limit = seek == ESeek::Exact ? 1 : Max<ui64>();
@@ -1310,8 +1310,8 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
                       const ITransactionMapPtr& visible,
                       const ITransactionObserverPtr& observer) const
 {
-    Y_ABORT_UNLESS(ColdParts.empty(), "Cannot select with cold parts");
-    Y_ABORT_UNLESS(key_.size() == Scheme->Keys->Types.size());
+    Y_ENSURE(ColdParts.empty(), "Cannot select with cold parts");
+    Y_ENSURE(key_.size() == Scheme->Keys->Types.size());
 
     const TCelled key(key_, *Scheme->Keys, false);
 
@@ -1358,7 +1358,7 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
     // Frozen are sorted by epoch, apply in reverse order
     for (auto pos = Frozen.rbegin(); !row.IsFinalized() && pos != Frozen.rend(); ++pos) {
         const auto& memTable = *pos;
-        Y_ABORT_UNLESS(lastEpoch > memTable->Epoch, "Ordering of epochs is incorrect");
+        Y_ENSURE(lastEpoch > memTable->Epoch, "Ordering of epochs is incorrect");
         lastEpoch = memTable->Epoch;
         if (auto it = TMemIter::Make(*memTable, memTable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
             if (it->IsValid() && (snapshotFound || it->SkipToRowVersion(snapshot, stats, committed, observer, DecidedTransactions))) {
@@ -1384,7 +1384,7 @@ EReady TTable::Select(TRawVals key_, TTagsRef tags, IPages* env, TRowState& row,
                     it.SetBounds(pos->Slice);
                     auto res = it.Seek(key, ESeek::Exact);
                     if (res == EReady::Data) {
-                        Y_ABORT_UNLESS(lastEpoch > part->Epoch, "Ordering of epochs is incorrect");
+                        Y_ENSURE(lastEpoch > part->Epoch, "Ordering of epochs is incorrect");
                         lastEpoch = part->Epoch;
                         if (!snapshotFound) {
                             res = it.SkipToRowVersion(snapshot, stats, committed, observer, DecidedTransactions);
@@ -1447,7 +1447,7 @@ TSelectRowVersionResult TTable::SelectRowVersion(
         const ITransactionMapPtr& visible,
         const ITransactionObserverPtr& observer) const
 {
-    Y_ABORT_UNLESS(ColdParts.empty(), "Cannot select with cold parts");
+    Y_ENSURE(ColdParts.empty(), "Cannot select with cold parts");
 
     const TRemap remap(*Scheme, { });
 
@@ -1484,7 +1484,7 @@ TSelectRowVersionResult TTable::SelectRowVersion(
     // Frozen are sorted by epoch, apply in reverse order
     for (auto pos = Frozen.rbegin(); pos != Frozen.rend(); ++pos) {
         const auto& memTable = *pos;
-        Y_ABORT_UNLESS(lastEpoch > memTable->Epoch, "Ordering of epochs is incorrect");
+        Y_ENSURE(lastEpoch > memTable->Epoch, "Ordering of epochs is incorrect");
         lastEpoch = memTable->Epoch;
         if (auto it = TMemIter::Make(*memTable, memTable->Immediate(), key, ESeek::Exact, Scheme->Keys, &remap, env, EDirection::Forward)) {
             if (it->IsValid()) {
@@ -1508,7 +1508,7 @@ TSelectRowVersionResult TTable::SelectRowVersion(
                 it.SetBounds(pos->Slice);
                 auto res = it.Seek(key, ESeek::Exact);
                 if (res == EReady::Data && ready) {
-                    Y_ABORT_UNLESS(lastEpoch > part->Epoch, "Ordering of epochs is incorrect");
+                    Y_ENSURE(lastEpoch > part->Epoch, "Ordering of epochs is incorrect");
                     lastEpoch = part->Epoch;
                     if (auto rowVersion = it.SkipToCommitted(committed, observer)) {
                         return *rowVersion;

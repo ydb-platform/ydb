@@ -73,7 +73,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     }
 
     TString GetResolveProxyUrl(const TS3ExternalStorageConfig& settings) const {
-        Y_ABORT_UNLESS(HttpResolverConfig);
+        Y_ENSURE(HttpResolverConfig);
 
         TStringBuilder url;
         switch (settings.GetConfig().scheme) {
@@ -90,7 +90,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     }
 
     void ApplyProxy(TS3ExternalStorageConfig& settings, const TString& proxyHost) const {
-        Y_ABORT_UNLESS(HttpResolverConfig);
+        Y_ENSURE(HttpResolverConfig);
 
         settings.ConfigRef().proxyScheme = settings.GetConfig().scheme;
         settings.ConfigRef().proxyHost = proxyHost;
@@ -154,7 +154,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     }
 
     void Restart() {
-        Y_ABORT_UNLESS(ProxyResolved);
+        Y_ENSURE(ProxyResolved);
 
         MultiPart = false;
         Last = false;
@@ -211,7 +211,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     }
 
     void UploadScheme() {
-        Y_ABORT_UNLESS(!SchemeUploaded);
+        Y_ENSURE(!SchemeUploaded);
 
         if (!Scheme) {
             return Finish(false, "Cannot infer scheme");
@@ -224,7 +224,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     }
 
     void UploadPermissions() {
-        Y_ABORT_UNLESS(EnablePermissions && !PermissionsUploaded);
+        Y_ENSURE(EnablePermissions && !PermissionsUploaded);
 
         if (!Permissions) {
             return Finish(false, "Cannot infer permissions");
@@ -241,7 +241,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     }
 
     void UploadChangefeed() {
-        Y_ABORT_UNLESS(!ChangefeedsUploaded);
+        Y_ENSURE(!ChangefeedsUploaded);
         if (IndexExportedChangefeed == Changefeeds.size()) {
             ChangefeedsUploaded = true;
             if (Scanner) {
@@ -262,7 +262,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     }
 
     void UploadMetadata() {
-        Y_ABORT_UNLESS(!MetadataUploaded);
+        Y_ENSURE(!MetadataUploaded);
 
         Buffer = std::move(Metadata);
         PutDataWithChecksum(std::move(Buffer), Settings.GetMetadataKey(), MetadataChecksum, &TThis::StateUploadMetadata);
@@ -633,7 +633,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             UploadId.Clear(); // force getting info after restart
             Retry();
         } else {
-            Y_ABORT_UNLESS(Error);
+            Y_ENSURE(Error);
             Error = TStringBuilder() << *Error << " Additionally, 'AbortMultipartUpload' has failed: "
                 << error.GetMessage();
             PassAway();

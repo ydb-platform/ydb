@@ -9,29 +9,19 @@ namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 
 std::shared_ptr<IIndexMeta> TIndexConstructor::DoCreateIndexMeta(
     const ui32 indexId, const TString& indexName, const NSchemeShard::TOlapSchema& currentSchema, NSchemeShard::IErrorCollector& errors) const {
-    auto* columnInfo = currentSchema.GetColumns().GetByName(ColumnName);
+    auto* columnInfo = currentSchema.GetColumns().GetByName(GetColumnName());
     if (!columnInfo) {
-        errors.AddError("no column with name " + ColumnName);
+        errors.AddError("no column with name " + GetColumnName());
         return nullptr;
     }
     const ui32 columnId = columnInfo->GetId();
     return std::make_shared<TIndexMeta>(indexId, indexName, GetStorageId().value_or(NBlobOperations::TGlobal::DefaultStorageId), columnId,
-        DataExtractor, HashesCount, FilterSizeBytes, NGrammSize, RecordsCount);
+        GetDataExtractor(), HashesCount, FilterSizeBytes, NGrammSize, RecordsCount, TBase::GetBitsStorageConstructor());
 }
 
 TConclusionStatus TIndexConstructor::DoDeserializeFromJson(const NJson::TJsonValue& jsonInfo) {
-    if (!jsonInfo.Has("column_name")) {
-        return TConclusionStatus::Fail("column_name have to be in bloom ngramm filter features");
-    }
-    if (!jsonInfo["column_name"].GetString(&ColumnName)) {
-        return TConclusionStatus::Fail("column_name have to be string in bloom ngramm filter features");
-    }
-    if (!ColumnName) {
-        return TConclusionStatus::Fail("empty column_name in bloom ngramm filter features");
-    }
-
     {
-        auto conclusion = DataExtractor.DeserializeFromJson(jsonInfo["data_extractor"]);
+        auto conclusion = TBase::DoDeserializeFromJson(jsonInfo);
         if (conclusion.IsFail()) {
             return conclusion;
         }
@@ -81,6 +71,12 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKiki
         return TConclusionStatus::Fail(errorMessage);
     }
     auto& bFilter = proto.GetBloomNGrammFilter();
+    {
+        auto conclusion = TBase::DeserializeFromProtoBitsStorageOnly(bFilter);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
+    }
     RecordsCount = bFilter.GetRecordsCount();
     if (!TConstants::CheckRecordsCount(RecordsCount)) {
         return TConclusionStatus::Fail("RecordsCount have to be in " + TConstants::GetRecordsCountIntervalString());
@@ -109,12 +105,13 @@ NKikimr::TConclusionStatus TIndexConstructor::DoDeserializeFromProto(const NKiki
 
 void TIndexConstructor::DoSerializeToProto(NKikimrSchemeOp::TOlapIndexRequested& proto) const {
     auto* filterProto = proto.MutableBloomNGrammFilter();
-    filterProto->SetColumnName(ColumnName);
+    TBase::SerializeToProtoBitsStorageOnly(*filterProto);
+    filterProto->SetColumnName(GetColumnName());
     filterProto->SetRecordsCount(RecordsCount);
     filterProto->SetNGrammSize(NGrammSize);
     filterProto->SetFilterSizeBytes(FilterSizeBytes);
     filterProto->SetHashesCount(HashesCount);
-    *filterProto->MutableDataExtractor() = DataExtractor.SerializeToProto();
+    *filterProto->MutableDataExtractor() = GetDataExtractor().SerializeToProto();
 }
 
 }   // namespace NKikimr::NOlap::NIndexes::NBloomNGramm

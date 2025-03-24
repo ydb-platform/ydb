@@ -410,6 +410,7 @@ message TKqpPhyStage {
     bool AllowWithSpilling = 13;
     uint32 TaskCount = 14;
     double StageCost = 15;
+    bool IsShuffleEliminated = 16;
 }
 
 message TKqpPhyResult {

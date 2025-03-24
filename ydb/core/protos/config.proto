@@ -1596,6 +1596,18 @@ message TImmediateControlsConfig {
         }];
     }
 
+    message TGRpcControls {
+        message TRequestConfig {
+            optional uint64 MaxInFlight = 1 [(ControlOptions) = {
+                Description: "Max in flight requests",
+                MinValue: 0,
+                MaxValue: 1000000,
+                DefaultValue: 0
+            }];
+        }
+        map<string, TRequestConfig> RequestConfigs = 1;
+    }
+
     optional TDataShardControls DataShardControls = 1;
     optional TTxLimitControls TxLimitControls = 2;
     optional TCoordinatorControls CoordinatorControls = 3;
@@ -1609,6 +1621,7 @@ message TImmediateControlsConfig {
     optional TBlobStorageControllerControls BlobStorageControllerControls = 11;
     optional TTableServiceControls TableServiceControls = 12;
     optional TTestShardControls TestShardControls = 13;
+    optional TGRpcControls GRpcControls = 14;
 };
 
 message TMeteringConfig {

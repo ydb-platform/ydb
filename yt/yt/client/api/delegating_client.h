@@ -395,6 +395,11 @@ public:
         const TPartitionTablesOptions& options),
         (paths, options))
 
+    DELEGATE_METHOD(TFuture<ITablePartitionReaderPtr>, CreateTablePartitionReader, (
+        const TTablePartitionCookiePtr& descriptor,
+        const TReadTablePartitionOptions& options),
+        (descriptor, options))
+
     // Journals
     DELEGATE_METHOD(TFuture<void>, TruncateJournal, (
         const NYPath::TYPath& path,

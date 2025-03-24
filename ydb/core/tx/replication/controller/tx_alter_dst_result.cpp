@@ -58,9 +58,6 @@ public:
                 CLOG_N(ctx, "Replication altered"
                     << ": rid# " << rid);
                 Replication->SetState(Replication->GetDesiredState());
-                if (Replication->GetState() != TReplication::EState::Ready) {
-                    Replication.Reset();
-                }
             }
         } else {
             target->SetDstState(TReplication::EDstState::Error);
@@ -87,6 +84,10 @@ public:
             NIceDb::TUpdate<Schema::Targets::DstState>(target->GetDstState()),
             NIceDb::TUpdate<Schema::Targets::Issue>(target->GetIssue())
         );
+
+        if (Replication->GetState() != TReplication::EState::Ready) {
+            Replication.Reset();
+        }
 
         return true;
     }

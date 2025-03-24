@@ -112,7 +112,7 @@ class TExportScan: private NActors::IActorCallback, public NTable::IScan {
     }
 
     void Handle(TEvExportScan::TEvReset::TPtr&) {
-        Y_ABORT_UNLESS(IsReady());
+        Y_ENSURE(IsReady());
 
         EXPORT_LOG_D("Handle TEvExportScan::TEvReset"
             << ": self# " << SelfId());
@@ -124,7 +124,7 @@ class TExportScan: private NActors::IActorCallback, public NTable::IScan {
     }
 
     void Handle(TEvExportScan::TEvFeed::TPtr&) {
-        Y_ABORT_UNLESS(IsReady());
+        Y_ENSURE(IsReady());
 
         EXPORT_LOG_D("Handle TEvExportScan::TEvFeed"
             << ": self# " << SelfId());
@@ -137,7 +137,7 @@ class TExportScan: private NActors::IActorCallback, public NTable::IScan {
     }
 
     void Handle(TEvExportScan::TEvFinish::TPtr& ev) {
-        Y_ABORT_UNLESS(IsReady());
+        Y_ENSURE(IsReady());
 
         EXPORT_LOG_D("Handle TEvExportScan::TEvFinish"
             << ": self# " << SelfId()

@@ -51,7 +51,7 @@ namespace NTable {
          */
         ui64 ToCounter() const {
             const auto value = Value;
-            Y_ABORT_UNLESS(value >= 0);
+            Y_ENSURE(value >= 0);
             return value;
         }
 

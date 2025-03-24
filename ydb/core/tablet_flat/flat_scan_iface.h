@@ -1,9 +1,10 @@
 #pragma once
 
-#include "util_basics.h"
 #include "flat_scan_lead.h"
 #include "flat_row_eggs.h"
 #include "flat_row_scheme.h"
+#include "util_basics.h"
+#include "util_fmt_abort.h"
 
 namespace NKikimr {
 namespace NTable {
@@ -143,7 +144,7 @@ namespace NTable {
     class IVersionScan : public IScan {
     private:
         EScan Feed(TArrayRef<const TCell>, const TRow&) override final {
-            Y_ABORT("Unexpected unversioned call");
+            Y_TABLET_ERROR("Unexpected unversioned call");
         }
 
     public:

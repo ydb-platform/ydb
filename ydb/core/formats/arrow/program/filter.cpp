@@ -104,8 +104,11 @@ TConclusion<IResourceProcessor::EExecutionResult> TFilterProcessor::DoExecute(
     AFL_VERIFY(filter.GetRecordsCountVerified() == inputColumns.front()->GetRecordsCount())("filter", filter.GetRecordsCountVerified())(
                                                      "input", inputColumns.front()->GetRecordsCount());
     if (context.GetLimit()) {
+        // TODO: Why context.GetResources()->GetRecordsCountActualVerified() is expected to be actual filtered count?
+        // context.GetResources()->AddFilter(
+        //     filter.Cut(context.GetResources()->GetRecordsCountActualVerified(), *context.GetLimit(), context.GetReverse()));
         context.GetResources()->AddFilter(
-            filter.Cut(context.GetResources()->GetRecordsCountActualVerified(), *context.GetLimit(), context.GetReverse()));
+            filter.Cut(filter.GetFilteredCountVerified(), *context.GetLimit(), context.GetReverse()));
     } else {
         context.GetResources()->AddFilter(filter);
     }

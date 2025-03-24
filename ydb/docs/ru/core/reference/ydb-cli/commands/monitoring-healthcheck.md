@@ -31,7 +31,7 @@ ydb [global options...] monitoring healthcheck [options...]
 ### Краткий результат проверки {#example-pretty}
 
 ```bash
-{{ ydb-cli }} monitoring healthcheck --format pretty
+{{ ydb-cli }} --profile quickstart monitoring healthcheck --format pretty
 ```
 
 Проблем с базой не обнаружено:
@@ -50,7 +50,7 @@ Healthcheck status: DEGRADED
 
 
 ```bash
-{{ ydb-cli }} monitoring healthcheck --format json
+{{ ydb-cli }} --profile quickstart monitoring healthcheck --format json
 ```
 
 Проблем с базой не обнаружено:

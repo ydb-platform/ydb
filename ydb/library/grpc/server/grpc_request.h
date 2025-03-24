@@ -430,7 +430,7 @@ private:
         if (IncRequest()) {
             // Adjust counters.
             RequestSize = Request_->ByteSize();
-            Counters_->StartProcessing(RequestSize);
+            Counters_->StartProcessing(RequestSize, Deadline());
             RequestTimer.Reset();
 
             if (!SslServer()) {

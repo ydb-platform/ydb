@@ -2565,7 +2565,7 @@ WITH (
             const auto& columns = table.GetTableColumns();
             const auto& keyColumns = table.GetPrimaryKeyColumns();
 
-            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 27);
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 30);
             UNIT_ASSERT_STRINGS_EQUAL(columns[0].Name, "OwnerId");
             UNIT_ASSERT_STRINGS_EQUAL(FormatType(columns[0].Type), "Uint64?");
 
@@ -2745,7 +2745,7 @@ WITH (
 
             auto children = result.GetChildren();
 
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 25);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 27);
 
             THashSet<TString> names;
             for (const auto& child : children) {

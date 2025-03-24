@@ -584,12 +584,15 @@ TExprBase DoRewriteTopSortOverKMeansTree(
 }
 
 TExprBase TryRewriteTopSortOverPrefixedKMeansTree(
-    TExprBase node, [[maybe_unused]] const TParentsMap& parentsMap,
+    TExprBase node,
     const TReadMatch& read, const TMaybeNode<TCoFlatMap>& flatMap, const TExprNode& lambdaArgs, const TExprBase& lambdaBody, const TCoTopBase& top,
     TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     const TKikimrTableDescription& tableDesc, const TIndexDescription& indexDesc, const TKikimrTableMetadata& implTable)
 {
-    if (!flatMap) {
+    auto flatMapLambda = flatMap.Lambda();
+    auto maybeOptionalIf = flatMapLambda.Body().Maybe<TCoOptionalIf>();
+    if (!maybeOptionalIf) {
+        YQL_LOG(WARN) << "Cannot use prefixed vector index for " << top.Ref().Dump();
         return node;
     }
 
@@ -602,12 +605,6 @@ TExprBase TryRewriteTopSortOverPrefixedKMeansTree(
     YQL_ENSURE(levelTableDesc->Metadata->Name.EndsWith(NTableIndex::NTableVectorKmeansTreeIndex::LevelTable));
     YQL_ENSURE(postingTableDesc->Metadata->Name.EndsWith(NTableIndex::NTableVectorKmeansTreeIndex::PostingTable));
     YQL_ENSURE(prefixTableDesc->Metadata->Name.EndsWith(NTableIndex::NTableVectorKmeansTreeIndex::PrefixTable));
-
-    auto flatMapLambda = flatMap.Cast().Lambda();
-    auto maybeOptionalIf = flatMapLambda.Body().Maybe<TCoOptionalIf>();
-    if (!maybeOptionalIf) {
-        return node;
-    }
 
     // TODO(mbkkt) It's kind of strange that almost everything here have same position
     const auto pos = read.Pos();
@@ -645,7 +642,7 @@ TExprBase TryRewriteTopSortOverPrefixedKMeansTree(
     };
     TMaybeNode<TCoLambda> mainLambda;
     auto prefixLambda = [&] {
-        auto newLambda = TExprBase{newLambdaFrom(flatMapLambda.Args().Ref(), flatMapLambda.Body().Ptr())}.Cast<TCoLambda>();
+        auto newLambda = TExprBase{newLambdaFrom(flatMapLambda.Cast().Args().Ref(), flatMapLambda.Cast().Body().Ptr())}.Cast<TCoLambda>();
         auto optionalIf = newLambda.Body().Cast<TCoOptionalIf>();
         auto oldValue = optionalIf.Value().Maybe<TCoAsStruct>();
         if (!oldValue) {
@@ -1120,12 +1117,12 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
         bool canUseVectorIndex = CanUseVectorIndex(*indexDesc, lambdaBody, topBase);
         if (indexDesc->KeyColumns.size() > 1) {
             if (!canUseVectorIndex) {
-                // TODO(mbkkt) some warnings? only
+                YQL_LOG(WARN) << "Cannot use prefixed vector index for " << topBase.Ref().Dump();
                 //  SELECT SomeDistance(...), ... FROM t VIEW i ... ORDER BY SomeDistance(...) LIMIT k
                 // is supported now
                 return node;
             }
-            return TryRewriteTopSortOverPrefixedKMeansTree(node, parentsMap,
+            return TryRewriteTopSortOverPrefixedKMeansTree(node,
                                                            readTableIndex, maybeFlatMap, *lambdaArgs, lambdaBody, topBase,
                                                            ctx, kqpCtx, tableDesc, *indexDesc, *implTable);
         }
@@ -1134,23 +1131,24 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
             // SELECT SomeDistance(...) AS d, ... FROM t VIEW i ... ORDER BY d LIMIT k 
             auto argument = lambdaBody.Maybe<TCoMember>().Struct().Maybe<TCoArgument>();
             if (!argument) {
-                // TODO(mbkkt) some warnings?
+                YQL_LOG(WARN) << "Cannot use vector index for " << topBase.Ref().Dump();
                 return node;
             }
             auto asStruct = maybeFlatMap.Lambda().Body().Maybe<TCoJust>().Input().Maybe<TCoAsStruct>();
             if (!asStruct) {
-                // TODO(mbkkt) some warnings?
+                YQL_LOG(WARN) << "Cannot use vector index for " << topBase.Ref().Dump();
                 return node;
             }
 
             // TODO(mbkkt) I think it shouldn't matter, but for my paranoia I will keep it for now
             // In general I want to check that result of flat map used as argument for member access in top lambda
-            const auto argumentName = argument.Cast().Name();
-            if (absl::c_none_of(maybeFlatMap.Cast().Lambda().Args(),
-                    [&](const TCoArgument& argument) { return argumentName == argument.Name(); })) {
-                // TODO(mbkkt) some warnings?
-                return node;
-            }
+            // But for some reason it starts to fail for same as tests queries in real-world
+            // const auto argumentName = argument.Cast().Name();
+            // if (absl::c_none_of(maybeFlatMap.Cast().Lambda().Args(),
+            //         [&](const TCoArgument& argument) { return argumentName == argument.Name(); })) {
+            //     YQL_LOG(WARN) << "Cannot use vector index for " << topBase.Ref().Dump();
+            //     return node;
+            // }
 
             const auto memberName = lambdaBody.Cast<TCoMember>().Name().Value();
             for (const auto& arg : asStruct.Cast().Args()) {
@@ -1170,7 +1168,7 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
                 break;
             }
             if (!canUseVectorIndex) {
-                // TODO(mbkkt) some warnings?
+                YQL_LOG(WARN) << "Cannot use vector index for " << topBase.Ref().Dump();
                 return node;
             }
             lambdaArgs = maybeFlatMap.Cast().Lambda().Args().Raw();

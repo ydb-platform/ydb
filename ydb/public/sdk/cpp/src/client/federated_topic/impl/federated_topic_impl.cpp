@@ -75,7 +75,7 @@ IOutputStream& operator<<(IOutputStream& out, NTopic::TDescribeTopicSettings con
 NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> TFederatedTopicClient::TImpl::GetAllClusterInfo() {
     InitObserver();
     return Observer->WaitForFirstState().Apply(
-            [weakObserver = std::weak_ptr(Observer)] (const auto &) {
+            [weakObserver = std::weak_ptr(Observer)] (const auto& ) {
                 auto observer = weakObserver.lock();
                 if (!observer) {
                     throw yexception() << "Lost observer"; // TODO better message?
@@ -85,7 +85,7 @@ NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> TFederated
                 result.reserve(state->DbInfos.size());
                 for (const auto& db: state->DbInfos) {
                     auto& dbinfo = result.emplace_back();
-                    switch(db->status()) {
+                    switch (db->status()) {
 #define TRANSLATE_STATUS(NAME) \
                     case TDbInfo::Status::DatabaseInfo_Status_##NAME: \
                         dbinfo.Status = TClusterInfo::EStatus::NAME; \

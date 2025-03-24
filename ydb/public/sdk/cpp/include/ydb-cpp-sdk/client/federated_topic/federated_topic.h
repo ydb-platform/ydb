@@ -540,6 +540,7 @@ public:
     };
 
     //! Discover all clusters for federated topic
+    // (May signal exception in future if FederatedTopicClient was destroyed when future fired)
     NThreading::TFuture<std::vector<TClusterInfo>> GetAllClusterInfo();
 
     static std::vector<NTopic::TTopicClient> GetAllTopicClients(const TDriver& driver, const std::vector<TClusterInfo>& clusterInfos, NTopic::TTopicClientSettings& clientSettings);

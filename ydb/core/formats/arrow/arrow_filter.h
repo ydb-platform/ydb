@@ -265,6 +265,7 @@ public:
 
     TColumnFilter And(const TColumnFilter& extFilter) const Y_WARN_UNUSED_RESULT;
     TColumnFilter Or(const TColumnFilter& extFilter) const Y_WARN_UNUSED_RESULT;
+    TColumnFilter ApplyFilter(const TColumnFilter& filter) const Y_WARN_UNUSED_RESULT;
 
     class TApplyContext {
     private:

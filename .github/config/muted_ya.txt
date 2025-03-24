@@ -19,6 +19,7 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
 ydb/core/kqp/ut/cost KqpCost.OlapWriteRow
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestAggregation
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterCompare
+ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesColumnActualization
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictActualization
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictStatActualization
 ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart
@@ -44,6 +45,7 @@ ydb/core/kqp/ut/tx KqpSnapshotIsolation.TReadOnlyOltpNoSink
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOltp
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOltpNoSink
 ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanOperationTmeoutBruteForce
+ydb/core/mind/hive/ut TStorageBalanceTest.TestScenario2
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/tablet_flat/ut TSharedPageCache.Compaction_FlatIndex

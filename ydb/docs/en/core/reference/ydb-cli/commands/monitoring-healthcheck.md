@@ -31,7 +31,7 @@ The response structure and description are provided in the [Health Check API](..
 ### Health check result in pretty format {#example-pretty}
 
 ```bash
-{{ ydb-cli }} monitoring healthcheck --format pretty
+{{ ydb-cli }} --profile quickstart monitoring healthcheck --format pretty
 ```
 
 Database is in good condition:
@@ -50,7 +50,7 @@ Healthcheck status: DEGRADED
 
 
 ```bash
-{{ ydb-cli }} monitoring healthcheck --format json
+{{ ydb-cli }} --profile quickstart monitoring healthcheck --format json
 ```
 
 Database is in good condition:

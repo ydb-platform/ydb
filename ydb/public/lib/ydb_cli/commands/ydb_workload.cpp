@@ -381,6 +381,7 @@ int TWorkloadCommandBase::Run(TConfig& config) {
         TopicClient = MakeHolder<NTopic::TTopicClient>(*Driver);
         SchemeClient = MakeHolder<NScheme::TSchemeClient>(*Driver);
         QueryClient = MakeHolder<NQuery::TQueryClient>(*Driver);
+        CoordinationClient = MakeHolder<NCoordination::TClient>(*Driver);
     }
     Params.DbPath = config.Database;
     auto workloadGen = Params.CreateGenerator();
@@ -397,7 +398,7 @@ void TWorkloadCommandBase::CleanTables(NYdbWorkload::IWorkloadQueryGenerator& wo
         if (DryRun) {
             Cout << "Remove " << fullPath << Endl;
         } else {
-            NStatusHelpers::ThrowOnErrorOrPrintIssues(RemovePathRecursive(*SchemeClient, *TableClient, TopicClient.Get(), QueryClient.Get(), fullPath, ERecursiveRemovePrompt::Never, settings));
+            NStatusHelpers::ThrowOnErrorOrPrintIssues(RemovePathRecursive(*SchemeClient, *TableClient, TopicClient.Get(), QueryClient.Get(), CoordinationClient.Get(), fullPath, ERecursiveRemovePrompt::Never, settings));
         }
         Cout << "Remove path " << path << "...Ok"  << Endl;
     }

@@ -2,6 +2,7 @@
 
 #include <ydb/public/lib/ydb_cli/commands/ydb_command.h>
 #include <ydb/public/lib/ydb_cli/common/progress_bar.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 #include <ydb/library/workload/abstract/workload_query_generator.h>
@@ -102,6 +103,7 @@ protected:
     THolder<NTopic::TTopicClient> TopicClient;
     THolder<NScheme::TSchemeClient> SchemeClient;
     THolder<NQuery::TQueryClient> QueryClient;
+    THolder<NCoordination::TClient> CoordinationClient;
     int Type = 0;
     bool DryRun = false;
 };

@@ -90,8 +90,9 @@ int TCommandRemoveDirectory::Run(TConfig& config) {
         NTable::TTableClient tableClient(driver);
         NTopic::TTopicClient topicClient(driver);
         NQuery::TQueryClient queryClient(driver);
+        NCoordination::TClient coordinationClient(driver);
         const auto prompt = Prompt.GetOrElse(ERecursiveRemovePrompt::Once);
-        NStatusHelpers::ThrowOnErrorOrPrintIssues(RemoveDirectoryRecursive(schemeClient, tableClient, &topicClient, &queryClient, Path, prompt, settings));
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(RemoveDirectoryRecursive(schemeClient, tableClient, &topicClient, &queryClient, &coordinationClient, Path, prompt, settings));
     } else {
         if (Prompt) {
             if (!NConsoleClient::Prompt(*Prompt, Path, NScheme::ESchemeEntryType::Directory)) {

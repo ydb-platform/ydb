@@ -198,7 +198,9 @@ struct TCreateNodeSettings : public TNodeSettings<TCreateNodeSettings> {
     TCreateNodeSettings(const Ydb::Coordination::Config& config);
 };
 struct TAlterNodeSettings : public TNodeSettings<TAlterNodeSettings> { };
-struct TDropNodeSettings : public TOperationRequestSettings<TDropNodeSettings> { };
+struct TDropNodeSettings : public TOperationRequestSettings<TDropNodeSettings> {
+    using TOperationRequestSettings<TDropNodeSettings>::TOperationRequestSettings;
+};
 struct TDescribeNodeSettings : public TOperationRequestSettings<TDescribeNodeSettings> { };
 
 ////////////////////////////////////////////////////////////////////////////////

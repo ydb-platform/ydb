@@ -29,6 +29,7 @@ namespace NActors {
         struct THeader {
             std::atomic<size_t> RefCount;
             IOwner* Owner;
+            char Padding[480];
 
             explicit THeader(IOwner* owner)
                 : RefCount{ 1 }
@@ -36,7 +37,7 @@ namespace NActors {
             {}
         };
 
-        static_assert(sizeof(THeader) == 16, "THeader has an unexpected size");
+        static_assert(sizeof(THeader) == 496, "THeader has an unexpected size");
 
         enum : size_t {
             PrivateHeaderSize = sizeof(TPrivateHeader),
@@ -44,6 +45,7 @@ namespace NActors {
             OverheadSize = PrivateHeaderSize + HeaderSize,
             MaxDataSize = (std::numeric_limits<size_t>::max() - OverheadSize)
         };
+        static_assert(OverheadSize == 512, "");
 
     public:
         TSharedData() noexcept

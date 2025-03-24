@@ -1186,6 +1186,7 @@ Y_UNIT_TEST_SUITE(TPDiskTest) {
         TReallyFastRng32 rng(seed);
 
         size_t size = 2_MB;
+        size = size / vdisk.PDiskParams->AppendBlockSize * vdisk.PDiskParams->AppendBlockSize;
         size_t written = 0;
         auto duration = TDuration::Seconds(15);
         TInstant end = TInstant::Now() + duration;

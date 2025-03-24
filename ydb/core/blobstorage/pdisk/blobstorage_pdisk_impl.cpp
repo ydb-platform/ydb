@@ -843,17 +843,26 @@ bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pi
         );
         if (count == 1
                 && (intptr_t)(*evChunkWrite->PartsPtr)[0].first % 512 == 0
-                && chunkOffset % FormatSectorSize == 0
-                && size % FormatSectorSize == 0) {
+                && chunkOffset % Format.SectorSize == 0
+                && size % Format.SectorSize == 0) {
             //
             newSize = size;
         } else {
             newSize = comp->CompactBuffer(chunkOffset % Format.SectorSize);
-            P_LOG(PRI_CRIT, BPD01, "Chunk write, compact buffer",
-                (size, size), (newSize, newSize));
+            TStringStream str;
+            str << "[";
+            for (size_t i = 0; i < evChunkWrite->PartsPtr->Size(); ++i) {
+                const auto& [ptr, size] = (*evChunkWrite->PartsPtr)[i];
+                str << size << ",";
+            }
+            str << "]";
+            P_LOG(PRI_DEBUG, BPD01, "Chunk write, compact buffer",
+                (count, count), (chunkOffset, chunkOffset),
+                (bufAlign, (intptr_t)(*evChunkWrite->PartsPtr)[0].first % 512),
+                (size, size), (newSize, newSize), (Sizes, str.Str()));
         }
         buff = comp->GetBuffer();
-        P_LOG(PRI_INFO, BPD01, "Chunk write", (ChunkIdx, chunkIdx), (Encrypted, encrypted), (format_ChunkSize, Format.ChunkSize),
+        P_LOG(PRI_DEBUG, BPD01, "Chunk write", (ChunkIdx, chunkIdx), (Encrypted, encrypted), (format_ChunkSize, Format.ChunkSize),
             (aligndown, AlignDown<ui32>(chunkOffset, Format.SectorSize)),
             (chunkOffset, chunkOffset), (Size, size), (NewSize, newSize),
             (diskOffset, diskOffset), (count, count));
@@ -1004,7 +1013,7 @@ TPDisk::EChunkReadPieceResult TPDisk::ChunkReadPiece(TIntrusivePtr<TChunkRead> &
 
     size_t diskSize = sectorsToRead * Format.SectorSize;
     ui64 diskOffset = (ui64)read->ChunkIdx * Format.ChunkSize + AlignDown<ui32>(read->Offset, Format.SectorSize);
-    P_LOG(PRI_CRIT, BPD01, "Read chunk", (Encrypted, read->ChunkEncrypted), (ChunkIdx, read->ChunkIdx),
+    P_LOG(PRI_DEBUG, BPD01, "Read chunk", (Encrypted, read->ChunkEncrypted), (ChunkIdx, read->ChunkIdx),
         (FirstSector, read->FirstSector), (Offset, read->Offset), (DiskSize, diskSize), (DiskOffset, diskOffset),
         (BytesToRead, bytesToRead), (PieceSizeLimit, pieceSizeLimit));
     if (!read->ChunkEncrypted) {
@@ -3061,7 +3070,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 delete request;
                 return false;
             }
-            if (false && ev.Offset % GetChunkAppendBlockSize() != 0) {
+            if (ev.Offset % GetChunkAppendBlockSize() != 0) {
                 err << Sprintf("Can't write chunkIdx# %" PRIu32 " with not aligned offset# %" PRIu32 " ownerId# %"
                         PRIu32, ev.ChunkIdx, ev.Offset, (ui32)ev.Owner);
                 SendChunkWriteError(ev, err.Str(), NKikimrProto::ERROR);

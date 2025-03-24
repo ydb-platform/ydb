@@ -121,6 +121,7 @@ namespace NKafka {
 
     void TKafkaInitProducerIdActor::RequestFullRetry(const TActorContext& ctx) {
         CurrentTxAbortRetryNumber++;
+        Kqp->ResetTxId();
         StartTxProducerInitCycle(ctx);
     }
     
@@ -143,6 +144,8 @@ namespace NKafka {
         try {
             switch (LastSentToKqpRequest) {
                 case BEGIN_TRANSACTION:
+                    // save tx id for future requests
+                    Kqp->SetTxId(ev->Get()->Record.GetResponse().GetTxMeta().id());
                     SendSelectRequest(ctx);
                     break;
                 case SELECT:

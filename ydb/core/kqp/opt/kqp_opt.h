@@ -18,7 +18,7 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
         , QueryCtx(queryCtx)
         , Tables(tables)
         , UserRequestContext(userRequestContext)
-    {   
+    {
         YQL_ENSURE(QueryCtx);
         YQL_ENSURE(Tables);
     }
@@ -32,6 +32,7 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     int EquiJoinsCount{};
     std::shared_ptr<NJson::TJsonValue> OverrideStatistics{};
     std::shared_ptr<NYql::TOptimizerHints> Hints{};
+    THashMap<TString, TString> AliasByTablePath;
 
     std::shared_ptr<NJson::TJsonValue> GetOverrideStatistics() {
         if (Config->OptOverrideStatistics.Get()) {

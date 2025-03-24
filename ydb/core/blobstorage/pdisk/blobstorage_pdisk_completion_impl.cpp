@@ -319,7 +319,9 @@ void TCompletionChunkRead::Exec(TActorSystem *actorSystem) {
     THolder<TEvChunkReadResult> result = MakeHolder<TEvChunkReadResult>(NKikimrProto::OK,
         Read->ChunkIdx, Read->Offset, Read->Cookie, PDisk->GetStatusFlags(Read->Owner, Read->OwnerGroupType), "");
 
-    CommonBuffer.Move(Read->Offset % 4096);
+    if (!Read->ChunkEncrypted) {
+        CommonBuffer.Move(Read->Offset % 4096);
+    }
     result->Data = std::move(CommonBuffer);
     CommonBuffer.Clear();
     //Y_VERIFY(result->Data.IsDetached());

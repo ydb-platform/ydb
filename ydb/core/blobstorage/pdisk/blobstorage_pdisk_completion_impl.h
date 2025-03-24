@@ -243,7 +243,8 @@ public:
         , DoubleFreeCanary(ReferenceCanary)
     {
         size_t tailroom = AlignUp<size_t>(read->Size + read->Offset % 4096, 4096) - read->Size;
-        CommonBuffer = TBufferWithGaps(read->Offset, read->Size + read->Offset % 4096, tailroom);
+        auto size = read->ChunkEncrypted ? read->Size : read->Size + read->Offset % 4096;
+        CommonBuffer = TBufferWithGaps(read->Offset, size, tailroom);
         //Y_VERIFY(false);
     }
 

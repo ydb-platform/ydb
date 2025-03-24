@@ -7,6 +7,7 @@
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/event_local.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap {
 class IGranuleDataAccessor;
@@ -67,10 +68,10 @@ public:
 class TEvUnregisterController
     : public NActors::TEventLocal<TEvUnregisterController, NColumnShard::TEvPrivate::EEv::EvUnregisterGranuleDataAccessor> {
 private:
-    YDB_READONLY(ui64, PathId, 0);
+    YDB_READONLY_DEF(TInternalPathId, PathId);
 
 public:
-    explicit TEvUnregisterController(const ui64 pathId)
+    explicit TEvUnregisterController(const TInternalPathId pathId)
         : PathId(pathId) {
     }
 };

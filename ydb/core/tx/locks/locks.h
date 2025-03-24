@@ -486,12 +486,12 @@ public:
     }
 
     NScheme::TTypeInfo GetKeyColumnType(ui32 pos) const {
-        Y_ABORT_UNLESS(pos < KeyColumnTypes.size());
+        Y_ENSURE(pos < KeyColumnTypes.size());
         return KeyColumnTypes[pos];
     }
 
     void UpdateKeyColumnsTypes(const TVector<NScheme::TTypeInfo>& keyTypes) {
-        Y_ABORT_UNLESS(KeyColumnTypes.size() <= keyTypes.size());
+        Y_ENSURE(KeyColumnTypes.size() <= keyTypes.size());
         if (KeyColumnTypes.size() < keyTypes.size()) {
             KeyColumnTypes = keyTypes;
             Ranges.SetKeyTypes(keyTypes);
@@ -619,7 +619,7 @@ public:
     }
 
     TRangeKey MakeRange(const TTableId& tableId, const TTableRange& range) const {
-        Y_ABORT_UNLESS(!range.Point);
+        Y_ENSURE(!range.Point);
         return TRangeKey{
             GetTableLocks(tableId),
             TOwnedCellVec(range.From),
@@ -690,7 +690,7 @@ private:
 
     TTableLocks::TPtr GetTableLocks(const TTableId& table) const {
         auto it = Tables.find(table.PathId);
-        Y_ABORT_UNLESS(it != Tables.end());
+        Y_ENSURE(it != Tables.end());
         return it->second;
     }
 
@@ -841,8 +841,8 @@ public:
     {}
 
     void SetupUpdate(TLocksUpdate* update, ILocksDb* db = nullptr) {
-        Y_ABORT_UNLESS(!Update, "Cannot setup a recursive update");
-        Y_ABORT_UNLESS(update, "Cannot setup a nullptr update");
+        Y_ENSURE(!Update, "Cannot setup a recursive update");
+        Y_ENSURE(update, "Cannot setup a nullptr update");
         Update = update;
         Db = db;
     }
@@ -866,7 +866,7 @@ public:
     }
 
     ui64 CurrentLockTxId() const {
-        Y_ABORT_UNLESS(Update);
+        Y_ENSURE(Update);
         return Update->LockTxId;
     }
 
@@ -960,7 +960,7 @@ private:
     static ui64 GetLockId(const TArrayRef<const TCell>& key) {
         ui64 lockId;
         bool ok = TLocksTable::ExtractKey(key, TLocksTable::EColumns::LockId, lockId);
-        Y_ABORT_UNLESS(ok);
+        Y_ENSURE(ok);
         return lockId;
     }
 };

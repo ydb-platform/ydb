@@ -45,7 +45,7 @@ EExecutionStatus TBuildWriteOutRSUnit::Execute(TOperation::TPtr op, TTransaction
 {
     TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
     auto writeTx = writeOp->GetWriteTx();
-    Y_ABORT_UNLESS(writeTx);
+    Y_ENSURE(writeTx);
 
     DataShard.ReleaseCache(*writeOp);
 
@@ -56,7 +56,7 @@ EExecutionStatus TBuildWriteOutRSUnit::Execute(TOperation::TPtr op, TTransaction
             case ERestoreDataStatus::Restart:
                 return EExecutionStatus::Restart;
             case ERestoreDataStatus::Error:
-                Y_ABORT("Failed to restore writeOp data: %s", writeTx->GetErrStr().c_str());
+                Y_ENSURE(false, "Failed to restore writeOp data: " << writeTx->GetErrStr());
         }
     }
 
@@ -85,7 +85,7 @@ EExecutionStatus TBuildWriteOutRSUnit::Execute(TOperation::TPtr op, TTransaction
             writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, TStringBuilder() << "Tx was terminated: " << e.what());
             return EExecutionStatus::Executed;
         } else {
-            Y_FAIL_S("Unexpected exception in KQP out-readsets prepare: " << e.what());
+            throw;
         }
     }
 

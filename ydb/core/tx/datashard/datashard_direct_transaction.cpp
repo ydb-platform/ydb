@@ -19,8 +19,8 @@ TDirectTransaction::TDirectTransaction(TInstant receivedAt, ui64 tieBreakerIndex
 
 void TDirectTransaction::BuildExecutionPlan(bool loaded)
 {
-    Y_ABORT_UNLESS(GetExecutionPlan().empty());
-    Y_ABORT_UNLESS(!loaded);
+    Y_ENSURE(GetExecutionPlan().empty());
+    Y_ENSURE(!loaded);
 
     TVector<EExecutionUnitKind> plan;
     plan.push_back(EExecutionUnitKind::BuildAndWaitDependencies);
@@ -40,7 +40,7 @@ bool TDirectTransaction::Execute(TDataShard* self, TTransactionContext& txc) {
             for (ui64 txId : volatileReadDependencies) {
                 AddVolatileDependency(txId);
                 bool ok = self->GetVolatileTxManager().AttachBlockedOperation(txId, GetTxId());
-                Y_VERIFY_S(ok, "Unexpected failure to attach " << *static_cast<TOperation*>(this) << " to volatile tx " << txId);
+                Y_ENSURE(ok, "Unexpected failure to attach " << *static_cast<TOperation*>(this) << " to volatile tx " << txId);
             }
         }
         return false;

@@ -2168,7 +2168,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
                 TVector<NJson::TJsonValue> values;
                 for (const auto& pr : result) {
                     bool ok = NJson::ReadJsonTree(pr.second, &values.emplace_back());
-                    Y_ABORT_UNLESS(ok);
+                    Y_ENSURE(ok);
                 }
                 return values;
             }
@@ -2719,7 +2719,7 @@ Y_UNIT_TEST_SUITE(Cdc) {
             case TSchemeBoardEvents::EvUpdate:
                 if (auto* msg = ev->Get<NSchemeBoard::NInternalEvents::TEvUpdate>()) {
                     NKikimrScheme::TEvDescribeSchemeResult desc;
-                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(desc, *msg->GetRecord().GetDescribeSchemeResultSerialized().begin()));
+                    Y_ENSURE(ParseFromStringNoSizeLimit(desc, *msg->GetRecord().GetDescribeSchemeResultSerialized().begin()));
                     if (desc.GetPath() == "/Root/Table/Stream" && desc.GetPathDescription().GetSelf().GetCreateFinished()) {
                         delayed.emplace_back(ev.Release());
                         return TTestActorRuntime::EEventAction::DROP;

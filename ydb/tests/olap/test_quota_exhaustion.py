@@ -142,7 +142,7 @@ class TestYdbWorkload(object):
         self.cluster.register_and_start_slots(self.database_name, count=1)
         self.cluster.wait_tenant_up(self.database_name)
 
-        # Set soft and hard quotas to 6GB
+        # Set soft and hard quotas to 40 Mb
         self.alter_database_quotas(self.cluster.nodes[1], self.database_name, """
             data_size_hard_quota: 40000000
             data_size_soft_quota: 40000000
@@ -157,10 +157,11 @@ class TestYdbWorkload(object):
 
         # Check that deletion works at least first time
         self.delete_test_chunk(session, table_path, 0)
-        # ^ uncomment after fixing https://github.com/ydb-platform/ydb/issues/13808
 
         # Check that deletions will lead to overflow at some moment
         i = self.delete_until_overload(session, table_path)
 
         # Check that all DELETE statements are completed
         assert i == ROWS_CHUNKS_COUNT
+
+        # Writes enabling after data deletion will be checked in separate PR

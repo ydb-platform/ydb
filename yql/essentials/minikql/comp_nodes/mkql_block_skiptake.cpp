@@ -57,7 +57,7 @@ public:
         const auto offsetPtr = new AllocaInst(indexType, 0U, "offset_ptr", atTop);
         const auto sizePtr = new AllocaInst(indexType, 0U, "size_ptr", atTop);
 
-        const auto sliceFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TWideSkipBlocksWrapper::SliceBlock));
+        const auto sliceFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TWideSkipBlocksWrapper::SliceBlock>());
         const auto sliceType = FunctionType::get(valueType, {ctx.GetFactory()->getType(), valueType, indexType}, false);
         const auto slicePtr = CastInst::Create(Instruction::IntToPtr, sliceFunc, PointerType::getUnqual(sliceType), "slice", atTop);
 
@@ -165,7 +165,7 @@ public:
 
             block = calc;
 
-            const auto makeCountFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&MakeBlockCount));
+            const auto makeCountFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&MakeBlockCount>());
             const auto makeCountType = FunctionType::get(valueType, {ctx.GetFactory()->getType(), indexType}, false);
             const auto makeCountPtr = CastInst::Create(Instruction::IntToPtr, makeCountFunc, PointerType::getUnqual(makeCountType), "make_count_func", block);
             const auto slice = CallInst::Create(makeCountType, makeCountPtr, {ctx.GetFactory(), count}, "slice", block);
@@ -275,7 +275,7 @@ public:
         const auto sizePtr = new AllocaInst(indexType, 0U, "size_ptr", atTop);
         new StoreInst(ConstantInt::get(indexType, 0), sizePtr, atTop);
 
-        const auto sliceFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TWideTakeBlocksWrapper::SliceBlock));
+        const auto sliceFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TWideTakeBlocksWrapper::SliceBlock>());
         const auto sliceType = FunctionType::get(valueType, {ctx.GetFactory()->getType(), valueType, indexType}, false);
         const auto slicePtr = CastInst::Create(Instruction::IntToPtr, sliceFunc, PointerType::getUnqual(sliceType), "slice", atTop);
 
@@ -361,7 +361,7 @@ public:
 
             block = calc;
 
-            const auto makeCountFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&MakeBlockCount));
+            const auto makeCountFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&MakeBlockCount>());
             const auto makeCountType = FunctionType::get(valueType, {ctx.GetFactory()->getType(), indexType}, false);
             const auto makeCountPtr = CastInst::Create(Instruction::IntToPtr, makeCountFunc, PointerType::getUnqual(makeCountType), "make_count_func", block);
             const auto slice = CallInst::Create(makeCountType, makeCountPtr, {ctx.GetFactory(), count}, "slice", block);

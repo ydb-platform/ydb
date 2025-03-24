@@ -19,6 +19,7 @@ target_link_libraries(subscriber-events-tables_erased PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  tx-columnshard-common
 )
 
 target_sources(subscriber-events-tables_erased PRIVATE

@@ -327,7 +327,8 @@ private: //IDqComputeActorAsyncInput
     }
 
     static TDuration GetCpuTimeDelta(ui64 startCycleCount) {
-        return TDuration::Seconds(NHPTimer::GetSeconds(GetCycleCountFast() - startCycleCount));
+        auto currentCycleCount = GetCycleCountFast();
+        return TDuration::Seconds(NHPTimer::GetSeconds(std::max(currentCycleCount, startCycleCount) - startCycleCount));
     }
 
     TDuration GetCpuTime() override {

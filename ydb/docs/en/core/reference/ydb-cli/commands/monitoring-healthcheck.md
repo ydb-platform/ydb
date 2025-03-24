@@ -59,8 +59,8 @@ Database is in good condition:
 {
  "self_check_result": "GOOD",
  "location": {
-  "id": 1,
-  "host": "localhost",
+  "id": 51059,
+  "host": "my-host.net",
   "port": 19001
  }
 }

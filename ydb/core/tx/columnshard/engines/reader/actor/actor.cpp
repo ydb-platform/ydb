@@ -7,7 +7,7 @@
 #include <yql/essentials/core/issue/yql_issue.h>
 
 namespace NKikimr::NOlap::NReader {
-constexpr TDuration SCAN_HARD_TIMEOUT = TDuration::Minutes(10);
+constexpr TDuration SCAN_HARD_TIMEOUT = TDuration::Minutes(60);
 constexpr TDuration SCAN_HARD_TIMEOUT_GAP = TDuration::Seconds(5);
 
 void TColumnShardScan::PassAway() {

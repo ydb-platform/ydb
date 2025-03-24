@@ -48,11 +48,16 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         UNIT_ASSERT(tablets.size() == 2);
     }
 
-    std::tuple<TTestActorRuntime&, Tests::TServer::TPtr, TActorId> TestCreateServer() {
+    std::tuple<TTestActorRuntime&, Tests::TServer::TPtr, TActorId> TestCreateServer(std::optional<bool> useSink = std::nullopt) {
         TPortManager pm;
+        NKikimrConfig::TAppConfig appConfig;
+        if (useSink) {
+            appConfig.MutableTableServiceConfig()->SetEnableOltpSink(*useSink);
+        }
         TServerSettings serverSettings(pm.GetPort(2134));
         serverSettings.SetDomainName("Root")
-            .SetUseRealThreads(false);
+            .SetUseRealThreads(false)
+            .SetAppConfig(appConfig);
 
         Tests::TServer::TPtr server = new TServer(serverSettings);
         auto &runtime = *server->GetRuntime();
@@ -203,8 +208,8 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         UNIT_ASSERT_VALUES_EQUAL(count, unitSpans.size());
     }
 
-    Y_UNIT_TEST(TestTraceDistributedUpsert) {
-        auto [runtime, server, sender] = TestCreateServer();
+    Y_UNIT_TEST_TWIN(TestTraceDistributedUpsert, UseSink) {
+        auto [runtime, server, sender] = TestCreateServer(UseSink);
 
         CreateShardedTable(server, sender, "/Root", "table-1", 1, false);
 
@@ -230,6 +235,8 @@ Y_UNIT_TEST_SUITE(TDataShardTrace) {
         UNIT_ASSERT_VALUES_EQUAL(1, uploader->Traces.size());
 
         TFakeWilsonUploader::Trace &trace = uploader->Traces.begin()->second;
+
+        Cerr << "Trace: " << trace.ToString() << Endl;
 
         auto deSpan = trace.Root.BFSFindOne("DataExecuter");
         UNIT_ASSERT(deSpan);

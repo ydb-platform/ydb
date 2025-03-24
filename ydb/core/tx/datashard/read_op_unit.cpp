@@ -19,7 +19,7 @@ public:
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override {
         IReadOperation* readOperation = dynamic_cast<IReadOperation*>(op.Get());
-        Y_ABORT_UNLESS(readOperation);
+        Y_ENSURE(readOperation);
 
         auto status = readOperation->Execute(txc, ctx);
         if (status == EExecutionStatus::Restart || status == EExecutionStatus::Continue)
@@ -33,7 +33,7 @@ public:
 
     void Complete(TOperation::TPtr op, const TActorContext& ctx) override {
         IReadOperation* readOperation = dynamic_cast<IReadOperation*>(op.Get());
-        Y_ABORT_UNLESS(readOperation);
+        Y_ENSURE(readOperation);
 
         readOperation->Complete(ctx);
     }

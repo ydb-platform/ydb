@@ -1131,7 +1131,7 @@ private:
     };
 
     void AddReadConflict(ui64 txId) {
-        Y_ABORT_UNLESS(State.LockId);
+        Y_ENSURE(State.LockId);
         // We have skipped uncommitted changes in txId, which would affect
         // the read result when it commits. Add a conflict edge that breaks
         // our lock when txId is committed.
@@ -1186,7 +1186,7 @@ const NHPTimer::STime TReader::MaxCyclesPerIteration =
 } // namespace
 
 void TReadIteratorState::ForwardScanEvent(std::unique_ptr<IEventHandle>&& ev, ui64 tabletId) {
-    Y_ABORT_UNLESS(State == EState::Scan);
+    Y_ENSURE(State == EState::Scan);
     if (ScanActorId) {
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, tabletId
             << " forwarding " << ev->GetTypeName() << " to scan actor " << ScanActorId);
@@ -1240,8 +1240,8 @@ private:
     }
 
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) final {
-        Y_ABORT_UNLESS(driver);
-        Y_ABORT_UNLESS(scheme);
+        Y_ENSURE(driver);
+        Y_ENSURE(scheme);
 
         Driver = driver;
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
@@ -1368,7 +1368,7 @@ private:
             continuationToken.SetFirstUnprocessedQuery(RangeIndex);
             continuationToken.SetLastProcessedKey(TSerializedCellVec::Serialize(key));
             bool res = continuationToken.SerializeToString(record.MutableContinuationToken());
-            Y_ABORT_UNLESS(res);
+            Y_ENSURE(res);
         }
 
         ui64 blockRows = std::exchange(BlockRows, 0);
@@ -1390,7 +1390,7 @@ private:
                         break;
                     }
                     default: {
-                        Y_ABORT("Unexpected format");
+                        Y_ENSURE(false, "Unexpected format");
                     }
                 }
             }
@@ -1527,8 +1527,8 @@ public:
 
     void BuildExecutionPlan(bool loaded) override
     {
-        Y_ABORT_UNLESS(GetExecutionPlan().empty());
-        Y_ABORT_UNLESS(!loaded);
+        Y_ENSURE(GetExecutionPlan().empty());
+        Y_ENSURE(!loaded);
 
         TVector<EExecutionUnitKind> plan;
         plan.push_back(EExecutionUnitKind::CheckRead);
@@ -1556,7 +1556,7 @@ public:
             return EExecutionStatus::DelayComplete;
         }
 
-        Y_ABORT_UNLESS(state.State == TReadIteratorState::EState::Executing);
+        Y_ENSURE(state.State == TReadIteratorState::EState::Executing);
 
         auto* request = state.Request;
 
@@ -1848,7 +1848,7 @@ public:
             for (ui64 txId : Reader->GetVolatileReadDependencies()) {
                 AddVolatileDependency(txId);
                 bool ok = Self->GetVolatileTxManager().AttachBlockedOperation(txId, GetTxId());
-                Y_ABORT_UNLESS(ok, "Unexpected failure to attach a blocked operation");
+                Y_ENSURE(ok, "Unexpected failure to attach a blocked operation");
             }
             Reader.reset();
             Result = MakeEvReadResult(ctx.SelfID.NodeId());
@@ -1915,7 +1915,7 @@ public:
             return;
         }
         auto& state = *it->second;
-        Y_ABORT_UNLESS(state.State == TReadIteratorState::EState::Init);
+        Y_ENSURE(state.State == TReadIteratorState::EState::Init);
 
         Result = MakeEvReadResult(ctx.SelfID.NodeId());
 
@@ -1948,16 +1948,16 @@ public:
         // Note: some checks already performed in TTxReadViaPipeline::Execute
         if (state.PathId.OwnerId != Self->TabletID()) {
             // owner is schemeshard, read user table
-            Y_ABORT_UNLESS(state.PathId.OwnerId == Self->GetPathOwnerId());
+            Y_ENSURE(state.PathId.OwnerId == Self->GetPathOwnerId());
 
             const auto tableId = state.PathId.LocalPathId;
             auto it = Self->TableInfos.find(tableId);
-            Y_ABORT_UNLESS(it != Self->TableInfos.end());
+            Y_ENSURE(it != Self->TableInfos.end());
 
             auto& userTableInfo = it->second;
             TableInfo = TShortTableInfo(userTableInfo);
 
-            Y_ABORT_UNLESS(!userTableInfo->IsBackup);
+            Y_ENSURE(!userTableInfo->IsBackup);
 
             state.SchemaVersion = userTableInfo->GetTableSchemaVersion();
             if (record.GetTableId().HasSchemaVersion()) {
@@ -2461,12 +2461,12 @@ public:
 
             if (!Op) {
                 // We must perform some initialization in transaction (e.g. after a follower sync), but before the operation is built
-                Y_ABORT_UNLESS(readIt != Self->ReadIteratorsByLocalReadId.end());
+                Y_ENSURE(readIt != Self->ReadIteratorsByLocalReadId.end());
                 auto& state = *readIt->second;
                 auto* request = state.Request;
                 const auto& record = request->Record;
 
-                Y_ABORT_UNLESS(state.State == TReadIteratorState::EState::Init);
+                Y_ENSURE(state.State == TReadIteratorState::EState::Init);
                 state.EnqueuedLocalTxId = 0;
 
                 bool setUsingSnapshotFlag = false;
@@ -2653,7 +2653,7 @@ public:
                 Op->IncrementInProgress();
             }
 
-            Y_ABORT_UNLESS(Op && Op->IsInProgress() && !Op->GetExecutionPlan().empty());
+            Y_ENSURE(Op && Op->IsInProgress() && !Op->GetExecutionPlan().empty());
 
             auto status = Self->Pipeline.RunExecutionPlan(Op, CompleteList, txc, ctx);
 
@@ -2683,7 +2683,7 @@ public:
                     break;
 
                 default:
-                    Y_FAIL_S("unexpected execution status " << status << " for operation "
+                    Y_ENSURE(false, "unexpected execution status " << status << " for operation "
                             << *Op << " " << Op->GetKind() << " at " << Self->TabletID());
             }
 
@@ -2695,14 +2695,9 @@ public:
             }
 
             return true;
-        } catch (const TSchemeErrorTabletException&) {
-            Y_ABORT();
         } catch (const TMemoryLimitExceededException&) {
-            Y_ABORT("there must be no leaked exceptions: TMemoryLimitExceededException");
-        } catch (const std::exception &e) {
-            Y_ABORT("there must be no leaked exceptions: %s", e.what());
-        } catch (...) {
-            Y_ABORT("there must be no leaked exceptions");
+            LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Unexpected TMemoryLimitExceededException");
+            throw;
         }
     }
 
@@ -2719,7 +2714,7 @@ public:
             << ": at tablet# " << Self->TabletID());
 
         if (Reply) {
-            Y_ABORT_UNLESS(!Op);
+            Y_ENSURE(!Op);
             auto it = Self->ReadIteratorsByLocalReadId.find(LocalReadId);
             if (it != Self->ReadIteratorsByLocalReadId.end()) {
                 auto& state = *it->second;
@@ -2733,7 +2728,7 @@ public:
         if (!Op)
             return;
 
-        Y_ABORT_UNLESS(!Op->GetExecutionPlan().empty());
+        Y_ENSURE(!Op->GetExecutionPlan().empty());
         if (!CompleteList.empty()) {
             Self->Pipeline.RunCompleteList(Op, CompleteList, ctx);
         }
@@ -2963,7 +2958,7 @@ public:
 
     void ApplyLocks(const TActorContext& ctx) {
         auto it = Self->ReadIteratorsByLocalReadId.find(LocalReadId);
-        Y_ABORT_UNLESS(it != Self->ReadIteratorsByLocalReadId.end());
+        Y_ENSURE(it != Self->ReadIteratorsByLocalReadId.end());
         auto& state = *it->second;
 
         if (!Result) {
@@ -2984,7 +2979,7 @@ public:
             if (!isBroken && (Reader->HadInvisibleRowSkips() || Reader->HadInconsistentResult())) {
                 sysLocks.BreakLock(state.Lock->GetLockId());
                 sysLocks.ApplyLocks();
-                Y_ABORT_UNLESS(state.Lock->IsBroken());
+                Y_ENSURE(state.Lock->IsBroken());
                 isBroken = true;
             }
 
@@ -3010,14 +3005,14 @@ public:
             } else {
                 // Lock valid, apply conflict changes
                 auto [locks, _] = sysLocks.ApplyLocks();
-                Y_ABORT_UNLESS(locks.empty(), "ApplyLocks acquired unexpected locks");
+                Y_ENSURE(locks.empty(), "ApplyLocks acquired unexpected locks");
             }
         }
     }
 
     void SendResult(const TActorContext& ctx) {
         auto it = Self->ReadIteratorsByLocalReadId.find(LocalReadId);
-        Y_ABORT_UNLESS(it != Self->ReadIteratorsByLocalReadId.end());
+        Y_ENSURE(it != Self->ReadIteratorsByLocalReadId.end());
         auto& state = *it->second;
 
         state.ReadContinuePending = false;
@@ -3262,7 +3257,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
             readId, localReadId, TPathId(record.GetTableId().GetOwnerId(), record.GetTableId().GetTableId()),
             sessionId, readVersion, isHeadRead,
             AppData()->MonotonicTimeProvider->Now()));
-    Y_ABORT_UNLESS(pr.second);
+    Y_ENSURE(pr.second);
 
     auto& state = pr.first->second;
     state.Ev = std::move(ev);
@@ -3393,7 +3388,7 @@ void TDataShard::Handle(TEvDataShard::TEvReadCancel::TPtr& ev, const TActorConte
 
     TReadIteratorId readId(ev->Sender, record.GetReadId());
     if (Pipeline.CancelWaitingReadIterator(readId)) {
-        Y_ABORT_UNLESS(!ReadIterators.contains(readId));
+        Y_ENSURE(!ReadIterators.contains(readId));
         return;
     }
 
@@ -3517,7 +3512,7 @@ void TDataShard::DeleteReadIterator(TReadIteratorsMap::iterator it) {
 
 void TDataShard::DeleteReadIterator(TReadIteratorsLocalMap::iterator localIt) {
     auto readIt = ReadIterators.find(localIt->second->ReadId);
-    Y_ABORT_UNLESS(readIt != ReadIterators.end());
+    Y_ENSURE(readIt != ReadIterators.end());
     DeleteReadIterator(readIt);
 }
 

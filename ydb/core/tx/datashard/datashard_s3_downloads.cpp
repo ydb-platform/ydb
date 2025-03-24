@@ -13,7 +13,7 @@ bool TS3DownloadsManager::Load(NIceDb::TNiceDb& db) {
         while (!rowset.EndOfSet()) {
             ui64 txId = rowset.GetValue<Schema::S3Downloads::TxId>();
 
-            Y_VERIFY_S(!Downloads.contains(txId), "Unexpected duplicate s3 download: " << txId);
+            Y_ENSURE(!Downloads.contains(txId), "Unexpected duplicate s3 download: " << txId);
             auto& info = Downloads[txId];
 
             if (rowset.HaveValue<Schema::S3Downloads::DataETag>()) {
@@ -55,8 +55,8 @@ const TS3Download* TS3DownloadsManager::Find(ui64 txId) const {
 const TS3Download& TS3DownloadsManager::Store(NIceDb::TNiceDb& db, ui64 txId, const TS3Download& newInfo) {
     auto& info = Downloads[txId];
 
-    Y_ABORT_UNLESS(newInfo.DataETag);
-    Y_ABORT_UNLESS(info.DataETag.GetOrElse(*newInfo.DataETag) == *newInfo.DataETag);
+    Y_ENSURE(newInfo.DataETag);
+    Y_ENSURE(info.DataETag.GetOrElse(*newInfo.DataETag) == *newInfo.DataETag);
     info = newInfo;
 
     using Schema = TDataShard::Schema;

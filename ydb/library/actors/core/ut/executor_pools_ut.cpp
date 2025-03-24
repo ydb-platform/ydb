@@ -434,11 +434,11 @@ Y_UNIT_TEST_SUITE(ExecutorPoolsTests) {
 
         TieBasicPoolsAndSharedPool({pool.get()}, sharedPool.get());
         PreparePools({pool.get(), sharedPool.get()});
-        
+
         TThreadEmulator emulator({pool.get()}, sharedPool.get());
         TWorkerIdentity workerIdentity{sharedPool.get(), 0};
 
-        std::vector<TMailbox*> mailboxes;   
+        std::vector<TMailbox*> mailboxes;
         for (ui32 i = 0; i < 4; ++i) {
             mailboxes.push_back(pool->GetMailboxTable()->Allocate());
         }
@@ -503,7 +503,7 @@ Y_UNIT_TEST_SUITE(ExecutorPoolsTests) {
 
         std::vector<IExecutorPool*> poolsForEmulator = {pools[0].get(), pools[1].get(), pools[2].get()};
         TThreadEmulator emulator(poolsForEmulator, sharedPool.get());
-        
+
         std::vector<TWorkerIdentity> workers {
             {sharedPool.get(), 0},
             {sharedPool.get(), 1},
@@ -584,7 +584,7 @@ Y_UNIT_TEST_SUITE(ExecutorPoolsTests) {
                 .PoolName = "WorkerPool1",
             },
             TPoolShortInfo{
-                .PoolId = 2, 
+                .PoolId = 2,
                 .SharedThreadCount = 1,
                 .ForeignSlots = 1,
                 .InPriorityOrder = true,
@@ -625,7 +625,7 @@ Y_UNIT_TEST_SUITE(ExecutorPoolsTests) {
 
         std::vector<IExecutorPool*> poolsForEmulator = {pools[0].get(), pools[1].get(), pools[2].get(), pools[3].get(), pools[4].get()};
         TThreadEmulator emulator(poolsForEmulator, sharedPool.get());
-        
+
         std::vector<TWorkerIdentity> workers {
             {sharedPool.get(), 0},
             {sharedPool.get(), 1},
@@ -648,7 +648,7 @@ Y_UNIT_TEST_SUITE(ExecutorPoolsTests) {
             }
         }
 
-        TEST_LOG("Test ForeignSlots limitation"); 
+        TEST_LOG("Test ForeignSlots limitation");
         UNIT_ASSERT_EQUAL(emulator.GetReadyActivation(workers[0], 0), mailboxes[2]);
         // worker 1 can't take task from pool 2, because it has only 1 foreign slot and it already acquired by worker 0
         UNIT_ASSERT_EQUAL(emulator.GetReadyActivation(workers[1], 0), mailboxes[3]);

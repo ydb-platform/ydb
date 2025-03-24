@@ -231,14 +231,14 @@ namespace NYql::NConnector {
 
     class TClientGRPC: public IClient {
     public:
-        TClientGRPC(const TGenericGatewayConfig& config) {
+        explicit TClientGRPC(const TGenericGatewayConfig& config) {
             Init(config);
         }
 
         ~TClientGRPC() {
             GrpcClient_->Stop(true);
         }
-        
+
         virtual TDescribeTableAsyncResult DescribeTable(const NApi::TDescribeTableRequest& request, TDuration timeout = {}) override {
             auto kind = request.Getdata_source_instance().Getkind();
             auto promise = NThreading::NewPromise<TResult<NApi::TDescribeTableResponse>>();

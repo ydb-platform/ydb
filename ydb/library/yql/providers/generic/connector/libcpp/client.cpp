@@ -334,13 +334,9 @@ namespace NYql::NConnector {
                     auto k = c.GetForKinds(i);
 
                     if (FactoryForKind_.contains(k)) {
-                        YQL_CLOG(WARN, ProviderGeneric)
-                            << TStringBuilder()
+                        throw yexception()
                             << "Duplicate connector is provided for the kind: "
-                            << EGenericDataSourceKind_Name(k)
-                            << " skip it";
-   
-                        continue;
+                            << EGenericDataSourceKind_Name(k);
                     }
 
                     FactoryForKind_.insert({k, std::move(f)});
@@ -412,7 +408,7 @@ namespace NYql::NConnector {
         NYdbGrpc::TGRpcClientConfig ConnectorConfigToGrpcConfig(const TGenericConnectorConfig& config, size_t order) const {
             auto cfg = NYdbGrpc::TGRpcClientConfig(); 
 
-            // Connector's name. If order equals zero it means config belongs "TGenericGatewayConfig.Connector"
+            // Connector's name. If order equals to zero, it means that the config belongs "TGenericGatewayConfig.Connector"
             // (default connector); otherwise, it is from "TGenericGatewayConfig.ConnectorS"
             auto name = TStringBuilder() 
                 << "Connector[" << (order == 0 ? TString("default") : TStringBuilder() << (order - 1)) << "]";
@@ -447,7 +443,7 @@ namespace NYql::NConnector {
     IClient::TPtr MakeClientGRPC(const ::NYql::TGenericGatewayConfig& cfg) {
         if (!cfg.HasConnector()) {
             throw yexception()
-                << "GenericGatewayConfig.Connector is empty. "
+                << "TGenericGatewayConfig.Connector is empty. "
                 << "In order to create a ClientGRPC it has to be set";
         }
 

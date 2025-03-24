@@ -302,17 +302,17 @@ private:
     }
 
     void Handle(TEvPrivate::TEvReconnectSession::TPtr&) {
-#if 0 // TODO
-        SRC_LOG_D("SessionId: " << GetSessionId() << ", Reconnect epoch: " << Metrics.ReconnectRate->Val());
-        Metrics.ReconnectRate->Inc();
-        if (ReadSession) {
-            ReadSession->Close(TDuration::Zero());
-            ReadSession.reset();
-            ReadyBuffer = std::queue<TReadyBatch>{}; // clear read buffer
+        for (auto& clusterState: Clusters) {
+            SRC_LOG_D("SessionId: " << GetSessionId(clusterState.Index) << ", Reconnect epoch: " << Metrics.ReconnectRate->Val());
+            if (clusterState.ReadSession) {
+                clusterState.ReadSession->Close(TDuration::Zero());
+                clusterState.ReadSession.reset();
+            }
         }
+        ReadyBuffer = std::queue<TReadyBatch>{}; // clear read buffer
+        Metrics.ReconnectRate->Inc();
 
         Schedule(ReconnectPeriod, new TEvPrivate::TEvReconnectSession());
-#endif
     }
 
     // IActor & IDqComputeActorAsyncInput
@@ -360,7 +360,7 @@ private:
                     actorSystem = NActors::TActivationContext::ActorSystem(),
                     selfId = SelfId()](const auto& future)
             {
-                auto federatedClusters = future.GetValue(future); 
+                auto federatedClusters = future.GetValue(); 
                 actorSystem->Send(selfId, new TEvPrivate::TEvReceivedClusters(std::move(federatedClusters)));
             });
     }

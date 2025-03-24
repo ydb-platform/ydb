@@ -286,7 +286,7 @@ private:
     void Handle(TEvPrivate::TEvSourceDataReady::TPtr& ev) {
         if (ev.Get()->Cookie && !Clusters.empty()) {
             auto index = ev.Get()->Cookie - 1;
-            auto &clusterState = Clusters[index];
+            auto& clusterState = Clusters[index];
             SRC_LOG_T("SessionId: " << GetSessionId(index) << " Source data ready");
             clusterState.SubscribedOnEvent = false;
             Metrics.InFlySubscribe->Dec();
@@ -348,8 +348,6 @@ private:
         }
     }
 
-
-    NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> AsyncInit;
     void StartClusterDiscovery() {
         if (!Clusters.empty()) {
             return;
@@ -359,11 +357,10 @@ private:
         }
         AsyncInit = GetFederatedTopicClient().GetAllTopicClusters();
         AsyncInit.Subscribe([
-                    future = AsyncInit,
                     actorSystem = NActors::TActivationContext::ActorSystem(),
-                    selfId = SelfId()](const auto&) mutable
+                    selfId = SelfId()](const auto& future)
             {
-                auto federatedClusters = future.ExtractValue(); 
+                auto federatedClusters = future.GetValue(future); 
                 actorSystem->Send(selfId, new TEvPrivate::TEvReceivedClusters(std::move(federatedClusters)));
             });
     }
@@ -381,10 +378,9 @@ private:
             clusterState.Info.AdjustTopicPath(clusterTopicPath);
             auto describeTopicFuture = GetTopicClient(clusterState).DescribeTopic(TString(clusterTopicPath), {});
             describeTopicFuture.Subscribe([
-                    describeTopicFuture,
                     index,
                     actorSystem = NActors::TActivationContext::ActorSystem(),
-                    selfId = SelfId()](const auto&) mutable
+                    selfId = SelfId()](const auto& describeTopicFuture)
                 {
                     try { // XXX do we need to catch exceptions here?
                         auto& describeTopic = describeTopicFuture.GetValue();
@@ -394,7 +390,7 @@ private:
                         }
                         auto partitionCount = describeTopic.GetTopicDescription().GetTotalPartitionsCount();
                         actorSystem->Send(selfId, new TEvPrivate::TEvDescribeTopicResult(index, partitionCount));
-                    } catch(std::exception &ex) {
+                    } catch(std::exception& ex) {
                         actorSystem->Send(selfId, new TEvPrivate::TEvDescribeTopicResult(index,
                                     NYdb::TStatus(NYdb::EStatus::INTERNAL_ERROR,
                                         NYdb::NIssue::TIssues({NYdb::NIssue::TIssue(ex.what())}))));
@@ -451,7 +447,7 @@ private:
             if (Clusters.empty()) {
                 StartClusterDiscovery();
             }
-            for (auto &clusterState: Clusters) {
+            for (auto& clusterState: Clusters) {
             // FIXME reindent
             if (clusterState.PartitionCount == 0) {
                 continue;
@@ -499,7 +495,7 @@ private:
     }
 
 private:
-    std::vector<ui64> GetPartitionsToRead(TClusterState &clusterState) const {
+    std::vector<ui64> GetPartitionsToRead(TClusterState& clusterState) const {
         std::vector<ui64> res;
 
         ui64 currentPartition = ReadParams.GetPartitioningParams().GetEachTopicPartitionGroupId();
@@ -527,7 +523,7 @@ private:
             TInstant::Now());
     }
 
-    NYdb::NTopic::TReadSessionSettings GetReadSessionSettings(TClusterState &clusterState) const {
+    NYdb::NTopic::TReadSessionSettings GetReadSessionSettings(TClusterState& clusterState) const {
         NYdb::NTopic::TTopicReadSettings topicReadSettings;
         std::string topicPath = SourceParams.GetTopicPath();
         clusterState.Info.AdjustTopicPath(topicPath);
@@ -556,7 +552,7 @@ private:
             SubscribeOnNextEvent(clusterState);
         }
     }
-    void SubscribeOnNextEvent(TClusterState &clusterState) {
+    void SubscribeOnNextEvent(TClusterState& clusterState) {
         if (!clusterState.SubscribedOnEvent) {
             clusterState.SubscribedOnEvent = true;
             Metrics.InFlySubscribe->Inc();
@@ -776,6 +772,7 @@ private:
     TMaybe<TDqSourceWatermarkTracker<TPartitionKey, TPartitionKeyHash>> WatermarkTracker;
     TMaybe<TInstant> NextIdlenesCheckAt;
     IPqGateway::TPtr PqGateway;
+    NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> AsyncInit;
 };
 
 std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqPqReadActor(

@@ -100,17 +100,17 @@ NPq::NConfigurationManager::TAsyncDescribePathResult TPqSession::DescribePath(co
 
         auto futureClusterInfo = GetYdbPqClient(cluster, database, *config, credentialsProviderFactory).GetAllClusterInfo();
         return futureClusterInfo.Apply([
-                futureClusterInfo, ydbDriver = YdbDriver, credentialsProviderFactory,
+                ydbDriver = YdbDriver, credentialsProviderFactory,
                 cluster, database, path,
                 topicSettings = GetYdbPqClientOptions(database, *config, credentialsProviderFactory)
-        ](const auto &) mutable {
-            auto allClustersInfo = futureClusterInfo.ExtractValue();
+        ](const auto& futureClusterInfo) mutable {
+            auto allClustersInfo = futureClusterInfo.GetValue();
             std::vector<NYdb::NTopic::TAsyncDescribeTopicResult> results;
             results.reserve(allClustersInfo.size());
             Y_ENSURE(!allClustersInfo.empty());
             std::vector<std::string> paths;
             paths.reserve(allClustersInfo.size());
-            for (auto &clusterInfo: allClustersInfo) {
+            for (auto& clusterInfo: allClustersInfo) {
                 auto& clusterTopicPath = paths.emplace_back(path);
                 clusterInfo.AdjustTopicPath(clusterTopicPath);
                 clusterInfo.AdjustTopicClientSettings(topicSettings);

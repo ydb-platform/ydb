@@ -1102,14 +1102,14 @@ void TDqPqRdReadActor::StartClusterDiscovery() {
     auto& database = SourceParams.GetDatabase();
     auto& topicPath = SourceParams.GetTopicPath();
     auto future = GetTopicClient().GetAllTopicClusters();
-    future.Subscribe([future,
+    future.Subscribe([
             actorSystem = NActors::TActivationContext::ActorSystem(), selfId = SelfId(),
             driver = Driver, clientSettings = GetTopicClientSettings(),
             discoveryEndpoint, database,
             topicPath = std::string(topicPath),
             LogPrefix = LogPrefix
-    ](const auto& ) mutable {
-        auto federatedClusters = future.ExtractValue();
+    ](const auto& future) mutable {
+        auto federatedClusters = future.GetValue();
         if (federatedClusters.empty()) {
             federatedClusters.emplace_back(
                 "",
@@ -1120,7 +1120,7 @@ void TDqPqRdReadActor::StartClusterDiscovery() {
         auto describeTopicFutures = std::make_shared<std::vector<NYdb::NTopic::TAsyncDescribeTopicResult>>();
         describeTopicFutures->reserve(federatedClusters.size());
 
-        for (auto &info: federatedClusters) {
+        for (auto& info : federatedClusters) {
             info.AdjustTopicClientSettings(clientSettings);
             NYdb::NTopic::TTopicClient topicClient(driver, clientSettings);
             auto clusterTopicPath = topicPath;
@@ -1129,11 +1129,13 @@ void TDqPqRdReadActor::StartClusterDiscovery() {
             describeTopicFutures->emplace_back(topicClient.DescribeTopic(clusterTopicPath, {}));
         }
         // FIXME don't WaitAll, receive all info desynced
-        NThreading::WaitAll(*describeTopicFutures).Subscribe(
-            [describeTopicFutures, actorSystem, selfId, federatedClusters = std::move(federatedClusters), LogPrefix = std::move(LogPrefix)](const auto& ) mutable {
+        NThreading::WaitAll(*describeTopicFutures).Subscribe([
+            actorSystem, selfId,
+            federatedClusters = std::move(federatedClusters),
+            LogPrefix = std::move(LogPrefix)](const auto& describeTopicFutures) mutable {
                 std::vector<ui64> partitionsCount;
                 partitionsCount.reserve(federatedClusters.size());
-                for (auto &describeTopicFuture: *describeTopicFutures) {
+                for (auto& describeTopicFuture : *describeTopicFutures) {
                     partitionsCount.emplace_back(describeTopicFuture.GetValue().GetTopicDescription().GetTotalPartitionsCount());
                 }
                 actorSystem->Send(selfId, new TEvPrivate::TEvReceivedClusters(std::move(federatedClusters), std::move(partitionsCount)));

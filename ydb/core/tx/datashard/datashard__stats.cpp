@@ -104,7 +104,7 @@ public:
 
         auto fetchEv = new NPageCollection::TFetch{ {}, info->PageCollection, TVector<TPageId>{ pageId } };
         PagesSize += info->GetPageSize(pageId);
-        Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(NSharedCache::EPriority::Bkgr, fetchEv, SelfActorId));
+        Send(MakeSharedPageCacheId(), new NSharedCache::TEvRequest(NSharedCache::EPriority::Bkgr, fetchEv));
 
         Spent->Alter(false); // pause measurement
         ReleaseResources();
@@ -175,6 +175,14 @@ private:
             << (ev->PartOwners.size() > 1 || ev->PartOwners.size() == 1 && *ev->PartOwners.begin() != TabletId ? ", with borrowed parts" : "")
             << (ev->HasSchemaChanges ? ", with schema changes" : "")
             << ", LoadedSize " << PagesSize << ", " << NFmt::Do(*Spent));
+        
+        if (const auto& stats = ev->Stats; stats.DataSize.Size > 10_MB && stats.RowCount > 100
+            && Min(stats.RowCountHistogram.size(), stats.DataSizeHistogram.size()) < HistogramBucketsCount / 2)
+        {
+            LOG_ERROR_S(GetActorContext(), NKikimrServices::TABLET_STATS_BUILDER, "Stats at datashard " << TabletId << ", for tableId " << TableId
+                << " don't have enough keys: "
+                << ev->Stats.ToString());
+        }
 
         Send(ReplyTo, ev.Release());
 

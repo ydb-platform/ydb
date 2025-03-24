@@ -250,7 +250,7 @@ struct TRspMetadata
 {
     i32 ThrottleTimeMs = 0;
     std::vector<TRspMetadataBroker> Brokers;
-    std::optional<TString> ClusterId;
+    std::optional<std::string> ClusterId;
     i32 ControllerId = 0;
     std::vector<TRspMetadataTopic> Topics;
     std::vector<TTaggedField> TagBuffer;

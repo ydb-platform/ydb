@@ -71,6 +71,7 @@ namespace NKikimr {
                     PARAM_V(UnrecoveredNonphantomBlobs);
                     PARAM_V(DonorVDiskId);
                     PARAM_V(DropDonor);
+                    PARAM_V(DonorNotReady);
                     GROUP("Plan Generation Stats") {
                         PARAM_V(ItemsTotal);
                         PARAM_V(ItemsPlanned);
@@ -109,6 +110,7 @@ namespace NKikimr {
                         PARAM_V(ProxyStat->VDiskRespOK);
                         PARAM_V(ProxyStat->VDiskRespRACE);
                         PARAM_V(ProxyStat->VDiskRespERROR);
+                        PARAM_V(ProxyStat->VDiskRespNOTREADY);
                         PARAM_V(ProxyStat->VDiskRespDEADLINE);
                         PARAM_V(ProxyStat->VDiskRespOther);
                         PARAM_V(ProxyStat->LogoBlobGotIt);
@@ -153,6 +155,10 @@ namespace NKikimr {
             ui32 NodeId;
             ui32 PDiskId;
             ui32 VSlotId;
+            bool NotReady;
+            TInstant FirstNotReady;
+            TInstant LastNotReady;
+            ui32 NotReadyCount;
         };
 
         std::shared_ptr<TReplCtx> ReplCtx;
@@ -228,7 +234,9 @@ namespace NKikimr {
                     .QueueActorId = queueActorId,
                     .NodeId = nodeId,
                     .PDiskId = pdiskId,
-                    .VSlotId = vslotId
+                    .VSlotId = vslotId,
+                    .NotReady = false,
+                    .NotReadyCount = 0
                 });
                 Donors.emplace_back(vdiskId, queueActorId);
             }
@@ -379,6 +387,34 @@ namespace NKikimr {
 
             CanDropDonor = CanDropDonor && info->DropDonor;
 
+            if (info->DonorNotReady) {
+                Y_ABORT_UNLESS(!DonorQueue.empty() && DonorQueue.front());
+                auto& donor = DonorQueue.front();
+
+                if (donor->FirstNotReady == TInstant::Zero()) {
+                    donor->FirstNotReady = now;
+                }
+                donor->LastNotReady = now;
+                donor->NotReadyCount++;
+            } else if (!DonorQueue.empty() && DonorQueue.front()) {
+                DonorQueue.front()->NotReady = false;
+            }
+
+            for (auto& donor : DonorQueue) {
+                if (donor) {
+                    TDuration timeNotReady = donor->LastNotReady - donor->FirstNotReady;
+                    if (!donor->NotReady && (timeNotReady > ReplCtx->VDiskCfg->ReplMaxDonorNotReadyDuration || (donor->NotReadyCount > ReplCtx->VDiskCfg->ReplMaxDonorNotReadyCount))) {
+                        donor->NotReady = true;
+                    }
+                    if (donor->NotReady && ((now - donor->LastNotReady) > TDuration::Hours(1))) {
+                        donor->NotReady = false;
+                        donor->FirstNotReady = TInstant::Zero();
+                        donor->LastNotReady = TInstant::Zero();
+                        donor->NotReadyCount = 0;
+                    }
+                }
+            }
+
             bool finished = false;
 
             if (info->Eof) { // when it is the last quantum for some donor, rotate the blob sets
@@ -468,6 +504,16 @@ namespace NKikimr {
         void RunRepl(const TLogoBlobID& from) {
             LastReplQuantumStart = TAppData::TimeProvider->Now();
             Y_ABORT_UNLESS(!ReplJobActorId);
+
+            // Iterate through the donor queue, moving "NotReady" donors to the end  
+            // until a ready donor or an empty optional (indicating the use of the group's other disks instead of a donor) is found.
+            auto donorIt = DonorQueue.begin();
+            while (donorIt != DonorQueue.end() && (*donorIt && (*donorIt)->NotReady)) {
+                auto cur = donorIt;
+                donorIt++;
+                DonorQueue.splice(DonorQueue.end(), DonorQueue, cur);
+            }
+
             const auto& donor = DonorQueue.front();
             STLOG(PRI_DEBUG, BS_REPL, BSVR32, VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TReplScheduler::RunRepl"),
                 (From, from), (Donor, donor ? TString(TStringBuilder() << "{VDiskId# " << donor->VDiskId << " VSlotId# " <<

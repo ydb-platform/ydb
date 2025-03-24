@@ -18,6 +18,8 @@ class TestContext:
 
     The class is created by the test execution system and used by {ScenarioTestHelper}."""
 
+    __test__ = False
+
     def __init__(self, suite_name: str, test_name: str, scenario: Callable) -> None:
         """Constructor.
 

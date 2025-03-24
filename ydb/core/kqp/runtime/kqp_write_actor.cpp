@@ -558,6 +558,8 @@ public:
             << ", Cookie=" << ev->Cookie);
         UpdateStats(ev->Get()->Record.GetTxStats());
 
+        TxManager->AddParticipantNode(ev->Sender.NodeId());
+
         switch (ev->Get()->GetStatus()) {
         case NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED: {
             CA_LOG_E("Got UNSPECIFIED for table `"
@@ -2427,6 +2429,8 @@ public:
             }
             return (tableInfo.Pathes.size() == 1 ? "Table: " : "Tables: ")  + builder;
         };
+
+        TxManager->AddParticipantNode(ev->Sender.NodeId());
 
         // TODO: get rid of copy-paste
         switch (ev->Get()->GetStatus()) {

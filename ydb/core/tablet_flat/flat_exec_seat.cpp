@@ -5,7 +5,7 @@ namespace NTabletFlatExecutor {
 
     void TSeat::Complete(const TActorContext& ctx, bool isRW) {
         if (Y_UNLIKELY(IsTerminated())) {
-            Y_ABORT_UNLESS(!isRW, "Terminating a read-write transaction");
+            Y_ENSURE(!isRW, "Terminating a read-write transaction");
             Self->Terminate(TerminationReason, ctx);
             Self->TxSpan.EndError("Terminated");
             return;

@@ -34,26 +34,24 @@ private:
 
     std::shared_ptr<NGroupedMemoryManager::TAllocationGuard> AccessorsGuard;
     std::optional<TPortionDataAccessor> PortionAccessor;
-    THashMap<NIndexes::NRequest::TOriginalDataAddress, std::shared_ptr<NIndexes::IIndexMeta>> DataAddrToIndex;
+    THashMap<NArrow::NSSA::IDataSource::TCheckIndexContext, std::shared_ptr<NIndexes::IIndexMeta>> DataAddrToIndex;
 
 public:
-    void AddRemapDataToIndex(const NIndexes::NRequest::TOriginalDataAddress& addr, const std::shared_ptr<NIndexes::IIndexMeta>& index) {
+    void AddRemapDataToIndex(const NArrow::NSSA::IDataSource::TCheckIndexContext& addr, const std::shared_ptr<NIndexes::IIndexMeta>& index) {
         AFL_VERIFY(DataAddrToIndex.emplace(addr, index).second);
     }
 
-    std::shared_ptr<NIndexes::IIndexMeta> ExtractRemapDataToIndex(const NIndexes::NRequest::TOriginalDataAddress& addr) {
+    std::shared_ptr<NIndexes::IIndexMeta> GetRemapDataToIndex(const NArrow::NSSA::IDataSource::TCheckIndexContext& addr) const {
         auto it = DataAddrToIndex.find(addr);
         AFL_VERIFY(it != DataAddrToIndex.end());
-        auto result = it->second;
-        DataAddrToIndex.erase(it);
-        return result;
+        return it->second;
     }
 
     void AddFetchers(const std::vector<std::shared_ptr<IKernelFetchLogic>>& fetchers);
     void AddFetcher(const std::shared_ptr<IKernelFetchLogic>& fetcher);
 
-    std::shared_ptr<IKernelFetchLogic> ExtractFetcherOptional(const ui32 columnId) {
-        auto it = Fetchers.find(columnId);
+    std::shared_ptr<IKernelFetchLogic> ExtractFetcherOptional(const ui32 entityId) {
+        auto it = Fetchers.find(entityId);
         if (it == Fetchers.end()) {
             return nullptr;
         } else {
@@ -63,9 +61,9 @@ public:
         }
     }
 
-    std::shared_ptr<IKernelFetchLogic> ExtractFetcherVerified(const ui32 columnId) {
-        auto result = ExtractFetcherOptional(columnId);
-        AFL_VERIFY(!!result)("column_id", columnId);
+    std::shared_ptr<IKernelFetchLogic> ExtractFetcherVerified(const ui32 entityId) {
+        auto result = ExtractFetcherOptional(entityId);
+        AFL_VERIFY(!!result)("column_id", entityId);
         return result;
     }
 

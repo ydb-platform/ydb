@@ -1756,17 +1756,33 @@ public:
                            </div>
                            <div class='modal-body'>
                                <div class='row'>
-                                   <div class='col-md-12'>
+                                   <div class='col-md-6'>
                                        <h2> Run Balancer</h2>
+                                   </div>
+                                   <div class='col-md-6'>
+                                       <h2> Currently running</h2>
                                    </div>
                                </div>
                                <div class='row'>
-                                   <div class='col-md-2'>
+                                   <div class='col-md-3'>
                                        <label for='balancer_max_movements'>Max movements</label>
                                        <div in='balancer_max_movements' class='input-group'>
                                            <input id='balancer_max_movements' type='number' value='1000' class='form-control'>
                                        </div>
                                        <br>
+                                   </div>
+                                   <div class='col-md-3'>
+                                       <label for='balancer_in_flight'>In-flight</label>
+                                       <div in='balancer_in_flight' class='input-group'>
+                                           <input id='balancer_in_flight' type='number' value='1' class='form-control'>
+                                       </div>
+                                       <br>
+                                   </div>
+                                   <div class='col-md-6'>
+                                       <table id='current_balancers' class='table table-stripped'>
+                                       <tbody>
+                                       </tbody>
+                                       </table>
                                    </div>
                                </div>
                                <div class='row'>
@@ -1786,16 +1802,15 @@ public:
                                </div>
                                <div class='row'>
                                    <div class='col-md-8'>
+                                       <details>
+                                       <summary style='display:list-item'> This will restart all tablets. You probably don't want do that on a running production database.</summary>
                                        <label for='tenant_name'> Please enter the tenant name to confirm you know what you are doing</label>
                                        <div in='tenant_name' class='input-group' style='width:100%'>
                                            <input id='tenant_name' type='text' class='form-control'>
                                        </div>
                                        <br>
-                                   </div>
-                              </div>
-                              <div class='row'>
-                                   <div class='col-md-2'>
                                        <button id='button_rebalance' type='submit' class='btn btn-danger' onclick='rebalanceTabletsFromScratch();' data-dismiss='modal'>Run</button>
+                                       </details>
                                    </div>
                               </div>
                               <div class='row'>
@@ -1997,9 +2012,9 @@ function drainNode(element, nodeId) {
 }
 
 function rebalanceTablets() {
-    $('#balancerProgress').html('o.O');
     var max_movements = $('#balancer_max_movements').val();
-    $.ajax({url:'app?TabletID=' + hiveId + '&page=Rebalance&movements=' + max_movements});
+    var in_flight = $('#balancer_in_flight').val();
+    $.ajax({url:'app?TabletID=' + hiveId + '&page=Rebalance&movements=' + max_movements + '&inflight=' + in_flight});
 }
 
 function rebalanceTabletsFromScratch(element) {
@@ -2127,6 +2142,7 @@ function fillDataShort(result) {
             $('#resourceScatterMemory').html(result.ScatterHtml.Memory);
             $('#resourceScatterNetwork').html(result.ScatterHtml.Network);
 
+            $('#current_balancers > tbody > tr').remove();
             for (var b = 0; b < result.Balancers.length; b++) {
                 var balancerObj = result.Balancers[b];
                 var balancerHtml = $('#balancer' + b)[0];
@@ -2140,7 +2156,9 @@ function fillDataShort(result) {
                     balancerHtml.cells[4].innerHTML = '';
                 }
                 if (balancerObj.IsRunningNow && balancerObj.CurrentMaxMovements > 0) {
-                    balancerHtml.cells[5].innerHTML = Math.floor(balancerObj.CurrentMovements * 100 / balancerObj.CurrentMaxMovements) + '%';
+                    var progress = Math.floor(balancerObj.CurrentMovements * 100 / balancerObj.CurrentMaxMovements) + '%';
+                    balancerHtml.cells[5].innerHTML = progress;
+                    $('#current_balancers > tbody').append("<tr><td>" + balancerHtml.cells[0].innerHTML + "</td><td>" + progress +"</td></tr>");
                 } else {
                     balancerHtml.cells[5].innerHTML = '';
                 }
@@ -2763,12 +2781,14 @@ class TTxMonEvent_Rebalance : public TTransactionBase<THive> {
 public:
     const TActorId Source;
     int MaxMovements = 1000;
+    ui64 MaxInFlight = 1;
 
     TTxMonEvent_Rebalance(const TActorId& source, NMon::TEvRemoteHttpInfo::TPtr& ev, TSelf* hive)
         : TBase(hive)
         , Source(source)
     {
         MaxMovements = FromStringWithDefault(ev->Get()->Cgi().Get("movements"), MaxMovements);
+        MaxInFlight = FromStringWithDefault(ev->Get()->Cgi().Get("inflight"), MaxInFlight);
     }
 
     TTxType GetTxType() const override { return NHive::TXTYPE_MON_REBALANCE; }
@@ -2776,7 +2796,8 @@ public:
     bool Execute(TTransactionContext&, const TActorContext&) override {
         Self->StartHiveBalancer({
             .Type = EBalancerType::Manual,
-            .MaxMovements = MaxMovements
+            .MaxMovements = MaxMovements,
+            .MaxInFlight = MaxInFlight,
         });
         return true;
     }

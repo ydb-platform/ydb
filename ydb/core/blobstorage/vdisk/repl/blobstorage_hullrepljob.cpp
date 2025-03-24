@@ -124,11 +124,11 @@ namespace NKikimr {
 
                 if (AddingTasks) {
                     for (; it.Valid(); it.Next()) {
+                        StartKey = it.GetCurKey().LogoBlobID();
+
                         if (checkRestart()) {
                             return;
                         }
-
-                        StartKey = it.GetCurKey().LogoBlobID();
 
                         // we still have some space in recovery machine logic, so we can add new item
                         ProcessItem(it, *barriers, allowKeepFlags);
@@ -147,11 +147,11 @@ namespace NKikimr {
                 }
 
                 for (; it.Valid(); it.Next()) {
+                    StartKey = it.GetCurKey().LogoBlobID();
+
                     if (checkRestart()) {
                         return;
                     }
-
-                    StartKey = it.GetCurKey().LogoBlobID();
 
                     // check the milestone queue, if we have requested blob
                     if (MilestoneQueue.Match(StartKey, &ReplInfo->ItemsTotal, &ReplInfo->WorkUnitsTotal)) {
@@ -341,10 +341,12 @@ namespace NKikimr {
 
         void HandleDetectedPhantomBlobCommitted() {
             bool dropDonor = true;
+            bool bsQueueNotReady = true;
             for (const auto& proxy : DiskProxySet) {
                 dropDonor = dropDonor && proxy && proxy->NoTransientErrors();
+                bsQueueNotReady = bsQueueNotReady && proxy && proxy->IsBSQueueNotReady();
             }
-            ReplInfo->Finish(LastKey, Eof, Donor && dropDonor, std::move(UnreplicatedBlobRecords), std::move(MilestoneQueue));
+            ReplInfo->Finish(LastKey, Eof, Donor && dropDonor, Donor && bsQueueNotReady, std::move(UnreplicatedBlobRecords), std::move(MilestoneQueue));
 
             TProxyStat stat;
             for (const TVDiskProxyPtr& p : DiskProxySet) {

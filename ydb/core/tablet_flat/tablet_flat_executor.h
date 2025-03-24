@@ -2,6 +2,7 @@
 #include "defs.h"
 
 #include "flat_scan_iface.h"
+#include "util_fmt_abort.h"
 
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/base/blobstorage.h>
@@ -136,7 +137,7 @@ public:
 
     void RequestMemory(ui64 bytes)
     {
-        Y_ABORT_UNLESS(!MemoryGCToken);
+        Y_ENSURE(!MemoryGCToken);
         RequestedMemory += bytes;
     }
 
@@ -160,16 +161,16 @@ public:
 
     TAutoPtr<TMemoryToken> HoldMemory(ui64 size)
     {
-        Y_ABORT_UNLESS(!MemoryGCToken);
-        Y_ABORT_UNLESS(size <= MemoryLimit);
-        Y_ABORT_UNLESS(size > 0);
+        Y_ENSURE(!MemoryGCToken);
+        Y_ENSURE(size <= MemoryLimit);
+        Y_ENSURE(size > 0);
         MemoryGCToken = new TMemoryGCToken(size, TaskId);
         return new TMemoryToken(MemoryGCToken);
     }
 
     void UseMemoryToken(TAutoPtr<TMemoryToken> token)
     {
-        Y_ABORT_UNLESS(!MemoryToken);
+        Y_ENSURE(!MemoryToken);
         MemoryToken = std::move(token);
     }
 
@@ -301,7 +302,7 @@ public:
     virtual bool Execute(TTransactionContext &txc, const TActorContext &ctx) = 0;
     virtual void Complete(const TActorContext &ctx) = 0;
     virtual void Terminate(ETerminationReason reason, const TActorContext &/*ctx*/) {
-        Y_ABORT("Unexpected transaction termination (reason %" PRIu32 ")", (ui32)reason);
+        Y_TABLET_ERROR("Unexpected transaction termination (reason " << (ui32)reason << ")");
     }
     virtual void ReleaseTxData(TTxMemoryProvider &/*provider*/, const TActorContext &/*ctx*/) {}
     virtual TTxType GetTxType() const { return UnknownTxType; }
@@ -527,7 +528,7 @@ namespace NFlatExecutorSetup {
             : TabletActorID(tablet)
             , TabletInfo(info)
         {
-            Y_ABORT_UNLESS(TTabletTypes::TypeInvalid != TabletInfo->TabletType);
+            Y_ENSURE(TTabletTypes::TypeInvalid != TabletInfo->TabletType);
         }
 
         TActorId ExecutorActorID;

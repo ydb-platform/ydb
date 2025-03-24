@@ -1290,6 +1290,76 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     }
 
+    Y_UNIT_TEST(DefaultAndIndexesTestDefaultColumnNotIncludedInIndex) {
+        NKikimrConfig::TAppConfig appConfig;
+        TKikimrRunner kikimr(TKikimrSettings().SetPQConfig(DefaultPQConfig()).SetAppConfig(appConfig));
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto query = R"(
+                --!syntax_v1
+                CREATE TABLE test (
+                    A Int64 NOT NULL,
+                    B Int64,
+                    Created Int32 DEFAULT 1,
+                    Deleted Int32 DEFAULT 0,
+                    PRIMARY KEY (A ),
+                    INDEX testIndex GLOBAL ON (B, A)
+                )
+            )";
+
+            auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                                       result.GetIssues().ToString());
+        }
+
+        auto fQuery = [&](TString query) -> TString {
+            NYdb::NTable::TExecDataQuerySettings execSettings;
+            execSettings.KeepInQueryCache(true);
+            execSettings.CollectQueryStats(ECollectQueryStatsMode::Basic);
+
+            auto result =
+                session
+                    .ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(),
+                                      execSettings)
+                    .ExtractValueSync();
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS,
+                                       result.GetIssues().ToString());
+            if (result.GetResultSets().size() > 0)
+                return NYdb::FormatResultSetYson(result.GetResultSet(0));
+            return "";
+        };
+
+        fQuery(R"(
+            upsert into test (A, B, Created, Deleted) values (5, 15, 1, 0)
+        )");
+
+        fQuery(R"(
+            $to_upsert = (
+                select A from
+                `test`
+                where A = 5
+            );
+
+            upsert into `test` (A, Deleted)
+            select A, 10 as Deleted from $to_upsert;
+        )");
+
+        CompareYson(
+            R"(
+            [
+                [5;[15];[1];[10]]
+            ]
+            )",
+            fQuery(R"(
+                SELECT A, B, Created, Deleted FROM `test` ORDER BY A;
+            )")
+        );
+    }
+
     Y_UNIT_TEST(Utf8AndDefault) {
 
         NKikimrConfig::TAppConfig appConfig;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "util_fmt_abort.h"
 #include "util_fmt_line.h"
 
 #include <ydb/core/base/appdata.h>
@@ -58,8 +59,9 @@ namespace NUtil {
 
             auto *ev = new NLog::TEvLog(stamp, ui32(level), Comp, line);
 
-            if (!Sys->Send(Path, ev))
-                Y_ABORT("Cannot send NLog::TEvLog to logger actor");
+            if (!Sys->Send(Path, ev)) {
+                Y_TABLET_ERROR("Cannot send NLog::TEvLog to logger actor");
+            }
         }
 
     private:

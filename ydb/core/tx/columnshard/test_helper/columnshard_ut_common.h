@@ -364,19 +364,6 @@ struct TTestSchema {
         return txBody;
     }
 
-    static TString TtlTxBody(const std::vector<ui64>& pathIds, TString ttlColumnName, ui64 tsSeconds) {
-        NKikimrTxColumnShard::TTtlTxBody proto;
-        proto.SetTtlColumnName(ttlColumnName);
-        proto.SetUnixTimeSeconds(tsSeconds);
-        for (auto& pathId : pathIds) {
-            proto.AddPathIds(pathId);
-        }
-
-        TString txBody;
-        Y_PROTOBUF_SUPPRESS_NODISCARD proto.SerializeToString(&txBody);
-        return txBody;
-    }
-
     static std::vector<TString> ExtractNames(const std::vector<NArrow::NTest::TTestColumn>& columns) {
         std::vector<TString> out;
         out.reserve(columns.size());

@@ -59,8 +59,9 @@ Y_UNIT_TEST_SUITE(ChannelScheduler) {
             while (numEvents) {
                 TEventOutputChannel *channel = scheduler.PickChannelWithLeastConsumedWeight();
                 ui32 before = task.GetDataSize();
-                ui64 weightConsumed = 0;
-                numEvents -= channel->FeedBuf(task, 0, &weightConsumed);
+                ui64 weightConsumed = task.GetDataSize();
+                numEvents -= channel->FeedBuf(task, 0);
+                weightConsumed = task.GetDataSize() - weightConsumed;
                 ui32 after = task.GetDataSize();
                 Y_ABORT_UNLESS(after >= before);
                 scheduler.FinishPick(weightConsumed, 0);

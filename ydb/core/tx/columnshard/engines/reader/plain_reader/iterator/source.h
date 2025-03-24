@@ -7,6 +7,7 @@
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/action.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/predicate/range.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/columns_set.h>
@@ -47,13 +48,19 @@ private:
     virtual void DoOnSourceFetchingFinishedSafe(IDataReader& owner, const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) override;
     virtual void DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
     virtual void DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>& sourcePtr) override;
-    virtual TConclusion<bool> DoStartFetchIndex(const NArrow::NSSA::TProcessorContext& /*context*/, const TFetchIndexContext& /*fetchContext*/) override {
+    virtual TConclusion<bool> DoStartFetchImpl(
+        const NArrow::NSSA::TProcessorContext& /*context*/, const std::vector<std::shared_ptr<NCommon::IKernelFetchLogic>>& /*fetchersExt*/) override {
         AFL_VERIFY(false);
         return false;
     }
+
+    virtual TConclusion<std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>> DoStartFetchIndex(
+        const NArrow::NSSA::TProcessorContext& /*context*/, const TFetchIndexContext& /*fetchContext*/) override {
+        AFL_VERIFY(false);
+        return std::vector<std::shared_ptr<NArrow::NSSA::IFetchLogic>>();
+    }
     virtual TConclusion<NArrow::TColumnFilter> DoCheckIndex(const NArrow::NSSA::TProcessorContext& /*context*/,
-        const TFetchIndexContext& /*fetchContext*/,
-        const std::shared_ptr<arrow::Scalar>& /*value*/) override {
+        const TCheckIndexContext& /*fetchContext*/, const std::shared_ptr<arrow::Scalar>& /*value*/) override {
         AFL_VERIFY(false);
         return NArrow::TColumnFilter::BuildAllowFilter();
     }
@@ -61,18 +68,18 @@ private:
         const NArrow::NSSA::TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
         AFL_VERIFY(false);
     }
-    virtual TConclusion<bool> DoStartFetchData(
-        const NArrow::NSSA::TProcessorContext& /*context*/, const ui32 /*columnId*/, const TString& /*subColumnName*/) override {
+    virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchData(
+        const NArrow::NSSA::TProcessorContext& /*context*/, const TDataAddress& /*address*/) override {
         AFL_VERIFY(false);
-        return false;
+        return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
     }
-    virtual TConclusion<bool> DoStartFetchHeader(
+    virtual TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> DoStartFetchHeader(
         const NArrow::NSSA::TProcessorContext& /*context*/, const TFetchHeaderContext& /*fetchContext*/) override {
         AFL_VERIFY(false);
-        return false;
+        return std::shared_ptr<NArrow::NSSA::IFetchLogic>();
     }
     virtual TConclusion<NArrow::TColumnFilter> DoCheckHeader(
-        const NArrow::NSSA::TProcessorContext& /*context*/, const TFetchHeaderContext& /*fetchContext*/) override {
+        const NArrow::NSSA::TProcessorContext& /*context*/, const TCheckHeaderContext& /*fetchContext*/) override {
         AFL_VERIFY(false);
         return NArrow::TColumnFilter::BuildAllowFilter();
     }
@@ -97,7 +104,7 @@ public:
         return DoStartFetchingAccessor(sourcePtr, step);
     }
 
-    virtual ui64 GetPathId() const = 0;
+    virtual TInternalPathId GetPathId() const = 0;
     virtual bool HasIndexes(const std::set<ui32>& indexIds) const = 0;
 
     const NArrow::TReplaceKey& GetStartReplaceKey() const {
@@ -215,7 +222,7 @@ private:
         return result;
     }
     virtual void DoAbort() override;
-    virtual ui64 GetPathId() const override {
+    virtual TInternalPathId GetPathId() const override {
         return Portion->GetPathId();
     }
 
@@ -315,8 +322,8 @@ private:
         result.InsertValue("info", CommittedBlob.DebugString());
         return result;
     }
-    virtual ui64 GetPathId() const override {
-        return 0;
+    virtual TInternalPathId GetPathId() const override {
+        return TInternalPathId{};
     }
 
     virtual bool DoAddTxConflict() override {

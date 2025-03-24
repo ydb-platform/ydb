@@ -105,7 +105,7 @@ namespace NSQLTranslationV1 {
         virtual TMaybe<TString> FindColumnMistype(const TString& name) const;
 
         virtual bool InitFilters(TContext& ctx);
-        void AddDependentSource(ISource* usedSource);
+        void AddDependentSource(TSourcePtr usedSource);
         bool IsAlias(EExprSeat exprSeat, const TString& label) const;
         bool IsExprAlias(const TString& label) const;
         bool IsExprSeat(EExprSeat exprSeat, EExprType type = EExprType::WithExpression) const;
@@ -144,7 +144,7 @@ namespace NSQLTranslationV1 {
         TLegacyHoppingWindowSpecPtr LegacyHoppingWindowSpec;
         TNodePtr SessionWindow;
         TNodePtr HoppingWindow;
-        TVector<ISource*> UsedSources;
+        TVector<TSourcePtr> UsedSources;
         TString FlattenMode;
         bool FlattenColumns = false;
         THashMap<TString, ui32> GenIndexes;

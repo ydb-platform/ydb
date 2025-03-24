@@ -865,6 +865,7 @@ std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> CalculateNo
             .OptLLVM(state->Types->OptLLVM.GetOrElse(TString()))
             .OperationHash(calcHash)
             .SecureParams(secureParams)
+            .RuntimeLogLevel(state->Types->RuntimeLogLevel)
         );
     return WrapFutureCallback(future, [state, calcNodes](const IYtGateway::TCalcResult& res, const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         YQL_ENSURE(res.Data.size() == calcNodes.size());
@@ -2325,6 +2326,16 @@ bool IsYtTableSuitableForArrowInput(NNodes::TExprBase tableNode, std::function<v
     }
 
     return true;
+}
+
+TMaybeNode<TCoLambda> GetMapLambda(const TYtWithUserJobsOpBase& op) {
+    if (auto map = op.Maybe<TYtMap>()) {
+        return map.Cast().Mapper();
+    } else if (auto maybeLambda = op.Maybe<TYtMapReduce>().Mapper().Maybe<TCoLambda>()) {
+        return maybeLambda.Cast();
+    }
+
+    return {};
 }
 
 } // NYql

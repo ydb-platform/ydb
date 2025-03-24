@@ -1628,8 +1628,12 @@ public:
             QueryState->QueryStats.Executions.back().Swap(executerResults.MutableStats());
         }
 
-        for (auto nodeId : ev->ParticipantNodes) {
-            QueryState->ParticipantNodes.emplace(nodeId);
+        if (QueryState->TxCtx->TxManager) {
+            QueryState->ParticipantNodes = QueryState->TxCtx->TxManager->GetParticipantNodes();
+        } else {
+            for (auto nodeId : ev->ParticipantNodes) {
+                QueryState->ParticipantNodes.emplace(nodeId);
+            }
         }
 
         if (response->GetStatus() != Ydb::StatusIds::SUCCESS) {
@@ -2005,7 +2009,6 @@ public:
             size_t trailingResultsCount = 0;
             for (size_t i = 0; i < phyQuery.ResultBindingsSize(); ++i) {
                 if (QueryState->IsStreamResult()) {
-
                     if (QueryState->QueryData->HasTrailingTxResult(phyQuery.GetResultBindings(i))) {
                         auto ydbResult = QueryState->QueryData->GetYdbTxResult(
                             phyQuery.GetResultBindings(i), response->GetArena(), {});
@@ -2379,7 +2382,7 @@ public:
             QueryState->PoolHandlerActor = Nothing();
         }
 
-        if (QueryState && QueryState->ParticipantNodes.size() == 1) {
+        if (QueryState && QueryState->IsSingleNodeExecution()) {
             Counters->TotalSingleNodeReqCount->Inc();
             if (!QueryState->IsLocalExecution(SelfId().NodeId())) {
                 Counters->NonLocalSingleNodeReqCount->Inc();

@@ -208,6 +208,9 @@ THolder<TEvIndexBuilder::TEvCreateRequest> BuildIndexPropose(
 
     const TPath dstPath = TPath::Init(item.DstPathId, ss);
     settings.set_source_path(dstPath.PathString());
+    if (ss->MaxRestoreBuildIndexShardsInFlight) {
+        settings.set_max_shards_in_flight(ss->MaxRestoreBuildIndexShardsInFlight);
+    }
 
     Y_ABORT_UNLESS(item.NextIndexIdx < item.Scheme.indexes_size());
     settings.mutable_index()->CopyFrom(item.Scheme.indexes(item.NextIndexIdx));

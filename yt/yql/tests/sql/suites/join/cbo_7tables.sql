@@ -1,4 +1,3 @@
-/* ytfile can not */
 USE plato;
 
 pragma CostBasedOptimizer="native";

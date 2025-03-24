@@ -23,7 +23,7 @@ public:
     // IClientBase methods
     DELEGATE_METHOD(IConnectionPtr, GetConnection, (), ())
 
-    DELEGATE_METHOD(std::optional<TStringBuf>, GetClusterName,
+    DELEGATE_METHOD(std::optional<std::string>, GetClusterName,
         (bool fetchIfNull),
         (fetchIfNull))
 
@@ -394,6 +394,11 @@ public:
         const std::vector<NYPath::TRichYPath>& paths,
         const TPartitionTablesOptions& options),
         (paths, options))
+
+    DELEGATE_METHOD(TFuture<ITablePartitionReaderPtr>, CreateTablePartitionReader, (
+        const TTablePartitionCookiePtr& descriptor,
+        const TReadTablePartitionOptions& options),
+        (descriptor, options))
 
     // Journals
     DELEGATE_METHOD(TFuture<void>, TruncateJournal, (

@@ -2,10 +2,10 @@
 
 #include "world.h"
 #include "events.h"
-#include <ydb/core/tablet_flat/util_fmt_logger.h>
 #include <ydb/core/tablet_flat/util_fmt_abort.h>
-#include <ydb/core/tablet_flat/util_fmt_desc.h>
 #include <ydb/core/tablet_flat/util_fmt_basic.h>
+#include <ydb/core/tablet_flat/util_fmt_desc.h>
+#include <ydb/core/tablet_flat/util_fmt_logger.h>
 #include <ydb/library/actors/core/actor.h>
 
 namespace NKikimr {
@@ -28,7 +28,7 @@ namespace NFake {
             , Edge(head) /* Live until this runlevel exists */
             , Stopped(stopped)
         {
-             Y_ABORT_UNLESS(Edge < Levels.size(), "Out of runlevels slots");
+            Y_ENSURE(Edge < Levels.size(), "Out of runlevels slots");
         }
 
     private:
@@ -70,7 +70,7 @@ namespace NFake {
             } else if (eh->CastAsLocal<NFake::TEvTerm>()) {
 
             } else {
-                Y_Fail("Unexpected event " << eh->GetTypeName());
+                Y_TABLET_ERROR("Unexpected event " << eh->GetTypeName());
             }
         }
 
@@ -100,7 +100,7 @@ namespace NFake {
                 auto actor = Register(cmd.Actor.release(), cmd.MailboxType, 0);
                 auto result = Childs.emplace(actor, level);
 
-                Y_ABORT_UNLESS(result.second, "Cannot register same actor twice");
+                Y_ENSURE(result.second, "Cannot register same actor twice");
 
                 Levels[level].Left += 1, Total += 1, Head = Max(Head, level);
 

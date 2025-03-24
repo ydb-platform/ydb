@@ -192,7 +192,8 @@ struct TEvYdbProxy {
         explicit TEndTopicPartitionResult(const NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent& event)
             : PartitionId(event.GetPartitionSession()->GetPartitionId())
             , AdjacentPartitionsIds(event.GetAdjacentPartitionIds().begin(), event.GetAdjacentPartitionIds().end())
-            , ChildPartitionsIds(event.GetChildPartitionIds().begin(), event.GetChildPartitionIds().end()) {
+            , ChildPartitionsIds(event.GetChildPartitionIds().begin(), event.GetChildPartitionIds().end())
+        {
         }
 
         void Out(IOutputStream& out) const;

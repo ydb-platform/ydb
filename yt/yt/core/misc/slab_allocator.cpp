@@ -7,6 +7,7 @@
 #include <library/cpp/yt/malloc/malloc.h>
 
 #include <library/cpp/yt/memory/memory_usage_tracker.h>
+#include <library/cpp/yt/memory/poison.h>
 
 namespace NYT {
 
@@ -114,6 +115,7 @@ public:
     {
         auto* obj = FreeList_.Extract();
         if (Y_LIKELY(obj)) {
+            RecycleFreedMemory(TMutableRef(&obj[1], ObjectSize_ - sizeof(TFreeListItem)));
             AllocatedItems.Increment();
             AliveItems.Update(GetRefCounter(this)->GetRefCount() + 1);
             // Fast path.
@@ -127,7 +129,10 @@ public:
     {
         FreedItems.Increment();
         AliveItems.Update(GetRefCounter(this)->GetRefCount() - 1);
-        FreeList_.Put(static_cast<TFreeListItem*>(obj));
+        auto* typedPtr = static_cast<TFreeListItem*>(obj);
+        // Poison all memory except the header used for FreeList_.
+        PoisonFreedMemory(TMutableRef(&typedPtr[1], ObjectSize_ - sizeof(TFreeListItem)));
+        FreeList_.Put(typedPtr);
         Unref(this);
     }
 
@@ -193,6 +198,7 @@ private:
         // Build chain of chunks.
         auto objectCount = ObjectCount_;
         auto objectSize = ObjectSize_;
+        auto poisonedSize = objectSize - sizeof(TFreeListItem);
 
         YT_VERIFY(objectCount > 0);
         YT_VERIFY(objectSize > 0);
@@ -202,6 +208,7 @@ private:
             auto* current = reinterpret_cast<TFreeListItem*>(ptr);
             ptr += objectSize;
 
+            PoisonFreedMemory(TMutableRef(&current[1], poisonedSize));
             current->Next.store(reinterpret_cast<TFreeListItem*>(ptr), std::memory_order::release);
         }
 
@@ -209,6 +216,7 @@ private:
 
         auto* current = reinterpret_cast<TFreeListItem*>(ptr);
         current->Next.store(nullptr, std::memory_order::release);
+        PoisonFreedMemory(TMutableRef(&current[1], poisonedSize));
 
         return {head, current};
     }
@@ -254,6 +262,7 @@ private:
         // Extract one element.
         auto* next = head->Next.load();
         FreeList_.Put(next, tail);
+        RecycleFreedMemory(TMutableRef(head, ObjectSize_));
         return head;
     }
 };
@@ -281,6 +290,7 @@ public:
 
         auto itemCount = ++RefCount_;
         auto ptr = malloc(allocatedSize);
+        PoisonUninitializedMemory(TMutableRef(ptr, allocatedSize));
 
         auto header = reinterpret_cast<TSizeHeader*>(ptr);
         header->Size = allocatedSize;
@@ -296,6 +306,7 @@ public:
         ptr = reinterpret_cast<void*>(reinterpret_cast<char*>(ptr) - sizeof(TSizeHeader));
 
         auto allocatedSize = reinterpret_cast<TSizeHeader*>(ptr)->Size;
+        PoisonFreedMemory(TMutableRef(ptr, allocatedSize));
         ReleaseMemory(allocatedSize);
         free(ptr);
         FreedItems.Increment();

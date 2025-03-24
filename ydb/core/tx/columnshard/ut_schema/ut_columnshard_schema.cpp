@@ -83,20 +83,6 @@ std::shared_ptr<arrow::RecordBatch> UpdateColumn(std::shared_ptr<arrow::RecordBa
     return arrow::RecordBatch::Make(schema, batch->num_rows(), columns);
 }
 
-bool TriggerTTL(TTestBasicRuntime& runtime, TActorId& sender, NOlap::TSnapshot snap, const std::vector<ui64>& pathIds,
-                ui64 tsSeconds, const TString& ttlColumnName) {
-    TString txBody = TTestSchema::TtlTxBody(pathIds, ttlColumnName, tsSeconds);
-    auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
-        NKikimrTxColumnShard::TX_KIND_TTL, sender, snap.GetTxId(), txBody);
-
-    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, event.release());
-    auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
-    const auto& res = ev->Get()->Record;
-    UNIT_ASSERT_EQUAL(res.GetTxId(), snap.GetTxId());
-    UNIT_ASSERT_EQUAL(res.GetTxKind(), NKikimrTxColumnShard::TX_KIND_TTL);
-    return (res.GetStatus() == NKikimrTxColumnShard::SUCCESS);
-}
-
 bool TriggerMetadata(
     TTestBasicRuntime& runtime, TActorId& sender, NYDBTest::TControllers::TGuard<NOlap::TWaitCompactionController>& controller) {
     auto isDone = [initialCounter = controller->GetTieringMetadataActualizationCount().Val(), &controller]() {
@@ -225,6 +211,8 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     ui32 ttlSec = TAppData::TimeProvider->Now().Seconds(); // disable internal tll
     if (internal) {
         ttlSec -= (ts[0] + ts[1]) / 2; // enable internal ttl between ts1 and ts2
+    } else {
+        ttlSec -= ts[0] + ttlIncSeconds;
     }
     if (spec.HasTiers()) {
         spec.Tiers[0].EvictAfter = TDuration::Seconds(ttlSec);
@@ -242,6 +230,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
 
     auto blobs = MakeData(ts, PORTION_ROWS, PORTION_ROWS / 2, spec.TtlColumn, ydbSchema);
     UNIT_ASSERT_EQUAL(blobs.size(), 2);
+    auto lastTtlFinishedCount = csControllerGuard->GetTTLFinishedCounter().Val();
     for (auto& data : blobs) {
         std::vector<ui64> writeIds;
         UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, data, ydbSchema, true, &writeIds));
@@ -255,12 +244,8 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
         RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
     }
 
-    if (internal) {
-        TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {}, 0, spec.TtlColumn);
-    } else {
-        TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), { tableId }, ts[0] + ttlIncSeconds, spec.TtlColumn);
-    }
-    while (csControllerGuard->GetTTLFinishedCounter().Val() != csControllerGuard->GetTTLStartedCounter().Val()) {
+    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvPrivate::TEvPeriodicWakeup(true));
+    while (csControllerGuard->GetTTLFinishedCounter().Val() == lastTtlFinishedCount) {
         runtime.SimulateSleep(TDuration::Seconds(1)); // wait all finished before (ttl especially)
     }
 
@@ -271,7 +256,6 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     }
 
     {
-        --planStep;
         TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
         reader.SetReplyColumnIds(TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { spec.TtlColumn }));
         auto rb = reader.ReadAll();
@@ -292,18 +276,13 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     if (spec.HasTiers()) {
         csControllerGuard->OverrideTierConfigs(runtime, sender, TTestSchema::BuildSnapshot(spec));
     }
-
-    if (internal) {
-        TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {}, 0, spec.TtlColumn);
-    } else {
-        TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {tableId}, ts[1] + ttlIncSeconds, spec.TtlColumn);
-    }
-    while (csControllerGuard->GetTTLFinishedCounter().Val() != csControllerGuard->GetTTLStartedCounter().Val()) {
+    lastTtlFinishedCount = csControllerGuard->GetTTLFinishedCounter().Val();
+    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvPrivate::TEvPeriodicWakeup(true));
+    while (csControllerGuard->GetTTLFinishedCounter().Val() == lastTtlFinishedCount) {
         runtime.SimulateSleep(TDuration::Seconds(1)); // wait all finished before (ttl especially)
     }
 
     {
-        --planStep;
         TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
         auto columnIds = TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { spec.TtlColumn });
         columnIds.emplace_back((ui32)NOlap::IIndexInfo::ESpecialColumn::PLAN_STEP);
@@ -314,6 +293,7 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     }
 
     // Disable TTL
+    lastTtlFinishedCount = csControllerGuard->GetTTLFinishedCounter().Val();
     auto ok = ProposeSchemaTx(runtime, sender,
                          TTestSchema::AlterTableTxBody(tableId, 3, TTestSchema::TTableSpecials()),
                          NOlap::TSnapshot(++planStep, ++txId));
@@ -329,17 +309,9 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     ProposeCommit(runtime, sender, ++txId, writeIds);
     PlanCommit(runtime, sender, ++planStep, txId);
 
-    if (internal) {
-        TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {}, 0, spec.TtlColumn);
-    } else {
-        TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {tableId}, ts[0] - ttlIncSeconds, spec.TtlColumn);
-    }
-    while (csControllerGuard->GetTTLFinishedCounter().Val() != csControllerGuard->GetTTLStartedCounter().Val()) {
-        runtime.SimulateSleep(TDuration::Seconds(1)); // wait all finished before (ttl especially)
-    }
+    ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvPrivate::TEvPeriodicWakeup(true));
 
     {
-        --planStep;
         TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
         reader.SetReplyColumnIds(TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { spec.TtlColumn }));
         auto rb = reader.ReadAll();
@@ -660,7 +632,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
                 reader->Ack();
             }
             // Eviction
-            TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {}, 0, specs[i].TtlColumn);
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvPrivate::TEvPeriodicWakeup(true));
 
             Cerr << "-- " << (hasColdEviction ? "COLD" : "HOT")
                 << " TIERING(" << i << ") num tiers: " << specs[i].Tiers.size() << Endl;
@@ -690,7 +662,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         // Read data after eviction
         TString columnToRead = specs[i].TtlColumn;
 
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep - 1, Max<ui64>()));
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
         reader.SetReplyColumnIds(TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { columnToRead }));
         auto rb = reader.ReadAll();
         if (expectedReadResult == EExpectedResult::ERROR) {
@@ -1121,9 +1093,6 @@ void TestCompaction(std::optional<ui32> numWrites = {}) {
         ProposeCommit(runtime, sender, txId, writeIds);
         PlanCommit(runtime, sender, planStep, txId);
 
-        if (i % 2 == 0) {
-            TriggerTTL(runtime, sender, NOlap::TSnapshot(++planStep, ++txId), {}, 0, spec.TtlColumn);
-        }
     }
 }
 

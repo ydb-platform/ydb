@@ -38,7 +38,7 @@ public:
 
     MOCK_METHOD(IConnectionPtr, GetConnection, (), (override));
 
-    MOCK_METHOD(std::optional<TStringBuf>, GetClusterName, (bool fetchIfNull), (override));
+    MOCK_METHOD(std::optional<std::string>, GetClusterName, (bool fetchIfNull), (override));
 
     MOCK_METHOD(TFuture<ITransactionPtr>, StartTransaction, (
         NTransactionClient::ETransactionType type,
@@ -514,6 +514,11 @@ public:
     MOCK_METHOD(TFuture<TMultiTablePartitions>, PartitionTables, (
         const std::vector<NYPath::TRichYPath>& paths,
         const TPartitionTablesOptions& options),
+        (override));
+
+    MOCK_METHOD(TFuture<ITablePartitionReaderPtr>, CreateTablePartitionReader, (
+        const TTablePartitionCookiePtr& partition,
+        const TReadTablePartitionOptions& options),
         (override));
 
     MOCK_METHOD(TFuture<void>, TruncateJournal, (

@@ -5,33 +5,78 @@ namespace NKikimr::NArrow::NSSA {
 
 TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnDataProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
-    auto acc = context.GetResources()->GetAccessorOptional(ColumnId);
-    if (!!acc) {
-        if (!SubColumnName) {
-            if (acc->HasWholeDataVolume()) {
-                return EExecutionResult::Success;
-            } else {
-                context.GetResources()->Remove(ColumnId);
+    auto source = context.GetDataSource().lock();
+    if (!source) {
+        return TConclusionStatus::Fail("source was destroyed before (original fetch start)");
+    }
+    std::vector<std::shared_ptr<IFetchLogic>> logic;
+    for (auto&& [_, i] : DataAddresses) {
+        auto acc = context.GetResources()->GetAccessorOptional(i.GetColumnId());
+        THashSet<TString> subColumnsToFetch;
+        for (auto&& sc : i.GetSubColumnNames(true)) {
+            if (!acc || !acc->HasSubColumnData(sc)) {
+                if (!sc && acc) {
+                    context.GetResources()->Remove(i.GetColumnId());
+                }
+                subColumnsToFetch.emplace(sc);
             }
-        } else if (acc->HasSubColumnData(SubColumnName)) {
-            return EExecutionResult::Success;
+        }
+        if (subColumnsToFetch.empty()) {
+            continue;
+        }
+        auto conclusion = source->StartFetchData(context, i.SelectSubColumns(subColumnsToFetch));
+        if (conclusion.IsFail()) {
+            return conclusion;
+        } else if (!!conclusion.GetResult()) {
+            logic.emplace_back(conclusion.DetachResult());
+        } else {
+            continue;
         }
     }
-    auto conclusion = context.GetDataSource()->StartFetchData(context, GetOutputColumnIdOnce(), SubColumnName);
+
+    for (auto&& [_, i] : IndexContext) {
+        auto conclusion = source->StartFetchIndex(context, i);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        } else {
+            logic.insert(logic.end(), conclusion.GetResult().begin(), conclusion.GetResult().end());
+        }
+    }
+    for (auto&& [_, i] : HeaderContext) {
+        if (context.GetResources()->GetAccessorOptional(i.GetColumnId())) {
+            continue;
+        }
+        auto conclusion = source->StartFetchHeader(context, i);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        } else if (!!conclusion.GetResult()) {
+            logic.emplace_back(conclusion.DetachResult());
+        } else {
+            continue;
+        }
+    }
+
+    auto conclusion = source->StartFetch(context, logic);
     if (conclusion.IsFail()) {
         return conclusion;
-    } else if (*conclusion) {
-        return EExecutionResult::InBackground;
+    } else if (!*conclusion) {
+        return IResourceProcessor::EExecutionResult::Success;
     } else {
-        return EExecutionResult::Success;
+        return EExecutionResult::InBackground;
     }
 }
 
 TConclusion<IResourceProcessor::EExecutionResult> TOriginalColumnAccessorProcessor::DoExecute(
     const TProcessorContext& context, const TExecutionNodeContext& /*nodeContext*/) const {
     const auto acc = context.GetResources()->GetAccessorOptional(GetOutputColumnIdOnce());
-    if (!acc || !acc->HasSubColumnData(SubColumnName)) {
-        context.GetDataSource()->AssembleAccessor(context, GetOutputColumnIdOnce(), SubColumnName);
+    for (auto&& sc : DataAddress.GetSubColumnNames(true)) {
+        if (!acc || !acc->HasSubColumnData(sc)) {
+            auto source = context.GetDataSource().lock();
+            if (!source) {
+                return TConclusionStatus::Fail("source was destroyed before (original assemble start)");
+            }
+            source->AssembleAccessor(context, GetOutputColumnIdOnce(), sc);
+        }
     }
     return EExecutionResult::Success;
 }

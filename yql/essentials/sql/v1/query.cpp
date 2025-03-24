@@ -3171,6 +3171,11 @@ public:
                             BuildQuotedAtom(Pos, to_lower(ToString(warningPragma.GetAction()))))));
                 }
 
+                if (ctx.RuntimeLogLevel) {
+                    currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
+                        BuildQuotedAtom(Pos, "RuntimeLogLevel"), BuildQuotedAtom(Pos, ctx.RuntimeLogLevel))));
+                }
+
                 if (ctx.ResultSizeLimit > 0) {
                     currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", resultSink,
                         BuildQuotedAtom(Pos, "SizeLimit"), BuildQuotedAtom(Pos, ToString(ctx.ResultSizeLimit)))));

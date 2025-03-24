@@ -191,7 +191,7 @@ namespace NTabletFlatExecutor {
 
                 return { };
             } else if (one->State != EState::Task) {
-                Y_Fail(NFmt::Do(*one) << " acquired an unexpected resource");
+                Y_TABLET_ERROR(NFmt::Do(*one) << " acquired an unexpected resource");
             } else {
                 // A call to Start is expected now
                 one->State = EState::Ready;
@@ -245,7 +245,7 @@ namespace NTabletFlatExecutor {
             auto *one = Lookup(serial, false);
 
             if (serial & 0x1 /* system scan */) {
-                Y_Fail(NFmt::If(one) << " is system (" << serial << "), cannot be cancelled this way");
+                Y_TABLET_ERROR(NFmt::If(one) << " is system (" << serial << "), cannot be cancelled this way");
             }
 
             if (!one) {
@@ -266,7 +266,7 @@ namespace NTabletFlatExecutor {
             auto *one = Lookup(serial, false);
 
             if (!(serial & 0x1 /* system scan */)) {
-                Y_Fail(NFmt::If(one) << " is not system (" << serial << "), cannot be cancelled this way");
+                Y_TABLET_ERROR(NFmt::If(one) << " is not system (" << serial << "), cannot be cancelled this way");
             }
 
             if (!one) {
@@ -281,7 +281,7 @@ namespace NTabletFlatExecutor {
             auto *one = Lookup(serial, true);
 
             if (one->State < EState::Scan) {
-                Y_Fail(NFmt::Do(*one) << " got unexpected scan result");
+                Y_TABLET_ERROR(NFmt::Do(*one) << " got unexpected scan result");
             } else {
                 NUtil::SubSafe(CounterAlive, ui32(1));
 
@@ -305,7 +305,7 @@ namespace NTabletFlatExecutor {
                 std::make_tuple(token),
                 std::make_tuple(token, table, options, std::move(snapshot)));
 
-            Y_ABORT_UNLESS(got.second, "Failed to make new scan state entry");
+            Y_ENSURE(got.second, "Failed to make new scan state entry");
 
             auto *one = &got.first->second;
 
@@ -318,7 +318,7 @@ namespace NTabletFlatExecutor {
         ui64 Start(TOne &one, NOps::TConf conf)
         {
             if (one.State != EState::None && one.State != EState::Ready) {
-                Y_Fail(NFmt::Do(one) << " is not in start condition");
+                Y_TABLET_ERROR(NFmt::Do(one) << " is not in start condition");
             }
 
             switch (one.Options.ReadPrio) {
@@ -343,7 +343,7 @@ namespace NTabletFlatExecutor {
                 conf.AheadHi = Tables[one.Table].AheadHi;
             }
 
-            Y_ABORT_UNLESS(one.Snapshot);
+            Y_ENSURE(one.Snapshot);
             auto *actor = new NOps::TDriver(one.Serial, one.Scan, conf, std::move(one.Snapshot));
 
             if (auto logl = Logger->Log(NUtil::ELnLev::Info))
@@ -416,7 +416,7 @@ namespace NTabletFlatExecutor {
             auto *one = Scans.FindPtr(serial);
 
             if (require && one == nullptr) {
-                Y_Fail("Cannot find scan serial " << serial << " in states");
+                Y_TABLET_ERROR("Cannot find scan serial " << serial << " in states");
             }
 
             return one;

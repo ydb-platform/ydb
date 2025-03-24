@@ -8,7 +8,7 @@ namespace NTable {
     {
         const auto &data = memTable->GetBlobs()->Get(ref).Data;
 
-        Y_ABORT_UNLESS(data, "Got external blob in NMem::TBlobs with no data");
+        Y_ENSURE(data, "Got external blob in NMem::TBlobs with no data");
 
         return { true, &data };
     }

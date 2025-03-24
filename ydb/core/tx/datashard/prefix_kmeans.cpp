@@ -490,7 +490,7 @@ public:
             std::array<TCell, 1> cells;
             cells[0] = TCell::Make(Parent);
             TSerializedCellVec::UnsafeAppendCells(cells, pk);
-            PrefixBuf.AddRow({}, TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize({}));
+            PrefixBuf.AddRow(TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize({}));
         } else if (!TCellVectorsEquals{}(Key.GetCells().subspan(0, PrefixColumns), key.subspan(0, PrefixColumns))) {
             HasNextKey = true;
             return EScan::Reset;

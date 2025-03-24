@@ -363,7 +363,7 @@ protected:
             pk[0] = TCell::Make(Parent);
             pk[1] = TCell::Make(Child + pos);
             data[0] = TCell{row};
-            WriteBuf.AddRow({}, TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
+            WriteBuf.AddRow(TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
             ++pos;
         }
         Upload(false);

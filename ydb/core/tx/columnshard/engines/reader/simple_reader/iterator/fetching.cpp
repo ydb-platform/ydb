@@ -205,7 +205,7 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDa
 }
 
 void TDuplicateFilter::TFilterSubscriber::OnFilterReady(const NArrow::TColumnFilter& filter) {
-    Source->MutableStageData().AddFilter(filter, false);
+    Source->MutableStageData().AddFilter(Source->GetStageData().AdaptFullFilter(filter));
     Step.Next();
     auto task = std::make_shared<TStepAction>(Source, std::move(Step), Source->GetContext()->GetCommonContext()->GetScanActorId());
     NConveyor::TScanServiceOperator::SendTaskToExecute(task, Source->GetContext()->GetCommonContext()->GetConveyorProcessId());

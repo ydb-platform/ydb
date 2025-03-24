@@ -79,7 +79,7 @@ unique = ["", "UNIQUE"]
 index_sync = ["SYNC", "ASYNC"]
 
 
-class TestCreateTables():
+class CreateTables():
     def create_table(self, table_name: str, columns: dict[str, dict[str]], pk_colums: dict[str, dict[str]], index_colums: dict[str, dict[str]], unique: str, sync: str) -> str:
         sql_create = f"CREATE TABLE {table_name} ("
         for prefix in columns.keys():

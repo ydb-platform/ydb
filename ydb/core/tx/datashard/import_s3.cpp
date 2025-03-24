@@ -93,8 +93,8 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         }
 
         std::pair<ui64, ui64> NextRange(ui64 contentLength, ui64 processedBytes) const override {
-            Y_ABORT_UNLESS(contentLength > 0);
-            Y_ABORT_UNLESS(processedBytes < contentLength);
+            Y_ENSURE(contentLength > 0);
+            Y_ENSURE(processedBytes < contentLength);
 
             const ui64 start = processedBytes + PendingBytes();
             const ui64 end = Min(SumWithSaturation(start, RangeSize), contentLength) - 1;
@@ -141,7 +141,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         }
 
         EDataStatus TryGetData(TStringBuf& data, TString& error) override {
-            Y_ABORT_UNLESS(Pos == 0);
+            Y_ENSURE(Pos == 0);
 
             const ui64 pos = AsStringBuf(Buffer.Size()).rfind('\n');
             if (TString::npos == pos) {
@@ -193,12 +193,12 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         }
 
         void Feed(TString&& portion, bool /* last */) override {
-            Y_ABORT_UNLESS(Portion.Empty());
+            Y_ENSURE(Portion.Empty());
             Portion.Assign(portion.data(), portion.size());
         }
 
         EDataStatus TryGetData(TStringBuf& data, TString& error) override {
-            Y_ABORT_UNLESS(ReadyInputBytes == 0 && ReadyOutputPos == 0);
+            Y_ENSURE(ReadyInputBytes == 0 && ReadyOutputPos == 0);
 
             auto input = ZSTD_inBuffer{Portion.Data(), Portion.Size(), 0};
             while (!ReadyOutputPos) {
@@ -309,14 +309,14 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
                 TMaybe<TBuffer> block = Deserializer.GetNextBlock(); // Returns at least one encrypted block
                 if (block) {
                     const ui64 processedAfter = Deserializer.GetProcessedInputBytes();
-                    Y_ABORT_UNLESS(processedAfter - processedBefore <= FeedUnprocessedBytes);
+                    Y_ENSURE(processedAfter - processedBefore <= FeedUnprocessedBytes);
                     // Data is read by blocks from encrypted file.
                     // Each block contains at least one row of data with '\n',
                     // so we will always get some data from DataController.
                     ReadyInputBytes += processedAfter - processedBefore;
                     DataController->Feed(TString(block->Data(), block->Size()), Last);
                     const EDataStatus status = DataController->TryGetData(data, error);
-                    Y_ABORT_UNLESS(status == READY_DATA);
+                    Y_ENSURE(status == READY_DATA);
                     return status;
                 } else {
                     return NOT_ENOUGH_DATA;
@@ -387,14 +387,14 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         }
 
         void AddRow(const TVector<TCell>& keys, const TVector<TCell>& values) {
-            Y_ABORT_UNLESS(Record);
+            Y_ENSURE(Record);
             auto& row = *Record->AddRows();
             row.SetKeyColumns(TSerializedCellVec::Serialize(keys));
             row.SetValueColumns(TSerializedCellVec::Serialize(values));
         }
 
         const std::shared_ptr<NKikimrTxDataShard::TEvUploadRowsRequest>& GetRecord() {
-            Y_ABORT_UNLESS(Record);
+            Y_ENSURE(Record);
             return Record;
         }
 
@@ -496,7 +496,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             Reader.Reset(new TReadControllerZstd(ReadBatchSize, ReadBufferSizeLimit));
             break;
         case NBackupRestoreTraits::ECompressionCodec::Invalid:
-            Y_ABORT("unreachable");
+            Y_ENSURE(false, "unreachable");
         }
 
         ETag = result.GetResult().GetETag();
@@ -536,7 +536,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         IMPORT_LOG_N("Process download info at '" << marker << "'"
             << ": info# " << info);
 
-        Y_ABORT_UNLESS(info.DataETag);
+        Y_ENSURE(info.DataETag);
         if (!CheckETag(*info.DataETag, ETag, marker)) {
             return;
         }
@@ -693,7 +693,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             return false;
         }
 
-        Y_ABORT_UNLESS(!keys.empty());
+        Y_ENSURE(!keys.empty());
         if (!TableInfo.IsMyKey(keys) /* TODO: maybe skip */) {
             Finish(false, TStringBuilder() << "Key is out of range on line: " << origLine);
             return false;
@@ -871,7 +871,7 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
         TAutoPtr<IDestructable> prod = new TImportJobProduct(success, error, WrittenBytes, WrittenRows);
         Send(DataShard, new TDataShard::TEvPrivate::TEvAsyncJobComplete(prod), 0, TxId);
 
-        Y_ABORT_UNLESS(TaskId);
+        Y_ENSURE(TaskId);
         Send(MakeResourceBrokerID(), new TEvResourceBroker::TEvFinishTask(TaskId));
 
         PassAway();

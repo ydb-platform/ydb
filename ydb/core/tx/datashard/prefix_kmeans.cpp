@@ -269,10 +269,10 @@ protected:
             << " Uploader: " << Uploader.ToString() << " ev->Sender: " << ev->Sender.ToString());
 
         if (Uploader) {
-            Y_VERIFY_S(Uploader == ev->Sender, "Mismatch Uploader: " << Uploader.ToString() << " ev->Sender: "
+            Y_ENSURE(Uploader == ev->Sender, "Mismatch Uploader: " << Uploader.ToString() << " ev->Sender: "
                                                                      << ev->Sender.ToString() << Debug());
         } else {
-            Y_ABORT_UNLESS(Driver == nullptr);
+            Y_ENSURE(Driver == nullptr);
             return;
         }
 
@@ -715,7 +715,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
         badRequest(TStringBuilder() << "Unknown table id: " << pathId.LocalPathId);
         return;
     }
-    Y_ABORT_UNLESS(*userTableIt);
+    Y_ENSURE(*userTableIt);
     const auto& userTable = **userTableIt;
 
     if (const auto* recCard = ScanManager.Get(id)) {

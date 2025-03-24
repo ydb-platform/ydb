@@ -210,7 +210,7 @@ struct TUserTable : public TThrRefBase {
                     return ECodec::LZ4;
                 // keep no default
             }
-            Y_ABORT("unexpected");
+            Y_ENSURE(false, "unexpected");
         }
 
         static ECache ExtractDbCache(const NKikimrSchemeOp::TFamilyDescription& family) {
@@ -229,7 +229,7 @@ struct TUserTable : public TThrRefBase {
                     return ECache::Ever;
                 // keep no default
             }
-            Y_ABORT("unexpected");
+            Y_ENSURE(false, "unexpected");
         }
     };
 
@@ -281,7 +281,7 @@ struct TUserTable : public TThrRefBase {
                 columnIds.reserve(columnNames.size());
                 for (const auto& columnName : columnNames) {
                     auto it = nameToId.find(columnName);
-                    Y_ABORT_UNLESS(it != nameToId.end());
+                    Y_ENSURE(it != nameToId.end());
                     columnIds.push_back(it->second);
                 }
             };
@@ -491,7 +491,7 @@ struct TUserTable : public TThrRefBase {
 
     void GetSchema(NKikimrSchemeOp::TTableDescription& description) const {
         bool ok = description.ParseFromArray(Schema.data(), Schema.size());
-        Y_ABORT_UNLESS(ok);
+        Y_ENSURE(ok);
     }
 
     void SetSchema(const NKikimrSchemeOp::TTableDescription& description) {

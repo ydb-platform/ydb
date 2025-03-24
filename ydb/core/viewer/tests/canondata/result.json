@@ -5012,6 +5012,18 @@
             "StartOffset": 0,
             "EndOffset": 21,
             "Truncated": false
+        },
+        "no_partition": {
+            "status_code": 400,
+            "text": "field 'partition' is required"
+        },
+        "no_offset_or_ts": {
+            "status_code": 400,
+            "text": "Either read_timestamp or offset parameter must be specified"
+        },
+        "both_offset_and_ts": {
+            "status_code": 400,
+            "text": "Only read_timestamp or offset parameter may be specified, not both"
         }
     }
 }

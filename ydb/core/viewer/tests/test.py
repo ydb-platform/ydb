@@ -639,6 +639,24 @@ def test_topic_data():
         'limit': '5'
     })
 
+    response_no_part = call_viewer("/viewer/topic_data", {
+        'database': dedicated_db,
+        'path': '{}/topic2'.format(dedicated_db),
+        'offset': '20'
+    })
+    response_no_offset_or_ts = call_viewer("/viewer/topic_data", {
+        'database': dedicated_db,
+        'path': '{}/topic2'.format(dedicated_db),
+        'partition': '0'
+    })
+    response_both_offset_and_ts = call_viewer("/viewer/topic_data", {
+        'database': dedicated_db,
+        'path': '{}/topic2'.format(dedicated_db),
+        'partition': '0',
+        'offset': '20',
+        'read_timestamp': '20'
+    })
+
     def strip_non_canonized(resp):
         for message in resp["Messages"]:
             assert int(message.get("CreateTimestamp", "0")) != 0
@@ -655,6 +673,9 @@ def test_topic_data():
         'response_read': strip_non_canonized(response),
         'response_metadata': strip_non_canonized(response_w_meta),
         'response_compressed': strip_non_canonized(response_compressed),
-        'response_not_truncated': strip_non_canonized(response_last)
+        'response_not_truncated': strip_non_canonized(response_last),
+        'no_partition': response_no_part,
+        'no_offset_or_ts': response_no_offset_or_ts,
+        'both_offset_and_ts': response_both_offset_and_ts
     }
     return result

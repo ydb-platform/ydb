@@ -78,7 +78,7 @@ struct TSchemeShard::TExport::TTxForget: public TSchemeShard::TXxport::TTxBase {
                 << ", info: " << exportInfo->ToString()
             );
             
-            PrepareDroppingDir(Self, exportInfo, db);
+            PrepareDropping(Self, exportInfo, db);
 
             Progress = true;
         }

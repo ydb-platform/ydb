@@ -328,7 +328,7 @@ TString ExportItemPathName(const TString& exportPathName, ui32 itemIdx) {
     return TStringBuilder() << exportPathName << "/" << itemIdx;
 }
 
-void PrepareDroppingDir(TSchemeShard* ss, TExportInfo::TPtr exportInfo, NIceDb::TNiceDb& db, bool isAutoDropping) {
+void PrepareDropping(TSchemeShard* ss, TExportInfo::TPtr exportInfo, NIceDb::TNiceDb& db, bool isAutoDropping) {
     exportInfo->WaitTxId = InvalidTxId;
     exportInfo->State = isAutoDropping ? TExportInfo::EState::AutoDropping : TExportInfo::EState::Dropping;
     ss->PersistExportState(db, exportInfo);
@@ -344,8 +344,9 @@ void PrepareDroppingDir(TSchemeShard* ss, TExportInfo::TPtr exportInfo, NIceDb::
         }
 
         ss->PersistExportItemState(db, exportInfo, itemIdx);
-        if (isAutoDropping)
+        if (isAutoDropping) {
             exportInfo->PendingDropItems.push_back(itemIdx);
+        }
     }
 }
 

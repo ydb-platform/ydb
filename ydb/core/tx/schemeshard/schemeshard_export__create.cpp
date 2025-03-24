@@ -1346,7 +1346,7 @@ private:
             }
             if (!itemHasIssues && AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
                 exportInfo->EndTime = TAppData::TimeProvider->Now();
-                PrepareDroppingDir(Self, exportInfo, db, true);
+                PrepareDropping(Self, exportInfo, db, true);
                 AllocateTxId(exportInfo);
             }
 
@@ -1371,10 +1371,7 @@ private:
                 SendNotificationsIfFinished(exportInfo, true); // for tests
 
                 if (exportInfo->State == EState::AutoDropping) {
-                    exportInfo->State = EState::Done;
-                    exportInfo->WaitTxId = InvalidTxId;
-                    AllocateTxId(exportInfo);
-                    break;
+                    return EndExport(exportInfo, EState::Done, db);
                 }
 
                 if (exportInfo->Uid) {

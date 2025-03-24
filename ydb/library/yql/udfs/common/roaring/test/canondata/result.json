@@ -9,6 +9,11 @@
             "uri": "file://test.test_intersect_/results.txt"
         }
     ],
+    "test.test[run_optimize]": [
+        {
+            "uri": "file://test.test_run_optimize_/results.txt"
+        }
+    ],
     "test.test[serialize_deserialize]": [
         {
             "uri": "file://test.test_serialize_deserialize_/results.txt"
@@ -17,11 +22,6 @@
     "test.test[union]": [
         {
             "uri": "file://test.test_union_/results.txt"
-        }
-    ],
-    "test.test[run_optimize]": [
-        {
-            "uri": "file://test.test_run_optimize_/results.txt"
         }
     ]
 }

@@ -93,6 +93,23 @@ TOffloadedPoolAllocatorPtr CreateOffloadedPoolAllocator(
     return std::make_shared<TOffloadedPoolAllocator>(std::move(scopedAlloc));
 }
 
+template <class T>
+struct TNullableAllocLockOps {
+    static inline void Acquire(T* t) noexcept {
+        if (t) {
+            t->Acquire();
+        }
+    }
+
+    static inline void Release(T* t) noexcept {
+        if (t) {
+            t->Release();
+        }
+    }
+};
+
+using TNullableAllocGuard = TGuard<NKikimr::NMiniKQL::TScopedAlloc, TNullableAllocLockOps<NKikimr::NMiniKQL::TScopedAlloc>>;
+
 
 class TColumnBatch : public IDataBatch {
 public:
@@ -143,23 +160,23 @@ public:
     }
 
     explicit TColumnBatch(const TRecordBatchPtr& data, std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc = nullptr)
-        : Data(data)
+        : Alloc(alloc) 
+        , Data(data)
         , SerializedMemory(NArrow::GetBatchDataSize(Data))
-        , Memory(NArrow::GetBatchMemorySize(Data))
-        , Alloc(alloc) {
+        , Memory(NArrow::GetBatchMemorySize(Data)) {
     }
 
     ~TColumnBatch() {
-        TGuard guard(*Alloc);
-        Data.reset();   
+        TNullableAllocGuard guard(Alloc.get());
+        Data.reset();
     }
 
 private:
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc = nullptr;
     TRecordBatchPtr Data;
     i64 SerializedMemory = 0;
     i64 Memory = 0;
 
-    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc = nullptr;
     bool Extracted = false;
 };
 
@@ -438,7 +455,7 @@ public:
             , BatchBuilder(std::make_unique<NArrow::TArrowBatchBuilder>(
                 arrow::Compression::UNCOMPRESSED,
                 BuildNotNullColumns(inputColumns),
-                NKikimr::NMiniKQL::GetArrowMemoryPool()))
+                alloc ? NKikimr::NMiniKQL::GetArrowMemoryPool() : arrow::default_memory_pool()))
             , Alloc(std::move(alloc)) {
         TString err;
         if (!BatchBuilder->Start(BuildBatchBuilderColumns(WriteIndex, inputColumns), 0, 0, err)) {
@@ -447,12 +464,12 @@ public:
     }
 
     ~TColumnDataBatcher() {
-        TGuard guard(*Alloc);
+        TNullableAllocGuard guard(Alloc.get());
         BatchBuilder.reset();
     }
 
     void AddData(const NMiniKQL::TUnboxedValueBatch& data) override {
-        TGuard guard(*Alloc);
+        TNullableAllocGuard guard(Alloc.get());
         TRowBuilder rowBuilder(Columns.size());
         data.ForEachRow([&](const auto& row) {
             for (size_t index = 0; index < Columns.size(); ++index) {
@@ -471,8 +488,9 @@ public:
     }
 
     IDataBatchPtr Build() override {
-        TGuard guard(*Alloc);
-        return MakeIntrusive<TColumnBatch>(BatchBuilder->FlushBatch(true), Alloc);
+        TNullableAllocGuard guard(Alloc.get());
+        auto batch = BatchBuilder->FlushBatch(true);
+        return MakeIntrusive<TColumnBatch>(std::move(batch), Alloc);
     }
 
 private:
@@ -500,6 +518,7 @@ public:
             : Columns(BuildColumns(inputColumns))
             , WriteColumnIds(BuildWriteColumnIds(inputColumns, writeIndex))
             , Alloc(std::move(alloc)) {
+        AFL_ENSURE(Alloc);
         AFL_ENSURE(schemeEntry.ColumnTableInfo);
         const auto& description = schemeEntry.ColumnTableInfo->Description;
         AFL_ENSURE(description.HasSchema());
@@ -853,6 +872,7 @@ public:
         , WriteColumnIds(BuildWriteColumnIds(inputColumns, WriteIndex))
         , KeyColumnTypes(BuildKeyColumnTypes(keyColumns))
         , Alloc(std::move(alloc)) {
+        AFL_ENSURE(Alloc);
         AFL_ENSURE(Columns.size() <= std::numeric_limits<ui16>::max());
     }
 

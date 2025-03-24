@@ -685,6 +685,8 @@ Y_UNIT_TEST_TWIN(OneShardLocalExec, UseSink) {
     auto session = db.CreateSession().GetValueSync().GetSession();
 
     TKqpCounters counters(kikimr.GetTestServer().GetRuntime()->GetAppData().Counters);
+
+    UNIT_ASSERT_VALUES_EQUAL(counters.TotalSingleNodeReqCount->Val(), 1);
     {
         auto result = session.ExecuteDataQuery(R"(
             SELECT * FROM `/Root/KeyValue` WHERE Key = 1;

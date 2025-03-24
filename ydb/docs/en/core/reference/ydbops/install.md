@@ -67,13 +67,13 @@ The `ydbops` executables will be available in the `bin` folder. Binary files are
 
 #### Installing
 
-To install the binary file, execute command `make`.
+To install the binary file, execute the command `make`.
 
 Optional parameters:
 
-- `INSTALL_DIR`: The folder, to which the executable file will be installed. Default value: `~/ydb/bin`.
+- `INSTALL_DIR`: The folder where the executable file will be installed. Default value: `~/ydb/bin`.
 
-- `BUILD_DIR`: The folder that contains the generated executable file. Use this parameter if you created the executable file manually. For example, use `BUILD_DIR=.` if the executable file is in the current working folder.
+- `BUILD_DIR`: The folder that contains the generated executable file. Use this parameter if you created the executable file manually. For example, use `BUILD_DIR=.` if the executable file is in the current working directory.
 
 ```bash
 make install [INSTALL_DIR=<path_to_install_folder>] [BUILD_DIR=<path_to_build_folder>]

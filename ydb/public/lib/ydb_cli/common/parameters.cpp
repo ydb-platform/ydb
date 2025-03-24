@@ -387,88 +387,7 @@ void TCommandWithParameters::GetParamTypes(const TDriver&, const TString& queryT
                 
                 // Создаем тип на основе строкового представления
                 TTypeBuilder builder;
-                
-                // Определяем тип данных
-                if (typeStr == "String") {
-                    builder.Primitive(EPrimitiveType::String);
-                } else if (typeStr == "Utf8") {
-                    builder.Primitive(EPrimitiveType::Utf8);
-                } else if (typeStr == "Int32") {
-                    builder.Primitive(EPrimitiveType::Int32);
-                } else if (typeStr == "Uint32") {
-                    builder.Primitive(EPrimitiveType::Uint32);
-                } else if (typeStr == "Int64") {
-                    builder.Primitive(EPrimitiveType::Int64);
-                } else if (typeStr == "Uint64") {
-                    builder.Primitive(EPrimitiveType::Uint64);
-                } else if (typeStr == "Double") {
-                    builder.Primitive(EPrimitiveType::Double);
-                } else if (typeStr == "Bool") {
-                    builder.Primitive(EPrimitiveType::Bool);
-                } else if (typeStr == "Date") {
-                    builder.Primitive(EPrimitiveType::Date);
-                } else if (typeStr == "Datetime") {
-                    builder.Primitive(EPrimitiveType::Datetime);
-                } else if (typeStr == "Timestamp") {
-                    builder.Primitive(EPrimitiveType::Timestamp);
-                } else if (typeStr == "Interval") {
-                    builder.Primitive(EPrimitiveType::Interval);
-                } else if (typeStr.StartsWith("Decimal")) {
-                    // Обработка типа Decimal
-                    // Формат: Decimal(precision, scale)
-                    // Например: Decimal(10,2)
-                    TString params = typeStr.substr(7, typeStr.length() - 8); // Убираем "Decimal(" и ")"
-                    size_t commaPos = params.find(',');
-                    if (commaPos != TString::npos) {
-                        ui32 precision = FromString<ui32>(params.substr(0, commaPos));
-                        ui32 scale = FromString<ui32>(params.substr(commaPos + 1));
-                        NYdb::TDecimalType decimalType(precision, scale);
-                        builder.Decimal(decimalType);
-                    }
-                } else if (typeStr == "Json") {
-                    builder.Primitive(EPrimitiveType::Json);
-                } else if (typeStr == "Yson") {
-                    builder.Primitive(EPrimitiveType::Yson);
-                } else if (typeStr == "Uuid") {
-                    builder.Primitive(EPrimitiveType::Uuid);
-                } else if (typeStr.StartsWith("List<")) {
-                    // Обработка списков
-                    TString itemType = typeStr.substr(5, typeStr.length() - 6);
-                    builder.BeginList();
-                    if (itemType == "String") {
-                        builder.Primitive(EPrimitiveType::String);
-                    } else if (itemType == "Utf8") {
-                        builder.Primitive(EPrimitiveType::Utf8);
-                    } else if (itemType == "Int32") {
-                        builder.Primitive(EPrimitiveType::Int32);
-                    } else if (itemType == "Uint32") {
-                        builder.Primitive(EPrimitiveType::Uint32);
-                    } else if (itemType == "Int64") {
-                        builder.Primitive(EPrimitiveType::Int64);
-                    } else if (itemType == "Uint64") {
-                        builder.Primitive(EPrimitiveType::Uint64);
-                    } else if (itemType == "Double") {
-                        builder.Primitive(EPrimitiveType::Double);
-                    } else if (itemType == "Bool") {
-                        builder.Primitive(EPrimitiveType::Bool);
-                    }
-                    builder.EndList();
-                } else if (typeStr.StartsWith("Struct<")) {
-                    // Обработка структур
-                    builder.BeginStruct();
-                    // TODO: Добавить обработку полей структуры
-                    builder.EndStruct();
-                } else if (typeStr.StartsWith("Tuple<")) {
-                    // Обработка кортежей
-                    builder.BeginTuple();
-                    // TODO: Добавить обработку элементов кортежа
-                    builder.EndTuple();
-                } else if (typeStr.StartsWith("Dict<")) {
-                    // Обработка словарей
-                    builder.BeginDict();
-                    // TODO: Добавить обработку ключей и значений словаря
-                    builder.EndDict();
-                }
+                ProcessType(typeStr, builder);
                 
                 // Сохраняем тип параметра
                 ParamTypes.emplace(paramName, builder.Build());
@@ -477,6 +396,86 @@ void TCommandWithParameters::GetParamTypes(const TDriver&, const TString& queryT
                 i += 4;
             }
         }
+    }
+}
+
+void TCommandWithParameters::ProcessType(const TString& typeStr, TTypeBuilder& builder) {
+    if (typeStr == "String") {
+        builder.Primitive(EPrimitiveType::String);
+    } else if (typeStr == "Utf8") {
+        builder.Primitive(EPrimitiveType::Utf8);
+    } else if (typeStr == "Int32") {
+        builder.Primitive(EPrimitiveType::Int32);
+    } else if (typeStr == "Uint32") {
+        builder.Primitive(EPrimitiveType::Uint32);
+    } else if (typeStr == "Int64") {
+        builder.Primitive(EPrimitiveType::Int64);
+    } else if (typeStr == "Uint64") {
+        builder.Primitive(EPrimitiveType::Uint64);
+    } else if (typeStr == "Double") {
+        builder.Primitive(EPrimitiveType::Double);
+    } else if (typeStr == "Bool") {
+        builder.Primitive(EPrimitiveType::Bool);
+    } else if (typeStr.StartsWith("Decimal")) {
+        // Обработка типа Decimal
+        // Формат: Decimal(precision, scale)
+        // Например: Decimal(10,2)
+        TString params = typeStr.substr(7, typeStr.length() - 8); // Убираем "Decimal(" и ")"
+        size_t commaPos = params.find(',');
+        if (commaPos != TString::npos) {
+            ui32 precision = FromString<ui32>(params.substr(0, commaPos));
+            ui32 scale = FromString<ui32>(params.substr(commaPos + 1));
+            NYdb::TDecimalType decimalType(precision, scale);
+            builder.Decimal(decimalType);
+        }
+    } else if (typeStr.StartsWith("List<")) {
+        // Обработка списков
+        TString itemType = typeStr.substr(5, typeStr.length() - 6);
+        builder.BeginList();
+        ProcessType(itemType, builder);
+        builder.EndList();
+    } else if (typeStr.StartsWith("Struct<")) {
+        // Обработка структур
+        builder.BeginStruct();
+        TString fields = typeStr.substr(7, typeStr.length() - 8);
+        TVector<TString> fieldParts;
+        Split(fields, ",", fieldParts);
+        for (const auto& field : fieldParts) {
+            size_t colonPos = field.find(':');
+            if (colonPos != TString::npos) {
+                TString fieldName = field.substr(0, colonPos);
+                TString fieldType = field.substr(colonPos + 1);
+                builder.AddMember(fieldName);
+                ProcessType(fieldType, builder);
+            }
+        }
+        builder.EndStruct();
+    } else if (typeStr.StartsWith("Tuple<")) {
+        // Обработка кортежей
+        builder.BeginTuple();
+        TString elements = typeStr.substr(6, typeStr.length() - 7);
+        TVector<TString> elementTypes;
+        Split(elements, ",", elementTypes);
+        for (const auto& elementType : elementTypes) {
+            ProcessType(elementType, builder);
+        }
+        builder.EndTuple();
+    } else if (typeStr.StartsWith("Dict<")) {
+        // Обработка словарей
+        builder.BeginDict();
+        TString params = typeStr.substr(5, typeStr.length() - 6);
+        size_t commaPos = params.find(',');
+        if (commaPos != TString::npos) {
+            TString keyType = params.substr(0, commaPos);
+            TString valueType = params.substr(commaPos + 1);
+            
+            // Добавляем тип ключа
+            ProcessType(keyType, builder);
+            
+            // Добавляем тип значения
+            ProcessType(valueType, builder);
+        }
+        builder.EndDict();
     }
 }
 

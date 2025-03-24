@@ -390,9 +390,9 @@ private:
                 }
                 return ERetryErrorClass::NoRetry;
             },
-            TDuration::MilliSeconds(10),
+            TDuration::MilliSeconds(5),
             TDuration::MilliSeconds(200),
-            TDuration::Seconds(1)
+            TDuration::MilliSeconds(500)
         );
 
         if (!body.empty()) {

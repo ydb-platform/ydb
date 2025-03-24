@@ -247,13 +247,6 @@ public:
                 }
             }
 
-
-            if (from < TInstant::Now() - TDuration::Days(7)) {
-                downsamplingDisabled = false;
-                downsamplingAggregation = "AVG";
-                downsamplingGridSec = 5 * 60; // 5 minutes
-            }
-
             return Build<TDqSourceWrap>(ctx, read->Pos())
                 .Input<TSoSourceSettings>()
                     .World(soReadObject.World())

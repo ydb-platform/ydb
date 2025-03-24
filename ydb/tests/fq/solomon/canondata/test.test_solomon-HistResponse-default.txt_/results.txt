@@ -41,14 +41,6 @@ rows {
     }
     pairs {
       key {
-        bytes_value: "downsampling.disabled"
-      }
-      payload {
-        bytes_value: "bool False"
-      }
-    }
-    pairs {
-      key {
         bytes_value: "downsampling.fill"
       }
       payload {
@@ -65,6 +57,22 @@ rows {
     }
     pairs {
       key {
+        bytes_value: "from"
+      }
+      payload {
+        bytes_value: "seconds: 1702046439\n"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "downsampling.disabled"
+      }
+      payload {
+        bytes_value: "bool False"
+      }
+    }
+    pairs {
+      key {
         bytes_value: "program"
       }
       payload {
@@ -77,6 +85,14 @@ rows {
       }
       payload {
         bytes_value: "hist"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "to"
+      }
+      payload {
+        bytes_value: "seconds: 1702046739\n"
       }
     }
   }
@@ -102,14 +118,6 @@ rows {
     }
     pairs {
       key {
-        bytes_value: "downsampling.disabled"
-      }
-      payload {
-        bytes_value: "bool False"
-      }
-    }
-    pairs {
-      key {
         bytes_value: "downsampling.fill"
       }
       payload {
@@ -126,6 +134,22 @@ rows {
     }
     pairs {
       key {
+        bytes_value: "from"
+      }
+      payload {
+        bytes_value: "seconds: 1702046439\n"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "downsampling.disabled"
+      }
+      payload {
+        bytes_value: "bool False"
+      }
+    }
+    pairs {
+      key {
         bytes_value: "program"
       }
       payload {
@@ -138,6 +162,14 @@ rows {
       }
       payload {
         bytes_value: "hist"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "to"
+      }
+      payload {
+        bytes_value: "seconds: 1702046739\n"
       }
     }
   }
@@ -163,14 +195,6 @@ rows {
     }
     pairs {
       key {
-        bytes_value: "downsampling.disabled"
-      }
-      payload {
-        bytes_value: "bool False"
-      }
-    }
-    pairs {
-      key {
         bytes_value: "downsampling.fill"
       }
       payload {
@@ -187,6 +211,22 @@ rows {
     }
     pairs {
       key {
+        bytes_value: "from"
+      }
+      payload {
+        bytes_value: "seconds: 1702046439\n"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "downsampling.disabled"
+      }
+      payload {
+        bytes_value: "bool False"
+      }
+    }
+    pairs {
+      key {
         bytes_value: "program"
       }
       payload {
@@ -199,6 +239,14 @@ rows {
       }
       payload {
         bytes_value: "hist"
+      }
+    }
+    pairs {
+      key {
+        bytes_value: "to"
+      }
+      payload {
+        bytes_value: "seconds: 1702046739\n"
       }
     }
   }

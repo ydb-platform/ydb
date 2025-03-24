@@ -5,6 +5,15 @@
 #include <ydb/public/lib/ydb_cli/common/interactive.h>
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/threading/future/async.h>
+#include <yql/essentials/parser/lexer_common/lexer.h>
+#include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
+#include <yql/essentials/sql/settings/translation_settings.h>
+#include <yql/essentials/sql/v1/lexer/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
+#include <yql/essentials/public/issue/yql_issue.h>
+
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -333,18 +342,142 @@ void TCommandWithParameters::SetParamsInputFromFile(TString& file) {
     SetParamsInput(InputFileHolder.Get());
 }
 
-void TCommandWithParameters::GetParamTypes(const TDriver& driver, const TString& queryText) {
-    NScripting::TScriptingClient client(driver);
+void TCommandWithParameters::GetParamTypes(const TDriver&, const TString& queryText) {
+    using NSQLTranslation::ILexer;
+    using NSQLTranslation::TParsedToken;
+    using NSQLTranslation::Tokenize;
+    using NSQLTranslation::SQL_MAX_PARSER_ERRORS;
+    using NSQLTranslationV1::MakeLexer;
+    using NYql::TIssues;
+    using NYdb::TTypeBuilder;
+    using NYdb::EPrimitiveType;
 
-    NScripting::TExplainYqlRequestSettings explainSettings;
-    explainSettings.Mode(NScripting::ExplainYqlRequestMode::Validate);
+    // Создаем лексер
+    NSQLTranslationV1::TLexers lexers;
+    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
 
-    auto result = client.ExplainYqlScript(
-        queryText,
-        explainSettings
-    ).GetValueSync();
-    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
-    ParamTypes = result.GetParameterTypes();
+    auto lexer = MakeLexer(lexers, /* ansi = */ false, /* antlr4 = */ true);
+
+    // Токенизируем запрос
+    TVector<TParsedToken> tokens;
+    TIssues issues;
+    Tokenize(*lexer, queryText, "Query", tokens, issues, SQL_MAX_PARSER_ERRORS);
+
+    // Анализируем токены для поиска параметров
+    for (size_t i = 0; i < tokens.size(); ++i) {
+        const auto& token = tokens[i];
+        
+        // Ищем объявление параметра (DECLARE $name AS type)
+        if (token.Name == "DECLARE" && i + 4 < tokens.size()) {
+            const auto& paramToken = tokens[i + 1];
+            const auto& asToken = tokens[i + 2];
+            const auto& typeToken = tokens[i + 3];
+            const auto& semicolonToken = tokens[i + 4];
+            
+            if (paramToken.Name == "DOLLAR" && 
+                asToken.Name == "AS" && 
+                semicolonToken.Name == "SEMICOLON") {
+                
+                // Получаем имя параметра
+                TString paramName = "$" + paramToken.Content;
+                
+                // Получаем тип данных
+                TString typeStr = typeToken.Content;
+                
+                // Создаем тип на основе строкового представления
+                TTypeBuilder builder;
+                
+                // Определяем тип данных
+                if (typeStr == "String") {
+                    builder.Primitive(EPrimitiveType::String);
+                } else if (typeStr == "Utf8") {
+                    builder.Primitive(EPrimitiveType::Utf8);
+                } else if (typeStr == "Int32") {
+                    builder.Primitive(EPrimitiveType::Int32);
+                } else if (typeStr == "Uint32") {
+                    builder.Primitive(EPrimitiveType::Uint32);
+                } else if (typeStr == "Int64") {
+                    builder.Primitive(EPrimitiveType::Int64);
+                } else if (typeStr == "Uint64") {
+                    builder.Primitive(EPrimitiveType::Uint64);
+                } else if (typeStr == "Double") {
+                    builder.Primitive(EPrimitiveType::Double);
+                } else if (typeStr == "Bool") {
+                    builder.Primitive(EPrimitiveType::Bool);
+                } else if (typeStr == "Date") {
+                    builder.Primitive(EPrimitiveType::Date);
+                } else if (typeStr == "Datetime") {
+                    builder.Primitive(EPrimitiveType::Datetime);
+                } else if (typeStr == "Timestamp") {
+                    builder.Primitive(EPrimitiveType::Timestamp);
+                } else if (typeStr == "Interval") {
+                    builder.Primitive(EPrimitiveType::Interval);
+                } else if (typeStr.StartsWith("Decimal")) {
+                    // Обработка типа Decimal
+                    // Формат: Decimal(precision, scale)
+                    // Например: Decimal(10,2)
+                    TString params = typeStr.substr(7, typeStr.length() - 8); // Убираем "Decimal(" и ")"
+                    size_t commaPos = params.find(',');
+                    if (commaPos != TString::npos) {
+                        ui32 precision = FromString<ui32>(params.substr(0, commaPos));
+                        ui32 scale = FromString<ui32>(params.substr(commaPos + 1));
+                        NYdb::TDecimalType decimalType(precision, scale);
+                        builder.Decimal(decimalType);
+                    }
+                } else if (typeStr == "Json") {
+                    builder.Primitive(EPrimitiveType::Json);
+                } else if (typeStr == "Yson") {
+                    builder.Primitive(EPrimitiveType::Yson);
+                } else if (typeStr == "Uuid") {
+                    builder.Primitive(EPrimitiveType::Uuid);
+                } else if (typeStr.StartsWith("List<")) {
+                    // Обработка списков
+                    TString itemType = typeStr.substr(5, typeStr.length() - 6);
+                    builder.BeginList();
+                    if (itemType == "String") {
+                        builder.Primitive(EPrimitiveType::String);
+                    } else if (itemType == "Utf8") {
+                        builder.Primitive(EPrimitiveType::Utf8);
+                    } else if (itemType == "Int32") {
+                        builder.Primitive(EPrimitiveType::Int32);
+                    } else if (itemType == "Uint32") {
+                        builder.Primitive(EPrimitiveType::Uint32);
+                    } else if (itemType == "Int64") {
+                        builder.Primitive(EPrimitiveType::Int64);
+                    } else if (itemType == "Uint64") {
+                        builder.Primitive(EPrimitiveType::Uint64);
+                    } else if (itemType == "Double") {
+                        builder.Primitive(EPrimitiveType::Double);
+                    } else if (itemType == "Bool") {
+                        builder.Primitive(EPrimitiveType::Bool);
+                    }
+                    builder.EndList();
+                } else if (typeStr.StartsWith("Struct<")) {
+                    // Обработка структур
+                    builder.BeginStruct();
+                    // TODO: Добавить обработку полей структуры
+                    builder.EndStruct();
+                } else if (typeStr.StartsWith("Tuple<")) {
+                    // Обработка кортежей
+                    builder.BeginTuple();
+                    // TODO: Добавить обработку элементов кортежа
+                    builder.EndTuple();
+                } else if (typeStr.StartsWith("Dict<")) {
+                    // Обработка словарей
+                    builder.BeginDict();
+                    // TODO: Добавить обработку ключей и значений словаря
+                    builder.EndDict();
+                }
+                
+                // Сохраняем тип параметра
+                ParamTypes.emplace(paramName, builder.Build());
+                
+                // Пропускаем обработанные токены
+                i += 4;
+            }
+        }
+    }
 }
 
 bool TCommandWithParameters::GetNextParams(const TDriver& driver, const TString& queryText,

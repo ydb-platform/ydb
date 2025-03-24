@@ -29,6 +29,7 @@ namespace NActors {
     struct TPoolShortInfo {
         i16 PoolId = 0;
         i16 SharedThreadCount = 0;
+        i16 ForeignSlots = 0;
         bool InPriorityOrder = false;
         TString PoolName;
     };
@@ -39,11 +40,11 @@ namespace NActors {
     };
 
     struct TPoolManager {
-        TStackVec<TPoolShortInfo, 8> PoolInfos;
+        std::vector<TPoolShortInfo> PoolInfos;
         TStackVec<TPoolThreadRange, 8> PoolThreadRanges;
         TStackVec<i16, 8> PriorityOrder;
     
-        TPoolManager(const TVector<TPoolShortInfo> &poolInfos);
+        TPoolManager(const std::vector<TPoolShortInfo> &poolInfos);
     };
 
     class ISharedPool {
@@ -115,10 +116,10 @@ namespace NActors {
         static constexpr TDuration DEFAULT_TIME_PER_MAILBOX = TBasicExecutorPoolConfig::DEFAULT_TIME_PER_MAILBOX;
         static constexpr ui32 DEFAULT_EVENTS_PER_MAILBOX = TBasicExecutorPoolConfig::DEFAULT_EVENTS_PER_MAILBOX;
 
-        explicit TSharedExecutorPool(const TSharedExecutorPoolConfig& cfg, const TVector<TPoolShortInfo> &poolInfos);
+        explicit TSharedExecutorPool(const TSharedExecutorPoolConfig& cfg, const std::vector<TPoolShortInfo> &poolInfos);
         ~TSharedExecutorPool();
 
-        i16 SumThreads(const TVector<TPoolShortInfo> &poolInfos);
+        i16 SumThreads(const std::vector<TPoolShortInfo> &poolInfos);
         void Initialize() override;
         i16 FindPoolForWorker(TSharedExecutorThreadCtx& thread, ui64 revolvingReadCounter);
         TMailbox* GetReadyActivation(ui64 revolvingReadCounter) override;
@@ -148,6 +149,8 @@ namespace NActors {
 
         ui32 GetThreads() const override;
         float GetThreadCount() const override;
+        i16 GetMaxFullThreadCount() const override;
+        i16 GetMinFullThreadCount() const override;
         float GetDefaultThreadCount() const override;
         float GetMinThreadCount() const override;
         float GetMaxThreadCount() const override;
@@ -179,6 +182,10 @@ namespace NActors {
         // generic
         TAffinity* Affinity() const override {
             return nullptr;
+        }
+
+        const TPoolManager& GetPoolManager() const {
+            return PoolManager;
         }
     };
 }

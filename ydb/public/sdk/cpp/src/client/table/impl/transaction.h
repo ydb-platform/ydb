@@ -30,10 +30,10 @@ public:
 
     void AddPrecommitCallback(TPrecommitTransactionCallback cb);
 
-private:
     TSession Session_;
     std::string TxId_;
 
+private:
     bool ChangesAreAccepted = true; // haven't called Commit or Rollback yet
     mutable std::vector<TPrecommitTransactionCallback> PrecommitCallbacks;
 };

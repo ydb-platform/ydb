@@ -203,7 +203,7 @@ struct TReadSessionGetEventSettings : public TCommonClientSettingsBase<TReadSess
     FLUENT_SETTING_DEFAULT(bool, Block, false);
     FLUENT_SETTING_OPTIONAL(size_t, MaxEventsCount);
     FLUENT_SETTING_DEFAULT(size_t, MaxByteSize, std::numeric_limits<size_t>::max());
-    FLUENT_SETTING_OPTIONAL(std::reference_wrapper<ITransactionBase>, Tx);
+    FLUENT_SETTING_OPTIONAL(std::reference_wrapper<TTransactionBase>, Tx);
 };
 
 class IReadSession {

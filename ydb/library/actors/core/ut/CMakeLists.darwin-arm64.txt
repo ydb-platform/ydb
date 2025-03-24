@@ -54,6 +54,8 @@ target_sources(ydb-library-actors-core-ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/ut/event_pb_payload_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/ut/event_pb_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/ut/executor_pool_basic_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/ut/executor_pool_semaphore_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/ut/executor_pools_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/ut/log_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/ut/mon_ut.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/ut/scheduler_actor_ut.cpp

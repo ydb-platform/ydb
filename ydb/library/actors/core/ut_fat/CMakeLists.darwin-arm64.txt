@@ -15,6 +15,10 @@
 add_executable(ydb-library-actors-core-ut_fat)
 
 
+target_include_directories(ydb-library-actors-core-ut_fat PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core
+)
+
 target_link_libraries(ydb-library-actors-core-ut_fat PUBLIC
   contrib-libs-cxxsupp
   yutil
@@ -36,6 +40,7 @@ target_link_options(ydb-library-actors-core-ut_fat PRIVATE
 
 target_sources(ydb-library-actors-core-ut_fat PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/ut_fat/actor_benchmark.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/actors/core/ut_fat/waiting_benchs.cpp
 )
 
 

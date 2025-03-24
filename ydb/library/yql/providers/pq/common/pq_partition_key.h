@@ -6,9 +6,7 @@ namespace NPq {
     struct TPartitionKey {
         TString Cluster;
         ui64 PartitionId;
-        bool operator==(const TPartitionKey& other) const {
-            return PartitionId == other.PartitionId && Cluster == other.Cluster;
-        }
+        bool operator==(const TPartitionKey& other) const = default;
     };
     struct TPartitionKeyHash {
         ui64 operator()(const TPartitionKey &x) const {

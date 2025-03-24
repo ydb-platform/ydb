@@ -118,9 +118,8 @@ NPq::NConfigurationManager::TAsyncDescribePathResult TPqSession::DescribePath(co
             }
             auto allFutureDescribes = NThreading::WaitAll(results);
             return allFutureDescribes.Apply([results = std::move(results), paths = std::move(paths), allClustersInfo = std::move(allClustersInfo), cluster, database, path](const auto& ) mutable {
-                ui32 partitions = 0;
+                uint32_t partitions = 0;
                 yexception ex;
-                TMutex mutex;
                 for (size_t i = 0; i != results.size(); ++i) {
                     auto& futureDescribe = results[i];
                     auto describeTopicResult = futureDescribe.ExtractValue();

@@ -113,8 +113,6 @@ class TMockPqGateway : public IMockPqGateway {
     };
 
     struct TMockFederatedTopicClient : public IFederatedTopicClient {
-        TMockFederatedTopicClient() {}
-
         NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> GetAllTopicClusters() override {
             std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo> dbInfo;
             dbInfo.emplace_back(
@@ -122,8 +120,6 @@ class TMockPqGateway : public IMockPqGateway {
                     NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo::EStatus::AVAILABLE);
             return NThreading::MakeFuture(std::move(dbInfo));
         }
-
-        ~TMockFederatedTopicClient() override {}
     };
 
 public:

@@ -120,7 +120,7 @@ struct TEvPrivate {
             std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>&& federatedClusters,
             std::vector<ui64>&& partitionsCount)
             : FederatedClusters(std::move(federatedClusters))
-            , PartitionsCount(partitionsCount)
+            , PartitionsCount(std::move(partitionsCount))
         {}
         std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo> FederatedClusters;
         std::vector<ui64> PartitionsCount;
@@ -622,7 +622,7 @@ TDuration TDqPqRdReadActor::GetCpuTime() {
 
 std::vector<ui64> TDqPqRdReadActor::GetPartitionsToRead() const {
     std::vector<ui64> res;
-    ui64 partitionsCount = PartitionsCount.size() ? *std::max_element(PartitionsCount.cbegin(), PartitionsCount.cend()) : ReadParams.GetPartitioningParams().GetTopicPartitionsCount();
+    ui64 partitionsCount = PartitionsCount.empty() ? ReadParams.GetPartitioningParams().GetTopicPartitionsCount() : *std::max_element(PartitionsCount.cbegin(), PartitionsCount.cend());
     ui64 currentPartition = ReadParams.GetPartitioningParams().GetEachTopicPartitionGroupId();
     do {
         res.emplace_back(currentPartition); // 0-based in topic API
@@ -1078,9 +1078,7 @@ void TDqPqRdReadActor::UpdateSessions() {
             std::forward_as_tuple(TxId, SelfId(), rowDispatcherActorId, queueId, ++NextGeneration));
         auto& session = Sessions.at(rowDispatcherActorId);
         SRC_LOG_I("Create session to " << rowDispatcherActorId << ", generation " << session.Generation);
-        for (auto partitionId : partitions) {
-            session.Partitions.insert(partitionId);
-        }
+        session.Partitions.insert(partitions.begin(), partitions.end());
         ReadActorByEventQueueId[queueId] = rowDispatcherActorId;
     }
     LastUsedPartitionDistribution = LastReceivedPartitionDistribution;
@@ -1131,8 +1129,8 @@ void TDqPqRdReadActor::StartClusterDiscovery() {
         // FIXME don't WaitAll, receive all info desynced
         NThreading::WaitAll(*describeTopicFutures).Subscribe([
             actorSystem, selfId,
-            federatedClusters = std::move(federatedClusters),
-            LogPrefix = std::move(LogPrefix)](const auto& describeTopicFutures) mutable {
+            federatedClusters = std::move(federatedClusters)]
+            (const auto& describeTopicFutures) mutable {
                 std::vector<ui64> partitionsCount;
                 partitionsCount.reserve(federatedClusters.size());
                 for (auto& describeTopicFuture : *describeTopicFutures) {

@@ -160,18 +160,22 @@ IFederatedTopicClient::TPtr TPqNativeGateway::GetFederatedTopicClient(const NYdb
 
 NYdb::NFederatedTopic::TFederatedTopicClientSettings TPqNativeGateway::GetFederatedTopicClientSettings() const {
     NYdb::NFederatedTopic::TFederatedTopicClientSettings settings;
-    if (CommonTopicClientSettings) {
-        settings.DefaultCompressionExecutor(CommonTopicClientSettings->DefaultCompressionExecutor_);
-        settings.DefaultHandlersExecutor(CommonTopicClientSettings->DefaultHandlersExecutor_);
-#define COPY_OPTIONAL_SETTINGS(NAME) \
-        if (CommonTopicClientSettings->NAME##_) { \
-            settings.NAME(*CommonTopicClientSettings->NAME##_); \
-        }
-        COPY_OPTIONAL_SETTINGS(CredentialsProviderFactory);
-        COPY_OPTIONAL_SETTINGS(SslCredentials);
-        COPY_OPTIONAL_SETTINGS(DiscoveryMode);
-#undef COPY_OPTIONAL_SETTINGS
+
+    if (!CommonTopicClientSettings) {
+        return settings;
     }
+
+    settings.DefaultCompressionExecutor(CommonTopicClientSettings->DefaultCompressionExecutor_);
+    settings.DefaultHandlersExecutor(CommonTopicClientSettings->DefaultHandlersExecutor_);
+#define COPY_OPTIONAL_SETTINGS(NAME) \
+    if (CommonTopicClientSettings->NAME##_) { \
+        settings.NAME(*CommonTopicClientSettings->NAME##_); \
+    }
+    COPY_OPTIONAL_SETTINGS(CredentialsProviderFactory);
+    COPY_OPTIONAL_SETTINGS(SslCredentials);
+    COPY_OPTIONAL_SETTINGS(DiscoveryMode);
+#undef COPY_OPTIONAL_SETTINGS
+
     return settings;
 }
 

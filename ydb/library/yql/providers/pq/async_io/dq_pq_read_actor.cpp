@@ -360,7 +360,7 @@ private:
                     actorSystem = NActors::TActivationContext::ActorSystem(),
                     selfId = SelfId()](const auto& future)
             {
-                auto federatedClusters = future.GetValue(); 
+                auto federatedClusters = future.GetValue();
                 actorSystem->Send(selfId, new TEvPrivate::TEvReceivedClusters(std::move(federatedClusters)));
             });
     }
@@ -390,7 +390,7 @@ private:
                         }
                         auto partitionCount = describeTopic.GetTopicDescription().GetTotalPartitionsCount();
                         actorSystem->Send(selfId, new TEvPrivate::TEvDescribeTopicResult(index, partitionCount));
-                    } catch(std::exception& ex) {
+                    } catch (std::exception& ex) {
                         actorSystem->Send(selfId, new TEvPrivate::TEvDescribeTopicResult(index,
                                     NYdb::TStatus(NYdb::EStatus::INTERNAL_ERROR,
                                         NYdb::NIssue::TIssues({NYdb::NIssue::TIssue(ex.what())}))));
@@ -404,7 +404,7 @@ private:
     void Handle(TEvPrivate::TEvDescribeTopicResult::TPtr& ev) {
         auto clusterIndex = ev->Get()->ClusterIndex;
         auto partitionCount = ev->Get()->PartitionCount;
-        if(auto status = ev->Get()->Status) {
+        if (auto status = ev->Get()->Status) {
             TStringBuilder message;
             message << "Failed to describe topic \"" << SourceParams.GetTopicPath() << "\"";
             if (!Clusters[clusterIndex].Info.Name.empty()) {

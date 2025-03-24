@@ -15,12 +15,12 @@ struct TDummyFederatedTopicClient : public IFederatedTopicClient {
     NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> GetAllTopicClusters() override {
         std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo> dbInfo;
         dbInfo.emplace_back(
-                "", "dummy", "/Root",
+                "",
+                FederatedClientSettings_.DiscoveryEndpoint_ ? *FederatedClientSettings_.DiscoveryEndpoint_ : "",
+                FederatedClientSettings_.Database_ ? *FederatedClientSettings_.Database_ : "",
                 NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo::EStatus::AVAILABLE);
         return NThreading::MakeFuture(std::move(dbInfo));
     }
-
-    ~TDummyFederatedTopicClient() {}
 private:
     NYdb::NFederatedTopic::TFederatedTopicClientSettings FederatedClientSettings_;
 };

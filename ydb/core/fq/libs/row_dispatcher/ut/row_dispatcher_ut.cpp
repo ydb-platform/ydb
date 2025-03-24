@@ -140,6 +140,7 @@ public:
     }
 
     void MockAddSession(const NYql::NPq::NProto::TDqPqTopicSource& source, const THashSet<ui32>& partitionIds, TActorId readActorId, ui64 generation = 1) {
+        Y_ENSURE(!partitionIds.empty());
         auto event = new NFq::TEvRowDispatcher::TEvStartSession(
             source,
             partitionIds,

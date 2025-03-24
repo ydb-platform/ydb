@@ -385,6 +385,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
         rowVersion = GetMvccTxVersion(EMvccTxMode::ReadOnly);
     }
 
+    LOG_N("Starting TReshuffleKMeansScan " << record.ShortDebugString()
+        << " row version " << rowVersion);
+
     // Note: it's very unlikely that we have volatile txs before this snapshot
     if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
         VolatileTxManager.AttachWaitingSnapshotEvent(rowVersion, std::unique_ptr<IEventHandle>(ev.Release()));

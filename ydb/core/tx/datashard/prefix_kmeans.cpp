@@ -680,6 +680,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
     auto& record = ev->Get()->Record;
     TRowVersion rowVersion = GetMvccTxVersion(EMvccTxMode::ReadOnly);
 
+    LOG_N("Starting TPrefixKMeansScan " << record.ShortDebugString()
+        << " row version " << rowVersion);
+
     // Note: it's very unlikely that we have volatile txs before this snapshot
     if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
         VolatileTxManager.AttachWaitingSnapshotEvent(rowVersion, std::unique_ptr<IEventHandle>(ev.Release()));

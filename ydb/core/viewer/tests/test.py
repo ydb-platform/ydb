@@ -402,6 +402,15 @@ def normalize_result_healthcheck(result):
     return result
 
 
+def normalize_result_replication(result):
+    result = replace_values_by_key(result, ['connection_string',
+                                            'endpoint',
+                                            'plan_step',
+                                            'tx_id'])
+    delete_keys_recursively(result, ['issue_log'])
+    return result
+
+
 def normalize_result(result):
     delete_keys_recursively(result, ['Version',
                                      'MemoryUsed',
@@ -421,6 +430,7 @@ def normalize_result(result):
     result = normalize_result_pdisks(result)
     result = normalize_result_vdisks(result)
     result = normalize_result_cluster(result)
+    result = normalize_result_replication(result)
     return result
 
 
@@ -678,13 +688,10 @@ def test_transfer_describe():
     })
 
     result = get_viewer_normalized("/viewer/describe_replication", {
-            'database': dedicated_db,
-            'path': '{}/TestTransfer'.format(dedicated_db),
-            'include_stats': 'true',
-            'enums': 'true'
-            })
+        'database': dedicated_db,
+        'path': '{}/TestTransfer'.format(dedicated_db),
+        'include_stats': 'true',
+        'enums': 'true'
+    })
 
-    result['connection_params'] = {}
-    result['self'] = {}
-
-    return result;
+    return result

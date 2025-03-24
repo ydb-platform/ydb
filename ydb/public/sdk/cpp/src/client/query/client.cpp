@@ -730,17 +730,129 @@ TAsyncBeginTransactionResult TSession::BeginTransaction(const TTxSettings& txSet
         Client_->Settings_.SessionPoolSettings_.CloseIdleThreshold_);
 }
 
+class TTransaction::TImpl {
+public:
+    TImpl(const TSession& session, const std::string& txId)
+        : Session_(session)
+        , TxId_(txId)
+    {}
+
+    const std::string& GetId() const {
+        return TxId_;
+    }
+
+    const std::string& GetSessionId() const {
+        return Session_.GetId();
+    }
+
+    bool IsActive() const {
+        return !TxId_.empty();
+    }
+
+    TAsyncStatus Precommit() const {
+        auto result = NThreading::MakeFuture(TStatus(EStatus::SUCCESS, {}));
+
+        for (auto& callback : PrecommitCallbacks) {
+            if (!callback) {
+                continue;
+            }
+
+            // If you send multiple requests in parallel, the `KQP` service can respond with `SESSION_BUSY`.
+            // Therefore, precommit operations are performed sequentially. Here we capture the closure to
+            // trigger it later.
+            auto action = [callback = std::move(callback)](const TAsyncStatus& prev) {
+                if (const TStatus& status = prev.GetValue(); !status.IsSuccess()) {
+                    return prev;
+                }
+    
+                return callback();
+            };
+
+            result = result.Apply(action);
+        }
+
+        return result;
+    }
+
+    TAsyncCommitTransactionResult Commit(const TCommitTxSettings& settings = TCommitTxSettings()) {
+        ChangesAreAccepted = false;
+
+        auto result = Precommit();
+
+        auto precommitsCompleted = [this, settings](const TAsyncStatus& result) mutable {
+            if (const TStatus& status = result.GetValue(); !status.IsSuccess()) {
+                return NThreading::MakeFuture(TCommitTransactionResult(TStatus(status)));
+            }
+
+            PrecommitCallbacks.clear();
+
+            return Session_.Client_->CommitTransaction(TxId_,
+                                                       settings,
+                                                       Session_);
+        };
+
+        return result.Apply(precommitsCompleted);
+    }
+
+    TAsyncStatus Rollback(const TRollbackTxSettings& settings = TRollbackTxSettings()) {
+        ChangesAreAccepted = false;
+        return Session_.Client_->RollbackTransaction(TxId_, settings, Session_);
+    }
+
+    TSession GetSession() const {
+        return Session_;
+    }
+
+    void AddPrecommitCallback(TPrecommitTransactionCallback cb) {
+        if (!ChangesAreAccepted) {
+            ythrow TContractViolation("Changes are no longer accepted");
+        }
+    
+        PrecommitCallbacks.push_back(std::move(cb));
+    }
+
+private:
+    TSession Session_;
+    std::string TxId_;
+
+    bool ChangesAreAccepted = true; // haven't called Commit or Rollback yet
+    std::vector<TPrecommitTransactionCallback> PrecommitCallbacks;
+};
+
 TTransaction::TTransaction(const TSession& session, const std::string& txId)
-    : Session_(session)
-    , TxId_(txId)
+    : TransactionImpl_(std::make_shared<TTransaction::TImpl>(session, txId))
 {}
 
-TAsyncCommitTransactionResult TTransaction::Commit(const NYdb::NQuery::TCommitTxSettings& settings) {
-    return Session_.Client_->CommitTransaction(TxId_, settings, Session_);
+const std::string& TTransaction::GetId() const {
+    return TransactionImpl_->GetId();
+}
+
+const std::string& TTransaction::GetSessionId() const {
+    return TransactionImpl_->GetSessionId();
+}
+
+bool TTransaction::IsActive() const {
+    return TransactionImpl_->IsActive();
+}
+
+TAsyncStatus TTransaction::Precommit() const {
+    return TransactionImpl_->Precommit();
+}
+
+TAsyncCommitTransactionResult TTransaction::Commit(const TCommitTxSettings& settings) {
+    return TransactionImpl_->Commit(settings);
 }
 
 TAsyncStatus TTransaction::Rollback(const TRollbackTxSettings& settings) {
-    return Session_.Client_->RollbackTransaction(TxId_, settings, Session_);
+    return TransactionImpl_->Rollback(settings);
+}
+
+TSession TTransaction::GetSession() const {
+    return TransactionImpl_->GetSession();
+}
+
+void TTransaction::AddPrecommitCallback(TPrecommitTransactionCallback cb) {
+    TransactionImpl_->AddPrecommitCallback(std::move(cb));
 }
 
 TBeginTransactionResult::TBeginTransactionResult(TStatus&& status, TTransaction transaction)

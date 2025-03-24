@@ -36,7 +36,8 @@ class TestRestartNodes(object):
         node = cls.cluster.nodes[1]
         cls.ydb_client = YdbClient(endpoint=f"grpc://{node.host}:{node.port}", database=f"/{configurator.domain_name}")
         cls.ydb_client.wait_connection()
-        time.sleep(120)
+        time.sleep(10)
+        # TODO: increase sleep value
         
 
     @classmethod
@@ -75,30 +76,32 @@ class TestRestartNodes(object):
             self.ydb_client.query(f"""
                 --!syntax_v1
                 CREATE TABLE `{tableName}` (
-                    `Key` Uint64 NOT NULL,
-                    `Value1` String,
-                    PRIMARY KEY (`Key`)
-                )
-                TABLESTORE `TableStore`;
+                    Key Uint64 NOT NULL,
+                    Value String,
+                    PRIMARY KEY (Key)
+                ) WITH (
+                    STORE = COLUMN,
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 5
+                );
             """)
             self.ydb_client.query(f"""
                 ALTER TABLE `{tableName}`
-                ADD COLUMN `Value2` String;
-            """)
+                    ADD COLUMN `Value2` String;
+                """)
 
     def test(self):
-        self.ydb_client.query("""
-            --!syntax_v1
-            CREATE TABLESTORE `TableStore` (
-                Key Uint64 NOT NULL,
-                Value1 String,
-                PRIMARY KEY (Key)
-            )
-            WITH (
-                STORE = COLUMN,
-                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
-            );
-        """)
+        # self.ydb_client.query("""
+        #     --!syntax_v1
+        #     CREATE TABLESTORE `TableStore` (
+        #         Key Uint64 NOT NULL,
+        #         Value1 String,
+        #         PRIMARY KEY (Key)
+        #     )
+        #     WITH (
+        #         STORE = COLUMN,
+        #         AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+        #     );
+        # """)
 
         threads: list[TestThread] = []
         # threads.append(TestThread(target=ydb_workload.bulk_upsert, args=[wait_time, 10, 1000, True]))
@@ -122,5 +125,3 @@ class TestRestartNodes(object):
 
         for thread in threads:
             thread.join()
-
-        

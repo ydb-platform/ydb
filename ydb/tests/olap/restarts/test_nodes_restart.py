@@ -27,7 +27,10 @@ class TestRestartNodes(object):
                                              nodes=nodes_count,
                                              use_in_memory_pdisks=False,
                                              additional_log_configs={'CMS': LogLevels.DEBUG},
-                                             )
+                                             extra_feature_flags=[
+                                                'enable_column_store'
+                                             ]
+                                            )
         cls.cluster = KiKiMR(configurator=configurator)
         cls.cluster.start()
         node = cls.cluster.nodes[1]
@@ -65,16 +68,18 @@ class TestRestartNodes(object):
         assert current_count != prev_count
 
     def create_table(self, thread_id: int):
-        deadline: datetime = datetime.datetime.now() + datetime.timedelta(minutes=3)
+        deadline: datetime = datetime.datetime.now() + datetime.timedelta(seconds=10)
+        # deadline: datetime = datetime.datetime.now() + datetime.timedelta(minutes=3)
         while datetime.datetime.now() < deadline:
-            tableName = f"table_{thread_id}_{datetime.timestamp()}"
+            tableName = f"table_{thread_id}_{datetime.datetime.now().timestamp()}"
             self.ydb_client.query(f"""
+                --!syntax_v1
                 CREATE TABLE `{tableName}` (
                     `Key` Uint64 NOT NULL,
                     `Value1` String,
                     PRIMARY KEY (`Key`)
                 )
-                TABLESTORE `tableStoreName`;
+                TABLESTORE `TableStore`;
             """)
             self.ydb_client.query(f"""
                 ALTER TABLE `{tableName}`
@@ -90,7 +95,8 @@ class TestRestartNodes(object):
                 PRIMARY KEY (Key)
             )
             WITH (
-                STORE = COLUMN
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
             );
         """)
 
@@ -104,13 +110,15 @@ class TestRestartNodes(object):
 
         time.sleep(10)
 
-        for node in self.cluster.nodes:
-            node.stop()
-            # киляются с killom.
-            # тут уточнить, как это делать.
 
-        for node in self.cluster.nodes:
-            node.start()
+        self.cluster.restart_nodes()
+        # for node in self.cluster.nodes.values():
+        #     node.stop()
+        #     # киляются с killom.
+        #     # тут уточнить, как это делать.
+
+        # for node in self.cluster.nodes.values():
+        #     node.start()
 
         for thread in threads:
             thread.join()

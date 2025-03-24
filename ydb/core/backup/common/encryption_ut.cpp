@@ -280,6 +280,13 @@ Y_UNIT_TEST_SUITE(EncryptedFileSerializerTest) {
         UNIT_ASSERT(!restored.GetNextBlock());
         UNIT_ASSERT_EXCEPTION_CONTAINS(restored.AddData(TBuffer("data", 4), true), yexception, "Stream finished");
     }
+
+    Y_UNIT_TEST(IVSerialization) {
+        TEncryptionIV iv = TEncryptionIV::Generate();
+        UNIT_ASSERT_STRINGS_EQUAL(TEncryptionIV::FromHexString(iv.GetHexString()).GetHexString(), iv.GetHexString());
+        UNIT_ASSERT_EQUAL(TEncryptionIV::FromHexString(iv.GetHexString()), iv);
+        UNIT_ASSERT_EQUAL(TEncryptionIV::FromBinaryString(iv.GetBinaryString()), iv);
+    }
 }
 
 } // namespace NKikimr::NBackup

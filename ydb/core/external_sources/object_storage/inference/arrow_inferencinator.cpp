@@ -172,6 +172,9 @@ std::variant<ArrowFields, TString> InferCsvTypes(std::shared_ptr<arrow::io::Rand
     if (auto sizeStatus = file->GetSize().Value(&fileSize); !sizeStatus.ok()) {
         return TStringBuilder{} << "coudn't get file size: " << sizeStatus.ToString();
     }
+    if (fileSize <= 0 || fileSize > INT32_MAX) {
+        return TStringBuilder{} << "empty file";
+    }
 
     std::shared_ptr<arrow::csv::TableReader> reader;
     auto readerStatus = arrow::csv::TableReader::Make(
@@ -224,6 +227,9 @@ std::variant<ArrowFields, TString> InferJsonTypes(std::shared_ptr<arrow::io::Ran
     int64_t fileSize;
     if (auto sizeStatus = file->GetSize().Value(&fileSize); !sizeStatus.ok()) {
         return TStringBuilder{} << "coudn't get file size: " << sizeStatus.ToString();
+    }
+    if (fileSize <= 0 || fileSize > INT32_MAX) {
+        return TStringBuilder{} << "empty file";
     }
 
     std::shared_ptr<arrow::json::TableReader> reader;

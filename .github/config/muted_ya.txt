@@ -1,14 +1,33 @@
 ydb/apps/ydb/ut YdbWorkloadTransferTopicToTable.Default_Run
 ydb/core/blobstorage/dsproxy/ut_fat TBlobStorageProxyTest.TestBatchedPutRequestDoesNotContainAHugeBlob
 ydb/core/blobstorage/ut_blobstorage/ut_huge HugeBlobOnlineSizeChange.Compaction
-ydb/core/blobstorage/ut_blobstorage/ut_huge [*/*] chunk chunk
+ydb/core/blobstorage/ut_blobstorage/ut_huge [0/10] chunk chunk
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.block42
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3dc
 ydb/core/blobstorage/ut_blobstorage/ut_scrub BlobScrubbing.mirror3of4
 ydb/core/blobstorage/ut_vdisk TBsLocalRecovery.WriteRestartReadHugeDecreased
 ydb/core/blobstorage/ut_vdisk TBsVDiskGC.GCPutKeepBarrierSync
 ydb/core/blobstorage/ut_vdisk TBsVDiskManyPutGet.ManyPutRangeGetCompactionIndexOnly
-ydb/core/blobstorage/ut_vdisk [*/*] chunk chunk
+ydb/core/blobstorage/ut_vdisk [0/20] chunk chunk
+ydb/core/blobstorage/ut_vdisk [1/20] chunk chunk
+ydb/core/blobstorage/ut_vdisk [10/20] chunk chunk
+ydb/core/blobstorage/ut_vdisk [11/20] chunk chunk
+ydb/core/blobstorage/ut_vdisk [12/20] chunk chunk
+ydb/core/blobstorage/ut_vdisk [13/20] chunk chunk
+ydb/core/blobstorage/ut_vdisk [14/20] chunk chunk
+ydb/core/blobstorage/ut_vdisk [15/20] chunk chunk
+ydb/core/blobstorage/ut_vdisk [16/20] chunk chunk
+ydb/core/blobstorage/ut_vdisk [17/20] chunk chunk
+ydb/core/blobstorage/ut_vdisk [18/20] chunk chunk
+ydb/core/blobstorage/ut_vdisk [19/20] chunk chunk
+ydb/core/blobstorage/ut_vdisk [2/20] chunk chunk
+ydb/core/blobstorage/ut_vdisk [3/20] chunk chunk
+ydb/core/blobstorage/ut_vdisk [4/20] chunk chunk
+ydb/core/blobstorage/ut_vdisk [5/20] chunk chunk
+ydb/core/blobstorage/ut_vdisk [6/20] chunk chunk
+ydb/core/blobstorage/ut_vdisk [7/20] chunk chunk
+ydb/core/blobstorage/ut_vdisk [8/20] chunk chunk
+ydb/core/blobstorage/ut_vdisk [9/20] chunk chunk
 ydb/core/cms/ut_sentinel_unstable TSentinelUnstableTests.BSControllerCantChangeStatus
 ydb/core/fq/libs/row_dispatcher/ut sole chunk chunk
 ydb/core/health_check/ut THealthCheckTest.LayoutIncorrect
@@ -22,7 +41,7 @@ ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterCompare
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictActualization
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictStatActualization
 ydb/core/kqp/ut/olap KqpOlapWrite.TierDraftsGCWithRestart
-ydb/core/kqp/ut/olap [*/*] chunk chunk
+ydb/core/kqp/ut/olap [197/200] chunk chunk
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceYQLUpsertFail+useSink
@@ -32,8 +51,8 @@ ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/scheme KqpScheme.AlterAsyncReplication
 ydb/core/kqp/ut/scheme KqpScheme.AlterTransfer
 ydb/core/kqp/ut/scheme KqpScheme.AlterTransfer_QueryService
-ydb/core/kqp/ut/scheme [*/*] chunk chunk
-ydb/core/kqp/ut/service [*/*] chunk chunk
+ydb/core/kqp/ut/service [3/50] chunk chunk
+ydb/core/kqp/ut/service [46/50] chunk chunk
 ydb/core/kqp/ut/tx KqpSinkTx.OlapInvalidateOnError
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOlap
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TConflictReadWriteOltp
@@ -175,10 +194,23 @@ ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync1
 ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync10
 ydb/services/ydb/sdk_sessions_ut YdbSdkSessions.TestSdkFreeSessionAfterBadSessionQueryService
 ydb/services/ydb/sdk_sessions_ut YdbSdkSessions.TestSdkFreeSessionAfterBadSessionQueryServiceStreamCall
-ydb/services/ydb/sdk_sessions_ut [*/*] chunk chunk
-ydb/services/ydb/table_split_ut [*/*] chunk chunk
+ydb/services/ydb/sdk_sessions_ut [0/60] chunk chunk
+ydb/services/ydb/sdk_sessions_ut [1/60] chunk chunk
+ydb/services/ydb/sdk_sessions_ut [10/60] chunk chunk
+ydb/services/ydb/sdk_sessions_ut [11/60] chunk chunk
+ydb/services/ydb/sdk_sessions_ut [12/60] chunk chunk
+ydb/services/ydb/sdk_sessions_ut [13/60] chunk chunk
+ydb/services/ydb/sdk_sessions_ut [14/60] chunk chunk
+ydb/services/ydb/sdk_sessions_ut [15/60] chunk chunk
+ydb/services/ydb/sdk_sessions_ut [2/60] chunk chunk
+ydb/services/ydb/sdk_sessions_ut [3/60] chunk chunk
+ydb/services/ydb/sdk_sessions_ut [4/60] chunk chunk
+ydb/services/ydb/sdk_sessions_ut [5/60] chunk chunk
+ydb/services/ydb/sdk_sessions_ut [6/60] chunk chunk
+ydb/services/ydb/sdk_sessions_ut [7/60] chunk chunk
+ydb/services/ydb/sdk_sessions_ut [8/60] chunk chunk
+ydb/services/ydb/sdk_sessions_ut [9/60] chunk chunk
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
-ydb/tests/fq/control_plane_storage [*/*] chunk chunk
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-0-True-3-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-1-True-3-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[v1-2-True-3-fq_client0-mvp_external_ydb_endpoint0]
@@ -192,7 +224,6 @@ ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup[
 ydb/tests/fq/mem_alloc test_scheduling.py.TestSchedule.test_skip_busy[kikimr0]
 ydb/tests/fq/multi_plane [test_retry.py] chunk chunk
 ydb/tests/fq/multi_plane [test_retry_high_rate.py] chunk chunk
-ydb/tests/fq/yds [*/*] chunk chunk
 ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_same[v1]
 ydb/tests/fq/yds test_2_selects_limit.py.TestSelectLimit.test_select_sequence[v1]
 ydb/tests/fq/yds test_mem_alloc.py.TestMemAlloc.test_hop_alloc[v1]
@@ -202,12 +233,17 @@ ydb/tests/fq/yds test_select_limit_db_id.py.TestSelectLimitWithDbId.test_select_
 ydb/tests/fq/yds test_yds_bindings.py.TestBindings.test_yds_insert[v1]
 ydb/tests/functional/compatibility test_followers.py.TestFollowersCompatibility.test_followers_compatability
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
-ydb/tests/functional/rename [test_rename.py */*] chunk chunk
+ydb/tests/functional/rename [test_rename.py 0/10] chunk chunk
+ydb/tests/functional/rename [test_rename.py 1/10] chunk chunk
+ydb/tests/functional/rename [test_rename.py 2/10] chunk chunk
+ydb/tests/functional/rename [test_rename.py 3/10] chunk chunk
+ydb/tests/functional/rename [test_rename.py 4/10] chunk chunk
+ydb/tests/functional/rename [test_rename.py 5/10] chunk chunk
 ydb/tests/functional/serializable sole chunk chunk
 ydb/tests/functional/serializable test.py.test_local
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--true]
-ydb/tests/functional/suite_tests [test_sql_logic.py */*] chunk chunk
+ydb/tests/functional/suite_tests [test_sql_logic.py 7/10] chunk chunk
 ydb/tests/functional/suite_tests test_postgres.py.TestPGSQL.test_sql_suite[plan-jointest/join2.test]
 ydb/tests/functional/suite_tests test_sql_logic.py.TestSQLLogic.test_sql_suite[results-select3-13.test]
 ydb/tests/functional/tenants test_dynamic_tenants.py.test_create_and_drop_the_same_tenant2[enable_alter_database_create_hive_first--false]
@@ -219,7 +255,6 @@ ydb/tests/functional/tenants test_tenants.py.TestTenants.test_list_database_abov
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_stop_start[enable_alter_database_create_hive_first--false]
 ydb/tests/functional/tenants test_tenants.py.TestTenants.test_stop_start[enable_alter_database_create_hive_first--true]
 ydb/tests/functional/tpc/large [test_tpcds.py] chunk chunk
-ydb/tests/functional/tpc/large sole chunk chunk
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[10]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[11]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[12]
@@ -231,7 +266,6 @@ ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tp
 ydb/tests/olap sole chunk chunk
 ydb/tests/olap test_quota_exhaustion.py.TestYdbWorkload.test_delete
 ydb/tests/olap/column_family/compression alter_compression.py.TestAlterCompression.test_all_supported_compression
-ydb/tests/olap/column_family/compression sole chunk chunk
 ydb/tests/olap/scenario sole chunk chunk
 ydb/tests/olap/scenario test_alter_compression.py.TestAlterCompression.test[alter_compression]
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]

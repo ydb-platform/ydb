@@ -110,3 +110,4 @@ class CreateTables():
             count += 1
         sql_ttl += f""" ON {ttl} {f"AS {time}" if time != "" else ""} ); """
         return sql_ttl
+    

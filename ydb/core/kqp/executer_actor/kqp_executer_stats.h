@@ -23,10 +23,39 @@ struct TTimeSeriesStats {
     std::vector<std::pair<ui64, ui64>> History;
 
     void ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqStatsAggr& stats);
+    void ExportAggStats(NYql::NDqProto::TDqStatsAggr& stats);
     void ExportAggStats(ui64 baseTimeMs, NYql::NDqProto::TDqStatsAggr& stats);
-    void Resize(ui32 taskCount);
-    void SetNonZero(ui32 taskIndex, ui64 value);
+    void Resize(ui32 count);
+    void SetNonZero(ui32 index, ui64 value);
     void Pack();
+    void AppendHistory();
+};
+
+struct TPartitionedStats : public TTimeSeriesStats {
+    std::vector<std::vector<ui64>> Parts;
+
+    void ResizeByTasks(ui32 taskCount);
+    void ResizeByParts(ui32 partCount, ui32 taskCount);
+    void SetNonZero(ui32 taskIndex, ui32 partIndex, ui64 value, bool recordTimeSeries);
+};
+
+struct TTimeMultiSeriesStats {
+    std::unordered_map<TString, ui32> Indices;
+    ui32 TaskCount = 0;
+    ui32 PartCount = 0;
+
+    void SetNonZero(TPartitionedStats& stats, ui32 taskIndex, const TString& key, ui64 value, bool recordTimeSeries);
+};
+
+struct TExternalStats : public TTimeMultiSeriesStats {
+    TPartitionedStats ExternalRows;
+    TPartitionedStats ExternalBytes;
+    TPartitionedStats FirstMessageMs;
+    TPartitionedStats LastMessageMs;
+
+    void Resize(ui32 taskCount);
+    void SetHistorySampleCount(ui32 historySampleCount);
+    void ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqExternalAggrStats& stats);
 };
 
 struct TMetricInfo {
@@ -80,6 +109,7 @@ struct TAsyncBufferStats {
         Resize(taskCount);
     }
 
+    TExternalStats External;
     TAsyncStats Ingress;
     TAsyncStats Push;
     TAsyncStats Pop;
@@ -179,8 +209,8 @@ struct TStageExecutionStats {
     std::map<TString, TTableStats> Tables;
     std::map<TString, TAsyncBufferStats> Ingress;
     std::map<TString, TAsyncBufferStats> Egress;
-    std::map<ui32, TAsyncBufferStats> Input;
-    std::map<ui32, TAsyncBufferStats> Output;
+    std::unordered_map<ui32, TAsyncBufferStats> Input;
+    std::unordered_map<ui32, TAsyncBufferStats> Output;
 
     std::map<TString, TOperatorStats> Joins;
     std::map<TString, TOperatorStats> Filters;

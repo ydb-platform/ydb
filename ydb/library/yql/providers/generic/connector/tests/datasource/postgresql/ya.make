@@ -78,7 +78,6 @@ PEERDIR(
 )
 
 DEPENDS(
-    ydb/library/yql/tools/dqrun
     yql/essentials/udfs/common/json2
     ydb/tests/tools/kqprun
     library/recipes/docker_compose/bin

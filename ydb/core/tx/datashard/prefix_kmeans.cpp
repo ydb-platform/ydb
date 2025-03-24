@@ -333,8 +333,8 @@ protected:
 
     void UploadImpl()
     {
-        Y_ABORT_IF(UploadBuf.IsEmpty());
-        Y_ABORT_IF(Uploader);
+        Y_ASSERT(!UploadBuf.IsEmpty());
+        Y_ASSERT(!Uploader);
         auto actor = NTxProxy::CreateUploadRowsInternal(
             this->SelfId(), UploadTable, UploadTypes, UploadBuf.GetRowsData(),
             NTxProxy::EUploadRowsMode::WriteToTableShadow, true /*writeToPrivateTable*/);

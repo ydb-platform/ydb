@@ -86,8 +86,7 @@ namespace NKikimr {
                 DirectWriteActor = TComponentTracingLevels::TQueryProcessor::Basic,
                 BufferWriteActor = TComponentTracingLevels::TQueryProcessor::Basic,
                     BufferWriteActorState = TComponentTracingLevels::TQueryProcessor::Detailed,
-                    TableWriteActorShardsResolve = TComponentTracingLevels::TQueryProcessor::Detailed,
-                    TableWriteBatch = TComponentTracingLevels::TQueryProcessor::Detailed,
+                    TableWriteActor = TComponentTracingLevels::TQueryProcessor::Detailed,
 
             BulkUpsertActor = TComponentTracingLevels::TQueryProcessor::TopLevel,
         };

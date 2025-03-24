@@ -30,7 +30,6 @@ struct TEvFlush : public TEventLocal<TEvFlush, TKqpBufferWriterEvents::EvFlush> 
 };
 
 struct TEvTerminate : public TEventLocal<TEvTerminate, TKqpBufferWriterEvents::EvTerminate> {
-    NWilson::TTraceId TraceId;
 };
 
 // From BufferActor

@@ -275,6 +275,7 @@ public:
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvCommit>();
             event->ExecuterActorId = SelfId();
             event->TxId = TxId;
+            event->TraceId = NWilson::TTraceId(ExecuterSpan.GetTraceId());
             Send<ESendingType::Tail>(BufferActorId, event.release(), IEventHandle::FlagTrackDelivery);
             return;
         } else if (Request.LocksOp == ELocksOp::Rollback) {
@@ -283,6 +284,7 @@ public:
 
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvRollback>();
             event->ExecuterActorId = SelfId();
+            event->TraceId = NWilson::TTraceId(ExecuterSpan.GetTraceId());
             Send<ESendingType::Tail>(BufferActorId, event.release(), IEventHandle::FlagTrackDelivery);
             MakeResponseAndPassAway();
             return;
@@ -292,6 +294,7 @@ public:
 
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvFlush>();
             event->ExecuterActorId = SelfId();
+            event->TraceId = NWilson::TTraceId(ExecuterSpan.GetTraceId());
             Send<ESendingType::Tail>(BufferActorId, event.release(), IEventHandle::FlagTrackDelivery);
             return;
         } else {

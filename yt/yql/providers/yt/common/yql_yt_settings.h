@@ -220,6 +220,7 @@ struct TYtSettings {
     NCommon::TConfSetting<TSet<NUdf::EDataSlot>, true> BlockReaderSupportedDataTypes;
     NCommon::TConfSetting<TString, true> _BinaryCacheFolder;
     NCommon::TConfSetting<TString, true> RuntimeCluster;
+    NCommon::TConfSetting<bool, true> _AllowRemoteClusterInput;
 
     // Optimizers
     NCommon::TConfSetting<bool, true> _EnableDq;

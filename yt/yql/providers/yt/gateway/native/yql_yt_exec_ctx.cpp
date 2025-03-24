@@ -92,9 +92,13 @@ void TExecContextBase::SetInput(TExprBase input, bool forcePathColumns, const TH
         extraSysColumnsNode.Add(sys);
     }
 
+    const bool allowRemoteClusters = settings->_AllowRemoteClusterInput.Get(Cluster_).GetOrElse(DEFAULT_ALLOW_REMOTE_CLUSTER_INPUT);
     if (auto out = input.Maybe<TYtOutput>()) { // Pull case
         auto tableInfo = TYtTableBaseInfo::Parse(out.Cast());
         YQL_CLOG(INFO, ProviderYt) << "Runtime cluster: " << Cluster_ << ", Input: " << tableInfo->Cluster << '.' << tableInfo->Name;
+        if (tableInfo->Cluster != Cluster_ && !allowRemoteClusters) {
+            throw yexception() << "Operation input from remote cluster " << tableInfo->Cluster << " is not allowed on cluster " << Cluster_;
+        }
         NYT::TRichYPath richYPath(NYql::TransformPath(tmpFolder, tableInfo->Name, true, Session_->UserName_));
         if (tableInfo->Cluster != Cluster_) {
             richYPath.Cluster(Clusters_->GetYtName(tableInfo->Cluster));
@@ -145,6 +149,9 @@ void TExecContextBase::SetInput(TExprBase input, bool forcePathColumns, const TH
                 const TString pathCluster = pathInfo.Table->Cluster;
                 if (loggedTable++ < 10) {
                     YQL_CLOG(INFO, ProviderYt) << "Runtime cluster: " << Cluster_ << ", Input: " << pathCluster << '.' << pathInfo.Table->Name << '[' << group << ']';
+                }
+                if (pathCluster != Cluster_ && !allowRemoteClusters) {
+                    throw yexception() << "Operation input from remote cluster " << pathCluster << " is not allowed on cluster " << Cluster_;
                 }
                 // Table may have aux columns. Exclude them by specifying explicit columns from the type
                 if (forcePathColumns && pathInfo.Table->RowSpec && !pathInfo.HasColumns()) {

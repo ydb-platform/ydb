@@ -541,6 +541,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
             }
         });
     REGISTER_SETTING(*this, RuntimeClusterSelection).Parser([](const TString& v) { return FromString<ERuntimeClusterSelectionMode>(v); });
+    REGISTER_SETTING(*this, _AllowRemoteClusterInput);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

@@ -643,12 +643,7 @@
         }
     },
     "test.test_transfer_describe": {
-        "connection_params": {
-            "connection_string": "grpc://localhost:3184/?database=/Root/dedicated_db",
-            "database": "/Root/dedicated_db",
-            "endpoint": "localhost:3184",
-            "oauth": {}
-        },
+        "connection_params": {},
         "error": {
             "issues": [
                 {

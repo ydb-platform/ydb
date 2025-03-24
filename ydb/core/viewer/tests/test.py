@@ -684,6 +684,7 @@ def test_transfer_describe():
             'enums': 'true'
             })
 
+    result['connection_params'] = {}
     result['self'] = {}
 
     return result;

@@ -76,6 +76,7 @@ protected:
     const TString PrefixTable;
     TString UploadTable;
 
+    TBufferData LevelBuf;
     TBufferData PostingBuf;
     TBufferData PrefixBuf;
     TBufferData UploadBuf;
@@ -225,16 +226,12 @@ public:
     {
         LOG_T("PageFault " << Debug());
 
-        if (!UploadBuf.IsEmpty()) {
+        if (UploadInProgress()
+            || TryUpload(LevelBuf, LevelTable, LevelTypes, false)
+            || TryUpload(PostingBuf, PostingTable, PostingTypes, false)
+            || TryUpload(PrefixBuf, PrefixTable, PrefixTypes, false))
+        {
             return EScan::Feed;
-        }
-
-        if (!PostingBuf.IsEmpty()) {
-            PostingBuf.FlushTo(UploadBuf);
-            InitUpload(PostingTable, PostingTypes);
-        } else if (!PrefixBuf.IsEmpty()) {
-            PrefixBuf.FlushTo(UploadBuf);
-            InitUpload(PrefixTable, PrefixTypes);
         }
 
         return EScan::Feed;
@@ -256,7 +253,7 @@ protected:
     {
         LOG_T("Retry upload " << Debug());
 
-        if (!UploadBuf.IsEmpty()) {
+        if (UploadInProgress()) {
             RetryUpload();
         }
     }
@@ -283,12 +280,12 @@ protected:
             UploadRows += UploadBuf.GetRows();
             UploadBytes += UploadBuf.GetBytes();
             UploadBuf.Clear();
-            if (PostingBuf.IsReachLimits(Limits)) {
-                PostingBuf.FlushTo(UploadBuf);
-                InitUpload(PostingTable, PostingTypes);
-            } else if (PrefixBuf.IsReachLimits(Limits)) {
-                PrefixBuf.FlushTo(UploadBuf);
-                InitUpload(PrefixTable, PrefixTypes);
+
+            if (TryUpload(LevelBuf, LevelTable, LevelTypes, true)
+                || TryUpload(PostingBuf, PostingTable, PostingTypes, true)
+                || TryUpload(PrefixBuf, PrefixTable, PrefixTypes, true))
+            {
+                // new upload started
             }
 
             Driver->Touch(EScan::Feed);
@@ -309,20 +306,21 @@ protected:
 
     EScan FeedUpload()
     {
-        if (!PostingBuf.IsReachLimits(Limits) && !PrefixBuf.IsReachLimits(Limits)) {
+        if (!LevelBuf.IsReachLimits(Limits) && !PostingBuf.IsReachLimits(Limits) && !PrefixBuf.IsReachLimits(Limits)) {
             return EScan::Feed;
         }
-        if (!UploadBuf.IsEmpty()) {
+
+        if (UploadInProgress()) {
             return EScan::Sleep;
         }
-        if (PostingBuf.IsReachLimits(Limits)) {
-            PostingBuf.FlushTo(UploadBuf);
-            InitUpload(PostingTable, PostingTypes);
-        } else {
-            Y_ASSERT(PrefixBuf.IsReachLimits(Limits));
-            PrefixBuf.FlushTo(UploadBuf);
-            InitUpload(PrefixTable, PrefixTypes);
+        
+        if (TryUpload(LevelBuf, LevelTable, LevelTypes, true)
+            || TryUpload(PostingBuf, PostingTable, PostingTypes, true)
+            || TryUpload(PrefixBuf, PrefixTable, PrefixTypes, true))
+        {
+            // new upload started
         }
+
         return EScan::Feed;
     }
 
@@ -356,20 +354,38 @@ protected:
         UploadImpl();
     }
 
-
-    void UploadSample()
+    bool UploadInProgress()
     {
-        Y_ASSERT(UploadBuf.IsEmpty());
+        return !UploadBuf.IsEmpty();
+    }
+
+    bool TryUpload(TBufferData& buffer, const TString& table, const std::shared_ptr<NTxProxy::TUploadTypes>& types, bool byLimit)
+    {
+        if (Y_UNLIKELY(UploadInProgress())) {
+            // already uploading something
+            return true;
+        }
+
+        if (!buffer.IsEmpty() && (!byLimit || buffer.IsReachLimits(Limits))) {
+            buffer.FlushTo(UploadBuf);
+            InitUpload(table, types);
+            return true;
+        }
+
+        return false;
+    }
+
+    void MakeLevelRows()
+    {
         std::array<TCell, 2> pk;
         std::array<TCell, 1> data;
         for (NTable::TPos pos = 0; const auto& row : Clusters) {
             pk[0] = TCell::Make(Parent);
             pk[1] = TCell::Make(Child + pos);
             data[0] = TCell{row};
-            UploadBuf.AddRow(TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
+            LevelBuf.AddRow(TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
             ++pos;
         }
-        InitUpload(LevelTable, LevelTypes);
     }
 };
 
@@ -426,25 +442,19 @@ public:
         ui64 zeroSeq = 0;
         while (true) {
             if (State == UploadState) {
-                // TODO: it's a little suboptimal to wait here
-                // better is wait after MoveToNextKey but before UploadSample
-                if (!UploadBuf.IsEmpty()) {
-                    return EScan::Sleep;
-                }
                 if (MoveToNextPrefix()) {
                     zeroSeq = seq;
                     continue;
                 }
-                if (!PostingBuf.IsEmpty()) {
-                    PostingBuf.FlushTo(UploadBuf);
-                    InitUpload(PostingTable, PostingTypes);
+                
+                if (UploadInProgress()
+                    || TryUpload(LevelBuf, LevelTable, LevelTypes, false)
+                    || TryUpload(PostingBuf, PostingTable, PostingTypes, false)
+                    || TryUpload(PrefixBuf, PrefixTable, PrefixTypes, false))
+                {
                     return EScan::Sleep;
                 }
-                if (!PrefixBuf.IsEmpty()) {
-                    PrefixBuf.FlushTo(UploadBuf);
-                    InitUpload(PrefixTable, PrefixTypes);
-                    return EScan::Sleep;
-                }
+
                 return EScan::Final;
             }
 
@@ -471,8 +481,7 @@ public:
             Y_ASSERT(State == EState::KMEANS);
             if (RecomputeClusters()) {
                 lead.SetTags(UploadScan);
-
-                UploadSample();
+                MakeLevelRows();
                 State = UploadState;
             } else {
                 lead.SetTags({&EmbeddingTag, 1});

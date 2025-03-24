@@ -560,24 +560,6 @@ void TTopicSession::CloseTopicSession() {
 }
 
 void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent& event) {
-    auto minTime = Self.GetMinStartingMessageTimestamp();
-    auto &messages = event.GetMessages();
-    auto oldsize = messages.size();
-
-    if (!messages.empty()) {
-        Self.LastMessageOffset = messages.back().GetOffset();
-    }
-    messages.erase(std::remove_if(messages.begin(), messages.end(),
-                [minTime](const auto &message) {
-                    return message.GetWriteTime() < minTime;
-                }), messages.end());
-    if (messages.size() < oldsize) {
-        LOG_ROW_DISPATCHER_TRACE("Skipped " << (oldsize - messages.size()) << "/" << oldsize << " received messages (before " << minTime << ")");
-    }
-    if (messages.empty()) {
-        return;
-    }
-
     ui64 dataSize = 0;
     auto& messages = event.GetMessages();
 

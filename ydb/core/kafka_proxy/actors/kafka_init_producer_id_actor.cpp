@@ -121,6 +121,7 @@ namespace NKafka {
 
     void TKafkaInitProducerIdActor::RequestFullRetry(const TActorContext& ctx) {
         CurrentTxAbortRetryNumber++;
+        Kqp->ResetTxId();
         StartTxProducerInitCycle(ctx);
     }
     
@@ -143,6 +144,8 @@ namespace NKafka {
         try {
             switch (LastSentToKqpRequest) {
                 case BEGIN_TRANSACTION:
+                    // save tx id for future requests
+                    Kqp->SetTxId(ev->Get()->Record.GetResponse().GetTxMeta().id());
                     SendSelectRequest(ctx);
                     break;
                 case SELECT:
@@ -175,7 +178,6 @@ namespace NKafka {
         // if epoch will overflow we need to delete-insert row in this transaction
         // so that new producer id (serial) is assigned to this transactional id
         else if (producerState->ProducerEpoch == std::numeric_limits<i16>::max() - 1) {
-            EpochOverflown = true;
             SendDeleteByTransactionalIdRequest(ctx);
         } 
         // else we increment epoch and persist in the database
@@ -290,36 +292,22 @@ namespace NKafka {
         // for this transactional id there is no rows
         if (parser.RowsCount() == 0) {
             return {};
+        } 
+        // there are multiple rows for this transactional id. This is unexpected and should not happen
+        else if (parser.RowsCount() > 1) {
+            throw yexception() << "Request returned more than one row: " << resp.GetYdbResults().size();
         } else {
             parser.TryNextRow();
 
-            TProducerState result = ExtractProducerState(parser);
-        
-            // when we use delete-insert in same transaction 
-            // we receive 2 rows for same transactional id for some reason
-            // last one is the most relevant and we need to extract it
-            bool hasNextRow = parser.TryNextRow();
-            if (hasNextRow && EpochOverflown) {
-                TProducerState result = ExtractProducerState(parser);
-                return result;
-            } else if (hasNextRow) {
-                // there are multiple rows for this transactional id. This is unexpected and should not happen
-                throw yexception() << "Request returned more than one row: " << resp.GetYdbResults().size();
-            }
+            TProducerState result; 
+
+            result.TransactionalId = parser.ColumnParser("transactional_id").GetUtf8();
+            result.ProducerId = parser.ColumnParser("producer_id").GetInt64();
+            result.ProducerEpoch = parser.ColumnParser("producer_epoch").GetInt16();
+            result.UpdatedAt = parser.ColumnParser("updated_at").GetDatetime();
 
             return result;
         }
-    }
-
-    TProducerState TKafkaInitProducerIdActor::ExtractProducerState(NYdb::TResultSetParser& parser) {
-        TProducerState result; 
-
-        result.TransactionalId = parser.ColumnParser("transactional_id").GetUtf8();
-        result.ProducerId = parser.ColumnParser("producer_id").GetInt64();
-        result.ProducerEpoch = parser.ColumnParser("producer_epoch").GetInt16();
-        result.UpdatedAt = parser.ColumnParser("updated_at").GetDatetime();
-
-        return result;
     }
 
     TString TKafkaInitProducerIdActor::GetYqlWithTableName(const TString& templateStr) {

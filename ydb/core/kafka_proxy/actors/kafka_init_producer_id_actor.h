@@ -37,9 +37,6 @@ namespace NKafka {
             // Kafka related fields
             const ui64 CorrelationId;
             const TString TransactionalId;
-            // means that in this request we encountered max value for int16 
-            // and we need to reissue producer id through delete-insert request
-            bool EpochOverflown = false;
             
             // kqp related staff
             std::unique_ptr<NKafka::TKqpTxHelper> Kqp;
@@ -92,7 +89,6 @@ namespace NKafka {
             bool IsTransactionalProducerInitialization();
             EKafkaErrors KqpStatusToKafkaError(Ydb::StatusIds::StatusCode status);
             std::optional<TProducerState> ParseProducerState(NKqp::TEvKqp::TEvQueryResponse::TPtr ev);
-            TProducerState ExtractProducerState(NYdb::TResultSetParser& parser);
             TString GetYqlWithTableName(const TString& templateStr);
             TString LogPrefix();
             TString GetAsStr(EInitProducerIdKqpRequests request);

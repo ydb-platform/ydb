@@ -412,7 +412,7 @@ public:
     void Resolve() {
         AFL_ENSURE(InconsistentTx || IsOlap);
         TableWriteActorSpan = NWilson::TSpan(TWilsonKqp::TableWriteActor, NWilson::TTraceId(ParentTraceId),
-            "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
+            "WaitForTableResolve", NWilson::EFlags::AUTO_END);
 
         if (IsOlap) {
             ResolveTable();
@@ -1637,7 +1637,7 @@ public:
         State = EState::WRITING;
         Alloc->Release();
         Counters->BufferActorsCount->Inc();
-        UpdateTracingState("BufferWriteActorState.Writing");
+        UpdateTracingState("Write", BufferWriteActorSpan.GetTraceId());
     }
 
     void Bootstrap() {
@@ -1715,7 +1715,7 @@ public:
                     TxManager,
                     SessionActorId,
                     Counters);
-                writeInfo.WriteTableActor->SetParentTraceId(BufferWriteActorSpan.GetTraceId());
+                writeInfo.WriteTableActor->SetParentTraceId(BufferWriteActorStateSpan.GetTraceId());
                 writeInfo.WriteTableActorId = RegisterWithSameMailbox(writeInfo.WriteTableActor);
                 CA_LOG_D("Create new TableWriteActor for table `" << settings.TablePath << "` (" << settings.TableId << "). lockId=" << LockTxId << " " << writeInfo.WriteTableActorId);
             }
@@ -1832,9 +1832,9 @@ public:
         }
     }
 
-    void Flush() {
+    void Flush(NWilson::TTraceId traceId) {
         Counters->BufferActorFlushes->Inc();
-        UpdateTracingState("BufferWriteActorState.Flushing");
+        UpdateTracingState("Flush", std::move(traceId));
         OperationStartTime = TInstant::Now();
 
         CA_LOG_D("Start flush");
@@ -1846,8 +1846,8 @@ public:
         Process();
     }
 
-    void Prepare(const ui64 txId) {
-        UpdateTracingState("BufferWriteActorState.Preparing");
+    void Prepare(const ui64 txId, NWilson::TTraceId traceId) {
+        UpdateTracingState("Commit", std::move(traceId));
         OperationStartTime = TInstant::Now();
 
         CA_LOG_D("Start prepare for distributed commit");
@@ -1866,9 +1866,9 @@ public:
         SendToTopics(false);
     }
 
-    void ImmediateCommit() {
+    void ImmediateCommit(NWilson::TTraceId traceId) {
         Counters->BufferActorImmediateCommits->Inc();
-        UpdateTracingState("BufferWriteActorState.Committing");
+        UpdateTracingState("Commit", std::move(traceId));
         OperationStartTime = TInstant::Now();
 
         CA_LOG_D("Start immediate commit");
@@ -1888,7 +1888,6 @@ public:
 
     void DistributedCommit() {
         Counters->BufferActorDistributedCommits->Inc();
-        UpdateTracingState("BufferWriteActorState.Committing");
         OperationStartTime = TInstant::Now();
 
         CA_LOG_D("Start distributed commit with TxId=" << *TxId);
@@ -1903,9 +1902,9 @@ public:
         SendCommitToCoordinator();
     }
 
-    void Rollback() {
+    void Rollback(NWilson::TTraceId traceId) {
         Counters->BufferActorRollbacks->Inc();
-        UpdateTracingState("BufferWriteActorState.RollingBack");
+        UpdateTracingState("RollBack", std::move(traceId));
 
         CA_LOG_D("Start rollback");
         State = EState::ROLLINGBACK;
@@ -2053,6 +2052,7 @@ public:
         Send(
             MakePipePerNodeCacheID(false),
             new TEvPipeCache::TEvForward(ev.Release(), *Coordinator, /* subscribe */ true),
+            0,
             0,
             BufferWriteActorStateSpan.GetTraceId());
     }
@@ -2270,7 +2270,7 @@ public:
     void Handle(TEvKqpBuffer::TEvTerminate::TPtr&) {
         if (State != EState::ROLLINGBACK && State != EState::FINISHED) {
             CancelProposal();
-            Rollback();
+            Rollback(BufferWriteActorSpan.GetTraceId());
         }
         PassAway();
     }
@@ -2280,7 +2280,7 @@ public:
         for (auto& [_, info] : WriteInfos) {
             info.WriteTableActor->FlushBuffers();
         }
-        Flush();
+        Flush(std::move(ev->Get()->TraceId));
     }
 
     void Handle(TEvKqpBuffer::TEvCommit::TPtr& ev) {
@@ -2290,23 +2290,23 @@ public:
         }
 
         if (!TxManager->NeedCommit()) {
-            RollbackAndDie();
+            RollbackAndDie(std::move(ev->Get()->TraceId));
         } else if (TxManager->IsSingleShard() && !TxManager->HasOlapTable() && (!WriteInfos.empty() || TxManager->HasTopics())) {
             TxManager->StartExecute();
-            ImmediateCommit();
+            ImmediateCommit(std::move(ev->Get()->TraceId));
         } else {
             TxManager->StartPrepare();
-            Prepare(ev->Get()->TxId);
+            Prepare(ev->Get()->TxId, std::move(ev->Get()->TraceId));
         }
     }
 
     void Handle(TEvKqpBuffer::TEvRollback::TPtr& ev) {
         ExecuterActorId = ev->Get()->ExecuterActorId;
-        RollbackAndDie();
+        RollbackAndDie(std::move(ev->Get()->TraceId));
     }
 
-    void RollbackAndDie() {
-        Rollback();
+    void RollbackAndDie(NWilson::TTraceId traceId) {
+        Rollback(std::move(traceId));
         Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
         PassAway();
     }
@@ -2671,7 +2671,7 @@ public:
 
     void OnFlushed() {
         YQL_ENSURE(State == EState::FLUSHING);
-        UpdateTracingState("BufferWriteActorState.Writing");
+        UpdateTracingState("Write", BufferWriteActorSpan.GetTraceId());
         OnOperationFinished(Counters->BufferActorFlushLatencyHistogram);
         State = EState::WRITING;
         Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{
@@ -2695,7 +2695,6 @@ public:
 
     void ReplyErrorAndDie(NYql::NDqProto::StatusIds::StatusCode statusCode, auto id, const TString& message, const NYql::TIssues& subIssues = {}) {
         BufferWriteActorStateSpan.EndError(message);
-        BufferWriteActorSpan.EndError(message);
 
         NYql::TIssue issue(message);
         SetIssueCode(id, issue);
@@ -2711,14 +2710,16 @@ public:
 
     void ReplyErrorAndDie(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::TIssues&& issues) {
         BufferWriteActorStateSpan.EndError(issues.ToOneLineString());
-        BufferWriteActorSpan.EndError(issues.ToOneLineString());
 
         ReplyErrorAndDieImpl(statusCode, std::move(issues));
     }
 
-    void UpdateTracingState(TStringBuf name) {
-        BufferWriteActorStateSpan = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, BufferWriteActorSpan.GetTraceId(),
+    void UpdateTracingState(const char* name, NWilson::TTraceId traceId) {
+        BufferWriteActorStateSpan = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, std::move(traceId),
             name, NWilson::EFlags::AUTO_END);
+        if (traceId != BufferWriteActorSpan.GetTraceId()) {
+            BufferWriteActorStateSpan.Link(BufferWriteActorSpan.GetTraceId());
+        }
         for (auto& [_, info] : WriteInfos) {
             info.WriteTableActor->SetParentTraceId(BufferWriteActorStateSpan.GetTraceId());
         }
@@ -2732,7 +2733,7 @@ public:
 
         CancelProposal();
         if (State != EState::ROLLINGBACK) {
-            Rollback();
+            Rollback(BufferWriteActorSpan.GetTraceId());
             // Rollback can't finish with error
             Send<ESendingType::Tail>(SessionActorId, new TEvKqpBuffer::TEvError{
                 statusCode,
@@ -2943,7 +2944,6 @@ private:
         }
 
         ev->SendTime = TInstant::Now();
-        ev->TraceId = ForwardWriteActorSpan.GetTraceId();
 
         CA_LOG_D("Send data=" << DataSize << ", closed=" << Closed << ", bufferActorId=" << BufferActorId);
         AFL_ENSURE(Send(BufferActorId, ev.release()));

@@ -662,7 +662,7 @@ def test_topic_data():
 
 def test_transfer_describe():
     grpc_port = cluster.nodes[1].grpc_port
-    endpoint = "grpc://localhost:{}".format(grpc_port)
+    endpoint = "grpc://localhost:{}/?database={}".format(grpc_port, dedicated_db)
     lambd = "($x) -> { RETURN <|Id:$x._offset|>; }"
 
     call_viewer("/viewer/query", {

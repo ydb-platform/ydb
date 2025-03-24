@@ -119,6 +119,10 @@ NPq::NConfigurationManager::TAsyncDescribePathResult TPqSession::DescribePath(co
                 clusterInfo.AdjustTopicClientSettings(topicSettings);
                 results.emplace_back(NYdb::NTopic::TTopicClient(ydbDriver, topicSettings).DescribeTopic(clusterTopicPath));
             }
+            // XXX This produces circular dependency until the future is fired
+            // results references allFutureDescribe
+            // lambda references results
+            // allFutureDescribe contains lambda
             auto allFutureDescribes = NThreading::WaitAll(results);
             return allFutureDescribes.Apply([results = std::move(results), paths = std::move(paths), allClustersInfo = std::move(allClustersInfo), cluster, database, path](const auto& ) mutable {
                 uint32_t partitions = 0;

@@ -187,9 +187,9 @@ public:
     FLUENT_SETTING(TMessageMeta, MessageMeta);
 
     //! Transaction id
-    FLUENT_SETTING_OPTIONAL(std::reference_wrapper<ITransactionBase>, Tx);
+    FLUENT_SETTING_OPTIONAL(std::reference_wrapper<TTransactionBase>, Tx);
 
-    ITransactionBase* GetTxPtr() const
+    TTransactionBase* GetTxPtr() const
     {
         return Tx_ ? &Tx_->get() : nullptr;
     }
@@ -202,7 +202,7 @@ public:
     //! return - true if write succeeded, false if message was not enqueued for write within blockTimeout.
     //! no Ack is provided.
     virtual bool Write(TWriteMessage&& message,
-                       ITransactionBase* tx = nullptr,
+                       TTransactionBase* tx = nullptr,
                        const TDuration& blockTimeout = TDuration::Max()) = 0;
 
 
@@ -249,7 +249,7 @@ public:
     //! Write single message.
     //! continuationToken - a token earlier provided to client with ReadyToAccept event.
     virtual void Write(TContinuationToken&& continuationToken, TWriteMessage&& message,
-                       ITransactionBase* tx = nullptr) = 0;
+                       TTransactionBase* tx = nullptr) = 0;
 
     //! Write single message. Old method with only basic message options.
     virtual void Write(TContinuationToken&& continuationToken, std::string_view data, std::optional<uint64_t> seqNo = std::nullopt,
@@ -258,7 +258,7 @@ public:
     //! Write single message that is already coded by codec.
     //! continuationToken - a token earlier provided to client with ReadyToAccept event.
     virtual void WriteEncoded(TContinuationToken&& continuationToken, TWriteMessage&& params,
-                              ITransactionBase* tx = nullptr) = 0;
+                              TTransactionBase* tx = nullptr) = 0;
 
     //! Write single message that is already compressed by codec. Old method with only basic message options.
     virtual void WriteEncoded(TContinuationToken&& continuationToken, std::string_view data, ECodec codec, uint32_t originalSize,

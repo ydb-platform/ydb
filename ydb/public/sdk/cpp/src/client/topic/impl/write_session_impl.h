@@ -425,7 +425,7 @@ private:
 
     bool TxIsChanged(const Ydb::Topic::StreamWriteMessage_WriteRequest* writeRequest) const;
 
-    void TrySubscribeOnTransactionCommit(ITransactionBase* tx);
+    void TrySubscribeOnTransactionCommit(TTransactionBase* tx);
     void CancelTransactions();
     TTransactionInfoPtr GetOrCreateTxInfo(const TTransactionId& txId);
     void TrySignalAllAcksReceived(ui64 seqNo);

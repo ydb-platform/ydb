@@ -1,9 +1,8 @@
 #include "transaction.h"
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 namespace NYdb::inline Dev::NTopic {
 
-TTransactionId MakeTransactionId(const ITransactionBase& tx)
+TTransactionId MakeTransactionId(const TTransactionBase& tx)
 {
     return {tx.GetSessionId(), tx.GetId()};
 }

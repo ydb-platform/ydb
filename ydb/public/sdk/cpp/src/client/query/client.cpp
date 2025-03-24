@@ -811,24 +811,19 @@ public:
         PrecommitCallbacks.push_back(std::move(cb));
     }
 
-private:
     TSession Session_;
     std::string TxId_;
 
+private:
     bool ChangesAreAccepted = true; // haven't called Commit or Rollback yet
     std::vector<TPrecommitTransactionCallback> PrecommitCallbacks;
 };
 
 TTransaction::TTransaction(const TSession& session, const std::string& txId)
     : TransactionImpl_(std::make_shared<TTransaction::TImpl>(session, txId))
-{}
-
-const std::string& TTransaction::GetId() const {
-    return TransactionImpl_->GetId();
-}
-
-const std::string& TTransaction::GetSessionId() const {
-    return TransactionImpl_->GetSessionId();
+{
+    SessionId_ = &TransactionImpl_->Session_.GetId();
+    TxId_ = &TransactionImpl_->TxId_;
 }
 
 bool TTransaction::IsActive() const {

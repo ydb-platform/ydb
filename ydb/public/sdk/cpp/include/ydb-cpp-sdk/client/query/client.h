@@ -169,16 +169,12 @@ private:
     TSession Session_;
 };
 
-class TTransaction : public ITransactionBase {
+class TTransaction : public TTransactionBase {
     friend class TQueryClient;
     friend class TExecuteQueryIterator::TReaderImpl;
     friend class TExecQueryImpl;
 
 public:
-    const std::string& GetId() const override;
-
-    const std::string& GetSessionId() const override;
-
     bool IsActive() const;
 
     TAsyncCommitTransactionResult Commit(const TCommitTxSettings& settings = TCommitTxSettings());

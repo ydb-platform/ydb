@@ -8,14 +8,25 @@ namespace NYdb::inline Dev {
 
 using TPrecommitTransactionCallback = std::function<TAsyncStatus ()>;
 
-class ITransactionBase {
+class TTransactionBase {
 public:
-    virtual const std::string& GetId() const = 0;
-    virtual const std::string& GetSessionId() const = 0;
+    const std::string& GetId() const {
+        return *TxId_;
+    }
+
+    const std::string& GetSessionId() const {
+        return *SessionId_;
+    }
 
     virtual void AddPrecommitCallback(TPrecommitTransactionCallback cb) = 0;
 
-    virtual ~ITransactionBase() = default;
+    virtual ~TTransactionBase() = default;
+
+protected:
+    TTransactionBase() = default;
+
+    const std::string* SessionId_;
+    const std::string* TxId_;
 };
 
 } // namespace NYdb

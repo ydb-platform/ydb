@@ -1896,12 +1896,10 @@ TAsyncStatus TTableClient::RetryOperation(
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Represents data transaction
-class TTransaction : public ITransactionBase {
+class TTransaction : public TTransactionBase {
     friend class TTableClient;
-public:
-    const std::string& GetId() const override;
-    const std::string& GetSessionId() const override;
 
+public:
     bool IsActive() const;
 
     TAsyncCommitTransactionResult Commit(const TCommitTxSettings& settings = TCommitTxSettings());

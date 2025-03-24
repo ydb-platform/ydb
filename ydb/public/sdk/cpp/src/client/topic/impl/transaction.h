@@ -21,7 +21,7 @@ bool operator!=(const TTransactionId& lhs, const TTransactionId& rhs)
     return !(lhs == rhs);
 }
 
-TTransactionId MakeTransactionId(const ITransactionBase& tx);
+TTransactionId MakeTransactionId(const TTransactionBase& tx);
 
 TStatus MakeSessionExpiredError();
 TStatus MakeCommitTransactionSuccess();

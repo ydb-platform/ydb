@@ -1,6 +1,5 @@
 RECURSE(
     async_replication
-    dml
     dump_restore
     copy_table
     lib
@@ -9,4 +8,5 @@ RECURSE(
     secondary_index
     s3
     vector_index
-)
+    ttl
+)      

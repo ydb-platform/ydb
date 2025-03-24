@@ -27,14 +27,6 @@ public:
         AllowedMethods = {HTTP_METHOD_GET};
     }
 
-    void Bootstrap() override {
-        const auto& params(Event->Get()->Request.GetParams());
-        if (params.Has("database_path")) {
-            Database = params.Get("database_path");
-        }
-        TBase::Bootstrap();
-    }
-
     static YAML::Node GetSwagger() {
         TSimpleYamlBuilder yaml({
             .Method = "get",

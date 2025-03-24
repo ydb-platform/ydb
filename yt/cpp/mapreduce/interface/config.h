@@ -89,6 +89,9 @@ struct TConfig
     TString LogPath;
     THashSet<TString> LogExcludeCategories = {"Bus", "Net", "Dns", "Concurrency"};
 
+    // NB: If the "Hosts" config option is set, it is assumed to take priority over the proxy role.
+    TString ProxyRole;
+
     ///
     /// For historical reasons mapreduce client uses its own logging system.
     ///

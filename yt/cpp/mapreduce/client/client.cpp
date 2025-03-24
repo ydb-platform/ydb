@@ -1568,8 +1568,9 @@ TClientContext CreateClientContext(
 
     SetupClusterContext(context, serverName);
 
-    if (options.ProxyRole_) {
-        context.Config->Hosts = "hosts?role=" + *options.ProxyRole_;
+    if (context.Config->ProxyRole && context.Config->Hosts == "hosts") {
+        context.ProxyRole = context.Config->ProxyRole;
+        context.Config->Hosts = "hosts?role=" + *context.ProxyRole;
     }
 
     if (context.UseTLS || options.UseCoreHttpClient_) {

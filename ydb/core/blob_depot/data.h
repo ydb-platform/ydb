@@ -451,6 +451,14 @@ namespace NKikimr::NBlobDepot {
         ui64 InFlightTrashSize = 0;
         ui64 TotalS3DataSize = 0;
 
+        ui64 LoadRestartTx = 0;
+        ui64 LoadRunSuccessorTx = 0;
+        ui64 LoadProcessingCycles = 0;
+        ui64 LoadFinishTxCycles = 0;
+        ui64 LoadRestartTxCycles = 0;
+        ui64 LoadRunSuccessorTxCycles = 0;
+        ui64 LoadTotalCycles = 0;
+
         friend class TGroupAssimilator;
 
         THashMultiMap<void*, TLogoBlobID> InFlightTrashBlobs; // being committed, but not yet confirmed

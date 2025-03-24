@@ -670,17 +670,17 @@ public:
                             const TForceShardSplitSettings& forceShardSplitSettings,
                             TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge,
                             THashSet<TTabletId>& partOwners, ui64& totalSize, float& totalLoad,
-                            const TTableInfo* mainTableForIndex) const;
+                            float cpuUsageThreshold, const TTableInfo* mainTableForIndex, TString& reason) const;
 
     bool CheckCanMergePartitions(const TSplitSettings& splitSettings,
                                  const TForceShardSplitSettings& forceShardSplitSettings,
-                                 TShardIdx shardIdx, TVector<TShardIdx>& shardsToMerge,
-                                 const TTableInfo* mainTableForIndex) const;
+                                 TShardIdx shardIdx, const TTabletId& tabletId, TVector<TShardIdx>& shardsToMerge,
+                                 const TTableInfo* mainTableForIndex, TString& reason) const;
 
     bool CheckSplitByLoad(
             const TSplitSettings& splitSettings, TShardIdx shardIdx,
             ui64 dataSize, ui64 rowCount,
-            const TTableInfo* mainTableForIndex) const;
+            const TTableInfo* mainTableForIndex, TString& reason) const;
 
     bool IsSplitBySizeEnabled(const TForceShardSplitSettings& params) const {
         // Respect unspecified SizeToSplit when force shard splits are disabled
@@ -803,16 +803,30 @@ public:
         return stats.DataSize >= params.ForceShardSplitDataSize;
     }
 
-    bool ShouldSplitBySize(ui64 dataSize, const TForceShardSplitSettings& params) const {
+    bool ShouldSplitBySize(ui64 dataSize, const TForceShardSplitSettings& params, TString& reason) const {
         if (!IsSplitBySizeEnabled(params)) {
             return false;
         }
         // When shard is over the maximum size we split even when over max partitions
         if (dataSize >= params.ForceShardSplitDataSize && !params.DisableForceShardSplit) {
+            reason = TStringBuilder() << "force split by size ("
+                << "shardSize: " << dataSize << ", "
+                << "maxShardSize: " << params.ForceShardSplitDataSize << ")";
+
             return true;
         }
         // Otherwise we split when we may add one more partition
-        return Partitions.size() < GetMaxPartitionsCount() && dataSize >= GetShardSizeToSplit(params);
+        if (Partitions.size() < GetMaxPartitionsCount() && dataSize >= GetShardSizeToSplit(params)) {
+            reason = TStringBuilder() << "split by size ("
+                << "shardCount: " << Partitions.size() << ", "
+                << "maxShardCount: " << GetMaxPartitionsCount() << ", "
+                << "shardSize: " << dataSize << ", "
+                << "maxShardSize: " << GetShardSizeToSplit(params) << ")";
+
+            return true;
+        }
+
+        return false;
     }
 
     bool NeedRecreateParts() const {

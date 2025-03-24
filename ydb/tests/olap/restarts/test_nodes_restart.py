@@ -7,6 +7,7 @@ import time
 from ydb.tests.library.common.types import Erasure
 import yatest.common
 
+from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
@@ -17,11 +18,12 @@ from enum import Enum
 
 logger = logging.getLogger(__name__)
 
-class RestartNodesTest(object):
+class TestRestartNodes(object):
     @classmethod
     def setup_class(cls):
-        nodes_count = 8 if cls.erasure == Erasure.BLOCK_4_2 else 9
-        configurator = KikimrConfigGenerator(cls.erasure,
+        # nodes_count = 8 if cls.erasure == Erasure.BLOCK_4_2 else 9
+        nodes_count = 8
+        configurator = KikimrConfigGenerator(None,
                                              nodes=nodes_count,
                                              use_in_memory_pdisks=False,
                                              additional_log_configs={'CMS': LogLevels.DEBUG},
@@ -95,7 +97,7 @@ class RestartNodesTest(object):
         threads: list[TestThread] = []
         # threads.append(TestThread(target=ydb_workload.bulk_upsert, args=[wait_time, 10, 1000, True]))
         for i in range(10):
-            thread.append(TestThread(target=self.create_table, args=[i]))
+            threads.append(TestThread(target=self.create_table, args=[i]))
 
         for thread in threads:
             thread.start()
@@ -104,6 +106,8 @@ class RestartNodesTest(object):
 
         for node in self.cluster.nodes:
             node.stop()
+            # киляются с killom.
+            # тут уточнить, как это делать.
 
         for node in self.cluster.nodes:
             node.start()

@@ -1,8 +1,8 @@
 LIBRARY()
 
 PEERDIR(
-    ydb/public/sdk/cpp/client/ydb_value
-    ydb/public/sdk/cpp/client/ydb_types
+    ydb/public/sdk/cpp/src/client/value
+    ydb/public/sdk/cpp/src/client/types
     yql/essentials/parser/lexer_common
     yql/essentials/parser/proto_ast
     yql/essentials/sql/settings
@@ -15,4 +15,8 @@ SRCS(
     yql_parser.cpp
 )
 
-END() 
+END()
+
+RECURSE_FOR_TESTS(
+    ut
+)

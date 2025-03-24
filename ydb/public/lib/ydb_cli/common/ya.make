@@ -65,6 +65,10 @@ GENERATE_ENUM_SERIALIZATION(parameters.h)
 
 END()
 
+RECURSE(
+    yql_parser
+)
+
 RECURSE_FOR_TESTS(
     ut
 )

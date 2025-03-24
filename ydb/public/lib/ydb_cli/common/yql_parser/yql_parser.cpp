@@ -34,32 +34,85 @@ std::map<std::string, TType> TYqlParser::GetParamTypes(const TString& queryText)
         const auto& token = tokens[i];
         
         // Ищем объявление параметра (DECLARE $name AS type)
-        if (token.Name == "DECLARE" && i + 4 < tokens.size()) {
-            const auto& paramToken = tokens[i + 1];
-            const auto& asToken = tokens[i + 2];
-            const auto& typeToken = tokens[i + 3];
-            const auto& semicolonToken = tokens[i + 4];
+        if (token.Content == "DECLARE") {
+            // Пропускаем пробелы
+            size_t j = i + 1;
+            while (j < tokens.size() && tokens[j].Name == "WS") {
+                j++;
+            }
             
-            if (paramToken.Name == "DOLLAR" && 
-                asToken.Name == "AS" && 
-                semicolonToken.Name == "SEMICOLON") {
+            // Проверяем, что следующий токен - $
+            if (j < tokens.size() && tokens[j].Content == "$") {
+                j++;
                 
                 // Получаем имя параметра
-                TString paramName = "$" + paramToken.Content;
-                
-                // Получаем тип данных
-                TString typeStr = StripString(typeToken.Content);
-                
-                // Создаем тип на основе строкового представления
-                TTypeBuilder builder;
-                ProcessType(typeStr, builder);
-                
-                // Сохраняем тип параметра
-                result.emplace(paramName, builder.Build());
-                
-                // Пропускаем обработанные токены
-                i += 4;
+                if (j < tokens.size()) {
+                    TString paramName = "$" + tokens[j].Content;
+                    j++;
+                    
+                    // Пропускаем пробелы
+                    while (j < tokens.size() && tokens[j].Name == "WS") {
+                        j++;
+                    }
+                    
+                    // Проверяем наличие AS
+                    if (j < tokens.size() && tokens[j].Content == "AS") {
+                        j++;
+                        
+                        // Пропускаем пробелы после AS
+                        while (j < tokens.size() && tokens[j].Name == "WS") {
+                            j++;
+                        }
+                        
+                        // Собираем тип до точки с запятой или конца запроса
+                        TString typeStr;
+                        int angleBrackets = 0;
+                        int parentheses = 0;
+                        
+                        while (j < tokens.size() && tokens[j].Content != ";") {
+                            if (tokens[j].Name != "WS") {
+                                if (tokens[j].Content == "<") {
+                                    angleBrackets++;
+                                } else if (tokens[j].Content == ">") {
+                                    angleBrackets--;
+                                } else if (tokens[j].Content == "(") {
+                                    parentheses++;
+                                } else if (tokens[j].Content == ")") {
+                                    parentheses--;
+                                }
+                                
+                                if (!typeStr.empty() && (tokens[j].Content == "," || tokens[j].Content == "<" || tokens[j].Content == ">" || tokens[j].Content == "(" || tokens[j].Content == ")")) {
+                                    typeStr += tokens[j].Content;
+                                } else if (!typeStr.empty() && tokens[j].Content != ",") {
+                                    typeStr += " " + tokens[j].Content;
+                                } else {
+                                    typeStr += tokens[j].Content;
+                                }
+                            }
+                            j++;
+                            
+                            if (angleBrackets == 0 && parentheses == 0 && j < tokens.size() && tokens[j].Content == ",") {
+                                break;
+                            }
+                        }
+                        
+                        if (!typeStr.empty()) {
+                            // Удаляем лишние пробелы
+                            typeStr = StripString(typeStr);
+                            
+                            // Создаем тип на основе строкового представления
+                            TTypeBuilder builder;
+                            ProcessType(typeStr, builder);
+                            
+                            // Сохраняем тип параметра
+                            result.emplace(paramName, builder.Build());
+                        }
+                    }
+                }
             }
+            
+            // Обновляем индекс
+            i = j;
         }
     }
     
@@ -67,106 +120,135 @@ std::map<std::string, TType> TYqlParser::GetParamTypes(const TString& queryText)
 }
 
 void TYqlParser::ProcessType(const TString& typeStr, TTypeBuilder& builder) {
+    // Удаляем лишние пробелы
+    TString cleanTypeStr = StripString(typeStr);
+    
     // Обрабатываем базовые типы
-    if (typeStr == "Bool") {
+    if (cleanTypeStr == "Bool") {
         builder.Primitive(EPrimitiveType::Bool);
-    } else if (typeStr == "Int8") {
+    } else if (cleanTypeStr == "Int8") {
         builder.Primitive(EPrimitiveType::Int8);
-    } else if (typeStr == "Uint8") {
+    } else if (cleanTypeStr == "Uint8") {
         builder.Primitive(EPrimitiveType::Uint8);
-    } else if (typeStr == "Int16") {
+    } else if (cleanTypeStr == "Int16") {
         builder.Primitive(EPrimitiveType::Int16);
-    } else if (typeStr == "Uint16") {
+    } else if (cleanTypeStr == "Uint16") {
         builder.Primitive(EPrimitiveType::Uint16);
-    } else if (typeStr == "Int32") {
+    } else if (cleanTypeStr == "Int32") {
         builder.Primitive(EPrimitiveType::Int32);
-    } else if (typeStr == "Uint32") {
+    } else if (cleanTypeStr == "Uint32") {
         builder.Primitive(EPrimitiveType::Uint32);
-    } else if (typeStr == "Int64") {
+    } else if (cleanTypeStr == "Int64") {
         builder.Primitive(EPrimitiveType::Int64);
-    } else if (typeStr == "Uint64") {
+    } else if (cleanTypeStr == "Uint64") {
         builder.Primitive(EPrimitiveType::Uint64);
-    } else if (typeStr == "Float") {
+    } else if (cleanTypeStr == "Float") {
         builder.Primitive(EPrimitiveType::Float);
-    } else if (typeStr == "Double") {
+    } else if (cleanTypeStr == "Double") {
         builder.Primitive(EPrimitiveType::Double);
-    } else if (typeStr == "String") {
+    } else if (cleanTypeStr == "String") {
         builder.Primitive(EPrimitiveType::String);
-    } else if (typeStr == "Utf8") {
+    } else if (cleanTypeStr == "Utf8") {
         builder.Primitive(EPrimitiveType::Utf8);
-    } else if (typeStr == "Json") {
+    } else if (cleanTypeStr == "Json") {
         builder.Primitive(EPrimitiveType::Json);
-    } else if (typeStr == "Yson") {
+    } else if (cleanTypeStr == "Yson") {
         builder.Primitive(EPrimitiveType::Yson);
-    } else if (typeStr == "Date") {
+    } else if (cleanTypeStr == "Date") {
         builder.Primitive(EPrimitiveType::Date);
-    } else if (typeStr == "Datetime") {
+    } else if (cleanTypeStr == "Datetime") {
         builder.Primitive(EPrimitiveType::Datetime);
-    } else if (typeStr == "Timestamp") {
+    } else if (cleanTypeStr == "Timestamp") {
         builder.Primitive(EPrimitiveType::Timestamp);
-    } else if (typeStr == "Interval") {
+    } else if (cleanTypeStr == "Interval") {
         builder.Primitive(EPrimitiveType::Interval);
-    } else if (typeStr.StartsWith("Decimal")) {
+    } else if (cleanTypeStr.StartsWith("Decimal")) {
         // Обрабатываем тип Decimal
-        TString params = StripString(typeStr.substr(7)); // Убираем "Decimal"
+        TString params = StripString(cleanTypeStr.substr(7)); // Убираем "Decimal"
         if (params.StartsWith("(") && params.EndsWith(")")) {
             params = params.substr(1, params.length() - 2);
             TVector<TString> parts;
             StringSplitter(params).Split(',').SkipEmpty().Collect(&parts);
             if (parts.size() == 2) {
-                ui8 precision = FromString<ui8>(parts[0]);
-                ui8 scale = FromString<ui8>(parts[1]);
+                ui8 precision = FromString<ui8>(StripString(parts[0]));
+                ui8 scale = FromString<ui8>(StripString(parts[1]));
                 builder.Decimal(TDecimalType(precision, scale));
             }
         }
-    } else if (typeStr.StartsWith("List<")) {
+    } else if (cleanTypeStr.StartsWith("List<")) {
         // Обработка списков
-        TString itemType = typeStr.substr(5, typeStr.length() - 6);
+        TString itemType = cleanTypeStr.substr(5, cleanTypeStr.length() - 6);
         builder.BeginList();
         ProcessType(itemType, builder);
         builder.EndList();
-    } else if (typeStr.StartsWith("Struct<")) {
+    } else if (cleanTypeStr.StartsWith("Struct<")) {
         // Обработка структур
         builder.BeginStruct();
-        TString fields = typeStr.substr(7, typeStr.length() - 8);
+        TString fields = cleanTypeStr.substr(7, cleanTypeStr.length() - 8);
+        
+        // Разбираем поля с учетом вложенных типов
         TVector<TString> fieldParts;
-        StringSplitter(fields).Split(',').SkipEmpty().Collect(&fieldParts);
+        int angleBrackets = 0;
+        TString currentField;
+        
+        for (size_t i = 0; i < fields.length(); ++i) {
+            if (fields[i] == '<') {
+                angleBrackets++;
+                currentField += fields[i];
+            } else if (fields[i] == '>') {
+                angleBrackets--;
+                currentField += fields[i];
+            } else if (fields[i] == ',' && angleBrackets == 0) {
+                if (!currentField.empty()) {
+                    fieldParts.push_back(StripString(currentField));
+                    currentField.clear();
+                }
+            } else {
+                currentField += fields[i];
+            }
+        }
+        
+        if (!currentField.empty()) {
+            fieldParts.push_back(StripString(currentField));
+        }
+        
         for (const auto& field : fieldParts) {
             size_t colonPos = field.find(':');
             if (colonPos != TString::npos) {
-                TString fieldName = field.substr(0, colonPos);
-                TString fieldType = field.substr(colonPos + 1);
+                TString fieldName = StripString(field.substr(0, colonPos));
+                TString fieldType = StripString(field.substr(colonPos + 1));
                 builder.AddMember(fieldName);
                 ProcessType(fieldType, builder);
             }
         }
         builder.EndStruct();
-    } else if (typeStr.StartsWith("Tuple<")) {
+    } else if (cleanTypeStr.StartsWith("Tuple<")) {
         // Обработка кортежей
-        builder.BeginTuple();
-        TString elements = typeStr.substr(6, typeStr.length() - 7);
+        TString elements = cleanTypeStr.substr(6, cleanTypeStr.length() - 7);
         TVector<TString> elementTypes;
         StringSplitter(elements).Split(',').SkipEmpty().Collect(&elementTypes);
+        
+        builder.BeginTuple();
         for (const auto& elementType : elementTypes) {
-            ProcessType(elementType, builder);
+            builder.AddElement();
+            ProcessType(StripString(elementType), builder);
         }
         builder.EndTuple();
-    } else if (typeStr.StartsWith("Dict<")) {
+    } else if (cleanTypeStr.StartsWith("Dict<")) {
         // Обработка словарей
-        builder.BeginDict();
-        TString params = typeStr.substr(5, typeStr.length() - 6);
+        TString params = cleanTypeStr.substr(5, cleanTypeStr.length() - 6);
         size_t commaPos = params.find(',');
         if (commaPos != TString::npos) {
-            TString keyType = params.substr(0, commaPos);
-            TString valueType = params.substr(commaPos + 1);
+            TString keyType = StripString(params.substr(0, commaPos));
+            TString valueType = StripString(params.substr(commaPos + 1));
             
-            // Добавляем тип ключа
+            builder.BeginDict();
+            builder.DictKey();
             ProcessType(keyType, builder);
-            
-            // Добавляем тип значения
+            builder.DictPayload();
             ProcessType(valueType, builder);
+            builder.EndDict();
         }
-        builder.EndDict();
     }
 }
 

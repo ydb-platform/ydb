@@ -9,6 +9,8 @@ namespace NEtcd {
 
 constexpr bool NotifyWatchtower = true;
 
+constexpr auto Endless = "\0"sv;
+
 struct TSharedStuff {
     using TPtr = std::shared_ptr<TSharedStuff>;
 

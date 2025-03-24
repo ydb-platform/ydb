@@ -33,7 +33,7 @@ std::string DecrementKey(std::string key) {
 std::ostream& DumpKeyRange(std::ostream& out, std::string_view key, std::string_view end) {
     if (end.empty())
         out << '=' << key;
-    else if ("\0"sv == end)
+    else if (Endless == end)
         out << '>' << '=' << key;
     else if (end == key)
         out << '^' << key;

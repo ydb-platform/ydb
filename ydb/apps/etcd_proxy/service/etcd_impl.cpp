@@ -46,8 +46,6 @@ void MakeSlice(const std::string_view& key, const std::string_view& rangeEnd, st
     MakeSlice(where.view(), sql, params, paramsCounter, revision);
 }
 
-static constexpr auto Endless = "\0"sv;
-
 struct TRange : public TOperation {
     std::string Key, RangeEnd;
     bool KeysOnly, CountOnly, Serializable;

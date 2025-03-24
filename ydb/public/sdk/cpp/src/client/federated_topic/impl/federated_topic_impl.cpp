@@ -75,7 +75,11 @@ IOutputStream& operator<<(IOutputStream& out, NTopic::TDescribeTopicSettings con
 NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> TFederatedTopicClient::TImpl::GetAllClusterInfo() {
     InitObserver();
     return Observer->WaitForFirstState().Apply(
-            [observer = Observer] (const auto &) {
+            [weakObserver = std::weak_ptr(Observer)] (const auto &) {
+                auto observer = weakObserver.lock();
+                if (!observer) {
+                    throw yexception() << "Lost observer"; // TODO better message?
+                }
                 auto state = observer->GetState();
                 std::vector<TClusterInfo> result;
                 result.reserve(state->DbInfos.size());
@@ -98,7 +102,7 @@ NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> TFederated
                     dbinfo.Endpoint = db->endpoint();
                     dbinfo.Path = db->path();
                 }
-                return std::move(result);
+                return result;
             });
 }
 

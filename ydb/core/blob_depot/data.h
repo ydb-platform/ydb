@@ -717,9 +717,9 @@ namespace NKikimr::NBlobDepot {
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        ui64 GetTotalStoredDataSize() const {
-            return TotalStoredDataSize;
-        }
+        ui64 GetTotalStoredDataSize() const { return TotalStoredDataSize; }
+        ui64 GetTotalStoredTrashSize() const { return TotalStoredTrashSize; }
+        ui64 GetInFlightTrashSize() const { return InFlightTrashSize; }
 
         void RenderMainPage(IOutputStream& s);
 

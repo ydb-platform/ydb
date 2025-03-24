@@ -72,11 +72,11 @@ class TSliceToMerge {
 private:
     YDB_READONLY_DEF(std::vector<NArrow::TContainerWithIndexes<arrow::RecordBatch>>, Batches);
     std::vector<ui64> SequentialWriteId;
-    const ui64 PathId;
+    const TInternalPathId PathId;
     const NEvWrite::EModificationType ModificationType;
 
 public:
-    TSliceToMerge(const ui64 pathId, const NEvWrite::EModificationType modificationType)
+    TSliceToMerge(const TInternalPathId pathId, const NEvWrite::EModificationType modificationType)
         : PathId(pathId)
         , ModificationType(modificationType) {
     }

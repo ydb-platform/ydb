@@ -376,8 +376,9 @@ private:
             SRC_LOG_D(index << " Name " << cluster.Name << " Endpoint " << cluster.Endpoint << " Path " << cluster.Path << " Status " << (int)cluster.Status);
             std::string clusterTopicPath = SourceParams.GetTopicPath();
             clusterState.Info.AdjustTopicPath(clusterTopicPath);
-            auto describeTopicFuture = GetTopicClient(clusterState).DescribeTopic(TString(clusterTopicPath), {});
-            describeTopicFuture.Subscribe([
+            GetTopicClient(clusterState)
+                .DescribeTopic(TString(clusterTopicPath), {})
+                .Subscribe([
                     index,
                     actorSystem = NActors::TActivationContext::ActorSystem(),
                     selfId = SelfId()](const auto& describeTopicFuture)

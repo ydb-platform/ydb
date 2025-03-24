@@ -10,7 +10,7 @@ from urllib.parse import urlencode
 import time
 
 
-cluster = KiKiMR(KikimrConfigGenerator(enable_alter_database_create_hive_first=True))
+cluster = KiKiMR(KikimrConfigGenerator(extra_feature_flags={'enable_alter_database_create_hive_first': True, 'enable_topic_transfer': True}))
 cluster.start()
 domain_name = '/' + cluster.domain_name
 dedicated_db = domain_name + "/dedicated_db"
@@ -658,3 +658,32 @@ def test_topic_data():
         'response_not_truncated': strip_non_canonized(response_last)
     }
     return result
+
+
+def test_transfer_describe():
+    grpc_port = cluster.nodes[1].grpc_port
+    endpoint = "grpc://localhost:{}".format(grpc_port)
+    lambd = "($x) -> { RETURN <|Id:$x._offset|>; }"
+
+    call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': 'CREATE TABLE `TransferTargetTable` ( `Id` Uint64 NOT NULL PRIMARY KEY (Id)) WITH (STORE = COLUMN)',
+        'schema': 'multi'
+    })
+
+    call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': 'CREATE TRANSFER `TestTransfer` FROM `TopicNotExists` TO `Table` USING {} WITH (CONNECTION_STRING = "{}")'.format(lambd, endpoint),
+        'schema': 'multi'
+    })
+
+    result = get_viewer_normalized("/viewer/describe_replication", {
+            'database': dedicated_db,
+            'path': '{}/TestTransfer'.format(dedicated_db),
+            'include_stats': 'true',
+            'enums': 'true'
+            })
+
+    result['self'] = {}
+
+    return result;

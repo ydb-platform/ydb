@@ -43,6 +43,7 @@ private:
     void SetParamsInputFromFile(TString& file);
     void SetParamsInputFromStdin();
     void GetParamTypes(const TDriver& driver, const TString& queryText);
+    void ProcessType(const TString& typeStr, TTypeBuilder& builder);
 
     TMaybe<TString> ReadData();
 

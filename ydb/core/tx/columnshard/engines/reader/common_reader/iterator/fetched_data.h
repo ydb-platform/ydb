@@ -157,11 +157,15 @@ public:
         Table->Clear();
     }
 
-    void AddFilter(const std::shared_ptr<NArrow::TColumnFilter>& filter, const bool sequential = true) {
+    NArrow::TColumnFilter AdaptFullFilter(NArrow::TColumnFilter filter) const {
+        return Table->AdaptFullFilter(std::move(filter));
+    }
+
+    void AddFilter(const std::shared_ptr<NArrow::TColumnFilter>& filter) {
         if (!filter) {
             return;
         }
-        return Table->AddFilter(*filter, sequential);
+        return Table->AddFilter(*filter);
     }
 
     std::shared_ptr<NArrow::TGeneralContainer> ToGeneralContainer(
@@ -173,8 +177,8 @@ public:
         Table->CutFilter(recordsCount, limit, reverse);
     }
 
-    void AddFilter(const NArrow::TColumnFilter& filter, const bool sequential = true) {
-        Table->AddFilter(filter, sequential);
+    void AddFilter(const NArrow::TColumnFilter& filter) {
+        Table->AddFilter(filter);
     }
 };
 

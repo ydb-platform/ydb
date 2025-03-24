@@ -349,23 +349,14 @@ public:
         if (simpleValue) {
             return filter;
         } else {
-            return TColumnFilter::BuildDenyFilter();
+            return TColumnFilter::BuildAllowFilter();
         }
     }
-    static TColumnFilter MergeWithSimple(const bool simpleValue, const TColumnFilter& filter) {
-        const auto count = filter.GetRecordsCount();
+    static TColumnFilter MergeWithSimple(const bool simpleValue, const TColumnFilter& /*filter*/) {
         if (simpleValue) {
-            TColumnFilter result = TColumnFilter::BuildAllowFilter();
-            if (count) {
-                result.Add(true, *count);
-            }
-            return result;
+            return TColumnFilter::BuildAllowFilter();
         } else {
-            TColumnFilter result = TColumnFilter::BuildDenyFilter();
-            if (count) {
-                result.Add(false, *count);
-            }
-            return result;
+            return TColumnFilter::BuildDenyFilter();
         }
     }
 };
@@ -451,7 +442,7 @@ TColumnFilter TColumnFilter::Or(const TColumnFilter& extFilter) const {
     return TMergerImpl(*this, extFilter).Merge<TMergePolicyOr>();
 }
 
-TColumnFilter TColumnFilter::ApplyFilterFrom(const TColumnFilter& extFilter) const {
+TColumnFilter TColumnFilter::ApplyFilter(const TColumnFilter& extFilter) const {
     ResetCaches();
     return TMergerImpl(*this, extFilter).Merge<TMergePolicyApplyFilter>();
 }

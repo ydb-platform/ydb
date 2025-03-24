@@ -111,6 +111,9 @@ NPq::NConfigurationManager::TAsyncDescribePathResult TPqSession::DescribePath(co
             std::vector<std::string> paths;
             paths.reserve(allClustersInfo.size());
             for (auto& clusterInfo: allClustersInfo) {
+                if (!clusterInfo.IsAvailableForRead()) {
+                    continue;
+                }
                 auto& clusterTopicPath = paths.emplace_back(path);
                 clusterInfo.AdjustTopicPath(clusterTopicPath);
                 clusterInfo.AdjustTopicClientSettings(topicSettings);

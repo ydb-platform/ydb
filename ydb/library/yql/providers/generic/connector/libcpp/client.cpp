@@ -328,18 +328,15 @@ namespace NYql::NConnector {
 
             for (auto c : config.GetConnectors()) {
                 auto cfg = ConnectorConfigToGrpcConfig(c, count++);
-                auto f = CreateFactoryForConnector(c.GetFactory(), GrpcClient_, cfg, keepAlive);
+                std::shared_ptr<IConnectionFactory<NApi::Connector>> f 
+                    = std::move(CreateFactoryForConnector(c.GetFactory(), GrpcClient_, cfg, keepAlive));
 
-                for (size_t i = 0; i < c.ForKindsSize(); ++i) {
-                    auto k = c.GetForKinds(i);
-
-                    if (FactoryForKind_.contains(k)) {
+                for (auto k : c.GetForKinds()) {
+                    if (!FactoryForKind_.try_emplace(NYql::EGenericDataSourceKind(k), f).second) {
                         throw yexception()
                             << "Duplicate connector is provided for the kind: "
                             << EGenericDataSourceKind_Name(k);
                     }
-
-                    FactoryForKind_.insert({k, std::move(f)});
                 }
             }
         }

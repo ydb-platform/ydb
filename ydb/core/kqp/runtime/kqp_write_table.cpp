@@ -338,6 +338,8 @@ private:
         NScheme::TTypeInfo Type;
         NUdf::TUnboxedValuePod Value;
         TString PgBinaryValue;
+
+        NYql::NDecimal::TInt128 DecimalBuf;
     };
 
 public:
@@ -352,6 +354,10 @@ public:
             const TString& typeMod) {
         CellsInfo[index].Type = type;
         CellsInfo[index].Value = value;
+
+        if (CellsInfo[index].Type.GetTypeId() == NUdf::TDataType<NUdf::TDecimal>::Id) {
+            CellsInfo[index].DecimalBuf = value.GetInt128();
+        }
 
         if (type.GetTypeId() == NScheme::NTypeIds::Pg && value) {
             auto typeDesc = type.GetPgTypeDesc();
@@ -399,9 +405,8 @@ private:
             KNOWN_FIXED_VALUE_TYPES(MAKE_PRIMITIVE_TYPE_CELL_CASE)
         case NUdf::TDataType<NUdf::TDecimal>::Id:
             {
-                auto intValue = cellInfo.Value.GetInt128();
-                constexpr auto valueSize = sizeof(intValue);
-                return TCell(reinterpret_cast<const char*>(&intValue), valueSize);
+                constexpr auto valueSize = sizeof(cellInfo.DecimalBuf);
+                return TCell(reinterpret_cast<const char*>(&cellInfo.DecimalBuf), valueSize);
             }
         }
 

@@ -239,7 +239,7 @@ protected:
         if (RetryCount < Limits.MaxUploadRowsRetryCount && UploadStatus.IsRetriable()) {
             LOG_N("Got retriable error, " << Debug() << UploadStatus.ToString());
 
-            Schedule(Limits.GetTimeoutBackouff(RetryCount), new TEvents::TEvWakeup);
+            Schedule(Limits.GetTimeoutBackoff(RetryCount), new TEvents::TEvWakeup);
             return;
         }
 

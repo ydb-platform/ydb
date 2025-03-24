@@ -1272,6 +1272,10 @@ private:
             Stats->AddDatashardStats(std::move(*res->Record.MutableTxStats()));
         }
 
+        if (TxManager) {
+            TxManager->AddParticipantNode(ev->Sender.NodeId());
+        }
+
         switch (ev->Get()->GetStatus()) {
             case NKikimrDataEvents::TEvWriteResult::STATUS_UNSPECIFIED: {
                 YQL_ENSURE(false);

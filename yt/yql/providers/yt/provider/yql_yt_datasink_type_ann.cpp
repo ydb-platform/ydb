@@ -149,6 +149,15 @@ private:
         return true;
     }
 
+    static bool EnsureDataSinkClusterMatchesTable(const TYtDSink& sink, const TYtTable& table, TExprContext& ctx) {
+        if (sink.Cluster().Value() != table.Cluster().Value()) {
+            ctx.AddError(TIssue(ctx.GetPosition(sink.Pos()), TStringBuilder() << "Datasink cluster doesn't match table cluster: '"
+                << sink.Cluster().Value() << "' != '" << table.Cluster().Value() << "'"));
+            return false;
+        }
+        return true;
+    }
+
     TStatus ValidateAndUpdateTransientOpBase(const TExprNode::TPtr& input, TExprNode::TPtr& output,
         TExprContext& ctx, bool multiIO, EYtSettingTypes allowedSectionSettings) const {
         if (!ValidateOutputOpBase(input, ctx, multiIO)) {
@@ -1574,6 +1583,10 @@ private:
             return TStatus::Error;
         }
 
+        if (!EnsureDataSinkClusterMatchesTable(TYtDSink(input->ChildPtr(TYtWriteTable::idx_DataSink)), TYtTable(table), ctx)) {
+            return TStatus::Error;
+        }
+
         auto settings = input->Child(TYtWriteTable::idx_Settings);
         if (!EnsureTuple(*settings, ctx)) {
             return TStatus::Error;
@@ -1720,6 +1733,9 @@ private:
                 << " callable, but got " << table->Content()));
             return TStatus::Error;
         }
+        if (!EnsureDataSinkClusterMatchesTable(TYtDSink(input->ChildPtr(TYtWriteTable::idx_DataSink)), TYtTable(table), ctx)) {
+            return TStatus::Error;
+        }
 
         auto dropTable = TYtDropTable(input);
         if (!TYtTableInfo::HasSubstAnonymousLabel(dropTable.Table())) {
@@ -1844,6 +1860,10 @@ private:
         if (!table->IsCallable(TYtTable::CallableName())) {
             ctx.AddError(TIssue(ctx.GetPosition(table->Pos()), TStringBuilder() << "Expected " << TYtTable::CallableName()
                 << " callable, but got " << table->Content()));
+            return TStatus::Error;
+        }
+
+        if (!EnsureDataSinkClusterMatchesTable(TYtDSink(input->ChildPtr(TYtWriteTable::idx_DataSink)), TYtTable(table), ctx)) {
             return TStatus::Error;
         }
 

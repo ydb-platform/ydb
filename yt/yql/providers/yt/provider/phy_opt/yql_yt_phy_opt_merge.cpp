@@ -86,6 +86,10 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassMerge(TExprBase n
                     continue;
                 }
 
+                if (innerMerge.DataSink().Cluster().Value() != op.DataSink().Cluster().Value()) {
+                    continue;
+                }
+
                 if (NYql::HasSettingsExcept(innerMerge.Settings().Ref(), EYtSettingType::KeepSorted | EYtSettingType::Limit)) {
                     continue;
                 }
@@ -229,6 +233,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassMergeBeforePublis
     auto publish = node.Cast<TYtPublish>();
 
     auto cluster = publish.DataSink().Cluster().StringValue();
+    YQL_ENSURE(cluster != YtUnspecifiedCluster);
     auto path = publish.Publish().Name().StringValue();
     auto commitEpoch = TEpochInfo::Parse(publish.Publish().CommitEpoch().Ref()).GetOrElse(0);
 
@@ -248,6 +253,10 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassMergeBeforePublis
             }
 
             if (merge.Ref().StartsExecution() || merge.Ref().HasResult()) {
+                continue;
+            }
+
+            if (publish.DataSink().Cluster().Value() != merge.DataSink().Cluster().Value()) {
                 continue;
             }
 
@@ -406,6 +415,11 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::MergeToCopy(TExprBase n
     }
 
     if (merge.Input().Item(0).Paths().Size() > 1) {
+        return node;
+    }
+
+    auto cluster = merge.DataSink().Cluster().StringValue();
+    if (cluster == YtUnspecifiedCluster || cluster != GetClusterFromSection(merge.Input().Item(0))) {
         return node;
     }
 

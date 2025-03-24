@@ -87,4 +87,4 @@ make install INSTALL_DIR=install_folder BUILD_DIR=.
 
 ## Download the binary from releases page
 
-You can download binary releases from [YDBOps Releases](../../downloads/index.md#ydbops).
+You can download binary releases from [{#T}](../../downloads/index.md#ydbops).

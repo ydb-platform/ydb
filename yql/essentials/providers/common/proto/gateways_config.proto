@@ -596,6 +596,7 @@ enum EGenericDataSourceKind {
     ORACLE = 8;
     LOGGING = 9;
     MONGO_DB = 10;
+    REDIS = 11;
 }
 
 // EGenericProtocol generalizes various kinds of network protocols supported by different databases.
@@ -669,6 +670,10 @@ message TMongoDbDataSourceOptions {
     optional EUnsupportedTypeDisplayMode unsupported_type_display_mode = 3;
 }
 
+// TRedisDataSourceOptions represents settings specific to Redis
+message TRedisDataSourceOptions {
+}
+
 // TGenericDataSourceInstance helps to identify the instance of a data source to redirect request to.
 message TGenericDataSourceInstance {
     // Data source kind
@@ -694,6 +699,7 @@ message TGenericDataSourceInstance {
         TOracleDataSourceOptions oracle_options = 11;
         TLoggingDataSourceOptions logging_options = 12;
         TMongoDbDataSourceOptions mongodb_options = 13;
+        TRedisDataSourceOptions redis_options = 14;
     }
 }
 

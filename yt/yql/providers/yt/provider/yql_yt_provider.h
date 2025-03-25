@@ -50,6 +50,8 @@ struct TYtTableDescription: public TYtTableDescriptionBase {
     std::unordered_map<ui32, size_t> WriteValidateCount; // mutationId -> validate count
     TMaybe<TString> Hash;
     TString ColumnGroupSpec;
+    TSet<TString> ColumnGroupSpecAlts; // All alternative column group representations
+    bool ColumnGroupSpecInherited = false; // Inherit existing column groups without explicit user hints
     bool RowSpecSortReady = false;
 
     bool Fill(

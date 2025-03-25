@@ -199,6 +199,8 @@ void TConfig::Reset()
     LogPath = GetEnv("YT_LOG_PATH");
     LogUseCore = GetBool("YT_LOG_USE_CORE", false);
 
+    ProxyRole = GetEnv("YT_PROXY_ROLE");
+
     ContentEncoding = GetEncoding("YT_CONTENT_ENCODING");
     AcceptEncoding = GetEncoding("YT_ACCEPT_ENCODING");
 

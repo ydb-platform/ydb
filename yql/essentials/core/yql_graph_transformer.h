@@ -449,6 +449,10 @@ inline std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> Sync
     return SyncStatus(IGraphTransformer::TStatus::Repeat);
 }
 
+inline std::pair<IGraphTransformer::TStatus, TAsyncTransformCallbackFuture> SyncRepeatWithRestart() {
+    return SyncStatus(IGraphTransformer::TStatus(IGraphTransformer::TStatus::Repeat, true));
+}
+
 typedef std::unordered_map<TExprNode::TPtr, ui64, TExprNode::TPtrHash> TSyncMap;
 }
 

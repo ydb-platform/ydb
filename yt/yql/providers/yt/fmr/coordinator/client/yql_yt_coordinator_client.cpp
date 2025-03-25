@@ -1,12 +1,14 @@
 #include <library/cpp/http/simple/http_client.h>
 
 #include <library/cpp/retry/retry.h>
+#include <util/string/vector.h>
 #include <yt/yql/providers/yt/fmr/proto/coordinator.pb.h>
 #include <yt/yql/providers/yt/fmr/coordinator/interface/proto_helpers/yql_yt_coordinator_proto_helpers.h>
 
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/log/log_component.h>
 #include <yql/essentials/utils/yql_panic.h>
+#include <yt/yql/providers/yt/fmr/utils/yql_yt_log_context.h>
 
 #include "yql_yt_coordinator_client.h"
 
@@ -28,7 +30,7 @@ public:
         TStringStream outputStream;
 
         auto startOperationFunc = [&]() {
-            httpClient.DoPost(startOperationRequestUrl, protoStartOperationRequest.SerializeAsString(), &outputStream, Headers_);
+            httpClient.DoPost(startOperationRequestUrl, protoStartOperationRequest.SerializeAsString(), &outputStream, GetHeadersWithLogContext(Headers_, false));
             TString serializedResponse = outputStream.ReadAll();
             NProto::TStartOperationResponse protoStartOperationResponse;
             YQL_ENSURE(protoStartOperationResponse.ParseFromString(serializedResponse));
@@ -43,7 +45,7 @@ public:
         TStringStream outputStream;
 
         auto getOperationFunc = [&]() {
-            httpClient.DoGet(getOperationRequestUrl, &outputStream, Headers_);
+            httpClient.DoGet(getOperationRequestUrl, &outputStream, GetHeadersWithLogContext(Headers_, false));
             TString serializedResponse = outputStream.ReadAll();
             NProto::TGetOperationResponse protoGetOperationResponse;
             YQL_ENSURE(protoGetOperationResponse.ParseFromString(serializedResponse));
@@ -58,7 +60,7 @@ public:
         TStringStream outputStream;
 
         auto deleteOperationFunc = [&]() {
-            httpClient.DoRequest("DELETE", deleteOperationRequestUrl, "", &outputStream, Headers_);
+            httpClient.DoRequest("DELETE", deleteOperationRequestUrl, "", &outputStream, GetHeadersWithLogContext(Headers_, false));
             TString serializedResponse = outputStream.ReadAll();
             NProto::TDeleteOperationResponse protoDeleteOperationResponse;
             YQL_ENSURE(protoDeleteOperationResponse.ParseFromString(serializedResponse));
@@ -74,7 +76,7 @@ public:
         TStringStream outputStream;
 
         auto sendHeartbeatRequestFunc = [&]() {
-            httpClient.DoPost(sendHearbeatRequestUrl, protoSendHeartbeatRequest.SerializeAsString(), &outputStream, Headers_);
+            httpClient.DoPost(sendHearbeatRequestUrl, protoSendHeartbeatRequest.SerializeAsString(), &outputStream, GetHeadersWithLogContext(Headers_, false));
             TString serializedResponse = outputStream.ReadAll();
             NProto::THeartbeatResponse protoHeartbeatResponse;
             YQL_ENSURE(protoHeartbeatResponse.ParseFromString(serializedResponse));
@@ -91,7 +93,7 @@ public:
         TStringStream outputStream;
 
         auto getFmrTableInfoRequestFunc = [&]() {
-            httpClient.DoGet(sendHearbeatRequestUrl, &outputStream, Headers_);
+            httpClient.DoGet(sendHearbeatRequestUrl, &outputStream, GetHeadersWithLogContext(Headers_, false));
             TString serializedResponse = outputStream.ReadAll();
             NProto::TGetFmrTableInfoResponse protoGetFmrTableInfoResponse;
             YQL_ENSURE(protoGetFmrTableInfoResponse.ParseFromString(serializedResponse));
@@ -103,7 +105,7 @@ public:
 private:
     TString Host_;
     ui16 Port_;
-    TSimpleHttpClient::THeaders Headers_;
+    TKeepAliveHttpClient::THeaders Headers_;
     std::shared_ptr<IRetryPolicy<const yexception&>> RetryPolicy_ = IRetryPolicy<const yexception&>::GetExponentialBackoffPolicy(
         /*retryClassFunction*/ [] (const yexception&) {
             return ERetryErrorClass::LongRetry;

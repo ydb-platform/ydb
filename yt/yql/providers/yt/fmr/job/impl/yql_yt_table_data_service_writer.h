@@ -4,8 +4,8 @@
 #include <util/stream/output.h>
 #include <yt/cpp/mapreduce/interface/io.h>
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
-#include <yt/yql/providers/yt/fmr/table_data_service/interface/table_data_service.h>
-#include <yt/yql/providers/yt/fmr/utils/table_data_service_key.h>
+#include <yt/yql/providers/yt/fmr/table_data_service/interface/yql_yt_table_data_service.h>
+#include <yt/yql/providers/yt/fmr/utils/yql_yt_table_data_service_key.h>
 
 namespace NYql::NFmr {
 

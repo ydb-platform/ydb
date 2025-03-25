@@ -2,10 +2,13 @@ name: Update Muted YA
 
 on:
   workflow_dispatch:
+env:
+  GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+
 
 jobs:
   create-or-update-muted-ya:
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -24,8 +27,8 @@ jobs:
           
       - name: Update branch with main
         run: |
-          git config user.name github-actions
-          git config user.email github-actions@github.com
+          git config user.name YDBot
+          git config user.email ydbot@ydb.tech 
           git checkout main
           git pull --rebase origin main
           git fetch origin create-muted-ya || true
@@ -123,3 +126,4 @@ jobs:
       - name: Log message if no changes
         if: env.changes != 'true'
         run: echo "No changes to commit. Exiting Workflow without further actions."
+

@@ -41,7 +41,7 @@ jobs:
 
       - name: Run the script
         run: |
-          .github/scripts/tests/create_new_muted_ya.py
+          .github/scripts/tests/create_new_muted_ya.py update_muted_ya
 
       - name: Move new_muted_ya_with_flaky.txt to muted_ya.txt
         run: |

@@ -17,7 +17,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ env.BASE_BRANCH }}
-          persist-credentials: false
 
       - name: Install dependencies
         run: |
@@ -28,19 +27,23 @@ jobs:
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
-          
+
       - name: Update branch with base branch
         run: |
           git config user.name YDBot
           git config user.email ydbot@ydb.tech 
-          git checkout ${{ env.BASE_BRANCH }} || true
-          git pull --rebase origin ${{ env.BASE_BRANCH }} || true
-          git fetch origin ${{ env.BRANCH }} || true
+          git checkout ${{ env.BASE_BRANCH }}
+          git pull --rebase origin ${{ env.BASE_BRANCH }}
+          git fetch origin ${{ env.BRANCH }}
           if [ -n "$(git branch -a | grep remotes/origin/${{ env.BRANCH }})" ]; then
-            git checkout ${{ env.BRANCH }} || true
-            git rebase ${{ env.BASE_BRANCH }} || true
+            git checkout ${{ env.BRANCH }}
+            git rebase ${{ env.BASE_BRANCH }}  -X theirs
+            if [ $? -ne 0 ]; then
+              echo "Merge conflict detected. Please resolve conflicts manually and push the changes."
+              exit 1
+            fi
           else
-            git checkout -b ${{ env.BRANCH }} || true
+            git checkout -b ${{ env.BRANCH }}
           fi
 
       - name: Run the script

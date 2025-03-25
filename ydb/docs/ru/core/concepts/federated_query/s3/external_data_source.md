@@ -149,7 +149,7 @@ WHERE
 
 {% include [!](_includes/format_settings.md) %}
 
-В строках форматирования можно использовать любые шаблонные переменные, поддерживаемые функцией `strftime`(C99). В {{ ydb-full-name }} поддерживаются следующие форматы типов `Datetime` и `Timestamp`:
+В строках форматирования можно использовать любые шаблонные переменные, поддерживаемые функцией [`strftime`(C99)](https://en.cppreference.com/w/c/chrono/strftime). В {{ ydb-full-name }} поддерживаются следующие форматы типов `Datetime` и `Timestamp`:
 
 {% include [!](_includes/date_formats.md) %}
 

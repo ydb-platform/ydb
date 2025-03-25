@@ -7,4 +7,4 @@
 |`data.timestamp.format_name`|Предопределенный формат, в котором записаны данные типа `Timestamp`|`POSIX`, `ISO`, `UNIX_TIME_SECONDS`, `UNIX_TIME_MILLISECONDS`, `UNIX_TIME_MICROSECONDS`|
 |`data.timestamp.format`|Шаблон, определяющий как записаны данные типа `Timestamp`|Строка форматирования, например: `%Y-%m-%dT%H-%M-%S`|
 |`data.date.format`|Формат, в котором записаны данные типа `Date`|Строка форматирования, например: `%Y-%m-%d`|
-|`csv_delimiter`|Разделитель данных в формате `csv_with_names`|Любой символ|
+|`csv_delimiter`|Разделитель данных в формате `csv_with_names`|Любой символ (UTF-8)|

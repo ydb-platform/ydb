@@ -74,8 +74,9 @@ class TestRestartNodes(object):
         logger.info(f"In progress: starting killing nodes")
         deadline: datetime = datetime.datetime.now() + datetime.timedelta(seconds=30)
         while datetime.datetime.now() < deadline:
-            nodes = list(self.cluster.nodes.items())[0: len(self.cluster.nodes) // 2]
+            nodes = list(self.cluster.nodes.items())
             random.shuffle(nodes)
+            nodes = nodes[0: len(nodes) // 2]
             for key, node in nodes:
                 logger.info(f"In progress: killing {key}-node")
                 node.kill()

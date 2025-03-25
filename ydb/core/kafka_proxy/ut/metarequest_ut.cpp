@@ -1,5 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/public/sdk/cpp/client/ydb_persqueue_core/ut/ut_utils/test_server.h>
+
 #include <ydb/core/kafka_proxy/kafka_events.h>
 #include <ydb/core/kafka_proxy/actors/kafka_metadata_actor.h>
 
@@ -29,9 +30,11 @@ Y_UNIT_TEST_SUITE(TMetadataActorTests) {
 
         auto context = std::make_shared<TContext>(Config);
         context->ConnectionId = edgeActor;
+        context->DatabasePath = "/Root";
         context->UserToken = new NACLib::TUserToken("root@builtin", {});
 
-        auto actorId = runtime->Register(new TKafkaMetadataActor(context, 1, TMessagePtr<TMetadataRequestData>(std::make_shared<TBuffer>(), request)));
+        auto actorId = runtime->Register(new TKafkaMetadataActor(context, 1, TMessagePtr<TMetadataRequestData>(std::make_shared<TBuffer>(), request),
+                                                                 NKafka::MakeKafkaDiscoveryCacheID()));
         runtime->EnableScheduleForActor(actorId);
         runtime->DispatchEvents();
         Cerr << "Wait for response for topics: '";
@@ -43,7 +46,9 @@ Y_UNIT_TEST_SUITE(TMetadataActorTests) {
     }
 
     Y_UNIT_TEST(TopicMetadataGoodAndBad) {
-        NPersQueue::TTestServer server;
+        auto serverSettings = NKikimr::NPersQueueTests::PQSettings(0).SetDomainName("Root").SetNodeCount(1);
+        serverSettings.AppConfig->MutableKafkaProxyConfig()->SetEnableKafkaProxy(true);
+        NPersQueue::TTestServer server{serverSettings};
         TString topicName = "rt3.dc1--topic";
         TString topicName2 = "rt3.dc1--topic2";
         TString topicPath = TString("/Root/PQ/") + topicName;
@@ -51,6 +56,8 @@ Y_UNIT_TEST_SUITE(TMetadataActorTests) {
         ui32 totalPartitions = 5;
         server.AnnoyingClient->CreateTopic(topicName, totalPartitions);
         server.AnnoyingClient->CreateTopic(topicName2, totalPartitions * 2);
+        server.WaitInit("topic");
+
 
         auto edgeId = server.CleverServer->GetRuntime()->AllocateEdgeActor();
         auto event = GetEvent(server, edgeId, {topicPath});
@@ -86,7 +93,7 @@ Y_UNIT_TEST_SUITE(TMetadataActorTests) {
 
         event = GetEvent(server, edgeId, {});
         response = dynamic_cast<TMetadataResponseData*>(event->Response.get());
-        UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(response->Topics.size(), 2);
 
         event = GetEvent(server, edgeId, {topicPath}, "proxy-host");
         response = dynamic_cast<TMetadataResponseData*>(event->Response.get());

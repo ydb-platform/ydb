@@ -191,6 +191,11 @@ void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorCon
         Y_ABORT("bad status");
     };
 
+    // There should be no consumers in the configuration of the background partition. When creating a partition,
+    // the PQ tablet specifically removes all consumer settings from the config.
+    Y_ABORT_UNLESS(!Partition()->IsSupportive() ||
+                   (Partition()->Config.GetConsumers().empty() && Partition()->TabletConfig.GetConsumers().empty()));
+
     Partition()->PartitionConfig = GetPartitionConfig(Partition()->Config, Partition()->Partition.OriginalPartitionId);
     Partition()->PartitionGraph = MakePartitionGraph(Partition()->Config);
 
@@ -382,6 +387,7 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
         case NKikimrProto::OVERRUN: {
             auto& sourceIdStorage = Partition()->SourceIdStorage;
             auto& usersInfoStorage = Partition()->UsersInfoStorage;
+            const bool isSupportive = Partition()->IsSupportive();
 
             for (ui32 i = 0; i < range.PairSize(); ++i) {
                 const auto& pair = range.GetPair(i);
@@ -406,9 +412,9 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
                     sourceIdStorage.LoadSourceIdInfo(*key, pair.GetValue(), now);
                 } else if (type == TKeyPrefix::MarkProtoSourceId) {
                     sourceIdStorage.LoadSourceIdInfo(*key, pair.GetValue(), now);
-                } else if (type == TKeyPrefix::MarkUser) {
+                } else if ((type == TKeyPrefix::MarkUser) && !isSupportive) {
                     usersInfoStorage->Parse(*key, pair.GetValue(), ctx);
-                } else if (type == TKeyPrefix::MarkUserDeprecated) {
+                } else if ((type == TKeyPrefix::MarkUserDeprecated) && !isSupportive) {
                     usersInfoStorage->ParseDeprecated(*key, pair.GetValue(), ctx);
                 }
             }
@@ -456,6 +462,12 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
         return;
     }
 
+    if (WaitForDeleteAndRename) {
+        // The tablet deleted and renamed the blobs
+        PoisonPill(ctx);
+        return;
+    }
+
     auto& response = ev->Get()->Record;
     Y_ABORT_UNLESS(response.ReadRangeResultSize() == 1);
 
@@ -465,8 +477,13 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
     switch(range.GetStatus()) {
         case NKikimrProto::OK:
         case NKikimrProto::OVERRUN:
-
             FillBlobsMetaData(range, ctx);
+
+            if (CompatibilityRequest) {
+                ctx.Send(Partition()->Tablet, CompatibilityRequest.Release());
+                WaitForDeleteAndRename = true;
+                return;
+            }
 
             if (range.GetStatus() == NKikimrProto::OVERRUN) { //request rest of range
                 Y_ABORT_UNLESS(range.PairSize());
@@ -486,6 +503,113 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
     };
 }
 
+enum EKeyPosition {
+    RhsContainsLhs,
+    RhsAfterLhs,
+    LhsContainsRhs,
+    GapBetweenLhsAndRhs
+};
+
+// Calculates the location of keys relative to each other
+static EKeyPosition KeyPosition(const TKey& lhs, const TKey& rhs)
+{
+    Y_ABORT_UNLESS(lhs.GetOffset() <= rhs.GetOffset(),
+                   "lhs: %s, rhs: %s",
+                   lhs.ToString().data(), rhs.ToString().data());
+
+    if (lhs.GetOffset() == rhs.GetOffset()) {
+        if (lhs.GetPartNo() == rhs.GetPartNo()) {
+            Y_ABORT_UNLESS(lhs.GetCount() < rhs.GetCount(),
+                           "lhs: %s, rhs: %s",
+                           lhs.ToString().data(), rhs.ToString().data());
+            return RhsContainsLhs;
+        }
+        Y_ABORT_UNLESS(lhs.GetPartNo() + lhs.GetInternalPartsCount() == rhs.GetPartNo(),
+                       "lhs: %s, rhs: %s",
+                       lhs.ToString().data(), rhs.ToString().data());
+        return RhsAfterLhs;
+    }
+
+    // case lhs.GetOffset() < rhs.GetOffset()
+
+    if (ui64 nextOffset = lhs.GetOffset() + lhs.GetCount(); nextOffset > rhs.GetOffset()) {
+        return LhsContainsRhs;
+    } else if (nextOffset == rhs.GetOffset()) {
+        return RhsAfterLhs;
+    } else {
+        return GapBetweenLhsAndRhs;
+    }
+}
+
+static THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range,
+                                             const TPartitionId& partitionId)
+{
+    TVector<TString> keys;
+
+    for (ui32 i = 0; i < range.PairSize(); ++i) {
+        const auto& pair = range.GetPair(i);
+        Y_ABORT_UNLESS(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
+        keys.push_back(pair.GetKey());
+    }
+
+    std::sort(keys.begin(), keys.end());
+
+    TDeque<TString> filtered;
+    TKey lastKey;
+
+    for (auto& key : keys) {
+        if (filtered.empty()) {
+            filtered.push_back(std::move(key));
+            lastKey = MakeKeyFromString(filtered.back(), partitionId);
+            continue;
+        }
+
+        auto candidate = MakeKeyFromString(key, partitionId);
+
+        switch (KeyPosition(lastKey, candidate)) {
+        case RhsContainsLhs:
+            // We found a key that is wider than the previous key
+            filtered.back() = std::move(key);
+            lastKey = MakeKeyFromString(filtered.back(), partitionId);
+            break;
+        case RhsAfterLhs:
+        case GapBetweenLhsAndRhs:
+            // The new key is adjacent to the previous key or there is a gap between them
+            filtered.push_back(std::move(key));
+            lastKey = MakeKeyFromString(filtered.back(), partitionId);
+            break;
+        case LhsContainsRhs:
+            // The current key already contains this key
+            break;
+        default:
+            Y_ABORT("A strange key %s, last key %s",
+                    key.data(), filtered.back().data());
+        }
+    }
+
+    return {filtered.begin(), filtered.end()};
+}
+
+TString FindFirstHeadKey(const THashSet<TString>& keys)
+{
+    TString key;
+
+    for (const auto& k : keys) {
+        if (k.back() != '|') {
+            continue;
+        }
+        if (key.empty()) {
+            key = k;
+            continue;
+        }
+        if (k < key) {
+            key = k;
+        }
+    }
+
+    return key;
+}
+
 void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext& ctx) {
     auto& endOffset = Partition()->EndOffset;
     auto& startOffset = Partition()->StartOffset;
@@ -495,9 +619,40 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
     auto& gapSize = Partition()->GapSize;
     auto& bodySize = Partition()->BodySize;
 
+    const auto actualKeys = FilterBlobsMetaData(range, PartitionId());
+    const TString firstHeadKey = FindFirstHeadKey(actualKeys);
+
+    CompatibilityRequest = MakeHolder<TEvKeyValue::TEvRequest>();
+
     for (ui32 i = 0; i < range.PairSize(); ++i) {
-        auto pair = range.GetPair(i);
+        const auto& pair = range.GetPair(i);
         Y_ABORT_UNLESS(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
+
+        if (!actualKeys.contains(pair.GetKey())) {
+            // It is necessary to remove the extra blob
+            auto* cmd = CompatibilityRequest->Record.AddCmdDeleteRange();
+            auto* range = cmd->MutableRange();
+            range->SetFrom(pair.GetKey());
+            range->SetIncludeFrom(true);
+            range->SetTo(pair.GetKey());
+            range->SetIncludeTo(true);
+            continue;
+        }
+        if (pair.GetKey().back() == '?') {
+            // We need to rename the new keys. At the same time, the location relative to the "head" must be
+            // taken into account
+            TString newKey = pair.GetKey();
+            if (newKey < firstHeadKey) {
+                newKey.resize(newKey.size() - 1);
+            } else {
+                newKey.back() = '|';
+            }
+            auto* cmd = CompatibilityRequest->Record.AddCmdRename();
+            cmd->SetOldKey(pair.GetKey());
+            cmd->SetNewKey(newKey);
+            continue;
+        }
+
         TKey k = MakeKeyFromString(pair.GetKey(), PartitionId());
         if (dataKeysBody.empty()) { //no data - this is first pair of first range
             head.Offset = endOffset = startOffset = k.GetOffset();
@@ -526,6 +681,11 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
         dataKeysBody.push_back({k, pair.GetValueSize(),
                         TInstant::Seconds(pair.GetCreationUnixTime()),
                         dataKeysBody.empty() ? 0 : dataKeysBody.back().CumulativeSize + dataKeysBody.back().Size});
+    }
+
+    if ((CompatibilityRequest->Record.CmdDeleteRangeSize() == 0) && (CompatibilityRequest->Record.CmdRenameSize() == 0)) {
+        // All the keys are correct. We don't need to delete or rename anything
+        CompatibilityRequest = nullptr;
     }
 
     Y_ABORT_UNLESS(endOffset >= startOffset);

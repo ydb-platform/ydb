@@ -144,7 +144,7 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         attributes = {
             SqsMessageAttribute('a', 'String', 'xyz'),
             SqsMessageAttribute('b', 'Number', 42),
-            SqsMessageAttribute('c', 'Binary', base64.b64encode(to_bytes('binary_data'))),
+            SqsMessageAttribute('c', 'Binary', base64.b64encode(b'binary_data')),
         }
         if is_fifo:
             self.seq_no += 1
@@ -984,7 +984,7 @@ class SqsGenericMessagingTest(KikimrSqsTestBase):
         queue_urls = [self._create_queue_and_assert("{}-{}".format(self.queue_name, i)) for i in range(10)]
         created_queue_url2 = self._create_queue_and_assert(self.queue_name + '1.fifo', is_fifo=True)
         queue_urls.append(created_queue_url2)
-        queue_urls.append(created_queue_url2 + to_bytes('_nonexistent_queue_url'))
+        queue_urls.append(created_queue_url2 + '_nonexistent_queue_url')
         batch_result = self._sqs_api.private_get_queue_attributes_batch(queue_urls)
         assert_that(
             batch_result['GetQueueAttributesBatchResultEntry'], instance_of(list)

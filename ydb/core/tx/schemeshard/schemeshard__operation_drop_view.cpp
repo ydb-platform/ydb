@@ -56,7 +56,7 @@ public:
         path->SetDropped(step, OperationId.GetTxId());
         context.SS->PersistDropStep(db, pathId, step, OperationId);
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
-        domainInfo->DecPathsInside();
+        domainInfo->DecPathsInside(context.SS);
         parentDir->DecAliveChildren();
 
         context.SS->TabletCounters->Simple()[COUNTER_VIEW_COUNT].Sub(1);

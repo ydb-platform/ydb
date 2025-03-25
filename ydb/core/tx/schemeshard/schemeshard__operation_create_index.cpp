@@ -244,7 +244,7 @@ public:
 
         context.OnComplete.ActivateTx(OperationId);
 
-        dstPath.DomainInfo()->IncPathsInside();
+        dstPath.DomainInfo()->IncPathsInside(context.SS);
         parentPath.Base()->IncAliveChildren();
 
         SetState(NextState());

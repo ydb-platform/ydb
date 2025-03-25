@@ -560,6 +560,21 @@ class KikimrConfigGenerator(object):
         with open(os.path.join(configs_path, "config.yaml"), "w") as writer:
             writer.write(yaml.safe_dump(self.yaml_config))
 
+    def clone_grpc_as_ext_endpoint(self, port, endpoint_id=None):
+        cur_grpc_config = copy.deepcopy(self.yaml_config['grpc_config'])
+        if 'ext_endpoints' in cur_grpc_config:
+            del cur_grpc_config['ext_endpoints']
+
+        cur_grpc_config['port'] = port
+
+        if endpoint_id is not None:
+            cur_grpc_config['endpoint_id'] = endpoint_id
+
+        if 'ext_endpoints' not in self.yaml_config['grpc_config']:
+            self.yaml_config['grpc_config']['ext_endpoints'] = []
+
+        self.yaml_config['grpc_config']['ext_endpoints'].append(cur_grpc_config)
+
     def get_yql_udfs_to_load(self):
         if not self.__load_udfs:
             return []

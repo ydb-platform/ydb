@@ -188,6 +188,10 @@ public:
         return TBaseAsyncContext<TService>::GetCompressionLevel();
     }
 
+    TString GetEndpointId() const override {
+        return Server_->GetEndpointId();
+    }
+
     //! Get pointer to the request's message.
     const NProtoBuf::Message* GetRequest() const override {
         return Request_;

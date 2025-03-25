@@ -973,7 +973,7 @@ public:
             }
         }
 
-        path.DomainInfo()->AddInternalShards(op); //allow over commit for merge
+        path.DomainInfo()->AddInternalShards(op, context.SS); //allow over commit for merge
         path->IncShardsInside(dstCount);
 
         SetState(NextState());

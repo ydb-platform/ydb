@@ -76,6 +76,7 @@ void TLockInfo::MakeShardLock() {
 
 bool TLockInfo::AddShardLock(const TPathId& pathId) {
     Y_ABORT_UNLESS(ShardLock);
+    Y_DEBUG_ABORT_UNLESS(Locker->FindTablePtr(pathId));
     if (ReadTables.insert(pathId).second) {
         UnpersistedRanges = true;
         return true;
@@ -104,6 +105,7 @@ bool TLockInfo::AddRange(const TRangeKey& range) {
 }
 
 bool TLockInfo::AddWriteLock(const TPathId& pathId) {
+    Y_DEBUG_ABORT_UNLESS(Locker->FindTablePtr(pathId));
     if (WriteTables.insert(pathId).second) {
         UnpersistedRanges = true;
         return true;
@@ -305,16 +307,18 @@ void TLockInfo::RestorePersistentRange(const ILocksDb::TLockRange& rangeRow) {
     range.Flags = ELockRangeFlags(rangeRow.Flags);
 
     if (!!(range.Flags & ELockRangeFlags::Read)) {
-        if (ReadTables.insert(range.TableId).second) {
-            ShardLock = true;
-            if (auto* table = Locker->FindTablePtr(range.TableId)) {
+        // Note: table could be missing after it's dropped
+        if (auto* table = Locker->FindTablePtr(range.TableId)) {
+            if (ReadTables.insert(range.TableId).second) {
+                ShardLock = true;
                 table->AddShardLock(this);
             }
         }
     }
     if (!!(range.Flags & ELockRangeFlags::Write)) {
-        if (WriteTables.insert(range.TableId).second) {
-            if (auto* table = Locker->FindTablePtr(range.TableId)) {
+        // Note: table could be missing after it's dropped
+        if (auto* table = Locker->FindTablePtr(range.TableId)) {
+            if (WriteTables.insert(range.TableId).second) {
                 table->AddWriteLock(this);
             }
         }

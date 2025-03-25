@@ -269,6 +269,14 @@ void PQTabletPrepare(
     ui64 tabletId,
     TActorId edge);
 
+void PQTabletPrepareFromResource(
+    const TTabletPreparationParameters& parameters,
+    const TVector<std::pair<TString, bool>>& users,
+    const TString& resourceName,
+    TTestActorRuntime& runtime,
+    ui64 tabletId,
+    TActorId edge);
+
 void PQBalancerPrepare(
     const TString topic,
     const TVector<std::pair<ui32, std::pair<ui64, ui32>>>& map,
@@ -284,7 +292,6 @@ void PQTabletRestart(
     ui64 tabletId,
     TActorId edge);
 
-
 /*
 ** TTestContext requiring functions
 */
@@ -292,6 +299,12 @@ void PQTabletRestart(
 void PQTabletPrepare(
     const TTabletPreparationParameters& parameters,
     const TVector<std::pair<TString, bool>>& users,
+    TTestContext& context);
+
+void PQTabletPrepareFromResource(
+    const TTabletPreparationParameters& parameters,
+    const TVector<std::pair<TString, bool>>& users,
+    const TString& resourceName,
     TTestContext& context);
 
 void PQBalancerPrepare(

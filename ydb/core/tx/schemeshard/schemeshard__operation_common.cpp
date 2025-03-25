@@ -479,7 +479,7 @@ void NTableState::UpdatePartitioningForCopyTable(TOperationId operationId, TTxSt
             dstTableInfo->PerShardPartitionConfig.erase(shard.Idx);
             context.SS->PersistShardDeleted(db, shard.Idx, context.SS->ShardInfos[shard.Idx].BindedChannels);
             context.SS->ShardInfos.erase(shard.Idx);
-            domainInfo->RemoveInternalShard(shard.Idx);
+            domainInfo->RemoveInternalShard(shard.Idx, context.SS);
             context.SS->DecrementPathDbRefCount(pathId, "remove shard from txState");
             context.SS->ShardRemoved(shard.Idx);
         }
@@ -530,7 +530,7 @@ void NTableState::UpdatePartitioningForCopyTable(TOperationId operationId, TTxSt
     ui32 newShardCout = dstTableInfo->GetPartitions().size();
 
     dstPath->SetShardsInside(newShardCout);
-    domainInfo->AddInternalShards(txState);
+    domainInfo->AddInternalShards(txState, context.SS);
 
     context.SS->PersistTable(db, txState.TargetPathId);
     context.SS->PersistTxState(db, operationId);

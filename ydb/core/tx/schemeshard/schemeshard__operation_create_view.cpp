@@ -196,7 +196,7 @@ public:
         context.DbChanges.PersistTxState(OperationId);
 
         dstPath.MaterializeLeaf(owner, viewPathId);
-        dstPath.DomainInfo()->IncPathsInside();
+        dstPath.DomainInfo()->IncPathsInside(context.SS);
         parentPath.Base()->IncAliveChildren();
         result->SetPathId(viewPathId.LocalPathId);
 

@@ -330,7 +330,7 @@ public:
 
         context.SS->PersistTxState(db, OperationId);
 
-        path.DomainInfo()->AddInternalShards(txState);
+        path.DomainInfo()->AddInternalShards(txState, context.SS);
 
         SetState(NextState());
         return result;

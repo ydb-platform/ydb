@@ -1331,6 +1331,10 @@ public:
         Ctx_->ReplyError(code, msg, details);
     }
 
+    TString GetEndpointId() const {
+        return Ctx_->GetEndpointId();
+    }
+
 private:
     void Reply(NProtoBuf::Message *resp, ui32 status) override {
         // End Of Request for non streaming requests

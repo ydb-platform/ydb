@@ -859,7 +859,7 @@ public:
         context.SS->ClearDescribePathCaches(path.Base());
         context.OnComplete.PublishToSchemeBoard(OperationId, path.Base()->PathId);
 
-        path.DomainInfo()->AddInternalShards(txState);
+        path.DomainInfo()->AddInternalShards(txState, context.SS);
         path.DomainInfo()->IncPQPartitionsInside(partitionsToCreate);
         path.DomainInfo()->UpdatePQReservedStorage(oldReserve.Storage, reserve.Storage);
         path.Base()->IncShardsInside(shardsToCreate);

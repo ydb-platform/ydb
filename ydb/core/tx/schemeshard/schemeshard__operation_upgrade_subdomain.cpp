@@ -1252,7 +1252,7 @@ public:
             context.OnComplete.Dependence(otherTxId, OperationId.GetTxId());
         }
 
-        path.DomainInfo()->AddInternalShards(txState);
+        path.DomainInfo()->AddInternalShards(txState, context.SS);
         path.Base()->IncShardsInside();
 
         context.OnComplete.ActivateTx(OperationId);

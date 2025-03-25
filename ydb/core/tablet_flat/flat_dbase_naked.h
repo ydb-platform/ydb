@@ -101,6 +101,24 @@ namespace NTable {
                 aggr.MemTableOps += Self->GetOpsCount();
             }
 
+            /**
+             * Returns serial before the transaction (when in transaction),
+             * but possibly after schema changes or memtable flushes.
+             */
+            ui64 StableSerial() const noexcept
+            {
+                return DataModified && !EpochSnapshot ? SerialBackup : Serial;
+            }
+
+            /**
+             * Returns epoch before the transaction (when in transaction),
+             * but possibly after schema changes or memtable flushes.
+             */
+            TEpoch StableHead() const noexcept
+            {
+                return EpochSnapshot ? *EpochSnapshot : Self->Head();
+            }
+
             const ui32 Table = Max<ui32>();
             const TIntrusivePtr<TTable> Self;
             const TTxStamp Edge = 0;    /* Stamp of last snapshot       */
@@ -145,6 +163,14 @@ namespace NTable {
         ui64 Serial() const noexcept
         {
             return Serial_;
+        }
+
+        /**
+         * Returns serial before the transaction (when in transaction)
+         */
+        ui64 StableSerial() const noexcept
+        {
+            return InTransaction ? Begin_ : Serial_;
         }
 
         TTableWrapper& Get(ui32 table, bool require) noexcept

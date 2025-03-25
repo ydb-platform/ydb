@@ -258,7 +258,7 @@ public:
                 newDir->TempDirOwnerActorId, newDir->PathId);
         }
 
-        dstPath.DomainInfo()->IncPathsInside();
+        dstPath.DomainInfo()->IncPathsInside(context.SS);
         parentPath.Base()->IncAliveChildren();
 
         context.OnComplete.ActivateTx(OperationId);

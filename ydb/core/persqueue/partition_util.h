@@ -116,7 +116,7 @@ struct TPartition::THasDataReq {
     TMaybe<TInstant> ReadTimestamp;
 
     bool operator < (const THasDataReq& req) const {
-        return Num < req.Num;
+        return std::tuple(Offset, Num) < std::tuple(req.Offset, req.Num);
     }
 };
 

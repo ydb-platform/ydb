@@ -440,8 +440,7 @@ private:
         ResultSets.emplace_back();
         ResultSets.back() = std::move(data.GetResultSet());
 
-        THolder<NKqp::TEvKqpExecuter::TEvStreamDataAck> ack = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>();
-        ack->Record.SetSeqNo(ev->Get()->Record.GetSeqNo());
+        THolder<NKqp::TEvKqpExecuter::TEvStreamDataAck> ack = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         Send(ev->Sender, ack.Release());
     }
 

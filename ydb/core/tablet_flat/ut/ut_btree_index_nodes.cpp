@@ -99,7 +99,7 @@ namespace {
         dumpChild(node, 0);
 
         for (TRecIdx i : xrange(node.GetKeysCount())) {
-            Cerr << intend << " | > ";
+            Cerr << intend << " | > {";
 
             auto cells = node.GetKeyCellsIter(i, groupInfo.ColsKeyIdx);
             for (TPos pos : xrange(cells.Count())) {
@@ -111,7 +111,7 @@ namespace {
                 Cerr << (pos ? ", " : "") << str;
             }
 
-            Cerr << Endl;
+            Cerr << "}" << Endl;
             dumpChild(node, i + 1);
         }
 

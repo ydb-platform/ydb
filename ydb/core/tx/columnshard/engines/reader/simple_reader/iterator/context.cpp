@@ -128,4 +128,16 @@ void TSpecialReadContext::RegisterDuplicatesManager(const std::deque<std::shared
     DuplicatesManager = NActors::TActivationContext::Register(new TDuplicateFilterConstructor(sources));
 }
 
+void TSpecialReadContext::OnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source) {
+    if (DuplicatesManager) {
+        NActors::TActivationContext::AsActorContext().Send(DuplicatesManager, new TEvNotifyReadingFinished({ source }));
+    }
+}
+
+void TSpecialReadContext::OnSourcesSkipped(const std::vector<std::shared_ptr<NCommon::IDataSource>>& sources) {
+    if (DuplicatesManager) {
+        NActors::TActivationContext::AsActorContext().Send(DuplicatesManager, new TEvNotifyReadingFinished(sources));
+    }
+}
+
 }   // namespace NKikimr::NOlap::NReader::NSimple

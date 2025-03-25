@@ -49,6 +49,8 @@ public:
     }
 
     void RegisterDuplicatesManager(const std::deque<std::shared_ptr<IDataSource>>& sources);
+    void OnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source);
+    void OnSourcesSkipped(const std::vector<std::shared_ptr<NCommon::IDataSource>>& sources);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

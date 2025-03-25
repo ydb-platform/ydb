@@ -12,14 +12,26 @@ namespace NKikimr::NOlap::NReader {
 
 void TIntervalCounter::PropagateDelta(const TPosition& node) {
     AFL_VERIFY(node.GetIndex() < PropagatedDeltas.size());
-    if (PropagatedDeltas[node.GetIndex()]) {
-        const i64 delta = PropagatedDeltas[node.GetIndex()] * (node.IntervalSize() / 2);
-        AFL_VERIFY((i64)Count[node.GetIndex() * 2 + 1] >= -delta);
-        AFL_VERIFY((i64)Count[node.GetIndex() * 2 + 2] >= -delta);
-        Count[node.GetIndex() * 2 + 1] += delta;
-        Count[node.GetIndex() * 2 + 2] += delta;
-        PropagatedDeltas[node.GetIndex()] = 0;
+    if (!PropagatedDeltas[node.GetIndex()]) {
+        return;
     }
+
+    const ui64 left = node.GetIndex() * 2 + 1;
+    const ui64 right = node.GetIndex() * 2 + 2;
+    if (left < PropagatedDeltas.size()) {
+        AFL_VERIFY(right < PropagatedDeltas.size());
+        PropagatedDeltas[left] += PropagatedDeltas[node.GetIndex()];
+        PropagatedDeltas[right] += PropagatedDeltas[node.GetIndex()];
+    } else {
+        AFL_VERIFY((i64)Count[left] >= -PropagatedDeltas[node.GetIndex()]);
+        AFL_VERIFY((i64)Count[right] >= -PropagatedDeltas[node.GetIndex()]);
+        Count[left] += PropagatedDeltas[node.GetIndex()];
+        Count[right] += PropagatedDeltas[node.GetIndex()];
+    }
+    const i64 delta = PropagatedDeltas[node.GetIndex()] * (node.IntervalSize());
+    AFL_VERIFY((i64)Count[node.GetIndex()] >= -delta);
+    Count[node.GetIndex()] += delta;
+    PropagatedDeltas[node.GetIndex()] = 0;
 }
 
 void TIntervalCounter::Update(const TPosition& node, const TModification& modification) {
@@ -47,10 +59,11 @@ void TIntervalCounter::Inc(const ui32 l, const ui32 r) {
     Update(GetRoot(), TModification(l, r, 1));
 }
 
-ui64 TIntervalCounter::GetCount(const TPosition& node, const ui32 l, const ui32 r) const {
+ui64 TIntervalCounter::GetCount(const TPosition& node, const ui32 l, const ui32 r) {
     if (l <= node.GetLeft() && r >= node.GetRight()) {
         return GetCount(node);
     }
+    PropagateDelta(node);
     bool needLeft = node.LeftChild().GetRight() >= l;
     bool needRight = node.RightChild().GetLeft() <= r;
     AFL_VERIFY(needLeft || needRight);
@@ -132,12 +145,12 @@ TDuplicateFilterConstructor::TSourceIntervals::TSourceIntervals(const std::deque
     class TBorderView {
     private:
         YDB_READONLY_DEF(bool, IsLast);
-        const NSimple::TReplaceKeyAdapter* PK;
+        const NSimple::TReplaceKeyAdapter* Start;
         YDB_READONLY_DEF(ui64, SourceId);
 
         TBorderView(const bool isLast, const NSimple::TReplaceKeyAdapter* pk, const ui64 sourceId)
             : IsLast(isLast)
-            , PK(pk)
+            , Start(pk)
             , SourceId(sourceId) {
         }
 
@@ -150,15 +163,15 @@ TDuplicateFilterConstructor::TSourceIntervals::TSourceIntervals(const std::deque
         }
 
         bool operator<(const TBorderView& other) const {
-            return std::tie<const NSimple::TReplaceKeyAdapter&, const bool&, const ui64&>(*PK, IsLast, SourceId) <
-                   std::tie<const NSimple::TReplaceKeyAdapter&, const bool&, const ui64&>(*other.PK, other.IsLast, other.SourceId);
+            return std::tie<const NSimple::TReplaceKeyAdapter&, const bool&, const ui64&>(*Start, IsLast, SourceId) <
+                   std::tie<const NSimple::TReplaceKeyAdapter&, const bool&, const ui64&>(*other.Start, other.IsLast, other.SourceId);
         };
         bool operator==(const TBorderView& other) const {
             return SourceId == other.SourceId && IsLast == other.IsLast;
         };
 
-        const NSimple::TReplaceKeyAdapter& GetPK() const {
-            return *PK;
+        const NSimple::TReplaceKeyAdapter& GetStart() const {
+            return *Start;
         }
     };
 
@@ -172,8 +185,8 @@ TDuplicateFilterConstructor::TSourceIntervals::TSourceIntervals(const std::deque
     THashMap<ui64, ui32> firstBySourceId;
     for (const auto& border : borders) {
         if (border.GetIsLast()) {
-            if (IntervalBorders.empty() || IntervalBorders.back() != border.GetPK().GetReplaceKey()) {
-                IntervalBorders.emplace_back(border.GetPK().GetReplaceKey());
+            if (IntervalBorders.empty() || IntervalBorders.back() != border.GetStart().GetReplaceKey()) {
+                IntervalBorders.emplace_back(border.GetStart().GetReplaceKey());
             }
             const TIntervalsRange sourceRange(
                 *TValidator::CheckNotNull(firstBySourceId.FindPtr(border.GetSourceId())), IntervalBorders.size() - 1);
@@ -183,22 +196,69 @@ TDuplicateFilterConstructor::TSourceIntervals::TSourceIntervals(const std::deque
         }
     }
     AFL_VERIFY(SourceRanges.size() == sources.size());
+
+    {
+        ui64 maxStart = 0;
+        for (const auto& source : sources) {
+            ui64 currentStart = GetRangeBySourceId(source->GetSourceId()).GetFirstIdx();
+            AFL_VERIFY(maxStart <= currentStart);
+            maxStart = currentStart;
+        }
+    }
 }
 
 void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "request_duplicates_filter")("source_id", ev->Get()->GetSource()->GetSourceId());
-    const ui32 sourceId = ev->Get()->GetSource()->GetSourceId();
+    const ui32 reqSourceId = ev->Get()->GetSource()->GetSourceId();
+    const auto reqSourceRange = Intervals.GetRangeBySourceId(reqSourceId);
 
-    while (!SortedSources.empty() && Intervals.GetRangeBySourceId(SortedSources.front()->GetSourceId()).GetFirstIdx() <=
-                                            Intervals.GetRangeBySourceId(sourceId).GetLastIdx()) {
+    // FIXME: sources may come out of order (need request buffering)
+    AFL_VERIFY(SortedSources.empty() || SortedSources.front()->GetSourceId() == reqSourceId || Intervals.GetRangeBySourceId(SortedSources.front()->GetSourceId()).GetFirstIdx() > Intervals.GetRangeBySourceId(reqSourceId).GetLastIdx())("sorted_sources", SortedSources.size());
+
+    while (!SkippedSources.empty() || !SortedSources.empty()) {
+        std::shared_ptr<NCommon::IDataSource> source = SkippedSources.empty() ? SortedSources.front() : SkippedSources.front();
+        const TIntervalsRange range = Intervals.GetRangeBySourceId(source->GetSourceId());
+        if (range.GetFirstIdx() > reqSourceRange.GetLastIdx()) {
+            break;
+        }
+
+        const bool isSkipped = !SkippedSources.empty();
+        if (isSkipped) {
+            SkippedSources.pop_front();
+
+            // TODO: update NextIntervalToMerge (everywhere)
+            // const ui32 nextInterval = [this]() {
+            //     if (!SkippedSources.empty()) {
+            //         return Intervals.GetRangeBySourceId(SkippedSources.front()->GetSourceId()).GetFirstIdx();
+            //     }
+            //     if (!SortedSources.empty()) {
+            //         return Intervals.GetRangeBySourceId(SortedSources.front()->GetSourceId()).GetFirstIdx();
+            //     }
+            //     return std::numeric_limits<ui32>::max();
+            // }();
+            // while (!NextIntervalToMerge.IsEnd() && NextIntervalToMerge.GetIntervalIdx() != nextInterval) {
+            //     NextIntervalToMerge.Next();
+            // }
+        } else {
+            SortedSources.pop_front();
+        }
+
+        if (range.GetLastIdx() < reqSourceRange.GetFirstIdx()) {
+            AFL_VERIFY(FinishedSourceIds.emplace(reqSourceId).second);
+            AFL_VERIFY(isSkipped);
+            continue;
+        }
+
         ActiveSources.emplace_back(std::make_shared<TSourceFilterConstructor>(SortedSources.front(), Intervals));
         ActiveSourceById.emplace(ActiveSources.back()->GetSource()->GetSourceId(), ActiveSources.back());
-        SortedSources.pop_front();
         StartFetchingColumns(ActiveSources.back(), ev->Get()->GetSource()->GetMemoryGroupId());
+
+        if (isSkipped) {
+            ActiveSources.back()->SetSubscriber(std::make_shared<TNoOpSubscriber>());
+        }
     }
 
-    // FIXME: some sources don't need filters during a scan
-    auto constructor = GetConstructorBySourceId(sourceId);
+    auto constructor = GetConstructorBySourceId(reqSourceId);
     constructor->SetSubscriber(ev->Get()->GetSubscriber());
     FlushFinishedSources();
 }
@@ -227,10 +287,29 @@ void TDuplicateFilterConstructor::Handle(const TEvDuplicateFilterDataFetched::TP
     NotFetchedSourcesCount.Dec(intervals.GetFirstIdx(), intervals.GetLastIdx());
 
     AFL_VERIFY(intervals.GetFirstIdx() >= NextIntervalToMerge.GetIntervalIdx());
-    while (!NextIntervalToMerge.IsEnd() && !NotFetchedSourcesCount.GetCount(NextIntervalToMerge.GetIntervalIdx(), NextIntervalToMerge.GetIntervalIdx())) {
+    while (!NextIntervalToMerge.IsEnd() &&
+           !NotFetchedSourcesCount.GetCount(NextIntervalToMerge.GetIntervalIdx(), NextIntervalToMerge.GetIntervalIdx())) {
         StartMergingColumns(NextIntervalToMerge);
         NextIntervalToMerge.Next();
     }
+}
+
+void TDuplicateFilterConstructor::Handle(const TEvNotifyReadingFinished::TPtr& ev) {
+    for (const auto& source : ev->Get()->GetSources()) {
+        if (FinishedSourceIds.contains(source->GetSourceId())) {
+            continue;
+        }
+        if (auto* findSource = ActiveSourceById.FindPtr(source->GetSourceId())) {
+            (*findSource)->SetSubscriber(std::make_shared<TNoOpSubscriber>());
+            continue;
+        }
+        // FIXME: sources may come out of order
+        AFL_VERIFY(!SortedSources.empty());
+        AFL_VERIFY(SortedSources.front()->GetSourceId() == source->GetSourceId());
+        SkippedSources.emplace_back(SortedSources.front());
+        SortedSources.pop_front();
+    }
+    FlushFinishedSources();
 }
 
 void TDuplicateFilterConstructor::Handle(const NActors::TEvents::TEvPoison::TPtr&) {
@@ -259,6 +338,8 @@ TDuplicateFilterConstructor::TDuplicateFilterConstructor(const std::deque<std::s
 }
 
 void TDuplicateFilterConstructor::StartFetchingColumns(const std::shared_ptr<TSourceFilterConstructor>& source, const ui64 memoryGroupId) const {
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("event", "start_fetching_columns")(
+        "source", source->GetSource()->GetSourceId())("memory_group", memoryGroupId);
     auto fetchingContext = std::make_shared<TColumnFetchingContext>(source, SelfId());
 
     auto portion = std::dynamic_pointer_cast<NSimple::TPortionDataSource>(source->GetSource());
@@ -273,6 +354,8 @@ void TDuplicateFilterConstructor::StartFetchingColumns(const std::shared_ptr<TSo
 }
 
 void TDuplicateFilterConstructor::StartMergingColumns(const TIntervalsCursor& interval) const {
+    AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("event", "start_merging_columns")(
+        "columns", interval.GetSourcesByRightInterval().size())("interval", interval.GetIntervalIdx());
     AFL_VERIFY(!ActiveSources.empty());
     const std::shared_ptr<NCommon::TSpecialReadContext> readContext = ActiveSources.front()->GetSource()->GetContext();
     const std::shared_ptr<TBuildDuplicateFilters> task = std::make_shared<TBuildDuplicateFilters>(
@@ -290,16 +373,16 @@ void TDuplicateFilterConstructor::StartMergingColumns(const TIntervalsCursor& in
 
 void TDuplicateFilterConstructor::FlushFinishedSources() {
     while (!ActiveSources.empty() && ActiveSources.front()->IsReady()) {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "build_duplicates_filter")(
+        AFL_TRACE(NKikimrServices::TX_COLUMNSHARD_SCAN)("component", "duplicates_manager")("event", "build_duplicates_filter")(
             "source_id", ActiveSources.front()->GetSource()->GetSourceId());
         ActiveSources.front()->Finish();
         AFL_VERIFY(ActiveSourceById.erase(ActiveSources.front()->GetSource()->GetSourceId()));
+        FinishedSourceIds.emplace(ActiveSources.front()->GetSource()->GetSourceId());
         ActiveSources.pop_front();
-        ++FinishedSourcesCount;
     }
 
     if (ActiveSources.empty() && SortedSources.empty()) {
-        AFL_VERIFY(NotFetchedSourcesCount.IsAllZeros());
+        AFL_VERIFY(NextIntervalToMerge.IsEnd());
         PassAway();
     }
 }
@@ -313,9 +396,9 @@ std::shared_ptr<TDuplicateFilterConstructor::TSourceFilterConstructor> TDuplicat
 
 std::shared_ptr<TDuplicateFilterConstructor::TSourceFilterConstructor> TDuplicateFilterConstructor::GetConstructorBySourceSeqNumber(
     const ui32 seqNumber) const {
-    AFL_VERIFY(seqNumber >= FinishedSourcesCount);
-    AFL_VERIFY(seqNumber - FinishedSourcesCount < ActiveSources.size());
-    return ActiveSources[seqNumber - FinishedSourcesCount];
+    AFL_VERIFY(seqNumber >= FinishedSourceIds.size());
+    AFL_VERIFY(seqNumber - FinishedSourceIds.size() < ActiveSources.size());
+    return ActiveSources[seqNumber - FinishedSourceIds.size()];
 }
 
 }   // namespace NKikimr::NOlap::NReader

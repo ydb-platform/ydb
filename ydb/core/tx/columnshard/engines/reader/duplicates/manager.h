@@ -14,6 +14,17 @@ namespace NSimple {
 class IDataSource;
 }
 
+class TEvNotifyReadingFinished: public NActors::TEventLocal<TEvNotifyReadingFinished, NColumnShard::TEvPrivate::EvNotifyReadingFinished> {
+private:
+    YDB_READONLY_DEF(std::vector<std::shared_ptr<NCommon::IDataSource>>, Sources);
+
+public:
+    TEvNotifyReadingFinished(const std::vector<std::shared_ptr<NCommon::IDataSource>>& sources)
+        : Sources(sources) {
+        AFL_VERIFY(!sources.empty());
+    }
+};
+
 class TEvDuplicateFilterIntervalResult
     : public NActors::TEventLocal<TEvDuplicateFilterIntervalResult, NColumnShard::TEvPrivate::EvDuplicateFilterIntervalResult> {
 private:
@@ -25,6 +36,7 @@ public:
     TEvDuplicateFilterIntervalResult(TConclusion<TFilterBySourceId>&& result, const ui32 intervalIdx)
         : Result(std::move(result))
         , IntervalIdx(intervalIdx) {
+        AFL_VERIFY(!Result->empty());
     }
 
     TFilterBySourceId&& DetachResult() {
@@ -104,7 +116,7 @@ private:
     void PropagateDelta(const TPosition& node);
     void Update(const TPosition& node, const TModification& modification);
     void Inc(const ui32 l, const ui32 r);
-    ui64 GetCount(const TPosition& node, const ui32 l, const ui32 r) const;
+    ui64 GetCount(const TPosition& node, const ui32 l, const ui32 r);
     ui64 GetCount(const TPosition& node) const {
         AFL_VERIFY(node.GetIndex() < Count.size());
         return Count[node.GetIndex()] +
@@ -117,7 +129,7 @@ private:
 public:
     TIntervalCounter(const std::vector<std::pair<ui32, ui32>>& intervals);
     void Dec(const ui32 l, const ui32 r);
-    ui64 GetCount(const ui32 l, const ui32 r) const {
+    ui64 GetCount(const ui32 l, const ui32 r) {
         return GetCount(GetRoot(), l, r);
     }
     bool IsAllZeros() const;
@@ -126,6 +138,14 @@ public:
 class TDuplicateFilterConstructor: public NActors::TActor<TDuplicateFilterConstructor> {
 private:
     friend class TColumnFetchingContext;
+
+    class TNoOpSubscriber: public IFilterSubscriber {
+    private:
+        virtual void OnFilterReady(const NArrow::TColumnFilter&) {
+        }
+        virtual void OnFailure(const TString&) {
+        }
+    };
 
     class TIntervalsRange {
     private:
@@ -237,26 +257,19 @@ private:
         YDB_READONLY_DEF(std::shared_ptr<NCommon::IDataSource>, Source);
         std::shared_ptr<IFilterSubscriber> Subscriber;
         std::vector<ui64> IntervalOffsets;
+        std::vector<NArrow::TReplaceKey> RightIntervalBorders;
         ui64 ReadyFilterCount = 0;
 
     public:
-        TSourceFilterConstructor(const std::shared_ptr<NCommon::IDataSource>& source,
-            const TSourceIntervals& intervals)
+        TSourceFilterConstructor(const std::shared_ptr<NCommon::IDataSource>& source, const TSourceIntervals& intervals)
             : FirstIntervalIdx(intervals.GetRangeBySourceId(source->GetSourceId()).GetFirstIdx())
             , IntervalFilters(intervals.GetRangeBySourceId(source->GetSourceId()).NumIntervals())
             , Source(source) {
-            IntervalOffsets.emplace_back(0);
-            const TIntervalsRange& sourceIntervals = intervals.GetRangeBySourceId(source->GetSourceId());
-            for (ui32 intervalIdx = sourceIntervals.GetFirstIdx() + 1; intervalIdx <= sourceIntervals.GetLastIdx(); ++intervalIdx) {
-                const NArrow::NAccessor::IChunkedArray::TRowRange findLeftBorder = source->GetStageData().ToGeneralContainer()->EqualRange(
-                    *intervals.GetLeftExlusiveBorder(intervalIdx)
-                         ->ToBatch(source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPrimaryKey()));
-                // TODO: hide decision in a class?
-                IntervalOffsets.emplace_back(source->GetContext()->GetReadMetadata()->IsDescSorted()
-                                                 ? source->GetRecordsCount() - findLeftBorder.GetBegin()
-                                                 : findLeftBorder.GetEnd());
+            const TIntervalsRange range = intervals.GetRangeBySourceId(Source->GetSourceId());
+            RightIntervalBorders.reserve(range.NumIntervals());
+            for (ui32 intervalIdx = range.GetFirstIdx(); intervalIdx <= range.GetLastIdx(); ++intervalIdx) {
+                RightIntervalBorders.emplace_back(intervals.GetRightInclusiveBorder(intervalIdx));
             }
-            AFL_VERIFY(IntervalOffsets.size() == sourceIntervals.NumIntervals());
         }
 
         void StartFetchingColumns(const ui64 memoryGroupId);
@@ -270,6 +283,29 @@ private:
             AFL_VERIFY(MemoryGuard);
             AFL_VERIFY(!ColumnData);
             ColumnData = std::move(data);
+
+            AFL_VERIFY(ColumnData);
+            IntervalOffsets.emplace_back(0);
+            for (ui32 intervalIdx = FirstIntervalIdx + 1; intervalIdx < FirstIntervalIdx + IntervalFilters.size(); ++intervalIdx) {
+                NArrow::TGeneralContainer keysData = [this]() {
+                    // TODO: optimize?
+                    // TODO: simplify?
+                    std::vector<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> columns;
+                    const auto& pkSchema = Source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPrimaryKey();
+                    for (const auto& field : pkSchema->fields()) {
+                        columns.emplace_back(ColumnData->GetAccessorByNameOptional(field->name()));
+                    }
+                    return NArrow::TGeneralContainer(
+                        Source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPrimaryKey(), std::move(columns));
+                }();
+                const NArrow::NAccessor::IChunkedArray::TRowRange findLeftBorder = keysData.EqualRange(
+                    *RightIntervalBorders[intervalIdx - 1].ToBatch(Source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPrimaryKey()));
+                // TODO: hide decision in a class?
+                IntervalOffsets.emplace_back(Source->GetContext()->GetReadMetadata()->IsDescSorted()
+                                                 ? ColumnData->GetRecordsCount() - findLeftBorder.GetBegin()
+                                                 : findLeftBorder.GetEnd());
+            }
+            AFL_VERIFY(IntervalOffsets.size() == IntervalFilters.size());
         }
         void SetSubscriber(const std::shared_ptr<IFilterSubscriber>& subscriber) {
             AFL_VERIFY(!Subscriber);
@@ -281,6 +317,7 @@ private:
         }
 
         NArrow::NAccessor::IChunkedArray::TRowRange GetIntervalRange(const ui32 globalIntervalIdx) const {
+            AFL_VERIFY(!IntervalOffsets.empty());
             AFL_VERIFY(globalIntervalIdx >= FirstIntervalIdx)("global", globalIntervalIdx)("first", FirstIntervalIdx);
             const ui32 localIntervalIdx = globalIntervalIdx - FirstIntervalIdx;
             AFL_VERIFY(localIntervalIdx < IntervalOffsets.size())("local", localIntervalIdx)("global", globalIntervalIdx)(
@@ -302,9 +339,10 @@ private:
 
 private:
     TSourceIntervals Intervals;
-    ui64 FinishedSourcesCount = 0;
+    THashSet<ui64> FinishedSourceIds;
     std::deque<std::shared_ptr<TSourceFilterConstructor>> ActiveSources;
     THashMap<ui64, std::shared_ptr<TSourceFilterConstructor>> ActiveSourceById;
+    std::deque<std::shared_ptr<NSimple::IDataSource>> SkippedSources;
     std::deque<std::shared_ptr<NSimple::IDataSource>> SortedSources;
     TIntervalCounter NotFetchedSourcesCount;
     TIntervalsCursor NextIntervalToMerge;
@@ -315,6 +353,7 @@ private:
             hFunc(TEvRequestFilter, Handle);
             hFunc(TEvDuplicateFilterIntervalResult, Handle);
             hFunc(TEvDuplicateFilterDataFetched, Handle);
+            hFunc(TEvNotifyReadingFinished, Handle);
             hFunc(NActors::TEvents::TEvPoison, Handle);
             default:
                 AFL_VERIFY(false)("unexpected_event", ev->GetTypeName());
@@ -324,6 +363,7 @@ private:
     void Handle(const TEvRequestFilter::TPtr&);
     void Handle(const TEvDuplicateFilterIntervalResult::TPtr&);
     void Handle(const TEvDuplicateFilterDataFetched::TPtr&);
+    void Handle(const TEvNotifyReadingFinished::TPtr&);
     void Handle(const NActors::TEvents::TEvPoison::TPtr&);
 
     void AbortConstruction(const TString& reason);

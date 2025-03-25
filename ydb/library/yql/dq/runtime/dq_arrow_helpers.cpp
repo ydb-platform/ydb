@@ -1050,7 +1050,6 @@ public:
 
         const auto estimatedSize = SplitStack.back().GetSize() / std::max(ChunkSizeLimit, ui64(1));
         result.reserve(estimatedSize);
-        SplitStack.reserve(estimatedSize);
         while (!SplitStack.empty()) {
             auto item = std::move(SplitStack.back());
             SplitStack.pop_back();

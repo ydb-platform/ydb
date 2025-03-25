@@ -1058,20 +1058,20 @@ Y_UNIT_TEST_SUITE(ConvertUnboxedValueToArrowAndBack){
 }
 
 Y_UNIT_TEST_SUITE(TestArrowBlockSplitter) {
-    void ValidateSplit(const TBlockValue& initialItem, ui64 numberParts, ui64 sizeLimit, const std::vector<std::vector<arrow::Datum>>& splttedItems) {
-        UNIT_ASSERT_VALUES_EQUAL(splttedItems.size(), numberParts);
+    void ValidateSplit(const TBlockValue& initialItem, ui64 numberParts, ui64 sizeLimit, const std::vector<std::vector<arrow::Datum>>& splittedItems) {
+        UNIT_ASSERT_VALUES_EQUAL(splittedItems.size(), numberParts);
         const ui64 numberRows = TArrowBlock::From(initialItem.Values.back()).GetDatum().scalar_as<arrow::UInt64Scalar>().value;
         const ui64 expectedSplittedSize = numberRows / numberParts;
         const ui64 width = initialItem.Type->GetElementsCount();
 
         ui64 rowsCount = 0;
-        for (const auto& splttedBatch : splttedItems) {
+        for (const auto& splittedBatch : splittedItems) {
             const auto batchSuffix = TStringBuilder() << "rows count: " << rowsCount;
 
-            UNIT_ASSERT_VALUES_EQUAL_C(width, splttedBatch.size(), batchSuffix);
-            UNIT_ASSERT_C(splttedBatch.back().is_scalar(), batchSuffix);
+            UNIT_ASSERT_VALUES_EQUAL_C(width, splittedBatch.size(), batchSuffix);
+            UNIT_ASSERT_C(splittedBatch.back().is_scalar(), batchSuffix);
 
-            const auto splittedSize = splttedBatch.back().scalar_as<arrow::UInt64Scalar>().value;
+            const auto splittedSize = splittedBatch.back().scalar_as<arrow::UInt64Scalar>().value;
             UNIT_ASSERT_VALUES_EQUAL_C(splittedSize, expectedSplittedSize, batchSuffix);
 
             ui64 itemSize = 0;
@@ -1079,7 +1079,7 @@ Y_UNIT_TEST_SUITE(TestArrowBlockSplitter) {
                 const auto columnSuffix = TStringBuilder() << batchSuffix << ", column: " << i;
 
                 const auto initialDatum = TArrowBlock::From(initialItem.Values[i]).GetDatum();
-                const auto splittedDatum = splttedBatch[i];
+                const auto splittedDatum = splittedBatch[i];
                 if (initialDatum.is_scalar()) {
                     UNIT_ASSERT_C(splittedDatum.is_scalar(), columnSuffix);
                     UNIT_ASSERT_C(initialDatum.Equals(splittedDatum), columnSuffix);

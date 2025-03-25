@@ -41,7 +41,7 @@ class TpchSuiteBase(LoadSuiteBase):
             return
         cls.check_tables_size(folder=cls._get_path(False), tables=cls._get_tables_size())
 
-    @pytest.mark.parametrize('query_num', [i for i in [21, 22]])
+    @pytest.mark.parametrize('query_num', [i for i in range(1, 23)])
     def test_tpch(self, query_num: int):
         if query_num in self.skip_tests:
             return
@@ -89,5 +89,5 @@ class TestTpch10000(TpchSuiteBase):
 
     scale: int = 10000
     iterations: int = 1
-    check_canonical: bool = CheckCanonicalPolicy.NO
+    check_canonical: bool = CheckCanonicalPolicy.WARNING
     timeout = max(TpchSuiteBase.timeout, 14400.)

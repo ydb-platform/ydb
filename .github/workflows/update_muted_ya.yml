@@ -61,20 +61,20 @@ jobs:
       - name: Collect PR description
         id: pr_description
         run: |
-          PR_BODY=$'Automatically updated muted YA file by GitHub Actions.\n\n'
+          PR_BODY=''
           if [ -s mute_update/deleted_tests_in_mute_debug.txt ]; then
               DELETED_COUNT=$(wc -l < mute_update/deleted_tests_in_mute_debug.txt)
-              PR_BODY+=$'**Removed from mute: '"${DELETED_COUNT}"**$'\n\n'"$(cat mute_update/deleted_tests_in_mute_debug.txt)"$'\n
+              PR_BODY+=$'Removed from mute: '"${DELETED_COUNT}"$'\n\n'"$(cat mute_update/deleted_tests_in_mute_debug.txt)"$'\n
           \n\n'
           fi
           if [ -s mute_update/flaky_debug.txt ]; then
               FLAKY_COUNT=$(wc -l < mute_update/flaky_debug.txt)
-              PR_BODY+=$'**Muted flaky: '"${FLAKY_COUNT}"**$'\n\n'"$(cat mute_update/flaky_debug.txt)"$'\n
+              PR_BODY+=$'Muted flaky: '"${FLAKY_COUNT}"$'\n\n'"$(cat mute_update/flaky_debug.txt)"$'\n
           \n\n'
           fi
           if [ -s mute_update/muted_stable_debug.txt ]; then
               MUTED_STABLE_COUNT=$(wc -l < mute_update/muted_stable_debug.txt)
-              PR_BODY+=$'**Unmutd stable: '"${MUTED_STABLE_COUNT}"**$'\n\n'"$(cat mute_update/muted_stable_debug.txt)"$'\n
+              PR_BODY+=$'Unmuted stable: '"${MUTED_STABLE_COUNT}"$'\n\n'"$(cat mute_update/muted_stable_debug.txt)"$'\n
           \n\n'
           fi
           echo "PR_BODY=${PR_BODY}" >> $GITHUB_ENV

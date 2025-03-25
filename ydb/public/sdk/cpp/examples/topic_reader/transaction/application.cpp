@@ -20,10 +20,10 @@ TApplication::TApplication(const TOptions& options)
 
     Driver.emplace(config);
     TopicClient.emplace(*Driver);
-    TableClient.emplace(*Driver);
+    QueryClient.emplace(*Driver);
 
     CreateTopicReadSession(options);
-    CreateTableSession();
+    CreateQuerySession();
 
     TablePath = options.TablePath;
 }
@@ -40,15 +40,15 @@ void TApplication::CreateTopicReadSession(const TOptions& options)
     std::cout << "Topic session was created" << std::endl;
 }
 
-void TApplication::CreateTableSession()
+void TApplication::CreateQuerySession()
 {
-    NYdb::NTable::TCreateSessionSettings settings;
+    NYdb::NQuery::TCreateSessionSettings settings;
 
-    auto result = TableClient->GetSession(settings).GetValueSync();
+    auto result = QueryClient->GetSession(settings).GetValueSync();
 
-    TableSession = result.GetSession();
+    QuerySession = result.GetSession();
 
-    std::cout << "Table session was created" << std::endl;
+    std::cout << "Query session was created" << std::endl;
 }
 
 void TApplication::Run()
@@ -104,10 +104,10 @@ void TApplication::Finalize()
 void TApplication::BeginTransaction()
 {
     Y_ABORT_UNLESS(!Transaction);
-    Y_ABORT_UNLESS(TableSession);
+    Y_ABORT_UNLESS(QuerySession);
 
-    auto settings = NYdb::NTable::TTxSettings::SerializableRW();
-    auto result = TableSession->BeginTransaction(settings).GetValueSync();
+    auto settings = NYdb::NQuery::TTxSettings::SerializableRW();
+    auto result = QuerySession->BeginTransaction(settings).GetValueSync();
 
     Transaction = result.GetTransaction();
 }
@@ -116,7 +116,7 @@ void TApplication::CommitTransaction()
 {
     Y_ABORT_UNLESS(Transaction);
 
-    NYdb::NTable::TCommitTxSettings settings;
+    NYdb::NQuery::TCommitTxSettings settings;
 
     auto result = Transaction->Commit(settings).GetValueSync();
 
@@ -173,20 +173,16 @@ void TApplication::InsertRowsIntoTable()
 
     auto params = builder.Build();
 
-    NYdb::NTable::TExecDataQuerySettings settings;
-    settings.KeepInQueryCache(true);
-
-    auto runQuery = [this, &query, &params, &settings](NYdb::NTable::TSession) -> NYdb::TStatus {
+    auto runQuery = [this, &query, &params](NYdb::NQuery::TSession) -> NYdb::TStatus {
         auto result =
-            Transaction->GetSession().ExecuteDataQuery(query,
-                                                       NYdb::NTable::TTxControl::Tx(*Transaction),
-                                                       params,
-                                                       settings).GetValueSync();
+            Transaction->GetSession().ExecuteQuery(query,
+                                                   NYdb::NQuery::TTxControl::Tx(*Transaction),
+                                                   params).GetValueSync();
 
         return result;
     };
 
-    TableClient->RetryOperationSync(runQuery);
+    QueryClient->RetryQuerySync(runQuery);
 }
 
 void TApplication::AppendTableRow(const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message)

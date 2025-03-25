@@ -8,6 +8,7 @@ env:
   BRANCH_FOR_PR: update_muted_ya
   TITLE: "Update muted_ya.txt"
   BASE_BRANCH: dev_wf_update_mute_v3
+  REVIEWERS: ydb-platform/ci
 
 jobs:
   create-or-update-muted-ya:
@@ -31,11 +32,27 @@ jobs:
       - name: Update branch with base branch
         run: |
           git config user.name YDBot
-          git config user.email ydbot@ydb.tech 
-          if [ -n "$(git ls-remote --heads origin ${{ env.BRANCH_FOR_PR }})" ]; then
-            git push origin --delete ${{ env.BRANCH_FOR_PR }}
+          git config user.email ydbot@ydb.tech
+      
+          # Создаём локальную ветку Branch_for_pr, если её нет
+          if ! git show-ref --quiet refs/heads/${{ env.BRANCH_FOR_PR }}; then
+            git checkout -b ${{ env.BRANCH_FOR_PR }}
+          else
+            git checkout ${{ env.BRANCH_FOR_PR }}
           fi
-          git checkout -b ${{ env.BRANCH_FOR_PR }}
+      
+          # Пытаемся сделать rebase с использованием стратегии theirs
+          if ! git rebase ${{ env.BASE_BRANCH }} -X theirs; then
+            echo "Rebase failed, force deleting remote branch and retrying..."
+            if [ -n "$(git ls-remote --heads origin ${{ env.BRANCH_FOR_PR }})" ]; then
+              git push origin --delete ${{ env.BRANCH_FOR_PR }}
+            fi
+            # Пересоздаём локальную ветку от BASE_BRANCH
+            git checkout ${{ env.BASE_BRANCH }}
+            git branch -D ${{ env.BRANCH_FOR_PR }}
+            git checkout -b ${{ env.BRANCH_FOR_PR }}
+      
+          fi
         
       - name: Run the script
         run: |
@@ -118,5 +135,6 @@ jobs:
           TITLE: ${{ env.TITLE }}
           BASE_BRANCH: ${{ env.BASE_BRANCH }}
           BODY: ${{ env.PR_BODY }}
+          REVIEWERS: ${{ env.REVIEWERS }}
         run: |
           python .github/scripts/create_or_update_pr.py

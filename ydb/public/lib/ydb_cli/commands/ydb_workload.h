@@ -103,7 +103,6 @@ protected:
     THolder<NTopic::TTopicClient> TopicClient;
     THolder<NScheme::TSchemeClient> SchemeClient;
     THolder<NQuery::TQueryClient> QueryClient;
-    THolder<NCoordination::TClient> CoordinationClient;
     int Type = 0;
     bool DryRun = false;
 };

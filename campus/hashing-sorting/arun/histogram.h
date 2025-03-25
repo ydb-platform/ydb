@@ -1,0 +1,38 @@
+#pragma once
+
+#include <util/system/types.h>
+#include <vector>
+#include <iostream>
+
+
+struct Bucket {
+    i64 left;
+    i64 right;
+    ui64 count;
+};
+
+struct FreqBucket {
+    i64 left;
+    i64 right;
+    double count;
+};
+
+template<class TBucket>
+struct Histogram {
+    std::vector<TBucket> buckets;
+};
+
+Histogram<FreqBucket> multiMerge(const std::vector<Histogram<Bucket>>& sources);
+
+template<class TBucket>
+std::ostream& operator<<(std::ostream& out, const Histogram<TBucket>& hist) {
+    out << "{ ";
+    size_t sz = hist.buckets.size();
+    for (size_t i = 0; i < sz; i++) {
+        const TBucket& b = hist.buckets[i];
+        out << "[" << b.left << " (" << b.count << ") " << b.right << "]";
+        if (i != sz - 1) out << ", ";
+    }
+    out << "}";
+    return out;
+}

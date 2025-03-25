@@ -28,7 +28,7 @@ class TestTTL(TestBase):
                     for sync in index_sync:
                         if uniq != "UNIQUE" or sync != "ASYNC":
                             if i == 1:
-                                index = index_first_not_Bool
+                                index = index_second
                             elif uniq == "UNIQUE":
                                 index = index_first_not_Bool
                             else:

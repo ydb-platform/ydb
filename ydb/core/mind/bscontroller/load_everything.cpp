@@ -109,6 +109,7 @@ public:
                 if (state.HaveValue<T::ShredState>()) {
                     Self->ShredState.OnLoad(state.GetValue<T::ShredState>());
                 }
+                Self->EnableConfigV2 = state.GetValue<T::EnableConfigV2>();
             }
         }
 
@@ -472,14 +473,6 @@ public:
             }
         }
 
-        // primitive garbage collection for obsolete metrics
-        for (const auto& key : pdiskMetricsToDelete) {
-            db.Table<Schema::PDiskMetrics>().Key(key).Delete();
-        }
-        for (const auto& key : vdiskMetricsToDelete) {
-            db.Table<Schema::VDiskMetrics>().Key(key).Delete();
-        }
-
         // apply storage pool stats
         std::unordered_map<TBoxStoragePoolId, ui64> allocatedSizeMap;
         for (const auto& [vslotId, slot] : Self->VSlots) {
@@ -521,6 +514,14 @@ public:
         // calculate group status for all groups
         for (auto& [id, group] : Self->GroupMap) {
             group->CalculateGroupStatus();
+        }
+
+        // primitive garbage collection for obsolete metrics
+        for (const auto& key : pdiskMetricsToDelete) {
+            db.Table<Schema::PDiskMetrics>().Key(key).Delete();
+        }
+        for (const auto& key : vdiskMetricsToDelete) {
+            db.Table<Schema::VDiskMetrics>().Key(key).Delete();
         }
 
         return true;

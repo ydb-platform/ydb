@@ -1,6 +1,6 @@
 from ydb.tests.sql.lib.test_base import TestBase
 from ydb.tests.stress.oltp_workload.workload import cleanup_type_name
-from ydb.tests.datashard.lib.create_table import create_table, create_ttl, pk_types, non_pk_types, index_first, index_second, ttl_types, unique, index_sync
+from ydb.tests.datashard.lib.create_table import create_table, create_ttl, pk_types, non_pk_types, index_first, index_first_not_Bool, index_second, ttl_types, unique, index_sync
 
 
 class TestDML(TestBase):
@@ -14,8 +14,14 @@ class TestDML(TestBase):
             for uniq in unique:
                 for sync in index_sync:
                     if uniq != "UNIQUE" or sync != "ASYNC":
+                        if i == 1:
+                            index = index_second
+                        elif uniq == "UNIQUE":
+                            index = index_first_not_Bool
+                        else:
+                            index = index_first
                         self.DML(
-                            f"table_index_{i}_{uniq}_{sync}", pk_types, {}, index_first if i == 0 else index_second, "", uniq, sync)
+                            f"table_index_{i}_{uniq}_{sync}", pk_types, {}, index, "", uniq, sync)
 
         self.DML(
             "table_all_types", pk_types, {**pk_types, **non_pk_types}, {}, "", "", "")

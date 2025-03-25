@@ -24,6 +24,19 @@ index_first = {
     "Decimal(35,10)": "CAST('{}.123456' AS Decimal(35,10))",
 }
 
+index_first_not_Bool = {
+    "Int64": "CAST({} AS Int64)",
+    "Uint64": "CAST({} AS Uint64)",
+    "Int32": "CAST({} AS Int32)",
+    "Uint32": "CAST({} AS Uint32)",
+    # "Int16": "CAST({} AS Int16)", https://github.com/ydb-platform/ydb/issues/15842
+    # "Uint16": "CAST({} AS Uint16)", https://github.com/ydb-platform/ydb/issues/15842
+    "Int8": "CAST({} AS Int8)",
+    "Decimal(15,0)": "CAST('{}.0' AS Decimal(15,0))",
+    "Decimal(22,9)": "CAST('{}.123' AS Decimal(22,9))",
+    "Decimal(35,10)": "CAST('{}.123456' AS Decimal(35,10))",
+}
+
 index_second = {
     "DyNumber": "CAST('{}E1' AS DyNumber)",
     "String": "'String {}'",

@@ -6,8 +6,11 @@
 
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/kqp/ut/common/columnshard.h>
+#include <ydb/core/tx/columnshard/counters/common/object_counter.h>
+#include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/source.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
+#include <ydb/core/tx/limiter/grouped_memory/service/process.h>
 #include <ydb/core/wrappers/fake_storage.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -65,9 +68,23 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
 
     class TSelectCommand: public ICommand {
     private:
-        const TString Command;
-        const TString Compare;
+        TString Command;
+        TString Compare;
+        std::optional<ui64> ExpectIndexSkip;
+        std::optional<ui64> ExpectIndexNoData;
+        std::optional<ui64> ExpectIndexApprove;
+
         virtual TConclusionStatus DoExecute(TKikimrRunner& kikimr) override {
+            auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
+            AFL_VERIFY(controller);
+            const i64 indexSkipStart = controller->GetIndexesSkippingOnSelect().Val();
+            const i64 indexApproveStart = controller->GetIndexesApprovedOnSelect().Val();
+            const i64 indexNoDataStart = controller->GetIndexesSkippedNoData().Val();
+
+            const i64 headerSkipStart = controller->GetHeadersSkippingOnSelect().Val();
+            const i64 headerApproveStart = controller->GetHeadersApprovedOnSelect().Val();
+            const i64 headerNoDataStart = controller->GetHeadersSkippedNoData().Val();
+
             Cerr << "EXECUTE: " << Command << Endl;
             auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
             auto it = kikimr.GetQueryClient().StreamExecuteQuery(Command, NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
@@ -78,14 +95,79 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
                 Cerr << "OUTPUT: " << output << Endl;
                 CompareYson(output, Compare);
             }
+            const ui32 iSkip = controller->GetIndexesSkippingOnSelect().Val() - indexSkipStart;
+            const ui32 iNoData = controller->GetIndexesSkippedNoData().Val() - indexNoDataStart;
+            const ui32 iApproves = controller->GetIndexesApprovedOnSelect().Val() - indexApproveStart;
+            Cerr << "INDEX:" << iNoData << "/" << iSkip << "/" << iApproves << Endl;
+
+            const ui32 hSkip = controller->GetHeadersSkippingOnSelect().Val() - headerSkipStart;
+            const ui32 hNoData = controller->GetHeadersSkippedNoData().Val() - headerNoDataStart;
+            const ui32 hApproves = controller->GetHeadersApprovedOnSelect().Val() - headerApproveStart;
+            Cerr << "HEADER:" << hNoData << "/" << hSkip << "/" << hApproves << Endl;
+            if (ExpectIndexSkip) {
+                AFL_VERIFY(iSkip + hSkip == *ExpectIndexSkip)("expect", ExpectIndexSkip)("ireal", iSkip)("hreal", hSkip)(
+                                     "current", controller->GetIndexesSkippingOnSelect().Val())("pred", indexSkipStart);
+            }
+            if (ExpectIndexNoData) {
+                AFL_VERIFY(iNoData == *ExpectIndexNoData)("expect", ExpectIndexNoData)("real", iNoData)(
+                                       "current", controller->GetIndexesSkippedNoData().Val())("pred", indexNoDataStart);
+            }
+            if (ExpectIndexApprove) {
+                AFL_VERIFY(iApproves == *ExpectIndexApprove)("expect", ExpectIndexApprove)("real", iApproves)(
+                                         "current", controller->GetIndexesApprovedOnSelect().Val())("pred", indexApproveStart);
+            }
             return TConclusionStatus::Success();
         }
 
     public:
-        TSelectCommand(const TString& command, const TString& compare)
-            : Command(command)
-            , Compare(compare) {
+        bool DeserializeFromString(const TString& info) {
+            auto lines = StringSplitter(info).SplitBySet("\n").ToList<TString>();
+            std::optional<ui32> state;
+            for (auto&& l : lines) {
+                l = Strip(l);
+                if (l.StartsWith("READ:")) {
+                    l = l.substr(5);
+                    state = 0;
+                } else if (l.StartsWith("EXPECTED:")) {
+                    l = l.substr(9);
+                    state = 1;
+                } else if (l.StartsWith("IDX_ND_SKIP_APPROVE:")) {
+                    state = 2;
+                    l = l.substr(20);
+                } else {
+                    AFL_VERIFY(state)("line", l);
+                }
+
+                if (*state == 0) {
+                    Command += l;
+                } else if (*state == 1) {
+                    Compare += l;
+                } else if (*state == 2) {
+                    auto idxExpectations = StringSplitter(l).SplitBySet(" ,.;").SkipEmpty().ToList<TString>();
+                    AFL_VERIFY(idxExpectations.size() == 3)("size", idxExpectations.size())("string", l);
+                    if (idxExpectations[0] != "{}") {
+                        ui32 res;
+                        AFL_VERIFY(TryFromString<ui32>(idxExpectations[0], res))("string", l);
+                        ExpectIndexNoData = res;
+                    }
+                    if (idxExpectations[1] != "{}") {
+                        ui32 res;
+                        AFL_VERIFY(TryFromString<ui32>(idxExpectations[1], res))("string", l);
+                        ExpectIndexSkip = res;
+                    }
+                    if (idxExpectations[2] != "{}") {
+                        ui32 res;
+                        AFL_VERIFY(TryFromString<ui32>(idxExpectations[2], res))("string", l);
+                        ExpectIndexApprove = res;
+                    }
+                } else {
+                    AFL_VERIFY(false)("line", l);
+                }
+            }
+            return true;
         }
+
+        TSelectCommand() = default;
     };
 
     class TStopCompactionCommand: public ICommand {
@@ -99,6 +181,24 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
 
     public:
         TStopCompactionCommand() {
+        }
+    };
+
+    class TOneActualizationCommand: public ICommand {
+    private:
+        virtual TConclusionStatus DoExecute(TKikimrRunner& kikimr) override {
+            {
+                auto alterQuery =
+                    TStringBuilder()
+                    << "ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, SCHEME_NEED_ACTUALIZATION=`true`);";
+                auto session = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+                auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
+                AFL_VERIFY(alterResult.GetStatus() == NYdb::EStatus::SUCCESS)("error", alterResult.GetIssues().ToString());
+            }
+            auto controller = NYDBTest::TControllers::GetControllerAs<NYDBTest::NColumnShard::TController>();
+            AFL_VERIFY(controller);
+            controller->WaitActualization(TDuration::Seconds(10));
+            return TConclusionStatus::Success();
         }
     };
 
@@ -149,9 +249,7 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
 
     public:
         TScriptExecutor(const std::vector<std::shared_ptr<ICommand>>& commands)
-            : Commands(commands)
-        {
-
+            : Commands(commands) {
         }
         void Execute() {
             NKikimrConfig::TAppConfig appConfig;
@@ -166,6 +264,10 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             for (auto&& i : Commands) {
                 i->Execute(kikimr);
             }
+            AFL_VERIFY(NColumnShard::TMonitoringObjectsCounter<NOlap::NGroupedMemoryManager::TProcessMemoryScope>::GetCounter().Val() == 0)("count",
+                           NColumnShard::TMonitoringObjectsCounter<NOlap::NGroupedMemoryManager::TProcessMemoryScope>::GetCounter().Val());
+            AFL_VERIFY(NColumnShard::TMonitoringObjectsCounter<NOlap::NReader::NCommon::IDataSource>::GetCounter().Val() == 0)(
+                           "count", NColumnShard::TMonitoringObjectsCounter<NOlap::NReader::NCommon::IDataSource>::GetCounter().Val());
         }
     };
 
@@ -180,29 +282,17 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
                 command = command.substr(5);
                 return std::make_shared<TDataCommand>(command);
             } else if (command.StartsWith("READ:")) {
-                auto lines = StringSplitter(command.substr(5)).SplitBySet("\n").ToList<TString>();
-                int step = 0;
-                TString request;
-                TString expectation;
-                for (auto&& i : lines) {
-                    i = Strip(i);
-                    if (i.StartsWith("EXPECTED:")) {
-                        step = 1;
-                        i = i.substr(9);
-                    }
-                    if (step == 0) {
-                        request += i;
-                    } else if (step == 1) {
-                        expectation += i;
-                    }
-                }
-                return std::make_shared<TSelectCommand>(request, expectation);
+                auto result = std::make_shared<TSelectCommand>();
+                AFL_VERIFY(result->DeserializeFromString(command));
+                return result;
             } else if (command.StartsWith("WAIT_COMPACTION")) {
                 return std::make_shared<TWaitCompactionCommand>();
             } else if (command.StartsWith("STOP_COMPACTION")) {
                 return std::make_shared<TStopCompactionCommand>();
             } else if (command.StartsWith("ONE_COMPACTION")) {
                 return std::make_shared<TOneCompactionCommand>();
+            } else if (command.StartsWith("ONE_ACTUALIZATION")) {
+                return std::make_shared<TOneActualizationCommand>();
             } else {
                 AFL_VERIFY(false)("command", command);
                 return nullptr;
@@ -270,7 +360,6 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             for (auto&& i : Scripts) {
                 i.Execute();
             }
-
         }
     };
 
@@ -336,6 +425,35 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         TScriptVariator(script).Execute();
     }
 
+    Y_UNIT_TEST(QuotedFilterVariants) {
+        TString script = R"(
+            SCHEMA:            
+            CREATE TABLE `/Root/ColumnTable` (
+                Col1 Uint64 NOT NULL,
+                Col2 JsonDocument,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$1|2|10$$);
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
+                      `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+            ------
+            DATA:
+            REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a.b.c" : "a1", "b.c.d" : "b1", "c.d.e" : "c1"}')), (2u, JsonDocument('{"a.b.c" : "a2"}')),
+                                                                    (3u, JsonDocument('{"b.c.d" : "b3", "d.e.f" : "d3"}')), (4u, JsonDocument('{"b.c.d" : "b4asdsasdaa", "a.b.c" : "a4"}'))
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"a.b.c\"") = "a2" ORDER BY Col1;
+            EXPECTED: [[2u;["{\"a.b.c\":\"a2\"}"]]]
+            
+        )";
+        TScriptVariator(script).Execute();
+    }
+
     Y_UNIT_TEST(FilterVariants) {
         TString script = R"(
             SCHEMA:            
@@ -363,6 +481,157 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             ------
             READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
             EXPECTED: [[1u;["{\"a\":\"a1\",\"b\":\"b1\",\"c\":\"c1\"}"]];[2u;["{\"a\":\"a2\"}"]];[3u;["{\"b\":\"b3\",\"d\":\"d3\"}"]];[4u;["{\"a\":\"a4\",\"b\":\"b4asdsasdaa\"}"]]]
+            
+        )";
+        TScriptVariator(script).Execute();
+    }
+
+    Y_UNIT_TEST(DoubleFilterVariants) {
+        TString script = R"(
+            SCHEMA:            
+            CREATE TABLE `/Root/ColumnTable` (
+                Col1 Uint64 NOT NULL,
+                Col2 JsonDocument,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$1|2|10$$);
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
+                      `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+            ------
+            DATA:
+            REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a" : "a1", "b" : "b1", "c" : "c1"}')), (2u, JsonDocument('{"a" : "a2"}')),
+                                                                    (3u, JsonDocument('{"b" : "b3", "d" : "d3"}')), (4u, JsonDocument('{"b" : "b4asdsasdaa", "a" : "a4"}'))
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.b") = "b3" AND JSON_VALUE(Col2, "$.d") = "d3" ORDER BY Col1;
+            EXPECTED: [[3u;["{\"b\":\"b3\",\"d\":\"d3\"}"]]]
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
+            EXPECTED: [[1u;["{\"a\":\"a1\",\"b\":\"b1\",\"c\":\"c1\"}"]];[2u;["{\"a\":\"a2\"}"]];[3u;["{\"b\":\"b3\",\"d\":\"d3\"}"]];[4u;["{\"a\":\"a4\",\"b\":\"b4asdsasdaa\"}"]]]
+            
+        )";
+        TScriptVariator(script).Execute();
+    }
+
+    Y_UNIT_TEST(OrFilterVariants) {
+        TString script = R"(
+            SCHEMA:            
+            CREATE TABLE `/Root/ColumnTable` (
+                Col1 Uint64 NOT NULL,
+                Col2 JsonDocument,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$1|2|10$$);
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
+                      `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+            ------
+            DATA:
+            REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a" : "a1", "b" : "b1", "c" : "c1"}')), (2u, JsonDocument('{"a" : "a2"}')),
+                                                                    (3u, JsonDocument('{"b" : "b3", "d" : "d3"}')), (4u, JsonDocument('{"b" : "b4asdsasdaa", "a" : "a4"}'))
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE (JSON_VALUE(Col2, "$.b") = "b3" AND JSON_VALUE(Col2, "$.d") = "d3") OR (JSON_VALUE(Col2, "$.b") = "b1" AND JSON_VALUE(Col2, "$.c") = "c1") ORDER BY Col1;
+            EXPECTED: [[1u;["{\"a\":\"a1\",\"b\":\"b1\",\"c\":\"c1\"}"]];[3u;["{\"b\":\"b3\",\"d\":\"d3\"}"]]]
+            
+        )";
+        TScriptVariator(script).Execute();
+    }
+
+    Y_UNIT_TEST(DoubleFilterReduceScopeVariants) {
+        TString script = R"(
+            SCHEMA:            
+            CREATE TABLE `/Root/ColumnTable` (
+                Col1 Uint64 NOT NULL,
+                Col2 JsonDocument,
+                Col3 UTF8,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$1|2|10$$);
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
+                      `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+            ------
+            DATA:
+            REPLACE INTO `/Root/ColumnTable` (Col1, Col2, Col3) VALUES(1u, JsonDocument('{"a" : "value_a", "b" : "b1", "c" : "c1"}'), "value1"), (2u, JsonDocument('{"a" : "value_a"}'), "value1"),
+                                                                    (3u, JsonDocument('{"a" : "value_a", "b" : "value_b"}'), "value2"), (4u, JsonDocument('{"b" : "value_b", "a" : "a4"}'), "value4")
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a") = "value_a" AND Col3 = "value2" ORDER BY Col1;
+            EXPECTED: [[3u;["{\"a\":\"value_a\",\"b\":\"value_b\"}"];["value2"]]]
+            
+        )";
+        TScriptVariator(script).Execute();
+    }
+
+    Y_UNIT_TEST(DoubleFilterReduceScopeWithPredicateVariants) {
+        TString script = R"(
+            SCHEMA:            
+            CREATE TABLE `/Root/ColumnTable` (
+                Col1 Uint64 NOT NULL,
+                Col2 JsonDocument,
+                Col3 UTF8,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$1|2|10$$);
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
+                      `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+            ------
+            DATA:
+            REPLACE INTO `/Root/ColumnTable` (Col1, Col2, Col3) VALUES(1u, JsonDocument('{"a" : "value_a", "b" : "b1", "c" : "c1"}'), "value1"), (2u, JsonDocument('{"a" : "value_a"}'), "value1"),
+                                                                    (3u, JsonDocument('{"a" : "value_a", "b" : "value_b"}'), "value2"), (4u, JsonDocument('{"b" : "value_b", "a" : "a4"}'), "value4")
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a") = "value_a" AND Col3 = "value2" AND Col1 > 1 ORDER BY Col1;
+            EXPECTED: [[3u;["{\"a\":\"value_a\",\"b\":\"value_b\"}"];["value2"]]]
+            
+        )";
+        TScriptVariator(script).Execute();
+    }
+
+    Y_UNIT_TEST(DoubleFilterReduceScopeWithPredicateVariantsWithSeparatedColumnAtFirst) {
+        TString script = R"(
+            SCHEMA:            
+            CREATE TABLE `/Root/ColumnTable` (
+                Col1 Uint64 NOT NULL,
+                Col2 JsonDocument,
+                Col3 UTF8,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$1|2|10$$);
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
+                      `COLUMNS_LIMIT`=`$$0|1|1024$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+            ------
+            DATA:
+            REPLACE INTO `/Root/ColumnTable` (Col1, Col2, Col3) VALUES(1u, JsonDocument('{"a" : "value_a", "b" : "b1", "c" : "c1"}'), "value1"), (2u, JsonDocument('{"a" : "value_a"}'), "value1"),
+                                                                    (3u, JsonDocument('{"a" : "value_a", "b" : "value_b"}'), "value2"), (4u, JsonDocument('{"b" : "value_b", "a" : "a4dsadasdasdasdsdasdasdas"}'), "value4")
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a") = "value_a" AND JSON_VALUE(Col2, "$.b") = "value_b" AND Col1 > 1 ORDER BY Col1;
+            EXPECTED: [[3u;["{\"a\":\"value_a\",\"b\":\"value_b\"}"];["value2"]]]
             
         )";
         TScriptVariator(script).Execute();
@@ -426,6 +695,35 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         TScriptVariator(script).Execute();
     }
 
+    Y_UNIT_TEST(SimpleExistsVariants) {
+        TString script = R"(
+            SCHEMA:            
+            CREATE TABLE `/Root/ColumnTable` (
+                Col1 Uint64 NOT NULL,
+                Col2 JsonDocument,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$1|2|10$$);
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
+                      `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+            ------
+            DATA:
+            REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a" : "a1"}')), (2u, JsonDocument('{"a" : "a2"}')),
+                                                                    (3u, JsonDocument('{"b" : "b3"}')), (4u, JsonDocument('{"b" : "b4asdsasdaa", "a" : "a4"}'))
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_EXISTS(Col2, "$.a") ORDER BY Col1;
+            EXPECTED: [[1u;["{\"a\":\"a1\"}"]];[2u;["{\"a\":\"a2\"}"]];[4u;["{\"a\":\"a4\",\"b\":\"b4asdsasdaa\"}"]]]
+            
+        )";
+        TScriptVariator(script).Execute();
+    }
+
     Y_UNIT_TEST(CompactionVariants) {
         TString script = R"(
             STOP_COMPACTION
@@ -462,6 +760,83 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
             EXPECTED: [[1u;["{\"a\":\"a1\"}"]];[2u;["{\"a\":\"a2\"}"]];[3u;["{\"b\":\"b3\"}"]];[4u;["{\"a\":\"a4\",\"b\":\"b4\"}"]];[10u;#];
                                    [11u;["{\"a\":\"1a1\"}"]];[12u;["{\"a\":\"1a2\"}"]];[13u;["{\"b\":\"1b3\"}"]];[14u;["{\"a\":\"a4\",\"b\":\"1b4\"}"]]]
+            
+        )";
+        TScriptVariator(script).Execute();
+    }
+
+    Y_UNIT_TEST(BloomIndexesVariants) {
+        TString script = R"(
+            STOP_COMPACTION
+            ------
+            SCHEMA:            
+            CREATE TABLE `/Root/ColumnTable` (
+                Col1 Uint64 NOT NULL,
+                Col2 JsonDocument,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = $$2$$);
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `SCAN_READER_POLICY_NAME`=`SIMPLE`)
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`SUB_COLUMNS`, 
+                      `COLUMNS_LIMIT`=`$$0|1|1024$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
+            ------
+            DATA:
+            REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a.b.c" : "a1"}')), (2u, JsonDocument('{"a.b.c" : "a2"}')), 
+                                                                    (3u, JsonDocument('{"b.c.d" : "b3"}')), (4u, JsonDocument('{"b.c.d" : "b4", "a" : "a4"}'))
+            ------
+            DATA:
+            REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(11u, JsonDocument('{"a.b.c" : "1a1"}')), (12u, JsonDocument('{"a.b.c" : "1a2"}')), 
+                                                                    (13u, JsonDocument('{"b.c.d" : "1b3"}')), (14u, JsonDocument('{"b.c.d" : "1b4", "a" : "a4"}'))
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=a_index, TYPE=$$CATEGORY_BLOOM_FILTER|BLOOM_FILTER$$,
+                    FEATURES=`{"column_name" : "Col2", "false_positive_probability" : 0.01}`)
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_ngramm_b, TYPE=BLOOM_NGRAMM_FILTER,
+                FEATURES=`{"column_name" : "Col2", "ngramm_size" : 3, "hashes_count" : 2, "filter_size_bytes" : 4096, 
+                           "records_count" : 1024, "data_extractor" : {"class_name" : "SUB_COLUMN", "sub_column_name" : "b.c.d"}}`);
+            ------
+            DATA:
+            REPLACE INTO `/Root/ColumnTable` (Col1) VALUES(10u)
+            ------
+            ONE_ACTUALIZATION
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"a.b.c\"") = "a1" ORDER BY Col1;
+            EXPECTED: [[1u;["{\"a.b.c\":\"a1\"}"]]]
+            IDX_ND_SKIP_APPROVE: 0, 3, 1
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=DROP_INDEX, NAME=a_index)
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"a.b.c\"") = "1a1" ORDER BY Col1;
+            EXPECTED: [[11u;["{\"a.b.c\":\"1a1\"}"]]]
+            IDX_ND_SKIP_APPROVE: 0, 3, 1
+            ------
+            SCHEMA:
+            ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=b_index, TYPE=CATEGORY_BLOOM_FILTER,
+                    FEATURES=`{"column_name" : "Col2", "false_positive_probability" : 0.01}`)
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") = "1b4" ORDER BY Col1;
+            EXPECTED: [[14u;["{\"a\":\"a4\",\"b.c.d\":\"1b4\"}"]]]
+            IDX_ND_SKIP_APPROVE: 0, 3, 1
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") = "1b5" ORDER BY Col1;
+            EXPECTED: []
+            IDX_ND_SKIP_APPROVE: 0, 4, 0
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") like "1b3" ORDER BY Col1;
+            EXPECTED: [[13u;["{\"b.c.d\":\"1b3\"}"]]]
+            IDX_ND_SKIP_APPROVE: 0, 3, 1
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.\"b.c.d\"") like "1b5" ORDER BY Col1;
+            EXPECTED: []
+            IDX_ND_SKIP_APPROVE: 0, 4, 0
             
         )";
         TScriptVariator(script).Execute();
@@ -547,7 +922,6 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
         )";
         TScriptVariator(script).Execute();
     }
-
 }
 
 }   // namespace NKikimr::NKqp

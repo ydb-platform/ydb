@@ -42,6 +42,9 @@ bool TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocated(std::shared_ptr
     const std::shared_ptr<NGroupedMemoryManager::IAllocation>& /*allocation*/) {
     auto data = Source.lock();
     if (!data || data->GetContext()->IsAborted()) {
+        if (data) {
+            FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, data->AddEvent("fail_malloc"));
+        }
         guard->Release();
         return false;
     }
@@ -51,6 +54,7 @@ bool TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocated(std::shared_ptr
         data->RegisterAllocationGuard(std::move(guard));
     }
     Step.Next();
+    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, data->AddEvent("fmalloc"));
     auto task = std::make_shared<TStepAction>(data, std::move(Step), data->GetContext()->GetCommonContext()->GetScanActorId());
     NConveyor::TScanServiceOperator::SendTaskToExecute(task, data->GetContext()->GetCommonContext()->GetConveyorProcessId());
     return true;
@@ -68,6 +72,7 @@ TAllocateMemoryStep::TFetchingStepAllocation::TFetchingStepAllocation(
 void TAllocateMemoryStep::TFetchingStepAllocation::DoOnAllocationImpossible(const TString& errorMessage) {
     auto sourcePtr = Source.lock();
     if (sourcePtr) {
+        FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, sourcePtr->AddEvent("fail_malloc"));
         sourcePtr->GetContext()->GetCommonContext()->AbortWithError(
             "cannot allocate memory for step " + Step.GetName() + ": '" + errorMessage + "'");
     }
@@ -89,6 +94,7 @@ TConclusion<bool> TAllocateMemoryStep::DoExecuteInplace(const std::shared_ptr<ID
     }
 
     auto allocation = std::make_shared<TFetchingStepAllocation>(source, size, step, StageIndex);
+    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("smalloc"));
     NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(source->GetContext()->GetProcessMemoryControlId(),
         source->GetContext()->GetCommonContext()->GetScanId(), source->GetMemoryGroupId(), { allocation }, (ui32)StageIndex);
     return false;

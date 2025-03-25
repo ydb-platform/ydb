@@ -6,7 +6,7 @@ SIZE(MEDIUM)
 
 PEERDIR(
     library/cpp/testing/unittest
-    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/minikql/comp_nodes/llvm16
     ydb/core/testlib/basics/default
 )
 

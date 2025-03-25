@@ -53,7 +53,7 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
     ctx.Send(writeMeta.GetSource(), event.release(), 0, cookie);
 }
 
-TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedWait(const ui64 pathId) const {
+TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedWait(const TInternalPathId pathId) const {
     if (InsertTable && InsertTable->IsOverloadedByCommitted(pathId)) {
         return EOverloadStatus::InsertTable;
     }
@@ -64,7 +64,7 @@ TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedWait(const ui64 pathI
     return EOverloadStatus::None;
 }
 
-TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedImmediate(const ui64 /* pathId */) const {
+TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedImmediate(const TInternalPathId /* pathId */) const {
     if (IsAnyChannelYellowStop()) {
         return EOverloadStatus::Disk;
     }
@@ -179,7 +179,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     Counters.GetCSCounters().OnStartWriteRequest();
 
     const auto& record = Proto(ev->Get());
-    const ui64 pathId = record.GetTableId();
+    const auto pathId = TInternalPathId::FromRawValue(record.GetTableId());
     const ui64 writeId = record.GetWriteId();
     const ui64 cookie = ev->Cookie;
     const TString dedupId = record.GetDedupId();
@@ -203,24 +203,30 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     writeMeta.SetLongTxId(NLongTxService::TLongTxId::FromProto(record.GetLongTxId()));
     writeMeta.SetWritePartId(record.GetWritePartId());
 
-    const auto returnFail = [&](const NColumnShard::ECumulativeCounters signalIndex, const EWriteFailReason reason) {
+    const auto returnFail = [&](const NColumnShard::ECumulativeCounters signalIndex, const EWriteFailReason reason, NKikimrTxColumnShard::EResultStatus resultStatus) {
         Counters.GetTabletCounters()->IncCounter(signalIndex);
 
-        ctx.Send(source, std::make_unique<TEvColumnShard::TEvWriteResult>(TabletID(), writeMeta, NKikimrTxColumnShard::EResultStatus::ERROR));
+        ctx.Send(source, std::make_unique<TEvColumnShard::TEvWriteResult>(TabletID(), writeMeta, resultStatus));
         Counters.GetCSCounters().OnFailedWriteResponse(reason);
         return;
     };
 
+    if (SpaceWatcher->SubDomainOutOfSpace && (!record.HasModificationType() || (record.GetModificationType() != NKikimrTxColumnShard::TEvWrite::OPERATION_DELETE))) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_writing")("reason", "quota_exceeded");
+        Counters.GetTabletCounters()->IncCounter(COUNTER_OUT_OF_SPACE);
+        return returnFail(COUNTER_WRITE_FAIL, EWriteFailReason::Overload, NKikimrTxColumnShard::EResultStatus::OVERLOADED);
+    }
+
     if (!AppDataVerified().ColumnShardConfig.GetWritingEnabled()) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "skip_writing")("reason", "disabled");
-        return returnFail(COUNTER_WRITE_FAIL, EWriteFailReason::Disabled);
+        return returnFail(COUNTER_WRITE_FAIL, EWriteFailReason::Disabled, NKikimrTxColumnShard::EResultStatus::ERROR);
     }
 
     if (!TablesManager.IsReadyForStartWrite(pathId, false)) {
         LOG_S_NOTICE("Write (fail) into pathId:" << writeMeta.GetTableId() << (TablesManager.HasPrimaryIndex() ? "" : " no index")
                                                  << " at tablet " << TabletID());
 
-        return returnFail(COUNTER_WRITE_FAIL, EWriteFailReason::NoTable);
+        return returnFail(COUNTER_WRITE_FAIL, EWriteFailReason::NoTable, NKikimrTxColumnShard::EResultStatus::ERROR);
     }
 
     {
@@ -230,7 +236,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
                           .CheckWriteData();
         if (status.IsFail()) {
             AFL_WARN(NKikimrServices::TX_COLUMNSHARD_WRITE)("event", "writing_fail_through_compaction")("reason", status.GetErrorMessage());
-            return returnFail(COUNTER_WRITE_FAIL, EWriteFailReason::CompactionCriteria);
+            return returnFail(COUNTER_WRITE_FAIL, EWriteFailReason::CompactionCriteria, NKikimrTxColumnShard::EResultStatus::ERROR);
         }
     }
 
@@ -239,7 +245,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     if (!arrowData->ParseFromProto(record)) {
         LOG_S_ERROR(
             "Write (fail) " << record.GetData().size() << " bytes into pathId " << writeMeta.GetTableId() << " at tablet " << TabletID());
-        return returnFail(COUNTER_WRITE_FAIL, EWriteFailReason::IncorrectSchema);
+        return returnFail(COUNTER_WRITE_FAIL, EWriteFailReason::IncorrectSchema, NKikimrTxColumnShard::EResultStatus::ERROR);
     }
 
     NEvWrite::TWriteData writeData(writeMetaPtr, arrowData, snapshotSchema->GetIndexInfo().GetReplaceKey(),
@@ -544,7 +550,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
-    const auto pathId = operation.GetTableId().GetTableId();
+    const auto pathId = TInternalPathId::FromRawValue(operation.GetTableId().GetTableId());
 
     if (!TablesManager.IsReadyForStartWrite(pathId, false)) {
         sendError("table not writable", NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR);
@@ -564,7 +570,11 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
-    auto overloadStatus = CheckOverloadedImmediate(pathId);
+    const bool outOfSpace = SpaceWatcher->SubDomainOutOfSpace && (*mType != NEvWrite::EModificationType::Delete);
+    if (outOfSpace) {
+        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_writing")("reason", "quota_exceeded")("source", "dataevent");
+    }
+    auto overloadStatus = outOfSpace ? EOverloadStatus::Disk : CheckOverloadedImmediate(pathId);
     if (overloadStatus != EOverloadStatus::None) {
         std::unique_ptr<NActors::IEventBase> result = NEvents::TDataEvents::TEvWriteResult::BuildError(
             TabletID(), 0, NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, "overload data error");
@@ -572,11 +582,6 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
             NEvWrite::TWriteMeta(0, pathId, source, {}, TGUID::CreateTimebased().AsGuidString(),
                 Counters.GetCSCounters().WritingCounters->GetWriteFlowCounters()),
             arrowData->GetSize(), cookie, std::move(result), ctx);
-        return;
-    }
-
-    if (!AppDataVerified().ColumnShardConfig.GetWritingEnabled()) {
-        sendError("writing disabled", NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
         return;
     }
 

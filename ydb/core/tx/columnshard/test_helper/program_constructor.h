@@ -23,6 +23,7 @@ public:
     ui32 AddConstant(const TString& bytes);
     ui32 AddOperation(const NYql::TKernelRequestBuilder::EBinaryOp op, const std::vector<ui32>& arguments);
     ui32 AddOperation(const NKikimrSSA::TProgram::TAssignment::EFunction op, const std::vector<ui32>& arguments);
+    ui32 AddOperation(const TString& kernelName, const std::vector<ui32>& arguments);
     ui32 AddAggregation(
         const NArrow::NSSA::NAggregation::EAggregate op, const std::vector<ui32>& arguments, const std::vector<ui32>& groupByKeys);
     void AddFilter(const ui32 colId);

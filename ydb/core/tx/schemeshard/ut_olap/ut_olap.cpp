@@ -47,6 +47,58 @@ static const TVector<NArrow::NTest::TTestColumn> defaultYdbSchema = {
 
 }}
 
+#define DEBUG_HINT (TStringBuilder() << "at line " << __LINE__)
+
+NLs::TCheckFunc LsCheckDiskQuotaExceeded(
+    bool expectExceeded = true,
+    const TString& debugHint = ""
+) {
+    return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
+        auto& desc = record.GetPathDescription().GetDomainDescription();
+        UNIT_ASSERT_VALUES_EQUAL_C(
+            desc.GetDomainState().GetDiskQuotaExceeded(),
+            expectExceeded,
+            debugHint << ", subdomain's disk space usage:\n" << desc.GetDiskSpaceUsage().DebugString()
+        );
+    };
+}
+
+void CheckQuotaExceedance(TTestActorRuntime& runtime,
+                          ui64 schemeShard,
+                          const TString& pathToSubdomain,
+                          bool expectExceeded,
+                          const TString& debugHint = ""
+) {
+    TestDescribeResult(DescribePath(runtime, schemeShard, pathToSubdomain), {
+        LsCheckDiskQuotaExceeded(expectExceeded, debugHint)
+    });
+}
+
+NKikimrTxDataShard::TEvPeriodicTableStats WaitTableStats(TTestActorRuntime& runtime, ui64 columnShardId, ui64 minPartCount = 0) {
+    NKikimrTxDataShard::TEvPeriodicTableStats stats;
+    bool captured = false;
+
+    auto observer = runtime.AddObserver<TEvDataShard::TEvPeriodicTableStats>([&](const auto& event) {
+            const auto& record = event->Get()->Record;
+            if (record.GetDatashardId() == columnShardId && record.GetTableStats().GetPartCount() >= minPartCount) {
+                stats = record;
+                captured = true;
+            }
+        }
+    );
+
+    for (int i = 0; i < 5 && !captured; ++i) {
+        TDispatchOptions options;
+        options.CustomFinalCondition = [&]() { return captured; };
+        runtime.DispatchEvents(options, TDuration::Seconds(5));
+    }
+
+    observer.Remove();
+
+    UNIT_ASSERT(captured);
+
+    return stats;
+}
 
 Y_UNIT_TEST_SUITE(TOlap) {
     Y_UNIT_TEST(CreateStore) {
@@ -925,5 +977,162 @@ Y_UNIT_TEST_SUITE(TOlap) {
         env.TestWaitNotification(runtime, txId);
 
         TestLs(runtime, "/MyRoot/OlapStore", false, NLs::PathExist);
+    }
+
+    Y_UNIT_TEST(StoreStatsQuota) {
+        TTestBasicRuntime runtime;
+
+        TTestEnvOptions opts;
+        opts.DisableStatsBatching(true);
+        opts.EnablePersistentPartitionStats(true);
+        opts.EnableTopicDiskSubDomainQuota(false);
+
+        TTestEnv env(runtime, opts);
+        runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NActors::NLog::PRI_DEBUG);
+        runtime.UpdateCurrentTime(TInstant::Now() - TDuration::Seconds(600));
+
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+
+        // disable stats batching
+        auto& appData = runtime.GetAppData();
+        appData.SchemeShardConfig.SetStatsBatchTimeoutMs(0);
+        appData.SchemeShardConfig.SetStatsMaxBatchSize(0);
+
+        // apply config via reboot
+        TActorId sender = runtime.AllocateEdgeActor();
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+
+        constexpr const char* databaseDescription = R"(
+            DatabaseQuotas {
+                data_size_hard_quota: 1000000
+                data_size_soft_quota: 900000
+            }
+        )";
+
+        ui64 txId = 100;
+
+        TestCreateSubDomain(runtime, ++txId,  "/MyRoot", TStringBuilder() << R"(
+                Name: "SomeDatabase"
+            )" << databaseDescription
+        );
+
+        const TString& olapSchema = defaultStoreSchema;
+
+        TestCreateOlapStore(runtime, ++txId, "/MyRoot/SomeDatabase", olapSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/SomeDatabase/OlapStore", false, NLs::PathExist);
+        TestLsPathId(runtime, 3, NLs::PathStringEqual("/MyRoot/SomeDatabase/OlapStore"));
+
+        TString tableSchema = R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+        )";
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/SomeDatabase/OlapStore", tableSchema);
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 pathId = 0;
+        ui64 shardId = 0;
+        ui64 planStep = 0;
+        auto checkFn = [&](const NKikimrScheme::TEvDescribeSchemeResult& record) {
+            auto& self = record.GetPathDescription().GetSelf();
+            pathId = self.GetPathId();
+            txId = self.GetCreateTxId() + 1;
+            planStep = self.GetCreateStep();
+            auto& sharding = record.GetPathDescription().GetColumnTableDescription().GetSharding();
+            UNIT_ASSERT_VALUES_EQUAL(sharding.ColumnShardsSize(), 1);
+            shardId = sharding.GetColumnShards()[0];
+            UNIT_ASSERT_VALUES_EQUAL(record.GetPath(), "/MyRoot/SomeDatabase/OlapStore/ColumnTable");
+        };
+
+        TestLsPathId(runtime, 4, checkFn);
+        UNIT_ASSERT(shardId);
+        UNIT_ASSERT(pathId);
+        UNIT_ASSERT(planStep);
+        {
+            auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase/OlapStore/ColumnTable", true, true);
+            Cerr << description.DebugString() << Endl;
+            auto& tabletStats = description.GetPathDescription().GetTableStats();
+
+            UNIT_ASSERT(description.GetPathDescription().HasTableStats());
+            UNIT_ASSERT_EQUAL(tabletStats.GetRowCount(), 0);
+            UNIT_ASSERT_EQUAL(tabletStats.GetDataSize(), 0);
+        }
+
+        CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
+
+        ui32 rowsInBatch = 100000;
+        ui64 writeId = 0;
+        TString data;
+
+        {   // Write data directly into shard
+            TActorId sender = runtime.AllocateEdgeActor();
+            data = NTxUT::MakeTestBlob({0, rowsInBatch}, defaultYdbSchema, {}, { "timestamp" });
+            TSet<ui64> txIds;
+            for (ui32 i = 0; i < 10; ++i) {
+                std::vector<ui64> writeIds;
+                ++txId;
+                NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId);
+                NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
+                txIds.insert(txId);
+            }
+
+            NTxUT::PlanCommit(runtime, sender, shardId, ++planStep, txIds);
+
+            WaitTableStats(runtime, shardId);
+            CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", true, DEBUG_HINT);
+
+            // Check that writes will fail if quota is exceeded
+            std::vector<ui64> writeIds;
+            ++txId;
+            AFL_VERIFY(!NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId));
+            NTxUT::ProposeCommitFail(runtime, sender, shardId, txId, writeIds, txId);
+        }
+
+        csController->WaitIndexation(TDuration::Seconds(5));
+        {
+            auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase/OlapStore", true, true);
+            Cerr << description.DebugString() << Endl;
+            auto& tabletStats = description.GetPathDescription().GetTableStats();
+
+            UNIT_ASSERT_GT(tabletStats.GetRowCount(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetDataSize(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetPartCount(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetRowUpdates(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetImmediateTxCompleted(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetPlannedTxCompleted(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetLastAccessTime(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetLastUpdateTime(), 0);
+        }
+
+        {
+            auto description = DescribePrivatePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase/OlapStore/ColumnTable", true, true);
+            Cerr << description.DebugString() << Endl;
+            auto& tabletStats = description.GetPathDescription().GetTableStats();
+
+            UNIT_ASSERT_GT(tabletStats.GetRowCount(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetDataSize(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetPartCount(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetLastAccessTime(), 0);
+            UNIT_ASSERT_GT(tabletStats.GetLastUpdateTime(), 0);
+        }
+
+        std::vector<ui64> writeIds;
+        TSet<ui64> txIds;
+        ++txId;
+        bool delResult = NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Delete, txId);
+        Y_UNUSED(delResult);
+        NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
+        txIds.insert(txId);
+        NTxUT::PlanCommit(runtime, sender, shardId, ++planStep, txIds);
+
+        csController->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
+        csController->WaitCompactions(TDuration::Seconds(60));
+        WaitTableStats(runtime, shardId);
+        CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
     }
 }

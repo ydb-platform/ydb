@@ -67,7 +67,7 @@ PEERDIR(
     ydb/core/testlib/actors
     ydb/core/testlib/basics
     yql/essentials/minikql/comp_nodes
-    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/minikql/comp_nodes/llvm16
     yql/essentials/sql/pg_dummy
 )
 

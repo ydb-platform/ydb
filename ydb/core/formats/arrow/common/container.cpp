@@ -1,6 +1,7 @@
 #include "container.h"
 
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
+#include <ydb/core/formats/arrow/arrow_filter.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -238,6 +239,18 @@ NJson::TJsonValue TGeneralContainer::DebugJson(const bool withData) const {
         }
     }
     return result;
+}
+
+TGeneralContainer TGeneralContainer::ApplyFilter(const TColumnFilter& filter) const {
+    if (!Columns.size()) {
+        return *BuildEmptySame();
+    } else {
+        std::vector<std::shared_ptr<NAccessor::IChunkedArray>> columns;
+        for (auto&& i : Columns) {
+            columns.emplace_back(filter.Apply(i));
+        }
+        return TGeneralContainer(Schema->GetFields(), std::move(columns));
+    }
 }
 
 TConclusion<std::shared_ptr<arrow::Scalar>> IFieldsConstructor::GetDefaultColumnElementValue(

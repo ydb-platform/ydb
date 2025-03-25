@@ -24,7 +24,10 @@ TConclusion<std::shared_ptr<TSubColumnsArray>> TSubColumnsArray::Make(const std:
     for (ui32 i = 0; i < reader.GetRecordsCount();) {
         auto address = reader.GetReadChunk(i);
         storage.emplace_back(address.GetArray());
-        adapter->AddDataToBuilders(address.GetArray(), builder);
+        auto conclusion = adapter->AddDataToBuilders(address.GetArray(), builder);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
         i += address.GetArray()->length();
         AFL_VERIFY(i <= reader.GetRecordsCount());
     }
@@ -51,14 +54,14 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
     NKikimrArrowAccessorProto::TSubColumnsAccessor proto;
     std::vector<TString> blobRanges;
     if (ColumnsData.GetStats().GetColumnsCount()) {
-        blobRanges.emplace_back(ColumnsData.GetStats().SerializeAsString(externalInfo.GetDefaultSerializer()));
+        blobRanges.emplace_back(ColumnsData.GetStats().SerializeAsString(nullptr));
         proto.SetColumnStatsSize(blobRanges.back().size());
     } else {
         proto.SetColumnStatsSize(0);
     }
 
     if (OthersData.GetStats().GetColumnsCount()) {
-        blobRanges.emplace_back(OthersData.GetStats().SerializeAsString(externalInfo.GetDefaultSerializer()));
+        blobRanges.emplace_back(OthersData.GetStats().SerializeAsString(nullptr));
         proto.SetOtherStatsSize(blobRanges.back().size());
     } else {
         proto.SetOtherStatsSize(0);

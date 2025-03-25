@@ -2,6 +2,7 @@
 
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/arrow_helpers.h>
@@ -75,7 +76,7 @@ IChunkedArray::TFullDataAddress IChunkedArray::GetChunk(const std::optional<TAdd
 
 IChunkedArray::TFullChunkedArrayAddress IChunkedArray::GetArray(
     const std::optional<TAddressChain>& chunkCurrent, const ui64 position, const std::shared_ptr<IChunkedArray>& selfPtr) const {
-    AFL_VERIFY(position < GetRecordsCount());
+    AFL_VERIFY(position < GetRecordsCount())("pos", position)("records_count", GetRecordsCount());
     if (IsDataOwner()) {
         AFL_VERIFY(selfPtr);
         TAddressChain chain;
@@ -120,13 +121,28 @@ std::shared_ptr<IChunkedArray> IChunkedArray::DoApplyFilter(const TColumnFilter&
 }
 
 std::shared_ptr<IChunkedArray> IChunkedArray::ApplyFilter(const TColumnFilter& filter, const std::shared_ptr<IChunkedArray>& selfPtr) const {
+    AFL_VERIFY(selfPtr);
     if (filter.IsTotalAllowFilter()) {
         return selfPtr;
     }
     if (filter.IsTotalDenyFilter()) {
         return TTrivialArray::BuildEmpty(GetDataType());
     }
-    return DoApplyFilter(filter);
+    auto result = DoApplyFilter(filter);
+    AFL_VERIFY(result);
+    AFL_VERIFY(result->GetRecordsCount() == filter.GetFilteredCountVerified());
+    return result;
+}
+
+std::shared_ptr<arrow::ChunkedArray> IChunkedArray::GetChunkedArray() const {
+    std::vector<std::shared_ptr<arrow::Array>> chunks;
+    std::optional<TFullDataAddress> address;
+    for (ui32 position = 0; position < GetRecordsCount();) {
+        address = GetChunk(address, position);
+        chunks.emplace_back(address->GetArray());
+        position += address->GetArray()->length();
+    }
+    return std::make_shared<arrow::ChunkedArray>(chunks, GetDataType());
 }
 
 TString IChunkedArray::TReader::DebugString(const ui32 position) const {
@@ -182,6 +198,10 @@ std::shared_ptr<arrow::Array> IChunkedArray::TFullDataAddress::CopyRecord(const 
 
 TString IChunkedArray::TFullDataAddress::DebugString(const ui64 position) const {
     return NArrow::DebugString(Array, Address.GetLocalIndex(position));
+}
+
+void IChunkedArray::TLocalDataAddress::Reallocate() {
+    Array = NArrow::ReallocateArray(Array);
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

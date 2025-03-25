@@ -10,6 +10,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
 #include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -267,13 +268,25 @@ protected:
 
         ui32 keySize = KeyColumnPositions.size(); // YdbSchema contains keys first
         TRowWriter writer(out, keySize);
-        NArrow::TArrowToYdbConverter batchConverter(YdbSchema, writer);
+        NArrow::TArrowToYdbConverter batchConverter(YdbSchema, writer, IsInfinityInJsonAllowed());
         if (!batchConverter.Process(*batch, errorMessage)) {
             return {};
         }
 
         RuCost = writer.GetRuCost();
         return out;
+    }
+
+    bool IsInfinityInJsonAllowed() const {
+        if (TableKind != NSchemeCache::TSchemeCacheNavigate::KindColumnTable) {
+            return false;
+        }
+        switch (AppDataVerified().ColumnShardConfig.GetDoubleOutOfRangeHandling()) {
+            case NKikimrConfig::TColumnShardConfig_EJsonDoubleOutOfRangeHandlingPolicy_REJECT:
+                return false;
+            case NKikimrConfig::TColumnShardConfig_EJsonDoubleOutOfRangeHandlingPolicy_CAST_TO_INFINITY:
+                return true;
+        }
     }
 
 private:
@@ -658,7 +671,7 @@ private:
                     }
                     // Explicit types conversion
                     if (!ColumnsToConvert.empty()) {
-                        auto convertResult = NArrow::ConvertColumns(Batch, ColumnsToConvert);
+                        auto convertResult = NArrow::ConvertColumns(Batch, ColumnsToConvert, IsInfinityInJsonAllowed());
                         if (!convertResult.ok()) {
                             return ReplyWithError(Ydb::StatusIds::BAD_REQUEST,
                                 TStringBuilder() << "Cannot convert arrow batch:" << convertResult.status().ToString(), ctx);
@@ -1238,9 +1251,8 @@ private:
 using TFieldDescription = NTxProxy::TUploadRowsBase<NKikimrServices::TActivity::GRPC_REQ>::TFieldDescription;
 
 template <class TProto>
-inline bool FillCellsFromProto(TVector<TCell>& cells, const TVector<TFieldDescription>& descr, const TProto& proto,
-                            TString& err, TMemoryPool& valueDataPool)
-{
+inline bool FillCellsFromProto(TVector<TCell>& cells, const TVector<TFieldDescription>& descr, const TProto& proto, TString& err,
+    TMemoryPool& valueDataPool, const bool allowInfDouble = false) {
     cells.clear();
     cells.reserve(descr.size());
 
@@ -1250,7 +1262,8 @@ inline bool FillCellsFromProto(TVector<TCell>& cells, const TVector<TFieldDescri
             return false;
         }
         cells.push_back({});
-        if (!CellFromProtoVal(fd.Type, fd.Typmod, &proto.Getitems(fd.PositionInStruct), false, cells.back(), err, valueDataPool)) {
+        if (!CellFromProtoVal(
+                fd.Type, fd.Typmod, &proto.Getitems(fd.PositionInStruct), false, cells.back(), err, valueDataPool, allowInfDouble)) {
             return false;
         }
 

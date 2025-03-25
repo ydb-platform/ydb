@@ -14,7 +14,7 @@ PEERDIR(
     ydb/library/pdisk_io
     yql/essentials/parser/pg_wrapper
     yql/essentials/sql/pg
-    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/minikql/comp_nodes/llvm16
     ydb/tools/stress_tool/lib
     ydb/tools/stress_tool/proto
 )

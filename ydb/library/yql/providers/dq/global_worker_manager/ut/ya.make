@@ -11,8 +11,8 @@ PEERDIR(
     ydb/library/yql/providers/dq/actors/yt
     ydb/library/yql/providers/dq/actors
     ydb/library/yql/dq/actors/compute
-    yql/essentials/minikql/computation/llvm14
-    yql/essentials/minikql/comp_nodes/llvm14
+    yql/essentials/minikql/computation/llvm16
+    yql/essentials/minikql/comp_nodes/llvm16
 
     yql/essentials/core/dq_integration/transform
     ydb/library/yql/dq/comp_nodes

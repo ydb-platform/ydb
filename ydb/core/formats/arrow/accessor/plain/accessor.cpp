@@ -26,6 +26,32 @@ std::shared_ptr<TTrivialArray> TTrivialArray::BuildEmpty(const std::shared_ptr<a
     return std::make_shared<TTrivialArray>(TThreadSimpleArraysCache::GetNull(type, 0));
 }
 
+void TTrivialArray::Reallocate() {
+    Array = NArrow::ReallocateArray(Array);
+}
+
+std::shared_ptr<arrow::Array> TTrivialArray::BuildArrayFromOptionalScalar(
+    const std::shared_ptr<arrow::Scalar>& scalar, const std::shared_ptr<arrow::DataType>& type) {
+    if (scalar) {
+        AFL_VERIFY(scalar->type->id() == type->id());
+        auto builder = NArrow::MakeBuilder(scalar->type, 1);
+        TStatusValidator::Validate(builder->AppendScalar(*scalar));
+        return NArrow::FinishBuilder(std::move(builder));
+    } else {
+        auto builder = NArrow::MakeBuilder(type, 1);
+        TStatusValidator::Validate(builder->AppendNull());
+        return NArrow::FinishBuilder(std::move(builder));
+    }
+}
+
+std::optional<bool> TTrivialArray::DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const {
+    if (Array->length() == 1) {
+        value = TStatusValidator::GetValid(Array->GetScalar(0));
+        return true;
+    }
+    return {};
+}
+
 namespace {
 class TChunkAccessor {
 private:

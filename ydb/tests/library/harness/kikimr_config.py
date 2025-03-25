@@ -356,6 +356,9 @@ class KikimrConfigGenerator(object):
         if columnshard_config:
             self.yaml_config["column_shard_config"] = columnshard_config
 
+        if column_shard_config:
+            self.yaml_config["column_shard_config"] = column_shard_config
+
         self.__build()
 
         if self.grpc_ssl_enable:

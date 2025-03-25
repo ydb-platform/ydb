@@ -78,7 +78,7 @@ public:
     using TBase::TBase;
     bool DeserializeFromString(const TString& data) {
         if (!TBase::DeserializeFromString(data)) {
-            Initialize(TFakeStatusChannel::GetClassNameStatic());
+            AFL_VERIFY(Initialize(TFakeStatusChannel::GetClassNameStatic()));
             return false;
         }
         return true;

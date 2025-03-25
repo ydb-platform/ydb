@@ -1,6 +1,5 @@
 #include "create_table_formatter.h"
 
-#include <random>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/tx/schemeshard/schemeshard_info_types.h>
 #include <ydb/core/ydb_convert/table_description.h>
@@ -1004,6 +1003,8 @@ void TCreateTableFormatter::Format(const NKikimrColumnShardColumnDefaults::TColu
         return;
     }
 
+    Stream << " DEFAULT ";
+
     TGuard<NMiniKQL::TScopedAlloc> guard(Alloc);
     const auto& scalar = defaultValue.GetScalar();
     if (scalar.HasBool()) {
@@ -1142,16 +1143,16 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDataLifeCycle& 
         case NKikimrSchemeOp::TTTLSettings::UNIT_AUTO:
             break;
         case NKikimrSchemeOp::TTTLSettings::UNIT_SECONDS:
-            Stream << "AS SECONDS";
+            Stream << " AS SECONDS";
             break;
         case NKikimrSchemeOp::TTTLSettings::UNIT_MILLISECONDS:
-            Stream << "AS MILLISECONDS";
+            Stream << " AS MILLISECONDS";
             break;
         case NKikimrSchemeOp::TTTLSettings::UNIT_MICROSECONDS:
-            Stream << "AS MICROSECONDS";
+            Stream << " AS MICROSECONDS";
             break;
         case NKikimrSchemeOp::TTTLSettings::UNIT_NANOSECONDS:
-            Stream << "AS NANOSECONDS";
+            Stream << " AS NANOSECONDS";
             break;
         default:
             ythrow TFormatFail(Ydb::StatusIds::INTERNAL_ERROR, "Unsupported unit");

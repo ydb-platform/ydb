@@ -4599,7 +4599,11 @@ bool TPersQueue::AllTransactionsHaveBeenProcessed() const
         return false;
     }
 
-    return existUnplannedConfigTx || Txs.empty();
+    if (existUnplannedConfigTx) {
+        return true;
+    }
+
+    return EvProposeTransactionQueue.empty() && Txs.empty();
 }
 
 void TPersQueue::SendProposeTransactionAbort(const TActorId& target,

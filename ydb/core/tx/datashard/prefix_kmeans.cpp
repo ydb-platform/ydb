@@ -110,7 +110,7 @@ public:
         return NKikimrServices::TActivity::LOCAL_KMEANS_SCAN_ACTOR;
     }
 
-    TPrefixKMeansScanBase(const TUserTable& table, TLead&& lead,
+    TPrefixKMeansScanBase(const TUserTable& table,
                           const NKikimrTxDataShard::TEvPrefixKMeansRequest& request,
                           const TActorId& responseActorId,
                           TAutoPtr<TEvDataShard::TEvPrefixKMeansResponse>&& response)
@@ -122,7 +122,6 @@ public:
         , K{request.GetK()}
         , State{EState::SAMPLE}
         , UploadState{request.GetUpload()}
-        , Lead{std::move(lead)}
         , BuildId{request.GetId()}
         , Rng{request.GetSeed()}
         , LevelTable{request.GetLevelName()}
@@ -171,12 +170,13 @@ public:
         }
     }
 
-    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
+    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) final
     {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
         LOG_D("Prepare " << Debug());
 
         Driver = driver;
+        Lead.To(scheme->Tags(), {}, NTable::ESeek::Lower);
         return {EScan::Feed, {}};
     }
 
@@ -419,9 +419,9 @@ class TPrefixKMeansScan final: public TPrefixKMeansScanBase, private TCalculatio
     }
 
 public:
-    TPrefixKMeansScan(const TUserTable& table, TLead&& lead, NKikimrTxDataShard::TEvPrefixKMeansRequest& request,
+    TPrefixKMeansScan(const TUserTable& table, NKikimrTxDataShard::TEvPrefixKMeansRequest& request,
                       const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvPrefixKMeansResponse>&& response)
-        : TPrefixKMeansScanBase{table, std::move(lead), request, responseActorId, std::move(response)}
+        : TPrefixKMeansScanBase{table, request, responseActorId, std::move(response)}
     {
         this->Dimensions = request.GetSettings().vector_dimension();
         LOG_D("Create " << Debug());
@@ -736,12 +736,6 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
         ScanManager.Drop(id);
     }
 
-    const auto range = userTable.GetTableRange();
-    if (range.IsEmptyRange(userTable.KeyColumnTypes)) {
-        badRequest(TStringBuilder() << " requested range doesn't intersect with table range");
-        return;
-    }
-
     if (!IsStateActive()) {
         badRequest(TStringBuilder() << "Shard " << TabletID() << " is not ready for requests");
         return;
@@ -755,7 +749,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvPrefixKMeansRequest::TPtr& ev, cons
     TAutoPtr<NTable::IScan> scan;
     auto createScan = [&]<typename T> {
         scan = new TPrefixKMeansScan<T>{
-            userTable, CreateLeadFrom(range), record, ev->Sender, std::move(response),
+            userTable, record, ev->Sender, std::move(response),
         };
     };
     MakeScan(record, createScan, badRequest);

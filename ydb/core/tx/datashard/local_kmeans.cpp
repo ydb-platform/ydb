@@ -443,9 +443,17 @@ public:
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
     {
-        LOG_T("Feed " << Debug());
         ++ReadRows;
         ReadBytes += CountBytes(key, row);
+        
+        return Feed(key, *row);
+    }
+
+private:
+    EScan Feed(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    {
+        LOG_T("Feed " << Debug());
+        
         switch (State) {
             case EState::SAMPLE:
                 return FeedSample(row);
@@ -464,7 +472,6 @@ public:
         }
     }
 
-private:
     bool InitAggregatedClusters()
     {
         if (Clusters.size() == 0) {
@@ -544,10 +551,10 @@ private:
         return true;
     }
 
-    EScan FeedSample(const TRow& row)
+    EScan FeedSample(TArrayRef<const TCell> row)
     {
-        Y_ASSERT(row.Size() == 1);
-        const auto embedding = row.Get(0).AsRef();
+        Y_ASSERT(row.size() == 1);
+        const auto embedding = row.at(0).AsRef();
         if (!this->IsExpectedSize(embedding)) {
             return EScan::Feed;
         }
@@ -571,15 +578,15 @@ private:
         return MaxProbability != 0 ? EScan::Feed : EScan::Reset;
     }
 
-    EScan FeedKMeans(const TRow& row)
+    EScan FeedKMeans(TArrayRef<const TCell> row)
     {
-        Y_ASSERT(row.Size() == 1);
+        Y_ASSERT(row.size() == 1);
         const ui32 pos = FeedEmbedding(*this, Clusters, row, 0);
-        AggregateToCluster(pos, row.Get(0).Data());
+        AggregateToCluster(pos, row.at(0).Data());
         return EScan::Feed;
     }
 
-    EScan FeedUploadMain2Build(TArrayRef<const TCell> key, const TRow& row)
+    EScan FeedUploadMain2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos > K) {
@@ -589,7 +596,7 @@ private:
         return FeedUpload();
     }
 
-    EScan FeedUploadMain2Posting(TArrayRef<const TCell> key, const TRow& row)
+    EScan FeedUploadMain2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos > K) {
@@ -599,7 +606,7 @@ private:
         return FeedUpload();
     }
 
-    EScan FeedUploadBuild2Build(TArrayRef<const TCell> key, const TRow& row)
+    EScan FeedUploadBuild2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos > K) {
@@ -609,7 +616,7 @@ private:
         return FeedUpload();
     }
 
-    EScan FeedUploadBuild2Posting(TArrayRef<const TCell> key, const TRow& row)
+    EScan FeedUploadBuild2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos > K) {

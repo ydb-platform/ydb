@@ -36,10 +36,10 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
         return {};
     }
 
-    auto cluster = TString{GetClusterName(input)};
     TSyncMap syncList;
     const ERuntimeClusterSelectionMode selectionMode =
         State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+    auto cluster = DeriveClusterFromInput(input, selectionMode);
     if (!IsYtCompleteIsolatedLambda(keySelectorLambda.Ref(), syncList, cluster, false, selectionMode)
         || !IsYtCompleteIsolatedLambda(handlerLambda.Ref(), syncList, cluster, false, selectionMode)) {
         return node;

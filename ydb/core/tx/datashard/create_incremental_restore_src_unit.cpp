@@ -47,7 +47,7 @@ protected:
 
     void Abort(TOperation::TPtr op, const TActorContext& ctx, const TString& error) {
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, error);
 
@@ -88,18 +88,18 @@ protected:
 
     bool Run(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) {
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
-        Y_ABORT_UNLESS(tx->GetSchemeTx().HasCreateIncrementalRestoreSrc());
+        Y_ENSURE(tx->GetSchemeTx().HasCreateIncrementalRestoreSrc());
         const auto& restoreSrc = tx->GetSchemeTx().GetCreateIncrementalRestoreSrc();
 
         const ui64 tableId = restoreSrc.GetSrcPathId().GetLocalId();
-        Y_ABORT_UNLESS(DataShard.GetUserTables().contains(tableId));
+        Y_ENSURE(DataShard.GetUserTables().contains(tableId));
 
         const ui32 localTableId = DataShard.GetUserTables().at(tableId)->LocalTid;
-        Y_ABORT_UNLESS(txc.DB.GetScheme().GetTableInfo(localTableId));
+        Y_ENSURE(txc.DB.GetScheme().GetTableInfo(localTableId));
 
-        Y_ABORT_UNLESS(restoreSrc.HasDstPathId());
+        Y_ENSURE(restoreSrc.HasDstPathId());
 
         THolder<NTable::IScan> scan{CreateScan(restoreSrc, op->GetTxId())};
 
@@ -133,7 +133,7 @@ protected:
 
     bool ProcessResult(TOperation::TPtr op, const TActorContext&) {
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         auto* result = CheckedCast<TExportScanProduct*>(op->ScanResult().Get());
         bool done = true;
@@ -147,7 +147,7 @@ protected:
                 schemeOp->BytesProcessed = result->BytesRead;
                 schemeOp->RowsProcessed = result->RowsRead;
             } else {
-                Y_FAIL_S("Cannot find schema tx: " << op->GetTxId());
+                Y_ENSURE(false, "Cannot find schema tx: " << op->GetTxId());
             }
             break;
         case EExportOutcome::Aborted:
@@ -168,7 +168,7 @@ protected:
 
         const ui64 tableId = tx->GetSchemeTx().GetBackup().GetTableId();
 
-        Y_ABORT_UNLESS(DataShard.GetUserTables().contains(tableId));
+        Y_ENSURE(DataShard.GetUserTables().contains(tableId));
         const ui32 localTableId = DataShard.GetUserTables().at(tableId)->LocalTid;
 
         DataShard.CancelScan(localTableId, tx->GetScanTask());
@@ -177,17 +177,17 @@ protected:
 
     void PersistResult(TOperation::TPtr op, TTransactionContext& txc) {
         auto* schemeOp = DataShard.FindSchemaTx(op->GetTxId());
-        Y_ABORT_UNLESS(schemeOp);
+        Y_ENSURE(schemeOp);
 
         NIceDb::TNiceDb db(txc.DB);
         DataShard.PersistSchemeTxResult(db, *schemeOp);
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override final {
-        Y_ABORT_UNLESS(op->IsSchemeTx());
+        Y_ENSURE(op->IsSchemeTx());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         if (!IsRelevant(tx)) {
             return EExecutionStatus::Executed;

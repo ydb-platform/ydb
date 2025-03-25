@@ -10,7 +10,7 @@ from urllib.parse import urlencode
 import time
 
 
-cluster = KiKiMR(KikimrConfigGenerator(enable_alter_database_create_hive_first=True))
+cluster = KiKiMR(KikimrConfigGenerator(extra_feature_flags={'enable_alter_database_create_hive_first': True, 'enable_topic_transfer': True}))
 cluster.start()
 domain_name = '/' + cluster.domain_name
 dedicated_db = domain_name + "/dedicated_db"
@@ -402,6 +402,15 @@ def normalize_result_healthcheck(result):
     return result
 
 
+def normalize_result_replication(result):
+    result = replace_values_by_key(result, ['connection_string',
+                                            'endpoint',
+                                            'plan_step',
+                                            'tx_id'])
+    delete_keys_recursively(result, ['issue_log'])
+    return result
+
+
 def normalize_result(result):
     delete_keys_recursively(result, ['Version',
                                      'MemoryUsed',
@@ -421,6 +430,7 @@ def normalize_result(result):
     result = normalize_result_pdisks(result)
     result = normalize_result_vdisks(result)
     result = normalize_result_cluster(result)
+    result = normalize_result_replication(result)
     return result
 
 
@@ -577,6 +587,31 @@ def test_viewer_nodes_issue_14992():
     return result
 
 
+def test_operations_list():
+    return get_viewer_normalized("/operation/list", {
+        'database': dedicated_db,
+        'kind': 'import/s3'
+    })
+
+
+def test_operations_list_page():
+    return get_viewer_normalized("/operation/list", {
+        'database': dedicated_db,
+        'kind': 'import/s3',
+        'offset': 50,
+        'limit': 50
+    })
+
+
+def test_operations_list_page_bad():
+    return get_viewer_normalized("/operation/list", {
+        'database': dedicated_db,
+        'kind': 'import/s3',
+        'offset': 10,
+        'limit': 50
+    })
+
+
 def test_topic_data():
     grpc_port = cluster.nodes[1].grpc_port
 
@@ -657,4 +692,31 @@ def test_topic_data():
         'response_compressed': strip_non_canonized(response_compressed),
         'response_not_truncated': strip_non_canonized(response_last)
     }
+    return result
+
+
+def test_transfer_describe():
+    grpc_port = cluster.nodes[1].grpc_port
+    endpoint = "grpc://localhost:{}/?database={}".format(grpc_port, dedicated_db)
+    lambd = "($x) -> { RETURN <|Id:$x._offset|>; }"
+
+    call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': 'CREATE TABLE `TransferTargetTable` ( `Id` Uint64 NOT NULL PRIMARY KEY (Id)) WITH (STORE = COLUMN)',
+        'schema': 'multi'
+    })
+
+    call_viewer("/viewer/query", {
+        'database': dedicated_db,
+        'query': 'CREATE TRANSFER `TestTransfer` FROM `TopicNotExists` TO `Table` USING {} WITH (CONNECTION_STRING = "{}")'.format(lambd, endpoint),
+        'schema': 'multi'
+    })
+
+    result = get_viewer_normalized("/viewer/describe_replication", {
+        'database': dedicated_db,
+        'path': '{}/TestTransfer'.format(dedicated_db),
+        'include_stats': 'true',
+        'enums': 'true'
+    })
+
     return result

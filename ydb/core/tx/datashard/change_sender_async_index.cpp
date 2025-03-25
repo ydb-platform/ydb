@@ -80,10 +80,10 @@ private:
             return AsDerived()->OnIndexUnderRemove();
         }
 
-        Y_ABORT_UNLESS(entry.ListNodeEntry->Children.size() == 1);
+        Y_ENSURE(entry.ListNodeEntry->Children.size() == 1);
         const auto& indexTable = entry.ListNodeEntry->Children.at(0);
 
-        Y_ABORT_UNLESS(indexTable.Kind == TNavigate::KindTable);
+        Y_ENSURE(indexTable.Kind == TNavigate::KindTable);
         AsDerived()->TargetTablePathId = indexTable.PathId;
 
         AsDerived()->NextState(TStateTag{});
@@ -247,7 +247,7 @@ class TAsyncIndexChangeSenderMain
 
     void Handle(TEvChangeExchange::TEvRemoveSender::TPtr& ev) {
         LOG_D("Handle " << ev->Get()->ToString());
-        Y_ABORT_UNLESS(ev->Get()->PathId == GetChangeSenderIdentity());
+        Y_ENSURE(ev->Get()->PathId == GetChangeSenderIdentity());
 
         RemoveRecords();
         PassAway();

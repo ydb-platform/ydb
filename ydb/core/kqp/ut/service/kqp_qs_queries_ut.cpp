@@ -1704,14 +1704,11 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         checkDrop(true, EEx::IfExists, 1);
 
         // rename
-        Y_UNUSED(checkRename);
-        /*
         checkCreate(true, EEx::Empty, 2);
         checkRename(true, 2, 3);
         checkRename(false, 2, 3); // already renamed, no such table
         checkDrop(false, EEx::Empty, 2); // no such table
         checkDrop(true, EEx::Empty, 3);
-        */
     }
 
     Y_UNIT_TEST(DdlColumnTable) {

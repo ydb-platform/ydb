@@ -33,7 +33,8 @@ void AddRowMain2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArra
     cells[0] = TCell::Make(parent);
     auto pk = TSerializedCellVec::Serialize(cells);
     TSerializedCellVec::UnsafeAppendCells(key, pk);
-    buffer.AddRow(TSerializedCellVec{key}, TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize(*row));
+    buffer.AddRow(TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize(*row),
+        TSerializedCellVec{key});
 }
 
 void AddRowMain2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
@@ -43,8 +44,8 @@ void AddRowMain2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TAr
     cells[0] = TCell::Make(parent);
     auto pk = TSerializedCellVec::Serialize(cells);
     TSerializedCellVec::UnsafeAppendCells(key, pk);
-    buffer.AddRow(TSerializedCellVec{key}, TSerializedCellVec{std::move(pk)},
-                  TSerializedCellVec::Serialize((*row).Slice(dataPos)));
+    buffer.AddRow(TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize((*row).Slice(dataPos)),
+        TSerializedCellVec{key});
 }
 
 void AddRowBuild2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
@@ -54,7 +55,8 @@ void AddRowBuild2Build(TBufferData& buffer, NTableIndex::TClusterId parent, TArr
     cells[0] = TCell::Make(parent);
     auto pk = TSerializedCellVec::Serialize(cells);
     TSerializedCellVec::UnsafeAppendCells(key.Slice(prefixColumns), pk);
-    buffer.AddRow(TSerializedCellVec{key}, TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize(*row));
+    buffer.AddRow(TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize(*row),
+        TSerializedCellVec{key});
 }
 
 void AddRowBuild2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TArrayRef<const TCell> key, const NTable::TRowState& row,
@@ -64,8 +66,8 @@ void AddRowBuild2Posting(TBufferData& buffer, NTableIndex::TClusterId parent, TA
     cells[0] = TCell::Make(parent);
     auto pk = TSerializedCellVec::Serialize(cells);
     TSerializedCellVec::UnsafeAppendCells(key.Slice(prefixColumns), pk);
-    buffer.AddRow(TSerializedCellVec{key}, TSerializedCellVec{std::move(pk)},
-                  TSerializedCellVec::Serialize((*row).Slice(dataPos)));
+    buffer.AddRow(TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize((*row).Slice(dataPos)),
+        TSerializedCellVec{key});
 }
 
 TTags MakeUploadTags(const TUserTable& table, const TProtoStringType& embedding,

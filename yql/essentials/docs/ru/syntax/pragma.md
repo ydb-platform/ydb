@@ -377,7 +377,7 @@ WarnUntypedStringLiterals является [scoped](#pragmascope) настрой
 
 Интерпретировать указанный приложенный файл как библиотеку, из которой можно делать [IMPORT](export_import.md). Тип синтаксиса библиотеки определяется по расширению файла:
 * `.sql` для YQL диалекта SQL <span style="color: green;">(рекомендуется)</span>;
-* `.yql` для [s-expressions](/docs/s_expressions).
+* `.yqls` для [s-expressions](/docs/s_expressions).
 
 Пример с приложенным файлом к запросу:
 

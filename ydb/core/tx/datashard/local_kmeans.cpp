@@ -282,10 +282,10 @@ protected:
             << " Uploader: " << Uploader.ToString() << " ev->Sender: " << ev->Sender.ToString());
 
         if (Uploader) {
-            Y_VERIFY_S(Uploader == ev->Sender, "Mismatch Uploader: " << Uploader.ToString() << " ev->Sender: "
+            Y_ENSURE(Uploader == ev->Sender, "Mismatch Uploader: " << Uploader.ToString() << " ev->Sender: "
                                                                      << ev->Sender.ToString() << Debug());
         } else {
-            Y_ABORT_UNLESS(Driver == nullptr);
+            Y_ENSURE(Driver == nullptr);
             return;
         }
 
@@ -307,7 +307,7 @@ protected:
         if (RetryCount < Limits.MaxUploadRowsRetryCount && UploadStatus.IsRetriable()) {
             LOG_N("Got retriable error, " << Debug() << UploadStatus.ToString());
 
-            ctx.Schedule(Limits.GetTimeoutBackouff(RetryCount), new TEvents::TEvWakeup());
+            ctx.Schedule(Limits.GetTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
             return;
         }
 
@@ -363,7 +363,7 @@ protected:
             pk[0] = TCell::Make(Parent);
             pk[1] = TCell::Make(Child + pos);
             data[0] = TCell{row};
-            WriteBuf.AddRow({}, TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
+            WriteBuf.AddRow(TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
             ++pos;
         }
         Upload(false);
@@ -657,6 +657,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
         rowVersion = GetMvccTxVersion(EMvccTxMode::ReadOnly);
     }
 
+    LOG_N("Starting TLocalKMeansScan " << request.ShortDebugString()
+        << " row version " << rowVersion);
+
     // Note: it's very unlikely that we have volatile txs before this snapshot
     if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
         VolatileTxManager.AttachWaitingSnapshotEvent(rowVersion, std::unique_ptr<IEventHandle>(ev.Release()));
@@ -700,7 +703,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
         badRequest(TStringBuilder() << "Unknown table id: " << pathId.LocalPathId);
         return;
     }
-    Y_ABORT_UNLESS(*userTableIt);
+    Y_ENSURE(*userTableIt);
     const auto& userTable = **userTableIt;
 
     if (const auto* recCard = ScanManager.Get(id)) {

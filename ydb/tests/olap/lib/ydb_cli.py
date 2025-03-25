@@ -167,7 +167,7 @@ class YdbCliHelper:
                     self._init_iter(iter)
                     self.result.iterations[iter].error_message = msg
                     self._add_error(f'Iteration {iter}: {msg}')
-            if returncode != 0 and len([x for x in filter(lambda x: x.error_message, self.result.iterations.values())]) == 0:
+            if returncode != 0 and len([x for x in filter(lambda x: x.error_message or x.warning_message, self.result.iterations.values())]) == 0:
                 self._add_error(f'Invalid return code: {returncode} instead 0. stderr: {self.result.stderr}')
 
         def _load_plan(self, name: str) -> YdbCliHelper.QueryPlan:
@@ -278,7 +278,7 @@ class YdbCliHelper:
 
         def process(self) -> YdbCliHelper.WorkloadRunResult:
             try:
-                wait_error = YdbCluster.wait_ydb_alive(20 * 60, self.db_path)
+                wait_error = YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60)), self.db_path)
                 if wait_error is not None:
                     self.result.error_message = wait_error
                 else:

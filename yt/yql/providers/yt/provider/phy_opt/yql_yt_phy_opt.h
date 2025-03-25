@@ -145,6 +145,10 @@ private:
 
     NNodes::TMaybeNode<NNodes::TExprBase> ForceTransform(NNodes::TExprBase node, TExprContext& ctx) const;
 
+    NNodes::TMaybeNode<NNodes::TExprBase> UpdateDataSinkCluster(NNodes::TExprBase node, TExprContext& ctx) const;
+
+    NNodes::TMaybeNode<NNodes::TExprBase> UpdateDataSourceCluster(NNodes::TExprBase node, TExprContext& ctx) const;
+
     template <typename TLMapType>
     NNodes::TMaybeNode<NNodes::TExprBase> LMap(NNodes::TExprBase node, TExprContext& ctx) const;
 

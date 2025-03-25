@@ -47,6 +47,7 @@ PEERDIR(
     ydb/public/lib/json_value
     ydb/public/sdk/cpp/src/library/operation_id
     ydb/public/lib/yson_value
+    ydb/public/sdk/cpp/src/client/coordination
     ydb/public/sdk/cpp/src/client/draft
     ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/result

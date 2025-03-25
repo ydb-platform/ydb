@@ -92,15 +92,15 @@ class TestRestartNodes(object):
     def test(self):
         # self.ydb_client.query("""
         #     --!syntax_v1
-        #     CREATE TABLESTORE `TableStore` (
-        #         Key Uint64 NOT NULL,
-        #         Value1 String,
-        #         PRIMARY KEY (Key)
-        #     )
-        #     WITH (
-        #         STORE = COLUMN,
-        #         AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
-        #     );
+            # CREATE TABLESTORE `TableStore` (
+            #     Key Uint64 NOT NULL,
+            #     Value1 String,
+            #     PRIMARY KEY (Key)
+            # )
+            # WITH (
+            #     STORE = COLUMN,
+            #     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
+            # );
         # """)
 
         threads: list[TestThread] = []

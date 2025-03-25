@@ -246,4 +246,11 @@ void DoDescribeReplication(std::unique_ptr<IRequestOpCtx> p, const IFacilityProv
     f.RegisterActor(new TDescribeReplicationRPC(p.release()));
 }
 
+using TEvDescribeReplicationRequest = TGrpcRequestOperationCall<Ydb::Replication::DescribeReplicationRequest, Ydb::Replication::DescribeReplicationResponse>;
+
+template<>
+IActor* TEvDescribeReplicationRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
+    return new TDescribeReplicationRPC(msg);
+}
+
 }

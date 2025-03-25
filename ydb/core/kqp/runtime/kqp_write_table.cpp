@@ -372,7 +372,7 @@ public:
         CellsInfo[index].Type = type;
         CellsInfo[index].Value = value;
 
-        if (CellsInfo[index].Type.GetTypeId() == NUdf::TDataType<NUdf::TDecimal>::Id) {
+        if (CellsInfo[index].Type.GetTypeId() == NUdf::TDataType<NUdf::TDecimal>::Id && value) {
             CellsInfo[index].DecimalBuf = value.GetInt128();
         }
 

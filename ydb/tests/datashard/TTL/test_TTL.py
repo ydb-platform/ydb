@@ -6,13 +6,14 @@ from ydb.tests.sql.lib.test_base import TestBase
 from ydb.tests.stress.oltp_workload.workload import cleanup_type_name
 from ydb.tests.datashard.lib.create_table import CreateTables, pk_types, non_pk_types, index_first, index_second, unique, index_sync
 
+
 ttl_types = {
+    "Timestamp": "CAST({}000000 AS Timestamp)",
     "DyNumber": "CAST('{}' AS DyNumber)",
     "Uint32": "CAST({} AS Uint32)",
     "Uint64": "CAST({} AS Uint64)",
     "Date": "CAST('{}' AS Date)",
     "Datetime": "CAST('{}' AS Datetime)",
-    "Timestamp": "CAST({} AS Timestamp)",
 }
 
 
@@ -26,11 +27,13 @@ class TestTTL(TestBase, CreateTables):
                         if uniq != "UNIQUE" and sync != "ASYNC":
                             thr = threading.Thread(target=self.TTL, args=(
                                 f"table_{ttl}_{i}_{uniq}_{sync}", pk_types, {
-                                    **pk_types, **non_pk_types}, index_first if i == 0 else index_second, ttl, uniq, sync,))
+                                    **pk_types, **non_pk_types}, index_first if i == 0 else index_second, ttl, uniq, sync,), name=f"table_{ttl}_{i}_{uniq}_{sync}")
                             thr.start()
                             threads.append(thr)
+                            
         for thread in threads:
             thread.join()
+
 
     def TTL(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
         columns = {
@@ -48,7 +51,7 @@ class TestTTL(TestBase, CreateTables):
         sql_create_table = self.create_table(
             table_name, columns, pk_columns, index_columns, unique, sync)
         self.query(sql_create_table)
-        sql_ttl = self.create_ttl(f"ttl_{cleanup_type_name(ttl)}", {"PT5S": ""}, "SECONDS" if ttl ==
+        sql_ttl = self.create_ttl(f"ttl_{cleanup_type_name(ttl)}", {"PT15M": ""}, "SECONDS" if ttl ==
                                   "Uint32" or ttl == "Uint64" or ttl == "DyNumber" else "", table_name)
         self.query(sql_ttl)
         self.insert(table_name, pk_types, all_types, index, ttl)
@@ -58,17 +61,23 @@ class TestTTL(TestBase, CreateTables):
         now_date = datetime.now()
         old_date = now_date - timedelta(weeks=1)
         future_time_5_sec = now_date + timedelta(seconds=5)
-        future_time = now_date + timedelta(weeks=1)
+        future_time = now_date + timedelta(weeks=2)
         if ttl == "Uint64" or ttl == "Uint32" or ttl == "DyNumber" or ttl == "Timestamp":
-            now_date = int(now_date.timestamp())
-            old_date = int(old_date.timestamp())
-            future_time_5_sec = int(future_time_5_sec.timestamp())
-            future_time = int(future_time.timestamp())
+            now_date = int(datetime.timestamp(now_date))
+            old_date = int(datetime.timestamp(old_date))
+            future_time_5_sec = int(datetime.timestamp(future_time_5_sec))
+            future_time = int(datetime.timestamp(future_time))
         if ttl == "Date":
             now_date = now_date.date()
             old_date = old_date.date()
             future_time_5_sec = future_time_5_sec.date()
             future_time = future_time.date()
+        if ttl == "Datetime":
+            now_date = now_date.strftime("%Y-%m-%dT%H:%M:%SZ")
+            old_date = old_date.strftime("%Y-%m-%dT%H:%M:%SZ")
+            future_time_5_sec = future_time_5_sec.strftime(
+                "%Y-%m-%dT%H:%M:%SZ")
+            future_time = future_time.strftime("%Y-%m-%dT%H:%M:%SZ")
         for i in range(1, 3):
             self.create_insert(table_name, pk_types,
                                all_types, index, ttl, i, old_date)
@@ -81,6 +90,9 @@ class TestTTL(TestBase, CreateTables):
         for i in range(7, 9):
             self.create_insert(table_name, pk_types,
                                all_types, index, ttl, i, future_time)
+            
+        for i in range(1, 9):
+            self.create_select(table_name, pk_types, all_types, index, i, 1)
 
     def create_insert(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, value: int, date):
         insert_sql = f"""
@@ -100,7 +112,7 @@ class TestTTL(TestBase, CreateTables):
         self.query(insert_sql)
 
     def select(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str]):
-        time.sleep(15*60)
+        time.sleep(60*15)
         for i in range(1, 7):
             self.create_select(table_name, pk_types, all_types, index, i, 0)
 
@@ -118,7 +130,7 @@ class TestTTL(TestBase, CreateTables):
                 sql_select += f"col_{cleanup_type_name(type_name)}={all_types[type_name].format(value)} and "
         for type_name in index.keys():
             sql_select += f"col_index_{cleanup_type_name(type_name)}={index[type_name].format(value)} and "
-        sql_select += f"pk_Int64={pk_types["Int64"].format(value)}"
+        sql_select += f"""pk_Int64={pk_types["Int64"].format(value)}"""
         rows = self.query(sql_select)
         assert len(
-            rows) == 1 and rows[0].count == expected_count_rows, f"Expected 0 rows, error when deleting {value} lines, table {table_name}"
+            rows) == 1 and rows[0].count == expected_count_rows, f"Expected {expected_count_rows} rows, error when deleting {value} lines, table {table_name}"

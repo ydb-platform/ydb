@@ -30,5 +30,6 @@ target_link_libraries(solomon-solomon_accessor-client PUBLIC
 
 target_sources(solomon-solomon_accessor-client PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/solomon_accessor/client/solomon_accessor_client.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/solomon_accessor/client/solomon_client_utils.cpp
 )
 

@@ -51,12 +51,12 @@ target_link_libraries(solomon-solomon_accessor-grpc PUBLIC
 )
 
 target_proto_messages(solomon-solomon_accessor-grpc PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/solomon_accessor/grpc/solomon_accessor_pb.proto
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/solomon/solomon_accessor/grpc/data_service.proto
 )
 
 target_sources(solomon-solomon_accessor-grpc PRIVATE
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/solomon/solomon_accessor/grpc/solomon_accessor_pb.pb.h
-  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/solomon/solomon_accessor/grpc/solomon_accessor_pb.grpc.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/solomon/solomon_accessor/grpc/data_service.pb.h
+  ${PROJECT_BINARY_DIR}/ydb/library/yql/providers/solomon/solomon_accessor/grpc/data_service.grpc.pb.h
 )
 
 

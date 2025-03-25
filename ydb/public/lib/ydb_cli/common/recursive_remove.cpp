@@ -178,7 +178,7 @@ TStatus RemoveDirectoryRecursive(
     const TRemoveDirectoryRecursiveSettings& settings
 ) {
     const auto listingSettings = TRecursiveListSettings()
-        .Filter([&](const TSchemeEntry& entry) {
+        .Filter([](const TSchemeEntry& entry) {
             // explicitly skip subdomains
             return entry.Type != ESchemeEntryType::SubDomain;
         });

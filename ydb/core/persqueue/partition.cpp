@@ -2337,8 +2337,8 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
                 " Bad request (session already dead) " <<
                 " SessionId '" << operation.GetReadSessionId() << "'");
             result = false;
-        } else if (operation.GetOnlyCheckCommitedToFinish() && !IsActive()) {
-            if (static_cast<ui64>(userInfo.Offset) != EndOffset) {
+        } else if (operation.GetOnlyCheckCommitedToFinish()) {
+            if (IsActive() || static_cast<ui64>(userInfo.Offset) != EndOffset) {
                result = false;
             }
         } else {

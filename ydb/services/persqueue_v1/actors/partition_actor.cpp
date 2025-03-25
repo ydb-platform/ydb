@@ -160,7 +160,7 @@ void TPartitionActor::Bootstrap(const TActorContext& ctx) {
 }
 
 void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TActorContext& ctx) {
-    if (!ClientHasAnyCommits && Parents.size() != 0) {
+    if (!ClientHasAnyCommits && Parents.size() != 0) { // savnik проверка на то что включены транзакции?
         std::vector<TKqpHelper::TCommitInfo> commits;
         for (auto& parent: Parents) {
             TKqpHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>(), .KillReadSession = false, .OnlyCheckCommitedToFinish = true, .ReadSessionId = Session};

@@ -40,4 +40,3 @@ def create_ttl_sql_request(ttl: str, inteval: dict[str, str], time: str, table_n
          ON {ttl} {f"AS {time}" if time != "" else ""} )
     """
     return sql_ttl
-

@@ -792,7 +792,8 @@ namespace NYdb::NConsoleClient {
             .StoreResult(&IdleTimeout_);
         config.Opts->AddLongOption("commit", "Commit messages after successful read")
             .Optional()
-            .StoreTrue(&Commit_);
+            .DefaultValue(false)
+            .StoreResult(&Commit_);
         config.Opts->AddLongOption("limit", "Limit on message count to read, 0 - unlimited. "
                                             "If avobe 0, processing stops when either topic is empty, or the specified limit reached. "
                                             "Must be above 0 for pretty output format."

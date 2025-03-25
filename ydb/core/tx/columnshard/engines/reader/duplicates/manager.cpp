@@ -244,12 +244,12 @@ void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
         }
 
         if (range.GetLastIdx() < reqSourceRange.GetFirstIdx()) {
-            AFL_VERIFY(FinishedSourceIds.emplace(reqSourceId).second);
+            AFL_VERIFY(FinishedSourceIds.emplace(source->GetSourceId()).second);
             AFL_VERIFY(isSkipped);
             continue;
         }
 
-        ActiveSources.emplace_back(std::make_shared<TSourceFilterConstructor>(SortedSources.front(), Intervals));
+        ActiveSources.emplace_back(std::make_shared<TSourceFilterConstructor>(source, Intervals));
         ActiveSourceById.emplace(ActiveSources.back()->GetSource()->GetSourceId(), ActiveSources.back());
         StartFetchingColumns(ActiveSources.back(), ev->Get()->GetSource()->GetMemoryGroupId());
 

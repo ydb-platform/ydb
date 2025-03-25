@@ -182,20 +182,37 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
     }
 
     Y_UNIT_TEST(RequestReplaceDevicePDisk) {
-        std::function<void(Ydb::Maintenance::ActionScope_PDisk*, NCms::TPDiskID&)> pdiskIdFn = [](Ydb::Maintenance::ActionScope_PDisk* pdisk, NCms::TPDiskID& pdiskId) {
+        std::function<void(NCms::TPDiskID&, Ydb::Maintenance::ActionScope_PDisk*)> serializeIdFn = [](NCms::TPDiskID& pdiskId, Ydb::Maintenance::ActionScope_PDisk* pdisk) {
             auto* id = pdisk->mutable_pdisk_id();
             id->set_node_id(pdiskId.NodeId);
             id->set_pdisk_id(pdiskId.DiskId);
         };
 
-        std::function<void(Ydb::Maintenance::ActionScope_PDisk*, NCms::TPDiskID&)> pdiskLocationFn = [](Ydb::Maintenance::ActionScope_PDisk* pdisk, NCms::TPDiskID& pdiskId) {
+        std::function<void(const Ydb::Maintenance::ActionScope_PDisk&, NCms::TPDiskID&)> deserializeIdFn = [](const Ydb::Maintenance::ActionScope_PDisk& pdisk, NCms::TPDiskID& pdiskId) {
+            auto& id = pdisk.Getpdisk_id();
+            pdiskId.NodeId = id.node_id();
+            pdiskId.DiskId = id.pdisk_id();
+        };
+
+        std::function<void(NCms::TPDiskID&, Ydb::Maintenance::ActionScope_PDisk*)> serializeLocationFn = [](NCms::TPDiskID& pdiskId, Ydb::Maintenance::ActionScope_PDisk* pdisk) {
             auto* location = pdisk->mutable_pdisk_location();
             location->set_host("::1"); // All nodes live on this host.
             location->set_path("/" + std::to_string(pdiskId.NodeId) + "/pdisk-" + std::to_string(pdiskId.DiskId) + ".data");
         };
 
-        // put both functions in vector, iterate over it and call each function
-        for (auto pdiskFn : {pdiskIdFn, pdiskLocationFn}) {
+        std::function<void(const Ydb::Maintenance::ActionScope_PDisk&, NCms::TPDiskID&)> deserializeLocationFn = [](const Ydb::Maintenance::ActionScope_PDisk& pdisk, NCms::TPDiskID& pdiskId) {
+            auto& location = pdisk.Getpdisk_location();
+            sscanf(location.path().c_str(), "/%d/pdisk-%d.data", &pdiskId.NodeId, &pdiskId.DiskId);
+        };
+
+        std::vector<std::function<void(NCms::TPDiskID&, Ydb::Maintenance::ActionScope_PDisk*)>> serializeFns = {serializeIdFn, serializeLocationFn};
+        
+        std::vector<std::function<void(const Ydb::Maintenance::ActionScope_PDisk&, NCms::TPDiskID&)>> deserializeFns = {deserializeIdFn, deserializeLocationFn};
+
+        for (size_t i = 0; i < serializeFns.size(); i++) {
+            auto serializeFn = serializeFns[i];
+            auto deserializeFn = deserializeFns[i];
+
             TTestEnvOpts envOpts(8);
             envOpts.WithSentinel();
 
@@ -217,8 +234,8 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
             auto* scope = lockAction->mutable_scope();
 
             auto* pdisk = scope->mutable_pdisk();
-            auto disk = env.PDiskId(0);
-            pdiskFn(pdisk, disk);
+            NCms::TPDiskID disk = env.PDiskId(0);
+            serializeFn(disk, pdisk);
             lockAction->mutable_duration()->set_seconds(60);
 
             env.SendToCms(req.release());
@@ -226,6 +243,27 @@ Y_UNIT_TEST_SUITE(TMaintenanceApiTest) {
             auto response = env.GrabEdgeEvent<NCms::TEvCms::TEvMaintenanceTaskResponse>();
 
             UNIT_ASSERT_VALUES_EQUAL(response->Record.GetStatus(), Ydb::StatusIds_StatusCode_SUCCESS);
+            
+            {
+                auto& result = response->Record.GetResult();
+                UNIT_ASSERT_VALUES_EQUAL(result.action_group_states().size(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(result.action_group_states(0).action_states().size(), 1);
+                const auto &actionState = result.action_group_states(0).action_states(0);
+
+                UNIT_ASSERT(actionState.has_action());
+                const auto& action = actionState.action();
+                UNIT_ASSERT(action.has_lock_action());
+                const auto& lockAction = action.lock_action();
+
+                UNIT_ASSERT(lockAction.has_scope());
+                const auto& scope = lockAction.scope();
+                UNIT_ASSERT(scope.has_pdisk());
+                const auto& pdisk = scope.pdisk();
+                
+                NCms::TPDiskID resultDisk;
+                deserializeFn(pdisk, resultDisk);
+                UNIT_ASSERT_VALUES_EQUAL(resultDisk, disk);
+            }
 
             env.CheckRequest("user", "user-r-1", false, NKikimrCms::TStatus::TStatus::WRONG_REQUEST);
         }

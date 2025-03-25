@@ -43,14 +43,44 @@ namespace {
         }
     }
 
+    static bool ConvertToPDiskId(const TString &name, TPDiskID &id) {
+        int size;
+
+        if (sscanf(name.data(), "pdisk-%" SCNu32 "-%" SCNu32 "%n", &id.NodeId, &id.DiskId, &size) != 2) {
+            return false;
+        }
+
+        if (size != static_cast<int>(name.size())) {
+            return false;
+        }
+
+        return true;
+    }
+
     void ConvertAction(const NKikimrCms::TAction& cmsAction, Ydb::Maintenance::LockAction& action) {
         *action.mutable_duration() = TimeUtil::MicrosecondsToDuration(cmsAction.GetDuration());
 
-        ui32 nodeId;
-        if (TryFromString(cmsAction.GetHost(), nodeId)) {
-            action.mutable_scope()->set_node_id(nodeId);
+        if (cmsAction.DevicesSize() > 0) {
+            Y_ABORT_UNLESS(cmsAction.DevicesSize() == 1);
+            auto& device = cmsAction.GetDevices()[0];
+            auto* pdisk = action.mutable_scope()->mutable_pdisk();
+            TPDiskID id;
+            if (ConvertToPDiskId(device, id)) {
+                auto* pdiskId = pdisk->mutable_pdisk_id();
+                pdiskId->set_node_id(id.NodeId);
+                pdiskId->set_pdisk_id(id.DiskId);
+            } else {
+                auto* pdiskLocation = pdisk->mutable_pdisk_location();
+                pdiskLocation->set_host(cmsAction.GetHost());
+                pdiskLocation->set_path(device);
+            }
         } else {
-            action.mutable_scope()->set_host(cmsAction.GetHost());
+            ui32 nodeId;
+            if (TryFromString(cmsAction.GetHost(), nodeId)) {
+                action.mutable_scope()->set_node_id(nodeId);
+            } else {
+                action.mutable_scope()->set_host(cmsAction.GetHost());
+            }
         }
     }
 

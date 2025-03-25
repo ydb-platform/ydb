@@ -57,6 +57,9 @@ CLUSTER_CONFIG = dict(
     column_shard_config={
         'disabled_on_scheme_shard': False,
     },
+    table_service_config={
+        'enable_olap_sink': True,
+    }
 )
 
 

@@ -90,7 +90,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
             result = session1.ExecuteQuery(Q_(R"(
                 UPSERT INTO `/Root/Test` (Group, Name, Comment)
                 VALUES (1U, "Paul", "Changed");
-            )"), TTxControl::Tx(tx1->GetId()).CommitTx()).ExtractValueSync();
+            )"), TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
             // Keys changed since taking snapshot.
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
 
@@ -148,7 +148,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
             result = session1.ExecuteQuery(Q_(R"(
                 UPSERT INTO `/Root/Test` (Group, Name, Comment)
                 VALUES (1U, "Paul", "Changed");
-            )"), TTxControl::Tx(tx1->GetId()).CommitTx()).ExtractValueSync();
+            )"), TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
             result = session2.ExecuteQuery(Q_(R"(
@@ -205,7 +205,7 @@ Y_UNIT_TEST_SUITE(KqpSnapshotIsolation) {
 
             result = session1.ExecuteQuery(Q_(R"(
                 SELECT * FROM `/Root/Test` WHERE Name == "Paul" ORDER BY Group, Name;
-            )"), TTxControl::Tx(tx1->GetId()).CommitTx()).ExtractValueSync();
+            )"), TTxControl::Tx(*tx1).CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
             CompareYson(R"([[[300u];["None"];1u;"Paul"]])", FormatResultSetYson(result.GetResultSet(0)));
 

@@ -268,6 +268,8 @@ void TReplicationWriterConfig::Register(TRegistrar registrar)
         .DefaultNew();
     registrar.Parameter("node_rpc_timeout", &TThis::NodeRpcTimeout)
         .Default(TDuration::Seconds(300));
+    registrar.Parameter("probe_put_blocks_timeout", &TThis::ProbePutBlocksTimeout)
+        .Default(TDuration::Seconds(60));
     registrar.Parameter("upload_replication_factor", &TThis::UploadReplicationFactor)
         .GreaterThanOrEqual(1)
         .Default(2);
@@ -299,6 +301,9 @@ void TReplicationWriterConfig::Register(TRegistrar registrar)
         .Default();
 
     registrar.Parameter("enable_local_throttling", &TThis::EnableLocalThrottling)
+        .Default(false);
+
+    registrar.Parameter("use_probe_put_blocks", &TThis::UseProbePutBlocks)
         .Default(false);
 
     registrar.Preprocessor([] (TThis* config) {

@@ -177,7 +177,10 @@ public:
         : Env(env)
         , QueryClient(NQuery::TQueryClient(Env.GetDriver()))
         , TableClient(TTableClient(Env.GetDriver()))
-    {}
+    {
+        CreateTier("tier1");
+        CreateTier("tier2");
+    }
 
     void CheckShowCreateTable(const std::string& query, const std::string& tableName, TString formatQuery = "", bool temporary = false) {
         auto session = QueryClient.GetSession().GetValueSync().GetSession();
@@ -194,16 +197,16 @@ public:
             UNIT_ASSERT_VALUES_EQUAL_C(UnescapeC(formatQuery), UnescapeC(showCreateTableQuery), UnescapeC(showCreateTableQuery));
         }
 
-        auto tableDescOrig = DescribeTable(tableName, sessionId);
+        auto describeResultOrig = DescribeTable(tableName, sessionId);
 
         DropTable(session, tableName);
 
         CreateTable(session, showCreateTableQuery);
-        auto tableDescNew = DescribeTable(tableName, sessionId);
+        auto describeResultNew = DescribeTable(tableName, sessionId);
 
         DropTable(session, tableName);
 
-        CompareDescriptions(std::move(tableDescOrig), std::move(tableDescNew), showCreateTableQuery);
+        CompareDescriptions(std::move(describeResultOrig), std::move(describeResultNew), showCreateTableQuery);
     }
 
 private:
@@ -213,7 +216,24 @@ private:
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    NKikimrSchemeOp::TTableDescription DescribeTable(const std::string& tableName,
+    void CreateTier(const TString& tierName) {
+        auto session = TableClient.CreateSession().GetValueSync().GetSession();
+        auto result = session.ExecuteSchemeQuery(R"(
+            UPSERT OBJECT `accessKey` (TYPE SECRET) WITH (value = `secretAccessKey`);
+            UPSERT OBJECT `secretKey` (TYPE SECRET) WITH (value = `fakeSecret`);
+            CREATE EXTERNAL DATA SOURCE `)" + tierName + R"(` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="http://fake.fake/olap-)" + tierName + R"(",
+                AUTH_METHOD="AWS",
+                AWS_ACCESS_KEY_ID_SECRET_NAME="accessKey",
+                AWS_SECRET_ACCESS_KEY_SECRET_NAME="secretKey",
+                AWS_REGION="ru-central1"
+        );
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    Ydb::Table::CreateTableRequest DescribeTable(const std::string& tableName,
             std::optional<TString> sessionId = std::nullopt) {
 
         auto describeTable = [this](const TString& path) {
@@ -228,7 +248,19 @@ private:
             runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
             auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(handle);
 
-            return reply->GetRecord().GetPathDescription().GetTable();
+            if (reply->GetRecord().GetPathDescription().HasColumnTableDescription()) {
+                const auto& tableDescription = reply->GetRecord().GetPathDescription().GetColumnTableDescription();
+
+                return *GetCreateTableRequest(tableDescription);
+            }
+
+            if (!reply->GetRecord().GetPathDescription().HasTable()) {
+                UNIT_ASSERT_C(false, "Invalid path type");
+            }
+
+            const auto& tableDescription = reply->GetRecord().GetPathDescription().GetTable();
+
+            return *GetCreateTableRequest(tableDescription);
         };
 
         TString tablePath = TString(tableName);
@@ -294,14 +326,11 @@ private:
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    void CompareDescriptions(NKikimrSchemeOp::TTableDescription origDesc, NKikimrSchemeOp::TTableDescription newDesc, const std::string& showCreateTableQuery) {
-        Ydb::Table::CreateTableRequest requestFirst = *GetCreateTableRequest(origDesc);
-        Ydb::Table::CreateTableRequest requestSecond = *GetCreateTableRequest(newDesc);
-
+    void CompareDescriptions(Ydb::Table::CreateTableRequest describeResultOrig, Ydb::Table::CreateTableRequest describeResultNew, const std::string& showCreateTableQuery) {
         TString first;
-        ::google::protobuf::TextFormat::PrintToString(requestFirst, &first);
+        ::google::protobuf::TextFormat::PrintToString(describeResultOrig, &first);
         TString second;
-        ::google::protobuf::TextFormat::PrintToString(requestSecond, &second);
+        ::google::protobuf::TextFormat::PrintToString(describeResultNew, &second);
 
         UNIT_ASSERT_VALUES_EQUAL_C(first, second, showCreateTableQuery);
     }
@@ -337,6 +366,15 @@ private:
         if (!FillSequenceDescription(scheme, tableDesc, status, error)) {
             return Nothing();
         }
+
+        return scheme;
+    }
+
+    TMaybe<Ydb::Table::CreateTableRequest> GetCreateTableRequest(const NKikimrSchemeOp::TColumnTableDescription& tableDesc) {
+        Ydb::Table::CreateTableRequest scheme;
+
+        FillColumnDescription(scheme, tableDesc);
+        FillColumnFamilies(scheme, tableDesc);
 
         return scheme;
     }
@@ -906,7 +944,7 @@ WITH (
 
         checker.CheckShowCreateTable(R"(
             CREATE TABLE test_show_create (
-                Key1 Int64 NOT NULL,
+                Key1 Uint64 NOT NULL,
                 Key2 Utf8 NOT NULL,
                 Key3 Int32 NOT NULL,
                 Value1 Utf8 FAMILY Family1,
@@ -926,11 +964,15 @@ WITH (
             PARTITION BY HASH(`Key1`, `Key2`)
             WITH (
                 STORE = COLUMN,
-                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 100
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 100,
+                TTL =
+                    Interval("PT10S") TO EXTERNAL DATA SOURCE `/Root/tier1`,
+                    Interval("PT1H") DELETE
+                    ON Key1 AS SECONDS
             );
         )", "test_show_create",
 R"(CREATE TABLE `test_show_create` (
-    `Key1` Int64 NOT NULL,
+    `Key1` Uint64 NOT NULL,
     `Key2` Utf8 NOT NULL,
     `Key3` Int32 NOT NULL,
     `Value1` Utf8,
@@ -944,7 +986,11 @@ R"(CREATE TABLE `test_show_create` (
 PARTITION BY HASH (`Key1`, `Key2`)
 WITH (
     STORE = COLUMN,
-    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 100
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 100,
+    TTL =
+        INTERVAL('PT10S') TO EXTERNAL DATA SOURCE `/Root/tier1`,
+        INTERVAL('PT1H') DELETE
+    ON Key1 AS SECONDS
 );
 )"
         );
@@ -1092,6 +1138,82 @@ R"(CREATE TABLE `test_show_create` (
     PRIMARY KEY (`Key`)
 )
 WITH (TTL = INTERVAL('PT1H') DELETE ON Key AS SECONDS);
+)"
+        );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Uint32 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+            PARTITION BY HASH(`Key`)
+            WITH (
+                STORE = COLUMN,
+                TTL = INTERVAL('PT1H') DELETE ON Key AS MILLISECONDS
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Uint32 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+            PARTITION BY HASH(`Key`)
+            WITH (
+                STORE = COLUMN,
+                TTL =
+                    INTERVAL('PT1H') TO EXTERNAL DATA SOURCE `/Root/tier2`,
+                    INTERVAL('PT3H') DELETE
+                ON Key AS NANOSECONDS
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+            PARTITION BY HASH(`Key`)
+            WITH (
+                STORE = COLUMN,
+                TTL = INTERVAL('PT1H') TO EXTERNAL DATA SOURCE `/Root/tier2` ON Key AS MICROSECONDS
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Timestamp NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+            PARTITION BY HASH(`Key`)
+            WITH (
+                STORE = COLUMN,
+                TTL =
+                    Interval("PT10S") TO EXTERNAL DATA SOURCE `/Root/tier1`,
+                    Interval("PT1M") TO EXTERNAL DATA SOURCE `/Root/tier2`,
+                    Interval("PT1H") DELETE
+                    ON Key
+            );
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` Timestamp NOT NULL,
+    `Value` String,
+    PRIMARY KEY (`Key`)
+)
+PARTITION BY HASH (`Key`)
+WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64,
+    TTL =
+        INTERVAL('PT10S') TO EXTERNAL DATA SOURCE `/Root/tier1`,
+        INTERVAL('PT1M') TO EXTERNAL DATA SOURCE `/Root/tier2`,
+        INTERVAL('PT1H') DELETE
+    ON Key
+);
 )"
         );
     }

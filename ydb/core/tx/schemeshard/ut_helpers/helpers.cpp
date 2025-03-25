@@ -1045,8 +1045,8 @@ namespace NSchemeShardUT_Private {
             if (item.destination_prefix()) {
                 dest << item.destination_prefix();
             } else if (request.GetExportToS3Settings().has_encryption_settings()) {
-                continue;
-            } else {
+                continue; // validated separately
+            } else if (item.destination_prefix() || request.GetExportToS3Settings().destination_prefix()) {
                 TString src = item.source_path();
                 if (size_t pos = src.find_last_of('/'); pos != TString::npos) {
                     dest << src.substr(pos + 1);

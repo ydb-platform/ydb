@@ -162,7 +162,7 @@ namespace NYql::NConnector {
     };
 
     ///
-    ///  Create a factory based on a value in a config file
+    ///  Create a factory based on a it's type @sa NYql::EConnectionFactory
     ///
     std::unique_ptr<IConnectionFactory<NApi::Connector>> CreateFactoryForConnector(
         NYql::EConnectionFactory factory,
@@ -329,7 +329,7 @@ namespace NYql::NConnector {
             for (auto c : config.GetConnectors()) {
                 auto cfg = ConnectorConfigToGrpcConfig(c, count++);
                 std::shared_ptr<IConnectionFactory<NApi::Connector>> f 
-                    = std::move(CreateFactoryForConnector(c.GetFactory(), GrpcClient_, cfg, keepAlive));
+                    = CreateFactoryForConnector(c.GetFactory(), GrpcClient_, cfg, keepAlive);
 
                 for (auto k : c.GetForKinds()) {
                     if (!FactoryForKind_.try_emplace(NYql::EGenericDataSourceKind(k), f).second) {

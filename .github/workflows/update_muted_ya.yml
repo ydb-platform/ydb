@@ -67,6 +67,11 @@ jobs:
           # Use printf to handle special characters and newlines
           printf "PR_BODY<<EOF\n%s\nEOF\n" "$PR_BODY" >> $GITHUB_ENV
       
+      - name: Stage changes if any
+        if: env.changes == 'true'
+        run: |
+          git add .github/config/muted_ya.txt
+          
       - name: Update branch with base branch
         run: |
           git config user.name YDBot
@@ -85,10 +90,6 @@ jobs:
             git checkout -b ${{ env.BRANCH }}
           fi
   
-      - name: Stage changes if any
-        if: env.changes == 'true'
-        run: |
-          git add .github/config/muted_ya.txt
 
       - name: Delete other files
         run: |

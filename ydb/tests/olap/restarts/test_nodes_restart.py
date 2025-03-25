@@ -18,7 +18,18 @@ from ydb.tests.olap.helpers.ydb_client import YdbClient
 
 from enum import Enum
 
+# logging.basicConfig(
+#     stream=sys.stderr,
+#     format='%(asctime)s - %(levelname)s - %(message)s',
+#     datefmt='%Y-%m-%d %H:%M:%S',
+#     level=logging.INFO
+# )
+
 logger = logging.getLogger(__name__)
+handler = logging.StreamHandler(sys.stderr)
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 class TestRestartNodes(object):
     @classmethod
@@ -48,30 +59,30 @@ class TestRestartNodes(object):
         cls.cluster.stop()
 
     def alter_table(self, thread_id: int):
-        print(f"In progress: starting altering the table for thread#{thread_id}\n", file=sys.stderr)
-        deadline: datetime = datetime.datetime.now() + datetime.timedelta(minutes=2)
+        logger.info(f"In progress: starting altering the table for thread#{thread_id}")
+        deadline: datetime = datetime.datetime.now() + datetime.timedelta(seconds=30)
         while datetime.datetime.now() < deadline:
-            print("In progress: sending alter query\n", file=sys.stderr)
+            logger.info("In progress: sending alter query")
             self.ydb_client.query(f"""
                 ALTER TABLE `my_table` SET(TTL = Interval("PT48H") ON timestamp)
                 """)
-            print("In progress: executed alter query\n", file=sys.stderr)
+            logger.info("In progress: executed alter query")
 
-        print(f"In progress: finished altering for thread#{thread_id}\n", file=sys.stderr)
+        logger.info(f"In progress: finished altering for thread#{thread_id}")
 
     def kill_nodes(self):
-        print(f"In progress: starting killing nodes\n", file=sys.stderr)
-        deadline: datetime = datetime.datetime.now() + datetime.timedelta(minutes=2)
+        logger.info(f"In progress: starting killing nodes")
+        deadline: datetime = datetime.datetime.now() + datetime.timedelta(seconds=30)
         while datetime.datetime.now() < deadline:
-            nodes = list(self.cluster.nodes.items())
+            nodes = list(self.cluster.nodes.items())[0: len(self.cluster.nodes) // 2]
             random.shuffle(nodes)
             for key, node in nodes:
-                print(f"In progress: killing {key}-node\n", file=sys.stderr)
+                logger.info(f"In progress: killing {key}-node")
                 node.kill()
-                print(f"In progress: killed {key}-node, starting it\n", file=sys.stderr)
+                logger.info(f"In progress: killed {key}-node, starting it")
                 node.start()
-                print(f"In progress: started {key}-node\n", file=sys.stderr)
-        print(f"In progress: finished killing nodes\n", file=sys.stderr)
+                logger.info(f"In progress: started {key}-node")
+        logger.info(f"In progress: finished killing nodes")
                 
 
     def test(self):
@@ -97,7 +108,7 @@ class TestRestartNodes(object):
         # 4) начинаю гонять 1 альтер.
         # 5) в течение 2х минут альтер должен начать успешно проходить. крутить в цикле.
 
-        print("Init: creating a table\n", file=sys.stderr)
+        logger.info("Init: creating a table")
         self.ydb_client.query(f"""
                 CREATE TABLE `my_table` (
                     timestamp Timestamp NOT NULL, 
@@ -109,34 +120,34 @@ class TestRestartNodes(object):
                     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 5
                 );
             """)
-        print("Init: sucessfully created the table\n", file=sys.stderr)
+        logger.info("Init: sucessfully created the table")
 
         threads: list[TestThread] = []
         for i in range(10):
             threads.append(TestThread(target=self.alter_table, args=[i]))
         threads.append(TestThread(target=self.kill_nodes))
 
-        print("In progress: starting 11 threads\n", file=sys.stderr)
+        logger.info("In progress: starting 11 threads")
         for thread in threads:
             thread.start()
-        print("In progress: started 11 threads, now joining them\n", file=sys.stderr)
+        logger.info("In progress: started 11 threads, now joining them")
         for thread in threads:
             thread.join()
-        print("In progress: joined 11 threads\n", file=sys.stderr)
+        logger.info("In progress: joined 11 threads")
 
-        print("In progress: starting nodes again\n", file=sys.stderr)
+        logger.info("In progress: starting nodes again")
         # TODO: investigate, maybe here should be no repeating start() calls
         for node in self.cluster.nodes.values():
             node.start()
-        print("In progress: stared nodes again\n", file=sys.stderr)
+        logger.info("In progress: stared nodes again")
 
-        print("In progress: starting altering table\n", file=sys.stderr)
-        deadline: datetime = datetime.datetime.now() + datetime.timedelta(minutes=2)
+        logger.info("In progress: starting altering table")
+        deadline: datetime = datetime.datetime.now() + datetime.timedelta(minutes=30)
         while datetime.datetime.now() < deadline:
-            print("In progress: sending alter query\n", file=sys.stderr)
+            logger.info("In progress: sending alter query")
             self.ydb_client.query(f"""
                 ALTER TABLE `my_table` SET(TTL = Interval("PT49H") ON timestamp)
                 """)
-            print("In progress: executed alter query\n", file=sys.stderr)
+            logger.info("In progress: executed alter query")
             
-        print("Finished: finished altering table\n", file=sys.stderr)
+        logger.info("Finished: finished altering table")

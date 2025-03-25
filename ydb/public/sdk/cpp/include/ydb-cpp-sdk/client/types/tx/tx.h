@@ -25,8 +25,8 @@ public:
 protected:
     TTransactionBase() = default;
 
-    const std::string* SessionId_;
-    const std::string* TxId_;
+    const std::string* SessionId_ = nullptr;
+    const std::string* TxId_ = nullptr;
 };
 
 } // namespace NYdb

@@ -6,6 +6,7 @@ import logging
 import time
 from ydb.tests.library.common.types import Erasure
 import yatest.common
+import random
 
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.util import LogLevels
@@ -45,49 +46,21 @@ class TestRestartNodes(object):
         cls.ydb_client.stop()
         cls.cluster.stop()
 
-
-    def get_row_count(self) -> int:
-        return self.ydb_client.query(f"select count(*) as Rows from `{self.table_name}`")[0].rows[0]["Rows"]
-
-    def aggregation_query(self, duration: datetime.timedelta):
-        deadline: datetime = datetime.datetime.now() + duration
+    def alter_table(self, thread_id: int):
+        deadline: datetime = datetime.datetime.now() + datetime.timedelta(minutes=2)
         while datetime.datetime.now() < deadline:
-            hours: int = random.randint(1, 10)
-            self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` ")
-            self.ydb_client.query(f"SELECT * FROM `{self.table_name}` WHERE timestamp < CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours})")
-            # TODO: this queries somehow make db fallen. Investigate
-            # self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` WHERE timestamp < CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours})")
-            # self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` WHERE " + 
-                                #   f"(timestamp >= CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours + 1})) AND " + 
-                                #   f"(timestamp <= CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours}))")
-
-    def check_insert(self, duration: int):
-        prev_count: int = self.get_row_count()
-        time.sleep(duration)
-        current_count: int = self.get_row_count()
-        logging.info(f'check insert: {current_count} {prev_count}')
-        assert current_count != prev_count
-
-    def create_table(self, thread_id: int):
-        deadline: datetime = datetime.datetime.now() + datetime.timedelta(seconds=10)
-        # deadline: datetime = datetime.datetime.now() + datetime.timedelta(minutes=3)
-        while datetime.datetime.now() < deadline:
-            tableName = f"table_{thread_id}_{datetime.datetime.now().timestamp()}"
             self.ydb_client.query(f"""
-                --!syntax_v1
-                CREATE TABLE `{tableName}` (
-                    Key Uint64 NOT NULL,
-                    Value String,
-                    PRIMARY KEY (Key)
-                ) WITH (
-                    STORE = COLUMN,
-                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 5
-                );
-            """)
-            self.ydb_client.query(f"""
-                ALTER TABLE `{tableName}`
-                    ADD COLUMN `Value2` String;
+                ALTER TABLE `my_table` SET(TTL = Interval("PT48H") ON timestamp)
                 """)
+
+    def kill_nodes(self):
+        deadline: datetime = datetime.datetime.now() + datetime.timedelta(minutes=2)
+        while datetime.datetime.now() < deadline:
+            nodes = list(self.cluster.nodes.items())
+            random.shuffle(nodes)
+            for _, node in nodes:
+                node.kill()
+                node.start()
 
     def test(self):
         # self.ydb_client.query("""
@@ -103,25 +76,46 @@ class TestRestartNodes(object):
             # );
         # """)
 
+        # Ошибка должна быть как в paste.
+        # Нужно думать про это как про то что у пользователя не работает alter.
+        # Сценарий пользователя: летят alter-ы, рестартуют ноды, затем ничего не работает.
+        # 1) создать одну таблицу.
+        # 2) альтеры в одну таблицу и одновременно случайно убиваем произвольные ноды в течение 2х минут . из нескольких потоков.
+        # 3) поднимаю все ноды. 
+        # 4) начинаю гонять 1 альтер.
+        # 5) в течение 2х минут альтер должен начать успешно проходить. крутить в цикле.
+
+        self.ydb_client.query(f"""
+                CREATE TABLE `my_table` (
+                    timestamp Timestamp NOT NULL, 
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (timestamp)
+                ) WITH (
+                    STORE = COLUMN,
+                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 5
+                );
+            """)
+
         threads: list[TestThread] = []
-        # threads.append(TestThread(target=ydb_workload.bulk_upsert, args=[wait_time, 10, 1000, True]))
         for i in range(10):
-            threads.append(TestThread(target=self.create_table, args=[i]))
+            threads.append(TestThread(target=self.alter_table, args=[i]))
+        threads.append(TestThread(target=self.kill_nodes))
 
         for thread in threads:
             thread.start()
 
-        time.sleep(10)
-
-
-        self.cluster.restart_nodes()
-        # for node in self.cluster.nodes.values():
-        #     node.stop()
-        #     # киляются с killom.
-        #     # тут уточнить, как это делать.
-
-        # for node in self.cluster.nodes.values():
-        #     node.start()
-
         for thread in threads:
             thread.join()
+        
+        # TODO: investigate, maybe here should be no repeating start() calls
+        for node in self.cluster.nodes.values():
+            node.start()
+
+        deadline: datetime = datetime.datetime.now() + datetime.timedelta(minutes=2)
+        while datetime.datetime.now() < deadline:
+            self.ydb_client.query(f"""
+                ALTER TABLE `my_table` SET(TTL = Interval("PT48H") ON timestamp)
+                """)
+        
+

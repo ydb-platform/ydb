@@ -124,6 +124,7 @@ public:
 
         TMap<TString, TVector<TConnectionParam>> ConnectionParams;
         bool EnableSsl = false;
+        bool SkipDiscovery = false;
         bool IsNetworkIntensive = false;
         TString Oauth2KeyFile;
 

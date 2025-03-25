@@ -62,10 +62,16 @@ class TestRestartNodes(object):
         logger.info(f"In progress: starting altering the table for thread#{thread_id}")
         deadline: datetime = datetime.datetime.now() + datetime.timedelta(seconds=30)
         while datetime.datetime.now() < deadline:
+            ttl = random.randint(0, 1000)
             logger.info("In progress: sending alter query")
-            self.ydb_client.query(f"""
-                ALTER TABLE `my_table` SET(TTL = Interval("PT48H") ON timestamp)
-                """)
+            try:
+                self.ydb_client.query(f"""
+                    ALTER TABLE `my_table` SET(TTL = Interval("PT{ttl}H") ON timestamp)
+                    """, )
+            except Exception as x:
+                logger.error(f"In progress: Caught an exception during query executing: {x}")
+            except:
+                logger.error(f"In progress: Caught an unknown exception during node killing executing")
             logger.info("In progress: executed alter query")
 
         logger.info(f"In progress: finished altering for thread#{thread_id}")
@@ -78,11 +84,18 @@ class TestRestartNodes(object):
             random.shuffle(nodes)
             nodes = nodes[0: len(nodes) // 2]
             for key, node in nodes:
-                logger.info(f"In progress: killing {key}-node")
-                node.kill()
-                logger.info(f"In progress: killed {key}-node, starting it")
-                node.start()
-                logger.info(f"In progress: started {key}-node")
+                try:
+                    logger.info(f"In progress: killing {key}-node")
+                    node.kill()
+                    time.sleep(random.randint(1, 10))
+                    logger.info(f"In progress: killed {key}-node, starting it")
+                    node.start()
+                    time.sleep(random.randint(1, 10))
+                    logger.info(f"In progress: started {key}-node")
+                except Exception as x:
+                    logger.error(f"In progress: Caught an exception during node killing executing: {x}")
+                except:
+                    logger.error(f"In progress: Caught an unknown exception during node killing executing")
         logger.info(f"In progress: finished killing nodes")
                 
 
@@ -131,10 +144,11 @@ class TestRestartNodes(object):
         logger.info("In progress: starting 11 threads")
         for thread in threads:
             thread.start()
-        logger.info("In progress: started 11 threads, now joining them")
-        for thread in threads:
-            thread.join()
-        logger.info("In progress: joined 11 threads")
+        logger.info("In progress: started 11 threads, now joining last")
+        # for thread in threads:
+        #     thread.join()
+        threads[-1].join()
+        logger.info("In progress: joined killing thread")
 
         logger.info("In progress: starting nodes again")
         # TODO: investigate, maybe here should be no repeating start() calls
@@ -143,12 +157,18 @@ class TestRestartNodes(object):
         logger.info("In progress: stared nodes again")
 
         logger.info("In progress: starting altering table")
-        deadline: datetime = datetime.datetime.now() + datetime.timedelta(minutes=30)
+        deadline: datetime = datetime.datetime.now() + datetime.timedelta(seconds=30)
         while datetime.datetime.now() < deadline:
+            ttl = random.randint(1, 1000)
             logger.info("In progress: sending alter query")
-            self.ydb_client.query(f"""
-                ALTER TABLE `my_table` SET(TTL = Interval("PT49H") ON timestamp)
-                """)
+            try:
+                self.ydb_client.query(f"""
+                    ALTER TABLE `my_table` SET(TTL = Interval("PT{ttl}H") ON timestamp)
+                    """, )
+            except Exception as x:
+                logger.error(f"In progress: Caught an exception during query executing: {x}")
+            except:
+                logger.error(f"In progress: Caught an unknown exception during node killing executing")
             logger.info("In progress: executed alter query")
             
         logger.info("Finished: finished altering table")

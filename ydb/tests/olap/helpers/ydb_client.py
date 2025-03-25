@@ -1,5 +1,8 @@
 import ydb
 
+# from contrib.python.ydb.py3.ydb.query.pool.py import (
+#     RetrySettings
+# )
 
 class YdbClient:
     def __init__(self, endpoint: str, database: str):
@@ -16,4 +19,5 @@ class YdbClient:
         self.driver.wait(timeout, fail_fast=True)
 
     def query(self, statement):
-        return self.session_pool.execute_with_retries(statement)
+        with ydb.QuerySessionPool(self.driver) as pool:
+            return pool.execute_with_retries(statement, retry_settings=ydb.RetrySettings(max_retries=0))

@@ -10,17 +10,23 @@ namespace NKikimr::NOlap::NReader {
 class TBuildDuplicateFilters: public NConveyor::ITask {
     class TFiltersBuilder: public NArrow::NMerger::IMergeResultBuilder {
     private:
-        std::vector<NArrow::TColumnFilter> Filters;
+        THashMap<ui64, NArrow::TColumnFilter> Filters;
+
+        void AddImpl(const ui64 sourceId, const bool value) {
+            auto* findFilter = Filters.FindPtr(sourceId);
+            if (!findFilter) {
+                findFilter = &Filters.emplace(sourceId, NArrow::TColumnFilter::BuildAllowFilter()).first->second;
+            }
+            findFilter->Add(value);
+        }
 
     private:
         virtual void AddRecord(const NArrow::NMerger::TBatchIterator& cursor) override {
-            AFL_VERIFY(cursor.GetSourceId() < Filters.size())("id", cursor.GetSourceId())("size", Filters.size());
-            Filters[cursor.GetSourceId()].Add(true);
+            AddImpl(cursor.GetSourceId(), true);
         }
 
         virtual void SkipRecord(const NArrow::NMerger::TBatchIterator& cursor) override {
-            AFL_VERIFY(cursor.GetSourceId() < Filters.size())("id", cursor.GetSourceId())("size", Filters.size());
-            Filters[cursor.GetSourceId()].Add(false);
+            AddImpl(cursor.GetSourceId(), false);
         }
 
         virtual void ValidateDataSchema(const std::shared_ptr<arrow::Schema>& /*schema*/) const override {
@@ -31,14 +37,7 @@ class TBuildDuplicateFilters: public NConveyor::ITask {
         }
 
     public:
-        TFiltersBuilder(const ui32 numSources) {
-            Filters.reserve(numSources);
-            for (ui32 i = 0; i < numSources; ++i) {
-                Filters.emplace_back(NArrow::TColumnFilter::BuildAllowFilter());
-            }
-        }
-
-        std::vector<NArrow::TColumnFilter>&& ExtractFilters() && {
+        THashMap<ui64, NArrow::TColumnFilter>&& ExtractFilters() && {
             return std::move(Filters);
         }
     };

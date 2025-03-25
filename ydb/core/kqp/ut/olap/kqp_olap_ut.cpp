@@ -3308,8 +3308,11 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(SingleShardRead) {
-        std::unique_ptr<TKikimrRunner> Kikimr;
-        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
+        auto settings = TKikimrSettings()
+            .SetAppConfig(appConfig)
+            .SetWithSampleTables(false);
         auto kikimr = std::make_unique<TKikimrRunner>(settings);
         Tests::NCommon::TLoggerInit(*kikimr).Initialize();
         auto queryClient = kikimr->GetQueryClient();

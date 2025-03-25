@@ -265,6 +265,9 @@ protected:
         for (auto& [shardId, nodeId] : ShardIdToNodeId) {
             ShardsOnNode[nodeId].push_back(shardId);
             ParticipantNodes.emplace(nodeId);
+            if (TxManager) {
+                TxManager->AddParticipantNode(nodeId);
+            }
         }
 
         if (IsDebugLogEnabled()) {
@@ -1536,6 +1539,11 @@ protected:
         const ui64 /*nodeId*/,
         bool enableShuffleElimination = false
     ) const {
+        const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
+        if (const auto taskCount = stage.GetTaskCount()) {
+            return taskCount;
+        }
+
         ui32 result = 0;
         if (isOlapScan) {
             if (AggregationSettings.HasCSScanThreadsPerNode()) {
@@ -1545,7 +1553,6 @@ protected:
                 result = predictor.CalcTasksOptimalCount(TStagePredictor::GetUsableThreads(), {});
             }
         } else {
-            const auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
             result = AggregationSettings.GetDSScanMinimalThreads();
             if (stage.GetProgram().GetSettings().GetHasSort()) {
                 result = std::max(result, AggregationSettings.GetDSBaseSortScanThreads());

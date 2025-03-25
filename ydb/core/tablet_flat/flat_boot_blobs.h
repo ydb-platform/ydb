@@ -21,11 +21,6 @@ namespace NBoot {
         TLoadBlobs() = default;
         TLoadBlobs(IStep *owner, NPageCollection::TLargeGlobId largeGlobId, ui64 cookie);
 
-        ~TLoadBlobs()
-        {
-            Y_ABORT_UNLESS(!RefCount(), "TLoadBlobs is still referenced somewhere");
-        }
-
         void Start() override { }
 
         void Feed(TLogoBlobID blobId, TString body)

@@ -13,7 +13,7 @@
 
 namespace NKikimr::NColumnShard {
 
-TWriteOperation::TWriteOperation(const ui64 pathId, const TOperationWriteId writeId, const ui64 lockId, const ui64 cookie,
+TWriteOperation::TWriteOperation(const TInternalPathId pathId, const TOperationWriteId writeId, const ui64 lockId, const ui64 cookie,
     const EOperationStatus& status, const TInstant createdAt, const std::optional<ui32> granuleShardingVersionId,
     const NEvWrite::EModificationType mType, const bool writePortions)
     : PathId(pathId)
@@ -52,7 +52,7 @@ void TWriteOperation::CommitOnExecute(
 
     if (!WritePortions) {
         THashSet<TInsertWriteId> insertWriteIds(InsertWriteIds.begin(), InsertWriteIds.end());
-        auto pathExists = [&](ui64 pathId) {
+        auto pathExists = [&](TInternalPathId pathId) {
             return owner.TablesManager.HasTable(pathId);
         };
         if (insertWriteIds.size()) {
@@ -109,7 +109,7 @@ void TWriteOperation::ToProto(NKikimrTxColumnShard::TInternalOperationData& prot
     }
     proto.SetModificationType((ui32)ModificationType);
     proto.SetWritePortions(WritePortions);
-    proto.SetPathId(PathId);
+    proto.SetPathId(PathId.GetRawValue());
 }
 
 void TWriteOperation::FromProto(const NKikimrTxColumnShard::TInternalOperationData& proto) {
@@ -117,7 +117,7 @@ void TWriteOperation::FromProto(const NKikimrTxColumnShard::TInternalOperationDa
         InsertWriteIds.push_back(TInsertWriteId(writeId));
     }
     WritePortions = proto.GetWritePortions();
-    PathId = proto.GetPathId();
+    PathId = TInternalPathId::FromRawValue(proto.GetPathId());
     AFL_VERIFY(!WritePortions || PathId);
     if (proto.HasModificationType()) {
         ModificationType = (NEvWrite::EModificationType)proto.GetModificationType();

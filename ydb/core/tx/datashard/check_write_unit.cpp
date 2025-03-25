@@ -42,7 +42,7 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
                                            TTransactionContext &,
                                            const TActorContext &ctx)
 {
-    Y_ABORT_UNLESS(!op->IsAborted());
+    Y_ENSURE(!op->IsAborted());
 
     if (CheckRejectDataTx(op, ctx)) {
         op->Abort(EExecutionUnitKind::FinishProposeWrite);
@@ -52,8 +52,8 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
 
     TWriteOperation* writeOp = TWriteOperation::CastWriteOperation(op);
     auto writeTx = writeOp->GetWriteTx();
-    Y_ABORT_UNLESS(writeTx);
-    Y_ABORT_UNLESS(writeTx->Ready() || writeTx->RequirePrepare());
+    Y_ENSURE(writeTx);
+    Y_ENSURE(writeTx->Ready() || writeTx->RequirePrepare());
 
     // Check if we are out of space and tx wants to update user
     // or system table.

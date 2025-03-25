@@ -29,7 +29,7 @@ bool TryCodecFromTask(const NKikimrSchemeOp::TBackupTask& task, ECompressionCode
 
 ECompressionCodec CodecFromTask(const NKikimrSchemeOp::TBackupTask& task) {
     ECompressionCodec codec;
-    Y_ABORT_UNLESS(TryCodecFromTask(task, codec));
+    Y_ENSURE(TryCodecFromTask(task, codec));
     return codec;
 }
 
@@ -64,10 +64,10 @@ TString DataFileExtension(EDataFormat format, ECompressionCodec codec) {
     };
 
     auto fit = formats.find(format);
-    Y_VERIFY_S(fit != formats.end(), "Unexpected format: " << format);
+    Y_ENSURE(fit != formats.end(), "Unexpected format: " << format);
 
     auto cit = codecs.find(codec);
-    Y_VERIFY_S(cit != codecs.end(), "Unexpected codec: " << codec);
+    Y_ENSURE(cit != codecs.end(), "Unexpected codec: " << codec);
 
     return Sprintf("%s%s", fit->second.c_str(), cit->second.c_str());
 }

@@ -6,6 +6,7 @@
 
 #include <util/generic/hash.h>
 #include <util/generic/vector.h>
+#include <util/generic/yexception.h>
 #include <util/random/random.h>
 
 namespace NKikimr {
@@ -44,7 +45,7 @@ namespace NUtil {
     }
 
     inline ui8 SelectChannel(const TVector<float>& normalizedShares, const TVector<ui8>& channels) {
-        Y_ABORT_UNLESS(normalizedShares.size() == channels.size(), "Normalized shares and channels sizes mismatch");
+        Y_ENSURE(normalizedShares.size() == channels.size(), "Normalized shares and channels sizes mismatch");
 
         if (channels.size() == 1) {
             return channels[0];

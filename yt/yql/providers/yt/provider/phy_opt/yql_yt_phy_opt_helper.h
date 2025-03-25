@@ -51,6 +51,7 @@ NNodes::TCoLambda FallbackLambdaOutput(NNodes::TCoLambda lambda, TExprContext& c
 
 NNodes::TYtDSink GetDataSink(NNodes::TExprBase input, TExprContext& ctx);
 NNodes::TYtDSink MakeDataSink(TPositionHandle pos, TStringBuf cluster, TExprContext& ctx);
+NNodes::TYtDSource MakeDataSource(TPositionHandle pos, TStringBuf cluster, TExprContext& ctx);
 
 NNodes::TExprBase GetWorld(NNodes::TExprBase input, NNodes::TMaybeNode<NNodes::TExprBase> main, TExprContext& ctx);
 

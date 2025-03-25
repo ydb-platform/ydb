@@ -1,4 +1,4 @@
-#include "table_data_service_key.h"
+#include "yql_yt_table_data_service_key.h"
 #include <util/string/builder.h>
 
 namespace NYql::NFmr {

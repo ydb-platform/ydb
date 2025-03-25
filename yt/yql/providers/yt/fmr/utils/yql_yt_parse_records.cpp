@@ -1,4 +1,4 @@
-#include "parse_records.h"
+#include "yql_yt_parse_records.h"
 
 using namespace NYql;
 

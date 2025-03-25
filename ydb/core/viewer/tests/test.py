@@ -587,6 +587,31 @@ def test_viewer_nodes_issue_14992():
     return result
 
 
+def test_operations_list():
+    return get_viewer_normalized("/operation/list", {
+        'database': dedicated_db,
+        'kind': 'import/s3'
+    })
+
+
+def test_operations_list_page():
+    return get_viewer_normalized("/operation/list", {
+        'database': dedicated_db,
+        'kind': 'import/s3',
+        'offset': 50,
+        'limit': 50
+    })
+
+
+def test_operations_list_page_bad():
+    return get_viewer_normalized("/operation/list", {
+        'database': dedicated_db,
+        'kind': 'import/s3',
+        'offset': 10,
+        'limit': 50
+    })
+
+
 def test_topic_data():
     grpc_port = cluster.nodes[1].grpc_port
 

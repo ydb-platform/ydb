@@ -47,7 +47,7 @@ namespace NMem {
 
         const NPageCollection::TMemGlob& Get(ui64 ref) const
         {
-            Y_ABORT_UNLESS(ref >= Head && ref < Tail(), "ELargeObj ref is out of cache");
+            Y_ENSURE(ref >= Head && ref < Tail(), "ELargeObj ref is out of cache");
 
             return Store[ref - Head];
         }
@@ -59,7 +59,7 @@ namespace NMem {
 
         ui64 Push(const NPageCollection::TGlobId& glob, TSharedData data)
         {
-            Y_ABORT_UNLESS(glob.Logo.BlobSize(), "Blob cannot have zero bytes");
+            Y_ENSURE(glob.Logo.BlobSize(), "Blob cannot have zero bytes");
 
             Store.emplace_back(glob, std::move(data));
             Bytes += glob.Logo.BlobSize();
@@ -72,7 +72,7 @@ namespace NMem {
         void Assign(TArrayRef<NPageCollection::TLoadedPage> pages)
         {
             for (auto &one : pages) {
-                Y_ABORT_UNLESS(one.PageId < Store.size());
+                Y_ENSURE(one.PageId < Store.size());
 
                 Store[one.PageId].Data = std::move(one.Data);
             }
@@ -82,12 +82,12 @@ namespace NMem {
         {
             if (count > 0) {
                 size_t currentSize = Store.size();
-                Y_ABORT_UNLESS(count <= currentSize);
+                Y_ENSURE(count <= currentSize);
                 Store.Enumerate(currentSize - count, currentSize, [pages](size_t, NPageCollection::TMemGlob& blob) {
-                    Y_ABORT_UNLESS(blob.GId.Logo.TabletID() == 0);
+                    Y_ENSURE(blob.GId.Logo.TabletID() == 0);
                     const ui32 ref = blob.GId.Logo.Cookie();
                     const auto& fixedBlob = pages.at(ref);
-                    Y_ABORT_UNLESS(fixedBlob.GId.Logo.TabletID() != 0);
+                    Y_ENSURE(fixedBlob.GId.Logo.TabletID() != 0);
                     blob.GId = fixedBlob.GId;
                 });
             }
@@ -97,7 +97,7 @@ namespace NMem {
         {
             if (count > 0) {
                 size_t currentSize = Store.size();
-                Y_ABORT_UNLESS(count <= currentSize);
+                Y_ENSURE(count <= currentSize);
                 Store.Enumerate(currentSize - count, currentSize, [this](size_t, NPageCollection::TMemGlob& blob) {
                     Bytes -= blob.GId.Logo.BlobSize();
                 });

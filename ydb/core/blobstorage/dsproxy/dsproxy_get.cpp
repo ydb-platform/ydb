@@ -356,7 +356,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
                 TMonotonic nextAcceleration = RequestStartTime + timeToAccelerate;
                 LWTRACK(DSProxyScheduleAccelerate, Orbit, nextAcceleration > now ? (nextAcceleration - now).MicroSeconds() / 1000.0 : 0.0, "Get");
                 if (nextAcceleration > now) {
-                    ui64 causeIdx = RootCauseTrack.RegisterAccelerate();
+                    ui64 causeIdx = RootCauseTrack.RegisterAccelerate("Get");
                     Schedule(nextAcceleration - now, new TEvAccelerateGet(causeIdx));
                     IsGetAccelerateScheduled = true;
                 } else {
@@ -376,7 +376,7 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
                 TMonotonic nextAcceleration = RequestStartTime + timeToAccelerate;
                 LWTRACK(DSProxyScheduleAccelerate, Orbit, nextAcceleration > now ? (nextAcceleration - now).MicroSeconds() / 1000.0 : 0.0, "Put");
                 if (nextAcceleration > now) {
-                    ui64 causeIdx = RootCauseTrack.RegisterAccelerate();
+                    ui64 causeIdx = RootCauseTrack.RegisterAccelerate("Put");
                     Schedule(nextAcceleration - now, new TEvAcceleratePut(causeIdx));
                     IsPutAccelerateScheduled = true;
                 } else {

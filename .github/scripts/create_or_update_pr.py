@@ -4,7 +4,8 @@ from github import Github
 
 def create_or_update_pr():
     GITHUB_TOKEN = os.getenv('GITHUB_TOKEN')
-    BRANCH = os.getenv('BRANCH')
+    BASE_BRANCH = os.getenv('BASE_BRANCH')
+    BRANCH_FOR_PR = os.getenv('BRANCH_FOR_PR')
     TITLE = os.getenv('TITLE')
     BODY = os.getenv('BODY')
 
@@ -12,7 +13,7 @@ def create_or_update_pr():
     repo = g.get_repo(os.getenv('GITHUB_REPOSITORY'))
 
     # Check for an existing PR
-    existing_prs = repo.get_pulls(head=BRANCH, base='main', state='open')
+    existing_prs = repo.get_pulls(head=BRANCH_FOR_PR, base=BASE_BRANCH, state='open')
     existing_pr = None
     for pr in existing_prs:
         if pr.title == TITLE:
@@ -26,7 +27,7 @@ def create_or_update_pr():
     else:
         print("No existing PR found. Creating a new PR.")
         # Create new PR
-        repo.create_pull(title=TITLE, body=BODY, head=BRANCH, base='main')
+        repo.create_pull(title=TITLE, body=BODY, head=BRANCH_FOR_PR, base=BASE_BRANCH)
 
 if __name__ == '__main__':
     create_or_update_pr()

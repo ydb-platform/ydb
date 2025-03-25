@@ -13,7 +13,7 @@ class TestDML(TestBase):
         for i in range(2):
             for uniq in unique:
                 for sync in index_sync:
-                    if uniq != "UNIQUE" and sync != "ASYNC":
+                    if uniq != "UNIQUE" or sync != "ASYNC":
                         self.DML(
                             f"table_index_{i}_{uniq}_{sync}", pk_types, {}, index_first if i == 0 else index_second, "", uniq, sync)
 

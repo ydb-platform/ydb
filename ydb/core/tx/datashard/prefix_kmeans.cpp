@@ -76,6 +76,7 @@ protected:
     const TString PrefixTable;
     TString UploadTable;
 
+    TBufferData LevelBuf;
     TBufferData PostingBuf;
     TBufferData PrefixBuf;
     TBufferData UploadBuf;
@@ -170,7 +171,7 @@ public:
         }
     }
 
-    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept final
+    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
     {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
         LOG_D("Prepare " << Debug());
@@ -179,7 +180,7 @@ public:
         return {EScan::Feed, {}};
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final
+    TAutoPtr<IDestructable> Finish(EAbort abort) final
     {
         LOG_D("Finish " << Debug());
 
@@ -208,7 +209,7 @@ public:
         return nullptr;
     }
 
-    void Describe(IOutputStream& out) const noexcept final
+    void Describe(IOutputStream& out) const final
     {
         out << Debug();
     }
@@ -221,21 +222,14 @@ public:
             << " PostingBuf size: " << PostingBuf.Size() << " PrefixBuf size: " << PrefixBuf.Size() << " UploadBuf size: " << UploadBuf.Size();
     }
 
-    EScan PageFault() noexcept final
+    EScan PageFault() final
     {
         LOG_T("PageFault " << Debug());
 
-        if (!UploadBuf.IsEmpty()) {
-            return EScan::Feed;
-        }
-
-        if (!PostingBuf.IsEmpty()) {
-            PostingBuf.FlushTo(UploadBuf);
-            InitUpload(PostingTable, PostingTypes);
-        } else if (!PrefixBuf.IsEmpty()) {
-            PrefixBuf.FlushTo(UploadBuf);
-            InitUpload(PrefixTable, PrefixTypes);
-        }
+        UploadInProgress()
+            || TryUpload(LevelBuf, LevelTable, LevelTypes, false)
+            || TryUpload(PostingBuf, PostingTable, PostingTypes, false)
+            || TryUpload(PrefixBuf, PrefixTable, PrefixTypes, false);
 
         return EScan::Feed;
     }
@@ -256,7 +250,7 @@ protected:
     {
         LOG_T("Retry upload " << Debug());
 
-        if (!UploadBuf.IsEmpty()) {
+        if (UploadInProgress()) {
             RetryUpload();
         }
     }
@@ -283,13 +277,10 @@ protected:
             UploadRows += UploadBuf.GetRows();
             UploadBytes += UploadBuf.GetBytes();
             UploadBuf.Clear();
-            if (PostingBuf.IsReachLimits(Limits)) {
-                PostingBuf.FlushTo(UploadBuf);
-                InitUpload(PostingTable, PostingTypes);
-            } else if (PrefixBuf.IsReachLimits(Limits)) {
-                PrefixBuf.FlushTo(UploadBuf);
-                InitUpload(PrefixTable, PrefixTypes);
-            }
+
+            TryUpload(LevelBuf, LevelTable, LevelTypes, true)
+                || TryUpload(PostingBuf, PostingTable, PostingTypes, true)
+                || TryUpload(PrefixBuf, PrefixTable, PrefixTypes, true);
 
             Driver->Touch(EScan::Feed);
             return;
@@ -309,20 +300,18 @@ protected:
 
     EScan FeedUpload()
     {
-        if (!PostingBuf.IsReachLimits(Limits) && !PrefixBuf.IsReachLimits(Limits)) {
+        if (!LevelBuf.IsReachLimits(Limits) && !PostingBuf.IsReachLimits(Limits) && !PrefixBuf.IsReachLimits(Limits)) {
             return EScan::Feed;
         }
-        if (!UploadBuf.IsEmpty()) {
+
+        if (UploadInProgress()) {
             return EScan::Sleep;
         }
-        if (PostingBuf.IsReachLimits(Limits)) {
-            PostingBuf.FlushTo(UploadBuf);
-            InitUpload(PostingTable, PostingTypes);
-        } else {
-            Y_ASSERT(PrefixBuf.IsReachLimits(Limits));
-            PrefixBuf.FlushTo(UploadBuf);
-            InitUpload(PrefixTable, PrefixTypes);
-        }
+        
+        TryUpload(LevelBuf, LevelTable, LevelTypes, true)
+            || TryUpload(PostingBuf, PostingTable, PostingTypes, true)
+            || TryUpload(PrefixBuf, PrefixTable, PrefixTypes, true);
+
         return EScan::Feed;
     }
 
@@ -356,20 +345,38 @@ protected:
         UploadImpl();
     }
 
-
-    void UploadSample()
+    bool UploadInProgress()
     {
-        Y_ASSERT(UploadBuf.IsEmpty());
+        return !UploadBuf.IsEmpty();
+    }
+
+    bool TryUpload(TBufferData& buffer, const TString& table, const std::shared_ptr<NTxProxy::TUploadTypes>& types, bool byLimit)
+    {
+        if (Y_UNLIKELY(UploadInProgress())) {
+            // already uploading something
+            return true;
+        }
+
+        if (!buffer.IsEmpty() && (!byLimit || buffer.IsReachLimits(Limits))) {
+            buffer.FlushTo(UploadBuf);
+            InitUpload(table, types);
+            return true;
+        }
+
+        return false;
+    }
+
+    void WriteLevelRows()
+    {
         std::array<TCell, 2> pk;
         std::array<TCell, 1> data;
         for (NTable::TPos pos = 0; const auto& row : Clusters) {
             pk[0] = TCell::Make(Parent);
             pk[1] = TCell::Make(Child + pos);
             data[0] = TCell{row};
-            UploadBuf.AddRow(TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
+            LevelBuf.AddRow(TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
             ++pos;
         }
-        InitUpload(LevelTable, LevelTypes);
     }
 };
 
@@ -420,31 +427,25 @@ public:
         LOG_D("Create " << Debug());
     }
 
-    EScan Seek(TLead& lead, ui64 seq) noexcept final
+    EScan Seek(TLead& lead, ui64 seq) final
     {
         LOG_D("Seek " << Debug());
         ui64 zeroSeq = 0;
         while (true) {
             if (State == UploadState) {
-                // TODO: it's a little suboptimal to wait here
-                // better is wait after MoveToNextKey but before UploadSample
-                if (!UploadBuf.IsEmpty()) {
-                    return EScan::Sleep;
-                }
                 if (MoveToNextPrefix()) {
                     zeroSeq = seq;
                     continue;
                 }
-                if (!PostingBuf.IsEmpty()) {
-                    PostingBuf.FlushTo(UploadBuf);
-                    InitUpload(PostingTable, PostingTypes);
+                
+                if (UploadInProgress()
+                    || TryUpload(LevelBuf, LevelTable, LevelTypes, false)
+                    || TryUpload(PostingBuf, PostingTable, PostingTypes, false)
+                    || TryUpload(PrefixBuf, PrefixTable, PrefixTypes, false))
+                {
                     return EScan::Sleep;
                 }
-                if (!PrefixBuf.IsEmpty()) {
-                    PrefixBuf.FlushTo(UploadBuf);
-                    InitUpload(PrefixTable, PrefixTypes);
-                    return EScan::Sleep;
-                }
+
                 return EScan::Final;
             }
 
@@ -471,8 +472,7 @@ public:
             Y_ASSERT(State == EState::KMEANS);
             if (RecomputeClusters()) {
                 lead.SetTags(UploadScan);
-
-                UploadSample();
+                WriteLevelRows();
                 State = UploadState;
             } else {
                 lead.SetTags({&EmbeddingTag, 1});
@@ -482,7 +482,7 @@ public:
         }
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
     {
         LOG_T("Feed " << Debug());
         if (!Prefix) {
@@ -595,7 +595,7 @@ private:
         return true;
     }
 
-    EScan FeedSample(const TRow& row) noexcept
+    EScan FeedSample(const TRow& row)
     {
         Y_ASSERT(row.Size() == 1);
         const auto embedding = row.Get(0).AsRef();
@@ -622,7 +622,7 @@ private:
         return MaxProbability != 0 ? EScan::Feed : EScan::Reset;
     }
 
-    EScan FeedKMeans(const TRow& row) noexcept
+    EScan FeedKMeans(const TRow& row)
     {
         Y_ASSERT(row.Size() == 1);
         const ui32 pos = FeedEmbedding(*this, Clusters, row, 0);
@@ -630,7 +630,7 @@ private:
         return EScan::Feed;
     }
 
-    EScan FeedUploadBuild2Build(TArrayRef<const TCell> key, const TRow& row) noexcept
+    EScan FeedUploadBuild2Build(TArrayRef<const TCell> key, const TRow& row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos > K) {
@@ -640,7 +640,7 @@ private:
         return FeedUpload();
     }
 
-    EScan FeedUploadBuild2Posting(TArrayRef<const TCell> key, const TRow& row) noexcept
+    EScan FeedUploadBuild2Posting(TArrayRef<const TCell> key, const TRow& row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos > K) {

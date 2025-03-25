@@ -22,15 +22,15 @@ public:
     }
 
     ui64 GetChannelId() const override {
-        Y_ABORT("Not implemented");
+        return PushStats.ChannelId;
     }
 
     const TDqInputChannelStats& GetPushStats() const override {
-        Y_ABORT("Not implemented");
+        return PushStats;
     }
 
     const TDqInputStats& GetPopStats() const override {
-        Y_ABORT("Not implemented");
+        return PopStats;
     }
 
 private:

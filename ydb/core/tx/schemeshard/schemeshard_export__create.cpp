@@ -885,8 +885,12 @@ private:
         case EState::Dropping:
             if (exportInfo->PendingDropItems) {
                 itemIdx = PopFront(exportInfo->PendingDropItems);
+                if (exportInfo->State == EState::AutoDropping)
+                Cerr << "AutoDropping allocate table: " << itemIdx << Endl; 
                 DropTable(exportInfo, itemIdx, txId);
             } else {
+                if (exportInfo->State == EState::AutoDropping)
+                Cerr << "AutoDropping allocate dir" << Endl; 
                 DropDir(exportInfo, txId);
             }
             break;
@@ -1064,9 +1068,13 @@ private:
                 Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
                 exportInfo->Items.at(itemIdx).WaitTxId = txId;
                 Self->PersistExportItemState(db, exportInfo, itemIdx);
+                if (exportInfo->State == EState::AutoDropping)
+                Cerr << "AutoDropping modify item: " << itemIdx << Endl;
             } else {
                 exportInfo->WaitTxId = txId;
                 Self->PersistExportState(db, exportInfo);
+                if (exportInfo->State == EState::AutoDropping)
+                Cerr << "AutoDropping modify dir" << Endl;
             }
             break;
 
@@ -1358,6 +1366,10 @@ private:
         case EState::AutoDropping:
         case EState::Dropping:
             if (!exportInfo->AllItemsAreDropped()) {
+
+                if (exportInfo->State == EState::AutoDropping)
+                Cerr << "AutoDropping notify item: " << itemIdx << Endl;
+
                 Y_ABORT_UNLESS(itemIdx < exportInfo->Items.size());
                 auto& item = exportInfo->Items.at(itemIdx);
 
@@ -1370,6 +1382,9 @@ private:
                 }
             } else {
                 SendNotificationsIfFinished(exportInfo, true); // for tests
+
+                if (exportInfo->State == EState::AutoDropping)
+                Cerr << "AutoDropping notify dir" << Endl;
 
                 if (exportInfo->State == EState::AutoDropping) {
                     return EndExport(exportInfo, EState::Done, db);

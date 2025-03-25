@@ -341,12 +341,12 @@ void PrepareDropping(TSchemeShard* ss, TExportInfo::TPtr exportInfo, NIceDb::TNi
         const TPath itemPath = TPath::Resolve(ExportItemPathName(ss, exportInfo, itemIdx), ss);
         if (itemPath.IsResolved() && !itemPath.IsDeleted()) {
             item.State = TExportInfo::EState::Dropping;
+            if (isAutoDropping) {
+                exportInfo->PendingDropItems.push_back(itemIdx);
+            }
         }
 
         ss->PersistExportItemState(db, exportInfo, itemIdx);
-        if (isAutoDropping) {
-            exportInfo->PendingDropItems.push_back(itemIdx);
-        }
     }
 }
 

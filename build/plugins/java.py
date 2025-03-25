@@ -367,3 +367,11 @@ def on_setup_project_coords_if_needed(unit, *args):
     else:
         value = 'project(\\":{}\\")'.format(project_dir.replace('/', ':'))
     unit.set(['EXPORT_GRADLE_CLASSPATH', value])
+
+
+def on_java_resource_tar_validate_extract_root(unit, extract_root):
+    if extract_root == '<required>':
+        ymake.report_configure_error(
+            'Macro JAVA_RESOURCE_TAR requires to set EXTRACT_ROOT. '
+            'Usage JAVA_RESOURCE_TAR(tar_path EXTRACT_ROOT root_dir)'
+        )

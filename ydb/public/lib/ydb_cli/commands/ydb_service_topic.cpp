@@ -795,7 +795,7 @@ namespace NYdb::NConsoleClient {
             .DefaultValue(false)
             .StoreResult(&Commit_);
         config.Opts->AddLongOption("limit", "Limit on message count to read, 0 - unlimited. "
-                                            "If avobe 0, processing stops when either topic is empty, or the specified limit reached. "
+                                            "If above 0, processing stops when either topic is empty, or the specified limit reached. "
                                             "Must be above 0 for pretty output format."
                                             "\nDefault is 10 for pretty format, unlimited for streaming formats.")
             .Optional()

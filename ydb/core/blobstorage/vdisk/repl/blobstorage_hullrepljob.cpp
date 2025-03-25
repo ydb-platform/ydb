@@ -61,10 +61,8 @@ namespace NKikimr {
             Recipient = parentId;
 
             // count unreplicated so far blobs in this work too
-            for (const TLogoBlobID& id : *UnreplicatedBlobsPtr) {
-                ReplInfo->WorkUnitsTotal += id.BlobSize();
-            }
-            ReplInfo->ItemsTotal += UnreplicatedBlobsPtr->size();
+            ReplInfo->WorkUnitsTotal += UnreplicatedBlobsPtr->GetNumWorkUnits();
+            ReplInfo->ItemsTotal += UnreplicatedBlobsPtr->GetNumItems();
 
             // prepare the recovery machine
             RecoveryMachine = std::make_unique<TRecoveryMachine>(ReplCtx, ReplInfo);
@@ -91,12 +89,12 @@ namespace NKikimr {
 
             if (BlobsToReplicatePtr) {
                 // iterate over queue items and match them with iterator
-                for (; !BlobsToReplicatePtr->empty() && AddingTasks; BlobsToReplicatePtr->pop_front()) {
+                for (; !BlobsToReplicatePtr->IsEmpty() && AddingTasks; BlobsToReplicatePtr->PopFront()) {
                     if (++counter % 1024 == 0 && GetCycleCountFast() >= plannedEndTime) {
                         Send(ReplCtx->SkeletonId, new TEvTakeHullSnapshot(true));
                         return;
                     } else {
-                        const TLogoBlobID& key = BlobsToReplicatePtr->front();
+                        const TLogoBlobID& key = BlobsToReplicatePtr->Front();
                         it.Seek(key);
                         const bool processed = it.Valid() && it.GetCurKey().LogoBlobID() == key &&
                             ProcessItem(it, *barriers, allowKeepFlags);
@@ -105,25 +103,14 @@ namespace NKikimr {
                         }
                     }
                 }
-                if (!AddingTasks) {
-                    for (const TLogoBlobID& key : *BlobsToReplicatePtr) {
-                        ReplInfo->WorkUnitsTotal += key.BlobSize();
-                    }
-                    ReplInfo->ItemsTotal += BlobsToReplicatePtr->size();
-                }
-                eof = BlobsToReplicatePtr->empty();
+                ReplInfo->WorkUnitsTotal += BlobsToReplicatePtr->GetNumWorkUnits();
+                ReplInfo->ItemsTotal += BlobsToReplicatePtr->GetNumItems();
+                eof = BlobsToReplicatePtr->IsEmpty();
             } else {
                 // scan through the index until we have enough blobs to recover or the time is out
                 const TBlobStorageGroupInfo::TTopology& topology = *ReplCtx->VCtx->Top;
 
-                if (StartKey == TLogoBlobID()) {
-                    it.SeekToFirst();
-                } else {
-                    it.Seek(StartKey);
-                    if (it.Valid() && it.GetCurKey() == StartKey) {
-                        it.Next();
-                    }
-                }
+                it.Seek(StartKey);
 
                 auto checkRestart = [&] {
                     if (++counter % 1024 == 0 && GetCycleCountFast() >= plannedEndTime) {
@@ -137,11 +124,11 @@ namespace NKikimr {
 
                 if (AddingTasks) {
                     for (; it.Valid(); it.Next()) {
+                        StartKey = it.GetCurKey().LogoBlobID();
+
                         if (checkRestart()) {
                             return;
                         }
-
-                        StartKey = it.GetCurKey().LogoBlobID();
 
                         // we still have some space in recovery machine logic, so we can add new item
                         ProcessItem(it, *barriers, allowKeepFlags);
@@ -160,11 +147,11 @@ namespace NKikimr {
                 }
 
                 for (; it.Valid(); it.Next()) {
+                    StartKey = it.GetCurKey().LogoBlobID();
+
                     if (checkRestart()) {
                         return;
                     }
-
-                    StartKey = it.GetCurKey().LogoBlobID();
 
                     // check the milestone queue, if we have requested blob
                     if (MilestoneQueue.Match(StartKey, &ReplInfo->ItemsTotal, &ReplInfo->WorkUnitsTotal)) {
@@ -408,8 +395,8 @@ namespace NKikimr {
                     (ReplItemsRemaining, (ui64)mon.ReplItemsRemaining()),
                     (LastKey, LastKey),
                     (Eof, Eof),
-                    (BlobsToReplicatePtr.size, ssize_t(BlobsToReplicatePtr ? BlobsToReplicatePtr->size() : (ssize_t)-1)),
-                    (UnreplicatedBlobsPtr.size, UnreplicatedBlobsPtr->size()));
+                    (BlobsToReplicatePtr.size, ssize_t(BlobsToReplicatePtr ? BlobsToReplicatePtr->GetNumItems() : (ssize_t)-1)),
+                    (UnreplicatedBlobsPtr.size, UnreplicatedBlobsPtr->GetNumItems()));
             }
 
             mon.ReplWorkUnitsRemaining() = ReplInfo->WorkUnitsTotal;
@@ -699,7 +686,7 @@ namespace NKikimr {
                     (RecoveryQueueSize, RecoveryQueue.size()));
 
                 // sort unreplicated blobs vector as it may contain records in incorrect order due to phantom checking
-                std::sort(UnreplicatedBlobsPtr->begin(), UnreplicatedBlobsPtr->end());
+                UnreplicatedBlobsPtr->Sort();
                 return true;
             }
 
@@ -810,7 +797,7 @@ namespace NKikimr {
             } else if (record.LooksLikePhantom) {
                 ++ReplCtx->MonGroup.ReplPhantomBlobsWithProblems();
             }
-            UnreplicatedBlobsPtr->push_back(item.Id);
+            UnreplicatedBlobsPtr->Push(item.Id);
         }
 
         void DropUnreplicatedBlobRecord(const TLogoBlobID& id) {

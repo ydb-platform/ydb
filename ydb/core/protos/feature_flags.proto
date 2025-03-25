@@ -202,4 +202,6 @@ message TFeatureFlags {
     optional bool EnableTabletRestartOnUnhandledExceptions = 176 [default = true];
     optional bool EnableKafkaTransactions = 177 [default = false];
     optional bool EnableLoginCache = 178 [default = false];
+    optional bool SwitchToConfigV2 = 179 [default = false];
+    optional bool SwitchToConfigV1 = 180 [default = false];
 }

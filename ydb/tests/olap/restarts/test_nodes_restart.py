@@ -3,6 +3,7 @@ import os
 import random
 
 import logging
+import shutil
 import sys
 import time
 from ydb.tests.library.common.types import Erasure
@@ -17,6 +18,7 @@ from ydb.tests.olap.common.thread_helper import TestThread
 from ydb.tests.olap.helpers.ydb_client import YdbClient
 
 from enum import Enum
+from pathlib import Path
 
 # logging.basicConfig(
 #     stream=sys.stderr,
@@ -25,11 +27,61 @@ from enum import Enum
 #     level=logging.INFO
 # )
 
-logger = logging.getLogger(__name__)
-handler = logging.StreamHandler(sys.stderr)
-formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-logger.addHandler(handler)
+LOG_DIR = '/home/emgariko/project/logs/LostPlanStep/test_output_'
+
+def copy_test_results(run_id):
+    source_dir = '/home/emgariko/project/ydb_fork/ydb/ydb/tests/olap/restarts/test-results'
+    dest_dir = f'/home/emgariko/project/logs/LostPlanStep/test_results_/test_results_{run_id}'
+    
+    try:
+        Path(dest_dir).parent.mkdir(parents=True, exist_ok=True)
+        
+        if os.path.exists(source_dir):
+            shutil.copytree(source_dir, dest_dir, dirs_exist_ok=True)
+            return True
+    except Exception as e:
+        print(f"Failed to copy test results: {e}")
+        return False
+
+def get_next_log_id(log_dir=LOG_DIR):
+    Path(log_dir).mkdir(exist_ok=True)
+
+    existing_logs = [f for f in os.listdir(log_dir) if f.startswith("out_")]
+    
+    if not existing_logs:
+        return 1
+    
+    ids = [int(f.split('_')[1].split('.')[0]) for f in existing_logs]
+    return max(ids) + 1
+
+def setup_logger(name=__name__, log_dir=LOG_DIR):
+    logger = logging.getLogger(name)
+    # handler = logging.StreamHandler(sys.stderr)
+    # formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    # handler.setFormatter(formatter)
+    # logger.addHandler(handler)
+
+    # logger = logging.getLogger(name)
+    logger.setLevel(logging.INFO)
+    
+    next_id = get_next_log_id(log_dir)
+    log_file = f"{log_dir}/out_{next_id}.log"
+    
+    file_handler = logging.FileHandler(log_file, encoding='utf-8')
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    
+    logger.handlers.clear()
+    logger.addHandler(file_handler)
+
+    if copy_test_results(next_id):
+        logger.info(f"Test results copied to test_results_{next_id}")
+    else:
+        logger.warning("Failed to copy test results")
+    
+    return logger
+
+logger = setup_logger()
 
 class TestRestartNodes(object):
     @classmethod

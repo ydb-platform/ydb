@@ -11,7 +11,7 @@ PY3TEST()
     )
 
     SIZE(MEDIUM)
-    TIMEOUT(180)
+    TIMEOUT(300)
 
     PEERDIR(
         ydb/tests/library

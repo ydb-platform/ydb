@@ -61,6 +61,8 @@ jobs:
       - name: Collect PR description
         id: pr_description
         run: |
+          echo pwd
+          echo ls -lhtr
           PR_BODY="Automatically updated muted YA file by GitHub Actions.\n\n"
           if [ -s mute_update/deleted_tests_in_mute_debug.txt ]; then
             DELETED_COUNT=$(wc -l < mute_update/deleted_tests_in_mute_debug.txt)

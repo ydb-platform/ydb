@@ -1,10 +1,8 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/public/lib/ydb_cli/common/yql_parser/yql_parser.h>
 
+using namespace NYdb;
 using namespace NYdb::NConsoleClient;
-using NYdb::TTypeParser;
-using NYdb::EPrimitiveType;
-using NYdb::TType;
 
 Y_UNIT_TEST_SUITE(TYqlParserTest) {
     Y_UNIT_TEST(TestBasicTypes) {

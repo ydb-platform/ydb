@@ -97,7 +97,6 @@ struct TTopicSessionParams {
     TString Endpoint;
     TString Database;
     TString TopicPath;
-    TString Cluster;
     ui64 PartitionId = 0;
 };
 

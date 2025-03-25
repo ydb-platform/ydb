@@ -5,9 +5,7 @@
 #include <ydb/core/fq/libs/events/event_subspace.h>
 #include <ydb/core/fq/libs/row_dispatcher/protos/events.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
-#include <ydb/library/yql/providers/pq/common/pq_partition_key.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/topic_session_stats.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/public/purecalc/common/fwd.h>
@@ -35,8 +33,6 @@ public:
 };
 
 struct TEvRowDispatcher {
-    using TPartitionKey = NPq::TPartitionKey;
-    using TPartitionKeyHash = NPq::TPartitionKeyHash;
     // Event ids.
     enum EEv : ui32 {
         EvCoordinatorChanged = YqEventSubspaceBegin(TYqEventSubspace::RowDispatcher),
@@ -99,11 +95,9 @@ struct TEvRowDispatcher {
         TEvStartSession() = default;
         TEvStartSession(
             const NYql::NPq::NProto::TDqPqTopicSource& sourceParams,
-            const THashSet<ui32>& partitionIds,
+            const std::set<ui32>& partitionIds,
             const TString token,
-            const THashMap<TPartitionKey, ui64, TPartitionKeyHash>& readOffsets,
-            const std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>& federatedClusters,
-            const std::vector<ui64>& partitionsCount,
+            const std::map<ui32, ui64>& readOffsets,
             ui64 startingMessageTimestampMs,
             const TString& queryId) {
             *Record.MutableSource() = sourceParams;
@@ -111,18 +105,8 @@ struct TEvRowDispatcher {
                 Record.AddPartitionIds(partitionId);
             }
             Record.SetToken(token);
-            Y_ENSURE(partitionsCount.size() == federatedClusters.size());
-            for (ui32 cluster = 0; cluster < federatedClusters.size(); ++cluster) {
-                auto* federationCluster = Record.AddFederatedEndpoints();
-                federationCluster->SetName(TString(federatedClusters[cluster].Name));
-                federationCluster->SetEndpoint(TString(federatedClusters[cluster].Endpoint));
-                federationCluster->SetPath(TString(federatedClusters[cluster].Path));
-                federationCluster->SetPartitionsCount(partitionsCount[cluster]);
-            }
-            for (const auto& [partitionKey, offset] : readOffsets) {
-                auto& [cluster, partitionId] = partitionKey;
+            for (const auto& [partitionId, offset] : readOffsets) {
                 auto* partitionOffset = Record.AddOffsets();
-                partitionOffset->SetCluster(cluster);
                 partitionOffset->SetPartitionId(partitionId);
                 partitionOffset->SetOffset(offset);
             }

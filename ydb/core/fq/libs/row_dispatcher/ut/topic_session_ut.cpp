@@ -88,19 +88,15 @@ public:
     }
 
     void StartSession(TActorId readActorId, const NYql::NPq::NProto::TDqPqTopicSource& source, TMaybe<ui64> readOffset = Nothing(), bool expectedError = false) {
-        THashMap<NFq::TEvRowDispatcher::TPartitionKey, ui64, NFq::TEvRowDispatcher::TPartitionKeyHash> readOffsets;
+        std::map<ui32, ui64> readOffsets;
         if (readOffset) {
-            NFq::TEvRowDispatcher::TPartitionKey key;
-            key.PartitionId = PartitionId;
-            readOffsets[key] = *readOffset;
+            readOffsets[PartitionId] = *readOffset;
         }
         auto event = new NFq::TEvRowDispatcher::TEvStartSession(
             source,
             {PartitionId},
             "Token",
             readOffsets,
-            {{"","","",NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo::EStatus::AVAILABLE}},
-            {PartitionId + 1},
             0,         // StartingMessageTimestamp;
             "QueryId");
         Runtime.Send(new IEventHandle(TopicSession, readActorId, event));

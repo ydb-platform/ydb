@@ -643,13 +643,6 @@ class LintConfigs:
 
     @classmethod
     def cpp_configs(cls, unit, flat_args, spec_args):
-        custom_config = spec_args.get('CUSTOM_CONFIG')
-        if custom_config:
-            # TODO delete CUSTOM_CONFIG, it's used only by arc
-            config = custom_config[0]
-            assert_file_exists(unit, config)
-            return {cls.KEY: serialize_list([config])}
-
         if config := cls._from_config_type(unit, spec_args):
             # specified by config type, autoincludes scheme
             return {cls.KEY: serialize_list([config])}

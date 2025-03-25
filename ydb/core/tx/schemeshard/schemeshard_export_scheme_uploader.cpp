@@ -483,7 +483,12 @@ private:
         writer.Flush();
         ss.Flush();
 
-        return AddFile("SchemaMapping/mapping.json", content, IV, Key);
+        TMaybe<NBackup::TEncryptionIV> iv;
+        if (IV) {
+            iv = NBackup::TEncryptionIV::Combine(*IV, NBackup::EBackupFileType::SchemaMapping, 0, 0);
+        }
+
+        return AddFile("SchemaMapping/mapping.json", content, iv, Key);
     }
 
     void ProcessQueue() {

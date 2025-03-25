@@ -6,16 +6,16 @@ import subprocess
 
 from ydb.tests.sql.lib.test_base import TestBase
 from ydb.tests.stress.oltp_workload.workload import cleanup_type_name
-from ydb.tests.datashard.lib.create_table import create_table, create_ttl, pk_types, non_pk_types, index_first, index_second, unique, index_sync
+from ydb.tests.datashard.lib.create_table import create_table, pk_types, non_pk_types, index_first, index_second, unique, index_sync, index_first_not_Bool
 
 
 ttl_types = {
+    "Datetime": "CAST({} AS Datetime)",
     "Timestamp": "CAST({}000000 AS Timestamp)",
     "DyNumber": "CAST('{}' AS DyNumber)",
     "Uint32": "CAST({} AS Uint32)",
     "Uint64": "CAST({} AS Uint64)",
     "Date": "CAST('{}' AS Date)",
-    "Datetime": "CAST({} AS Datetime)",
 }
 
 
@@ -27,9 +27,15 @@ class TestTTL(TestBase):
                 for uniq in unique:
                     for sync in index_sync:
                         if uniq != "UNIQUE" or sync != "ASYNC":
+                            if i == 1:
+                                index = index_first_not_Bool
+                            elif uniq == "UNIQUE":
+                                index = index_first_not_Bool
+                            else:
+                                index = index_first
                             self.TTL(
                                 f"table_{ttl}_{i}_{uniq}_{sync}", pk_types, {
-                                    **pk_types, **non_pk_types}, index_first if i == 0 else index_second, ttl, uniq, sync)
+                                    **pk_types, **non_pk_types}, index, ttl, uniq, sync)
 
 
 
@@ -89,7 +95,6 @@ class TestTTL(TestBase):
         print(f"{table_name} insert ok")
 
     def create_insert(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, value: int, date):
-        print(value)
         insert_sql= f"""
             INSERT INTO {table_name}(
                 {", ".join(["pk_" + cleanup_type_name(type_name) for type_name in pk_types.keys()])}{", " if len(all_types) != 0 else ""}

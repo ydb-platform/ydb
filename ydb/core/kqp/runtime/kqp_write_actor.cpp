@@ -1942,7 +1942,7 @@ public:
         return true;
     }
 
-    void ImmediateCommit(NWilson::TTraceId traceId) {
+    bool ImmediateCommit(NWilson::TTraceId traceId) {
         Counters->BufferActorImmediateCommits->Inc();
         UpdateTracingState("Commit", std::move(traceId));
         OperationStartTime = TInstant::Now();
@@ -2361,7 +2361,7 @@ public:
         for (auto& [_, info] : WriteInfos) {
             info.WriteTableActor->FlushBuffers();
         }
-        Flush(std::move(ev->Get()->TraceId));
+        Flush(std::move(ev->TraceId));
     }
 
     void Handle(TEvKqpBuffer::TEvCommit::TPtr& ev) {
@@ -2371,19 +2371,19 @@ public:
         }
 
         if (!TxManager->NeedCommit()) {
-            RollbackAndDie(std::move(ev->Get()->TraceId));
+            RollbackAndDie(std::move(ev->TraceId));
         } else if (TxManager->IsSingleShard() && !TxManager->HasOlapTable() && (!WriteInfos.empty() || TxManager->HasTopics())) {
             TxManager->StartExecute();
-            ImmediateCommit(std::move(ev->Get()->TraceId));
+            ImmediateCommit(std::move(ev->TraceId));
         } else {
             TxManager->StartPrepare();
-            Prepare(ev->Get()->TxId, std::move(ev->Get()->TraceId));
+            Prepare(ev->Get()->TxId, std::move(ev->TraceId));
         }
     }
 
     void Handle(TEvKqpBuffer::TEvRollback::TPtr& ev) {
         ExecuterActorId = ev->Get()->ExecuterActorId;
-        RollbackAndDie(std::move(ev->Get()->TraceId));
+        RollbackAndDie(std::move(ev->TraceId));
     }
 
     void RollbackAndDie(NWilson::TTraceId traceId) {

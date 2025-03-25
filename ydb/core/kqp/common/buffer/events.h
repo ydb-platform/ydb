@@ -16,17 +16,14 @@ struct TEvKqpBuffer {
 struct TEvCommit : public TEventLocal<TEvCommit, TKqpBufferWriterEvents::EvCommit> {
     TActorId ExecuterActorId;
     ui64 TxId;
-    NWilson::TTraceId TraceId;
 };
 
 struct TEvRollback : public TEventLocal<TEvRollback, TKqpBufferWriterEvents::EvRollback> {
     TActorId ExecuterActorId;
-    NWilson::TTraceId TraceId;
 };
 
 struct TEvFlush : public TEventLocal<TEvFlush, TKqpBufferWriterEvents::EvFlush> {
     TActorId ExecuterActorId;
-    NWilson::TTraceId TraceId;
 };
 
 struct TEvTerminate : public TEventLocal<TEvTerminate, TKqpBufferWriterEvents::EvTerminate> {

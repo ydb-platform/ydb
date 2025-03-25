@@ -275,8 +275,12 @@ public:
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvCommit>();
             event->ExecuterActorId = SelfId();
             event->TxId = TxId;
-            event->TraceId = NWilson::TTraceId(ExecuterSpan.GetTraceId());
-            Send<ESendingType::Tail>(BufferActorId, event.release(), IEventHandle::FlagTrackDelivery);
+            Send<ESendingType::Tail>(
+                BufferActorId,
+                event.release(),
+                IEventHandle::FlagTrackDelivery,
+                0,
+                ExecuterSpan.GetTraceId());
             return;
         } else if (Request.LocksOp == ELocksOp::Rollback) {
             Become(&TKqpDataExecuter::FinalizeState);
@@ -284,8 +288,12 @@ public:
 
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvRollback>();
             event->ExecuterActorId = SelfId();
-            event->TraceId = NWilson::TTraceId(ExecuterSpan.GetTraceId());
-            Send<ESendingType::Tail>(BufferActorId, event.release(), IEventHandle::FlagTrackDelivery);
+            Send<ESendingType::Tail>(
+                BufferActorId,
+                event.release(),
+                IEventHandle::FlagTrackDelivery,
+                0,
+                ExecuterSpan.GetTraceId());
             MakeResponseAndPassAway();
             return;
         } else if (Request.UseImmediateEffects) {
@@ -294,8 +302,12 @@ public:
 
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvFlush>();
             event->ExecuterActorId = SelfId();
-            event->TraceId = NWilson::TTraceId(ExecuterSpan.GetTraceId());
-            Send<ESendingType::Tail>(BufferActorId, event.release(), IEventHandle::FlagTrackDelivery);
+            Send<ESendingType::Tail>(
+                BufferActorId,
+                event.release(),
+                IEventHandle::FlagTrackDelivery,
+                0,
+                ExecuterSpan.GetTraceId());
             return;
         } else {
             Become(&TKqpDataExecuter::FinalizeState);

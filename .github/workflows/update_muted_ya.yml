@@ -83,6 +83,11 @@ jobs:
         run: |
           git add .github/config/muted_ya.txt
 
+      - name: Delete other files
+        if: env.changes == 'true'
+        run: |
+          rm -rf mute_update
+
       - name: Commit changes
         if: env.changes == 'true'
         run: |
@@ -102,14 +107,12 @@ jobs:
         uses: peter-evans/create-pull-request@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          branch: create-muted-ya
+          branch: origin/create-muted-ya
           base: main
-          title: "Update Muted YA File"
+          title: "Update muted_ya.txt"
           body: ${{ env.PR_BODY }}
-          labels: "Automated PR"
+          author: YDBot <ydbot@yandex-team.ru>
           reviewers: "ydb-platform/engineering"
-          create-when-empty: false
-          allow-empty-commit: false
           draft: false
 
       - name: Update pull request if exists

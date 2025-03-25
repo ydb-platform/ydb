@@ -231,7 +231,7 @@ public:
             || TryUpload(PostingBuf, PostingTable, PostingTypes, false)
             || TryUpload(PrefixBuf, PrefixTable, PrefixTypes, false))
         {
-            return EScan::Feed;
+            // new upload started
         }
 
         return EScan::Feed;

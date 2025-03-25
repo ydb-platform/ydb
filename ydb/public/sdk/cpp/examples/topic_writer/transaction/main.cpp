@@ -6,22 +6,22 @@ int main() {
     const std::string DATABASE = "DATABASE";
     const std::string TOPIC = "PATH/TO/TOPIC";
 
-    NYdb::TDriverConfig config;
-    config.SetEndpoint(ENDPOINT);
-    config.SetDatabase(DATABASE);
-    NYdb::TDriver driver(config);
+    NYdb::TDriver driver(NYdb::TDriverConfig()
+        .SetEndpoint(ENDPOINT)
+        .SetDatabase(DATABASE)
+    );
 
     NYdb::NQuery::TQueryClient queryClient(driver);
+
     auto getSessionResult = queryClient.GetSession().GetValueSync();
     NYdb::NStatusHelpers::ThrowOnError(getSessionResult);
     auto session = getSessionResult.GetSession();
 
     NYdb::NTopic::TTopicClient topicClient(driver);
 
-    auto topicSession = topicClient.CreateSimpleBlockingWriteSession(
-        NYdb::NTopic::TWriteSessionSettings()
-            .Path(TOPIC)
-            .DeduplicationEnabled(true)
+    auto topicSession = topicClient.CreateSimpleBlockingWriteSession(NYdb::NTopic::TWriteSessionSettings()
+        .Path(TOPIC)
+        .DeduplicationEnabled(true)
     );
 
     auto beginTxResult = session.BeginTransaction(NYdb::NQuery::TTxSettings()).GetValueSync();
@@ -32,5 +32,5 @@ int main() {
 
     topicSession->Write(std::move(writeMessage), &tx);
 
-    tx.Commit().GetValueSync();
+    NYdb::NStatusHelpers::ThrowOnError(tx.Commit().GetValueSync());
 }

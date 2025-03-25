@@ -5,6 +5,9 @@ on:
 
 env:
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  BRANCH: create-muted-ya
+  TITLE: "Update muted_ya.txt"
+  BASE_BRANCH: main
 
 jobs:
   create-or-update-muted-ya:
@@ -13,7 +16,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ env.BASE_BRANCH }}
           persist-credentials: false
 
       - name: Install dependencies
@@ -26,18 +29,18 @@ jobs:
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
           
-      - name: Update branch with main
+      - name: Update branch with base branch
         run: |
           git config user.name YDBot
           git config user.email ydbot@ydb.tech 
-          git checkout main
-          git pull --rebase origin main
-          git fetch origin create-muted-ya || true
-          if [ -n "$(git branch -a | grep remotes/origin/create-muted-ya)" ]; then
-            git checkout create-muted-ya
-            git rebase main
+          git checkout ${{ env.BASE_BRANCH }}
+          git pull --rebase origin ${{ env.BASE_BRANCH }}
+          git fetch origin ${{ env.BRANCH }} || true
+          if [ -n "$(git branch -a | grep remotes/origin/${{ env.BRANCH }})" ]; then
+            git checkout ${{ env.BRANCH }}
+            git rebase ${{ env.BASE_BRANCH }}
           else
-            git checkout -b create-muted-ya
+            git checkout -b ${{ env.BRANCH }}
           fi
 
       - name: Run the script
@@ -94,11 +97,10 @@ jobs:
           git commit -m "Update muted YA file"
 
       - name: Push changes
-        if: env.changes == 'true'
         uses: ad-m/github-push-action@v0.8.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          branch: create-muted-ya
+          branch: ${{ env.BRANCH }}
           force: true
 
       - name: Install PyGithub
@@ -108,30 +110,10 @@ jobs:
       - name: Create or update PR
         id: create_or_update_pr
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BRANCH: create-muted-ya
-          TITLE: "Update muted_ya.txt"
+          GITHUB_TOKEN: ${{ env.GH_TOKEN }}
+          BRANCH: ${{ env.BRANCH }}
+          TITLE: ${{ env.TITLE }}
+          BASE_BRANCH: ${{ env.BASE_BRANCH }}
           BODY: ${{ env.PR_BODY }}
         run: |
-          import os
-          from github import Github
-
-          g = Github(os.getenv('GITHUB_TOKEN'))
-          repo = g.get_repo(os.getenv('GITHUB_REPOSITORY'))
-
-          # Check for an existing PR
-          existing_prs = repo.get_pulls(head=BRANCH, base='main', state='open')
-          existing_pr = None
-          for pr in existing_prs:
-              if pr.title == TITLE:
-                  existing_pr = pr
-                  break
-
-          if existing_pr:
-              print(f"Existing PR found. Updating PR #{existing_pr.number}.")
-              # Update existing PR
-              existing_pr.edit(title=TITLE, body=BODY)
-          else:
-              print("No existing PR found. Creating a new PR.")
-              # Create new PR
-              repo.create_pull(title=TITLE, body=BODY, head=BRANCH, base='main')
+          python .github/scripts/create_or_update_pr.py

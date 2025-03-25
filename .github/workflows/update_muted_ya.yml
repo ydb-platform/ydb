@@ -32,7 +32,6 @@ jobs:
         run: |
           git config user.name YDBot
           git config user.email ydbot@ydb.tech 
-          git fetch origin ${{ env.BRANCH_FOR_PR }}
           if [ -n "$(git ls-remote --heads origin ${{ env.BRANCH_FOR_PR }})" ]; then
             git push origin --delete ${{ env.BRANCH_FOR_PR }}
           fi

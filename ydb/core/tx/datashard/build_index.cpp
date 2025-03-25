@@ -366,7 +366,7 @@ private:
         if (RetryCount < Limits.MaxUploadRowsRetryCount && UploadStatus.IsRetriable()) {
             LOG_N("Got retriable error, " << Debug());
 
-            ctx.Schedule(Limits.GetTimeoutBackouff(RetryCount), new TEvents::TEvWakeup());
+            ctx.Schedule(Limits.GetTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
             return;
         }
 
@@ -425,9 +425,9 @@ public:
             const auto rowCells = *row;
 
             ReadBuf.AddRow(
-                TSerializedCellVec(key),
                 TSerializedCellVec(rowCells.Slice(0, TargetDataColumnPos)),
-                TSerializedCellVec::Serialize(rowCells.Slice(TargetDataColumnPos)));
+                TSerializedCellVec::Serialize(rowCells.Slice(TargetDataColumnPos)),
+                TSerializedCellVec(key));
         });
     }
 };
@@ -463,9 +463,9 @@ public:
             auto pkTarget = pk;
             auto valueTarget = ValueSerialized;
             ReadBuf.AddRow(
-                std::move(pk),
                 std::move(pkTarget),
-                std::move(valueTarget));
+                std::move(valueTarget),
+                std::move(pk));
         });
     }
 };

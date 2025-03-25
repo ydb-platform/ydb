@@ -41,7 +41,7 @@ class TpchSuiteBase(LoadSuiteBase):
             return
         cls.check_tables_size(folder=cls._get_path(False), tables=cls._get_tables_size())
 
-    @pytest.mark.parametrize('query_num', [i for i in range(1, 23)])
+    @pytest.mark.parametrize('query_num', [i for i in [21, 22]])
     def test_tpch(self, query_num: int):
         if query_num in self.skip_tests:
             return

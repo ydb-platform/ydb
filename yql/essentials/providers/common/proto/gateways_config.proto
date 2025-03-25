@@ -596,6 +596,8 @@ enum EGenericDataSourceKind {
     ORACLE = 8;
     LOGGING = 9;
     MONGO_DB = 10;
+    REDIS = 11;
+    PROMETHEUS = 12;
 }
 
 // EGenericProtocol generalizes various kinds of network protocols supported by different databases.

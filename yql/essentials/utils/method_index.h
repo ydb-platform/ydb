@@ -1,4 +1,5 @@
 #pragma once
+
 #include <util/system/platform.h>
 #include <cstring>
 #include <cstdint>

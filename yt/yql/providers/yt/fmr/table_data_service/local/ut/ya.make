@@ -1,7 +1,7 @@
 UNITTEST()
 
 SRCS(
-    test_table_service.cpp
+    yql_yt_table_serivce_ut.cpp
 )
 
 PEERDIR(

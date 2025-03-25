@@ -129,4 +129,6 @@ constexpr bool DEFAULT_REPORT_EQUIJOIN_STATS = false;
 
 constexpr ERuntimeClusterSelectionMode DEFAULT_RUNTIME_CLUSTER_SELECTION = NYql::ERuntimeClusterSelectionMode::Disable;
 
+constexpr bool DEFAULT_ALLOW_REMOTE_CLUSTER_INPUT = false;
+
 } // NYql

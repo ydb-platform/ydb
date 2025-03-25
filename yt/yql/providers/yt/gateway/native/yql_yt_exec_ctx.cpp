@@ -92,10 +92,21 @@ void TExecContextBase::SetInput(TExprBase input, bool forcePathColumns, const TH
         extraSysColumnsNode.Add(sys);
     }
 
+    const bool allowRemoteClusters = settings->_AllowRemoteClusterInput.Get(Cluster_).GetOrElse(DEFAULT_ALLOW_REMOTE_CLUSTER_INPUT);
     if (auto out = input.Maybe<TYtOutput>()) { // Pull case
         auto tableInfo = TYtTableBaseInfo::Parse(out.Cast());
-        YQL_CLOG(INFO, ProviderYt) << "Input: " << Cluster_ << '.' << tableInfo->Name;
+        YQL_CLOG(INFO, ProviderYt) << "Runtime cluster: " << Cluster_ << ", Input: " << tableInfo->Cluster << '.' << tableInfo->Name;
+        if (tableInfo->Cluster != Cluster_ && !allowRemoteClusters) {
+            throw yexception() << "Operation input from remote cluster " << tableInfo->Cluster << " is not allowed on cluster " << Cluster_;
+        }
         NYT::TRichYPath richYPath(NYql::TransformPath(tmpFolder, tableInfo->Name, true, Session_->UserName_));
+        if (tableInfo->Cluster != Cluster_) {
+            richYPath.Cluster(Clusters_->GetYtName(tableInfo->Cluster));
+            if (!Config_->GetLocalChainTest()) {
+                auto pathEntry = GetEntryForCluster(tableInfo->Cluster);
+                richYPath.TransactionId(pathEntry->Tx->GetId());
+            }
+        }
 
         auto spec = tableInfo->GetCodecSpecNode();
         if (!extraSysColumnsNode.IsUndefined()) {
@@ -115,9 +126,9 @@ void TExecContextBase::SetInput(TExprBase input, bool forcePathColumns, const TH
     else {
         TMaybe<bool> hasScheme;
         size_t loggedTable = 0;
-        const auto entry = Config_->GetLocalChainTest() ? TTransactionCache::TEntry::TPtr() : GetEntry();
-
-        auto fillSection = [&] (TYtSection section, ui32 group) {
+        const bool localChainTest = Config_->GetLocalChainTest();
+        ui32 group = 0;
+        for (auto section: input.Cast<TYtSectionList>()) {
             TVector<TStringBuf> columns;
             auto sysColumnsSetting = NYql::GetSettingAsColumnList(section.Settings().Ref(), EYtSettingType::SysColumns);
             if (forcePathColumns) {
@@ -135,8 +146,12 @@ void TExecContextBase::SetInput(TExprBase input, bool forcePathColumns, const TH
             }
             for (auto path: section.Paths()) {
                 TYtPathInfo pathInfo(path);
+                const TString pathCluster = pathInfo.Table->Cluster;
                 if (loggedTable++ < 10) {
-                    YQL_CLOG(INFO, ProviderYt) << "Input: " << Cluster_ << '.' << pathInfo.Table->Name << '[' << group << ']';
+                    YQL_CLOG(INFO, ProviderYt) << "Runtime cluster: " << Cluster_ << ", Input: " << pathCluster << '.' << pathInfo.Table->Name << '[' << group << ']';
+                }
+                if (pathCluster != Cluster_ && !allowRemoteClusters) {
+                    throw yexception() << "Operation input from remote cluster " << pathCluster << " is not allowed on cluster " << Cluster_;
                 }
                 // Table may have aux columns. Exclude them by specifying explicit columns from the type
                 if (forcePathColumns && pathInfo.Table->RowSpec && !pathInfo.HasColumns()) {
@@ -144,13 +159,23 @@ void TExecContextBase::SetInput(TExprBase input, bool forcePathColumns, const TH
                 }
                 auto name = NYql::TransformPath(tmpFolder, pathInfo.Table->Name, pathInfo.Table->IsTemp, Session_->UserName_);
                 NYT::TRichYPath richYPath;
-                if ((pathInfo.Table->IsTemp && !pathInfo.Table->IsAnonymous) || !entry) {
+                if (localChainTest || (pathInfo.Table->IsTemp && !pathInfo.Table->IsAnonymous)) {
                     richYPath.Path(name);
+                    if (pathCluster != Cluster_ && !localChainTest) {
+                        richYPath.TransactionId(GetEntryForCluster(pathCluster)->Tx->GetId());
+                    }
                 } else {
-                    auto p = entry->Snapshots.FindPtr(std::make_pair(name, pathInfo.Table->Epoch.GetOrElse(0)));
-                    YQL_ENSURE(p, "Table " << pathInfo.Table->Name << " has no snapshot");
-                    richYPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p)).OriginalPath(NYT::AddPathPrefix(name, NYT::TConfig::Get()->Prefix));
+                    auto entry = GetEntryForCluster(pathCluster);
+                    with_lock(entry->Lock_) {
+                        auto p = entry->Snapshots.FindPtr(std::make_pair(name, pathInfo.Table->Epoch.GetOrElse(0)));
+                        YQL_ENSURE(p, "Table " << Cluster_ << "." << pathInfo.Table->Name.Quote() << " has no snapshot");
+                        richYPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p)).OriginalPath(NYT::AddPathPrefix(name, NYT::TConfig::Get()->Prefix));
+                    }
                 }
+                if (pathCluster != Cluster_) {
+                    richYPath.Cluster(Clusters_->GetYtName(pathCluster));
+                }
+
                 pathInfo.FillRichYPath(richYPath);
 
                 auto spec = pathInfo.GetCodecSpecNode();
@@ -184,22 +209,7 @@ void TExecContextBase::SetInput(TExprBase input, bool forcePathColumns, const TH
             } else {
                 YQL_ENSURE(NYql::GetSampleParams(section.Settings().Ref()) == Sampling, "Different sampling settings");
             }
-        };
-
-        if (entry) {
-            with_lock(entry->Lock_) {
-                ui32 group = 0;
-                for (auto section: input.Cast<TYtSectionList>()) {
-                    fillSection(section, group);
-                    ++group;
-                }
-            }
-        } else {
-            ui32 group = 0;
-            for (auto section: input.Cast<TYtSectionList>()) {
-                fillSection(section, group);
-                ++group;
-            }
+            ++group;
         }
 
         if (hasScheme && !*hasScheme) {
@@ -221,6 +231,7 @@ void TExecContextBase::SetOutput(TYtOutSection output, const TYtSettings::TConst
     TVector<NYT::TNode> outTableSpecs;
     for (auto table: output) {
         TYtOutTableInfo tableInfo(table);
+        YQL_ENSURE(!tableInfo.Cluster || tableInfo.Cluster == Cluster_);
         TString outTableName = tableInfo.Name;
         if (outTableName.empty()) {
             outTableName = TStringBuilder() << "tmp/" << GetGuidAsString(Session_->RandomProvider_->GenGuid());
@@ -250,6 +261,7 @@ void TExecContextBase::SetOutput(TYtOutSection output, const TYtSettings::TConst
 
 void TExecContextBase::SetSingleOutput(const TYtOutTableInfo& outTable, const TYtSettings::TConstPtr& settings) {
     const TString tmpFolder = GetTablesTmpFolder(*settings);
+    YQL_ENSURE(!outTable.Cluster || outTable.Cluster == Cluster_);
     TString outTableName = TStringBuilder() << "tmp/" << GetGuidAsString(Session_->RandomProvider_->GenGuid());
     TString outTablePath = NYql::TransformPath(tmpFolder, outTableName, true, Session_->UserName_);
 

@@ -1292,7 +1292,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                 };
             )");
 
-        testCase.CheckTransferStateError("Unexpected entry kind at 'writer'");
+        testCase.CheckTransferStateError("Only column tables are supported as transfer targets.");
     }
 }
 

@@ -2630,18 +2630,8 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         }
     }
 
-    Y_UNIT_TEST(TestReadLargeParquetFile) {
-        const TString bucket = "test_read_large_file_bucket";
+    void ReadLargeParquetFiles(std::shared_ptr<NKikimr::NKqp::TKikimrRunner> kikimr, const TString& bucket) {
         CreateBucket(bucket);
-
-        NKikimrConfig::TAppConfig config;
-        auto& tableService = *config.MutableTableServiceConfig();
-        tableService.SetArrayBufferMinFillPercentage(75);
-        tableService.SetBlockChannelsMode(NKikimrConfig::TTableServiceConfig::BLOCK_CHANNELS_FORCE);
-        tableService.MutableResourceManager()->SetChannelChunkSizeLimit(100000);
-
-        auto kikimr = NTestUtils::MakeKikimrRunner(config, {.NodeCount = 2});
-        WaitResourcesPublish(*kikimr);
 
         auto tc = kikimr->GetTableClient();
         auto session = tc.CreateSession().GetValueSync().GetSession();
@@ -2718,6 +2708,29 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
         UNIT_ASSERT(parser.TryNextRow());
         UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetUint64(), 2000000);
+    }
+
+    Y_UNIT_TEST(TestReadLargeParquetFile) {
+        NKikimrConfig::TAppConfig config;
+        auto& tableService = *config.MutableTableServiceConfig();
+        tableService.SetArrayBufferMinFillPercentage(75);
+        tableService.SetBlockChannelsMode(NKikimrConfig::TTableServiceConfig::BLOCK_CHANNELS_FORCE);
+        tableService.MutableResourceManager()->SetChannelChunkSizeLimit(100000);
+
+        auto kikimr = NTestUtils::MakeKikimrRunner(config, {.NodeCount = 2});
+        WaitResourcesPublish(*kikimr);
+        ReadLargeParquetFiles(kikimr, "test_read_large_file_bucket");
+    }
+
+    Y_UNIT_TEST(TestLocalReadLargeParquetFile) {
+        NKikimrConfig::TAppConfig config;
+        auto& tableService = *config.MutableTableServiceConfig();
+        tableService.ClearArrayBufferMinFillPercentage();
+        tableService.SetBlockChannelsMode(NKikimrConfig::TTableServiceConfig::BLOCK_CHANNELS_FORCE);
+        tableService.MutableResourceManager()->SetChannelChunkSizeLimit(100000);
+
+        auto kikimr = NTestUtils::MakeKikimrRunner(config);
+        ReadLargeParquetFiles(kikimr, "test_local_read_large_file_bucket");
     }
 }
 

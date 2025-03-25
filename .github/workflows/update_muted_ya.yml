@@ -5,9 +5,9 @@ on:
 
 env:
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  BRANCH: create-muted-ya
+  BRANCH_FOR_PR: update_muted_ya
   TITLE: "Update muted_ya.txt"
-  BASE_BRANCH: main
+  BASE_BRANCH: dev_wf_update_mute_v3
 
 jobs:
   create-or-update-muted-ya:
@@ -32,13 +32,11 @@ jobs:
         run: |
           git config user.name YDBot
           git config user.email ydbot@ydb.tech 
-          git checkout ${{ env.BASE_BRANCH }}
-          git pull --rebase origin ${{ env.BASE_BRANCH }}
-          git fetch origin ${{ env.BRANCH }}
-          if [ -n "$(git ls-remote --heads origin ${{ env.BRANCH }})" ]; then
-            git push origin --delete ${{ env.BRANCH }}
+          git fetch origin ${{ env.BRANCH_FOR_PR }}
+          if [ -n "$(git ls-remote --heads origin ${{ env.BRANCH_FOR_PR }})" ]; then
+            git push origin --delete ${{ env.BRANCH_FOR_PR }}
           fi
-          git checkout -b ${{ env.BRANCH }}
+          git checkout -b ${{ env.BRANCH_FOR_PR }}
         
       - name: Run the script
         run: |
@@ -97,7 +95,7 @@ jobs:
         uses: ad-m/github-push-action@v0.8.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          branch: ${{ env.BRANCH }}
+          branch: ${{ env.BRANCH_FOR_PR }}
           force: true
 
       - name: Install PyGithub
@@ -108,7 +106,7 @@ jobs:
         id: create_or_update_pr
         env:
           GITHUB_TOKEN: ${{ env.GH_TOKEN }}
-          BRANCH: ${{ env.BRANCH }}
+          BRANCH_FOR_PR: ${{ env.BRANCH_FOR_PR }}
           TITLE: ${{ env.TITLE }}
           BASE_BRANCH: ${{ env.BASE_BRANCH }}
           BODY: ${{ env.PR_BODY }}

@@ -34,7 +34,6 @@
 #include <google/protobuf/text_format.h>
 
 #include <format>
-#include <ranges>
 
 namespace NYdb::NDump {
 

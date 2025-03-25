@@ -2913,12 +2913,12 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                 } else {
                     // Cerr << "\nQUERY: " << query << "\nSTATS:\n" << result.GetStats()->ToString() << Endl;
                     auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access().size(), 1);
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).name(), "/Root/Foo");
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(1).table_access(0).updates().rows(), 2);
-                    UNIT_ASSERT(stats.query_phases(1).table_access(0).updates().bytes() > 1);
-                    UNIT_ASSERT(stats.query_phases(1).cpu_time_us() > 0);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access().size(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).name(), "/Root/Foo");
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(0).table_access(0).updates().rows(), 2);
+                    UNIT_ASSERT(stats.query_phases(0).table_access(0).updates().bytes() > 1);
+                    UNIT_ASSERT(stats.query_phases(0).cpu_time_us() > 0);
                     UNIT_ASSERT(stats.total_duration_us() > 0);
                 }
             }
@@ -2978,24 +2978,13 @@ R"___(<main>: Error: Transaction not found: , code: 2015
                     auto& stats = NYdb::TProtoAccessor::GetProto(*result.GetStats());
 
                     int idx = 0;
-                    if (stats.query_phases().size() == 2) {
-                        idx = 0;
-                    } else {
-                        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 3);
-                        UNIT_ASSERT(stats.query_phases(0).table_access().empty());
-                        idx = 1;
-                    }
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
-                    // 1st phase: find matching rows
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access().size(), 1);
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).name(), "/Root/Foo");
                     UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).reads().rows(), 2);
+                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx).table_access(0).deletes().rows(), 2);
                     UNIT_ASSERT(stats.query_phases(idx).cpu_time_us() > 0);
-                    // 2nd phase: delete found rows
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx + 1).table_access().size(), 1);
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx + 1).table_access(0).name(), "/Root/Foo");
-                    UNIT_ASSERT_VALUES_EQUAL(stats.query_phases(idx + 1).table_access(0).deletes().rows(), 2);
-                    UNIT_ASSERT(stats.query_phases(idx + 1).cpu_time_us() > 0);
                     UNIT_ASSERT(stats.total_duration_us() > 0);
                 }
             }

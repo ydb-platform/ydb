@@ -375,7 +375,7 @@ protected:
         return false;
     }
 
-    void MakeLevelRows()
+    void WriteLevelRows()
     {
         std::array<TCell, 2> pk;
         std::array<TCell, 1> data;
@@ -481,7 +481,7 @@ public:
             Y_ASSERT(State == EState::KMEANS);
             if (RecomputeClusters()) {
                 lead.SetTags(UploadScan);
-                MakeLevelRows();
+                WriteLevelRows();
                 State = UploadState;
             } else {
                 lead.SetTags({&EmbeddingTag, 1});

@@ -44,7 +44,7 @@ message TTableServiceConfig {
         optional uint64 KqpPatternCacheCompiledCapacityBytes = 21 [default = 104857600]; // 100 MiB
         optional double SpillingPercent = 22 [default = 80]; // 100 MiB
 
-        optional uint64 MinMemAllocSize = 23 [default = 8388608]; // 8 MiB
+        optional uint64 MinMemAllocSize = 23 [default = 1048576]; // 1 MiB
         optional uint64 MinMemFreeSize = 24  [default = 33554432]; // 32 MiB
 
         optional uint64 MaxNonParallelTasksExecutionLimit = 25 [default = 8];

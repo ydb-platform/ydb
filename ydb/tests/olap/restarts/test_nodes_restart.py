@@ -67,7 +67,7 @@ class TestRestartNodes(object):
             try:
                 self.ydb_client.query(f"""
                     ALTER TABLE `my_table` SET(TTL = Interval("PT{ttl}H") ON timestamp)
-                    """, )
+                    """)
             except Exception as x:
                 logger.error(f"In progress: Caught an exception during query executing: {x}")
             except:
@@ -78,7 +78,7 @@ class TestRestartNodes(object):
 
     def kill_nodes(self):
         logger.info(f"In progress: starting killing nodes")
-        deadline: datetime = datetime.datetime.now() + datetime.timedelta(seconds=30)
+        deadline: datetime = datetime.datetime.now() + datetime.timedelta(seconds=90)
         while datetime.datetime.now() < deadline:
             nodes = list(self.cluster.nodes.items())
             random.shuffle(nodes)
@@ -158,13 +158,19 @@ class TestRestartNodes(object):
 
         logger.info("In progress: starting altering table")
         deadline: datetime = datetime.datetime.now() + datetime.timedelta(seconds=30)
+
+        # проверить что ни одного успешного прогона не было.
+        # Поставить на ночь крутится.
+        # Дальше надо воспроизвести на store.
+        # В тесте поискать как создавать таблицу в ColumnStore.
+        
         while datetime.datetime.now() < deadline:
             ttl = random.randint(1, 1000)
             logger.info("In progress: sending alter query")
             try:
                 self.ydb_client.query(f"""
                     ALTER TABLE `my_table` SET(TTL = Interval("PT{ttl}H") ON timestamp)
-                    """, )
+                    """)
             except Exception as x:
                 logger.error(f"In progress: Caught an exception during query executing: {x}")
             except:

@@ -1145,7 +1145,9 @@ private:
             Self->PersistExportItemState(db, exportInfo, itemIdx);
 
             if (AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
-                EndExport(exportInfo, EState::Done, db);
+                // EndExport(exportInfo, EState::Done, db);
+                PrepareDropping(Self, exportInfo, db, true);
+                AllocateTxId(exportInfo);
             }
         } else if (exportInfo->State == EState::Cancellation) {
             item.State = EState::Cancelled;
@@ -1345,7 +1347,6 @@ private:
                 }
             }
             if (!itemHasIssues && AllOf(exportInfo->Items, &TExportInfo::TItem::IsDone)) {
-                exportInfo->EndTime = TAppData::TimeProvider->Now();
                 PrepareDropping(Self, exportInfo, db, true);
                 AllocateTxId(exportInfo);
             }

@@ -121,7 +121,11 @@ bool TOlapSchema::Update(const TOlapSchemaUpdate& schemaUpdate, IErrorCollector&
 void TOlapSchema::ParseFromLocalDB(const NKikimrSchemeOp::TColumnTableSchema& tableSchema) {
     NextColumnId = tableSchema.GetNextColumnId();
     Version = tableSchema.GetVersion();
-    Engine = NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES;
+    if (tableSchema.HasEngine()) {
+        Engine = tableSchema.GetEngine();
+    } else {
+        Engine = NKikimrSchemeOp::COLUMN_ENGINE_REPLACING_TIMESERIES;
+    }
 
     Columns.Parse(tableSchema);
     Indexes.Parse(tableSchema);

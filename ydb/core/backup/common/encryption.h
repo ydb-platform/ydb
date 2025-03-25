@@ -19,6 +19,7 @@ enum class EBackupFileType : unsigned char {
     // All items
     Metadata = 0,
     Permissions = 1,
+    SchemaMapping = 2,
 
     // Table
     TableSchema = 10,

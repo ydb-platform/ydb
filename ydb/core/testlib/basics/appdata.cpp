@@ -65,6 +65,7 @@ namespace NKikimr {
         app->AwsCompatibilityConfig = AwsCompatibilityConfig;
         app->S3ProxyResolverConfig = S3ProxyResolverConfig;
         app->GraphConfig = GraphConfig;
+        app->QueryServiceConfig = QueryServiceConfig;
         app->InitFeatureFlags(FeatureFlags);
 
         // This is a special setting active in test runtime only

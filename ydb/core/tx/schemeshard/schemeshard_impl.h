@@ -345,6 +345,7 @@ public:
     bool EnableExternalDataSourcesOnServerless = false;
     bool EnableParameterizedDecimal = false;
     bool EnableDataErasure = false;
+    bool EnableExternalSourceSchemaInference = false;
 
     TShardDeleter ShardDeleter;
 
@@ -510,6 +511,10 @@ public:
     void ConfigureAccountLockout(
         const ::NKikimrProto::TAuthConfig& config,
         const TActorContext &ctx);
+
+    void ConfigureQueryService(
+        const NKikimrConfig::TQueryServiceConfig& config,
+        const TActorContext& ctx);
 
     void StartStopCompactionQueues();
 

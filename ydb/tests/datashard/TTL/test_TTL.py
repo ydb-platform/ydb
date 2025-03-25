@@ -4,7 +4,7 @@ import threading
 
 from ydb.tests.sql.lib.test_base import TestBase
 from ydb.tests.stress.oltp_workload.workload import cleanup_type_name
-from ydb.tests.datashard.lib.create_table import CreateTables, pk_types, non_pk_types, index_first, index_second, unique, index_sync
+from ydb.tests.datashard.lib.create_table import create_table, create_ttl, pk_types, non_pk_types, index_first, index_second, unique, index_sync
 
 
 ttl_types = {
@@ -17,7 +17,7 @@ ttl_types = {
 }
 
 
-class TestTTL(TestBase, CreateTables):
+class TestTTL(TestBase):
     def test_TTL(self):
         threads = []
         for ttl in ttl_types.keys():
@@ -30,10 +30,10 @@ class TestTTL(TestBase, CreateTables):
                                     **pk_types, **non_pk_types}, index_first if i == 0 else index_second, ttl, uniq, sync,), name=f"table_{ttl}_{i}_{uniq}_{sync}")
                             thr.start()
                             threads.append(thr)
-                            
+                            thr.join()
+
         for thread in threads:
             thread.join()
-
 
     def TTL(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
         columns = {
@@ -48,11 +48,11 @@ class TestTTL(TestBase, CreateTables):
         index_columns = {
             "col_index_": index.keys()
         }
-        sql_create_table = self.create_table(
+        sql_create_table = create_table(
             table_name, columns, pk_columns, index_columns, unique, sync)
         self.query(sql_create_table)
-        sql_ttl = self.create_ttl(f"ttl_{cleanup_type_name(ttl)}", {"PT15M": ""}, "SECONDS" if ttl ==
-                                  "Uint32" or ttl == "Uint64" or ttl == "DyNumber" else "", table_name)
+        sql_ttl = create_ttl(f"ttl_{cleanup_type_name(ttl)}", {"PT0S": ""}, "SECONDS" if ttl ==
+                             "Uint32" or ttl == "Uint64" or ttl == "DyNumber" else "", table_name)
         self.query(sql_ttl)
         self.insert(table_name, pk_types, all_types, index, ttl)
         self.select(table_name, pk_types, all_types, index)
@@ -90,9 +90,6 @@ class TestTTL(TestBase, CreateTables):
         for i in range(7, 9):
             self.create_insert(table_name, pk_types,
                                all_types, index, ttl, i, future_time)
-            
-        for i in range(1, 9):
-            self.create_select(table_name, pk_types, all_types, index, i, 1)
 
     def create_insert(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, value: int, date):
         insert_sql = f"""
@@ -112,7 +109,6 @@ class TestTTL(TestBase, CreateTables):
         self.query(insert_sql)
 
     def select(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str]):
-        time.sleep(60*15)
         for i in range(1, 7):
             self.create_select(table_name, pk_types, all_types, index, i, 0)
 
@@ -131,6 +127,10 @@ class TestTTL(TestBase, CreateTables):
         for type_name in index.keys():
             sql_select += f"col_index_{cleanup_type_name(type_name)}={index[type_name].format(value)} and "
         sql_select += f"""pk_Int64={pk_types["Int64"].format(value)}"""
-        rows = self.query(sql_select)
+        for _ in range(20):
+            rows = self.query(sql_select)
+            if (len(rows) == 1 and rows[0].count == expected_count_rows) or expected_count_rows == 1:
+                break
+            time.sleep(60)
         assert len(
             rows) == 1 and rows[0].count == expected_count_rows, f"Expected {expected_count_rows} rows, error when deleting {value} lines, table {table_name}"

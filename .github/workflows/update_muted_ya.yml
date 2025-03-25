@@ -33,14 +33,14 @@ jobs:
         run: |
           git config user.name YDBot
           git config user.email ydbot@ydb.tech 
-          git checkout ${{ env.BASE_BRANCH }}
-          git pull --rebase origin ${{ env.BASE_BRANCH }}
+          git checkout ${{ env.BASE_BRANCH }} || true
+          git pull --rebase origin ${{ env.BASE_BRANCH }} || true
           git fetch origin ${{ env.BRANCH }} || true
           if [ -n "$(git branch -a | grep remotes/origin/${{ env.BRANCH }})" ]; then
-            git checkout ${{ env.BRANCH }}
-            git rebase ${{ env.BASE_BRANCH }}
+            git checkout ${{ env.BRANCH }} || true
+            git rebase ${{ env.BASE_BRANCH }} || true
           else
-            git checkout -b ${{ env.BRANCH }}
+            git checkout -b ${{ env.BRANCH }} || true
           fi
 
       - name: Run the script

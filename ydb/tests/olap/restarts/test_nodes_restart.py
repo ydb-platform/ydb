@@ -164,7 +164,10 @@ class TestRestartNodes(object):
         # Дальше надо воспроизвести на store.
         # В тесте поискать как создавать таблицу в ColumnStore.
         
+        all_failed = True
+
         while datetime.datetime.now() < deadline:
+            hasException = False
             ttl = random.randint(1, 1000)
             logger.info("In progress: sending alter query")
             try:
@@ -173,8 +176,16 @@ class TestRestartNodes(object):
                     """)
             except Exception as x:
                 logger.error(f"In progress: Caught an exception during query executing: {x}")
+                hasException = True
             except:
                 logger.error(f"In progress: Caught an unknown exception during node killing executing")
+                hasException = True
+            finally:
+                if not hasException:
+                    all_failed = False
             logger.info("In progress: executed alter query")
             
+        if all_failed:
+            logger.error("Finished: All alter queries in last section failed")
+
         logger.info("Finished: finished altering table")

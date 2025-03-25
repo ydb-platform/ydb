@@ -226,13 +226,10 @@ public:
     {
         LOG_T("PageFault " << Debug());
 
-        if (UploadInProgress()
+        UploadInProgress()
             || TryUpload(LevelBuf, LevelTable, LevelTypes, false)
             || TryUpload(PostingBuf, PostingTable, PostingTypes, false)
-            || TryUpload(PrefixBuf, PrefixTable, PrefixTypes, false))
-        {
-            // new upload started
-        }
+            || TryUpload(PrefixBuf, PrefixTable, PrefixTypes, false);
 
         return EScan::Feed;
     }
@@ -281,12 +278,9 @@ protected:
             UploadBytes += UploadBuf.GetBytes();
             UploadBuf.Clear();
 
-            if (TryUpload(LevelBuf, LevelTable, LevelTypes, true)
+            TryUpload(LevelBuf, LevelTable, LevelTypes, true)
                 || TryUpload(PostingBuf, PostingTable, PostingTypes, true)
-                || TryUpload(PrefixBuf, PrefixTable, PrefixTypes, true))
-            {
-                // new upload started
-            }
+                || TryUpload(PrefixBuf, PrefixTable, PrefixTypes, true);
 
             Driver->Touch(EScan::Feed);
             return;
@@ -314,12 +308,9 @@ protected:
             return EScan::Sleep;
         }
         
-        if (TryUpload(LevelBuf, LevelTable, LevelTypes, true)
+        TryUpload(LevelBuf, LevelTable, LevelTypes, true)
             || TryUpload(PostingBuf, PostingTable, PostingTypes, true)
-            || TryUpload(PrefixBuf, PrefixTable, PrefixTypes, true))
-        {
-            // new upload started
-        }
+            || TryUpload(PrefixBuf, PrefixTable, PrefixTypes, true);
 
         return EScan::Feed;
     }

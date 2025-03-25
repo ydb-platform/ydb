@@ -1,5 +1,9 @@
 items:
-- name: Настройка TLS
-  href: tls.md
-- name: Аутентификация узлов баз данных
+- name: auth_config
+  href: auth_config.md
+- name: client_certificate_authorization
   href: node-authentication.md
+- name: security_config
+  href: security_config.md
+- name: tls
+  href: tls.md

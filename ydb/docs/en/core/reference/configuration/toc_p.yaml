@@ -1,5 +1,9 @@
 items:
-- name: TLS
-  href: tls.md
-- name: Database node authentication
+- name: auth_config
+  href: auth_config.md
+- name: client_certificate_authorization
   href: node-authentication.md
+- name: security_config
+  href: security_config.md
+- name: tls
+  href: tls.md

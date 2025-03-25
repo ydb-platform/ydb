@@ -90,7 +90,7 @@ protected:
     TUploadLimits Limits;
 
     NTable::TTag EmbeddingTag;
-    TTags UploadScan;
+    TTags ScanTags;
 
     TUploadStatus UploadStatus;
 
@@ -102,7 +102,7 @@ protected:
 
     ui32 PrefixColumns;
     TSerializedCellVec Prefix;
-    bool HasNextPrefix = false;
+    bool IsExhausted = false;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType()
@@ -134,7 +134,8 @@ public:
         const auto& embedding = request.GetEmbeddingColumn();
         const auto& data = request.GetDataColumns();
         // scan tags
-        UploadScan = MakeUploadTags(table, embedding, data, EmbeddingPos, DataPos, EmbeddingTag);
+        ScanTags = MakeUploadTags(table, embedding, data, EmbeddingPos, DataPos, EmbeddingTag);
+        Lead.To(ScanTags, {}, NTable::ESeek::Lower);
         // upload types
         {
             Ydb::Type type;
@@ -170,13 +171,12 @@ public:
         }
     }
 
-    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) final
+    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
     {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
         LOG_D("Prepare " << Debug());
 
         Driver = driver;
-        Lead.To(scheme->Tags(), {}, NTable::ESeek::Lower);
         return {EScan::Feed, {}};
     }
 
@@ -196,7 +196,7 @@ public:
         record.SetUploadBytes(UploadBytes);
         if (abort != EAbort::None) {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
-        } else if (UploadStatus.IsSuccess()) {
+        } else if (UploadStatus.IsNone() || UploadStatus.IsSuccess()) {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);
         } else {
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
@@ -217,9 +217,10 @@ public:
     TString Debug() const
     {
         return TStringBuilder() << "TPrefixKMeansScan Id: " << BuildId << " Parent: " << Parent << " Child: " << Child
-            << " UploadTable: " << UploadTable << " K: " << K << " Clusters: " << Clusters.size()
+            << " K: " << K << " Clusters: " << Clusters.size()
             << " State: " << State << " Round: " << Round << " / " << MaxRounds
-            << " PostingBuf size: " << PostingBuf.Size() << " PrefixBuf size: " << PrefixBuf.Size() << " UploadBuf size: " << UploadBuf.Size();
+            << " LevelBuf size: " << LevelBuf.Size() << " PostingBuf size: " << PostingBuf.Size() << " PrefixBuf size: " << PrefixBuf.Size()
+            << " UploadTable: " << UploadTable << " UploadBuf size: " << UploadBuf.Size();
     }
 
     EScan PageFault() final
@@ -392,13 +393,7 @@ class TPrefixKMeansScan final: public TPrefixKMeansScanBase, private TCalculatio
     std::vector<TAggregatedCluster> AggregatedClusters;
 
 
-    bool MoveToNextPrefix() {
-        if (!HasNextPrefix) {
-            if (UploadStatus.IsNone()) {
-                UploadStatus.StatusCode = Ydb::StatusIds::SUCCESS;
-            }
-            return false;
-        }
+    void StartNewPrefix() {
         Parent = Child + K;
         Child = Parent + 1;
         Round = 0;
@@ -413,9 +408,7 @@ class TPrefixKMeansScan final: public TPrefixKMeansScanBase, private TCalculatio
         MaxRows.clear();
         Clusters.clear();
         ClusterSizes.clear();
-        HasNextPrefix = false;
         AggregatedClusters.clear();
-        return true;
     }
 
 public:
@@ -429,62 +422,38 @@ public:
 
     EScan Seek(TLead& lead, ui64 seq) final
     {
-        LOG_D("Seek " << Debug());
-        ui64 zeroSeq = 0;
-        while (true) {
-            if (State == UploadState) {
-                if (MoveToNextPrefix()) {
-                    zeroSeq = seq;
-                    continue;
-                }
-                
-                if (UploadInProgress()
-                    || TryUpload(LevelBuf, LevelTable, LevelTypes, false)
-                    || TryUpload(PostingBuf, PostingTable, PostingTypes, false)
-                    || TryUpload(PrefixBuf, PrefixTable, PrefixTypes, false))
-                {
-                    return EScan::Sleep;
-                }
+        LOG_D("Seek " << seq << " " << Debug());
 
-                return EScan::Final;
+        if (IsExhausted) {
+            if (UploadInProgress()
+                || TryUpload(LevelBuf, LevelTable, LevelTypes, false)
+                || TryUpload(PostingBuf, PostingTable, PostingTypes, false)
+                || TryUpload(PrefixBuf, PrefixTable, PrefixTypes, false))
+            {
+                return EScan::Sleep;
             }
-
-            lead = Lead;
-            if (State == EState::SAMPLE) {
-                lead.SetTags({&EmbeddingTag, 1});
-                if (seq == zeroSeq && !HasNextPrefix) {
-                    return EScan::Feed;
-                }
-                State = EState::KMEANS;
-                if (!InitAggregatedClusters()) {
-                    // We don't need to do anything,
-                    // because this datashard doesn't have valid embeddings for this parent
-                    if (MoveToNextPrefix()) {
-                        zeroSeq = seq;
-                        continue;
-                    }
-                    return EScan::Final;
-                }
-                ++Round;
-                return EScan::Feed;
-            }
-
-            Y_ASSERT(State == EState::KMEANS);
-            if (RecomputeClusters()) {
-                lead.SetTags(UploadScan);
-                WriteLevelRows();
-                State = UploadState;
-            } else {
-                lead.SetTags({&EmbeddingTag, 1});
-                ++Round;
-            }
-            return EScan::Feed;
+            return EScan::Final;
         }
+
+        lead = Lead;
+
+        return EScan::Feed;
     }
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
     {
         LOG_T("Feed " << Debug());
+
+        ++ReadRows;
+        ReadBytes += CountBytes(key, row);
+
+        if (Prefix && !TCellVectorsEquals{}(Prefix.GetCells(), key.subspan(0, PrefixColumns))) {
+            if (!FinishPrefix()) {
+                return EScan::Reset;
+            }
+            LOG_T("Prefix finished " << Debug());
+        }
+
         if (!Prefix) {
             Prefix = TSerializedCellVec{key.subspan(0, PrefixColumns)};
 
@@ -494,12 +463,8 @@ public:
             cells[0] = TCell::Make(Parent);
             TSerializedCellVec::UnsafeAppendCells(cells, pk);
             PrefixBuf.AddRow(TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize({}));
-        } else if (!TCellVectorsEquals{}(Prefix.GetCells(), key.subspan(0, PrefixColumns))) {
-            HasNextPrefix = true;
-            return EScan::Reset;
         }
-        ++ReadRows;
-        ReadBytes += CountBytes(key, row);
+
         switch (State) {
             case EState::SAMPLE:
                 return FeedSample(row);
@@ -515,7 +480,57 @@ public:
         }
     }
 
+    EScan Exhausted() final
+    {
+        LOG_D("Exhausted " << Debug());
+
+        if (!FinishPrefix()) {
+            return EScan::Reset;
+        }
+            
+        LOG_T("Prefix finished " << Debug());
+        IsExhausted = true;
+        
+        // call Seek to wait uploads
+        return EScan::Reset;
+    }
+
 private:
+    bool FinishPrefix()
+    {
+        if (State == EState::SAMPLE) {
+            State = EState::KMEANS;
+            if (!InitAggregatedClusters()) {
+                // We don't need to do anything,
+                // because this datashard doesn't have valid embeddings for this parent
+                StartNewPrefix();
+                return true;
+            }
+            Round = 1;
+            return false; // do KMEANS
+        }
+
+        if (State == EState::KMEANS) {
+            if (RecomputeClusters()) {
+                WriteLevelRows();
+                State = UploadState;
+                return false; // do upload
+            } else {
+                ++Round;
+                return false; // retry KMEANS
+            }
+        }
+
+        if (State == UploadState) {
+            StartNewPrefix();
+            return true;
+        }
+
+        Y_ASSERT(false);
+        StartNewPrefix();
+        return true;
+    }
+
     bool InitAggregatedClusters()
     {
         if (Clusters.size() == 0) {
@@ -597,8 +612,7 @@ private:
 
     EScan FeedSample(const TRow& row)
     {
-        Y_ASSERT(row.Size() == 1);
-        const auto embedding = row.Get(0).AsRef();
+        const auto embedding = row.Get(EmbeddingPos).AsRef();
         if (!this->IsExpectedSize(embedding)) {
             return EScan::Feed;
         }
@@ -624,8 +638,7 @@ private:
 
     EScan FeedKMeans(const TRow& row)
     {
-        Y_ASSERT(row.Size() == 1);
-        const ui32 pos = FeedEmbedding(*this, Clusters, row, 0);
+        const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         AggregateToCluster(pos, row.Get(0).Data());
         return EScan::Feed;
     }

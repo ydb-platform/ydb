@@ -360,7 +360,8 @@ struct MainTestCase {
         for (size_t i = 20; i--;) {
             auto result = DescribeTransfer().GetReplicationDescription();
             if (TReplicationDescription::EState::Error == result.GetState()) {
-                Cerr << ">>>>> " << result.GetErrorState().GetIssues().ToOneLineString() << Endl << Flush;
+                Cerr << ">>>>> ACTUAL: " << result.GetErrorState().GetIssues().ToOneLineString() << Endl << Flush;
+                Cerr << ">>>>> EXPECTED: " << expectedMessage << Endl << Flush;
                 UNIT_ASSERT(result.GetErrorState().GetIssues().ToOneLineString().contains(expectedMessage));
                 break;
             }
@@ -1293,6 +1294,47 @@ Y_UNIT_TEST_SUITE(Transfer)
             )");
 
         testCase.CheckTransferStateError("Only column tables are supported as transfer targets.");
+    }
+
+    Y_UNIT_TEST(CreateTransferTargetIsNotTable)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TOPIC `%s`;
+            )");
+        testCase.CreateTopic();
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )");
+
+        testCase.CheckTransferStateError("Only column tables are supported as transfer targets.");
+    }
+
+    Y_UNIT_TEST(CreateTransferTargetNotExists)
+    {
+        MainTestCase testCase;
+        testCase.CreateTopic();
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )");
+
+        testCase.CheckTransferStateError(TStringBuilder() << "The target table `/local/" << testCase.TableName << "` does not exist");
     }
 }
 

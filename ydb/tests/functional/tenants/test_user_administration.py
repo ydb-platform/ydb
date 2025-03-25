@@ -94,6 +94,11 @@ def prepared_tenant_db(ydb_cluster, ydb_endpoint, ydb_database_module_scope):
             # additional setup for individual tests
             session.execute_scheme("create user ordinaryuser password '1234'")
 
+            session.execute_scheme("create group ordinarygroup")
+            session.execute_scheme("create user dbadmin2 password '1234'")
+            session.execute_scheme("create group dbsubadmins")
+            session.execute_scheme('alter group dbadmins add user dbadmin2, dbsubadmins')
+
         # setup for database admins, second
         # make dbadmin the real admin of the database
         driver.scheme_client.modify_permissions(database_path, ydb.ModifyPermissionsSettings().change_owner('dbadmins'))
@@ -123,3 +128,61 @@ def test_ordinaryuser_can_change_password_for_himself(ydb_endpoint, prepared_roo
             session.execute_scheme("alter user ordinaryuser password '4321'")
 
     user_auth_token = login_user(ydb_endpoint, database_path, 'ordinaryuser', '4321')
+
+
+def test_database_admin_cant_change_database_owner(ydb_endpoint, prepared_root_db, prepared_tenant_db, ydb_client):
+    database_path = prepared_tenant_db
+
+    user_auth_token = login_user(ydb_endpoint, database_path, 'dbadmin', '1234')
+    credentials = ydb.AuthTokenCredentials(user_auth_token)
+
+    with ydb_client(database_path, credentials=credentials) as driver:
+        driver.wait()
+
+        with pytest.raises(ydb.issues.Error) as exc_info:
+            driver.scheme_client.modify_permissions(database_path, ydb.ModifyPermissionsSettings().change_owner('ordinaryuser'))
+
+        assert exc_info.type is ydb.issues.Unauthorized
+        assert 'Access denied for dbadmin' in exc_info.value.message
+
+
+@pytest.mark.parametrize('query', [
+    pytest.param('alter group dbadmins add user ordinaryuser', id='add-user'),
+    pytest.param('alter group dbadmins drop user dbadmin', id='remove-himself'),
+    pytest.param('alter group dbadmins drop user dbadmin2', id='remove-other-admin'),
+    pytest.param('alter group dbadmins add user ordinarygroup', id='add-subgroup'),
+    pytest.param('alter group dbadmins drop user dbsubadmins', id='remove-subgroup'),
+    pytest.param('drop group dbadmins', id='remove-admin-group'),
+    pytest.param('alter group dbadmins rename to dbadminsdemoted', id='rename-admin-group'),
+
+])
+def test_database_admin_cant_change_database_admin_group(ydb_endpoint, prepared_root_db, prepared_tenant_db, ydb_client, query):
+    database_path = prepared_tenant_db
+
+    user_auth_token = login_user(ydb_endpoint, database_path, 'dbadmin', '1234')
+    credentials = ydb.AuthTokenCredentials(user_auth_token)
+
+    with ydb_client(database_path, credentials=credentials) as driver:
+        driver.wait()
+
+        pool = ydb.SessionPool(driver)
+        with pool.checkout() as session:
+            with pytest.raises(ydb.issues.Error) as exc_info:
+                session.execute_scheme(query)
+
+            assert exc_info.type is ydb.issues.Unauthorized
+            assert 'Access denied.' in exc_info.value.message
+
+
+def test_database_admin_can_create_user(ydb_endpoint, prepared_root_db, prepared_tenant_db, ydb_client):
+    database_path = prepared_tenant_db
+
+    user_auth_token = login_user(ydb_endpoint, database_path, 'dbadmin', '1234')
+    credentials = ydb.AuthTokenCredentials(user_auth_token)
+
+    with ydb_client(database_path, credentials=credentials) as driver:
+        driver.wait()
+
+        pool = ydb.SessionPool(driver)
+        with pool.checkout() as session:
+            session.execute_scheme("create user testuser password '1234'")

@@ -14,5 +14,6 @@ void DoGetMaintenanceTask(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvi
 void DoListMaintenanceTasks(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 void DoDropMaintenanceTask(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 void DoCompleteAction(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
+void DoDrainNode(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f);
 
 }

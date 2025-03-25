@@ -11,7 +11,6 @@ namespace NKikimr {
 namespace NStat {
 
 using namespace NYdb;
-using namespace NYdb::NTable;
 using namespace NYdb::NScheme;
 
 namespace {

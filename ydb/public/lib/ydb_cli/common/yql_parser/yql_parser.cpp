@@ -34,7 +34,7 @@ std::map<std::string, TType> TYqlParser::GetParamTypes(const TString& queryText)
         const auto& token = tokens[i];
         
         // Ищем объявление параметра (DECLARE $name AS type)
-        if (token.Content == "DECLARE") {
+        if (token.Content == "DECLARE" || token.Content == "declare") {
             // Пропускаем пробелы
             size_t j = i + 1;
             while (j < tokens.size() && tokens[j].Name == "WS") {
@@ -56,7 +56,7 @@ std::map<std::string, TType> TYqlParser::GetParamTypes(const TString& queryText)
                     }
                     
                     // Проверяем наличие AS
-                    if (j < tokens.size() && tokens[j].Content == "AS") {
+                    if (j < tokens.size() && (tokens[j].Content == "AS" || tokens[j].Content == "as")) {
                         j++;
                         
                         // Пропускаем пробелы после AS
@@ -73,25 +73,30 @@ std::map<std::string, TType> TYqlParser::GetParamTypes(const TString& queryText)
                             if (tokens[j].Name != "WS") {
                                 if (tokens[j].Content == "<") {
                                     angleBrackets++;
+                                    typeStr += "<";
                                 } else if (tokens[j].Content == ">") {
                                     angleBrackets--;
+                                    typeStr += ">";
                                 } else if (tokens[j].Content == "(") {
                                     parentheses++;
+                                    typeStr += "(";
                                 } else if (tokens[j].Content == ")") {
                                     parentheses--;
-                                }
-                                
-                                if (!typeStr.empty() && (tokens[j].Content == "," || tokens[j].Content == "<" || tokens[j].Content == ">" || tokens[j].Content == "(" || tokens[j].Content == ")")) {
-                                    typeStr += tokens[j].Content;
-                                } else if (!typeStr.empty() && tokens[j].Content != ",") {
-                                    typeStr += " " + tokens[j].Content;
+                                    typeStr += ")";
+                                } else if (tokens[j].Content == ",") {
+                                    typeStr += ",";
+                                } else if (tokens[j].Content == "?") {
+                                    typeStr += "?";
                                 } else {
+                                    if (!typeStr.empty() && typeStr.back() != '<' && typeStr.back() != '(' && typeStr.back() != ',' && typeStr.back() != '?') {
+                                        typeStr += " ";
+                                    }
                                     typeStr += tokens[j].Content;
                                 }
                             }
                             j++;
                             
-                            if (angleBrackets == 0 && parentheses == 0 && j < tokens.size() && tokens[j].Content == ",") {
+                            if (angleBrackets == 0 && parentheses == 0 && j < tokens.size() && tokens[j].Content == ";") {
                                 break;
                             }
                         }
@@ -123,46 +128,59 @@ void TYqlParser::ProcessType(const TString& typeStr, TTypeBuilder& builder) {
     // Удаляем лишние пробелы
     TString cleanTypeStr = StripString(typeStr);
     
+    // Проверяем на опциональный тип
+    bool isOptional = cleanTypeStr.EndsWith("?");
+    if (isOptional) {
+        cleanTypeStr = cleanTypeStr.substr(0, cleanTypeStr.length() - 1);
+        builder.BeginOptional();
+    }
+    
+    // Приводим к нижнему регистру для сравнения
+    TString lowerTypeStr;
+    for (char c : cleanTypeStr) {
+        lowerTypeStr += std::tolower(c);
+    }
+    
     // Обрабатываем базовые типы
-    if (cleanTypeStr == "Bool") {
+    if (lowerTypeStr == "bool") {
         builder.Primitive(EPrimitiveType::Bool);
-    } else if (cleanTypeStr == "Int8") {
+    } else if (lowerTypeStr == "int8") {
         builder.Primitive(EPrimitiveType::Int8);
-    } else if (cleanTypeStr == "Uint8") {
+    } else if (lowerTypeStr == "uint8" || lowerTypeStr == "uint8") {
         builder.Primitive(EPrimitiveType::Uint8);
-    } else if (cleanTypeStr == "Int16") {
+    } else if (lowerTypeStr == "int16") {
         builder.Primitive(EPrimitiveType::Int16);
-    } else if (cleanTypeStr == "Uint16") {
+    } else if (lowerTypeStr == "uint16" || lowerTypeStr == "uint16") {
         builder.Primitive(EPrimitiveType::Uint16);
-    } else if (cleanTypeStr == "Int32") {
+    } else if (lowerTypeStr == "int32") {
         builder.Primitive(EPrimitiveType::Int32);
-    } else if (cleanTypeStr == "Uint32") {
+    } else if (lowerTypeStr == "uint32" || lowerTypeStr == "uint32") {
         builder.Primitive(EPrimitiveType::Uint32);
-    } else if (cleanTypeStr == "Int64") {
+    } else if (lowerTypeStr == "int64") {
         builder.Primitive(EPrimitiveType::Int64);
-    } else if (cleanTypeStr == "Uint64") {
+    } else if (lowerTypeStr == "uint64" || lowerTypeStr == "uint64") {
         builder.Primitive(EPrimitiveType::Uint64);
-    } else if (cleanTypeStr == "Float") {
+    } else if (lowerTypeStr == "float") {
         builder.Primitive(EPrimitiveType::Float);
-    } else if (cleanTypeStr == "Double") {
+    } else if (lowerTypeStr == "double") {
         builder.Primitive(EPrimitiveType::Double);
-    } else if (cleanTypeStr == "String") {
+    } else if (lowerTypeStr == "string") {
         builder.Primitive(EPrimitiveType::String);
-    } else if (cleanTypeStr == "Utf8") {
+    } else if (lowerTypeStr == "utf8") {
         builder.Primitive(EPrimitiveType::Utf8);
-    } else if (cleanTypeStr == "Json") {
+    } else if (lowerTypeStr == "json") {
         builder.Primitive(EPrimitiveType::Json);
-    } else if (cleanTypeStr == "Yson") {
+    } else if (lowerTypeStr == "yson") {
         builder.Primitive(EPrimitiveType::Yson);
-    } else if (cleanTypeStr == "Date") {
+    } else if (lowerTypeStr == "date") {
         builder.Primitive(EPrimitiveType::Date);
-    } else if (cleanTypeStr == "Datetime") {
+    } else if (lowerTypeStr == "datetime") {
         builder.Primitive(EPrimitiveType::Datetime);
-    } else if (cleanTypeStr == "Timestamp") {
+    } else if (lowerTypeStr == "timestamp") {
         builder.Primitive(EPrimitiveType::Timestamp);
-    } else if (cleanTypeStr == "Interval") {
+    } else if (lowerTypeStr == "interval") {
         builder.Primitive(EPrimitiveType::Interval);
-    } else if (cleanTypeStr.StartsWith("Decimal")) {
+    } else if (lowerTypeStr.StartsWith("decimal")) {
         // Обрабатываем тип Decimal
         TString params = StripString(cleanTypeStr.substr(7)); // Убираем "Decimal"
         if (params.StartsWith("(") && params.EndsWith(")")) {
@@ -175,13 +193,13 @@ void TYqlParser::ProcessType(const TString& typeStr, TTypeBuilder& builder) {
                 builder.Decimal(TDecimalType(precision, scale));
             }
         }
-    } else if (cleanTypeStr.StartsWith("List<")) {
+    } else if (lowerTypeStr.StartsWith("list<")) {
         // Обработка списков
         TString itemType = cleanTypeStr.substr(5, cleanTypeStr.length() - 6);
         builder.BeginList();
         ProcessType(itemType, builder);
         builder.EndList();
-    } else if (cleanTypeStr.StartsWith("Struct<")) {
+    } else if (lowerTypeStr.StartsWith("struct<")) {
         // Обработка структур
         builder.BeginStruct();
         TString fields = cleanTypeStr.substr(7, cleanTypeStr.length() - 8);
@@ -222,7 +240,7 @@ void TYqlParser::ProcessType(const TString& typeStr, TTypeBuilder& builder) {
             }
         }
         builder.EndStruct();
-    } else if (cleanTypeStr.StartsWith("Tuple<")) {
+    } else if (lowerTypeStr.StartsWith("tuple<")) {
         // Обработка кортежей
         TString elements = cleanTypeStr.substr(6, cleanTypeStr.length() - 7);
         TVector<TString> elementTypes;
@@ -234,7 +252,7 @@ void TYqlParser::ProcessType(const TString& typeStr, TTypeBuilder& builder) {
             ProcessType(StripString(elementType), builder);
         }
         builder.EndTuple();
-    } else if (cleanTypeStr.StartsWith("Dict<")) {
+    } else if (lowerTypeStr.StartsWith("dict<")) {
         // Обработка словарей
         TString params = cleanTypeStr.substr(5, cleanTypeStr.length() - 6);
         size_t commaPos = params.find(',');
@@ -249,6 +267,10 @@ void TYqlParser::ProcessType(const TString& typeStr, TTypeBuilder& builder) {
             ProcessType(valueType, builder);
             builder.EndDict();
         }
+    }
+    
+    if (isOptional) {
+        builder.EndOptional();
     }
 }
 

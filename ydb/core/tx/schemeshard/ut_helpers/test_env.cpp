@@ -148,7 +148,7 @@ public:
     void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ev);
         auto event = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationRequest>();
-        event->Record.MutableConfig()->CopyFrom(Config);
+        event->Record.MutableConfig() = Config;
         ctx.Send(ev->Sender, event.Release(), 0, ev->Cookie);
     }
 private:

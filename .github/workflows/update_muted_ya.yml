@@ -28,6 +28,18 @@ jobs:
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
 
+      - name: Update branch with base branch
+        run: |
+          git config user.name YDBot
+          git config user.email ydbot@ydb.tech 
+          git checkout ${{ env.BASE_BRANCH }}
+          git pull --rebase origin ${{ env.BASE_BRANCH }}
+          git fetch origin ${{ env.BRANCH }}
+          if [ -n "$(git ls-remote --heads origin ${{ env.BRANCH }})" ]; then
+            git push origin --delete ${{ env.BRANCH }}
+          fi
+          git checkout -b ${{ env.BRANCH }}
+        
       - name: Run the script
         run: |
           .github/scripts/tests/create_new_muted_ya.py update_muted_ya
@@ -35,7 +47,7 @@ jobs:
       - name: Move new_muted_ya_with_flaky.txt to muted_ya.txt
         run: |
           cp mute_update/new_muted_ya_with_flaky.txt .github/config/muted_ya.txt
-      
+
       - name: Check if changes exist
         id: changes_check
         run: |
@@ -66,30 +78,11 @@ jobs:
 
           # Use printf to handle special characters and newlines
           printf "PR_BODY<<EOF\n%s\nEOF\n" "$PR_BODY" >> $GITHUB_ENV
-      
+
       - name: Stage changes if any
         if: env.changes == 'true'
         run: |
           git add .github/config/muted_ya.txt
-          
-      - name: Update branch with base branch
-        run: |
-          git config user.name YDBot
-          git config user.email ydbot@ydb.tech 
-          git checkout ${{ env.BASE_BRANCH }}
-          git pull --rebase origin ${{ env.BASE_BRANCH }}
-          git fetch origin ${{ env.BRANCH }}
-          if [ -n "$(git branch -a | grep remotes/origin/${{ env.BRANCH }})" ]; then
-            git checkout ${{ env.BRANCH }}
-            git rebase ${{ env.BASE_BRANCH }} -X ours
-            if [ $? -ne 0 ]; then
-              echo "Merge conflict detected. Please resolve conflicts manually and push the changes."
-              exit 1
-            fi
-          else
-            git checkout -b ${{ env.BRANCH }}
-          fi
-  
 
       - name: Delete other files
         run: |

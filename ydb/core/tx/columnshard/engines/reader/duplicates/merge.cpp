@@ -7,22 +7,17 @@ TConclusionStatus TBuildDuplicateFilters::DoExecute(const std::shared_ptr<ITask>
     NArrow::NMerger::TMergePartialStream merger(PKSchema, nullptr, false, VersionColumnNames);
     for (ui64 i = 0; i < Sources.size(); ++i) {
         const auto& source = Sources[i];
-        merger.AddSource(source.GetData(), source.GetFilter(), i);
+        merger.AddSource(source.GetData(), source.GetFilter(), source.GetSourceId());
     }
-    TFiltersBuilder filtersBuilder(Sources.size());
+    TFiltersBuilder filtersBuilder;
     merger.DrainAll(filtersBuilder);
-    std::vector<NArrow::TColumnFilter> filters = std::move(filtersBuilder).ExtractFilters();
-    AFL_VERIFY(filters.size() == Sources.size());
-    // TODO: avoid copying filters
-    THashMap<ui64, NArrow::TColumnFilter> result;
-    for (ui64 i = 0; i < filters.size(); ++i) {
-        AFL_VERIFY(Sources[i].GetData()->GetRecordsCount() == filters[i].GetRecordsCountVerified())(
-                                                                  "data", Sources[i].GetData()->GetRecordsCount())(
-                                                                  "filter", filters[i].GetRecordsCountVerified());
-        result.emplace(Sources[i].GetSourceId(), std::move(filters[i]));
+    THashMap<ui64, NArrow::TColumnFilter> filters = std::move(filtersBuilder).ExtractFilters();
+    AFL_VERIFY(filters.size() == Sources.size())("filters", filters.size())("sources", Sources.size());
+    for (const auto& source : Sources) {
+        AFL_VERIFY(source.GetData()->GetRecordsCount() == TValidator::CheckNotNull(filters.FindPtr(source.GetSourceId()))->GetRecordsCountVerified())(
+                "data", source.GetData()->GetRecordsCount())("filter", filters.FindPtr(source.GetSourceId())->GetRecordsCountVerified());
     }
-    AFL_VERIFY(result.size() == Sources.size())("result", result.size())("sources", Sources.size());
-    TActorContext::AsActorContext().Send(Owner, new TEvDuplicateFilterIntervalResult(std::move(result), IntervalIdx));
+    TActorContext::AsActorContext().Send(Owner, new TEvDuplicateFilterIntervalResult(std::move(filters), IntervalIdx));
     return TConclusionStatus::Success();
 }
 

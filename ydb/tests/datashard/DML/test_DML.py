@@ -5,10 +5,6 @@ from ydb.tests.datashard.lib.create_table import create_table, create_ttl, pk_ty
 
 class TestDML(TestBase):
     def test_DML(self):
-        # all ttl
-        for ttl in ttl_types.keys():
-            self.DML(
-                f"table_ttl_{ttl}", pk_types, {}, {}, ttl, "", "")
         # all index
         for i in range(2):
             for uniq in unique:
@@ -22,6 +18,10 @@ class TestDML(TestBase):
                             index = index_first
                         self.DML(
                             f"table_index_{i}_{uniq}_{sync}", pk_types, {}, index, "", uniq, sync)
+        # all ttl
+        for ttl in ttl_types.keys():
+            self.DML(
+                f"table_ttl_{ttl}", pk_types, {}, {}, ttl, "", "")
 
         self.DML(
             "table_all_types", pk_types, {**pk_types, **non_pk_types}, {}, "", "", "")
@@ -97,7 +97,7 @@ class TestDML(TestBase):
         """
         self.query(insert_sql)
 
-    def update(self, table_name: str, all_types: dict[str, str], index: dict[str, str], ttl: str):
+    def update(self, table_name: str, all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str):
         count = 1
 
         if ttl != "":
@@ -110,10 +110,19 @@ class TestDML(TestBase):
                 count, f"col_{type_name}", all_types[type_name], table_name)
             count += 1
 
-        for type_name in index.keys():
-            self.create_update(
-                count, f"col_index_{type_name}", index[type_name], table_name)
-            count += 1
+        if unique == "":
+            for type_name in index.keys():
+                self.create_update(
+                    count, f"col_index_{type_name}", index[type_name], table_name)
+                count += 1
+        else:
+            number_of_columns = len(pk_types) + len(all_types) + len(index)+2
+            if ttl != "":
+                number_of_columns += 1
+            for type_name in index.keys():
+                self.create_update(
+                    number_of_columns, number_of_columns - len(index)-1, f"col_index_{type_name}", index[type_name], table_name)
+                number_of_columns += 1
 
         count_assert = 1
 
@@ -135,16 +144,30 @@ class TestDML(TestBase):
                 assert len(
                     rows) == 1 and rows[0].count == number_of_columns, f"Expected {number_of_columns} rows after insert, faild in col_{cleanup_type_name(type_name)}, table {table_name}"
             count_assert += 1
-
-        for type_name in index.keys():
-            rows = self.query(
-                f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_index_{cleanup_type_name(type_name)}={index[type_name].format(count_assert)}")
-            assert len(
-                rows) == 1 and rows[0].count == number_of_columns, f"Expected {number_of_columns} rows after insert, faild in col_index_{cleanup_type_name(type_name)}, table {table_name}"
-            count_assert += 1
+        if unique == "":
+            for type_name in index.keys():
+                rows = self.query(
+                    f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_index_{cleanup_type_name(type_name)}={index[type_name].format(count_assert)}")
+                assert len(
+                    rows) == 1 and rows[0].count == number_of_columns, f"Expected {number_of_columns} rows after insert, faild in col_index_{cleanup_type_name(type_name)}, table {table_name}"
+                count_assert += 1
+        else:
+            number_of_columns = len(pk_types) + len(all_types) + len(index) + 1
+            if ttl != "":
+                number_of_columns += 1
+            for type_name in index.keys():
+                rows = self.query(
+                    f"SELECT COUNT(*) as count FROM `{table_name}` WHERE col_index_{cleanup_type_name(type_name)}={index[type_name].format(number_of_columns)}")
+                assert len(
+                    rows) == 1 and rows[0].count == 1, f"Expected {1} rows after insert, faild in col_index_{cleanup_type_name(type_name)}, table {table_name}"
+                number_of_columns += 1
 
     def create_update(self, value: int, type_name: str, key: str, table_name: str):
         update_sql = f""" UPDATE `{table_name}` SET {cleanup_type_name(type_name)} = {key.format(value)} """
+        self.query(update_sql)
+
+    def create_update_unique(self, value: int, search: int, type_name: str, key: str, table_name: str):
+        update_sql = f""" UPDATE `{table_name}` SET {cleanup_type_name(type_name)} = {key.format(value)} WHERE {cleanup_type_name(type_name)} = {key.format(search)}"""
         self.query(update_sql)
 
     def upsert(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):

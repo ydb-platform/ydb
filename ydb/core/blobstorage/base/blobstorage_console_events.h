@@ -77,14 +77,9 @@ namespace NKikimr {
             NKikimrBlobStorage::TEvControllerReplaceConfigRequest, EvControllerReplaceConfigRequest> {
         TEvControllerReplaceConfigRequest() = default;
 
-        TEvControllerReplaceConfigRequest(
-            std::optional<TString> clusterYaml,
-            std::optional<TString> storageYaml,
-            std::optional<bool> switchDedicatedStorageSection,
-            bool dedicatedConfigMode,
-            bool allowUnknownFields,
-            bool bypassMetadataChecks) {
-
+        TEvControllerReplaceConfigRequest(std::optional<TString> clusterYaml, std::optional<TString> storageYaml,
+                std::optional<bool> switchDedicatedStorageSection, bool dedicatedConfigMode, bool allowUnknownFields,
+                bool bypassMetadataChecks, bool enableConfigV2, bool disableConfigV2) {
             if (clusterYaml) {
                 Record.SetClusterYaml(*clusterYaml);
             }
@@ -97,6 +92,11 @@ namespace NKikimr {
             Record.SetDedicatedConfigMode(dedicatedConfigMode);
             Record.SetAllowUnknownFields(allowUnknownFields);
             Record.SetBypassMetadataChecks(bypassMetadataChecks);
+            if (enableConfigV2) {
+                Record.SetSwitchEnableConfigV2(true);
+            } else if (disableConfigV2) {
+                Record.SetSwitchEnableConfigV2(false);
+            }
         }
 
         TString ToString() const override {

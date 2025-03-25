@@ -232,7 +232,9 @@ public:
             shim.SwitchDedicatedStorageSection,
             shim.DedicatedConfigMode,
             request->allow_unknown_fields() || request->bypass_checks(),
-            request->bypass_checks());
+            request->bypass_checks(),
+            false /* TODO: implement */,
+            false /* TODO: implement */);
     }
 
 private:

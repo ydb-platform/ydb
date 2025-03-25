@@ -1,4 +1,6 @@
+* Support coordination nodes in `ydb scheme rmdir --recursive`.
 * Fixed return code of command `ydb workload * run --check-canonical` for the case when benchmark query results differ from canonical ones.
+
 ## 2.20.0 ##
 
 * Added support for dual configuration mode in the `ydb admin cluster config fetch` command, allowing it to handle separate cluster and storage config sections.

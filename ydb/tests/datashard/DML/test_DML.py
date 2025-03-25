@@ -1,9 +1,9 @@
 from ydb.tests.sql.lib.test_base import TestBase
 from ydb.tests.stress.oltp_workload.workload import cleanup_type_name
-from ydb.tests.datashard.lib.create_table import CreateTables, pk_types, non_pk_types, index_first, index_second, ttl_types, unique, index_sync
+from ydb.tests.datashard.lib.create_table import create_table, create_ttl, pk_types, non_pk_types, index_first, index_second, ttl_types, unique, index_sync
 
 
-class TestDML(CreateTables, TestBase):
+class TestDML(TestBase):
     def test_DML(self):
         # all ttl
         for ttl in ttl_types.keys():
@@ -33,12 +33,12 @@ class TestDML(CreateTables, TestBase):
         index_columns = {
             "col_index_": index.keys()
         }
-        sql_create_table = self.create_table(
+        sql_create_table = create_table(
             table_name, columns, pk_columns, index_columns, unique, sync)
         self.query(sql_create_table)
         if ttl != "":
-            sql_ttl = self.create_ttl(f"ttl_{cleanup_type_name(ttl)}", {"P18262D": ""}, "SECONDS" if ttl ==
-                                      "Uint32" or ttl == "Uint64" or ttl == "DyNumber" else "", table_name)
+            sql_ttl = create_ttl(f"ttl_{cleanup_type_name(ttl)}", {"P18262D": ""}, "SECONDS" if ttl ==
+                                 "Uint32" or ttl == "Uint64" or ttl == "DyNumber" else "", table_name)
             self.query(sql_ttl)
         self.insert(table_name, all_types, pk_types, index, ttl)
         self.update(table_name, all_types, index, ttl)

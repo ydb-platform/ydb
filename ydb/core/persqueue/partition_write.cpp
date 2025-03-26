@@ -1115,7 +1115,7 @@ ui32 TPartition::RenameTmpCmdWrites(TEvKeyValue::TEvRequest* request)
 {
     ui32 curWrites = 0;
     for (ui32 i = 0; i < request->Record.CmdWriteSize(); ++i) { //change keys for yet to be writed KV pairs
-        TKey key(request->Record.GetCmdWrite(i).GetKey());
+        auto key = TKey::FromString(request->Record.GetCmdWrite(i).GetKey());
         if (key.GetType() == TKeyPrefix::TypeTmpData) {
             key.SetType(TKeyPrefix::TypeData);
             request->Record.MutableCmdWrite(i)->SetKey(TString(key.Data(), key.Size()));
@@ -1259,7 +1259,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             auto oldCmdWrite = request->Record.GetCmdWrite();
             request->Record.ClearCmdWrite();
             for (ui32 i = 0; i < (ui32)oldCmdWrite.size(); ++i) {
-                TKey key(oldCmdWrite.Get(i).GetKey());
+                auto key = TKey::FromString(oldCmdWrite.Get(i).GetKey());
                 if (key.GetType() != TKeyPrefix::TypeTmpData) {
                     request->Record.AddCmdWrite()->CopyFrom(oldCmdWrite.Get(i));
                 }
@@ -1386,7 +1386,12 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
 
 std::pair<TKey, ui32> TPartition::GetNewWriteKeyImpl(bool headCleared, bool needCompaction, ui32 HeadSize)
 {
-    TKey key(TKeyPrefix::TypeData, Partition, NewHead.Offset, NewHead.PartNo, NewHead.GetCount(), NewHead.GetInternalPartsCount(), !needCompaction);
+    TKey key;
+    if (needCompaction) {
+        key = TKey::ForBody(TKeyPrefix::TypeData, Partition, NewHead.Offset, NewHead.PartNo, NewHead.GetCount(), NewHead.GetInternalPartsCount());
+    } else {
+        key = TKey::ForHead(TKeyPrefix::TypeData, Partition, NewHead.Offset, NewHead.PartNo, NewHead.GetCount(), NewHead.GetInternalPartsCount());
+    }
 
     if (NewHead.PackedSize > 0)
         DataKeysHead[TotalLevels - 1].AddKey(key, NewHead.PackedSize);
@@ -1399,8 +1404,8 @@ std::pair<TKey, ui32> TPartition::GetNewWriteKeyImpl(bool headCleared, bool need
             DataKeysHead[i].Clear();
         }
         if (!headCleared) { //compacted blob must contain both head and NewHead
-            key = TKey(TKeyPrefix::TypeData, Partition, Head.Offset, Head.PartNo, NewHead.GetCount() + Head.GetCount(),
-                        Head.GetInternalPartsCount() +  NewHead.GetInternalPartsCount(), false);
+            key = TKey::ForBody(TKeyPrefix::TypeData, Partition, Head.Offset, Head.PartNo, NewHead.GetCount() + Head.GetCount(),
+                                Head.GetInternalPartsCount() +  NewHead.GetInternalPartsCount());
         } //otherwise KV blob is not from head (!key.IsHead()) and contains only new data from NewHead
         res = std::make_pair(key, HeadSize + NewHead.PackedSize);
     } else {

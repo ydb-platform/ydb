@@ -10,7 +10,7 @@ std::pair<TKeyPrefix, TKeyPrefix> MakeKeyPrefixRange(TKeyPrefix::EType type, con
     return {std::move(from), std::move(to)};
 }
 
-TKey MakeKeyFromString(const TString& s, const TPartitionId& partition)
+TKey TKey::FromString(const TString& s, const TPartitionId& partition)
 {
     TKey t(s);
     return TKey(t.GetType(),
@@ -20,6 +20,34 @@ TKey MakeKeyFromString(const TString& s, const TPartitionId& partition)
                 t.GetCount(),
                 t.GetInternalPartsCount(),
                 t.IsHead());
+}
+
+TKey TKey::ForBody(EType type,
+                   const TPartitionId& partition,
+                   const ui64 offset,
+                   const ui16 partNo,
+                   const ui32 count,
+                   const ui16 internalPartsCount)
+{
+    return {type, partition, offset, partNo, count, internalPartsCount, false};
+}
+
+TKey TKey::ForHead(EType type,
+                   const TPartitionId& partition,
+                   const ui64 offset,
+                   const ui16 partNo,
+                   const ui32 count,
+                   const ui16 internalPartsCount)
+{
+    return {type, partition, offset, partNo, count, internalPartsCount, true};
+}
+
+TKey TKey::FromKey(const TKey& k,
+                   EType type,
+                   const TPartitionId& partition,
+                   ui64 offset)
+{
+    return {type, partition, offset, k.GetPartNo(), k.GetCount(), k.GetInternalPartsCount(), k.IsHead()};
 }
 
 void TKeyPrefix::SetTypeImpl(EType type, bool isServicePartition)

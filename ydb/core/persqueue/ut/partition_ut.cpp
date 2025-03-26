@@ -927,6 +927,10 @@ void TPartitionFixture::WaitDataRangeRequest()
 void TPartitionFixture::SendDataRangeResponse(ui32 partitionId,
                                               ui64 begin, ui64 end, bool isHead)
 {
+    auto makeKey = [](bool isHead) -> auto {
+        return isHead ? &TKey::ForHead : &TKey::ForBody;
+    };
+
     Y_ABORT_UNLESS(begin <= end);
 
     auto event = MakeHolder<TEvKeyValue::TEvResponse>();
@@ -935,7 +939,7 @@ void TPartitionFixture::SendDataRangeResponse(ui32 partitionId,
     auto read = event->Record.AddReadRangeResult();
     read->SetStatus(NKikimrProto::OK);
     auto pair = read->AddPair();
-    NPQ::TKey key(NPQ::TKeyPrefix::TypeData, TPartitionId(partitionId), begin, 0, end - begin, 0, isHead);
+    NPQ::TKey key = makeKey(isHead)(NPQ::TKeyPrefix::TypeData, TPartitionId(partitionId), begin, 0, end - begin, 0);
     pair->SetStatus(NKikimrProto::OK);
     pair->SetKey(key.ToString());
     pair->SetValueSize(684);

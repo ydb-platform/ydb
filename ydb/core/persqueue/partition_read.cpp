@@ -490,7 +490,7 @@ TReadAnswer TReadInfo::FormAnswer(
         }
         Y_ABORT_UNLESS(offset <= Offset);
         Y_ABORT_UNLESS(offset < Offset || partNo <= PartNo);
-        TKey key(TKeyPrefix::TypeData, TPartitionId(0), offset, partNo, count, internalPartsCount, false);
+        auto key = TKey::ForBody(TKeyPrefix::TypeData, TPartitionId(0), offset, partNo, count, internalPartsCount);
         ui64 firstHeaderOffset = GetFirstHeaderOffset(key, blobValue);
         for (TBlobIterator it(key, blobValue); it.IsValid() && !needStop; it.Next()) {
             TBatch batch = it.GetBatch();

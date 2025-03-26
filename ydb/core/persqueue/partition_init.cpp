@@ -516,7 +516,7 @@ THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TR
     for (ui32 i = 0; i < range.PairSize(); ++i) {
         const auto& pair = range.GetPair(i);
         Y_ABORT_UNLESS(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
-        source.push_back(MakeKeyFromString(pair.GetKey(), partitionId));
+        source.push_back(TKey::FromString(pair.GetKey(), partitionId));
     }
 
     auto isKeyLess = [](const TKey& lhs, const TKey& rhs) {
@@ -590,7 +590,7 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
     for (ui32 i = 0; i < range.PairSize(); ++i) {
         const auto& pair = range.GetPair(i);
         Y_ABORT_UNLESS(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
-        TKey k = MakeKeyFromString(pair.GetKey(), PartitionId());
+        auto k = TKey::FromString(pair.GetKey(), PartitionId());
         if (!actualKeys.contains(pair.GetKey())) {
             Partition()->DeletedKeys.emplace_back(k.ToString());
             continue;

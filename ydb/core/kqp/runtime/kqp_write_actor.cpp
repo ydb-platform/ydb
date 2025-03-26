@@ -219,8 +219,7 @@ public:
         const NKikimrDataEvents::ELockMode lockMode,
         const IKqpTransactionManagerPtr& txManager,
         const TActorId sessionActorId,
-        TIntrusivePtr<TKqpCounters> counters,
-        NWilson::TTraceId traceId)
+        TIntrusivePtr<TKqpCounters> counters)
         : MessageSettings(GetWriteActorSettings())
         , Alloc(alloc)
         , MvccSnapshot(mvccSnapshot)
@@ -235,7 +234,6 @@ public:
         , Callbacks(callbacks)
         , TxManager(txManager ? txManager : CreateKqpTransactionManager(/* collectOnly= */ true))
         , Counters(counters)
-        , TableWriteActorSpan(TWilsonKqp::TableWriteActor, NWilson::TTraceId(traceId), "TKqpTableWriteActor")
     {
         LogPrefix = TStringBuilder() << "Table: `" << TablePath << "` (" << TableId << "), " << "SessionActorId: " << sessionActorId;
         ShardedWriteController = CreateShardedWriteController(
@@ -354,6 +352,10 @@ public:
         ShardedWriteController->Close();
     }
 
+    void SetParentTraceId(NWilson::TTraceId traceId) {
+        ParentTraceId = std::move(traceId);
+    }
+
     void UpdateShards() {
         // TODO: Maybe there are better ways to initialize new shards...
         for (const auto& shardInfo : ShardedWriteController->GetPendingShards()) {
@@ -419,6 +421,9 @@ public:
 
     void Resolve() {
         AFL_ENSURE(InconsistentTx || IsOlap);
+        TableWriteActorSpan = NWilson::TSpan(TWilsonKqp::TableWriteActor, NWilson::TTraceId(ParentTraceId),
+            "WaitForTableResolve", NWilson::EFlags::AUTO_END);
+
         if (IsOlap) {
             ResolveTable();
         } else {
@@ -463,10 +468,7 @@ public:
         entry.ShowPrivatePath = true;
         request->ResultSet.emplace_back(entry);
 
-        TableWriteActorStateSpan = NWilson::TSpan(TWilsonKqp::TableWriteActorTableNavigate, TableWriteActorSpan.GetTraceId(),
-            "WaitForShardsResolve", NWilson::EFlags::AUTO_END);
-
-        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request), 0, 0, TableWriteActorStateSpan.GetTraceId());
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request), 0, 0, TableWriteActorSpan.GetTraceId());
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -517,7 +519,7 @@ public:
         request->ResultSet.emplace_back(std::move(keyRange));
 
         TAutoPtr<TEvTxProxySchemeCache::TEvResolveKeySet> resolveReq(new TEvTxProxySchemeCache::TEvResolveKeySet(request));
-        Send(MakeSchemeCacheID(), resolveReq.Release(), 0, 0, TableWriteActorStateSpan.GetTraceId());
+        Send(MakeSchemeCacheID(), resolveReq.Release(), 0, 0, TableWriteActorSpan.GetTraceId());
     }
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
@@ -978,7 +980,7 @@ public:
             new TEvPipeCache::TEvForward(evWrite.release(), shardId, /* subscribe */ true),
             0,
             metadata->Cookie,
-            TableWriteActorSpan.GetTraceId());
+            NWilson::TTraceId(ParentTraceId));
 
         ShardedWriteController->OnMessageSent(shardId, metadata->Cookie);
 
@@ -1143,7 +1145,10 @@ public:
     }
 
     void Prepare() {
-        TableWriteActorStateSpan.EndOk();
+        if (TableWriteActorSpan) {
+            TableWriteActorSpan.EndOk(); // Resolve finished
+        }
+
         ResolveAttempts = 0;
 
         if (IsOlap) {
@@ -1158,9 +1163,6 @@ public:
     }
 
     void RuntimeError(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::EYqlIssueCode id, const TString& message, const NYql::TIssues& subIssues = {}) {
-        if (TableWriteActorStateSpan) {
-            TableWriteActorStateSpan.EndError(message);
-        }
         if (TableWriteActorSpan) {
             TableWriteActorSpan.EndError(message);
         }
@@ -1169,9 +1171,6 @@ public:
     }
 
     void RuntimeError(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::TIssues&& issues) {
-        if (TableWriteActorStateSpan) {
-            TableWriteActorStateSpan.EndError(issues.ToOneLineString());
-        }
         if (TableWriteActorSpan) {
             TableWriteActorSpan.EndError(issues.ToOneLineString());
         }
@@ -1288,8 +1287,8 @@ public:
 
     TKqpTableWriterStatistics Stats;
 
+    NWilson::TTraceId ParentTraceId;
     NWilson::TSpan TableWriteActorSpan;
-    NWilson::TSpan TableWriteActorStateSpan;
 };
 
 class TKqpDirectWriteActor : public TActorBootstrapped<TKqpDirectWriteActor>, public NYql::NDq::IDqComputeActorAsyncOutput, public IKqpTableWriterCallbacks {
@@ -1356,9 +1355,8 @@ public:
                 Settings.GetLockMode(),
                 nullptr,
                 TActorId{},
-                Counters,
-                DirectWriteActorSpan.GetTraceId());
-
+                Counters);
+            WriteTableActor->SetParentTraceId(DirectWriteActorSpan.GetTraceId());
             WriteTableActorId = RegisterWithSameMailbox(WriteTableActor);
 
             TVector<NKikimrKqp::TKqpColumnMetadataProto> keyColumnsMetadata(
@@ -1694,12 +1692,11 @@ public:
         , Alloc(settings.Alloc)
         , Counters(settings.Counters)
         , TxProxyMon(settings.TxProxyMon)
-        , BufferWriteActor(TWilsonKqp::BufferWriteActor, NWilson::TTraceId(settings.TraceId), "TKqpBufferWriteActor", NWilson::EFlags::AUTO_END)
-        , BufferWriteActorState(TWilsonKqp::BufferWriteActorState, BufferWriteActor.GetTraceId(),
-            "BufferWriteActorState::Writing", NWilson::EFlags::AUTO_END)
+        , BufferWriteActorSpan(TWilsonKqp::BufferWriteActor, NWilson::TTraceId(settings.TraceId), "BufferWriteActor", NWilson::EFlags::AUTO_END)
     {
         State = EState::WRITING;
         Counters->BufferActorsCount->Inc();
+        UpdateTracingState("Write", BufferWriteActorSpan.GetTraceId());
     }
 
     void Bootstrap() {
@@ -1784,8 +1781,8 @@ public:
                     settings.TransactionSettings.LockMode,
                     TxManager,
                     SessionActorId,
-                    Counters,
-                    BufferWriteActor.GetTraceId());
+                    Counters);
+                writeInfo.WriteTableActor->SetParentTraceId(BufferWriteActorStateSpan.GetTraceId());
                 writeInfo.WriteTableActorId = RegisterWithSameMailbox(writeInfo.WriteTableActor);
                 CA_LOG_D("Create new TableWriteActor for table `" << settings.TablePath << "` (" << settings.TableId << "). lockId=" << LockTxId << " " << writeInfo.WriteTableActorId);
             }
@@ -1908,10 +1905,9 @@ public:
         return true;
     }
 
-    bool Flush() {
+    bool Flush(NWilson::TTraceId traceId) {
         Counters->BufferActorFlushes->Inc();
-        BufferWriteActorState = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, BufferWriteActor.GetTraceId(),
-            "BufferWriteActorState::Flushing", NWilson::EFlags::AUTO_END);
+        UpdateTracingState("Flush", std::move(traceId));
         OperationStartTime = TInstant::Now();
 
         CA_LOG_D("Start flush");
@@ -1923,9 +1919,8 @@ public:
         return Process();
     }
 
-    bool Prepare(const ui64 txId) {
-        BufferWriteActorState = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, BufferWriteActor.GetTraceId(),
-            "BufferWriteActorState::Preparing", NWilson::EFlags::AUTO_END);
+    bool Prepare(const ui64 txId, NWilson::TTraceId traceId) {
+        UpdateTracingState("Commit", std::move(traceId));
         OperationStartTime = TInstant::Now();
 
         CA_LOG_D("Start prepare for distributed commit");
@@ -1947,10 +1942,9 @@ public:
         return true;
     }
 
-    bool ImmediateCommit() {
+    bool ImmediateCommit(NWilson::TTraceId traceId) {
         Counters->BufferActorImmediateCommits->Inc();
-        BufferWriteActorState = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, BufferWriteActor.GetTraceId(),
-            "BufferWriteActorState::Committing", NWilson::EFlags::AUTO_END);
+        UpdateTracingState("Commit", std::move(traceId));
         OperationStartTime = TInstant::Now();
 
         CA_LOG_D("Start immediate commit");
@@ -1973,8 +1967,6 @@ public:
 
     void DistributedCommit() {
         Counters->BufferActorDistributedCommits->Inc();
-        BufferWriteActorState = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, BufferWriteActor.GetTraceId(),
-            "BufferWriteActorState::Committing", NWilson::EFlags::AUTO_END);
         OperationStartTime = TInstant::Now();
 
         CA_LOG_D("Start distributed commit with TxId=" << *TxId);
@@ -1989,10 +1981,9 @@ public:
         SendCommitToCoordinator();
     }
 
-    void Rollback() {
+    void Rollback(NWilson::TTraceId traceId) {
         Counters->BufferActorRollbacks->Inc();
-        BufferWriteActorState = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, BufferWriteActor.GetTraceId(),
-            "BufferWriteActorState::RollingBack", NWilson::EFlags::AUTO_END);
+        UpdateTracingState("RollBack", std::move(traceId));
 
         CA_LOG_D("Start rollback");
         State = EState::ROLLINGBACK;
@@ -2049,7 +2040,7 @@ public:
                 new TEvPipeCache::TEvForward(evWrite.release(), shardId, /* subscribe */ true),
                 0,
                 0,
-                BufferWriteActor.GetTraceId());
+                BufferWriteActorStateSpan.GetTraceId());
         }
     }
 
@@ -2091,7 +2082,6 @@ public:
             }
 
             SendTime[tabletId] = TInstant::Now();
-            auto traceId = BufferWriteActor.GetTraceId();
 
             CA_LOG_D("Executing KQP transaction on topic tablet: " << tabletId
             << ", writeId: " << writeId << ", isImmediateCommit: " << isImmediateCommit);
@@ -2101,7 +2091,7 @@ public:
                 new TEvPipeCache::TEvForward(ev.release(), tabletId, /* subscribe */ true),
                 0,
                 0,
-                std::move(traceId));
+                BufferWriteActorStateSpan.GetTraceId());
         }
     }
 
@@ -2140,7 +2130,10 @@ public:
             << ", shards: " << affectedSet.size());
         Send(
             MakePipePerNodeCacheID(false),
-            new TEvPipeCache::TEvForward(ev.Release(), *Coordinator, /* subscribe */ true));
+            new TEvPipeCache::TEvForward(ev.Release(), *Coordinator, /* subscribe */ true),
+            0,
+            0,
+            BufferWriteActorStateSpan.GetTraceId());
     }
 
     void Close() {
@@ -2358,7 +2351,7 @@ public:
     void Handle(TEvKqpBuffer::TEvTerminate::TPtr&) {
         if (State != EState::ROLLINGBACK && State != EState::FINISHED) {
             CancelProposal();
-            Rollback();
+            Rollback(BufferWriteActorSpan.GetTraceId());
         }
         PassAway();
     }
@@ -2368,7 +2361,7 @@ public:
         for (auto& [_, info] : WriteInfos) {
             info.WriteTableActor->FlushBuffers();
         }
-        Flush();
+        Flush(std::move(ev->TraceId));
     }
 
     void Handle(TEvKqpBuffer::TEvCommit::TPtr& ev) {
@@ -2378,23 +2371,23 @@ public:
         }
 
         if (!TxManager->NeedCommit()) {
-            RollbackAndDie();
+            RollbackAndDie(std::move(ev->TraceId));
         } else if (TxManager->IsSingleShard() && !TxManager->HasOlapTable() && (!WriteInfos.empty() || TxManager->HasTopics())) {
             TxManager->StartExecute();
-            ImmediateCommit();
+            ImmediateCommit(std::move(ev->TraceId));
         } else {
             TxManager->StartPrepare();
-            Prepare(ev->Get()->TxId);
+            Prepare(ev->Get()->TxId, std::move(ev->TraceId));
         }
     }
 
     void Handle(TEvKqpBuffer::TEvRollback::TPtr& ev) {
         ExecuterActorId = ev->Get()->ExecuterActorId;
-        RollbackAndDie();
+        RollbackAndDie(std::move(ev->TraceId));
     }
 
-    void RollbackAndDie() {
-        Rollback();
+    void RollbackAndDie(NWilson::TTraceId traceId) {
+        Rollback(std::move(traceId));
         Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{});
         PassAway();
     }
@@ -2761,8 +2754,7 @@ public:
 
     void OnFlushed() {
         YQL_ENSURE(State == EState::FLUSHING);
-        BufferWriteActorState = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, BufferWriteActor.GetTraceId(),
-            "BufferWriteActorState::Writing", NWilson::EFlags::AUTO_END);
+        UpdateTracingState("Write", BufferWriteActorSpan.GetTraceId());
         OnOperationFinished(Counters->BufferActorFlushLatencyHistogram);
         State = EState::WRITING;
         Send<ESendingType::Tail>(ExecuterActorId, new TEvKqpBuffer::TEvResult{
@@ -2785,8 +2777,7 @@ public:
     }
 
     void ReplyErrorAndDie(NYql::NDqProto::StatusIds::StatusCode statusCode, auto id, const TString& message, const NYql::TIssues& subIssues = {}) {
-        BufferWriteActorState.EndError(message);
-        BufferWriteActor.EndError(message);
+        BufferWriteActorStateSpan.EndError(message);
 
         NYql::TIssue issue(message);
         SetIssueCode(id, issue);
@@ -2801,10 +2792,20 @@ public:
     }
 
     void ReplyErrorAndDie(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::TIssues&& issues) {
-        BufferWriteActorState.EndError(issues.ToOneLineString());
-        BufferWriteActor.EndError(issues.ToOneLineString());
+        BufferWriteActorStateSpan.EndError(issues.ToOneLineString());
 
         ReplyErrorAndDieImpl(statusCode, std::move(issues));
+    }
+
+    void UpdateTracingState(const char* name, NWilson::TTraceId traceId) {
+        BufferWriteActorStateSpan = NWilson::TSpan(TWilsonKqp::BufferWriteActorState, std::move(traceId),
+            name, NWilson::EFlags::AUTO_END);
+        if (traceId != BufferWriteActorSpan.GetTraceId()) {
+            BufferWriteActorStateSpan.Link(BufferWriteActorSpan.GetTraceId());
+        }
+        for (auto& [_, info] : WriteInfos) {
+            info.WriteTableActor->SetParentTraceId(BufferWriteActorStateSpan.GetTraceId());
+        }
     }
 
     void ReplyErrorAndDieImpl(NYql::NDqProto::StatusIds::StatusCode statusCode, NYql::TIssues&& issues) {
@@ -2815,7 +2816,7 @@ public:
 
         CancelProposal();
         if (State != EState::ROLLINGBACK) {
-            Rollback();
+            Rollback(BufferWriteActorSpan.GetTraceId());
             // Rollback can't finish with error
             Send<ESendingType::Tail>(SessionActorId, new TEvKqpBuffer::TEvError{
                 statusCode,
@@ -2893,8 +2894,8 @@ private:
     THashMap<ui64, TInstant> SendTime;
     TInstant OperationStartTime;
 
-    NWilson::TSpan BufferWriteActor;
-    NWilson::TSpan BufferWriteActorState;
+    NWilson::TSpan BufferWriteActorSpan;
+    NWilson::TSpan BufferWriteActorStateSpan;
 };
 
 class TKqpForwardWriteActor : public TActorBootstrapped<TKqpForwardWriteActor>, public NYql::NDq::IDqComputeActorAsyncOutput {

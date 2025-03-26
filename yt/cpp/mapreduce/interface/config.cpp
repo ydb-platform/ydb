@@ -26,6 +26,7 @@
 
 namespace NYT {
 
+const TString DefaultHosts = "hosts";
 const TString DefaultRemoteTempTablesDirectory = "//tmp/yt_wrapper/table_storage";
 const TString DefaultRemoteTempFilesDirectory = "//tmp/yt_wrapper/file_storage";
 
@@ -191,7 +192,7 @@ void TConfig::LoadTimings()
 
 void TConfig::Reset()
 {
-    Hosts = GetEnv("YT_HOSTS", "hosts");
+    Hosts = GetEnv("YT_HOSTS", DefaultHosts);
     Pool = GetEnv("YT_POOL");
     Prefix = GetEnv("YT_PREFIX");
     ApiVersion = GetEnv("YT_VERSION", "v3");
@@ -199,7 +200,8 @@ void TConfig::Reset()
     LogPath = GetEnv("YT_LOG_PATH");
     LogUseCore = GetBool("YT_LOG_USE_CORE", false);
 
-    ProxyRole = GetEnv("YT_PROXY_ROLE");
+    HttpProxyRole = GetEnv("YT_HTTP_PROXY_ROLE");
+    RpcProxyRole = GetEnv("YT_RPC_PROXY_ROLE");
 
     ContentEncoding = GetEncoding("YT_CONTENT_ENCODING");
     AcceptEncoding = GetEncoding("YT_ACCEPT_ENCODING");

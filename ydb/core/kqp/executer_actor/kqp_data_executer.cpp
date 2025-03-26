@@ -2010,9 +2010,12 @@ private:
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             auto& tx = Request.Transactions[txIdx];
             auto scheduledTaskCount = ScheduleByCost(tx, ResourcesSnapshot);
+            AFL_ENSURE(tx.Body->StagesSize() < (static_cast<ui64>(1) << PriorityTxShift));
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
                 auto& stage = tx.Body->GetStages(stageIdx);
-                auto& stageInfo = TasksGraph.GetStageInfo(TStageId(txIdx, stageIdx));
+                const auto stageId = TStageId(txIdx, stageIdx);
+                auto& stageInfo = TasksGraph.GetStageInfo(stageId);
+                AFL_ENSURE(stageInfo.Id == stageId);
 
                 if (stageInfo.Meta.ShardKind == NSchemeCache::TSchemeCacheRequest::KindAsyncIndexTable) {
                     TMaybe<TString> error;

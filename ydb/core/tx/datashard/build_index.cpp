@@ -255,7 +255,7 @@ public:
 
         UploadStatusToMessage(progress->Record);
 
-        LOG_N("Finished " << Debug() << " " << progress->Record.ShortDebugString());
+        LOG_N("Finish" << Debug() << " " << progress->Record.ShortDebugString());
         this->Send(ProgressActorId, progress.Release());
 
         Driver = nullptr;

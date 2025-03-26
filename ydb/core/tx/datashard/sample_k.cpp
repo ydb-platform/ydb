@@ -156,7 +156,7 @@ public:
         } else {
             Response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
         }
-        LOG_N("Finished " << Debug() << " " << Response->Record.ShortDebugString());
+        LOG_N("Finish" << Debug() << " " << Response->Record.ShortDebugString());
         Send(ResponseActorId, Response.Release());
         Driver = nullptr;
         PassAway();

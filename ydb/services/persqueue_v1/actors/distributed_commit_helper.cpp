@@ -7,7 +7,7 @@ TDistributedCommitHelper::TDistributedCommitHelper(TString database, TString con
     : DataBase(database)
     , Consumer(consumer)
     , Path(path)
-    , Commits(std::move(commits)) // savnik move
+    , Commits(std::move(commits))
     , Step(BEGIN_TRANSACTION_SENDED)
     , Cookie(cookie)
 {}
@@ -24,7 +24,7 @@ TDistributedCommitHelper::ECurrentStep TDistributedCommitHelper::Handle(NKqp::TE
             break;
         case COMMIT_SENDED:
             Step = DONE;
-            CloseKqpSession(ctx); // savnik wait?
+            CloseKqpSession(ctx);
             break;
         case DONE:
             break;

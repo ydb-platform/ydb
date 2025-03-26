@@ -2853,7 +2853,7 @@ TPartition::EProcessResult TPartition::PreProcessImmediateTx(const NKikimrPQ::TE
     return EProcessResult::Continue;
 }
 
-void TPartition::ExecImmediateTx(TTransaction& t) // savnik
+void TPartition::ExecImmediateTx(TTransaction& t)
 {
     --ImmediateTxCount;
     const auto& record = t.ProposeTransaction->GetRecord();

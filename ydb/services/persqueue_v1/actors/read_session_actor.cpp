@@ -1267,9 +1267,9 @@ void TReadSessionActor<UseMigrationProtocol>::Handle(TEvPersQueue::TEvLockPartit
         return CloseSession(PersQueue::ErrorCode::ERROR, error, ctx);
     }
 
-    std::unordered_set<ui64> notCommitedToFinishParents; // savnik: если сначала придет лок на детей, все сломается. Плохо?
+    std::unordered_set<ui64> notCommitedToFinishParents;
     for (auto& parent: topic.PartitionGraph->GetPartition(record.GetPartition())->DirectParents) {
-        for (auto& otherPartitions: Partitions) { // savnik: to map
+        for (auto& otherPartitions: Partitions) { // TODO: map
             if (otherPartitions.second.Partition.Partition == parent->Id && otherPartitions.second.Offset != otherPartitions.second.EndOffset) {
                 notCommitedToFinishParents.emplace(otherPartitions.second.Partition.Partition);
             }

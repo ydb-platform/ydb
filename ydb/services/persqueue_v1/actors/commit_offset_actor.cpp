@@ -123,9 +123,7 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
         TDistributedCommitHelper::TCommitInfo commit {.PartitionId = partitionNode->Id, .Offset = commitRequest->offset(), .KillReadSession = true, .OnlyCheckCommitedToFinish = false};
         commits.push_back(commit);
 
-        // savnik if empty database?
-        Kqp = std::make_unique<TDistributedCommitHelper>(Request().GetDatabaseName().GetOrElse(TString()), ClientId, topic, commits); // savnik add cookie?
-
+        Kqp = std::make_unique<TDistributedCommitHelper>(Request().GetDatabaseName().GetOrElse(TString()), ClientId, topic, commits);
         Kqp->SendCreateSessionRequest(ctx);
     }
 }
@@ -141,7 +139,7 @@ void TCommitOffsetActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const 
     if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "strict CommitOffset failed. Kqp error: " << ev->Get()->Record);
 
-        Ydb::Topic::CommitOffsetResult result; // savnik: how to return exception?
+        Ydb::Topic::CommitOffsetResult result;
         Request().SendResult(result, record.GetYdbStatus());
         Die(ctx);
         return;

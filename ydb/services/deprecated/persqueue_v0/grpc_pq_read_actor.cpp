@@ -2374,7 +2374,7 @@ void TPartitionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TAc
     }
 
     if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
-        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession("KQP query response status is not ok", NPersQueue::NErrorCode::ERROR)); // savnik: retry?
+        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession("KQP query response status is not ok", NPersQueue::NErrorCode::ERROR));
         return;
     }
 

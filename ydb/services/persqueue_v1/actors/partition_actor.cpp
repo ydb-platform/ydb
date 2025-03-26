@@ -160,7 +160,7 @@ void TPartitionActor::Bootstrap(const TActorContext& ctx) {
 }
 
 void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TActorContext& ctx) {
-    if (!ClientHasAnyCommits && Parents.size() != 0) { // savnik проверка на то что включены транзакции?
+    if (!ClientHasAnyCommits && Parents.size() != 0) {
         std::vector<TDistributedCommitHelper::TCommitInfo> commits;
         for (auto& parent: Parents) {
             TDistributedCommitHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>(), .KillReadSession = false, .OnlyCheckCommitedToFinish = true, .ReadSessionId = Session};
@@ -221,7 +221,7 @@ void TPartitionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TAc
     }
 
     if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
-        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession("KQP query response status is not ok", PersQueue::ErrorCode::ERROR)); // savnik: retry?
+        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession("KQP query response status is not ok", PersQueue::ErrorCode::ERROR));
         return;
     }
 
@@ -386,7 +386,7 @@ void TPartitionActor::ResendRecentRequests() {
         NTabletPipe::SendData(ctx, PipeClient, event.Release());
     }
 
-    if (InitDone) { // savnik need resend?
+    if (InitDone) {
         for (auto& c : CommitsInfly) { //resend all commits
             if (c.second.Offset != Max<ui64>())
                 SendCommit(c.first, c.second.Offset, ctx);
@@ -1373,7 +1373,7 @@ void TPartitionActor::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TActorContext&
     auto request = MakeReadRequest(ReadOffset, 0, req->MaxCount, req->MaxSize, req->MaxTimeLagMs, req->ReadTimestampMs, DirectReadId);
     RequestInfly = true;
     CurrentRequest = request;
-    
+
     if (!PipeClient) //Pipe will be recreated soon
         return;
 

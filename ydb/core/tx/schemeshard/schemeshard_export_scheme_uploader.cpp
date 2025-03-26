@@ -2,6 +2,7 @@
 #include "schemeshard_export_scheme_uploader.h"
 
 #include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/datashard/export_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>

@@ -298,6 +298,7 @@ namespace {
             auto request = Sprintf(requestTpl.c_str(), S3Port());
 
             TTestEnv env(runtime);
+            runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
             Run(runtime, env, tables, request, expectedStatus, "/MyRoot", false);
 
             if (expectedStatus == Ydb::StatusIds::SUCCESS) {

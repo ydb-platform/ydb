@@ -1,11 +1,14 @@
 #pragma once
 
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/library/actors/core/actor.h>
 
 namespace Ydb::Export {
     class ExportToS3Settings;
+}
+
+namespace NKikimrSchemeOp {
+    class TExportMetadata;
 }
 
 namespace NKikimr::NSchemeShard {

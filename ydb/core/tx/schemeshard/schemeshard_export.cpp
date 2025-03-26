@@ -198,9 +198,7 @@ void TSchemeShard::PersistExportState(NIceDb::TNiceDb& db, const TExportInfo::TP
         NIceDb::TUpdate<Schema::Exports::WaitTxId>(exportInfo->WaitTxId),
         NIceDb::TUpdate<Schema::Exports::Issue>(exportInfo->Issue),
         NIceDb::TUpdate<Schema::Exports::StartTime>(exportInfo->StartTime.Seconds()),
-        NIceDb::TUpdate<Schema::Exports::EndTime>(exportInfo->EndTime.Seconds()),
-        NIceDb::TUpdate<Schema::Exports::Settings>(exportInfo->Settings),
-        NIceDb::TUpdate<Schema::Exports::ExportMetadata>(exportInfo->ExportMetadata)
+        NIceDb::TUpdate<Schema::Exports::EndTime>(exportInfo->EndTime.Seconds())
     );
 }
 

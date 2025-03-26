@@ -1246,18 +1246,25 @@ private:
         NIceDb::TNiceDb db(txc.DB);
 
         switch (exportInfo->State) {
-        case EState::CreateExportDir:
+        case EState::CreateExportDir: {
             exportInfo->WaitTxId = InvalidTxId;
 
-            if (TString issues; !FillExportMetadata(exportInfo, issues)) {
+            const bool supportEncryptedExport = AppData()->FeatureFlags.GetEnableEncryptedExport();
+            if (TString issues; supportEncryptedExport && !FillExportMetadata(exportInfo, issues)) {
                 exportInfo->State = EState::Cancelled;
                 exportInfo->EndTime = TAppData::TimeProvider->Now();
                 exportInfo->Issue = issues;
                 break;
             }
 
-            if (UploadExportMetadata(exportInfo, ctx)) {
+            if (supportEncryptedExport && UploadExportMetadata(exportInfo, ctx)) {
                 exportInfo->State = EState::UploadExportMetadata;
+
+                // Persist modified metadata and new settings
+                db.Table<Schema::Exports>().Key(exportInfo->Id).Update(
+                    NIceDb::TUpdate<Schema::Exports::Settings>(exportInfo->Settings),
+                    NIceDb::TUpdate<Schema::Exports::ExportMetadata>(exportInfo->ExportMetadata)
+                );
             } else if (AnyOf(exportInfo->Items, &IsPathTypeTable)) {
                 exportInfo->State = EState::CopyTables;
                 AllocateTxId(exportInfo);
@@ -1274,6 +1281,7 @@ private:
                 exportInfo->PendingItems.clear();
             }
             break;
+        }
 
         case EState::CopyTables: {
             if (exportInfo->DependencyTxIds.contains(txId)) {

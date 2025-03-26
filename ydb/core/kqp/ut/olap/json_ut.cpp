@@ -106,15 +106,15 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
             Cerr << "HEADER:" << hNoData << "/" << hSkip << "/" << hApproves << Endl;
             if (ExpectIndexSkip) {
                 AFL_VERIFY(iSkip + hSkip == *ExpectIndexSkip)("expect", ExpectIndexSkip)("ireal", iSkip)("hreal", hSkip)(
-                                     "current", controller->GetIndexesSkippingOnSelect().Val())("pred", indexSkipStart);
+                                            "current", controller->GetIndexesSkippingOnSelect().Val())("pred", indexSkipStart);
             }
             if (ExpectIndexNoData) {
                 AFL_VERIFY(iNoData == *ExpectIndexNoData)("expect", ExpectIndexNoData)("real", iNoData)(
-                                       "current", controller->GetIndexesSkippedNoData().Val())("pred", indexNoDataStart);
+                                        "current", controller->GetIndexesSkippedNoData().Val())("pred", indexNoDataStart);
             }
             if (ExpectIndexApprove) {
                 AFL_VERIFY(iApproves == *ExpectIndexApprove)("expect", ExpectIndexApprove)("real", iApproves)(
-                                         "current", controller->GetIndexesApprovedOnSelect().Val())("pred", indexApproveStart);
+                                          "current", controller->GetIndexesApprovedOnSelect().Val())("pred", indexApproveStart);
             }
             return TConclusionStatus::Success();
         }
@@ -473,14 +473,20 @@ Y_UNIT_TEST_SUITE(KqpOlapJson) {
                       `COLUMNS_LIMIT`=`$$1024|0|1$$`, `SPARSED_DETECTOR_KFF`=`$$0|10|1000$$`, `MEM_LIMIT_CHUNK`=`$$0|100|1000000$$`, `OTHERS_ALLOWED_FRACTION`=`$$0|0.5$$`)
             ------
             DATA:
-            REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a" : "a1", "b" : "b1", "c" : "c1"}')), (2u, JsonDocument('{"a" : "a2"}')),
+            REPLACE INTO `/Root/ColumnTable` (Col1, Col2) VALUES(1u, JsonDocument('{"a" : "a1", "b" : "b1", "c" : "c1", "d" : null, "e.v" : {"c" : 1, "e" : {"c.a" : 2}}}')), (2u, JsonDocument('{"a" : "a2"}')),
                                                                     (3u, JsonDocument('{"b" : "b3", "d" : "d3"}')), (4u, JsonDocument('{"b" : "b4asdsasdaa", "a" : "a4"}'))
             ------
             READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.a") = "a2" ORDER BY Col1;
             EXPECTED: [[2u;["{\"a\":\"a2\"}"]]]
             ------
             READ: SELECT * FROM `/Root/ColumnTable` ORDER BY Col1;
-            EXPECTED: [[1u;["{\"a\":\"a1\",\"b\":\"b1\",\"c\":\"c1\"}"]];[2u;["{\"a\":\"a2\"}"]];[3u;["{\"b\":\"b3\",\"d\":\"d3\"}"]];[4u;["{\"a\":\"a4\",\"b\":\"b4asdsasdaa\"}"]]]
+            EXPECTED: [[1u;["{\"a\":\"a1\",\"b\":\"b1\",\"c\":\"c1\",\"d\":\"NULL\",\"e.v\":{\"c\":\"1\",\"e\":{\"c.a\":\"2\"}}}"]];[2u;["{\"a\":\"a2\"}"]];[3u;["{\"b\":\"b3\",\"d\":\"d3\"}"]];[4u;["{\"a\":\"a4\",\"b\":\"b4asdsasdaa\"}"]]]
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.'e.v'.c") = "1" ORDER BY Col1;
+            EXPECTED: [[1u;["{\"a\":\"a1\",\"b\":\"b1\",\"c\":\"c1\",\"d\":\"NULL\",\"e.v\":{\"c\":\"1\",\"e\":{\"c.a\":\"2\"}}}"]]]
+            ------
+            READ: SELECT * FROM `/Root/ColumnTable` WHERE JSON_VALUE(Col2, "$.'e.v'.e.'c.a'") = "2" ORDER BY Col1;
+            EXPECTED: [[1u;["{\"a\":\"a1\",\"b\":\"b1\",\"c\":\"c1\",\"d\":\"NULL\",\"e.v\":{\"c\":\"1\",\"e\":{\"c.a\":\"2\"}}}"]]]
             
         )";
         TScriptVariator(script).Execute();

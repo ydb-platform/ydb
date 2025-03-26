@@ -73,16 +73,24 @@ public:
     }
 
     TStringBuf AddKeyOwn(const std::vector<TStringBuf>& prefix, const TString& key) {
+        const TString keyQuoted = ((key.find(".") != TString::npos) ? ("'" + key + "'") : key);
         if (prefix.empty()) {
-            Storage.emplace_back(key);
+            Storage.emplace_back(keyQuoted);
         } else {
-            Storage.emplace_back(JoinSeq(".", prefix) + "." + key);
+            Storage.emplace_back(JoinSeq(".", prefix) + "." + keyQuoted);
         }
         return TStringBuf(Storage.back().data(), Storage.back().size());
     }
 
     TStringBuf AddKey(const std::vector<TStringBuf>& prefix, const TStringBuf key) {
-        if (prefix.empty()) {
+        if (key.find(".") != TString::npos) {
+            if (prefix.size()) {
+                Storage.emplace_back(JoinSeq(".", prefix) + ".'" + key + "'");
+            } else {
+                Storage.emplace_back(TString("'") + key + "'");
+            }
+            return TStringBuf(Storage.back().data(), Storage.back().size());
+        } else if (prefix.empty()) {
             return key;
         } else {
             Storage.emplace_back(JoinSeq(".", prefix) + "." + key);
@@ -95,7 +103,7 @@ public:
         if (itElements == Elements.end()) {
             itElements = Elements.emplace(key, key).first;
         }
-        itElements->second.AddNull(CurrentRecordIndex);
+        itElements->second.AddDataToOwn("NULL", CurrentRecordIndex);
     }
 
     void AddKV(const TStringBuf key, const TStringBuf value) {

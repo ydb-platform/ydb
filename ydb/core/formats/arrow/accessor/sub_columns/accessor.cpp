@@ -131,11 +131,65 @@ IChunkedArray::TLocalDataAddress TSubColumnsArray::DoGetLocalData(
                 AFL_VERIFY(false);
             }
         };
+
+        const auto addValueToJson = [&](const TString& path, const TString& valueStr) {
+            ui32 start = 0;
+            bool enqueue = false;
+            bool wasEnqueue = false;
+            NJson::TJsonValue* current = &value;
+            for (ui32 i = 0; i < path.size(); ++i) {
+                if (path[i] == '\\') {
+                    ++i;
+                    continue;
+                }
+                if (path[i] == '\'' || path[i] == '\"') {
+                    wasEnqueue = true;
+                    enqueue = !enqueue;
+                    continue;
+                }
+                if (enqueue) {
+                    continue;
+                }
+                if (path[i] == '.') {
+                    if (wasEnqueue) {
+                        AFL_VERIFY(i > start + 2);
+                        TStringBuf key(path.data() + start + 1, (i - 1) - start - 1);
+                        NJson::TJsonValue* currentNext = nullptr;
+                        if (current->GetValuePointer(key, &currentNext)) {
+                            current = currentNext;
+                        } else {
+                            current = &current->InsertValue(key, NJson::JSON_MAP);
+                        }
+                    } else {
+                        AFL_VERIFY(i > start);
+                        TStringBuf key(path.data() + start, i - start);
+                        NJson::TJsonValue* currentNext = nullptr;
+                        if (current->GetValuePointer(key, &currentNext)) {
+                            current = currentNext;
+                        } else {
+                            current = &current->InsertValue(key, NJson::JSON_MAP);
+                        }
+                    }
+                    wasEnqueue = false;
+                    start = i + 1;
+                }
+            }
+            if (wasEnqueue) {
+                AFL_VERIFY(path.size() > start + 2)("path", path)("start", start);
+                TStringBuf key(path.data() + start + 1, (path.size() - 1) - start - 1);
+                current->InsertValue(key, valueStr);
+            } else {
+                AFL_VERIFY(path.size() > start);
+                TStringBuf key(path.data() + start, (path.size()) - start);
+                current->InsertValue(key, valueStr);
+            }
+        };
+
         auto onRecordKV = [&](const ui32 index, const std::string_view valueView, const bool isColumn) {
             if (isColumn) {
-                value.InsertValue(ColumnsData.GetStats().GetColumnNameString(index), TString(valueView.data(), valueView.size()));
+                addValueToJson(ColumnsData.GetStats().GetColumnNameString(index), TString(valueView.data(), valueView.size()));
             } else {
-                value.InsertValue(OthersData.GetStats().GetColumnNameString(index), TString(valueView.data(), valueView.size()));
+                addValueToJson(OthersData.GetStats().GetColumnNameString(index), TString(valueView.data(), valueView.size()));
             }
         };
         it.ReadRecord(recordIndex, onStartRecord, onRecordKV, onFinishRecord);

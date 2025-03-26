@@ -12,7 +12,8 @@ TConclusionStatus TArrayExtractor::DoFill(TDataBuilder& dataBuilder, std::deque<
     ui32 idx = 0;
     while (Iterator.HasNext()) {
         auto value = Iterator.Next();
-        const TStringBuf key = dataBuilder.AddKeyOwn(GetPrefix(), "[" + ::ToString(idx++) + "]");
+        const TString jsonKey = "[" + ::ToString(idx++) + "]";
+        const TStringBuf key = dataBuilder.AddKeyOwn(GetPrefix(), jsonKey);
         if (value.GetType() == NBinaryJson::EEntryType::String) {
             dataBuilder.AddKV(key, value.GetString());
         } else if (value.GetType() == NBinaryJson::EEntryType::Number) {
@@ -24,9 +25,9 @@ TConclusionStatus TArrayExtractor::DoFill(TDataBuilder& dataBuilder, std::deque<
         } else if (value.GetType() == NBinaryJson::EEntryType::Container) {
             auto container = value.GetContainer();
             if (container.GetType() == NBinaryJson::EContainerType::Array) {
-                iterators.emplace_back(std::make_shared<TArrayExtractor>(container.GetArrayIterator(), GetPrefixWith(key)));
+                iterators.emplace_back(std::make_shared<TArrayExtractor>(Storage, container.GetArrayIterator(), GetPrefixWithOwn(jsonKey)));
             } else if (container.GetType() == NBinaryJson::EContainerType::Object) {
-                iterators.emplace_back(std::make_shared<TKVExtractor>(container.GetObjectIterator(), GetPrefixWith(key)));
+                iterators.emplace_back(std::make_shared<TKVExtractor>(Storage, container.GetObjectIterator(), GetPrefixWithOwn(jsonKey)));
             } else {
                 return TConclusionStatus::Fail("unexpected top value scalar in container iterator");
             }
@@ -58,9 +59,10 @@ TConclusionStatus TKVExtractor::DoFill(TDataBuilder& dataBuilder, std::deque<std
         } else if (value.GetType() == NBinaryJson::EEntryType::Container) {
             auto container = value.GetContainer();
             if (container.GetType() == NBinaryJson::EContainerType::Array) {
-                iterators.emplace_back(std::make_shared<TArrayExtractor>(container.GetArrayIterator(), GetPrefixWith(key)));
+                iterators.emplace_back(
+                    std::make_shared<TArrayExtractor>(Storage, container.GetArrayIterator(), GetPrefixWith(jsonKey.GetString())));
             } else if (container.GetType() == NBinaryJson::EContainerType::Object) {
-                iterators.emplace_back(std::make_shared<TKVExtractor>(container.GetObjectIterator(), GetPrefixWith(key)));
+                iterators.emplace_back(std::make_shared<TKVExtractor>(Storage, container.GetObjectIterator(), GetPrefixWith(jsonKey.GetString())));
             } else {
                 return TConclusionStatus::Fail("unexpected top value scalar in container iterator");
             }

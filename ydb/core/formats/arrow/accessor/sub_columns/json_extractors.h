@@ -6,15 +6,41 @@
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
+class TJsonStorage {
+private:
+    std::deque<TString> Data;
+
+public:
+    TStringBuf Store(const TString& data) {
+        Data.emplace_back(data);
+        return TStringBuf(Data.back().data(), Data.back().size());
+    }
+};
+
 class IJsonObjectExtractor {
 private:
     std::vector<TStringBuf> Prefix;
     virtual TConclusionStatus DoFill(TDataBuilder& dataBuilder, std::deque<std::shared_ptr<IJsonObjectExtractor>>& iterators) = 0;
 
 protected:
-    std::vector<TStringBuf> GetPrefixWith(const TStringBuf key) const {
+    std::shared_ptr<TJsonStorage> Storage;
+
+    std::vector<TStringBuf> GetPrefixWith(const TStringBuf key) {
         auto result = Prefix;
-        result.emplace_back(key);
+        if (key.find(".") != TString::npos) {
+            result.emplace_back(Storage->Store(TString("'") + key + "'"));
+        } else {
+            result.emplace_back(key);
+        }
+        return result;
+    }
+    std::vector<TStringBuf> GetPrefixWithOwn(const TString& key) {
+        auto result = Prefix;
+        if (key.find(".")) {
+            result.emplace_back(Storage->Store("'" + key + "'"));
+        } else {
+            result.emplace_back(Storage->Store(key));
+        }
         return result;
     }
     const std::vector<TStringBuf>& GetPrefix() const {
@@ -24,8 +50,9 @@ protected:
 public:
     virtual ~IJsonObjectExtractor() = default;
 
-    IJsonObjectExtractor(const std::vector<TStringBuf>& prefix)
-        : Prefix(prefix) {
+    IJsonObjectExtractor(const std::shared_ptr<TJsonStorage>& storage, const std::vector<TStringBuf>& prefix)
+        : Prefix(prefix)
+        , Storage(storage) {
     }
 
     [[nodiscard]] TConclusionStatus Fill(TDataBuilder& dataBuilder, std::deque<std::shared_ptr<IJsonObjectExtractor>>& iterators) {
@@ -40,8 +67,9 @@ private:
     virtual TConclusionStatus DoFill(TDataBuilder& dataBuilder, std::deque<std::shared_ptr<IJsonObjectExtractor>>& iterators) override;
 
 public:
-    TKVExtractor(const NBinaryJson::TObjectIterator& iterator, const std::vector<TStringBuf>& prefix)
-        : TBase(prefix)
+    TKVExtractor(
+        const std::shared_ptr<TJsonStorage>& storage, const NBinaryJson::TObjectIterator& iterator, const std::vector<TStringBuf>& prefix)
+        : TBase(storage, prefix)
         , Iterator(iterator) {
     }
 };
@@ -54,8 +82,9 @@ private:
     virtual TConclusionStatus DoFill(TDataBuilder& dataBuilder, std::deque<std::shared_ptr<IJsonObjectExtractor>>& iterators) override;
 
 public:
-    TArrayExtractor(const NBinaryJson::TArrayIterator& iterator, const std::vector<TStringBuf>& prefix)
-        : TBase(prefix)
+    TArrayExtractor(
+        const std::shared_ptr<TJsonStorage>& storage, const NBinaryJson::TArrayIterator& iterator, const std::vector<TStringBuf>& prefix)
+        : TBase(storage, prefix)
         , Iterator(iterator) {
     }
 };

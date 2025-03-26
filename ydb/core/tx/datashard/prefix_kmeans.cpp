@@ -186,8 +186,6 @@ public:
 
     TAutoPtr<IDestructable> Finish(EAbort abort) final
     {
-        LOG_D("Finish " << Debug());
-
         if (Uploader) {
             Send(Uploader, new TEvents::TEvPoison);
             Uploader = {};
@@ -206,6 +204,8 @@ public:
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
         }
         NYql::IssuesToMessage(UploadStatus.Issues, record.MutableIssues());
+
+        LOG_N("Finished " << Debug() << " " << Response->Record.ShortDebugString());
         Send(ResponseActorId, Response.Release());
 
         Driver = nullptr;

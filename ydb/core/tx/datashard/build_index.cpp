@@ -254,9 +254,8 @@ public:
 
         UploadStatusToMessage(progress->Record);
 
+        LOG_N("Finished " << Debug() << " " << progress->Record.ShortDebugString());
         this->Send(ProgressActorId, progress.Release());
-
-        LOG_D("Finish " << Debug());
 
         Driver = nullptr;
         this->PassAway();
@@ -517,6 +516,9 @@ void TDataShard::Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, cons
 void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
     TRowVersion rowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId());
+
+    LOG_N("Starting TBuildIndexScan " << record.ShortDebugString()
+        << " row version " << rowVersion);
 
     // Note: it's very unlikely that we have volatile txs before this snapshot
     if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {

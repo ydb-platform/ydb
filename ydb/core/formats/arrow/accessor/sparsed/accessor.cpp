@@ -110,8 +110,12 @@ IChunkedArray::TLocalDataAddress TSparsedArrayChunk::GetChunk(
     AFL_VERIFY(it != RemapExternalToInternal.begin());
     --it;
     if (it->GetIsDefault()) {
-        return IChunkedArray::TLocalDataAddress(
-            NArrow::TThreadSimpleArraysCache::Get(ColValue->type(), DefaultValue, it->GetSize()), it->GetStartExt(), 0);
+        if (!DefaultValue) {
+            return IChunkedArray::TLocalDataAddress(
+                NArrow::TThreadSimpleArraysCache::Get(ColValue->type(), DefaultValue, it->GetSize()), it->GetStartExt(), 0);
+        } else {
+            return NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(*DefaultValue, it->GetSize()));
+        }
     } else {
         return IChunkedArray::TLocalDataAddress(ColValue->Slice(it->GetStartInt(), it->GetSize()), it->GetStartExt(), 0);
     }

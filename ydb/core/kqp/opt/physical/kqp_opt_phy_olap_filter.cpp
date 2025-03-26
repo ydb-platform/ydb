@@ -214,11 +214,6 @@ TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& 
         return false;
     });
 
-    // Temporary fix for https://st.yandex-team.ru/KIKIMR-22216
-    if (parameters.size()!=0) {
-        return nullptr;
-    }
-
     const auto members = FindNodes(apply.Ptr(), [&argument] (const TExprNode::TPtr& node) {
         if (const auto maybeMember = TMaybeNode<TCoMember>(node))
             return maybeMember.Cast().Struct().Raw() == &argument;
@@ -231,8 +226,16 @@ TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& 
     arguments.reserve(members.size());
     for (const auto& member : members) {
         columns.emplace_back(member->TailPtr());
-        arguments.emplace_back(ctx.NewArgument(member->Pos(), columns.back()->Content()));
+        TString argumentName = "members_" + TString(columns.back()->Content());
+        arguments.emplace_back(ctx.NewArgument(member->Pos(), TStringBuf(argumentName)));
         replacements.emplace(member.Get(), arguments.back());
+    }
+
+    for(const auto& pptr : parameters) {
+        TCoParameter parameter = TMaybeNode<TCoParameter>(pptr).Cast();
+        TString argumentName = "parameter_" + TString(parameter.Name().StringValue());
+        arguments.emplace_back(ctx.NewArgument(pptr->Pos(), TStringBuf(argumentName)));
+        replacements.emplace(pptr.Get(), arguments.back());
     }
 
     // Temporary fix for https://st.yandex-team.ru/KIKIMR-22560
@@ -243,6 +246,7 @@ TMaybeNode<TExprBase> YqlApplyPushdown(const TExprBase& apply, const TExprNode& 
     return Build<TKqpOlapApply>(ctx, apply.Pos())
         .Type(ExpandType(argument.Pos(), *argument.GetTypeAnn(), ctx))
         .Columns().Add(std::move(columns)).Build()
+        .Parameters().Add(std::move(parameters)).Build()
         .Lambda(ctx.NewLambda(apply.Pos(), ctx.NewArguments(argument.Pos(), std::move(arguments)), ctx.ReplaceNodes(apply.Ptr(), replacements)))
         .Done();
 }
@@ -401,7 +405,7 @@ std::vector<TExprBase> ConvertComparisonNode(const TExprBase& nodeIn, const TExp
             return SafeCastPredicatePushdown(maybeFlatmap.Cast(), argument, ctx, pos);
         } else if (auto maybePredicate = node.Maybe<TCoCompare>()) {
             return SimplePredicatePushdown(maybePredicate.Cast(), argument, ctx, pos);
-        }        
+        }
 
         if constexpr (NKikimr::NSsa::RuntimeVersion >= 5U) {
             return YqlApplyPushdown(node, argument, ctx);
@@ -800,7 +804,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
         }
         remaining = std::move(remainingAfterApply);
     }
-    
+
     if (pushedPredicates.empty()) {
         return node;
     }
@@ -810,7 +814,7 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
     const auto remainingFilter = CombinePredicatesWithAnd(remaining, ctx, node.Pos(), false, true);
 
     TMaybeNode<TExprBase> olapFilter;
-    if (pushedFilter.FirstLevelOps.IsValid()) {    
+    if (pushedFilter.FirstLevelOps.IsValid()) {
         olapFilter = Build<TKqpOlapFilter>(ctx, node.Pos())
             .Input(read.Process().Body())
             .Condition(pushedFilter.FirstLevelOps.Cast())

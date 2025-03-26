@@ -139,6 +139,7 @@ class TestRestartNodes(object):
                 logger.error(f"Init: Caught an exception during query executing: {x}")
             except:
                 logger.error(f"Init: Caught an unknown exception during creating the table")
+            logger.info("In progress: executed create query")
 
         logger.info(f"Init: finished creating tables for thread#{thread_id}")
 
@@ -209,11 +210,10 @@ class TestRestartNodes(object):
                 AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
             );
         """)
-        logger.info("Init: sucessfulle creathe the columnstore, creating a table")
-        for i in range(5):
-            thread: TestThread = TestThread(target=self.create_table, args=[i])
-        
+        logger.info("Init: sucessfully created the columnstore, creating a table")
         threads: list[TestThread] = []
+        for i in range(5):
+            threads.append(TestThread(target=self.create_table, args=[i]))
         for i in range(5, 10):
             threads.append(TestThread(target=self.alter_table, args=[i]))
         threads.append(TestThread(target=self.kill_nodes))

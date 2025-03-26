@@ -3,7 +3,6 @@
 #include "yql_position.h"
 
 #include <yql/essentials/public/issue/yql_issue.h>
-#include <yql/essentials/parser/proto_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
 #include <yql/essentials/sql/v1/lexer/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
@@ -13,8 +12,6 @@
 #include <util/string/strip.h>
 
 #include <regex>
-
-#define TOKEN(NAME) SQLv1Antlr4Lexer::TOKEN_##NAME
 
 namespace NYdb::NConsoleClient {
     using NSQLTranslation::ILexer;

@@ -83,6 +83,8 @@ ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_ch
 ydb/library/yql/providers/generic/connector/tests/join test.py.test_join[join_pg_pg-kqprun]
 ydb/services/keyvalue/ut sole chunk chunk
 ydb/services/keyvalue/ut sole+chunk+chunk
+ydb/library/yaml_config/ut_transform test_transform.py.TestYamlConfigTransformations.test_basic[args1-dump_ds_init]
+ydb/library/yql/dq/opt/ut sole chunk chunk
 ydb/services/persqueue_v1/ut TPersQueueCommonTest.TestLimiterLimitsWithBlobsRateLimit
 ydb/services/persqueue_v1/ut TPersQueueCommonTest.TestLimiterLimitsWithUserPayloadRateLimit
 ydb/services/ydb/sdk_sessions_pool_ut YdbSdkSessionsPool.StressTestSync1

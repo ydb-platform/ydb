@@ -24,6 +24,14 @@ struct Histogram {
 
 Histogram<FreqBucket> multiMerge(const std::vector<Histogram<Bucket>>& sources);
 
+struct Partition {
+    i64 left;
+    i64 right;
+    i32 out;
+};
+
+//void multifit(const Histogram<FreqBucket>& hist, ui32 binCount);
+
 template<class TBucket>
 std::ostream& operator<<(std::ostream& out, const Histogram<TBucket>& hist) {
     out << "{ ";

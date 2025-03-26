@@ -93,3 +93,14 @@ Histogram<FreqBucket> multiMerge(const std::vector<Histogram<Bucket>>& sources) 
 }
 
 
+// static ui64 countL(const std::vector<FreqBucket>& buckets) {
+//     double sum = 0;
+//     double max = hist.buckets[0].count;
+
+// }
+
+// void multifit(const Histogram<FreqBucket>& hist, ui32 binCount) {
+
+
+// }
+

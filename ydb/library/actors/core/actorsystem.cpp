@@ -204,10 +204,8 @@ namespace NActors {
             if (ev->HasBuffer()) {
                 CheckEventMemory(ev->GetChainBuffer());
             }
-            Y_ABORT_UNLESS(ev->Recipient == recipient,
-                "Event rewrite from %s to %s would be lost via interconnect",
-                ev->Recipient.ToString().c_str(),
-                recipient.ToString().c_str());
+            Y_ENSURE(ev->Recipient == recipient,
+                "Event rewrite from " << ev->Recipient << " to " << recipient << " would be lost via interconnect");
             recipient = InterconnectProxy(recpNodeId);
             ev->Rewrite(TEvInterconnect::EvForward, recipient);
         }

@@ -213,7 +213,7 @@ namespace NKikimr::NStorage {
         if (!fetched) { // fill in 'to-be-fetched' version of config with version incremented by one
             try {
                 auto metadata = NYamlConfig::GetMainMetadata(yaml);
-                metadata.Cluster = metadata.Cluster.value_or("unknown"); // TODO: fix this
+                metadata.Cluster = metadata.Cluster.value_or(AppData()->ClusterName);
                 metadata.Version = metadata.Version.value_or(0) + 1;
                 temp = NYamlConfig::ReplaceMetadata(yaml, metadata);
             } catch (const std::exception& ex) {

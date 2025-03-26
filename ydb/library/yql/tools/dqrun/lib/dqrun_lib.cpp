@@ -318,7 +318,7 @@ TDqRunTool::~TDqRunTool() {
             Driver_->Stop(true);
         }
     } catch (...) {
-        Cerr << "Error while stopping YDB driver: " << CurrentExceptionMessage();
+        Cerr << "Error while stopping YDB driver: " << CurrentExceptionMessage() << Endl;
     }
 }
 

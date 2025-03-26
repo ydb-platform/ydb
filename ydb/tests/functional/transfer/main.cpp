@@ -140,28 +140,29 @@ struct MainTestCase {
     {
     }
 
-    void CreateTable(const TString& tableDDL) {
-        auto ddl = Sprintf(tableDDL.data(), TableName.data());
+    void ExecuteDDL(const TString& ddl) {
         auto res = Session.ExecuteQuery(ddl, TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
     }
 
+    void CreateTable(const TString& tableDDL) {
+        ExecuteDDL(Sprintf(tableDDL.data(), TableName.data()));
+    }
+
     void CreateTopic(size_t partitionCount = 10) {
-        auto res = Session.ExecuteQuery(Sprintf(R"(
+        ExecuteDDL(Sprintf(R"(
             CREATE TOPIC `%s`
             WITH (
                 min_active_partitions = %d
             );
-        )", TopicName.data(), partitionCount), TTxControl::NoTx()).GetValueSync();
-        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        )", TopicName.data(), partitionCount));
     }
 
     void CreateConsumer(const TString& consumerName) {
-        auto res = Session.ExecuteQuery(Sprintf(R"(
+        ExecuteDDL(Sprintf(R"(
             ALTER TOPIC `%s`
             ADD CONSUMER `%s`;
-        )", TopicName.data(), consumerName.data()), TTxControl::NoTx()).GetValueSync();
-        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        )", TopicName.data(), consumerName.data()));
     }
 
     struct CreateTransferSettings {
@@ -200,7 +201,7 @@ struct MainTestCase {
             sb << ", BATCH_SIZE_BYTES = " << *settings.BatchSizeBytes << Endl;
         }
 
-        auto res = Session.ExecuteQuery(Sprintf(R"(
+        auto ddl = Sprintf(R"(
             %s;
 
             CREATE TRANSFER `%s`
@@ -209,9 +210,9 @@ struct MainTestCase {
                 CONNECTION_STRING = 'grpc://%s'
                 %s
             );
-        )", lambda.data(), TransferName.data(), TopicName.data(), TableName.data(), ConnectionString.data(), sb.data()),
-            TTxControl::NoTx()).GetValueSync();
-        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        )", lambda.data(), TransferName.data(), TopicName.data(), TableName.data(), ConnectionString.data(), sb.data());
+
+        ExecuteDDL(ddl);
     }
 
     struct AlterTransferSettings {
@@ -360,7 +361,8 @@ struct MainTestCase {
         for (size_t i = 20; i--;) {
             auto result = DescribeTransfer().GetReplicationDescription();
             if (TReplicationDescription::EState::Error == result.GetState()) {
-                Cerr << ">>>>> " << result.GetErrorState().GetIssues().ToOneLineString() << Endl << Flush;
+                Cerr << ">>>>> ACTUAL: " << result.GetErrorState().GetIssues().ToOneLineString() << Endl << Flush;
+                Cerr << ">>>>> EXPECTED: " << expectedMessage << Endl << Flush;
                 UNIT_ASSERT(result.GetErrorState().GetIssues().ToOneLineString().contains(expectedMessage));
                 break;
             }
@@ -1242,7 +1244,34 @@ Y_UNIT_TEST_SUITE(Transfer)
         }});
     }
 
-    Y_UNIT_TEST(CreateTransferTopicNotExists)
+    Y_UNIT_TEST(CreateTransferSourceNotExists)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8 NOT NULL,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )");
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )");
+
+        testCase.CheckTransferStateError("Discovery error: local/Topic_");
+    }
+
+    Y_UNIT_TEST(CreateTransferSourceIsNotTopic)
     {
         MainTestCase testCase;
         testCase.CreateTable(R"(
@@ -1255,6 +1284,13 @@ Y_UNIT_TEST_SUITE(Transfer)
                 );
             )");
         
+            testCase.ExecuteDDL(Sprintf(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    PRIMARY KEY (Key)
+                );
+            )", testCase.TopicName.data()));
+
         testCase.CreateTransfer(R"(
                 $l = ($x) -> {
                     return [
@@ -1292,7 +1328,48 @@ Y_UNIT_TEST_SUITE(Transfer)
                 };
             )");
 
-        testCase.CheckTransferStateError("Unexpected entry kind at 'writer'");
+        testCase.CheckTransferStateError("Only column tables are supported as transfer targets");
+    }
+
+    Y_UNIT_TEST(CreateTransferTargetIsNotTable)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TOPIC `%s`;
+            )");
+        testCase.CreateTopic();
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )");
+
+        testCase.CheckTransferStateError("Only column tables are supported as transfer targets");
+    }
+
+    Y_UNIT_TEST(CreateTransferTargetNotExists)
+    {
+        MainTestCase testCase;
+        testCase.CreateTopic();
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )");
+
+        testCase.CheckTransferStateError(TStringBuilder() << "The target table `/local/" << testCase.TableName << "` does not exist");
     }
 }
 

@@ -211,6 +211,12 @@ private:
 
             case TKikimrKey::Type::Database:
             {
+                if (!SessionCtx->Config().FeatureFlags.GetEnableDatabaseAdmin()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+                        TStringBuilder() << "ALTER DATABASE statement is not supported"));
+                    return TStatus::Error;
+                }
+
                 return TStatus::Ok;
             }
 

@@ -11788,6 +11788,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
     Y_UNIT_TEST(NewOwnerOnDatabase) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableAlterDatabase(true);
+
         ui64 txId = 100;
 
         TString newOwner = "user1";

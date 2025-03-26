@@ -21,8 +21,6 @@
 #include <util/generic/serialized_enum.h>
 #include <util/string/printf.h>
 
-#include <ydb/core/statistics/ut_common/ut_common.h>
-
 namespace NKikimr {
 namespace NKqp {
 
@@ -3828,11 +3826,22 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             }
         }
     }
+    
+    void CheckOwner(TSession& session, const TString& path, const TString& name) {
+        TDescribeTableResult describe = session.DescribeTable(path).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+        auto tableDesc = describe.GetTableDescription();
+        const auto& currentOwner = tableDesc.GetOwner();
+        UNIT_ASSERT_VALUES_EQUAL_C(name, currentOwner, "name is not currentOwner");
+    }
 
     Y_UNIT_TEST(AlterDatabaseChangeOwner) {
-        NStat::TTestEnv env(1, 1, true);
+        /* Default Kikimr runner can not create extsubdomain */
+        TTestExtEnv::TEnvSettings settings;
+        settings.FeatureFlags.SetEnableAlterDatabase(true);
 
-        CreateDatabase(env, "Test");
+        TTestExtEnv env(settings);
+        env.CreateDatabase("Test");
 
         TTableClient client(env.GetDriver());
         auto session = client.CreateSession().GetValueSync().GetSession();
@@ -3867,7 +3876,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             auto result = session.ExecuteSchemeQuery(alterDatabaseSql).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Error: fail in ApplyIf section: path is not database");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Error: fail in ApplyIf section: wrong Path type.");
         }
         {
             auto alterDatabaseSql = TStringBuilder() << R"(
@@ -3877,6 +3886,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             auto result = session.ExecuteSchemeQuery(alterDatabaseSql).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+            CheckOwner(session, "/Root/Test", "superuser");
         }
     }
 

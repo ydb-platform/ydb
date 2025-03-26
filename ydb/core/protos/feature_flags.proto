@@ -205,4 +205,5 @@ message TFeatureFlags {
     optional bool SwitchToConfigV2 = 179 [default = false];
     optional bool SwitchToConfigV1 = 180 [default = false];
     optional bool EnableEncryptedExport = 181 [default = false];
+    optional bool EnableAlterDatabase = 182 [default = false];
 }

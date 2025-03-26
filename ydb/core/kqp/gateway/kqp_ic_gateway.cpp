@@ -908,6 +908,7 @@ public:
 
             auto ev = MakeHolder<TRequest>();
 
+            ev->Record.SetDatabaseName(Database);
             if (UserToken) {
                 ev->Record.SetUserToken(UserToken->GetSerializedToken());
             }

@@ -1371,25 +1371,43 @@ bool TSchemeShard::CheckApplyIf(const NKikimrSchemeOp::TModifyScheme& scheme, TS
             }
         }
 
-        if (!item.GetPathTypes().empty()) {
-            if (!pathType.has_value()) {
-                errStr = TStringBuilder()
-                    << "fail in ApplyIf section:"
-                    << " argument `pathType` is undefined,"
-                    << " but ApplyIf has non-empty field `PathTypes.`";
+        if (AppData()->FeatureFlags.GetEnableAlterDatabase()) {
+            if (!item.GetPathTypes().empty()) {
+                if (!pathType.has_value()) {
+                    errStr = TStringBuilder()
+                        << "fail in ApplyIf section:"
+                        << " argument `pathType` is undefined,"
+                        << " but ApplyIf has non-empty field `PathTypes.`";
 
-                return false;
+                    return false;
+                }
+
+                const auto& pathTypes = item.GetPathTypes();
+                bool allowed = (std::find(pathTypes.begin(), pathTypes.end(), pathType) != pathTypes.end());
+                if (!allowed) {
+                    auto enumToString = [](TPathElement::EPathType type) {
+                        return NKikimrSchemeOp::EPathType_Name(type);
+                    };
+
+                    errStr = TStringBuilder()
+                        << "fail in ApplyIf section:"
+                        << " wrong Path type."
+                        << " Expected types: ";
+
+                        for (int i = 0; i < pathTypes.size(); i++) {
+                            errStr += enumToString(static_cast<TPathElement::EPathType>(pathTypes[i]) ) + ",;"[i + 1 == pathTypes.size()] + " ";
+                        }
+
+                        errStr += TStringBuilder() << "But actual Path type is " << enumToString(pathType.value());
+                    return false;
+                }
             }
+        } else if (!item.GetPathTypes().empty()) {
+            errStr = TStringBuilder()
+                << "fail in ApplyIf section:"
+                << " Check Path Type is not supported";
 
-            const auto& pathTypes = item.GetPathTypes();
-            bool allowed = (std::find(pathTypes.begin(), pathTypes.end(), pathType) != pathTypes.end());
-            if (!allowed) {
-                errStr = TStringBuilder()
-                    << "fail in ApplyIf section:"
-                    << " path is not database";
-
-                return false;
-            }
+            return false;
         }
     }
 

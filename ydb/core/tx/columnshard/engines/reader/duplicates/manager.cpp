@@ -225,20 +225,6 @@ void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
         const bool isSkipped = !SkippedSources.empty();
         if (isSkipped) {
             SkippedSources.pop_front();
-
-            // TODO: update NextIntervalToMerge (everywhere)
-            // const ui32 nextInterval = [this]() {
-            //     if (!SkippedSources.empty()) {
-            //         return Intervals.GetRangeBySourceId(SkippedSources.front()->GetSourceId()).GetFirstIdx();
-            //     }
-            //     if (!SortedSources.empty()) {
-            //         return Intervals.GetRangeBySourceId(SortedSources.front()->GetSourceId()).GetFirstIdx();
-            //     }
-            //     return std::numeric_limits<ui32>::max();
-            // }();
-            // while (!NextIntervalToMerge.IsEnd() && NextIntervalToMerge.GetIntervalIdx() != nextInterval) {
-            //     NextIntervalToMerge.Next();
-            // }
         } else {
             SortedSources.pop_front();
         }
@@ -286,6 +272,11 @@ void TDuplicateFilterConstructor::Handle(const TEvDuplicateFilterDataFetched::TP
     const TIntervalsRange intervals = Intervals.GetRangeBySourceId(ev->Get()->GetSourceId());
     NotFetchedSourcesCount.Dec(intervals.GetFirstIdx(), intervals.GetLastIdx());
 
+    while (!NextIntervalToMerge.IsEnd() &&
+           (ActiveSources.empty() || Intervals.GetRangeBySourceId(ActiveSources.front()->GetSource()->GetSourceId()).GetFirstIdx() >
+                                         NextIntervalToMerge.GetIntervalIdx())) {
+        NextIntervalToMerge.Next();
+    }
     AFL_VERIFY(intervals.GetFirstIdx() >= NextIntervalToMerge.GetIntervalIdx());
     while (!NextIntervalToMerge.IsEnd() &&
            !NotFetchedSourcesCount.GetCount(NextIntervalToMerge.GetIntervalIdx(), NextIntervalToMerge.GetIntervalIdx())) {
@@ -382,7 +373,6 @@ void TDuplicateFilterConstructor::FlushFinishedSources() {
     }
 
     if (ActiveSources.empty() && SortedSources.empty()) {
-        AFL_VERIFY(NextIntervalToMerge.IsEnd());
         PassAway();
     }
 }

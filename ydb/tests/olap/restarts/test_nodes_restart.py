@@ -19,6 +19,7 @@ from ydb.tests.olap.helpers.ydb_client import YdbClient
 
 from enum import Enum
 from pathlib import Path
+from multiprocessing import Value
 
 # logging.basicConfig(
 #     stream=sys.stderr,
@@ -82,8 +83,11 @@ def setup_logger(name=__name__, log_dir=LOG_DIR):
     return logger
 
 logger = setup_logger()
+counter = Value('i', 0)
 
 class TestRestartNodes(object):
+
+
     @classmethod
     def setup_class(cls):
         # nodes_count = 8 if cls.erasure == Erasure.BLOCK_4_2 else 9
@@ -110,16 +114,46 @@ class TestRestartNodes(object):
         cls.ydb_client.stop()
         cls.cluster.stop()
 
+    def create_table(self, thread_id: int):
+        logger.info(f"Init: starting creating the table for thread#{thread_id}")
+        deadline : datetime = datetime.datetime.now() + datetime.timedelta(seconds=30)
+        while datetime.datetime.now() < deadline:
+            logger.info("Init: sending create table query")
+            try:
+                with counter.get_lock():
+                    table_id = counter.value
+                    logger.info(f"Init: sending create table#{table_id} query")
+                    self.ydb_client.query(f"""
+                        CREATE TABLE `TableStore/my_table_{table_id}` (
+                            timestamp Timestamp NOT NULL, 
+                            Key Uint64,
+                            Value String,
+                            PRIMARY KEY (timestamp)
+                        ) WITH (
+                            STORE = COLUMN,
+                            AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+                        );
+                    """)
+                    counter.value += 1
+            except Exception as x:
+                logger.error(f"Init: Caught an exception during query executing: {x}")
+            except:
+                logger.error(f"Init: Caught an unknown exception during creating the table")
+
+        logger.info(f"Init: finished creating tables for thread#{thread_id}")
+
     def alter_table(self, thread_id: int):
         logger.info(f"In progress: starting altering the table for thread#{thread_id}")
         deadline: datetime = datetime.datetime.now() + datetime.timedelta(seconds=30)
         while datetime.datetime.now() < deadline:
-            ttl = random.randint(0, 1000)
-            logger.info("In progress: sending alter query")
             try:
-                self.ydb_client.query(f"""
-                    ALTER TABLE `TableStore/my_table` SET(TTL = Interval("PT{ttl}H") ON timestamp);
-                    """)
+                with counter.get_lock():
+                    logger.info("In progress: sending alter query")
+                    ttl = random.randint(0, 1000)
+                    table_id = random.randint(0, counter.value)
+                    self.ydb_client.query(f"""
+                        ALTER TABLE `TableStore/my_table_{table_id}` SET(TTL = Interval("PT{ttl}H") ON timestamp);
+                        """)
             except Exception as x:
                 logger.error(f"In progress: Caught an exception during query executing: {x}")
             except:
@@ -172,25 +206,15 @@ class TestRestartNodes(object):
             )
             WITH (
                 STORE = COLUMN,
-                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 5
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
             );
         """)
         logger.info("Init: sucessfulle creathe the columnstore, creating a table")
-        self.ydb_client.query(f"""
-                CREATE TABLE `TableStore/my_table` (
-                    timestamp Timestamp NOT NULL, 
-                    Key Uint64,
-                    Value String,
-                    PRIMARY KEY (timestamp)
-                ) WITH (
-                    STORE = COLUMN,
-                    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 5
-                );
-            """)
-        logger.info("Init: sucessfully created the table")
-
+        for i in range(5):
+            thread: TestThread = TestThread(target=self.create_table, args=[i])
+        
         threads: list[TestThread] = []
-        for i in range(10):
+        for i in range(5, 10):
             threads.append(TestThread(target=self.alter_table, args=[i]))
         threads.append(TestThread(target=self.kill_nodes))
 
@@ -224,9 +248,13 @@ class TestRestartNodes(object):
             ttl = random.randint(1, 1000)
             logger.info("In progress: [last section] sending alter query")
             try:
-                self.ydb_client.query(f"""
-                    ALTER TABLE `TableStore/my_table` SET(TTL = Interval("PT{ttl}H") ON timestamp);
-                    """)
+                with counter.get_lock():
+                    logger.info("In progress: sending alter query")
+                    ttl = random.randint(0, 1000)
+                    table_id = random.randint(0, counter.value)
+                    self.ydb_client.query(f"""
+                        ALTER TABLE `TableStore/my_table_{table_id}` SET(TTL = Interval("PT{ttl}H") ON timestamp);
+                        """)
             except Exception as x:
                 logger.error(f"In progress: [last section] Caught an exception during query executing: {x}")
                 hasException = True

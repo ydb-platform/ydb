@@ -265,9 +265,7 @@ void TTopicData::Bootstrap() {
     if (!TruncateLongMessages && Timestamp > 0) {
         return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "no_truncate option can only be specified with offset (not timestamp"));
     }
-    if (Limit == 0) {
-        Limit = 10;
-    } else if (Limit > MAX_MESSAGES_LIMIT) {
+    if (Limit > MAX_MESSAGES_LIMIT) {
         return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Too many messages requested"));
     }
 

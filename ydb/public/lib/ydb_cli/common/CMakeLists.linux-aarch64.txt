@@ -54,6 +54,7 @@ target_link_libraries(common PUBLIC
 target_sources(common PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/aws.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/cert_format_converter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/client_command_options.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/command.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/command_utils.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/common.cpp

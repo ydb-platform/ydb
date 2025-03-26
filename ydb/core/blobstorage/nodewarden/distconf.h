@@ -227,6 +227,7 @@ namespace NKikimr::NStorage {
         // pending event queue
         std::deque<TAutoPtr<IEventHandle>> PendingEvents;
         std::vector<ui32> NodeIds;
+        THashSet<ui32> NodeIdsSet;
         TNodeIdentifier SelfNode;
 
         // scatter tasks

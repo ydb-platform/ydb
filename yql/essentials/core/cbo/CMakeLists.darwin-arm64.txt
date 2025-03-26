@@ -19,6 +19,8 @@ get_built_tool_path(
   enum_parser
 )
 
+add_subdirectory(simple)
+
 add_library(essentials-core-cbo)
 
 

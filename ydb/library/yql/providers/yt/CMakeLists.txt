@@ -12,5 +12,5 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(actors)
 add_subdirectory(dq_task_preprocessor)
+add_subdirectory(actors)

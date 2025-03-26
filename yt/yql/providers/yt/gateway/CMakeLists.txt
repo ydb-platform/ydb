@@ -15,4 +15,5 @@
 add_subdirectory(native)
 add_subdirectory(lib)
 add_subdirectory(qplayer)
+add_subdirectory(fmr)
 add_subdirectory(file)

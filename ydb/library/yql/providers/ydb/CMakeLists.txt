@@ -15,5 +15,5 @@
 add_subdirectory(provider)
 add_subdirectory(expr_nodes)
 add_subdirectory(proto)
-add_subdirectory(actors)
 add_subdirectory(comp_nodes)
+add_subdirectory(actors)

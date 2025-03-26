@@ -97,6 +97,16 @@ public:
             }
         }
 
+        void AddNull(const ui32 recordIndex) {
+            if (LastRecordIndex) {
+                AFL_VERIFY(*LastRecordIndex < recordIndex)("last", LastRecordIndex)("index", recordIndex);
+                TStatusValidator::Validate(Builder->AppendNulls(recordIndex - *LastRecordIndex));
+            } else {
+                TStatusValidator::Validate(Builder->AppendNulls(recordIndex + 1));
+            }
+            LastRecordIndex = recordIndex;
+        }
+
         std::shared_ptr<IChunkedArray> Finish(const ui32 recordsCount) {
             if (LastRecordIndex) {
                 AFL_VERIFY(*LastRecordIndex < recordsCount)("last", LastRecordIndex)("count", recordsCount);

@@ -11,7 +11,11 @@ void TColumnElements::BuildSparsedAccessor(const ui32 recordsCount) {
     AFL_VERIFY(!Accessor);
     auto recordsBuilder = TSparsedArray::MakeBuilderUtf8(RecordIndexes.size(), DataSize);
     for (ui32 idx = 0; idx < RecordIndexes.size(); ++idx) {
-        recordsBuilder.AddRecord(RecordIndexes[idx], Values[idx]);
+        if (Values[idx]) {
+            recordsBuilder.AddRecord(RecordIndexes[idx], *Values[idx]);
+        } else {
+            recordsBuilder.AddNull(RecordIndexes[idx]);
+        }
     }
     Accessor = recordsBuilder.Finish(recordsCount);
 }
@@ -20,7 +24,11 @@ void TColumnElements::BuildPlainAccessor(const ui32 recordsCount) {
     AFL_VERIFY(!Accessor);
     auto builder = TTrivialArray::MakeBuilderUtf8(recordsCount, DataSize);
     for (auto it = RecordIndexes.begin(); it != RecordIndexes.end(); ++it) {
-        builder.AddRecord(*it, Values[it - RecordIndexes.begin()]);
+        if (auto v = Values[it - RecordIndexes.begin()]) {
+            builder.AddRecord(*it, *v);
+        } else {
+            builder.AddNull(*it, *v);
+        }
     }
     Accessor = builder.Finish(recordsCount);
 }

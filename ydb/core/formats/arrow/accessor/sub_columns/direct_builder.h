@@ -17,7 +17,7 @@ namespace NKikimr::NArrow::NAccessor::NSubColumns {
 class TColumnElements {
 private:
     YDB_READONLY_DEF(TStringBuf, KeyName);
-    YDB_READONLY_DEF(std::deque<TStringBuf>, Values);
+    YDB_READONLY_DEF(std::deque<std::optional<TStringBuf>>, Values);
     std::vector<TString> ValuesStorage;
     YDB_READONLY_DEF(std::vector<ui32>, RecordIndexes);
     YDB_READONLY(ui32, DataSize, 0);
@@ -89,7 +89,7 @@ public:
         if (itElements == Elements.end()) {
             itElements = Elements.emplace(key, key).first;
         }
-        itElements->second.AddData(std::string_view(), CurrentRecordIndex);
+        itElements->second.AddData(std::nullopt, CurrentRecordIndex);
     }
 
     void AddKV(const TStringBuf key, const TStringBuf value) {

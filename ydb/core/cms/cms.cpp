@@ -513,6 +513,7 @@ void TCms::AddPermissionExtensions(const TAction& action, TPermission& perm) con
         case TAction::RESTART_SERVICES:
         case TAction::SHUTDOWN_HOST:
         case TAction::REBOOT_HOST:
+        case TAction::DRAIN_NODE:
             AddHostExtensions(action.GetHost(), perm);
             break;
         default:
@@ -597,6 +598,8 @@ bool TCms::CheckAction(const TAction &action, const TActionOptions &opts, TError
             return CheckActionShutdownHost(action, opts, error, ctx);
         case TAction::REPLACE_DEVICES:
             return CheckActionReplaceDevices(action, opts.PermissionDuration, error);
+        case TAction::DRAIN_NODE:
+            return true;
         case TAction::START_SERVICES:
         case TAction::STOP_SERVICES:
         case TAction::ADD_HOST:
@@ -1726,6 +1729,18 @@ void TCms::OnBSCPipeDestroyed(const TActorContext &ctx)
         ctx.Send(State->Sentinel, new TEvSentinel::TEvBSCPipeDisconnected);
 }
 
+TActorId TCms::HivePipe() {
+    if (!State->HivePipe) {
+        auto hiveId = AppData()->DomainsInfo->GetHive();
+        NTabletPipe::TClientConfig config;
+        config.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+        auto* client = NTabletPipe::CreateClient(SelfId(), hiveId, config);
+        State->HivePipe = Register(client);
+    }
+
+    return State->HivePipe;
+}
+
 void TCms::Handle(TEvCms::TEvGetClusterInfoRequest::TPtr &ev, const TActorContext &ctx) {
     TAutoPtr<TEvCms::TEvGetClusterInfoResponse> resp = new TEvCms::TEvGetClusterInfoResponse;
     resp->Info = ClusterInfo;
@@ -2386,8 +2401,12 @@ void TCms::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev,
                   const TActorContext &ctx)
 {
     auto *msg = ev->Get();
-    if (msg->ClientId == State->BSControllerPipe)
+    if (msg->ClientId == State->BSControllerPipe) {
         OnBSCPipeDestroyed(ctx);
+    } else if (msg->ClientId == State->HivePipe) {
+        NTabletPipe::CloseClient(ctx, State->HivePipe);
+        State->HivePipe = TActorId();
+    }
 }
 
 void TCms::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev,
@@ -2396,6 +2415,13 @@ void TCms::Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev,
     TEvTabletPipe::TEvClientConnected *msg = ev->Get();
     if (msg->ClientId == State->BSControllerPipe && msg->Status != NKikimrProto::OK)
         OnBSCPipeDestroyed(ctx);
+}
+
+void TCms::Handle(TEvHive::TEvDrainNodeResult::TPtr &ev,
+                  const TActorContext &ctx)
+{
+    Y_UNUSED(ev);
+    Y_UNUSED(ctx);
 }
 
 IActor *CreateCms(const TActorId &tablet, TTabletStorageInfo *info)

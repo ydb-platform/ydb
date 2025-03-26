@@ -266,6 +266,7 @@ private:
             HFunc(TEvConsole::TEvReplaceConfigSubscriptionsResponse, Handle);
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             HFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            HFunc(TEvHive::TEvDrainNodeResult, Handle);
             IgnoreFunc(TEvTabletPipe::TEvServerConnected);
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
             IgnoreFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
@@ -397,6 +398,8 @@ private:
     void AddHostExtensions(const TString &host, NKikimrCms::TPermission &perm) const;
 
     void OnBSCPipeDestroyed(const TActorContext &ctx);
+
+    TActorId HivePipe();
 
     void Handle(TEvPrivate::TEvClusterInfo::TPtr &ev, const TActorContext &ctx);
     void Handle(TEvPrivate::TEvLogAndSend::TPtr &ev, const TActorContext &ctx);

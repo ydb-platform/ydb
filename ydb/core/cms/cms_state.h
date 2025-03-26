@@ -64,6 +64,7 @@ struct TCmsState : public TAtomicRefCount<TCmsState> {
     ui64 CmsTabletId = 0;
     TActorId CmsActorId;
     TActorId BSControllerPipe;
+    TActorId HivePipe;
     TActorId Sentinel;
 
     bool EnableCMSRequestPriorities = false;

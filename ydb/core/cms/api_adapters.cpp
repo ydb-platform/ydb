@@ -353,6 +353,7 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
     bool ValidateAction(const Ydb::Maintenance::Action& action) {
         switch (action.action_case()) {
         case Ydb::Maintenance::Action::kLockAction:
+        case Ydb::Maintenance::Action::kDrainAction:
             return ValidateScope(action.lock_action().scope());
         default:
             Reply(Ydb::StatusIds::BAD_REQUEST, "Unknown action");
@@ -399,11 +400,7 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
         return true;
     }
 
-    static void ConvertAction(const Ydb::Maintenance::LockAction& action, NKikimrCms::TAction& cmsAction) {
-        cmsAction.SetType(NKikimrCms::TAction::SHUTDOWN_HOST);
-        cmsAction.SetDuration(TimeUtil::DurationToMicroseconds(action.duration()));
-
-        const auto& scope = action.scope();
+    static void ConvertScope(const Ydb::Maintenance::ActionScope& scope, NKikimrCms::TAction& cmsAction) {
         switch (scope.scope_case()) {
         case Ydb::Maintenance::ActionScope::kNodeId:
             cmsAction.SetHost(ToString(scope.node_id()));
@@ -414,6 +411,19 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
         default:
             Y_ABORT("unreachable");
         }
+    }
+
+    static void ConvertAction(const Ydb::Maintenance::LockAction& action, NKikimrCms::TAction& cmsAction) {
+        cmsAction.SetType(NKikimrCms::TAction::SHUTDOWN_HOST);
+        cmsAction.SetDuration(TimeUtil::DurationToMicroseconds(action.duration()));
+
+        ConvertScope(action.scope(), cmsAction);
+    }
+
+    static void ConvertAction(const Ydb::Maintenance::DrainAction& action, NKikimrCms::TAction& cmsAction) {
+        cmsAction.SetType(NKikimrCms::TAction::DRAIN_NODE);
+
+        ConvertScope(action.scope(), cmsAction);
     }
 
     void ConvertRequest(const TString& user, const Ydb::Maintenance::CreateMaintenanceTaskRequest& request,
@@ -442,6 +452,8 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
             for (const auto& action : group.actions()) {
                 if (action.has_lock_action()) {
                     ConvertAction(action.lock_action(), *cmsRequest.AddActions());
+                } else if (action.has_drain_action()) {
+                    ConvertAction(action.drain_action(), *cmsRequest.AddActions());
                 } else {
                     Y_ABORT("unreachable");
                 }

@@ -1,6 +1,8 @@
 #include "cms_impl.h"
 #include "scheme.h"
 
+#include <ydb/core/base/hive.h>
+
 #include <google/protobuf/text_format.h>
 
 namespace NKikimr::NCms {
@@ -76,6 +78,12 @@ public:
                 auto ret = Self->SetHostMarker(permission.GetAction().GetHost(), NKikimrCms::MARKER_DISK_FAULTY, txc, ctx);
                 std::move(ret.begin(), ret.end(), std::back_inserter(UpdateMarkers));
             }
+
+            if (permission.GetAction().GetType() == NKikimrCms::TAction::DRAIN_NODE) {
+                for (const auto* node : Self->ClusterInfo->HostNodes(permission.GetAction().GetHost())) {
+                    DrainRequests.emplace_back(new TEvHive::TEvDrainNode(node->NodeId));
+                }
+            }
         }
 
         if (Scheduled) {
@@ -126,6 +134,10 @@ public:
         Self->Reply(Request.Get(), Response, ctx);
         Self->SchedulePermissionsCleanup(ctx);
         Self->SentinelUpdateHostMarkers(std::move(UpdateMarkers), ctx);
+
+        for (auto& ev : DrainRequests) {
+            ctx.Send(Self->HivePipe(), ev.Release());
+        }
     }
 
 private:
@@ -137,6 +149,7 @@ private:
     ui64 NextPermissionId;
     ui64 NextRequestId;
     TVector<TEvSentinel::TEvUpdateHostMarkers::THostMarkers> UpdateMarkers;
+    TVector<THolder<TEvHive::TEvDrainNode>> DrainRequests;
 };
 
 ITransaction *TCms::CreateTxStorePermissions(THolder<IEventBase> req, TAutoPtr<IEventHandle> resp,

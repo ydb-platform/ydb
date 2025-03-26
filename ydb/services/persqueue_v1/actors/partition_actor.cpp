@@ -227,7 +227,6 @@ void TPartitionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TAc
 
     auto step = kqpIt->second->Handle(ev, ctx);
     if (step == TKqpHelper::ECurrentStep::DONE) {
-        ClientHasAnyCommits = true;
         CommitDone(ev->Cookie, ctx);
     }
 }
@@ -730,7 +729,7 @@ void TPartitionActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorCo
             return;
     }
 
-    if (!(result.HasCmdReadResult() || result.HasCmdPrepareReadResult() || result.HasCmdPublishReadResult() || result.HasCmdForgetReadResult())) { //this is commit response
+    if (!(result.HasCmdReadResult() || result.HasCmdPrepareReadResult() || result.HasCmdPublishReadResult() || result.HasCmdForgetReadResult())) { // this is commit response
         CommitDone(result.GetCookie(), ctx);
         return;
     }
@@ -913,6 +912,7 @@ void TPartitionActor::CommitDone(ui64 cookie, const TActorContext& ctx) {
     }
 
     Counters.Commits.Inc();
+    ClientHasAnyCommits = true;
 
     ui32 commitDurationMs = (ctx.Now() - CommitsInfly.front().second.StartTime).MilliSeconds();
     if (Counters.CommitLatency) {

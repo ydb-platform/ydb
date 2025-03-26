@@ -1,4 +1,5 @@
 PY3_LIBRARY()
+<<<<<<< HEAD
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 ENV(MOTO_SERVER_PATH="contrib/python/moto/bin/moto_server")
 

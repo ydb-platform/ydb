@@ -2258,7 +2258,6 @@ void TSchemeShard::PersistRemoveSubDomain(NIceDb::TNiceDb& db, const TPathId& pa
 
         if (DataErasureManager->Remove(pathId)) {
             db.Table<Schema::WaitingDataErasureTenants>().Key(pathId.OwnerId, pathId.LocalPathId).Delete();
-            // Send request to BSC if waiting tenants are empty
         }
 
         db.Table<Schema::SubDomains>().Key(pathId.LocalPathId).Delete();

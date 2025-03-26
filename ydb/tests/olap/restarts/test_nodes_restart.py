@@ -118,7 +118,7 @@ class TestRestartNodes(object):
             logger.info("In progress: sending alter query")
             try:
                 self.ydb_client.query(f"""
-                    ALTER TABLE `my_table` SET(TTL = Interval("PT{ttl}H") ON timestamp)
+                    ALTER TABLE `TableStore/my_table` SET(TTL = Interval("PT{ttl}H") ON timestamp);
                     """)
             except Exception as x:
                 logger.error(f"In progress: Caught an exception during query executing: {x}")
@@ -152,19 +152,6 @@ class TestRestartNodes(object):
                 
 
     def test(self):
-        # self.ydb_client.query("""
-        #     --!syntax_v1
-            # CREATE TABLESTORE `TableStore` (
-            #     Key Uint64 NOT NULL,
-            #     Value1 String,
-            #     PRIMARY KEY (Key)
-            # )
-            # WITH (
-            #     STORE = COLUMN,
-            #     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 10
-            # );
-        # """)
-
         # Ошибка должна быть как в paste.
         # Нужно думать про это как про то что у пользователя не работает alter.
         # Сценарий пользователя: летят alter-ы, рестартуют ноды, затем ничего не работает.
@@ -174,9 +161,23 @@ class TestRestartNodes(object):
         # 4) начинаю гонять 1 альтер.
         # 5) в течение 2х минут альтер должен начать успешно проходить. крутить в цикле.
 
-        logger.info("Init: creating a table")
+        logger.info("Init: creating a columnstore")
+        self.ydb_client.query("""
+            --!syntax_v1
+            CREATE TABLESTORE `TableStore` (
+                timestamp Timestamp NOT NULL, 
+                Key Uint64,
+                Value String,
+                PRIMARY KEY (timestamp)
+            )
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 5
+            );
+        """)
+        logger.info("Init: sucessfulle creathe the columnstore, creating a table")
         self.ydb_client.query(f"""
-                CREATE TABLE `my_table` (
+                CREATE TABLE `TableStore/my_table` (
                     timestamp Timestamp NOT NULL, 
                     Key Uint64,
                     Value String,
@@ -224,7 +225,7 @@ class TestRestartNodes(object):
             logger.info("In progress: [last section] sending alter query")
             try:
                 self.ydb_client.query(f"""
-                    ALTER TABLE `my_table` SET(TTL = Interval("PT{ttl}H") ON timestamp)
+                    ALTER TABLE `TableStore/my_table` SET(TTL = Interval("PT{ttl}H") ON timestamp);
                     """)
             except Exception as x:
                 logger.error(f"In progress: [last section] Caught an exception during query executing: {x}")

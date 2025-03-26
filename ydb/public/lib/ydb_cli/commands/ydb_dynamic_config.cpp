@@ -191,7 +191,7 @@ int TCommandConfigFetch::Run(TConfig& config) {
 
     if (!storageConfig.empty()) {
         try {
-            clusterConfig = NYamlConfig::UpgradeStorageConfigVersion(clusterConfig);
+            storageConfig = NYamlConfig::UpgradeStorageConfigVersion(storageConfig);
         } catch(...) {
             // it is better to return at least something
             // because for user it is the only way to get config

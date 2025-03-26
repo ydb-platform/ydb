@@ -13,13 +13,11 @@ namespace NYdb::NConsoleClient {
         {
         }
 
-        TCompletions Apply(const std::string& prefix, int& contextLen) override {
+        TCompletions Apply(const std::string& prefix, int& /* contextLen */) override {
             auto completion = Engine->Complete({
                 .Text = prefix,
                 .CursorPosition = prefix.length(),
             });
-
-            contextLen = completion.CompletedToken.SourcePosition;
 
             replxx::Replxx::completions_t entries;
             for (auto& candidate : completion.Candidates) {

@@ -60,7 +60,7 @@ private:
     ui64 Offset = 0;
     ui64 Timestamp = 0;
 
-    ui32 Limit = 0;
+    ui32 Limit = 10;
     bool TruncateLongMessages = true;
     TMap<ui32, THolder<NYdb::NTopic::ICodec>> Codecs;
     std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> NavigateResponse;

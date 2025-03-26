@@ -183,4 +183,54 @@ Y_UNIT_TEST_SUITE(CppGrpcClientSimpleTest) {
         auto session = sessionResult.GetSession();
         UNIT_ASSERT_VALUES_EQUAL(session.GetId(), "my-session-id");
     }
+
+    Y_UNIT_TEST(WithoutDiscoveryDriverLevel) {
+        TPortManager pm;
+
+        // Start our mock table service
+        TMockTableService tableService;
+        ui16 tablePort = pm.GetPort();
+        auto tableServer = StartGrpcServer(
+                TStringBuilder() << "127.0.0.1:" << tablePort,
+                tableService);
+
+        auto driver = TDriver(
+            TDriverConfig()
+                .SetEndpoint(TStringBuilder() << "localhost:" << tablePort)
+                .SetDiscoveryMode(EDiscoveryMode::Off)
+                .SetDatabase("/Root/My/DB"));
+        auto client = NTable::TTableClient(driver);
+        auto sessionFuture = client.CreateSession();
+
+        UNIT_ASSERT(sessionFuture.Wait(TDuration::Seconds(10)));
+        auto sessionResult = sessionFuture.ExtractValueSync();
+        UNIT_ASSERT(sessionResult.IsSuccess());
+        auto session = sessionResult.GetSession();
+        UNIT_ASSERT_VALUES_EQUAL(session.GetId(), "my-session-id");
+    }
+
+    Y_UNIT_TEST(WithoutDiscoveryClientLevel) {
+        TPortManager pm;
+
+        // Start our mock table service
+        TMockTableService tableService;
+        ui16 tablePort = pm.GetPort();
+        auto tableServer = StartGrpcServer(
+                TStringBuilder() << "127.0.0.1:" << tablePort,
+                tableService);
+
+        auto driver = TDriver(
+            TDriverConfig()
+                .SetEndpoint(TStringBuilder() << "localhost:" << tablePort)
+                .SetDatabase("/Root/My/DB"));
+        auto client = NTable::TTableClient(driver, TClientSettings().DiscoveryMode(EDiscoveryMode::Off));
+        auto sessionFuture = client.CreateSession();
+
+        UNIT_ASSERT(sessionFuture.Wait(TDuration::Seconds(10)));
+        auto sessionResult = sessionFuture.ExtractValueSync();
+        UNIT_ASSERT(sessionResult.IsSuccess());
+        auto session = sessionResult.GetSession();
+        UNIT_ASSERT_VALUES_EQUAL(session.GetId(), "my-session-id");
+    }
+
 }

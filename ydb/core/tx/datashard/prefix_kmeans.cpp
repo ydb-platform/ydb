@@ -500,26 +500,6 @@ public:
     }
 
 private:
-    void Feed(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
-    {
-        switch (State) {
-            case EState::SAMPLE:
-                FeedSample(row);
-                break;
-            case EState::KMEANS:
-                FeedKMeans(row);
-                break;
-            case EState::UPLOAD_BUILD_TO_BUILD:
-                FeedUploadBuild2Build(key, row);
-                break;
-            case EState::UPLOAD_BUILD_TO_POSTING:
-                FeedUploadBuild2Posting(key, row);
-                break;
-            default:
-                Y_ASSERT(false);
-        }
-    }
-
     bool FinishPrefix()
     {
         if (FinishPrefixImpl()) {
@@ -661,6 +641,26 @@ private:
         ClusterSizes.erase(ClusterSizes.begin() + w, ClusterSizes.end());
         Clusters.erase(Clusters.begin() + w, Clusters.end());
         return true;
+    }
+
+    void Feed(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    {
+        switch (State) {
+            case EState::SAMPLE:
+                FeedSample(row);
+                break;
+            case EState::KMEANS:
+                FeedKMeans(row);
+                break;
+            case EState::UPLOAD_BUILD_TO_BUILD:
+                FeedUploadBuild2Build(key, row);
+                break;
+            case EState::UPLOAD_BUILD_TO_POSTING:
+                FeedUploadBuild2Posting(key, row);
+                break;
+            default:
+                Y_ASSERT(false);
+        }
     }
 
     void FeedSample(TArrayRef<const TCell> row)

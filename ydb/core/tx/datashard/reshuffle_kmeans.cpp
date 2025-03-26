@@ -310,6 +310,7 @@ public:
         }
     }
 
+private:
     EScan FeedUploadMain2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);

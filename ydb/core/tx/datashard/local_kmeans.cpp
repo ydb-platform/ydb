@@ -469,6 +469,7 @@ public:
         }
     }
 
+private:
     bool InitAggregatedClusters()
     {
         if (Clusters.size() == 0) {

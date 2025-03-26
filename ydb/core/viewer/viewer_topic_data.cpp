@@ -244,7 +244,7 @@ void TTopicData::Bootstrap() {
     TruncateLongMessages = FromStringWithDefault<bool>(params.Get("truncate"), true);
 
     if (!params.Has("partition")) {
-        return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Parameter 'partition' is nessasary"));
+        return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Parameter 'partition' is necessary"));
     }
     PartitionId = FromStringWithDefault(params.Get("partition"), PartitionId);
 

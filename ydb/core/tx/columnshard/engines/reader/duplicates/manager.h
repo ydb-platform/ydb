@@ -168,7 +168,7 @@ private:
     private:
         using TRangeBySourceId = THashMap<ui64, TIntervalsRange>;
         YDB_READONLY_DEF(TRangeBySourceId, SourceRanges);
-        std::vector<ui64> SortedSourceIds;
+        YDB_READONLY_DEF(std::vector<ui64>, SortedSourceIds);
         std::vector<NArrow::TReplaceKey> IntervalBorders;
 
     public:
@@ -222,14 +222,12 @@ private:
             }
 
             while (NextSourceSeqNumber != Owner->NumSources() && Owner->GetRangeBySourceSeqNumber(NextSourceSeqNumber).GetFirstIdx() <= IntervalIdx) {
-                SourcesByRightInterval.emplace(Owner->GetRangeBySourceSeqNumber(NextSourceSeqNumber).GetFirstIdx(), NextSourceSeqNumber);
+                SourcesByRightInterval.emplace(Owner->GetRangeBySourceSeqNumber(NextSourceSeqNumber).GetLastIdx(), NextSourceSeqNumber);
                 ++NextSourceSeqNumber;
             }
 
             AFL_VERIFY(IntervalIdx <= Owner->NumIntervals())("i", IntervalIdx)("num_intervals", Owner->NumIntervals());
-            if (IntervalIdx == Owner->NumIntervals()) {
-                AFL_VERIFY(SourcesByRightInterval.empty());
-            }
+            AFL_VERIFY(IsEnd() == SourcesByRightInterval.empty())("sources", SourcesByRightInterval.size())("interval", IntervalIdx);
         }
 
     public:
@@ -337,15 +335,79 @@ private:
         void AbortConstruction(const TString& reason);
     };
 
+    class IAction {
+    public:
+        virtual void Execute(TDuplicateFilterConstructor& self, const ui64 sourceId) = 0;
+        virtual ~IAction() = default;
+    };
+
+    class TRequestQueue {
+    private:
+        std::deque<ui64> OrderedSourceIds;
+        THashMap<ui64, std::unique_ptr<IAction>> RequestsBySourceId;
+
+    public:
+        void AddRequest(const ui64 sourceId, std::unique_ptr<IAction> action) {
+            AFL_VERIFY(RequestsBySourceId.emplace(sourceId, std::move(action)).second);
+        }
+
+        [[nodiscard]] std::optional<std::pair<ui64, std::unique_ptr<IAction>>> ExtractNextAction() {
+            if (OrderedSourceIds.empty()) {
+                return std::nullopt;
+            }
+            auto findNextRequest = RequestsBySourceId.find(OrderedSourceIds.front());
+            if (findNextRequest == RequestsBySourceId.end()) {
+                return std::nullopt;
+            }
+            OrderedSourceIds.pop_front();
+            std::pair<ui64, std::unique_ptr<IAction>> result(findNextRequest->first, std::move(findNextRequest->second));
+            RequestsBySourceId.erase(findNextRequest);
+            return result;
+        }
+
+        bool IsDone() const {
+            return OrderedSourceIds.empty();
+        }
+
+        TRequestQueue(const TSourceIntervals& intervals)
+            : OrderedSourceIds(intervals.GetSortedSourceIds().begin(), intervals.GetSortedSourceIds().end()) {
+        }
+    };
+
+    class TActionSkip: public IAction {
+    private:
+        virtual void Execute(TDuplicateFilterConstructor& self, const ui64 sourceId) override {
+            self.DoSkip(sourceId);
+        }
+    };
+
+    class TActionGetFilter: public IAction {
+    private:
+        std::shared_ptr<IFilterSubscriber> Subscriber;
+        ui64 MemoryGroupId;
+
+        virtual void Execute(TDuplicateFilterConstructor& self, const ui64 sourceId) override {
+            self.DoGetFilter(sourceId, Subscriber, MemoryGroupId);
+        }
+
+    public:
+        TActionGetFilter(const std::shared_ptr<IFilterSubscriber>& subscriber, const std::shared_ptr<NCommon::IDataSource>& source)
+            : Subscriber(subscriber)
+            , MemoryGroupId(source->GetMemoryGroupId()) {
+        }
+    };
+
 private:
     TSourceIntervals Intervals;
     THashSet<ui64> FinishedSourceIds;
-    std::deque<std::shared_ptr<TSourceFilterConstructor>> ActiveSources;
-    THashMap<ui64, std::shared_ptr<TSourceFilterConstructor>> ActiveSourceById;
-    std::deque<std::shared_ptr<NSimple::IDataSource>> SkippedSources;
-    std::deque<std::shared_ptr<NSimple::IDataSource>> SortedSources;
     TIntervalCounter NotFetchedSourcesCount;
     TIntervalsCursor NextIntervalToMerge;
+    THashMap<ui64, std::shared_ptr<TSourceFilterConstructor>> ActiveSourceById;
+    TRequestQueue RequestsBuffer;
+
+    std::deque<std::shared_ptr<NSimple::IDataSource>> SortedSources;
+    std::deque<std::shared_ptr<NSimple::IDataSource>> SkippedSources;
+    std::deque<std::shared_ptr<TSourceFilterConstructor>> ActiveSources;
 
 private:
     STATEFN(StateMain) {
@@ -370,6 +432,10 @@ private:
     void StartFetchingColumns(const std::shared_ptr<TSourceFilterConstructor>& source, const ui64 memoryGroupId) const;
     void StartMergingColumns(const TIntervalsCursor& interval) const;
     void FlushFinishedSources();
+
+    void HandleRequest(const ui64 sourceId, std::unique_ptr<IAction> action);
+    void DoSkip(const ui64 sourceId);
+    void DoGetFilter(const ui64 sourceId, const std::shared_ptr<IFilterSubscriber>& subscriber, const ui64 memoryGroupId);
 
     std::shared_ptr<TSourceFilterConstructor> GetConstructorBySourceId(const ui64 sourceId) const;
     std::shared_ptr<TSourceFilterConstructor> GetConstructorBySourceSeqNumber(const ui32 seqNumber) const;

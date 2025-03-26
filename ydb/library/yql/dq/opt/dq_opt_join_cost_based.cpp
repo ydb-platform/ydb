@@ -309,6 +309,10 @@ public:
         return joinTree;
     }
 
+    void DisableShuffleElimination() {
+        EnableShuffleElimination = false;
+    }
+
 private:
     using TNodeSet64 = std::bitset<64>;
     using TNodeSet128 = std::bitset<128>;
@@ -520,6 +524,10 @@ TExprBase DqOptimizeEquiJoinWithCosts(
 
     if (optLevel == 2 && allRowStorage) {
         return node;
+    }
+
+    if (auto optimizer = dynamic_cast<TOptimizerNativeNew*>(&opt); allRowStorage && optimizer != nullptr) {
+        optimizer->DisableShuffleElimination();
     }
 
     equiJoinCounter++;

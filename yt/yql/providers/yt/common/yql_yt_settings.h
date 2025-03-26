@@ -122,6 +122,7 @@ struct TYtSettings {
     NCommon::TConfSetting<ui32, false> BatchListFolderConcurrency;
     NCommon::TConfSetting<bool, false> ForceTmpSecurity;
     NCommon::TConfSetting<ERuntimeClusterSelectionMode, false> RuntimeClusterSelection;
+    NCommon::TConfSetting<TString, false> DefaultRuntimeCluster;
 
     // Job runtime
     NCommon::TConfSetting<TString, true> Pool;

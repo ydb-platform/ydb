@@ -70,6 +70,7 @@ def onjava_module(unit, *args):
         '21',
         '22',
         '23',
+        '24',
     ):
         data['ENABLE_PREVIEW'] = extract_macro_calls(unit, 'ENABLE_PREVIEW_VALUE', args_delim)
 
@@ -300,6 +301,7 @@ def on_jdk_version_macro_check(unit, *args):
         '21',
         '22',
         '23',
+        '24',
     )
     if jdk_version not in available_versions:
         ymake.report_configure_error(
@@ -367,3 +369,11 @@ def on_setup_project_coords_if_needed(unit, *args):
     else:
         value = 'project(\\":{}\\")'.format(project_dir.replace('/', ':'))
     unit.set(['EXPORT_GRADLE_CLASSPATH', value])
+
+
+def on_java_resource_tar_validate_extract_root(unit, extract_root):
+    if extract_root == '<required>':
+        ymake.report_configure_error(
+            'Macro JAVA_RESOURCE_TAR requires to set EXTRACT_ROOT. '
+            'Usage JAVA_RESOURCE_TAR(tar_path EXTRACT_ROOT root_dir)'
+        )

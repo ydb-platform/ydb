@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -32,6 +33,7 @@ TStatus RemoveDirectoryRecursive(
     NTable::TTableClient& tableClient,
     NTopic::TTopicClient* topicClient,
     NQuery::TQueryClient* queryClient,
+    NCoordination::TClient* coordinationClient,
     const TString& path,
     ERecursiveRemovePrompt prompt,
     const NScheme::TRemoveDirectorySettings& settings = {},
@@ -43,6 +45,7 @@ TStatus RemovePathRecursive(
     NTable::TTableClient& tableClient,
     NTopic::TTopicClient* topicClient,
     NQuery::TQueryClient* queryClient,
+    NCoordination::TClient* coordinationClient,
     const TString& path,
     ERecursiveRemovePrompt prompt,
     const TRemovePathRecursiveSettings& settings = {},

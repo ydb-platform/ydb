@@ -1456,6 +1456,7 @@ message TIndexInfo
     optional string predicate = 3;
     optional string unfolded_column = 4;
     optional int32 index_correspondence = 6; // NTableClient::ESecondaryIndexState
+    optional TTableSchema evaluated_columns_schema = 7;
 }
 
 message TReqGetTableMountInfo

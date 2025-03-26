@@ -322,11 +322,25 @@ namespace NKikimr::NBsController {
 
         if (record.HasClusterYaml()) {
             PendingYamlConfig.emplace(record.GetClusterYaml());
+
             // don't need to reset them explicitly
             // every time we get new request we just replace them
             AllowUnknownFields = record.GetAllowUnknownFields();
+
+            if (Self.YamlConfig && PendingYamlConfig == std::get<0>(*Self.YamlConfig)) {
+                PendingYamlConfig.reset(); // no cluster yaml config changed
+            }
         } else {
             PendingYamlConfig.reset();
+        }
+
+        if (PendingStorageYamlConfig == Self.StorageYamlConfig) {
+            PendingStorageYamlConfig.reset(); // no storage yaml config changed
+        }
+
+        if (!PendingYamlConfig && !PendingStorageYamlConfig) {
+            // nothing changes -- finish request now
+            return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::Success);
         }
 
         if (PendingYamlConfig) {
@@ -339,6 +353,10 @@ namespace NKikimr::NBsController {
                 return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest,
                      TStringBuilder() << "cluster YAML config version mismatch got# " << meta.Version
                          << " expected# " << expected);
+           } else if (meta.Cluster != AppData()->ClusterName) {
+                return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest,
+                     TStringBuilder() << "cluster YAML config cluster name mismatch got# " << meta.Cluster
+                         << " expected# " << AppData()->ClusterName);
            }
         }
 
@@ -352,7 +370,11 @@ namespace NKikimr::NBsController {
                 return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest,
                     TStringBuilder() << "storage YAML config version mismatch got# " << meta.Version
                         << " expected# " << expected);
-            }
+           } else if (meta.Cluster != AppData()->ClusterName) {
+                return IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::InvalidRequest,
+                     TStringBuilder() << "storage YAML config cluster name mismatch got# " << meta.Cluster
+                         << " expected# " << AppData()->ClusterName);
+           }
         }
 
         if (record.GetSkipConsoleValidation() || !record.HasClusterYaml()) {

@@ -22,10 +22,6 @@
             ],
             "writes": [
                 {
-                    "columns": [
-                        "key",
-                        "subkey"
-                    ],
                     "type": "MultiErase"
                 }
             ]
@@ -34,10 +30,6 @@
             "name": "/local/base_write_delete_on_sql_plan/Input1",
             "writes": [
                 {
-                    "columns": [
-                        "Group",
-                        "Name"
-                    ],
                     "type": "MultiErase"
                 }
             ]

@@ -324,10 +324,6 @@
                     ],
                     "writes": [
                         {
-                            "columns": [
-                                "Group",
-                                "Name"
-                            ],
                             "type": "MultiErase"
                         }
                     ]

@@ -16,17 +16,9 @@
                     "type": "MultiUpsert"
                 },
                 {
-                    "columns": [
-                        "Group",
-                        "Name"
-                    ],
                     "type": "MultiErase"
                 },
                 {
-                    "columns": [
-                        "Group",
-                        "Name"
-                    ],
                     "type": "MultiErase"
                 },
                 {

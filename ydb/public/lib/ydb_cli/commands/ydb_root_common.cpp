@@ -147,6 +147,9 @@ void TClientCommandRootCommon::Config(TConfig& config) {
         .RequiredArgument("NAME").StoreResult(&ProfileName);
     opts.AddLongOption('y', "assume-yes", "Automatic yes to prompts; assume \"yes\" as answer to all prompts and run non-interactively.")
         .Optional().StoreTrue(&config.AssumeYes);
+
+    opts.AddLongOption("no-discovery", "Do not perform discovery (client balancing) for ydb cluster connection.")
+        .Optional().StoreTrue(&config.SkipDiscovery);
     TClientCommandRootBase::Config(config);
 
     if (config.UseIamAuth) {

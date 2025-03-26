@@ -481,10 +481,11 @@ class KikimrConfigGenerator(object):
             self.yaml_config["default_disk_type"] = "ROT"
             self.yaml_config["fail_domain_type"] = "rack"
             self._add_host_config_and_hosts()
-            self.yaml_config.pop("blob_storage_config")
-            self.yaml_config.pop("domains_config")
-            self.yaml_config.pop("nameservice_config")
             self.yaml_config["erasure"] = self.yaml_config.pop("static_erasure")
+
+            for name in ['blob_storage_config', 'domains_config', 'nameservice_config', 'system_tablets', 'grpc_config',
+                         'channel_profile_config', 'interconnect_config']:
+                del self.yaml_config[name]
         if self.simple_config:
             self.yaml_config.pop("feature_flags")
             self.yaml_config.pop("federated_query_config")

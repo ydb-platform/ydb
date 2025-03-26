@@ -145,7 +145,7 @@ class YdbCliHelper:
                 self.result.iterations[iter_num] = YdbCliHelper.Iteration()
 
         def _parse_stderr(self, stderr: str) -> None:
-            self.result.stderr = stderr   
+            self.result.stderr = stderr
             begin_str = f'{self.query_num}:'
             end_str = 'Query text:'
             iter_str = 'iteration '

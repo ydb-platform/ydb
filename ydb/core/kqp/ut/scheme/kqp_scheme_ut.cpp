@@ -6642,7 +6642,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(CreateExternalDataSourceWithSa) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig config;
+        config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        config.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(50000);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(config));
+
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -6791,7 +6795,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DropExternalDataSource) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig config;
+        config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        config.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(50000);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(config));
+
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -6831,7 +6839,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DoubleCreateExternalDataSource) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig config;
+        config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        config.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(50000);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(config));
+
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -6872,7 +6884,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(CreateExternalTable) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig config;
+        config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        config.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(50000);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(config));
+
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -6959,7 +6975,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DropExternalTable) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig config;
+        config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        config.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(50000);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(config));
+
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -7016,7 +7036,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(CreateExternalTableWithSettings) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig config;
+        config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        config.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(50000);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(config));
+
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -7064,7 +7088,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(CreateExternalTableWithUpperCaseSettings) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig config;
+        config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        config.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(50000);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(config));
+
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -7112,7 +7140,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DoubleCreateExternalTable) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig config;
+        config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        config.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(50000);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(config));
+
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -7162,7 +7194,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
     }
 
     Y_UNIT_TEST(DropDependentExternalDataSource) {
-        TKikimrRunner kikimr;
+        NKikimrConfig::TAppConfig config;
+        config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        config.MutableQueryServiceConfig()->MutableS3()->SetGeneratorPathsLimit(50000);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetAppConfig(config));
+
         kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableExternalDataSources(true);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

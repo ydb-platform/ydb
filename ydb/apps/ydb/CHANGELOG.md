@@ -1,3 +1,4 @@
+* YDB CLI help message improvements. Different display for detailed help and brief help.
 * Support coordination nodes in `ydb scheme rmdir --recursive`.
 * Fixed return code of command `ydb workload * run --check-canonical` for the case when benchmark query results differ from canonical ones.
 

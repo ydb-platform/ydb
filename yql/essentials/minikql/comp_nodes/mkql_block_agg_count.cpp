@@ -158,6 +158,14 @@ public:
         buffer.PopNumber(typedState->Count_);
     }
 
+    void DeserializeAndUpdateState(void* state, NUdf::TInputBuffer& buffer) final {
+        auto typedState = static_cast<TState*>(state);
+
+        TState deserializedState;
+        buffer.PopNumber(deserializedState.Count_);
+        typedState->Count_ += deserializedState.Count_;
+    }
+
     std::unique_ptr<IAggColumnBuilder> MakeResultBuilder(ui64 size) final {
         return std::make_unique<TColumnBuilder>(size, Ctx_);
     }

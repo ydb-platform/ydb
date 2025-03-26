@@ -60,7 +60,8 @@ struct TPartitionActorInfo {
     ui64 MaxProcessedDirectReadId = 0;
     ui64 LastDirectReadId = 0;
 
-    std::map<i64, TDirectReadInfo> DirectReads;
+    std::map<ui64, TDirectReadInfo> DirectReads;
+    std::queue<ui64> PendingDirectReadAcks;
 
     explicit TPartitionActorInfo(
             const TActorId& actor,
@@ -191,6 +192,7 @@ private:
 
     static constexpr ui64 MAX_INFLY_BYTES = 25_MB;
     static constexpr ui32 MAX_INFLY_READS = 10;
+    static constexpr ui32 MAX_PENDING_DIRECT_READ_ACKS = 10;
 
     static constexpr ui64 MAX_READ_SIZE = 100_MB;
     static constexpr ui64 READ_BLOCK_SIZE = 8_KB; // metering
@@ -330,6 +332,10 @@ private:
     void ProcessReads(const TActorContext& ctx);
     ui64 PrepareResponse(typename TFormedReadResponse<TServerMessage>::TPtr formedResponse);
     void ProcessAnswer(typename TFormedReadResponse<TServerMessage>::TPtr formedResponse, const TActorContext& ctx);
+    void ProcessDirectReads(
+        TPartitionsMap::iterator it,
+        const TActorContext& ctx
+    );
 
     void DropPartition(TPartitionsMapIterator& it, const TActorContext& ctx);
     void ReleasePartition(TPartitionsMapIterator& it, bool couldBeReads, const TActorContext& ctx);

@@ -51,6 +51,7 @@ END()
 
 IF (NOT EXPORT_CMAKE)
     RECURSE_FOR_TESTS(
+        ut2
         ut3
     )
 ENDIF()

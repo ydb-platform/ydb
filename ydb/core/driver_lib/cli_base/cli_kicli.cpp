@@ -1,5 +1,5 @@
-#include <ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/public/lib/ydb_cli/commands/ydb_sdk_core_access.h>
 #include <ydb/core/driver_lib/cli_config_base/config_base.h>
 #include "cli_kicli.h"
@@ -35,14 +35,6 @@ void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBus
 }
 
 void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusConsoleRequest>& request) {
-    SetToken(config, request);
-}
-
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusTabletLocalMKQL>& request) {
-    SetToken(config, request);
-}
-
-void PrepareRequest(TClientCommand::TConfig& config, TAutoPtr<NMsgBusProxy::TBusTabletLocalSchemeTx>& request) {
     SetToken(config, request);
 }
 

@@ -957,7 +957,12 @@ TEMPLATE_SCHEMA = {
 
 
 def _host_and_ic_port(host):
-    return "%s:%s" % (host.get("name", host.get("host")), str(host.get("ic_port", 19001)))
+    port = 19001
+    if "ic_port" in host:
+        port = host["ic_port"]
+    if "port" in host:
+        port = host["port"]
+    return "%s:%s" % (host.get("name", host.get("host")), str(port))
 
 
 def checkNameServiceDuplicates(validator, allow_duplicates, instance, schema):

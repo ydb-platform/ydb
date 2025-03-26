@@ -1,7 +1,7 @@
 #include "ydb_common_ut.h"
 
-#include <ydb-cpp-sdk/client/result/result.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>

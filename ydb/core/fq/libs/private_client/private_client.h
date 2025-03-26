@@ -2,7 +2,7 @@
 
 #include <library/cpp/monlib/dynamic_counters/counters.h>
 
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/core/fq/libs/protos/fq_private.pb.h>
 #include <ydb/core/fq/libs/grpc/fq_private_v1.grpc.pb.h>
 

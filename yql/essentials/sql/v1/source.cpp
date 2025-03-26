@@ -649,7 +649,7 @@ TMaybe<TString> ISource::FindColumnMistype(const TString& name) const {
     return result ? result : FindMistypeIn(ExprAliases, name);
 }
 
-void ISource::AddDependentSource(ISource* usedSource) {
+void ISource::AddDependentSource(TSourcePtr usedSource) {
     UsedSources.push_back(usedSource);
 }
 

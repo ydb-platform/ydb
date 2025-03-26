@@ -52,6 +52,11 @@ message TConsistencySettings {
     }
 }
 
+message TBatchingSettings {
+    optional uint64 FlushIntervalMilliSeconds = 1 [default = 60000];
+    optional uint64 BatchSizeBytes = 2 [default = 8388608];
+}
+
 message TReplicationConfig {
     message TTargetEverything {
         optional string DstPrefix = 1;
@@ -87,9 +92,10 @@ message TReplicationConfig {
             optional uint32 LagMilliSeconds = 5;
             // transfer
             optional string TransformLambda = 6;
+            optional string ConsumerName = 7;
         }
-
-        repeated TTarget Targets = 1;
+        optional TTarget Target = 1;
+        optional TBatchingSettings Batching = 2;
     }
 
     optional TConnectionParams SrcConnectionParams = 1;
@@ -251,6 +257,7 @@ message TLocalTableWriterSettings {
 message TTransferWriterSettings {
     optional NKikimrProto.TPathID PathId = 1;
     optional string TransformLambda = 2;
+    optional TBatchingSettings Batching = 3;
 }
 
 message TRunWorkerCommand {

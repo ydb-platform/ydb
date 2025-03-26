@@ -43,7 +43,7 @@ EExecutionStatus TPrepareDataTxInRSUnit::Execute(TOperation::TPtr op,
                                                  const TActorContext &ctx)
 {
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     if (tx->IsTxDataReleased()) {
         switch (Pipeline.RestoreDataTx(tx, txc, ctx)) {
@@ -52,12 +52,12 @@ EExecutionStatus TPrepareDataTxInRSUnit::Execute(TOperation::TPtr op,
             case ERestoreDataStatus::Restart:
                 return EExecutionStatus::Restart;
             case ERestoreDataStatus::Error:
-                Y_ABORT("Failed to restore tx data: %s", tx->GetDataTx()->GetErrors().c_str());
+                Y_ENSURE(false, "Failed to restore tx data: " << tx->GetDataTx()->GetErrors());
         }
     }
 
     IEngineFlat *engine = tx->GetDataTx()->GetEngine();
-    Y_VERIFY_S(engine, "missing engine for " << *op << " at " << DataShard.TabletID());
+    Y_ENSURE(engine, "missing engine for " << *op << " at " << DataShard.TabletID());
 
     // TODO: cancel tx in special execution unit.
     if (tx->GetDataTx()->CheckCancelled(DataShard.TabletID()))
@@ -66,7 +66,7 @@ EExecutionStatus TPrepareDataTxInRSUnit::Execute(TOperation::TPtr op,
     try {
         auto &inReadSets = op->InReadSets();
         auto result = engine->PrepareIncomingReadsets();
-        Y_VERIFY_S(result == IEngineFlat::EResult::Ok,
+        Y_ENSURE(result == IEngineFlat::EResult::Ok,
                    "Cannot prepare input RS for " << *op << " at "
                    << DataShard.TabletID() << ": " << engine->GetErrors());
 

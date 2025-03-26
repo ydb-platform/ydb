@@ -233,6 +233,8 @@ public:
         return Kind;
     }
 
+    bool ReturnsWorld() const;
+
     bool IsComposable() const {
         return (GetFlags() & TypeNonComposable) == 0;
     }
@@ -1413,6 +1415,21 @@ public:
     }
 };
 
+inline bool TTypeAnnotationNode::ReturnsWorld() const {
+    if (Kind == ETypeAnnotationKind::World) {
+        return true;
+    }
+
+    if (Kind == ETypeAnnotationKind::Tuple) {
+        auto tuple = static_cast<const TTupleExprType*>(this);
+        if (tuple->GetSize() == 2 && tuple->GetItems()[0]->GetKind() == ETypeAnnotationKind::World) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 inline bool TTypeAnnotationNode::Equals(const TTypeAnnotationNode& node) const {
     if (this == &node) {
         return true;
@@ -1656,6 +1673,24 @@ public:
         Result = std::move(result);
     }
 
+    const std::shared_ptr<TListType>& GetWorldLinks() const {
+        ENSURE_NOT_DELETED
+        ENSURE_NOT_FROZEN
+        return WorldLinks;
+    }
+
+    std::shared_ptr<TListType>& GetWorldLinks() {
+        ENSURE_NOT_DELETED
+        ENSURE_NOT_FROZEN
+        return WorldLinks;
+    }
+
+    void SetWorldLinks(std::shared_ptr<TListType>&& links) {
+        ENSURE_NOT_DELETED
+        ENSURE_NOT_FROZEN
+        WorldLinks = std::move(links);
+    }
+
     bool IsCallable(const std::string_view& name) const {
         ENSURE_NOT_DELETED
         return Type() == TExprNode::Callable && Content() == name;
@@ -1795,6 +1830,7 @@ public:
         ENSURE_NOT_FROZEN
         if (!--RefCount_) {
             Result.Reset();
+            WorldLinks.reset();
             Children_.clear();
             Constraints_.Clear();
             MarkDead();
@@ -2237,6 +2273,8 @@ private:
     const TExprNode* InnerLambda = nullptr;
 
     TPtr Result;
+
+    std::shared_ptr<TListType> WorldLinks;
 
     ui64 HashAbove = 0ULL;
     ui64 HashBelow = 0ULL;

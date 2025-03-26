@@ -2,6 +2,7 @@
 
 #include <ydb/core/tablet_flat/test/libs/rows/layout.h>
 #include <ydb/core/tablet_flat/test/libs/rows/mass.h>
+#include <ydb/core/tablet_flat/util_fmt_abort.h>
 
 #include <util/random/mersenne.h>
 #include <util/digest/city.h>
@@ -29,7 +30,7 @@ namespace NTest {
             }
         }
 
-        TRow Make(ui64 seq, bool hole) noexcept override
+        TRow Make(ui64 seq, bool hole) override
         {
             TSchemedCookRow row(*Scheme);
 
@@ -40,19 +41,19 @@ namespace NTest {
             return *row.Col(hash, bucket, name, ui32(Saved += hole ? 0 : 1));
         }
 
-        void Describe(IOutputStream &out) const noexcept override
+        void Describe(IOutputStream &out) const override
         {
             out << "ModelS3Hash";
         }
 
-        ui64 Base(const TRow &row) const noexcept override
+        ui64 Base(const TRow &row) const override
         {
             auto *up = row.Get(NTable::TTag(8));
 
             if (up == nullptr || up->Type != NScheme::NTypeIds::Uint32) {
-                Y_ABORT("Probably got row not from the TMass instance");
+                Y_TABLET_ERROR("Probably got row not from the TMass instance");
             } else if (up->Cell.Size() != sizeof(ui32) || !up->Cell.Data()) {
-                Y_ABORT("Last saved tow reference TCell is invalid in TRow");
+                Y_TABLET_ERROR("Last saved tow reference TCell is invalid in TRow");
             } else {
                 return *reinterpret_cast<const ui32*>(up->Cell.Data());
             }

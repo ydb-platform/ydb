@@ -34,7 +34,7 @@ namespace NTable {
             return Scheme || Redo || RemovedRowVersions;
         }
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "Change{" << Serial

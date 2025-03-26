@@ -11,8 +11,8 @@
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 
 #include <ydb/public/lib/fq/scope.h>
-#include <ydb-cpp-sdk/client/query/client.h>
-#include <ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>

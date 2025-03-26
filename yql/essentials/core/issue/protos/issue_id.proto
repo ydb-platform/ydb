@@ -42,6 +42,7 @@ message TIssuesIds {
 // core informational
         CORE_TOP_UNSUPPORTED_BLOCK_TYPES = 1200;
         CORE_TOP_UNSUPPORTED_BLOCK_CALLABLES = 1201;
+        CORE_UDF_RESOLVER = 1202;
 
 // core errors
         CORE_GC_NODES_LIMIT_EXCEEDED = 1500;

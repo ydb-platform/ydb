@@ -36,11 +36,13 @@ class Nodes(object):
 
         return command
 
-    def _check_async_execution(self, running_jobs, check_retcode=True, results=None):
+    def _check_async_execution(self, running_jobs, check_retcode=True, results=None, retry_attemps=0):
         if self._dry_run:
             return
 
         assert results is None or isinstance(results, dict)
+
+        new_jobs = []
 
         for cmd, process, host in running_jobs:
             out, err = process.communicate()
@@ -73,13 +75,19 @@ class Nodes(object):
                     )
                 )
                 if check_retcode:
-                    sys.exit(status_line)
+                    if retry_attemps > 0:
+                        new_jobs.append((cmd, subprocess.Popen(cmd), host))
+                    else:
+                        sys.exit(status_line)
             if results is not None:
                 results[host] = {
                     'retcode': retcode,
                     'stdout': out,
                     'stderr': err
                 }
+
+            if len(new_jobs) > 0:
+                self._check_async_execution(new_jobs, check_retcode, results, retry_attemps - 1)
 
     def execute_async_ret(self, cmd, check_retcode=True, nodes=None, results=None):
         running_jobs = []
@@ -157,7 +165,7 @@ class Nodes(object):
             process = subprocess.Popen(cmd)
             running_jobs.append((cmd, process, dst))
 
-        self._check_async_execution(running_jobs)
+        self._check_async_execution(running_jobs, retry_attemps=2)
 
     def copy(self, local_path, remote_path, directory=False, compressed_path=None):
         """

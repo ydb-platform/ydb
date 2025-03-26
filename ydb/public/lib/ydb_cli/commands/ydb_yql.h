@@ -3,7 +3,7 @@
 #include "ydb_command.h"
 #include "ydb_common.h"
 
-#include <ydb-cpp-sdk/client/draft/ydb_scripting.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/interruptible.h>
 #include <ydb/public/lib/ydb_cli/common/parameters.h>

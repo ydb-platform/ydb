@@ -33,6 +33,14 @@ NYTree::TFluentYsonBuilder::TAny<TOneShotFluentLogEventImpl<TParent>&&> TOneShot
 }
 
 template <class TParent>
+NYTree::TFluentYsonBuilder::TAny<TOneShotFluentLogEventImpl<TParent>&&> TOneShotFluentLogEventImpl<TParent>::Items(const NYson::TYsonString& attributes)
+{
+    YT_VERIFY(attributes.GetType() == NYson::EYsonType::MapFragment);
+    this->Consumer->OnRaw(attributes);
+    return NYTree::TFluentYsonBuilder::TAny<TThis&&>(this->Consumer, std::move(*this));
+}
+
+template <class TParent>
 TOneShotFluentLogEventImpl<TParent>::~TOneShotFluentLogEventImpl()
 {
     if (State_ && *Logger_) {

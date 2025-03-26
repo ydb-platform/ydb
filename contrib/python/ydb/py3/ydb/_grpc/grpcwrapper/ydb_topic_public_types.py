@@ -116,6 +116,28 @@ class PublicConsumer:
     attributes: Dict[str, str] = field(default_factory=lambda: dict())
     "Attributes of consumer"
 
+    consumer_stats: Optional["PublicConsumer.ConsumerStats"] = None
+
+    @dataclass
+    class ConsumerStats:
+        min_partitions_last_read_time: datetime.datetime
+        "Minimal timestamp of last read from partitions."
+
+        max_read_time_lag: datetime.timedelta
+        """
+        Maximum of differences between timestamp of read and write timestamp for all messages,
+        read during last minute.
+        """
+
+        max_write_time_lag: datetime.timedelta
+        """
+        Maximum of differences between write timestamp and create timestamp for all messages,
+        written during last minute.
+        """
+
+        bytes_read: "PublicMultipleWindowsStat"
+        "Bytes read statistics."
+
 
 @dataclass
 class PublicAlterConsumer:

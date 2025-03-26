@@ -241,6 +241,11 @@ namespace NYql::NDq::NWorker {
         NYql::NTaskRunnerProxy::TPipeFactoryOptions pfOptions;
         pfOptions.ExecPath = GetExecPath();
         pfOptions.FileCache = fileCache;
+
+        if (backendConfig.GetUseLocalLDLibraryPath()) {
+            pfOptions.Env["LD_LIBRARY_PATH"] = ".";
+        }
+
         if (deterministicMode) {
             YQL_LOG(DEBUG) << "deterministicMode On";
             pfOptions.Env["YQL_DETERMINISTIC_MODE"] = "1";

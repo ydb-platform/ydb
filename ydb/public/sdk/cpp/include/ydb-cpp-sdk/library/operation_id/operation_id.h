@@ -9,6 +9,7 @@ namespace Ydb {
 }
 
 namespace NKikimr {
+inline namespace Dev {
 namespace NOperationId {
 
 class TOperationId {
@@ -69,5 +70,6 @@ TOperationId::EKind ParseKind(const std::string_view value);
 std::string FormatPreparedQueryIdCompat(const std::string& str);
 bool DecodePreparedQueryIdCompat(const std::string& in, std::string& out);
 
-} // namespace NOperationId
-} // namespace NKikimr
+}
+}
+}

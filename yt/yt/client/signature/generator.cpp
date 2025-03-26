@@ -34,6 +34,12 @@ ISignatureGeneratorPtr CreateDummySignatureGenerator()
     return New<TDummySignatureGenerator>();
 }
 
+const ISignatureGeneratorPtr& GetDummySignatureGenerator()
+{
+    static ISignatureGeneratorPtr signatureGenerator = CreateDummySignatureGenerator();
+    return signatureGenerator;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TAlwaysThrowingSignatureGenerator

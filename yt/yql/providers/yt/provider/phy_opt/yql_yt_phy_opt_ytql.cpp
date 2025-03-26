@@ -161,23 +161,24 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ExtractQLFilters(TExprB
     }
     YQL_ENSURE(qlCompatiblePredicate);
 
-    TExprNode::TPtr prunedPredicate;
-    if (otherParts.empty()) {
-        prunedPredicate = MakeBool<true>(predicate->Pos(), ctx);
-    } else if (otherParts.size() == 1) {
-        prunedPredicate = otherParts.front();
-    } else {
-        prunedPredicate = ctx.NewCallable(predicate->Pos(), "And", std::move(otherParts));
-    }
-    YQL_ENSURE(prunedPredicate);
-
     const auto typeNode = ExpandType(rowArg->Pos(), *rowArg->GetTypeAnn(), ctx);
     const auto lambdaNode = ctx.NewLambda(qlCompatiblePredicate->Pos(), ctx.NewArguments(qlCompatiblePredicate->Pos(), {newRowArg}), std::move(qlCompatiblePredicate));
     const auto qlFilter = ctx.NewCallable(flatMap.Cast().Pos(), "YtQLFilter", {typeNode, lambdaNode});
 
     auto newOpMap = ctx.ChangeChild(opMap.Ref(), TYtMap::idx_Settings, NYql::AddSetting(opMap.Settings().Ref(), EYtSettingType::QLFilter, qlFilter, ctx));
+
     const bool pruneLambda = State_->Configuration->PruneQLFilterLambda.Get().GetOrElse(DEFAULT_PRUNE_QL_FILTER_LAMBDA);
     if (pruneLambda) {
+        TExprNode::TPtr prunedPredicate;
+        if (otherParts.empty()) {
+            prunedPredicate = MakeBool<true>(predicate->Pos(), ctx);
+        } else if (otherParts.size() == 1) {
+            prunedPredicate = otherParts.front();
+        } else {
+            prunedPredicate = ctx.NewCallable(predicate->Pos(), "And", std::move(otherParts));
+        }
+        YQL_ENSURE(prunedPredicate);
+
         const auto newFlatMap = Build<TCoFlatMapBase>(ctx, flatMap.Cast().Pos())
             .InitFrom(flatMap.Cast())
             .Lambda()

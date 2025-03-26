@@ -297,7 +297,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLChopperStreamTest) {
         UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|0|0|0|0|0|");
     }
 }
-#if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 9u
+
 Y_UNIT_TEST_SUITE(TMiniKQLChopperFlowTest) {
     Y_UNIT_TEST_LLVM(TestEmpty) {
         TSetup<LLVM> setup;
@@ -482,6 +482,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLChopperFlowTest) {
         UNIT_ASSERT_VALUES_EQUAL(TStringBuf(result.AsStringRef()), "|0|0|0|0|0|");
     }
 }
-#endif
+
 } // NMiniKQL
 } // NKikimr

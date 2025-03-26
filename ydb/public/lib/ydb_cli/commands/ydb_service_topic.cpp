@@ -8,7 +8,7 @@
 #include <ydb/public/lib/ydb_cli/common/print_utils.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_read.h>
 #include <ydb/public/lib/ydb_cli/topic/topic_write.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <util/generic/set.h>
 #include <util/stream/str.h>
@@ -792,7 +792,7 @@ namespace NYdb::NConsoleClient {
             .StoreResult(&IdleTimeout_);
         config.Opts->AddLongOption("commit", "Commit messages after successful read")
             .Optional()
-            .DefaultValue(true)
+            .DefaultValue(false)
             .StoreResult(&Commit_);
         config.Opts->AddLongOption("limit", "Limit on message count to read, 0 - unlimited. "
                                             "If avobe 0, processing stops when either topic is empty, or the specified limit reached. "
@@ -808,7 +808,7 @@ namespace NYdb::NConsoleClient {
             .RequiredArgument("TIMESTAMP")
             .Optional()
             .Handler1T<TString>(TimestampOptionHandler(&Timestamp_));
-        config.Opts->AddLongOption("partition-ids", "Comma separated list of partition ids to read from. If not specified, messages are read from all partitions.")
+        config.Opts->AddLongOption("partition-ids", "Comma separated list of partition ids to read from. If not specified, messages are read from all partitions. E.g. \"--partition-ids 0,1,10\"")
             .Optional()
             .SplitHandler(&PartitionIds_, ',');
 

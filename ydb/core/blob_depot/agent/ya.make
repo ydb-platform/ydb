@@ -1,5 +1,15 @@
 LIBRARY()
 
+    IF (OS_WINDOWS)
+        CFLAGS(
+            -DKIKIMR_DISABLE_S3_OPS
+        )
+    ELSE()
+        SRCS(
+            s3.cpp
+        )
+    ENDIF()
+
     SRCS(
         agent.cpp
         agent.h
@@ -37,6 +47,7 @@ LIBRARY()
         ydb/core/blobstorage/vdisk/common
         ydb/core/blob_depot
         ydb/core/protos
+        ydb/core/wrappers
     )
 
 END()

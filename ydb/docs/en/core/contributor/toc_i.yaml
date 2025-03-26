@@ -5,6 +5,11 @@ items:
   href: build-ya.md
 - name: Releases
   href: manage-releases.md
+- name: Documentation
+  href: documentation/index.md
+  include:
+    mode: link
+    path: documentation/toc_p.yaml
 - name: Core
   items:
   - name: General schema

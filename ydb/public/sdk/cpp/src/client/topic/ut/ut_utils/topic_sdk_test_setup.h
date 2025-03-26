@@ -1,8 +1,8 @@
 #pragma once
 
-#include <src/client/persqueue_public/ut/ut_utils/test_server.h>
+#include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 
-#include <src/client/topic/impl/write_session.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/write_session.h>
 
 namespace NYdb::NTopic::NTests {
 

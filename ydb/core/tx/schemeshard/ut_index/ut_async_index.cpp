@@ -5,7 +5,7 @@
 #include <ydb/core/tx/schemeshard/ut_helpers/test_with_reboots.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 using namespace NKikimr;
 using namespace NSchemeShard;

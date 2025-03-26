@@ -105,11 +105,16 @@ TDiskSpaceStatistics GetDiskSpaceStatistics(const TString& path);
 //! Creates the #path and parent directories if they don't exists.
 void MakeDirRecursive(const TString& path, int mode = 0777);
 
+constexpr ui32 UnnamedDeviceMajor = 0;
+
+//! Device major:minor pair.
+using TDeviceId = std::pair<ui32, ui32>;
+
 struct TPathStatistics
 {
     i64 Size = -1;
     ui64 INode;
-    int DeviceId;
+    TDeviceId DeviceId;
     TInstant ModificationTime;
     TInstant AccessTime;
 };
@@ -234,8 +239,8 @@ void Splice(
 TError AttachLsofOutput(TError error, const TString& path);
 TError AttachFindOutput(TError error, const TString& path);
 
-//! Returns id of device path belongs to.
-int GetDeviceId(const TString& path);
+//! Returns id of device (major:minor) path belongs to.
+TDeviceId GetDeviceId(const TString& path);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -142,3 +142,15 @@ BELONGS ya.make
         Links           : http://www.gnu.org/prep/maintain/html_node/License-Notices-for-Other-Files.html, https://spdx.org/licenses/FSFAP
     Files with this license:
         INSTALL [7:10]
+
+KEEP     MIT                  f759889bc387afe17a80ab852d7af858
+BELONGS ya.make
+FILE_INCLUDE AUTHORS found in files: lib/sfparse.c at line 1076
+    Note: matched license text is too long. Read it in the source files.
+    Scancode info:
+        Original SPDX id: MIT
+        Score           : 100.00
+        Match type      : TEXT
+        Links           : http://opensource.org/licenses/mit-license.php, https://spdx.org/licenses/MIT
+    Files with this license:
+        lib/sfparse.c [1062:1080]

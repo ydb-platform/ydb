@@ -9,35 +9,109 @@
 
 
 namespace NMonitoring {
+
+    struct TMetricOpts {
+        bool MemOnly = false;
+    };
+
     class IMetricFactory {
     public:
         virtual ~IMetricFactory() = default;
 
         virtual IGauge* Gauge(ILabelsPtr labels) = 0;
+        virtual IGauge* GaugeWithOpts(ILabelsPtr labels, TMetricOpts opts = {}) {
+                Y_UNUSED(opts);
+                return Gauge(std::move(labels));
+        }
+
         virtual ILazyGauge* LazyGauge(ILabelsPtr labels, std::function<double()> supplier) = 0;
+        virtual ILazyGauge* LazyGaugeWithOpts(ILabelsPtr labels, std::function<double()> supplier, TMetricOpts opts = {}) {
+                Y_UNUSED(opts);
+                return LazyGauge(std::move(labels), std::move(supplier));
+        }
+
         virtual IIntGauge* IntGauge(ILabelsPtr labels) = 0;
+        virtual IIntGauge* IntGaugeWithOpts(ILabelsPtr labels, TMetricOpts opts = {}) {
+            Y_UNUSED(opts);
+            return IntGauge(std::move(labels));
+        }
         virtual ILazyIntGauge* LazyIntGauge(ILabelsPtr labels, std::function<i64()> supplier) = 0;
+        virtual ILazyIntGauge* LazyIntGaugeWithOpts(ILabelsPtr labels, std::function<i64()> supplier, TMetricOpts opts = {}) {
+            Y_UNUSED(opts);
+            return LazyIntGauge(std::move(labels), std::move(supplier));
+        }
+
         virtual ICounter* Counter(ILabelsPtr labels) = 0;
+        virtual ICounter* CounterWithOpts(ILabelsPtr labels, TMetricOpts opts = {}) {
+            Y_UNUSED(opts);
+            return Counter(std::move(labels));
+        }
+
         virtual ILazyCounter* LazyCounter(ILabelsPtr labels, std::function<ui64()> supplier) = 0;
+        virtual ILazyCounter* LazyCounterWithOpts(ILabelsPtr labels, std::function<ui64()> supplier, TMetricOpts opts = {}) {
+            Y_UNUSED(opts);
+            return LazyCounter(std::move(labels), std::move(supplier));
+        }
 
         virtual IRate* Rate(ILabelsPtr labels) = 0;
+        virtual IRate* RateWithOpts(ILabelsPtr labels, TMetricOpts opts = {}) {
+            Y_UNUSED(opts);
+            return Rate(std::move(labels));
+        }
+
         virtual ILazyRate* LazyRate(ILabelsPtr labels, std::function<ui64()> supplier) = 0;
+        virtual ILazyRate* LazyRateWithOpts(ILabelsPtr labels, std::function<ui64()> supplier, TMetricOpts opts = {}) {
+            Y_UNUSED(opts);
+            return LazyRate(std::move(labels), std::move(supplier));
+        }
 
         virtual IHistogram* HistogramCounter(
                 ILabelsPtr labels,
                 IHistogramCollectorPtr collector) = 0;
+        virtual IHistogram* HistogramCounterWithOpts(
+                ILabelsPtr labels,
+                IHistogramCollectorPtr collector,
+                TMetricOpts opts = {})
+        {
+            Y_UNUSED(opts);
+            return HistogramCounter(std::move(labels), std::move(collector));
+        }
 
         virtual IHistogram* HistogramRate(
                 ILabelsPtr labels,
                 IHistogramCollectorPtr collector) = 0;
+        virtual IHistogram* HistogramRateWithOpts(
+            ILabelsPtr labels,
+            IHistogramCollectorPtr collector,
+            TMetricOpts opts = {})
+        {
+                Y_UNUSED(opts);
+                return HistogramRate(std::move(labels), std::move(collector));
+        }
 
         virtual IHistogram* HistogramCounter(
                 ILabelsPtr labels,
                 std::function<IHistogramCollectorPtr()> makeHistogramCollector) = 0;
+        virtual IHistogram* HistogramCounterWithOpts(
+                ILabelsPtr labels,
+                std::function<IHistogramCollectorPtr()> makeHistogramCollector,
+                TMetricOpts opts = {})
+        {
+                Y_UNUSED(opts);
+                return HistogramCounter(std::move(labels), std::move(makeHistogramCollector));
+        }
 
         virtual IHistogram* HistogramRate(
                 ILabelsPtr labels,
                 std::function<IHistogramCollectorPtr()> makeHistogramCollector) = 0;
+        virtual IHistogram* HistogramRateWithOpts(
+                ILabelsPtr labels,
+                std::function<IHistogramCollectorPtr()> makeHistogramCollector,
+                TMetricOpts opts = {})
+        {
+                Y_UNUSED(opts);
+                return HistogramRate(std::move(labels), std::move(makeHistogramCollector));
+        }
     };
 
     class IMetricSupplier {
@@ -79,29 +153,53 @@ namespace NMonitoring {
         static std::shared_ptr<TMetricRegistry> SharedInstance();
 
         TGauge* Gauge(TLabels labels);
+        TGauge* GaugeWithOpts(TLabels labels, TMetricOpts opts = {});
         TLazyGauge* LazyGauge(TLabels labels, std::function<double()> supplier);
+        TLazyGauge* LazyGaugeWithOpts(TLabels labels, std::function<double()> supplier, TMetricOpts opts = {});
         TIntGauge* IntGauge(TLabels labels);
+        TIntGauge* IntGaugeWithOpts(TLabels labels, TMetricOpts opts = {});
         TLazyIntGauge* LazyIntGauge(TLabels labels, std::function<i64()> supplier);
+        TLazyIntGauge* LazyIntGaugeWithOpts(TLabels labels, std::function<i64()> supplier, TMetricOpts opts = {});
         TCounter* Counter(TLabels labels);
+        TCounter* CounterWithOpts(TLabels labels, TMetricOpts opts = {});
         TLazyCounter* LazyCounter(TLabels labels, std::function<ui64()> supplier);
+        TLazyCounter* LazyCounterWithOpts(TLabels labels, std::function<ui64()> supplier, TMetricOpts opts = {});
         TRate* Rate(TLabels labels);
+        TRate* RateWithOpts(TLabels labels, TMetricOpts opts = {});
         TLazyRate* LazyRate(TLabels labels, std::function<ui64()> supplier);
+        TLazyRate* LazyRateWithOpts(TLabels labels, std::function<ui64()> supplier, TMetricOpts opts = {});
 
         THistogram* HistogramCounter(
                 TLabels labels,
                 IHistogramCollectorPtr collector);
+        THistogram* HistogramCounterWithOpts(
+                TLabels labels,
+                IHistogramCollectorPtr collector,
+                TMetricOpts opts = {});
 
         THistogram* HistogramRate(
                 TLabels labels,
                 IHistogramCollectorPtr collector);
+        THistogram* HistogramRateWithOpts(
+                TLabels labels,
+                IHistogramCollectorPtr collector,
+                TMetricOpts opts = {});
 
         THistogram* HistogramCounter(
                 TLabels labels,
                 std::function<IHistogramCollectorPtr()> makeHistogramCollector);
+        THistogram* HistogramCounterWithOpts(
+                TLabels labels,
+                std::function<IHistogramCollectorPtr()> makeHistogramCollector,
+                TMetricOpts opts = {});
 
         THistogram* HistogramRate(
                 TLabels labels,
                 std::function<IHistogramCollectorPtr()> makeHistogramCollector);
+        THistogram* HistogramRateWithOpts(
+                TLabels labels,
+                std::function<IHistogramCollectorPtr()> makeHistogramCollector,
+                TMetricOpts opts = {});
 
         /**
          * Set all registered metrics to zero
@@ -123,36 +221,65 @@ namespace NMonitoring {
 
     private:
         TGauge* Gauge(ILabelsPtr labels) override;
+        TGauge* GaugeWithOpts(ILabelsPtr labels, TMetricOpts opts = {}) override;
         TLazyGauge* LazyGauge(ILabelsPtr labels, std::function<double()> supplier) override;
+        TLazyGauge* LazyGaugeWithOpts(ILabelsPtr labels, std::function<double()> supplier, TMetricOpts opts = {}) override;
         TIntGauge* IntGauge(ILabelsPtr labels) override;
+        TIntGauge* IntGaugeWithOpts(ILabelsPtr labels, TMetricOpts opts = {}) override;
         TLazyIntGauge* LazyIntGauge(ILabelsPtr labels, std::function<i64()> supplier) override;
+        TLazyIntGauge* LazyIntGaugeWithOpts(ILabelsPtr labels, std::function<i64()> supplier, TMetricOpts opts = {}) override;
         TCounter* Counter(ILabelsPtr labels) override;
+        TCounter* CounterWithOpts(ILabelsPtr labels, TMetricOpts opts = {}) override;
         TLazyCounter* LazyCounter(ILabelsPtr labels, std::function<ui64()> supplier) override;
+        TLazyCounter* LazyCounterWithOpts(ILabelsPtr labels, std::function<ui64()> supplier, TMetricOpts opts = {}) override;
         TRate* Rate(ILabelsPtr labels) override;
+        TRate* RateWithOpts(ILabelsPtr labels, TMetricOpts opts = {}) override;
         TLazyRate* LazyRate(ILabelsPtr labels, std::function<ui64()> supplier) override;
+        TLazyRate* LazyRateWithOpts(ILabelsPtr labels, std::function<ui64()> supplier, TMetricOpts opts = {}) override;
 
         THistogram* HistogramCounter(
                 ILabelsPtr labels,
                 IHistogramCollectorPtr collector) override;
+        THistogram* HistogramCounterWithOpts(
+                ILabelsPtr labels,
+                IHistogramCollectorPtr collector,
+                TMetricOpts opts = {}) override;
 
         THistogram* HistogramRate(
                 ILabelsPtr labels,
                 IHistogramCollectorPtr collector) override;
+        THistogram* HistogramRateWithOpts(
+                ILabelsPtr labels,
+                IHistogramCollectorPtr collector,
+                TMetricOpts opts = {}) override;
 
         THistogram* HistogramCounter(
                 ILabelsPtr labels,
                 std::function<IHistogramCollectorPtr()> makeHistogramCollector) override;
+        THistogram* HistogramCounterWithOpts(
+                ILabelsPtr labels,
+                std::function<IHistogramCollectorPtr()> makeHistogramCollector,
+                TMetricOpts opts = {}) override;
 
         THistogram* HistogramRate(
                 ILabelsPtr labels,
                 std::function<IHistogramCollectorPtr()> makeHistogramCollector) override;
+        THistogram* HistogramRateWithOpts(
+                ILabelsPtr labels,
+                std::function<IHistogramCollectorPtr()> makeHistogramCollector,
+                TMetricOpts opts = {}) override;
+
+        struct TMetricValue {
+            IMetricPtr Metric;
+            TMetricOpts Opts;
+        };
 
     private:
         THolder<TRWMutex> Lock_ = MakeHolder<TRWMutex>();
-        THashMap<ILabelsPtr, IMetricPtr> Metrics_;
+        THashMap<ILabelsPtr, TMetricValue> Metrics_;
 
         template <typename TMetric, EMetricType type, typename TLabelsType, typename... Args>
-        TMetric* Metric(TLabelsType&& labels, Args&&... args);
+        TMetric* Metric(TLabelsType&& labels, TMetricOpts&& opts, Args&&... args);
 
         TLabels CommonLabels_;
     };

@@ -6,7 +6,7 @@
 #undef INCLUDE_YDB_INTERNAL_H
 
 #include <ydb/public/api/grpc/draft/ydb_logstore_v1.grpc.pb.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>

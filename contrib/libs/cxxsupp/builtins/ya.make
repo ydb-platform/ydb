@@ -12,9 +12,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(19.1.7)
+VERSION(20.1.0)
 
-ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/releases/download/llvmorg-19.1.7/compiler-rt-19.1.7.src.tar.xz)
+ORIGINAL_SOURCE(https://github.com/llvm/llvm-project/releases/download/llvmorg-20.1.0/compiler-rt-20.1.0.src.tar.xz)
 
 NO_COMPILER_WARNINGS()
 
@@ -79,9 +79,9 @@ IF (ARCH_ARM64 OR ARCH_X86_64)
             # NB: sources that were commented out were added in llvm-20
             extendbfsf2.c
             truncdfbf2.c
-            # truncxfbf2.c
+            truncxfbf2.c
             truncsfbf2.c
-            # trunctfbf2.c
+            trunctfbf2.c
         )
     ENDIF()
 ENDIF()
@@ -323,8 +323,7 @@ ELSEIF (ARCH_AARCH64)
     SRCS(
         aarch64/chkstk.S
         aarch64/fp_mode.c
-        aarch64/sme-abi-init.c
-        aarch64/sme-abi-vg.c
+        aarch64/sme-abi-assert.c
         aarch64/sme-abi.S
         aarch64/sme-libc-mem-routines.S
         absvdi2.c
@@ -645,6 +644,7 @@ ELSEIF (ARCH_X86_64)
         SRCS(
             x86_64/floatdixf.c
             divxc3.c
+            extendhfxf2.c
             extendxftf2.c
             fixunsxfdi.c
             fixunsxfsi.c
@@ -656,6 +656,7 @@ ELSEIF (ARCH_X86_64)
             mulxc3.c
             powixf2.c
             trunctfxf2.c
+            truncxfhf2.c
         )
     ENDIF()
 ELSE()

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/change_exchange/fwd.h>
+#include "fwd.h"
 
 #include <util/generic/fwd.h>
 #include <util/system/yassert.h>

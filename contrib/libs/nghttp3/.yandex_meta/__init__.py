@@ -1,10 +1,23 @@
 from devtools.yamaker.project import CMakeNinjaNixProject
 
+DUPLICATE_SYMS = [
+    "sfparse_base64decode",
+    "sfparse_parser_dict",
+    "sfparse_parser_inner_list",
+    "sfparse_parser_init",
+    "sfparse_parser_item",
+    "sfparse_parser_list",
+    "sfparse_parser_param",
+    "sfparse_pctdecode",
+    "sfparse_unescape",
+]
+
 
 def post_install(self):
     # Prefix sfparse_parser_dict to avoid conflicts with nghttp2 which also bundles sfparse library
     with self.yamakes["."] as m:
-        m.CFLAGS.append("-Dsfparse_parser_dict=nghttp3_sfparse_parser_dict")
+        for sym in DUPLICATE_SYMS:
+            m.CFLAGS.append(f"-D{sym}=nghttp3_{sym}")
 
 
 nghttp3 = CMakeNinjaNixProject(

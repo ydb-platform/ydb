@@ -96,9 +96,24 @@ message MaintenanceTaskOptions {
 
 // Used to describe the scope of a single action.
 message ActionScope {
+    message PDiskId {
+        uint32 node_id = 1;
+        uint32 pdisk_id = 2;
+    }
+    message PDiskLocation {
+        string host = 1 [(length).le = 255];
+        string path = 2 [(length).le = 255];
+    }
+    message PDisk {
+        oneof pdisk {
+            PDiskId pdisk_id = 1;
+            PDiskLocation pdisk_location = 2;
+        }
+    }
     oneof scope {
         uint32 node_id = 1;
         string host = 2 [(length).le = 255];
+        PDisk pdisk = 3;
     }
 }
 
@@ -182,6 +197,10 @@ message MaintenanceTaskResult {
     repeated ActionGroupStates action_group_states = 2;
     // Try again after this deadline. Specified if there are no performed actions.
     optional google.protobuf.Timestamp retry_after = 3;
+    // The time when the mainteance task was created.
+    google.protobuf.Timestamp create_time = 4;
+    // The last time when the mainteance task was refreshed. Initially equals to create_time.
+    google.protobuf.Timestamp last_refresh_time = 5;
 }
 
 message MaintenanceTaskResponse {
@@ -197,6 +216,10 @@ message GetMaintenanceTaskRequest {
 message GetMaintenanceTaskResult {
     MaintenanceTaskOptions task_options = 1;
     repeated ActionGroupStates action_group_states = 2;
+    // The time when the mainteance task was created.
+    google.protobuf.Timestamp create_time = 3;
+    // The last time when the mainteance task was refreshed. Initially equals to create_time.
+    google.protobuf.Timestamp last_refresh_time = 4;
 }
 
 message GetMaintenanceTaskResponse {

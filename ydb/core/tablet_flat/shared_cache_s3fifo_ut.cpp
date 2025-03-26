@@ -53,7 +53,7 @@ namespace {
 
         static void SetLocation(TPage* page, ES3FIFOPageLocation location) {
             ui32 location_ = static_cast<ui32>(location);
-            Y_ABORT_UNLESS(location_ < (1 << 4));
+            Y_ENSURE(location_ < (1 << 4));
             page->CacheFlags1 = location_;
         }
 
@@ -62,7 +62,7 @@ namespace {
         }
 
         static void SetFrequency(TPage* page, ui32 frequency) {
-            Y_ABORT_UNLESS(frequency < (1 << 4));
+            Y_ENSURE(frequency < (1 << 4));
             page->CacheFlags2 = frequency;
         }
     };

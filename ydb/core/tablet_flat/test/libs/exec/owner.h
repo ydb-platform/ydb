@@ -9,8 +9,8 @@
 #include <ydb/core/base/tablet.h>
 #include <ydb/core/mind/local.h>
 #include <ydb/core/tablet/tablet_setup.h>
-#include <ydb/core/tablet_flat/util_fmt_logger.h>
 #include <ydb/core/tablet_flat/util_fmt_abort.h>
+#include <ydb/core/tablet_flat/util_fmt_logger.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
@@ -31,7 +31,7 @@ namespace NFake {
             , Limit(Max(ui32(1), limit))
             , FollowerId(followerId)
         {
-            Y_ABORT_UNLESS(TTabletTypes::TypeInvalid != Info->TabletType);
+            Y_ENSURE(TTabletTypes::TypeInvalid != Info->TabletType);
         }
 
     private:
@@ -79,13 +79,13 @@ namespace NFake {
             } else if (eh->CastAsLocal<TEvTablet::TEvReady>()) {
 
             } else {
-                Y_Fail("Unexpected event " << eh->GetTypeName());
+                Y_TABLET_ERROR("Unexpected event " << eh->GetTypeName());
             }
         }
 
-        void Start(const TActorContext &ctx) noexcept
+        void Start(const TActorContext &ctx)
         {
-            Y_ABORT_UNLESS(!Agent, "Tablet actor is already started");
+            Y_ENSURE(!Agent, "Tablet actor is already started");
 
             if (auto logl = Logger->Log(ELnLev::Debug)) {
                 logl
@@ -101,12 +101,12 @@ namespace NFake {
                 Agent = Setup->Follower(Info.Get(), SelfId(), ctx, FollowerId, profile);
             }
 
-            Y_ABORT_UNLESS(Agent, "Failed to start new tablet actor");
+            Y_ENSURE(Agent, "Failed to start new tablet actor");
 
             Borns += 1;
         }
 
-        void DoSuicide() noexcept
+        void DoSuicide()
         {
             Send(std::exchange(Owner, { }), new TEvents::TEvGone);
             Send(std::exchange(User, { }), new TEvents::TEvGone);

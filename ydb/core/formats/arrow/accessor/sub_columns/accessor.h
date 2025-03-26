@@ -63,6 +63,15 @@ protected:
     }
 
 public:
+    virtual void DoVisitValues(const std::function<void(std::shared_ptr<arrow::Array>)>& /*visitor*/) const override {
+        AFL_VERIFY(false);
+    }
+
+    bool HasSubColumn(const TString& subColumnName) const {
+        return ColumnsData.GetStats().GetKeyIndexOptional(std::string_view(subColumnName.data(), subColumnName.size())) ||
+               OthersData.GetStats().GetKeyIndexOptional(std::string_view(subColumnName.data(), subColumnName.size()));
+    }
+
     void StoreSourceString(const TString& sourceDeserializationString) {
         AFL_VERIFY(!SourceDeserializationString);
         SourceDeserializationString = sourceDeserializationString;

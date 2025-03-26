@@ -1,6 +1,6 @@
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <src/library/string_utils/base64/base64.h>
+#include <ydb/public/sdk/cpp/src/library/string_utils/base64/base64.h>
 
 Y_UNIT_TEST_SUITE(TBase64DecodeUneven) {
     Y_UNIT_TEST(Base64DecodeUneven) {

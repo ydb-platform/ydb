@@ -1,12 +1,14 @@
 #pragma once
 
-#include <ydb-cpp-sdk/library/string_utils/helpers/helpers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/string_utils/helpers/helpers.h>
 
 #include <util/generic/yexception.h>
 #include <util/string/cast.h>
 
 #include <optional>
 
+namespace NYdb {
+inline namespace Dev {
 namespace NUtils {
 
 template <class TContainer, class T>
@@ -58,4 +60,6 @@ void GetNext(std::string_view& s, D delim, std::optional<std::string_view>& para
     }
 }
 
+}
+}
 }

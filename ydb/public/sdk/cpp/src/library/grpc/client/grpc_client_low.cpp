@@ -21,6 +21,7 @@
 #include <format>
 
 namespace NYdbGrpc {
+inline namespace Dev {
 
 void EnableGRpcTracing() {
     grpc_tracer_set_enabled("tcp", true);
@@ -603,4 +604,5 @@ grpc_socket_mutator* NImpl::CreateGRpcKeepAliveSocketMutator(const TTcpKeepAlive
     return nullptr;
 }
 
-} // namespace NGRpc
+}
+}

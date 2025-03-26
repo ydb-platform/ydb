@@ -45,7 +45,7 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
     const TActorContext& ctx)
 {
     TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     DataShard.ReleaseCache(*tx);
 
@@ -56,7 +56,7 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
             case ERestoreDataStatus::Restart:
                 return EExecutionStatus::Restart;
             case ERestoreDataStatus::Error:
-                Y_ABORT("Failed to restore tx data: %s", tx->GetDataTx()->GetErrors().c_str());
+                Y_ENSURE(false, "Failed to restore tx data: " << tx->GetDataTx()->GetErrors());
         }
     }
 
@@ -96,7 +96,7 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
         if (dataTx->GetKqpComputeCtx().HasPersistentChannels()) {
             auto result = KqpRunTransaction(ctx, op->GetTxId(), useGenericReadSets, tasksRunner);
 
-            Y_VERIFY_S(!dataTx->GetKqpComputeCtx().HadInconsistentReads(),
+            Y_ENSURE(!dataTx->GetKqpComputeCtx().HadInconsistentReads(),
                 "Unexpected inconsistent reads in operation " << *op << " when preparing persistent channels");
 
             if (result == NYql::NDq::ERunStatus::PendingInput && dataTx->GetKqpComputeCtx().IsTabletNotReady()) {
@@ -131,7 +131,7 @@ EExecutionStatus TBuildKqpDataTxOutRSUnit::Execute(TOperation::TPtr op, TTransac
                 ->AddError(NKikimrTxDataShard::TError::PROGRAM_ERROR, TStringBuilder() << "Tx was terminated: " << e.what());
             return EExecutionStatus::Executed;
         } else {
-            Y_FAIL_S("Unexpected exception in KQP out-readsets prepare: " << e.what());
+            throw;
         }
     }
 

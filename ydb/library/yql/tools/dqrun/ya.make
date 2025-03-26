@@ -70,7 +70,7 @@ ENDIF()
         ydb/library/yql/providers/pq/provider
         ydb/library/yql/providers/s3/actors
         ydb/library/yql/providers/s3/provider
-        ydb/library/yql/providers/solomon/async_io
+        ydb/library/yql/providers/solomon/actors
         ydb/library/yql/providers/solomon/gateway
         ydb/library/yql/providers/solomon/provider
         ydb/library/yql/providers/ydb/actors

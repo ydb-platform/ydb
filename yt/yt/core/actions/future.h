@@ -456,7 +456,7 @@ public:
 
     //! Similar to #SetFrom but calls #TrySet instead of #Set.
     template <class U>
-    void TrySetFrom(TFuture<U> another) const;
+    void TrySetFrom(const TFuture<U>& another) const;
 
     //! Gets the value.
     /*!

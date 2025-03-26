@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(EncryptedFileSerializerTest) {
     Y_UNIT_TEST(WrongParametersForDeserializer) {
         TEncryptionIV iv = TEncryptionIV::Generate();
         TBuffer testData = TEncryptedFileSerializer::EncryptFullFile("chacha-20-poly1305", Key32, iv, "test data");
-        UNIT_ASSERT_EXCEPTION_CONTAINS(TEncryptedFileDeserializer::DecryptFile(Key16, testData), yexception, "Invalid key length 16. Expected: 32");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TEncryptedFileDeserializer::DecryptFullFile(Key16, testData), yexception, "Invalid key length 16. Expected: 32");
         UNIT_ASSERT_EXCEPTION_CONTAINS(TEncryptedFileDeserializer::DecryptFullFile(Key16, TEncryptionIV::Generate(), testData), yexception, "File is corrupted");
     }
 
@@ -121,7 +121,7 @@ Y_UNIT_TEST_SUITE(EncryptedFileSerializerTest) {
         TEncryptionIV iv = TEncryptionIV::Generate();
         TBuffer fileData = TEncryptedFileSerializer::EncryptFullFile("aes-128_gcm", Key16, iv, TStringBuf());
 
-        auto [buffer, headerIV] = TEncryptedFileDeserializer::DecryptFile(Key16, fileData);
+        auto [buffer, headerIV] = TEncryptedFileDeserializer::DecryptFullFile(Key16, fileData);
         UNIT_ASSERT_VALUES_EQUAL(buffer.Size(), 0);
         UNIT_ASSERT_EQUAL(iv, headerIV);
 
@@ -158,14 +158,14 @@ Y_UNIT_TEST_SUITE(EncryptedFileSerializerTest) {
         TEncryptionIV iv = TEncryptionIV::Generate();
         TBuffer fileData = TEncryptedFileSerializer::EncryptFullFile("aes-256_gcm", Key32, iv, "short data file");
         fileData.Resize(fileData.Size() - 1);
-        UNIT_ASSERT_EXCEPTION_CONTAINS(TEncryptedFileDeserializer::DecryptFile(Key32, fileData), yexception, "File is corrupted");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TEncryptedFileDeserializer::DecryptFullFile(Key32, fileData), yexception, "File is corrupted");
     }
 
     Y_UNIT_TEST(AddByte) {
         TEncryptionIV iv = TEncryptionIV::Generate();
         TBuffer fileData = TEncryptedFileSerializer::EncryptFullFile("aes-256_gcm", Key32, iv, "short data file");
         fileData.Resize(fileData.Size() + 1);
-        UNIT_ASSERT_EXCEPTION_CONTAINS(TEncryptedFileDeserializer::DecryptFile(Key32, fileData), yexception, "File is corrupted");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TEncryptedFileDeserializer::DecryptFullFile(Key32, fileData), yexception, "File is corrupted");
 
         fileData.Resize(fileData.Size() - 1); // return back
         TEncryptedFileDeserializer deserializer(Key32);
@@ -205,7 +205,7 @@ Y_UNIT_TEST_SUITE(EncryptedFileSerializerTest) {
             for (size_t i = 0; i < fileData.Size(); ++i) {
                 TBuffer modified = fileData;
                 modified.Data()[i] ^= 1;
-                UNIT_ASSERT_EXCEPTION_CONTAINS(TEncryptedFileDeserializer::DecryptFile(SelectKey(alg), modified), yexception, "File is corrupted");
+                UNIT_ASSERT_EXCEPTION_CONTAINS(TEncryptedFileDeserializer::DecryptFullFile(SelectKey(alg), modified), yexception, "File is corrupted");
             }
         }
     }
@@ -215,7 +215,7 @@ Y_UNIT_TEST_SUITE(EncryptedFileSerializerTest) {
         TBuffer fileData = TEncryptedFileSerializer::EncryptFullFile("AES-128-GCM", Key16, iv, "test text");
         // Make header big
         fileData.Data()[0] = char(-1);
-        UNIT_ASSERT_EXCEPTION_CONTAINS(TEncryptedFileDeserializer::DecryptFile(Key16, fileData), yexception, "File is corrupted");
+        UNIT_ASSERT_EXCEPTION_CONTAINS(TEncryptedFileDeserializer::DecryptFullFile(Key16, fileData), yexception, "File is corrupted");
 
         {
             TEncryptedFileDeserializer deserializer(Key16);

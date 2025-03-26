@@ -1,13 +1,13 @@
 #include "hedging.h"
 
-#include "cache.h"
 #include "config.h"
 #include "counter.h"
 #include "rpc.h"
-#include "private.h"
 
 #include <yt/yt/client/api/client.h>
 #include <yt/yt/client/api/queue_transaction.h>
+
+#include <yt/yt/client/cache/cache.h>
 
 #include <yt/yt/client/misc/method_helpers.h>
 
@@ -66,7 +66,7 @@ public:
         return Executor_->GetClient(0)->GetConnection();
     }
 
-    std::optional<TStringBuf> GetClusterName(bool fetchIfNull = true) override
+    std::optional<std::string> GetClusterName(bool fetchIfNull = true) override
     {
         Y_UNUSED(fetchIfNull);
         return {};
@@ -141,6 +141,7 @@ public:
     UNSUPPORTED_METHOD(TFuture<TSkynetSharePartsLocationsPtr>, LocateSkynetShare, (const TRichYPath&, const TLocateSkynetShareOptions&));
     UNSUPPORTED_METHOD(TFuture<std::vector<NTableClient::TColumnarStatistics>>, GetColumnarStatistics, (const std::vector<TRichYPath>&, const TGetColumnarStatisticsOptions&));
     UNSUPPORTED_METHOD(TFuture<TMultiTablePartitions>, PartitionTables, (const std::vector<TRichYPath>&, const TPartitionTablesOptions&));
+    UNSUPPORTED_METHOD(TFuture<ITablePartitionReaderPtr>, CreateTablePartitionReader, (const TTablePartitionCookiePtr&, const TReadTablePartitionOptions&));
     UNSUPPORTED_METHOD(TFuture<NYson::TYsonString>, GetTablePivotKeys, (const TYPath&, const TGetTablePivotKeysOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, CreateTableBackup, (const TBackupManifestPtr&, const TCreateTableBackupOptions&));
     UNSUPPORTED_METHOD(TFuture<void>, RestoreTableBackup, (const TBackupManifestPtr&, const TRestoreTableBackupOptions&));

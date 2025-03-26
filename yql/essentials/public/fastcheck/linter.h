@@ -21,6 +21,12 @@ enum class EMode {
     View
 };
 
+enum EClusterMode {
+    Many,
+    Single,
+    Unknown
+};
+
 struct TCheckFilter {
     bool Include = true;
     TString CheckNameGlob;
@@ -29,6 +35,8 @@ struct TCheckFilter {
 struct TChecksRequest {
     TString Program;
     TString File;
+    EClusterMode ClusterMode = Many;
+    TString ClusterSystem;
     THashMap<TString, TString> ClusterMapping;
     ESyntax Syntax = ESyntax::YQL;
     ui16 SyntaxVersion = 1;

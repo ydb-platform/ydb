@@ -184,20 +184,10 @@ NKikimr::NMiniKQL::TType* BuildTypeImpl(const TTypeAnnotationNode& annotation, c
     }
 
     case ETypeAnnotationKind::EmptyList: {
-        if (NKikimr::NMiniKQL::RuntimeVersion < 11) {
-            auto voidType = typeBuilder.NewVoidType();
-            return typeBuilder.NewListType(voidType);
-        }
-
         return typeBuilder.GetTypeEnvironment().GetTypeOfEmptyListLazy();
     }
 
     case ETypeAnnotationKind::EmptyDict: {
-        if constexpr(NKikimr::NMiniKQL::RuntimeVersion < 11) {
-            auto voidType = typeBuilder.NewVoidType();
-            return typeBuilder.NewDictType(voidType, voidType, false);
-        }
-
         return typeBuilder.GetTypeEnvironment().GetTypeOfEmptyDictLazy();
     }
 

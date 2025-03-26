@@ -4,6 +4,7 @@
 #include <yql/essentials/providers/common/proto/udf_resolver.pb.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/public/udf/udf_log.h>
 
 #include <util/generic/maybe.h>
 #include <util/generic/vector.h>
@@ -48,6 +49,7 @@ public:
         const TTypeAnnotationNode* CallableType = nullptr;
         bool SupportsBlocks = false;
         bool IsStrict = false;
+        TVector<TString> Messages;
     };
 
     struct TImport {
@@ -66,13 +68,13 @@ public:
     */
     virtual TMaybe<TFilePathWithMd5> GetSystemModulePath(const TStringBuf& moduleName) const = 0;
     virtual bool LoadMetadata(const TVector<TImport*>& imports,
-        const TVector<TFunction*>& functions, TExprContext& ctx) const = 0;
+        const TVector<TFunction*>& functions, TExprContext& ctx, NUdf::ELogLevel logLevel) const = 0;
 
-    virtual TResolveResult LoadRichMetadata(const TVector<TImport>& imports) const = 0;
+    virtual TResolveResult LoadRichMetadata(const TVector<TImport>& imports, NUdf::ELogLevel logLevel) const = 0;
     virtual bool ContainsModule(const TStringBuf& moduleName) const = 0;
 };
 
-TResolveResult LoadRichMetadata(const IUdfResolver& resolver, const TVector<TUserDataBlock>& blocks);
-TResolveResult LoadRichMetadata(const IUdfResolver& resolver, const TVector<TString>& paths);
+TResolveResult LoadRichMetadata(const IUdfResolver& resolver, const TVector<TUserDataBlock>& blocks, NUdf::ELogLevel logLevel = NUdf::ELogLevel::Info);
+TResolveResult LoadRichMetadata(const IUdfResolver& resolver, const TVector<TString>& paths, NUdf::ELogLevel logLevel = NUdf::ELogLevel::Info);
 
 }

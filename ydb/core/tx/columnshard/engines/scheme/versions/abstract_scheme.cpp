@@ -304,7 +304,7 @@ public:
     }
 };
 
-TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr, const ui64 pathId,
+TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(const ISnapshotSchema::TPtr& selfPtr, const TInternalPathId pathId,
     const std::shared_ptr<arrow::RecordBatch>& incomingBatch, const NEvWrite::EModificationType mType,
     const std::shared_ptr<IStoragesManager>& storagesManager, const std::shared_ptr<NColumnShard::TSplitterCounters>& splitterCounters) const {
     AFL_VERIFY(incomingBatch->num_rows());
@@ -364,6 +364,14 @@ TConclusion<TWritePortionInfoWithBlobsResult> ISnapshotSchema::PrepareForWrite(c
 
 ui32 ISnapshotSchema::GetIndexesCount() const {
     return GetIndexInfo().GetIndexes().size();
+}
+
+NIndexes::TIndexMetaContainer ISnapshotSchema::GetIndexVerified(const ui32 indexId) const {
+    return GetIndexInfo().GetIndexVerified(indexId);
+}
+
+NIndexes::TIndexMetaContainer ISnapshotSchema::GetIndexOptional(const ui32 indexId) const {
+    return GetIndexInfo().GetIndexOptional(indexId);
 }
 
 }   // namespace NKikimr::NOlap

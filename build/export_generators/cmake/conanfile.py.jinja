@@ -33,11 +33,13 @@ class App(ConanFile):
 {%-     endif -%}
 
 {%-     if (has_conan_os_depends_requires) -%}
-{%-         for conan_os_depend in conan.os_depends|selectattr('requires') %}
-{%-             if (conan_os_depend.requires|length) %}
-        if self.settings.os == "{{ conan_os_depend.os }}":
-{%-                 for conan_require in conan_os_depend.requires %}
-            self.requires("{{ conan_require }}")
+{%-         set oses = conan.os_depends|selectattr('os')|map(attribute='os')|unique -%}
+{%-         for os in oses %}
+{%-             set os_requires = conan.os_depends|selectattr('os', 'eq', os)|selectattr('requires')|map(attribute='requires')|sum|unique -%}
+{%-             if (os_requires|length) %}
+        if self.settings.os == "{{ os }}":
+{%-                 for os_require in os_requires %}
+            self.requires("{{ os_require }}")
 {%-                 endfor -%}
 {%-             endif -%}
 {%-         endfor -%}
@@ -55,11 +57,13 @@ class App(ConanFile):
 {%-     endif -%}
 
 {%-     if (has_conan_os_depends_tool_requires) -%}
-{%-         for conan_os_depend in conan.os_depends|selectattr('tool_requires') %}
-{%-             if (conan_os_depend.tool_requires|length) %}
-        if self.settings.os == "{{ conan_os_depend.os }}":
-{%-                 for conan_tool_require in conan_os_depend.tool_requires %}
-            self.tool_requires("{{ conan_tool_require }}")
+{%-         set oses = conan.os_depends|selectattr('os')|map(attribute='os')|unique -%}
+{%-         for os in oses %}
+{%-             set os_tool_requires = conan.os_depends|selectattr('os', 'eq', os)|selectattr('tool_requires')|map(attribute='tool_requires')|sum|unique -%}
+{%-             if (os_tool_requires|length) %}
+        if self.settings.os == "{{ os }}":
+{%-                 for os_tool_require in os_tool_requires %}
+            self.requires("{{ os_tool_require }}")
 {%-                 endfor -%}
 {%-             endif -%}
 {%-         endfor -%}

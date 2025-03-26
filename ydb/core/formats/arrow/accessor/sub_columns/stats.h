@@ -24,6 +24,14 @@ private:
     std::shared_ptr<arrow::UInt8Array> AccessorType;
 
 public:
+    ui32 GetFilledValuesCount() const {
+        ui32 result = 0;
+        for (ui32 i = 0; i < (ui32)DataRecordsCount->length(); ++i) {
+            result += DataRecordsCount->Value(i);
+        }
+        return result;
+    }
+
     NJson::TJsonValue DebugJson() const {
         NJson::TJsonValue result = NJson::JSON_MAP;
         result.InsertValue("key_names", NArrow::DebugJson(DataNames, 1000000, 1000000)["data"]);

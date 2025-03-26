@@ -41,6 +41,26 @@ static NHttpClient::IHttpResponsePtr Request(
     return context.HttpClient->Request(url, requestId, config.HttpConfig, header, body);
 }
 
+static NHttpClient::IHttpRequestPtr StartRequest(
+    const TClientContext& context,
+    THttpHeader& header,
+    const TString& requestId,
+    const TRequestConfig& config)
+{
+    TString hostName;
+    if (config.IsHeavy) {
+        hostName = GetProxyForHeavyRequest(context);
+    } else {
+        hostName = context.ServerName;
+    }
+
+    UpdateHeaderForProxyIfNeed(hostName, context, header);
+
+    auto url = GetFullUrlForProxy(hostName, context, header);
+
+    return context.HttpClient->StartRequest(url, requestId, config.HttpConfig, header);
+}
+
 NHttpClient::IHttpResponsePtr RequestWithoutRetry(
     const TClientContext& context,
     TMutationId& mutationId,
@@ -69,6 +89,25 @@ NHttpClient::IHttpResponsePtr RequestWithoutRetry(
     }
     auto requestId = CreateGuidAsString();
     return Request(context, header, body, requestId, config);
+}
+
+NHttpClient::IHttpRequestPtr StartRequestWithoutRetry(
+    const TClientContext& context,
+    THttpHeader& header,
+    const TRequestConfig& config)
+{
+    if (context.ServiceTicketAuth) {
+        header.SetServiceTicket(context.ServiceTicketAuth->Ptr->IssueServiceTicket());
+    } else {
+        header.SetToken(context.Token);
+    }
+
+    if (context.ImpersonationUser) {
+        header.SetImpersonationUser(*context.ImpersonationUser);
+    }
+
+    auto requestId = CreateGuidAsString();
+    return StartRequest(context, header, requestId, config);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

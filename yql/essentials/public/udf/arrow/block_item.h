@@ -166,6 +166,18 @@ public:
         return &Raw;
     }
 
+    static inline TBlockItem Void() {
+        TBlockItem v;
+        v.Raw.Simple.Meta = static_cast<ui8>(EMarkers::Embedded);
+        return v;
+    }
+
+    static inline TBlockItem Zero() {
+        TBlockItem v;
+        v.Raw.Simple.Meta = static_cast<ui8>(EMarkers::Embedded);
+        return v;
+    }
+
     inline const void* GetRawPtr() const
     {
         return &Raw;

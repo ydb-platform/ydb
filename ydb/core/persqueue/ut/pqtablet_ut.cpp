@@ -1259,6 +1259,68 @@ Y_UNIT_TEST_F(DropTablet_Before_Write, TPQTabletFixture)
                                    .Status=NKikimrPQ::TEvProposeTransactionResult::ABORTED});
 }
 
+Y_UNIT_TEST_F(DropTablet_And_UnplannedConfigTransaction, TPQTabletFixture)
+{
+    PQTabletPrepare({.partitions=2}, {}, *Ctx);
+
+    const ui64 txId = 67890;
+
+    auto tabletConfig =
+        NHelpers::MakeConfig(2, {
+                             {.Consumer="client-1", .Generation=0},
+                             {.Consumer="client-3", .Generation=7}},
+                             2);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Configs=NHelpers::TConfigParams{
+                                  .Tablet=tabletConfig,
+                                  .Bootstrap=NHelpers::MakeBootstrapConfig(),
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    // The 'TEvDropTablet` message arrives when the transaction has not yet received a PlanStep. We know that SS
+    // performs no more than one operation at a time. Therefore, we believe that no one is waiting for this
+    // transaction anymore.
+    SendDropTablet({.TxId=12345});
+    WaitDropTabletReply({.Status=NKikimrProto::EReplyStatus::OK, .TxId=12345, .TabletId=Ctx->TabletId, .State=NKikimrPQ::EDropped});
+}
+
+Y_UNIT_TEST_F(DropTablet_And_PlannedConfigTransaction, TPQTabletFixture)
+{
+    PQTabletPrepare({.partitions=2}, {}, *Ctx);
+
+    const ui64 txId = 67890;
+
+    auto tabletConfig =
+        NHelpers::MakeConfig(2, {
+                             {.Consumer="client-1", .Generation=0},
+                             {.Consumer="client-3", .Generation=7}},
+                             2);
+
+    SendProposeTransactionRequest({.TxId=txId,
+                                  .Configs=NHelpers::TConfigParams{
+                                  .Tablet=tabletConfig,
+                                  .Bootstrap=NHelpers::MakeBootstrapConfig(),
+                                  }});
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::PREPARED});
+
+    SendPlanStep({.Step=100, .TxIds={txId}});
+    WaitPlanStepAck({.Step=100, .TxIds={txId}});
+
+    // The 'TEvDropTablet` message arrives when the transaction has already received a PlanStep.
+    // We will receive the response when the transaction is executed.
+    SendDropTablet({.TxId=12345});
+
+    WaitPlanStepAccepted({.Step=100});
+
+    WaitProposeTransactionResponse({.TxId=txId,
+                                   .Status=NKikimrPQ::TEvProposeTransactionResult::COMPLETE});
+
+    WaitDropTabletReply({.Status=NKikimrProto::EReplyStatus::OK, .TxId=12345, .TabletId=Ctx->TabletId, .State=NKikimrPQ::EDropped});
+}
+
 Y_UNIT_TEST_F(UpdateConfig_1, TPQTabletFixture)
 {
     PQTabletPrepare({.partitions=2}, {}, *Ctx);

@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb-cpp-sdk/client/types/credentials/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
 #include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 
 namespace NYql::NTestCreds {

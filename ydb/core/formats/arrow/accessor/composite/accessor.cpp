@@ -1,6 +1,8 @@
 #include "accessor.h"
 
 #include <ydb/core/formats/arrow/arrow_filter.h>
+
+#include <ydb/library/formats/arrow/arrow_helpers.h>
 namespace NKikimr::NArrow::NAccessor {
 
 namespace {
@@ -87,6 +89,25 @@ IChunkedArray::TLocalChunkedArrayAddress TCompositeChunkedArray::DoGetLocalChunk
     SelectChunk(chunkCurrent, position, accessor);
     AFL_VERIFY(result);
     return *result;
+}
+
+std::optional<bool> TCompositeChunkedArray::DoCheckOneValueAccessor(std::shared_ptr<arrow::Scalar>& value) const {
+    std::optional<std::shared_ptr<arrow::Scalar>> result;
+    for (auto&& i : Chunks) {
+        std::shared_ptr<arrow::Scalar> valLocal;
+        auto res = i->CheckOneValueAccessor(valLocal);
+        if (!res || !*res) {
+            return res;
+        }
+        if (!result) {
+            result = valLocal;
+        } else if (!NArrow::ScalarCompareNullable(*result, valLocal)) {
+            return false;
+        }
+    }
+    AFL_VERIFY(!!result);
+    value = *result;
+    return true;
 }
 
 }   // namespace NKikimr::NArrow::NAccessor

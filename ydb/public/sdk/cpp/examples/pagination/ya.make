@@ -1,7 +1,5 @@
 PROGRAM()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
-
 SRCS(
     main.cpp
     pagination_data.cpp

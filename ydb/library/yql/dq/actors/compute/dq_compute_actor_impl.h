@@ -363,13 +363,15 @@ protected:
         }
         if (Terminated) {
             DoTerminateImpl();
-            MemoryQuota.Reset();
-            MemoryLimits.MemoryQuotaManager.reset();
         }
     }
 
     virtual void DoExecuteImpl() = 0;
-    virtual void DoTerminateImpl() {}
+
+    virtual void DoTerminateImpl() {
+            MemoryQuota.Reset();
+            MemoryLimits.MemoryQuotaManager.reset();
+    }
 
     virtual bool DoHandleChannelsAfterFinishImpl() = 0;
 
@@ -459,7 +461,7 @@ protected:
             return;
         }
 
-        if (status != ERunStatus::Finished) {
+        if (status == ERunStatus::PendingInput) {
             for (auto& [id, inputTransform] : InputTransformsMap) {
                 if (!inputTransform.Buffer->Empty()) {
                     ContinueExecute(EResumeSource::CAPendingInput);
@@ -653,8 +655,11 @@ protected:
         Terminate(State == NDqProto::COMPUTE_STATE_FINISHED, NDqProto::EComputeState_Name(State));
     }
 
-    void InternalError(TIssuesIds::EIssueCode issueCode, const TString& message) {
-        InternalError(NYql::NDqProto::StatusIds::PRECONDITION_FAILED, issueCode, message);
+    void ErrorFromIssue(TIssuesIds::EIssueCode issueCode, const TString& message) {
+        TIssue issue(message);
+        SetIssueCode(issueCode, issue);
+        const auto statusCode = GetDqStatus(issue).GetOrElse(NYql::NDqProto::StatusIds::PRECONDITION_FAILED);
+        InternalError(statusCode, std::move(issue));
     }
 
     void InternalError(NYql::NDqProto::StatusIds::StatusCode statusCode, TIssuesIds::EIssueCode issueCode, const TString& message) {
@@ -1121,6 +1126,7 @@ protected:
 
                 State = NDqProto::COMPUTE_STATE_FAILURE;
                 ReportStateAndMaybeDie(NYql::NDqProto::StatusIds::TIMEOUT, {TIssue(reason)}, true);
+                DoTerminateImpl();
                 break;
             }
             case EEvWakeupTag::PeriodicStatsTag: {
@@ -1147,6 +1153,7 @@ protected:
 
                 TerminateSources("executer lost", false);
                 Terminate(false, "executer lost"); // Executer lost - no need to report state
+                DoTerminateImpl();
                 break;
             }
             default: {
@@ -1190,6 +1197,7 @@ protected:
         if (ev->Get()->Record.GetStatusCode() == NYql::NDqProto::StatusIds::INTERNAL_ERROR) {
             Y_ABORT_UNLESS(ev->Get()->GetIssues().Size() == 1);
             InternalError(NYql::NDqProto::StatusIds::INTERNAL_ERROR, *ev->Get()->GetIssues().begin());
+            DoTerminateImpl();
             return;
         }
 
@@ -1213,6 +1221,7 @@ protected:
         }
 
         ReportStateAndMaybeDie(ev->Get()->Record.GetStatusCode(), issues, true);
+        DoTerminateImpl();
     }
 
     void HandleExecuteBase(NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
@@ -1462,31 +1471,38 @@ protected:
         }
     }
 
-    void PollAsyncInput() {
+    [[nodiscard]]
+    TMaybe<EResumeSource> PollAsyncInput() {
+        TMaybe<EResumeSource> pollResult;
         if (!Running) {
             CA_LOG_T("Skip polling inputs and sources because not running");
-            return;
+            return pollResult;
         }
 
         CA_LOG_T("Poll inputs");
         for (auto& [inputIndex, transform] : InputTransformsMap) {
             if (auto resume = transform.PollAsyncInput(MetricsReporter, WatermarksTracker, RuntimeSettings.AsyncInputPushLimit)) {
-                ContinueExecute(*resume);
+                if (!pollResult || *pollResult == EResumeSource::CAPollAsyncNoSpace) {
+                    pollResult = resume;
+                }
             }
         }
 
         // Don't produce any input from sources if we're about to save checkpoint.
         if ((Checkpoints && Checkpoints->HasPendingCheckpoint() && !Checkpoints->ComputeActorStateSaved())) {
             CA_LOG_T("Skip polling sources because of pending checkpoint");
-            return;
+            return pollResult;
         }
 
         CA_LOG_T("Poll sources");
         for (auto& [inputIndex, source] : SourcesMap) {
             if (auto resume =  source.PollAsyncInput(MetricsReporter, WatermarksTracker, RuntimeSettings.AsyncInputPushLimit)) {
-                ContinueExecute(*resume);
+                if (!pollResult || *pollResult == EResumeSource::CAPollAsyncNoSpace) {
+                    pollResult = resume;
+                }
             }
         }
+        return pollResult;
     }
 
     void OnNewAsyncInputDataArrived(const IDqComputeActorAsyncInput::TEvNewAsyncInputDataArrived::TPtr& ev) {

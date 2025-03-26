@@ -15,7 +15,7 @@ TEpoch TPartComponents::GetEpoch() const {
         return Epoch;
     }
 
-    Y_ABORT_UNLESS(PageCollectionComponents && PageCollectionComponents[0].Packet,
+    Y_ENSURE(PageCollectionComponents && PageCollectionComponents[0].Packet,
         "PartComponents has neither a known epoch, nor a parsed meta packet");
 
     return TLoader::GrabEpoch(*this);

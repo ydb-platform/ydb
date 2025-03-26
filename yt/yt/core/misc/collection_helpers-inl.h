@@ -208,6 +208,15 @@ auto EmplaceOrCrash(TContainer&& container, TArgs&&... args)
     return it;
 }
 
+template <class TMap, class TKey>
+auto EmplaceDefault(TMap&& map, TKey&& key)
+{
+    return map.emplace(
+        std::piecewise_construct_t{},
+        std::tuple<TKey&&>{std::forward<TKey>(key)},
+        std::tuple{});
+}
+
 template <class T, class... TVariantArgs>
 T& GetOrCrash(std::variant<TVariantArgs...>& variant)
 {

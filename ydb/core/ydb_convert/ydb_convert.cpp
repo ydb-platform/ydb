@@ -6,7 +6,7 @@
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/protos/subdomains.pb.h>
 
-#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/binary_json/write.h>
@@ -1192,7 +1192,7 @@ bool CheckValueData(NScheme::TTypeInfo type, const TCell& cell, TString& err) {
 }
 
 bool CellFromProtoVal(const NScheme::TTypeInfo& type, i32 typmod, const Ydb::Value* vp, bool allowCastFromString,
-                                TCell& c, TString& err, TMemoryPool& valueDataPool)
+                                TCell& c, TString& err, TMemoryPool& valueDataPool, bool allowInfDouble)
 {
     if (vp->Hasnull_flag_value()) {
         c = TCell();
@@ -1256,7 +1256,7 @@ bool CellFromProtoVal(const NScheme::TTypeInfo& type, i32 typmod, const Ydb::Val
             break;
         }
     case NScheme::NTypeIds::JsonDocument : {
-        const auto binaryJson = NBinaryJson::SerializeToBinaryJson(val.Gettext_value());
+        const auto binaryJson = NBinaryJson::SerializeToBinaryJson(val.Gettext_value(), allowInfDouble);
         if (std::holds_alternative<TString>(binaryJson)) {
             err = "Invalid JSON for JsonDocument provided: " + std::get<TString>(binaryJson);
             return false;

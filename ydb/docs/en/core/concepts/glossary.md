@@ -280,6 +280,10 @@ An access subject can be a [user](#access-user) or a [group](#access-group).
 
 An **[access right](../security/authorization.md#right)** is an entity that represents permission for an [access subject](#access-subject) to perform a specific set of operations in a cluster or database on a specific [access object](#access-object).
 
+### Access right inheritance {#access-right-inheritance}
+
+**Access right inheritance** refers to the mechanism by which [access rights](#access-right) are automatically passed down from parent [access objects](#access-object) to child access objects within a database structure. This ensures that permissions granted at a higher level in the hierarchy are applied to all sub-levels beneath it, unless [explicitly overridden](../reference/ydb-cli/commands/scheme-permissions.md#clear-inheritance).
+
 ### Access control list {#access-control-list}
 
 An **access control list** or **ACL** is a list of all [rights](#access-right) granted to [access subjects](#access-subject) (users and groups) for a specific [access object](#access-object).

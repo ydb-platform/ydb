@@ -33,7 +33,6 @@ using namespace NNodes::NDq;
 
 TRuntimeNode BuildTableContentCall(TStringBuf callName,
     TType* outItemType,
-    TStringBuf clusterName,
     const TExprNode& input,
     const TMaybe<ui64>& itemsCount,
     NCommon::TMkqlBuildContext& ctx,
@@ -56,7 +55,8 @@ TRuntimeNode BuildTableContentCall(TStringBuf callName,
     TVector<TRuntimeNode> groups;
     if (input.IsCallable(TYtOutput::CallableName())) {
         YQL_ENSURE(!forceKeyColumns);
-        auto outTableInfo = TYtOutTableInfo(GetOutTable(TExprBase(&input)));
+        auto outTableWithCluster = GetOutTableWithCluster(TExprBase(&input));
+        auto outTableInfo = TYtOutTableInfo(outTableWithCluster.first);
         YQL_ENSURE(outTableInfo.Stat, "Table " << outTableInfo.Name.Quote() << " has no Stat");
         auto richYPath = NYT::TRichYPath(outTableInfo.Name);
         if (forceColumns && outTableInfo.RowSpec->HasAuxColumns()) {
@@ -66,6 +66,7 @@ TRuntimeNode BuildTableContentCall(TStringBuf callName,
             }
             richYPath.Columns(columns);
         }
+        richYPath.Cluster(outTableWithCluster.second);
         TString spec;
         if (!extraSysColumns.empty()) {
             auto specNode = outTableInfo.GetCodecSpecNode();
@@ -196,6 +197,8 @@ TRuntimeNode BuildTableContentCall(TStringBuf callName,
 
                 TVector<TRuntimeNode> tupleItems;
                 NYT::TRichYPath richTPath(pathInfo.Table->Name);
+                YQL_ENSURE(pathInfo.Table->Cluster);
+                richTPath.Cluster(pathInfo.Table->Cluster);
                 pathInfo.FillRichYPath(richTPath);
                 tupleItems.push_back(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(NYT::NodeToYsonString(NYT::PathToNode(richTPath))));
                 tupleItems.push_back(ctx.ProgramBuilder.NewDataLiteral(pathInfo.Table->IsTemp));
@@ -247,7 +250,6 @@ TRuntimeNode BuildTableContentCall(TStringBuf callName,
 
     TCallableBuilder call(ctx.ProgramBuilder.GetTypeEnvironment(), callName, outType);
 
-    call.Add(ctx.ProgramBuilder.NewDataLiteral<NUdf::EDataSlot::String>(clusterName)); // cluster name
     call.Add(ctx.ProgramBuilder.NewList(listTypeGroup, groups));
     call.Add(ctx.ProgramBuilder.NewTuple(samplingTupleItems));
 
@@ -290,7 +292,6 @@ TRuntimeNode BuildTableContentCall(TStringBuf callName,
 }
 
 TRuntimeNode BuildTableContentCall(TType* outItemType,
-    TStringBuf clusterName,
     const TExprNode& input,
     const TMaybe<ui64>& itemsCount,
     NCommon::TMkqlBuildContext& ctx,
@@ -298,7 +299,7 @@ TRuntimeNode BuildTableContentCall(TType* outItemType,
     const THashSet<TString>& extraSysColumns,
     bool forceKeyColumns)
 {
-    return BuildTableContentCall(TYtTableContent::CallableName(), outItemType, clusterName, input, itemsCount, ctx, forceColumns, extraSysColumns, forceKeyColumns);
+    return BuildTableContentCall(TYtTableContent::CallableName(), outItemType, input, itemsCount, ctx, forceColumns, extraSysColumns, forceKeyColumns);
 }
 
 template<bool NeedPartitionRanges>
@@ -401,7 +402,8 @@ TRuntimeNode BuildDqYtInputCall(
                 YQL_ENSURE(tableName, "Unaccounted anonymous table: " << pathInfo.Table->Name);
             }
 
-            NYT::TRichYPath richYPath = state->Gateway->GetRealTable(state->SessionId, clusterName, tableName, pathInfo.Table->Epoch.GetOrElse(0), tmpFolder);
+            NYT::TRichYPath richYPath = state->Gateway->GetRealTable(state->SessionId, clusterName, tableName,
+                pathInfo.Table->Epoch.GetOrElse(0), tmpFolder, pathInfo.Table->IsTemp, pathInfo.Table->IsAnonymous);
             pathInfo.FillRichYPath(richYPath);
             auto pathNode = NYT::PathToNode(richYPath);
 
@@ -490,12 +492,12 @@ void RegisterYtMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
                 auto read = maybeRead.Cast();
                 return BuildTableContentCall(name,
                     ctx.BuildType(node, *node.GetTypeAnn()->Cast<TListExprType>()->GetItemType()),
-                    read.DataSource().Cluster().Value(), read.Input().Ref(), itemsCount, ctx, true);
+                    read.Input().Ref(), itemsCount, ctx, true);
             } else {
                 auto output = tableContent.Input().Cast<TYtOutput>();
                 return BuildTableContentCall(name,
                     ctx.BuildType(node, *node.GetTypeAnn()->Cast<TListExprType>()->GetItemType()),
-                    GetOutputOp(output).DataSink().Cluster().Value(), output.Ref(), itemsCount, ctx, true);
+                    output.Ref(), itemsCount, ctx, true);
             }
         });
 
@@ -525,12 +527,12 @@ void RegisterYtMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
                 auto read = maybeRead.Cast();
                 return BuildTableContentCall(name,
                     ctx.BuildType(node, *origItemStructType),
-                    read.DataSource().Cluster().Value(), read.Input().Ref(), itemsCount, ctx, true);
+                    read.Input().Ref(), itemsCount, ctx, true);
             } else {
                 auto output = tableContent.Input().Cast<TYtOutput>();
                 return BuildTableContentCall(name,
                 ctx.BuildType(node, *origItemStructType),
-                GetOutputOp(output).DataSink().Cluster().Value(), output.Ref(), itemsCount, ctx, true);
+                output.Ref(), itemsCount, ctx, true);
             }
         });
 

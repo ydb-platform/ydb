@@ -137,6 +137,15 @@ TExprNode::TPtr OptimizeWideToBlocks(const TExprNode::TPtr& node, TExprContext& 
         const auto tail = input.HeadPtr();
         const auto flowInput = tail->IsCallable("FromFlow") ? tail->HeadPtr()
                              : ctx.NewCallable(tail->Pos(), "ToFlow", { tail });
+
+        // Static assert to ensure backward compatible change: if the
+        // constant below is true, both input and output types of
+        // ReplicateScalars callable have to be WideStream; otherwise,
+        // both input and output types have to be WideFlow.
+        // FIXME: When all spots using ReplicateScalars are adjusted
+        // to work with WideStream, drop the assertion below.
+        static_assert(!NYql::NBlockStreamIO::ReplicateScalars);
+
         return ctx.Builder(node->Pos())
             .Callable("FromFlow")
                 .Callable(0, "ReplicateScalars")
@@ -190,6 +199,14 @@ TExprNode::TPtr OptimizeWideFromBlocks(const TExprNode::TPtr& node, TExprContext
         return input.HeadPtr();
     }
 
+    // Static assert to ensure backward compatible change: if the
+    // constant below is true, both input and output types of
+    // ReplicateScalars callable have to be WideStream; otherwise,
+    // both input and output types have to be WideFlow.
+    // FIXME: When all spots using ReplicateScalars are adjusted
+    // to work with WideStream, drop the assertion below.
+    static_assert(!NYql::NBlockStreamIO::ReplicateScalars);
+
     if (input.IsCallable("FromFlow") && input.Head().IsCallable("ReplicateScalars")) {
         const auto& replicateScalars = input.Head();
         // Technically, the code below rewrites the following sequence
@@ -213,6 +230,15 @@ TExprNode::TPtr OptimizeWideFromBlocks(const TExprNode::TPtr& node, TExprContext
 
 TExprNode::TPtr OptimizeWideTakeSkipBlocks(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     Y_UNUSED(types);
+
+    // Static assert to ensure backward compatible change: if the
+    // constant below is true, both input and output types of
+    // ReplicateScalars callable have to be WideStream; otherwise,
+    // both input and output types have to be WideFlow.
+    // FIXME: When all spots using ReplicateScalars are adjusted
+    // to work with WideStream, drop the assertion below.
+    static_assert(!NYql::NBlockStreamIO::ReplicateScalars);
+
     if (node->Head().IsCallable("ReplicateScalars")) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << node->Head().Content();
         return ctx.SwapWithHead(*node);
@@ -223,6 +249,15 @@ TExprNode::TPtr OptimizeWideTakeSkipBlocks(const TExprNode::TPtr& node, TExprCon
 
 TExprNode::TPtr OptimizeBlockCompress(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     Y_UNUSED(types);
+
+    // Static assert to ensure backward compatible change: if the
+    // constant below is true, both input and output types of
+    // ReplicateScalars callable have to be WideStream; otherwise,
+    // both input and output types have to be WideFlow.
+    // FIXME: When all spots using ReplicateScalars are adjusted
+    // to work with WideStream, drop the assertion below.
+    static_assert(!NYql::NBlockStreamIO::ReplicateScalars);
+
     if (node->Head().IsCallable("ReplicateScalars")) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << node->Head().Content();
         if (node->Head().ChildrenSize() == 1) {
@@ -250,6 +285,15 @@ TExprNode::TPtr OptimizeBlockCompress(const TExprNode::TPtr& node, TExprContext&
 
 TExprNode::TPtr OptimizeBlocksTopOrSort(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     Y_UNUSED(types);
+
+    // Static assert to ensure backward compatible change: if the
+    // constant below is true, both input and output types of
+    // ReplicateScalars callable have to be WideStream; otherwise,
+    // both input and output types have to be WideFlow.
+    // FIXME: When all spots using ReplicateScalars are adjusted
+    // to work with WideStream, drop the assertion below.
+    static_assert(!NYql::NBlockStreamIO::ReplicateScalars);
+
     if (node->Head().IsCallable("ReplicateScalars")) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Swap " << node->Content() << " with " << node->Head().Content();
         return ctx.SwapWithHead(*node);
@@ -263,6 +307,15 @@ TExprNode::TPtr OptimizeBlockExtend(const TExprNode::TPtr& node, TExprContext& c
     TExprNodeList inputs = node->ChildrenList();
     bool hasReplicateScalars = false;
     for (auto& input : inputs) {
+
+        // Static assert to ensure backward compatible change: if the
+        // constant below is true, both input and output types of
+        // ReplicateScalars callable have to be WideStream; otherwise,
+        // both input and output types have to be WideFlow.
+        // FIXME: When all spots using ReplicateScalars are adjusted
+        // to work with WideStream, drop the assertion below.
+        static_assert(!NYql::NBlockStreamIO::ReplicateScalars);
+
         if (input->IsCallable("ReplicateScalars")) {
             hasReplicateScalars = true;
             input = input->HeadPtr();
@@ -279,6 +332,15 @@ TExprNode::TPtr OptimizeBlockExtend(const TExprNode::TPtr& node, TExprContext& c
 
 TExprNode::TPtr OptimizeReplicateScalars(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     Y_UNUSED(types);
+
+    // Static assert to ensure backward compatible change: if the
+    // constant below is true, both input and output types of
+    // ReplicateScalars callable have to be WideStream; otherwise,
+    // both input and output types have to be WideFlow.
+    // FIXME: When all spots using ReplicateScalars are adjusted
+    // to work with WideStream, drop the assertion below.
+    static_assert(!NYql::NBlockStreamIO::ReplicateScalars);
+
     if (node->Head().IsCallable("ReplicateScalars")) {
         if (node->ChildrenSize() == 1) {
             YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << node->Head().Content() << " as input of " << node->Content();
@@ -322,6 +384,15 @@ TExprNode::TPtr ExpandBlockExtend(const TExprNode::TPtr& node, TExprContext& ctx
 
         const bool hasScalars = AnyOf(items.begin(), items.end() - 1, [](const auto& item) { return item->IsScalar(); });
         seenScalars = seenScalars || hasScalars;
+
+        // Static assert to ensure backward compatible change: if the
+        // constant below is true, both input and output types of
+        // ReplicateScalars callable have to be WideStream; otherwise,
+        // both input and output types have to be WideFlow.
+        // FIXME: When all spots using ReplicateScalars are adjusted
+        // to work with WideStream, drop the assertion below.
+        static_assert(!NYql::NBlockStreamIO::ReplicateScalars);
+
         newChildren.push_back(ctx.WrapByCallableIf(hasScalars, "ReplicateScalars", std::move(child)));
     }
 
@@ -334,6 +405,15 @@ TExprNode::TPtr ExpandBlockExtend(const TExprNode::TPtr& node, TExprContext& ctx
 
 TExprNode::TPtr ExpandReplicateScalars(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     Y_UNUSED(types);
+
+    // Static assert to ensure backward compatible change: if the
+    // constant below is true, both input and output types of
+    // ReplicateScalars callable have to be WideStream; otherwise,
+    // both input and output types have to be WideFlow.
+    // FIXME: When all spots using ReplicateScalars are adjusted
+    // to work with WideStream, drop the assertion below.
+    static_assert(!NYql::NBlockStreamIO::ReplicateScalars);
+
     YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << node->Content();
     const auto& items = node->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
     const ui32 width = items.size();
@@ -2687,6 +2767,123 @@ TExprNode::TPtr ExpandListHas(const TExprNode::TPtr& input, TExprContext& ctx) {
     }
 
     return RewriteSearchByKeyForTypesMismatch<true, true>(input, ctx);
+}
+
+TExprNode::TPtr ExpandPruneAdjacentKeys(const TExprNode::TPtr& input, TExprContext& ctx) {
+    const auto type = input->Head().GetTypeAnn();
+    const auto& keyExtractorLambda = input->ChildRef(1);
+
+    YQL_ENSURE(type->GetKind() == ETypeAnnotationKind::List || type->GetKind() == ETypeAnnotationKind::Stream);
+
+    const auto elemType = type->GetKind() == ETypeAnnotationKind::List
+        ? type->Cast<TListExprType>()->GetItemType()
+        : type->Cast<TStreamExprType>()->GetItemType();
+    const auto optionalElemType = *ctx.MakeType<TOptionalExprType>(elemType);
+
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content();
+    return ctx.Builder(input->Pos())
+        .Callable("OrderedFlatMap")
+            .Callable(0, "Fold1Map")
+                .Add(0, input->HeadPtr())
+                .Lambda(1)
+                    .Param("item")
+                    .List(0)
+                        .Callable(0, "Just")
+                            .Arg(0, "item")
+                        .Seal()
+                        .Arg(1, "item")
+                    .Seal()
+                .Seal()
+                .Lambda(2)
+                    .Param("item")
+                    .Param("state")
+                    .List(0)
+                        .Callable(0, "If")
+                            .Callable(0, "AggrEquals")
+                                .Apply(0, keyExtractorLambda)
+                                    .With(0, "item")
+                                .Seal()
+                                .Apply(1, keyExtractorLambda)
+                                    .With(0, "state")
+                                .Seal()
+                            .Seal()
+                            .Callable(1, "Nothing")
+                                .Add(0, ExpandType(input->Pos(), optionalElemType, ctx))
+                            .Seal()
+                            .Callable(2, "Just")
+                                .Arg(0, "item")
+                            .Seal()
+                        .Seal()
+                        .Arg(1, "item")
+                    .Seal()
+                .Seal()
+            .Seal()
+            .Lambda(1)
+                .Param("item")
+                .Arg(0, "item")
+            .Seal()
+        .Seal()
+        .Build();
+}
+
+TExprNode::TPtr ExpandPruneKeys(const TExprNode::TPtr& input, TExprContext& ctx) {
+    const auto type = input->Head().GetTypeAnn();
+    const auto& keyExtractorLambda = input->ChildRef(1);
+    YQL_ENSURE(type->GetKind() == ETypeAnnotationKind::List || type->GetKind() == ETypeAnnotationKind::Stream);
+
+    auto initHandler = ctx.Builder(input->Pos())
+        .Lambda()
+            .Param("key")
+            .Param("item")
+            .Arg(0, "item")
+        .Seal()
+        .Build();
+    auto updateHandler = ctx.Builder(input->Pos())
+        .Lambda()
+            .Param("key")
+            .Param("item")
+            .Param("state")
+            .Arg(0, "state")
+        .Seal()
+        .Build();
+    auto finishHandler = ctx.Builder(input->Pos())
+        .Lambda()
+            .Param("key")
+            .Param("state")
+            .Callable(0, "Just")
+                .Arg(0, "state")
+            .Seal()
+        .Seal()
+        .Build();
+
+    YQL_CLOG(DEBUG, CorePeepHole) << "Expand " << input->Content();
+    if (type->GetKind() == ETypeAnnotationKind::List) {
+        return ctx.Builder(input->Pos())
+            .Callable("CombineByKey")
+                .Add(0, input->HeadPtr())
+                .Lambda(1) // preMap
+                    .Param("item")
+                    .Callable(0, "Just")
+                       .Arg(0, "item")
+                    .Seal()
+                .Seal()
+                .Add(2, keyExtractorLambda)
+                .Add(3, initHandler)
+                .Add(4, updateHandler)
+                .Add(5, finishHandler)
+            .Seal()
+            .Build();
+    } else {
+        return ctx.Builder(input->Pos())
+            .Callable("CombineCore")
+                .Add(0, input->HeadPtr())
+                .Add(1, keyExtractorLambda)
+                .Add(2, initHandler)
+                .Add(3, updateHandler)
+                .Add(4, finishHandler)
+            .Seal()
+            .Build();
+    }
 }
 
 TExprNode::TPtr ExpandPgArrayOp(const TExprNode::TPtr& input, TExprContext& ctx) {
@@ -6569,6 +6766,14 @@ TExprNode::TPtr OptimizeBlockCombine(const TExprNode::TPtr& node, TExprContext& 
         return UpdateBlockCombineColumns(node, filterIndex, argIndices, ctx);
     }
 
+    // Static assert to ensure backward compatible change: if the
+    // constant below is true, both input and output types of
+    // ReplicateScalars callable have to be WideStream; otherwise,
+    // both input and output types have to be WideFlow.
+    // FIXME: When all spots using ReplicateScalars are adjusted
+    // to work with WideStream, drop the assertion below.
+    static_assert(!NYql::NBlockStreamIO::ReplicateScalars);
+
     if (node->Head().IsCallable("ReplicateScalars")) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << node->Head().Content() << " as input of " << node->Content();
         return ctx.ChangeChild(*node, 0, node->Head().HeadPtr());
@@ -6579,6 +6784,15 @@ TExprNode::TPtr OptimizeBlockCombine(const TExprNode::TPtr& node, TExprContext& 
 
 TExprNode::TPtr OptimizeBlockMerge(const TExprNode::TPtr& node, TExprContext& ctx, TTypeAnnotationContext& types) {
     Y_UNUSED(types);
+
+    // Static assert to ensure backward compatible change: if the
+    // constant below is true, both input and output types of
+    // ReplicateScalars callable have to be WideStream; otherwise,
+    // both input and output types have to be WideFlow.
+    // FIXME: When all spots using ReplicateScalars are adjusted
+    // to work with WideStream, drop the assertion below.
+    static_assert(!NYql::NBlockStreamIO::ReplicateScalars);
+
     if (node->Head().IsCallable("ReplicateScalars")) {
         YQL_CLOG(DEBUG, CorePeepHole) << "Drop " << node->Head().Content() << " as input of " << node->Content();
         return ctx.ChangeChild(*node, 0, node->Head().HeadPtr());
@@ -6650,6 +6864,14 @@ TExprNode::TPtr SwapReplicateScalarsWithWideMap(const TExprNode::TPtr& wideMap, 
             replicatedOutputIndexes.push_back(ctx.NewAtom(input.Pos(), i));
         }
     }
+
+    // Static assert to ensure backward compatible change: if the
+    // constant below is true, both input and output types of
+    // ReplicateScalars callable have to be WideStream; otherwise,
+    // both input and output types have to be WideFlow.
+    // FIXME: When all spots using ReplicateScalars are adjusted
+    // to work with WideStream, drop the assertion below.
+    static_assert(!NYql::NBlockStreamIO::ReplicateScalars);
 
     return ctx.Builder(wideMap->Pos())
         .Callable("ReplicateScalars")
@@ -6832,6 +7054,15 @@ TExprNode::TPtr OptimizeWideMaps(const TExprNode::TPtr& node, TExprContext& ctx)
                     .Add(1, DropUnusedArgs(node->Tail(), unused, ctx))
                 .Seal().Build();
         } else if (node->IsCallable("WideMap") && input.IsCallable("ReplicateScalars")) {
+
+            // Static assert to ensure backward compatible change: if the
+            // constant below is true, both input and output types of
+            // ReplicateScalars callable have to be WideStream; otherwise,
+            // both input and output types have to be WideFlow.
+            // FIXME: When all spots using ReplicateScalars are adjusted
+            // to work with WideStream, drop the assertion below.
+            static_assert(!NYql::NBlockStreamIO::ReplicateScalars);
+
             YQL_CLOG(DEBUG, CorePeepHole) << node->Content() << " over " << input.Content();
             return SwapReplicateScalarsWithWideMap(node, ctx);
         }
@@ -8675,6 +8906,8 @@ struct TPeepHoleRules {
         {"CheckedDiv", &ExpandCheckedDiv},
         {"CheckedMod", &ExpandCheckedMod},
         {"CheckedMinus", &ExpandCheckedMinus},
+        {"PruneAdjacentKeys", &ExpandPruneAdjacentKeys},
+        {"PruneKeys", &ExpandPruneKeys},
         {"JsonValue", &ExpandJsonValue},
         {"JsonExists", &ExpandJsonExists},
         {"EmptyIterator", &DropDependsOnFromEmptyIterator},
@@ -8754,7 +8987,6 @@ struct TPeepHoleRules {
         {"GraceSelfJoinCore", &OptimizeGraceSelfJoinCore},
         {"CommonJoinCore", &OptimizeCommonJoinCore},
         {"BuildTablePath", &DoBuildTablePath},
-        {"Exists", &OptimizeExists},
         {"SqueezeToDict", &OptimizeSqueezeToDict},
         {"NarrowFlatMap", &OptimizeNarrowFlatMap},
         {"NarrowMultiMap", &OptimizeWideMaps},
@@ -8774,7 +9006,9 @@ struct TPeepHoleRules {
         {"Coalesce", &OptimizeCoalesce},
     };
 
-    const TExtPeepHoleOptimizerMap FinalStageExtRules = {};
+    const TExtPeepHoleOptimizerMap FinalStageExtRules = {
+        {"Exists", &OptimizeExists},
+    };
 
     const TExtPeepHoleOptimizerMap FinalStageNonDetRules = {
         {"Random", &Random0Arg<double>},

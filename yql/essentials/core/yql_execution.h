@@ -77,6 +77,13 @@ namespace NYql {
             , Stage(stage, TInstant::Now())
         {
         }
+
+        static EOpBlockStatus CombineBlockStatuses(EOpBlockStatus lhs, EOpBlockStatus rhs) {
+            if (lhs == rhs) {
+                return lhs;
+            }
+            return EOpBlockStatus::Partial;
+        }
     };
 
     struct TOperationStatistics {

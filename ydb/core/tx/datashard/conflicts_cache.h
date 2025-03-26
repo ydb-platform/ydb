@@ -124,7 +124,7 @@ public:
             std::piecewise_construct,
             std::forward_as_tuple(localTid),
             std::forward_as_tuple(localTid));
-        Y_ABORT_UNLESS(res.second);
+        Y_ENSURE(res.second);
         return res.first->second;
     }
 

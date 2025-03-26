@@ -4,9 +4,8 @@
 #include <ydb/core/base/cputime.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/sys_view/common/schema.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-
-
 
 namespace NKikimr::NKqp {
 
@@ -35,7 +34,8 @@ public:
         , TxId(txId)
         , UserToken(userToken)
         , Transactions(transactions)
-        , TasksGraph(tasksGraph) {}
+        , TasksGraph(tasksGraph)
+        , SystemViewRewrittenResolver(NSysView::CreateSystemViewRewrittenResolver()) {}
 
     void Bootstrap() {
         ResolveKeys();
@@ -173,12 +173,19 @@ private:
 
                     stageInfo.Meta.ShardKey = ExtractKey(stageInfo.Meta.TableId, stageInfo.Meta.TableConstInfo, operation);
 
-                    if (stageInfo.Meta.TableKind == ETableKind::Olap && TableRequestIds.find(stageInfo.Meta.TableId) == TableRequestIds.end()) {
+                    if (SystemViewRewrittenResolver->IsSystemView(stageInfo.Meta.TableId.SysViewInfo)) {
+                        continue;
+                    }
+
+                    if (stageInfo.Meta.TableKind == ETableKind::Olap) {
+                        if (TableRequestIds.find(stageInfo.Meta.TableId) == TableRequestIds.end()) {
+                            auto& entry = requestNavigate->ResultSet.emplace_back();
+                            entry.TableId = stageInfo.Meta.TableId;
+                            entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
+                            entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpTable;
+                        }
+
                         TableRequestIds[stageInfo.Meta.TableId].emplace_back(pair.first);
-                        auto& entry = requestNavigate->ResultSet.emplace_back();
-                        entry.TableId = stageInfo.Meta.TableId;
-                        entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
-                        entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpTable;
                     }
 
                     auto& entry = request->ResultSet.emplace_back(std::move(stageInfo.Meta.ShardKey));
@@ -273,6 +280,8 @@ private:
     bool ShouldTerminate = false;
     TMaybe<ui32> GotUnexpectedEvent;
     TDuration CpuTime;
+
+    THolder<NSysView::ISystemViewResolver> SystemViewRewrittenResolver;
 };
 
 } // anonymous namespace

@@ -35,8 +35,14 @@ namespace NKikimr::NStorage {
             return; // still waiting for previous one
         }
 
+        ProposeRequestInFlight = true;
+
         if (!StorageConfig || !StorageConfig->HasConfigComposite()) {
-            return; // no config yet
+            // send empty proposition just to connect to console
+            auto ev = std::make_unique<TEvBlobStorage::TEvControllerProposeConfigRequest>();
+            ev->Record.SetDistconf(true);
+            NTabletPipe::SendData(SelfId(), ConsolePipeId, ev.release(), ++ProposeRequestCookie);
+            return;
         }
 
         Y_ABORT_UNLESS(MainConfigYamlVersion);
@@ -51,11 +57,14 @@ namespace NKikimr::NStorage {
             MainConfigFetchYamlHash, *MainConfigYamlVersion));
         ProposedConfigHashVersion.emplace(MainConfigFetchYamlHash, *MainConfigYamlVersion);
         NTabletPipe::SendData(SelfId(), ConsolePipeId, new TEvBlobStorage::TEvControllerProposeConfigRequest(
-            MainConfigFetchYamlHash, *MainConfigYamlVersion), ++ProposeRequestCookie);
-        ProposeRequestInFlight = true;
+            MainConfigFetchYamlHash, *MainConfigYamlVersion, true), ++ProposeRequestCookie);
     }
 
     void TDistributedConfigKeeper::Handle(TEvBlobStorage::TEvControllerValidateConfigResponse::TPtr ev) {
+        STLOG(PRI_DEBUG, BS_NODE, NWDC10, "received TEvControllerValidateConfigResponse",
+            (Sender, ev->Sender), (Cookie, ev->Cookie), (Record, ev->Get()->Record),
+            (ConsoleConfigValidationQ.size, ConsoleConfigValidationQ.size()));
+
         auto& q = ConsoleConfigValidationQ;
         auto pred = [&](const auto& item) {
             const auto& [actorId, yaml, cookie] = item;
@@ -114,7 +123,7 @@ namespace NKikimr::NStorage {
                 break;
 
             case NKikimrBlobStorage::TEvControllerProposeConfigResponse::ReverseCommit:
-                Y_DEBUG_ABORT();
+                // just do nothing, we didn't have the config in distconf, possibly it is being enabled
                 break;
         }
     }
@@ -204,7 +213,7 @@ namespace NKikimr::NStorage {
         if (!fetched) { // fill in 'to-be-fetched' version of config with version incremented by one
             try {
                 auto metadata = NYamlConfig::GetMainMetadata(yaml);
-                metadata.Cluster = metadata.Cluster.value_or("unknown"); // TODO: fix this
+                metadata.Cluster = metadata.Cluster.value_or(AppData()->ClusterName);
                 metadata.Version = metadata.Version.value_or(0) + 1;
                 temp = NYamlConfig::ReplaceMetadata(yaml, metadata);
             } catch (const std::exception& ex) {

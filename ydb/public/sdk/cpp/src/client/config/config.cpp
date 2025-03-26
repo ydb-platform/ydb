@@ -1,11 +1,11 @@
-#include <ydb-cpp-sdk/client/config/config.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/config/config.h>
 
-#include <src/client/common_client/impl/client.h>
-#include <src/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
 
 #include <ydb/public/api/grpc/ydb_config_v1.grpc.pb.h>
 
-namespace NYdb::inline V3::NConfig {
+namespace NYdb::inline Dev::NConfig {
 
 class TConfigClient::TImpl : public TClientImplCommon<TConfigClient::TImpl> {
 public:

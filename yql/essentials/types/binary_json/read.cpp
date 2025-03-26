@@ -336,6 +336,7 @@ TString SerializeToJson(TStringBuf binaryJson) {
     TJsonWriterConfig config;
     config.DoubleNDigits = 16;
     config.FloatNDigits = 8;
+    config.WriteNanAsString = true;
 
     TStringStream output;
     TJsonWriter writer(&output, config);

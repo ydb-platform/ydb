@@ -164,6 +164,17 @@ private:
 
                 auto listSelectType = ctx.MakeType<TListExprType>(selectType);
 
+                if (!SessionCtx->Config().FeatureFlags.GetEnableShowCreate()) {
+                    for (auto setting : readTable.Settings()) {
+                        auto name = setting.Name().Value();
+                        if (name == "showCreateTable") {
+                            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), 
+                                TStringBuilder() << "SHOW CREATE statement is not supported"));
+                            return TStatus::Error;
+                        }
+                    }
+                }
+
                 TTypeAnnotationNode::TListType children;
                 children.push_back(node.World().Ref().GetTypeAnn());
                 children.push_back(listSelectType);
@@ -1833,6 +1844,9 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             "password",
             "password_secret_name",
             "commit_interval",
+            "flush_interval",
+            "batch_size_bytes",
+            "consumer",
         };
 
         if (!CheckReplicationSettings(node.TransferSettings(), supportedSettings, ctx)) {
@@ -1860,6 +1874,8 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
             "password_secret_name",
             "state",
             "failover_mode",
+            "flush_interval",
+            "batch_size_bytes",
         };
 
         if (!CheckReplicationSettings(node.TransferSettings(), supportedSettings, ctx)) {

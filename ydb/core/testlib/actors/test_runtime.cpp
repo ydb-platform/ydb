@@ -123,6 +123,11 @@ namespace NActors {
             NKikimr::TAppData::TimeProvider = TimeProvider;
         }
 
+        // We want tests to fail on unhandled exceptions by default
+        if (!App0->FeatureFlags.HasEnableTabletRestartOnUnhandledExceptions()) {
+            App0->FeatureFlags.SetEnableTabletRestartOnUnhandledExceptions(false);
+        }
+
         MonPorts.clear();
         for (ui32 nodeIndex = 0; nodeIndex < NodeCount; ++nodeIndex) {
             ui32 nodeId = FirstNodeId + nodeIndex;

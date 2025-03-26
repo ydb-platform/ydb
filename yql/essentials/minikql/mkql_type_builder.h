@@ -125,7 +125,8 @@ public:
             const TStringBuf& moduleName,
             NUdf::ICountersProvider* countersProvider,
             const NUdf::TSourcePosition& pos,
-            const NUdf::ISecureParamsProvider* provider = nullptr);
+            const NUdf::ISecureParamsProvider* secureParamsProvider = nullptr,
+            const NUdf::ILogProvider* logProvider = nullptr);
 
     NUdf::IFunctionTypeInfoBuilder1& ImplementationImpl(
             NUdf::TUniquePtr<NUdf::IBoxedValue> impl) override;
@@ -206,6 +207,7 @@ public:
     const NUdf::IBlockTypeHelper& IBlockTypeHelper() const override;
 
     bool GetSecureParam(NUdf::TStringRef key, NUdf::TStringRef& value) const override;
+    NUdf::TLoggerPtr MakeLogger(bool synchronized) const override;
 
 private:
     const TTypeEnvironment& Env_;
@@ -223,6 +225,7 @@ private:
     NUdf::ICountersProvider* CountersProvider_;
     NUdf::TSourcePosition Pos_;
     const NUdf::ISecureParamsProvider* SecureParamsProvider_;
+    const NUdf::ILogProvider* LogProvider_;
     TString ModuleIR_;
     TString ModuleIRUniqID_;
     TString IRFunctionName_;

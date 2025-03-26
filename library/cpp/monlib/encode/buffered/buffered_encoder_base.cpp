@@ -144,6 +144,12 @@ void TBufferedEncoderBase::OnLogHistogram(TInstant time, TLogHistogramSnapshotPt
     metric.TimeSeries.Add(time, s.Get());
 }
 
+void TBufferedEncoderBase::OnMemOnly(bool isMemOnly) {
+    State_.Expect(TEncoderState::EState::METRIC);
+    TMetric& metric = Metrics_.back();
+    metric.IsMemOnly = isMemOnly;
+}
+
 TString TBufferedEncoderBase::FormatLabels(const TPooledLabels& labels) const {
     auto formattedLabels = TVector<TString>(Reserve(labels.size() + CommonLabels_.size()));
     auto addLabel = [&](const TPooledLabel& l) {

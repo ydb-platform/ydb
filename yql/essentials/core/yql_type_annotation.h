@@ -8,6 +8,7 @@
 #include "yql_statistics.h"
 
 #include <yql/essentials/public/udf/udf_validate.h>
+#include <yql/essentials/public/udf/udf_log.h>
 #include <yql/essentials/core/credentials/yql_credentials.h>
 #include <yql/essentials/core/url_lister/interface/url_lister_manager.h>
 #include <yql/essentials/core/qplayer/storage/interface/yql_qstorage.h>
@@ -94,6 +95,13 @@ public:
         QContext = qContext;
     }
 
+    void SetClusterMapping(const THashMap<TString, TString>& clusterMapping) {
+        ClusterMapping = clusterMapping;
+    }
+    void SetSqlFlags(const THashSet<TString>& flags) {
+        SqlFlags = flags;
+    }
+
     void RegisterPackage(const TString& package) override;
     bool SetPackageDefaultVersion(const TString& package, ui32 version) override;
     const TExportTable* GetModule(const TString& module) const override;
@@ -129,8 +137,8 @@ private:
     THashMap<TString, ui32> PackageVersions;
     THashMap<TString, THashMap<int, TLibraryCohesion>> Libs;
     TModulesTable Modules;
-    const THashMap<TString, TString> ClusterMapping;
-    const THashSet<TString> SqlFlags;
+    THashMap<TString, TString> ClusterMapping;
+    THashSet<TString> SqlFlags;
     const bool OptimizeLibraries;
     THolder<TExprContext::TFreezeGuard> FreezeGuard;
     TString FileAliasPrefix;
@@ -382,6 +390,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     NUdf::EValidateMode ValidateMode = NUdf::EValidateMode::None;
     bool DisableNativeUdfSupport = false;
     TMaybe<TString> OptLLVM;
+    NUdf::ELogLevel RuntimeLogLevel = NUdf::ELogLevel::Info;
     bool IsReadOnly = false;
     TAutoPtr<IGraphTransformer> CustomInstantTypeTransformer;
     bool Diagnostics = false;

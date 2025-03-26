@@ -7,7 +7,7 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NFq {
 

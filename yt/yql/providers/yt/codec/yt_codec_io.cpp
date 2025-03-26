@@ -1599,8 +1599,7 @@ public:
         ColumnConverters_.reserve(fields.size());
         for (auto& field: fields) {
             YQL_ENSURE(!field.Type->IsPg());
-            bool native = Specs_.Inputs[TableIndex_]->NativeYtTypeFlags && !field.ExplicitYson;
-            ColumnConverters_.emplace_back(MakeYtColumnConverter(field.Type, nullptr, *Pool_, native));
+            ColumnConverters_.emplace_back(MakeYtColumnConverter(field.Type, nullptr, *Pool_, Specs_.Inputs[TableIndex_]->NativeYtTypeFlags));
         }
     }
 

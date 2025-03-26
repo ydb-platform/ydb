@@ -219,6 +219,13 @@ public:
     template <CErrorNestable TValue>
     TError operator << (const std::optional<TValue>& rhs) const &;
 
+    // The |enricher| is called during TError construction and before TErrorOr<> construction. Meant
+    // to enrich the error, e.g. by setting generic attributes. The |RegisterEnricher| method is not
+    // threadsafe and is meant to be called from single-threaded bootstrapping code. Multiple
+    // enrichers are supported and will be called in order of registration.
+    using TEnricher = std::function<void(TError&)>;
+    static void RegisterEnricher(TEnricher enricher);
+
 private:
     class TImpl;
     std::unique_ptr<TImpl> Impl_;
@@ -226,8 +233,11 @@ private:
     explicit TErrorOr(std::unique_ptr<TImpl> impl);
 
     void MakeMutable();
+    void Enrich();
 
     friend class TErrorAttributes;
+
+    static TEnricher Enricher_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

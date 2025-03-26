@@ -1,7 +1,5 @@
 UNITTEST()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
-
 FORK_SUBTESTS()
 
 IF (SANITIZER_TYPE OR WITH_VALGRIND)

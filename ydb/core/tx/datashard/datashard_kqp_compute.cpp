@@ -177,7 +177,7 @@ void TKqpDatashardComputeContext::SetReadVersion(TRowVersion readVersion) {
 }
 
 TRowVersion TKqpDatashardComputeContext::GetReadVersion() const {
-    Y_ABORT_UNLESS(!UserDb.GetReadVersion().IsMin(), "Cannot perform reads without ReadVersion set");
+    Y_ENSURE(!UserDb.GetReadVersion().IsMin(), "Cannot perform reads without ReadVersion set");
 
     return UserDb.GetReadVersion();
 }
@@ -253,7 +253,7 @@ bool TKqpDatashardComputeContext::PinPages(const TVector<IEngineFlat::TValidated
         }
 
         ui64 localTid = GetLocalTableId(key.TableId);
-        Y_ABORT_UNLESS(localTid, "table not exist");
+        Y_ENSURE(localTid, "table not exist");
 
         auto* tableInfo = scheme.GetTableInfo(localTid);
         TSmallVec<TRawTypeValue> from;

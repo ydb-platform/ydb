@@ -7,7 +7,7 @@
 #include <ydb/core/fq/libs/db_schema/db_schema.h>
 #include <ydb/core/fq/libs/shared_resources/db_exec.h>
 #include <ydb/public/api/protos/draft/fq.pb.h>
-#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <util/datetime/base.h>
 #include <util/generic/typetraits.h>

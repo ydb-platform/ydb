@@ -18,6 +18,9 @@ struct TExponentialBackoffOptions
     static constexpr double DefaultBackoffMultiplier = 1.5;
     static constexpr double DefaultBackoffJitter = 0.1;
 
+    /*!
+     * \note Can be up to std::numeric_limits<int>::max() inclusive.
+    */
     int InvocationCount = DefaultInvocationCount;
     TDuration MinBackoff = DefaultMinBackoff;
     TDuration MaxBackoff = DefaultMaxBackoff;
@@ -67,6 +70,20 @@ struct TLogDigestConfig
 };
 
 DEFINE_REFCOUNTED_TYPE(TLogDigestConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TFairShareHierarchicalSchedulerDynamicConfig
+    : public NYTree::TYsonStruct
+{
+    TDuration WindowSize;
+
+    REGISTER_YSON_STRUCT(TFairShareHierarchicalSchedulerDynamicConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TFairShareHierarchicalSchedulerDynamicConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 

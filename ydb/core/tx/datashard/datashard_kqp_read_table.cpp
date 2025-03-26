@@ -193,7 +193,7 @@ public:
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, BasicBlock*& block) const {
         Y_UNUSED(ctx, block);
-        Y_ABORT("LLVM compilation is not implemented for OLTP-workload");
+        Y_ENSURE(false, "LLVM compilation is not implemented for OLTP-workload");
     }
 #endif
 

@@ -1,6 +1,7 @@
 import time
 import logging
-from .base import TllTieringTestBase, ColumnTableHelper
+from .base import TllTieringTestBase
+from ydb.tests.olap.common.column_table_helper import ColumnTableHelper
 import ydb
 import concurrent
 import random

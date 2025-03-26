@@ -4660,7 +4660,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(value.GetElement(1U).template Get<ui32>(), 1571889697U);
         UNIT_ASSERT_VALUES_EQUAL(value.GetElement(2U).template Get<ui32>(), 1571940097U);
     }
-#if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 25u
+
     Y_UNIT_TEST_LLVM(TestSqueezeToList) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;
@@ -4718,7 +4718,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLComputationNodeTest) {
         UNIT_ASSERT_VALUES_EQUAL(full.GetElement(1U).template Get<float>(), 1.1f);
         UNIT_ASSERT_VALUES_EQUAL(full.GetElement(2U).template Get<float>(), -3.14f);
     }
-#endif
+
     Y_UNIT_TEST_LLVM(TestPerfHolders) {
         TSetup<LLVM> setup;
         TProgramBuilder& pb = *setup.PgmBuilder;

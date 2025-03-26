@@ -621,17 +621,18 @@ def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
     if not test_files:
         return
 
-    tsconfig_paths = unit.get("TS_CONFIG_PATH").split()
-    tsconfig_path = tsconfig_paths[0]
-
-    if len(tsconfig_paths) > 1:
-        tsconfig_path = unit.get("_TS_TYPECHECK_TSCONFIG")
-        if not tsconfig_path:
+    tsconfig_path = unit.get("_TS_TYPECHECK_TSCONFIG")
+    if not tsconfig_path:
+        tsconfig_paths = unit.get("TS_CONFIG_PATH").split()
+        if len(tsconfig_paths) > 1:
             macros = " or ".join([f"TS_TYPECHECK({p})" for p in tsconfig_paths])
             raise Exception(f"Module uses several tsconfig files, specify which one to use for typecheck: {macros}")
-        abs_tsconfig_path = unit.resolve(unit.resolve_arc_path(tsconfig_path))
-        if not abs_tsconfig_path:
-            raise Exception(f"tsconfig for typecheck not found: {tsconfig_path}")
+
+        tsconfig_path = tsconfig_paths[0]
+
+    abs_tsconfig_path = unit.resolve(unit.resolve_arc_path(tsconfig_path))
+    if not abs_tsconfig_path:
+        raise Exception(f"tsconfig for typecheck not found: {tsconfig_path}")
 
     unit.on_peerdir_ts_resource("typescript")
     user_recipes = unit.get("TEST_RECIPES_VALUE")
@@ -801,6 +802,11 @@ def on_node_modules_configure(unit: NotsUnitType) -> None:
         if not unit.get("TS_TEST_FOR"):
             __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives(["hide", "output"], sorted(outs)))
 
+        lf = pm.load_lockfile_from_dir(pm.sources_path)
+
+        if hasattr(lf, "validate_importers"):
+            lf.validate_importers()
+
         if pj.get_use_prebuilder():
             unit.on_peerdir_ts_resource("@yatool/prebuilder")
             unit.set(
@@ -816,7 +822,6 @@ def on_node_modules_configure(unit: NotsUnitType) -> None:
 
             if prebuilder_major == "0":
                 # TODO: FBP-1408
-                lf = pm.load_lockfile_from_dir(pm.sources_path)
                 is_valid, invalid_keys = lf.validate_has_addons_flags()
 
                 if not is_valid:
@@ -830,7 +835,6 @@ def on_node_modules_configure(unit: NotsUnitType) -> None:
                         + "\n  - ".join(invalid_keys)
                     )
             else:
-                lf = pm.load_lockfile_from_dir(pm.sources_path)
                 requires_build_packages = lf.get_requires_build_packages()
                 is_valid, validation_messages = pj.validate_prebuilds(requires_build_packages)
 

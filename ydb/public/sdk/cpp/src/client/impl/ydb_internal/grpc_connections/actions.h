@@ -1,19 +1,19 @@
 #pragma once
 
-#include <src/client/impl/ydb_internal/internal_header.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/internal_header.h>
 
 #include <ydb/public/api/protos/ydb_operation.pb.h>
-#include <src/client/impl/ydb_internal/common/types.h>
-#include <src/client/impl/ydb_internal/db_driver_state/state.h>
-#include <src/client/impl/ydb_internal/plain_status/status.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/common/types.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/db_driver_state/state.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/plain_status/status.h>
 
-#include <src/library/grpc/client/grpc_client_low.h>
+#include <ydb/public/sdk/cpp/src/library/grpc/client/grpc_client_low.h>
 
 #include <util/thread/pool.h>
 
 #include <grpcpp/alarm.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 using NYdbGrpc::IQueueClientContext;
 using NYdbGrpc::IQueueClientEvent;

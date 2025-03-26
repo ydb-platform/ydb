@@ -826,6 +826,8 @@ TEncryptedFileDeserializer::TEncryptedFileDeserializer()
 
 TEncryptedFileDeserializer::~TEncryptedFileDeserializer() = default;
 
+TEncryptedFileDeserializer& TEncryptedFileDeserializer::operator=(TEncryptedFileDeserializer&&) = default;
+
 void TEncryptedFileDeserializer::AddData(TBuffer data, bool last) {
     Impl->AddData(std::move(data), last);
 }
@@ -844,7 +846,7 @@ TEncryptedFileDeserializer TEncryptedFileDeserializer::RestoreFromState(const TS
     return deserializer;
 }
 
-std::pair<TBuffer, TEncryptionIV> TEncryptedFileDeserializer::DecryptFile(TEncryptionKey key, TBuffer data) {
+std::pair<TBuffer, TEncryptionIV> TEncryptedFileDeserializer::DecryptFullFile(TEncryptionKey key, TBuffer data) {
     TEncryptedFileDeserializer deserializer(std::move(key));
     deserializer.AddData(std::move(data), true);
 

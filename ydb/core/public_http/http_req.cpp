@@ -1,7 +1,7 @@
 #include "http_req.h"
 
 #include <ydb/library/actors/http/http_proxy.h>
-#include <ydb-cpp-sdk/client/types/status_codes.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status_codes.h>
 #include <ydb/core/http_proxy/http_req.h>
 
 #include <util/generic/guid.h>

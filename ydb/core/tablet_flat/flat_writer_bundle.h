@@ -6,6 +6,7 @@
 #include "flat_writer_blocks.h"
 #include "util_basics.h"
 #include "util_channel.h"
+#include "util_fmt_abort.h"
 
 namespace NKikimr {
 namespace NTabletFlatExecutor {
@@ -26,7 +27,7 @@ namespace NWriter {
             , ChannelsShares(conf.ChannelsShares)
             , Banks(base, conf.Slots)
         {
-            Y_ABORT_UNLESS(Groups.size() >= 1, "There must be at least one page collection group");
+            Y_ENSURE(Groups.size() >= 1, "There must be at least one page collection group");
 
             const auto none = NTable::NPage::ECache::None;
 
@@ -40,26 +41,21 @@ namespace NWriter {
             Growth = new NTable::TScreen::TCook;
         }
 
-        ~TBundle()
-        {
-            Y_ABORT_UNLESS(!Blobs, "Bundle writer still has some blobs");
-        }
-
         TVector<NPageCollection::TGlob> GetBlobsToSave() noexcept
         {
             return std::exchange(Blobs, { });
         }
 
-        TVector<TResult> Results() noexcept
+        TVector<TResult> Results()
         {
             for (auto &blocks : Blocks) {
-                Y_ABORT_UNLESS(!*blocks, "Bundle writer has unflushed data");
+                Y_ENSURE(!*blocks, "Bundle writer has unflushed data");
             }
 
             return std::move(Results_);
         }
 
-        NPageCollection::TLargeGlobId WriteExtra(TArrayRef<const char> body) noexcept
+        NPageCollection::TLargeGlobId WriteExtra(TArrayRef<const char> body)
         {
             return Put(/* data cookieRange */ 1, ExtraChannel, body, Groups[0].MaxBlobSize);
         }
@@ -70,7 +66,7 @@ namespace NWriter {
             return Blocks.at(group)->Write(std::move(page), type);
         }
 
-        TPageId WriteOuter(TSharedData page) noexcept override
+        TPageId WriteOuter(TSharedData page) override
         {
             return
                 Blocks.back()->Write(std::move(page), EPage::Opaque);
@@ -81,7 +77,7 @@ namespace NWriter {
             Blocks[0]->WriteInplace(page, body);
         }
 
-        NPageCollection::TGlobId WriteLarge(TString blob, ui64 ref) noexcept override
+        NPageCollection::TGlobId WriteLarge(TString blob, ui64 ref) override
         {
             ui8 bestChannel = ChannelsShares.Select(BlobsChannels);
             
@@ -93,7 +89,7 @@ namespace NWriter {
             return glob;
         }
 
-        void Finish(TString overlay) noexcept override
+        void Finish(TString overlay) override
         {
             auto &result = Results_.emplace_back();
 
@@ -101,31 +97,31 @@ namespace NWriter {
                 if (auto written = Blocks[num]->Finish(); written.PageCollection) {
                     result.PageCollections.emplace_back(std::move(written));
                 } else if (num < Blocks.size() - 1) {
-                    Y_ABORT("Finish produced an empty main page collection");
+                    Y_TABLET_ERROR("Finish produced an empty main page collection");
                 }
 
-                Y_ABORT_UNLESS(!*Blocks[num], "Block writer has unexpected data");
+                Y_ENSURE(!*Blocks[num], "Block writer has unexpected data");
             }
 
-            Y_ABORT_UNLESS(result.PageCollections, "Finish produced no page collections");
+            Y_ENSURE(result.PageCollections, "Finish produced no page collections");
 
             result.Growth = Growth->Unwrap();
             result.Overlay = overlay;
         }
 
-        NPageCollection::TCookieAllocator& CookieRange(ui32 cookieRange) noexcept override
+        NPageCollection::TCookieAllocator& CookieRange(ui32 cookieRange) override
         {
-            Y_ABORT_UNLESS(cookieRange == 0 || cookieRange == 1, "Invalid cookieRange requested");
+            Y_ENSURE(cookieRange == 0 || cookieRange == 1, "Invalid cookieRange requested");
 
             return cookieRange == 0 ? Banks.Meta : Banks.Data;
         }
 
-        void Put(NPageCollection::TGlob&& glob) noexcept override
+        void Put(NPageCollection::TGlob&& glob) override
         {
             Blobs.emplace_back(std::move(glob));
         }
 
-        NPageCollection::TLargeGlobId Put(ui32 cookieRange, ui8 channel, TArrayRef<const char> body, ui32 block) noexcept override
+        NPageCollection::TLargeGlobId Put(ui32 cookieRange, ui8 channel, TArrayRef<const char> body, ui32 block) override
         {
             const auto largeGlobId = CookieRange(cookieRange).Do(channel, body.size(), block);
 
@@ -141,11 +137,11 @@ namespace NWriter {
                 offset += chunk;
                 left -= chunk;
 
-                Y_ABORT_UNLESS(chunk && (chunk == block || left == 0));
+                Y_ENSURE(chunk && (chunk == block || left == 0));
             }
 
-            Y_ABORT_UNLESS(offset == body.size());
-            Y_ABORT_UNLESS(left == 0);
+            Y_ENSURE(offset == body.size());
+            Y_ENSURE(left == 0);
             return largeGlobId;
         }
 

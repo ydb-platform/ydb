@@ -2,6 +2,9 @@ import threading
 
 
 class TestThread(threading.Thread):
+
+    __test__ = False
+
     def run(self) -> None:
         self.exc = None
         try:
@@ -16,7 +19,10 @@ class TestThread(threading.Thread):
         return self.ret
 
 
-class TestThreads():
+class TestThreads:
+
+    __test__ = False
+
     def __init__(self):
         self.threads: list[TestThread] = list()
 

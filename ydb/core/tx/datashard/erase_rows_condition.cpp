@@ -107,7 +107,7 @@ class TExpirationCondition: public IEraseRowsCondition {
         case NScheme::NTypeIds::Pg:
             return GetWallClockPg();
         default:
-            Y_ABORT("Unreachable");
+            Y_ENSURE(false, "Unreachable");
         }
     }
 
@@ -138,7 +138,7 @@ class TExpirationCondition: public IEraseRowsCondition {
                 return false;
             }
         default:
-            Y_ABORT("Unreachable");
+            Y_ENSURE(false, "Unreachable");
         }
     }
 
@@ -157,7 +157,7 @@ class TExpirationCondition: public IEraseRowsCondition {
         case NScheme::NTypeIds::Timestamp64:
             return TInstant::MicroSeconds(value) <= WallClockInstant;
         default:
-            Y_ABORT("Unreachable");
+            Y_ENSURE(false, "Unreachable");
         }
     }
 
@@ -175,7 +175,7 @@ class TExpirationCondition: public IEraseRowsCondition {
                 return result <= 0;
             }
             default:
-                Y_ABORT("Unreachable");
+                Y_ENSURE(false, "Unreachable");
             }
         } else {
             return false;
@@ -206,17 +206,17 @@ public:
 
     void Prepare(TIntrusiveConstPtr<NTable::TRowScheme> scheme, TMaybe<NTable::TPos> remapPos) override {
         const auto* columnInfo = scheme->ColInfo(ColumnId);
-        Y_ABORT_UNLESS(columnInfo);
+        Y_ENSURE(columnInfo);
 
         Pos = remapPos.GetOrElse(columnInfo->Pos);
-        Y_ABORT_UNLESS(Pos < scheme->Tags().size());
+        Y_ENSURE(Pos < scheme->Tags().size());
 
         Type = columnInfo->TypeInfo;
     }
 
     bool Check(const NTable::TRowState& row) const override {
-        Y_ABORT_UNLESS(Pos != Max<NTable::TPos>());
-        Y_ABORT_UNLESS(Pos < row.Size());
+        Y_ENSURE(Pos != Max<NTable::TPos>());
+        Y_ENSURE(Pos < row.Size());
 
         const auto& cell = row.Get(Pos);
         if (cell.IsNull()) {

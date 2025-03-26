@@ -44,7 +44,7 @@ namespace NTabletFlatExecutor {
             Get(table, EReady::Wait).Ready = EReady::Done;
             Holds.Barriers.push_back(barrier);
 
-            Y_ABORT_UNLESS(Pending, "Snapshot pending counter is out of sync");
+            Y_ENSURE(Pending, "Snapshot pending counter is out of sync");
 
             return --Pending == 0;
         }
@@ -59,7 +59,7 @@ namespace NTabletFlatExecutor {
         void Moved(ui32 src, ui32 dst)
         {
             Get(src, EReady::Done);
-            Y_ABORT_UNLESS(!Holds.Moved.contains(src), "Table moved multiple times");
+            Y_ENSURE(!Holds.Moved.contains(src), "Table moved multiple times");
             Holds.Moved[src] = dst;
         }
 
@@ -84,7 +84,7 @@ namespace NTabletFlatExecutor {
         TState& Get(ui32 table, EReady ready)
         {
             auto &state = Tables[table];
-            Y_ABORT_UNLESS(state.Ready == ready, "Table snapshot is not in state");
+            Y_ENSURE(state.Ready == ready, "Table snapshot is not in state");
             return state;
         }
 

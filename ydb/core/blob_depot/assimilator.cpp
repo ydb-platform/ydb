@@ -264,6 +264,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void Complete(const TActorContext&) override {
+                Self->Self->OnUpdateDecommitState();
                 Self->Self->Data->CommitTrash(this);
                 Self->UpdateAssimilatorPosition();
 
@@ -297,9 +298,10 @@ namespace NKikimr::NBlobDepot {
             return;
         }
 
-        THPTimer timer;
+        const ui64 endTime = GetCycleCountFast() + DurationToCycles(TDuration::MilliSeconds(10));
         ui32 numItems = 0;
         bool timeout = false;
+        bool invalidate = false;
 
         if (!LastPlanScannedKey) {
             ++Self->AsStats.CopyIteration;
@@ -311,21 +313,24 @@ namespace NKikimr::NBlobDepot {
             LastPlanScannedKey ? TData::TKey(*LastPlanScannedKey) : TData::TKey::Min(),
             TData::TKey::Max(),
         };
+
         Self->Data->ScanRange(range, nullptr, nullptr, [&](const TData::TKey& key, const TData::TValue& value) {
-            if (++numItems == 1000) {
-                numItems = 0;
-                if (TDuration::Seconds(timer.Passed()) >= TDuration::MilliSeconds(1)) {
-                    timeout = true;
-                    return false;
-                }
-            }
             if (value.GoingToAssimilate) {
                 Self->AsStats.BytesToCopy += key.GetBlobId().BlobSize();
-                Self->JsonHandler.Invalidate();
+                invalidate = true;
             }
             LastPlanScannedKey.emplace(key.GetBlobId());
-            return true;
+            if (++numItems % 1024 == 0 && endTime <= GetCycleCountFast()) {
+                timeout = true;
+                return false;
+            } else {
+                return true;
+            }
         });
+
+        if (invalidate) {
+            Self->JsonHandler.Invalidate();
+        }
 
         if (timeout) {
             ResumeScanDataForPlanningInFlight = true;
@@ -539,6 +544,7 @@ namespace NKikimr::NBlobDepot {
             }
 
             void Complete(const TActorContext&) override {
+                Self->Self->OnUpdateDecommitState();
                 Self->ActionInProgress = false;
                 Self->Action();
             }
@@ -592,7 +598,9 @@ namespace NKikimr::NBlobDepot {
                     return true;
                 }
 
-                void Complete(const TActorContext&) override {}
+                void Complete(const TActorContext&) override {
+                    Self->OnUpdateDecommitState();
+                }
             };
 
             Self->GroupAssimilatorId = {};
@@ -704,6 +712,15 @@ namespace NKikimr::NBlobDepot {
            GroupAssimilatorId = RegisterWithSameMailbox(new TGroupAssimilator(this));
            JsonHandler.Invalidate();
         }
+    }
+
+    void TBlobDepot::OnUpdateDecommitState() {
+        auto&& c = TabletCounters->Simple();
+        const bool d = Configured && Config.GetIsDecommittingGroup(); // is decommission enabled for this tablet?
+        using E = EDecommitState;
+        c[NKikimrBlobDepot::COUNTER_DECOMMIT_MODE_PREPARING] = d && DecommitState < E::BlocksFinished;
+        c[NKikimrBlobDepot::COUNTER_DECOMMIT_MODE_IN_PROGRESS] = d && E::BlocksFinished <= DecommitState && DecommitState < E::Done;
+        c[NKikimrBlobDepot::COUNTER_DECOMMIT_MODE_DONE] = d && E::Done <= DecommitState;
     }
 
 } // NKikimr::NBlobDepot

@@ -49,7 +49,7 @@ public:
     private:
         ui32 KeyIndex;
         std::shared_ptr<IChunkedArray> GlobalChunkedArray;
-        std::shared_ptr<arrow::StringArray> CurrentArrayData;
+        const arrow::StringArray* CurrentArrayData;
         std::optional<IChunkedArray::TFullChunkedArrayAddress> FullArrayAddress;
         std::optional<IChunkedArray::TFullDataAddress> ChunkAddress;
         ui32 CurrentIndex = 0;
@@ -63,7 +63,7 @@ public:
                 const ui32 localIndex = FullArrayAddress->GetAddress().GetLocalIndex(CurrentIndex);
                 ChunkAddress = FullArrayAddress->GetArray()->GetChunk(ChunkAddress, localIndex);
                 AFL_VERIFY(ChunkAddress->GetArray()->type()->id() == arrow::utf8()->id());
-                CurrentArrayData = std::static_pointer_cast<arrow::StringArray>(ChunkAddress->GetArray());
+                CurrentArrayData = static_cast<const arrow::StringArray*>(ChunkAddress->GetArray().get());
                 if (FullArrayAddress->GetArray()->GetType() == IChunkedArray::EType::Array) {
                     if (CurrentArrayData->IsNull(localIndex)) {
                         Next();
@@ -113,20 +113,16 @@ public:
 
         bool Next() {
             AFL_VERIFY(IsValid());
-            while (true) {
-                ++CurrentIndex;
-                if (ChunkAddress->GetAddress().Contains(CurrentIndex)) {
-                    if (CurrentArrayData->IsNull(ChunkAddress->GetAddress().GetLocalIndex(CurrentIndex))) {
-                        continue;
-                    }
-                    return true;
-                } else if (CurrentIndex == GlobalChunkedArray->GetRecordsCount()) {
-                    return false;
-                } else {
-                    InitArrays();
-                    return IsValid();
+            AFL_VERIFY(ChunkAddress->GetAddress().Contains(CurrentIndex));
+            ++CurrentIndex;
+            for (; CurrentIndex < ChunkAddress->GetAddress().GetGlobalFinishPosition(); ++CurrentIndex) {
+                if (CurrentArrayData->IsNull(CurrentIndex - ChunkAddress->GetAddress().GetGlobalStartPosition())) {
+                    continue;
                 }
+                return true;
             }
+            InitArrays();
+            return IsValid();
         }
     };
 

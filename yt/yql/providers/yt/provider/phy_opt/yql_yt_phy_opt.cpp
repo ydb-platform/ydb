@@ -17,6 +17,10 @@ TYtPhysicalOptProposalTransformer::TYtPhysicalOptProposalTransformer(TYtState::T
     , State_(state)
 {
 #define HNDL(name) "PhysicalOptimizer-"#name, Hndl(&TYtPhysicalOptProposalTransformer::name)
+    if (State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION) != ERuntimeClusterSelectionMode::Disable) {
+        AddHandler(0, &TYtTransientOpBase::Match, HNDL(UpdateDataSinkCluster));
+        AddHandler(0, &TYtReadTable::Match, HNDL(UpdateDataSourceCluster));
+    }
     AddHandler(0, &TCoMux::Match, HNDL(Mux));
     AddHandler(0, &TYtWriteTable::Match, HNDL(Write));
     if (!State_->Configuration->_EnableYtDqProcessWriteConstraints.Get().GetOrElse(DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS)) {

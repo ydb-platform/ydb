@@ -10,10 +10,10 @@ namespace NPageCollection {
     public:
         TAlign(TArrayRef<const ui64> steps) : Steps(steps) { }
 
-        TBorder Lookup(ui64 offset, const ui64 sz) const noexcept
+        TBorder Lookup(ui64 offset, const ui64 sz) const
         {
             auto it = UpperBound(Steps.begin(), Steps.end(), offset);
-            Y_ABORT_UNLESS(it != Steps.end(), "Lookup span is out of borders");
+            Y_ENSURE(it != Steps.end(), "Lookup span is out of borders");
 
             const ui32 first = std::distance(Steps.begin(), it);
             const ui64 base = it == Steps.begin() ? 0 : *(it - 1);
@@ -24,7 +24,7 @@ namespace NPageCollection {
 
             while (Steps[last] < szoffset) {
                 lastOffset = Steps[last++];
-                Y_ABORT_UNLESS(last < Steps.size(), "Lookup span is out of borders");
+                Y_ENSURE(last < Steps.size(), "Lookup span is out of borders");
             }
 
             return

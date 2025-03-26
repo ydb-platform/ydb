@@ -141,14 +141,14 @@ TZStdCompressionProcessor* TS3Buffer::CreateCompression(const TMaybe<TS3ExportBu
 }
 
 void TS3Buffer::ColumnsOrder(const TVector<ui32>& tags) {
-    Y_ABORT_UNLESS(tags.size() == Columns.size());
+    Y_ENSURE(tags.size() == Columns.size());
 
     Indices.clear();
     for (ui32 i = 0; i < tags.size(); ++i) {
         const ui32 tag = tags.at(i);
         auto it = Columns.find(tag);
-        Y_ABORT_UNLESS(it != Columns.end());
-        Y_ABORT_UNLESS(Indices.emplace(tag, i).second);
+        Y_ENSURE(it != Columns.end());
+        Y_ENSURE(Indices.emplace(tag, i).second);
     }
 }
 
@@ -156,8 +156,8 @@ bool TS3Buffer::Collect(const NTable::IScan::TRow& row, IOutputStream& out) {
     bool needsComma = false;
     for (const auto& [tag, column] : Columns) {
         auto it = Indices.find(tag);
-        Y_ABORT_UNLESS(it != Indices.end());
-        Y_ABORT_UNLESS(it->second < (*row).size());
+        Y_ENSURE(it != Indices.end());
+        Y_ENSURE(it->second < (*row).size());
         const auto& cell = (*row)[it->second];
 
         BytesRead += cell.Size();
@@ -253,7 +253,7 @@ bool TS3Buffer::Collect(const NTable::IScan::TRow& row, IOutputStream& out) {
             serialized = UuidToStream(cell.AsValue<std::pair<ui64, ui64>>(), out, ErrorString);
             break;
         default:
-            Y_ABORT("Unsupported type");
+            Y_ENSURE(false, "Unsupported type");
         }
 
         if (!serialized) {
@@ -312,7 +312,7 @@ IEventBase* TS3Buffer::PrepareEvent(bool last, NExportScan::IBuffer::TStats& sta
 }
 
 void TS3Buffer::Clear() {
-    Y_ABORT_UNLESS(Flush(false, false));
+    Y_ENSURE(Flush(false, false));
 }
 
 bool TS3Buffer::IsFilled() const {

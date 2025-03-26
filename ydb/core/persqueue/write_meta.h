@@ -2,7 +2,7 @@
 
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/persqueue.h>
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <util/string/vector.h>
 

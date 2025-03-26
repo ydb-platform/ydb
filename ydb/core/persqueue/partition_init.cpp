@@ -200,6 +200,11 @@ void TInitConfigStep::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorCon
         Y_ABORT("bad status");
     };
 
+    // There should be no consumers in the configuration of the background partition. When creating a partition,
+    // the PQ tablet specifically removes all consumer settings from the config.
+    Y_ABORT_UNLESS(!Partition()->IsSupportive() ||
+                   (Partition()->Config.GetConsumers().empty() && Partition()->TabletConfig.GetConsumers().empty()));
+
     Partition()->PartitionConfig = GetPartitionConfig(Partition()->Config, Partition()->Partition.OriginalPartitionId);
     Partition()->PartitionGraph = MakePartitionGraph(Partition()->Config);
 
@@ -395,6 +400,7 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
         case NKikimrProto::OVERRUN: {
             auto& sourceIdStorage = Partition()->SourceIdStorage;
             auto& usersInfoStorage = Partition()->UsersInfoStorage;
+            const bool isSupportive = Partition()->IsSupportive();
 
             for (ui32 i = 0; i < range.PairSize(); ++i) {
                 const auto& pair = range.GetPair(i);
@@ -416,9 +422,9 @@ void TInitInfoRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
                     sourceIdStorage.LoadSourceIdInfo(*key, pair.GetValue(), now);
                 } else if (type == TKeyPrefix::MarkProtoSourceId) {
                     sourceIdStorage.LoadSourceIdInfo(*key, pair.GetValue(), now);
-                } else if (type == TKeyPrefix::MarkUser) {
+                } else if ((type == TKeyPrefix::MarkUser) && !isSupportive) {
                     usersInfoStorage->Parse(*key, pair.GetValue(), ctx);
-                } else if (type == TKeyPrefix::MarkUserDeprecated) {
+                } else if ((type == TKeyPrefix::MarkUserDeprecated) && !isSupportive) {
                     usersInfoStorage->ParseDeprecated(*key, pair.GetValue(), ctx);
                 }
             }

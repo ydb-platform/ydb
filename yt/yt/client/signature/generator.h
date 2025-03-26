@@ -23,6 +23,7 @@ DEFINE_REFCOUNTED_TYPE(ISignatureGenerator)
 ////////////////////////////////////////////////////////////////////////////////
 
 ISignatureGeneratorPtr CreateDummySignatureGenerator();
+const ISignatureGeneratorPtr& GetDummySignatureGenerator();
 
 ISignatureGeneratorPtr CreateAlwaysThrowingSignatureGenerator();
 

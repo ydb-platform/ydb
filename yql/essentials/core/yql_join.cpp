@@ -817,6 +817,8 @@ IGraphTransformer::TStatus ValidateEquiJoinOptions(TPositionHandle positionHandl
             // do nothing
         } else if (optionName == "shuffle_lhs_by" || optionName == "shuffle_rhs_by") {
             // do nothing
+        } else if (optionName == "multiple_joins") {
+            // do nothing
         } else if (optionName == "compact") {
             options.Compact = true;
         } else {

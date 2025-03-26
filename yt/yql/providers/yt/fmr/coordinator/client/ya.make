@@ -6,10 +6,12 @@ SRCS(
 
 PEERDIR(
     library/cpp/http/simple
+    library/cpp/retry
     library/cpp/threading/future
     yt/yql/providers/yt/fmr/coordinator/interface
     yt/yql/providers/yt/fmr/coordinator/interface/proto_helpers
     yt/yql/providers/yt/fmr/proto
+    yt/yql/providers/yt/fmr/utils
     yql/essentials/utils
 )
 

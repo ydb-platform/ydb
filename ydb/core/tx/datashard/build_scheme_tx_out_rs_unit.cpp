@@ -41,13 +41,13 @@ EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op,
                                                   const TActorContext &)
 {
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     auto &schemeTx = tx->GetSchemeTx();
     if (!schemeTx.HasSendSnapshot() && !schemeTx.HasCreateIncrementalBackupSrc())
         return EExecutionStatus::Executed;
 
-    Y_ABORT_UNLESS(!op->InputSnapshots().empty(), "Snapshots expected");
+    Y_ENSURE(!op->InputSnapshots().empty(), "Snapshots expected");
 
     auto &outReadSets = op->OutReadSets();
     ui64 srcTablet = DataShard.TabletID();
@@ -59,20 +59,20 @@ EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op,
     ui64 targetTablet = snapshot.GetSendTo(0).GetShard();
     ui64 tableId = snapshot.GetTableId_Deprecated();
     if (snapshot.HasTableId()) {
-        Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == snapshot.GetTableId().GetOwnerId());
+        Y_ENSURE(DataShard.GetPathOwnerId() == snapshot.GetTableId().GetOwnerId());
         tableId = snapshot.GetTableId().GetTableId();
     }
-    Y_ABORT_UNLESS(DataShard.GetUserTables().contains(tableId));
+    Y_ENSURE(DataShard.GetUserTables().contains(tableId));
     ui32 localTableId = DataShard.GetUserTables().at(tableId)->LocalTid;
 
     for (auto &snapshot : op->InputSnapshots()) {
         auto* txSnapshot = dynamic_cast<TTxTableSnapshotContext*>(snapshot.Get());
-        Y_ABORT_UNLESS(txSnapshot, "Unexpected input snapshot type");
+        Y_ENSURE(txSnapshot, "Unexpected input snapshot type");
 
         TString snapBody = DataShard.BorrowSnapshot(localTableId, *snapshot, { }, { }, targetTablet);
         txc.Env.DropSnapshot(snapshot);
 
-        Y_ABORT_UNLESS(snapBody, "Failed to make full borrow snap. w/o tx restarts");
+        Y_ENSURE(snapBody, "Failed to make full borrow snap. w/o tx restarts");
 
         TRowVersion minVersion = TRowVersion(op->GetStep(), op->GetTxId()).Next();
         TRowVersion completeEdge = DataShard.GetSnapshotManager().GetCompleteEdge();
@@ -122,7 +122,7 @@ EExecutionStatus TBuildSchemeTxOutRSUnit::Execute(TOperation::TPtr op,
         rsBody.reserve(SnapshotTransferReadSetMagic.size() + rs.ByteSizeLong());
         rsBody.append(SnapshotTransferReadSetMagic);
         bool ok = rs.AppendToString(&rsBody);
-        Y_ABORT_UNLESS(ok, "Failed to serialize schema readset");
+        Y_ENSURE(ok, "Failed to serialize schema readset");
 
         outReadSets[std::make_pair(srcTablet, targetTablet)] = rsBody;
     }

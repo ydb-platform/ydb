@@ -69,6 +69,7 @@ public:
             ui32 flags,
             const NUdf::TSourcePosition& pos,
             const NUdf::ISecureParamsProvider* secureParamsProvider,
+            const NUdf::ILogProvider* logProvider,
             TFunctionTypeInfo* funcInfo) const = 0;
 
     virtual TMaybe<TString> FindUdfPath(const TStringBuf& moduleName) const = 0;

@@ -14,7 +14,7 @@
 
 #include <ydb/library/grpc/server/event_callback.h>
 #include <ydb/library/grpc/server/grpc_async_ctx_base.h>
-#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>

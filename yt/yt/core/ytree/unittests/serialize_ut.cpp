@@ -51,7 +51,7 @@ DEFINE_BIT_ENUM(ETestBitEnum,
     ((Green)  (0x0004))
 );
 
-enum class EPlainTestEnum
+enum class EVanillaTestEnum
 {
     First,
     Second,
@@ -429,9 +429,9 @@ TEST(TSerializationTest, SerializableArcadiaEnum)
 
 TEST(TSerializationTest, PlainEnum)
 {
-    TestSerializationDeserialization(EPlainTestEnum::First);
+    TestSerializationDeserialization(EVanillaTestEnum::First);
 
-    TestSerializationDeserialization(static_cast<EPlainTestEnum>(42));
+    TestSerializationDeserialization(static_cast<EVanillaTestEnum>(42));
 }
 
 TEST(TYTreeSerializationTest, Protobuf)

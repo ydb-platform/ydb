@@ -1,6 +1,6 @@
 #include "issue.h"
 
-#include <src/library/issue/yql_issue_message.h>
+#include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 

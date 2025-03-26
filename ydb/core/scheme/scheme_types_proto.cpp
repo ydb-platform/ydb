@@ -1,6 +1,7 @@
 #include "scheme_types_proto.h"
 
-#include <util/string/printf.h>
+#include <util/generic/yexception.h>
+#include <util/string/builder.h>
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 
 
@@ -11,7 +12,7 @@ TProtoColumnType ProtoColumnTypeFromTypeInfoMod(const TTypeInfo typeInfo, const 
     columnType.TypeId = (ui32)typeInfo.GetTypeId();
     switch (typeInfo.GetTypeId()) {
     case NTypeIds::Pg: {
-        Y_ABORT_UNLESS(typeInfo.GetPgTypeDesc(), "no pg type descriptor");
+        Y_ENSURE(typeInfo.GetPgTypeDesc(), "no pg type descriptor");
         columnType.TypeInfo = NKikimrProto::TTypeInfo();
         columnType.TypeInfo->SetPgTypeId(NPg::PgTypeIdFromTypeDesc(typeInfo.GetPgTypeDesc()));
         if (typeMod) {
@@ -32,7 +33,7 @@ TTypeInfoMod TypeInfoModFromProtoColumnType(ui32 typeId, const NKikimrProto::TTy
     auto type = (TTypeId)typeId;
     switch (type) {
     case NTypeIds::Pg: {
-        Y_ABORT_UNLESS(typeInfo, "no type info for pg type");
+        Y_ENSURE(typeInfo, "no type info for pg type");
         TTypeInfoMod res = {
             .TypeInfo = {NPg::TypeDescFromPgTypeId(typeInfo->GetPgTypeId())},
             .TypeMod = (typeInfo->HasPgTypeMod() ? typeInfo->GetPgTypeMod() : TProtoStringType{})
@@ -66,7 +67,7 @@ NKikimrProto::TTypeInfo DefaultDecimalProto() {
 
 
 void ProtoFromTypeInfo(const NScheme::TTypeInfo& typeInfo, const TProtoStringType& typeMod, ::NKikimrProto::TTypeInfo& typeInfoProto) {
-    Y_ABORT_UNLESS(NTypeIds::IsParametrizedType(typeInfo.GetTypeId()), "Unexpected typeId %u", typeInfo.GetTypeId());
+    Y_ENSURE(NTypeIds::IsParametrizedType(typeInfo.GetTypeId()), "Unexpected typeId " << typeInfo.GetTypeId());
 
     switch (typeInfo.GetTypeId()) {
     case NScheme::NTypeIds::Pg: {
@@ -81,14 +82,14 @@ void ProtoFromTypeInfo(const NScheme::TTypeInfo& typeInfo, const TProtoStringTyp
         break;
     }
     default:
-        Y_ABORT_UNLESS(false, "Unexpected typeId %u", typeInfo.GetTypeId());
+        Y_ENSURE(false, "Unexpected typeId " << typeInfo.GetTypeId());
     }  
 }
 
 NScheme::TTypeInfo TypeInfoFromProto(NScheme::TTypeId typeId, const ::NKikimrProto::TTypeInfo& typeInfoProto) {
     switch (typeId) {
     case NScheme::NTypeIds::Pg: {
-        Y_ABORT_UNLESS(typeInfoProto.HasPgTypeId());
+        Y_ENSURE(typeInfoProto.HasPgTypeId());
         return NScheme::TTypeInfo(NPg::TypeDescFromPgTypeId(typeInfoProto.GetPgTypeId()));
     }
     case NScheme::NTypeIds::Decimal: {
@@ -119,14 +120,14 @@ bool TypeInfoFromProto(const ::Ydb::Type& typeProto, TTypeInfoMod& typeInfoMod, 
         const auto& typeName = typeProto.pg_type().type_name();
         auto pgDesc = NPg::TypeDescFromPgTypeName(typeName);
         if (!pgDesc) {
-            error = Sprintf("Unknown pg type %s", typeName.c_str());
+            error = TStringBuilder() << "Unknown pg type " << typeName;
             return false;
         }
 
         typeInfoMod = {NScheme::TTypeInfo(pgDesc), typeProto.pg_type().type_modifier()};
         return true;
     } else {
-        error = Sprintf("Unexpected type, got proto: %s", typeProto.ShortDebugString().c_str());
+        error = TStringBuilder() << "Unexpected type, got proto: " << typeProto.ShortDebugString();
         return false;
     }
 }

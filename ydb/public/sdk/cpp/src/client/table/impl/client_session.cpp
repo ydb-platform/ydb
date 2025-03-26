@@ -3,7 +3,7 @@
 
 #include <util/string/cast.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 namespace NTable {
 
 TSession::TImpl::TImpl(const std::string& sessionId, const std::string& endpoint, bool useQueryCache, ui32 queryCacheSize, bool isOwnedBySessionPool)

@@ -220,11 +220,24 @@ TStructuredJobTableList ApplyProtobufColumnFilters(
         return tableList;
     }
 
-    auto isDynamic = NRawClient::BatchTransform(
+    TVector<TRichYPath> tableListPaths;
+    for (const auto& table: tableList) {
+        Y_ABORT_UNLESS(table.RichYPath, "Cannot get path to apply column filters");
+        tableListPaths.emplace_back(*table.RichYPath);
+    }
+
+    auto isDynamic = NRawClient::RemoteClustersBatchTransform(
         preparer.GetClient()->GetRawClient(),
-        tableList,
+        preparer.GetContext(),
+        tableListPaths,
         [&] (IRawBatchRequestPtr batch, const auto& table) {
-            return batch->Get(preparer.GetTransactionId(), table.RichYPath->Path_ + "/@dynamic", TGetOptions());
+            // In case of external cluster, we can't use the current transaction
+            // since it is unknown for the external cluster.
+            // Hence, we should take a global transaction.
+            if (table.Cluster_ && !table.Cluster_->empty()) {
+                return batch->Get(TTransactionId(), table.Path_ + "/@dynamic", TGetOptions());
+            }
+            return batch->Get(preparer.GetTransactionId(), table.Path_ + "/@dynamic", TGetOptions());
         });
 
     auto newTableList = tableList;
@@ -768,6 +781,7 @@ void BuildUserJobFluently(
                     list.Item().Value(BuildJobProfilerSpec(jobProfiler));
                 })
             .EndList()
+        .Item("start_queue_consumer_registration_manager").Value(false)
         .Item("redirect_stdout_to_stderr").Value(preparer.ShouldRedirectStdoutToStderr());
 }
 
@@ -1048,17 +1062,19 @@ void CheckInputTablesExist(
 {
     Y_ENSURE(!paths.empty(), "Input tables are not set");
     for (auto& path : paths) {
-        auto curTransactionId =  path.TransactionId_.GetOrElse(preparer.GetTransactionId());
-        auto exists = RequestWithRetry<bool>(
-            preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
-            [&preparer, &curTransactionId, &path] (TMutationId /*mutationId*/) {
-                return preparer.GetClient()->GetRawClient()->Exists(
-                    curTransactionId,
-                    path.Path_);
-            });
-        Y_ENSURE_EX(
-            path.Cluster_.Defined() || exists,
-            TApiUsageError() << "Input table '" << path.Path_ << "' doesn't exist");
+        if (!path.Cluster_.Defined()) {
+            auto curTransactionId =  path.TransactionId_.GetOrElse(preparer.GetTransactionId());
+            auto exists = RequestWithRetry<bool>(
+                preparer.GetClientRetryPolicy()->CreatePolicyForGenericRequest(),
+                [&preparer, &curTransactionId, &path] (TMutationId /*mutationId*/) {
+                    return preparer.GetClient()->GetRawClient()->Exists(
+                        curTransactionId,
+                        path.Path_);
+                });
+            Y_ENSURE_EX(
+                exists,
+                TApiUsageError() << "Input table '" << path.Path_ << "' doesn't exist");
+        }
     }
 }
 

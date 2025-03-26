@@ -8,8 +8,8 @@
 #include <ydb/core/fq/libs/shared_resources/shared_resources.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 
-#include <ydb-cpp-sdk/client/table/table.h>
-#include <ydb-cpp-sdk/client/query/query.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
 
 namespace NFq {
 

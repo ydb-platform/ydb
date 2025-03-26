@@ -38,7 +38,7 @@ namespace NTable {
         TShrink& Put(TArrayRef<const TPartView> all, TCells from, TCells to)
         {
             for (auto &partView: all) {
-                Y_ABORT_UNLESS(partView.Slices, "Shrink attempt on a part without slices");
+                Y_ENSURE(partView.Slices, "Shrink attempt on a part without slices");
 
                 if (!from && !to) /* [-inf, +inf) */ {
                     PartView.emplace_back(partView);

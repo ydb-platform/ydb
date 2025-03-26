@@ -54,17 +54,27 @@ namespace NFake {
 
     struct TEvExecute : public TEventLocal<TEvExecute, EvExecute> {
         using ITransaction = NTabletFlatExecutor::ITransaction;
+        using IExecutor = NTabletFlatExecutor::NFlatExecutorSetup::IExecutor;
+        using TLambda = std::function<void (IExecutor*, const TActorContext&)>;
 
-        TEvExecute(TAutoPtr<ITransaction> func) {
-            THolder<ITransaction> h(func.Release());
-            Funcs.push_back(std::move(h));
+        TEvExecute(ITransaction* tx) {
+            Txs.emplace_back(tx);
         }
 
-        TEvExecute(TVector<THolder<ITransaction>> funcs)
-            : Funcs(std::move(funcs))
+        TEvExecute(THolder<ITransaction> tx) {
+            Txs.push_back(std::move(tx));
+        }
+
+        TEvExecute(TVector<THolder<ITransaction>> txs)
+            : Txs(std::move(txs))
         { }
 
-        TVector<THolder<ITransaction>> Funcs;
+        TEvExecute(TLambda&& lambda) {
+            Lambdas.push_back(std::move(lambda));
+        }
+
+        TVector<THolder<ITransaction>> Txs;
+        TVector<TLambda> Lambdas;
     };
 
     struct TEvResult : public TEventLocal<TEvResult, EvResult> {

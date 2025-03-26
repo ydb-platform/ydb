@@ -30,24 +30,24 @@ struct TScanRecord {
 class TScanManager {
 public:
     const TScanRecord* Get(ui64 id) const {
-        Y_ABORT_UNLESS(id != 0);
+        Y_ENSURE(id != 0);
         if (Id == id) {
             return &Record;
         }
-        Y_ABORT_UNLESS(Id == 0);
+        Y_ENSURE(Id == 0);
         return nullptr;
     }
 
     TScanRecord::TScanIds& Set(ui64 id, TScanRecord::TSeqNo seqNo) {
-        Y_ABORT_UNLESS(id != 0);
-        Y_ABORT_UNLESS(Id == 0);
+        Y_ENSURE(id != 0);
+        Y_ENSURE(Id == 0);
         Id = id;
         Record.SeqNo = seqNo;
         return Record.ScanIds;
     }
 
     void Drop(ui64 id) {
-        Y_ABORT_UNLESS(Get(id) == &Record);
+        Y_ENSURE(Get(id) == &Record);
         Id = 0;
         Record = {};
     }

@@ -39,7 +39,7 @@ public:
             Op->IncrementInProgress();
         }
 
-        Y_ABORT_UNLESS(Op && Op->IsInProgress() && !Op->GetExecutionPlan().empty());
+        Y_ENSURE(Op && Op->IsInProgress() && !Op->GetExecutionPlan().empty());
 
         auto status = Self->Pipeline.RunExecutionPlan(Op, CompleteList, txc, ctx);
 
@@ -48,7 +48,7 @@ public:
                 return false;
 
             case EExecutionStatus::Reschedule:
-                Y_ABORT("Unexpected Reschedule status while handling a direct operation");
+                Y_ENSURE(false, "Unexpected Reschedule status while handling a direct operation");
 
             case EExecutionStatus::Executed:
             case EExecutionStatus::Continue:
@@ -62,7 +62,7 @@ public:
             case EExecutionStatus::ExecutedNoMoreRestarts:
             case EExecutionStatus::DelayComplete:
             case EExecutionStatus::DelayCompleteNoMoreRestarts:
-                Y_FAIL_S("unexpected execution status " << status << " for operation "
+                Y_ENSURE(false, "unexpected execution status " << status << " for operation "
                         << *Op << " " << Op->GetKind() << " at " << Self->TabletID());
         }
 

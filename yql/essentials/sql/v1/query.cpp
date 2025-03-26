@@ -2021,7 +2021,7 @@ public:
                 options = L(options, Q(Y(Q("password"), password)));
             } else if (Params->Hash) {
                 options = L(options, Q(Y(Q("hash"), hash)));
-            } else {
+            } else if (Params->IsPasswordNull) {
                 options = L(options, Q(Y(Q("nullPassword"))));
             }
 
@@ -3169,6 +3169,11 @@ public:
                     currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
                         BuildQuotedAtom(Pos, "Warning"), BuildQuotedAtom(Pos, warningPragma.GetPattern()),
                             BuildQuotedAtom(Pos, to_lower(ToString(warningPragma.GetAction()))))));
+                }
+
+                if (ctx.RuntimeLogLevel) {
+                    currentWorlds->Add(Y("let", "world", Y(TString(ConfigureName), "world", configSource,
+                        BuildQuotedAtom(Pos, "RuntimeLogLevel"), BuildQuotedAtom(Pos, ctx.RuntimeLogLevel))));
                 }
 
                 if (ctx.ResultSizeLimit > 0) {

@@ -15,7 +15,7 @@
 #include <ydb/core/scheme/scheme_type_info.h>
 #include <util/system/unaligned_mem.h>
 
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 namespace NKikimr {
 namespace NGRpcService {

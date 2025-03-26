@@ -220,7 +220,6 @@ private:
         if (!indexPath.Exists()) {
             return;
         }
-
         auto writer = memory->MakeWriter("", {});
         TFileInput indexFile(indexPath.GetPath());
         TInstant indexWrittenAt;

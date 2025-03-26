@@ -300,6 +300,9 @@ public:
     bool OnWriteIndexStart(const ui64 tabletId, NOlap::TColumnEngineChanges& change) {
         return DoOnWriteIndexStart(tabletId, change);
     }
+    virtual void OnHeaderSelectProcessed(const std::optional<bool> /*result*/) {
+    }
+
     virtual void OnIndexSelectProcessed(const std::optional<bool> /*result*/) {
     }
     TDuration GetMaxReadStaleness() const {

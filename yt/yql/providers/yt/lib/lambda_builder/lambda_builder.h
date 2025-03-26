@@ -34,7 +34,8 @@ public:
         const TIntrusivePtr<ITimeProvider>& timeProvider = {},
         NKikimr::NMiniKQL::IStatsRegistry* jobStats = nullptr,
         NKikimr::NUdf::ICountersProvider* counters = nullptr,
-        const NKikimr::NUdf::ISecureParamsProvider *secureParamsProvider = nullptr);
+        const NKikimr::NUdf::ISecureParamsProvider *secureParamsProvider = nullptr,
+        const NKikimr::NUdf::ILogProvider* logProvider = nullptr);
 
     ~TLambdaBuilder();
 
@@ -106,6 +107,7 @@ protected:
     NKikimr::NMiniKQL::IStatsRegistry* const JobStats;
     NKikimr::NUdf::ICountersProvider* const Counters;
     const NKikimr::NUdf::ISecureParamsProvider* SecureParamsProvider;
+    const NKikimr::NUdf::ILogProvider* LogProvider;
 
     /// TODO: remove?
     void SetExternalEnv(const NKikimr::NMiniKQL::TTypeEnvironment* env);

@@ -3,7 +3,7 @@
 #include "ydb_command.h"
 #include "ydb_common.h"
 
-#include <ydb-cpp-sdk/client/export/export.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/export/export.h>
 #include <ydb/public/lib/ydb_cli/common/aws.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/parseable_struct.h>

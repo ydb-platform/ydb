@@ -143,6 +143,7 @@ message TConfigItem {
         GroupedMemoryLimiterConfig = 82;
         ReplicationConfigItem = 83;
         CompPrioritiesConfig = 85;
+        HealthCheckConfigItem = 89;
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;
@@ -265,6 +266,7 @@ message TSetYamlConfigRequest {
     optional bytes UserToken = 2;
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
+    optional bool BypassAuth = 5;
 }
 
 message TSetYamlConfigResponse {
@@ -276,6 +278,7 @@ message TReplaceYamlConfigRequest {
     optional bytes UserToken = 2;
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
+    optional bool BypassAuth = 5;
 }
 
 message TReplaceYamlConfigResponse {
@@ -307,6 +310,7 @@ message TGetAllConfigsRequest {
     optional bytes UserToken = 2;
     optional string PeerName = 3;
     optional string IngressDatabase = 4;
+    optional bool BypassAuth = 5;
 }
 
 message TGetAllConfigsResponse {

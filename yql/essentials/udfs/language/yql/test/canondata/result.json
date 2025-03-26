@@ -1,4 +1,19 @@
 {
+    "test.test[ExtractClusters]": [
+        {
+            "uri": "file://test.test_ExtractClusters_/results.txt"
+        }
+    ],
+    "test.test[ExtractFuncs]": [
+        {
+            "uri": "file://test.test_ExtractFuncs_/results.txt"
+        }
+    ],
+    "test.test[ExtractInFuncs]": [
+        {
+            "uri": "file://test.test_ExtractInFuncs_/results.txt"
+        }
+    ],
     "test.test[ObfuscateColumn]": [
         {
             "uri": "file://test.test_ObfuscateColumn_/results.txt"

@@ -17,7 +17,7 @@ namespace NTest {
     struct TSponge {
         TSponge(ESponge kind) : Kind(kind) { }
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "Sponge{"
@@ -28,7 +28,7 @@ namespace NTest {
                 << "}";
         }
 
-        void operator()(const TRowState &row) noexcept
+        void operator()(const TRowState &row)
         {
             Rows += 1;
 
@@ -48,7 +48,7 @@ namespace NTest {
             }
         }
 
-        void operator()(const void *ptr_, ui64 bytes) noexcept
+        void operator()(const void *ptr_, ui64 bytes)
         {
             Bytes += bytes, Cells += 1, Upper = Max(Upper, bytes);
 

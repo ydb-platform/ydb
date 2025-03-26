@@ -34,8 +34,20 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::LambdaFieldsSubset(TYtW
         // Argument is not used in lambda body
         return op;
     }
-    if (parents->second.size() == 1 && TCoExtractMembers::Match(*parents->second.begin())) {
-        auto members = TCoExtractMembers(*parents->second.begin()).Members();
+    const TExprNode* extract = nullptr;
+    for (auto p: parents->second) {
+        if (TCoExtractMembers::Match(p)) {
+            if (extract != nullptr) {
+                // Several ExtractMembers
+                return op;
+            }
+            extract = p;
+        } else if (!TCoDependsOn::Match(p)) {
+            return op;
+        }
+    }
+    if (extract) {
+        auto members = TCoExtractMembers(extract).Members();
         TSet<TStringBuf> memberSet;
         std::for_each(members.begin(), members.end(), [&memberSet](const auto& m) { memberSet.insert(m.Value()); });
         auto reduceBy = NYql::GetSettingAsColumnList(op.Settings().Ref(), EYtSettingType::ReduceBy);

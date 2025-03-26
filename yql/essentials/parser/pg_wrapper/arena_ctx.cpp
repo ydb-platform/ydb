@@ -30,9 +30,9 @@ extern MemoryContext ArenaGetChunkContext(void *pointer);
 extern Size ArenaGetChunkSpace(void *pointer);
 extern bool ArenaIsEmpty(MemoryContext context);
 extern void ArenaStats(MemoryContext context,
-						  MemoryStatsPrintFunc printfunc, void *passthru,
-						  MemoryContextCounters *totals,
-						  bool print_to_stderr);
+                          MemoryStatsPrintFunc printfunc, void *passthru,
+                          MemoryContextCounters *totals,
+                          bool print_to_stderr);
 #ifdef MEMORY_CONTEXT_CHECKING
 extern void ArenaCheck(MemoryContext context);
 #endif
@@ -137,4 +137,9 @@ void TArenaMemoryContext::Release() {
     Prev = nullptr;
 }
 
+namespace NCommon {
+std::shared_ptr<void> CreateMemoryArenaContext() {
+    return std::make_shared<TArenaMemoryContext>();
+}
+}
 }

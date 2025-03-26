@@ -397,6 +397,9 @@ void FillReadRanges(const TReader& read, const TKikimrTableMetadata&, TProto& re
 
     if constexpr (std::is_same_v<TProto, NKqpProto::TKqpPhyOpReadOlapRanges>) {
         readProto.SetSorted(settings.Sorted);
+        if (settings.TabletId) {
+            readProto.SetTabletId(*settings.TabletId);
+        }
     }
 
     readProto.SetReverse(settings.Reverse);
@@ -694,13 +697,22 @@ private:
         return type;
     }
 
-    void CompileStage(const TDqPhyStage& stage, NKqpProto::TKqpPhyStage& stageProto, TExprContext& ctx,
-        const TMap<ui64, ui32>& stagesMap, TRequestPredictor& rPredictor, THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
-    {
+    void CompileStage(
+        const TDqPhyStage& stage,
+        NKqpProto::TKqpPhyStage& stageProto,
+        TExprContext& ctx,
+        const TMap<ui64, ui32>& stagesMap,
+        TRequestPredictor& rPredictor,
+        THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap,
+        THashMap<ui64, NKqpProto::TKqpPhyStage*>& physicalStageByID
+    ) {
         const bool hasEffects = NOpt::IsKqpEffectsStage(stage);
 
         TStagePredictor& stagePredictor = rPredictor.BuildForStage(stage, ctx);
         stagePredictor.Scan(stage.Program().Ptr());
+
+        auto stageSettings = NDq::TDqStageSettings::Parse(stage);
+        stageProto.SetIsShuffleEliminated(stageSettings.IsShuffleEliminated);
 
         for (ui32 inputIndex = 0; inputIndex < stage.Inputs().Size(); ++inputIndex) {
             const auto& input = stage.Inputs().Item(inputIndex);
@@ -714,7 +726,7 @@ private:
                 auto connection = input.Cast<TDqConnection>();
 
                 auto& protoInput = *stageProto.AddInputs();
-                FillConnection(connection, stagesMap, protoInput, ctx, tablesMap);
+                FillConnection(connection, stagesMap, protoInput, ctx, tablesMap, physicalStageByID);
                 protoInput.SetInputIndex(inputIndex);
             }
         }
@@ -806,6 +818,8 @@ private:
                 tableOp.MutableReadOlapRange()->SetReadType(NKqpProto::TKqpPhyOpReadOlapRanges::BLOCKS);
             } else if (auto maybeDqSourceWrapBase = node.Maybe<TDqSourceWrapBase>()) {
                 stageCost += GetDqSourceWrapBaseCost(maybeDqSourceWrapBase.Cast(), TypesCtx);
+            } else if (auto maybeDqReadWrapBase = node.Maybe<TDqReadWrapBase>()) {
+                FillDqRead(maybeDqReadWrapBase.Cast(), stageProto, ctx);
             } else {
                 YQL_ENSURE(!node.Maybe<TKqpReadTable>());
             }
@@ -878,7 +892,6 @@ private:
 
         stageProto.SetProgramAst(KqpExprToPrettyString(stage.Program(), ctx));
 
-        auto stageSettings = NDq::TDqStageSettings::Parse(stage);
         stageProto.SetStageGuid(stageSettings.Id);
         stageProto.SetIsSinglePartition(NDq::TDqStageSettings::EPartitionMode::Single == stageSettings.PartitionMode);
         stageProto.SetAllowWithSpilling(Config->EnableSpilling);
@@ -892,13 +905,14 @@ private:
         bool hasEffectStage = false;
 
         TMap<ui64, ui32> stagesMap;
+        THashMap<ui64, NKqpProto::TKqpPhyStage*> physicalStageByID;
         THashMap<TStringBuf, THashSet<TStringBuf>> tablesMap;
 
         TRequestPredictor rPredictor;
         for (const auto& stage : tx.Stages()) {
-            auto* protoStage = txProto.AddStages();
-            CompileStage(stage, *protoStage, ctx, stagesMap, rPredictor, tablesMap);
-            hasEffectStage |= protoStage->GetIsEffectsStage();
+            physicalStageByID[stage.Ref().UniqueId()] = txProto.AddStages();
+            CompileStage(stage, *physicalStageByID[stage.Ref().UniqueId()], ctx, stagesMap, rPredictor, tablesMap, physicalStageByID);
+            hasEffectStage |= physicalStageByID[stage.Ref().UniqueId()]->GetIsEffectsStage();
             stagesMap[stage.Ref().UniqueId()] = txProto.StagesSize() - 1;
         }
         for (auto&& i : *txProto.MutableStages()) {
@@ -941,7 +955,7 @@ private:
 
             auto& resultProto = *txProto.AddResults();
             auto& connectionProto = *resultProto.MutableConnection();
-            FillConnection(connection, stagesMap, connectionProto, ctx, tablesMap);
+            FillConnection(connection, stagesMap, connectionProto, ctx, tablesMap, physicalStageByID);
 
             const TTypeAnnotationNode* itemType = nullptr;
             switch (connectionProto.GetTypeCase()) {
@@ -1079,40 +1093,67 @@ private:
         if (dataSourceCategory == NYql::KikimrProviderName || dataSourceCategory == NYql::YdbProviderName || dataSourceCategory == NYql::KqpReadRangesSourceName) {
             FillKqpSource(source, protoSource, allowSystemColumns, tablesMap);
         } else {
-            // Delegate source filling to dq integration of specific provider
-            const auto provider = TypesCtx.DataSourceMap.find(dataSourceCategory);
-            YQL_ENSURE(provider != TypesCtx.DataSourceMap.end(), "Unsupported data source category: \"" << dataSourceCategory << "\"");
-            NYql::IDqIntegration* dqIntegration = provider->second->GetDqIntegration();
-            YQL_ENSURE(dqIntegration, "Unsupported dq source for provider: \"" << dataSourceCategory << "\"");
-            auto& externalSource = *protoSource->MutableExternalSource();
+            FillDqInput(source.Ptr(), protoSource, dataSourceCategory, ctx, true);
+        }
+    }
 
-            // Partitioning
-            TVector<TString> partitionParams;
-            TString clusterName;
-            // In runtime, number of tasks with Sources is limited by 2x of node count
-            // We prepare a lot of partitions and distribute them between these tasks
-            // Constraint of 1 task per partition is NOT valid anymore
-            auto maxTasksPerStage = Config->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
-            IDqIntegration::TPartitionSettings pSettings;
-            pSettings.MaxPartitions = maxTasksPerStage;
-            pSettings.CanFallback = false;
-            dqIntegration->Partition(source.Ref(), partitionParams, &clusterName, ctx, pSettings);
-            externalSource.SetTaskParamKey(TString(dataSourceCategory));
-            for (const TString& partitionParam : partitionParams) {
-                externalSource.AddPartitionedTaskParams(partitionParam);
-            }
+    void FillDqInput(TExprNode::TPtr source, NKqpProto::TKqpSource* protoSource, TStringBuf dataSourceCategory, TExprContext& ctx, bool isDqSource) {
+        // Delegate source filling to dq integration of specific provider
+        const auto provider = TypesCtx.DataSourceMap.find(dataSourceCategory);
+        YQL_ENSURE(provider != TypesCtx.DataSourceMap.end(), "Unsupported data source category: \"" << dataSourceCategory << "\"");
+        NYql::IDqIntegration* dqIntegration = provider->second->GetDqIntegration();
+        YQL_ENSURE(dqIntegration, "Unsupported dq source for provider: \"" << dataSourceCategory << "\"");
+        auto& externalSource = *protoSource->MutableExternalSource();
 
-            if (const auto& secureParams = FindOneSecureParam(source.Ptr(), TypesCtx, "source", SecretNames)) {
+        // Partitioning
+        TVector<TString> partitionParams;
+        TString clusterName;
+        // In runtime, number of tasks with Sources is limited by 2x of node count
+        // We prepare a lot of partitions and distribute them between these tasks
+        // Constraint of 1 task per partition is NOT valid anymore
+        auto maxTasksPerStage = Config->MaxTasksPerStage.Get().GetOrElse(TDqSettings::TDefault::MaxTasksPerStage);
+        IDqIntegration::TPartitionSettings pSettings;
+        pSettings.MaxPartitions = maxTasksPerStage;
+        pSettings.CanFallback = false;
+        pSettings.DataSizePerJob = Config->DataSizePerPartition.Get().GetOrElse(NYql::TDqSettings::TDefault::DataSizePerJob);
+        dqIntegration->Partition(*source, partitionParams, &clusterName, ctx, pSettings);
+        externalSource.SetTaskParamKey(TString(dataSourceCategory));
+        for (const TString& partitionParam : partitionParams) {
+            externalSource.AddPartitionedTaskParams(partitionParam);
+        }
+
+        if (isDqSource) {
+            if (const auto& secureParams = FindOneSecureParam(source, TypesCtx, "source", SecretNames)) {
                 externalSource.SetSourceName(secureParams->first);
                 externalSource.SetAuthInfo(secureParams->second);
             }
 
             google::protobuf::Any& settings = *externalSource.MutableSettings();
             TString& sourceType = *externalSource.MutableType();
-            dqIntegration->FillSourceSettings(source.Ref(), settings, sourceType, maxTasksPerStage, ctx);
+            dqIntegration->FillSourceSettings(*source, settings, sourceType, maxTasksPerStage, ctx);
             YQL_ENSURE(!settings.type_url().empty(), "Data source provider \"" << dataSourceCategory << "\" didn't fill dq source settings for its dq source node");
             YQL_ENSURE(sourceType, "Data source provider \"" << dataSourceCategory << "\" didn't fill dq source settings type for its dq source node");
+        } else {
+            // Source is embedded into stage as lambda
+            externalSource.SetType(TString(dataSourceCategory));
+            externalSource.SetEmbedded(true);
         }
+    }
+
+    void FillDqRead(const TDqReadWrapBase& readWrapBase, NKqpProto::TKqpPhyStage& stageProto, TExprContext& ctx) {
+        for (const auto& flag : readWrapBase.Flags()) {
+            if (flag.Value() == "Solid") {
+                return;
+            }
+        }
+
+        const auto read = readWrapBase.Input();
+        const ui32 dataSourceChildIndex = 1;
+        YQL_ENSURE(read.Ref().ChildrenSize() > dataSourceChildIndex);
+        YQL_ENSURE(read.Ref().Child(dataSourceChildIndex)->IsCallable("DataSource"));
+
+        const TStringBuf dataSourceCategory = read.Ref().Child(dataSourceChildIndex)->Child(0)->Content();
+        FillDqInput(read.Ptr(), stageProto.AddSources(), dataSourceCategory, ctx, false);
     }
 
     THashMap<TStringBuf, ui32> CreateColumnToOrder(
@@ -1203,15 +1244,15 @@ private:
             if (const auto inconsistentWrite = settings.InconsistentWrite().Cast(); inconsistentWrite.StringValue() == "true") {
                 settingsProto.SetInconsistentTx(true);
             }
-          
+
             if (const auto streamWrite = settings.StreamWrite().Cast(); streamWrite.StringValue() == "true") {
                 settingsProto.SetEnableStreamWrite(true);
             }
-          
+
             if (const auto isBatch = settings.IsBatch().Cast(); isBatch.StringValue() == "true") {
                 settingsProto.SetIsBatch(true);
             }
-            
+
             settingsProto.SetIsOlap(settings.TableType().Cast().StringValue() == "olap");
             settingsProto.SetPriority(FromString<i64>(settings.Priority().Cast().StringValue()));
 
@@ -1266,10 +1307,14 @@ private:
         }
     }
 
-    void FillConnection(const TDqConnection& connection, const TMap<ui64, ui32>& stagesMap,
-        NKqpProto::TKqpPhyConnection& connectionProto, TExprContext& ctx,
-        THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap)
-    {
+    void FillConnection(
+        const TDqConnection& connection,
+        const TMap<ui64, ui32>& stagesMap,
+        NKqpProto::TKqpPhyConnection& connectionProto,
+        TExprContext& ctx,
+        THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap,
+        THashMap<ui64, NKqpProto::TKqpPhyStage*>& physicalStageByID
+    ) {
         auto inputStageIndex = stagesMap.FindPtr(connection.Output().Stage().Ref().UniqueId());
         YQL_ENSURE(inputStageIndex, "stage #" << connection.Output().Stage().Ref().UniqueId() << " not found in stages map: "
             << PrintKqpStageOnly(connection.Output().Stage(), ctx));
@@ -1307,7 +1352,7 @@ private:
                         case ETypeAnnotationKind::Optional: {
                             auto optionalType = ty->Cast<TOptionalExprType>()->GetItemType();
                             Y_ENSURE(
-                                optionalType->GetKind() == ETypeAnnotationKind::Data, 
+                                optionalType->GetKind() == ETypeAnnotationKind::Data,
                                 TStringBuilder{} << "Can't retrieve type from optional" << static_cast<std::int64_t>(optionalType->GetKind()) << "for ColumnHashV1 Shuffling"
                             );
                             slot = optionalType->Cast<TDataExprType>()->GetSlot();
@@ -1329,6 +1374,10 @@ private:
         }
 
         if (connection.Maybe<TDqCnMap>()) {
+            auto stageID = connection.Output().Stage().Ref().UniqueId();
+            auto physicalStage = physicalStageByID[stageID];
+            Y_ENSURE(physicalStage != nullptr, TStringBuf{} << "stage#" << stageID);
+            physicalStage->SetIsShuffleEliminated(true);
             connectionProto.MutableMap();
             return;
         }

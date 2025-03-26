@@ -11,11 +11,11 @@ namespace NDataShard {
 
     template<class TValue>
     struct TRangeTreapDefaultValueTraits {
-        static bool Less(const TValue& a, const TValue& b) noexcept {
+        static bool Less(const TValue& a, const TValue& b) {
             return a < b;
         }
 
-        static bool Equal(const TValue& a, const TValue& b) noexcept {
+        static bool Equal(const TValue& a, const TValue& b) {
             return a == b;
         }
     };
@@ -104,8 +104,8 @@ namespace NDataShard {
          * Adds mapping from the given range to the given value
          */
         void AddRange(TOwnedRange range, TValue value) {
-            Y_ABORT_UNLESS(range.LeftKey.size() <= KeyTypes.size(), "Range left key is too large");
-            Y_ABORT_UNLESS(range.RightKey.size() <= KeyTypes.size(), "Range right key is too large");
+            Y_ENSURE(range.LeftKey.size() <= KeyTypes.size(), "Range left key is too large");
+            Y_ENSURE(range.RightKey.size() <= KeyTypes.size(), "Range right key is too large");
 
             auto leftBorder = TBorder::MakeLeft(range.LeftKey, range.LeftInclusive);
             auto rightBorder = TBorder::MakeRight(range.RightKey, range.RightInclusive);
@@ -123,7 +123,7 @@ namespace NDataShard {
         /**
          * Removes all ranges with the given value
          */
-        void RemoveRanges(const TValue& value) noexcept {
+        void RemoveRanges(const TValue& value) {
             auto it = Values.find(value);
             if (it != Values.end()) {
                 while (!it->second.Empty()) {
@@ -250,7 +250,7 @@ namespace NDataShard {
          */
         TNode* FindOrSplit(THolder<TNode>&& t,
                            THolder<TNode>& l, THolder<TNode>& r,
-                           const TBorder& key, const TValue& value) noexcept
+                           const TBorder& key, const TValue& value)
         {
             if (!t) {
                 return nullptr;
@@ -295,7 +295,7 @@ namespace NDataShard {
         /**
          * Removes node t from the tree
          */
-        void DoRemove(TNode* t) noexcept {
+        void DoRemove(TNode* t) {
             Y_DEBUG_ABORT_UNLESS(t, "Trying to remove a nullptr node");
             TNode* p = t->Parent;
             if (p) {
@@ -314,7 +314,7 @@ namespace NDataShard {
         /**
          * Removes the node linked by tptr from the tree
          */
-        void DoRemove(THolder<TNode>* tptr) noexcept {
+        void DoRemove(THolder<TNode>* tptr) {
             THolder<TNode> d = std::move(*tptr);
             Y_DEBUG_ABORT_UNLESS(d, "Cannot remove a null node");
             ++Stats_.Deletes;
@@ -334,7 +334,7 @@ namespace NDataShard {
         /**
          * Merges two subtrees l and r (where l < r)
          */
-        THolder<TNode> Merge(THolder<TNode> l, THolder<TNode> r) noexcept {
+        THolder<TNode> Merge(THolder<TNode> l, THolder<TNode> r) {
             Y_DEBUG_ABORT_UNLESS(!l || l->Parent == nullptr);
             Y_DEBUG_ABORT_UNLESS(!r || r->Parent == nullptr);
             if (!l || !r) {
@@ -356,7 +356,7 @@ namespace NDataShard {
          *
          * Returns the node which was the source of the new MaxRightKey
          */
-        TNode* RecomputeMaxRight(TNode* t) noexcept {
+        TNode* RecomputeMaxRight(TNode* t) {
             TNode* source = t;
             t->MaxRightKey = t->RightKey;
             t->MaxRightMode = t->RightMode;
@@ -379,7 +379,7 @@ namespace NDataShard {
         /**
          * Recomputes MaxRightKey for subtree root t and its parents
          */
-        void RecomputeMaxRights(TNode* t) noexcept {
+        void RecomputeMaxRights(TNode* t) {
             while (t) {
                 RecomputeMaxRight(t);
                 t = t->Parent;
@@ -418,7 +418,7 @@ namespace NDataShard {
          *
          * Returns true when t->MaxRightKey is modified
          */
-        bool ExtendMaxRightKey(TNode* t, const TOwnedCellVec& rightKey, EPrefixMode rightMode) noexcept {
+        bool ExtendMaxRightKey(TNode* t, const TOwnedCellVec& rightKey, EPrefixMode rightMode) {
             int cmp = CompareBorders(t->MaxRightBorder(), TBorder{ rightKey, rightMode });
             if (cmp < 0) {
                 t->MaxRightKey = rightKey;
@@ -433,7 +433,7 @@ namespace NDataShard {
         /**
          * Extends MaxRightKey of node t and all its parents
          */
-        void ExtendMaxRightKeys(TNode* t, const TOwnedCellVec& rightKey, EPrefixMode rightMode) noexcept {
+        void ExtendMaxRightKeys(TNode* t, const TOwnedCellVec& rightKey, EPrefixMode rightMode) {
             while (t && ExtendMaxRightKey(t, rightKey, rightMode)) {
                 t = t->Parent;
             }
@@ -516,9 +516,9 @@ namespace NDataShard {
         /**
          * Validates all invariants for the tree, used for tests
          */
-        void Validate() const noexcept {
+        void Validate() const {
             if (Root) {
-                Y_ABORT_UNLESS(Root->Parent == nullptr, "Root must not have a parent");
+                Y_ENSURE(Root->Parent == nullptr, "Root must not have a parent");
                 DoValidate(Root.Get());
             }
         }
@@ -527,7 +527,7 @@ namespace NDataShard {
         /**
          * Validates all invariants for subtree t
          */
-        std::tuple<TNode*, TNode*> DoValidate(TNode* t) const noexcept {
+        std::tuple<TNode*, TNode*> DoValidate(TNode* t) const {
             int cmp;
             TNode* leftMost = t;
             TNode* rightMost = t;
@@ -535,14 +535,14 @@ namespace NDataShard {
             bool maxRightTrivial = true;
 
             if (auto* l = t->Left.Get()) {
-                Y_ABORT_UNLESS(l->Parent == t, "Left child parent is incorrect");
-                Y_ABORT_UNLESS(l->Prio >= t->Prio, "Left child prio is incorrect");
+                Y_ENSURE(l->Parent == t, "Left child parent is incorrect");
+                Y_ENSURE(l->Prio >= t->Prio, "Left child prio is incorrect");
                 cmp = this->CompareBorders(l->LeftBorder(), t->LeftBorder());
-                Y_ABORT_UNLESS(cmp < 0 || cmp == 0 && TValueTraits::Less(l->Value, t->Value), "Left child must be smaller than t");
+                Y_ENSURE(cmp < 0 || cmp == 0 && TValueTraits::Less(l->Value, t->Value), "Left child must be smaller than t");
                 TNode* leftRightMost;
                 std::tie(leftMost, leftRightMost) = DoValidate(l);
                 cmp = this->CompareBorders(leftRightMost->LeftBorder(), t->LeftBorder());
-                Y_ABORT_UNLESS(cmp < 0 || cmp == 0 && TValueTraits::Less(leftRightMost->Value, t->Value), "Left child rightmost node must be smaller than t");
+                Y_ENSURE(cmp < 0 || cmp == 0 && TValueTraits::Less(leftRightMost->Value, t->Value), "Left child rightmost node must be smaller than t");
                 cmp = this->CompareBorders(maxRightBorder, l->MaxRightBorder());
                 if (cmp < 0) {
                     maxRightBorder = l->MaxRightBorder();
@@ -551,14 +551,14 @@ namespace NDataShard {
             }
 
             if (auto* r = t->Right.Get()) {
-                Y_ABORT_UNLESS(r->Parent == t, "Right child parent is incorrect");
-                Y_ABORT_UNLESS(r->Prio >= t->Prio, "Right child prio is incorrect");
+                Y_ENSURE(r->Parent == t, "Right child parent is incorrect");
+                Y_ENSURE(r->Prio >= t->Prio, "Right child prio is incorrect");
                 cmp = this->CompareBorders(t->LeftBorder(), r->LeftBorder());
-                Y_ABORT_UNLESS(cmp < 0 || cmp == 0 && TValueTraits::Less(t->Value, r->Value), "Right child must be bigger than t");
+                Y_ENSURE(cmp < 0 || cmp == 0 && TValueTraits::Less(t->Value, r->Value), "Right child must be bigger than t");
                 TNode* rightLeftMost;
                 std::tie(rightLeftMost, rightMost) = DoValidate(r);
                 cmp = this->CompareBorders(t->LeftBorder(), rightLeftMost->LeftBorder());
-                Y_ABORT_UNLESS(cmp < 0 || cmp == 0 && TValueTraits::Less(t->Value, rightLeftMost->Value), "Right child leftmost node must be bigger than t");
+                Y_ENSURE(cmp < 0 || cmp == 0 && TValueTraits::Less(t->Value, rightLeftMost->Value), "Right child leftmost node must be bigger than t");
                 cmp = this->CompareBorders(maxRightBorder, r->MaxRightBorder());
                 if (cmp < 0) {
                     maxRightBorder = r->MaxRightBorder();
@@ -567,10 +567,9 @@ namespace NDataShard {
             }
 
             cmp = this->CompareBorders(maxRightBorder, t->MaxRightBorder());
-            Y_ABORT_UNLESS(cmp == 0, "Subtree must have max right key equal to the calculated max");
-            Y_ABORT_UNLESS(maxRightTrivial == t->MaxRightTrivial,
-                "Subtree must have correct MaxRightTrivial flag (computed=%d, stored=%d)",
-                int(maxRightTrivial), int(t->MaxRightTrivial));
+            Y_ENSURE(cmp == 0, "Subtree must have max right key equal to the calculated max");
+            Y_ENSURE(maxRightTrivial == t->MaxRightTrivial,
+                "Subtree must have correct MaxRightTrivial flag (computed=" << int(maxRightTrivial) << ", stored=" << int(t->MaxRightTrivial) << ")");
 
             return { leftMost, rightMost };
         }

@@ -1,15 +1,5 @@
 LIBRARY(run)
 
-IF (OS_WINDOWS)
-    CFLAGS(
-        -DKIKIMR_DISABLE_S3_OPS
-    )
-ELSE()
-    PEERDIR(
-        contrib/libs/aws-sdk-cpp/aws-cpp-sdk-core
-    )
-ENDIF()
-
 ADDINCL(
     ydb/public/sdk/cpp
 )
@@ -148,6 +138,7 @@ PEERDIR(
     ydb/library/grpc/server/actors
     ydb/library/pdisk_io
     ydb/library/security
+    ydb/library/signal_backtrace
     ydb/library/yql/providers/pq/cm_client
     ydb/library/yql/providers/s3/actors
     ydb/public/lib/base

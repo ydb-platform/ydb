@@ -56,6 +56,7 @@ GENERATE_ENUM_SERIALIZATION(sql_call_param.h)
 END()
 
 RECURSE(
+    complete
     format
     lexer
     perf

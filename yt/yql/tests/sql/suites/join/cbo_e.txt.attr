@@ -1,0 +1,25 @@
+{
+    "_yql_row_spec"={
+        "Type"=["StructType";[
+            ["e1";["OptionalType";["DataType";"String"]]]]
+        ];
+    };
+
+
+
+    "schema" = <"strict" = %true; "unique_keys" = %false>
+    [
+        {
+            "name" = "e1";
+            "type" = "string";
+            "type_v3" = {"type_name" = "optional"; item = "string"}
+        };
+    ];
+    "extended_stats" = [
+        {
+            "column_name" = "e1";
+            "data_weight" = 26;
+            "num_unique_vals" = 4;
+        };
+    ]
+}

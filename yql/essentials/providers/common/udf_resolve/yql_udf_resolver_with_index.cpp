@@ -78,7 +78,8 @@ public:
         }
     }
 
-    bool LoadMetadata(const TVector<TImport*>& imports, const TVector<TFunction*>& functions, TExprContext& ctx) const override {
+    bool LoadMetadata(const TVector<TImport*>& imports, const TVector<TFunction*>& functions,
+        TExprContext& ctx, NUdf::ELogLevel logLevel) const override {
         with_lock(Lock_) {
             bool hasErrors = false;
             THashSet<TString> requiredModules;
@@ -105,12 +106,12 @@ public:
 
             fallbackImports.insert(fallbackImports.end(), additionalImports.begin(), additionalImports.end());
 
-            return Fallback_->LoadMetadata(fallbackImports, fallbackFunctions, ctx) && !hasErrors;
+            return Fallback_->LoadMetadata(fallbackImports, fallbackFunctions, ctx, logLevel) && !hasErrors;
         }
     }
 
-    TResolveResult LoadRichMetadata(const TVector<TImport>& imports) const override {
-        return Fallback_->LoadRichMetadata(imports);
+    TResolveResult LoadRichMetadata(const TVector<TImport>& imports, NUdf::ELogLevel logLevel) const override {
+        return Fallback_->LoadRichMetadata(imports, logLevel);
     }
 
     bool ContainsModule(const TStringBuf& moduleName) const override {
@@ -203,6 +204,7 @@ private:
         function.NormalizedUserType = std::get<0>(ctx.SingletonTypeCache);
         function.IsStrict = info.IsStrict;
         function.SupportsBlocks = info.SupportsBlocks;
+        function.Messages = info.Messages;
         return true;
     }
 

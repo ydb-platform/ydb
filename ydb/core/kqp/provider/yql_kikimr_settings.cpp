@@ -95,10 +95,12 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, CostBasedOptimizationLevel);
     REGISTER_SETTING(*this, EnableSpillingNodes)
         .Parser([](const TString& v) { return ParseEnableSpillingNodes(v); });
+    REGISTER_SETTING(*this, UseBlockReader);
 
     REGISTER_SETTING(*this, MaxDPHypDPTableSize);
 
     REGISTER_SETTING(*this, MaxTasksPerStage);
+    REGISTER_SETTING(*this, DataSizePerPartition);
     REGISTER_SETTING(*this, MaxSequentialReadsInFlight);
 
     REGISTER_SETTING(*this, KMeansTreeSearchTopSize);

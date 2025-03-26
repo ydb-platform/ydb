@@ -32,12 +32,12 @@ namespace NKafka {
      *           HEARTBEAT request()
      *           ---------------->
      *           HEARTBEAT response(status = OK)
-     *           <---------------- 
+     *           <----------------
      *
      *           HEARTBEAT request()
      *           ---------------->
      *           HEARTBEAT response(status = REBALANCE_IN_PROGRESS) //if partitions to read list changes
-     *           <---------------- 
+     *           <----------------
      *
      *           JOIN_GROUP request(topics) //client send again, because REBALANCE_IN_PROGRESS in heartbeat response
      *           ---------------->
@@ -49,8 +49,11 @@ namespace NKafka {
      *           LEAVE_GROUP request()
      *           ---------------->
      *           LEAVE_GROUP response()
-     *           <----------------   
+     *           <----------------
      */
+
+static const TString SUPPORTED_ASSIGN_STRATEGY = "roundrobin";
+static const TString SUPPORTED_JOIN_GROUP_PROTOCOL = "consumer";
 
 class TKafkaReadSessionActor: public NActors::TActorBootstrapped<TKafkaReadSessionActor> {
 
@@ -111,11 +114,11 @@ private:
             HFunc(TEvPersQueue::TEvLockPartition, HandleLockPartition);
             HFunc(TEvPersQueue::TEvReleasePartition, HandleReleasePartition);
             HFunc(TEvPersQueue::TEvError, HandleBalancerError);
-            
+
             // from Pipe
             HFunc(TEvTabletPipe::TEvClientConnected, HandlePipeConnected);
             HFunc(TEvTabletPipe::TEvClientDestroyed, HandlePipeDestroyed);
-            
+
             // others
             HFunc(TEvKafka::TEvWakeup, HandleWakeup);
             SFunc(TEvents::TEvPoison, Die);
@@ -163,7 +166,7 @@ private:
     TString Session;
     TString AssignProtocolName;
     i64 GenerationId = 0;
-    ui64 JoinGroupCorellationId = 0;
+    ui64 CorellationId = 0;
     ui64 Cookie;
     bool NeedRebalance = false;
     TInstant LastHeartbeatTime = TInstant::Now();

@@ -15,12 +15,12 @@ static void ResortColumns(
 {
     THashMap<TString, ui32> nameToTag;
     for (const auto& [tag, column] : order) {
-        Y_ABORT_UNLESS(nameToTag.emplace(column.Name, tag).second);
+        Y_ENSURE(nameToTag.emplace(column.Name, tag).second);
     }
 
     SortBy(columns, [&nameToTag](const auto& column) {
         auto it = nameToTag.find(column.name());
-        Y_ABORT_UNLESS(it != nameToTag.end());
+        Y_ENSURE(it != nameToTag.end());
         return it->second;
     });
 }

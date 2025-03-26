@@ -21,12 +21,51 @@ TString GetYdbDatabase()
     return GetEnv("YDB_DATABASE");
 }
 
-TString RunYdb(const TList<TString>& args1, const TList<TString>& args2, bool checkExitCode)
+class TShellCommandEnvScope {
+public:
+    explicit TShellCommandEnvScope(const THashMap<TString, TString>& env) {
+        if (!env.contains("YDB_ENDPOINT")) {
+            Unset("YDB_ENDPOINT");
+        }
+        if (!env.contains("YDB_DATABASE")) {
+            Unset("YDB_DATABASE");
+        }
+        for (const auto& [key, value] : env) {
+            Set(key, value);
+        }
+    }
+
+    ~TShellCommandEnvScope() {
+        for (const auto& [key, value] : Env) {
+            if (value) {
+                SetEnv(key, *value);
+            } else {
+                UnsetEnv(key);
+            }
+        }
+    }
+
+    void Set(const TString& key, const TString& value) {
+        Env[key] = TryGetEnv(key);
+        SetEnv(key, value);
+    }
+
+    void Unset(const TString& key) {
+        Env[key] = TryGetEnv(key);
+        UnsetEnv(key);
+    }
+
+    THashMap<TString, TMaybe<TString>> Env;
+};
+
+TString RunYdb(const TList<TString>& args1, const TList<TString>& args2, bool checkExitCode, bool autoAddEndpointAndDatabase, const THashMap<TString, TString>& env, int expectedExitCode)
 {
     TShellCommand command(BinaryPath(GetEnv("YDB_CLI_BINARY")));
 
-    command << "-e" << ("grpc://" + GetYdbEndpoint());
-    command << "-d" << ("/" + GetYdbDatabase());
+    if (autoAddEndpointAndDatabase) {
+        command << "-e" << ("grpc://" + GetYdbEndpoint());
+        command << "-d" << ("/" + GetYdbDatabase());
+    }
 
     for (auto& arg : args1) {
         command << arg;
@@ -36,9 +75,10 @@ TString RunYdb(const TList<TString>& args1, const TList<TString>& args2, bool ch
         command << arg;
     }
 
+    TShellCommandEnvScope envScope(env);
     command.Run().Wait();
 
-    if (checkExitCode && (command.GetExitCode() != 0)) {
+    if (checkExitCode && (command.GetExitCode() != expectedExitCode)) {
         ythrow yexception() << Endl <<
             "command: " << command.GetQuotedCommand() << Endl <<
             "exitcode: " << command.GetExitCode() << Endl <<

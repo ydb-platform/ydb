@@ -547,6 +547,7 @@ void TBlobStorageController::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& 
         if (auto&& nodeId = it->second) {
             OnWardenDisconnected(*nodeId, it->first);
         }
+        ConfigLock.erase(it->first);
         PipeServerToNode.erase(it);
     } else {
         Y_DEBUG_ABORT_UNLESS(false);

@@ -9,7 +9,7 @@ import contextlib
 # but somehow it does not
 #
 # for ydb_{cluster, database, ...} fixture family
-pytest_plugins = 'ydb.tests.library.harness.ydb_fixtures'
+pytest_plugins = 'ydb.tests.library.fixtures'
 
 
 logger = logging.getLogger(__name__)
@@ -113,6 +113,15 @@ def ydb_quoted_serverless_db(ydb_cluster, ydb_root, ydb_hostel_db, ydb_safe_test
 def ydb_disk_quoted_serverless_db(ydb_cluster, ydb_root, ydb_hostel_db, ydb_safe_test_name):
     database_name = os.path.join(ydb_root, "quoted_serverless", ydb_safe_test_name)
     disk_quotas = {'hard': 64 * 1024 * 1024, 'soft': 32 * 1024 * 1024}
+
+    with ydb_serverless_db_ctx(ydb_cluster, database_name, ydb_hostel_db, disk_quotas=disk_quotas):
+        yield database_name
+
+
+@pytest.fixture(scope='function')
+def ydb_disk_small_quoted_serverless_db(ydb_cluster, ydb_root, ydb_hostel_db, ydb_safe_test_name):
+    database_name = os.path.join(ydb_root, "quoted_serverless", ydb_safe_test_name)
+    disk_quotas = {'hard': 6 * 1024 * 1024, 'soft': 3 * 1024 * 1024}
 
     with ydb_serverless_db_ctx(ydb_cluster, database_name, ydb_hostel_db, disk_quotas=disk_quotas):
         yield database_name

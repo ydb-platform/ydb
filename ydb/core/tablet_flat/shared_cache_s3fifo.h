@@ -1,5 +1,6 @@
 #pragma once
 #include "defs.h"
+#include "util_fmt_abort.h"
 #include <ydb/core/util/cache_cache_iface.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <library/cpp/monlib/counters/counters.h>
@@ -130,7 +131,7 @@ public:
             case ES3FIFOPageLocation::None:
                 return Insert(page);
             default:
-                Y_ABORT("Unknown page location");
+                Y_TABLET_ERROR("Unknown page location");
         }
     }
 
@@ -146,7 +147,7 @@ public:
                 Erase(MainQueue, page);
                 break;
             default:
-                Y_ABORT("Unknown page location");
+                Y_TABLET_ERROR("Unknown page location");
         }
 
         TPageTraits::SetFrequency(page, 0);
@@ -246,10 +247,10 @@ private:
     }
 
     TPage* Pop(TQueue& queue) {
-        Y_ABORT_UNLESS(!queue.Queue.Empty());
-        Y_ABORT_UNLESS(TPageTraits::GetLocation(queue.Queue.Front()) == queue.Location);
-        Y_ABORT_UNLESS(queue.Count > 0);
-        Y_ABORT_UNLESS(queue.Size >= TPageTraits::GetSize(queue.Queue.Front()));
+        Y_ENSURE(!queue.Queue.Empty());
+        Y_ENSURE(TPageTraits::GetLocation(queue.Queue.Front()) == queue.Location);
+        Y_ENSURE(queue.Count > 0);
+        Y_ENSURE(queue.Size >= TPageTraits::GetSize(queue.Queue.Front()));
 
         TPage* page = queue.Queue.PopFront();
         queue.Count--;
@@ -260,7 +261,7 @@ private:
     }
 
     void Push(TQueue& queue, TPage* page) {
-        Y_ABORT_UNLESS(TPageTraits::GetLocation(page) == ES3FIFOPageLocation::None);
+        Y_ENSURE(TPageTraits::GetLocation(page) == ES3FIFOPageLocation::None);
 
         queue.Queue.PushBack(page);
         queue.Count++;
@@ -269,9 +270,9 @@ private:
     }
 
     void Erase(TQueue& queue, TPage* page) {
-        Y_ABORT_UNLESS(TPageTraits::GetLocation(page) == queue.Location);
-        Y_ABORT_UNLESS(queue.Count > 0);
-        Y_ABORT_UNLESS(queue.Size >= TPageTraits::GetSize(page));
+        Y_ENSURE(TPageTraits::GetLocation(page) == queue.Location);
+        Y_ENSURE(queue.Count > 0);
+        Y_ENSURE(queue.Size >= TPageTraits::GetSize(page));
 
         page->Unlink();
         queue.Count--;

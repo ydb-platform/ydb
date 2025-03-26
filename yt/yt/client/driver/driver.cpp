@@ -192,6 +192,8 @@ public:
 
         REGISTER_ALL(TPartitionTablesCommand,              "partition_tables",                Null,       Structured, false, false);
 
+        REGISTER    (TReadTablePartitionCommand,           "read_table_partition",            Null,       Tabular,    false, true , ApiVersion4);
+
         REGISTER    (TInsertRowsCommand,                   "insert_rows",                     Tabular,    Null,       true,  true , ApiVersion3);
         REGISTER    (TLockRowsCommand,                     "lock_rows",                       Tabular,    Null,       true,  true , ApiVersion3);
         REGISTER    (TDeleteRowsCommand,                   "delete_rows",                     Tabular,    Null,       true,  true , ApiVersion3);

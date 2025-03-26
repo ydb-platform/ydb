@@ -1,8 +1,8 @@
-#include <ydb-cpp-sdk/client/discovery/discovery.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/discovery/discovery.h>
 
-#include <src/client/common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 namespace NDiscovery {
 
 TListEndpointsResult::TListEndpointsResult(TStatus&& status, const Ydb::Discovery::ListEndpointsResult& proto)

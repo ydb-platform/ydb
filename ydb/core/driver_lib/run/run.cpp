@@ -149,6 +149,7 @@
 #include <ydb/library/actors/util/memory_track.h>
 #include <ydb/library/actors/prof/tag.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
+#include <ydb/library/signal_backtrace/signal_backtrace.h>
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 
 #include <util/charset/wide.h>
@@ -242,6 +243,11 @@ public:
             const auto& allowedSids = securityConfig.GetRegisterDynamicNodeAllowedSIDs();
             TVector<TString> registerDynamicNodeAllowedSIDs(allowedSids.cbegin(), allowedSids.cend());
             appData->RegisterDynamicNodeAllowedSIDs = std::move(registerDynamicNodeAllowedSIDs);
+        }
+        if (securityConfig.BootstrapAllowedSIDsSize() > 0) {
+            const auto& allowedSids = securityConfig.GetBootstrapAllowedSIDs();
+            TVector<TString> bootstrapAllowedSIDs(allowedSids.cbegin(), allowedSids.cend());
+            appData->BootstrapAllowedSIDs = std::move(bootstrapAllowedSIDs);
         }
 
         appData->InitFeatureFlags(Config.GetFeatureFlags());
@@ -754,8 +760,8 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         }
 
         if (hasTableService) {
-            server.AddService(new NGRpcService::TGRpcYdbTableService(ActorSystem.Get(), Counters, grpcRequestProxies,
-                hasTableService.IsRlAllowed(), grpcConfig.GetHandlersPerCompletionQueue()));
+            server.AddService(new NGRpcService::TGRpcYdbTableService(ActorSystem.Get(), Counters, AppData->InFlightLimiterRegistry,
+                grpcRequestProxies, hasTableService.IsRlAllowed(), grpcConfig.GetHandlersPerCompletionQueue()));
         }
 
         if (hasClickhouseInternal) {
@@ -1198,6 +1204,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
 
     if (runConfig.AppConfig.HasReplicationConfig()) {
         AppData->ReplicationConfig = runConfig.AppConfig.GetReplicationConfig();
+    }
+
+    if (runConfig.AppConfig.HasHealthCheckConfig()) {
+        AppData->HealthCheckConfig = runConfig.AppConfig.GetHealthCheckConfig();
     }
 
     // setup resource profiles
@@ -1740,11 +1750,9 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
         sil->AddServiceInitializer(new TGraphServiceInitializer(runConfig));
     }
 
-#ifndef KIKIMR_DISABLE_S3_OPS
     if (serviceMask.EnableAwsService) {
         sil->AddServiceInitializer(new TAwsApiInitializer(*this));
     }
-#endif
 
     return sil;
 }
@@ -1935,6 +1943,10 @@ void TKikimrRunner::SetSignalHandlers() {
 #endif
     signal(SIGINT, &TKikimrRunner::OnTerminate);
     signal(SIGTERM, &TKikimrRunner::OnTerminate);
+
+    if (IsTrue(GetEnv("YDB_ENABLE_SIGNAL_BACKTRACE"))) {
+        Singleton<TTraceCollector>(TTraceCollector::DEFAULT_SIGNALS);
+    }
 
 #if !defined(_win_)
     SetAsyncSignalHandler(SIGHUP, [](int) {

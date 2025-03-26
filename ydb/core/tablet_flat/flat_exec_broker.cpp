@@ -11,7 +11,7 @@ TBroker::TBroker(IOps* ops, TIntrusivePtr<TIdEmitter> emitter)
 { }
 
 TTaskId TBroker::SubmitTask(TString name, TResourceParams params, TResourceConsumer consumer) {
-    Y_ABORT_UNLESS(consumer, "Resource consumer cannot be null");
+    Y_ENSURE(consumer, "Resource consumer cannot be null");
     TTaskId taskId = Emitter->Do();
     Submitted[taskId].swap(consumer);
     SendToBroker(new TEvResourceBroker::TEvSubmitTask(

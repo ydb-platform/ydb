@@ -688,6 +688,10 @@ ids {
   severity: S_INFO
 }
 ids {
+  code: CORE_UDF_RESOLVER
+  severity: S_INFO
+}
+ids {
   code: CBO_ENUM_LIMIT_REACHED
   severity: S_WARNING
 }

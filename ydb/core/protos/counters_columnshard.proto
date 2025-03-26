@@ -205,4 +205,6 @@ enum ETxTypes {
     TXTYPE_ASK_PORTION_METADATA = 38                        [(TxTypeOpts) = {Name: "TxAskPortionMetadata"}];
     TXTYPE_WRITE_PORTIONS_FINISHED = 39                     [(TxTypeOpts) = {Name: "TxWritePortionsFinished"}];
     TXTYPE_WRITE_PORTIONS_FAILED = 40                       [(TxTypeOpts) = {Name: "TxWritePortionsFailed"}];
+    TXTYPE_PERSIST_SUBDOMAIN_OUT_OF_SPACE = 41              [(TxTypeOpts) = {Name: "TxPersistSubDomainOutOfSpace"}];
+    TXTYPE_PERSIST_SUBDOMAIN_PATH_ID = 42                   [(TxTypeOpts) = {Name: "TxPersistSubDomainPathId"}];
 }

@@ -89,14 +89,16 @@ IServerPtr CreateServer(
     TServerConfigPtr config,
     NNet::IListenerPtr listener,
     NConcurrency::IPollerPtr poller,
-    NConcurrency::IPollerPtr acceptor);
+    NConcurrency::IPollerPtr acceptor,
+    IMemoryUsageTrackerPtr memoryTracker = GetNullMemoryUsageTracker());
 IServerPtr CreateServer(
     TServerConfigPtr config,
     NConcurrency::IPollerPtr poller);
 IServerPtr CreateServer(
     TServerConfigPtr config,
     NConcurrency::IPollerPtr poller,
-    NConcurrency::IPollerPtr acceptor);
+    NConcurrency::IPollerPtr acceptor,
+    IMemoryUsageTrackerPtr memoryTracker = GetNullMemoryUsageTracker());
 IServerPtr CreateServer(
     int port,
     NConcurrency::IPollerPtr poller);

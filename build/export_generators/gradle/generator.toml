@@ -79,6 +79,7 @@ custom_runs-cmake_packages-name="str"
 custom_runs-cmake_packages-components="list"
 
 javac-flags="list"
+kotlinc-flags="list"
 
 [attrs.root]
 
@@ -95,5 +96,6 @@ test=[
     "/ut",
     "/src/test",
     "/src/test/java",
-    "/src/test-integration"
+    "/src/test-integration",
+    "/src/test-multicell"
 ]

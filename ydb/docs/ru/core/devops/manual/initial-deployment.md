@@ -109,6 +109,25 @@ sudo usermod -aG disk ydb
 
 {% include [_includes/storage-device-requirements.md](../../_includes/storage-device-requirements.md) %}
 
+Получить список блочных устройств на сервере можно командой `lsblk`. Пример вывода:
+
+```txt
+NAME   MAJ:MIN RM   SIZE RO TYPE MOUNTPOINTS
+loop0    7:0    0  63.3M  1 loop /snap/core20/1822
+...
+vda    252:0    0    40G  0 disk
+├─vda1 252:1    0     1M  0 part
+└─vda2 252:2    0    40G  0 part /
+vdb    252:16   0   186G  0 disk
+└─vdb1 252:17   0   186G  0 part
+```
+
+Названия блочных устройств зависят от настроек операционной системы, заданных базовым образом или настроенных вручную. Обычно имена устройств состоят из трех частей:
+
+- Фиксированный префикс или префикс, указывающий на тип устройства
+- Последовательный идентификатор устройства (может быть буквой или числом)
+- Последовательный идентификатор раздела на данном устройстве (обычно число)
+
 1. Создайте разделы на выбранных дисках:
 
     {% note alert %}
@@ -125,7 +144,7 @@ sudo usermod -aG disk ydb
     sudo partx --u ${DISK}
     ```
 
-    После выполнения в системе появится диск с меткой `/dev/disk/by-partlabel/ydb_disk_ssd_01`.
+    Выполните команду `ls -l /dev/disk/by-partlabel/`, чтобы убедиться что в системе появился диск с меткой `/dev/disk/by-partlabel/ydb_disk_ssd_01`.
 
     Если вы планируете использовать более одного диска на каждом сервере, укажите для каждого свою уникальную метку вместо `ydb_disk_ssd_01`. Метки дисков должны быть уникальны в рамках каждого сервера, и используются в конфигурационных файлах, как показано в последующих инструкциях.
 
@@ -380,7 +399,7 @@ sudo chmod 700 /opt/ydb/certs
 
   ```bash
   export LD_LIBRARY_PATH=/opt/ydb/lib
-  /opt/ydb/bin/ydbd -f token-file --ca-file ca.crt -s grpcs://`hostname -s`:2135 \
+  /opt/ydb/bin/ydbd -f token-file --ca-file ca.crt -s grpcs://`hostname -f`:2135 \
       admin database /Root/testdb create ssd:1
   echo $?
   ```
@@ -497,25 +516,23 @@ sudo chmod 700 /opt/ydb/certs
         yql -s 'ALTER USER root PASSWORD "passw0rd"'
     ```
 
-    Вместо значения `passw0rd` подставьте необходимый пароль.
+    Вместо значения `passw0rd` подставьте необходимый пароль. Сохраните пароль в отдельный файл. Последующие команды от имени пользователя `root` будут выполняться с использованием пароля, передаваемого с помощью ключа `--password-file <path_to_user_password>`. Также пароль можно сохранить в профиле подключения, как описано в [документации {{ ydb-short-name }} CLI](../../reference/ydb-cli/profile/index.md).
 
 1. Создайте дополнительные учетные записи:
 
     ```bash
-    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
+    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root --password-file <path_to_root_pass_file> \
         yql -s 'CREATE USER user1 PASSWORD "passw0rd"'
     ```
 
 1. Установите права учетных записей, включив их во встроенные группы:
 
     ```bash
-    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root \
+    ydb --ca-file ca.crt -e grpcs://<node.ydb.tech>:2136 -d /Root/testdb --user root --password-file <path_to_root_pass_file> \
         yql -s 'ALTER GROUP `ADMINS` ADD USER user1'
     ```
 
-В перечисленных выше примерах команд `<node.ydb.tech>` - FQDN сервера, на котором запущен любой динамический узел, обслуживающий базу `/Root/testdb`.
-
-При выполнении команд создания учетных записей и присвоения групп клиент {{ ydb-short-name }} CLI будет запрашивать ввод пароля пользователя `root`. Избежать многократного ввода пароля можно, создав профиль подключения, как описано в [документации {{ ydb-short-name }} CLI](../../reference/ydb-cli/profile/index.md).
+В перечисленных выше примерах команд `<node.ydb.tech>` — FQDN сервера, на котором запущен любой динамический узел, обслуживающий базу `/Root/testdb`. При подключении по SSH к динамическому узлу {{ ydb-short-name }} удобно использовать конструкцию `grpcs://$(hostname -f):2136` для получения FQDN.
 
 ## Протестируйте работу с созданной базой {#try-first-db}
 

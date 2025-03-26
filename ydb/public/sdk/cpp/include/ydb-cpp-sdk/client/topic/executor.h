@@ -7,7 +7,7 @@
 #include <memory>
 #include <mutex>
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 class IExecutor: public TThrRefBase {
 public:

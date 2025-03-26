@@ -57,6 +57,26 @@ INode::TPtr TCreateObject::FillFeatures(INode::TPtr options) const {
     return options;
 }
 
+namespace {
+
+bool InitFeatures(TContext& ctx, ISource* src, std::map<TString, TDeferredAtom>& features) {
+    for (auto& [key, value] : features) {
+        if (value.HasNode() && !value.Build()->Init(ctx, src)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+}
+
+bool TCreateObject::DoInit(TContext& ctx, ISource* src) {
+    if (!InitFeatures(ctx, src, Features)) {
+        return false;
+    }
+    return TObjectProcessorImpl::DoInit(ctx, src);
+}
+
 TObjectOperatorContext::TObjectOperatorContext(TScopedStatePtr scoped)
     : Scoped(scoped)
     , ServiceId(Scoped->CurrService)

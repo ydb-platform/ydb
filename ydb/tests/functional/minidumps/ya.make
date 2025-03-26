@@ -3,7 +3,7 @@ IF (OS_LINUX AND NOT SANITIZER_TYPE)
 PY3TEST()
 
 TEST_SRCS(
-    test_break.py
+#    test_break.py
 )
 
 SIZE(MEDIUM)

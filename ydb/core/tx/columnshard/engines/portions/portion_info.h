@@ -6,6 +6,7 @@
 
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/common/blob.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -77,7 +78,7 @@ private:
     std::optional<TSnapshot> CommitSnapshot;
     std::optional<TInsertWriteId> InsertWriteId;
 
-    ui64 PathId = 0;
+    TInternalPathId PathId;
     ui64 PortionId = 0;   // Id of independent (overlayed by PK) portion of data in pathId
     TSnapshot MinSnapshotDeprecated = TSnapshot::Zero();   // {PlanStep, TxId} is min snapshot for {Granule, Portion}
     TSnapshot RemoveSnapshot = TSnapshot::Zero();
@@ -234,7 +235,7 @@ public:
 
     void SerializeToProto(NKikimrColumnShardDataSharingProto::TPortionInfo& proto) const;
 
-    ui64 GetPathId() const {
+    TInternalPathId GetPathId() const {
         return PathId;
     }
 
@@ -335,7 +336,7 @@ public:
         ShardingVersion.reset();
     }
 
-    void SetPathId(const ui64 pathId) {
+    void SetPathId(const TInternalPathId pathId) {
         PathId = pathId;
     }
 

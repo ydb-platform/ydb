@@ -78,18 +78,6 @@ namespace NKikimr {
         // create a new slice
         TLevelSlicePtr res(new TLevelSlice(settings, slice->Ctx));
 
-        // assign VolatileOrderId for any new SSTables at level 0 to allow merging them to level 0 below
-        {
-            for (auto it = addIt; it.Valid(); it.Next()) {
-                if (const auto& table = it.Get(); !table.Level) {
-                    const ui64 prev = std::exchange(table.SstPtr->VolatileOrderId, ++slice->Ctx->VolatileOrderId);
-                    Y_ABORT_UNLESS(prev == 0);
-                } else { // items are sorted in ascending order of Level
-                    break;
-                }
-            }
-        }
-
         ui32 levelsSize = slice->SortedLevels.size();
         if (ctask.Action == NHullComp::ActCompactSsts) {
             Y_ABORT_UNLESS(ctask.CompactSsts.TargetLevel != (ui32)-1);

@@ -7,8 +7,8 @@
 #include <ydb/core/cms/console/configs_dispatcher.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
-#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
-#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 namespace NKikimr {
 namespace NGRpcService {

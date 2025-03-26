@@ -116,6 +116,8 @@ namespace NKikimr::NBlobDepot {
                 STLOG(PRI_DEBUG, BLOB_DEPOT, BDT20, "TTxLoad::Complete", (Id, Self->GetLogId()),
                     (Configured, Self->Configured));
 
+                Self->OnUpdateDecommitState();
+
                 if (Self->Configured) {
                     Self->StartOperation();
                 }

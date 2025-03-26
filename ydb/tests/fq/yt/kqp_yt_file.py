@@ -208,7 +208,7 @@ def run_file_kqp_no_cache(suite, case, cfg):
                     scheme_file=os.path.join('ydb/tests/fq/yt/cfg', 'kqprun_scheme.sql'),
                     udfs_dir=yql_binary_path('yql/essentials/tests/common/test_framework/udfs_deps'))
 
-    return kqprun.yql_exec(program=sql_query, verbose=True, check_error=True, tables=in_tables)
+    return kqprun.yql_exec(yql_program=sql_query, verbose=True, check_error=True, yql_tables=in_tables)
 
 
 def run_file_kqp(suite, case, cfg):

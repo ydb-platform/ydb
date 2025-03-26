@@ -5,6 +5,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/random_provider
     library/cpp/threading/future
     yt/yql/providers/yt/fmr/job_factory/interface
     yt/yql/providers/yt/fmr/request_options

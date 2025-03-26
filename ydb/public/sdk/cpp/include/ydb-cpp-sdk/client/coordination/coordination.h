@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 namespace Ydb {
 namespace Coordination {
@@ -12,7 +12,7 @@ namespace Coordination {
 }
 }
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 namespace NScheme {
 struct TPermissions;
@@ -198,7 +198,9 @@ struct TCreateNodeSettings : public TNodeSettings<TCreateNodeSettings> {
     TCreateNodeSettings(const Ydb::Coordination::Config& config);
 };
 struct TAlterNodeSettings : public TNodeSettings<TAlterNodeSettings> { };
-struct TDropNodeSettings : public TOperationRequestSettings<TDropNodeSettings> { };
+struct TDropNodeSettings : public TOperationRequestSettings<TDropNodeSettings> {
+    using TOperationRequestSettings<TDropNodeSettings>::TOperationRequestSettings;
+};
 struct TDescribeNodeSettings : public TOperationRequestSettings<TDescribeNodeSettings> { };
 
 ////////////////////////////////////////////////////////////////////////////////

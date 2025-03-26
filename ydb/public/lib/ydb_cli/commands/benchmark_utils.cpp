@@ -11,14 +11,14 @@
 #include <library/cpp/string_utils/csv/csv.h>
 #include <library/cpp/digest/md5/md5.h>
 
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/lib/ydb_cli/common/formats.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 #include <ydb/public/lib/ydb_cli/common/plan2svg.h>
 #include <ydb/public/lib/ydb_cli/common/progress_indication.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <ydb/public/api/protos/ydb_query.pb.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>

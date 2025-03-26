@@ -1,17 +1,17 @@
 #pragma once
 
-#include <src/client/impl/ydb_internal/internal_header.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/internal_header.h>
 
 #include <ydb/public/api/protos/ydb_discovery.pb.h>
-#include <src/client/impl/ydb_internal/internal_client/client.h>
-#include <src/client/impl/ydb_internal/plain_status/status.h>
-#include <src/client/impl/ydb_endpoints/endpoints.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/internal_client/client.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/plain_status/status.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_endpoints/endpoints.h>
 
 #include <library/cpp/threading/future/future.h>
 
 #include <mutex>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 struct TListEndpointsResult {
     Ydb::Discovery::ListEndpointsResult Result;

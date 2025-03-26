@@ -17,7 +17,11 @@ namespace {
 NKikimrConfig::TAppConfig AppCfg() {
     NKikimrConfig::TAppConfig appCfg;
 
-    auto* rm = appCfg.MutableTableServiceConfig()->MutableResourceManager();
+    auto* ts = appCfg.MutableTableServiceConfig();
+    ts->SetEnableQueryServiceSpilling(true);
+
+    auto* rm = ts->MutableResourceManager();
+
     rm->SetChannelBufferSize(50);
     rm->SetMinChannelBufferSize(50);
     rm->SetMkqlLightProgramMemoryLimit(100 << 20);
@@ -33,12 +37,15 @@ NKikimrConfig::TAppConfig AppCfg() {
 NKikimrConfig::TAppConfig AppCfgLowComputeLimits(double reasonableTreshold, bool enableSpilling=true, bool limitFileSize=false) {
     NKikimrConfig::TAppConfig appCfg;
 
-    auto* rm = appCfg.MutableTableServiceConfig()->MutableResourceManager();
+    auto* ts = appCfg.MutableTableServiceConfig();
+    ts->SetEnableQueryServiceSpilling(enableSpilling);
+
+    auto* rm = ts->MutableResourceManager();
     rm->SetMkqlLightProgramMemoryLimit(100);
     rm->SetMkqlHeavyProgramMemoryLimit(300);
     rm->SetSpillingPercent(reasonableTreshold);
 
-    auto* spilling = appCfg.MutableTableServiceConfig()->MutableSpillingServiceConfig()->MutableLocalFileConfig();
+    auto* spilling = ts->MutableSpillingServiceConfig()->MutableLocalFileConfig();
 
     spilling->SetEnable(enableSpilling);
     spilling->SetRoot("./spilling/");

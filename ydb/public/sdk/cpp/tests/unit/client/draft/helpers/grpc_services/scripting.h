@@ -2,7 +2,7 @@
 
 #include <ydb/public/api/grpc/ydb_scripting_v1.grpc.pb.h>
 
-namespace NYdb::inline V3::NScripting {
+namespace NYdb::inline Dev::NScripting {
 
 class TMockSlyDbProxy : public Ydb::Scripting::V1::ScriptingService::Service
 {

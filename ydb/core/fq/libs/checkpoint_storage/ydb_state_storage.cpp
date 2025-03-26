@@ -4,7 +4,7 @@
 #include <ydb/core/fq/libs/ydb/util.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 
-#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 #include <yql/essentials/minikql/comp_nodes/mkql_saveload.h>

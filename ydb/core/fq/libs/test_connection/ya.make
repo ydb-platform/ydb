@@ -18,7 +18,7 @@ PEERDIR(
     ydb/core/fq/libs/control_plane_storage
     ydb/core/fq/libs/test_connection/events
     ydb/library/yql/providers/pq/cm_client
-    ydb/library/yql/providers/solomon/async_io
+    ydb/library/yql/providers/solomon/actors
 )
 
 YQL_LAST_ABI_VERSION()

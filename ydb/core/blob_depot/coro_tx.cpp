@@ -7,8 +7,6 @@
 
 namespace NKikimr::NBlobDepot {
 
-    thread_local TCoroTx *TCoroTx::Current = nullptr;
-
     enum class EOutcome {
         UNSET,
         FINISH_TX,
@@ -27,7 +25,10 @@ namespace NKikimr::NBlobDepot {
         return size;
     }
 
-    class TCoroTx::TContext : public ITrampoLine {
+    class TCoroTx::TContext
+        : public ITrampoLine
+        , public TContextBase
+    {
         TMappedAllocation Stack;
         TExceptionSafeContext Context;
         TExceptionSafeContext *BackContext = nullptr;
@@ -35,13 +36,13 @@ namespace NKikimr::NBlobDepot {
         EOutcome Outcome = EOutcome::UNSET;
 
         TTokens Tokens;
-        std::function<void()> Body;
+        std::function<void(TContextBase&)> Body;
 
         bool Finished = false;
         bool Aborted = false;
 
     public:
-        TContext(TTokens&& tokens, std::function<void()>&& body)
+        TContext(TTokens&& tokens, std::function<void(TContextBase&)>&& body)
             : Stack(AlignStackSize(65536))
             , Context({this, TArrayRef(Stack.Begin(), Stack.End())})
             , Tokens(std::move(tokens))
@@ -55,20 +56,25 @@ namespace NKikimr::NBlobDepot {
         ~TContext() {
             if (!Finished) {
                 Aborted = true;
-                Resume();
+                Resume(nullptr);
             }
         }
 
-        EOutcome Resume() {
+        EOutcome Resume(NTabletFlatExecutor::TTransactionContext *txc) {
             Outcome = EOutcome::UNSET;
+
+            NTabletFlatExecutor::TTransactionContext *prevTxC = std::exchange(TxContext, txc);
+            Y_ABORT_UNLESS(!prevTxC);
 
             TExceptionSafeContext returnContext;
             Y_ABORT_UNLESS(!BackContext);
             BackContext = &returnContext;
-            Y_DEBUG_ABORT_UNLESS(CurrentTx() || Aborted);
             returnContext.SwitchTo(&Context);
             Y_ABORT_UNLESS(BackContext == &returnContext);
             BackContext = nullptr;
+
+            prevTxC = std::exchange(TxContext, nullptr);
+            Y_ABORT_UNLESS(prevTxC == txc);
 
             Y_ABORT_UNLESS(Outcome != EOutcome::UNSET);
             return Outcome;
@@ -100,7 +106,7 @@ namespace NKikimr::NBlobDepot {
         void DoRun() override {
             if (!IsExpired()) {
                 try {
-                    Body();
+                    Body(*this);
                 } catch (const TExDead&) {
                     // just do nothing
                 }
@@ -110,7 +116,7 @@ namespace NKikimr::NBlobDepot {
         }
     };
 
-    TCoroTx::TCoroTx(TBlobDepot *self, TTokens&& tokens, std::function<void()> body)
+    TCoroTx::TCoroTx(TBlobDepot *self, TTokens&& tokens, std::function<void(TCoroTx::TContextBase&)> body)
         : TTransactionBase(self)
         , Context(std::make_unique<TContext>(std::move(tokens), std::move(body)))
     {}
@@ -124,18 +130,8 @@ namespace NKikimr::NBlobDepot {
     {}
 
     bool TCoroTx::Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext&) {
-        // prepare environment
-        Y_ABORT_UNLESS(TxContext == nullptr && Current == nullptr);
-        TxContext = &txc;
-        Current = this;
-
         Y_ABORT_UNLESS(Context);
-        const EOutcome outcome = Context->Resume();
-
-        // clear environment back
-        Y_ABORT_UNLESS(TxContext == &txc && Current == this);
-        TxContext = nullptr;
-        Current = nullptr;
+        const EOutcome outcome = Context->Resume(&txc);
 
         switch (outcome) {
             case EOutcome::FINISH_TX:
@@ -150,16 +146,8 @@ namespace NKikimr::NBlobDepot {
     }
 
     void TCoroTx::Complete(const TActorContext&) {
-        // prepare environment
-        Y_ABORT_UNLESS(TxContext == nullptr && Current == nullptr);
-        Current = this;
-
         Y_ABORT_UNLESS(Context);
-        const EOutcome outcome = Context->Resume();
-
-        // clear environment back
-        Y_ABORT_UNLESS(TxContext == nullptr && Current == this);
-        Current = nullptr;
+        const EOutcome outcome = Context->Resume(nullptr);
 
         switch (outcome) {
             case EOutcome::RUN_SUCCESSOR_TX:
@@ -174,28 +162,21 @@ namespace NKikimr::NBlobDepot {
         }
     }
 
-    TCoroTx *TCoroTx::CurrentTx() {
-        return Current;
+    NTabletFlatExecutor::TTransactionContext *TCoroTx::TContextBase::GetTxc() {
+        Y_ABORT_UNLESS(TxContext);
+        return TxContext;
     }
 
-    NTabletFlatExecutor::TTransactionContext *TCoroTx::GetTxc() {
-        Y_ABORT_UNLESS(Current->TxContext);
-        return Current->TxContext;
+    void TCoroTx::TContextBase::FinishTx() {
+        static_cast<TContext*>(this)->Return(EOutcome::FINISH_TX);
     }
 
-    void TCoroTx::FinishTx() {
-        Y_ABORT_UNLESS(Current);
-        Current->Context->Return(EOutcome::FINISH_TX);
+    void TCoroTx::TContextBase::RestartTx() {
+        static_cast<TContext*>(this)->Return(EOutcome::RESTART_TX);
     }
 
-    void TCoroTx::RestartTx() {
-        Y_ABORT_UNLESS(Current);
-        Current->Context->Return(EOutcome::RESTART_TX);
-    }
-
-    void TCoroTx::RunSuccessorTx() {
-        Y_ABORT_UNLESS(Current);
-        Current->Context->Return(EOutcome::RUN_SUCCESSOR_TX);
+    void TCoroTx::TContextBase::RunSuccessorTx() {
+        static_cast<TContext*>(this)->Return(EOutcome::RUN_SUCCESSOR_TX);
     }
 
 } // NKikimr::NBlobDepot

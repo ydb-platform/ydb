@@ -20,11 +20,12 @@
 #include <library/cpp/protobuf/interop/cast.h>
 
 #include <ydb/public/api/protos/draft/fq.pb.h>
-#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 
 #include <ydb/library/db_pool/db_pool.h>
 #include <ydb/library/security/util.h>
+#include <ydb/library/protobuf_printer/security_printer.h>
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/mon/mon.h>
@@ -750,7 +751,7 @@ protected:
             const auto& request = ev->Get()->Request;
             size_t responseByteSize = 0;
             if (issues) {
-                CPS_LOG_AS_W(*actorSystem, name << ": {" << TrimForLogs(request.DebugString()) << "} ERROR: " << internalIssues.ToOneLineString());
+                CPS_LOG_AS_W(*actorSystem, name << ": {" << TrimForLogs(SecureDebugString(request)) << "} ERROR: " << internalIssues.ToOneLineString());
                 auto event = std::make_unique<ResponseEvent>(issues);
                 event->DebugInfo = debugInfo;
                 responseByteSize = event->GetByteSize();
@@ -763,7 +764,7 @@ protected:
                     });
                 }
             } else {
-                CPS_LOG_AS_T(*actorSystem, name << ": {" << TrimForLogs(result.DebugString()) << "} SUCCESS");
+                CPS_LOG_AS_T(*actorSystem, name << ": {" << TrimForLogs(SecureDebugString(result)) << "} SUCCESS");
                 std::unique_ptr<ResponseEvent> event;
                 if constexpr (ResponseEvent::Auditable) {
                     event = std::make_unique<ResponseEvent>(result, auditDetails);

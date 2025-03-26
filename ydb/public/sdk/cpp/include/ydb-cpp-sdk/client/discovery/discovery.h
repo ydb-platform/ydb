@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
 
 namespace Ydb {
 namespace Discovery {
@@ -12,7 +12,7 @@ namespace Discovery {
 } // namespace Discovery
 } // namespace Ydb
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 namespace NDiscovery {
 
 ////////////////////////////////////////////////////////////////////////////////

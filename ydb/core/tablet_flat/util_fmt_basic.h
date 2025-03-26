@@ -9,7 +9,7 @@ namespace NFmt {
     struct TDelay {
         TDelay(TDuration val): Val(val) { }
 
-        TOut& Do(TOut &out) const noexcept
+        TOut& Do(TOut &out) const
         {
             const ui64 grid[] =  {
                     60ull,          /* minute                   */
@@ -36,7 +36,7 @@ namespace NFmt {
         }
 
     protected:
-        inline TOut& Small(TOut &out, ui64 secs) const noexcept
+        inline TOut& Small(TOut &out, ui64 secs) const
         {
             char ln_[8];
 

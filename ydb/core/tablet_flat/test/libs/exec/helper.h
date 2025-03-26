@@ -11,7 +11,7 @@ namespace NFake {
     struct TStarter {
         using TMake = TTabletSetupInfo::TTabletCreationFunc;
 
-        IActor* Do(TActorId user, ui32 retry, ui32 tablet, TMake make, ui32 channelsCount, ui32 followerId = 0) noexcept
+        IActor* Do(TActorId user, ui32 retry, ui32 tablet, TMake make, ui32 channelsCount, ui32 followerId = 0)
         {
             const auto simple = TMailboxType::Simple;
 
@@ -21,7 +21,7 @@ namespace NFake {
             return new NFake::TOwner(user, retry, info, setup, followerId);
         }
 
-        virtual TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channelsCount) noexcept
+        virtual TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channelsCount)
         {
             const auto none = TErasureType::ErasureNone;
 

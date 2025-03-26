@@ -2,7 +2,7 @@
 
 #include "memory_info.h"
 
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 
 #include <ydb/library/actors/core/defs.h>
 #include <ydb/library/actors/core/actor.h>

@@ -55,6 +55,7 @@ namespace NKikimr {
             HandlePortion(ev->Get()->Portion);
             Stat = ev->Get()->Stat;
             HasTransientErrors = HasTransientErrors || ev->Get()->HasTransientErrors;
+            BSQueueNotReady = BSQueueNotReady || ev->Get()->BSQueueNotReady;
         }
 
         void TVDiskProxy::HandlePortion(TNextPortion &portion) {
@@ -125,6 +126,7 @@ namespace NKikimr {
             bool RequestFromVDiskProxyPending;
             bool Finished;
             bool HasTransientErrors = false;
+            bool BSQueueNotReady = false;
             ui64 NextSendCookie;
             ui64 NextReceiveCookie;
             TResultQueue ResultQueue;
@@ -223,7 +225,7 @@ namespace NKikimr {
             void ProcessPendingRequests() {
                 // if there are unsatisfied requests, try to satisfy them as far as we have data in prefetch
                 if (RequestFromVDiskProxyPending && Prefetch.Valid()) {
-                    Send(Recipient, new TEvReplProxyNextResult(VDiskId, std::move(Prefetch), Stat, HasTransientErrors));
+                    Send(Recipient, new TEvReplProxyNextResult(VDiskId, std::move(Prefetch), Stat, HasTransientErrors, BSQueueNotReady));
                     Prefetch.Reset();
                     PrefetchDataSize = 0;
                     RequestFromVDiskProxyPending = false;
@@ -354,9 +356,13 @@ namespace NKikimr {
                         HasTransientErrors = true;
                         break;
                     case NKikimrProto::ERROR:
-                    case NKikimrProto::NOTREADY:
                         ++Stat.VDiskRespERROR;
                         HasTransientErrors = true;
+                        break;
+                    case NKikimrProto::NOTREADY:
+                        ++Stat.VDiskRespNOTREADY;
+                        HasTransientErrors = true;
+                        BSQueueNotReady = true;
                         break;
                     case NKikimrProto::DEADLINE:
                         ++Stat.VDiskRespDEADLINE;

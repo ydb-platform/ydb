@@ -693,7 +693,6 @@ public:
             }
         }
 
-        auto cluster = TString{TYtDSource(input->ChildPtr(TYtReadTable::idx_DataSource)).Cluster().Value()};
         TMaybe<bool> yamrFormat;
         TMaybe<TSampleParams> sampling;
         for (size_t i = 0; i < input->Child(TYtReadTable::idx_Input)->ChildrenSize(); ++i) {
@@ -715,14 +714,15 @@ public:
                 if (auto maybeTable = path.Table().Maybe<TYtTable>()) {
                     auto table = maybeTable.Cast();
                     auto tableName = table.Name().Value();
+                    auto tableCluster = table.Cluster().StringValue();
                     if (!NYql::HasSetting(table.Settings().Ref(), EYtSettingType::UserSchema)) {
                         // Don't validate already substituted anonymous tables
                         if (!NYql::HasSetting(table.Settings().Ref(), EYtSettingType::Anonymous) || !tableName.StartsWith("tmp/")) {
-                            const TYtTableDescription& tableDesc = State_->TablesData->GetTable(cluster,
+                            const TYtTableDescription& tableDesc = State_->TablesData->GetTable(tableCluster,
                                 TString{tableName},
                                 TEpochInfo::Parse(table.Epoch().Ref()));
 
-                            if (!tableDesc.Validate(ctx.GetPosition(table.Pos()), cluster, tableName,
+                            if (!tableDesc.Validate(ctx.GetPosition(table.Pos()), tableCluster, tableName,
                                 NYql::HasSetting(table.Settings().Ref(), EYtSettingType::WithQB), State_->AnonymousLabels, ctx)) {
                                 return TStatus::Error;
                             }
@@ -740,8 +740,12 @@ public:
             }
         }
 
+        auto cluster = TYtDSource(input->ChildPtr(TYtReadTable::idx_DataSource)).Cluster().StringValue();
         auto readInput = input->ChildPtr(TYtReadTable::idx_Input);
-        auto newInput = ValidateAndUpdateTablesMeta(readInput, cluster, State_->TablesData, State_->Types->UseTableMetaFromGraph, ctx);
+        const ERuntimeClusterSelectionMode selectionMode =
+            State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+        auto newInput = ValidateAndUpdateTablesMeta(readInput, cluster, State_->TablesData,
+            State_->Types->UseTableMetaFromGraph, selectionMode, ctx);
         if (!newInput) {
             return TStatus::Error;
         }
@@ -809,6 +813,10 @@ public:
         auto tableName = TString{readScheme.Table().Name().Value()};
         auto view = NYql::GetSetting(readScheme.Table().Settings().Ref(), EYtSettingType::View);
         TString viewName = view ? TString{view->Child(1)->Content()} : TString();
+
+        if (!EnsureDataSourceClusterMatchesTable(readScheme.DataSource(), readScheme.Table(), ctx)) {
+            return TStatus::Error;
+        }
 
         TYtTableDescription& tableDesc = State_->TablesData->GetOrAddTable(cluster, tableName,
             TEpochInfo::Parse(readScheme.Table().Epoch().Ref()));
@@ -1061,6 +1069,15 @@ public:
         return TStatus::Repeat;
     }
 private:
+    static bool EnsureDataSourceClusterMatchesTable(const TYtDSource& source, const TYtTable& table, TExprContext& ctx) {
+        if (source.Cluster().Value() != table.Cluster().Value()) {
+            ctx.AddError(TIssue(ctx.GetPosition(source.Pos()), TStringBuilder() << "Datasource cluster doesn't match table cluster: '"
+                << source.Cluster().Value() << "' != '" << table.Cluster().Value() << "'"));
+            return false;
+        }
+        return true;
+    }
+
     const TYtState::TPtr State_;
 };
 

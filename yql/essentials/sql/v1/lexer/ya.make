@@ -20,6 +20,8 @@ RECURSE(
     antlr3_ansi
     antlr4
     antlr4_ansi
+    antlr4_pure
+    antlr4_pure_ansi
 )
 
 RECURSE_FOR_TESTS(

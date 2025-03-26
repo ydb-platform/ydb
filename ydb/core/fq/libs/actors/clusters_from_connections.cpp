@@ -28,6 +28,9 @@ void FillClusterAuth(TClusterConfig& clusterCfg,
     case FederatedQuery::IamAuth::kCurrentIam:
         clusterCfg.SetToken(authToken);
         break;
+    case FederatedQuery::IamAuth::kToken:
+        clusterCfg.SetToken(auth.token().token());
+        break;
     case FederatedQuery::IamAuth::kServiceAccount:
         clusterCfg.SetServiceAccountId(auth.service_account().id());
         clusterCfg.SetServiceAccountIdSignature(accountIdSignatures.at(auth.service_account().id()));

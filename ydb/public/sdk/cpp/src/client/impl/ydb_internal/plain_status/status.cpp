@@ -1,11 +1,11 @@
 #define INCLUDE_YDB_INTERNAL_H
 #include "status.h"
 
-#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
 #include <util/string/builder.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 using std::string;
 

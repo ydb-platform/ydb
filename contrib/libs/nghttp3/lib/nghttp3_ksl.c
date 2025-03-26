@@ -34,7 +34,7 @@
 #include "nghttp3_mem.h"
 #include "nghttp3_range.h"
 
-static nghttp3_ksl_blk null_blk = {{{NULL, NULL, 0, 0, {0}}}};
+static nghttp3_ksl_blk null_blk;
 
 nghttp3_objalloc_def(ksl_blk, nghttp3_ksl_blk, oplent)
 

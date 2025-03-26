@@ -688,6 +688,28 @@ TYtDSink GetDataSink(TExprBase input, TExprContext& ctx) {
     }
 }
 
+TYtDSink MakeDataSink(TPositionHandle pos, TStringBuf cluster, TExprContext& ctx) {
+    return Build<TYtDSink>(ctx, pos)
+        .Category()
+            .Value(YtProviderName)
+        .Build()
+        .Cluster()
+            .Value(cluster)
+        .Build()
+        .Done();
+}
+
+NNodes::TYtDSource MakeDataSource(TPositionHandle pos, TStringBuf cluster, TExprContext& ctx) {
+    return Build<TYtDSource>(ctx, pos)
+        .Category()
+            .Value(YtProviderName)
+        .Build()
+        .Cluster()
+            .Value(cluster)
+        .Build()
+        .Done();
+}
+
 TExprBase GetWorld(TExprBase input, TMaybeNode<TExprBase> main, TExprContext& ctx) {
     if (!main) {
         main = ctx.NewWorld(input.Pos());

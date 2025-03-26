@@ -1,8 +1,8 @@
-#include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
-#include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/credentials.h>
-#include <ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/jwt_token_source.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/from_file.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/credentials.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/oauth2_token_exchange/jwt_token_source.h>
 
-#include <ydb-cpp-sdk/type_switcher.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/string_utils/base64/base64.h>
@@ -13,7 +13,7 @@
 
 #include <jwt-cpp/jwt.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 namespace {
 

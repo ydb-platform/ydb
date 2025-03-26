@@ -18,7 +18,7 @@ class TMockConnection
 public:
     MOCK_METHOD(TClusterTag, GetClusterTag, (), (const, override));
     MOCK_METHOD(const std::string&, GetLoggingTag, (), (const, override));
-    MOCK_METHOD(const TString&, GetClusterId, (), (const, override));
+    MOCK_METHOD(const std::string&, GetClusterId, (), (const, override));
     MOCK_METHOD(const std::optional<std::string>&, GetClusterName, (), (const, override));
 
     MOCK_METHOD(IInvokerPtr, GetInvoker, (), (override));

@@ -5,6 +5,7 @@
 
 namespace NYql {
 
+constexpr TStringBuf UnknownProviderName = "unknown";
 constexpr TStringBuf ConfigProviderName = "config";
 constexpr TStringBuf KikimrProviderName = "kikimr";
 constexpr TStringBuf ResultProviderName = "result";

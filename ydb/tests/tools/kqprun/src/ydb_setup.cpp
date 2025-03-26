@@ -14,6 +14,8 @@
 
 #include <yql/essentials/utils/log/log.h>
 
+#include <yt/yql/providers/yt/mkql_dq/yql_yt_dq_transform.h>
+
 using namespace NKikimrRun;
 
 namespace NKqpRun {
@@ -252,6 +254,7 @@ private:
         serverSettings.SetComputationFactory(Settings_.ComputationFactory);
         serverSettings.SetYtGateway(Settings_.YtGateway);
         serverSettings.S3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
+        serverSettings.SetDqTaskTransformFactory(NYql::CreateYtDqTaskTransformFactory(true));
         serverSettings.SetInitializeFederatedQuerySetupFactory(true);
         serverSettings.SetVerbose(Settings_.VerboseLevel >= EVerbose::InitLogs);
 

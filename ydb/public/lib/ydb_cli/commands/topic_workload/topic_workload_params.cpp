@@ -5,7 +5,7 @@
 #include <library/cpp/getopt/small/last_getopt_support.h>
 #include <library/cpp/regex/pcre/regexp.h>
 
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <util/generic/hash.h>
 

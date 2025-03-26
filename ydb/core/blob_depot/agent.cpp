@@ -1,6 +1,7 @@
 #include "blob_depot_tablet.h"
 #include "data.h"
 #include "space_monitor.h"
+#include "s3.h"
 
 namespace NKikimr::NBlobDepot {
 
@@ -30,6 +31,12 @@ namespace NKikimr::NBlobDepot {
     void TBlobDepot::OnAgentDisconnect(TAgent& agent) {
         agent.InvalidateStepRequests.clear();
         agent.PushCallbacks.clear();
+
+        for (TS3Locator locator : agent.S3WritesInFlight) {
+            // they were not in InFlightTrashS3, so we just have to delete them
+            S3Manager->AddTrashToCollect(locator);
+        }
+        agent.S3WritesInFlight.clear();
     }
 
     void TBlobDepot::Handle(TEvBlobDepot::TEvRegisterAgent::TPtr ev) {
@@ -77,6 +84,14 @@ namespace NKikimr::NBlobDepot {
 
         if (Config.GetIsDecommittingGroup()) {
             record->SetDecommitGroupId(Config.GetVirtualGroupId());
+        }
+
+        if (Config.HasS3BackendSettings()) {
+            record->MutableS3BackendSettings()->CopyFrom(Config.GetS3BackendSettings());
+        }
+
+        if (Config.HasName()) {
+            record->SetName(Config.GetName());
         }
 
         TActivationContext::Send(response.release());

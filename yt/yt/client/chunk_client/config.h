@@ -331,6 +331,8 @@ struct TReplicationWriterConfig
      */
     TDuration NodeRpcTimeout;
 
+    TDuration ProbePutBlocksTimeout;
+
     NRpc::TRetryingChannelConfigPtr NodeChannel;
 
     int UploadReplicationFactor;
@@ -365,6 +367,10 @@ struct TReplicationWriterConfig
 
     //! If |true| network throttlers will be applied even in case of requests to local host.
     bool EnableLocalThrottling;
+
+    //! Enable write protocol with probe put blocks.
+    //! Acquiring resources for putting blocks before invoking PutBlocks.
+    bool UseProbePutBlocks;
 
     int GetDirectUploadNodeCount();
 

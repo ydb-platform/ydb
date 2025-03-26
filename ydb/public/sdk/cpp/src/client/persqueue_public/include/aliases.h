@@ -1,13 +1,13 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/topic/codecs.h>
-#include <ydb-cpp-sdk/client/topic/counters.h>
-#include <ydb-cpp-sdk/client/topic/errors.h>
-#include <ydb-cpp-sdk/client/topic/events_common.h>
-#include <ydb-cpp-sdk/client/topic/executor.h>
-#include <ydb-cpp-sdk/client/topic/retry_policy.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/counters.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/errors.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/events_common.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/executor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/retry_policy.h>
 
-namespace NYdb::inline V3::NPersQueue {
+namespace NYdb::inline Dev::NPersQueue {
 
 // codecs
 using NTopic::ECodec;

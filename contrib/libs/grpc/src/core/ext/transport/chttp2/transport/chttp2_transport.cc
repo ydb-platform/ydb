@@ -2076,9 +2076,11 @@ void grpc_chttp2_cancel_stream(grpc_chttp2_transport* t, grpc_chttp2_stream* s,
       grpc_http2_error_code http_error;
       grpc_error_get_status(due_to_error, s->deadline, nullptr, nullptr,
                             &http_error, nullptr);
-      grpc_chttp2_add_rst_stream_to_next_write(
-          t, s->id, static_cast<uint32_t>(http_error), &s->stats.outgoing);
-      grpc_chttp2_initiate_write(t, GRPC_CHTTP2_INITIATE_WRITE_RST_STREAM);
+      if (s->sent_initial_metadata) {
+        grpc_chttp2_add_rst_stream_to_next_write(
+            t, s->id, static_cast<uint32_t>(http_error), &s->stats.outgoing);
+        grpc_chttp2_initiate_write(t, GRPC_CHTTP2_INITIATE_WRITE_RST_STREAM);
+      }
     }
   }
   if (!due_to_error.ok() && !s->seen_error) {

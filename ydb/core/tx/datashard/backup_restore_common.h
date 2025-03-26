@@ -31,7 +31,7 @@ protected:
 
     void Abort(TOperation::TPtr op, const TActorContext& ctx, const TString& error) {
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, error);
 
@@ -57,7 +57,7 @@ private:
 
     void PersistResult(TOperation::TPtr op, TTransactionContext& txc) {
         auto* schemeOp = DataShard.FindSchemaTx(op->GetTxId());
-        Y_ABORT_UNLESS(schemeOp);
+        Y_ENSURE(schemeOp);
 
         NIceDb::TNiceDb db(txc.DB);
         DataShard.PersistSchemeTxResult(db, *schemeOp);
@@ -87,7 +87,7 @@ public:
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) override final {
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         if (!IsRelevant(tx)) {
             return EExecutionStatus::Executed;

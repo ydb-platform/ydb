@@ -75,9 +75,9 @@ class TValuePackerTransport {
 public:
     using TSelf = TValuePackerTransport<Fast>;
 
-    explicit TValuePackerTransport(const TType* type, arrow::MemoryPool* pool = nullptr);
+    explicit TValuePackerTransport(const TType* type, arrow::MemoryPool* pool = nullptr, TMaybe<ui8> minFillPercentage = Nothing());
     // for compatibility with TValuePackerGeneric - stable packing is not supported
-    TValuePackerTransport(bool stable, const TType* type, arrow::MemoryPool* ppol = nullptr);
+    TValuePackerTransport(bool stable, const TType* type, arrow::MemoryPool* ppol = nullptr, TMaybe<ui8> minFillPercentage = Nothing());
 
     // AddItem()/UnpackBatch() will perform incremental packing - type T is processed as list item type. Will produce List<T> layout
     TSelf& AddItem(const NUdf::TUnboxedValuePod& value);
@@ -97,6 +97,8 @@ public:
     void Clear();
     NYql::TChunkedBuffer Finish();
 
+    void SetMinFillPercentage(TMaybe<ui8> minFillPercentage);
+
     // Pack()/Unpack() will pack/unpack single value of type T
     NYql::TChunkedBuffer Pack(const NUdf::TUnboxedValuePod& value) const;
     NUdf::TUnboxedValue Unpack(NYql::TChunkedBuffer&& buf, const THolderFactory& holderFactory) const;
@@ -105,7 +107,7 @@ private:
     void BuildMeta(TPagedBuffer::TPtr& buffer, bool addItemCount) const;
     void StartPack();
 
-    void InitBlocks();
+    void InitBlocks(TMaybe<ui8> minFillPercentage);
     TSelf& AddWideItemBlocks(const NUdf::TUnboxedValuePod* values, ui32 count);
     NYql::TChunkedBuffer FinishBlocks();
     void UnpackBatchBlocks(NYql::TChunkedBuffer&& buf, const THolderFactory& holderFactory, TUnboxedValueBatch& result) const;

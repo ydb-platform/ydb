@@ -175,6 +175,19 @@ public: \
     } \
     static_assert(true)
 
+//! Defines a trivial public read-only boolean property that is passed by value.
+//! All arguments after name are used as default value (via braced-init-list).
+#define DEFINE_BYVAL_RO_BOOLEAN_PROPERTY(name, ...) \
+protected: \
+    bool name##_ { __VA_ARGS__ }; \
+    \
+public: \
+    Y_FORCE_INLINE bool Is##name() const \
+    { \
+        return name##_; \
+    } \
+    static_assert(true)
+
 //! Defines a trivial public read-write property that is passed by value.
 //! All arguments after name are used as default value (via braced-init-list).
 #define DEFINE_BYVAL_RW_PROPERTY_WITH_FLUENT_SETTER(declaringType, type, name, ...) \

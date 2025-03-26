@@ -76,22 +76,24 @@ public:
                 return TStatus::Ok;
             }
 
-            Statistics_["DqAnalyzerOn"]++;
+            if (!State_->TypeCtx->DqCaptured) {
+                Statistics_["DqAnalyzerOn"]++;
 
-            bool good = true;
-            TNodeSet visited;
-            Scan(*input, ctx, good, visited);
+                bool good = true;
+                TNodeSet visited;
+                Scan(*input, ctx, good, visited);
 
-            if (good) {
-                Statistics_["DqAnalyzerOk"]++;
-            } else {
-                Statistics_["DqAnalyzerFail"] ++;
-            }
+                if (good) {
+                    Statistics_["DqAnalyzerOk"]++;
+                } else {
+                    Statistics_["DqAnalyzerFail"] ++;
+                }
 
-            if (!good) {
-                YQL_CLOG(DEBUG, ProviderDq) << "abort hidden";
-                State_->AbortHidden();
-                return TStatus::Ok;
+                if (!good) {
+                    YQL_CLOG(DEBUG, ProviderDq) << "abort hidden";
+                    State_->AbortHidden();
+                    return TStatus::Ok;
+                }
             }
         }
 

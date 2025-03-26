@@ -40,6 +40,7 @@ private:
     private:
         const TClickbenchWorkloadDataInitializerGenerator& Owner;
         TVector<TFile::TPtr> Files;
+        ui32 FilesCount = 0;
         TAdaptiveLock Lock;
         bool FirstPortion = true;
         static constexpr ui64 DataSetSize = 99997497;

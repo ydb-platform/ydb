@@ -8,7 +8,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/blobstorage_vdisk_config.pb.h>
 #include <ydb/core/protos/feature_flags.pb.h>
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/base/feature_flags.h>
 
 namespace NKikimr {
@@ -174,6 +174,8 @@ namespace NKikimr {
         ui32 ReplPrefetchDataSize;
         ui32 ReplMaxResponseSize;
         ui32 ReplInterconnectChannel;
+        TDuration ReplMaxDonorNotReadyDuration;
+        ui32 ReplMaxDonorNotReadyCount;
         ui32 HandoffMaxWaitQueueSize;
         ui32 HandoffMaxWaitQueueByteSize;
         ui32 HandoffMaxInFlightSize;
@@ -257,6 +259,9 @@ namespace NKikimr {
         TControlWrapper ThrottlingMaxOccupancyPerMille;
         TControlWrapper ThrottlingMinLogChunkCount;
         TControlWrapper ThrottlingMaxLogChunkCount;
+
+        ///////////// SYNC SETTINGS //////////////////
+        TControlWrapper MaxInProgressSyncCount;
 
         ///////////// FEATURE FLAGS ////////////////////////
         NKikimrConfig::TFeatureFlags FeatureFlags;

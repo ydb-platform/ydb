@@ -805,7 +805,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, TString, TString, TString, TString, bool, TString, ui32, bool, bool> TBackupSettingsRec;
+    typedef std::tuple<TPathId, TString, TString, TString, TString, bool, TString, ui32, bool, bool, TString> TBackupSettingsRec;
     typedef TDeque<TBackupSettingsRec> TBackupSettingsRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -819,7 +819,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::TableDescription>(""),
             rowSet.template GetValueOrDefault<typename SchemaTable::NumberOfRetries>(0),
             rowSet.template GetValueOrDefault<typename SchemaTable::EnableChecksums>(false),
-            rowSet.template GetValueOrDefault<typename SchemaTable::EnablePermissions>(false)
+            rowSet.template GetValueOrDefault<typename SchemaTable::EnablePermissions>(false),
+            rowSet.template GetValueOrDefault<typename SchemaTable::ChangefeedUnderlyingTopics>("")
         );
     }
 
@@ -3804,6 +3805,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 ui32 nRetries = std::get<7>(rec);
                 bool enableChecksums = std::get<8>(rec);
                 bool enablePermissions = std::get<9>(rec);
+                TString changefeedUnderlyingTopics = std::get<10>(rec);
 
                 Y_ABORT_UNLESS(tableName.size() > 0);
 
@@ -3834,6 +3836,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 if (tableDesc) {
                     auto desc = tableInfo->BackupSettings.MutableTable();
                     Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*desc, tableDesc));
+                }
+                
+                if (changefeedUnderlyingTopics) {
+                    NKikimrSchemeOp::TChangefeedUnderlyingTopics wrapperOverTopics;
+                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(wrapperOverTopics, changefeedUnderlyingTopics));
+                    for (const auto& topic : wrapperOverTopics.GetChangefeedUnderlyingTopics()) {
+                        *tableInfo->BackupSettings.AddChangefeedUnderlyingTopics() = topic;
+                    }
                 }
 
                 LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Loaded backup settings"

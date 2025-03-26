@@ -6,6 +6,7 @@
 #include <ydb/core/tx/columnshard/engines/changes/abstract/abstract.h>
 #include <ydb/core/tx/columnshard/engines/portions/write_with_blobs.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/filtered_scheme.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap::NCompaction {
 class TMerger {
@@ -40,6 +41,6 @@ public:
 
     std::vector<TWritePortionInfoWithBlobsResult> Execute(const std::shared_ptr<NArrow::NSplitter::TSerializationStats>& stats,
         const NArrow::NMerger::TIntervalPositions& checkPoints, const std::shared_ptr<TFilteredSnapshotSchema>& resultFiltered,
-        const ui64 pathId, const std::optional<ui64> shardingActualVersion);
+        const TInternalPathId pathId, const std::optional<ui64> shardingActualVersion);
 };
 }   // namespace NKikimr::NOlap::NCompaction

@@ -18,4 +18,5 @@ message TData {
     bytes Raw = 2;
     uint32 Chunks = 3;
     optional uint32 PayloadId = 4;
+    uint32 Rows = 5;
 }

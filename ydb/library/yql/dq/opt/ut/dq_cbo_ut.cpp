@@ -34,13 +34,13 @@ Y_UNIT_TEST_SUITE(DQCBO) {
 Y_UNIT_TEST(Empty) {
     TBaseProviderContext pctx;
     TExprContext dummyCtx;
-    std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, 100000, dummyCtx));
+    std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, 100000, dummyCtx, false));
 }
 
 Y_UNIT_TEST(JoinSearch2Rels) {
     TBaseProviderContext pctx;
     TExprContext dummyCtx;
-    std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, 100000, dummyCtx));
+    std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, 100000, dummyCtx, false));
 
     auto rel1 = std::make_shared<TRelOptimizerNode>(
         "a",
@@ -83,7 +83,7 @@ Type: ManyManyJoin, Nrows: 2e+10, Ncols: 2, ByteSize: 0, Cost: 2.00112e+10, Sel:
 Y_UNIT_TEST(JoinSearch3Rels) {
     TBaseProviderContext pctx;
     TExprContext dummyCtx;
-    std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, 100000, dummyCtx));
+    std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, 100000, dummyCtx, false));
 
     auto rel1 = std::make_shared<TRelOptimizerNode>("a",
         TOptimizerStatistics(BaseTable, 100000, 1, 0, 1000000));
@@ -138,6 +138,151 @@ Type: ManyManyJoin, Nrows: 4e+13, Ncols: 3, ByteSize: 0, Cost: 4.004e+13, Sel: 1
 )__";
 
     UNIT_ASSERT_STRINGS_EQUAL(expected, ss.str());
+}
+
+Y_UNIT_TEST(JoinSearchYQL19363) {
+    // Verify that JoinSearch() correctly handles dot and comma characters.
+    TBaseProviderContext pctx;
+    TExprContext dummyCtx;
+    std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, 100000, dummyCtx, false));
+
+    TString relName1 = "a,b.c";
+    TString colName1 = "a.x";
+    TString relName2 = "b,d.e";
+    TString colName2 = "b.y";
+
+    auto rel1 = std::make_shared<TRelOptimizerNode>(relName1,
+        TOptimizerStatistics(BaseTable, 1, 1, 0, 1));
+    auto rel2 = std::make_shared<TRelOptimizerNode>(relName2,
+        TOptimizerStatistics(BaseTable, 1, 1, 0, 1));
+
+    TVector<NDq::TJoinColumn> leftKeys = {NDq::TJoinColumn(relName1, colName1)};
+    TVector<NDq::TJoinColumn> rightKeys ={NDq::TJoinColumn(relName2, colName2)};
+
+    auto op = std::make_shared<TJoinOptimizerNode>(
+        std::static_pointer_cast<IBaseOptimizerNode>(rel1),
+        std::static_pointer_cast<IBaseOptimizerNode>(rel2),
+        leftKeys,
+        rightKeys,
+        InnerJoin,
+        EJoinAlgoType::GraceJoin,
+        false,
+        false
+    );
+
+    auto res = optimizer->JoinSearch(op);
+
+    UNIT_ASSERT_STRINGS_EQUAL(res->LeftJoinKeys[0].RelName, relName1);
+    UNIT_ASSERT_STRINGS_EQUAL(res->LeftJoinKeys[0].AttributeName, colName1);
+    UNIT_ASSERT_STRINGS_EQUAL(res->RightJoinKeys[0].RelName, relName2);
+    UNIT_ASSERT_STRINGS_EQUAL(res->RightJoinKeys[0].AttributeName, colName2);
+
+    auto generateSpecialCharacters = []() -> TString {
+        TString result;
+        for (int i = 1; i <= 255; ++i) {
+            result += char(i);
+        }
+        return result;
+    };
+
+    relName1 = generateSpecialCharacters() + ".a";
+    relName2 = generateSpecialCharacters() + ".b";
+
+    // Verify that arbitrary characters are correctly handled and preserved
+    rel1 = std::make_shared<TRelOptimizerNode>(relName1,
+        TOptimizerStatistics(BaseTable, 1, 1, 0, 1));
+    rel2 = std::make_shared<TRelOptimizerNode>(relName2,
+        TOptimizerStatistics(BaseTable, 1, 1, 0, 1));
+
+    colName1 = colName2 = generateSpecialCharacters();
+
+    leftKeys = TVector<NDq::TJoinColumn>{NDq::TJoinColumn(relName1, colName1)};
+    rightKeys = TVector<NDq::TJoinColumn>{NDq::TJoinColumn(relName2, colName2)};
+
+    op = std::make_shared<TJoinOptimizerNode>(
+        std::static_pointer_cast<IBaseOptimizerNode>(rel1),
+        std::static_pointer_cast<IBaseOptimizerNode>(rel2),
+        leftKeys,
+        rightKeys,
+        InnerJoin,
+        EJoinAlgoType::GraceJoin,
+        false,
+        false
+    );
+
+    res = optimizer->JoinSearch(op);
+
+    UNIT_ASSERT_STRINGS_EQUAL(res->LeftJoinKeys[0].RelName, relName1);
+    UNIT_ASSERT_STRINGS_EQUAL(res->LeftJoinKeys[0].AttributeName, colName1);
+    UNIT_ASSERT_STRINGS_EQUAL(res->RightJoinKeys[0].RelName, relName2);
+    UNIT_ASSERT_STRINGS_EQUAL(res->RightJoinKeys[0].AttributeName, colName2);
+}
+
+struct TMockProviderContextYT24403 : public TBaseProviderContext {
+    bool IsJoinApplicable(
+        const std::shared_ptr<IBaseOptimizerNode>&,
+        const std::shared_ptr<IBaseOptimizerNode>&,
+        const TVector<NDq::TJoinColumn>&,
+        const TVector<NDq::TJoinColumn>&,
+        EJoinAlgoType joinAlgo,
+        EJoinKind
+    ) override {
+        CalledIsJoinApplicable.insert(joinAlgo);
+        return true;
+    }
+
+    TOptimizerStatistics ComputeJoinStats(
+        const TOptimizerStatistics& leftStats,
+        const TOptimizerStatistics& rightStats,
+        const TVector<NDq::TJoinColumn>& leftJoinKeys,
+        const TVector<NDq::TJoinColumn>& rightJoinKeys,
+        EJoinAlgoType joinAlgo,
+        EJoinKind joinKind,
+        TCardinalityHints::TCardinalityHint* maybeHint
+    ) const override {
+        CalledComputeJoinStats.insert(joinAlgo);
+        return TBaseProviderContext::ComputeJoinStats(leftStats, rightStats, leftJoinKeys, rightJoinKeys, joinAlgo, joinKind, maybeHint);
+    }
+
+    THashSet<EJoinAlgoType> CalledIsJoinApplicable;
+    mutable THashSet<EJoinAlgoType> CalledComputeJoinStats;
+};
+
+Y_UNIT_TEST(JoinSearchYT24403) {
+    TMockProviderContextYT24403 pctx;
+    TExprContext dummyCtx;
+    std::unique_ptr<IOptimizerNew> optimizer = std::unique_ptr<IOptimizerNew>(MakeNativeOptimizerNew(pctx, 100000, dummyCtx, false));
+
+    const TString relName1 = "a";
+    const TString relName2 = "b";
+    const TString colName1 = "x";
+    const TString colName2 = "x";
+
+    auto rel1 = std::make_shared<TRelOptimizerNode>(relName1,
+        TOptimizerStatistics(BaseTable, 1, 1, 0, 1));
+    auto rel2 = std::make_shared<TRelOptimizerNode>(relName2,
+        TOptimizerStatistics(BaseTable, 1, 1, 0, 1));
+
+    TVector<NDq::TJoinColumn> leftKeys = {NDq::TJoinColumn(relName1, colName1)};
+    TVector<NDq::TJoinColumn> rightKeys ={NDq::TJoinColumn(relName2, colName2)};
+
+    auto op = std::make_shared<TJoinOptimizerNode>(
+        std::static_pointer_cast<IBaseOptimizerNode>(rel1),
+        std::static_pointer_cast<IBaseOptimizerNode>(rel2),
+        leftKeys,
+        rightKeys,
+        InnerJoin,
+        EJoinAlgoType::GraceJoin,
+        false,
+        false
+    );
+
+    auto res = optimizer->JoinSearch(op);
+
+    for (auto joinAlgo : AllJoinAlgos) {
+        UNIT_ASSERT(pctx.CalledIsJoinApplicable.count(joinAlgo) > 0);
+        UNIT_ASSERT(pctx.CalledComputeJoinStats.count(joinAlgo) > 0);
+    }
 }
 
 Y_UNIT_TEST(RelCollector) {
@@ -246,7 +391,7 @@ Y_UNIT_TEST(DqOptimizeEquiJoinWithCostsNative) {
     TExprContext ctx;
     TBaseProviderContext pctx;
     std::function<IOptimizerNew*()> optFactory = [&]() {
-        return MakeNativeOptimizerNew(pctx, 100000, ctx);
+        return MakeNativeOptimizerNew(pctx, 100000, ctx, false);
     };
     _DqOptimizeEquiJoinWithCosts(optFactory, ctx);
 }

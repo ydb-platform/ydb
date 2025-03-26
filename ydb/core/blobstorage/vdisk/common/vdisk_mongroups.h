@@ -899,5 +899,40 @@ public:                                                                         
             COUNTER_DEF(SkeletonFrontUptimeSeconds);
         };
 
+        ///////////////////////////////////////////////////////////////////////////////////
+        // TCompactionStrategyGroup
+        ///////////////////////////////////////////////////////////////////////////////////
+        class TCompactionStrategyGroup : public TBase {
+        public:
+            GROUP_CONSTRUCTOR(TCompactionStrategyGroup)
+            {
+                COUNTER_INIT(BlobsDelSst, true);
+                COUNTER_INIT(BlobsPromoteSsts, true);
+                COUNTER_INIT(BlobsExplicit, true);
+                COUNTER_INIT(BlobsBalance, true);
+                COUNTER_INIT(BlobsFreeSpace, true);
+                COUNTER_INIT(BlobsSqueeze, true);
+
+                COUNTER_INIT(BlocksPromoteSsts, true);
+                COUNTER_INIT(BlocksBalance, true);
+
+                COUNTER_INIT(BarriersPromoteSsts, true);
+                COUNTER_INIT(BarriersBalance, true);
+            }
+
+            COUNTER_DEF(BlobsDelSst);
+            COUNTER_DEF(BlobsPromoteSsts);
+            COUNTER_DEF(BlobsExplicit);
+            COUNTER_DEF(BlobsBalance);
+            COUNTER_DEF(BlobsFreeSpace);
+            COUNTER_DEF(BlobsSqueeze);
+
+            COUNTER_DEF(BlocksPromoteSsts);
+            COUNTER_DEF(BlocksBalance);
+
+            COUNTER_DEF(BarriersPromoteSsts);
+            COUNTER_DEF(BarriersBalance);
+        };
+
     } // NMonGroup
 } // NKikimr

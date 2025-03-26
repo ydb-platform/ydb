@@ -83,6 +83,7 @@ struct TRunnerOptions {
     std::optional<size_t> TraceOptScriptId;
 
     TDuration ScriptCancelAfter;
+    std::unordered_set<Ydb::StatusIds::StatusCode> RetryableStatuses;
 
     TYdbSetupSettings YdbSettings;
 };

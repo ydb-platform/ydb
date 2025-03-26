@@ -49,10 +49,10 @@ struct TReplicationLagPenaltyProviderOptions
     : public virtual NYTree::TYsonStruct
 {
     // Clusters that need checks for replication lag.
-    std::vector<TString> ReplicaClusters;
+    std::vector<std::string> ReplicaClusters;
 
     // Table that needs checks for replication lag.
-    TString TablePath;
+    NYPath::TYPath TablePath;
 
     // Same as BanPenalty in hedging client.
     TDuration LagPenalty;

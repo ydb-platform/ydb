@@ -9,7 +9,7 @@
 #include <vector>
 #include <utility>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 template<typename TDerived>
 struct TRequestSettings {

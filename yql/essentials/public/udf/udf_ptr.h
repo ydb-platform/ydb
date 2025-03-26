@@ -1,7 +1,7 @@
 #pragma once
 
 #include <util/system/yassert.h> // Y_ASSERT
-
+#include "udf_type_size_check.h"
 
 namespace NYql {
 namespace NUdf {
@@ -214,6 +214,35 @@ private:
 private:
     T* Ptr_;
 };
+
+//////////////////////////////////////////////////////////////////////////////
+// IRefCounted
+//////////////////////////////////////////////////////////////////////////////
+class IRefCounted {
+public:
+    virtual ~IRefCounted() = default;
+
+    inline void Ref() noexcept {
+        Refs_++;
+    }
+
+    inline void UnRef() noexcept {
+        Y_DEBUG_ABORT_UNLESS(Refs_ > 0);
+        if (--Refs_ == 0) {
+            delete this;
+        }
+    }
+
+private:
+    ui32 Refs_ = 0;
+    ui32 Reserved_ = 0;
+
+    void Unused() {
+        Y_UNUSED(Reserved_);
+    }
+};
+
+UDF_ASSERT_TYPE_SIZE(IRefCounted, 16);
 
 } // namspace NUdf
 } // namspace NYql

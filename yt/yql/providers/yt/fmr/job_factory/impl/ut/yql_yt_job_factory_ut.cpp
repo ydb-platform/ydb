@@ -9,6 +9,13 @@
 
 namespace NYql::NFmr {
 
+TTask::TPtr CreateTestTask() {
+    auto input = TYtTableRef("test_cluster", "test_path");
+    auto output = TFmrTableOutputRef("test_table_id");
+    auto params = TDownloadTaskParams(input, output);
+    return MakeTask(ETaskType::Download, "test_task_id", params, "test_session_id");
+}
+
 Y_UNIT_TEST_SUITE(FmrFactoryTests) {
     Y_UNIT_TEST(GetSuccessfulTaskResult) {
         auto operationResults = std::make_shared<TString>("no_result_yet");
@@ -16,15 +23,15 @@ Y_UNIT_TEST_SUITE(FmrFactoryTests) {
             while (! cancelFlag->load()) {
                 Sleep(TDuration::Seconds(1));
                 *operationResults = "operation_result";
-                return ETaskStatus::Completed;
+                return TJobResult{.TaskStatus = ETaskStatus::Completed, .Stats = TStatistics()};
             }
-            return ETaskStatus::Failed;
+            return TJobResult{.TaskStatus = ETaskStatus::Failed, .Stats = TStatistics()};
         };
         TFmrJobFactorySettings settings{.NumThreads =3, .Function=func};
         auto factory = MakeFmrJobFactory(settings);
         auto cancelFlag = std::make_shared<std::atomic<bool>>(false);
 
-        auto futureTaskStatus = factory->StartJob(nullptr, cancelFlag);
+        auto futureTaskStatus = factory->StartJob(CreateTestTask(), cancelFlag);
         auto taskResult = futureTaskStatus.GetValueSync();
         ETaskStatus taskStatus = taskResult->TaskStatus;
 
@@ -41,17 +48,17 @@ Y_UNIT_TEST_SUITE(FmrFactoryTests) {
                 ++numIterations;
                 if (numIterations == 100) {
                     *operationResults = "operation_result";
-                    return ETaskStatus::Completed;
+                    return TJobResult{.TaskStatus = ETaskStatus::Completed, .Stats = TStatistics()};
                 }
             }
-            return ETaskStatus::Failed;
+            return TJobResult{.TaskStatus = ETaskStatus::Failed, .Stats = TStatistics()};
         };
         TFmrJobFactorySettings settings{.NumThreads =3, .Function=func};
 
         auto factory = MakeFmrJobFactory(settings);
         auto cancelFlag = std::make_shared<std::atomic<bool>>(false);
         auto futureTaskStatus = factory->StartJob(
-            nullptr, cancelFlag);
+            CreateTestTask(), cancelFlag);
         Sleep(TDuration::Seconds(2));
         cancelFlag->store(true);
         auto taskResult = futureTaskStatus.GetValueSync();

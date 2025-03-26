@@ -1,8 +1,8 @@
 #include <library/cpp/resource/resource.h>
 
-#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 const char* YDB_AUTH_TICKET_HEADER = "x-ydb-auth-ticket";
 const char* YDB_DATABASE_HEADER = "x-ydb-database";
@@ -29,7 +29,7 @@ const char* YDB_CLIENT_CAPABILITY_SESSION_BALANCER = "session-balancer";
 
 
 std::string GetSdkSemver() {
-    return NResource::Find("ydb_sdk_version_v3.txt");
+    return NResource::Find("ydb_sdk_version_dev.txt");
 }
 
 } // namespace NYdb

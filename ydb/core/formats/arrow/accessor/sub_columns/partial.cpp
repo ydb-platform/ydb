@@ -7,10 +7,14 @@
 
 namespace NKikimr::NArrow::NAccessor {
 
-void TSubColumnsPartialArray::InitOthers(const TString& blob, const TChunkConstructionData& externalInfo, const bool deserialize) {
+void TSubColumnsPartialArray::InitOthers(const TString& blob, const TChunkConstructionData& externalInfo,
+    const std::shared_ptr<NArrow::TColumnFilter>& applyFilter, const bool deserialize) {
     AFL_VERIFY(!OthersData);
     auto container = NSubColumns::TConstructor::BuildOthersContainer(blob, Header.GetAddressesProto(), externalInfo, deserialize);
     OthersData = NSubColumns::TOthersData(Header.GetOtherStats(), container.DetachResult());
+    if (applyFilter) {
+        OthersData = OthersData->ApplyFilter(*applyFilter, Settings);
+    }
     StoreOthersString = blob;
 }
 

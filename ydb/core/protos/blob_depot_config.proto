@@ -21,23 +21,34 @@ message TChannelProfile {
 message TS3BackendSettings {
     optional NKikimrSchemeOp.TS3Settings Settings = 1; // how to connect to S3 (mandatory field)
 
-    // data (when written) is first stored in ordinary data channel and then asynchronously transferred to S3 storage by
-    // BlobDepot tablet; amount of stored data can be controlled by following settings
-    //
-    // future operation may include modes when data is uploaded by agents directly to the storage
+    message TAsyncMode {
+        // data (when written) is first stored in ordinary data channel and then asynchronously transferred to S3 storage by
+        // BlobDepot tablet; amount of stored data can be controlled by following settings
+        //
+        // future operation may include modes when data is uploaded by agents directly to the storage
 
-    // when do we fully stop processing new queries until some data is uploaded
-    optional uint64 MaxPendingBytes = 2;
+        // when do we fully stop processing new queries until some data is uploaded
+        optional uint64 MaxPendingBytes = 2;
 
-    // when do we start throttling (if set, this must be strictly less than MaxPendingBytes, which also must be set)
-    optional uint64 ThrottleStartBytes = 3;
+        // when do we start throttling (if set, this must be strictly less than MaxPendingBytes, which also must be set)
+        optional uint64 ThrottleStartBytes = 3;
 
-    // upload rate (bytes per second) at ThrottleStartBytes amount of data (which linearly drops to 0 as amount increases
-    // up to MaxPendingBytes)
-    optional uint64 ThrottleMaxBytesPerSecond = 4;
+        // upload rate (bytes per second) at ThrottleStartBytes amount of data (which linearly drops to 0 as amount increases
+        // up to MaxPendingBytes)
+        optional uint64 ThrottleMaxBytesPerSecond = 4;
 
-    // number of concurrent puts
-    optional uint32 AsyncUploadPutsInFlight = 5 [default = 1];
+        // number of concurrent puts
+        optional uint32 UploadPutsInFlight = 5 [default = 1];
+    }
+
+    message TSyncMode {
+        // data is written synchronously by agent
+    }
+
+    oneof Mode {
+        TAsyncMode AsyncMode = 2;
+        TSyncMode SyncMode = 3;
+    }
 }
 
 message TBlobDepotConfig {
@@ -49,4 +60,5 @@ message TBlobDepotConfig {
     optional NKikimrHive.TEvCreateTablet HiveParams = 6; // extra hive parameters
     optional uint64 TenantHiveId = 7;
     optional TS3BackendSettings S3BackendSettings = 8; // if set, then this tablet stores all its data in S3 (except for some cache/inflight)
+    optional string Name = 9;
 }

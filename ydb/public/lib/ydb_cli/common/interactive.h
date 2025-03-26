@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
 namespace NYdb {
 namespace NConsoleClient {

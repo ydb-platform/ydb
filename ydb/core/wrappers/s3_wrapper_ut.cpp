@@ -3,6 +3,7 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 #include <ydb/core/wrappers/s3_wrapper.h>
 
@@ -13,8 +14,6 @@
 
 #include <util/string/printf.h>
 
-#include <aws/core/Aws.h>
-
 using namespace NActors;
 using namespace NKikimr;
 using namespace NKikimr::NWrappers;
@@ -22,14 +21,12 @@ using namespace Aws::S3::Model;
 
 namespace {
 
-Aws::SDKOptions Options;
-
 Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
-    Aws::InitAPI(Options);
+    NKikimr::InitAwsAPI();
 }
 
 Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
-    Aws::ShutdownAPI(Options);
+    NKikimr::ShutdownAwsAPI();
 }
 
 }

@@ -1,6 +1,6 @@
 {% extends '//builtin/bag.ym' %}
 
-{% block current_version %}19.1.7{% endblock %}
+{% block current_version %}20.1.0{% endblock %}
 
 {% block current_url %}
 https://github.com/llvm/llvm-project/releases/download/llvmorg-{{self.version().strip()}}/compiler-rt-{{self.version().strip()}}.src.tar.xz
@@ -12,6 +12,7 @@ rm CMakeLists.txt
 cd lib/builtins
 rm CMakeLists.txt
 rm aarch64/lse.S
+sed -e 's|.*#include.*ptrauth.h.*||' -i crtbegin.c
 sed -e 's|.*#include.*sys/byteorder.h.*||' -i int_endianness.h
 sed -e 's|.*#include.*zircon/features.h.*||' -i cpu_model/aarch64/fmv/fuchsia.inc
 sed -e 's|.*#include.*zircon/features.h.*||' -i cpu_model/aarch64/lse_atomics/fuchsia.inc
@@ -87,7 +88,7 @@ def name(n):
 sset = frozenset([name(x) for x in special])
 scrt = frozenset(['crtbegin', 'crtend'])
 # x86_80_BIT_SOURCES
-x86_not_win = frozenset(['divxc3', 'extendxftf2', 'fixxfdi', 'fixxfti', 'fixunsxfdi', 'fixunsxfsi', 'fixunsxfti', 'floatdixf', 'floattixf', 'floatundixf', 'floatuntixf', 'mulxc3', 'powixf2', 'trunctfxf2'])
+x86_not_win = frozenset(['divxc3', 'extendhfxf2', 'extendxftf2', 'fixxfdi', 'fixxfti', 'fixunsxfdi', 'fixunsxfsi', 'fixunsxfti', 'floatdixf', 'floattixf', 'floatundixf', 'floatuntixf', 'mulxc3', 'powixf2', 'trunctfxf2', 'truncxfhf2'])
 other_not_emscripten = frozenset([
     'clear_cache',
     'emutls',
@@ -142,9 +143,9 @@ IF (ARCH_ARM64 OR ARCH_X86_64)
             # NB: sources that were commented out were added in llvm-20
             extendbfsf2.c
             truncdfbf2.c
-            # truncxfbf2.c
+            truncxfbf2.c
             truncsfbf2.c
-            # trunctfbf2.c
+            trunctfbf2.c
         )
     ENDIF()
 ENDIF()

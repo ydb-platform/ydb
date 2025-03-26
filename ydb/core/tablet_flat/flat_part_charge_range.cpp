@@ -5,7 +5,7 @@ namespace NKikimr::NTable {
 
 bool ChargeRange(IPages *env, const TCells key1, const TCells key2,
             const TRun &run, const TKeyCellDefaults &keyDefaults, TTagsRef tags,
-            ui64 items, ui64 bytes, bool includeHistory) noexcept
+            ui64 items, ui64 bytes, bool includeHistory)
 {
     bool ready = true;
     auto pos = run.LowerBound(key1);
@@ -57,7 +57,7 @@ bool ChargeRange(IPages *env, const TCells key1, const TCells key2,
 
 bool ChargeRangeReverse(IPages *env, const TCells key1, const TCells key2,
             const TRun &run, const TKeyCellDefaults &keyDefaults, TTagsRef tags,
-            ui64 items, ui64 bytes, bool includeHistory) noexcept
+            ui64 items, ui64 bytes, bool includeHistory)
 {
     bool ready = true;
     auto pos = run.LowerBoundReverse(key1);

@@ -76,6 +76,11 @@ inline TActorId MakeBlobStorageReplBrokerID() {
     return TActorId(0, TStringBuf(x, 12));
 }
 
+inline TActorId MakeBlobStorageSyncBrokerID() {
+    char x[12] = {'b', 's', 's', 'y', 'n', 'c', 'b', 'r', 'o', 'k', 'e', 'r'};
+    return TActorId(0, TStringBuf(x, 12));
+}
+
 inline TActorId MakeBlobStorageNodeWardenID(ui32 node) {
     char x[12] = {'b','s','n','o','d','e','c','n','t','r','l','r'};
     return TActorId(node, TStringBuf(x, 12));

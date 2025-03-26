@@ -70,5 +70,5 @@ namespace NYdb {
             TParsedTokenList Tokens;
         };
 
-    }
-}
+    } // namespace NConsoleClient
+} // namespace NYdb

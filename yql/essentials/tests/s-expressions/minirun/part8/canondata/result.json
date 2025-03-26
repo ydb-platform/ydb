@@ -578,9 +578,9 @@
     ],
     "test.test[Udf-PythonAvg--Debug]": [
         {
-            "checksum": "3c48becb08f825e3f64de7f909c3d4a7",
+            "checksum": "d90368f50cd675a0868fa9090bca1a54",
             "size": 989,
-            "uri": "https://{canondata_backend}/1600758/4167b447d68450d04af3e055febcc3a8168a477c/resource.tar.gz#test.test_Udf-PythonAvg--Debug_/opt.yql"
+            "uri": "https://{canondata_backend}/1936947/488d1ce7f16cf486fb2c04ce444c576f60aa7157/resource.tar.gz#test.test_Udf-PythonAvg--Debug_/opt.yql"
         }
     ],
     "test.test[Udf-PythonAvg--Results]": [

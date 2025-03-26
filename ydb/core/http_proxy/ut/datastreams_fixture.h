@@ -24,10 +24,10 @@
 #include <ydb/library/persqueue/tests/counters.h>
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
 
-#include <ydb-cpp-sdk/client/common_client/settings.h>
-#include <ydb-cpp-sdk/client/datastreams/datastreams.h>
-#include <ydb-cpp-sdk/client/discovery/discovery.h>
-#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/settings.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/datastreams/datastreams.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/discovery/discovery.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <ydb/services/ydb/ydb_common_ut.h>
 

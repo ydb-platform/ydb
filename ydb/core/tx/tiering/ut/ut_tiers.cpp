@@ -12,7 +12,7 @@
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/actors/core/av_bootstrapped.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 #include <ydb/services/metadata/manager/alter.h>
 #include <ydb/services/metadata/manager/common.h>
 #include <ydb/services/metadata/manager/table_record.h>
@@ -277,6 +277,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
+        appConfig.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
 
         Tests::TServerSettings serverSettings(msgbPort);
         serverSettings.Port = msgbPort;

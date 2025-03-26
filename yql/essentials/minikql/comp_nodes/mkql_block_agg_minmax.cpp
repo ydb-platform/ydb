@@ -385,6 +385,22 @@ public:
         *typedState = Packer_.Unpack(buffer.PopString(), Ctx_.HolderFactory).Release();
     }
 
+    void DeserializeAndUpdateState(void* state, NUdf::TInputBuffer& buffer) final {
+        auto currentState = static_cast<TGenericState*>(state);
+        TGenericState deserializedState = Packer_.Unpack(buffer.PopString(), Ctx_.HolderFactory).Release();
+
+        TBlockItem currentStateItem = Converter_->MakeItem(*currentState);
+        TBlockItem deserializedStateItem = Converter_->MakeItem(deserializedState);
+
+        bool stateChanged = false;
+        UpdateMinMax<IsMin>(*Compare_, currentStateItem, stateChanged, deserializedStateItem);
+
+        if (stateChanged) {
+            currentState->DeleteUnreferenced();
+            *currentState = Converter_->MakeValue(currentStateItem, Ctx_.HolderFactory);
+        }
+    }
+
     std::unique_ptr<IAggColumnBuilder> MakeResultBuilder(ui64 size) final {
         return std::make_unique<TGenericColumnBuilder>(size, Type_, Ctx_);
     }
@@ -627,6 +643,22 @@ public:
         auto typedState = static_cast<TGenericState*>(state);
 
         *typedState = std::move(MakeString(buffer.PopString()));
+    }
+
+    void DeserializeAndUpdateState(void* state, NUdf::TInputBuffer& buffer) final {
+        auto typedState = static_cast<TGenericState*>(state);
+        TMaybe<NUdf::TStringRef> currentState = typedState->AsStringRef();
+        TGenericState deserializedState = std::move(MakeString(buffer.PopString()));
+        NUdf::TStringRef deserializedStateRef = deserializedState.AsStringRef();
+
+        bool stateChanged = false;
+        UpdateMinMax<IsMin>(currentState, stateChanged, deserializedStateRef);
+
+        if (stateChanged) {
+            auto newState = MakeString(*currentState);
+            typedState->DeleteUnreferenced();
+            *typedState = std::move(newState);
+        }
     }
 
     std::unique_ptr<IAggColumnBuilder> MakeResultBuilder(ui64 size) final {
@@ -874,6 +906,28 @@ public:
         if constexpr (IsNullable) {
             buffer.PopNumber(typedState->IsValid);
         }
+    }
+
+    void DeserializeAndUpdateState(void* state, NUdf::TInputBuffer& buffer) final {
+        auto typedState = MakeStateWrapper<TStateType>(state);
+
+        buffer.PopNumber(typedState->Value);
+
+        if constexpr (IsNullable) {
+            buffer.PopNumber(typedState->IsValid);
+        }
+
+        TStateType deserializedState;
+        buffer.PopNumber(deserializedState.Value);
+
+        if constexpr (IsNullable) {
+            buffer.PopNumber(deserializedState.IsValid);
+            if (deserializedState.IsValid) {
+                typedState->Value = UpdateMinMax<IsMin>(typedState->Value, deserializedState.Value);
+                typedState->IsValid = deserializedState.IsValid;
+            }
+        }
+        typedState->Value = UpdateMinMax<IsMin>(typedState->Value, deserializedState.Value);
     }
 
     std::unique_ptr<IAggColumnBuilder> MakeResultBuilder(ui64 size) final {

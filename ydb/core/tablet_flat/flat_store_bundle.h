@@ -10,8 +10,8 @@ namespace NTable {
 
     class IBundle : public virtual TThrRefBase {
     public:
-        virtual const TLogoBlobID& BundleId() const = 0;
-        virtual ui64 BackingSize() const = 0;
+        virtual const TLogoBlobID& BundleId() const noexcept = 0;
+        virtual ui64 BackingSize() const noexcept = 0;
         virtual const NPageCollection::TPageCollection* Packet(ui32 room) const noexcept = 0;
 
         template<typename TContainer>
@@ -29,8 +29,8 @@ namespace NTable {
      */
     class IBorrowBundle : public virtual TThrRefBase {
     public:
-        virtual const TLogoBlobID& BundleId() const = 0;
-        virtual ui64 BackingSize() const = 0;
+        virtual const TLogoBlobID& BundleId() const noexcept = 0;
+        virtual ui64 BackingSize() const noexcept = 0;
 
         virtual void SaveAllBlobIdsTo(TVector<TLogoBlobID> &vec) const = 0;
     };

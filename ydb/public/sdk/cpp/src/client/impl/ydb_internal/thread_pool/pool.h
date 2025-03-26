@@ -1,12 +1,12 @@
 #pragma once
 
-#include <src/client/impl/ydb_internal/internal_header.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/internal_header.h>
 
 #include <util/thread/pool.h>
 
 #include <memory>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 inline std::unique_ptr<IThreadPool> CreateThreadPool(size_t threads) {
     std::unique_ptr<IThreadPool> queue;

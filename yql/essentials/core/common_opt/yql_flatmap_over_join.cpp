@@ -128,7 +128,7 @@ bool IsRequiredAndFilteredSide(const TExprNode::TPtr& joinTree, const TJoinLabel
 TExprNode::TPtr ApplyJoinPredicate(const TExprNode::TPtr& predicate, const TExprNode::TPtr& filterInput,
     const TExprNode::TPtr& args, const TJoinLabels& labels, const THashMap<ui32, THashMap<TString, TString>>& aliasedKeys,
     const TMap<TStringBuf, TVector<TStringBuf>>& renameMap, bool onlyKeys,
-    ui32 firstCandidate, ui32 inputIndex, bool ordered, bool substituteWithNulls, TExprContext& ctx
+    ui32 firstCandidate, ui32 inputIndex, bool ordered, bool substituteWithNulls, bool forceOptional, TExprContext& ctx
 ) {
     return ctx.Builder(predicate->Pos())
     .Callable(ordered ? "OrderedFilter" : "Filter")
@@ -157,7 +157,8 @@ TExprNode::TPtr ApplyJoinPredicate(const TExprNode::TPtr& predicate, const TExpr
                             auto memberName = label.MemberName(part1, part2);
                             auto memberType = label.FindColumn(part1, part2);
                             Y_ENSURE(memberType);
-                            const TTypeAnnotationNode* optMemberType = ((*memberType)->IsOptionalOrNull()) ? *memberType : ctx.MakeType<TOptionalExprType>(*memberType);
+                            const bool memberIsOptional = (*memberType)->IsOptionalOrNull();
+                            const TTypeAnnotationNode* optMemberType = memberIsOptional ? *memberType : ctx.MakeType<TOptionalExprType>(*memberType);
 
                             if (auto renamed = renameMap.FindPtr(targetColumns[0])) {
                                 if (renamed->empty()) {
@@ -177,6 +178,16 @@ TExprNode::TPtr ApplyJoinPredicate(const TExprNode::TPtr& predicate, const TExpr
                                         .Atom(0, targetColumn)
                                         .Callable(1, "Nothing")
                                             .Add(0, typeNode)
+                                        .Seal()
+                                    .Seal();
+                                } else if (forceOptional && !memberIsOptional) {
+                                    parent.List(index++)
+                                        .Atom(0, targetColumn)
+                                        .Callable(1, "Just")
+                                            .Callable(0, "Member")
+                                                .Arg(0, "row")
+                                                .Atom(1, memberName)
+                                            .Seal()
                                         .Seal()
                                     .Seal();
                                 } else {
@@ -286,7 +297,7 @@ TExprNode::TPtr SingleInputPredicatePushdownOverEquiJoin(TExprNode::TPtr equiJoi
         // then apply predicate
         newInput = ApplyJoinPredicate(
             predicate, /*filterInput=*/newInput, args, labels, aliasedKeys, renameMap, onlyKeys,
-            firstCandidate, inputIndex, ordered, /*substituteWithNulls=*/false, ctx
+            firstCandidate, inputIndex, ordered, /*substituteWithNulls=*/false, /*forceOptional=*/false, ctx
         );
 
         // then return reassembled join
@@ -415,7 +426,7 @@ TExprNode::TPtr FilterPushdownOverJoinOptionalSide(TExprNode::TPtr equiJoin, TEx
     // then apply predicate
     auto filteredInput = ApplyJoinPredicate(
         predicate, /*filterInput=*/rightSideInput, args, labels, {}, renameMap, onlyKeys,
-        inputIndex, inputIndex, ordered, /*substituteWithNulls=*/false, ctx
+        inputIndex, inputIndex, ordered, /*substituteWithNulls=*/false, /*forceOptional=*/true, ctx
     );
 
     // then create unionall of two joins.
@@ -469,7 +480,7 @@ TExprNode::TPtr FilterPushdownOverJoinOptionalSide(TExprNode::TPtr equiJoin, TEx
     //extend left only join with nulls as left part and apply same predicate
     auto nullPredicateFilter = ApplyJoinPredicate(
         predicate, /*filterInput=*/leftOnlyJoin, args, labels, {}, renameMap, onlyKeys,
-        inputIndex, inputIndex, ordered, /*substituteWithNulls=*/true, ctx
+        inputIndex, inputIndex, ordered, /*substituteWithNulls=*/true, /*forceOptional=*/false, ctx
     );
 
     //then unite the results;

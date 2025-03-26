@@ -37,6 +37,8 @@ public:
     void OnSummaryDouble(TInstant time, ISummaryDoubleSnapshotPtr snapshot) override;
     void OnLogHistogram(TInstant, TLogHistogramSnapshotPtr) override;
 
+    void OnMemOnly(bool isMemOnly) override;
+
 protected:
     using TPooledStr = TStringPoolBuilder::TValue;
 
@@ -80,6 +82,7 @@ protected:
         EMetricType MetricType = EMetricType::UNKNOWN;
         TPooledLabels Labels;
         TMetricTimeSeries TimeSeries;
+        bool IsMemOnly;
     };
 
 protected:

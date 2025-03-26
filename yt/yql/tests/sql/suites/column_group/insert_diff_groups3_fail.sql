@@ -1,4 +1,4 @@
-/* custom error:Insert with "column_groups" to existing table is not allowed*/
+/* custom error:Insert with different "column_groups" to existing table is not allowed*/
 USE plato;
 
 pragma yt.ColumnGroupMode="perusage";

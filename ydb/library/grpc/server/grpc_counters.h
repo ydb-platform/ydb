@@ -13,7 +13,7 @@ struct ICounterBlock : public TThrRefBase {
     virtual void CountResourceExhausted() = 0;
     virtual void CountRequestBytes(ui32 requestSize) = 0;
     virtual void CountResponseBytes(ui32 responseSize) = 0;
-    virtual void StartProcessing(ui32 requestSize) = 0;
+    virtual void StartProcessing(ui32 requestSize, TInstant deadline) = 0;
     virtual void FinishProcessing(ui32 requestSize, ui32 responseSize, bool ok, ui32 status, TDuration requestDuration) = 0;
     virtual void CountRequestsWithoutDatabase() {}
     virtual void CountRequestsWithoutToken() {}
@@ -90,7 +90,7 @@ public:
         *ResponseBytes += responseSize;
     }
 
-    void StartProcessing(ui32 requestSize) override {
+    void StartProcessing(ui32 requestSize, TInstant /*deadline*/) override {
         TotalCounter->Inc();
         InflyCounter->Inc();
         *RequestBytes += requestSize;

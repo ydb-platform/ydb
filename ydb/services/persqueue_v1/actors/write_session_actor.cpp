@@ -13,7 +13,7 @@
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/library/actors/core/log.h>
 #include <google/protobuf/util/time_util.h>

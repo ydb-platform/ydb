@@ -148,7 +148,7 @@ bool TCdcStreamHeartbeatManager::Load(NIceDb::TNiceDb& db) {
             rowset.GetValue<Schema::CdcStreamHeartbeats::LastTxId>()
         );
 
-        Y_ABORT_UNLESS(!CdcStreams.contains(streamPathId));
+        Y_ENSURE(!CdcStreams.contains(streamPathId));
         CdcStreams.emplace(streamPathId, THeartbeatInfo{
             .TablePathId = tablePathId,
             .Interval = interval,
@@ -170,7 +170,7 @@ void TCdcStreamHeartbeatManager::AddCdcStream(NTable::TDatabase& db,
 {
     const auto last = TRowVersion::Min();
 
-    Y_ABORT_UNLESS(!CdcStreams.contains(streamPathId));
+    Y_ENSURE(!CdcStreams.contains(streamPathId));
     auto res = CdcStreams.emplace(streamPathId, THeartbeatInfo{
         .TablePathId = tablePathId,
         .Interval = heartbeatInterval,
@@ -239,7 +239,7 @@ THashMap<TPathId, TCdcStreamHeartbeatManager::THeartbeatInfo> TCdcStreamHeartbea
         }
 
         auto it = CdcStreams.find(top.StreamPathId);
-        Y_ABORT_UNLESS(it != CdcStreams.end());
+        Y_ENSURE(it != CdcStreams.end());
 
         const auto& streamPathId = it->first;
         auto& info = it->second;

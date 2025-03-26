@@ -5,8 +5,8 @@
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/library/table_creator/table_creator.h>
 #include <ydb/services/ydb/ydb_common_ut.h>
-#include <ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <ydb/library/actors/interconnect/interconnect_impl.h>
 

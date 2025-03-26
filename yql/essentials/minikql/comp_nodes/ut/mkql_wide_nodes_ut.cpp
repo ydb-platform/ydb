@@ -3,7 +3,7 @@
 
 namespace NKikimr {
 namespace NMiniKQL {
-#if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 18u
+
 Y_UNIT_TEST_SUITE(TMiniKQLWideNodesTest) {
     // TDOD: fixme
 #if 0
@@ -119,6 +119,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLWideNodesTest) {
     }
 
 }
-#endif
+
 }
 }

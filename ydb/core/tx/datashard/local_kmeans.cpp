@@ -114,7 +114,6 @@ protected:
         ui64 P = 0;
         ui64 I = 0;
 
-        bool operator==(const TProbability&) const noexcept = default;
         auto operator<=>(const TProbability&) const noexcept = default;
     };
 
@@ -189,7 +188,7 @@ public:
         NextTypes = MakeUploadTypes(table, UploadState, embedding, data);
     }
 
-    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) noexcept final
+    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
     {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
         LOG_D("Prepare " << Debug());
@@ -198,7 +197,7 @@ public:
         return {EScan::Feed, {}};
     }
 
-    TAutoPtr<IDestructable> Finish(EAbort abort) noexcept final
+    TAutoPtr<IDestructable> Finish(EAbort abort) final
     {
         LOG_D("Finish " << Debug());
 
@@ -230,7 +229,7 @@ public:
         return nullptr;
     }
 
-    void Describe(IOutputStream& out) const noexcept final
+    void Describe(IOutputStream& out) const final
     {
         out << Debug();
     }
@@ -243,7 +242,7 @@ public:
             << " ReadBuf size: " << ReadBuf.Size() << " WriteBuf size: " << WriteBuf.Size() << " ";
     }
 
-    EScan PageFault() noexcept final
+    EScan PageFault() final
     {
         LOG_T("PageFault " << Debug());
 
@@ -282,10 +281,10 @@ protected:
             << " Uploader: " << Uploader.ToString() << " ev->Sender: " << ev->Sender.ToString());
 
         if (Uploader) {
-            Y_VERIFY_S(Uploader == ev->Sender, "Mismatch Uploader: " << Uploader.ToString() << " ev->Sender: "
+            Y_ENSURE(Uploader == ev->Sender, "Mismatch Uploader: " << Uploader.ToString() << " ev->Sender: "
                                                                      << ev->Sender.ToString() << Debug());
         } else {
-            Y_ABORT_UNLESS(Driver == nullptr);
+            Y_ENSURE(Driver == nullptr);
             return;
         }
 
@@ -307,7 +306,7 @@ protected:
         if (RetryCount < Limits.MaxUploadRowsRetryCount && UploadStatus.IsRetriable()) {
             LOG_N("Got retriable error, " << Debug() << UploadStatus.ToString());
 
-            ctx.Schedule(Limits.GetTimeoutBackouff(RetryCount), new TEvents::TEvWakeup());
+            ctx.Schedule(Limits.GetTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
             return;
         }
 
@@ -363,7 +362,7 @@ protected:
             pk[0] = TCell::Make(Parent);
             pk[1] = TCell::Make(Child + pos);
             data[0] = TCell{row};
-            WriteBuf.AddRow({}, TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
+            WriteBuf.AddRow(TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
             ++pos;
         }
         Upload(false);
@@ -390,7 +389,7 @@ public:
         LOG_D("Create " << Debug());
     }
 
-    EScan Seek(TLead& lead, ui64 seq) noexcept final
+    EScan Seek(TLead& lead, ui64 seq) final
     {
         LOG_D("Seek " << Debug());
         if (State == UploadState) {
@@ -442,7 +441,7 @@ public:
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) noexcept final
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
     {
         LOG_T("Feed " << Debug());
         ++ReadRows;
@@ -545,7 +544,7 @@ private:
         return true;
     }
 
-    EScan FeedSample(const TRow& row) noexcept
+    EScan FeedSample(const TRow& row)
     {
         Y_ASSERT(row.Size() == 1);
         const auto embedding = row.Get(0).AsRef();
@@ -572,7 +571,7 @@ private:
         return MaxProbability != 0 ? EScan::Feed : EScan::Reset;
     }
 
-    EScan FeedKMeans(const TRow& row) noexcept
+    EScan FeedKMeans(const TRow& row)
     {
         Y_ASSERT(row.Size() == 1);
         const ui32 pos = FeedEmbedding(*this, Clusters, row, 0);
@@ -580,7 +579,7 @@ private:
         return EScan::Feed;
     }
 
-    EScan FeedUploadMain2Build(TArrayRef<const TCell> key, const TRow& row) noexcept
+    EScan FeedUploadMain2Build(TArrayRef<const TCell> key, const TRow& row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos > K) {
@@ -590,7 +589,7 @@ private:
         return FeedUpload();
     }
 
-    EScan FeedUploadMain2Posting(TArrayRef<const TCell> key, const TRow& row) noexcept
+    EScan FeedUploadMain2Posting(TArrayRef<const TCell> key, const TRow& row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos > K) {
@@ -600,7 +599,7 @@ private:
         return FeedUpload();
     }
 
-    EScan FeedUploadBuild2Build(TArrayRef<const TCell> key, const TRow& row) noexcept
+    EScan FeedUploadBuild2Build(TArrayRef<const TCell> key, const TRow& row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos > K) {
@@ -610,7 +609,7 @@ private:
         return FeedUpload();
     }
 
-    EScan FeedUploadBuild2Posting(TArrayRef<const TCell> key, const TRow& row) noexcept
+    EScan FeedUploadBuild2Posting(TArrayRef<const TCell> key, const TRow& row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         if (pos > K) {
@@ -657,6 +656,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
         rowVersion = GetMvccTxVersion(EMvccTxMode::ReadOnly);
     }
 
+    LOG_N("Starting TLocalKMeansScan " << request.ShortDebugString()
+        << " row version " << rowVersion);
+
     // Note: it's very unlikely that we have volatile txs before this snapshot
     if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
         VolatileTxManager.AttachWaitingSnapshotEvent(rowVersion, std::unique_ptr<IEventHandle>(ev.Release()));
@@ -700,7 +702,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
         badRequest(TStringBuilder() << "Unknown table id: " << pathId.LocalPathId);
         return;
     }
-    Y_ABORT_UNLESS(*userTableIt);
+    Y_ENSURE(*userTableIt);
     const auto& userTable = **userTableIt;
 
     if (const auto* recCard = ScanManager.Get(id)) {

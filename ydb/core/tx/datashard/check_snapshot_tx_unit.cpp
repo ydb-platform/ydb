@@ -65,11 +65,11 @@ public:
     }
 
     EExecutionStatus Execute(TOperation::TPtr op, TTransactionContext&, const TActorContext& ctx) override {
-        Y_ABORT_UNLESS(op->IsSnapshotTx());
-        Y_ABORT_UNLESS(!op->IsAborted());
+        Y_ENSURE(op->IsSnapshotTx());
+        Y_ENSURE(!op->IsAborted());
 
         TActiveTransaction* tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         if (CheckRejectDataTx(op, ctx)) {
             op->Abort(EExecutionUnitKind::FinishPropose);

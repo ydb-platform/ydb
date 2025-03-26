@@ -1,6 +1,7 @@
+#include "common_ut.h"
 #include "service.h"
 #include "transfer_writer.h"
-#include "common_ut.h"
+#include "worker.h"
 
 #include <ydb/core/fq/libs/row_dispatcher/purecalc_compilation/compile_service.h>
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
@@ -47,7 +48,9 @@ Y_UNIT_TEST_SUITE(TransferWriter) {
 
         auto compiler = env.GetRuntime().Register(NFq::NRowDispatcher::CreatePurecalcCompileService({}, MakeIntrusive<NMonitoring::TDynamicCounters>()));
 
-        auto writer = env.GetRuntime().Register(CreateTransferWriter(lambda, tablePathId, compiler));
+        NKikimrReplication::TBatchingSettings batchingSettings;
+        batchingSettings.SetFlushIntervalMilliSeconds(1);
+        auto writer = env.GetRuntime().Register(CreateTransferWriter(lambda, tablePathId, compiler, batchingSettings));
         env.Send<TEvWorker::TEvHandshake>(writer, new TEvWorker::TEvHandshake());
 
         env.Send<TEvWorker::TEvPoll>(writer, new TEvWorker::TEvData(0, "TestSource", {

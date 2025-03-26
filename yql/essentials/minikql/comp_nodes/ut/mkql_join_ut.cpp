@@ -116,7 +116,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLCommonJoinCoreTupleTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 }
-#if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 18u
+
 Y_UNIT_TEST_SUITE(TMiniKQLCommonJoinCoreWideTest) {
     Y_UNIT_TEST_LLVM(Inner) {
         TSetup<LLVM> setup;
@@ -323,7 +323,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLCommonJoinCoreWideTest) {
         UNIT_ASSERT(!iterator.Next(item));
     }
 }
-#endif
+
 }
 }
 

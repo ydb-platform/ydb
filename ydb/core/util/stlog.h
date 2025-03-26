@@ -104,6 +104,12 @@ namespace NKikimr::NStLog {
     template<typename T> struct TIsIterable<NProtoBuf::RepeatedField<T>> { static constexpr bool value = true; };
     template<typename T> struct TIsIterable<NProtoBuf::RepeatedPtrField<T>> { static constexpr bool value = true; };
 
+    template<typename T> struct TIsIterableKV { static constexpr bool value = false; };
+    template<typename... Ts> struct TIsIterableKV<THashMap<Ts...>> { static constexpr bool value = true; };
+    template<typename... Ts> struct TIsIterableKV<TMap<Ts...>> { static constexpr bool value = true; };
+    template<typename... Ts> struct TIsIterableKV<std::map<Ts...>> { static constexpr bool value = true; };
+    template<typename... Ts> struct TIsIterableKV<std::unordered_map<Ts...>> { static constexpr bool value = true; };
+
     template<typename T> struct TIsIdWrapper { static constexpr bool value = false; };
     template<typename TType, typename TTag> struct TIsIdWrapper<TIdWrapper<TType, TTag>> { static constexpr bool value = true; };
 
@@ -180,6 +186,19 @@ namespace NKikimr::NStLog {
                     OutputParam(s, *begin);
                 }
                 s << "]";
+            } else if constexpr (TIsIterableKV<Tx>::value) {
+                s << '{';
+                for (bool first = true; const auto& [k, v] : value) {
+                    if (first) {
+                        first = false;
+                    } else {
+                        s << ' ';
+                    }
+                    OutputParam(s, k);
+                    s << ':';
+                    OutputParam(s, v);
+                }
+                s << '}';
             } else {
                 s << value;
             }
@@ -210,6 +229,17 @@ namespace NKikimr::NStLog {
                 auto end = std::end(value);
                 for (; begin != end; ++begin) {
                     OutputParam(json, *begin);
+                }
+                json.CloseArray();
+            } else if constexpr (TIsIterableKV<Tx>::value) {
+                json.OpenArray();
+                for (const auto& [k, v] : value) {
+                    json.OpenMap();
+                    json.WriteKey("key");
+                    OutputParam(json, k);
+                    json.WriteKey("value");
+                    OutputParam(json, v);
+                    json.CloseMap();
                 }
                 json.CloseArray();
             } else if constexpr (TIsIdWrapper<Tx>::value){

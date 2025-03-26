@@ -1,4 +1,4 @@
-#include <ydb-cpp-sdk/client/iam/iam.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
 
 #include "common/iam.h"
 
@@ -10,7 +10,7 @@
 
 using namespace yandex::cloud::iam::v1;
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 class TIAMCredentialsProvider : public ICredentialsProvider {
 public:

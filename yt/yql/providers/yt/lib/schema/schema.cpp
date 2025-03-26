@@ -7,6 +7,8 @@
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
 
+#include <yt/cpp/mapreduce/interface/serialize.h>
+
 #include <library/cpp/yson/node/node_io.h>
 #include <library/cpp/yson/node/node_builder.h>
 
@@ -1087,6 +1089,27 @@ TString GetTypeV3String(const TTypeAnnotationNode& type, ui64 nativeTypeCompatib
     NYT::TNodeBuilder nodeBuilder(&typeNode);
     NCommon::WriteTypeToYson(nodeBuilder, &type);
     return NYT::NodeToCanonicalYsonString(RowSpecYqlTypeToYtNativeType(typeNode, nativeTypeCompatibility));
+}
+
+TString GetColumnGroupSpecFromSchema(const NYT::TNode& schema) {
+    NYT::TTableSchema ytSchema;
+    NYT::Deserialize(ytSchema, schema);
+    std::map<TString, std::set<TString>> groups;
+    for (const auto& col: ytSchema.Columns()) {
+        if (auto grp = col.Group()) {
+            groups[*grp].insert(col.Name());
+        }
+    }
+    if (!groups.empty()) {
+        auto groupSpec = NYT::TNode();
+        for (auto& grp: groups) {
+            auto cols = NYT::TNode::CreateList();
+            std::for_each(grp.second.cbegin(), grp.second.cend(), [&cols](const auto& name) { cols.Add(name); });
+            groupSpec[grp.first] = std::move(cols);
+        }
+        return NYT::NodeToCanonicalYsonString(groupSpec, NYson::EYsonFormat::Text);
+    }
+    return {};
 }
 
 } // NYql

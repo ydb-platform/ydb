@@ -28,7 +28,7 @@ public:
     TBuildSlicesTask(NEvWrite::TWriteData&& writeData, const std::shared_ptr<arrow::RecordBatch>& batch,
         const TWritingContext& context)
         : WriteData(std::move(writeData))
-        , TabletId(WriteData.GetWriteMeta().GetTableId())
+        , TabletId(context.GetTabletId())
         , OriginalBatch(batch)
         , Context(context) {
         WriteData.MutableWriteMeta().OnStage(NEvWrite::EWriteStage::BuildSlices);

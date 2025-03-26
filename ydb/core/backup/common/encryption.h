@@ -199,6 +199,8 @@ public:
     TEncryptedFileDeserializer(TEncryptionKey key, TEncryptionIV expectedIV); // Decrypt file with key. Check that IV in header is equal to expectedIV
     ~TEncryptedFileDeserializer();
 
+    TEncryptedFileDeserializer& operator=(TEncryptedFileDeserializer&&);
+
     // Adds buffer with input data.
     void AddData(TBuffer data, bool last);
 
@@ -223,7 +225,7 @@ public:
     size_t GetProcessedInputBytes() const;
 
     // Helper that deserializes the whole file at one time
-    static std::pair<TBuffer, TEncryptionIV> DecryptFile(TEncryptionKey key, TBuffer data);
+    static std::pair<TBuffer, TEncryptionIV> DecryptFullFile(TEncryptionKey key, TBuffer data);
     static TBuffer DecryptFullFile(TEncryptionKey key, TEncryptionIV expectedIV, TBuffer data);
 
 private:

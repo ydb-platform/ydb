@@ -4,6 +4,7 @@
 #include <ydb/core/formats/arrow/program/assign_internal.h>
 #include <ydb/core/formats/arrow/program/filter.h>
 #include <ydb/core/formats/arrow/program/projection.h>
+#include <ydb/core/formats/arrow/program/stream_logic.h>
 #include <ydb/core/tx/columnshard/engines/scheme/abstract/index_info.h>
 
 #include <ydb/library/arrow_kernels/operations.h>
@@ -274,7 +275,6 @@ TConclusionStatus TProgramBuilder::ReadAssign(
 
     switch (assign.GetExpressionCase()) {
         case TId::kFunction: {
-
             std::shared_ptr<IKernelLogic> kernelLogic;
             if (assign.GetFunction().GetKernelName()) {
                 kernelLogic.reset(IKernelLogic::TFactory::Construct(assign.GetFunction().GetKernelName()));
@@ -285,14 +285,27 @@ TConclusionStatus TProgramBuilder::ReadAssign(
             if (function.IsFail()) {
                 return function;
             }
-            auto processor = TCalculationProcessor::Build(std::move(arguments), columnName.GetColumnId(), function.DetachResult(), kernelLogic);
-            if (processor.IsFail()) {
-                return processor;
+
+            if (assign.GetFunction().HasYqlOperationId() && assign.GetFunction().GetYqlOperationId() ==
+                (ui32)NYql::TKernelRequestBuilder::EBinaryOp::And) {
+                auto processor =
+                    std::make_shared<TStreamLogicProcessor>(std::move(arguments), columnName.GetColumnId(), NKernels::EOperation::And);
+                Builder.Add(processor);
+            } else if (assign.GetFunction().HasYqlOperationId() &&
+                       assign.GetFunction().GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::Or) {
+                auto processor =
+                    std::make_shared<TStreamLogicProcessor>(std::move(arguments), columnName.GetColumnId(), NKernels::EOperation::Or);
+                Builder.Add(processor);
+            } else {
+                auto processor = TCalculationProcessor::Build(std::move(arguments), columnName.GetColumnId(), function.DetachResult(), kernelLogic);
+                if (processor.IsFail()) {
+                    return processor;
+                }
+                if (assign.GetFunction().HasYqlOperationId()) {
+                    processor.GetResult()->SetYqlOperationId(assign.GetFunction().GetYqlOperationId());
+                }
+                Builder.Add(processor.DetachResult());
             }
-            if (assign.GetFunction().HasYqlOperationId()) {
-                processor.GetResult()->SetYqlOperationId(assign.GetFunction().GetYqlOperationId());
-            }
-            Builder.Add(processor.DetachResult());
             break;
         }
         case TId::kConstant: {

@@ -690,6 +690,19 @@ protected:
             .NoArgument()
             .SetFlag(&RunnerOptions.YdbSettings.SameSession);
 
+        options.AddLongOption("retry", "Retry queries which failed with specific status")
+            .RequiredArgument("status")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                const TString statusName(option->CurValOrDef());
+                Ydb::StatusIds::StatusCode status;
+                if (!Ydb::StatusIds::StatusCode_Parse(statusName, &status)) {
+                    ythrow yexception() << "Invalid status to retry: " << statusName << ", should be one of Ydb::StatusIds::StatusCode";
+                }
+                if (!RunnerOptions.RetryableStatuses.emplace(status).second) {
+                    ythrow yexception() << "Got duplicated status to retry: " << statusName;
+                }
+            });
+
         // Cluster settings
 
         options.AddLongOption('N', "node-count", "Number of nodes to create")

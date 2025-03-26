@@ -309,7 +309,13 @@ template<typename TMmap = TSystemMmap>
 void* GetAlignedPage(ui64 size);
 
 template<typename TMmap = TSystemMmap>
+void* GetAlignedPage();
+
+template<typename TMmap = TSystemMmap>
 void ReleaseAlignedPage(void* mem, ui64 size);
+
+template<typename TMmap = TSystemMmap>
+void ReleaseAlignedPage(void* mem);
 
 template<typename TMmap = TSystemMmap>
 i64 GetTotalMmapedBytes();

@@ -488,7 +488,7 @@ int TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkload
         Cout << "Summary table saved in CSV format to " << CsvReportFileName << Endl;
     }
 
-    return queriesWithSomeFails ? EXIT_FAILURE : EXIT_SUCCESS;
+    return (queriesWithSomeFails || queriesWithDiff) ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
 void TWorkloadCommandBenchmark::PrintResult(const BenchmarkUtils::TQueryBenchmarkResult& res, IOutputStream& out, const std::string& expected) const {
@@ -515,12 +515,12 @@ void TWorkloadCommandBenchmark::SavePlans(const BenchmarkUtils::TQueryBenchmarkR
     if (res.GetQueryPlan()) {
         {
             TFileOutput out(planFName + "table");
-            TQueryPlanPrinter queryPlanPrinter(EDataFormat::PrettyTable, true, out, 120);
+            TQueryPlanPrinter queryPlanPrinter(EDataFormat::PrettyTable, true, out);
             queryPlanPrinter.Print(res.GetQueryPlan());
         }
         {
             TFileOutput out(planFName + "json");
-            TQueryPlanPrinter queryPlanPrinter(EDataFormat::JsonBase64, true, out, 120);
+            TQueryPlanPrinter queryPlanPrinter(EDataFormat::JsonBase64, true, out);
             queryPlanPrinter.Print(res.GetQueryPlan());
         }
         {

@@ -1107,19 +1107,20 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
             // Check admin restrictions and special cases
             if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterLogin) {
-                // User management is allowed to any user or (if configured so) to admins only
-                if (checkAdmin && !isAdmin) {
-                    const auto errString = MakeAccessDeniedError(ctx, "attempt to manage user");
-                    auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
-                    ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
-                    return false;
-                }
-                allowACLBypass = checkAdmin && isAdmin;
-
+                // EnableStrictUserManagement == false:
+                //   - any user can manage users|groups, but require AlterSchema right
+                //
+                // EnableStrictUserManagement == true:
+                //   - user can change password for himself, and does not require AlterSchema right
+                //   - only admins can manage users|groups, and does not require AlterSchema right
+                //   - database admin can't change other database admins
+                //   - database admin can't change database admin group
+                //   - database admin can't change database owner
+                //
                 const auto& alterLogin = modifyScheme.GetAlterLogin();
 
-                // Any user can change their own password (but nothing else)
-                auto isUserChangesOwnPassword = [](const auto& alterLogin, const NACLib::TSID& subjectSid) {
+                // User changes password for himself (and only password)
+                bool isUserChangesOwnPassword = [](const auto& alterLogin, const NACLib::TSID& subjectSid) {
                     if (alterLogin.GetAlterCase() == NKikimrSchemeOp::TAlterLogin::kModifyUser) {
                         const auto& targetUser = alterLogin.GetModifyUser();
                         if (targetUser.HasPassword() && !targetUser.HasCanLogin()) {
@@ -1127,11 +1128,21 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                         }
                     }
                     return false;
-                };
-                allowACLBypass = allowACLBypass || isUserChangesOwnPassword(alterLogin, UserToken->GetUserSID());
+                }(alterLogin, UserToken->GetUserSID());
+
+                bool allowManageUser = !checkAdmin || isAdmin || isUserChangesOwnPassword;
+
+                if (!allowManageUser) {
+                    const auto errString = MakeAccessDeniedError(ctx, "attempt to manage user");
+                    auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
+                    ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
+                    return false;
+                }
+
+                allowACLBypass = (checkAdmin && isAdmin) || isUserChangesOwnPassword;
 
                 // Database admin is not allowed to manage group of database admins (its the privilege of cluster admins).
-                if (IsDatabaseAdministrator) {
+                if (checkAdmin && IsDatabaseAdministrator) {
                     TString group;
                     switch (alterLogin.GetAlterCase()) {
                         case NKikimrSchemeOp::TAlterLogin::kAddGroupMembership:

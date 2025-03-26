@@ -76,6 +76,12 @@ enum class EBlockOutputMode {
     Force    /* "force" */,
 };
 
+enum class ERuntimeClusterSelectionMode {
+    Disable  /* "disable" */,
+    Auto     /* "auto" */,
+    Force    /* "force" */,
+};
+
 struct TYtSettings {
     using TConstPtr = std::shared_ptr<const TYtSettings>;
 
@@ -115,6 +121,8 @@ struct TYtSettings {
     NCommon::TConfSetting<EInferSchemaMode, false> InferSchemaMode;
     NCommon::TConfSetting<ui32, false> BatchListFolderConcurrency;
     NCommon::TConfSetting<bool, false> ForceTmpSecurity;
+    NCommon::TConfSetting<ERuntimeClusterSelectionMode, false> RuntimeClusterSelection;
+    NCommon::TConfSetting<TString, false> DefaultRuntimeCluster;
 
     // Job runtime
     NCommon::TConfSetting<TString, true> Pool;
@@ -203,6 +211,7 @@ struct TYtSettings {
     NCommon::TConfSetting<bool, true> _UseKeyBoundApi;
     NCommon::TConfSetting<TString, true> NetworkProject;
     NCommon::TConfSetting<bool, true> _EnableYtPartitioning;
+    NCommon::TConfSetting<bool, false> EnableDynamicStoreReadInDQ;
     NCommon::TConfSetting<bool, true> ForceJobSizeAdjuster;
     NCommon::TConfSetting<bool, true> EnforceJobUtc;
     NCommon::TConfSetting<bool, true> UseRPCReaderInDQ;
@@ -211,6 +220,8 @@ struct TYtSettings {
     NCommon::TConfSetting<TSet<TString>, true> BlockReaderSupportedTypes;
     NCommon::TConfSetting<TSet<NUdf::EDataSlot>, true> BlockReaderSupportedDataTypes;
     NCommon::TConfSetting<TString, true> _BinaryCacheFolder;
+    NCommon::TConfSetting<TString, true> RuntimeCluster;
+    NCommon::TConfSetting<bool, true> _AllowRemoteClusterInput;
 
     // Optimizers
     NCommon::TConfSetting<bool, true> _EnableDq;
@@ -303,6 +314,7 @@ struct TYtSettings {
     NCommon::TConfSetting<bool, false> _EnableYtDqProcessWriteConstraints;
     NCommon::TConfSetting<bool, false> CompactForDistinct;
     NCommon::TConfSetting<bool, false> DropUnusedKeysFromKeyFilter;
+    NCommon::TConfSetting<bool, false> ReportEquiJoinStats;
 };
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings);

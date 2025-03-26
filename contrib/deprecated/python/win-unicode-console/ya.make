@@ -6,10 +6,6 @@ VERSION(0.5)
 
 LICENSE(MIT)
 
-PEERDIR(
-    library/python/symbols/win_unicode_console
-)
-
 NO_LINT()
 
 NO_CHECK_IMPORTS(

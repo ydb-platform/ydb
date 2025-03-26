@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(6.1.1)
+VERSION(7.0.0)
 
 LICENSE(BSD-3-Clause)
 
@@ -27,7 +27,7 @@ NO_CHECK_IMPORTS(
 NO_UTIL()
 
 CFLAGS(
-    -DPSUTIL_VERSION=611
+    -DPSUTIL_VERSION=700
 )
 
 SRCS(
@@ -125,7 +125,6 @@ PY_SRCS(
     TOP_LEVEL
     psutil/__init__.py
     psutil/_common.py
-    psutil/_compat.py
     psutil/_psaix.py
     psutil/_psbsd.py
     psutil/_pslinux.py

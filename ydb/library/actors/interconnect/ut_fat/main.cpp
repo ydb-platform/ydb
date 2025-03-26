@@ -9,6 +9,7 @@
 
 #include <library/cpp/testing/unittest/tests_data.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <library/cpp/digest/crc32c/crc32c.h>
 
 #include <util/network/sock.h>
 #include <util/network/poller.h>
@@ -21,11 +22,13 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
     class TSenderActor: public TSenderBaseActor {
         TDeque<ui64> InFly;
         ui16 SendFlags;
+        bool UseRope;
 
     public:
-        TSenderActor(const TActorId& recipientActorId, ui16 sendFlags)
+        TSenderActor(const TActorId& recipientActorId, ui16 sendFlags, bool useRope)
             : TSenderBaseActor(recipientActorId, 32)
             , SendFlags(sendFlags)
+            , UseRope(useRope)
         {
         }
 
@@ -36,8 +39,19 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
         void SendMessage(const TActorContext& ctx) override {
             const ui32 flags = IEventHandle::MakeFlags(0, SendFlags);
             const ui64 cookie = SequenceNumber;
-            const TString payload('@', RandomNumber<size_t>(65536) + 4096);
-            ctx.Send(RecipientActorId, new TEvTest(SequenceNumber, payload), flags, cookie);
+
+            const TString payload(RandomNumber<size_t>(65536) + 4096, '@');
+
+            auto ev = new TEvTest(SequenceNumber);
+            ev->Record.SetDataCrc(Crc32c(payload.data(), payload.size()));
+
+            if (UseRope) {
+                ev->Record.SetPayloadId(ev->AddPayload(TRope(payload)));
+            } else {
+                ev->Record.SetPayload(payload);
+            }
+
+            ctx.Send(RecipientActorId, ev, flags, cookie);
             InFly.push_back(SequenceNumber);
             ++InFlySize;
             ++SequenceNumber;
@@ -90,6 +104,14 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
             Y_ABORT_UNLESS(m.HasSequenceNumber());
             Y_ABORT_UNLESS(m.GetSequenceNumber() >= ReceivedCount, "got #%" PRIu64 " expected at least #%" PRIu64,
                      m.GetSequenceNumber(), ReceivedCount);
+            if (m.HasPayloadId()) {
+                auto rope = ev->Get()->GetPayload(m.GetPayloadId());
+                auto data = rope.GetContiguousSpan();
+                auto crc = Crc32c(data.data(), data.size());
+                Y_ABORT_UNLESS(m.GetDataCrc() == crc);
+            } else {
+                Y_ABORT_UNLESS(m.HasPayload());
+            }
             ++ReceivedCount;
             SenderNode->Send(ev->Sender, new TEvTestResponse(m.GetSequenceNumber()));
         }
@@ -109,7 +131,23 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
 
         TReceiverActor* receiverActor = new TReceiverActor(testCluster.GetNode(1));
         const TActorId recipient = testCluster.RegisterActor(receiverActor, 2);
-        TSenderActor* senderActor = new TSenderActor(recipient, flags);
+        TSenderActor* senderActor = new TSenderActor(recipient, flags, false);
+        testCluster.RegisterActor(senderActor, 1);
+
+        NanoSleep(30ULL * 1000 * 1000 * 1000);
+    }
+
+    Y_UNIT_TEST(InterconnectTestWithProxyUnsureUndeliveredWithRopeXdc) {
+        ui32 numNodes = 2;
+        double bandWidth = 1000000;
+        ui16 flags = IEventHandle::FlagTrackDelivery | IEventHandle::FlagGenerateUnsureUndelivered;
+        TTestICCluster::TTrafficInterrupterSettings interrupterSettings{TDuration::Seconds(2), bandWidth, true};
+
+        TTestICCluster testCluster(numNodes, TChannelsConfig(), &interrupterSettings);
+
+        TReceiverActor* receiverActor = new TReceiverActor(testCluster.GetNode(1));
+        const TActorId recipient = testCluster.RegisterActor(receiverActor, 2);
+        TSenderActor* senderActor = new TSenderActor(recipient, flags, true);
         testCluster.RegisterActor(senderActor, 1);
 
         NanoSleep(30ULL * 1000 * 1000 * 1000);
@@ -125,7 +163,7 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
 
         TReceiverActor* receiverActor = new TReceiverActor(testCluster.GetNode(1));
         const TActorId recipient = testCluster.RegisterActor(receiverActor, 2);
-        TSenderActor* senderActor = new TSenderActor(recipient, flags);
+        TSenderActor* senderActor = new TSenderActor(recipient, flags, false);
         testCluster.RegisterActor(senderActor, 1);
 
         NanoSleep(30ULL * 1000 * 1000 * 1000);

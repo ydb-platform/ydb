@@ -47,8 +47,8 @@ bool TOutReadSets::LoadReadSets(NIceDb::TNiceDb& db) {
         // Cache it regardless of size, since we're going to send it soon
         rsInfo.Body = std::move(body);
 
-        Y_ABORT_UNLESS(!CurrentReadSets.contains(seqNo));
-        Y_ABORT_UNLESS(!CurrentReadSetKeys.contains(rsInfo));
+        Y_ENSURE(!CurrentReadSets.contains(seqNo));
+        Y_ENSURE(!CurrentReadSetKeys.contains(rsInfo));
 
         CurrentReadSetKeys[rsInfo] = seqNo;
         CurrentReadSets[seqNo] = std::move(rsInfo);
@@ -64,8 +64,8 @@ bool TOutReadSets::LoadReadSets(NIceDb::TNiceDb& db) {
 void TOutReadSets::SaveReadSet(NIceDb::TNiceDb& db, ui64 seqNo, ui64 step, const TReadSetKey& rsKey, const TString& body) {
     using Schema = TDataShard::Schema;
 
-    Y_ABORT_UNLESS(!CurrentReadSets.contains(seqNo));
-    Y_ABORT_UNLESS(!CurrentReadSetKeys.contains(rsKey));
+    Y_ENSURE(!CurrentReadSets.contains(seqNo));
+    Y_ENSURE(!CurrentReadSetKeys.contains(rsKey));
 
     TReadSetInfo rsInfo(rsKey);
     rsInfo.Step = step;
@@ -153,7 +153,7 @@ void TOutReadSets::SaveAck(const TActorContext &ctx, TAutoPtr<TEvTxProcessing::T
 
     if (CurrentReadSets.contains(seqno)) {
         TReadSetKey rsKey(txId, Self->TabletID(), sender, dest);
-        Y_ABORT_UNLESS(CurrentReadSetKeys[rsKey] == seqno);
+        Y_ENSURE(CurrentReadSetKeys[rsKey] == seqno);
 
         CurrentReadSetKeys.erase(rsKey);
         CurrentReadSets.erase(seqno);

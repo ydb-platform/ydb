@@ -143,8 +143,8 @@ TEST(TOperationsApiParsingTest, ParseOperationAttributes)
     EXPECT_EQ(*attrs.FinishTime - *attrs.StartTime, TDuration::Days(1));
 
     EXPECT_TRUE(attrs.BriefProgress);
-    EXPECT_EQ(attrs.BriefProgress->Completed, 84u);
-    EXPECT_EQ(attrs.BriefProgress->Failed, 1u);
+    EXPECT_EQ(attrs.BriefProgress->Completed, 84);
+    EXPECT_EQ(attrs.BriefProgress->Failed, 1);
 
     EXPECT_TRUE(attrs.BriefSpec);
     EXPECT_EQ((*attrs.BriefSpec)["title"].AsString(), "some-title");
@@ -156,13 +156,13 @@ TEST(TOperationsApiParsingTest, ParseOperationAttributes)
     EXPECT_TRUE(!attrs.Result->Error);
 
     EXPECT_TRUE(attrs.Progress);
-    EXPECT_EQ(attrs.Progress->JobStatistics.JobState({}).GetStatistics("data/input/row_count").Sum(), 85u);
-    EXPECT_EQ(attrs.Progress->JobCounters.GetCompletedInterrupted().GetTotal(), 2u);
-    EXPECT_EQ(attrs.Progress->JobCounters.GetAbortedNonScheduled().GetTotal(), 3u);
-    EXPECT_EQ(attrs.Progress->JobCounters.GetAbortedScheduled().GetTotal(), 4u);
-    EXPECT_EQ(attrs.Progress->JobCounters.GetAborted().GetTotal(), 7u);
-    EXPECT_EQ(attrs.Progress->JobCounters.GetFailed().GetTotal(), 7u);
-    EXPECT_EQ(attrs.Progress->JobCounters.GetTotal(), 66u);
+    EXPECT_EQ(attrs.Progress->JobStatistics.JobState({}).GetStatistics("data/input/row_count").Sum(), 85);
+    EXPECT_EQ(attrs.Progress->JobCounters.GetCompletedInterrupted().GetTotal(), 2);
+    EXPECT_EQ(attrs.Progress->JobCounters.GetAbortedNonScheduled().GetTotal(), 3);
+    EXPECT_EQ(attrs.Progress->JobCounters.GetAbortedScheduled().GetTotal(), 4);
+    EXPECT_EQ(attrs.Progress->JobCounters.GetAborted().GetTotal(), 7);
+    EXPECT_EQ(attrs.Progress->JobCounters.GetFailed().GetTotal(), 7);
+    EXPECT_EQ(attrs.Progress->JobCounters.GetTotal(), 66);
     EXPECT_EQ(*attrs.Progress->BuildTime, TInstant::ParseIso8601("2018-01-01T00:00:00.000000Z"));
 
     EXPECT_TRUE(attrs.Events);
@@ -186,6 +186,6 @@ TEST(TOperationsApiParsingTest, EmptyProgress)
 
     EXPECT_TRUE(attrs.Progress);
     EXPECT_EQ(attrs.Progress->JobStatistics.JobState({}).GetStatisticsNames(), TVector<TString>{});
-    EXPECT_EQ(attrs.Progress->JobCounters.GetTotal(), 0u);
+    EXPECT_EQ(attrs.Progress->JobCounters.GetTotal(), 0);
     EXPECT_TRUE(!attrs.Progress->BuildTime);
 }

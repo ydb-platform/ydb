@@ -216,6 +216,8 @@ namespace NKikimr::NStorage {
         TControlWrapper ThrottlingMinLogChunkCount;
         TControlWrapper ThrottlingMaxLogChunkCount;
 
+        TControlWrapper MaxInProgressSyncCount;
+
         TControlWrapper MaxCommonLogChunksHDD;
         TControlWrapper MaxCommonLogChunksSSD;
 

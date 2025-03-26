@@ -17,12 +17,6 @@ columns {
   }
 }
 columns {
-  name: "kind"
-  type {
-    type_id: STRING
-  }
-}
-columns {
   name: "project"
   type {
     type_id: STRING
@@ -51,13 +45,10 @@ rows {
     bytes_value: "bool False"
   }
   items {
-    bytes_value: "PREVIOUS"
+    bytes_value: "3"
   }
   items {
     bytes_value: "int 15000"
-  }
-  items {
-    bytes_value: "MY_KIND"
   }
   items {
     bytes_value: "my_project"
@@ -66,7 +57,7 @@ rows {
     uint32_value: 0
   }
   items {
-    bytes_value: "MY_TYPE"
+    bytes_value: "RATE"
   }
   items {
     double_value: 100
@@ -77,13 +68,10 @@ rows {
     bytes_value: "bool False"
   }
   items {
-    bytes_value: "PREVIOUS"
+    bytes_value: "3"
   }
   items {
     bytes_value: "int 15000"
-  }
-  items {
-    bytes_value: "MY_KIND"
   }
   items {
     bytes_value: "my_project"
@@ -92,7 +80,7 @@ rows {
     uint32_value: 0
   }
   items {
-    bytes_value: "MY_TYPE"
+    bytes_value: "RATE"
   }
   items {
     double_value: 200
@@ -103,13 +91,10 @@ rows {
     bytes_value: "bool False"
   }
   items {
-    bytes_value: "PREVIOUS"
+    bytes_value: "3"
   }
   items {
     bytes_value: "int 15000"
-  }
-  items {
-    bytes_value: "MY_KIND"
   }
   items {
     bytes_value: "my_project"
@@ -118,7 +103,7 @@ rows {
     uint32_value: 0
   }
   items {
-    bytes_value: "MY_TYPE"
+    bytes_value: "RATE"
   }
   items {
     double_value: 300

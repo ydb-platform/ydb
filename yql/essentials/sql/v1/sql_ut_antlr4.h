@@ -10,6 +10,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <library/cpp/regex/pcre/pcre.h>
 #include <util/string/split.h>
 #include <deque>
 #include <unordered_set>
@@ -82,6 +83,13 @@ inline void ExpectFailWithError(const TString& query, const TString& error) {
 
     UNIT_ASSERT(!res.Root);
     UNIT_ASSERT_NO_DIFF(Err2Str(res), error);
+}
+
+inline void ExpectFailWithFuzzyError(const TString& query, const TString& errorRegex) {
+    NYql::TAstParseResult res = SqlToYql(query);
+
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(NPcre::TPcre<char>(errorRegex.c_str()).Matches(Err2Str(res)));
 }
 
 inline NYql::TAstParseResult SqlToYqlWithAnsiLexer(const TString& query, size_t maxErrors = 10, const TString& provider = {}, EDebugOutput debug = EDebugOutput::None) {

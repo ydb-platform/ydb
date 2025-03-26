@@ -581,6 +581,10 @@ void THive::Handle(TEvPrivate::TEvBootTablets::TPtr&) {
 
 void THive::Handle(TEvHive::TEvInitMigration::TPtr& ev) {
     BLOG_D("Handle InitMigration " << ev->Get()->Record);
+    if (AreWeRootHive()) {
+        Send(ev->Sender, new TEvHive::TEvInitMigrationReply(NKikimrProto::ERROR));
+        return;
+    }
     if (MigrationState == NKikimrHive::EMigrationState::MIGRATION_READY || MigrationState == NKikimrHive::EMigrationState::MIGRATION_COMPLETE) {
         if (ev->Get()->Record.GetMigrationFilter().GetFilterDomain().GetSchemeShard() == 0 && GetMySubDomainKey().GetSchemeShard() == 0) {
             BLOG_ERROR("Migration ignored - unknown domain");

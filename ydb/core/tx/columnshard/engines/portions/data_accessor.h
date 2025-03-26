@@ -239,6 +239,7 @@ public:
         NBlobOperations::NRead::TCompositeReadBlobs& blobs, const TIndexInfo& indexInfo) const;
 
     std::vector<const TColumnRecord*> GetColumnChunksPointers(const ui32 columnId) const;
+    std::vector<const TIndexChunk*> GetIndexChunksPointers(const ui32 indexId) const;
 
     THashMap<TChunkAddress, TString> DecodeBlobAddresses(NBlobOperations::NRead::TCompositeReadBlobs&& blobs, const TIndexInfo& indexInfo) const;
 
@@ -275,7 +276,6 @@ public:
         ui32 DefaultRowsCount = 0;
         std::shared_ptr<arrow::Scalar> DefaultValue;
         TString Data;
-        const bool NeedCache = true;
 
     public:
         ui32 GetExpectedRowsCountVerified() const {
@@ -291,10 +291,9 @@ public:
             }
         }
 
-        TAssembleBlobInfo(const ui32 rowsCount, const std::shared_ptr<arrow::Scalar>& defValue, const bool needCache = true)
+        TAssembleBlobInfo(const ui32 rowsCount, const std::shared_ptr<arrow::Scalar>& defValue)
             : DefaultRowsCount(rowsCount)
-            , DefaultValue(defValue)
-            , NeedCache(needCache) {
+            , DefaultValue(defValue) {
             AFL_VERIFY(DefaultRowsCount);
         }
 

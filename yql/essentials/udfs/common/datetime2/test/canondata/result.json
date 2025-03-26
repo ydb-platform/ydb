@@ -34,6 +34,11 @@
             "uri": "file://test.test_EndOf_/results.txt"
         }
     ],
+    "test.test[Error]": [
+        {
+            "uri": "file://test.test_Error_/extracted"
+        }
+    ],
     "test.test[FormatMicroseconds]": [
         {
             "uri": "file://test.test_FormatMicroseconds_/results.txt"

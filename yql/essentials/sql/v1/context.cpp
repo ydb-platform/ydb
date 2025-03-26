@@ -100,6 +100,7 @@ TContext::TContext(const TLexers& lexers, const TParsers& parsers,
     , HasPendingErrors(false)
     , DqEngineEnable(Settings.DqDefaultAuto->Allow())
     , AnsiQuotedIdentifiers(settings.AnsiLexer)
+    , WarningPolicy(settings.IsReplay)
     , BlockEngineEnable(Settings.BlockDefaultAuto->Allow())
 {
     for (auto lib : settings.Libraries) {
@@ -247,7 +248,7 @@ IOutputStream& TContext::MakeIssue(ESeverity severity, TIssueCode code, NYql::TP
         }
 
         if (Settings.MaxErrors <= Issues.Size()) {
-            ythrow NProtoAST::TTooManyErrors() << "Too many issues";
+            ythrow NAST::TTooManyErrors() << "Too many issues";
         }
     }
 

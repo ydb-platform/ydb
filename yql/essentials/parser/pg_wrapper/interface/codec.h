@@ -50,5 +50,7 @@ void WriteSkiffPg(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxe
 extern "C" void ReadSkiffPgValue(NKikimr::NMiniKQL::TPgType* type, NKikimr::NUdf::TUnboxedValue& value, TInputBuf& buf);
 extern "C" void WriteSkiffPgValue(NKikimr::NMiniKQL::TPgType* type, const NKikimr::NUdf::TUnboxedValuePod& value, TOutputBuf& buf);
 
+std::shared_ptr<void> CreateMemoryArenaContext();
+
 } // namespace NCommon
 } // namespace NYql

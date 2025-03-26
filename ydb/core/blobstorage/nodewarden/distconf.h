@@ -227,6 +227,7 @@ namespace NKikimr::NStorage {
         // pending event queue
         std::deque<TAutoPtr<IEventHandle>> PendingEvents;
         std::vector<ui32> NodeIds;
+        THashSet<ui32> NodeIdsSet;
         TNodeIdentifier SelfNode;
 
         // scatter tasks
@@ -351,8 +352,13 @@ namespace NKikimr::NStorage {
         bool HasQuorum() const;
         void ProcessCollectConfigs(TEvGather::TCollectConfigs *res);
 
-        using TProcessCollectConfigsResult = std::variant<std::monostate, TString, NKikimrBlobStorage::TStorageConfig>;
-        TProcessCollectConfigsResult ProcessCollectConfigs(TEvGather::TCollectConfigs *res, const TString *selfAssemblyUUID);
+        struct TProcessCollectConfigsResult {
+            std::variant<std::monostate, TString, NKikimrBlobStorage::TStorageConfig> Outcome;
+            bool IsDistconfDisabledQuorum = false;
+        };
+        TProcessCollectConfigsResult ProcessCollectConfigs(TEvGather::TCollectConfigs *res,
+            std::optional<TStringBuf> selfAssemblyUUID);
+
         std::optional<TString> ProcessProposeStorageConfig(TEvGather::TProposeStorageConfig *res);
 
         struct TExConfigError : yexception {};

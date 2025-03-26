@@ -13,7 +13,6 @@ PY_SRCS(
     bundle.py
     coverage.py
     cp.py
-    cpp_style.py
     create_init_py.py
     credits.py
     docs.py

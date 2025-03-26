@@ -12,6 +12,9 @@
 
 #include <functional>
 
+#include <yql/essentials/public/udf/udf_type_inspection.h>
+#include <yql/essentials/public/udf/udf_types.h>
+
 namespace NYql {
 namespace NUdf {
 
@@ -45,6 +48,7 @@ inline bool IsNull(const arrow::ArrayData& data, size_t index) {
     return data.GetNullCount() > 0 && !arrow::BitUtil::GetBit(data.GetValues<uint8_t>(0, 0), index + data.offset);
 }
 
+ui64 GetSizeOfArrayDataInBytes(const arrow::ArrayData& data);
 ui64 GetSizeOfArrowBatchInBytes(const arrow::RecordBatch& batch);
 ui64 GetSizeOfArrowExecBatchInBytes(const arrow::compute::ExecBatch& batch);
 
@@ -234,6 +238,18 @@ inline void SetMemoryContext(void* ptr, void* ctx) {
 
 inline void ZeroMemoryContext(void* ptr) {
     SetMemoryContext(ptr, nullptr);
+}
+
+inline bool IsSingularType(const ITypeInfoHelper& typeInfoHelper, const TType* type) {
+    auto kind = typeInfoHelper.GetTypeKind(type);
+    return kind == ETypeKind::Null ||
+           kind == ETypeKind::Void ||
+           kind == ETypeKind::EmptyDict ||
+           kind == ETypeKind::EmptyList;
+}
+
+inline bool NeedWrapWithExternalOptional(const ITypeInfoHelper& typeInfoHelper, const TType* type) {
+    return TPgTypeInspector(typeInfoHelper, type) || IsSingularType(typeInfoHelper, type);
 }
 
 } // namespace NUdf

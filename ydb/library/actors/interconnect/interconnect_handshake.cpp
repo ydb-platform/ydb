@@ -818,7 +818,7 @@ namespace NActors {
         std::vector<NInterconnect::TAddress> ResolvePeer() {
             // issue request to a nameservice to resolve peer node address
             const auto mono = TActivationContext::Monotonic();
-            Send(Common->NameserviceId, new TEvInterconnect::TEvResolveNode(PeerNodeId, TActivationContext::Now() + (Deadline - mono)));
+            Send(Common->NameserviceId, new TEvInterconnect::TEvResolveNode(PeerNodeId, Deadline));
 
             // wait for the result
             auto ev = WaitForSpecificEvent<TEvResolveError, TEvLocalNodeInfo, TEvInterconnect::TEvNodeAddress>(
@@ -1208,8 +1208,7 @@ namespace NActors {
 
         THolder<TEvInterconnect::TNodeInfo> GetPeerNodeInfo() {
             Y_ABORT_UNLESS(PeerNodeId);
-            Send(Common->NameserviceId, new TEvInterconnect::TEvGetNode(PeerNodeId, TActivationContext::Now() +
-                (Deadline - TActivationContext::Monotonic())));
+            Send(Common->NameserviceId, new TEvInterconnect::TEvGetNode(PeerNodeId, Deadline));
             auto response = WaitForSpecificEvent<TEvInterconnect::TEvNodeInfo>("GetPeerNodeInfo");
             return std::move(response->Get()->Node);
         }

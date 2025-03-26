@@ -266,11 +266,10 @@ IComputationNode* WrapYtTableFile(NMiniKQL::TCallable& callable, const TComputat
     const TYtFileServices::TPtr& services, bool noLocks)
 {
     if (TableContent) {
-        YQL_ENSURE(callable.GetInputsCount() == 4, "Expected 4 args");
+        YQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 args");
     } else {
-        YQL_ENSURE(callable.GetInputsCount() == 8 || callable.GetInputsCount() == 4, "Expected 8 or 4 args");
+        YQL_ENSURE(callable.GetInputsCount() == 7 || callable.GetInputsCount() == 3, "Expected 7 or 3 args");
     }
-    const TString cluster(AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().AsStringRef());
 
     TType* itemType = AS_TYPE(NMiniKQL::TListType, callable.GetType()->GetReturnType())->GetItemType();
     TVector<std::pair<TString, TColumnsInfo>> tablePaths;
@@ -283,7 +282,7 @@ IComputationNode* WrapYtTableFile(NMiniKQL::TCallable& callable, const TComputat
 
     NCommon::TCodecContext codecCtx(ctx.Env, ctx.FunctionRegistry, &ctx.HolderFactory);
 
-    TListLiteral* groupList = AS_VALUE(TListLiteral, callable.GetInput(1));
+    TListLiteral* groupList = AS_VALUE(TListLiteral, callable.GetInput(0));
     const bool multiGroup = groupList->GetItemsCount() > 1;
 
     TVector<THashSet<TStringBuf>> outColumnGroups;
@@ -315,8 +314,12 @@ IComputationNode* WrapYtTableFile(NMiniKQL::TCallable& callable, const TComputat
 
             NYT::TRichYPath richYPath;
             NYT::Deserialize(richYPath, NYT::NodeFromYsonString(TString(AS_VALUE(TDataLiteral, tuple->GetValue(0))->AsValue().AsStringRef())));
+            YQL_ENSURE(richYPath.Cluster_);
 
             const bool isTemporary = AS_VALUE(TDataLiteral, tuple->GetValue(1))->AsValue().Get<bool>();
+            const bool isAnonymous = AS_VALUE(TDataLiteral, tuple->GetValue(5))->AsValue().Get<bool>();
+            const ui32 epoch = AS_VALUE(TDataLiteral, tuple->GetValue(6))->AsValue().Get<ui32>();
+
             auto tableMeta = NYT::NodeFromYsonString(TString(AS_VALUE(TDataLiteral, tuple->GetValue(2))->AsValue().AsStringRef()));
             TMkqlIOSpecs::TSpecInfo specInfo;
             TMkqlIOSpecs::LoadSpecInfo(true, tableMeta, codecCtx, specInfo);
@@ -334,7 +337,14 @@ IComputationNode* WrapYtTableFile(NMiniKQL::TCallable& callable, const TComputat
             }
 
             inputAttrs.Add(tableMeta);
-            auto path = services->GetTablePath(cluster, richYPath.Path_, isTemporary, noLocks);
+            TString path;
+            if (isTemporary && !isAnonymous) {
+                path = services->GetTmpTablePath(richYPath.Path_);
+            } else if (noLocks) {
+                path = services->GetTablePath(*richYPath.Cluster_, richYPath.Path_, isAnonymous);
+            } else {
+                path = services->GetTableSnapshotPath(*richYPath.Cluster_, richYPath.Path_, isAnonymous, epoch);
+            }
             tableNames.push_back(isTemporary ? TString() : richYPath.Path_);
             tablePaths.emplace_back(path, TColumnsInfo{richYPath.Columns_, richYPath.RenameColumns_});
             if (!richYPath.Columns_ && !isTemporary && specInfo.StrictSchema) {
@@ -356,7 +366,7 @@ IComputationNode* WrapYtTableFile(NMiniKQL::TCallable& callable, const TComputat
     }
 
     std::optional<ui64> length;
-    TTupleLiteral* lengthTuple = AS_VALUE(TTupleLiteral, callable.GetInput(3));
+    TTupleLiteral* lengthTuple = AS_VALUE(TTupleLiteral, callable.GetInput(2));
     if (lengthTuple->GetValuesCount() > 0) {
         YQL_ENSURE(lengthTuple->GetValuesCount() == 1, "Expect 1 element in the length tuple");
         length = AS_VALUE(TDataLiteral, lengthTuple->GetValue(0))->AsValue().Get<ui64>();
@@ -365,11 +375,11 @@ IComputationNode* WrapYtTableFile(NMiniKQL::TCallable& callable, const TComputat
     std::array<IComputationExternalNode*, 5> argNodes;
     argNodes.fill(nullptr);
 
-    if (!TableContent && callable.GetInputsCount() == 8) {
-        argNodes[0] = LocateExternalNode(ctx.NodeLocator, callable, 4, false); // TableIndex
-        argNodes[1] = LocateExternalNode(ctx.NodeLocator, callable, 5, false); // TablePath
-        argNodes[2] = LocateExternalNode(ctx.NodeLocator, callable, 6, false); // TableRecord
-        argNodes[4] = LocateExternalNode(ctx.NodeLocator, callable, 7, false); // RowNumber
+    if (!TableContent && callable.GetInputsCount() == 7) {
+        argNodes[0] = LocateExternalNode(ctx.NodeLocator, callable, 3, false); // TableIndex
+        argNodes[1] = LocateExternalNode(ctx.NodeLocator, callable, 4, false); // TablePath
+        argNodes[2] = LocateExternalNode(ctx.NodeLocator, callable, 5, false); // TableRecord
+        argNodes[4] = LocateExternalNode(ctx.NodeLocator, callable, 6, false); // RowNumber
     }
 
     // sampling arg is ignored in the file provider

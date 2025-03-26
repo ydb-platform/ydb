@@ -249,7 +249,7 @@ class LoadSuiteBase:
     @classmethod
     def setup_class(cls) -> None:
         start_time = time()
-        error = YdbCluster.wait_ydb_alive(20 * 60)
+        error = YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60)))
         tb = None
         if not error and hasattr(cls, 'do_setup_class'):
             try:
@@ -257,7 +257,8 @@ class LoadSuiteBase:
             except BaseException as e:
                 error = str(e)
                 tb = e.__traceback__
-        first_node_start_time = min([n.start_time for n in YdbCluster.get_cluster_nodes(db_only=False)])
+        nodes_start_time = [n.start_time for n in YdbCluster.get_cluster_nodes(db_only=False)]
+        first_node_start_time = min(nodes_start_time) if len(nodes_start_time) > 0 else 0
         ResultsProcessor.upload_results(
             kind='Load',
             suite=cls.suite(),

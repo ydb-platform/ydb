@@ -76,7 +76,7 @@ EExecutionStatus TWaitForStreamClearanceUnit::Execute(TOperation::TPtr op,
     }
 
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     if (!op->IsWaitingForStreamClearance()) {
         auto tid = tx->GetDataTx()->GetReadTableTransaction().GetTableId().GetTableId();
@@ -136,7 +136,7 @@ void TWaitForStreamClearanceUnit::Handle(TDataShard::TEvPrivate::TEvNodeDisconne
 {
     if (op->IsWaitingForStreamClearance()) {
         TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
         if (ev->Get()->NodeId == tx->GetStreamSink().NodeId()) {
             Abort(TStringBuilder() << "Disconnected from stream sink (node " << ev->Get()->NodeId
@@ -190,7 +190,7 @@ void TWaitForStreamClearanceUnit::Abort(const TString &err,
                                         const TActorContext &ctx)
 {
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     BuildResult(op)->AddError(NKikimrTxDataShard::TError::WRONG_SHARD_STATE, err);
     if (tx->GetScanSnapshotId()) {

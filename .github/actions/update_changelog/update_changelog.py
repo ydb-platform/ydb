@@ -123,7 +123,8 @@ def update_changelog(changelog_path, pr_data):
         if validate_pr_description(pr["body"], is_not_for_cl_valid=False):
             category = extract_changelog_category(pr["body"])
             category = match_pr_to_changelog_category(category)
-            body = extract_changelog_body(pr["body"])
+            dirty_body = extract_changelog_body(pr["body"])
+            body = dirty_body.replace("\r", "")
             if category and body:
                 body += f" [#{pr['number']}]({pr['url']})"
                 body += f" ([{pr['name']}]({pr['user_url']}))"
@@ -190,12 +191,13 @@ if __name__ == "__main__":
         try:
             pr_details = fetch_pr_details(pr["id"])
             user_details = fetch_user_details(pr_details["user"]["login"])
+            name = user_details.get("name", None)
             if validate_pr_description(pr_details["body"], is_not_for_cl_valid=False):
                 pr_data.append({
                     "number": pr_details["number"],
                     "body": pr_details["body"].strip(),
                     "url": pr_details["html_url"],
-                    "name": user_details.get("name", pr_details["user"]["login"]),  # Use login if name is not available
+                    "name": name or pr_details["user"]["login"],  # Use login if name is not available
                     "user_url": pr_details["user"]["html_url"]
                 })
         except Exception as e:

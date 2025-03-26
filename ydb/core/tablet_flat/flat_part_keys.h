@@ -67,12 +67,12 @@ namespace NTable {
             return RowId;
         }
 
-        TSerializedCellVec GetKey() const noexcept
+        TSerializedCellVec GetKey() const
         {
             return TSerializedCellVec(Key);
         }
 
-        bool SeekRow(TRowId rowId) noexcept
+        bool SeekRow(TRowId rowId)
         {
             if (RowId != rowId) {
                 if (rowId == Max<TRowId>()) {
@@ -91,11 +91,11 @@ namespace NTable {
                     return true;
                 }
 
-                Y_ABORT_UNLESS(Index->GetRowId() <= rowId, "SeekIndex invariant failure");
+                Y_ENSURE(Index->GetRowId() <= rowId, "SeekIndex invariant failure");
                 if (!LoadPage(Index->GetPageId())) {
                     return false;
                 }
-                Y_ABORT_UNLESS(Page.BaseRow() == Index->GetRowId(), "Index and data are out of sync");
+                Y_ENSURE(Page.BaseRow() == Index->GetRowId(), "Index and data are out of sync");
                 auto lastRowId = Page.BaseRow() + (Page->Count - 1);
                 if (lastRowId < rowId) {
                     // Row is out of range for this page
@@ -108,29 +108,29 @@ namespace NTable {
             return true;
         }
 
-        bool SeekLastRow() noexcept
+        bool SeekLastRow()
         {
             auto hasLast = Index->SeekLast();
             if (hasLast == EReady::Page) {
                 return false;
             }
-            Y_ABORT_UNLESS(hasLast != EReady::Gone, "Unexpected failure to find the last index record");
+            Y_ENSURE(hasLast != EReady::Gone, "Unexpected failure to find the last index record");
 
             if (!LoadPage(Index->GetPageId())) {
                 return false;
             }
-            Y_ABORT_UNLESS(Page.BaseRow() == Index->GetRowId(), "Index and data are out of sync");
+            Y_ENSURE(Page.BaseRow() == Index->GetRowId(), "Index and data are out of sync");
             auto lastRowId = Page.BaseRow() + (Page->Count - 1);
             LoadRow(lastRowId);
             return true;
         }
 
-        bool LoadPage(TPageId pageId) noexcept
+        bool LoadPage(TPageId pageId)
         {
-            Y_ABORT_UNLESS(pageId != Max<TPageId>(), "Unexpected seek to an invalid page id");
+            Y_ENSURE(pageId != Max<TPageId>(), "Unexpected seek to an invalid page id");
             if (PageId != pageId) {
                 if (auto* data = Env->TryGetPage(Part, pageId, {})) {
-                    Y_ABORT_UNLESS(Page.Set(data), "Unexpected failure to load data page");
+                    Y_ENSURE(Page.Set(data), "Unexpected failure to load data page");
                     PageId = pageId;
                 } else {
                     return false;
@@ -139,11 +139,11 @@ namespace NTable {
             return true;
         }
 
-        void LoadRow(TRowId rowId) noexcept
+        void LoadRow(TRowId rowId)
         {
             if (RowId != rowId) {
                 auto it = Page->Begin() + (rowId - Page.BaseRow());
-                Y_ABORT_UNLESS(it, "Unexpected failure to find row on the data page");
+                Y_ENSURE(it, "Unexpected failure to find row on the data page");
                 Key.clear();
                 for (const auto& info : Part->Scheme->Groups[0].ColsKeyData) {
                     Key.push_back(it->Cell(info));

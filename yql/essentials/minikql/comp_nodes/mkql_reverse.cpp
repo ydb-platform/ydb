@@ -34,7 +34,7 @@ public:
         const auto factory = new LoadInst(structPtrType, first, "factory", block);
         const auto builder = new LoadInst(structPtrType, fourth, "builder", block);
 
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&THolderFactory::ReverseList));
+        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&THolderFactory::ReverseList>());
 
         const auto list = GetNodeValue(List, ctx, block);
 

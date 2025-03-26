@@ -71,6 +71,9 @@ public:
     virtual void BuildTopicTxs(NTopic::TTopicOperationTransactions& txs) = 0;
     virtual bool HasTopics() const = 0;
 
+    virtual void AddParticipantNode(const ui32 nodeId) = 0;
+    virtual const THashSet<ui32>& GetParticipantNodes() const = 0;
+
     virtual bool IsTxPrepared() const = 0;
     virtual bool IsTxFinished() const = 0;
 

@@ -186,7 +186,7 @@ public:
     }
 
     void SetSchemaOp(TSchemaOperation * op) {
-        Y_ABORT_UNLESS(!SchemaTx || SchemaTx->TxId == op->TxId);
+        Y_ENSURE(!SchemaTx || SchemaTx->TxId == op->TxId);
         SchemaTx = op;
     }
 
@@ -454,7 +454,7 @@ private:
             if (!res.second)
                 res.first->Counter += 1;
             auto res2 = TxIdMap.emplace(txId, res.first);
-            Y_VERIFY_S(res2.second, "Unexpected duplicate immediate tx " << txId
+            Y_ENSURE(res2.second, "Unexpected duplicate immediate tx " << txId
                     << " committing at " << version);
             res.first->TxCounter += 1;
         }
@@ -467,11 +467,11 @@ private:
 
         inline void Remove(ui64 txId, TRowVersion version) {
             auto it = TxIdMap.find(txId);
-            Y_VERIFY_S(it != TxIdMap.end(), "Removing immediate tx " << txId << " " << version
+            Y_ENSURE(it != TxIdMap.end(), "Removing immediate tx " << txId << " " << version
                     << " does not match a previous Add");
-            Y_VERIFY_S(TRowVersion(it->second->Step, it->second->TxId) == version, "Removing immediate tx " << txId << " " << version
+            Y_ENSURE(TRowVersion(it->second->Step, it->second->TxId) == version, "Removing immediate tx " << txId << " " << version
                     << " does not match a previous Add " << TRowVersion(it->second->Step, it->second->TxId));
-            Y_VERIFY_S(it->second->TxCounter > 0, "Removing immediate tx " << txId << " " << version
+            Y_ENSURE(it->second->TxCounter > 0, "Removing immediate tx " << txId << " " << version
                     << " with a mismatching TxCounter");
             --it->second->TxCounter;
             if (--it->second->Counter == 0)
@@ -481,10 +481,10 @@ private:
 
         inline void Remove(TRowVersion version) {
             auto it = ItemsSet.find(version);
-            Y_VERIFY_S(it != ItemsSet.end(), "Removing version " << version
+            Y_ENSURE(it != ItemsSet.end(), "Removing version " << version
                     << " does not match a previous Add");
             if (--it->Counter == 0) {
-                Y_VERIFY_S(it->TxCounter == 0, "Removing version " << version
+                Y_ENSURE(it->TxCounter == 0, "Removing version " << version
                     << " while TxCounter has active references, possible Add/Remove mismatch");
                 ItemsSet.erase(it);
             }

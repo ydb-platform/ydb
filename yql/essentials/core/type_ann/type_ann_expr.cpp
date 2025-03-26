@@ -4,6 +4,7 @@
 #include <yql/essentials/core/yql_opt_proposed_by_data.h>
 #include <yql/essentials/core/yql_opt_rewrite_io.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/type_ann/type_ann_expr.h>
 #include <yql/essentials/utils/log/log.h>
 #include <util/datetime/cputimer.h>
@@ -47,6 +48,10 @@ public:
         output = input;
         if (Mode == ETypeCheckMode::Initial && IsComplete) {
             return TStatus::Ok;
+        }
+
+        if (IsOptimizerEnabled<KeepWorldOptName>(Types) && !IsOptimizerDisabled<KeepWorldOptName>(Types)) {
+            KeepWorldEnabled = true;
         }
 
         auto status = TransformNode(input, output, ctx);
@@ -299,6 +304,7 @@ private:
             {
                 input->SetTypeAnn(ctx.MakeType<TUnitExprType>());
                 CheckExpected(*input, ctx);
+                CalculateWorld(*input);
                 return TStatus::Ok;
             }
 
@@ -349,6 +355,7 @@ private:
                     (const TTypeAnnotationNode*)ctx.MakeType<TUnitExprType>() :
                     ctx.MakeType<TTupleExprType>(children));
                 CheckExpected(*input, ctx);
+                CalculateWorld(*input);
                 return TStatus::Ok;
             }
 
@@ -411,6 +418,7 @@ private:
 
                 if (input->GetTypeAnn()) {
                     CheckExpected(*input, ctx);
+                    CalculateWorld(*input);
                 }
 
                 return TStatus::Ok;
@@ -484,6 +492,7 @@ private:
 
                     input->SetState(TExprNode::EState::TypeComplete);
                     CheckExpected(*input, ctx);
+                    CalculateWorld(*input);
                 }
                 else if (status == TStatus::Async) {
                     CallableInputs.push_back(input);
@@ -506,6 +515,7 @@ private:
             {
                 input->SetTypeAnn(ctx.MakeType<TWorldExprType>());
                 CheckExpected(*input, ctx);
+                CalculateWorld(*input);
                 return TStatus::Ok;
             }
 
@@ -563,6 +573,58 @@ private:
         CheckExpectedTypeAndColumnOrder(input, ctx, Types);
     }
 
+    void CalculateWorld(TExprNode& input) {
+        if (!KeepWorldEnabled) {
+            return;
+        }
+
+        YQL_ENSURE(!input.GetWorldLinks());
+        if (input.IsAtom() || input.IsWorld() || input.IsArgument()) {
+            return;
+        }
+
+        TExprNode::TListType candidates;
+        bool hasWorlds = false;
+        for (const auto& child : input.Children()) {
+            if (!child->GetTypeAnn()) {
+                continue;
+            }
+
+            if (child->GetTypeAnn()->ReturnsWorld()) {
+                if (!child->IsWorld()) {
+                    hasWorlds = true;
+                    candidates.push_back(child);
+                }
+            } else {
+                auto inner = child->GetWorldLinks();
+                if (inner) {
+                    candidates.insert(candidates.end(), inner->begin(), inner->end());
+                }
+            }
+        }
+
+        SortUniqueBy(candidates, [](const auto& p){ return p->UniqueId(); });
+        if (!candidates.empty()) {
+            if (!hasWorlds) {
+                for (const auto& child : input.Children()) {
+                    if (!child->GetTypeAnn()) {
+                        continue;
+                    }
+
+                    if (!child->GetTypeAnn()->ReturnsWorld()) {
+                        auto inner = child->GetWorldLinks();
+                        if (inner && *inner == candidates) {
+                            input.SetWorldLinks(std::move(inner));
+                            return;
+                        }
+                    }
+                }
+            }
+
+            input.SetWorldLinks(std::make_shared<TExprNode::TListType>(std::move(candidates)));
+        }
+    }
+
 private:
     TAutoPtr<IGraphTransformer> CallableTransformer;
     TTypeAnnotationContext& Types;
@@ -574,6 +636,7 @@ private:
     THashMap<TString, ui64> RepeatCallableCount;
     TStack<std::pair<TStringBuf, bool>> CurrentFunctions;
     THashMap<TStringBuf, std::pair<ui64, ui64>> CallableTimes;
+    bool KeepWorldEnabled = false;
 };
 
 } // namespace

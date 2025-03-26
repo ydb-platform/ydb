@@ -38,7 +38,7 @@ public:
     }
 
     bool LoadMetadata(const TVector<TImport*>& imports,
-        const TVector<TFunction*>& functions, TExprContext& ctx) const final {
+        const TVector<TFunction*>& functions, TExprContext& ctx, NUdf::ELogLevel logLevel) const final {
         if (QContext_.CanRead()) {
             for (auto& f : functions) {
                 auto key = MakeKey(f);
@@ -53,7 +53,7 @@ public:
             return true;
         }
 
-        auto res = Inner_->LoadMetadata(imports, functions, ctx);
+        auto res = Inner_->LoadMetadata(imports, functions, ctx, logLevel);
         if (res && QContext_.CanWrite()) {
             // calculate hash for each function and store it
             for (const auto& f : functions) {
@@ -66,12 +66,12 @@ public:
         return res;
     }
 
-    TResolveResult LoadRichMetadata(const TVector<TImport>& imports) const final {
+    TResolveResult LoadRichMetadata(const TVector<TImport>& imports, NUdf::ELogLevel logLevel) const final {
         if (QContext_.CanRead()) {
             ythrow yexception() << "Can't replay LoadRichMetadata";
         }
 
-        return Inner_->LoadRichMetadata(imports);
+        return Inner_->LoadRichMetadata(imports, logLevel);
     }
 
     bool ContainsModule(const TStringBuf& moduleName) const final {
@@ -127,6 +127,15 @@ private:
             node("IsStrict", NYT::TNode(true));
         }
 
+        if (!f->Messages.empty()) {
+            auto list = NYT::TNode::CreateList();
+            for (const auto& x : f->Messages) {
+                list.Add(x);
+            }
+
+            node("Messages", list);
+        }
+
         return NYT::NodeToYsonString(node,NYT::NYson::EYsonFormat::Binary);
     }
 
@@ -153,6 +162,12 @@ private:
 
         if (node.HasKey("IsStrict")) {
             f->IsStrict = node["IsStrict"].AsBool();
+        }
+
+        if (node.HasKey("Messages")) {
+            for (const auto& x : node["Messages"].AsList()) {
+                f->Messages.push_back(x.AsString());
+            }
         }
     }
 

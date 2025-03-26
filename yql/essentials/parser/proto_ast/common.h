@@ -1,15 +1,14 @@
 #pragma once
 
 #include <yql/essentials/parser/lexer_common/lexer.h>
+#include <yql/essentials/parser/common/error.h>
 
 #include <google/protobuf/message.h>
 #include <util/generic/ptr.h>
 #include <util/generic/vector.h>
 #include <util/charset/utf8.h>
 
-namespace NProtoAST {
-    static const char* INVALID_TOKEN_NAME = "nothing";
-    static const char* ABSENCE = " absence";
+namespace NAST {
 
     template <typename InputType>
     void InvalidCharacter(IOutputStream& err, const InputType* input) {
@@ -22,7 +21,6 @@ namespace NProtoAST {
         }
     }
 
-
     template <typename TokenType>
     inline void InvalidToken(IOutputStream& err, const TokenType* token) {
         if (token) {
@@ -34,46 +32,16 @@ namespace NProtoAST {
         }
     }
 
-    class TTooManyErrors : public yexception {
-    };
-
-    class IErrorCollector {
-    public:
-        explicit IErrorCollector(size_t maxErrors);
-        virtual ~IErrorCollector();
-
-        // throws TTooManyErrors
-        void Error(ui32 line, ui32 col, const TString& message);
-
-    private:
-        virtual void AddError(ui32 line, ui32 col, const TString& message) = 0;
-
-    protected:
-        const size_t MaxErrors;
-        size_t NumErrors;
-    };
-
-    class TErrorOutput: public IErrorCollector {
-    public:
-        TErrorOutput(IOutputStream& err, const TString& name, size_t maxErrors);
-        virtual ~TErrorOutput();
-
-    private:
-        void AddError(ui32 line, ui32 col, const TString& message) override;
-
-    public:
-        IOutputStream& Err;
-        TString Name;
-    };
-} // namespace NProtoAST
+} // namespace NAST
 
 namespace NSQLTranslation {
+
     class IParser {
     public:
         virtual ~IParser() = default;
 
         virtual google::protobuf::Message* Parse(
-            const TString& query, const TString& queryName, NProtoAST::IErrorCollector& err,
+            const TString& query, const TString& queryName, NAST::IErrorCollector& err,
             google::protobuf::Arena* arena) = 0;
     };
 
@@ -85,4 +53,5 @@ namespace NSQLTranslation {
     };
 
     using TParserFactoryPtr = TIntrusivePtr<IParserFactory>;
+
 } // namespace NSQLTranslation

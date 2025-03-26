@@ -84,7 +84,7 @@ class TReplicationCollocationOptions
     : public NYTree::TYsonStruct
 {
 public:
-    std::optional<std::vector<TString>> PreferredSyncReplicaClusters;
+    std::optional<std::vector<std::string>> PreferredSyncReplicaClusters;
 
     REGISTER_YSON_STRUCT(TReplicationCollocationOptions);
 

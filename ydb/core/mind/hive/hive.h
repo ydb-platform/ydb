@@ -384,7 +384,7 @@ inline void Out<NKikimr::NHive::TCompleteNotifications>(IOutputStream& o, const 
             if (it != n.Notifications.begin()) {
                 o << ',';
             }
-            o << Hex(it->first->Type) << " " << it->first.Get()->Recipient;
+            o << Hex(it->first->Type) << " " << it->first.Get()->Recipient << " " << it->first->ToString();
         }
     }
 }

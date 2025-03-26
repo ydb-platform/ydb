@@ -110,6 +110,10 @@ public:
         return Session_->TxCache_.GetEntry(YtServer_);
     }
 
+    TTransactionCache::TEntry::TPtr GetEntryForCluster(const TString& cluster) const {
+        return Session_->TxCache_.GetEntry(Clusters_->GetServer(cluster));
+    }
+
     TTransactionCache::TEntry::TPtr TryGetEntry() const {
         return Session_->TxCache_.TryGetEntry(YtServer_);
     }

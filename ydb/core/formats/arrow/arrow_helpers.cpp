@@ -240,4 +240,28 @@ std::shared_ptr<arrow::Table> ReallocateBatch(const std::shared_ptr<arrow::Table
     return NArrow::TStatusValidator::GetValid(arrow::Table::FromRecordBatches(batches));
 }
 
+std::shared_ptr<arrow::ChunkedArray> ReallocateArray(const std::shared_ptr<arrow::ChunkedArray>& original, arrow::MemoryPool* pool) {
+    if (!original) {
+        return original;
+    }
+    auto f = std::make_shared<arrow::Field>("1", original->type());
+    auto table = arrow::Table::Make(std::make_shared<arrow::Schema>(arrow::FieldVector({ f })), { original }, original->length());
+    table = ReallocateBatch(table, pool);
+    AFL_VERIFY(table->num_columns() == 1);
+    return table->column(0);
+}
+
+std::shared_ptr<arrow::Array> ReallocateArray(
+    const std::shared_ptr<arrow::Array>& arr, arrow::MemoryPool* pool /*= arrow::default_memory_pool()*/) {
+    if (!arr) {
+        return arr;
+    }
+    if (arr->length() == 0) {
+        return arr;
+    }
+    auto cArray = NArrow::ReallocateArray(std::make_shared<arrow::ChunkedArray>(arr), pool);
+    AFL_VERIFY(cArray->num_chunks() == 1);
+    return cArray->chunk(0);
+}
+
 }   // namespace NKikimr::NArrow

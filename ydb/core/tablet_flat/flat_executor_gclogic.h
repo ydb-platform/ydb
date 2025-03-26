@@ -23,7 +23,7 @@ struct TGCTime {
     inline void Clear() { Generation = Step = 0; }
     static TGCTime Infinity() { return TGCTime(std::numeric_limits<ui32>::max(), std::numeric_limits<ui32>::max()); }
 
-    explicit operator bool() const noexcept { return Valid(); }
+    explicit operator bool() const { return Valid(); }
 };
 
 struct TGCLogEntry {

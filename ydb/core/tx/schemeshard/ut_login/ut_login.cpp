@@ -313,7 +313,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         AlterLoginAddGroupMembership(runtime, ++txId, "/MyRoot", "user1", "group1");
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
             {NLs::HasGroup("group1", {"user1"})});
-        
+
         CreateAlterLoginRemoveGroup(runtime, ++txId, "/MyRoot", "group1");
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
             {NLs::HasNoGroup("group1")});
@@ -323,7 +323,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableStrictAclCheck(StrictAclCheck));
         ui64 txId = 100;
-        
+
         for (bool missingOk : {false, true}) {
             auto modifyTx = std::make_unique<TEvSchemeShard::TEvModifySchemeTransaction>(txId, TTestTxConfig::SchemeShard);
             auto transaction = modifyTx->Record.AddTransaction();
@@ -370,7 +370,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
                 {NLs::HasOwner("root@builtin")});
-        
+
         CreateAlterLoginRemoveGroup(runtime, ++txId, "/MyRoot", "group1");
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
             {NLs::HasNoGroup("group1")});
@@ -412,7 +412,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         TestModificationResult(runtime, txId, NKikimrScheme::StatusSuccess);
         TestDescribeResult(DescribePath(runtime, "/MyRoot/Dir1"),
                 {NLs::HasNoRight("+U:group1")});
-        
+
         CreateAlterLoginRemoveGroup(runtime, ++txId, "/MyRoot", "group1");
         TestDescribeResult(DescribePath(runtime, "/MyRoot"),
             {NLs::HasNoGroup("group1")});
@@ -630,8 +630,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
         // required: cannot contain username
 
         {
-            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "password1");
-            auto resultLogin = Login(runtime, "user1", "password1");
+            CreateAlterLoginCreateUser(runtime, ++txId, "/MyRoot", "user1", "Pass_word1");
+            auto resultLogin = Login(runtime, "user1", "Pass_word1");
             UNIT_ASSERT_VALUES_EQUAL(resultLogin.error(), "");
             auto describe = DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot");
             CheckSecurityState(describe, {.PublicKeysSize = 1, .SidsSize = 1});
@@ -1101,7 +1101,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardLoginTest) {
             accountLockout->SetAttemptThreshold(4);
             accountLockout->SetAttemptResetDuration("3s");
         });
- 
+
         TTestEnv env(runtime);
         auto accountLockoutConfig = runtime.GetAppData().AuthConfig.GetAccountLockout();
         ui64 txId = 100;

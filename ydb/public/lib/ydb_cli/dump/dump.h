@@ -1,8 +1,8 @@
 #pragma once
 
-#include <ydb-cpp-sdk/client/types/status/status.h>
-#include <ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
-#include <ydb-cpp-sdk/client/types/request_settings.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/status/status.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/fluent_settings_helpers.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/request_settings.h>
 
 #include <library/cpp/regex/pcre/regexp.h>
 
@@ -12,7 +12,7 @@ class TLog;
 
 namespace NYdb {
 
-inline namespace V3 {
+inline namespace Dev {
     class TDriver;
 }
 

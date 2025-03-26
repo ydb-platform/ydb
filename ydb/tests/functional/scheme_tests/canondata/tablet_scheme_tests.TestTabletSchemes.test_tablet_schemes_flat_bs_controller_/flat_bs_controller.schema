@@ -7,6 +7,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 29,
+                "ColumnName": "EnableConfigV2",
+                "ColumnType": "Bool"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "FixedKey",
                 "ColumnType": "Bool"
@@ -130,12 +135,18 @@
                 "ColumnId": 27,
                 "ColumnName": "StorageYamlConfig",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 28,
+                "ColumnName": "ExpectedStorageYamlConfigVersion",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    29,
                     1,
                     2,
                     4,
@@ -160,7 +171,8 @@
                     23,
                     24,
                     26,
-                    27
+                    27,
+                    28
                 ],
                 "RoomID": 0,
                 "Codec": 0,

@@ -7,13 +7,14 @@
 #include <yt/yt/core/net/local_address.h>
 
 #include <yt/yt/core/misc/checksum.h>
-#include <yt/yt/core/misc/memory_usage_tracker.h>
 
 #include <yt/yt/core/profiling/timing.h>
 
 #include <yt/yt/core/bus/tcp/dispatcher.h>
 
 #include <yt/yt/build/ya_version.h>
+
+#include <library/cpp/yt/memory/memory_usage_tracker.h>
 
 #include <library/cpp/yt/misc/cast.h>
 

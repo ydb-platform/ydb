@@ -356,8 +356,8 @@ Y_UNIT_TEST_SUITE(TestProgram) {
         }
         {
             auto* command = programProto.AddCommand();
-            auto* prjectionProto = command->MutableProjection();
-            prjectionProto->AddColumns()->SetId(15);
+            auto* projectionProto = command->MutableProjection();
+            projectionProto->AddColumns()->SetId(15);
         }
 
         {
@@ -377,6 +377,8 @@ Y_UNIT_TEST_SUITE(TestProgram) {
             updates.AddRow().Add<i16>(0).Add<float>(0.f);
             updates.AddRow().Add<i16>(1).Add<float>(2.f);
             updates.AddRow().Add<i16>(2).Add<float>(2.f);
+
+            Cerr << program.GetChainVerified()->DebugDOT() << Endl;
 
             auto batch = program.ApplyProgram(updates.BuildArrow(), columnResolver).DetachResult();
 

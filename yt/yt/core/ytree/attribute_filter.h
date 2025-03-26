@@ -166,6 +166,23 @@ void FormatValue(
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TShrunkAttributeFilterView
+{
+    const TAttributeFilter& AttributeFilter;
+    const size_t Limit;
+};
+
+TShrunkAttributeFilterView MakeShrunkFormattableView(
+    const TAttributeFilter& attributeFilter,
+    size_t limit);
+
+void FormatValue(
+    TStringBuilderBase* builder,
+    const TShrunkAttributeFilterView& attributeFilter,
+    TStringBuf /*spec*/);
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace NYT::NYTree
 
 #define ATTRIBUTE_FILER_INL_H_

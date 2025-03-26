@@ -30,6 +30,8 @@ public:
         }
         return DoExecute(input, output, resources);
     }
+
+    virtual bool IsBoolInResult() const = 0;
 };
 
 class TGetJsonPath: public IKernelLogic {
@@ -39,6 +41,9 @@ public:
     }
 
 private:
+    virtual bool IsBoolInResult() const override {
+        return false;
+    }
     class TDescription {
     private:
         std::shared_ptr<NAccessor::IChunkedArray> InputAccessor;
@@ -112,6 +117,9 @@ public:
     }
 
 private:
+    virtual bool IsBoolInResult() const override {
+        return true;
+    }
     virtual TString GetClassName() const override {
         return GetClassNameStatic();
     }

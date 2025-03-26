@@ -51,6 +51,10 @@ private:
     NSubColumns::TSettings Settings;
     TString StoreOthersString;
 
+    virtual void DoVisitValues(const TValuesSimpleVisitor& /*visitor*/) const override {
+        AFL_VERIFY(false);
+    }
+
 protected:
     virtual ui32 DoGetNullsCount() const override {
         AFL_VERIFY(false);
@@ -97,6 +101,17 @@ public:
         , Header(std::move(header)) {
     }
 
+    virtual bool HasWholeDataVolume() const override {
+        return false;
+    }
+
+    virtual bool HasSubColumnData(const TString& subColumnName) const override {
+        if (!subColumnName) {
+            return false;
+        }
+        return !NeedFetch(std::string_view(subColumnName.data(), subColumnName.size()));
+    }
+
     static std::shared_ptr<TSubColumnsPartialArray> BuildEmpty(const std::shared_ptr<arrow::DataType>& dataType, const ui32 recordsCount) {
         return std::make_shared<TSubColumnsPartialArray>(TSubColumnsHeader::BuildEmpty(), recordsCount, dataType);
     }
@@ -124,7 +139,8 @@ public:
         return !!OthersData;
     }
 
-    void InitOthers(const TString& blob, const TChunkConstructionData& externalInfo, const bool deserialize);
+    void InitOthers(const TString& blob, const TChunkConstructionData& externalInfo,
+        const std::shared_ptr<NArrow::TColumnFilter>& applyFilter, const bool deserialize);
 
     bool IsOtherColumn(const TString& colName) const {
         return !!Header.GetOtherStats().GetKeyIndexOptional(std::string_view(colName.data(), colName.size()));

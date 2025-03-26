@@ -358,6 +358,7 @@ private:
     TTypeAnnotationContextPtr GetAnnotationContext() const;
     TTypeAnnotationContextPtr ProvideAnnotationContext(const TString& username);
     bool CollectUsedClusters();
+    bool CheckParameters();
 
     NThreading::TFuture<void> OpenSession(const TString& username);
 
@@ -448,6 +449,7 @@ private:
     TQContext QContext_;
     TMaybe<TString> GatewaysForMerge_;
     TIssues FinalIssues_;
+    TMaybe<TIssue> ParametersIssue_;
 };
 
 void UpdateSqlFlagsFromQContext(const TQContext& qContext, THashSet<TString>& flags);

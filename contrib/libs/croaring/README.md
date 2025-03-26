@@ -419,14 +419,17 @@ int main() {
     // otherwise the result may be unusable.
     // The 'roaring_bitmap_portable_deserialize_safe' function will not read
     // beyond expectedsize bytes.
-    // We recommend you further use checksums to make sure that the input is from
-    // serialized data.
+    // We also recommend that you use checksums to check that serialized data corresponds
+    // to the serialized bitmap. The CRoaring library does not provide checksumming.
     roaring_bitmap_t *t = roaring_bitmap_portable_deserialize_safe(serializedbytes, expectedsize);
     if(t == NULL) { return EXIT_FAILURE; }
     const char *reason = NULL;
+    // If your input came from an untrusted source, then you need to validate the
+    // resulting bitmap. Failing to do so could lead to undefined behavior, crashes and so forth.
     if (!roaring_bitmap_internal_validate(t, &reason)) {
         return EXIT_FAILURE;
     }
+    // At this point, the bitmap is safe.
     assert(roaring_bitmap_equals(r1, t));  // what we recover is equal
     roaring_bitmap_free(t);
     // we can also check whether there is a bitmap at a memory location without
@@ -438,8 +441,8 @@ int main() {
     // We can also read the bitmap "safely" by specifying a byte size limit.
     // The 'roaring_bitmap_portable_deserialize_safe' function will not read
     // beyond expectedsize bytes.
-    // We recommend you further use checksums to make sure that the input is from
-    // serialized data.
+    // We also recommend that you use checksums to check that serialized data corresponds
+    // to the serialized bitmap. The CRoaring library does not provide checksumming.
     t = roaring_bitmap_portable_deserialize_safe(serializedbytes, expectedsize);
     if(t == NULL) {
         printf("Problem during deserialization.\n");
@@ -447,15 +450,14 @@ int main() {
         return EXIT_FAILURE;
     }
     // We can validate the bitmap we recovered to make sure it is proper.
+    // If the data came from an untrusted source, you should call
+    // roaring_bitmap_internal_validate.
     const char *reason_failure = NULL;
     if (!roaring_bitmap_internal_validate(t, &reason_failure)) {
         printf("safely deserialized invalid bitmap: %s\n", reason_failure);
         // We could clear any memory and close any file here.
         return EXIT_FAILURE;
     }
-    // It is still necessary for the content of seriallizedbytes to follow
-    // the standard: https://github.com/RoaringBitmap/RoaringFormatSpec
-    // This is guaranted when calling 'roaring_bitmap_portable_deserialize'.
     assert(roaring_bitmap_equals(r1, t));  // what we recover is equal
     roaring_bitmap_free(t);
 

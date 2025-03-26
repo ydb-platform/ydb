@@ -1,10 +1,11 @@
 #include "error.h"
 #include "serialize.h"
 
-#include <yt/yt/core/concurrency/public.h>
+#include <yt/yt/core/concurrency/fls.h>
 
 #include <yt/yt/core/net/local_address.h>
 
+#include <yt/yt/core/misc/collection_helpers.h>
 #include <yt/yt/core/misc/protobuf_helpers.h>
 
 #include <yt/yt/core/tracing/trace_context.h>
@@ -18,6 +19,8 @@
 
 #include <library/cpp/yt/global/variable.h>
 
+#include <library/cpp/yt/misc/global.h>
+
 namespace NYT {
 
 using namespace NTracing;
@@ -30,6 +33,8 @@ using NYT::ToProto;
 ////////////////////////////////////////////////////////////////////////////////
 
 constexpr TStringBuf OriginalErrorDepthAttribute = "original_error_depth";
+
+bool TErrorCodicils::Initialized_ = false;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -321,6 +326,20 @@ void SerializeInnerErrors(TFluentMap fluent, const TError& error, int depth)
 } // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
+
+void Serialize(
+    const TErrorCode& errorCode,
+    IYsonConsumer* consumer)
+{
+    consumer->OnInt64Scalar(static_cast<int>(errorCode));
+}
+
+void Deserialize(
+    TErrorCode& errorCode,
+    const NYTree::INodePtr& node)
+{
+    errorCode = TErrorCode(node->GetValue<int>());
+}
 
 void Serialize(
     const TError& error,
@@ -652,6 +671,98 @@ void TErrorSerializer::Load(TStreamLoadContext& context, TError& error)
     error.UpdateOriginAttributes();
     error.SetMessage(std::move(message));
     *error.MutableInnerErrors() = std::move(innerErrors);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+static YT_DEFINE_GLOBAL(NConcurrency::TFlsSlot<TErrorCodicils>, ErrorCodicilsSlot);
+
+TErrorCodicils::TGuard::~TGuard()
+{
+    TErrorCodicils::GetOrCreate().Set(std::move(Key_), std::move(OldGetter_));
+}
+
+TErrorCodicils::TGuard::TGuard(
+    std::string key,
+    TGetter oldGetter)
+    : Key_(std::move(key))
+    , OldGetter_(std::move(oldGetter))
+{ }
+
+void TErrorCodicils::Initialize()
+{
+    if (Initialized_) {
+        // Multiple calls are OK.
+        return;
+    }
+    Initialized_ = true;
+
+    ErrorCodicilsSlot(); // Warm up the slot.
+    TError::RegisterEnricher([] (TError& error) {
+        if (auto* codicils = TErrorCodicils::MaybeGet()) {
+            codicils->Apply(error);
+        }
+    });
+}
+
+TErrorCodicils& TErrorCodicils::GetOrCreate()
+{
+    return *ErrorCodicilsSlot().GetOrCreate();
+}
+
+TErrorCodicils* TErrorCodicils::MaybeGet()
+{
+    return ErrorCodicilsSlot().MaybeGet();
+}
+
+std::optional<std::string> TErrorCodicils::MaybeEvaluate(const std::string& key)
+{
+    auto* instance = MaybeGet();
+    if (!instance) {
+        return {};
+    }
+
+    auto getter = instance->Get(key);
+    if (!getter) {
+        return {};
+    }
+
+    return getter();
+}
+
+auto TErrorCodicils::Guard(std::string key, TGetter getter) -> TGuard
+{
+    auto& instance = GetOrCreate();
+    auto [it, added] = instance.Getters_.try_emplace(key, getter);
+    TGetter oldGetter;
+    if (!added) {
+        oldGetter = std::move(it->second);
+        it->second = std::move(getter);
+    }
+    return TGuard(std::move(key), std::move(oldGetter));
+}
+
+void TErrorCodicils::Apply(TError& error) const
+{
+    for (const auto& [key, getter] : Getters_) {
+        error <<= TErrorAttribute(key, getter());
+    }
+}
+
+void TErrorCodicils::Set(std::string key, TGetter getter)
+{
+    // We could enforce Initialized_, but that could make an error condition worse at runtime.
+    // Instead, let's keep enrichment optional.
+    if (getter) {
+        Getters_.insert_or_assign(std::move(key), std::move(getter));
+    } else {
+        Getters_.erase(std::move(key));
+    }
+}
+
+auto TErrorCodicils::Get(const std::string& key) const -> TGetter
+{
+    return GetOrDefault(Getters_, std::move(key));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

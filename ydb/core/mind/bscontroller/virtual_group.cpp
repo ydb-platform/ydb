@@ -95,6 +95,10 @@ namespace NKikimr::NBsController {
         NKikimrBlobDepot::TBlobDepotConfig config;
         config.SetVirtualGroupId(group->ID.GetRawId());
         config.MutableChannelProfiles()->CopyFrom(cmd.GetChannelProfiles());
+        if (cmd.HasS3BackendSettings()) {
+            config.MutableS3BackendSettings()->CopyFrom(cmd.GetS3BackendSettings());
+        }
+        config.SetName(cmd.GetName());
 
         const bool success = config.SerializeToString(&group->BlobDepotConfig.ConstructInPlace());
         Y_ABORT_UNLESS(success);

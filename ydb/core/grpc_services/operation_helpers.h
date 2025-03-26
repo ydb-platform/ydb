@@ -1,7 +1,7 @@
 #pragma once
 
 #include "defs.h"
-#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
 #include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
 namespace NKikimrIndexBuilder {

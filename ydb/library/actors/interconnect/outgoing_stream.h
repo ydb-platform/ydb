@@ -267,6 +267,6 @@ namespace NInterconnect {
         }
     };
 
-    using TOutgoingStream = TOutgoingStreamT<262144>;
+    using TOutgoingStream = TOutgoingStreamT<32768>;
 
 } // NInterconnect

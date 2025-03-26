@@ -72,4 +72,65 @@ Y_UNIT_TEST_SUITE(ColumnFilter) {
         AFL_VERIFY(!filter.CheckSlice(100, 130));
         AFL_VERIFY(filter.CheckSlice(0, 130));
     }
+
+    Y_UNIT_TEST(CutFilter1) {
+        TColumnFilter filter = TColumnFilter::BuildAllowFilter();
+        {
+            auto cut = filter.Cut(1000, 10000, false);
+            AFL_VERIFY(cut.DebugString() == "{1}[]")("val", cut.DebugString());
+        }
+        {
+            auto cut = filter.Cut(100, 10, false);
+            AFL_VERIFY(cut.DebugString() == "{1}[10,90]")("val", cut.DebugString());
+            auto cut1 = cut.Cut(10, 3, false);
+            AFL_VERIFY(cut1.DebugString() == "{1}[3,97]")("val", cut1.DebugString());
+            auto cut2 = cut.Cut(10, 3, true);
+            AFL_VERIFY(cut2.DebugString() == "{0}[7,3,90]")("val", cut2.DebugString());
+        }
+        {
+            auto cut = filter.Cut(100, 10, true);
+            AFL_VERIFY(cut.DebugString() == "{0}[90,10]")("val", cut.DebugString());
+            auto cut1 = cut.Cut(10, 0, true);
+            AFL_VERIFY(cut1.DebugString() == "{0}[100]")("val", cut1.DebugString());
+        }
+    }
+
+    Y_UNIT_TEST(CutFilter2) {
+        TColumnFilter filter = TColumnFilter::BuildAllowFilter();
+        filter.Add(true, 4);
+        filter.Add(false, 3);
+        filter.Add(true, 2);
+        filter.Add(false, 1);
+        filter.Add(true, 4);
+        filter.Add(false, 6);
+        filter.Add(true, 6);
+        filter.Add(false, 1);
+        filter.Add(true, 3);
+        filter.Add(false, 2);
+        {
+            auto cut = filter.Cut(filter.GetFilteredCountVerified(), 10, false);
+            AFL_VERIFY(cut.DebugString() == "{1}[4,3,2,1,4,18]")("val", cut.DebugString());
+            AFL_VERIFY(cut.GetRecordsCountVerified() == filter.GetRecordsCountVerified());
+        }
+        {
+            auto cut = filter.Cut(filter.GetFilteredCountVerified(), 1, false);
+            AFL_VERIFY(cut.DebugString() == "{1}[1,31]")("val", cut.DebugString());
+            AFL_VERIFY(cut.GetRecordsCountVerified() == filter.GetRecordsCountVerified());
+        }
+        {
+            auto cut = filter.Cut(filter.GetFilteredCountVerified(), 8, false);
+            AFL_VERIFY(cut.DebugString() == "{1}[4,3,2,1,2,20]")("val", cut.DebugString());
+            AFL_VERIFY(cut.GetRecordsCountVerified() == filter.GetRecordsCountVerified());
+        }
+        {
+            auto cut = filter.Cut(filter.GetFilteredCountVerified(), 10, true);
+            AFL_VERIFY(cut.DebugString() == "{0}[13,1,6,6,1,3,2]")("val", cut.DebugString());
+            AFL_VERIFY(cut.GetRecordsCountVerified() == filter.GetRecordsCountVerified());
+        }
+        {
+            auto cut = filter.Cut(filter.GetFilteredCountVerified(), 1000, true);
+            AFL_VERIFY(cut.DebugString() == "{1}[4,3,2,1,4,6,6,1,3,2]")("val", cut.DebugString());
+            AFL_VERIFY(cut.GetRecordsCountVerified() == filter.GetRecordsCountVerified());
+        }
+    }
 }

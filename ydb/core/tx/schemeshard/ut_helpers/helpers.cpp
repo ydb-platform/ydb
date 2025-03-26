@@ -18,7 +18,7 @@
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/auth.pb.h>
-#include <ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -821,6 +821,7 @@ namespace NSchemeShardUT_Private {
 
     // table
     GENERIC_WITH_ATTRS_HELPERS(CreateTable, NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable, &NKikimrSchemeOp::TModifyScheme::MutableCreateTable)
+    GENERIC_HELPERS(SimpleCreateTable, NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable, &NKikimrSchemeOp::TModifyScheme::MutableCreateTable)
     GENERIC_HELPERS(CreateIndexedTable, NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexedTable, &NKikimrSchemeOp::TModifyScheme::MutableCreateIndexedTable)
     GENERIC_HELPERS(ConsistentCopyTables, NKikimrSchemeOp::EOperationType::ESchemeOpCreateConsistentCopyTables, &NKikimrSchemeOp::TModifyScheme::MutableCreateConsistentCopyTables)
     GENERIC_HELPERS(AlterTable, NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable, &NKikimrSchemeOp::TModifyScheme::MutableAlterTable)

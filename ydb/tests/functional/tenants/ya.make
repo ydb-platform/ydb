@@ -13,10 +13,13 @@ TEST_SRCS(
     test_system_views.py
     test_auth_system_views.py
     test_publish_into_schemeboard_with_common_ssring.py
+    test_user_administration.py
     test_users_groups_with_acl.py
 )
 
 SPLIT_FACTOR(20)
+
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/library/flavours/flavours_deps.inc)
 
 DEPENDS(
     ydb/apps/ydbd
@@ -25,6 +28,8 @@ DEPENDS(
 PEERDIR(
     contrib/python/requests
     ydb/tests/library
+    ydb/tests/library/fixtures
+    ydb/tests/library/flavours
     ydb/tests/library/clients
     ydb/tests/oss/ydb_sdk_import
     ydb/public/sdk/python

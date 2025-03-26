@@ -172,7 +172,8 @@ const TKikimrTableDescription* TKikimrTablesData::EnsureTableExists(const TStrin
     return nullptr;
 }
 
-TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster, const TString& database, const TString& table, ETableType tableType) {
+TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster, const TString& database,
+        const TString& table, ETableType tableType, bool sysViewRewritten) {
     auto tablePath = table;
     if (TempTablesState) {
         auto tempTableInfoIt = TempTablesState->FindInfo(table, true);
@@ -191,6 +192,8 @@ TKikimrTableDescription& TKikimrTablesData::GetOrAddTable(const TString& cluster
             desc.RelativePath = pathPair.second;
         }
         desc.SetTableType(tableType);
+
+        desc.SetSysViewRewritten(sysViewRewritten);
 
         return desc;
     }
@@ -231,6 +234,19 @@ const TKikimrTableDescription& TKikimrTablesData::ExistingTable(const TStringBuf
     YQL_ENSURE(desc->DoesExist());
 
     return *desc;
+}
+
+std::optional<TString> TKikimrTablesData::GetTempTablePath(const TStringBuf& table) const {
+    if (!TempTablesState) {
+        return std::nullopt;
+    }
+
+    auto tempTableInfoIt = TempTablesState->FindInfo(table, false);
+
+    if (tempTableInfoIt != TempTablesState->TempTables.end()) {
+        return NKikimr::NKqp::GetTempTablePath(TempTablesState->Database, TempTablesState->SessionId, tempTableInfoIt->first);
+    }
+    return std::nullopt;
 }
 
 bool TKikimrTableDescription::Load(TExprContext& ctx, bool withSystemColumns) {

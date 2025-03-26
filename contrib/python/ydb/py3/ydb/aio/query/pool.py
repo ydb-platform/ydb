@@ -90,8 +90,15 @@ class QuerySessionPool:
                 logger.debug(f"Acquired dead session from queue: {session._state.session_id}")
 
         logger.debug(f"Session pool is not large enough: {self._current_size} < {self._size}, will create new one.")
-        session = await self._create_new_session()
+
         self._current_size += 1
+        try:
+            session = await self._create_new_session()
+        except Exception as e:
+            logger.error("Failed to create new session")
+            self._current_size -= 1
+            raise e
+
         return session
 
     async def release(self, session: QuerySession) -> None:

@@ -25,8 +25,8 @@ namespace NTest {
             TVector<const TPartView*> parts;
             parts.reserve(Flatten.size());
             for (auto &partView: Flatten) {
-                Y_ABORT_UNLESS(partView.Part, "Creating TWrapIter without a part");
-                Y_ABORT_UNLESS(partView.Slices, "Creating TWrapIter without slices");
+                Y_ENSURE(partView.Part, "Creating TWrapIter without a part");
+                Y_ENSURE(partView.Slices, "Creating TWrapIter without slices");
                 TOverlay{partView.Screen, partView.Slices}.Validate();
                 parts.push_back(&partView);
             }
@@ -54,12 +54,12 @@ namespace NTest {
             return Iter->Remap;
         }
 
-        void Make(IPages *env) noexcept
+        void Make(IPages *env)
         {
             Iter = nullptr, Env = env; /* Have to make on each Seek(...) */
         }
 
-        EReady Seek(TRawVals key_, ESeek seek) noexcept
+        EReady Seek(TRawVals key_, ESeek seek)
         {
             const TCelled key(key_, *Scheme->Keys, false);
 
@@ -89,12 +89,12 @@ namespace NTest {
             return Iter->Next(ENext::All);
         }
 
-        EReady Next() noexcept
+        EReady Next()
         {
             return Iter->Next(ENext::All);
         }
 
-        const TRowState& Apply() noexcept
+        const TRowState& Apply()
         {
             return Iter->Row();
         }

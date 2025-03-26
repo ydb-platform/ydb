@@ -35,7 +35,7 @@ void TFairThrottlerConfig::Register(TRegistrar registrar)
     registrar.Parameter("global_accumulation_ticks", &TThis::GlobalAccumulationTicks)
         .Default(5);
 
-    registrar.Parameter("ipc_path", &TThis::IPCPath)
+    registrar.Parameter("ipc_path", &TThis::IpcPath)
         .Default();
 }
 
@@ -95,27 +95,27 @@ static constexpr TStringBuf BucketsFileName = "buckets.v1";
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TFileIPCBucket
-    : public IIPCBucket
+class TFileIpcBucket
+    : public IIpcBucket
 {
 public:
-    TFileIPCBucket(const TString& path, bool create)
+    TFileIpcBucket(const TString& path, bool create)
         : File_(path, OpenAlways | RdWr)
     {
         if (create) {
             File_.Flock(LOCK_EX | LOCK_NB);
         }
 
-        File_.Resize(sizeof(TBucket));
+        File_.Resize(sizeof(TState));
 
         Map_ = std::make_unique<TFileMap>(File_, TMemoryMapCommon::oRdWr);
         Map_->Map(0, Map_->Length());
         LockMemory(Map_->Ptr(), Map_->Length());
     }
 
-    TBucket* State() override
+    TState* GetState() override
     {
-        return reinterpret_cast<TBucket*>(Map_->Ptr());
+        return reinterpret_cast<TState*>(Map_->Ptr());
     }
 
 private:
@@ -123,15 +123,15 @@ private:
     std::unique_ptr<TFileMap> Map_;
 };
 
-DEFINE_REFCOUNTED_TYPE(TFileIPCBucket)
+DEFINE_REFCOUNTED_TYPE(TFileIpcBucket)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TFileThrottlerIPC
-    : public IThrottlerIPC
+class TFileThrottlerIpc
+    : public IThrottlerIpc
 {
 public:
-    explicit TFileThrottlerIPC(const TString& path)
+    explicit TFileThrottlerIpc(const TString& path)
         : Path_(path)
     {
         NFS::MakeDirRecursive(Path_);
@@ -166,7 +166,7 @@ public:
         return reinterpret_cast<TSharedBucket*>(SharedBucketMap_->Ptr());
     }
 
-    std::vector<IIPCBucketPtr> ListBuckets() override
+    std::vector<IIpcBucketPtr> ListBuckets() override
     {
         Lock_->Acquire();
         auto release = Finally([this] {
@@ -175,14 +175,14 @@ public:
 
         Reload();
 
-        std::vector<IIPCBucketPtr> buckets;
+        std::vector<IIpcBucketPtr> buckets;
         for (const auto& bucket : OpenBuckets_) {
             buckets.push_back(bucket.second);
         }
         return buckets;
     }
 
-    IIPCBucketPtr AddBucket() override
+    IIpcBucketPtr AddBucket() override
     {
         Lock_->Acquire();
         auto release = Finally([this] {
@@ -191,7 +191,7 @@ public:
 
         auto id = TGuid::Create();
         OwnedBuckets_.insert(ToString(id));
-        return New<TFileIPCBucket>(Path_ + "/" + BucketsFileName + "/" + ToString(id), true);
+        return New<TFileIpcBucket>(Path_ + "/" + BucketsFileName + "/" + ToString(id), true);
     }
 
 private:
@@ -202,8 +202,8 @@ private:
     TFile SharedBucketFile_;
     std::unique_ptr<TFileMap> SharedBucketMap_;
 
-    THashMap<TString, IIPCBucketPtr> OpenBuckets_;
-    THashSet<TString> OwnedBuckets_;
+    THashMap<std::string, IIpcBucketPtr> OpenBuckets_;
+    THashSet<std::string> OwnedBuckets_;
 
     void Reload()
     {
@@ -230,7 +230,7 @@ private:
                     continue;
                 }
 
-                OpenBuckets_[fileName] = New<TFileIPCBucket>(bucketPath, false);
+                OpenBuckets_[fileName] = New<TFileIpcBucket>(bucketPath, false);
             } catch (const TSystemError& ex) {
                 continue;
             }
@@ -238,12 +238,12 @@ private:
     }
 };
 
-IThrottlerIPCPtr CreateFileThrottlerIPC(const TString& path)
+IThrottlerIpcPtr CreateFileThrottlerIpc(const TString& path)
 {
-    return New<TFileThrottlerIPC>(path);
+    return New<TFileThrottlerIpc>(path);
 }
 
-DEFINE_REFCOUNTED_TYPE(TFileThrottlerIPC)
+DEFINE_REFCOUNTED_TYPE(TFileThrottlerIpc)
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -623,12 +623,12 @@ TFairThrottler::TFairThrottler(
     , SharedBucket_(New<TSharedBucket>(config->GlobalAccumulationTicks, Profiler_))
     , Config_(std::move(config))
 {
-    if (Config_->IPCPath) {
-        IPC_ = New<TFileThrottlerIPC>(*Config_->IPCPath);
+    if (Config_->IpcPath) {
+        Ipc_ = New<TFileThrottlerIpc>(*Config_->IpcPath);
 
         SharedBucket_->Limit.Value = std::shared_ptr<std::atomic<i64>>(
-            &IPC_->State()->Value,
-            [ipc = IPC_] (auto /*ptr*/) { });
+            &Ipc_->State()->Value,
+            [state = Ipc_] (auto /*ptr*/) { });
 
         Profiler_.AddFuncGauge("/leader", MakeStrong(this), [this] {
             return IsLeader_.load();
@@ -646,7 +646,7 @@ TFairThrottler::TFairThrottler(
 }
 
 IThroughputThrottlerPtr TFairThrottler::CreateBucketThrottler(
-    const TString& name,
+    const std::string& name,
     TFairThrottlerBucketConfigPtr config)
 {
     if (!config) {
@@ -670,15 +670,15 @@ IThroughputThrottlerPtr TFairThrottler::CreateBucketThrottler(
 
     throttler->SetLimited(config->Limit || config->RelativeLimit);
 
-    IIPCBucketPtr ipc;
-    if (IPC_) {
-        ipc = IPC_->AddBucket();
+    IIpcBucketPtr state;
+    if (Ipc_) {
+        state = Ipc_->AddBucket();
     }
 
     Buckets_[name] = TBucket{
         .Config = std::move(config),
         .Throttler = throttler,
-        .IPC = ipc,
+        .Ipc = state,
     };
 
     return throttler;
@@ -686,7 +686,7 @@ IThroughputThrottlerPtr TFairThrottler::CreateBucketThrottler(
 
 void TFairThrottler::Reconfigure(
     TFairThrottlerConfigPtr config,
-    const THashMap<TString, TFairThrottlerBucketConfigPtr>& buckets)
+    const THashMap<std::string, TFairThrottlerBucketConfigPtr>& buckets)
 {
     for (const auto& [name, config] : buckets) {
         CreateBucketThrottler(name, config);
@@ -712,7 +712,7 @@ void TFairThrottler::DoUpdateLeader()
     std::vector<TBucketThrottler::TBucketState> states;
     states.reserve(Buckets_.size());
 
-    THashMap<TString, i64> bucketDemands;
+    THashMap<std::string, i64> bucketDemands;
     for (const auto& [name, bucket] : Buckets_) {
         auto state = bucket.Throttler->Peek();
 
@@ -736,12 +736,12 @@ void TFairThrottler::DoUpdateLeader()
         states.push_back(state);
     }
 
-    std::vector<IIPCBucketPtr> remoteBuckets;
-    if (IPC_) {
-        remoteBuckets = IPC_->ListBuckets();
+    std::vector<IIpcBucketPtr> remoteBuckets;
+    if (Ipc_) {
+        remoteBuckets = Ipc_->ListBuckets();
 
         for (const auto& remote : remoteBuckets) {
-            auto state = remote->State();
+            auto state = remote->GetState();
 
             weights.push_back(state->Weight.load());
 
@@ -771,9 +771,9 @@ void TFairThrottler::DoUpdateLeader()
     }
     auto freeIncome = ComputeFairDistribution(freeQuota, weights, demands, limits);
 
-    THashMap<TString, i64> bucketUsage;
-    THashMap<TString, i64> bucketIncome;
-    THashMap<TString, i64> bucketQuota;
+    THashMap<std::string, i64> bucketUsage;
+    THashMap<std::string, i64> bucketIncome;
+    THashMap<std::string, i64> bucketQuota;
 
     i64 leakedQuota = 0;
     int i = 0;
@@ -792,7 +792,7 @@ void TFairThrottler::DoUpdateLeader()
     }
 
     for (const auto& remote : remoteBuckets) {
-        auto state = remote->State();
+        auto state = remote->GetState();
 
         state->InFlow += tickIncome[i] + freeIncome[i];
 
@@ -828,41 +828,41 @@ void TFairThrottler::DoUpdateFollower()
 {
     auto guard = Guard(Lock_);
 
-    THashMap<TString, i64> bucketIncome;
-    THashMap<TString, i64> bucketUsage;
-    THashMap<TString, i64> bucketDemands;
-    THashMap<TString, i64> bucketQuota;
+    THashMap<std::string, i64> bucketIncome;
+    THashMap<std::string, i64> bucketUsage;
+    THashMap<std::string, i64> bucketDemands;
+    THashMap<std::string, i64> bucketQuota;
 
     i64 inFlow = 0;
     i64 outFlow = 0;
 
     for (const auto& [name, bucket] : Buckets_) {
-        auto ipc = bucket.IPC->State();
+        auto* ipcState = bucket.Ipc->GetState();
 
-        ipc->Weight = bucket.Config->Weight;
+        ipcState->Weight = bucket.Config->Weight;
         if (auto limit = bucket.Config->GetLimit(Config_->TotalLimit)) {
-            ipc->Limit = *limit;
+            ipcState->Limit = *limit;
         } else {
-            ipc->Limit = -1;
+            ipcState->Limit = -1;
         }
 
-        auto state = bucket.Throttler->Peek();
+        auto bucketState = bucket.Throttler->Peek();
         auto guarantee = bucket.Config->GetGuarantee(Config_->TotalLimit);
-        auto demand = state.Usage + state.Overdraft + state.QueueSize;
+        auto demand = bucketState.Usage + bucketState.Overdraft + bucketState.QueueSize;
         if (guarantee && *guarantee > demand) {
             demand = *guarantee;
         }
 
-        ipc->Demand = demand;
+        ipcState->Demand = demand;
         bucketDemands[name] = demand;
 
-        auto in = ipc->InFlow.exchange(0);
-        auto out = bucket.Throttler->Refill(in, ipc->GuaranteedQuota);
-        ipc->OutFlow += out;
+        auto in = ipcState->InFlow.exchange(0);
+        auto out = bucket.Throttler->Refill(in, ipcState->GuaranteedQuota);
+        ipcState->OutFlow += out;
 
         bucketIncome[name] = in;
-        bucketUsage[name] = state.Usage;
-        bucketQuota[name] = state.Quota;
+        bucketUsage[name] = bucketState.Usage;
+        bucketQuota[name] = bucketState.Quota;
 
         inFlow += in;
         outFlow += out;
@@ -906,7 +906,7 @@ void TFairThrottler::RefillFromSharedBucket()
 
 void TFairThrottler::UpdateLimits(TInstant at)
 {
-    if (!IsLeader_ && IPC_->TryLock()) {
+    if (!IsLeader_ && Ipc_->TryLock()) {
         IsLeader_ = true;
 
         YT_LOG_DEBUG("Throttler is leader");

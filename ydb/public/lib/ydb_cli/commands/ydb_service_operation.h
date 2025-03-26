@@ -3,8 +3,8 @@
 #include "ydb_command.h"
 #include "ydb_common.h"
 
-#include <ydb-cpp-sdk/library/operation_id/operation_id.h>
-#include <ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
 
 #include <util/generic/hash.h>

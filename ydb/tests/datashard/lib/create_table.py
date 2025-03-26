@@ -88,7 +88,7 @@ non_pk_types = {
     "Yson": "CAST('[{}]' AS Yson)"
 }
 
-unique = ["", "UNIQUE"]
+unique = ["UNIQUE", ""]
 index_sync = ["SYNC", "ASYNC"]
 
 

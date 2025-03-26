@@ -1,3 +1,5 @@
+import threading
+
 from ydb.tests.sql.lib.test_base import TestBase
 from ydb.tests.stress.oltp_workload.workload import cleanup_type_name
 from ydb.tests.datashard.lib.create_table import create_table, create_ttl, pk_types, non_pk_types, index_first, index_first_not_Bool, index_second, ttl_types, unique, index_sync
@@ -5,6 +7,7 @@ from ydb.tests.datashard.lib.create_table import create_table, create_ttl, pk_ty
 
 class TestDML(TestBase):
     def test_DML(self):
+        threads = []
         # all index
         for i in range(2):
             for uniq in unique:
@@ -16,15 +19,21 @@ class TestDML(TestBase):
                             index = index_first_not_Bool
                         else:
                             index = index_first
-                        self.DML(
-                            f"table_index_{i}_{uniq}_{sync}", pk_types, {}, index, "", uniq, sync)
+                        thr = threading.Thread(target=self.DML, args=(
+                            f"table_index_{i}_{uniq}_{sync}", pk_types, {}, index, "", uniq, sync,))
+                        thr.start()
+                        threads.append(thr)
         # all ttl
         for ttl in ttl_types.keys():
-            self.DML(
-                f"table_ttl_{ttl}", pk_types, {}, {}, ttl, "", "")
+            thr = threading.Thread(target=self.DML, args=(
+                f"table_ttl_{ttl}", pk_types, {}, {}, ttl, "", "",))
+            thr.start()
+            threads.append(thr)
 
-        self.DML(
-            "table_all_types", pk_types, {**pk_types, **non_pk_types}, {}, "", "", "")
+        thr = threading.Thread(target=self.DML, args=(
+            "table_all_types", pk_types, {**pk_types, **non_pk_types}, {}, "", "", "",))
+        for thread in threads:
+            thread.join()
 
     def DML(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
         columns = {
@@ -47,7 +56,7 @@ class TestDML(TestBase):
                                  "Uint32" or ttl == "Uint64" or ttl == "DyNumber" else "", table_name)
             self.query(sql_ttl)
         self.insert(table_name, all_types, pk_types, index, ttl)
-        self.update(table_name, all_types, index, ttl)
+        self.update(table_name, all_types, index, ttl, unique)
         self.upsert(table_name, all_types, pk_types, index, ttl)
         self.delete(table_name, all_types, pk_types, index, ttl)
 
@@ -116,13 +125,12 @@ class TestDML(TestBase):
                     count, f"col_index_{type_name}", index[type_name], table_name)
                 count += 1
         else:
-            number_of_columns = len(pk_types) + len(all_types) + len(index)+2
+            number_of_columns = len(pk_types) + len(all_types) + len(index)+1
             if ttl != "":
                 number_of_columns += 1
-            for type_name in index.keys():
-                self.create_update(
-                    number_of_columns, number_of_columns - len(index)-1, f"col_index_{type_name}", index[type_name], table_name)
-                number_of_columns += 1
+            for i in range(1, number_of_columns + 1):
+                self.create_update_unique(
+                    number_of_columns + i, i, index, table_name)
 
         count_assert = 1
 
@@ -152,7 +160,7 @@ class TestDML(TestBase):
                     rows) == 1 and rows[0].count == number_of_columns, f"Expected {number_of_columns} rows after insert, faild in col_index_{cleanup_type_name(type_name)}, table {table_name}"
                 count_assert += 1
         else:
-            number_of_columns = len(pk_types) + len(all_types) + len(index) + 1
+            number_of_columns = len(pk_types) + len(all_types) + len(index) + 2
             if ttl != "":
                 number_of_columns += 1
             for type_name in index.keys():
@@ -166,8 +174,22 @@ class TestDML(TestBase):
         update_sql = f""" UPDATE `{table_name}` SET {cleanup_type_name(type_name)} = {key.format(value)} """
         self.query(update_sql)
 
-    def create_update_unique(self, value: int, search: int, type_name: str, key: str, table_name: str):
-        update_sql = f""" UPDATE `{table_name}` SET {cleanup_type_name(type_name)} = {key.format(value)} WHERE {cleanup_type_name(type_name)} = {key.format(search)}"""
+    def create_update_unique(self, value: int, search: int, index: dict[str, str], table_name: str):
+        update_sql = f" UPDATE `{table_name}` SET "
+        count = 1
+        for type_name in index.keys():
+            update_sql += f"  col_index_{cleanup_type_name(type_name)} = {index[type_name].format(value)} "
+            if count != len(index):
+                update_sql += ", "
+            count += 1
+        update_sql += " WHERE "
+        count = 1
+        for type_name in index.keys():
+            update_sql += f"  col_index_{cleanup_type_name(type_name)} = {index[type_name].format(search)} "
+            if count != len(index):
+                update_sql += " and "
+            count += 1
+
         self.query(update_sql)
 
     def upsert(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):

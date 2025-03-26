@@ -208,11 +208,23 @@ TDuplicateFilterConstructor::TSourceIntervals::TSourceIntervals(const std::deque
 }
 
 void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
-    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "request_duplicates_filter")("source_id", ev->Get()->GetSource()->GetSourceId());
-    const ui32 reqSourceId = ev->Get()->GetSource()->GetSourceId();
+    HandleRequest(ev->Get()->GetSource()->GetSourceId(), std::make_unique<TActionGetFilter>(ev->Get()->GetSubscriber(), ev->Get()->GetSource()));
+}
+
+void TDuplicateFilterConstructor::Handle(const TEvNotifyReadingFinished::TPtr& ev) {
+    for (const auto& source : ev->Get()->GetSources()) {
+        if (FinishedSourceIds.contains(source->GetSourceId())) {
+            continue;
+        }
+        HandleRequest(source->GetSourceId(), std::make_unique<TActionSkip>());
+    }
+}
+
+void TDuplicateFilterConstructor::DoGetFilter(
+    const ui64 reqSourceId, const std::shared_ptr<IFilterSubscriber>& subscriber, const ui64 memoryGroupId) {
+    AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "request_duplicates_filter")("source_id", reqSourceId);
     const auto reqSourceRange = Intervals.GetRangeBySourceId(reqSourceId);
 
-    // FIXME: sources may come out of order (need request buffering)
     AFL_VERIFY(SortedSources.empty() || SortedSources.front()->GetSourceId() == reqSourceId || Intervals.GetRangeBySourceId(SortedSources.front()->GetSourceId()).GetFirstIdx() > Intervals.GetRangeBySourceId(reqSourceId).GetLastIdx())("sorted_sources", SortedSources.size());
 
     while (!SkippedSources.empty() || !SortedSources.empty()) {
@@ -237,7 +249,7 @@ void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
 
         ActiveSources.emplace_back(std::make_shared<TSourceFilterConstructor>(source, Intervals));
         ActiveSourceById.emplace(ActiveSources.back()->GetSource()->GetSourceId(), ActiveSources.back());
-        StartFetchingColumns(ActiveSources.back(), ev->Get()->GetSource()->GetMemoryGroupId());
+        StartFetchingColumns(ActiveSources.back(), memoryGroupId);
 
         if (isSkipped) {
             ActiveSources.back()->SetSubscriber(std::make_shared<TNoOpSubscriber>());
@@ -245,7 +257,7 @@ void TDuplicateFilterConstructor::Handle(const TEvRequestFilter::TPtr& ev) {
     }
 
     auto constructor = GetConstructorBySourceId(reqSourceId);
-    constructor->SetSubscriber(ev->Get()->GetSubscriber());
+    constructor->SetSubscriber(subscriber);
     FlushFinishedSources();
 }
 
@@ -285,21 +297,16 @@ void TDuplicateFilterConstructor::Handle(const TEvDuplicateFilterDataFetched::TP
     }
 }
 
-void TDuplicateFilterConstructor::Handle(const TEvNotifyReadingFinished::TPtr& ev) {
-    for (const auto& source : ev->Get()->GetSources()) {
-        if (FinishedSourceIds.contains(source->GetSourceId())) {
-            continue;
-        }
-        if (auto* findSource = ActiveSourceById.FindPtr(source->GetSourceId())) {
-            (*findSource)->SetSubscriber(std::make_shared<TNoOpSubscriber>());
-            continue;
-        }
-        // FIXME: sources may come out of order
-        AFL_VERIFY(!SortedSources.empty());
-        AFL_VERIFY(SortedSources.front()->GetSourceId() == source->GetSourceId());
-        SkippedSources.emplace_back(SortedSources.front());
-        SortedSources.pop_front();
+void TDuplicateFilterConstructor::DoSkip(const ui64 sourceId) {
+    AFL_VERIFY (!FinishedSourceIds.contains(sourceId));
+    if (auto* findSource = ActiveSourceById.FindPtr(sourceId)) {
+        (*findSource)->SetSubscriber(std::make_shared<TNoOpSubscriber>());
+        return;
     }
+    AFL_VERIFY(!SortedSources.empty());
+    AFL_VERIFY(SortedSources.front()->GetSourceId() == sourceId);
+    SkippedSources.emplace_back(SortedSources.front());
+    SortedSources.pop_front();
     FlushFinishedSources();
 }
 
@@ -317,7 +324,6 @@ void TDuplicateFilterConstructor::AbortConstruction(const TString& reason) {
 TDuplicateFilterConstructor::TDuplicateFilterConstructor(const std::deque<std::shared_ptr<NSimple::IDataSource>>& sources)
     : TActor(&TDuplicateFilterConstructor::StateMain)
     , Intervals(sources)
-    , SortedSources(sources)
     , NotFetchedSourcesCount([this]() {
         std::vector<std::pair<ui32, ui32>> intervals;
         for (const auto& [_, interval] : Intervals.GetSourceRanges()) {
@@ -325,7 +331,9 @@ TDuplicateFilterConstructor::TDuplicateFilterConstructor(const std::deque<std::s
         }
         return intervals;
     }())
-    , NextIntervalToMerge(&Intervals) {
+    , NextIntervalToMerge(&Intervals)
+    , RequestsBuffer(Intervals)
+    , SortedSources(sources) {
 }
 
 void TDuplicateFilterConstructor::StartFetchingColumns(const std::shared_ptr<TSourceFilterConstructor>& source, const ui64 memoryGroupId) const {
@@ -373,7 +381,19 @@ void TDuplicateFilterConstructor::FlushFinishedSources() {
     }
 
     if (ActiveSources.empty() && SortedSources.empty()) {
-        PassAway();
+        Send(SelfId(), new NActors::TEvents::TEvPoison());
+    }
+}
+
+void TDuplicateFilterConstructor::HandleRequest(const ui64 sourceId, std::unique_ptr<IAction> action) {
+    AFL_VERIFY(!FinishedSourceIds.contains(sourceId))("source", sourceId);
+    RequestsBuffer.AddRequest(sourceId, std::move(action));
+    while (true) {
+        auto request = RequestsBuffer.ExtractNextAction();
+        if (!request) {
+            break;
+        }
+        request->second->Execute(*this, request->first);
     }
 }
 

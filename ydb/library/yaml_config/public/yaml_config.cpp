@@ -881,15 +881,15 @@ std::variant<TMainMetadata, TDatabaseMetadata, TError> GetGenericMetadata(const 
     }
 }
 
-TString DowngradeMainConfigVersion(const TString& config) {
+TString UpgradeMainConfigVersion(const TString& config) {
     auto metadata = GetMainMetadata(config);
-    Y_ENSURE(metadata.Version && *metadata.Version > 0);
-    *metadata.Version = *metadata.Version - 1;
+    Y_ENSURE(metadata.Version);
+    *metadata.Version = *metadata.Version + 1;
     return ReplaceMetadata(config, metadata);
 }
 
-TString UpgradeMainConfigVersion(const TString& config) {
-    auto metadata = GetMainMetadata(config);
+TString UpgradeStorageConfigVersion(const TString& config) {
+    auto metadata = GetStorageMetadata(config);
     Y_ENSURE(metadata.Version);
     *metadata.Version = *metadata.Version + 1;
     return ReplaceMetadata(config, metadata);

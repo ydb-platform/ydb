@@ -181,7 +181,7 @@ int TCommandConfigFetch::Run(TConfig& config) {
             // because for user it is the only way to get config
             // user will be unable to reupload this config without manual interaction
             // and will get attention that something went horribly wrong
-            Cerr << "Unable to bump cluster config version, returning as-is" << Endl;
+            Cerr << "Unable to bump main config version, returning as-is" << Endl;
         }
         if (!storageConfig.empty() || DedicatedStorageSection) {
             Cerr << "cluster config: " << Endl;
@@ -190,6 +190,15 @@ int TCommandConfigFetch::Run(TConfig& config) {
     }
 
     if (!storageConfig.empty()) {
+        try {
+            clusterConfig = NYamlConfig::UpgradeStorageConfigVersion(clusterConfig);
+        } catch(...) {
+            // it is better to return at least something
+            // because for user it is the only way to get config
+            // user will be unable to reupload this config without manual interaction
+            // and will get attention that something went horribly wrong
+            Cerr << "Unable to bump storage config version, returning as-is" << Endl;
+        }
         if (!clusterConfig.empty() || DedicatedClusterSection) {
             Cerr << "storage config:" << Endl;
         }

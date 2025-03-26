@@ -2173,7 +2173,6 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
 
         // TODO: Move tablet's time to the future with mediator timecast instead
-        --planStep;
         --txId;
 
         const ui32 fullNumRows = numWrites * (triggerPortionSize - overlapSize) + overlapSize;

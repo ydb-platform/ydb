@@ -56,13 +56,13 @@ Invoke this command in the repository root folder:
 make build-in-docker
 ```
 
-The `ydbops` executables will be available in the `bin` folder. Binary files are generated for Linux and MacOS (arm64, amd64).
+The `ydbops` executables will be available in the `bin` folder. Binary files are generated for Linux and macOS (arm64, amd64).  
 
-| Binary name | Platform
-|-|-|
-| ydbops | Linux(amd64) |
-| ydbops_darwin_amd64 | MacOS(amd64) |
-| ydbops_darwin_arm64 | MacOS(arm64) |
+| Binary name            | Platform      |
+|------------------------|--------------|
+| ydbops                | Linux (amd64) |
+| ydbops_darwin_amd64   | macOS (amd64) |
+| ydbops_darwin_arm64   | macOS (arm64) |
 
 
 #### Installing

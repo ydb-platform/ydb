@@ -7,6 +7,7 @@
 #include <yql/essentials/minikql/defs.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/public/udf/udf_value.h>
+#include <yql/essentials/utils/yql_panic.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
@@ -985,7 +986,7 @@ class TBlockSplitter : public IBlockSplitter {
         }
 
         TItem PopBack(ui64 numberRows) {
-            MKQL_ENSURE(numberRows <= Length, "Can not pop more than number of rows");
+            YQL_ENSURE(numberRows <= Length, "Can not pop more than number of rows");
             Length -= numberRows;
             UpdateArraysSize();
 
@@ -1067,19 +1068,19 @@ public:
 
 private:
     std::vector<arrow::Datum> ExtractDatums(const NUdf::TUnboxedValuePod* values, ui32 count) const {
-        MKQL_ENSURE(count == Width, "Invalid width");
+        YQL_ENSURE(count == Width, "Invalid width");
 
         std::vector<arrow::Datum> result;
         result.reserve(Width);
         for (size_t i = 0; i < Width; ++i) {
             const auto& datum = result.emplace_back(TArrowBlock::From(values[i]).GetDatum());
-            MKQL_ENSURE(datum.is_array() || datum.is_scalar(), "Expecting array or scalar");
+            YQL_ENSURE(datum.is_array() || datum.is_scalar(), "Expecting array or scalar");
         }
         return result;
     }
 
     ui64 GetDatumMemorySize(ui64 index, const arrow::Datum& datum) {
-        MKQL_ENSURE(index < Width, "Invalid index");
+        YQL_ENSURE(index < Width, "Invalid index");
         if (datum.is_array()) {
             return GetColumnReader(index).GetDataWeight(*datum.array());
         }
@@ -1092,7 +1093,7 @@ private:
     }
 
     IBlockReader& GetColumnReader(ui64 index) {
-        MKQL_ENSURE(index < Width, "Invalid index");
+        YQL_ENSURE(index < Width, "Invalid index");
         if (!BlockReaders[index]) {
             BlockReaders[index] = MakeBlockReader(TTypeInfoHelper(), Items[index]->GetItemType());
         }
@@ -1113,38 +1114,30 @@ private:
 
 IBlockSplitter::TPtr CreateBlockSplitter(const TType* type, ui64 chunkSizeLimit) {
     if (!type->IsMulti()) {
+        // Not supported for legacy blocks
         return nullptr;
     }
 
     const TMultiType* multiType = static_cast<const TMultiType*>(type);
     const ui32 width = multiType->GetElementsCount();
-    if (!width) {
-        return nullptr;
-    }
+    YQL_ENSURE(width > 0);
 
     TVector<const TBlockType*> items;
     items.reserve(width);
-    for (ui32 i = 0; i < width; i++) {
-        const auto type = multiType->GetElementType(i);
-        if (!type->IsBlock()) {
-            return nullptr;
-        }
-
-        const TBlockType* blockType = static_cast<const TBlockType*>(type);
-        if (i == width - 1) {
-            if (blockType->GetShape() != TBlockType::EShape::Scalar) {
-                return nullptr;
-            }
-            if (!blockType->GetItemType()->IsData()) {
-                return nullptr;
-            }
-            if (static_cast<const TDataType*>(blockType->GetItemType())->GetDataSlot() != NUdf::EDataSlot::Uint64) {
-                return nullptr;
-            }
-        }
-
-        items.push_back(blockType);
+    for (ui32 i = 0; i < width - 1; i++) {
+        const auto elementType = multiType->GetElementType(i);
+        YQL_ENSURE(elementType->IsBlock());
+        items.push_back(static_cast<const TBlockType*>(elementType));
     }
+
+    const auto lengthType = multiType->GetElementType(width - 1);
+    YQL_ENSURE(lengthType->IsBlock());
+
+    const TBlockType* lengthBlockType = static_cast<const TBlockType*>(lengthType);
+    YQL_ENSURE(lengthBlockType->GetShape() == TBlockType::EShape::Scalar);
+    YQL_ENSURE(lengthBlockType->GetItemType()->IsData());
+    YQL_ENSURE(static_cast<const TDataType*>(lengthBlockType->GetItemType())->GetDataSlot() == NUdf::EDataSlot::Uint64);
+    items.push_back(lengthBlockType);
 
     return MakeIntrusive<TBlockSplitter>(items, chunkSizeLimit);
 }

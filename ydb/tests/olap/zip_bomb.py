@@ -6,7 +6,7 @@ from threading import Thread
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 
-ROWS_CHUNK_SIZE = 1000000
+ROWS_CHUNK_SIZE = 100000
 ROWS_CHUNKS_COUNT = 2
 
 
@@ -44,7 +44,7 @@ class TestZipBomb(object):
             """)
 
     def upsert_test_str_chunk(self, session, table, chunk_id, retries=10):
-        long_string = 'x' * 500
+        long_string = 'x' * 5000
         return session.execute_with_retries(f"""
                 $n = {ROWS_CHUNK_SIZE};
                 $values_list = ListReplicate(42ul, $n);

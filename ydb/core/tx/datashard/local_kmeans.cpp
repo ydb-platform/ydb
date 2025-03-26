@@ -443,18 +443,13 @@ public:
         return EScan::Feed;
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
-    {
-        ++ReadRows;
-        ReadBytes += CountBytes(key, row);
-        
-        return Feed(key, *row);
-    }
-
-private:
-    EScan Feed(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row_) final
     {
         LOG_T("Feed " << Debug());
+
+        ++ReadRows;
+        ReadBytes += CountBytes(key, row_);
+        auto row = *row_;
         
         switch (State) {
             case EState::SAMPLE:

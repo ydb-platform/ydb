@@ -288,19 +288,14 @@ public:
         LOG_I("Create " << Debug());
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
-    {
-        ++ReadRows;
-        ReadBytes += CountBytes(key, row);
-        
-        return Feed(key, *row);
-    }
-
-private:
-    EScan Feed(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row_) final
     {
         LOG_T("Feed " << Debug());
-
+        
+        ++ReadRows;
+        ReadBytes += CountBytes(key, row_);
+        auto row = *row_;
+        
         switch (UploadState) {
             case EState::UPLOAD_MAIN_TO_BUILD:
                 return FeedUploadMain2Build(key, row);

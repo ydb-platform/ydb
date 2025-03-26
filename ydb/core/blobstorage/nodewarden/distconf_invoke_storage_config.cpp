@@ -13,20 +13,17 @@ namespace NKikimr::NStorage {
     void TInvokeRequestHandlerActor::FetchStorageConfig(bool manual, bool fetchMain, bool fetchStorage) {
         if (!Self->StorageConfig) {
             FinishWithError(TResult::ERROR, "no agreed StorageConfig");
-        } else if (!Self->MainConfigFetchYaml) {
+        } else if (!Self->MainConfigYaml) {
             FinishWithError(TResult::ERROR, "no stored YAML for storage config");
         } else {
             auto ev = PrepareResult(TResult::OK, std::nullopt);
             auto *record = &ev->Record;
             auto *res = record->MutableFetchStorageConfig();
             if (fetchMain) {
-                res->SetYAML(Self->MainConfigFetchYaml);
+                res->SetYAML(Self->MainConfigYaml);
             }
             if (fetchStorage && Self->StorageConfigYaml) {
-                auto metadata = NYamlConfig::GetStorageMetadata(*Self->StorageConfigYaml);
-                metadata.Cluster = metadata.Cluster.value_or("unknown"); // TODO: fix this
-                metadata.Version = metadata.Version.value_or(0) + 1;
-                res->SetStorageYAML(NYamlConfig::ReplaceMetadata(*Self->StorageConfigYaml, metadata));
+                res->SetStorageYAML(*Self->StorageConfigYaml);
             }
 
             if (manual) {

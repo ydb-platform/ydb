@@ -387,17 +387,16 @@ namespace NKikimr::NBsController {
             response->Record.SetErrorReason("configuration is locked by distconf");
         } else if (Self.StorageYamlConfig) {
             if (record.GetDedicatedStorageSection()) {
-                // TODO(alexvru): increment generation
                 response->Record.SetStorageYaml(*Self.StorageYamlConfig);
             }
             if (record.GetDedicatedClusterSection() && Self.YamlConfig) {
                 const auto& [yaml, configVersion, yamlReturnedByFetch] = *Self.YamlConfig;
-                response->Record.SetClusterYaml(yamlReturnedByFetch);
+                response->Record.SetClusterYaml(yaml);
             }
         } else {
             if (!record.GetDedicatedClusterSection() && !record.GetDedicatedStorageSection() && Self.YamlConfig) {
                 const auto& [yaml, configVersion, yamlReturnedByFetch] = *Self.YamlConfig;
-                response->Record.SetClusterYaml(yamlReturnedByFetch);
+                response->Record.SetClusterYaml(yaml);
             }
         }
         auto h = std::make_unique<IEventHandle>(ev->Sender, Self.SelfId(), response.release(), 0, ev->Cookie);

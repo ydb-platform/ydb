@@ -41,6 +41,7 @@ class AbstractKiKiMRTest(object):
                                              nodes=nodes_count,
                                              use_in_memory_pdisks=False,
                                              metadata_section=cls.metadata_section,
+                                             simple_config=True,
                                              )
         cls.cluster = KiKiMR(configurator=configurator)
         cls.cluster.start()
@@ -144,6 +145,7 @@ class TestKiKiMRStoreConfigDir(AbstractKiKiMRTest):
             extra_grpc_services=['config'],
             metadata_section=cls.metadata_section,
             additional_log_configs={'BS_NODE': LogLevels.DEBUG},
+            simple_config=True,
         )
         cls.cluster = KiKiMR(configurator=configurator)
         cls.cluster.start()
@@ -193,7 +195,6 @@ class TestKiKiMRStoreConfigDir(AbstractKiKiMRTest):
 
         for node in self.cluster.nodes.values():
             node_config = node.read_node_config()
-            node_config['metadata']['version'] = get_config_version(yaml.dump(node_config)) + 1
             assert_that(
                 yaml.dump(yaml.safe_load(fetched_config), sort_keys=True) ==
                 yaml.dump(yaml.safe_load(yaml.dump(node_config)), sort_keys=True)

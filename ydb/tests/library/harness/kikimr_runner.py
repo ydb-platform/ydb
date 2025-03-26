@@ -9,6 +9,9 @@ import threading
 from importlib_resources import read_binary
 from google.protobuf import text_format
 import yaml
+import subprocess
+import requests
+from requests.exceptions import RequestException
 
 from six.moves.queue import Queue
 
@@ -71,7 +74,7 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
         self.grpc_ssl_port = port_allocator.grpc_ssl_port
         self.pgwire_port = port_allocator.pgwire_port
         self.sqs_port = None
-        if configurator.sqs_service_enabled:
+        if not configurator.simple_config and configurator.sqs_service_enabled:
             self.sqs_port = port_allocator.sqs_port
 
         self.__role = role
@@ -106,6 +109,46 @@ class KiKiMRNode(daemon.Daemon, kikimr_node_interface.NodeInterface):
                 }
 
         daemon.Daemon.__init__(self, self.command, cwd=self.__working_dir, timeout=180, stderr_on_error_lines=240, **kwargs)
+        
+    def is_port_listening(self, port):
+        """Check if the port is listening after node startup"""
+        try:
+            cmd = ["netstat", "-tuln"]
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            output = result.stdout.decode()
+            
+            port_lines = [line for line in output.split('\n') if str(port) in line]
+            if port_lines:
+                for line in port_lines:
+                    logger.info(f"Port {port} status: {line.strip()}")
+                is_listening = True
+            else:
+                logger.info(f"Port {port} is not found in netstat output")
+                is_listening = False
+            
+            return is_listening
+        except Exception as e:
+            logger.error(f"Error checking port {port}: {e}")
+            return False
+        
+    def check_ports(self):
+        """Check if all allocated ports are listening"""
+        ports_status = {
+            "grpc_port": self.is_port_listening(self.grpc_port),
+            "mon_port": self.is_port_listening(self.mon_port),
+            "ic_port": self.is_port_listening(self.ic_port)
+        }
+        
+        if hasattr(self, 'grpc_ssl_port') and self.grpc_ssl_port:
+            ports_status["grpc_ssl_port"] = self.is_port_listening(self.grpc_ssl_port)
+        
+        if hasattr(self, 'pgwire_port') and self.pgwire_port:
+            ports_status["pgwire_port"] = self.is_port_listening(self.pgwire_port)
+        
+        if hasattr(self, 'sqs_port') and self.sqs_port:
+            ports_status["sqs_port"] = self.is_port_listening(self.sqs_port)
+        
+        return ports_status
 
     @property
     def cwd(self):
@@ -319,6 +362,21 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
             ))
             raise
 
+    def __call_ydb_cli(self, cmd):
+        endpoint = 'grpc://{server}:{port}'.format(server=self.server, port=self.nodes[1].port)
+        full_command = [self.__configurator.get_ydb_cli_path(), '--endpoint', endpoint, '-y'] + cmd
+        logger.debug("Executing command = {}".format(full_command))
+        try:
+            return yatest.common.execute(full_command)
+        except yatest.common.ExecutionError as e:
+            logger.exception("KiKiMR command '{cmd}' failed with error: {e}\n\tstdout: {out}\n\tstderr: {err}".format(
+                cmd=" ".join(str(x) for x in full_command),
+                e=str(e),
+                out=e.execution_result.std_out,
+                err=e.execution_result.std_err
+            ))
+            raise
+
     def start(self):
         """
         Safely starts kikimr instance.
@@ -350,11 +408,15 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         for node_id in self.__configurator.all_node_ids():
             self.__run_node(node_id)
 
-        bs_needed = 'blob_storage_config' in self.__configurator.yaml_config
+        if self.__configurator.use_self_management:
+            self.__cluster_bootstrap()
+
+        bs_needed = ('blob_storage_config' in self.__configurator.yaml_config) or self.__configurator.use_self_management
 
         if bs_needed:
             self.__wait_for_bs_controller_to_start()
-            self.__add_bs_box()
+            if not self.__configurator.use_self_management:
+                self.__add_bs_box()
 
         pools = {}
 
@@ -385,6 +447,18 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         """
         self.__format_disks(node_id)
         self._nodes[node_id].start()
+        
+        time.sleep(3)
+        ports_status = self._nodes[node_id].check_ports()
+        logger.info(f"Node {node_id} port status after start: {ports_status}")
+        
+        if not ports_status["grpc_port"]:
+            logger.warning(f"Node {node_id} grpc port {self._nodes[node_id].grpc_port} is not listening!")
+        if not ports_status["mon_port"]:
+            logger.warning(f"Node {node_id} mon port {self._nodes[node_id].mon_port} is not listening!")
+        if not ports_status["ic_port"]:
+            logger.warning(f"Node {node_id} ic port {self._nodes[node_id].ic_port} is not listening!")
+            
         return self._nodes[node_id]
 
     def __register_node(self):
@@ -616,6 +690,29 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         )
         assert bs_controller_started
 
+    def __cluster_bootstrap(self):
+        timeout = 240
+        sleep = 5
+        retries, success = timeout / sleep, False
+        while retries > 0 and not success:
+            try:
+                self.__call_ydb_cli(
+                    [
+                        "admin",
+                        "cluster",
+                        "bootstrap",
+                        "--uuid", "test-cluster"
+                    ]
+                )
+                success = True
+
+            except Exception as e:
+                logger.error("Failed to execute, %s", str(e))
+                retries -= 1
+                time.sleep(sleep)
+
+                if retries == 0:
+                    raise
 
 class KikimrExternalNode(daemon.ExternalNodeDaemon, kikimr_node_interface.NodeInterface):
     kikimr_binary_deploy_path = '/Berkanavt/kikimr/bin/kikimr'

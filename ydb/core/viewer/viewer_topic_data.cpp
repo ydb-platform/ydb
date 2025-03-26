@@ -249,7 +249,7 @@ void TTopicData::Bootstrap() {
     PartitionId = FromStringWithDefault<ui32>(params.Get("partition"), 0);
 
     Offset = FromStringWithDefault<ui64>(params.Get("offset"), 0);
-    Timestamp = FromStringWithDefault<ui64>(params.Get("read_timestamp"), 0);
+    Timestamp = FromStringWithDefault(params.Get("read_timestamp"), Timestamp);
 
     Limit = FromStringWithDefault<ui32>(params.Get("limit"), 0);
 

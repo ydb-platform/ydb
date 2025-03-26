@@ -541,6 +541,12 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
             }
         });
     REGISTER_SETTING(*this, RuntimeClusterSelection).Parser([](const TString& v) { return FromString<ERuntimeClusterSelectionMode>(v); });
+    REGISTER_SETTING(*this, DefaultRuntimeCluster)
+        .Validator([this] (const TString&, TString value) {
+            if (!ValidClusters.contains(value)) {
+                throw yexception() << "Unknown cluster name: " << value;
+            }
+        });
     REGISTER_SETTING(*this, _AllowRemoteClusterInput);
 }
 

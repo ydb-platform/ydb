@@ -1,4 +1,7 @@
 # Sync content of this file with devtools/ya/core/error/__init__.py
+# Add some dummy lines to match the number of lines in devtools/ya/core/error/__init__.py
+# <dummy line>
+
 
 TEMPORARY_ERROR_MESSAGES = [
     'Connection reset by peer',
@@ -18,7 +21,6 @@ TEMPORARY_ERROR_MESSAGES = [
 ]
 
 
-# Node exit codes
 class ExitCodes(object):
     GENERIC_ERROR = 1
     # 2 is reserved not to be confused with bash's exit code

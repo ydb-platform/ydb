@@ -144,7 +144,8 @@ class YdbCliHelper:
             if iter_num not in self.result.iterations:
                 self.result.iterations[iter_num] = YdbCliHelper.Iteration()
 
-        def _process_returncode(self, returncode) -> None:
+        def _parse_stderr(self, stderr: str) -> None:
+            self.result.stderr = stderr   
             begin_str = f'{self.query_num}:'
             end_str = 'Query text:'
             iter_str = 'iteration '
@@ -167,6 +168,8 @@ class YdbCliHelper:
                     self._init_iter(iter)
                     self.result.iterations[iter].error_message = msg
                     self._add_error(f'Iteration {iter}: {msg}')
+
+        def _process_returncode(self, returncode) -> None:
             if returncode != 0 and len([x for x in filter(lambda x: x.error_message or x.warning_message, self.result.iterations.values())]) == 0:
                 self._add_error(f'Invalid return code: {returncode} instead 0. stderr: {self.result.stderr}')
 
@@ -239,7 +242,8 @@ class YdbCliHelper:
                     node_errors.append(f'Node {node} is down')
             self._add_error('\n'.join(node_errors))
 
-        def _parse_stdout(self):
+        def _parse_stdout(self, stdout: str) -> None:
+            self.result.stdout = stdout
             for line in self.result.stdout.splitlines():
                 m = re.search(r'iteration ([0-9]*):\s*ok\s*([\.0-9]*)s', line)
                 if m is not None:
@@ -269,13 +273,6 @@ class YdbCliHelper:
                 cmd += ['--scale', str(self.scale)]
             return cmd
 
-        def _exec_cli(self) -> None:
-            process = yatest.common.process.execute(self._get_cmd(), check_exit_code=False)
-            self.result.stdout = process.stdout.decode('utf-8', 'replace')
-            self.result.stderr = process.stderr.decode('utf-8', 'replace')
-            self._process_returncode(process.returncode)
-            self._parse_stdout()
-
         def process(self) -> YdbCliHelper.WorkloadRunResult:
             try:
                 wait_error = YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60)), self.db_path)
@@ -283,11 +280,14 @@ class YdbCliHelper:
                     self.result.error_message = wait_error
                 else:
                     self._nodes_info = self._get_nodes_info()
-                    self._exec_cli()
+                    process = yatest.common.process.execute(self._get_cmd(), check_exit_code=False)
+                    self._parse_stderr(process.stderr.decode('utf-8', 'replace'))
+                    self._parse_stdout(process.stdout.decode('utf-8', 'replace'))
                     self._check_nodes()
                     self._load_stats()
                     self._load_query_out()
                     self._load_plans()
+                    self._process_returncode(process.returncode)
             except BaseException as e:
                 self._add_error(str(e))
                 self.result.traceback = e.__traceback__

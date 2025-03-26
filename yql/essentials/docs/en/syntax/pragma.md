@@ -51,6 +51,14 @@ There are also special scoped pragmas with the scope defined by the same rules a
 
 Automatically run [COMMIT](commit.md) after every statement.
 
+### RuntimeLogLevel {#runtime-log-level}
+
+| Value type | Default |
+| --- | --- |
+| String, one of `Trace`, `Debug`, `Info`, `Notice`, `Warn`, `Error`, `Fatal` | `Info` |
+
+Allows you to change the logging level of calculations (for example, for UDFs) during query execution or at the stage of declaring the UDF signature.
+
 ### TablePathPrefix {#table-path-prefix}
 
 | Value type | Default |
@@ -324,7 +332,7 @@ Attach a set of files to the query by URL. Works similarly to adding multiple fi
 Treat the specified attached file as a library from which you can do [IMPORT](export_import.md). The syntax type for the library is determined from the file extension:
 
 * `.sql`: For the YQL dialect of SQL <span style="color: green;">(recommended)</span>.
-* `.yql`: For [s-expressions](/docs/s_expressions).
+* `.yqls`: For [s-expressions](/docs/s_expressions).
 
 Example with a file attached to the query:
 

@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/core/tx/columnshard/common/snapshot.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/engines/predicate/filter.h>
 #include <ydb/core/tx/program/program.h>
 
@@ -18,7 +19,7 @@ public:
     // Table
     ui64 TxId = 0;
     std::optional<ui64> LockId;
-    ui64 PathId = 0;
+    TInternalPathId PathId;
     TString TableName;
     bool ReadNothing = false;
     // Less[OrEqual], Greater[OrEqual] or both

@@ -17,7 +17,8 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
         replication->GetConfig().GetConsistencySettings(),
         target.GetStreamPath(),
         target.GetStreamConsumerName(),
-        target.GetDstPathId());
+        target.GetDstPathId(),
+        replication->GetConfig().GetTransferSpecific().GetBatching());
 }
 
 THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
@@ -29,7 +30,8 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
         const NKikimrReplication::TConsistencySettings& consistencySettings,
         const TString& srcStreamPath,
         const TString& srcStreamConsumerName,
-        const TPathId& dstPathId)
+        const TPathId& dstPathId,
+        const NKikimrReplication::TBatchingSettings& batchingSettings)
 {
     auto ev = MakeHolder<TEvService::TEvRunWorker>();
     auto& record = ev->Record;
@@ -57,6 +59,7 @@ THolder<TEvService::TEvRunWorker> MakeRunWorkerEv(
             auto& writerSettings = *record.MutableCommand()->MutableTransferWriter();
             dstPathId.ToProto(writerSettings.MutablePathId());
             writerSettings.SetTransformLambda(p->GetTransformLambda());
+            writerSettings.MutableBatching()->CopyFrom(batchingSettings);
             break;
         }
     }

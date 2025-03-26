@@ -66,4 +66,5 @@ message TDqSolomonSource {
     repeated string SystemColumns = 12;
     repeated string LabelNames = 13;
     map<string, string> Settings = 14;
+    repeated string RequiredLabelNames = 15;
 }

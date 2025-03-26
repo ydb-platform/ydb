@@ -319,6 +319,7 @@ message TClusterInfo {
     string Name = 2;
     string Domain = 3;
     EFlag Overall = 5;
+    optional uint64 CachedDataMaxAge = 8;
     repeated string Problems = 9;
     uint32 NodesTotal = 10;
     uint32 NodesAlive = 11;
@@ -516,9 +517,10 @@ message TStorageGroupsInfo {
     optional bool NeedGroup = 7;
     optional bool NeedSort = 8;
     optional bool NeedLimit = 9;
-    repeated string Problems = 10;
-    repeated TStorageGroupInfo StorageGroups = 11;
-    repeated TStorageGroupGroup StorageGroupGroups = 12;
+    optional uint64 CachedDataMaxAge = 10;
+    repeated string Problems = 11;
+    repeated TStorageGroupInfo StorageGroups = 12;
+    repeated TStorageGroupGroup StorageGroupGroups = 13;
 }
 
 message TStorageUsageStats {
@@ -578,6 +580,7 @@ message TNodesInfo {
     optional bool NeedSort = 8;
     optional bool NeedLimit = 9;
     repeated string Problems = 10;
+    optional uint64 CachedDataMaxAge = 11;
     repeated TNodeInfo Nodes = 20;
     repeated TNodeGroup NodeGroups = 30;
     optional uint64 MaximumDisksPerNode = 50;

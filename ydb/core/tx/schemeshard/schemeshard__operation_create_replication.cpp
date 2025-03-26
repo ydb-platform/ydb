@@ -58,6 +58,20 @@ struct TTransferStrategy : public IStrategy {
             return true;
         }
 
+        const auto& batching = desc.GetConfig().GetTransferSpecific().GetBatching();
+        if (batching.HasBatchSizeBytes() && batching.GetBatchSizeBytes() > 1_GB) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Batch size must be less than or equal to 1Gb");
+            return true;
+        }
+        if (batching.HasFlushIntervalMilliSeconds() && batching.GetFlushIntervalMilliSeconds() < TDuration::Seconds(1).MilliSeconds()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Flush interval must be greater than or equal to 1 second");
+            return true;
+        }
+        if (batching.HasFlushIntervalMilliSeconds() && batching.GetFlushIntervalMilliSeconds() > TDuration::Hours(24).MilliSeconds()) {
+            result.SetError(NKikimrScheme::StatusInvalidParameter, "Flush interval must be less than or equal to 24 hours");
+            return true;
+        }
+
         return false;
     }
 };

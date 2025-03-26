@@ -299,3 +299,77 @@ ORDER BY IntervalEnd desc, CPUCores desc
 ```
 
 * `"YYYY-MM-DDTHH:MM:SS.UUUUUUZ"` — время в зоне UTC 0 (`YYYY` — год, `MM` — месяц, `DD` — число, `hh` — часы, `mm` — минуты, `ss` — секунды, `uuuuuu` — микросекунды). Например, `"2023-01-26T13:00:00.000000Z"`.
+
+## Информация о пулах ресурсов {#resource_pools}
+
+Системное представление `resource_pools` содержит информацию о [настройках](../yql/reference/syntax/create-resource-pool.md#parameters) [пулов ресурсов](../concepts/glossary.md#resource-pool).
+
+Структура системного представления:
+
+Поле | Описание
+--- | ---
+`Name` | Имя пула ресурсов.<br/>Тип: `Utf8`.<br/>Ключ: `0`.
+`ConcurrentQueryLimit` | Максимальное количество параллельно выполняющихся запросов в пуле ресурсов.<br/>Тип: `Int32`.
+`QueueSize` | Максимальный размер очереди ожидания.<br/>Тип: `Int32`.
+`DatabaseLoadCpuThreshold` | Порог загрузки CPU всей базы данных, в процентах, после которого запросы не отправляются на выполнение и остаются в очереди.<br/>Тип: `Double`.
+`ResourceWeight` | [Веса](../dev/resource-consumption-management.md#resources_weight) для распределения ресурсов между пулами.<br/>Тип: `Double`.
+`TotalCpuLimitPercentPerNode` | Процент доступного CPU, который могут использовать все запросы на узле в данном пуле ресурсов.<br/>Тип: `Double`.
+`QueryCpuLimitPercentPerNode` | Процент доступного CPU на узле для одного запроса в пуле ресурсов.<br/>Тип: `Double`.
+`QueryMemoryLimitPercentPerNode` | Процент доступной памяти на узле, который может использовать запрос в данном пуле ресурсов.<br/>Тип: `Double`.
+
+### Пример
+
+Следующий запрос выводит информацию о настройках пула ресурсов с именем `default`:
+
+```yql
+SELECT
+    Name,
+    ConcurrentQueryLimit,
+    QueueSize,
+    DatabaseLoadCpuThreshold,
+    ResourceWeight,
+    TotalCpuLimitPercentPerNode,
+    QueryCpuLimitPercentPerNode,
+    QueryMemoryLimitPercentPerNode
+FROM `.sys/resource_pools`
+WHERE Name = "default";
+```
+
+Пример выдачи:
+
+\# | Name | ConcurrentQueryLimit | QueueSize | DatabaseLoadCpuThreshold | ResourceWeight | TotalCpuLimitPercentPerNode | QueryCpuLimitPercentPerNode |  QueryMemoryLimitPercentPerNode
+--- | --- | --- | --- | --- | --- | --- | --- | ---
+1 | default | -1 | -1 | -1 | -1 | -1 | -1 | -1
+
+## Информация о классификаторах пулов ресурсов {#resource_pools_classifiers}
+
+Системное представление `resource_pools_classifiers` содержит информацию о [настройках](../yql/reference/syntax/create-resource-pool-classifier.md#parameters) [классификаторов пулов ресурсов](../concepts/glossary.md#resource-pool-classifier).
+
+Структура системного представления:
+
+Поле | Описание
+--- | ---
+`Name` | Имя классификатора пула ресурсов.<br/>Тип: `Utf8`.<br/>Ключ: `0`.
+`Rank` | Приоритет выбора классификатора пулов ресурсов.<br/>Тип: `Int64`.
+`MemberName` | Пользователь или группа пользователей, которые будут отправлены в указанный пул ресурсов.<br/>Тип: `Utf8`.
+`ResourcePool` | Имя пула ресурсов, в который будут отправлены запросы.<br/>Тип: `Utf8`.
+
+### Пример
+
+Следующий запрос выводит информацию о настройках классификатора пула ресурсов с именем `olap`:
+
+```yql
+SELECT
+    Name,
+    Rank,
+    MemberName,
+    ResourcePool
+FROM `.sys/resource_pools_classifiers`
+WHERE Name = "olap";
+```
+
+Пример выдачи:
+
+\# | Name | Rank | MemberName | ResourcePool
+--- | --- | --- | --- | ---
+1 | olap | 1000 | olap_group@builtin | olap

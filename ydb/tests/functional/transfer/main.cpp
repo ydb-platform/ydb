@@ -156,7 +156,50 @@ struct MainTestCase {
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
     }
 
-    void CreateTransfer(const TString& lambda) {
+    void CreateConsumer(const TString& consumerName) {
+        auto res = Session.ExecuteQuery(Sprintf(R"(
+            ALTER TOPIC `%s`
+            ADD CONSUMER `%s`;
+        )", TopicName.data(), consumerName.data()), TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+    }
+
+    struct CreateTransferSettings {
+        std::optional<TString> ConsumerName = std::nullopt;
+        std::optional<TDuration> FlushInterval;
+        std::optional<ui64> BatchSizeBytes;
+
+        CreateTransferSettings()
+            : ConsumerName(std::nullopt)
+            , FlushInterval(TDuration::Seconds(1))
+            , BatchSizeBytes(8_MB) {}
+
+        static CreateTransferSettings WithConsumerName(const TString& consumerName) {
+            CreateTransferSettings result;
+            result.ConsumerName = consumerName;
+            return result;
+        }
+
+        static CreateTransferSettings WithBatching(const TDuration& flushInterval, const ui64 batchSize) {
+            CreateTransferSettings result;
+            result.FlushInterval = flushInterval;
+            result.BatchSizeBytes = batchSize;
+            return result;
+        }
+    };
+
+    void CreateTransfer(const TString& lambda, const CreateTransferSettings& settings = CreateTransferSettings()) {
+        TStringBuilder sb;
+        if (settings.ConsumerName) {
+            sb << ", CONSUMER = '" << *settings.ConsumerName << "'" << Endl;
+        }
+        if (settings.FlushInterval) {
+            sb << ", FLUSH_INTERVAL = Interval('PT" << settings.FlushInterval->Seconds() << "S')" << Endl;
+        }
+        if (settings.BatchSizeBytes) {
+            sb << ", BATCH_SIZE_BYTES = " << *settings.BatchSizeBytes << Endl;
+        }
+
         auto res = Session.ExecuteQuery(Sprintf(R"(
             %s;
 
@@ -164,20 +207,65 @@ struct MainTestCase {
             FROM `%s` TO `%s` USING $l
             WITH (
                 CONNECTION_STRING = 'grpc://%s'
-                -- , TOKEN = 'user@builtin'
+                %s
             );
-        )", lambda.data(), TransferName.data(), TopicName.data(), TableName.data(), ConnectionString.data()), TTxControl::NoTx()).GetValueSync();
+        )", lambda.data(), TransferName.data(), TopicName.data(), TableName.data(), ConnectionString.data(), sb.data()),
+            TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
     }
 
+    struct AlterTransferSettings {
+        std::optional<TString> TransformLambda;
+        std::optional<TDuration> FlushInterval;
+        std::optional<ui64> BatchSizeBytes;
+
+        AlterTransferSettings()
+            : FlushInterval(std::nullopt)
+            , BatchSizeBytes(std::nullopt) {}
+
+        static AlterTransferSettings WithBatching(const TDuration& flushInterval, const ui64 batchSize) {
+            AlterTransferSettings result;
+            result.FlushInterval = flushInterval;
+            result.BatchSizeBytes = batchSize;
+            return result;
+        }
+
+        static AlterTransferSettings WithTransformLambda(const TString& lambda) {
+            AlterTransferSettings result;
+            result.TransformLambda = lambda;
+            return result;
+        }
+    };
+
     void AlterTransfer(const TString& lambda) {
+        AlterTransfer(AlterTransferSettings::WithTransformLambda(lambda));
+    }
+
+    void AlterTransfer(const AlterTransferSettings& settings, bool success = true) {
+        TString lambda = settings.TransformLambda ? *settings.TransformLambda : "";
+        TString setLambda = settings.TransformLambda ? "SET USING $l" : "";
+
+        TStringBuilder sb;
+        if (settings.FlushInterval) {
+            sb << "FLUSH_INTERVAL = Interval('PT" << settings.FlushInterval->Seconds() << "S')" << Endl;
+        }
+        if (settings.BatchSizeBytes) {
+            sb << ", BATCH_SIZE_BYTES = " << *settings.BatchSizeBytes << Endl;
+        }
+
+        TString setOptions;
+        if (!sb.empty()) {
+            setOptions = TStringBuilder() << "SET (" << sb << " )";
+        }
+
         auto res = Session.ExecuteQuery(Sprintf(R"(
             %s;
 
             ALTER TRANSFER `%s`
-            SET USING $l;
-        )", lambda.data(), TransferName.data()), TTxControl::NoTx()).GetValueSync();
-        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            %s
+            %s;
+        )", lambda.data(), TransferName.data(), setLambda.data(), setOptions.data()), TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(success, res.IsSuccess(), res.GetIssues().ToString());
     }
 
     void DropTransfer() {
@@ -201,7 +289,7 @@ struct MainTestCase {
         settings.IncludeLocation(true);
         settings.IncludeStats(true);
 
-        return TopicClient.DescribeTopic(TopicName, settings);
+        return TopicClient.DescribeTopic(TopicName, settings).ExtractValueSync();
     }
 
     void Write(const TMessage& message) {
@@ -264,6 +352,20 @@ struct MainTestCase {
             }
 
             UNIT_ASSERT_C(attempt, "Unable to wait transfer result");
+            Sleep(TDuration::Seconds(1));
+        }
+    }
+
+    void CheckTransferStateError(const TString& expectedMessage) {
+        for (size_t i = 20; i--;) {
+            auto result = DescribeTransfer().GetReplicationDescription();
+            if (TReplicationDescription::EState::Error == result.GetState()) {
+                Cerr << ">>>>> " << result.GetErrorState().GetIssues().ToOneLineString() << Endl << Flush;
+                UNIT_ASSERT(result.GetErrorState().GetIssues().ToOneLineString().contains(expectedMessage));
+                break;
+            }
+    
+            UNIT_ASSERT_C(i, "Unable to wait transfer error");
             Sleep(TDuration::Seconds(1));
         }
     }
@@ -866,7 +968,7 @@ Y_UNIT_TEST_SUITE(Transfer)
             )");
 
         for (size_t i = 20; i--; ) {
-            auto result = testCase.DescribeTopic().ExtractValueSync();
+            auto result = testCase.DescribeTopic();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
             auto& consumers = result.GetTopicDescription().GetConsumers();
             if (1 == consumers.size()) {
@@ -883,7 +985,7 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTransfer();
 
         for (size_t i = 20; i--; ) {
-            auto result = testCase.DescribeTopic().ExtractValueSync();
+            auto result = testCase.DescribeTopic();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
             auto& consumers = result.GetTopicDescription().GetConsumers();
             if (0 == consumers.size()) {
@@ -915,18 +1017,8 @@ Y_UNIT_TEST_SUITE(Transfer)
                     return $x._unknown_field_for_lambda_compilation_error;
                 };
             )");
-
-        for (size_t i = 20; i--;) {
-            auto result = testCase.DescribeTransfer().GetReplicationDescription();
-            if (TReplicationDescription::EState::Error == result.GetState()) {
-                Cerr << ">>>>> " << result.GetErrorState().GetIssues().ToOneLineString() << Endl << Flush;
-                UNIT_ASSERT(result.GetErrorState().GetIssues().ToOneLineString().contains("_unknown_field_for_lambda_compilation_error"));
-                break;
-            }
-
-            UNIT_ASSERT_C(i, "Unable to wait transfer error");
-            Sleep(TDuration::Seconds(1));
-        }
+        
+        testCase.CheckTransferStateError("_unknown_field_for_lambda_compilation_error");
     }
 /*
     Y_UNIT_TEST(DescribeError_OnWriteToShard)
@@ -956,18 +1048,251 @@ Y_UNIT_TEST_SUITE(Transfer)
         
         testCase.Write({"message-1"});
 
-        for (size_t i = 20; i--;) {
-            auto result = testCase.DescribeTransfer().GetReplicationDescription();
-            if (TReplicationDescription::EState::Error == result.GetState()) {
-                Cerr << ">>>>> " << result.GetErrorState().GetIssues().ToOneLineString() << Endl << Flush;
-                UNIT_ASSERT(result.GetErrorState().GetIssues().ToOneLineString().contains("Cannot write data into shard"));
+        testCase.CheckTransferStateError("Cannot write data into shard");
+    }
+*/
+
+    Y_UNIT_TEST(CustomConsumer)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )");
+        
+        testCase.CreateTopic(1);
+        testCase.CreateConsumer("PredefinedConsumer");
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithConsumerName("PredefinedConsumer"));
+
+        Sleep(TDuration::Seconds(3));
+
+        { // Check that consumer is reused
+            auto result = testCase.DescribeTopic();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+            auto& consumers = result.GetTopicDescription().GetConsumers();
+            UNIT_ASSERT_VALUES_EQUAL(1, consumers.size());
+            UNIT_ASSERT_VALUES_EQUAL("PredefinedConsumer", consumers[0].GetConsumerName());
+        }
+
+        testCase.DropTransfer();
+
+        Sleep(TDuration::Seconds(3));
+
+        { // Check that consumer is not removed
+            auto result = testCase.DescribeTopic();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToOneLineString());
+            auto& consumers = result.GetTopicDescription().GetConsumers();
+            UNIT_ASSERT_VALUES_EQUAL(1, consumers.size());
+            UNIT_ASSERT_VALUES_EQUAL("PredefinedConsumer", consumers[0].GetConsumerName());
+        }
+    }
+
+    Y_UNIT_TEST(CustomFlushInterval)
+    {
+        TDuration flushInterval = TDuration::Seconds(5);
+
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )");
+
+        testCase.CreateTopic(1);
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithBatching(flushInterval, 13_MB));
+
+
+        TInstant expectedEnd = TInstant::Now() + flushInterval;
+        testCase.Write({"Message-1"});
+
+        // check that data in the table only after flush interval
+        for (size_t attempt = 20; attempt--; ) {
+            auto res = testCase.DoRead({{
+                _C("Key", ui64(0)),
+            }});
+            Cerr << "Attempt=" << attempt << " count=" << res.first << Endl << Flush;
+            if (res.first == 1) {
+                UNIT_ASSERT_C(expectedEnd <= TInstant::Now(), "Expected: " << expectedEnd << " Now: " << TInstant::Now());
                 break;
             }
 
-            UNIT_ASSERT_C(i, "Unable to wait transfer error");
+            UNIT_ASSERT_C(attempt, "Unable to wait transfer result");
             Sleep(TDuration::Seconds(1));
         }
     }
-*/
+
+    Y_UNIT_TEST(AlterFlushInterval)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )");
+
+        testCase.CreateTopic(1);
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithBatching(TDuration::Hours(1), 1_GB));
+
+
+        testCase.Write({"Message-1"});
+
+        // check if there isn`t data in the table (flush_interval is big)
+        for (size_t attempt = 5; attempt--; ) {
+            auto res = testCase.DoRead({{
+                _C("Key", ui64(0)),
+            }});
+            Cerr << "Attempt=" << attempt << " count=" << res.first << Endl << Flush;
+            UNIT_ASSERT_VALUES_EQUAL_C(0, res.first, "Flush has not been happened");
+            Sleep(TDuration::Seconds(1));
+        }
+
+        // flush interval is small
+        testCase.AlterTransfer(MainTestCase::AlterTransferSettings::WithBatching(TDuration::MilliSeconds(1), 1_GB), false);
+        // flush interval is big
+        testCase.AlterTransfer(MainTestCase::AlterTransferSettings::WithBatching(TDuration::Days(1) + TDuration::Seconds(1), 1_GB), false);
+
+        testCase.AlterTransfer(MainTestCase::AlterTransferSettings::WithBatching(TDuration::Seconds(1), 1_GB));
+
+        // check if there is data in the table
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }});
+    }
+
+    Y_UNIT_TEST(AlterBatchSize)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )");
+
+        testCase.CreateTopic(1);
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithBatching(TDuration::Hours(1), 512_MB));
+
+
+        testCase.Write({"Message-1"});
+
+        // batch size is big. alter is not success
+        testCase.AlterTransfer(MainTestCase::AlterTransferSettings::WithBatching(TDuration::Hours(1), 1_GB + 1), false);
+
+        // batch size is top valid value. alter is success
+        testCase.AlterTransfer(MainTestCase::AlterTransferSettings::WithBatching(TDuration::Hours(1), 1_GB));
+
+        // batch size is small. alter is success. after flush will
+        testCase.AlterTransfer(MainTestCase::AlterTransferSettings::WithBatching(TDuration::Hours(1), 1));
+
+        // check if there is data in the table
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }});
+    }
+
+    Y_UNIT_TEST(CreateTransferTopicNotExists)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8 NOT NULL,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )");
+        
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )");
+
+        testCase.CheckTransferStateError("Discovery error: local/Topic_");
+    }
+
+    Y_UNIT_TEST(CreateTransferRowTable)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8 NOT NULL,
+                    PRIMARY KEY (Key)
+                );
+            )");
+        testCase.CreateTopic();
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )");
+
+        testCase.CheckTransferStateError("Unexpected entry kind at 'writer'");
+    }
 }
 

@@ -19,10 +19,10 @@ public:
                              TTransactionContext &txc,
                              const TActorContext &) override
     {
-        Y_ABORT_UNLESS(op->IsSchemeTx());
+        Y_ENSURE(op->IsSchemeTx());
 
         TActiveTransaction *activeTx = dynamic_cast<TActiveTransaction*>(op.Get());
-        Y_VERIFY_S(activeTx, "cannot cast operation of kind " << op->GetKind());
+        Y_ENSURE(activeTx, "cannot cast operation of kind " << op->GetKind());
         const NKikimrTxDataShard::TFlatSchemeTransaction &tx = activeTx->GetSchemeTx();
 
         TSchemeOpSeqNo seqNo(tx.GetSeqNo());

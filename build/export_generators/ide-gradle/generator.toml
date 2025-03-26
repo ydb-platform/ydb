@@ -82,6 +82,7 @@ custom_runs-cmake_packages-name="str"
 custom_runs-cmake_packages-components="list"
 
 javac-flags="list"
+kotlinc-flags="list"
 
 [attrs.root]
 

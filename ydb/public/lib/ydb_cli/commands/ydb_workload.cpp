@@ -397,7 +397,7 @@ void TWorkloadCommandBase::CleanTables(NYdbWorkload::IWorkloadQueryGenerator& wo
         if (DryRun) {
             Cout << "Remove " << fullPath << Endl;
         } else {
-            NStatusHelpers::ThrowOnErrorOrPrintIssues(RemovePathRecursive(*SchemeClient, *TableClient, TopicClient.Get(), QueryClient.Get(), fullPath, ERecursiveRemovePrompt::Never, settings));
+            NStatusHelpers::ThrowOnErrorOrPrintIssues(RemovePathRecursive(*SchemeClient, *TableClient, TopicClient.Get(), QueryClient.Get(), nullptr, fullPath, ERecursiveRemovePrompt::Never, settings));
         }
         Cout << "Remove path " << path << "...Ok"  << Endl;
     }

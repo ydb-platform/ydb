@@ -21,6 +21,7 @@ bool TStepAction::DoApply(IDataReader& owner) const {
 }
 
 TConclusionStatus TStepAction::DoExecuteImpl() {
+    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Source->AddEvent("step_action"));
     if (Source->GetContext()->IsAborted()) {
         return TConclusionStatus::Success();
     }
@@ -67,6 +68,7 @@ TConclusion<bool> TFetchingScriptCursor::Execute(const std::shared_ptr<IDataSour
         }
         ++CurrentStepIdx;
     }
+    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("fcursor"));
     return true;
 }
 
@@ -235,6 +237,7 @@ TConclusion<bool> TProgramStep::DoExecuteInplace(const std::shared_ptr<IDataSour
             break;
         }
     }
+    FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("fgraph"));
     AFL_DEBUG(NKikimrServices::SSA_GRAPH_EXECUTION)(
         "graph_constructed", Program->DebugDOT(source->GetExecutionContext().GetExecutionVisitorVerified()->GetExecutedIds()));
 

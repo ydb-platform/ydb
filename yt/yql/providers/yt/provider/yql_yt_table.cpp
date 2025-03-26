@@ -827,6 +827,11 @@ bool TYtTableInfo::Validate(const TExprNode& node, EYtSettingTypes accepted, TEx
         return false;
     }
 
+    if (node.Child(TYtTable::idx_Cluster)->Content() == YtUnspecifiedCluster) {
+        ctx.AddError(TIssue(ctx.GetPosition(node.Child(TYtTable::idx_Cluster)->Pos()), TStringBuilder() << "Unspecified cluster is not expected"));
+        return false;
+    }
+
     return true;
 }
 
@@ -918,12 +923,33 @@ bool TYtOutTableInfo::Validate(const TExprNode& node, TExprContext& ctx) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder() << "Expected " << TYtOutTable::CallableName()));
         return false;
     }
-    if (!EnsureArgsCount(node, 5, ctx)) {
+    if (!EnsureMinArgsCount(node, 5, ctx)) {
+        return false;
+    }
+    if (!EnsureMaxArgsCount(node, 6, ctx)) {
         return false;
     }
 
     if (!EnsureAtom(*node.Child(TYtOutTable::idx_Name), ctx)) {
         return false;
+    }
+
+    if (node.ChildrenSize() == 6) {
+        const ui32 idx = TYtOutTable::idx_Cluster;
+        if (!EnsureAtom(*node.Child(idx), ctx)) {
+            return false;
+        }
+        TStringBuf cluster = node.Child(idx)->Content();
+        if (cluster.empty()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Child(idx)->Pos()), TStringBuilder()
+                << "Empty cluster for node " << node.Content() << " is not allowed"));
+            return false;
+        }
+        if (cluster == YtUnspecifiedCluster) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Child(idx)->Pos()), TStringBuilder()
+                << "Invalid cluster '" << cluster << "' for node " << node.Content()));
+            return false;
+        }
     }
 
 #define VALIDATE_OPT_FIELD(idx, TFunc)                                                   \
@@ -976,6 +1002,9 @@ void TYtOutTableInfo::Parse(TExprBase node) {
         Stat = MakeIntrusive<TYtTableStatInfo>(table.Stat());
     }
     Settings = table.Settings();
+    if (table.Cluster()) {
+        Cluster = table.Cluster().Cast().StringValue();
+    }
 }
 
 TExprBase TYtOutTableInfo::ToExprNode(TExprContext& ctx, const TPositionHandle& pos) const {
@@ -994,6 +1023,9 @@ TExprBase TYtOutTableInfo::ToExprNode(TExprContext& ctx, const TPositionHandle& 
         tableBuilder.Settings(Settings.Cast<TCoNameValueTupleList>());
     } else {
         tableBuilder.Settings().Build();
+    }
+    if (Cluster) {
+        tableBuilder.Cluster().Value(Cluster).Build();
     }
     return tableBuilder.Done();
 }

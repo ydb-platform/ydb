@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/counters/common/object_counter.h>
 #include <ydb/core/tx/columnshard/engines/scheme/versions/abstract_scheme.h>
 #include <ydb/core/tx/columnshard/operations/common/context.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/conveyor/usage/abstract.h>
 #include <ydb/core/tx/data_events/write_data.h>
 
@@ -26,7 +27,7 @@ public:
 
 class TBuildPackSlicesTask: public NConveyor::ITask, public NColumnShard::TMonitoringObjectsCounter<TBuildPackSlicesTask> {
 private:
-    const ui64 PathId;
+    const TInternalPathId PathId;
     const ui64 TabletId;
     const NEvWrite::EModificationType ModificationType;
     const std::vector<TWriteUnit> WriteUnits;
@@ -41,7 +42,7 @@ public:
         return "Write::ConstructBlobs::PackSlices";
     }
 
-    TBuildPackSlicesTask(std::vector<TWriteUnit>&& writeUnits, const NOlap::TWritingContext& context, const ui64 pathId, const ui64 tabletId,
+    TBuildPackSlicesTask(std::vector<TWriteUnit>&& writeUnits, const NOlap::TWritingContext& context, const TInternalPathId pathId, const ui64 tabletId,
         const NEvWrite::EModificationType modificationType)
         : PathId(pathId)
         , TabletId(tabletId)

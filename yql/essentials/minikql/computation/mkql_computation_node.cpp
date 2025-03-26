@@ -68,18 +68,25 @@ TComputationContext::TComputationContext(const THolderFactory& holderFactory,
             WideFields[fieldIdx + i] = &MutableValues[mutableIdx + i];
         }
     }
+
+    RssLogger = MakeLogger();
+    RssLoggerComponent = RssLogger->RegisterComponent("TrackRss");
 }
 
 TComputationContext::~TComputationContext() {
 #ifndef NDEBUG
     if (RssCounter) {
-        Cerr << "UsageOnFinish: graph=" << HolderFactory.GetPagePool().GetUsed()
+        RssLogger->Log(RssLoggerComponent, NUdf::ELogLevel::Info, TStringBuilder()
+            << "UsageOnFinish: graph=" << HolderFactory.GetPagePool().GetUsed()
             << ", rss=" << TRusage::Get().MaxRss
             << ", peakAlloc=" << HolderFactory.GetPagePool().GetPeakAllocated()
-            << ", adjustor=" << UsageAdjustor
-            << Endl;
+            << ", adjustor=" << UsageAdjustor);
     }
 #endif
+}
+
+NUdf::TLoggerPtr TComputationContext::MakeLogger() const {
+    return LogProvider ? LogProvider->MakeLogger() : NUdf::MakeNullLogger();
 }
 
 void TComputationContext::UpdateUsageAdjustor(ui64 memLimit) {
@@ -106,11 +113,11 @@ void TComputationContext::UpdateUsageAdjustor(ui64 memLimit) {
 
 #ifndef NDEBUG
     if (printUsage) {
-        Cerr << "Usage: graph=" << HolderFactory.GetPagePool().GetUsed()
+        RssLogger->Log(RssLoggerComponent, NUdf::ELogLevel::Info, TStringBuilder()
+            << "Usage: graph=" << HolderFactory.GetPagePool().GetUsed()
             << ", rss=" << rss
             << ", peakAlloc=" << HolderFactory.GetPagePool().GetPeakAllocated()
-            << ", adjustor=" << UsageAdjustor
-            << Endl;
+            << ", adjustor=" << UsageAdjustor);
         LastPrintUsage = TInstant::Now();
     }
 #endif

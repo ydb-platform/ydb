@@ -1,3 +1,5 @@
+* Support coordination nodes in `ydb scheme rmdir --recursive`.
+* Fixed return code of command `ydb workload * run --check-canonical` for the case when benchmark query results differ from canonical ones.
 
 ## 2.20.0 ##
 

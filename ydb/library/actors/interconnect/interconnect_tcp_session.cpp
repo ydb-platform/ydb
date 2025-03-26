@@ -953,8 +953,11 @@ namespace NActors {
 
             // generate some data within this channel
             const ui64 netBefore = channel->GetBufferedAmountOfData();
-            ui64 gross = 0;
-            const bool eventDone = channel->FeedBuf(task, serial, &gross);
+            const ui32 grossBefore = task.GetDataSize();
+            const bool eventDone = channel->FeedBuf(task, serial);
+            const ui32 grossAfter = task.GetDataSize();
+            Y_DEBUG_ABORT_UNLESS(grossBefore <= grossAfter);
+            const ui32 gross = grossAfter - grossBefore;
             channel->UnaccountedTraffic += gross;
             const ui64 netAfter = channel->GetBufferedAmountOfData();
             Y_DEBUG_ABORT_UNLESS(netAfter <= netBefore); // net amount should shrink
@@ -964,7 +967,7 @@ namespace NActors {
             TotalOutputQueueSize -= net;
             Proxy->Metrics->SubOutputBuffersTotalSize(net);
             bytesGenerated += gross;
-            Y_DEBUG_ABORT_UNLESS(!!net == !!gross && gross >= net, "net# %" PRIu64 " gross# %" PRIu64, net, gross);
+            Y_DEBUG_ABORT_UNLESS(gross || !net, "net# %" PRIu64 " gross# %" PRIu32, net, gross);
 
             // return it back to queue or delete, depending on whether this channel is still working or not
             ChannelScheduler->FinishPick(gross, EqualizeCounter);

@@ -395,7 +395,17 @@ void RegisterCoFinalizers(TFinalizingOptimizerMap& map) {
         }
         OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
             [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap& parentsMap, TExprContext& ctx) {
-                return ApplyExtractMembersToSort(input, members, parentsMap, ctx, " with multi-usage");
+                return ApplyExtractMembersToSortOrPruneKeys(input, members, parentsMap, ctx, " with multi-usage");
+            }
+        );
+
+        return true;
+    };
+
+    map[TCoPruneKeys::CallableName()] = map[TCoPruneAdjacentKeys::CallableName()] = [](const TExprNode::TPtr& node, TNodeOnNodeOwnedMap& toOptimize, TExprContext& ctx, TOptimizeContext& optCtx) {
+        OptimizeSubsetFieldsForNodeWithMultiUsage(node, *optCtx.ParentsMap, toOptimize, ctx,
+            [] (const TExprNode::TPtr& input, const TExprNode::TPtr& members, const TParentsMap& parentsMap, TExprContext& ctx) {
+                return ApplyExtractMembersToSortOrPruneKeys(input, members, parentsMap, ctx, " with multi-usage");
             }
         );
 

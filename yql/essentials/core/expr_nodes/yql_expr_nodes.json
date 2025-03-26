@@ -331,6 +331,24 @@
             ]
         },
         {
+            "Name": "TCoPruneKeysBase",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "CallableBase"},
+            "Children": [
+                {"Index": 1, "Name": "Extractor", "Type": "TCoLambda"}
+            ]
+        },
+        {
+            "Name": "TCoPruneKeys",
+            "Base": "TCoPruneKeysBase",
+            "Match": {"Type": "Callable", "Name": "PruneKeys"}
+        },
+        {
+            "Name": "TCoPruneAdjacentKeys",
+            "Base": "TCoPruneKeysBase",
+            "Match": {"Type": "Callable", "Name": "PruneAdjacentKeys"}
+        },
+        {
             "Name": "TCoFlatMapBase",
             "Base": "TCoInputBase",
             "Match": {"Type": "CallableBase"},

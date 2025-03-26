@@ -28,6 +28,7 @@ public:
     // TODO(max42): why these two methods must be re-implemented here? Maybe it is enough to replace TFluentYsonVoid with TFluentMap below?
 
     NYTree::TFluentYsonBuilder::TAny<TThis&&> Item(TStringBuf key);
+    NYTree::TFluentYsonBuilder::TAny<TThis&&> Items(const NYson::TYsonString& attributes);
 
     template <class T, class... TExtraArgs>
     TThis& OptionalItem(TStringBuf key, const T& optionalValue, TExtraArgs&&... extraArgs);

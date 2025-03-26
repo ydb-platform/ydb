@@ -495,12 +495,34 @@ IPlanBuilder& TProgram::GetPlanBuilder() {
 
 void TProgram::SetParametersYson(const TString& parameters) {
     Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
-    auto node = NYT::NodeFromYsonString(parameters);
-    YQL_ENSURE(node.IsMap());
-    for (const auto& x : node.AsMap()) {
-        YQL_ENSURE(x.second.IsMap());
-        YQL_ENSURE(x.second.HasKey("Data"));
-        YQL_ENSURE(x.second.Size() == 1);
+    NYT::TNode node;
+    try {
+        try {
+            node = NYT::NodeFromYsonString(parameters);
+        } catch (const std::exception& e) {
+            throw TErrorException(0) << "Invalid parameters: " << e.what();
+        }
+
+        if (!node.IsMap()) {
+            throw TErrorException(0) << "Invalid parameters: expected Map at first level";
+        }
+
+        for (const auto& x : node.AsMap()) {
+            if (!x.second.IsMap()) {
+                throw TErrorException(0) << "Invalid parameters: expected Map at second level";
+            }
+
+            if (!x.second.HasKey("Data")) {
+                throw TErrorException(0) << "Invalid parameters: expected Data key";
+            }
+
+            if (x.second.Size() != 1) {
+                throw TErrorException(0) << "Invalid parameters: expected Map with single element";
+            }
+        }
+    } catch (const std::exception& e) {
+        ParametersIssue_ = ExceptionToIssue(e);
+        return;
     }
 
     OperationOptions_.ParametersYson = node;
@@ -705,8 +727,25 @@ void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& 
     }
 }
 
+bool TProgram::CheckParameters() {
+    if (ParametersIssue_) {
+        if (!ExprCtx_) {
+            ExprCtx_.Reset(new TExprContext(NextUniqueId_));
+        }
+
+        ExprCtx_->AddError(*ParametersIssue_);
+        return false;
+    }
+
+    return true;
+}
+
 bool TProgram::ParseYql() {
     YQL_PROFILE_FUNC(TRACE);
+    if (!CheckParameters()) {
+        return false;
+    }
+
     YQL_ENSURE(SourceSyntax_ == ESourceSyntax::Unknown);
     SourceSyntax_ = ESourceSyntax::Yql;
     SyntaxVersion_ = 1;
@@ -730,6 +769,10 @@ bool TProgram::ParseSql() {
 bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
 {
     YQL_PROFILE_FUNC(TRACE);
+    if (!CheckParameters()) {
+        return false;
+    }
+
     YQL_ENSURE(SourceSyntax_ == ESourceSyntax::Unknown);
     SourceSyntax_ = ESourceSyntax::Sql;
     SyntaxVersion_ = settings.SyntaxVersion;

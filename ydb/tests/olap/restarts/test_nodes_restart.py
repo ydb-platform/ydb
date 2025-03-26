@@ -200,9 +200,9 @@ class TestRestartNodes(object):
         # for thread in threads:
         #     thread.join()
         threads[-1].join()
-        logger.info("In progress: joined killing thread")
-
-        logger.info("In progress: starting nodes again")
+        logger.info("In progress: joined killing thread, sleeping for 35s")
+        time.sleep(35)
+        logger.info("In progress: woke up, starting nodes again")
         # TODO: investigate, maybe here should be no repeating start() calls
         for node in self.cluster.nodes.values():
             node.start()
@@ -221,21 +221,21 @@ class TestRestartNodes(object):
         while datetime.datetime.now() < deadline:
             hasException = False
             ttl = random.randint(1, 1000)
-            logger.info("In progress: sending alter query")
+            logger.info("In progress: [last section] sending alter query")
             try:
                 self.ydb_client.query(f"""
                     ALTER TABLE `my_table` SET(TTL = Interval("PT{ttl}H") ON timestamp)
                     """)
             except Exception as x:
-                logger.error(f"In progress: Caught an exception during query executing: {x}")
+                logger.error(f"In progress: [last section] Caught an exception during query executing: {x}")
                 hasException = True
             except:
-                logger.error(f"In progress: Caught an unknown exception during node killing executing")
+                logger.error(f"In progress: [last section] Caught an unknown exception during node killing executing")
                 hasException = True
             finally:
                 if not hasException:
                     all_failed = False
-            logger.info("In progress: executed alter query")
+            logger.info("In progress: [last section] executed alter query")
             
         if all_failed:
             logger.error("Finished: All alter queries in last section failed")

@@ -1035,7 +1035,6 @@ def on_add_cpp_linter_check(fields, unit, *args):
         "LINTER": 1,
         "DEPENDS": unlimited,
         "CONFIGS": 1,
-        "CUSTOM_CONFIG": 1,
         "GLOBAL_RESOURCES": unlimited,
         "FILE_PROCESSING_TIME": 1,
         "EXTRA_PARAMS": unlimited,

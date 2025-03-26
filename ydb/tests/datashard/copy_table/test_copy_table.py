@@ -38,6 +38,7 @@ class TestCopyTable(TestBase):
         self.select_after_insert(
             f"copy_{table_name}", all_types, pk_types, index, ttl)
 
+    # После мерджа test_DML убрать эти методы https://github.com/ydb-platform/ydb/pull/16117/files
     def create_table(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
         columns = {
             "pk_": pk_types.keys(),
@@ -95,7 +96,6 @@ class TestCopyTable(TestBase):
             assert len(
                 rows) == 1 and rows[0].count == 1, f"Expected one rows, faild in {count} value, table {table_name}"
 
-    # После мерджа test_DML заменить это на метод от туда https://github.com/ydb-platform/ydb/pull/16117/files
     def create_insetr(self, table_name: str, value: int, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
         insert_sql = f"""
             INSERT INTO {table_name}(

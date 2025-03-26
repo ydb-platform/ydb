@@ -14,7 +14,7 @@ bool operator==(const TClientContext& lhs, const TClientContext& rhs)
            lhs.UseTLS == rhs.UseTLS &&
            lhs.TvmOnly == rhs.TvmOnly &&
            lhs.ProxyAddress == rhs.ProxyAddress &&
-           lhs.ProxyRole == rhs.ProxyRole;
+           lhs.RpcProxyRole == rhs.RpcProxyRole;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

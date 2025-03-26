@@ -328,10 +328,10 @@ protected:
             return node;
         }
 
-        auto cluster = TString{GetClusterName(input)};
         TSyncMap syncList;
         const ERuntimeClusterSelectionMode selectionMode =
             State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+        auto cluster = DeriveClusterFromInput(input, selectionMode);
 
         for (auto handler: aggregate.Handlers()) {
             auto trait = handler.Trait();
@@ -2280,6 +2280,7 @@ protected:
         auto leftCluster = GetClusterName(leftInput.Cast());
         auto rightCluster = GetClusterName(rightInput.Cast());
         if (leftCluster != rightCluster) {
+            // TODO: FIXME
             return node;
         }
 

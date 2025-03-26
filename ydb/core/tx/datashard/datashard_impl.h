@@ -1210,7 +1210,7 @@ class TDataShard
             return false;
         if (rowset.IsValid()) {
             ui64 val = rowset.GetValue<Schema::Sys::Uint64>();
-            Y_ABORT_UNLESS(val <= std::numeric_limits<ui32>::max());
+            Y_ENSURE(val <= std::numeric_limits<ui32>::max());
             value = static_cast<ui32>(val);
         }
         return true;
@@ -1222,7 +1222,7 @@ class TDataShard
             return false;
         if (rowset.IsValid()) {
             ui64 val = rowset.GetValue<Schema::Sys::Uint64>();
-            Y_ABORT_UNLESS(val <= 1, "Unexpected bool value %" PRIu64, val);
+            Y_ENSURE(val <= 1, "Unexpected bool value " << val);
             value = (val != 0);
         }
         return true;
@@ -1632,7 +1632,7 @@ public:
     }
 
     bool CanDrop() const {
-        Y_ABORT_UNLESS(State != TShardState::Offline, "Unexpexted repeated drop");
+        Y_ENSURE(State != TShardState::Offline, "Unexpexted repeated drop");
         // FIXME: why are we waiting for OutReadSets.Empty()?
         return (TxInFly() == 1) && OutReadSets.Empty() && (State != TShardState::PreOffline);
     }
@@ -1691,13 +1691,13 @@ public:
     const THashMap<ui64, TUserTable::TCPtr> &GetUserTables() const { return TableInfos; }
 
     ui64 GetLocalTableId(const TTableId& tableId) const {
-        Y_ABORT_UNLESS(!TSysTables::IsSystemTable(tableId));
+        Y_ENSURE(!TSysTables::IsSystemTable(tableId));
         auto it = TableInfos.find(tableId.PathId.LocalPathId);
         return it == TableInfos.end() ? 0 : it->second->LocalTid;
     }
 
     ui64 GetShadowTableId(const TTableId& tableId) const {
-        Y_ABORT_UNLESS(!TSysTables::IsSystemTable(tableId));
+        Y_ENSURE(!TSysTables::IsSystemTable(tableId));
         auto it = TableInfos.find(tableId.PathId.LocalPathId);
         return it == TableInfos.end() ? 0 : it->second->ShadowTid;
     }
@@ -2172,7 +2172,7 @@ public:
     };
 
     TTrivialLogThrottler& GetLogThrottler(ELogThrottlerType type) {
-        Y_ABORT_UNLESS(type != ELogThrottlerType::LAST);
+        Y_ENSURE(type != ELogThrottlerType::LAST);
         return LogThrottlers[type];
     };
 
@@ -2220,7 +2220,7 @@ private:
             for (const auto& partMeta : partMetaVec) {
                 auto it = LoanOwners.find(partMeta);
                 if (it != LoanOwners.end()) {
-                    Y_ABORT_UNLESS(it->second == ownerTabletId,
+                    Y_ENSURE(it->second == ownerTabletId,
                         "Part is already registered with a different owner");
                 } else {
                     LoanOwners[partMeta] = ownerTabletId;
@@ -2305,12 +2305,12 @@ private:
         }
 
         void SaveSnapshotForSending(ui64 dstTabletId, TAutoPtr<NKikimrTxDataShard::TEvSplitTransferSnapshot> snapshot) {
-            Y_ABORT_UNLESS(Dst.contains(dstTabletId));
+            Y_ENSURE(Dst.contains(dstTabletId));
             DataToSend[dstTabletId] = snapshot;
         }
 
         void DoSend(const TActorContext &ctx) {
-            Y_ABORT_UNLESS(Dst.size() == DataToSend.size());
+            Y_ENSURE(Dst.size() == DataToSend.size());
             for (const auto& ds : DataToSend) {
                 ui64 dstTablet = ds.first;
                 DoSend(dstTablet, ctx);
@@ -2318,7 +2318,7 @@ private:
         }
 
         void DoSend(ui64 dstTabletId, const TActorContext &ctx) {
-            Y_ABORT_UNLESS(Dst.contains(dstTabletId));
+            Y_ENSURE(Dst.contains(dstTabletId));
             NTabletPipe::TClientConfig clientConfig;
             PipesToDstShards[dstTabletId] = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, dstTabletId, clientConfig));
 
@@ -2399,7 +2399,7 @@ private:
         }
 
         void DoSend(ui64 dstTabletId, const TActorContext& ctx) {
-            Y_ABORT_UNLESS(Dst.contains(dstTabletId));
+            Y_ENSURE(Dst.contains(dstTabletId));
             NTabletPipe::TClientConfig clientConfig;
             clientConfig.CheckAliveness = true;
             clientConfig.RetryPolicy = PipeRetryPolicy;
@@ -2484,7 +2484,7 @@ private:
         }
 
         void DoSplit(const TActorContext& ctx) {
-            Y_ABORT_UNLESS(DstTabletIds);
+            Y_ENSURE(DstTabletIds);
             Worker = ctx.Register(CreateChangeExchangeSplit(Self, TVector<ui64>(DstTabletIds.begin(), DstTabletIds.end())));
             Acked = false;
         }
@@ -2597,8 +2597,8 @@ private:
             const ui64 txId = NEvWrite::TConvertor::GetTxId(first->Event);
 
             auto it = TxIds.find(txId);
-            Y_ABORT_UNLESS(it != TxIds.end() && it->second.First == first,
-                "Consistency check: proposed txId %" PRIu64 " in deque, but not in hashmap", txId);
+            Y_ENSURE(it != TxIds.end() && it->second.First == first,
+                "Consistency check: proposed txId " << txId << " in deque, but not in hashmap");
 
             // N.B. there should almost always be exactly one propose per txId
             it->second.First = first->Next;
@@ -3292,8 +3292,8 @@ protected:
     void Die(const TActorContext &ctx) override;
 
     void SendViaSchemeshardPipe(const TActorContext &ctx, ui64 tabletId, THolder<TEvDataShard::TEvSchemaChanged> event) {
-        Y_ABORT_UNLESS(tabletId);
-        Y_ABORT_UNLESS(CurrentSchemeShardId == tabletId);
+        Y_ENSURE(tabletId);
+        Y_ENSURE(CurrentSchemeShardId == tabletId);
 
         if (!SchemeShardPipe) {
             NTabletPipe::TClientConfig clientConfig;
@@ -3305,8 +3305,8 @@ protected:
     void ReportState(const TActorContext &ctx, ui32 state) {
         LOG_INFO_S(ctx, NKikimrServices::TX_DATASHARD, TabletID() << " Reporting state " << DatashardStateName(State)
                     << " to schemeshard " << CurrentSchemeShardId);
-        Y_ABORT_UNLESS(state != TShardState::Offline || !HasSharedBlobs(),
-                 "Datashard %" PRIu64 " tried to go offline while having shared blobs", TabletID());
+        Y_ENSURE(state != TShardState::Offline || !HasSharedBlobs(),
+                 "Datashard " << TabletID() << " tried to go offline while having shared blobs");
         if (!StateReportPipe) {
             NTabletPipe::TClientConfig clientConfig;
             clientConfig.RetryPolicy = SchemeShardPipeRetryPolicy;

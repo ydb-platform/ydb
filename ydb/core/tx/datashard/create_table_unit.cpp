@@ -42,7 +42,7 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
                                            const TActorContext &ctx)
 {
     TActiveTransaction *tx = dynamic_cast<TActiveTransaction*>(op.Get());
-    Y_VERIFY_S(tx, "cannot cast operation of kind " << op->GetKind());
+    Y_ENSURE(tx, "cannot cast operation of kind " << op->GetKind());
 
     const auto &schemeTx = tx->GetSchemeTx();
     if (!schemeTx.HasCreateTable())
@@ -52,7 +52,7 @@ EExecutionStatus TCreateTableUnit::Execute(TOperation::TPtr op,
 
     TPathId tableId(DataShard.GetPathOwnerId(), createTableTx.GetId_Deprecated());
     if (createTableTx.HasPathId()) {
-        Y_ABORT_UNLESS(DataShard.GetPathOwnerId() == createTableTx.GetPathId().GetOwnerId());
+        Y_ENSURE(DataShard.GetPathOwnerId() == createTableTx.GetPathId().GetOwnerId());
         tableId.LocalPathId = createTableTx.GetPathId().GetLocalId();
     }
 

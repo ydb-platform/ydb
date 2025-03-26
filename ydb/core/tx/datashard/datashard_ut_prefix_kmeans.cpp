@@ -226,6 +226,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
 
         InitRoot(server, sender);
 
@@ -313,7 +314,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
-        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
 
         InitRoot(server, sender);
 
@@ -465,6 +466,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
         auto sender = runtime.AllocateEdgeActor();
 
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_DEBUG);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
 
         InitRoot(server, sender);
 

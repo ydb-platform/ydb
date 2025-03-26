@@ -104,12 +104,12 @@
     - stdatomic.h:    contrib/deprecated/ffmpeg-3/compat/atomics/win32/stdatomic.h
     - atomic.h:       contrib/deprecated/ffmpeg-3/libavutil/atomic.h
 
-- source_filter: "^contrib/libs/ffmpeg-3.4.1/"
+- source_filter: "^contrib/deprecated/ffmpeg-3.4.1/"
   includes:
     - fontconfig/fontconfig.h
     - fribidi.h
-    - stdatomic.h:    contrib/libs/ffmpeg-3.4.1/compat/atomics/win32/stdatomic.h
-    - atomic.h:       contrib/libs/ffmpeg-3.4.1/libavutil/atomic.h
+    - stdatomic.h:    contrib/deprecated/ffmpeg-3.4.1/compat/atomics/win32/stdatomic.h
+    - atomic.h:       contrib/deprecated/ffmpeg-3.4.1/libavutil/atomic.h
 
 - source_filter: "^contrib/(deprecated/onednn|libs/intel/onednn)"
 

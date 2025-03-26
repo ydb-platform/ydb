@@ -1,7 +1,7 @@
 #include "yql_yt_table_data_service_reader.h"
 #include <yql/essentials/utils/log/log.h>
 #include <yql/essentials/utils/yql_panic.h>
-#include <yt/yql/providers/yt/fmr/utils/table_data_service_key.h>
+#include <yt/yql/providers/yt/fmr/utils/yql_yt_table_data_service_key.h>
 
 namespace NYql::NFmr {
 

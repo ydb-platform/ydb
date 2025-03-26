@@ -16,7 +16,7 @@ The structure of the data to transmit is as follows:
 The body of the SQL query looks like this:
 
 ```sql
-PRAGMA FeatureR010="prototype";
+PRAGMA FeatureR010="prototype"; -- pragma for enabling functionality
 
 SELECT * FROM bindings.input_table MATCH_RECOGNIZE ( -- Performing pattern matching from input_table
     PARTITION BY device_id, zone_id -- Partitioning the input data into groups by columns device_id and zone_id
@@ -66,9 +66,9 @@ Here is a brief description of the SQL syntax elements of the `MATCH_RECOGNIZE` 
 DEFINE <variable_1> AS <predicate_1> [ ... , <variable_N> AS <predicate_N> ]
 ```
 
-`DEFINE` declares variables that are searched for in the input data. Variables are names of SQL expressions computed over the input data. SQL expressions in `DEFINE` have the same meaning as search expressions in a `WHERE` SQL clause. For example, the `button = 1` expression searches for all rows that contain the `button` column with the `1` value. Any SQL expressions that can be used to perform a search, including aggregation functions like `LAST` or `FIRST`, can act as conditions. such as `button > 2 AND zone_id < 12` or `LAST(button) > 10`.
+`DEFINE` declares variables that are used to describe the desired pattern defined in [`PATTERN`](#pattern). Variables are named SQL statements evaluated over the input data. The syntax of the SQL statements in `DEFINE` is the same as the SQL statements of the `WHERE` predicate. For example, the `button = 1` expression searches for rows with the value `1` in the `button` column. Any SQL expressions that can be used to perform a search, including aggregation functions (`LAST`, `FIRST`). For example, `button > 2 AND zone_id < 12` or `LAST(button) > 10`.
 
-In your SQL statements, make sure to specify the variable name for which you are searching for matches. For instance, in the following SQL command, you need to specify the variable name for which the calculation is being performed (`A`), for the `button = 1` condition:
+In the example below, the SQL statement `A.button = 1` is declared as variable `A`.
 
 ```sql
 DEFINE
@@ -77,11 +77,11 @@ DEFINE
 
 {% note info %}
 
-The column list does not currently support aggregation functions (e.g., `AVG`, `MIN`, or `MAX`) and `PREV` and `NEXT` functions.
+`DEFINE` does not currently support aggregation functions (e.g., `AVG`, `MIN`, or `MAX`) and `PREV` and `NEXT` functions.
 
 {% endnote %}
 
-When processing each row of data, all logical expressions of all `DEFINE` keyword variables are calculated. If during the calculation of `DEFINE` variable expressions the logical expression gets the `TRUE` value, such a row is labeled with the `DEFINE` variable name and added to the list of rows subject to pattern matching.
+When processing each row of data, all SQL statements describing variables in `DEFINE` are calculated. When the SQL-expression describing the corresponding variable from `DEFINE` gets the `TRUE` value, such a row is labeled with the `DEFINE` variable name and added to the list of rows subject to pattern matching.
 
 #### **Example** {#define-example}
 
@@ -109,7 +109,7 @@ If a variable used in the `PATTERN` section has not been previously described in
 
 {% endnote %}
 
-You can use [quantifiers](https://en.wikipedia.org/wiki/Regular_expression#Quantification) in `PATTERN`. In regular expressions, they determine the number of repetitions of an element or subsequence in the matched pattern. Let’s use the `A`, `B`, `C`, and `D` variables from the `DEFINE` section to explain how quantifiers work. Here is the list of supported quantifiers:
+You can use [quantifiers](https://en.wikipedia.org/wiki/Regular_expression#Quantification) in `PATTERN`. In regular expressions, they determine the number of repetitions of an element or subsequence in the matched pattern. Here is the list of supported quantifiers:
 
 |Quantifier|Description|
 |----|-----|
@@ -185,11 +185,11 @@ The `ids` column contains the list of `zone_id * 10 + device_id` values counted 
 
 ### ROWS PER MATCH {#rows_per_match}
 
-`ROWS PER MATCH` determines the number of pattern matches. Default mode - `ONE ROW PER MATCH`.
+`ROWS PER MATCH` determines the number of pattern matches, as well as the number of columns returned. Default mode - `ONE ROW PER MATCH`.
 
-`ONE ROW PER MATCH` sets the `ROWS PER MATCH` mode to output one row per recognized pattern. The data schema of the result will be a union of [partitioning columns](#partition_by) and all [measures](#measures) columns.
+`ONE ROW PER MATCH` sets the `ROWS PER MATCH` mode to output one row per recognized pattern. The structure of the returned data corresponds to the columns listed in [`PARTITION BY`](#partition_by) and [`MEASURES`](#measures).
 
-`ALL ROWS PER MATCH` sets the `ROWS PER MATCH` mode to output all rows of recognized pattern except explicitly excluded by parentheses in [pattern](#pattern). The data schema of the result will be a union of input columns and all [measures](#measures) columns.
+`ALL ROWS PER MATCH` sets the `ROWS PER MATCH` mode to output all rows of recognized pattern except explicitly excluded by parentheses. In addition to the columns of the source table, the structure of the returned data includes the columns listed in the [`MEASURES`](#measures).
 
 #### **Examples** {#rows_per_match-examples}
 
@@ -229,7 +229,7 @@ MEASURES
     FIRST(B1.ts) AS first_ts,
     FIRST(B2.ts) AS mid_ts,
     LAST(B3.ts) AS last_ts
-ONE ROW PER MATCH
+ALL ROWS PER MATCH
 PATTERN (B1 {- B2 -} B3)
 DEFINE
     B1 AS B1.button = 1,
@@ -324,7 +324,7 @@ PARTITION BY <partition_1> [ ... , <partition_N> ]
 <partition> ::= { <column_names> | <expression> }
 ```
 
-`PARTITION BY` partitions the input data according to the list of the fields specified in this keyword. The expression converts the source data into multiple independent groups, each used for an independent pattern search. If the command is not specified, all data is processed as a single group.
+`PARTITION BY` - the expression partitions the source data into multiple non-overlapping groups, each used for an independent pattern search. If the command is not specified, all data is processed as a single group. Records with the same values of the columns listed after `PARTITION BY` fall into the same group.
 
 #### **Example** {#partition_by-example}
 

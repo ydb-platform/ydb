@@ -458,8 +458,8 @@ struct TSysViewProcessor::TTxInit : public TTxBase {
             std::sort(Self->PartitionTopByCpuHour.begin(), Self->PartitionTopByCpuHour.end(), compareByCpu);
 
             auto compareByTli = [] (const auto& l, const auto& r) {
-                return l->GetCPUCores() == r->GetCPUCores() ?
-                    l->GetTabletId() < r->GetTabletId() : l->GetCPUCores() > r->GetCPUCores();
+                return l->GetLocksBroken() == r->GetLocksBroken() ?
+                    l->GetTabletId() < r->GetTabletId() : l->GetLocksBroken() > r->GetLocksBroken();
             };
 
             std::sort(Self->PartitionTopByTliMinute.begin(), Self->PartitionTopByTliMinute.end(), compareByTli);

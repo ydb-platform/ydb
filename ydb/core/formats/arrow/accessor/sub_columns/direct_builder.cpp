@@ -27,7 +27,7 @@ void TColumnElements::BuildPlainAccessor(const ui32 recordsCount) {
         if (auto v = Values[it - RecordIndexes.begin()]) {
             builder.AddRecord(*it, *v);
         } else {
-            builder.AddNull(*it, *v);
+            builder.AddNull(*it);
         }
     }
     Accessor = builder.Finish(recordsCount);
@@ -105,7 +105,7 @@ TOthersData TDataBuilder::MergeOthers(const std::vector<TColumnElements*>& other
     auto othersBuilder = TOthersData::MakeMergedBuilder();
     while (heap.size()) {
         std::pop_heap(heap.begin(), heap.end());
-        othersBuilder->Add(heap.back().GetRecordIndex(), heap.back().GetKeyIndex(), heap.back().GetValue());
+        othersBuilder->AddImpl(heap.back().GetRecordIndex(), heap.back().GetKeyIndex(), heap.back().GetValuePointer());
         if (!heap.back().Next()) {
             heap.pop_back();
         } else {

@@ -90,11 +90,7 @@ public:
                 TStatusValidator::Validate(Builder->AppendNulls(recordIndex));
             }
             LastRecordIndex = recordIndex;
-            if (value.is_null()) {
-                TStatusValidator::Validate(Builder->AppendNulls(1));
-            } else {
-                AFL_VERIFY(NArrow::Append<TArrowDataType>(*Builder, arrow::util::string_view(value.data(), value.size())));
-            }
+            AFL_VERIFY(NArrow::Append<TArrowDataType>(*Builder, arrow::util::string_view(value.data(), value.size())));
         }
 
         void AddNull(const ui32 recordIndex) {

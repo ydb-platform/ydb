@@ -237,18 +237,9 @@ public:
                 AFL_VERIFY(*LastRecordIndex < recordIndex);
             }
             LastRecordIndex = recordIndex;
-            if (value.is_null()) {
-                if (!DefaultValue || DefaultValue->type->id() == arrow::null()->id()) {
-                    return;
-                } else {
-                    AFL_VERIFY(NArrow::Append<arrow::UInt32Type>(*IndexBuilder, recordIndex));
-                    ValueBuilder->AppendNulls(1);
-                }
-            } else {
-                AFL_VERIFY(NArrow::Append<arrow::UInt32Type>(*IndexBuilder, recordIndex));
-                AFL_VERIFY(NArrow::Append<TDataType>(*ValueBuilder, arrow::util::string_view(value.data(), value.size())));
-                ++RecordsCount;
-            }
+            AFL_VERIFY(NArrow::Append<arrow::UInt32Type>(*IndexBuilder, recordIndex));
+            AFL_VERIFY(NArrow::Append<TDataType>(*ValueBuilder, arrow::util::string_view(value.data(), value.size())));
+            ++RecordsCount;
         }
 
         void AddNull(const ui32 recordIndex) {
@@ -258,7 +249,7 @@ public:
             LastRecordIndex = recordIndex;
             if (!!DefaultValue && DefaultValue->type->id() != arrow::null()->id()) {
                 AFL_VERIFY(NArrow::Append<arrow::UInt32Type>(*IndexBuilder, recordIndex));
-                ValueBuilder->AppendNull();
+                TStatusValidator::Validate(ValueBuilder->AppendNull());
             }
         }
 

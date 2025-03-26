@@ -7,6 +7,7 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h>
+#include <util/string/join.h>
 
 namespace NKikimr::NArrow::NAccessor {
 class TSubColumnsArray;
@@ -34,6 +35,11 @@ public:
 
     TColumnElements(const TStringBuf key)
         : KeyName(key) {
+    }
+
+    void AddNull(const ui32 index) {
+        Values.emplace_back(std::nullopt);
+        RecordIndexes.emplace_back(index);
     }
 
     void AddData(const TStringBuf sb, const ui32 index) {
@@ -89,7 +95,7 @@ public:
         if (itElements == Elements.end()) {
             itElements = Elements.emplace(key, key).first;
         }
-        itElements->second.AddData(std::nullopt, CurrentRecordIndex);
+        itElements->second.AddNull(CurrentRecordIndex);
     }
 
     void AddKV(const TStringBuf key, const TStringBuf value) {
@@ -134,8 +140,12 @@ public:
             return KeyIndex;
         }
 
-        TStringBuf GetValue() const {
-            return Elements->GetValues()[Index];
+        const TStringBuf* GetValuePointer() const {
+            if (Elements->GetValues()[Index].has_value()) {
+                return &*Elements->GetValues()[Index];
+            } else {
+                return nullptr;
+            }
         }
 
         bool operator<(const THeapElements& item) const {

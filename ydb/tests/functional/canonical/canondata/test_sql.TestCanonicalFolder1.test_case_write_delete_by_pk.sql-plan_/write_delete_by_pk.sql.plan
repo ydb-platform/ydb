@@ -8,6 +8,10 @@
             "name": "/local/base_write_delete_by_pk_sql_plan/Input",
             "writes": [
                 {
+                    "columns": [
+                        "key",
+                        "subkey"
+                    ],
                     "type": "MultiErase"
                 }
             ]

@@ -533,9 +533,8 @@ IGraphTransformer::TStatus UpdateTableContentMemoryUsage(const TExprNode::TPtr& 
                                         if (info->Table->Meta->IsDynamic) {
                                             useItemsCount = false;
                                         }
-                                        if (!info->Table->Cluster) {
-                                            info->Table->Cluster = maybeRead.Cast().DataSource().Cluster().StringValue();
-                                        }
+                                        YQL_ENSURE(info->Table->Cluster);
+                                        YQL_ENSURE(info->Table->Cluster != YtUnspecifiedCluster);
                                         records.push_back(tableRecord);
                                         tableInfos.push_back(info);
                                     }

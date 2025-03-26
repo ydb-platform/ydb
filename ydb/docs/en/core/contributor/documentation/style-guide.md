@@ -54,11 +54,16 @@ Ensure that text follows proper language rules with no typos, grammar, punctuati
 - **Lists and bullet points.** Use bullet points or numbered lists to break down steps, features, or recommendations.
 - **Visual highlights.** If there's an important warning, information, or tip, highlight it using a `{% note info %} ... {% endnote %}` tag. For smaller inline highlights, sparingly use **bold** or *italic*.
 - **Code and samples.** When including code, use proper syntax highlighting, formatting, and comments to ensure readability. Show example output for queries and CLI commands. Use `code blocks` for everything likely to appear in a console or IDE, but not for visual highlights.
-- **Linking and references.** Provide clear and descriptive links to related resources or additional documentation. Instead of repeating the target's header for internal links, use `[{#T}](path/to/an/article.md)`.
-- **No copy-pasting.** If a piece of information needs to be displayed more than once, create a separate Markdown file in the `_includes` folder, then add it to all necessary places via `{% include [...](_includes/path/to/a/file.md) %}` instead of duplicating content by copying and pasting.
+- **Linking and references.**
+
+    - Provide clear and descriptive links to related resources or additional documentation.
+    - Links internal to documentation should always include a `.md` suffix and always be relative (that is, no `https://ydb.tech` prefix); otherwise, link consistency checking doesn't work, and they will eventually start leading to 404 errors.
+    - Instead of repeating the target's header for internal links, use `[{#T}](path/to/an/article.md)`.
+
+- **No copy-pasting.** If a piece of information needs to be displayed more than once, create a separate Markdown file in the `_includes` folder, then add it to all necessary places via the [`include`](https://diplodoc.com/docs/en/project/includes) feature instead of duplicating content by copying and pasting.
 - **Markdown syntax style.** {{ ydb-short-name }} documentation uses an automated linter for Markdown files. Refer to [.yfmlint](https://github.com/ydb-platform/ydb/blob/main/ydb/docs/.yfmlint) for the up-to-date list of enforced rules.
 - **Variable usage.** The {{ ydb-short-name }} documentation has a configuration file, [presets.yaml](https://github.com/ydb-platform/ydb/blob/main/ydb/docs/presets.yaml), that lists variables to prevent typos or conditionally hide content. Use these variables when appropriate, particularly `{{ ydb-short-name }}` instead of `YDB`.
-- **Diagrams.** Prefer built-in [Mermaid](https://github.com/diplodoc-platform/mermaid-extension) diagrams when possible. If using an external tool, submit the source file in the same `_assets` folder near image for future edits. Ensure diagrams look good in both light and dark modes.
+- **Diagrams.** Prefer built-in [Mermaid](https://github.com/diplodoc-platform/mermaid-extension) diagrams when possible. If using an external tool, submit the source file in the same `_assets` folder near the image for future edits. Ensure diagrams look good in both light and dark modes.
 - **Proper article placement.** New articles should be correctly placed in the [documentation structure](structure.md).
 - **Genre consistency.** Articles should not mix multiple [genres](genres.md), and the genre should match the article's place in the documentation structure.
 

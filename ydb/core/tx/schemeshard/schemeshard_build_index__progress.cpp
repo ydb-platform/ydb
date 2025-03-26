@@ -212,7 +212,7 @@ private:
         if (UploadStatus.IsRetriable() && RetryCount < Limits.MaxUploadRowsRetryCount) {
             LOG_N("Got retriable error, " << Debug() << " RetryCount: " << RetryCount);
 
-            this->Schedule(Limits.GetTimeoutBackouff(RetryCount), new TEvents::TEvWakeup());
+            this->Schedule(Limits.GetTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
             return;
         }
         TAutoPtr<TEvIndexBuilder::TEvUploadSampleKResponse> response = new TEvIndexBuilder::TEvUploadSampleKResponse;

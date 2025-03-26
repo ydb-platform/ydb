@@ -584,6 +584,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TTestBasicRuntime runtime;
         TTestEnvOptions options;
         options.EnableTieringInColumnShard(true);
+        options.RunFakeConfigDispatcher(true);
         TTestEnv env(runtime, options);
         ui64 txId = 100;
 
@@ -753,6 +754,7 @@ Y_UNIT_TEST_SUITE(TOlap) {
         TTestBasicRuntime runtime;
         TTestEnvOptions options;
         options.EnableTieringInColumnShard(true);
+        options.RunFakeConfigDispatcher(true);
         TTestEnv env(runtime, options);
         ui64 txId = 100;
 

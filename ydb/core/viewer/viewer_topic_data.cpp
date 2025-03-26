@@ -260,7 +260,7 @@ void TTopicData::Bootstrap() {
 
     // No truncate is available with on offset specified and limit = 1 or undefined
     if (!TruncateLongMessages && Limit > 1) {
-        return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "no_truncate option can only be specified with limit = 1"));
+        return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "truncate=false can only be specified with limit = 1"));
     }
     if (!TruncateLongMessages && Timestamp > 0) {
         return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "no_truncate option can only be specified with offset (not timestamp"));

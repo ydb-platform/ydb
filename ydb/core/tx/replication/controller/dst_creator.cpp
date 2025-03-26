@@ -528,11 +528,24 @@ class TDstCreator: public TActorBootstrapped<TDstCreator> {
 
     STATEFN(StateSubscribeDstPath) {
         switch (ev->GetTypeRewrite()) {
+            hFunc(TSchemeBoardEvents::TEvNotifyDelete, Handle);
             hFunc(TSchemeBoardEvents::TEvNotifyUpdate, Handle);
         default:
             return StateBase(ev);
         }
     }
+
+    void Handle(TSchemeBoardEvents::TEvNotifyDelete::TPtr& ev) {
+        LOG_T("Handle " << ev->Get()->ToString());
+
+        switch (Kind) {
+            case TReplication::ETargetKind::Table:
+            case TReplication::ETargetKind::IndexTable:
+                return;
+            case TReplication::ETargetKind::Transfer:
+                return Error(NKikimrScheme::EStatus::StatusPathDoesNotExist, TStringBuilder() << "The target table `" << DstPath << "` does not exist");
+            }
+        }
 
     void Handle(TSchemeBoardEvents::TEvNotifyUpdate::TPtr& ev) {
         LOG_T("Handle " << ev->Get()->ToString());

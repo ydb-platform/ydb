@@ -246,7 +246,7 @@ void TTopicData::Bootstrap() {
     if (!params.Has("partition")) {
         return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Parameter 'partition' is nessasary"));
     }
-    PartitionId = FromStringWithDefault<ui32>(params.Get("partition"), 0);
+    PartitionId = FromStringWithDefault(params.Get("partition"), PartitionId);
 
     Offset = FromStringWithDefault<ui64>(params.Get("offset"), 0);
     Timestamp = FromStringWithDefault(params.Get("read_timestamp"), Timestamp);

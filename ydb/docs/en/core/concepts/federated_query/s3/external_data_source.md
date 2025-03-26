@@ -87,6 +87,8 @@ Where:
 * `compression` — the [compression format](formats.md#compression_formats) of the files.
 * `schema_definition` — the [schema definition](#schema) of the data stored in the files.
 
+You can also specify optional [format settings](#format_settings) within `WITH` field.
+
 ### Data schema description {#schema}
 
 The data schema description consists of a set of fields:
@@ -139,7 +141,7 @@ As a result of executing such a query, the names and types of fields will be inf
 
 ### Data path formats {#path_format}
 
-In {{ ydb-full-name }}, the following data paths are supported:
+In {{ ydb-full-name }}, the following `file_path` parameter values are supported:
 
 {% include [!](_includes/path_format.md) %}
 
@@ -170,7 +172,9 @@ WITH(
     Manufacturer Utf8,
     Model Utf8,
     Price Double
-  )
+  ),
+  CSV_DELIMITER='-',
+  `DATA.DATE.FORMAT`="%Y-%m-%d"
 );
 ```
 

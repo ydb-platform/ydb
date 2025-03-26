@@ -87,6 +87,8 @@ WHERE
 * `compression` — [формат сжатия](formats.md#compression_formats) файлов.
 * `schema_definition` — [описание схемы хранимых данных](#schema) в файлах.
 
+Также в поле `WITH` можно указывать опциональные [параметры форматирования](#format_settings).
+
 ### Описание схемы данных {#schema}
 
 Описание схемы данных состоит из набора полей:
@@ -139,7 +141,7 @@ WHERE
 
 ### Форматы путей к данным {#path_format}
 
-В {{ ydb-full-name }} поддерживаются следующие пути к данным:
+В {{ ydb-full-name }} поддерживаются следующие значения параметра `file_path`:
 
 {% include [!](_includes/path_format.md) %}
 
@@ -170,7 +172,9 @@ WITH(
     Manufacturer Utf8,
     Model Utf8,
     Price Double
-  )
+  ),
+  CSV_DELIMITER='-',
+  `DATA.DATE.FORMAT`="%Y-%m-%d"
 );
 ```
 

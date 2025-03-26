@@ -1,6 +1,7 @@
 import os
 import argparse
 import tarfile
+import subprocess
 
 
 def is_exe(fpath):
@@ -25,12 +26,16 @@ def main():
         '--exclude', type=str, action='append', default=[], help="Exclude for create archive (can use multiply times)"
     )
     parser.add_argument('archive', type=str, action='store', help="Archive name, for example, archive.tar")  # required
-    parser.add_argument('directory', type=str, action='store', help="Directory name for create from or extract to")  # required
-    parser.add_argument('prefix', type=str, nargs='?', action='store', help="Path prefix for skip before create archive")  # dont't required, because nargs=?
+    parser.add_argument(
+        'directory', type=str, action='store', help="Directory name for create from or extract to"
+    )  # required
+    parser.add_argument(
+        'prefix', type=str, nargs='?', action='store', help="Path prefix for skip before create archive"
+    )  # dont't required, because nargs=?
 
     args = parser.parse_args()
 
-    if (args.extract and (args.exclude or args.prefix)):
+    if args.extract and (args.exclude or args.prefix):
         raise Exception(f"Illegal usage: {" ".join(args)}\n{_usage()}")
 
     tar = args.archive
@@ -49,12 +54,12 @@ def main():
             source = os.path.relpath(directory, prefix) if prefix else directory
             command = (
                 [tar_exe]
-                + (["--exclude='" + exclude + "'" for exclude in args.exclude] if args.exclude else [])
+                + (['--exclude=' + exclude for exclude in args.exclude] if args.exclude else [])
                 + ['-cf', tar]
                 + (['-C', prefix] if prefix else [])
                 + [source]
             )
-            os.execv(tar_exe, command)
+            subprocess.run(command, check=True)
         break
     else:
         if args.extract:

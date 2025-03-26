@@ -129,7 +129,7 @@ void TKafkaProduceActor::HandleInit(TEvTxProxySchemeCache::TEvNavigateKeySetResu
 
             topic.MeteringMode = info.PQGroupInfo->Description.GetPQTabletConfig().GetMeteringMode();
 
-            if (info.SecurityObject->CheckAccess(NACLib::EAccessRights::UpdateRow, *Context->UserToken)) {
+            if (!Context->RequireAuthentication || info.SecurityObject->CheckAccess(NACLib::EAccessRights::UpdateRow, *Context->UserToken)) {
                 topic.Status = OK;
                 topic.ExpirationTime = now + TOPIC_OK_EXPIRATION_INTERVAL;
                 topic.PartitionChooser = CreatePartitionChooser(info.PQGroupInfo->Description);
@@ -557,6 +557,8 @@ void TKafkaProduceActor::ProcessInitializationRequests(const TActorContext& ctx)
 
         request->ResultSet.emplace_back(entry);
     }
+
+    request->DatabaseName = CanonizePath(Context->DatabasePath);
 
     ctx.Send(MakeSchemeCacheID(), MakeHolder<TEvTxProxySchemeCache::TEvNavigateKeySet>(request.release()));
 }

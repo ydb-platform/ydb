@@ -128,6 +128,8 @@ public:
 
     //! Returns true if client was not interested in result (but we still must send response to make grpc happy)
     virtual bool IsClientLost() const = 0;
+
+    virtual TString GetEndpointId() const = 0;
 };
 
 } // namespace NYdbGrpc

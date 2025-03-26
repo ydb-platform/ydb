@@ -845,6 +845,7 @@ NKikimrPQ::TPQTabletConfig TPersQueue::MakeSupportivePartitionConfig() const
     partitionConfig.MutableReadRuleServiceTypes()->Clear();
     partitionConfig.MutableReadRuleVersions()->Clear();
     partitionConfig.MutableReadRuleGenerations()->Clear();
+    partitionConfig.MutableConsumers()->Clear();
 
     return partitionConfig;
 }
@@ -4621,7 +4622,6 @@ TActorId TPersQueue::GetPartitionQuoter(const TPartitionId& partition) {
             partition,
             SelfId(),
             TabletID(),
-            IsLocalDC,
             *Counters
         ));
     }

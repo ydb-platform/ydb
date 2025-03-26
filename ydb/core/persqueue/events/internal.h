@@ -185,7 +185,7 @@ struct TEvPQ {
         EvGetWriteInfoRequest,
         EvGetWriteInfoResponse,
         EvGetWriteInfoError,
-	EvTxBatchComplete,
+	    EvTxBatchComplete,
         EvReadingPartitionStatusRequest,
         EvProcessChangeOwnerRequests,
         EvWakeupReleasePartition,
@@ -195,6 +195,7 @@ struct TEvPQ {
         EvDeletePartition,
         EvDeletePartitionDone,
         EvTransactionCompleted,
+        EvListAllTopicsResponse,
         EvEnd
     };
 
@@ -1074,6 +1075,8 @@ struct TEvPQ {
         }
 
         ui32 Cookie; // InternalPartitionId
+        TActorId SupportivePartition;
+
         NPQ::TSourceIdMap SrcIdInfo;
         std::deque<NPQ::TDataKey> BodyKeys;
         TVector<NPQ::TClientBlob> BlobsFromHead;
@@ -1090,6 +1093,7 @@ struct TEvPQ {
     struct TEvGetWriteInfoError : public TEventLocal<TEvGetWriteInfoError, EvGetWriteInfoError> {
         ui32 Cookie; // InternalPartitionId
         TString Message;
+        TActorId SupportivePartition;
 
         TEvGetWriteInfoError(ui32 cookie, TString message) :
             Cookie(cookie),
@@ -1167,6 +1171,16 @@ struct TEvPQ {
         }
 
         TMaybe<NPQ::TWriteId> WriteId;
+    };
+
+    struct TEvListAllTopicsResponse : TEventLocal<TEvListAllTopicsResponse, EvListAllTopicsResponse> {
+        explicit TEvListAllTopicsResponse() = default;
+        explicit TEvListAllTopicsResponse(Ydb::StatusIds status, const TString& error);
+
+        TVector<TString> Topics;
+        bool HaveMoreTopics = false;
+        Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
+        TString Error;
     };
 };
 

@@ -35,6 +35,7 @@ public:
     virtual TVector<TStringBuf> GetPeerMetaValues(TStringBuf key) const;
     virtual TVector<TStringBuf> FindClientCert() const {return {};}
     virtual grpc_compression_level GetCompressionLevel() const { return GRPC_COMPRESS_LEVEL_NONE; }
+    virtual TString GetEndpointId() const;
 
     virtual google::protobuf::Arena* GetArena();
 

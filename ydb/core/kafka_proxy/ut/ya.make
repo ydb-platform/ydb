@@ -8,6 +8,7 @@ SRCS(
     ut_protocol.cpp
     ut_serialization.cpp
     metarequest_ut.cpp
+    port_discovery_ut.cpp
 )
 
 PEERDIR(

@@ -505,7 +505,7 @@ struct TEvPQProxy {
         ui64 PartitionId;
         ui64 Generation;
         ui64 NodeId;
-        TString Hostname;
+        //TString Hostname;
     };
 
     struct TEvPartitionLocationResponse : public NActors::TEventLocal<TEvPartitionLocationResponse, EvPartitionLocationResponse>

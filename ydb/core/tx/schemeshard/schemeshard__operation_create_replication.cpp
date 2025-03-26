@@ -332,7 +332,7 @@ public:
 
         context.SS->IncrementPathDbRefCount(path->PathId);
         parentPath->IncAliveChildren();
-        parentPath.DomainInfo()->IncPathsInside();
+        parentPath.DomainInfo()->IncPathsInside(context.SS);
 
         desc.MutableState()->MutableStandBy();
         auto replication = TReplicationInfo::Create(std::move(desc));
@@ -351,7 +351,7 @@ public:
         txState.State = TTxState::CreateParts;
 
         path->IncShardsInside();
-        parentPath.DomainInfo()->AddInternalShards(txState);
+        parentPath.DomainInfo()->AddInternalShards(txState, context.SS);
 
         if (parentPath->HasActiveChanges()) {
             const auto parentTxId = parentPath->PlannedToCreate() ? parentPath->CreateTxId : parentPath->LastTxId;

@@ -1,6 +1,6 @@
 UNITTEST_FOR(ydb/public/sdk/cpp/client/ydb_topic)
 
-IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
+IF (SANITIZER_TYPE OR WITH_VALGRIND)
     TIMEOUT(1200)
     SIZE(LARGE)
     TAG(ya:fat)
@@ -39,6 +39,11 @@ SRCS(
     local_partition_ut.cpp
     topic_to_table_ut.cpp
     trace_ut.cpp
+)
+
+RESOURCE(
+    ydb/public/sdk/cpp/client/ydb_topic/ut/resources/topic_A_partition_0_v24-4-2.dat topic_A_partition_0_v24-4-2.dat
+    ydb/public/sdk/cpp/client/ydb_topic/ut/resources/topic_A_partition_1_v24-4-2.dat topic_A_partition_1_v24-4-2.dat
 )
 
 END()

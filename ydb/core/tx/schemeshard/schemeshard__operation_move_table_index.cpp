@@ -20,7 +20,7 @@ void MarkSrcDropped(NIceDb::TNiceDb& db,
     context.SS->PersistUserAttributes(db, srcPath->PathId, srcPath->UserAttrs, nullptr);
 
     srcPath.Parent()->DecAliveChildren();
-    srcPath.DomainInfo()->DecPathsInside();
+    srcPath.DomainInfo()->DecPathsInside(context.SS);
 
     IncParentDirAlterVersionWithRepublish(operationId, srcPath, context);
 }
@@ -70,7 +70,7 @@ public:
 
         dstPath->StepCreated = step;
         context.SS->PersistCreateStep(db, dstPath.Base()->PathId, step);
-        dstPath.DomainInfo()->IncPathsInside();
+        dstPath.DomainInfo()->IncPathsInside(context.SS);
 
         dstPath.Activate();
         IncParentDirAlterVersionWithRepublish(OperationId, dstPath, context);

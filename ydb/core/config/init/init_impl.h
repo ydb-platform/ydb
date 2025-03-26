@@ -315,6 +315,7 @@ struct TCommonAppOptions {
     TString GRpcPublicHost = "";
     ui32 GRpcPublicPort = 0;
     ui32 GRpcsPublicPort = 0;
+    ui32 KafkaPort = 0;
     TVector<TString> GRpcPublicAddressesV4;
     TVector<TString> GRpcPublicAddressesV6;
     TString GRpcPublicTargetNameOverride = "";
@@ -383,6 +384,7 @@ struct TCommonAppOptions {
         opts.AddLongOption("grpc-public-host", "set public gRPC host for discovery").RequiredArgument("HOST").StoreResult(&GRpcPublicHost);
         opts.AddLongOption("grpc-public-port", "set public gRPC port for discovery").RequiredArgument("PORT").StoreResult(&GRpcPublicPort);
         opts.AddLongOption("grpcs-public-port", "set public gRPC SSL port for discovery").RequiredArgument("PORT").StoreResult(&GRpcsPublicPort);
+        opts.AddLongOption("kafka-port", "enable kafka proxy to listen on port").OptionalArgument("PORT").StoreResult(&KafkaPort);
         opts.AddLongOption("grpc-public-address-v4", "set public ipv4 address for discovery").RequiredArgument("ADDR").EmplaceTo(&GRpcPublicAddressesV4);
         opts.AddLongOption("grpc-public-address-v6", "set public ipv6 address for discovery").RequiredArgument("ADDR").EmplaceTo(&GRpcPublicAddressesV6);
         opts.AddLongOption("grpc-public-target-name-override", "set public hostname override for TLS in discovery").RequiredArgument("HOST").StoreResult(&GRpcPublicTargetNameOverride);
@@ -596,6 +598,12 @@ struct TCommonAppOptions {
                 }
             }
             ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::GRpcConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
+        }
+	if (KafkaPort) {
+            auto& conf = *appConfig.MutableKafkaProxyConfig();
+            conf.SetEnableKafkaProxy(true);
+            conf.SetListeningPort(KafkaPort);
+            ConfigUpdateTracer.AddUpdate(NKikimrConsole::TConfigItem::KafkaProxyConfigItem, TConfigItemInfo::EUpdateKind::UpdateExplicitly);
         }
         for (const auto& addr : GRpcPublicAddressesV4) {
             appConfig.MutableGRpcConfig()->AddPublicAddressesV4(addr);

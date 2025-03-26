@@ -373,8 +373,8 @@ namespace NKikimr::NSchemeShard {
                 context.OnComplete.PublishToSchemeBoard(OperationId, parentPath->PathId);
                 context.SS->ClearDescribePathCaches(dstPath.Base());
                 context.OnComplete.PublishToSchemeBoard(OperationId, dstPath->PathId);
-                dstPath.DomainInfo()->IncPathsInside();
-                dstPath.DomainInfo()->AddInternalShards(txState);
+                dstPath.DomainInfo()->IncPathsInside(context.SS);
+                dstPath.DomainInfo()->AddInternalShards(txState, context.SS);
                 dstPath->IncShardsInside();
                 parentPath->IncAliveChildren();
 

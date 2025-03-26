@@ -233,7 +233,7 @@ message TTableServiceConfig {
     optional uint64 SessionIdleDurationSeconds = 28 [default = 600];
     optional TAggregationConfig AggregationConfig = 29;
     optional bool EnableKqpScanQueryStreamLookup = 30 [default = true];
-    optional bool EnableKqpDataQueryStreamLookup = 31 [default = false];
+    optional bool EnableKqpDataQueryStreamLookup = 31 [default = true];
     optional TExecuterRetriesConfig ExecuterRetriesConfig = 32;
     reserved 33; // optional bool EnableKqpDataQueryStreamPointLookup = 33 [default = false];
     optional bool EnablePublishKqpProxyByRM = 34 [default = true];
@@ -273,7 +273,7 @@ message TTableServiceConfig {
         ONLY_POINTS = 2; // Accepts iff point prefix len > 0
         MAX_USED_PREFIX = 3;
     }
-    optional EIndexAutoChooseMode IndexAutoChooseMode = 50 [default = DISABLED];
+    optional EIndexAutoChooseMode IndexAutoChooseMode = 50 [default = MAX_USED_PREFIX];
 
     optional bool EnableColumnsWithDefault = 51 [default = true];
 

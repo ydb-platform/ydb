@@ -15,6 +15,7 @@
 #include <ydb/core/mind/tenant_pool.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tablet/tablet_impl.h>
+#include <ydb/core/testlib/actors/block_events.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/helpers.h>
 #include <ydb/core/testlib/tablet_helpers.h>
@@ -1471,6 +1472,27 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_EQUAL(createTabletReply->Record.GetForwardRequest().GetHiveTabletId(), subHiveTablet);
 
         runtime.SetObserverFunc(prevObserverFunc);
+    }
+
+    Y_UNIT_TEST(TestNoMigrationToSelf) {
+        TTestBasicRuntime runtime(2, false);
+        Setup(runtime, true);
+
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+        TActorId sender = runtime.AllocateEdgeActor(0);
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+        MakeSureTabletIsUp(runtime, hiveTablet, 0);
+
+        THolder<TEvHive::TEvCreateTablet> createTablet = MakeHolder<TEvHive::TEvCreateTablet>(testerTablet, 1, TTabletTypes::Dummy, BINDED_CHANNELS);
+        SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(createTablet), 0, true);
+
+        THolder<TEvHive::TEvInitMigration> migration = MakeHolder<TEvHive::TEvInitMigration>();
+        runtime.SendToPipe(hiveTablet, sender, migration.Release(), 0, GetPipeConfigWithRetries());
+        TAutoPtr<IEventHandle> handle;
+        auto initMigrationReply = runtime.GrabEdgeEventRethrow<TEvHive::TEvInitMigrationReply>(handle);
+        UNIT_ASSERT(initMigrationReply);
+        UNIT_ASSERT(initMigrationReply->Record.GetStatus() == NKikimrProto::ERROR);
     }
 
     Y_UNIT_TEST(TestCheckSubHiveMigrationManyTablets) {
@@ -3254,7 +3276,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
     }
 
-    Y_UNIT_TEST(TestFollowerPromotion) {
+    void TestFollowerPromotion(bool killDuringPromotion) {
         constexpr int NODES = 3;
         TTestBasicRuntime runtime(NODES, false);
         Setup(runtime, true);
@@ -3285,30 +3307,42 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             MakeSureTabletIsUp(runtime, tabletId, i, &pipeConfig, &tabletRolesBefore[i]);
         }
         int leaders = std::accumulate(tabletRolesBefore.begin(), tabletRolesBefore.end(), 0, [](int a, bool b) -> int { return b ? a + 1 : a; });
-        UNIT_ASSERT_VALUES_EQUAL(leaders, 1);
         int leaderNode = std::find(tabletRolesBefore.begin(), tabletRolesBefore.end(), true) - tabletRolesBefore.begin();
-        // killing leader
-        SendKillLocal(runtime, leaderNode);
+        UNIT_ASSERT_VALUES_EQUAL(leaders, 1);
+        {
+            TBlockEvents<TEvTablet::TEvPromoteToLeader> blockPromote(runtime);
+            // killing leader
+            SendKillLocal(runtime, leaderNode);
+
+            while (blockPromote.empty()) {
+                runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
+            }
+
+            if (killDuringPromotion) {
+                for (int i = 0; i < NODES; ++i) {
+                    if (i == leaderNode) {
+                        continue;
+                    }
+                    TActorId sender = runtime.AllocateEdgeActor(i);
+                    runtime.SendToPipe(tabletId, sender, new TEvents::TEvPoisonPill, i, pipeConfig);
+                }
+            }
+
+            runtime.DispatchEvents({}, TDuration::MilliSeconds(100));
+
+            blockPromote.Stop().Unblock();
+        }
         {
             TDispatchOptions options;
-            options.FinalEvents.emplace_back(TEvLocal::EvTabletStatus);
-            runtime.DispatchEvents(options);
+            options.FinalEvents.emplace_back(TEvLocal::EvTabletStatus, killDuringPromotion ? 3 : 1);
+            runtime.DispatchEvents(options, TDuration::MilliSeconds(100));
         }
-        std::array<bool, NODES> tabletRolesIntermediate = {};
-        for (int i = 0; i < NODES; ++i) {
-            if (i != leaderNode) {
-                MakeSureTabletIsUp(runtime, tabletId, i, &pipeConfig, &tabletRolesIntermediate[i]);
-            } else {
-                tabletRolesIntermediate[i] = false;
-            }
-        }
-        leaders = std::accumulate(tabletRolesIntermediate.begin(), tabletRolesIntermediate.end(), 0, [](int a, bool b) -> int { return b ? a + 1 : a; });
-        int followers = std::accumulate(tabletRolesIntermediate.begin(), tabletRolesIntermediate.end(), 0, [](int a, bool b) -> int { return b ? a : a + 1; });
-        UNIT_ASSERT_VALUES_EQUAL(leaders, 1);
-        UNIT_ASSERT_VALUES_EQUAL(followers, 2);
         std::unordered_set<std::pair<TTabletId, TFollowerId>> activeTablets;
         TActorId senderA = runtime.AllocateEdgeActor();
         for (int i = 0; i < NODES; ++i) {
+            if (i == leaderNode) {
+                continue;
+            }
             TActorId whiteboard = NNodeWhiteboard::MakeNodeWhiteboardServiceId(runtime.GetNodeId(i));
             runtime.Send(new IEventHandle(whiteboard, senderA, new NNodeWhiteboard::TEvWhiteboard::TEvTabletStateRequest()));
             TAutoPtr<IEventHandle> handle;
@@ -3323,6 +3357,16 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             }
         }
         UNIT_ASSERT_VALUES_EQUAL(activeTablets.size(), 3);
+        leaders = std::count_if(activeTablets.begin(), activeTablets.end(), [](auto&& p) { return p.second == 0; });
+        UNIT_ASSERT_VALUES_EQUAL(leaders, 1);
+    }
+
+    Y_UNIT_TEST(TestFollowerPromotion) {
+        TestFollowerPromotion(false);
+    }
+
+    Y_UNIT_TEST(TestFollowerPromotionFollowerDies) {
+        TestFollowerPromotion(true);
     }
 
     Y_UNIT_TEST(TestManyFollowersOnOneNode) {
@@ -3683,6 +3727,13 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         const TActorId hiveActor = CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
         runtime.EnableScheduleForActor(hiveActor);
 
+        // wait for creation of nodes
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, 2);
+            runtime.DispatchEvents(options);
+        }
+
 
         // creating NUM_TABLETS tablets
         TTabletTypes::EType tabletType = TTabletTypes::Dummy;
@@ -3720,7 +3771,13 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         CreateLocal(runtime, 2);
         CreateLocal(runtime, 3);
 
-        // kill all tablets
+        // no need to kill all tablets, hive must update followers on its own
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvTabletStatus);
+            runtime.DispatchEvents(options);
+        }
+        /*
         for (ui64 tabletId : tablets) {
             runtime.Register(CreateTabletKiller(tabletId));
 
@@ -3729,7 +3786,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
              // leader (death, start) + new extra follower
             options.FinalEvents.emplace_back(TDispatchOptions::TFinalEventCondition(TEvLocal::EvTabletStatus, 3));
             runtime.DispatchEvents(options);
-        }
+        }*/
 
         {
             int leaders = 0;
@@ -3755,7 +3812,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         CreateLocal(runtime, 4);
         CreateLocal(runtime, 5);
 
-        // kill all tablets
+        /*
         for (ui64 tabletId : tablets) {
             runtime.Register(CreateTabletKiller(tabletId));
 
@@ -3763,6 +3820,12 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             TDispatchOptions options;
              // leader (death, start) + new extra follower
             options.FinalEvents.emplace_back(TDispatchOptions::TFinalEventCondition(TEvLocal::EvTabletStatus, 3));
+            runtime.DispatchEvents(options);
+        }
+        */
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvTabletStatus);
             runtime.DispatchEvents(options);
         }
 
@@ -5791,12 +5854,13 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         UNIT_ASSERT_VALUES_EQUAL(result->Record.GetStatus(), expectedStatus);
     }
 
-    void VerifyLockTabletExecutionLost(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& owner) {
+    void VerifyLockTabletExecutionLost(TTestActorRuntime& runtime, ui64 tabletId, const TActorId& owner, NKikimrHive::ELockLostReason reason) {
         TAutoPtr<IEventHandle> handle;
         auto result = runtime.GrabEdgeEventRethrow<TEvHive::TEvLockTabletExecutionLost>(handle);
         UNIT_ASSERT(result);
         UNIT_ASSERT_VALUES_EQUAL(handle->GetRecipientRewrite(), owner);
         UNIT_ASSERT_VALUES_EQUAL(result->Record.GetTabletID(), tabletId);
+        UNIT_ASSERT_VALUES_EQUAL(static_cast<i32>(result->Record.GetReason()), static_cast<i32>(reason));
     }
 
     Y_UNIT_TEST(TestLockTabletExecution) {
@@ -5870,7 +5934,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         WaitForTabletIsUp(runtime, tabletId, 0);
 
         // Hive should try to notify owner on unlocking
-        VerifyLockTabletExecutionLost(runtime, tabletId, owner);
+        VerifyLockTabletExecutionLost(runtime, tabletId, owner, NKikimrHive::LOCK_LOST_REASON_NODE_DISCONNECTED);
     }
 
     Y_UNIT_TEST(TestLockTabletExecutionRebootTimeout) {
@@ -5899,7 +5963,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         WaitForTabletIsUp(runtime, tabletId, 0);
 
         // Hive should try to notify owner on unlocking
-        VerifyLockTabletExecutionLost(runtime, tabletId, owner);
+        VerifyLockTabletExecutionLost(runtime, tabletId, owner, NKikimrHive::LOCK_LOST_REASON_HIVE_RESTART);
     }
 
     Y_UNIT_TEST(TestLockTabletExecutionDelete) {
@@ -5935,7 +5999,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
 
         // Hive should try to notify owner on unlocking
-        VerifyLockTabletExecutionLost(runtime, tabletId, owner);
+        VerifyLockTabletExecutionLost(runtime, tabletId, owner, NKikimrHive::LOCK_LOST_REASON_TABLET_DELETED);
     }
 
     Y_UNIT_TEST(TestLockTabletExecutionDeleteReboot) {
@@ -5976,7 +6040,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         RebootTablet(runtime, hiveTablet, runtime.AllocateEdgeActor(0));
 
         // Hive should try to notify owner on unlocking
-        VerifyLockTabletExecutionLost(runtime, tabletId, owner);
+        VerifyLockTabletExecutionLost(runtime, tabletId, owner, NKikimrHive::LOCK_LOST_REASON_TABLET_DELETED);
     }
 
     void MakeSureTabletStaysDown(TTestActorRuntime& runtime, ui64 tabletId, const TDuration& timeout) {
@@ -6086,7 +6150,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         runtime.Send(new IEventHandle(proxy, disconnecter, new TEvInterconnect::TEvDisconnect()), 0);
 
         // wait for the lost lock notification
-        VerifyLockTabletExecutionLost(runtime, tabletId, owner);
+        VerifyLockTabletExecutionLost(runtime, tabletId, owner, NKikimrHive::LOCK_LOST_REASON_NODE_DISCONNECTED);
 
         // lock reconnect should fail
         SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::ERROR, owner, 500, true);
@@ -6155,7 +6219,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         WaitForTabletIsUp(runtime, tabletId, 0);
 
         // Hive should try to notify owner on unlocking
-        VerifyLockTabletExecutionLost(runtime, tabletId, owner);
+        VerifyLockTabletExecutionLost(runtime, tabletId, owner, NKikimrHive::LOCK_LOST_REASON_UNLOCKED);
     }
 
     Y_UNIT_TEST(TestLockTabletExecutionStealLock) {
@@ -6181,7 +6245,7 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         SendLockTabletExecution(runtime, hiveTablet, tabletId, 1, NKikimrProto::OK, owner2);
 
         // Hive should notify the old owner on unlocking
-        VerifyLockTabletExecutionLost(runtime, tabletId, owner);
+        VerifyLockTabletExecutionLost(runtime, tabletId, owner, NKikimrHive::LOCK_LOST_REASON_NEW_LOCK);
     }
 
     Y_UNIT_TEST(TestExternalBoot) {

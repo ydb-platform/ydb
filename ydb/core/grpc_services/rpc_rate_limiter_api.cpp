@@ -287,6 +287,7 @@ static void CopyProps(const Ydb::RateLimiter::Resource& src, NKikimrKesus::TStre
         auto copyMetric = [] (const Ydb::RateLimiter::MeteringConfig::Metric& srcMetric, NKikimrKesus::TAccountingConfig::TMetric& metric) {
             metric.SetEnabled(srcMetric.enabled());
             metric.SetBillingPeriodSec(srcMetric.billing_period_sec());
+            *metric.MutableLabels() = srcMetric.labels();
 
             /* overwrite if we have new fields */
             /* TODO: support arbitrary fields in metering core */
@@ -355,6 +356,7 @@ static void CopyProps(const NKikimrKesus::TStreamingQuoterResource& src, Ydb::Ra
         auto copyMetric = [] (const NKikimrKesus::TAccountingConfig::TMetric& srcMetric, Ydb::RateLimiter::MeteringConfig::Metric& metric) {
             metric.set_enabled(srcMetric.GetEnabled());
             metric.set_billing_period_sec(srcMetric.GetBillingPeriodSec());
+            *metric.mutable_labels() = srcMetric.GetLabels();
 
             /* TODO: support arbitrary fields in metering core */
             auto& metricFields = *metric.mutable_metric_fields()->mutable_fields();

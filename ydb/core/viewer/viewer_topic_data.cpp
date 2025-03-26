@@ -241,9 +241,8 @@ void TTopicData::Bootstrap() {
     const auto& params(Event->Get()->Request.GetParams());
     Timeout = TDuration::Seconds(std::min((ui32)Timeout.Seconds(), 30u));
 
-    if (params.Has("no_truncate")) {
-        TruncateLongMessages = !(FromStringWithDefault<bool>(params.Get("no_truncate"), false));
-    }
+    TruncateLongMessages = FromStringWithDefault<bool>(params.Get("truncate"), true);
+
     if (!params.Has("partition")) {
         return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Parameter 'partition' is nessasary"));
     }

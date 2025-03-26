@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
         url << "/viewer/topic_data" << "?path=" << topic << "&partition=" << partition << "&offset=" << offset
             << "&limit=" << limit;
         if (noTruncate) {
-            url << "&no_truncate=true";
+            url << "&truncate=false";
         }
         return url;
     }

@@ -460,6 +460,7 @@ bool TRootDataErasureManager::Remove(const TPathId& pathId) {
         WaitingDataErasureTenants.erase(it);
 
         if (WaitingDataErasureTenants.empty()) {
+            Status = EDataErasureStatus::IN_PROGRESS_BSC;
             SendRequestToBSC();
         }
         return true;

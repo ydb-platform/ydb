@@ -39,8 +39,10 @@ ydb import file csv --header --null-value "" --path <путь_к_таблице>
 
 1. Скачайте файл `2019-Nov.csv` с Kaggle
 2. Создайте таблицу в {{ ydb-short-name }}
+
 <details>
-  <summary>* Выполнив запрос в [WEB-интерфейсе](../../reference/embedded-ui/ydb-monitoring)</summary>
+  <summary>Выполнив запрос в [WEB-интерфейсе](../../reference/embedded-ui/ydb-monitoring)</summary>
+
   ```sql
   CREATE TABLE `ecommerce_table` (
       `event_time` Text NOT NULL,  -- Формат: "2019-11-01 00:00:00 UTC"
@@ -56,8 +58,10 @@ ydb import file csv --header --null-value "" --path <путь_к_таблице>
   );
   ```
 </details>
+
 <details>
-  <summary>* Выполнив команду через CLI</summary>
+  <summary>Выполнив команду через CLI</summary>
+
   ```bash
   ydb sql -s \
   'CREATE TABLE `ecommerce_table` (
@@ -112,7 +116,8 @@ sed -i '1s/ /_/g' accessories.csv
 
 4. Создайте таблицу в {{ ydb-short-name }}
 <details>
-  <summary>* Выполнив запрос в [WEB-интерфейсе](../../reference/embedded-ui/ydb-monitoring)</summary>
+  <summary>Выполнив запрос в [WEB-интерфейсе](../../reference/embedded-ui/ydb-monitoring)</summary>
+
   ```sql
   CREATE TABLE `accessories` (
       `Name` Text NOT NULL,
@@ -144,8 +149,10 @@ sed -i '1s/ /_/g' accessories.csv
   );
   ```
 </details>
+
 <details>
   <summary>* Выполнив команду через CLI</summary>
+
   ```bash
   ydb sql -s \
   'CREATE TABLE `accessories` (

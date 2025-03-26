@@ -479,27 +479,29 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
 
     LOG_I("Cleanup");
 
-    // cleanup
-    const auto listingSettings = TRecursiveListSettings()
-        .Filter([&](const TSchemeEntry& entry) {
-            return !oldEntries.contains(entry.Name);
-        });
-
-    auto newDirectoryList = RecursiveList(SchemeClient, dbBasePath, listingSettings);
-    if (!newDirectoryList.Status.IsSuccess()) {
+    auto newListing = RecursiveList(SchemeClient, dbBasePath);
+    if (!newListing.Status.IsSuccess()) {
         return restoreResult;
     }
 
-    // RecursiveList outputs elements in pre-order: root, recurse(children)...
-    // We need to reverse it to delete scheme objects before directories.
+    // Why don't we use the built-in RecursiveList filter?
+    // TSchemeEntry::Name is rewritten in the RecursiveList to become the full path to the object.
+    // Until it is rewritten, we can only use the entry name to filter it out, which is not enough.
+    std::erase_if(newListing.Entries, [&oldEntries](const TSchemeEntry& entry) {
+        return oldEntries.contains(entry.Name);
+    });
+
+    // Why do we reverse the list?
+    // RecursiveList outputs elements in pre-order: root, root's children, ...
+    // We reverse it to delete scheme objects before directories.
     auto cleanupResult = RemovePathsRecursive(
         SchemeClient,
         TableClient,
         TopicClient,
         QueryClient,
         CoordinationNodeClient,
-        newDirectoryList.Entries.rbegin(),
-        newDirectoryList.Entries.rend()
+        newListing.Entries.rbegin(),
+        newListing.Entries.rend()
     );
     if (!cleanupResult.IsSuccess()) {
         LOG_E("Error on cleanup, issues: " << cleanupResult.GetIssues().ToOneLineString());

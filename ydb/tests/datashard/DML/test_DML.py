@@ -36,6 +36,15 @@ class TestDML(TestBase):
             thread.join()
 
     def DML(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
+        self.create_table(table_name, pk_types, all_types,
+                          index, ttl, unique, sync)
+        self.insert(table_name, all_types, pk_types, index, ttl)
+        self.select_after_insert(table_name, all_types, pk_types, index, ttl)
+        self.update(table_name, all_types, index, ttl, unique)
+        self.upsert(table_name, all_types, pk_types, index, ttl)
+        self.delete(table_name, all_types, pk_types, index, ttl)
+
+    def create_table(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
         columns = {
             "pk_": pk_types.keys(),
             "col_": all_types.keys(),
@@ -55,10 +64,6 @@ class TestDML(TestBase):
             sql_ttl = create_ttl(f"ttl_{cleanup_type_name(ttl)}", {"P18262D": ""}, "SECONDS" if ttl ==
                                  "Uint32" or ttl == "Uint64" or ttl == "DyNumber" else "", table_name)
             self.query(sql_ttl)
-        self.insert(table_name, all_types, pk_types, index, ttl)
-        self.update(table_name, all_types, index, ttl, unique)
-        self.upsert(table_name, all_types, pk_types, index, ttl)
-        self.delete(table_name, all_types, pk_types, index, ttl)
 
     def insert(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
         number_of_columns = len(pk_types) + len(all_types) + len(index)
@@ -68,6 +73,30 @@ class TestDML(TestBase):
         for count in range(1, number_of_columns + 1):
             self.create_insetr(table_name, count, all_types,
                                pk_types, index, ttl)
+
+    def create_insetr(self, table_name: str, value: int, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
+        insert_sql = f"""
+            INSERT INTO {table_name}(
+                {", ".join(["pk_" + cleanup_type_name(type_name) for type_name in pk_types.keys()])}{", " if len(all_types) != 0 else ""}
+                {", ".join(["col_" + cleanup_type_name(type_name) for type_name in all_types.keys()])}{", " if len(index) != 0 else ""}
+                {", ".join(["col_index_" + cleanup_type_name(type_name) for type_name in index.keys()])}{", " if len(ttl) != 0 else ""}
+                {f"ttl_{ttl}" if ttl != "" else ""}
+            )
+            VALUES(
+                {", ".join([pk_types[type_name].format(value) for type_name in pk_types.keys()])}{", " if len(all_types) != 0 else ""}
+                {", ".join([all_types[type_name].format(value) for type_name in all_types.keys()])}{", " if len(index) != 0 else ""}
+                {", ".join([index[type_name].format(value) for type_name in index.keys()])}{", " if len(ttl) != 0 else ""}
+                {ttl_types[ttl].format(value) if ttl != "" else ""}
+            );
+        """
+        self.query(insert_sql)
+
+    def select_after_insert(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
+
+        number_of_columns = len(pk_types) + len(all_types) + len(index)
+
+        if ttl != "":
+            number_of_columns += 1
 
         for count in range(1, number_of_columns + 1):
             sql_select = f"""
@@ -88,23 +117,6 @@ class TestDML(TestBase):
             rows = self.query(sql_select)
             assert len(
                 rows) == 1 and rows[0].count == 1, f"Expected one rows, faild in {count} value, table {table_name}"
-
-    def create_insetr(self, table_name: str, value: int, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
-        insert_sql = f"""
-            INSERT INTO {table_name}(
-                {", ".join(["pk_" + cleanup_type_name(type_name) for type_name in pk_types.keys()])}{", " if len(all_types) != 0 else ""}
-                {", ".join(["col_" + cleanup_type_name(type_name) for type_name in all_types.keys()])}{", " if len(index) != 0 else ""}
-                {", ".join(["col_index_" + cleanup_type_name(type_name) for type_name in index.keys()])}{", " if len(ttl) != 0 else ""}
-                {f"ttl_{ttl}" if ttl != "" else ""}
-            )
-            VALUES(
-                {", ".join([pk_types[type_name].format(value) for type_name in pk_types.keys()])}{", " if len(all_types) != 0 else ""}
-                {", ".join([all_types[type_name].format(value) for type_name in all_types.keys()])}{", " if len(index) != 0 else ""}
-                {", ".join([index[type_name].format(value) for type_name in index.keys()])}{", " if len(ttl) != 0 else ""}
-                {ttl_types[ttl].format(value) if ttl != "" else ""}
-            );
-        """
-        self.query(insert_sql)
 
     def update(self, table_name: str, all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str):
         count = 1

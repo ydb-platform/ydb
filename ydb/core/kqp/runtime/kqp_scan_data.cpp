@@ -687,12 +687,16 @@ TBytesStatistics TKqpScanComputeContext::TScanData::TBlockBatchReader::AddData(c
     for (auto&& filtered : batches) {
         TUnboxedValueVector batchValues;
         batchValues.resize(totalColsCount);
-        Y_ENSURE(TotalColumnsCount == static_cast<ui32>(filtered->num_columns()));
-        for (int i = 0; i < filtered->num_columns(); ++i) {
-            batchValues[i] = holderFactory.CreateArrowBlock(arrow::Datum(AdoptArrowTypeToYQL(filtered->column(i))));
+        if (TotalColumnsCount == 0) {
+            Y_ENSURE(filtered->num_columns() == 3); //TODO send special single fake column from CS when no column requested
+        } else {
+            Y_ENSURE(TotalColumnsCount == static_cast<ui32>(filtered->num_columns()));
+            for (ui32 i = 0; i != TotalColumnsCount; ++i) {
+                batchValues[i] = holderFactory.CreateArrowBlock(arrow::Datum(AdoptArrowTypeToYQL(filtered->column(i))));
+            }
+            const ui64 batchByteSize = NArrow::GetBatchDataSize(filtered);
+            stats.AddStatistics({batchByteSize, batchByteSize});
         }
-        const ui64 batchByteSize = NArrow::GetBatchDataSize(filtered);
-        stats.AddStatistics({batchByteSize, batchByteSize});
 
         // !!! TODO !!!
         // if (!SystemColumns.empty()) {

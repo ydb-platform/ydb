@@ -3257,7 +3257,6 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
     }
 
     Y_UNIT_TEST(SingleShardRead) {
-        std::unique_ptr<TKikimrRunner> Kikimr;
         auto settings = TKikimrSettings().SetWithSampleTables(false);
         auto kikimr = std::make_unique<TKikimrRunner>(settings);
         Tests::NCommon::TLoggerInit(*kikimr).Initialize();
@@ -3333,5 +3332,35 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         testHelper.ReadData("SELECT COUNT(*) FROM `/Root/ColumnTableTest` WHERE time > CurrentUtcTimestamp()", "[[1u]]");
     }
-}
-}
+
+    Y_UNIT_TEST(ReadNoColumns) {
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto kikimr = std::make_unique<TKikimrRunner>(settings);
+        auto queryClient = kikimr->GetQueryClient();
+        const auto noTx = NQuery::TTxControl::NoTx();
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                CREATE TABLE Test (
+                    Key Uint32 not null,
+                    PRIMARY KEY (Key)
+                ) WITH (
+                    STORE = COLUMN,
+                    PARTITION_COUNT = 1
+                );
+            )", noTx).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                UPSERT INTO Test (Key) VALUES (10),(20)
+            )", noTx).GetValueSync();
+            UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto result = queryClient.ExecuteQuery("SELECT 17 FROM Test", noTx).GetValueSync();
+        UNIT_ASSERT_C(result.GetStatus() == NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson("[[17];[17]]", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+} // Y_UNIT_TEST_SUITE(KqpOlap)
+} // namespace NKikimr::NKqp

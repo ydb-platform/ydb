@@ -832,7 +832,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
 
     Y_UNIT_TEST(ShuffleEliminationManyKeysJoinPredicate) {
         auto [plan, resultSets] = ExecuteJoinOrderTestGenericQueryWithStats(
-            "queries/shuffle_elimination_many_keys_join_predicate.sql", "stats/tpch1000s.json", false, false, true
+            "queries/shuffle_elimination_many_keys_join_predicate.sql", "stats/tpch1000s.json", false, true, true
         );
 
         auto joinFinder = TFindJoinWithLabels(plan);

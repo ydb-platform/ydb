@@ -1,8 +1,9 @@
 PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
-SIZE(LARGE)
-TAG(ya:fat)
+FORK_SUBTESTS()
+
+SIZE(MEDIUM)
 
 TEST_SRCS(
     test_TTL.py

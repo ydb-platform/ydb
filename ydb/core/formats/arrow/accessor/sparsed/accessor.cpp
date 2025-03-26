@@ -110,12 +110,13 @@ IChunkedArray::TLocalDataAddress TSparsedArrayChunk::GetChunk(
     AFL_VERIFY(it != RemapExternalToInternal.begin());
     --it;
     if (it->GetIsDefault()) {
+        std::shared_ptr<arrow::Array> arr;
         if (!DefaultValue) {
-            return IChunkedArray::TLocalDataAddress(
-                NArrow::TThreadSimpleArraysCache::Get(ColValue->type(), DefaultValue, it->GetSize()), it->GetStartExt(), 0);
+            arr = NArrow::TThreadSimpleArraysCache::Get(ColValue->type(), DefaultValue, it->GetSize());
         } else {
-            return NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(*DefaultValue, it->GetSize()));
+            arr = NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(*DefaultValue, it->GetSize()));
         }
+        return IChunkedArray::TLocalDataAddress(arr, it->GetStartExt(), 0);
     } else {
         return IChunkedArray::TLocalDataAddress(ColValue->Slice(it->GetStartInt(), it->GetSize()), it->GetStartExt(), 0);
     }

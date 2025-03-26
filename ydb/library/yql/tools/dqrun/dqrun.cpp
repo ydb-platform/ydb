@@ -1027,7 +1027,7 @@ int RunMain(int argc, const char* argv[])
             clusters.emplace(to_lower(cluster.GetName()), TString{GenericProviderName});
         }
 
-        genericClient = NConnector::MakeClientGRPC(gatewaysConfig.GetGeneric().GetConnector());
+        genericClient = NConnector::MakeClientGRPC(gatewaysConfig.GetGeneric());
 
         dataProvidersInit.push_back(GetGenericDataProviderInitializer(genericClient, dbResolver, credentialsFactory));
     }

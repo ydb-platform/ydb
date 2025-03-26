@@ -90,7 +90,11 @@ public:
                 TStatusValidator::Validate(Builder->AppendNulls(recordIndex));
             }
             LastRecordIndex = recordIndex;
-            AFL_VERIFY(NArrow::Append<TArrowDataType>(*Builder, arrow::util::string_view(value.data(), value.size())));
+            if (value.is_null()) {
+                TStatusValidator::Validate(Builder->AppendNulls(1));
+            } else {
+                AFL_VERIFY(NArrow::Append<TArrowDataType>(*Builder, arrow::util::string_view(value.data(), value.size())));
+            }
         }
 
         std::shared_ptr<IChunkedArray> Finish(const ui32 recordsCount) {

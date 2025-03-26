@@ -66,6 +66,32 @@ public:
         ++CurrentRecordIndex;
     }
 
+    TStringBuf AddKeyOwn(const std::vector<TStringBuf>& prefix, const TString& key) {
+        if (prefix.empty()) {
+            Storage.emplace_back(key);
+        } else {
+            Storage.emplace_back(JoinSeq(".", prefix) + "." + key);
+        }
+        return TStringBuf(Storage.back().data(), Storage.back().size());
+    }
+
+    TStringBuf AddKey(const std::vector<TStringBuf>& prefix, const TStringBuf key) {
+        if (prefix.empty()) {
+            return key;
+        } else {
+            Storage.emplace_back(JoinSeq(".", prefix) + "." + key);
+            return TStringBuf(Storage.back().data(), Storage.back().size());
+        }
+    }
+
+    void AddKVNull(const TStringBuf key) {
+        auto itElements = Elements.find(key);
+        if (itElements == Elements.end()) {
+            itElements = Elements.emplace(key, key).first;
+        }
+        itElements->second.AddData(std::string_view(), CurrentRecordIndex);
+    }
+
     void AddKV(const TStringBuf key, const TStringBuf value) {
         auto itElements = Elements.find(key);
         if (itElements == Elements.end()) {

@@ -233,9 +233,18 @@ public:
         }
 
         void AddRecord(const ui32 recordIndex, const std::string_view value) {
-            AFL_VERIFY(NArrow::Append<arrow::UInt32Type>(*IndexBuilder, recordIndex));
-            AFL_VERIFY(NArrow::Append<TDataType>(*ValueBuilder, arrow::util::string_view(value.data(), value.size())));
-            ++RecordsCount;
+            if (value.is_null()) {
+                if (!DefaultValue || DefaultValue->type->id() == arrow::null()->id()) {
+                    return;
+                } else {
+                    AFL_VERIFY(NArrow::Append<arrow::UInt32Type>(*IndexBuilder, recordIndex));
+                    ValueBuilder->AppendNulls(1);
+                }
+            } else {
+                AFL_VERIFY(NArrow::Append<arrow::UInt32Type>(*IndexBuilder, recordIndex));
+                AFL_VERIFY(NArrow::Append<TDataType>(*ValueBuilder, arrow::util::string_view(value.data(), value.size())));
+                ++RecordsCount;
+            }
         }
 
         std::shared_ptr<IChunkedArray> Finish(const ui32 recordsCount) {

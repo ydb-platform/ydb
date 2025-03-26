@@ -273,6 +273,8 @@ namespace NInternal {
 
     bool MightHaveDependents(ESchemeEntryType type) {
         switch (type) {
+        // directories might contain external data sources, which might have dependent objects (i.e. external tables)
+        case ESchemeEntryType::Directory:
         case ESchemeEntryType::ExternalDataSource:
             return true;
         default:

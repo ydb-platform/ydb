@@ -16,7 +16,6 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
                                                          NActors::TActorSystem* actorSystem = nullptr,
                                                          size_t pathsLimit = 50000,
                                                          std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> credentialsFactory = nullptr,
-                                                         bool enableInfer = false);
-                                                         const std::set<TString>& availableExternalDataSources = NYql::GetAllExternalDataSourceTypes());
-
+                                                         bool enableInfer = false,
+                                                         const std::set<TString>& availableExternalDataSources = {});
 }

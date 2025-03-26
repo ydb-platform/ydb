@@ -12,11 +12,11 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(jwt)
 add_subdirectory(grpc)
 add_subdirectory(issue)
 add_subdirectory(string_utils)
+add_subdirectory(jwt)
+add_subdirectory(operation_id)
 add_subdirectory(decimal)
 add_subdirectory(uuid)
-add_subdirectory(operation_id)
 add_subdirectory(persqueue)

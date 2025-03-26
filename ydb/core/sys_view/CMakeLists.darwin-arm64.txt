@@ -13,9 +13,8 @@
 # changes in this file.
 
 add_subdirectory(service)
-add_subdirectory(common)
 add_subdirectory(partition_stats)
-add_subdirectory(processor)
+add_subdirectory(common)
 add_subdirectory(auth)
 add_subdirectory(nodes)
 add_subdirectory(pg_tables)
@@ -26,6 +25,7 @@ add_subdirectory(sessions)
 add_subdirectory(show_create)
 add_subdirectory(storage)
 add_subdirectory(tablets)
+add_subdirectory(processor)
 add_subdirectory(ut)
 add_subdirectory(ut_large)
 

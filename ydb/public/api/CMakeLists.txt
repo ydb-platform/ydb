@@ -13,5 +13,5 @@
 # changes in this file.
 
 add_subdirectory(protos)
-add_subdirectory(client)
 add_subdirectory(grpc)
+add_subdirectory(client)

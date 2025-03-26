@@ -19,10 +19,10 @@ get_built_tool_path(
   enum_parser
 )
 
+add_subdirectory(simple)
+add_subdirectory(compilation)
 add_subdirectory(events)
 add_subdirectory(shutdown)
-add_subdirectory(compilation)
-add_subdirectory(simple)
 add_subdirectory(buffer)
 
 add_library(core-kqp-common)

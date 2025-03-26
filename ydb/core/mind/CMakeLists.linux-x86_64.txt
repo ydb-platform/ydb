@@ -12,8 +12,8 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(bscontroller)
 add_subdirectory(hive)
+add_subdirectory(bscontroller)
 add_subdirectory(address_classification)
 add_subdirectory(ut)
 add_subdirectory(ut_fat)

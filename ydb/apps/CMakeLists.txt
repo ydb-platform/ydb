@@ -12,7 +12,8 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(pgwire)
+add_subdirectory(etcd_proxy)
 add_subdirectory(version)
+add_subdirectory(pgwire)
 add_subdirectory(ydb)
 add_subdirectory(ydbd)

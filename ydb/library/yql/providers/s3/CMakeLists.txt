@@ -13,14 +13,14 @@
 # changes in this file.
 
 add_subdirectory(proto)
-add_subdirectory(actors_factory)
-add_subdirectory(expr_nodes)
 add_subdirectory(credentials)
 add_subdirectory(compressors)
 add_subdirectory(common)
 add_subdirectory(events)
 add_subdirectory(object_listers)
 add_subdirectory(path_generator)
+add_subdirectory(actors_factory)
+add_subdirectory(expr_nodes)
 add_subdirectory(statistics)
 add_subdirectory(provider)
 add_subdirectory(actors)

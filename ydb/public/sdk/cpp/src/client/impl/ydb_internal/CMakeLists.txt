@@ -12,14 +12,14 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(plain_status)
-add_subdirectory(value_helpers)
 add_subdirectory(grpc_connections)
 add_subdirectory(db_driver_state)
 add_subdirectory(logger)
+add_subdirectory(plain_status)
 add_subdirectory(thread_pool)
-add_subdirectory(make_request)
 add_subdirectory(common)
+add_subdirectory(make_request)
 add_subdirectory(kqp_session_common)
-add_subdirectory(retry)
 add_subdirectory(session_pool)
+add_subdirectory(retry)
+add_subdirectory(value_helpers)

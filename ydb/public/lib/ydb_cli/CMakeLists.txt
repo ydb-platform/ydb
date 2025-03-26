@@ -12,8 +12,8 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+add_subdirectory(dump)
 add_subdirectory(common)
 add_subdirectory(commands)
-add_subdirectory(dump)
 add_subdirectory(import)
 add_subdirectory(topic)

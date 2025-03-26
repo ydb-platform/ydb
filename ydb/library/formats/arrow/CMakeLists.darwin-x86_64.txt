@@ -13,14 +13,14 @@
 # changes in this file.
 
 add_subdirectory(protos)
+add_subdirectory(hash)
+add_subdirectory(simple_builder)
 add_subdirectory(switch)
 add_subdirectory(validation)
-add_subdirectory(simple_builder)
 add_subdirectory(transformer)
 add_subdirectory(splitter)
 add_subdirectory(modifier)
 add_subdirectory(scalar)
-add_subdirectory(hash)
 add_subdirectory(common)
 add_subdirectory(csv)
 add_subdirectory(ut)

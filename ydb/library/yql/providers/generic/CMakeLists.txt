@@ -13,8 +13,8 @@
 # changes in this file.
 
 add_subdirectory(connector)
-add_subdirectory(actors)
-add_subdirectory(proto)
 add_subdirectory(provider)
 add_subdirectory(expr_nodes)
+add_subdirectory(proto)
+add_subdirectory(actors)
 add_subdirectory(pushdown)

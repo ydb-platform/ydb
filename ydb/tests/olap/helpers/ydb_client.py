@@ -20,4 +20,4 @@ class YdbClient:
 
     def query(self, statement):
         with ydb.QuerySessionPool(self.driver) as pool:
-            return pool.execute_with_retries(statement, retry_settings=ydb.RetrySettings(max_retries=0))
+            return pool.execute_with_retries(statement, retry_settings=ydb.RetrySettings(max_retries=0, max_session_acquire_timeout=5))

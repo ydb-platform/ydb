@@ -40,6 +40,7 @@ target_link_libraries(minikql-comp_nodes-no_llvm PUBLIC
   essentials-types-binary_json
   yql-essentials-minikql
   essentials-minikql-arrow
+  essentials-core-sql_types
   public-udf-arrow
   parser-pg_wrapper-interface
   yql-essentials-utils

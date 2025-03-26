@@ -31,6 +31,7 @@ target_link_libraries(essentials-core-sql_types PUBLIC
 target_sources(essentials-core-sql_types PRIVATE
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/sql_types/match_recognize.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/sql_types/simple_types.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/core/sql_types/block.h
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/sql_types/match_recognize.h
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/sql_types/simple_types.h
   ${PROJECT_SOURCE_DIR}/yql/essentials/core/sql_types/yql_atom_enums.h

@@ -41,7 +41,6 @@ private:
     void HandlePQResponse(TEvPersQueue::TEvResponse::TPtr& ev);
     void FillProtoResponse(ui64 maxSingleMessageSize = 1_MB, ui64 maxTotalSize = 10_MB);
     NYdb::NTopic::ICodec* GetCodec(NPersQueueCommon::ECodec codec);
-    TMaybe<ui64> GetIntegerParam(const TString& name, bool required, bool& ok);
 
     STATEFN(StateRequestedDescribe);
 
@@ -57,10 +56,11 @@ public:
 private:
     ui64 TabletId;
     TString TopicPath;
-    TMaybe<ui64> PartitionId;
-    TMaybe<ui64> Offset;
-    TMaybe<ui64> Timestamp;
-    TMaybe<ui64> Limit;
+    ui32 PartitionId;
+    ui64 Offset = 0;
+    ui64 Timestamp = 0;
+
+    ui32 Limit = 0;
     bool TruncateLongMessages = true;
     TMap<ui32, THolder<NYdb::NTopic::ICodec>> Codecs;
     std::optional<TRequestResponse<TEvTxProxySchemeCache::TEvNavigateKeySetResult>> NavigateResponse;

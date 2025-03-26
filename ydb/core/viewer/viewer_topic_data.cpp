@@ -85,16 +85,14 @@ void TTopicData::SendPQReadRequest() {
 
     NKikimrClient::TPersQueueRequest request;
     request.MutablePartitionRequest()->SetTopic(TopicPath);
-    request.MutablePartitionRequest()->SetPartition(*PartitionId);
+    request.MutablePartitionRequest()->SetPartition(PartitionId);
     ActorIdToProto(pipeClient, request.MutablePartitionRequest()->MutablePipeClient());
 
     auto cmdRead = request.MutablePartitionRequest()->MutableCmdRead();
     cmdRead->SetClientId(NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER);
-    cmdRead->SetCount(TruncateLongMessages ? *Limit : 1);
-    if (Offset)
-        cmdRead->SetOffset(*Offset);
-    if (Timestamp)
-        cmdRead->SetReadTimestampMs(*Timestamp);
+    cmdRead->SetCount(TruncateLongMessages ? Limit : 1);
+    cmdRead->SetOffset(Offset);
+    cmdRead->SetReadTimestampMs(Timestamp);
 
     cmdRead->SetTimeoutMs(READ_TIMEOUT_MS);
     cmdRead->SetExternalOperation(true);
@@ -236,29 +234,6 @@ void TTopicData::StateRequestedDescribe(TAutoPtr<::NActors::IEventHandle>& ev) {
     }
 }
 
-TMaybe<ui64> TTopicData::GetIntegerParam(const TString& name, bool required, bool& ok) {
-    i64 value;
-    const auto& params(Event->Get()->Request.GetParams());
-    if (!ok)
-        return Nothing();
-
-    if (params.Has(name)) {
-        value = FromStringWithDefault<i32>(params.Get(name), -1);
-        if (value == -1) {
-            auto error = TStringBuilder() << "field ' "<< name << "' has invalid value, an interger >= 0 is expected";
-            ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", error));
-            ok = false;
-            return Nothing();
-        }
-        return (ui64)value;
-    } else if (required) {
-        auto error = TStringBuilder() << "field '"<< name << "' is required";
-        ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", error));
-        ok = false;
-    }
-    return Nothing();
-}
-
 void TTopicData::Bootstrap() {
     if (!Database.empty() && TBase::NeedToRedirect()) {
         return;
@@ -266,37 +241,37 @@ void TTopicData::Bootstrap() {
     const auto& params(Event->Get()->Request.GetParams());
     Timeout = TDuration::Seconds(std::min((ui32)Timeout.Seconds(), 30u));
 
-    bool ok = true;
-    PartitionId = GetIntegerParam("partition", true, ok);
-    Offset = GetIntegerParam("offset", false, ok);
-    Timestamp = GetIntegerParam("read_timestamp", false, ok);
-    Limit = GetIntegerParam("limit", false, ok);
-
     if (params.Has("no_truncate")) {
         TruncateLongMessages = !(FromStringWithDefault<bool>(params.Get("no_truncate"), false));
     }
-    if (!ok)
-        return;
+    if (!params.Has("partition")) {
+        return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Parameter 'partition' is nessasary"));
+    }
+    PartitionId = FromStringWithDefault<ui32>(params.Get("partition"), 0);
 
-    if (Offset.Defined() && Timestamp.Defined()) {
+    Offset = FromStringWithDefault<ui64>(params.Get("offset"), 0);
+    Timestamp = FromStringWithDefault<ui64>(params.Get("read_timestamp"), 0);
+
+    Limit = FromStringWithDefault<ui32>(params.Get("limit"), 0);
+
+    // Only allow timestamp XOR offset to be defined
+    if (Offset > 0 && Timestamp > 0) {
         return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Only read_timestamp or offset parameter may be specified, not both"));
     }
 
-    if (!Offset.Defined() && !Timestamp.Defined()) {
-        return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Either read_timestamp or offset parameter must be specified"));
-    }
-
-    if (!TruncateLongMessages && Limit.GetOrElse(1) > 1) {
+    // No truncate is available with on offset specified and limit = 1 or undefined
+    if (!TruncateLongMessages && Limit > 1) {
         return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "no_truncate option can only be specified with limit = 1"));
     }
-    if (!TruncateLongMessages && !Offset.Defined()) {
+    if (!TruncateLongMessages && Timestamp > 0) {
         return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "no_truncate option can only be specified with offset (not timestamp"));
     }
-    if (!Limit.Defined()) {
+    if (Limit == 0) {
         Limit = 10;
-    } else if (*Limit > MAX_MESSAGES_LIMIT) {
+    } else if (Limit > MAX_MESSAGES_LIMIT) {
         return ReplyAndPassAway(Viewer->GetHTTPBADREQUEST(Event->Get(), "text/plain", "Too many messages requested"));
     }
+
     TopicPath = params.Get("path");
     if (!TopicPath.empty()) {
         NavigateResponse = MakeRequestSchemeCacheNavigateWithToken(TopicPath, true, NACLib::DescribeSchema, 1);

@@ -16,11 +16,11 @@ public:
     const ui64 InputIndex;
     THashMap<TPartitionKey, ui64, TPartitionKeyHash> PartitionToOffset; // {cluster, partition} -> offset of next event.
     const TTxId TxId;
-    const NPq::NProto::TDqPqTopicSource SourceParams;
+    NPq::NProto::TDqPqTopicSource SourceParams;
     TDqAsyncStats IngressStats;
     TInstant StartingMessageTimestamp;
     TString LogPrefix;
-    const NPq::NProto::TDqReadTaskParams ReadParams;
+    NPq::NProto::TDqReadTaskParams ReadParams;
     const NActors::TActorId ComputeActorId;
     ui64 TaskId;
 

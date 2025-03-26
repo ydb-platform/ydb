@@ -5251,7 +5251,7 @@
         },
         "no_partition": {
             "status_code": 400,
-            "text": "Parameter 'partition' is nessasary"
+            "text": "Parameter 'partition' is necessary"
         },
         "both_offset_and_ts": {
             "status_code": 400,

@@ -1,3 +1,4 @@
+* Added "--no-discovery" option. It allows to skip discovery and use user provided endpoint to connect to YDB cluster.
 * Support coordination nodes in `ydb scheme rmdir --recursive`.
 * Fixed return code of command `ydb workload * run --check-canonical` for the case when benchmark query results differ from canonical ones.
 

@@ -102,6 +102,10 @@ protected:
 
     ui32 PrefixColumns;
     TSerializedCellVec Prefix;
+    TBufferData PrefixRows;
+    bool IsFirstPrefixFeed = true;
+    bool IsPrefixRowsValid = true;
+    
     bool IsExhausted = false;
 
 public:
@@ -299,26 +303,26 @@ protected:
         Driver->Touch(EScan::Final);
     }
 
-    EScan FeedUpload()
+    ui64 GetProbability()
+    {
+        return Rng.GenRand64();
+    }
+
+    bool ShouldWaitUpload()
     {
         if (!LevelBuf.IsReachLimits(Limits) && !PostingBuf.IsReachLimits(Limits) && !PrefixBuf.IsReachLimits(Limits)) {
-            return EScan::Feed;
+            return false;
         }
 
         if (UploadInProgress()) {
-            return EScan::Sleep;
+            return true;
         }
         
         TryUpload(LevelBuf, LevelTable, LevelTypes, true)
             || TryUpload(PostingBuf, PostingTable, PostingTypes, true)
             || TryUpload(PrefixBuf, PrefixTable, PrefixTypes, true);
 
-        return EScan::Feed;
-    }
-
-    ui64 GetProbability()
-    {
-        return Rng.GenRand64();
+        return !LevelBuf.IsReachLimits(Limits) && !PostingBuf.IsReachLimits(Limits) && !PrefixBuf.IsReachLimits(Limits);
     }
 
     void UploadImpl()
@@ -367,7 +371,7 @@ protected:
         return false;
     }
 
-    void WriteLevelRows()
+    void FormLevelRows()
     {
         std::array<TCell, 2> pk;
         std::array<TCell, 1> data;
@@ -404,6 +408,9 @@ class TPrefixKMeansScan final: public TPrefixKMeansScanBase, private TCalculatio
         // Exact seek with Lower also possible but needs to rewrite some code in Feed
         Lead.To(Prefix.GetCells(), NTable::ESeek::Upper);
         Prefix = {};
+        IsFirstPrefixFeed = true;
+        IsPrefixRowsValid = true;
+        PrefixRows.Clear();
         MaxProbability = std::numeric_limits<ui64>::max();
         MaxRows.clear();
         Clusters.clear();
@@ -442,21 +449,16 @@ public:
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
     {
+        LOG_T("Feed " << Debug());
+
         ++ReadRows;
         ReadBytes += CountBytes(key, row);
 
-        return Feed(key, *row);
-    }
-
-    EScan Feed(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
-    {
-        LOG_T("Feed " << Debug());
-
         if (Prefix && !TCellVectorsEquals{}(Prefix.GetCells(), key.subspan(0, PrefixColumns))) {
             if (!FinishPrefix()) {
+                // scan current prefix rows with a new state again
                 return EScan::Reset;
             }
-            LOG_T("Prefix finished " << Debug());
         }
 
         if (!Prefix) {
@@ -470,19 +472,17 @@ public:
             PrefixBuf.AddRow(TSerializedCellVec{std::move(pk)}, TSerializedCellVec::Serialize({}));
         }
 
-        switch (State) {
-            case EState::SAMPLE:
-                return FeedSample(row);
-            case EState::KMEANS:
-                return FeedKMeans(row);
-            case EState::UPLOAD_BUILD_TO_BUILD:
-                return FeedUploadBuild2Build(key, row);
-            case EState::UPLOAD_BUILD_TO_POSTING:
-                return FeedUploadBuild2Posting(key, row);
-            default:
-                Y_ASSERT(false);
-                return EScan::Final;
+        if (IsFirstPrefixFeed && IsPrefixRowsValid) {
+            PrefixRows.AddRow(TSerializedCellVec{key}, TSerializedCellVec::Serialize(*row));
+            if (PrefixRows.IsReachLimits(Limits)) {
+                PrefixRows.Clear();
+                IsPrefixRowsValid = false;
+            }
         }
+
+        Feed(key, *row);
+
+        return ShouldWaitUpload() ? EScan::Sleep : EScan::Feed;
     }
 
     EScan Exhausted() final
@@ -493,7 +493,6 @@ public:
             return EScan::Reset;
         }
             
-        LOG_T("Prefix finished " << Debug());
         IsExhausted = true;
         
         // call Seek to wait uploads
@@ -501,14 +500,65 @@ public:
     }
 
 private:
+    void Feed(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    {
+        switch (State) {
+            case EState::SAMPLE:
+                FeedSample(row);
+                break;
+            case EState::KMEANS:
+                FeedKMeans(row);
+                break;
+            case EState::UPLOAD_BUILD_TO_BUILD:
+                FeedUploadBuild2Build(key, row);
+                break;
+            case EState::UPLOAD_BUILD_TO_POSTING:
+                FeedUploadBuild2Posting(key, row);
+                break;
+            default:
+                Y_ASSERT(false);
+        }
+    }
+
     bool FinishPrefix()
+    {
+        if (FinishPrefixImpl()) {
+            StartNewPrefix();
+            LOG_D("FinishPrefix finished " << Debug());
+            return true;
+        } else {
+            IsFirstPrefixFeed = false;
+            
+            if (IsPrefixRowsValid) {
+                LOG_D("FinishPrefix not finished, manually feeding " << PrefixRows.Size() << " saved rows " << Debug());
+                for (ui64 iteration = 0; ; iteration++) {
+                    for (const auto& [key, row_] : *PrefixRows.GetRowsData()) {
+                        TSerializedCellVec row(row_);
+                        Feed(key.GetCells(), row.GetCells());
+                    }
+                    if (FinishPrefixImpl()) {
+                        StartNewPrefix();
+                        LOG_D("FinishPrefix finished in " << iteration << " iterations " << Debug());
+                        return true;
+                    } else {
+                        LOG_D("FinishPrefix not finished in " << iteration << " iterations " << Debug());
+                    }
+                }
+            } else {
+                LOG_D("FinishPrefix not finished, rescanning rows " << Debug());
+            }
+
+            return false;
+        }
+    }
+
+    bool FinishPrefixImpl()
     {
         if (State == EState::SAMPLE) {
             State = EState::KMEANS;
             if (!InitAggregatedClusters()) {
                 // We don't need to do anything,
                 // because this datashard doesn't have valid embeddings for this parent
-                StartNewPrefix();
                 return true;
             }
             Round = 1;
@@ -517,9 +567,9 @@ private:
 
         if (State == EState::KMEANS) {
             if (RecomputeClusters()) {
-                WriteLevelRows();
+                FormLevelRows();
                 State = UploadState;
-                return false; // do upload
+                return false; // do UPLOAD_*
             } else {
                 ++Round;
                 return false; // retry KMEANS
@@ -527,12 +577,10 @@ private:
         }
 
         if (State == UploadState) {
-            StartNewPrefix();
             return true;
         }
 
         Y_ASSERT(false);
-        StartNewPrefix();
         return true;
     }
 
@@ -615,11 +663,11 @@ private:
         return true;
     }
 
-    EScan FeedSample(TArrayRef<const TCell> row)
+    void FeedSample(TArrayRef<const TCell> row)
     {
         const auto embedding = row.at(EmbeddingPos).AsRef();
         if (!this->IsExpectedSize(embedding)) {
-            return EScan::Feed;
+            return;
         }
 
         const auto probability = GetProbability();
@@ -638,34 +686,28 @@ private:
             std::push_heap(MaxRows.begin(), MaxRows.end());
             MaxProbability = MaxRows.front().P;
         }
-        return MaxProbability != 0 ? EScan::Feed : EScan::Reset;
     }
 
-    EScan FeedKMeans(TArrayRef<const TCell> row)
+    void FeedKMeans(TArrayRef<const TCell> row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
         AggregateToCluster(pos, row.at(EmbeddingPos).Data());
-        return EScan::Feed;
     }
 
-    EScan FeedUploadBuild2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    void FeedUploadBuild2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos > K) {
-            return EScan::Feed;
+        if (pos < K) {
+            AddRowBuild2Build(PostingBuf, Child + pos, key, row, PrefixColumns);
         }
-        AddRowBuild2Build(PostingBuf, Child + pos, key, row, PrefixColumns);
-        return FeedUpload();
     }
 
-    EScan FeedUploadBuild2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
+    void FeedUploadBuild2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos > K) {
-            return EScan::Feed;
+        if (pos < K) {
+            AddRowBuild2Posting(PostingBuf, Child + pos, key, row, DataPos, PrefixColumns);
         }
-        AddRowBuild2Posting(PostingBuf, Child + pos, key, row, DataPos, PrefixColumns);
-        return FeedUpload();
     }
 };
 

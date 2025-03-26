@@ -599,6 +599,12 @@ TTypedColumn CompileYqlKernelScalarApply(const TKqpOlapApply& apply, TKqpOlapCom
         argTypes.emplace_back(arg.Type);
     }
 
+    for(const auto& param: apply.Parameters()) {
+        const auto& arg = GetOrCreateColumnIdAndType(param, ctx);
+        ids.emplace_back(arg.Id);
+        argTypes.emplace_back(arg.Type);
+    }
+
     auto *const command = ctx.CreateAssignCmd();
     auto *const function = command->MutableFunction();
     const auto idx = ctx.GetKernelRequestBuilder().AddScalarApply(apply.Lambda().Ref(), argTypes, ctx.ExprCtx());

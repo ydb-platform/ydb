@@ -39,19 +39,22 @@ TString WrapStaticConfig(const TString& yaml) {
 }
 
 TCommandConfig::TCommandConfig(
+        bool useLegacyApi,
         TCommandFlagsOverrides commandFlagsOverrides,
         bool allowEmptyDatabase)
     : TClientCommandTree("config", {}, "Dynamic config")
     , CommandFlagsOverrides(commandFlagsOverrides)
 {
-    AddCommand(std::make_unique<TCommandConfigFetch>(allowEmptyDatabase));
-    AddCommand(std::make_unique<TCommandConfigReplace>(allowEmptyDatabase));
+    AddCommand(std::make_unique<TCommandConfigFetch>(useLegacyApi, allowEmptyDatabase));
+    AddCommand(std::make_unique<TCommandConfigReplace>(useLegacyApi, allowEmptyDatabase));
     AddCommand(std::make_unique<TCommandConfigResolve>());
     AddCommand(std::make_unique<TCommandGenerateDynamicConfig>(allowEmptyDatabase));
 }
 
-TCommandConfig::TCommandConfig(bool allowEmptyDatabase)
-    : TCommandConfig(TCommandFlagsOverrides{}, allowEmptyDatabase)
+TCommandConfig::TCommandConfig(
+    bool useLegacyApi,
+    bool allowEmptyDatabase)
+    : TCommandConfig(useLegacyApi, TCommandFlagsOverrides{}, allowEmptyDatabase)
 {}
 
 void TCommandConfig::PropagateFlags(const TCommandFlags& flags) {
@@ -70,8 +73,11 @@ void TCommandConfig::PropagateFlags(const TCommandFlags& flags) {
     }
 }
 
-TCommandConfigFetch::TCommandConfigFetch(bool allowEmptyDatabase)
+TCommandConfigFetch::TCommandConfigFetch(
+        bool useLegacyApi,
+        bool allowEmptyDatabase)
     : TYdbReadOnlyCommand("fetch", {"get", "dump"}, "Fetch main dynamic-config")
+    , UseLegacyApi(useLegacyApi)
     , AllowEmptyDatabase(allowEmptyDatabase)
 {
 }
@@ -106,11 +112,16 @@ int TCommandConfigFetch::Run(TConfig& config) {
     auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
     auto client = NYdb::NConfig::TConfigClient(*driver);
 
-    NYdb::NConfig::TFetchAllConfigsSettings settings;
-    auto result = client.FetchAllConfigs(settings).GetValueSync();
+    NYdb::NConfig::TFetchConfigResult result(TStatus(EStatus::CLIENT_CALL_UNIMPLEMENTED, {}), {});
+
+    if (!UseLegacyApi) {
+        NYdb::NConfig::TFetchAllConfigsSettings settings;
+        result = client.FetchAllConfigs(settings).GetValueSync();
+    }
 
     // if the new Config API is not supported, fallback to the old DynamicConfig API
     if (result.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED || result.GetStatus() == EStatus::UNSUPPORTED) {
+        Cerr << "Warning: Fallback to DynamicConfig API" << Endl;
         auto client = NYdb::NDynamicConfig::TDynamicConfigClient(*driver);
         auto result = client.GetConfig().GetValueSync();
         NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
@@ -160,7 +171,18 @@ int TCommandConfigFetch::Run(TConfig& config) {
         }, entry.Identity);
     }
 
+
+    // TODO: rewrite it in proper way, without stdout and stderr confusion
     if (!clusterConfig.empty()) {
+        try {
+            clusterConfig = NYamlConfig::UpgradeMainConfigVersion(clusterConfig);
+        } catch(...) {
+            // it is better to return at least something
+            // because for user it is the only way to get config
+            // user will be unable to reupload this config without manual interaction
+            // and will get attention that something went horribly wrong
+            Cerr << "Unable to bump main config version, returning as-is" << Endl;
+        }
         if (!storageConfig.empty() || DedicatedStorageSection) {
             Cerr << "cluster config: " << Endl;
         }
@@ -168,6 +190,15 @@ int TCommandConfigFetch::Run(TConfig& config) {
     }
 
     if (!storageConfig.empty()) {
+        try {
+            storageConfig = NYamlConfig::UpgradeStorageConfigVersion(storageConfig);
+        } catch(...) {
+            // it is better to return at least something
+            // because for user it is the only way to get config
+            // user will be unable to reupload this config without manual interaction
+            // and will get attention that something went horribly wrong
+            Cerr << "Unable to bump storage config version, returning as-is" << Endl;
+        }
         if (!clusterConfig.empty() || DedicatedClusterSection) {
             Cerr << "storage config:" << Endl;
         }
@@ -182,8 +213,11 @@ int TCommandConfigFetch::Run(TConfig& config) {
     return EXIT_SUCCESS;
 }
 
-TCommandConfigReplace::TCommandConfigReplace(bool allowEmptyDatabase)
+TCommandConfigReplace::TCommandConfigReplace(
+        bool useLegacyApi,
+        bool allowEmptyDatabase)
     : TYdbCommand("replace", {}, "Replace dynamic config")
+    , UseLegacyApi(useLegacyApi)
     , IgnoreCheck(false)
     , AllowEmptyDatabase(allowEmptyDatabase)
 {
@@ -242,7 +276,11 @@ int TCommandConfigReplace::Run(TConfig& config) {
         settings.AllowUnknownFields();
     }
 
-    auto status = client.ReplaceConfig(DynamicConfig, settings).GetValueSync();
+    auto status = TStatus(EStatus::CLIENT_CALL_UNIMPLEMENTED, {});
+
+    if (!UseLegacyApi) {
+        status = client.ReplaceConfig(DynamicConfig, settings).GetValueSync();
+    }
 
     if (status.GetStatus() == EStatus::CLIENT_CALL_UNIMPLEMENTED || status.GetStatus() == EStatus::UNSUPPORTED) {
         Cerr << "Warning: Fallback to DynamicConfig API" << Endl;

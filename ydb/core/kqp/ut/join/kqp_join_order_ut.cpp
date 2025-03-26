@@ -839,7 +839,7 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         {
             auto join = joinFinder.Find({"partsupp", "lineitem"});
             UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (Grace)");
-            UNIT_ASSERT(join.LhsShuffled);
+            UNIT_ASSERT(!join.LhsShuffled);
             UNIT_ASSERT(join.RhsShuffled);
         }
     }

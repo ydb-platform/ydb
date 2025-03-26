@@ -170,7 +170,7 @@ class YdbCliHelper:
                     self._add_error(f'Iteration {iter}: {msg}')
 
         def _process_returncode(self, returncode) -> None:
-            if returncode != 0 and len([x for x in filter(lambda x: x.error_message or x.warning_message, self.result.iterations.values())]) == 0:
+            if returncode != 0 and not self.result.error_message and not self.result.warning_message:
                 self._add_error(f'Invalid return code: {returncode} instead 0. stderr: {self.result.stderr}')
 
         def _load_plan(self, name: str) -> YdbCliHelper.QueryPlan:

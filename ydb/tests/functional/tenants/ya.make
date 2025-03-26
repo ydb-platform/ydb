@@ -13,6 +13,7 @@ TEST_SRCS(
     test_system_views.py
     test_auth_system_views.py
     test_publish_into_schemeboard_with_common_ssring.py
+    test_user_administration.py
     test_users_groups_with_acl.py
 )
 

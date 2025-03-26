@@ -193,7 +193,7 @@ public:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
     {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
-        LOG_D("Prepare " << Debug());
+        LOG_I("Prepare " << Debug());
 
         Driver = driver;
         return {EScan::Feed, {}};
@@ -270,7 +270,7 @@ protected:
 
     void HandleWakeup(const NActors::TActorContext& /*ctx*/)
     {
-        LOG_T("Retry upload " << Debug());
+        LOG_I("Retry upload " << Debug());
 
         if (!WriteBuf.IsEmpty()) {
             Upload(true);
@@ -388,7 +388,7 @@ public:
         : TLocalKMeansScanBase{buildId, table, std::move(lead), parent, child, request, std::move(result)}
     {
         this->Dimensions = request.GetSettings().vector_dimension();
-        LOG_D("Create " << Debug());
+        LOG_I("Create " << Debug());
     }
 
     EScan Seek(TLead& lead, ui64 seq) final

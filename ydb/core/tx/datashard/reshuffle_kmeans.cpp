@@ -106,7 +106,7 @@ public:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
     {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
-        LOG_D("Prepare " << Debug());
+        LOG_I("Prepare " << Debug());
 
         Driver = driver;
         return {EScan::Feed, {}};
@@ -201,7 +201,7 @@ protected:
 
     void HandleWakeup()
     {
-        LOG_T("Retry upload " << Debug());
+        LOG_I("Retry upload " << Debug());
 
         if (!WriteBuf.IsEmpty()) {
             Upload(true);
@@ -285,7 +285,7 @@ public:
         : TReshuffleKMeansScanBase{table, std::move(lead), request, responseActorId, std::move(response)}
     {
         this->Dimensions = request.GetSettings().vector_dimension();
-        LOG_D("Create " << Debug());
+        LOG_I("Create " << Debug());
     }
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final

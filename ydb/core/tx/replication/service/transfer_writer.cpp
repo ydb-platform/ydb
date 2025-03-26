@@ -499,7 +499,7 @@ private:
         }
 
         if (entry.Status == TNavigate::EStatus::PathNotTable) {
-            return LogCritAndLeave("Only column tables are supported as transfer targets.");
+            return LogCritAndLeave("Only column tables are supported as transfer targets");
         }
 
         if (!CheckEntrySucceeded(entry)) {

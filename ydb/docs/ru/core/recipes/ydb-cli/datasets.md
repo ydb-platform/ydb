@@ -41,7 +41,9 @@ ydb import file csv --header --null-value "" --path <путь_к_таблице>
 2. Создайте таблицу в {{ ydb-short-name }}
 
 <details>
-  <summary>Выполнив запрос в [WEB-интерфейсе](../../reference/embedded-ui/ydb-monitoring)</summary>
+  <summary>Выполнив запрос в WEB-интерфейсе</summary>
+
+  Подробнее про [WEB-интерфейс](../../reference/embedded-ui/ydb-monitoring).
 
   ```sql
   CREATE TABLE `ecommerce_table` (
@@ -60,7 +62,7 @@ ydb import file csv --header --null-value "" --path <путь_к_таблице>
 </details>
 
 <details>
-  <summary>Выполнив команду через CLI</summary>
+  <summary>Выполнив команду YDB CLI</summary>
 
   ```bash
   ydb sql -s \
@@ -116,7 +118,9 @@ sed -i '1s/ /_/g' accessories.csv
 
 4. Создайте таблицу в {{ ydb-short-name }}
 <details>
-  <summary>Выполнив запрос в [WEB-интерфейсе](../../reference/embedded-ui/ydb-monitoring)</summary>
+  <summary>Выполнив запрос в WEB-интерфейсе</summary>
+
+  Подробнее про [WEB-интерфейс](../../reference/embedded-ui/ydb-monitoring).
 
   ```sql
   CREATE TABLE `accessories` (
@@ -151,7 +155,7 @@ sed -i '1s/ /_/g' accessories.csv
 </details>
 
 <details>
-  <summary>* Выполнив команду через CLI</summary>
+  <summary>Выполнив команду YDB CLI</summary>
 
   ```bash
   ydb sql -s \

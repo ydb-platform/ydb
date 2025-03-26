@@ -108,23 +108,23 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
     if (partitionNode->AllParents.size() == 0 && partitionNode->DirectChildren.size() == 0) {
         SendCommit(topicInitInfo, commitRequest, ctx);
     } else {
-        std::vector<TKqpHelper::TCommitInfo> commits;
+        std::vector<TDistributedCommitHelper::TCommitInfo> commits;
 
         for (auto& parent: partitionNode->AllParents) {
-            TKqpHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>(), .KillReadSession = true, .OnlyCheckCommitedToFinish = false};
+            TDistributedCommitHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>(), .KillReadSession = true, .OnlyCheckCommitedToFinish = false};
             commits.push_back(commit);
         }
 
         for (auto& child: partitionNode->AllChildren) {
-            TKqpHelper::TCommitInfo commit {.PartitionId = child->Id, .Offset = 0, .KillReadSession = true, .OnlyCheckCommitedToFinish = false};
+            TDistributedCommitHelper::TCommitInfo commit {.PartitionId = child->Id, .Offset = 0, .KillReadSession = true, .OnlyCheckCommitedToFinish = false};
             commits.push_back(commit);
         }
 
-        TKqpHelper::TCommitInfo commit {.PartitionId = partitionNode->Id, .Offset = commitRequest->offset(), .KillReadSession = true, .OnlyCheckCommitedToFinish = false};
+        TDistributedCommitHelper::TCommitInfo commit {.PartitionId = partitionNode->Id, .Offset = commitRequest->offset(), .KillReadSession = true, .OnlyCheckCommitedToFinish = false};
         commits.push_back(commit);
 
         // savnik if empty database?
-        Kqp = std::make_unique<TKqpHelper>(Request().GetDatabaseName().GetOrElse(TString()), ClientId, topic, commits); // savnik add cookie?
+        Kqp = std::make_unique<TDistributedCommitHelper>(Request().GetDatabaseName().GetOrElse(TString()), ClientId, topic, commits); // savnik add cookie?
 
         Kqp->SendCreateSessionRequest(ctx);
     }
@@ -149,7 +149,7 @@ void TCommitOffsetActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const 
 
     auto step = Kqp->Handle(ev, ctx);
 
-    if (step == TKqpHelper::ECurrentStep::DONE) {
+    if (step == TDistributedCommitHelper::ECurrentStep::DONE) {
         Ydb::Topic::CommitOffsetResult result;
         Request().SendResult(result, Ydb::StatusIds::SUCCESS);
         Die(ctx);

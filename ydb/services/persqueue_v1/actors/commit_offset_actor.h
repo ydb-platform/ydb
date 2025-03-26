@@ -1,7 +1,7 @@
 #pragma once
 
 #include "events.h"
-#include "kqp_commit_offset_helper.h"
+#include "distributed_commit_helper.h"
 
 
 #include <ydb/core/kqp/common/events/events.h>
@@ -96,7 +96,7 @@ private:
 
     NPersQueue::TTopicsListController TopicsHandler;
 
-    std::unique_ptr<TKqpHelper> Kqp;
+    std::unique_ptr<TDistributedCommitHelper> Kqp;
 };
 
 }

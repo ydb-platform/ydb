@@ -6,7 +6,7 @@
 
 #include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
-#include <ydb/services/persqueue_v1/actors/kqp_commit_offset_helper.h>
+#include <ydb/services/persqueue_v1/actors/distributed_commit_helper.h>
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 
 #include <ydb/core/base/tablet_pipe.h>
@@ -227,7 +227,7 @@ private:
     };
 
     std::deque<std::pair<ui64, TCommitInfo>> CommitsInfly; //ReadId, Offset
-    std::unordered_map<ui64, std::shared_ptr<TKqpHelper>> Kqps;
+    std::unordered_map<ui64, std::shared_ptr<TDistributedCommitHelper>> Kqps;
 
     std::set<NPQ::TPartitionGraph::Node*> Parents;
 

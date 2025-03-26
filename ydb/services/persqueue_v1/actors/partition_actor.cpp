@@ -161,14 +161,14 @@ void TPartitionActor::Bootstrap(const TActorContext& ctx) {
 
 void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TActorContext& ctx) {
     if (!ClientHasAnyCommits && Parents.size() != 0) { // savnik проверка на то что включены транзакции?
-        std::vector<TKqpHelper::TCommitInfo> commits;
+        std::vector<TDistributedCommitHelper::TCommitInfo> commits;
         for (auto& parent: Parents) {
-            TKqpHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>(), .KillReadSession = false, .OnlyCheckCommitedToFinish = true, .ReadSessionId = Session};
+            TDistributedCommitHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>(), .KillReadSession = false, .OnlyCheckCommitedToFinish = true, .ReadSessionId = Session};
             commits.push_back(commit);
         }
-        TKqpHelper::TCommitInfo commit {.PartitionId = Partition.Partition, .Offset = (i64)offset, .KillReadSession = false, .OnlyCheckCommitedToFinish = false, .ReadSessionId = Session};
+        TDistributedCommitHelper::TCommitInfo commit {.PartitionId = Partition.Partition, .Offset = (i64)offset, .KillReadSession = false, .OnlyCheckCommitedToFinish = false, .ReadSessionId = Session};
         commits.push_back(commit);
-        auto kqp = std::make_shared<TKqpHelper>(Database, ClientId, Topic->GetPrimaryPath(), commits, readId);
+        auto kqp = std::make_shared<TDistributedCommitHelper>(Database, ClientId, Topic->GetPrimaryPath(), commits, readId);
         Kqps.emplace(readId, kqp);
 
         kqp->SendCreateSessionRequest(ctx);
@@ -226,7 +226,7 @@ void TPartitionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TAc
     }
 
     auto step = kqpIt->second->Handle(ev, ctx);
-    if (step == TKqpHelper::ECurrentStep::DONE) {
+    if (step == TDistributedCommitHelper::ECurrentStep::DONE) {
         CommitDone(ev->Cookie, ctx);
     }
 }

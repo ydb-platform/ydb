@@ -9,7 +9,7 @@ namespace NKikimr::NGRpcProxy::V1 {
 
 using namespace NKikimr::NGRpcService;
 
-class TKqpHelper {
+class TDistributedCommitHelper {
 public:
     enum ECurrentStep {
         BEGIN_TRANSACTION_SENDED,
@@ -26,7 +26,7 @@ public:
         TString ReadSessionId;
     };
 
-    TKqpHelper(TString database, TString consumer, TString path, std::vector<TCommitInfo> commits, ui64 cookie = 0);
+    TDistributedCommitHelper(TString database, TString consumer, TString path, std::vector<TCommitInfo> commits, ui64 cookie = 0);
 
     ECurrentStep Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
     void SendCreateSessionRequest(const TActorContext& ctx);

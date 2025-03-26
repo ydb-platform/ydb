@@ -1,9 +1,9 @@
-#include "kqp_commit_offset_helper.h"
+#include "distributed_commit_helper.h"
 #include "ydb/core/kqp/common/simple/services.h"
 
 namespace NKikimr::NGRpcProxy::V1 {
 
-TKqpHelper::TKqpHelper(TString database, TString consumer, TString path, std::vector<TCommitInfo> commits, ui64 cookie)
+TDistributedCommitHelper::TDistributedCommitHelper(TString database, TString consumer, TString path, std::vector<TCommitInfo> commits, ui64 cookie)
     : DataBase(database)
     , Consumer(consumer)
     , Path(path)
@@ -12,7 +12,7 @@ TKqpHelper::TKqpHelper(TString database, TString consumer, TString path, std::ve
     , Cookie(cookie)
 {}
 
-TKqpHelper::ECurrentStep TKqpHelper::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
+TDistributedCommitHelper::ECurrentStep TDistributedCommitHelper::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
     switch (Step) {
         case BEGIN_TRANSACTION_SENDED:
             Step = OFFSETS_SENDED;
@@ -32,12 +32,12 @@ TKqpHelper::ECurrentStep TKqpHelper::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr
     return Step;
 }
 
-void TKqpHelper::SendCreateSessionRequest(const TActorContext& ctx) {
+void TDistributedCommitHelper::SendCreateSessionRequest(const TActorContext& ctx) {
     auto ev = MakeCreateSessionRequest();
     ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, Cookie);
 }
 
-void TKqpHelper::BeginTransaction(const NActors::TActorContext& ctx) {
+void TDistributedCommitHelper::BeginTransaction(const NActors::TActorContext& ctx) {
     auto begin = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
 
     begin->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_BEGIN_TX);
@@ -48,7 +48,7 @@ void TKqpHelper::BeginTransaction(const NActors::TActorContext& ctx) {
     ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), begin.Release(), 0, Cookie);
 }
 
-bool TKqpHelper::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx) {
+bool TDistributedCommitHelper::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
 
     if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
@@ -61,7 +61,7 @@ bool TKqpHelper::Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const 
     return true;
 }
 
-void TKqpHelper::CloseKqpSession(const TActorContext& ctx) {
+void TDistributedCommitHelper::CloseKqpSession(const TActorContext& ctx) {
     if (KqpSessionId) {
         auto ev = MakeCloseSessionRequest();
         ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), ev.Release(), 0, Cookie);
@@ -69,19 +69,19 @@ void TKqpHelper::CloseKqpSession(const TActorContext& ctx) {
     }
 }
 
-THolder<NKqp::TEvKqp::TEvCreateSessionRequest> TKqpHelper::MakeCreateSessionRequest() {
+THolder<NKqp::TEvKqp::TEvCreateSessionRequest> TDistributedCommitHelper::MakeCreateSessionRequest() {
     auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
     ev->Record.MutableRequest()->SetDatabase(DataBase);
     return ev;
 }
 
-THolder<NKqp::TEvKqp::TEvCloseSessionRequest> TKqpHelper::MakeCloseSessionRequest() {
+THolder<NKqp::TEvKqp::TEvCloseSessionRequest> TDistributedCommitHelper::MakeCloseSessionRequest() {
     auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
     ev->Record.MutableRequest()->SetSessionId(KqpSessionId);
     return ev;
 }
 
-void TKqpHelper::SendCommits(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const NActors::TActorContext& ctx) {
+void TDistributedCommitHelper::SendCommits(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const NActors::TActorContext& ctx) {
     auto& record = ev->Get()->Record;
     TxId = record.GetResponse().GetTxMeta().id();
     Y_ABORT_UNLESS(!TxId.empty());
@@ -111,7 +111,7 @@ void TKqpHelper::SendCommits(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const NAc
     ctx.Send(NKqp::MakeKqpProxyID(ctx.SelfID.NodeId()), offsets.Release(), 0, Cookie);
 }
 
-void TKqpHelper::CommitTx(const NActors::TActorContext& ctx) {
+void TDistributedCommitHelper::CommitTx(const NActors::TActorContext& ctx) {
     auto commit = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
 
     commit->Record.MutableRequest()->SetAction(NKikimrKqp::QUERY_ACTION_COMMIT_TX);

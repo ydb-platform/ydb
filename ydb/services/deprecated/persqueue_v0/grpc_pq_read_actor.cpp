@@ -14,7 +14,7 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
-#include <ydb/services/persqueue_v1/actors/kqp_commit_offset_helper.h>
+#include <ydb/services/persqueue_v1/actors/distributed_commit_helper.h>
 #include <ydb/services/persqueue_v1/actors/helpers.h>
 
 #include <library/cpp/protobuf/util/repeated_field_utils.h>
@@ -266,7 +266,7 @@ private:
     bool FirstRead;
     bool ReadingFinishedSent;
 
-    std::unordered_map<ui64, std::shared_ptr<NKikimr::NGRpcProxy::V1::TKqpHelper>> Kqps;
+    std::unordered_map<ui64, std::shared_ptr<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper>> Kqps;
     std::set<NPQ::TPartitionGraph::Node*> Parents;
 };
 
@@ -1904,14 +1904,14 @@ void TPartitionActor::CheckRelease(const TActorContext& ctx) {
 
 void TPartitionActor::SendCommit(const ui64 readId, const ui64 offset, const TActorContext& ctx) {
     if (!ClientHasAnyCommits && Parents.size() != 0) {
-        std::vector<NKikimr::NGRpcProxy::V1::TKqpHelper::TCommitInfo> commits;
+        std::vector<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::TCommitInfo> commits;
         for (auto& parent: Parents) {
-            NKikimr::NGRpcProxy::V1::TKqpHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>(), .KillReadSession = false, .OnlyCheckCommitedToFinish = true, .ReadSessionId = Session};
+            NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>(), .KillReadSession = false, .OnlyCheckCommitedToFinish = true, .ReadSessionId = Session};
             commits.push_back(commit);
         }
-        NKikimr::NGRpcProxy::V1::TKqpHelper::TCommitInfo commit {.PartitionId = Partition, .Offset = (i64)offset, .KillReadSession = false, .OnlyCheckCommitedToFinish = false, .ReadSessionId = Session};
+        NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::TCommitInfo commit {.PartitionId = Partition, .Offset = (i64)offset, .KillReadSession = false, .OnlyCheckCommitedToFinish = false, .ReadSessionId = Session};
         commits.push_back(commit);
-        auto kqp = std::make_shared<NKikimr::NGRpcProxy::V1::TKqpHelper>(Database, InternalClientId, Topic->GetPrimaryPath(), commits, readId);
+        auto kqp = std::make_shared<NKikimr::NGRpcProxy::V1::TDistributedCommitHelper>(Database, InternalClientId, Topic->GetPrimaryPath(), commits, readId);
         Kqps.emplace(readId, kqp);
 
         kqp->SendCreateSessionRequest(ctx);
@@ -2379,7 +2379,7 @@ void TPartitionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TAc
     }
 
     auto step = kqpIt->second->Handle(ev, ctx);
-    if (step == NKikimr::NGRpcProxy::V1::TKqpHelper::ECurrentStep::DONE) {
+    if (step == NKikimr::NGRpcProxy::V1::TDistributedCommitHelper::ECurrentStep::DONE) {
         CommitDone(ev->Cookie, ctx);
     }
 }

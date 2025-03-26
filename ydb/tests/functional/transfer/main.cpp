@@ -1328,7 +1328,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                 };
             )");
 
-        testCase.CheckTransferStateError("Only column tables are supported as transfer targets.");
+        testCase.CheckTransferStateError("Only column tables are supported as transfer targets");
     }
 
     Y_UNIT_TEST(CreateTransferTargetIsNotTable)
@@ -1350,7 +1350,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                 };
             )");
 
-        testCase.CheckTransferStateError("Only column tables are supported as transfer targets.");
+        testCase.CheckTransferStateError("Only column tables are supported as transfer targets");
     }
 
     Y_UNIT_TEST(CreateTransferTargetNotExists)

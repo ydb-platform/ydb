@@ -508,7 +508,7 @@ private:
 
         // TODO support row tables
         if (entry.Kind != TNavigate::KindColumnTable) {
-            return LogCritAndLeave("Only column tables are supported as transfer targets.");
+            return LogCritAndLeave("Only column tables are supported as transfer targets");
         }
 
         if (entry.Kind == TNavigate::KindColumnTable) {

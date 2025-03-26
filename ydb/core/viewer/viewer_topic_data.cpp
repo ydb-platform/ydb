@@ -251,7 +251,7 @@ void TTopicData::Bootstrap() {
     Offset = FromStringWithDefault<ui64>(params.Get("offset"), 0);
     Timestamp = FromStringWithDefault(params.Get("read_timestamp"), Timestamp);
 
-    Limit = FromStringWithDefault<ui32>(params.Get("limit"), 0);
+    Limit = FromStringWithDefault(params.Get("limit"), Limit);
 
     // Only allow timestamp XOR offset to be defined
     if (Offset > 0 && Timestamp > 0) {

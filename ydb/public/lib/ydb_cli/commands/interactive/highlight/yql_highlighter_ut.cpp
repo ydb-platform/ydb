@@ -1,4 +1,4 @@
-#include "yql_highlight.h"
+#include "yql_highlighter.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -9,9 +9,9 @@
 using namespace NYdb::NConsoleClient;
 
 Y_UNIT_TEST_SUITE(YqlHighlightTests) {
-    auto Coloring = YQLHighlight::ColorSchema::Debug();
+    auto Coloring = TColorSchema::Debug();
 
-    std::unordered_map<char, YQLHighlight::Color> colors = {
+    std::unordered_map<char, TColor> colors = {
         {'k', Coloring.keyword},
         {'o', Coloring.operation},
         {'f', Coloring.identifier.function},
@@ -22,35 +22,35 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         {'n', Coloring.number},
         {'u', Coloring.unknown},
         {'c', Coloring.comment},
-        {' ', YQLHighlight::Color::DEFAULT},
+        {' ', TColor::DEFAULT},
     };
 
-    std::unordered_map<YQLHighlight::Color, char> symbols = [] {
-        std::unordered_map<YQLHighlight::Color, char> symbols;
+    std::unordered_map<TColor, char> symbols = [] {
+        std::unordered_map<TColor, char> symbols;
         for (const auto& [symbol, color] : colors) {
             symbols[color] = symbol;
         }
         return symbols;
     }();
 
-    TVector<YQLHighlight::Color> ColorsFromPattern(const TStringBuf& symbols) {
-        TVector<YQLHighlight::Color> result(symbols.size());
+    TVector<TColor> ColorsFromPattern(const TStringBuf& symbols) {
+        TVector<TColor> result(symbols.size());
         for (std::size_t i = 0; i < symbols.size(); ++i) {
             result[i] = colors.at(symbols[i]);
         }
         return result;
     }
 
-    TVector<YQLHighlight::Color> Apply(YQLHighlight& highlight,
-                                       const TStringBuf& queryUtf8) {
+    TVector<TColor> Apply(IYQLHighlighter& highlight,
+                          const TStringBuf& queryUtf8) {
         const auto queryUtf32 = UTF8ToUTF32</* robust = */ false>(queryUtf8);
-        TVector<YQLHighlight::Color> colors(queryUtf32.size(),
-                                            YQLHighlight::Color::DEFAULT);
+        TVector<TColor> colors(queryUtf32.size(),
+                               TColor::DEFAULT);
         highlight.Apply(queryUtf8, colors);
         return colors;
     }
 
-    TString SymbolsFromColors(const TVector<YQLHighlight::Color>& colors) {
+    TString SymbolsFromColors(const TVector<TColor>& colors) {
         TString result(colors.size(), '-');
         for (std::size_t i = 0; i < colors.size(); ++i) {
             result[i] = symbols.at(colors[i]);
@@ -58,15 +58,15 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
         return result;
     }
 
-    void Check(YQLHighlight& highlight, const TStringBuf& query,
+    void Check(IYQLHighlighter::TPtr& highlight, const TStringBuf& query,
                const TStringBuf& pattern) {
-        auto actual = Apply(highlight, query);
-        UNIT_ASSERT_EQUAL_C(Apply(highlight, query), ColorsFromPattern(pattern),
+        auto actual = Apply(*highlight, query);
+        UNIT_ASSERT_EQUAL_C(Apply(*highlight, query), ColorsFromPattern(pattern),
                             SymbolsFromColors(actual));
     }
 
     Y_UNIT_TEST(Blank) {
-        YQLHighlight highlight(Coloring);
+        auto highlight = MakeYQLHighlighter(Coloring);
         Check(highlight, "", "");
         Check(highlight, " ", " ");
         Check(highlight, "   ", "   ");
@@ -79,7 +79,7 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
     }
 
     Y_UNIT_TEST(Invalid) {
-        YQLHighlight highlight(Coloring);
+        auto highlight = MakeYQLHighlighter(Coloring);
         Check(highlight, "!", "u");
         Check(highlight, "й", "u");
         Check(highlight, "编", "u");
@@ -89,7 +89,7 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
     }
 
     Y_UNIT_TEST(Keyword) {
-        YQLHighlight highlight(Coloring);
+        auto highlight = MakeYQLHighlighter(Coloring);
         Check(highlight, "SELECT", "kkkkkk");
         Check(highlight, "select", "kkkkkk");
         Check(highlight, "ALTER", "kkkkk");
@@ -98,13 +98,13 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
     }
 
     Y_UNIT_TEST(Operation) {
-        YQLHighlight highlight(Coloring);
+        auto highlight = MakeYQLHighlighter(Coloring);
         Check(highlight, "(1 + 21 / 4)", "on o nn o no");
         Check(highlight, "(1+21/4)", "ononnono");
     }
 
     Y_UNIT_TEST(FunctionIdentifier) {
-        YQLHighlight highlight(Coloring);
+        auto highlight = MakeYQLHighlighter(Coloring);
 
         Check(highlight, "MIN", "fff");
         Check(highlight, "min", "fff");
@@ -121,18 +121,18 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
     }
 
     Y_UNIT_TEST(TypeIdentifier) {
-        YQLHighlight highlight(Coloring);
+        auto highlight = MakeYQLHighlighter(Coloring);
         Check(highlight, "Bool", "tttt");
         Check(highlight, "Bool(value)", "ttttovvvvvo");
     }
 
     Y_UNIT_TEST(VariableIdentifier) {
-        YQLHighlight highlight(Coloring);
+        auto highlight = MakeYQLHighlighter(Coloring);
         Check(highlight, "test", "vvvv");
     }
 
     Y_UNIT_TEST(QuotedIdentifier) {
-        YQLHighlight highlight(Coloring);
+        auto highlight = MakeYQLHighlighter(Coloring);
         Check(highlight, "`/cluster/database`", "qqqqqqqqqqqqqqqqqqq");
         Check(highlight, "`test`select", "qqqqqqkkkkkk");
         Check(highlight, "`/cluster", "uuuuuuuuu");
@@ -140,7 +140,7 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
     }
 
     Y_UNIT_TEST(String) {
-        YQLHighlight highlight(Coloring);
+        auto highlight = MakeYQLHighlighter(Coloring);
         Check(highlight, "\"\"", "ss");
         Check(highlight, "\"test\"", "ssssss");
         Check(highlight, "\"", "u");
@@ -154,7 +154,7 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
     }
 
     Y_UNIT_TEST(MultilineString) {
-        YQLHighlight highlight(Coloring);
+        auto highlight = MakeYQLHighlighter(Coloring);
 
         Check(highlight, "@@", "oo");
         Check(highlight, "@@@", "ooo");
@@ -181,7 +181,7 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
     }
 
     Y_UNIT_TEST(TypedString) {
-        YQLHighlight highlight(Coloring);
+        auto highlight = MakeYQLHighlighter(Coloring);
         Check(
             highlight,
             "SELECT \"foo\"u, '[1;2]'y, @@{\"a\":null}@@j;",
@@ -189,7 +189,7 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
     }
 
     Y_UNIT_TEST(Number) {
-        YQLHighlight highlight(Coloring);
+        auto highlight = MakeYQLHighlighter(Coloring);
 
         Check(highlight, "1234", "nnnn");
         Check(highlight, "-123", "onnn");
@@ -213,7 +213,7 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
     }
 
     Y_UNIT_TEST(SQL) {
-        YQLHighlight highlight(Coloring);
+        auto highlight = MakeYQLHighlighter(Coloring);
         Check(highlight, "SELECT id, alias from users",
               "kkkkkk vvo vvvvv kkkk vvvvv");
         Check(highlight, "INSERT INTO users (id, alias) VALUES (12, \"tester\")",
@@ -229,7 +229,7 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
     }
 
     Y_UNIT_TEST(Emoji) {
-        YQLHighlight highlight(Coloring);
+        auto highlight = MakeYQLHighlighter(Coloring);
         Check(highlight, "☺", "u");
         Check(highlight, "\"☺\"", "sss");
         Check(highlight, "`☺`", "qqq");
@@ -254,11 +254,11 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
             "  ttttovvvvvoo ffffoofffovvvo  "
             "kkkk qqqqqqqqqqqqqqqqqqqqqqqq kkkk vvvvo";
 
-        YQLHighlight highlight(Coloring);
+        auto highlight = MakeYQLHighlighter(Coloring);
         for (std::size_t size = 0; size <= query.size(); ++size) {
             const TStringBuf prefix(query, 0, size);
 
-            auto colors = Apply(highlight, prefix);
+            auto colors = Apply(*highlight, prefix);
             Y_DO_NOT_OPTIMIZE_AWAY(colors);
 
             if (size == query.size() || IsSpace(pattern[size])) {
@@ -269,7 +269,7 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
     }
 
     Y_UNIT_TEST(Comment) {
-        YQLHighlight highlight(Coloring);
+        auto highlight = MakeYQLHighlighter(Coloring);
         Check(highlight, "- select", "o kkkkkk");
         Check(highlight, "select -- select", "kkkkkk ccccccccc");
         Check(highlight, "-- select\nselect", "cccccccccckkkkkk");
@@ -280,7 +280,7 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
     }
 
     Y_UNIT_TEST(Multiline) {
-        YQLHighlight highlight(Coloring);
+        auto highlight = MakeYQLHighlighter(Coloring);
         Check(
             highlight,
             "SELECT *\n"
@@ -306,7 +306,7 @@ Y_UNIT_TEST_SUITE(YqlHighlightTests) {
     }
 
     Y_UNIT_TEST(ANSI) {
-        YQLHighlight highlight(Coloring);
+        auto highlight = MakeYQLHighlighter(Coloring);
 
         Check(
             highlight,

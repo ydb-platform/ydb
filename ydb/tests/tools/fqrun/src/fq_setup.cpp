@@ -293,7 +293,7 @@ private:
 
     static FederatedQuery::CreateQueryRequest GetStreamRequest(const TRequestOptions& query) {
         FederatedQuery::CreateQueryRequest request;
-        request.set_execute_mode(FederatedQuery::ExecuteMode::RUN);
+        request.set_execute_mode(query.Action);
 
         auto& content = *request.mutable_content();
         content.set_type(FederatedQuery::QueryContent::STREAMING);
@@ -359,6 +359,9 @@ TRequestResult TFqSetup::DescribeQuery(const TString& queryId, TExecutionMeta& m
     for (const auto& resultMeta : result.result_set_meta()) {
         meta.ResultSetSizes.emplace_back(resultMeta.rows_count());
     }
+
+    meta.Ast = result.ast().data();
+    meta.Plan = result.plan().json();
 
     return GetStatus(response->Get()->Issues);
 }

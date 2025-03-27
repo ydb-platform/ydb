@@ -3,36 +3,32 @@
   "args":
     [
       {
-        "op_name":"LeftOnlyJoin (Grace)",
+        "op_name":"HashShuffle",
         "args":
           [
             {
-              "op_name":"HashShuffle",
+              "op_name":"LeftJoin (Grace)",
               "args":
                 [
                   {
-                    "op_name":"CrossJoin",
+                    "op_name":"HashShuffle",
                     "args":
                       [
                         {
                           "op_name":"TableFullScan",
                           "table":"customer"
-                        },
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"customer"
                         }
                       ]
-                  }
-                ]
-            },
-            {
-              "op_name":"HashShuffle",
-              "args":
-                [
+                  },
                   {
-                    "op_name":"TableFullScan",
-                    "table":"orders"
+                    "op_name":"HashShuffle",
+                    "args":
+                      [
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"orders"
+                        }
+                      ]
                   }
                 ]
             }

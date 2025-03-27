@@ -837,8 +837,8 @@ struct TReplicationSettingsBase {
     TMaybe<TOAuthToken> OAuthToken;
     TMaybe<TStaticCredentials> StaticCredentials;
     TMaybe<TStateDone> StateDone;
-    TMaybe<bool> StatePaused;
-    TMaybe<bool> StateStandBy;
+    bool StatePaused = false;
+    bool StateStandBy = false;
 
     using EFailoverMode = TStateDone::EFailoverMode;
     TStateDone& EnsureStateDone(EFailoverMode mode = EFailoverMode::Consistent) {

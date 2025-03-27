@@ -280,6 +280,7 @@ void TDuplicateFilterConstructor::Handle(const TEvDuplicateFilterIntervalResult:
 void TDuplicateFilterConstructor::Handle(const TEvDuplicateFilterDataFetched::TPtr& ev) {
     if (ev->Get()->GetStatus().IsFail()) {
         AbortConstruction(ev->Get()->GetStatus().GetErrorMessage());
+        return;
     }
     const TIntervalsRange intervals = Intervals.GetRangeBySourceId(ev->Get()->GetSourceId());
     NotFetchedSourcesCount.Dec(intervals.GetFirstIdx(), intervals.GetLastIdx());
@@ -363,7 +364,9 @@ void TDuplicateFilterConstructor::StartMergingColumns(const TIntervalsCursor& in
         std::shared_ptr<TSourceFilterConstructor> constructionInfo = GetConstructorBySourceSeqNumber(sourceSeqNumber);
         const NArrow::NAccessor::IChunkedArray::TRowRange range = constructionInfo->GetIntervalRange(interval.GetIntervalIdx());
         std::shared_ptr<NArrow::TGeneralContainer> slice =
-            std::make_shared<NArrow::TGeneralContainer>(constructionInfo->GetColumnData()->Slice(range.GetBegin(), range.Size()));
+            range.Empty()
+                ? constructionInfo->GetColumnData()->BuildEmptySame()
+                : std::make_shared<NArrow::TGeneralContainer>(constructionInfo->GetColumnData()->Slice(range.GetBegin(), range.Size()));
         task->AddSource(std::move(slice), std::make_shared<NArrow::TColumnFilter>(NArrow::TColumnFilter::BuildAllowFilter()),
             constructionInfo->GetSource()->GetSourceId());
     }

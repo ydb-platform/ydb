@@ -263,6 +263,8 @@ private:
             : FirstIntervalIdx(intervals.GetRangeBySourceId(source->GetSourceId()).GetFirstIdx())
             , IntervalFilters(intervals.GetRangeBySourceId(source->GetSourceId()).NumIntervals())
             , Source(source) {
+            AFL_VERIFY(IntervalFilters.size());
+
             const TIntervalsRange range = intervals.GetRangeBySourceId(Source->GetSourceId());
             RightIntervalBorders.reserve(range.NumIntervals());
             for (ui32 intervalIdx = range.GetFirstIdx(); intervalIdx <= range.GetLastIdx(); ++intervalIdx) {

@@ -412,7 +412,7 @@ Y_UNIT_TEST_F(MultiplePartitionsAndNoGapsInTheOffsets, TUpdateOffsetsInTransacti
     auto result = tx->Commit().ExtractValueSync();
     Cerr << ">>> CommitTx >>>" << Endl;
     UNIT_ASSERT_EQUAL(result.IsTransportError(), false);
-    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::BAD_REQUEST);
+    UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::ABORTED);
 }
 
 }

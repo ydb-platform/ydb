@@ -279,21 +279,20 @@ Y_UNIT_TEST_SUITE(TExternalTableTestReboots) {
     }
 
     Y_UNIT_TEST(DropReplacedExternalTableWithReboots) {
-        const TString testTable = R"(
-            Name: "ExternalTable"
-            SourceType: "General"
-            DataSourcePath: "/MyRoot/ExternalDataSource"
-            Location: "/"
-            Columns { Name: "RowId"       Type: "Uint64"}
-            Columns { Name: "FirstValue"  Type: "Utf8"}
-            Columns { Name: "SecondValue" Type: "Utf8"}
-        )";
-
         TTestWithReboots t;
         t.GetTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true).RunFakeConfigDispatcher(true);
+
         t.Run([&](TTestActorRuntime& runtime, bool&) {
             CreateExternalDataSource(runtime, *t.TestEnv, ++t.TxId);
-            TestCreateExternalTable(runtime, ++t.TxId, "/MyRoot", testTable);
+            TestCreateExternalTable(runtime, ++t.TxId, "/MyRoot", R"(
+                Name: "ExternalTable"
+                SourceType: "General"
+                DataSourcePath: "/MyRoot/ExternalDataSource"
+                Location: "/"
+                Columns { Name: "RowId"       Type: "Uint64"}
+                Columns { Name: "FirstValue"  Type: "Utf8"}
+                Columns { Name: "SecondValue" Type: "Utf8"}
+            )");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
             TestCreateExternalTable(runtime, ++t.TxId, "/MyRoot", R"(

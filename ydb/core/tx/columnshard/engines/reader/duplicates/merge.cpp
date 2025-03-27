@@ -19,6 +19,7 @@ TConclusionStatus TBuildDuplicateFilters::DoExecute(const std::shared_ptr<ITask>
                                                               "filter", filters.FindPtr(id)->GetRecordsCount().value_or(0));
     }
     TActorContext::AsActorContext().Send(Owner, new TEvDuplicateFilterIntervalResult(std::move(filters), IntervalIdx));
+    Counters->OnRowsMerged(filtersBuilder.GetRowsAdded(), filtersBuilder.GetRowsSkipped(), 0);
     return TConclusionStatus::Success();
 }
 

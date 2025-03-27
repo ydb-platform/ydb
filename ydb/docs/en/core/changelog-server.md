@@ -14,10 +14,13 @@ Release date:
   * [auto-partitioning mode](./concepts/topic.md#autopartitioning) for topics
   * transactions involving [topics](./concepts/glossary.md#topic) and [row-oriented tables](./concepts/glossary.md#row-oriented-table) simultaneously
   * [volatile distributed transactions](./contributor/datashard-distributed-txs.md#volatile-transactions)
-  * [automatic index selection](./dev/secondary-indexes.md#avtomaticheskoe-ispolzovanie-indeksov-pri-vyborke) for queries
+ 
 
 * Added the ability to [read and write to a topic](./reference/kafka-api/examples.md#primery-rabot-s-kafka-api) using the Kafka API without authentication.
 
+#### Performance
+
+* Enabled by default [automatic index selection](./dev/secondary-indexes.md#avtomaticheskoe-ispolzovanie-indeksov-pri-vyborke) for queries.
 
 #### Bug Fixes
 

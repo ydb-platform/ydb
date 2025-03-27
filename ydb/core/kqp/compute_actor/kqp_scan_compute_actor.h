@@ -8,7 +8,7 @@
 
 namespace NKikimr::NKqp::NScanPrivate {
 
-class TKqpScanComputeActor: public TSchedulableComputeActorBase<TKqpScanComputeActor> {
+class TKqpScanComputeActor: public NScheduler::TSchedulableComputeActorBase<TKqpScanComputeActor> {
 private:
     using TBase = TSchedulableComputeActorBase<TKqpScanComputeActor>;
 
@@ -68,7 +68,7 @@ public:
         return NKikimrServices::TActivity::KQP_SCAN_COMPUTE_ACTOR;
     }
 
-    TKqpScanComputeActor(TComputeActorSchedulingOptions, const TActorId& executerId, ui64 txId,
+    TKqpScanComputeActor(NScheduler::TComputeActorOptions, const TActorId& executerId, ui64 txId,
         NYql::NDqProto::TDqTask* task, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
         const NYql::NDq::TComputeRuntimeSettings& settings, const NYql::NDq::TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
         TIntrusivePtr<NActors::TProtoArenaHolder> arena, EBlockTrackingMode mode);

@@ -129,7 +129,7 @@ public:
 
         TComputeStagesWithScan* ComputesByStages = nullptr;
         std::shared_ptr<IKqpNodeState> State = nullptr;
-        TComputeActorSchedulingOptions SchedulingOptions = {};
+        NScheduler::TComputeActorOptions SchedulingOptions = {};
         TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
         TString Database;
     };

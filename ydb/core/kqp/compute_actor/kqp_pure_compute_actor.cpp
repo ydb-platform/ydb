@@ -15,7 +15,7 @@ TKqpComputeActor::TKqpComputeActor(const TActorId& executerId, ui64 txId, NDqPro
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
     NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    TComputeActorSchedulingOptions schedulingOptions, NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
+    NScheduler::TComputeActorOptions schedulingOptions, NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken,
     const TString& database)
     : TBase(std::move(schedulingOptions), executerId, txId, task, std::move(asyncIoFactory), AppData()->FunctionRegistry, settings, memoryLimits, /* ownMemoryQuota = */ true, /* passExceptions = */ true, /*taskCounters = */ nullptr, std::move(traceId), std::move(arena), GUCSettings)
@@ -295,7 +295,7 @@ IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::T
     const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
     NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
-    const TGUCSettings::TPtr& GUCSettings, TComputeActorSchedulingOptions cpuOptions,
+    const TGUCSettings::TPtr& GUCSettings, NScheduler::TComputeActorOptions cpuOptions,
     NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken,
     const TString& database)

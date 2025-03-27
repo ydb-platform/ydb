@@ -113,7 +113,7 @@ public:
         Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
         Become(&TKqpNodeService::WorkState);
 
-        Scheduler = std::make_shared<TComputeScheduler>();
+        Scheduler = std::make_shared<NScheduler::TComputeScheduler>();
         SchedulerOptions.Scheduler = Scheduler;
         SchedulerActorId = RegisterWithSameMailbox(CreateSchedulerActor(SchedulerOptions));
     }
@@ -216,7 +216,7 @@ private:
 
             if (share > 0) {
                 Scheduler->UpdateGroupShare(schedulerGroup, share, schedulerNow, resourceWeight);
-                Send(SchedulerActorId, new TEvSchedulerNewPool(msg.GetDatabase(), schedulerGroup));
+                Send(SchedulerActorId, new NScheduler::TEvSchedulerNewPool(msg.GetDatabase(), schedulerGroup));
             } else {
                 schedulerGroup = "";
             }
@@ -240,7 +240,7 @@ private:
 
         const ui32 tasksCount = msg.GetTasks().size();
         for (auto& dqTask: *msg.MutableTasks()) {
-            TComputeActorSchedulingOptions schedulingTaskOptions {
+            NScheduler::TComputeActorOptions schedulingTaskOptions {
                 .Now = schedulerNow,
                 .SchedulerActorId = SchedulerActorId,
                 .Scheduler = Scheduler.get(),
@@ -538,8 +538,8 @@ private:
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
 
-    std::shared_ptr<TComputeScheduler> Scheduler;
-    TSchedulerActorOptions SchedulerOptions;
+    std::shared_ptr<NScheduler::TComputeScheduler> Scheduler;
+    NScheduler::TSchedulerActorOptions SchedulerOptions;
     TActorId SchedulerActorId;
 
     //state sharded by TxId

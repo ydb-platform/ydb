@@ -50,14 +50,14 @@ IActor* CreateKqpComputeActor(const TActorId& executerId, ui64 txId, NYql::NDqPr
     NWilson::TTraceId traceId,
     TIntrusivePtr<NActors::TProtoArenaHolder> arena,
     const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-    TComputeActorSchedulingOptions, NKikimrConfig::TTableServiceConfig::EBlockTrackingMode,
+    NScheduler::TComputeActorOptions, NKikimrConfig::TTableServiceConfig::EBlockTrackingMode,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken,
     const TString& database);
 
 IActor* CreateKqpScanComputeActor(const TActorId& executerId, ui64 txId, NYql::NDqProto::TDqTask* task,
     NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory, const NYql::NDq::TComputeRuntimeSettings& settings,
     const NYql::NDq::TComputeMemoryLimits& memoryLimits, NWilson::TTraceId traceId,
-    TIntrusivePtr<NActors::TProtoArenaHolder> arena, TComputeActorSchedulingOptions, NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode);
+    TIntrusivePtr<NActors::TProtoArenaHolder> arena, NScheduler::TComputeActorOptions, NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode);
 
 IActor* CreateKqpScanFetcher(const NKikimrKqp::TKqpSnapshot& snapshot, std::vector<NActors::TActorId>&& computeActors,
     const NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta& meta, const NYql::NDq::TComputeRuntimeSettings& settings,

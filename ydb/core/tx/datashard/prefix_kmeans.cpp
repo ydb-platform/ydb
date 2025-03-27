@@ -538,7 +538,7 @@ private:
             State = EState::KMEANS;
             if (!InitAggregatedClusters()) {
                 // We don't need to do anything,
-                // because this datashard doesn't have valid embeddings for this parent
+                // because this datashard doesn't have valid embeddings for this prefix
                 return true;
             }
             Round = 1;
@@ -552,7 +552,7 @@ private:
                 return false; // do UPLOAD_*
             } else {
                 ++Round;
-                return false; // retry KMEANS
+                return false; // recompute KMEANS
             }
         }
 

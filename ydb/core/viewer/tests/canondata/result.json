@@ -2326,6 +2326,7 @@
                                 "Usage": "number"
                             }
                         ],
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
@@ -2668,6 +2669,7 @@
                                 "Usage": "number"
                             }
                         ],
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
@@ -2868,6 +2870,7 @@
                                 "Usage": "number"
                             }
                         ],
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
@@ -3068,6 +3071,7 @@
                                 "Usage": "number"
                             }
                         ],
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
@@ -3186,6 +3190,7 @@
                                 "Usage": "number"
                             }
                         ],
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
@@ -3253,6 +3258,7 @@
                                 "Usage": "number"
                             }
                         ],
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",
@@ -3323,6 +3329,7 @@
                                 "Usage": "number"
                             }
                         ],
+                        "RealNumberOfCpus": "not-zero-number",
                         "Roles": "not-empty-array",
                         "StartTime": "not-zero-number-text",
                         "SystemState": "Green",

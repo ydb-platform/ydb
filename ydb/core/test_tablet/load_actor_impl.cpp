@@ -79,11 +79,12 @@ namespace NKikimr::NTestShard {
                 return;
             }
         }
-        ui64 barrier = 2 * Settings.GetMaxDataBytes();
-        if (Settings.HasValidateAfterBytes()) {
-            barrier = Settings.GetValidateAfterBytes();
-        }
-        if (BytesProcessed > barrier) { // time to perform validation
+//        ui64 barrier = 2 * Settings.GetMaxDataBytes();
+//        if (Settings.HasValidateAfterBytes()) {
+//            barrier = Settings.GetValidateAfterBytes();
+//        }
+        if (0) {
+//        if (BytesProcessed > barrier) { // time to perform validation
             if (WritesInFlight.empty() && PatchesInFlight.empty() && DeletesInFlight.empty() && ReadsInFlight.empty() &&
                     TransitionInFlight.empty()) {
                 RunValidation(false);
@@ -92,7 +93,10 @@ namespace NKikimr::NTestShard {
             const TMonotonic now = TActivationContext::Monotonic();
 
             bool canWriteMore = false;
-            if (WritesInFlight.size() + PatchesInFlight.size() < Settings.GetMaxInFlight() && !DisableWrites) {
+            if (BytesOfData < Settings.GetMaxDataBytes() &&
+                WritesInFlight.size() + PatchesInFlight.size() < Settings.GetMaxInFlight()
+                && !DisableWrites)
+            {
                 if (NextWriteTimestamp <= now) {
                     if (Settings.HasPatchRequestsFractionPPM() && !ConfirmedKeys.empty() &&
                             RandomNumber(1'000'000u) < Settings.GetPatchRequestsFractionPPM()) {
@@ -114,13 +118,13 @@ namespace NKikimr::NTestShard {
             }
 
             bool canReadMore = false;
-            if (ReadsInFlight.size() < Settings.GetMaxReadsInFlight()) {
-                canReadMore = IssueRead();
-            }
+//            if (ReadsInFlight.size() < Settings.GetMaxReadsInFlight()) {
+//                canReadMore = IssueRead();
+//            }
 
-            if (BytesOfData > Settings.GetMaxDataBytes()) { // delete some data if needed
-                IssueDelete();
-            }
+//            if (BytesOfData > Settings.GetMaxDataBytes()) { // delete some data if needed
+//                IssueDelete();
+//            }
 
             if (!DoSomeActionInFlight && (canWriteMore || canReadMore)) {
                 TActivationContext::Send(new IEventHandle(EvDoSomeAction, 0, SelfId(), {}, nullptr, 0));

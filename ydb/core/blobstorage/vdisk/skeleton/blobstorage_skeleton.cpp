@@ -132,7 +132,7 @@ namespace NKikimr {
 
                 case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MIN_SENTINEL_DO_NOT_USE_:
                 case NKikimrBlobStorage::TGroupDecommitStatus_E_TGroupDecommitStatus_E_INT_MAX_SENTINEL_DO_NOT_USE_:
-                    Y_DEBUG_ABORT_UNLESS(false);
+                    Y_ABORT();
                     return true;
             }
         }
@@ -208,7 +208,7 @@ namespace NKikimr {
                     if (!ApplyHugeBlobSize(type.GetMinHugeBlobSizeInBytes())) {
                         continue;
                     }
-                    Y_ABORT_UNLESS(MinHugeBlobInBytes);
+                    Y_VERIFY_S(MinHugeBlobInBytes, VCtx->VDiskLogPrefix);
                     if (Config->RunRepl) {
                         ctx.Send(Db->ReplID, new TEvMinHugeBlobSizeUpdate(MinHugeBlobInBytes));
                     }
@@ -449,7 +449,7 @@ namespace NKikimr {
                 NActors::TActorId sender, ui64 cookie, NLWTrace::TOrbit &&orbit, NKikimrBlobStorage::EPutHandleClass handleClass,
                 TVPutInfo &info, std::unique_ptr<TEvResult> result)
         {
-            Y_DEBUG_ABORT_UNLESS(info.HullStatus.Status == NKikimrProto::OK);
+            Y_VERIFY_DEBUG_S(info.HullStatus.Status == NKikimrProto::OK, VCtx->VDiskLogPrefix);
             const TLogoBlobID &id = info.BlobId;
             TRope &buffer = info.Buffer;
             const TLsnSeg &seg = info.Lsn;
@@ -494,7 +494,7 @@ namespace NKikimr {
                 ui64 cookie, bool ignoreBlock, NKikimrBlobStorage::EPutHandleClass handleClass, TVPutInfo &info,
                 std::unique_ptr<TEvBlobStorage::TEvVPutResult> res, bool rewriteBlob)
         {
-            Y_DEBUG_ABORT_UNLESS(info.HullStatus.Status == NKikimrProto::OK);
+            Y_VERIFY_DEBUG_S(info.HullStatus.Status == NKikimrProto::OK, VCtx->VDiskLogPrefix);
             info.Buffer = TDiskBlob::Create(info.BlobId.BlobSize(), info.BlobId.PartId(), Db->GType.TotalPartCount(),
                 std::move(info.Buffer), *Arena, HullCtx->AddHeader);
             UpdatePDiskWriteBytes(info.Buffer.GetSize());
@@ -689,7 +689,7 @@ namespace NKikimr {
                     continue;
                 }
 
-                Y_ABORT_UNLESS(lsnBatch.First <= lsnBatch.Last);
+                Y_VERIFY_S(lsnBatch.First <= lsnBatch.Last, VCtx->VDiskLogPrefix);
 
                 info.Lsn = TLsnSeg(lsnBatch.First, lsnBatch.First);
                 lsnBatch.First++;
@@ -722,7 +722,7 @@ namespace NKikimr {
         }
 
         void HandlePutSyncGuidRecovery(TEvBlobStorage::TEvVPut::TPtr& ev, const TActorContext& ctx) {
-            Y_ABORT_UNLESS(ev->Get()->RewriteBlob);
+            Y_VERIFY_S(ev->Get()->RewriteBlob, VCtx->VDiskLogPrefix);
             Handle(ev, ctx);
         }
 
@@ -1368,7 +1368,7 @@ namespace NKikimr {
 
         void Handle(TEvBlobStorage::TEvMonStreamActorDeathNote::TPtr& ev, const TActorContext& /*ctx*/) {
             auto it = MonStreamActors.find(ev->Get()->StreamId);
-            Y_ABORT_UNLESS(it != MonStreamActors.end());
+            Y_VERIFY_S(it != MonStreamActors.end(), VCtx->VDiskLogPrefix);
             ActiveActors.Erase(it->second);
             MonStreamActors.erase(it);
         }
@@ -1426,7 +1426,7 @@ namespace NKikimr {
                 switch (opType) {
                     case NKikimrBlobStorage::TEvVCompact::ASYNC:
                     {
-                        Y_ABORT_UNLESS(Db->LoggerID);
+                        Y_VERIFY_S(Db->LoggerID, VCtx->VDiskLogPrefix);
                         // forward this message to logger, because it knows correct lsn
                         ctx.Send(ev->Forward(Db->LoggerID));
                         // reply back
@@ -1460,7 +1460,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvHullCompactResult::TPtr &ev, const TActorContext &ctx) {
-            Y_ABORT_UNLESS(VDiskCompactionState);
+            Y_VERIFY_S(VDiskCompactionState, VCtx->VDiskLogPrefix);
             VDiskCompactionState->Compacted(ctx, ev->Get()->RequestId, ev->Get()->Type, VCtx);
         }
 
@@ -1487,7 +1487,7 @@ namespace NKikimr {
             if (!SelfVDiskId.SameDisk(record.GetVDiskID())) {
                 ReplyError(NKikimrProto::RACE, "group generation mismatch", ev, ctx, now);
             } else {
-                Y_ABORT_UNLESS(Db->SyncLogID);
+                Y_VERIFY_S(Db->SyncLogID, VCtx->VDiskLogPrefix);
                 // forward this message to SyncLog
                 ctx.Send(ev->Forward(Db->SyncLogID));
                 // reply back
@@ -1576,7 +1576,7 @@ namespace NKikimr {
             }
 
 #ifdef UNPACK_LOCALSYNCDATA
-            Y_ABORT_UNLESS(ev->Get()->Extracted.IsReady());
+            Y_VERIFY_S(ev->Get()->Extracted.IsReady(), VCtx->VDiskLogPrefix);
             TLsnSeg seg = Hull->AllocateLsnForSyncDataCmd(ev->Get()->Extracted);
 #else
             TLsnSeg seg = Hull->AllocateLsnForSyncDataCmd(ev->Get()->Data);
@@ -1740,8 +1740,8 @@ namespace NKikimr {
 
             TRope buf = std::move(msg->Data);
             const ui64 bufSize = buf.GetSize();
-            Y_ABORT_UNLESS(bufSize <= Config->MaxLogoBlobDataSize,
-                    "TEvRecoveredHugeBlob: blob is huge bufSize# %zu", bufSize);
+            Y_VERIFY_S(bufSize <= Config->MaxLogoBlobDataSize, VCtx->VDiskLogPrefix <<
+                    "TEvRecoveredHugeBlob: blob is huge bufSize# " << bufSize);
             UpdatePDiskWriteBytes(bufSize);
 
             auto oosStatus = VCtx->GetOutOfSpaceState().GetGlobalStatusFlags();
@@ -1781,7 +1781,7 @@ namespace NKikimr {
             }
             TString data;
             bool res = record.SerializeToString(&data);
-            Y_ABORT_UNLESS(res);
+            Y_VERIFY_S(res, VCtx->VDiskLogPrefix);
 
             intptr_t loggedRecId = LoggedRecsVault.Put(new TLoggedRecPhantoms(seg, true, ev));
             void *loggedRecCookie = reinterpret_cast<void *>(loggedRecId);
@@ -1808,7 +1808,7 @@ namespace NKikimr {
             // dump db
             TStringStream dump;
             typename TDumper::EDumpRes status = dumper.Dump(dump);
-            Y_ABORT_UNLESS(status == TDumper::EDumpRes::OK);
+            Y_VERIFY_S(status == TDumper::EDumpRes::OK, VCtx->VDiskLogPrefix);
 
             str << "========= " << VCtx->VDiskLogPrefix << " ==========\n";
             str << dump.Str() << "\n";
@@ -1902,7 +1902,7 @@ namespace NKikimr {
             // check status
             if (ev->Get()->Status == NKikimrProto::OK) {
                 ApplyHugeBlobSize(Config->MinHugeBlobInBytes);
-                Y_ABORT_UNLESS(MinHugeBlobInBytes);
+                Y_VERIFY_S(MinHugeBlobInBytes, VCtx->VDiskLogPrefix);
 
                 // handle special case when donor disk starts and finds out that it has been wiped out
                 if (ev->Get()->LsnMngr->GetOriginallyRecoveredLsn() == 0 && Config->BaseInfo.DonorMode) {
@@ -1961,7 +1961,7 @@ namespace NKikimr {
 
                 // run SyncLogActor
                 std::unique_ptr<NSyncLog::TSyncLogRepaired> repairedSyncLog = std::move(ev->Get()->RepairedSyncLog);
-                Y_ABORT_UNLESS(SelfVDiskId == GInfo->GetVDiskId(VCtx->ShortSelfVDisk));
+                Y_VERIFY_S(SelfVDiskId == GInfo->GetVDiskId(VCtx->ShortSelfVDisk), VCtx->VDiskLogPrefix);
                 auto slCtx = MakeIntrusive<NSyncLog::TSyncLogCtx>(
                         VCtx,
                         Db->LsnMngr,
@@ -1989,8 +1989,11 @@ namespace NKikimr {
                     Db->LoggerID, Db->LogCutterID, ctx), ctx, NKikimrServices::BLOBSTORAGE);
 
                 // create VDiskCompactionState
-                VDiskCompactionState = std::make_unique<TVDiskCompactionState>(Hull->GetHullDs()->LogoBlobs->LIActor,
-                    Hull->GetHullDs()->Blocks->LIActor, Hull->GetHullDs()->Barriers->LIActor);
+                VDiskCompactionState = std::make_unique<TVDiskCompactionState>(
+                    VCtx->VDiskLogPrefix,
+                    Hull->GetHullDs()->LogoBlobs->LIActor,
+                    Hull->GetHullDs()->Blocks->LIActor,
+                    Hull->GetHullDs()->Barriers->LIActor);
 
                 // initialize Out Of Space Logic
                 OutOfSpaceLogic = std::make_shared<TOutOfSpaceLogic>(VCtx, Hull);
@@ -2326,8 +2329,8 @@ namespace NKikimr {
             std::unique_ptr<NPDisk::TEvCutLog> msg(ev->Release().Release());
 
             if (LocalDbInitialized) {
-                Y_DEBUG_ABORT_UNLESS(msg->Owner == PDiskCtx->Dsk->Owner);
-                Y_ABORT_UNLESS(!CutLogDelayedMsg);
+                Y_VERIFY_DEBUG_S(msg->Owner == PDiskCtx->Dsk->Owner, VCtx->VDiskLogPrefix);
+                Y_VERIFY_S(!CutLogDelayedMsg, VCtx->VDiskLogPrefix);
                 LOG_DEBUG_S(ctx, BS_LOGCUTTER, VCtx->VDiskLogPrefix
                         << "Handle " << msg->ToString()
                         << " actorid# " << ctx.SelfID.ToString()
@@ -2343,7 +2346,7 @@ namespace NKikimr {
         }
 
         void SpreadCutLog(std::unique_ptr<NPDisk::TEvCutLog> msg, const TActorContext &ctx) {
-            Y_DEBUG_ABORT_UNLESS(msg->Owner == PDiskCtx->Dsk->Owner);
+            Y_VERIFY_DEBUG_S(msg->Owner == PDiskCtx->Dsk->Owner, VCtx->VDiskLogPrefix);
 
             ui32 counter = 0;
             // setup FreeUpToLsn for Hull Database
@@ -2392,9 +2395,9 @@ namespace NKikimr {
 
             LocalDbInitialized = true;
             if (CutLogDelayedMsg) {
-                Y_DEBUG_ABORT_UNLESS(CutLogDelayedMsg->Owner == PDiskCtx->Dsk->Owner);
+                Y_VERIFY_DEBUG_S(CutLogDelayedMsg->Owner == PDiskCtx->Dsk->Owner, VCtx->VDiskLogPrefix);
                 SpreadCutLog(std::exchange(CutLogDelayedMsg, nullptr), ctx);
-                Y_ABORT_UNLESS(!CutLogDelayedMsg);
+                Y_VERIFY_S(!CutLogDelayedMsg, VCtx->VDiskLogPrefix);
             }
         }
 
@@ -2588,7 +2591,7 @@ namespace NKikimr {
         void CheckSnapshotExpiration(TAutoPtr<IEventHandle> ev, const TActorContext& ctx) {
             auto schedIt = std::find(SnapshotExpirationCheckSchedule.begin(), SnapshotExpirationCheckSchedule.end(),
                 TMonotonic::FromValue(ev->Cookie));
-            Y_ABORT_UNLESS(schedIt != SnapshotExpirationCheckSchedule.end());
+            Y_VERIFY_S(schedIt != SnapshotExpirationCheckSchedule.end(), VCtx->VDiskLogPrefix);
             SnapshotExpirationCheckSchedule.erase(schedIt);
 
             const TMonotonic now = ctx.Monotonic();

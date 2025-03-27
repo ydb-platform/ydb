@@ -85,9 +85,9 @@ namespace NKikimr {
                     if (const auto it = ChunkTypes.find(chunkId); it != ChunkTypes.end()) {
                         it->second = type;
                         FoundAnyChunks = true;
-                        Y_DEBUG_ABORT_UNLESS(ChunksToShred.contains(chunkId));
+                        Y_VERIFY_DEBUG_S(ChunksToShred.contains(chunkId), ShredCtx->VCtx->VDiskLogPrefix);
                     } else {
-                        Y_DEBUG_ABORT_UNLESS(!ChunksToShred.contains(chunkId));
+                        Y_VERIFY_DEBUG_S(!ChunksToShred.contains(chunkId), ShredCtx->VCtx->VDiskLogPrefix);
                     }
                 }
             };
@@ -156,9 +156,9 @@ namespace NKikimr {
                         STLOG(PRI_DEBUG, BS_SHRED, BSSV13, ShredCtx->VCtx->VDiskLogPrefix << "going to compact SST",
                             (SstId, seg.AssignedSstId), (AllChunks, seg.AllChunks));
                         FoundAnyChunks = true;
-                        Y_DEBUG_ABORT_UNLESS(ChunksToShred.contains(chunkId));
+                        Y_VERIFY_DEBUG_S(ChunksToShred.contains(chunkId), ShredCtx->VCtx->VDiskLogPrefix);
                     } else {
-                        Y_DEBUG_ABORT_UNLESS(!ChunksToShred.contains(chunkId));
+                        Y_VERIFY_DEBUG_S(!ChunksToShred.contains(chunkId), ShredCtx->VCtx->VDiskLogPrefix);
                     }
                 }
 

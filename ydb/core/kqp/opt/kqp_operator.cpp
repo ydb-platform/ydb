@@ -68,19 +68,6 @@ inline bool operator == (const TInfoUnit& lhs, const TInfoUnit& rhs) {
     return lhs.Alias == rhs.Alias && lhs.ColumnName == rhs.ColumnName;
 }
 
-TVector<std::shared_ptr<IOperator>*> IOperator::DescendantsDFS() {
-    TVector<std::shared_ptr<IOperator>*> res;
-    DescendantsDFS_rec(Children, 0, res);
-    return res;
-}
-
-void IOperator::DescendantsDFS_rec(TVector<std::shared_ptr<IOperator>> & children, size_t index, TVector<std::shared_ptr<IOperator>*> & res) {
-    for (size_t i=0; i<Children.size(); i++) {
-        children[index]->DescendantsDFS_rec(Children, i, res);
-    }
-    res.push_back(&children[index]);
-} 
-
 TOpRead::TOpRead(TExprNode::TPtr node) : IOperator(EOperator::Source, node) {
     auto opSource = TKqpOpRead(node);
 

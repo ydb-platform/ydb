@@ -231,6 +231,10 @@ void TSchemeShard::Handle(TEvPrivate::TEvExportSchemeUploadResult::TPtr& ev, con
     Execute(CreateTxProgressExport(ev), ctx);
 }
 
+void TSchemeShard::Handle(TEvPrivate::TEvExportUploadMetadataResult::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxProgressExport(ev), ctx);
+}
+
 void TSchemeShard::ResumeExports(const TVector<ui64>& exportIds, const TActorContext& ctx) {
     for (const ui64 id : exportIds) {
         Execute(CreateTxProgressExport(id), ctx);

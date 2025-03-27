@@ -3144,6 +3144,11 @@
                 "ColumnId": 18,
                 "ColumnName": "EnablePermissions",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 19,
+                "ColumnName": "ExportMetadata",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -3167,7 +3172,8 @@
                     15,
                     16,
                     17,
-                    18
+                    18,
+                    19
                 ],
                 "RoomID": 0,
                 "Codec": 0,

@@ -7,6 +7,8 @@
 #include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
 
+#include <ydb/core/backup/common/encryption.h>
+
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
@@ -22,6 +24,10 @@ ui32 PopFront(TDeque<ui32>& pendingItems) {
     const ui32 itemIdx = pendingItems.front();
     pendingItems.pop_front();
     return itemIdx;
+}
+
+bool IsPathTypeTable(const NKikimr::NSchemeShard::TExportInfo::TItem& item) {
+    return item.SourcePathType == NKikimrSchemeOp::EPathTypeTable;
 }
 
 }
@@ -243,6 +249,7 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     TEvTxAllocatorClient::TEvAllocateResult::TPtr AllocateResult = nullptr;
     TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr ModifyResult = nullptr;
     TEvPrivate::TEvExportSchemeUploadResult::TPtr SchemeUploadResult = nullptr;
+    TEvPrivate::TEvExportUploadMetadataResult::TPtr UploadMetadataResult = nullptr;
     TTxId CompletedTxId = InvalidTxId;
 
     explicit TTxProgress(TSelf* self, ui64 id)
@@ -269,6 +276,12 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     {
     }
 
+    explicit TTxProgress(TSelf* self, TEvPrivate::TEvExportUploadMetadataResult::TPtr& ev)
+        : TXxport::TTxBase(self)
+        , UploadMetadataResult(ev)
+    {
+    }
+
     explicit TTxProgress(TSelf* self, TTxId completedTxId)
         : TXxport::TTxBase(self)
         , CompletedTxId(completedTxId)
@@ -288,6 +301,8 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
             OnModifyResult(txc, ctx);
         } else if (SchemeUploadResult) {
             OnSchemeUploadResult(txc);
+        } else if (UploadMetadataResult) {
+            OnUploadMetadataResult(txc, ctx);
         } else if (CompletedTxId) {
             OnNotifyResult(txc, ctx);
         } else {
@@ -364,6 +379,100 @@ private:
             ));
             Self->RunningExportSchemeUploaders.emplace(item.SchemeUploader);
         }
+    }
+
+    bool FillExportMetadata(TExportInfo::TPtr exportInfo, TString& issues) {
+        if (exportInfo->Kind != TExportInfo::EKind::S3) {
+            return true;
+        }
+
+        Ydb::Export::ExportToS3Settings exportSettings;
+        Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo->Settings));
+
+        if (exportSettings.destination_prefix().empty()) { // No place to save backup metadata
+            return true;
+        }
+
+        TString commonDestinationPrefix = exportSettings.destination_prefix();
+        if (commonDestinationPrefix.back() == '/') {
+            commonDestinationPrefix.pop_back();
+        }
+
+        TMaybe<NBackup::TEncryptionIV> iv;
+        if (exportSettings.has_encryption_settings()) {
+            iv = NBackup::TEncryptionIV::Generate();
+            exportInfo->ExportMetadata.SetIV(iv->GetBinaryString());
+            exportInfo->ExportMetadata.SetEncryptionAlgorithm(NBackup::NormalizeEncryptionAlgorithmName(exportSettings.encryption_settings().encryption_algorithm()));
+        }
+
+        if (!exportSettings.compression().empty()) {
+            exportInfo->ExportMetadata.SetCompressionAlgorithm(exportSettings.compression());
+        }
+
+        const TString sourcePathRoot = exportSettings.source_path().empty() ? CanonizePath(Self->RootPathElements) : CanonizePath(exportSettings.source_path());
+
+        for (ui32 itemIndex = 1; itemIndex <= static_cast<ui32>(exportSettings.items_size()); ++itemIndex) {
+            Ydb::Export::ExportToS3Settings::Item& exportItem = *exportSettings.mutable_items(itemIndex - 1);
+            NKikimrSchemeOp::TExportMetadata::TSchemaMappingItem& schemaMappingItem = *exportInfo->ExportMetadata.AddSchemaMapping();
+
+            // remove source path prefix
+            TString exportPath = CanonizePath(exportItem.source_path());
+            if (exportPath.StartsWith(sourcePathRoot)) {
+                exportPath = exportPath.substr(sourcePathRoot.size() + 1); // cut all prefix + '/'
+            }
+            schemaMappingItem.SetSourcePath(exportPath);
+
+            TString destinationPrefix;
+            if (!exportItem.destination_prefix().empty()) {
+                TString& itemPrefix = *exportItem.mutable_destination_prefix();
+                if (itemPrefix[0] == '/') {
+                    destinationPrefix = itemPrefix = itemPrefix.substr(1);
+                } else {
+                    destinationPrefix = itemPrefix;
+                }
+                if (itemPrefix.back() == '/') {
+                    itemPrefix.pop_back();
+                }
+            } else {
+                std::stringstream itemPrefix;
+                if (exportSettings.has_encryption_settings()) {
+                    // Anonymize object name in export
+                    itemPrefix << std::setfill('0') << std::setw(3) << std::right << itemIndex;
+                } else {
+                    itemPrefix << exportPath;
+                }
+                destinationPrefix = itemPrefix.str();
+            }
+            schemaMappingItem.SetDestinationPrefix(destinationPrefix);
+            exportItem.set_destination_prefix(TStringBuilder() << commonDestinationPrefix << '/' << destinationPrefix);
+
+            if (iv) {
+                schemaMappingItem.SetIV(NBackup::TEncryptionIV::Combine(*iv, NBackup::EBackupFileType::Metadata, itemIndex, 0).GetBinaryString());
+            }
+        }
+        if (!exportSettings.SerializeToString(&exportInfo->Settings)) {
+            issues = "Failed to serialize settings";
+            return false;
+        }
+        return true;
+    }
+
+    bool UploadExportMetadata(TExportInfo::TPtr exportInfo, const TActorContext& ctx) { // returns true if we need to change state to UploadExportMetadata
+        if (exportInfo->Kind != TExportInfo::EKind::S3) {
+            return false;
+        }
+
+        Ydb::Export::ExportToS3Settings exportSettings;
+        Y_ABORT_UNLESS(exportSettings.ParseFromString(exportInfo->Settings));
+
+        if (exportSettings.destination_prefix().empty()) { // No place to save backup metadata
+            return false;
+        }
+
+        exportInfo->ExportMetadataUploader = ctx.Register(
+            CreateExportMetadataUploader(Self->SelfId(), exportInfo->Id, exportSettings, exportInfo->ExportMetadata));
+        Self->RunningExportSchemeUploaders.emplace(exportInfo->ExportMetadataUploader);
+        return true;
     }
 
     bool CancelTransferring(TExportInfo::TPtr exportInfo, ui32 itemIdx) {
@@ -547,6 +656,11 @@ private:
 
         exportInfo->State = EState::Cancelled;
 
+        if (auto metadataUploader = std::exchange(exportInfo->ExportMetadataUploader, {})) {
+            Send(metadataUploader, new TEvents::TEvPoisonPill());
+            Self->RunningExportSchemeUploaders.erase(metadataUploader);
+        }
+
         for (ui32 i : xrange(exportInfo->Items.size())) {
             KillChildActors(exportInfo->Items[i]);
             if (i == itemIdx) {
@@ -621,6 +735,10 @@ private:
             } else {
                 SubscribeTx(exportInfo);
             }
+            break;
+
+        case EState::UploadExportMetadata:
+            Y_ABORT_UNLESS(UploadExportMetadata(exportInfo, ctx));
             break;
 
         case EState::Transferring: {
@@ -1046,6 +1164,62 @@ private:
         }
     }
 
+    void OnUploadMetadataResult(TTransactionContext& txc, const TActorContext& ctx) {
+        Y_ABORT_UNLESS(UploadMetadataResult);
+        const auto& result = *UploadMetadataResult.Get()->Get();
+
+        LOG_D("TExport::TTxProgress: OnUploadMetadataResult"
+            << ": id# " << result.ExportId
+            << ", success# " << result.Success
+            << ", error# " << result.Error
+        );
+
+        const auto exportId = result.ExportId;
+        auto exportInfo = Self->Exports.Value(exportId, nullptr);
+        if (!exportInfo) {
+            LOG_E("TExport::TTxProgress: OnUploadMetadataResult received unknown export id"
+                << ": id# " << exportId
+            );
+            return;
+        }
+
+        Self->RunningExportSchemeUploaders.erase(std::exchange(exportInfo->ExportMetadataUploader, {}));
+
+        if (!exportInfo->IsInProgress()) {
+            return;
+        }
+
+        NIceDb::TNiceDb db(txc.DB);
+
+        if (!result.Success) {
+            exportInfo->State = EState::Cancelled;
+            exportInfo->EndTime = TAppData::TimeProvider->Now();
+            exportInfo->Issue = result.Error;
+
+            Self->PersistExportState(db, exportInfo);
+            return SendNotificationsIfFinished(exportInfo);
+        }
+
+        Y_ABORT_UNLESS(exportInfo->State == EState::UploadExportMetadata);
+        if (AnyOf(exportInfo->Items, &IsPathTypeTable)) {
+            exportInfo->State = EState::CopyTables;
+            AllocateTxId(exportInfo);
+        } else {
+            // None of the items is a table.
+            for (ui32 i : xrange(exportInfo->Items.size())) {
+                exportInfo->Items[i].State = EState::Transferring;
+                Self->PersistExportItemState(db, exportInfo, i);
+
+                UploadScheme(exportInfo, i, ctx);
+            }
+
+            exportInfo->State = EState::Transferring;
+            exportInfo->PendingItems.clear();
+        }
+
+        Self->PersistExportState(db, exportInfo);
+    }
+
     void OnNotifyResult(TTransactionContext& txc, const TActorContext& ctx) {
         Y_ABORT_UNLESS(CompletedTxId);
         LOG_D("TExport::TTxProgress: OnNotifyResult"
@@ -1092,12 +1266,26 @@ private:
         NIceDb::TNiceDb db(txc.DB);
 
         switch (exportInfo->State) {
-        case EState::CreateExportDir:
+        case EState::CreateExportDir: {
             exportInfo->WaitTxId = InvalidTxId;
 
-            if (AnyOf(exportInfo->Items, [](const TExportInfo::TItem& item) {
-                return item.SourcePathType == NKikimrSchemeOp::EPathTypeTable;
-            })) {
+            const bool supportEncryptedExport = AppData()->FeatureFlags.GetEnableEncryptedExport();
+            if (TString issues; supportEncryptedExport && !FillExportMetadata(exportInfo, issues)) {
+                exportInfo->State = EState::Cancelled;
+                exportInfo->EndTime = TAppData::TimeProvider->Now();
+                exportInfo->Issue = issues;
+                break;
+            }
+
+            if (supportEncryptedExport && UploadExportMetadata(exportInfo, ctx)) {
+                exportInfo->State = EState::UploadExportMetadata;
+
+                // Persist modified metadata and new settings
+                db.Table<Schema::Exports>().Key(exportInfo->Id).Update(
+                    NIceDb::TUpdate<Schema::Exports::Settings>(exportInfo->Settings),
+                    NIceDb::TUpdate<Schema::Exports::ExportMetadata>(exportInfo->ExportMetadata)
+                );
+            } else if (AnyOf(exportInfo->Items, &IsPathTypeTable)) {
                 exportInfo->State = EState::CopyTables;
                 AllocateTxId(exportInfo);
             } else {
@@ -1113,6 +1301,7 @@ private:
                 exportInfo->PendingItems.clear();
             }
             break;
+        }
 
         case EState::CopyTables: {
             if (exportInfo->DependencyTxIds.contains(txId)) {
@@ -1232,6 +1421,10 @@ ITransaction* TSchemeShard::CreateTxProgressExport(TEvSchemeShard::TEvModifySche
 }
 
 ITransaction* TSchemeShard::CreateTxProgressExport(TEvPrivate::TEvExportSchemeUploadResult::TPtr& ev) {
+    return new TExport::TTxProgress(this, ev);
+}
+
+ITransaction* TSchemeShard::CreateTxProgressExport(TEvPrivate::TEvExportUploadMetadataResult::TPtr& ev) {
     return new TExport::TTxProgress(this, ev);
 }
 

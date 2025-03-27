@@ -22,6 +22,7 @@ namespace TEvPrivate {
         EvImportSchemeReady,
         EvImportSchemeQueryResult,
         EvExportSchemeUploadResult,
+        EvExportUploadMetadataResult,
         EvServerlessStorageBilling,
         EvCleanDroppedPaths,
         EvCleanDroppedSubDomains,
@@ -136,6 +137,18 @@ namespace TEvPrivate {
         TEvExportSchemeUploadResult(ui64 id, ui32 itemIdx, bool success, const TString& error)
             : ExportId(id)
             , ItemIdx(itemIdx)
+            , Success(success)
+            , Error(error)
+        {}
+    };
+
+    struct TEvExportUploadMetadataResult: public TEventLocal<TEvExportUploadMetadataResult, EvExportUploadMetadataResult> {
+        const ui64 ExportId;
+        const bool Success;
+        const TString Error;
+
+        TEvExportUploadMetadataResult(ui64 id, bool success, const TString& error)
+            : ExportId(id)
             , Success(success)
             , Error(error)
         {}

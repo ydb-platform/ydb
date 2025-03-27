@@ -2150,3 +2150,19 @@ message TImportTableChangefeeds {
 message TChangefeedUnderlyingTopics {
     repeated TPathDescription ChangefeedUnderlyingTopics = 1;
 }
+
+message TExportMetadata {
+    message TSchemaMappingItem {
+        optional string SourcePath = 1;
+        optional string DestinationPrefix = 2;
+
+        // encryption details
+        optional bytes IV = 3;
+    }
+
+    repeated TSchemaMappingItem SchemaMapping = 1;
+
+    optional string CompressionAlgorithm = 2;
+    optional string EncryptionAlgorithm = 3;
+    optional bytes IV = 4;
+}

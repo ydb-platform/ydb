@@ -169,7 +169,7 @@ namespace {
                   UNIT_ASSERT(exportDirDesc.GetPathDescription().ChildrenSize() >= 1);
                   UNIT_ASSERT_EQUAL(exportDirDesc.GetPathDescription().GetChildren(0).GetName(), "0");
               }
-          } 
+          }
 
           UNIT_ASSERT(foundExportDir);
           UNIT_ASSERT(foundOriginalTable);
@@ -326,30 +326,68 @@ namespace {
         fieldChecker(proto);
     }
 
+    class TExportFixture : public NUnitTest::TBaseFixture {
+    public:
+        void RunS3(TTestBasicRuntime& runtime, const TVector<TString>& tables, const TString& requestTpl, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS) {
+            auto request = Sprintf(requestTpl.c_str(), S3Port());
+
+            TTestEnv env(runtime);
+            runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+            Run(runtime, env, tables, request, expectedStatus, "/MyRoot", false);
+
+            if (expectedStatus == Ydb::StatusIds::SUCCESS) {
+                for (auto& path : GetExportTargetPaths(request)) {
+                    auto canonPath = (path.StartsWith("/") || path.empty()) ? path : TString("/") + path;
+                    UNIT_ASSERT_C(HasS3File(canonPath + "/metadata.json"), canonPath + "/metadata.json");
+                    UNIT_ASSERT_C(HasS3File(canonPath + "/scheme.pb"), canonPath + "/scheme.pb");
+                }
+            }
+        }
+
+        bool HasS3File(const TString& path) {
+            auto it = S3Mock().GetData().find(path);
+            return it != S3Mock().GetData().end();
+        }
+
+        TString GetS3FileContent(const TString& path) {
+            auto it = S3Mock().GetData().find(path);
+            if (it != S3Mock().GetData().end()) {
+                return it->second;
+            }
+            return {};
+        }
+
+        void TearDown(NUnitTest::TTestContext&) override {
+            if (S3ServerMock) {
+                S3ServerMock = Nothing();
+                S3ServerPort = 0;
+            }
+        }
+
+    protected:
+        TS3Mock& S3Mock() {
+            if (!S3ServerMock) {
+                S3ServerPort = PortManager.GetPort();
+                S3ServerMock.ConstructInPlace(TS3Mock::TSettings(S3ServerPort));
+                UNIT_ASSERT(S3ServerMock->Start());
+            }
+            return *S3ServerMock;
+        }
+
+        ui16 S3Port() {
+            S3Mock();
+            return S3ServerPort;
+        }
+
+    private:
+        TPortManager PortManager;
+        ui16 S3ServerPort = 0;
+        TMaybe<TS3Mock> S3ServerMock;
+    };
+
 } // anonymous
 
-Y_UNIT_TEST_SUITE(TExportToS3Tests) {
-    void RunS3(TTestBasicRuntime& runtime, const TVector<TString>& tables, const TString& requestTpl) {
-        TPortManager portManager;
-        const ui16 port = portManager.GetPort();
-
-        TS3Mock s3Mock({}, TS3Mock::TSettings(port));
-        UNIT_ASSERT(s3Mock.Start());
-
-        auto request = Sprintf(requestTpl.c_str(), port);
-
-        TTestEnv env(runtime);
-        Run(runtime, env, tables, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false);
-
-        for (auto &path : GetExportTargetPaths(request)) {
-            auto canonPath = (path.StartsWith("/") || path.empty()) ? path : TString("/") + path;
-            auto it = s3Mock.GetData().find(canonPath + "/metadata.json");
-            UNIT_ASSERT(it != s3Mock.GetData().end());
-            it = s3Mock.GetData().find(canonPath + "/scheme.pb");
-            UNIT_ASSERT(it != s3Mock.GetData().end());
-        }
-    }
-
+Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
     Y_UNIT_TEST(ShouldSucceedOnSingleShardTable) {
         TTestBasicRuntime runtime;
 
@@ -1220,7 +1258,7 @@ partitioning_settings {
         prevObserverFunc = runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& event) {
             if (auto* p = event->CastAsLocal<TEvSchemeShard::TEvModifySchemeTransaction>()) {
                 auto& record = p->Record;
-                if (record.TransactionSize() >= 1 && 
+                if (record.TransactionSize() >= 1 &&
                     record.GetTransaction(0).GetOperationType() == NKikimrSchemeOp::ESchemeOpDropTable) {
                     afterExport = waitForStats(2);
                 }
@@ -1259,7 +1297,7 @@ partitioning_settings {
             SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 10 } }}}
         )");
         env.TestWaitNotification(runtime, txId);
-        
+
         WriteRow(runtime, ++txId, "/MyRoot/Table", 0, 1, "v1");
         env.TestWaitNotification(runtime, txId);
         WriteRow(runtime, ++txId, "/MyRoot/Table", 1, 100, "v100");
@@ -1281,7 +1319,7 @@ partitioning_settings {
               }
             }
         )", port));
-        
+
         runtime.WaitFor("put object request from 01 partition", [&]{ return blockPartition01.size() >= 1; });
         bool isCompleted = false;
 
@@ -1302,7 +1340,7 @@ partitioning_settings {
 
         blockPartition01.Stop();
         blockPartition01.Unblock();
-        
+
         env.TestWaitNotification(runtime, txId);
 
         const auto desc = TestGetExport(runtime, txId, "/MyRoot");
@@ -2480,7 +2518,7 @@ partitioning_settings {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableChecksumsExport(true));
         ui64 txId = 100;
-    
+
         // Create test table
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
@@ -2489,23 +2527,23 @@ partitioning_settings {
             KeyColumnNames: ["key"]
         )");
         env.TestWaitNotification(runtime, txId);
-    
+
         // Add some test data
         UploadRow(runtime, "/MyRoot/Table", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
-    
+
         TPortManager portManager;
         const ui16 port = portManager.GetPort();
-    
+
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
-        
+
         // Block sending backup task to datashards
         TBlockEvents<TEvDataShard::TEvProposeTransaction> block(runtime, [](auto& ev) {
             NKikimrTxDataShard::TFlatSchemeTransaction schemeTx;
             UNIT_ASSERT(schemeTx.ParseFromString(ev.Get()->Get()->GetTxBody()));
             return schemeTx.HasBackup();
         });
-    
+
         // Start export and expect it to be blocked
         TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ExportToS3Settings {
@@ -2517,18 +2555,18 @@ partitioning_settings {
               }
             }
         )", port));
-    
+
         runtime.WaitFor("backup task is sent to datashards", [&]{ return block.size() >= 1; });
-    
+
         // Stop blocking new events
         block.Stop();
-        
+
         // Reboot SchemeShard to resend backup task
         RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
-    
+
         // Wait for export to complete
         env.TestWaitNotification(runtime, txId);
-    
+
         // Verify checksums are created
         UNIT_ASSERT_VALUES_EQUAL(s3Mock.GetData().size(), 6);
 
@@ -2709,7 +2747,7 @@ attributes {
 
         TTestEnv env(runtime, TTestEnvOptions().EnableChecksumsExport(true));
         runtime.GetAppData().FeatureFlags.SetEnableChangefeedsExport(true);
-        
+
         Run(runtime, env, TVector<TString>{
             R"(
                 Name: "Table"
@@ -2776,7 +2814,7 @@ attributes {
               }
             }
         )", port);
-        
+
         runtime.GetAppData().FeatureFlags.SetEnableExportAutoDropping(false);
 
         Run(runtime, env, TVector<TString>{
@@ -2787,5 +2825,126 @@ attributes {
                 KeyColumnNames: ["key"]
             )",
         }, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, "", "", {}, true);
+    }
+
+    Y_UNIT_TEST(SchemaMapping) {
+        TTestBasicRuntime runtime;
+
+        RunS3(runtime, {
+            R"(
+                Name: "Table1"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )",
+            R"(
+                Name: "Table2"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )",
+        }, R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              destination_prefix: "my_export"
+              items {
+                source_path: "/MyRoot/Table1"
+              }
+              items {
+                source_path: "/MyRoot/Table2"
+                destination_prefix: "table2_prefix"
+              }
+            }
+        )");
+
+        UNIT_ASSERT(HasS3File("/my_export/metadata.json"));
+        UNIT_ASSERT(HasS3File("/my_export/SchemaMapping/metadata.json"));
+        UNIT_ASSERT(HasS3File("/my_export/SchemaMapping/mapping.json"));
+        UNIT_ASSERT(HasS3File("/my_export/Table1/scheme.pb"));
+        UNIT_ASSERT(HasS3File("/my_export/table2_prefix/scheme.pb"));
+        UNIT_ASSERT_STRINGS_EQUAL(GetS3FileContent("/my_export/metadata.json"), "{\"kind\":\"SimpleExportV0\"}");
+    }
+
+    Y_UNIT_TEST(SchemaMappingEncryption) {
+        TTestBasicRuntime runtime;
+
+        RunS3(runtime, {
+            R"(
+                Name: "Table1"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )",
+            R"(
+                Name: "Table2"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )",
+        }, R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              destination_prefix: "my_export"
+              items {
+                source_path: "/MyRoot/Table1"
+              }
+              items {
+                source_path: "/MyRoot/Table2"
+                destination_prefix: "table2_prefix"
+              }
+              encryption_settings {
+                encryption_algorithm: "AES-128-GCM"
+                symmetric_key {
+                    key: "0123456789012345"
+                }
+              }
+            }
+        )");
+
+        UNIT_ASSERT(HasS3File("/my_export/metadata.json"));
+        UNIT_ASSERT(HasS3File("/my_export/SchemaMapping/metadata.json.enc"));
+        UNIT_ASSERT(HasS3File("/my_export/SchemaMapping/mapping.json.enc"));
+        UNIT_ASSERT(HasS3File("/my_export/001/scheme.pb"));
+        UNIT_ASSERT(HasS3File("/my_export/table2_prefix/scheme.pb"));
+    }
+
+    Y_UNIT_TEST(SchemaMappingEncryptionIncorrectKey) {
+        TTestBasicRuntime runtime;
+
+        RunS3(runtime, {
+            R"(
+                Name: "Table1"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )",
+            R"(
+                Name: "Table2"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )",
+        }, R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              destination_prefix: "my_export"
+              items {
+                source_path: "/MyRoot/Table1"
+              }
+              items {
+                source_path: "/MyRoot/Table2"
+                destination_prefix: "table2_prefix"
+              }
+              encryption_settings {
+                encryption_algorithm: "AES-128-GCM"
+                symmetric_key {
+                    key: "123"
+                }
+              }
+            }
+        )", Ydb::StatusIds::CANCELLED);
     }
 }

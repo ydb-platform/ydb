@@ -37,7 +37,7 @@ class TestCopyTable(TestBase):
             yatest.common.binary_path(os.getenv('YDB_CLI_BINARY')),
             '-e', self.get_endpoint(),
             '-d', self.get_database(),
-            'tools copy',
+            'tools', 'copy',
             '--item', f"destination=copy_{table_name},source={table_name}"
         ])
         self.select_after_insert(

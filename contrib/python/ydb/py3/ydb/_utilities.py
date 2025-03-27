@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import importlib.util
+import sys
 import threading
 import codecs
 from concurrent import futures
@@ -191,8 +192,11 @@ def get_first_message_with_timeout(status_stream: SyncResponseIterator, timeout:
     waiter = future()
 
     def get_first_response(waiter):
-        first_response = next(status_stream)
-        waiter.set_result(first_response)
+        try:
+            first_response = next(status_stream)
+            waiter.set_result(first_response)
+        except:
+            print("Caught an unknown exception", file=sys.stderr)
 
     thread = threading.Thread(
         target=get_first_response,

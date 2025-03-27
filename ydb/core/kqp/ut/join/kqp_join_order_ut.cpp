@@ -123,7 +123,7 @@ static TKikimrRunner GetKikimrWithJoinSettings(bool useStreamLookupJoin = false,
     auto serverSettings = TKikimrSettings().SetAppConfig(appConfig);
     serverSettings.SetKqpSettings(settings);
 
-    serverSettings.SetNodeCount(4);
+    serverSettings.SetNodeCount(2);
     #if defined(_asan_enabled_)
         serverSettings.SetNodeCount(1);
     #endif
@@ -682,10 +682,6 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds16.sql", "stats/tpcds1000s.json", false, ColumnStore);
     }
 
-    Y_UNIT_TEST(TPCDS64kal) {
-        ExecuteJoinOrderTestGenericQueryWithStats("queries/tpcds64.sql", "stats/tpcds1000s.json", false, true);
-    }
-
     /* tpcds23 has > 1 result sets */
     Y_UNIT_TEST_TWIN(TPCDS23, ColumnStore) {
         ExplainJoinOrderTestDataQueryWithStats(
@@ -913,6 +909,12 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         UNIT_ASSERT(currentJoinOrder == ref);
     }
 
+    Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCH1, ColumnStore) {
+        CanonizedJoinOrderTest(
+            "queries/tpch1.sql", "stats/tpch1000s.json", "join_order/tpch1_1000s.json", false, ColumnStore
+        );
+    }
+
     Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCH2, ColumnStore) {
         CanonizedJoinOrderTest(
             "queries/tpch2.sql", "stats/tpch1000s.json", "join_order/tpch2_1000s.json", false, ColumnStore
@@ -925,9 +927,27 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
+    Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCH4, ColumnStore) {
+        CanonizedJoinOrderTest(
+            "queries/tpch4.sql", "stats/tpch1000s.json", "join_order/tpch4_1000s.json", false, ColumnStore
+        );
+    }
+
     Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCH5, ColumnStore) {
         CanonizedJoinOrderTest(
             "queries/tpch5.sql", "stats/tpch1000s.json", "join_order/tpch5_1000s.json", false, ColumnStore
+        );
+    }
+
+    Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCH6, ColumnStore) {
+        CanonizedJoinOrderTest(
+            "queries/tpch6.sql", "stats/tpch1000s.json", "join_order/tpch6_1000s.json", false, ColumnStore
+        );
+    }
+
+    Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCH7, ColumnStore) {
+        CanonizedJoinOrderTest(
+            "queries/tpch7.sql", "stats/tpch1000s.json", "join_order/tpch7_1000s.json", false, ColumnStore
         );
     }
 
@@ -952,6 +972,54 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
     Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCH11, ColumnStore) {
         CanonizedJoinOrderTest(
             "queries/tpch11.sql", "stats/tpch1000s.json", "join_order/tpch11_1000s.json", false, ColumnStore
+        );
+    }
+
+    Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCH12, ColumnStore) {
+        CanonizedJoinOrderTest(
+            "queries/tpch12.sql", "stats/tpch1000s.json", "join_order/tpch12_1000s.json", false, ColumnStore
+        );
+    }
+
+    Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCH13, ColumnStore) {
+        CanonizedJoinOrderTest(
+            "queries/tpch13.sql", "stats/tpch1000s.json", "join_order/tpch13_1000s.json", false, ColumnStore
+        );
+    }
+
+    Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCH14, ColumnStore) {
+        CanonizedJoinOrderTest(
+            "queries/tpch14.sql", "stats/tpch1000s.json", "join_order/tpch14_1000s.json", false, ColumnStore
+        );
+    }
+
+    Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCH15, ColumnStore) {
+        CanonizedJoinOrderTest(
+            "queries/tpch15.sql", "stats/tpch1000s.json", "join_order/tpch15_1000s.json", false, ColumnStore
+        );
+    }
+
+    Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCH16, ColumnStore) {
+        CanonizedJoinOrderTest(
+            "queries/tpch16.sql", "stats/tpch1000s.json", "join_order/tpch16_1000s.json", false, ColumnStore
+        );
+    }
+
+    Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCH17, ColumnStore) {
+        CanonizedJoinOrderTest(
+            "queries/tpch17.sql", "stats/tpch1000s.json", "join_order/tpch17_1000s.json", false, ColumnStore
+        );
+    }
+
+    Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCH18, ColumnStore) {
+        CanonizedJoinOrderTest(
+            "queries/tpch18.sql", "stats/tpch1000s.json", "join_order/tpch18_1000s.json", false, ColumnStore
+        );
+    }
+
+    Y_UNIT_TEST_TWIN(CanonizedJoinOrderTPCH19, ColumnStore) {
+        CanonizedJoinOrderTest(
+            "queries/tpch19.sql", "stats/tpch1000s.json", "join_order/tpch19_1000s.json", false, ColumnStore
         );
     }
 

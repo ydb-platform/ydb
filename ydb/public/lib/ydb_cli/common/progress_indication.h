@@ -11,10 +11,6 @@ public:
     struct TCurrentStats {
         ui64 ReadRows = 0;
         ui64 ReadBytes = 0;
-        ui64 UpdateRows = 0;
-        ui64 UpdateBytes = 0;
-        ui64 DeleteRows = 0;
-        ui64 DeleteBytes = 0;
         ui64 DurationUs = 0;
     };
     explicit TProgressIndication();

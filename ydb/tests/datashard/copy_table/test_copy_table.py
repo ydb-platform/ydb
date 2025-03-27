@@ -1,5 +1,6 @@
 import os
 import pytest
+import yatest
 
 from ydb.tests.sql.lib.test_base import TestBase
 from ydb.tests.stress.oltp_workload.workload import cleanup_type_name
@@ -32,9 +33,13 @@ class TestCopyTable(TestBase):
         self.create_table(table_name, pk_types, all_types,
                           index, ttl, unique, sync)
         self.insert(table_name, all_types, pk_types, index, ttl)
-        os.system(f"""
-                 ydb -e {self.get_endpoint()} -d {self.get_database()} tools copy --item destination=copy_{table_name},source={table_name}
-                  """)
+        yatest.common.execute([
+            yatest.common.binary_path(os.getenv('YDB_CLI_BINARY')),
+            '-e', self.get_endpoint(),
+            '-d', self.get_database(),
+            'tools copy',
+            '--item', f"destination=copy_{table_name},source={table_name}"
+        ])
         self.select_after_insert(
             f"copy_{table_name}", all_types, pk_types, index, ttl)
 

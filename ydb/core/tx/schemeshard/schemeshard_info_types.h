@@ -3113,6 +3113,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         NTableIndex::TClusterId ChildBegin = 1;  // included
         NTableIndex::TClusterId Child = ChildBegin;
 
+        ui64 TableSize = 0;
+
+
         ui64 ParentEnd() const noexcept {  // included
             return ChildBegin - 1;
         }
@@ -3173,25 +3176,28 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             return true;
         }
 
-        bool PrefixTableDone(ui64 tableSize, ui64 shards) {
-            if (!NeedsAnotherLevel()) {
-                return false;
-            }
+        void PrefixIndexDone(ui64 shards) {
+            Y_ABORT_UNLESS(NeedsAnotherLevel());
             State = MultiLocal;
-            NextLevel((1 + tableSize) * shards);
+            // There's two worst cases, but in both one shard contains TableSize rows
+            // 1. all rows have unique prefix (*), in such case we need 1 id for each row (parent, id in prefix table)
+            // 2. all unique prefixes have size K, so we have TableSize/K parents + TableSize childs
+            // * it doesn't work now, because now prefix should have at least K embeddings, but it's bug
+            NextLevel((2 * TableSize) * shards);
             Parent = ParentEnd();
-            return true;
         }
 
-        void Set(ui32 level, NTableIndex::TClusterId parent, ui32 state) {
-            // TODO(mbkkt) make it without cycles
-            while (Level < level) {
-                NextLevel();
-            }
-            while (Parent < parent) {
-                NextParent();
-            }
+        void Set(ui32 level, 
+                 NTableIndex::TClusterId parentBegin, NTableIndex::TClusterId parent, 
+                 NTableIndex::TClusterId childBegin, NTableIndex::TClusterId child,
+                 ui32 state, ui64 tableSize) {
+            Level = level;
+            ParentBegin = parentBegin;
+            Parent = parent;
+            ChildBegin = childBegin;
+            Child = child;
             State = static_cast<EState>(state);
+            TableSize = tableSize;
         }
 
         NKikimrTxDataShard::TEvLocalKMeansRequest::EState GetUpload() const {

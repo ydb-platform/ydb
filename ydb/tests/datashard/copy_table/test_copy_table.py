@@ -35,11 +35,11 @@ class TestCopyTable(TestBase):
         self.insert(table_name, all_types, pk_types, index, ttl)
         yatest.common.execute([
             yatest.common.binary_path(os.getenv('YDB_CLI_BINARY')),
-            '-e', self.get_endpoint(),
-            '-d', self.get_database(),
+            '-e', 'grpc://'+self.get_endpoint(),
+            f"--database={self.get_database()}",
             'tools', 'copy',
             '--item', f"destination=copy_{table_name},source={table_name}"
-        ])
+        ]).stdout.decode("utf-8")
         self.select_after_insert(
             f"copy_{table_name}", all_types, pk_types, index, ttl)
 

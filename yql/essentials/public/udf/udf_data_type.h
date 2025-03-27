@@ -45,15 +45,8 @@ enum EDataTypeFeatures : ui32 {
     TzDateType = 1u << 27,
     DecimalType = 1u << 28,
     TimeIntervalType = 1u << 29,
-    // FIXME: Remove, when no entries in the code are left.
-    BigDateType = 1u << 30,
     ExtDateType = 1u << 30,
 };
-
-// FIXME: This static assert is vital for renaming BigDateType
-// flag into ExtDateType to be in sync with naming in docs.
-// Remove this assert, only when BigDateType flags is removed.
-static_assert(ExtDateType == BigDateType);
 
 template <typename T>
 struct TDataType;

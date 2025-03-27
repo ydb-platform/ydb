@@ -1,5 +1,32 @@
 # Traceability Matrix
 
+### Datashards
+#### [ISSUE-14851](https://github.com/ydb-platform/ydb/issues/14851): Test Suite: datashard/types
+[![PROGRESS](https://img.shields.io/badge/PROGRESS-1%2F12:8%25-rgb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-14851-test-suite-datashardtypes)
+
+**Description**: * get all types of data;
+* get a column feature: regular column, primary key, indexed column, TTL column, ...;
+* perform all operations, including SELECT, INSERT, DELETE, TTL,  CDC, ASYNC REPLICATION, BACKUP/RESTORE, INDEX...
+
+Надо не забыть тесты-кейсы с совместимостью версий (фреймворк с @maximyurchuk )
+
+Есть мнение, что после реализации тест-кейсов нам очень бы помог coverage для анализа непокрытого кода
+
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
+| #14033 | Stress test for all supported data types | Write a stress test which performs the steps: | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14033)](https://github.com/ydb-platform/ydb/issues/14033) | Pending |
+| #14980 | Test for DML operations and all types | 1. Create a table with: | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14980)](https://github.com/ydb-platform/ydb/issues/14980) | Pending |
+| #14981 | Test for TTL on all types | 1. Create a table with: | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14981)](https://github.com/ydb-platform/ydb/issues/14981) | Pending |
+| #14983 | Test for async replication for all types | 1. Create a table with: | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14983)](https://github.com/ydb-platform/ydb/issues/14983) | Pending |
+| #14984 | Test for dump/restore to filesystem for all types | 1. Create a table with: | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14984)](https://github.com/ydb-platform/ydb/issues/14984) | Pending |
+| #14985 | Test for export/import to S3 for all types | 1. Create a table with: | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14985)](https://github.com/ydb-platform/ydb/issues/14985) | Pending |
+| #14986 | Test for secondary indexes for all types | 1. Create a table with: | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14986)](https://github.com/ydb-platform/ydb/issues/14986) | Pending |
+| #14987 | Test for vector index for all types | 1. Create a table with: | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14987)](https://github.com/ydb-platform/ydb/issues/14987) | Pending |
+| #14988 | Test for copy table for all types | 1. Create a table with: | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14988)](https://github.com/ydb-platform/ydb/issues/14988) | Pending |
+| #14989 | Test for split/merge for all types | 1. Create a table with: | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14989)](https://github.com/ydb-platform/ydb/issues/14989) | Pending |
+| #14990 | Test for parametrized queries for all types | 1. Create a table with: | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14990)](https://github.com/ydb-platform/ydb/issues/14990) | Pending |
+| #14991 | Test for all clauses of SELECT for all types | 1. Create a table with: | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14991)](https://github.com/ydb-platform/ydb/issues/14991) | Pending |
+
 ## Functional Requirements
 
 ### Bulk Upsert Data Insertion
@@ -43,7 +70,7 @@
 | #14681 | TPCH S100 is successful |  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14681)](https://github.com/ydb-platform/ydb/issues/14681) | Pending |
 
 #### [ISSUE-13527](https://github.com/ydb-platform/ydb/issues/13527): Test Suite: cs/read-write
-[![PROGRESS](https://img.shields.io/badge/PROGRESS-1%2F8:12%25-rgb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-13527-test-suite-csread-write)
+[![PROGRESS](https://img.shields.io/badge/PROGRESS-3%2F9:33%25-rgb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-13527-test-suite-csread-write)
 
 | Case ID | Name | Description | Issues |  Status |
 |---------|------|-------------|--------|:--------|
@@ -55,6 +82,7 @@
 | #13652 | Test cs writes. Written duplicates doesn't provoke disk exhaustion | Писать в таблицу много дубликатов первичного ключа. Отслеживать потреблямый объём стораджа. Проверять, что потребление стораджа растёт быстрее, чем кол-во строк в базе. | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13652)](https://github.com/ydb-platform/ydb/issues/13652) | Pending |
 | #13653 | Data deletion doesn't lead to disk exhaustion | Писать данные до того, как упрёмся в квоту. После этого удялять данные большими кусками.  | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13653)](https://github.com/ydb-platform/ydb/issues/13653) | Pending |
 | #13848 | Test CS RW load. Write, modify, read TBs | Проверка записи/модификации/чтения на больших объёмах данных (единицы-десятки. TB) | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/13848)](https://github.com/ydb-platform/ydb/issues/13848) | Pending |
+| #15512 | Test cs read. Memory over-usage by scan lead to failed queries, not OOM | Если данные порций, необходимые для скана, не помещаются в память ноды, скан должен падать с понятной ошибкой и не должен случаться OOM. | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/15512)](https://github.com/ydb-platform/ydb/issues/15512) | Pending |
 
 #### [ISSUE-14639](https://github.com/ydb-platform/ydb/issues/14639): Test suite: cs/write data
 [![PROGRESS](https://img.shields.io/badge/PROGRESS-2%2F8:25%25-rgb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-14639-test-suite-cswrite-data)
@@ -138,7 +166,7 @@
 
 ### TTL
 #### [ISSUE-13526](https://github.com/ydb-platform/ydb/issues/13526): Test Suite: cs/tiering+ttl
-[![PROGRESS](https://img.shields.io/badge/PROGRESS-4%2F12:33%25-rgb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-13526-test-suite-cstieringttl)
+[![PROGRESS](https://img.shields.io/badge/PROGRESS-5%2F12:41%25-rgb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-13526-test-suite-cstieringttl)
 
 | Case ID | Name | Description | Issues |  Status |
 |---------|------|-------------|--------|:--------|

@@ -131,8 +131,9 @@ NPq::NConfigurationManager::TAsyncDescribePathResult TPqSession::DescribePath(co
                 yexception ex;
                 for (size_t i = 0; i != results.size(); ++i) {
                     auto& futureDescribe = results[i];
-                    if (futureDescribe.HasException())
+                    if (futureDescribe.HasException()) {
                         continue;
+                    }
                     auto describeTopicResult = futureDescribe.ExtractValue();
                     if (!describeTopicResult.IsSuccess()) {
                         ex << "Failed to describe topic `" << cluster << "`.`" << path << "` (name '" << allClustersInfo[i].Name << "' endpoint '" << allClustersInfo[i].Endpoint << "' path '" << paths[i] << "') in the database `" << database << "`: " << describeTopicResult.GetIssues().ToString();

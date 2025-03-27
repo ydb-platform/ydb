@@ -12,7 +12,9 @@ import sys
 def get_version():
     try:
         return find('version.txt').decode('utf-8').strip()
-    except Exception:
+    except FileNotFoundError:
+        return "unknown"
+    except UnicodeDecodeError:
         return "unknown"
 
 

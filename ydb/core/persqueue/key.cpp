@@ -42,6 +42,16 @@ TKey TKey::ForHead(EType type,
     return {type, partition, offset, partNo, count, internalPartsCount, '|'};
 }
 
+TKey TKey::ForFastWrite(EType type,
+                        const TPartitionId& partition,
+                        const ui64 offset,
+                        const ui16 partNo,
+                        const ui32 count,
+                        const ui16 internalPartsCount)
+{
+    return {type, partition, offset, partNo, count, internalPartsCount, '?'};
+}
+
 TKey TKey::FromKey(const TKey& k,
                    EType type,
                    const TPartitionId& partition,

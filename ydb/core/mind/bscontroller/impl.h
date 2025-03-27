@@ -20,6 +20,8 @@ namespace NKikimr {
 
 namespace NBsController {
 
+class TGroupGeometryInfo;
+
 using NTabletFlatExecutor::TTabletExecutedFlat;
 using NTabletFlatExecutor::ITransaction;
 using NTabletFlatExecutor::TTransactionBase;
@@ -617,6 +619,12 @@ public:
         // also it depends on the Status of underlying PDisks, so every time their status change, group status has to
         // be recalculated too
         void CalculateGroupStatus();
+
+        // group layout status: whether it is positioned correctly
+        bool LayoutCorrect = false;
+
+        void CalculateLayoutStatus(TBlobStorageController *self, TBlobStorageGroupInfo::TTopology *topology,
+            const std::function<TGroupGeometryInfo()>& getGeom);
 
         template<typename T>
         static void Apply(TBlobStorageController* /*controller*/, T&& callback) {
@@ -1512,6 +1520,7 @@ public:
 private:
     TString InstanceId;
     std::shared_ptr<std::atomic_uint64_t> SelfHealUnreassignableGroups = std::make_shared<std::atomic_uint64_t>();
+    std::shared_ptr<std::atomic_uint64_t> GroupLayoutSanitizerInvalidGroups = std::make_shared<std::atomic_uint64_t>();
     TMaybe<TActorId> MigrationId;
     TVSlots VSlots; // ordering is important
     TPDisks PDisks; // ordering is important

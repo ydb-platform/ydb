@@ -1681,6 +1681,10 @@ void TTableInfo::SetPartitioning(TVector<TTableShardInfo>&& newPartitioning) {
     newAggregatedStats.RangeReads = Stats.Aggregated.RangeReads;
     newAggregatedStats.RangeReadRows = Stats.Aggregated.RangeReadRows;
 
+    newAggregatedStats.LocksAcquired = Stats.Aggregated.LocksAcquired;
+    newAggregatedStats.LocksWholeShard = Stats.Aggregated.LocksWholeShard;
+    newAggregatedStats.LocksBroken = Stats.Aggregated.LocksBroken;
+
     if (SplitOpsInFlight.empty()) {
         ExpectedPartitionCount = newPartitioning.size();
     }
@@ -1784,6 +1788,10 @@ void TTableAggregatedStats::UpdateShardStats(TShardIdx datashardIdx, const TPart
     Aggregated.WriteThroughput += (newStats.WriteThroughput - oldStats.WriteThroughput);
     Aggregated.ReadIops += (newStats.ReadIops - oldStats.ReadIops);
     Aggregated.WriteIops += (newStats.WriteIops - oldStats.WriteIops);
+
+    Aggregated.LocksAcquired += (newStats.LocksAcquired - oldStats.LocksAcquired);
+    Aggregated.LocksWholeShard += (newStats.LocksWholeShard - oldStats.LocksWholeShard);
+    Aggregated.LocksBroken += (newStats.LocksBroken - oldStats.LocksBroken);
 
     auto topUsage = oldStats.TopUsage.Update(newStats.TopUsage);
     oldStats = newStats;

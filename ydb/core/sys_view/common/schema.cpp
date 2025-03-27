@@ -282,8 +282,10 @@ private:
         RegisterColumnTableSystemView<Schema::PrimaryIndexGranuleStats>(TablePrimaryIndexGranuleStatsName);
         RegisterColumnTableSystemView<Schema::PrimaryIndexOptimizerStats>(TablePrimaryIndexOptimizerStatsName);
 
-        RegisterSystemView<Schema::TopPartitions>(TopPartitions1MinuteName);
-        RegisterSystemView<Schema::TopPartitions>(TopPartitions1HourName);
+        RegisterSystemView<Schema::TopPartitions>(TopPartitionsByCpu1MinuteName);
+        RegisterSystemView<Schema::TopPartitions>(TopPartitionsByCpu1HourName);
+        RegisterSystemView<Schema::TopPartitionsTli>(TopPartitionsByTli1MinuteName);
+        RegisterSystemView<Schema::TopPartitionsTli>(TopPartitionsByTli1HourName);
 
         RegisterPgTablesSystemViews();
 

@@ -7358,6 +7358,21 @@
                 "ColumnId": 34,
                 "ColumnName": "ByKeyFilterSize",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 35,
+                "ColumnName": "LocksAcquired",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 36,
+                "ColumnName": "LocksWholeShard",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 37,
+                "ColumnName": "LocksBroken",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -7397,7 +7412,10 @@
                     31,
                     32,
                     33,
-                    34
+                    34,
+                    35,
+                    36,
+                    37
                 ],
                 "RoomID": 0,
                 "Codec": 0,

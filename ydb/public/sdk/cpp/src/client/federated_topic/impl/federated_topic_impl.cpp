@@ -51,7 +51,7 @@ void TFederatedTopicClient::TImpl::InitObserver() {
     }
 }
 
-NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> TFederatedTopicClient::TImpl::GetAllClusterInfo(bool withClients = false) {
+NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> TFederatedTopicClient::TImpl::GetAllClusterInfo(bool withClients) {
     InitObserver();
     return Observer->WaitForFirstState().Apply(
             [weakObserver = std::weak_ptr(Observer), clientSettings = ClientSettings, driver = Driver, withClients] (const auto& ) {

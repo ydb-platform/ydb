@@ -1,4 +1,4 @@
-#include "schemeshard_export_scheme_uploaders.h"
+#include "schemeshard_export_uploaders.h"
 
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>

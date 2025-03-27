@@ -19,19 +19,11 @@ target_link_libraries(commands-interactive-complete PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  contrib-libs-antlr4_cpp_runtime
-  contrib-libs-antlr4-c3
-  essentials-sql-settings
-  sql-v1-format
-  antlr_ast-gen-v1_ansi_antlr4
-  antlr_ast-gen-v1_antlr4
+  restricted-patched-replxx
+  sql-v1-complete
 )
 
 target_sources(commands-interactive-complete PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/complete/sql_antlr4.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/complete/sql_complete.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/complete/sql_context.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/complete/sql_syntax.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/complete/string_util.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/complete/yql_completer.cpp
 )
 

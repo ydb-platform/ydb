@@ -12,7 +12,8 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(ut)
+add_subdirectory(highlight)
+add_subdirectory(complete)
 
 add_library(ydb_cli-commands-interactive)
 
@@ -22,22 +23,13 @@ target_link_libraries(ydb_cli-commands-interactive PUBLIC
   contrib-libs-cxxsupp
   yutil
   restricted-patched-replxx
-  contrib-libs-antlr4_cpp_runtime
-  essentials-parser-lexer_common
-  proto_ast-gen-v1_antlr4
-  sql-v1-complete
-  sql-v1-lexer
-  v1-lexer-antlr4
-  v1-lexer-antlr4_ansi
-  essentials-sql-settings
-  yql-essentials-utils
   common
+  commands-interactive-highlight
+  commands-interactive-complete
 )
 
 target_sources(ydb_cli-commands-interactive PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/interactive_cli.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/line_reader.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/yql_highlight.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/commands/interactive/yql_position.cpp
 )
 

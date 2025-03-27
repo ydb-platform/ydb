@@ -1,5 +1,6 @@
 | Version | Release date | Download | Changelog |
 :--- | :--- | :--- | :---
+| v.2.20.0 | 05/03/2025 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.20.0/linux/arm64/ydb) | [See the changelog](../../../changelog-cli.md#2-20-0) |
 | v.2.19.0 | 05/02/2025 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.19.0/linux/arm64/ydb) | [See the changelog](../../../changelog-cli.md#2-19-0) |
 | v.2.18.0 | 24/12/2024 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.18.0/linux/arm64/ydb) | [See the changelog](../../../changelog-cli.md#2-18-0) |
 | v.2.17.0 | 04/12/2024 | [Binary file](https://storage.yandexcloud.net/yandexcloud-ydb/release/2.17.0/linux/arm64/ydb) | [See the changelog](../../../changelog-cli.md#2-17-0) |

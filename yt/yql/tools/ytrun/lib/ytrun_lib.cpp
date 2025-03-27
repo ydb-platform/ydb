@@ -154,9 +154,13 @@ TYtRunTool::TYtRunTool(TString name)
         FillClusterMapping(*ytConfig, TString{YtProviderName});
 
         DefYtServer_ = NYql::TConfigClusters::GetDefaultYtServer(*ytConfig);
+
+        if (GetRunOptions().GatewayTypes.contains(FastMapReduceGatewayName)) {
+            GetRunOptions().GatewayTypes.emplace(YtProviderName);
+        }
     });
 
-    GetRunOptions().SetSupportedGateways({TString{YtProviderName}});
+    GetRunOptions().SetSupportedGateways({TString{YtProviderName}, TString{FastMapReduceGatewayName}});
     GetRunOptions().GatewayTypes.emplace(YtProviderName);
 
     AddFsDownloadFactory([this]() -> NFS::IDownloaderPtr {

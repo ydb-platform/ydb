@@ -3835,10 +3835,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_VALUES_EQUAL_C(name, currentOwner, "name is not currentOwner");
     }
 
-    Y_UNIT_TEST(AlterDatabaseChangeOwner) {
+    Y_UNIT_TEST_TWIN(AlterDatabaseChangeOwner, EnableAlterDatabase) {
         /* Default Kikimr runner can not create extsubdomain */
         TTestExtEnv::TEnvSettings settings;
-        settings.FeatureFlags.SetEnableAlterDatabase(true);
+        settings.FeatureFlags.SetEnableAlterDatabase(EnableAlterDatabase);
 
         TTestExtEnv env(settings);
         env.CreateDatabase("Test");
@@ -3875,8 +3875,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )";
 
             auto result = session.ExecuteSchemeQuery(alterDatabaseSql).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Error: fail in ApplyIf section: wrong Path type.");
+
+            if (EnableAlterDatabase) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Error: fail in ApplyIf section: wrong Path type.");
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "ALTER DATABASE statement is not supported");
+            }
         }
         {
             auto alterDatabaseSql = TStringBuilder() << R"(
@@ -3885,9 +3891,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )";
 
             auto result = session.ExecuteSchemeQuery(alterDatabaseSql).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-            CheckOwner(session, "/Root/Test", "superuser");
+            if (EnableAlterDatabase) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CheckOwner(session, "/Root/Test", "superuser");
+            } else {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "ALTER DATABASE statement is not supported");
+            }
         }
     }
 

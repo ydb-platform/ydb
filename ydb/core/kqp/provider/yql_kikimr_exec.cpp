@@ -102,6 +102,7 @@ namespace {
 
     TAlterDatabaseSettings ParseAlterDatabaseSettings(TKiAlterDatabase alterDatabase) {
         TAlterDatabaseSettings alterDatabaseSettings;
+        YQL_ENSURE(alterDatabase.DatabasePath().Value().size() > 0);
         alterDatabaseSettings.DatabasePath = alterDatabase.DatabasePath().Value();
 
         for (auto setting : alterDatabase.Settings()) {
@@ -109,6 +110,8 @@ namespace {
 
             if (name == "owner") {
                 alterDatabaseSettings.Owner = setting.Value().Cast<TCoAtom>().StringValue();
+            } else {
+                YQL_ENSURE(false);
             }
         }
 
@@ -135,6 +138,8 @@ namespace {
                 createUserSettings.CanLogin = true;
             } else if (name == "noLogin") {
                 createUserSettings.CanLogin = false;
+            } else {
+                YQL_ENSURE(false);
             }
         }
         return createUserSettings;
@@ -159,6 +164,8 @@ namespace {
                 alterUserSettings.CanLogin = true;
             } else if (name == "noLogin") {
                 alterUserSettings.CanLogin = false;
+            } else {
+                YQL_ENSURE(false);
             }
         }
         return alterUserSettings;

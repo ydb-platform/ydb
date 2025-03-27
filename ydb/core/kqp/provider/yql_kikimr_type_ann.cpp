@@ -211,12 +211,6 @@ private:
 
             case TKikimrKey::Type::Database:
             {
-                if (!SessionCtx->Config().FeatureFlags.GetEnableDatabaseAdmin()) {
-                    ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
-                        TStringBuilder() << "ALTER DATABASE statement is not supported"));
-                    return TStatus::Error;
-                }
-
                 return TStatus::Ok;
             }
 
@@ -1913,6 +1907,17 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
     }
 
     virtual TStatus HandleAlterDatabase(NNodes::TKiAlterDatabase node, TExprContext& ctx) override {
+        if (!SessionCtx->Config().FeatureFlags.GetEnableAlterDatabase()) {
+            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
+                TStringBuilder() << "ALTER DATABASE statement is not supported"));
+            return TStatus::Error;
+        }
+
+        if (!node.DatabasePath().Value()) {
+                ctx.AddError(TIssue(ctx.GetPosition(node.DatabasePath().Pos()), "DatabasePath can't be empty."));
+            return TStatus::Error;
+        }
+
         const THashSet<TString> supportedSettings = {
             "owner"
         };

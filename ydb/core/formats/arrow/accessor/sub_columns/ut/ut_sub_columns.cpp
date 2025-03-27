@@ -49,7 +49,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
 
     Y_UNIT_TEST(SlicesDef) {
         for (ui32 colsCount = 0; colsCount < 5; ++colsCount) {
-            NSubColumns::TSettings settings(4, colsCount, 0, 0, TDataAdapterContainer::GetDefault());
+            NSubColumns::TSettings settings(4, colsCount, 0, 0, NKikimr::NArrow::NAccessor::NSubColumns::TDataAdapterContainer::GetDefault());
 
             const std::vector<TString> jsons = {
                 R"({"a" : 1, "b" : 1, "c" : "111"})",
@@ -141,7 +141,7 @@ Y_UNIT_TEST_SUITE(SubColumnsArrayAccessor) {
 
     Y_UNIT_TEST(FiltersDef) {
         for (ui32 colsCount = 0; colsCount < 5; ++colsCount) {
-            NSubColumns::TSettings settings(4, colsCount, 0, 0, TDataAdapterContainer::GetDefault());
+            NSubColumns::TSettings settings(4, colsCount, 0, 0, NKikimr::NArrow::NAccessor::NSubColumns::TDataAdapterContainer::GetDefault());
 
             const std::vector<TString> jsons = {
                 R"({"a" : 1, "b" : 1, "c" : "111"})",

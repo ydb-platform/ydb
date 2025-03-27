@@ -126,21 +126,37 @@ NPq::NConfigurationManager::TAsyncDescribePathResult TPqSession::DescribePath(co
             auto allFutureDescribes = NThreading::WaitAll(results);
             return allFutureDescribes.Apply([results = std::move(results), paths = std::move(paths), allClustersInfo = std::move(allClustersInfo), cluster, database, path](const auto& ) mutable {
                 uint32_t partitions = 0;
-                yexception ex;
+                TStringBuilder ex;
+                auto addErrorHeader = [&]() {
+                    if (ex.empty()) {
+                        ex << "Failed to describe topic `" << cluster << "`.`" << path << "`in the database `" << database << "`: ";
+                    } else {
+                        ex << "; ";
+                    }
+                };
                 for (size_t i = 0; i != results.size(); ++i) {
                     auto& futureDescribe = results[i];
-                    if (futureDescribe.HasException()) {
-                        continue;
+                    auto addErrorCluster = [&]() {
+                        addErrorHeader();
+                        ex << "#" << i << " (name '" << allClustersInfo[i].Name << "' endpoint '" << allClustersInfo[i].Endpoint << "' path `" << paths[i] << "`): ";
+                    };
+                    try {
+                        auto describeTopicResult = futureDescribe.ExtractValue();
+                        if (!describeTopicResult.IsSuccess()) {
+                            addErrorCluster();
+                            ex << describeTopicResult.GetIssues().ToString();
+                            continue;
+                        }
+                        partitions = std::max(partitions, describeTopicResult.GetTopicDescription().GetTotalPartitionsCount());
+                    } catch (...) {
+                        addErrorCluster();
+                        ex << "Got exception: " << FormatCurrentException();
                     }
-                    auto describeTopicResult = futureDescribe.ExtractValue();
-                    if (!describeTopicResult.IsSuccess()) {
-                        ex << "Failed to describe topic `" << cluster << "`.`" << path << "` (name '" << allClustersInfo[i].Name << "' endpoint '" << allClustersInfo[i].Endpoint << "' path '" << paths[i] << "') in the database `" << database << "`: " << describeTopicResult.GetIssues().ToString();
-                        continue;
-                    }
-                    partitions = std::max(partitions, describeTopicResult.GetTopicDescription().GetTotalPartitionsCount());
                 }
                 if (!partitions) {
-                    throw ex;
+                    addErrorHeader();
+                    ex << "No parititions found\n";
+                    throw yexception() << ex;
                 }
                 NPq::NConfigurationManager::TTopicDescription desc(path);
                 desc.PartitionsCount = partitions;

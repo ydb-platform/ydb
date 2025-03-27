@@ -83,6 +83,7 @@ NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> TFederated
                     throw yexception() << "Lost observer"; // TODO better message?
                 }
                 auto state = observer->GetState();
+                NYdb::NStatusHelpers::ThrowOnError(state->Status);
                 std::vector<TClusterInfo> result;
                 result.reserve(state->DbInfos.size());
                 for (const auto& db: state->DbInfos) {

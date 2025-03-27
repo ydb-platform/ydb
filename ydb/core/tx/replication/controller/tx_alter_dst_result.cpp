@@ -56,7 +56,8 @@ public:
 
             if (Replication->CheckAlterDone()) {
                 CLOG_N(ctx, "Replication altered"
-                    << ": rid# " << rid);
+                    << ": rid# " << rid
+                    << ", state# " << Replication->GetDesiredState());
                 Replication->SetState(Replication->GetDesiredState());
             }
         } else {

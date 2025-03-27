@@ -357,19 +357,25 @@ struct MainTestCase {
         }
     }
 
-    void CheckTransferStateError(const TString& expectedMessage) {
+    TReplicationDescription CheckTransferState(TReplicationDescription::EState expected) {
         for (size_t i = 20; i--;) {
             auto result = DescribeTransfer().GetReplicationDescription();
-            if (TReplicationDescription::EState::Error == result.GetState()) {
-                Cerr << ">>>>> ACTUAL: " << result.GetErrorState().GetIssues().ToOneLineString() << Endl << Flush;
-                Cerr << ">>>>> EXPECTED: " << expectedMessage << Endl << Flush;
-                UNIT_ASSERT(result.GetErrorState().GetIssues().ToOneLineString().contains(expectedMessage));
-                break;
+            if (expected == result.GetState()) {
+                return result;
             }
     
-            UNIT_ASSERT_C(i, "Unable to wait transfer error");
+            UNIT_ASSERT_C(i, "Unable to wait transfer state. Expected: " << expected << ", actual: " << result.GetState());
             Sleep(TDuration::Seconds(1));
         }
+
+        Y_UNREACHABLE();
+    }
+
+    void CheckTransferStateError(const TString& expectedMessage) {
+        auto result = CheckTransferState(TReplicationDescription::EState::Error);
+        Cerr << ">>>>> ACTUAL: " << result.GetErrorState().GetIssues().ToOneLineString() << Endl << Flush;
+        Cerr << ">>>>> EXPECTED: " << expectedMessage << Endl << Flush;
+        UNIT_ASSERT(result.GetErrorState().GetIssues().ToOneLineString().contains(expectedMessage));
     }
 
     void Run(const TConfig& config) {
@@ -1403,6 +1409,8 @@ Y_UNIT_TEST_SUITE(Transfer)
             _C("Message", TString("Message-1"))
         }});
 
+        testCase.CheckTransferState(TReplicationDescription::EState::Running);
+
         Cerr << "State: Paused" << Endl << Flush;
 
         testCase.ExecuteDDL(Sprintf(R"(
@@ -1413,6 +1421,7 @@ Y_UNIT_TEST_SUITE(Transfer)
         )", testCase.TransferName.data()));
 
         Sleep(TDuration::Seconds(1));
+        testCase.CheckTransferState(TReplicationDescription::EState::Paused);
 
         testCase.Write({"Message-2"});
 
@@ -1432,6 +1441,7 @@ Y_UNIT_TEST_SUITE(Transfer)
         )", testCase.TransferName.data()));
 
         // Transfer is resumed. New messages are added to the table.
+        testCase.CheckTransferState(TReplicationDescription::EState::Running);
         testCase.CheckResult({{
             _C("Message", TString("Message-1"))
         }, {

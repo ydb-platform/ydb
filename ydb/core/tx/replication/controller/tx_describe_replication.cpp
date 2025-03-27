@@ -245,7 +245,6 @@ public:
         switch (replication->GetState()) {
         case TReplication::EState::Ready:
         case TReplication::EState::Removing:
-        case TReplication::EState::Paused: // TODO отдавть в describe paused?
             state.MutableStandBy();
             if (const auto lag = replication->GetLag()) {
                 state.MutableStandBy()->SetLagMilliSeconds(lag->MilliSeconds());
@@ -256,6 +255,9 @@ public:
             break;
         case TReplication::EState::Done:
             state.MutableDone();
+            break;
+        case TReplication::EState::Paused:
+            state.MutablePaused();
             break;
         case TReplication::EState::Error:
             if (auto issue = state.MutableError()->AddIssues()) {

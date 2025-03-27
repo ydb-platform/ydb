@@ -95,7 +95,9 @@ public:
         ColumnsLimit = proto.GetColumnsLimit();
         ChunkMemoryLimit = proto.GetChunkMemoryLimit();
         OthersAllowedFraction = proto.GetOthersAllowedFraction();
-        if (!DataExtractor.DeserializeFromProto(proto.GetDataExtractor())) {
+        if (!proto.HasDataExtractor()) {
+            AFL_VERIFY(DataExtractor.Initialize(TFirstLevelSchemaData::GetClassNameStatic()));
+        } else if (!DataExtractor.DeserializeFromProto(proto.GetDataExtractor())) {
             return false;
         }
         return true;

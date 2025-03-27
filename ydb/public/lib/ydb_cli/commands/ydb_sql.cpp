@@ -46,10 +46,11 @@ void TCommandSql::Config(TConfig& config) {
     config.Opts->AddLongOption("diagnostics-file", "Path to file where the diagnostics will be saved.")
         .RequiredArgument("[String]").StoreResult(&DiagnosticsFile);
     config.Opts->AddLongOption("syntax", "Query syntax [yql, pg]")
-        .RequiredArgument("[String]").Handler1T<TString>("yql", [this](const TString& arg) {
+        .RequiredArgument("[String]")
+        .Hidden()
+        .GetOpt().Handler1T<TString>("yql", [this](const TString& arg) {
             SetSyntax(arg);
-        })
-        .Hidden();
+        });
 
     AddOutputFormats(config, {
         EDataFormat::Pretty,

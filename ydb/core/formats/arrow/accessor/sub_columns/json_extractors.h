@@ -19,40 +19,19 @@ public:
 
 class IJsonObjectExtractor {
 private:
-    std::vector<TStringBuf> Prefix;
+    const TStringBuf Prefix;
     virtual TConclusionStatus DoFill(TDataBuilder& dataBuilder, std::deque<std::shared_ptr<IJsonObjectExtractor>>& iterators) = 0;
 
 protected:
-    TJsonStorage* Storage = nullptr;
-
-    std::vector<TStringBuf> GetPrefixWith(const TStringBuf key) {
-        auto result = Prefix;
-        if (key.find(".") != TString::npos) {
-            result.emplace_back(Storage->Store(std::string("'") + key + "'"));
-        } else {
-            result.emplace_back(key);
-        }
-        return result;
-    }
-    std::vector<TStringBuf> GetPrefixWithOwn(const TString& key) {
-        auto result = Prefix;
-        if (key.find(".")) {
-            result.emplace_back(Storage->Store("'" + key + "'"));
-        } else {
-            result.emplace_back(Storage->Store(key));
-        }
-        return result;
-    }
-    const std::vector<TStringBuf>& GetPrefix() const {
+    TStringBuf GetPrefix() const {
         return Prefix;
     }
 
 public:
     virtual ~IJsonObjectExtractor() = default;
 
-    IJsonObjectExtractor(const TJsonStorage& storage, const std::vector<TStringBuf>& prefix)
-        : Prefix(prefix)
-        , Storage(&storage) {
+    IJsonObjectExtractor(const TStringBuf prefix)
+        : Prefix(prefix) {
     }
 
     [[nodiscard]] TConclusionStatus Fill(TDataBuilder& dataBuilder, std::deque<std::shared_ptr<IJsonObjectExtractor>>& iterators) {
@@ -67,9 +46,8 @@ private:
     virtual TConclusionStatus DoFill(TDataBuilder& dataBuilder, std::deque<std::shared_ptr<IJsonObjectExtractor>>& iterators) override;
 
 public:
-    TKVExtractor(
-        const TJsonStorage& storage, const NBinaryJson::TObjectIterator& iterator, const std::vector<TStringBuf>& prefix)
-        : TBase(storage, prefix)
+    TKVExtractor(const NBinaryJson::TObjectIterator& iterator, const TStringBuf prefix)
+        : TBase(prefix)
         , Iterator(iterator) {
     }
 };
@@ -82,9 +60,8 @@ private:
     virtual TConclusionStatus DoFill(TDataBuilder& dataBuilder, std::deque<std::shared_ptr<IJsonObjectExtractor>>& iterators) override;
 
 public:
-    TArrayExtractor(
-        const TJsonStorage& storage, const NBinaryJson::TArrayIterator& iterator, const std::vector<TStringBuf>& prefix)
-        : TBase(storage, prefix)
+    TArrayExtractor(const NBinaryJson::TArrayIterator& iterator, const TStringBuf prefix)
+        : TBase(prefix)
         , Iterator(iterator) {
     }
 };

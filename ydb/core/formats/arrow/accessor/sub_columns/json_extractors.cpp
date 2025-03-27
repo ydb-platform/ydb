@@ -12,22 +12,23 @@ TConclusionStatus TArrayExtractor::DoFill(TDataBuilder& dataBuilder, std::deque<
     ui32 idx = 0;
     while (Iterator.HasNext()) {
         auto value = Iterator.Next();
-        const TString jsonKey = "[" + ::ToString(idx++) + "]";
-        const TStringBuf key = dataBuilder.AddKeyOwn(GetPrefix(), jsonKey);
+        const TStringBuf key = dataBuilder.AddKeyOwn(GetPrefix(), "[" + std::to_string(idx++) + "]");
         if (value.GetType() == NBinaryJson::EEntryType::String) {
             dataBuilder.AddKV(key, value.GetString());
         } else if (value.GetType() == NBinaryJson::EEntryType::Number) {
-            dataBuilder.AddKVOwn(key, ::ToString(value.GetNumber()));
+            dataBuilder.AddKVOwn(key, std::to_string(value.GetNumber()));
         } else if (value.GetType() == NBinaryJson::EEntryType::BoolFalse) {
-            dataBuilder.AddKVOwn(key, "0");
+            static const TString zeroString = "0";
+            dataBuilder.AddKV(key, TStringBuf(zeroString.data(), zeroString.size()));
         } else if (value.GetType() == NBinaryJson::EEntryType::BoolTrue) {
-            dataBuilder.AddKVOwn(key, "1");
+            static const TString oneString = "1";
+            dataBuilder.AddKV(key, TStringBuf(oneString.data(), oneString.size()));
         } else if (value.GetType() == NBinaryJson::EEntryType::Container) {
             auto container = value.GetContainer();
             if (container.GetType() == NBinaryJson::EContainerType::Array) {
-                iterators.emplace_back(std::make_shared<TArrayExtractor>(*Storage, container.GetArrayIterator(), GetPrefixWithOwn(jsonKey)));
+                iterators.emplace_back(std::make_shared<TArrayExtractor>(container.GetArrayIterator(), key));
             } else if (container.GetType() == NBinaryJson::EContainerType::Object) {
-                iterators.emplace_back(std::make_shared<TKVExtractor>(*Storage, container.GetObjectIterator(), GetPrefixWithOwn(jsonKey)));
+                iterators.emplace_back(std::make_shared<TKVExtractor>(container.GetObjectIterator(), key));
             } else {
                 return TConclusionStatus::Fail("unexpected top value scalar in container iterator");
             }
@@ -51,18 +52,19 @@ TConclusionStatus TKVExtractor::DoFill(TDataBuilder& dataBuilder, std::deque<std
         if (value.GetType() == NBinaryJson::EEntryType::String) {
             dataBuilder.AddKV(key, value.GetString());
         } else if (value.GetType() == NBinaryJson::EEntryType::Number) {
-            dataBuilder.AddKVOwn(key, ::ToString(value.GetNumber()));
+            dataBuilder.AddKVOwn(key, std::to_string(value.GetNumber()));
         } else if (value.GetType() == NBinaryJson::EEntryType::BoolFalse) {
-            dataBuilder.AddKVOwn(key, "0");
+            static const TString zeroString = "0";
+            dataBuilder.AddKV(key, TStringBuf(zeroString.data(), zeroString.size()));
         } else if (value.GetType() == NBinaryJson::EEntryType::BoolTrue) {
-            dataBuilder.AddKVOwn(key, "1");
+            static const TString oneString = "1";
+            dataBuilder.AddKV(key, TStringBuf(oneString.data(), oneString.size()));
         } else if (value.GetType() == NBinaryJson::EEntryType::Container) {
             auto container = value.GetContainer();
             if (container.GetType() == NBinaryJson::EContainerType::Array) {
-                iterators.emplace_back(
-                    std::make_shared<TArrayExtractor>(*Storage, container.GetArrayIterator(), GetPrefixWith(jsonKey.GetString())));
+                iterators.emplace_back(std::make_shared<TArrayExtractor>(container.GetArrayIterator(), key));
             } else if (container.GetType() == NBinaryJson::EContainerType::Object) {
-                iterators.emplace_back(std::make_shared<TKVExtractor>(*Storage, container.GetObjectIterator(), GetPrefixWith(jsonKey.GetString())));
+                iterators.emplace_back(std::make_shared<TKVExtractor>(container.GetObjectIterator(), key));
             } else {
                 return TConclusionStatus::Fail("unexpected top value scalar in container iterator");
             }

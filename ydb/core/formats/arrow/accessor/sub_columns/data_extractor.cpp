@@ -16,7 +16,6 @@ TConclusionStatus TFirstLevelSchemaData::DoAddDataToBuilders(
     }
 
     auto arr = std::static_pointer_cast<arrow::StringArray>(sourceArray);
-    auto storage = std::make_unique<TJsonStorage>();
     for (ui32 i = 0; i < arr->length(); ++i) {
         const auto view = arr->GetView(i);
         if (view.size() && !arr->IsNull(i)) {
@@ -29,9 +28,9 @@ TConclusionStatus TFirstLevelSchemaData::DoAddDataToBuilders(
             auto cursor = reader->GetRootCursor();
             std::deque<std::shared_ptr<IJsonObjectExtractor>> iterators;
             if (cursor.GetType() == NBinaryJson::EContainerType::Object) {
-                iterators.push_back(std::make_shared<TKVExtractor>(*storage, cursor.GetObjectIterator(), std::vector<TStringBuf>()));
+                iterators.push_back(std::make_shared<TKVExtractor>(cursor.GetObjectIterator(), TStringBuf()));
             } else if (cursor.GetType() == NBinaryJson::EContainerType::Array) {
-                iterators.push_back(std::make_shared<TArrayExtractor>(*storage, cursor.GetArrayIterator(), std::vector<TStringBuf>()));
+                iterators.push_back(std::make_shared<TArrayExtractor>(cursor.GetArrayIterator(), TStringBuf()));
             }
             while (iterators.size()) {
                 const auto conclusion = iterators.front()->Fill(dataBuilder, iterators);

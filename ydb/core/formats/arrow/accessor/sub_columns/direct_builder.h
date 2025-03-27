@@ -19,7 +19,6 @@ class TColumnElements {
 private:
     YDB_READONLY_DEF(TStringBuf, KeyName);
     YDB_READONLY_DEF(std::deque<std::optional<TStringBuf>>, Values);
-    std::vector<TString> ValuesStorage;
     YDB_READONLY_DEF(std::vector<ui32>, RecordIndexes);
     YDB_READONLY(ui32, DataSize, 0);
     std::shared_ptr<IChunkedArray> Accessor;
@@ -47,18 +46,13 @@ public:
         RecordIndexes.emplace_back(index);
         DataSize += sb.size();
     }
-
-    void AddDataToOwn(const TString& value, const ui32 index) {
-        ValuesStorage.emplace_back(value);
-        AddData(TStringBuf(value.data(), value.size()), index);
-    }
 };
 
 class TDataBuilder {
 private:
     ui32 CurrentRecordIndex = 0;
     THashMap<TStringBuf, TColumnElements> Elements;
-    std::deque<TString> Storage;
+    std::deque<std::string> Storage;
     const std::shared_ptr<arrow::DataType> Type;
     const TSettings Settings;
 
@@ -72,30 +66,38 @@ public:
         ++CurrentRecordIndex;
     }
 
-    TStringBuf AddKeyOwn(const std::vector<TStringBuf>& prefix, const TString& key) {
-        const TString keyQuoted = ((key.find(".") != TString::npos) ? ("'" + key + "'") : key);
-        if (prefix.empty()) {
-            Storage.emplace_back(keyQuoted);
+    TStringBuf AddKeyOwn(const TStringBuf currentPrefix, std::string&& key) {
+        if (key.find(".") != std::string::npos) {
+            if (currentPrefix.size()) {
+                Storage.emplace_back(std::string(currentPrefix.data(), currentPrefix.size()) + ".'" + key + "'");
+            } else {
+                Storage.emplace_back(std::string("'") + key + "'");
+            }
         } else {
-            Storage.emplace_back(JoinSeq(".", prefix) + "." + keyQuoted);
+            if (currentPrefix.size()) {
+                Storage.emplace_back(std::string(currentPrefix.data(), currentPrefix.size()) + "." + key);
+            } else {
+                Storage.emplace_back(std::move(key));
+            }
         }
         return TStringBuf(Storage.back().data(), Storage.back().size());
     }
 
-    TStringBuf AddKey(const std::vector<TStringBuf>& prefix, const TStringBuf key) {
-        if (key.find(".") != TString::npos) {
-            if (prefix.size()) {
-                Storage.emplace_back(JoinSeq(".", prefix) + ".'" + key + "'");
+    TStringBuf AddKey(const TStringBuf currentPrefix, const TStringBuf key) {
+        if (key.find(".") != std::string::npos) {
+            if (currentPrefix.size()) {
+                Storage.emplace_back(std::string(currentPrefix.data(), currentPrefix.size()) + ".'" + std::string(key.data(), key.size()) + "'");
             } else {
-                Storage.emplace_back(TString("'") + key + "'");
+                Storage.emplace_back(std::string("'") + std::string(key.data(), key.size()) + "'");
             }
-            return TStringBuf(Storage.back().data(), Storage.back().size());
-        } else if (prefix.empty()) {
-            return key;
         } else {
-            Storage.emplace_back(JoinSeq(".", prefix) + "." + key);
-            return TStringBuf(Storage.back().data(), Storage.back().size());
+            if (currentPrefix.size()) {
+                Storage.emplace_back(std::string(currentPrefix.data(), currentPrefix.size()) + "." + std::string(key.data(), key.size()));
+            } else {
+                return key;
+            }
         }
+        return TStringBuf(Storage.back().data(), Storage.back().size());
     }
 
     void AddKVNull(const TStringBuf key) {
@@ -103,7 +105,8 @@ public:
         if (itElements == Elements.end()) {
             itElements = Elements.emplace(key, key).first;
         }
-        itElements->second.AddDataToOwn("NULL", CurrentRecordIndex);
+        const static TString nullString = "NULL";
+        itElements->second.AddData(nullString, CurrentRecordIndex);
     }
 
     void AddKV(const TStringBuf key, const TStringBuf value) {
@@ -114,13 +117,13 @@ public:
         itElements->second.AddData(value, CurrentRecordIndex);
     }
 
-    void AddKVOwn(const TStringBuf key, const TString& value) {
-        Storage.emplace_back(value);
+    void AddKVOwn(const TStringBuf key, std::string&& value) {
+        Storage.emplace_back(std::move(value));
         auto itElements = Elements.find(key);
         if (itElements == Elements.end()) {
             itElements = Elements.emplace(key, key).first;
         }
-        itElements->second.AddData(value, CurrentRecordIndex);
+        itElements->second.AddData(Storage.back(), CurrentRecordIndex);
     }
 
     class THeapElements {

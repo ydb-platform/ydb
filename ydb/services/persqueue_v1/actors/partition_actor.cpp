@@ -221,7 +221,13 @@ void TPartitionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TAc
     }
 
     if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
-        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession("KQP query response status is not ok", PersQueue::ErrorCode::ERROR));
+        auto kqpQueryError = TStringBuilder() << "Kqp error. Status# " << record.GetYdbStatus() << ", ";
+
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
+        kqpQueryError << issues.ToString();
+
+        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(kqpQueryError, PersQueue::ErrorCode::ERROR));
         return;
     }
 

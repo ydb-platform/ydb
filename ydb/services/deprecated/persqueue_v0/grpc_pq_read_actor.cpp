@@ -987,6 +987,7 @@ void TReadSessionActor::Handle(V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const 
             topicHolder.IsServerless = t.IsServerless;
             topicHolder.FolderId = t.FolderId;
             topicHolder.FullConverter = t.TopicNameConverter;
+            topicHolder.PartitionGraph = t.PartitionGraph;
             FullPathToConverter[t.TopicNameConverter->GetPrimaryPath()] = t.TopicNameConverter;
             const auto& second = t.TopicNameConverter->GetSecondaryPath();
             if (!second.empty()) {
@@ -1008,13 +1009,20 @@ void TReadSessionActor::Handle(V1::TEvPQProxy::TEvAuthResultOk::TPtr& ev, const 
         ctx.Schedule(Min(CommitInterval, CHECK_ACL_DELAY), new TEvents::TEvWakeup());
     } else {
         for (auto& [name, t] : ev->Get()->TopicAndTablets) {
-            if (Topics.find(t.TopicNameConverter->GetInternalName()) == Topics.end()) {
+            auto it = Topics.find(t.TopicNameConverter->GetInternalName());
+            if (it == Topics.end()) {
                 CloseSession(TStringBuilder() << "list of topics changed - new topic '" <<
                              t.TopicNameConverter->GetInternalName() << "' found",
                              NPersQueue::NErrorCode::BAD_REQUEST, ctx);
                 return;
             }
+            it->second.PartitionGraph = t.PartitionGraph;
         }
+    }
+
+    while (!Locks.empty()) {
+        ctx.Send(ctx.SelfID, std::move(Locks.front()));
+        Locks.pop_front();
     }
 }
 
@@ -1056,6 +1064,20 @@ void TReadSessionActor::Handle(TEvPersQueue::TEvLockPartition::TPtr& ev, const T
         );
         return;
     }
+
+    auto* partitionNode = jt->second.PartitionGraph->GetPartition(record.GetPartition());
+    if (!partitionNode) {
+        LOG_DEBUG_S(
+            ctx, NKikimrServices::PQ_READ_PROXY,
+            PQ_LOG_PREFIX << " lock for unknown partition = " << record.GetPartition()
+        );
+        Locks.push_back(ev->Release());
+        if (!AuthInflight) {
+            SendAuthRequest(ctx);
+        }
+        return;
+    }
+
     // ToDo[counters]
     if (NumPartitionsFromTopic[intName]++ == 0) {
         if (AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
@@ -2374,7 +2396,14 @@ void TPartitionActor::Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TAc
     }
 
     if (record.GetYdbStatus() != Ydb::StatusIds::SUCCESS) {
-        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession("KQP query response status is not ok", NPersQueue::NErrorCode::ERROR));
+
+        auto kqpQueryError = TStringBuilder() << "Kqp error. Status# " << record.GetYdbStatus() << ", ";
+
+        NYql::TIssues issues;
+        NYql::IssuesFromMessage(record.GetResponse().GetQueryIssues(), issues);
+        kqpQueryError << issues.ToString();
+
+        ctx.Send(ParentId, new TEvPQProxy::TEvCloseSession(kqpQueryError, NPersQueue::NErrorCode::ERROR));
         return;
     }
 

@@ -310,6 +310,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                 already ? maxOffset : offset, CurrentTimestamp, already, maxSeqNo,
                 PartitionQuotaWaitTimeForCurrentBlob, TopicQuotaWaitTimeForCurrentBlob, queueTime, writeTime
             );
+
             LOG_DEBUG_S(
                 ctx,
                 NKikimrServices::PERSQUEUE,
@@ -508,6 +509,7 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
         SourceIdCounter.Use(sourceId, now);
     }
     TxSourceIdForPostPersist.clear();
+    TxInflightMaxSeqNoPerSourceId.clear();
 
     TxAffectedSourcesIds.clear();
     WriteAffectedSourcesIds.clear();
@@ -1029,6 +1031,7 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
             TStringBuilder() << "Write to inactive partition " << Partition.OriginalPartitionId);
         return EProcessResult::ContinueDrop;
     }
+
     if (DiskIsFull) {
         ScheduleReplyError(p.Cookie,
                             NPersQueue::NErrorCode::WRITE_ERROR_DISK_IS_FULL,
@@ -1037,6 +1040,13 @@ TPartition::EProcessResult TPartition::PreProcessRequest(TWriteMsg& p) {
     }
     if (TxAffectedSourcesIds.contains(p.Msg.SourceId)) {
         return EProcessResult::Blocked;
+    }
+    auto inflightMaxSeqNo = TxInflightMaxSeqNoPerSourceId.find(p.Msg.SourceId);
+
+    if (!inflightMaxSeqNo.IsEnd()) {
+        if (p.Msg.SeqNo <= inflightMaxSeqNo->second) {
+            return EProcessResult::Blocked;
+        }
     }
     WriteAffectedSourcesIds.insert(p.Msg.SourceId);
     return EProcessResult::Continue;
@@ -1165,12 +1175,11 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                         << ". Writing seqNo: " << sourceId.UpdatedSeqNo()
                         << ". EndOffset: " << EndOffset << ". CurOffset: " << curOffset << ". Offset: " << poffset
             );
-            if (!p.Internal) {
-                TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ALREADY].Increment(1);
-                MsgsDiscarded.Inc();
-                TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ALREADY].Increment(p.Msg.Data.size());
-                BytesDiscarded.Inc(p.Msg.Data.size());
-            }
+            Y_ENSURE(!p.Internal); // No Already for transactions;
+            TabletCounters.Cumulative()[COUNTER_PQ_WRITE_ALREADY].Increment(1);
+            MsgsDiscarded.Inc();
+            TabletCounters.Cumulative()[COUNTER_PQ_WRITE_BYTES_ALREADY].Increment(p.Msg.Data.size());
+            BytesDiscarded.Inc(p.Msg.Data.size());
         } else {
             if (!p.Internal) {
                 TabletCounters.Cumulative()[COUNTER_PQ_WRITE_SMALL_OFFSET].Increment(1);
@@ -1219,6 +1228,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                                 ", must be at least " << curOffset,
                                 p,
                                 NPersQueue::NErrorCode::EErrorCode::WRITE_ERROR_BAD_OFFSET);
+
         return false;
     }
 
@@ -1275,6 +1285,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         //this must not be happen - client sends gaps, fail this client till the end
         //now no changes will leak
         ctx.Send(Tablet, new TEvents::TEvPoisonPill());
+
         return false;
     }
     WriteNewSizeFull += p.Msg.SourceId.size() + p.Msg.Data.size();

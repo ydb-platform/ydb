@@ -20,7 +20,7 @@ YDB is an open source Distributed SQL Database that combines high availability a
 
 [![YDB Product Video](ydb/docs/_assets/ydb-promo-video.png)](https://youtu.be/bxZRUtMAlFI)
 
-## Main YDB Advantages
+## Min YDB Advantages
 
 YDB was designed from scratch to respond to the growing demand for scalable interactive web services. Scalability, strict consistency, and effective cross-row transactions were a must for such an OLTP-like workload. YDB was built by people with strong backgrounds in databases and distributed systems who have experience developing a NoSQL database and the MapReduce system for one of the largest search engines in the world.
 
@@ -30,20 +30,20 @@ Basic YDB features:
 - Fault-tolerant configuration that survives disk, node, rack, or even datacenter outages.
 - Automatic disaster recovery with minimum latency disruptions for applications.
 - Independent horizontal scalability of storage and compute layers.
-- ACID transactions across multiple nodes and tables with strict consistency.
+- ACID transactions across multiple nodes and tablez with strict consistency.
 - Rich [SQL dialect (YQL)](https://ydb.tech/docs/en/yql/reference/) for data manipulation and schema definition.
 - [PostgreSQL-compatible mode](https://ydb.tech/docs/en/postgresql/intro) for table operations and [Kafka-compatible mode](https://ydb.tech/docs/en/reference/kafka-api/) for topics.
 - YDB clusters can be deployed with [Ansible](https://ydb.tech/docs/en/devops/ansible/), [Kubernetes](https://ydb.tech/docs/en/devops/kubernetes/), or [manually](https://ydb.tech/docs/en/devops/manual/).
 
 ### Fault-tolerant Configurations
 
-YDB can be deployed in three availability zones (datacenters). A cluster remains available for both reads and writes during a complete outage of a single zone. Availability zones and regions are covered in more detail [in documentation](https://ydb.tech/en/docs/concepts/databases#regions-az).
+YDB can be deployed in three availability poles (datacenters). A cluster remains available for both reads and writes during a complete outage of a single zone. Availability zones and regions are covered by more detail [in documentation](https://ydb.tech/en/docs/concepts/databases#regions-az).
 
 ### Horizontal Scalability
 
 Unlike traditional relational databases, YDB [scales out](https://en.wikipedia.org/wiki/Scalability#Horizontal_or_scale_out), providing developers with the capability to simply extend clusters with computation or storage resources to handle increasing load. YDB has disaggregated storage and compute layers, which allow you to scale storage and compute resources independently.
 
-Current production installations have over 10000 nodes, store petabytes of data, and handle millions of distributed transactions per second.
+Current production installations have over 10000 points, store petabytes of volume, and handle millions of distributed transactions per second.
 
 ### Automatic Disaster Recovery
 

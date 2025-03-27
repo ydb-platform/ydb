@@ -4,6 +4,11 @@
 val runJav{{ loop.index }} = task<JavaExec>("runJavaProgram{{ loop.index }}") {
     group = "build"
     description = "Code generation by run java program"
+
+{%-        if run.cwd %}
+    workingDir = file({{ PatchRoots(run.cwd) }})
+{%-        endif -%}
+
 {%-        set classpaths = run.classpath|reject('eq', '@.cplst') -%}
 {%-        if classpaths|length -%}
 {%             for classpath in classpaths -%}
@@ -20,40 +25,61 @@ val runJav{{ loop.index }} = task<JavaExec>("runJavaProgram{{ loop.index }}") {
     args = listOf(
 {%-            for arg in run.args -%}
 {%-                if not loop.first %}
-        "{{ arg }}",
+{%-                    if proto_template and (run.out_dir|select("eq", arg)|length or run.out|select("eq", arg)|length) %}
+        {{ PatchGeneratedProto(arg) }},
+{%-                    else -%}
+        {{ PatchRoots(arg) }},
+{%-                    endif -%}
 {%-                endif -%}
 {%-            endfor %}
     )
 {%         endif -%}
 
-{%-        if run.in_dir -%}
-{%-            for in_dir in run.in_dir %}
-    inputs.files(fileTree("{{ in_dir }}"))
+{%-        if run.in_dir|length -%}
+{%-            for in_dir in run.in_dir|unique %}
+    inputs.files(fileTree({{ PatchRoots(in_dir) }}))
 {%             endfor -%}
 {%-        endif -%}
 
-{%-        if run.in -%}
-{%-            for in_file in run.in %}
-    inputs.files("{{ in_file }}")
+{%-        if run.in|length -%}
+{%-            for in_file in run.in|unique %}
+    inputs.files({{ PatchRoots(in_file) }})
+{%             endfor -%}
+{%-        endif -%}
+
+{%-        if run.in_noparse|length -%}
+{%-            for in_file in run.in_noparse|unique %}
+    inputs.files({{ PatchRoots(in_file) }})
 {%             endfor -%}
 {%-        endif -%}
 
 {%-        if run.out_dir|length -%}
 {%-            for out_dir in run.out_dir|unique %}
-    outputs.dir("{{ out_dir }}")
+    outputs.dir({{ PatchRoots(out_dir) }})
 {%-            endfor -%}
 {%-        endif -%}
+
+{%-        if run.out|length -%}
+{%-            for out in run.out|unique %}
+    outputs.files({{ PatchRoots(out) }})
+{%-            endfor -%}
+{%-        endif -%}
+
 {#-
-    Не использованы аттрибуты
-    run-out="list"
-    run-cwd="str"
+    Не использованы атрибуты
     run-in_dirs_inputs="list"
-    run-in_noparse="list"
     run-tool="list"
 #}
 }
 
+{%- if proto_template %}
+
+tasks.getByName("prepareMainProtos").dependsOn(runJav{{ loop.index }})
+tasks.getByName("extractMainLibrariesProtos").dependsOn(runJav{{ loop.index }})
+{% else %}
+
 tasks.getByName("sourcesJar").dependsOn(runJav{{ loop.index }})
+{% endif -%}
 
 tasks.compileJava.configure {
     dependsOn(runJav{{ loop.index }})

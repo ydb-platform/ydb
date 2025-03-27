@@ -3,6 +3,8 @@
 #include "defs.h"
 #include <yql/essentials/utils/swap_bytes.h>
 
+#include <array>
+
 namespace NYql {
 namespace NUdf {
 

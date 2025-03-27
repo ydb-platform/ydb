@@ -14,7 +14,15 @@
 namespace NYdb {
 namespace NConsoleClient {
 
-TString TYqlParser::ToLower(const TString& s) {
+enum class EParseState {
+    Start,
+    Declare,
+    ParamName,
+    As,
+    Type
+};
+
+TString TYqlParamParser::ToLower(const TString& s) {
     TString result = s;
     for (char& c : result) {
         c = std::tolower(c);
@@ -22,7 +30,7 @@ TString TYqlParser::ToLower(const TString& s) {
     return result;
 }
 
-std::optional<std::map<std::string, TType>> TYqlParser::GetParamTypes(const TString& queryText) {
+std::map<std::string, TType> TYqlParamParser::GetParamTypes(const TString& queryText) {
     std::map<std::string, TType> result;
 
     NSQLTranslationV1::TLexers lexers;
@@ -35,109 +43,103 @@ std::optional<std::map<std::string, TType>> TYqlParser::GetParamTypes(const TStr
     NYql::TIssues issues;
     if (!NSQLTranslation::Tokenize(*lexer, queryText, "Query", tokens, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS) ||
         !issues.Empty()) {
-        return std::nullopt;
+        return {};
     }
 
-    // Анализируем токены для поиска параметров
-    for (size_t i = 0; i < tokens.size(); ++i) {
-        const auto& token = tokens[i];
-        
-        // Ищем объявление параметра (DECLARE $name AS type)
-        if (TYqlParser::ToLower(token.Content) == "declare") {
-            size_t j = i + 1;
-            while (j < tokens.size() && tokens[j].Name == "WS") {
-                j++;
-            }
-            
-            if (j >= tokens.size() || tokens[j].Content != "$") {
-                return std::nullopt;
-            }
-            j++;
+    EParseState state = EParseState::Start;
+    TString paramName;
 
-            if (j >= tokens.size()) {
-                return std::nullopt;
-            }
-            TString paramName = "$" + tokens[j].Content;
-            j++;
+    for (size_t i = 0; i < tokens.size(); ++i) {      
+        if (tokens[i].Name == "WS") {
+            continue;
+        }
 
-            while (j < tokens.size() && tokens[j].Name == "WS") {
-                j++;
+        if (state == EParseState::Start) {
+            if (TYqlParamParser::ToLower(tokens[i].Content) != "declare") {
+                continue;   
             }
 
-            if (j >= tokens.size() || TYqlParser::ToLower(tokens[j].Content) != "as") {
-                return std::nullopt;
+            state = EParseState::Declare;
+        } else if (state == EParseState::Declare) {
+            if (tokens[i].Content != "$") { 
+                state = EParseState::Start;
+                continue;
             }
-            j++;
 
-            while (j < tokens.size() && tokens[j].Name == "WS") {
-                j++;
+            state = EParseState::ParamName;
+        } else if (state == EParseState::ParamName) {
+            paramName = "$" + tokens[i].Content;
+            state = EParseState::As;
+        } else if (state == EParseState::As) {
+            if (TYqlParamParser::ToLower(tokens[i].Content) != "as") {
+                state = EParseState::Start;
+                continue;
             }
-            
+
+            state = EParseState::Type;
+        } else if (state == EParseState::Type) {
+            if (tokens[i].Content == ";") {
+                state = EParseState::Start;
+                continue;
+            }
+
             TString typeStr;
-            int angleBrackets = 0;
-            int parentheses = 0;
-
-            while (j < tokens.size() && tokens[j].Content != ";") {
-                if (tokens[j].Name != "WS") {
-                    if (tokens[j].Content == "<") {
+            int64_t angleBrackets = 0;
+            int64_t parentheses = 0;
+            while (i < tokens.size() && tokens[i].Content != ";") {
+                if (tokens[i].Name != "WS") {
+                    if (tokens[i].Content == "<") {
                         angleBrackets++;
                         typeStr += "<";
-                    } else if (tokens[j].Content == ">") {
+                    } else if (tokens[i].Content == ">") {
                         angleBrackets--;
                         if (angleBrackets < 0) {
-                            return std::nullopt;
+                            typeStr.clear();
+                            break;
                         }
                         typeStr += ">";
-                    } else if (tokens[j].Content == "(") {
+                    } else if (tokens[i].Content == "(") {
                         parentheses++;
                         typeStr += "(";
-                    } else if (tokens[j].Content == ")") {
+                    } else if (tokens[i].Content == ")") {
                         parentheses--;
                         if (parentheses < 0) {
-                            return std::nullopt;
+                            typeStr.clear();
+                            break;
                         }
                         typeStr += ")";
-                    } else if (tokens[j].Content == ",") {
+                    } else if (tokens[i].Content == ",") {
                         typeStr += ",";
-                    } else if (tokens[j].Content == "?") {
+                    } else if (tokens[i].Content == "?") {
                         typeStr += "?";
                     } else {
                         if (!typeStr.empty() && typeStr.back() != '<' && typeStr.back() != '(' && typeStr.back() != ',' && typeStr.back() != '?') {
                             typeStr += " ";
                         }
-                        typeStr += tokens[j].Content;
+                        typeStr += tokens[i].Content;
                     }
                 }
-                j++;
+                i++;
 
-                if (angleBrackets == 0 && parentheses == 0 && j < tokens.size() && tokens[j].Content == ";") {
+                if (angleBrackets == 0 && parentheses == 0 && i < tokens.size() && tokens[i].Content == ";") {
                     break;
                 }
             }
 
-            if (angleBrackets != 0 || parentheses != 0 || j >= tokens.size() || tokens[j].Content != ";") {
-                return std::nullopt;
-            }
-
             if (!typeStr.empty()) {
                 TTypeBuilder builder;
-                if (!ProcessType(typeStr, builder)) {
-                    return std::nullopt;
+                if (ProcessType(typeStr, builder)) {
+                    result.emplace(paramName, builder.Build());
                 }
-
-                result.emplace(paramName, builder.Build());
-            } else {
-                return std::nullopt;
             }
-
-            i = j;
+            state = EParseState::Start;
         }
     }
 
     return result;
 }
 
-bool TYqlParser::ProcessType(const TString& typeStr, TTypeBuilder& builder) {
+bool TYqlParamParser::ProcessType(const TString& typeStr, TTypeBuilder& builder) {
     TString cleanTypeStr = StripString(typeStr);
 
     bool isOptional = cleanTypeStr.EndsWith("?");
@@ -146,7 +148,7 @@ bool TYqlParser::ProcessType(const TString& typeStr, TTypeBuilder& builder) {
         builder.BeginOptional();
     }
 
-    TString lowerTypeStr = TYqlParser::ToLower(cleanTypeStr);
+    TString lowerTypeStr = TYqlParamParser::ToLower(cleanTypeStr);
 
     if (lowerTypeStr == "bool") {
         builder.Primitive(EPrimitiveType::Bool);

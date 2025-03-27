@@ -1,4 +1,5 @@
 #include "data_extractor.h"
+#include "direct_builder.h"
 #include "json_extractors.h"
 
 #include <util/string/split.h>
@@ -28,7 +29,7 @@ TConclusionStatus TFirstLevelSchemaData::DoAddDataToBuilders(
             auto cursor = reader->GetRootCursor();
             std::deque<std::unique_ptr<IJsonObjectExtractor>> iterators;
             if (cursor.GetType() == NBinaryJson::EContainerType::Object) {
-                iterators.push_back(std::make_unique<TKVExtractor>(cursor.GetObjectIterator(), TStringBuf()));
+                iterators.push_back(std::make_unique<TKVExtractor>(cursor.GetObjectIterator(), TStringBuf(), FirstLevelOnly));
             } else if (cursor.GetType() == NBinaryJson::EContainerType::Array) {
                 iterators.push_back(std::make_unique<TArrayExtractor>(cursor.GetArrayIterator(), TStringBuf()));
             }

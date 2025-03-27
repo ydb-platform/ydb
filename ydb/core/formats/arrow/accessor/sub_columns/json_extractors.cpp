@@ -75,7 +75,9 @@ TConclusionStatus TKVExtractor::DoFill(TDataBuilder& dataBuilder, std::deque<std
             dataBuilder.AddKV(key, TStringBuf(oneString.data(), oneString.size()));
         } else if (value.GetType() == NBinaryJson::EEntryType::Container) {
             auto container = value.GetContainer();
-            if (container.GetType() == NBinaryJson::EContainerType::Array) {
+            if (FirstLevelOnly) {
+                dataBuilder.AddKVOwn(key, NBinaryJson::SerializeToJson(container));
+            } else if (container.GetType() == NBinaryJson::EContainerType::Array) {
                 continue;
                 iterators.emplace_back(std::make_unique<TArrayExtractor>(container.GetArrayIterator(), key));
             } else if (container.GetType() == NBinaryJson::EContainerType::Object) {

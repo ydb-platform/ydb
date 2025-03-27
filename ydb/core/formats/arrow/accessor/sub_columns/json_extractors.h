@@ -44,11 +44,13 @@ private:
     using TBase = IJsonObjectExtractor;
     NBinaryJson::TObjectIterator Iterator;
     virtual TConclusionStatus DoFill(TDataBuilder& dataBuilder, std::deque<std::unique_ptr<IJsonObjectExtractor>>& iterators) override;
+    const bool FirstLevelOnly = false;
 
 public:
-    TKVExtractor(const NBinaryJson::TObjectIterator& iterator, const TStringBuf prefix)
+    TKVExtractor(const NBinaryJson::TObjectIterator& iterator, const TStringBuf prefix, const bool firstLevelOnly = false)
         : TBase(prefix)
-        , Iterator(iterator) {
+        , Iterator(iterator)
+        , FirstLevelOnly(firstLevelOnly) {
     }
 };
 

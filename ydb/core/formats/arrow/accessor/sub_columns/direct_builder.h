@@ -7,6 +7,7 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h>
+#include <contrib/libs/xxhash/xxhash.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NArrow::NAccessor {
@@ -45,9 +46,33 @@ public:
 
 class TDataBuilder {
 private:
+    class TStorageAddress {
+    private:
+        const TStringBuf Prefix;
+        const TStringBuf Key;
+        const size_t Hash;
+    public:
+        TStorageAddress(const TStringBuf prefix, const TStringBuf key)
+            : Prefix(prefix)
+            , Key(key)
+            , Hash(XXH3_64bits(Prefix.data(), Prefix.size()) ^ XXH3_64bits(Key.data(), Key.size()))
+        {
+        }
+
+        operator size_t() const {
+            return Hash;
+        }
+
+        bool operator==(const TStorageAddress& item) const {
+            return Hash == item.Hash && Prefix == item.Prefix && Key == item.Key;
+        }
+    };
+
     ui32 CurrentRecordIndex = 0;
     THashMap<TStringBuf, TColumnElements> Elements;
+    THashMap<TStorageAddress, std::string> StorageHash;
     std::deque<std::string> Storage;
+    std::deque<TString> StorageStrings;
     const std::shared_ptr<arrow::DataType> Type;
     const TSettings Settings;
 
@@ -88,6 +113,15 @@ public:
             itElements = Elements.emplace(key, key).first;
         }
         itElements->second.AddData(Storage.back(), CurrentRecordIndex);
+    }
+
+    void AddKVOwn(const TStringBuf key, TString&& value) {
+        StorageStrings.emplace_back(std::move(value));
+        auto itElements = Elements.find(key);
+        if (itElements == Elements.end()) {
+            itElements = Elements.emplace(key, key).first;
+        }
+        itElements->second.AddData(StorageStrings.back(), CurrentRecordIndex);
     }
 
     class THeapElements {

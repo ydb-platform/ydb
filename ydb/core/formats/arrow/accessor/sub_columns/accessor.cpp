@@ -1,4 +1,5 @@
 #include "accessor.h"
+#include "direct_builder.h"
 
 #include <ydb/core/formats/arrow/accessor/composite_serial/accessor.h>
 #include <ydb/core/formats/arrow/accessor/plain/constructor.h>
@@ -14,9 +15,8 @@
 
 namespace NKikimr::NArrow::NAccessor {
 
-TConclusion<std::shared_ptr<TSubColumnsArray>> TSubColumnsArray::Make(const std::shared_ptr<IChunkedArray>& sourceArray,
-    const std::shared_ptr<NSubColumns::IDataAdapter>& adapter, const NSubColumns::TSettings& settings) {
-    AFL_VERIFY(adapter);
+TConclusion<std::shared_ptr<TSubColumnsArray>> TSubColumnsArray::Make(
+    const std::shared_ptr<IChunkedArray>& sourceArray, const NSubColumns::TSettings& settings) {
     AFL_VERIFY(sourceArray);
     NSubColumns::TDataBuilder builder(sourceArray->GetDataType(), settings);
     IChunkedArray::TReader reader(sourceArray);
@@ -24,7 +24,7 @@ TConclusion<std::shared_ptr<TSubColumnsArray>> TSubColumnsArray::Make(const std:
     for (ui32 i = 0; i < reader.GetRecordsCount();) {
         auto address = reader.GetReadChunk(i);
         storage.emplace_back(address.GetArray());
-        auto conclusion = adapter->AddDataToBuilders(address.GetArray(), builder);
+        auto conclusion = settings.GetDataExtractor()->AddDataToBuilders(address.GetArray(), builder);
         if (conclusion.IsFail()) {
             return conclusion;
         }
@@ -69,8 +69,7 @@ TString TSubColumnsArray::SerializeToString(const TChunkConstructionData& extern
     ui32 columnIdx = 0;
     for (auto&& i : ColumnsData.GetRecords()->GetColumns()) {
         TChunkConstructionData cData(GetRecordsCount(), nullptr, arrow::utf8(), externalInfo.GetDefaultSerializer());
-        blobRanges.emplace_back(
-            ColumnsData.GetStats().GetAccessorConstructor(columnIdx).SerializeToString(i, cData));
+        blobRanges.emplace_back(ColumnsData.GetStats().GetAccessorConstructor(columnIdx).SerializeToString(i, cData));
         auto* cInfo = proto.AddKeyColumns();
         cInfo->SetSize(blobRanges.back().size());
         ++columnIdx;

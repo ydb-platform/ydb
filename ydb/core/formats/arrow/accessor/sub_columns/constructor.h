@@ -10,7 +10,6 @@ namespace NKikimr::NArrow::NAccessor::NSubColumns {
 class TConstructor: public IConstructor {
 private:
     using TBase = IConstructor;
-    std::shared_ptr<IDataAdapter> DataExtractor = std::make_shared<TFirstLevelSchemaData>();
     TSettings Settings;
 
 public:

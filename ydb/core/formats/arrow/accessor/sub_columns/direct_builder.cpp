@@ -37,7 +37,7 @@ std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
     TSettings::TColumnsDistributor distributor = Settings.BuildDistributor(sumSize, CurrentRecordIndex);
     for (auto rIt = elementsBySize.rbegin(); rIt != elementsBySize.rend(); ++rIt) {
         for (auto&& i : rIt->second) {
-            switch (distributor.TakeAndDetect(rIt->first, i->GetRecordIndexes().size())) { 
+            switch (distributor.TakeAndDetect(rIt->first, i->GetRecordIndexes().size())) {
                 case TSettings::TColumnsDistributor::EColumnType::Separated:
                     columnElements.emplace_back(i);
                     break;
@@ -107,38 +107,40 @@ TOthersData TDataBuilder::MergeOthers(const std::vector<TColumnElements*>& other
     return othersBuilder->Finish(TOthersData::TFinishContext(BuildStats(otherKeys, Settings, recordsCount)));
 }
 
-TStringBuf TDataBuilder::AddKeyOwn(const TStringBuf currentPrefix, std::string&& key) {
+std::string BuildString(const TStringBuf currentPrefix, const TStringBuf key) {
     if (key.find(".") != std::string::npos) {
         if (currentPrefix.size()) {
-            Storage.emplace_back(Sprintf("%s.\"%s\"", currentPrefix.data(), key.data()));
+            return Sprintf("%s.\"%s\"", currentPrefix.data(), key.data());
         } else {
-            Storage.emplace_back(Sprintf("\"%s\"", key.data()));
+            return Sprintf("\"%s\"", key.data());
         }
     } else {
         if (currentPrefix.size()) {
-            Storage.emplace_back(Sprintf("%s.%s", currentPrefix.data(), key.data()));
+            return Sprintf("%s.%s", currentPrefix.data(), key.data());
         } else {
-            Storage.emplace_back(std::move(key));
+            return std::string(key.data(), key.size());
         }
     }
-    return TStringBuf(Storage.back().data(), Storage.back().size());
+}
+
+TStringBuf TDataBuilder::AddKeyOwn(const TStringBuf currentPrefix, std::string&& key) {
+    auto it = StorageHash.find(TStorageAddress(currentPrefix, TStringBuf(key.data(), key.size())));
+    if (it == StorageHash.end()) {
+        Storage.emplace_back(std::move(key));
+        it = StorageHash
+                 .emplace(
+                     TStorageAddress(currentPrefix, key), BuildString(currentPrefix, TStringBuf(Storage.back().data(), Storage.back().size())))
+                 .first;
+    }
+    return TStringBuf(it->second.data(), it->second.size());
 }
 
 TStringBuf TDataBuilder::AddKey(const TStringBuf currentPrefix, const TStringBuf key) {
-    if (key.find(".") != std::string::npos) {
-        if (currentPrefix.size()) {
-            Storage.emplace_back(Sprintf("%s.\"%s\"", currentPrefix.data(), key.data()));
-        } else {
-            Storage.emplace_back(Sprintf("\"%s\"", key.data()));
-        }
-    } else {
-        if (currentPrefix.size()) {
-            Storage.emplace_back(Sprintf("%s.%s", currentPrefix.data(), key.data()));
-        } else {
-            return key;
-        }
+    auto it = StorageHash.find(TStorageAddress(currentPrefix, key));
+    if (it == StorageHash.end()) {
+        it = StorageHash.emplace(TStorageAddress(currentPrefix, key), BuildString(currentPrefix, key)).first;
     }
-    return TStringBuf(Storage.back().data(), Storage.back().size());
+    return TStringBuf(it->second.data(), it->second.size());
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

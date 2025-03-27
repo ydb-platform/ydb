@@ -33,7 +33,7 @@ class TestCopyTable(TestBase):
                           index, ttl, unique, sync)
         self.insert(table_name, all_types, pk_types, index, ttl)
         os.system(f"""
-                  ydb -e {self.get_endpoint()} -d {self.get_database()} tools copy --item destination=copy_{table_name},source={table_name}
+                 ydb -e {self.get_endpoint()} -d {self.get_database()} tools copy --item destination=copy_{table_name},source={table_name}
                   """)
         self.select_after_insert(
             f"copy_{table_name}", all_types, pk_types, index, ttl)

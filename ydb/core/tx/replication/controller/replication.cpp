@@ -168,8 +168,10 @@ public:
             TenantResolver = ctx.Register(CreateTenantResolver(ctx.SelfID, ReplicationId, PathId));
         }
 
+        Cerr << ">>>>> Progress State = " << State << Endl << Flush;
         switch (State) {
         case EState::Ready:
+        case EState::Paused:
             if (!Targets) {
                 return DiscoverTargets(ctx);
             } else {
@@ -182,7 +184,6 @@ public:
                 return ProgressTargets(ctx);
             }
         case EState::Done:
-        case EState::Paused:
         case EState::Error:
             return;
         }

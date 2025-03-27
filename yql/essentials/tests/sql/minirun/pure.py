@@ -120,7 +120,7 @@ def run_test(suite, case, cfg, tmpdir, what, yql_http_file_server):
         opt_res_yson = normalize_result(stable_result_file(opt_res), False)
 
         # Compare results
-        assert opt_res_yson == base_res_yson, 'RESULTS_DIFFER\n' \
+        assert opt_res_yson == base_res_yson, 'RESULTS_DIFFER for mode {}\n'.format(what) + \
             'Result:\n %(opt_res_yson)s\n\n' \
             'Base result:\n %(base_res_yson)s\n' % locals()
 

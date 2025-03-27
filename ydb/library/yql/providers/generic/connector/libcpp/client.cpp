@@ -246,8 +246,10 @@ namespace NYql::NConnector {
                 promise.SetValue({std::move(status), std::move(NApi::TDescribeTableResponse())});
                 return promise.GetFuture();
             }
+
+            auto context = CreateClientContext();
             
-            auto callback = [promise](NYdbGrpc::TGrpcStatus&& status, NApi::TDescribeTableResponse&& resp) mutable {
+            auto callback = [context, promise](NYdbGrpc::TGrpcStatus&& status, NApi::TDescribeTableResponse&& resp) mutable {
                 promise.SetValue({std::move(status), std::move(resp)});
             };
 
@@ -255,7 +257,8 @@ namespace NYql::NConnector {
                 std::move(request),
                 std::move(callback),
                 &NApi::Connector::Stub::AsyncDescribeTable,
-                { .Timeout = timeout }
+                { .Timeout = timeout },
+                context.get()
             );
 
             return promise.GetFuture();
@@ -306,6 +309,16 @@ namespace NYql::NConnector {
             return ConnectionFactory_->Create();
         }
 
+        NYdbGrpc::IQueueClientContextPtr CreateClientContext() {
+            auto context = GrpcClient_->CreateContext();
+
+            if (!context) {
+                throw yexception() << "Client is being shut down";
+            }
+
+            return context;
+        }
+
         template<typename TResponse>
         TIteratorAsyncResult<IStreamIterator<TResponse>> DoEmptyStreamResponse(const grpc::StatusCode& code, TString msg) {
             auto promise = NThreading::NewPromise<TIteratorResult<IStreamIterator<TResponse>>>();
@@ -338,8 +351,9 @@ namespace NYql::NConnector {
         TIteratorAsyncResult<IStreamIterator<TResponse>> ServerSideStreamingCall(
             const NYql::EGenericDataSourceKind& kind, const TRequest& request, TRpcCallback rpc, TDuration timeout = {}) {
             auto promise = NThreading::NewPromise<TIteratorResult<IStreamIterator<TResponse>>>();
+            auto context = CreateClientContext();
 
-            auto callback = [promise](NYdbGrpc::TGrpcStatus&& status, NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr streamProcessor) mutable {
+            auto callback = [context, promise](NYdbGrpc::TGrpcStatus&& status, NYdbGrpc::IStreamRequestReadProcessor<TResponse>::TPtr streamProcessor) mutable {
                 if (!streamProcessor) {
                     promise.SetValue({std::move(status), nullptr});
                     return;
@@ -354,7 +368,8 @@ namespace NYql::NConnector {
                 std::move(request),
                 std::move(callback),
                 rpc,
-                { .Timeout = timeout }
+                { .Timeout = timeout },
+                context.get()
             );
 
             return promise.GetFuture();

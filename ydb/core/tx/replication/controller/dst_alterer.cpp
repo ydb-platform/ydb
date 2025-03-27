@@ -208,7 +208,6 @@ IActor* CreateDstAlterer(TReplication* replication, ui64 targetId, const TActorC
 IActor* CreateDstAlterer(const TActorId& parent, ui64 schemeShardId,
         ui64 rid, ui64 tid, TReplication::ETargetKind kind, const TPathId& dstPathId, TReplication::EState desiredState)
 {
-    Cerr << ">>>>> CreateDstAlterer desiredState = " << desiredState << Endl << Flush;
     return new TDstAlterer(parent, schemeShardId, rid, tid, kind, dstPathId, desiredState);
 }
 

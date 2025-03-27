@@ -43,6 +43,7 @@ public:
         Alter,
         Done,
         Removing,
+        Paused,
         Error = 255
     };
 

@@ -187,6 +187,8 @@ void TTargetBase::Progress(const TActorContext& ctx) {
             DstRemover = ctx.Register(CreateDstRemover(Replication, Id, ctx));
         }
         break;
+    case EDstState::Paused:
+        break;
     case EDstState::Error:
         break;
     }

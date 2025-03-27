@@ -62,18 +62,18 @@ TExprNode::TPtr BuildFilterFromConjuncts(TExprNode::TPtr input, TVector<TExprNod
         .Done().Ptr();
 }
 
-bool TPushFilterRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprContext& ctx, 
+std::shared_ptr<IOperator> TPushFilterRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprContext& ctx, 
     const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, 
     TTypeAnnotationContext& typeCtx, 
     const TKikimrConfiguration::TPtr& config) {
 
     if (input->Kind != EOperator::Filter) {
-        return false;
+        return input;
     }
 
     auto filter = std::static_pointer_cast<TOpFilter>(input);
     if (filter->GetInput()->Kind != EOperator::Join) {
-        return false;
+        return input;
     }
 
     auto join = std::static_pointer_cast<TOpJoin>(filter->GetInput());
@@ -124,7 +124,7 @@ bool TPushFilterRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprCont
     }
 
     if (!pushLeft.size() && !pushRight.size() && !joinConditions.size()) {
-        return false;
+        return input;
     }
 
     auto joinNode = TKqpOpJoin(join->Node);
@@ -165,11 +165,9 @@ bool TPushFilterRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprCont
 
     if (topLevelPreds.size()) {
         auto newFilter = BuildFilterFromConjuncts(newJoin, topLevelPreds, ctx);
-        input = std::make_shared<TOpFilter>(newFilter);
-        return true;
+        return std::make_shared<TOpFilter>(newFilter);
     } else {
-        input = std::make_shared<TOpJoin>(newJoin);
-        return true;
+        return std::make_shared<TOpJoin>(newJoin);
     }
 }
 

@@ -97,7 +97,7 @@ private:
 };
 
 struct TFakeGenericClient: public NConnector::IClient {
-    NConnector::TDescribeTableAsyncResult DescribeTable(const NConnector::NApi::TDescribeTableRequest& request) override {
+    NConnector::TDescribeTableAsyncResult DescribeTable(const NConnector::NApi::TDescribeTableRequest& request, TDuration) override {
         UNIT_ASSERT_VALUES_EQUAL(request.table(), "test_table");
         NConnector::TResult<NConnector::NApi::TDescribeTableResponse> result;
         auto& resp = result.Response.emplace();
@@ -146,7 +146,7 @@ struct TFakeGenericClient: public NConnector::IClient {
         return NThreading::MakeFuture<NConnector::TDescribeTableAsyncResult::value_type>(std::move(result));
     }
 
-    NConnector::TListSplitsStreamIteratorAsyncResult ListSplits(const NConnector::NApi::TListSplitsRequest& request) override {
+    NConnector::TListSplitsStreamIteratorAsyncResult ListSplits(const NConnector::NApi::TListSplitsRequest& request, TDuration) override {
         Y_UNUSED(request);
 
         NConnector::TIteratorResult<NConnector::IListSplitsStreamIterator> iteratorResult{
@@ -157,7 +157,7 @@ struct TFakeGenericClient: public NConnector::IClient {
         return NThreading::MakeFuture<NConnector::TIteratorResult<NConnector::IListSplitsStreamIterator>>(std::move(iteratorResult));
     }
 
-    NConnector::TReadSplitsStreamIteratorAsyncResult ReadSplits(const NConnector::NApi::TReadSplitsRequest& request) override {
+    NConnector::TReadSplitsStreamIteratorAsyncResult ReadSplits(const NConnector::NApi::TReadSplitsRequest& request, TDuration) override {
         Y_UNUSED(request);
         try {
             throw std::runtime_error("ReadSplits unimplemented");

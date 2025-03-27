@@ -14,8 +14,8 @@ namespace NKikimr {
     ////////////////////////////////////////////////////////////////////////////
     // Traverse data parts for a single key
     void TReadBatcher::StartTraverse(const TLogoBlobID& id, void *cookie, ui8 queryPartId, ui32 queryShift, ui32 querySize) {
-        Y_DEBUG_ABORT_UNLESS(id.PartId() == 0);
-        Y_DEBUG_ABORT_UNLESS(!Traversing);
+        Y_VERIFY_DEBUG_S(id.PartId() == 0, Ctx->VCtx->VDiskLogPrefix);
+        Y_VERIFY_DEBUG_S(!Traversing, Ctx->VCtx->VDiskLogPrefix);
         ClearTmpItems();
         CurID = id;
         Cookie = cookie;
@@ -29,7 +29,7 @@ namespace NKikimr {
 
     // We have data on disk
     void TReadBatcher::operator () (const TDiskPart &data, NMatrix::TVectorType parts) {
-        Y_DEBUG_ABORT_UNLESS(Traversing);
+        Y_VERIFY_DEBUG_S(Traversing, Ctx->VCtx->VDiskLogPrefix);
         if (QueryPartId && !parts.Get(QueryPartId - 1)) {
             return; // we have no requested part here
         }
@@ -44,7 +44,7 @@ namespace NKikimr {
         if (data.Size == TDiskBlob::HeaderSize + blobSize) { // skip the header, if it is present
             partOffs += TDiskBlob::HeaderSize;
         } else {
-            Y_ABORT_UNLESS(blobSize == data.Size);
+            Y_VERIFY_S(blobSize == data.Size, Ctx->VCtx->VDiskLogPrefix);
         }
 
         for (ui8 i : parts) {
@@ -59,7 +59,7 @@ namespace NKikimr {
                     tmpItem.UpdateWithMemItem(partId, Cookie, TRope());
                 } else if (tmpItem.ShouldUpdateWithDisk()) {
                     const ui32 size = QuerySize ? QuerySize : partSize - QueryShift;
-                    Y_DEBUG_ABORT_UNLESS(size);
+                    Y_VERIFY_DEBUG_S(size, Ctx->VCtx->VDiskLogPrefix);
                     tmpItem.UpdateWithDiskItem(partId, Cookie, TDiskPart(data.ChunkIdx, partOffs + QueryShift, size));
                 }
             }
@@ -77,10 +77,10 @@ namespace NKikimr {
             // put data item iff we gather all parts OR we need a concrete part and parts contain it
             for (TDiskBlob::TPartIterator it = diskBlob.begin(), e = diskBlob.end(); it != e; ++it) {
                 const ui8 partId = it.GetPartId();
-                Y_ABORT_UNLESS(partId > 0);
+                Y_VERIFY_S(partId > 0, Ctx->VCtx->VDiskLogPrefix);
                 const TLogoBlobID blobId(CurID, partId);
                 const ui32 partSize = diskBlob.GetPartSize(partId - 1);
-                Y_ABORT_UNLESS(partSize == Ctx->VCtx->Top->GType.PartSize(blobId));
+                Y_VERIFY_S(partSize == Ctx->VCtx->Top->GType.PartSize(blobId), Ctx->VCtx->VDiskLogPrefix);
                 if (QueryPartId == 0 || QueryPartId == partId) {
                     FoundAnything = true;
                     auto& item = TmpItems[partId - 1];
@@ -109,7 +109,7 @@ namespace NKikimr {
         for (ui8 i : missingParts) {
             // NOT_YET
             if (QueryPartId == 0 || i + 1 == QueryPartId) {
-                Y_ABORT_UNLESS(TmpItems[i].Empty());
+                Y_VERIFY_S(TmpItems[i].Empty(), Ctx->VCtx->VDiskLogPrefix);
                 FoundAnything = true;
                 TmpItems[i].UpdateWithNotYet(TLogoBlobID(CurID, i + 1), Cookie);
             }
@@ -144,11 +144,11 @@ namespace NKikimr {
     }
 
     void TReadBatcher::PrepareReadPlan() {
-        Y_ABORT_UNLESS(!Result->DiskDataItemPtrs.empty() && Result->GlueReads.empty());
+        Y_VERIFY_S(!Result->DiskDataItemPtrs.empty() && Result->GlueReads.empty(), Ctx->VCtx->VDiskLogPrefix);
 
         // sort read requests
         Sort(Result->DiskDataItemPtrs.begin(), Result->DiskDataItemPtrs.end(), TDataItem::DiskPartLess);
-        Y_ABORT_UNLESS(CheckDiskDataItemsOrdering(true));
+        Y_VERIFY_S(CheckDiskDataItemsOrdering(true), Ctx->VCtx->VDiskLogPrefix);
 
         // plan real requests
         TGlueRead *back = nullptr;
@@ -164,8 +164,10 @@ namespace NKikimr {
                 } else {
                     ui32 prevEnd = back->Part.Offset + back->Part.Size;
                     ui32 nextBeg = item->ActualRead.Offset;
-                    Y_ABORT_UNLESS(prevEnd <= nextBeg, "back: %s item: %s dataItems: %s",
-                           back->Part.ToString().data(), item->ActualRead.ToString().data(), DiskDataItemsToString().data());
+                    Y_VERIFY_S(prevEnd <= nextBeg, Ctx->VCtx->VDiskLogPrefix
+                        << "back: " << back->Part.ToString()
+                        << " item: "<< item->ActualRead.ToString()
+                        << " dataItems: " << DiskDataItemsToString());
 
                     if (nextBeg <= prevEnd + Ctx->PDiskCtx->Dsk->GlueRequestDistanceBytes) {
                         // glue requests

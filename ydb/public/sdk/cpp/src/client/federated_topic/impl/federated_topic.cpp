@@ -58,7 +58,7 @@ NTopic::TTopicClientSettings FromFederated(const TFederatedTopicClientSettings& 
 }
 
 TFederatedTopicClient::TFederatedTopicClient(const TDriver& driver, const TFederatedTopicClientSettings& settings)
-    : Impl_(std::make_shared<TImpl>(CreateInternalInterface(driver), settings))
+    : Impl_(std::make_shared<TImpl>(driver, CreateInternalInterface(driver), settings))
 {
     ProvideCodec(NTopic::ECodec::GZIP, std::make_unique<NTopic::TGzipCodec>());
     ProvideCodec(NTopic::ECodec::LZOP, std::make_unique<NTopic::TUnsupportedCodec>());
@@ -86,8 +86,8 @@ void TFederatedTopicClient::OverrideCodec(NTopic::ECodec codecId, std::unique_pt
     return Impl_->OverrideCodec(codecId, std::move(codecImpl));
 }
 
-NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> TFederatedTopicClient::GetAllClusterInfo() {
-    return Impl_->GetAllClusterInfo();
+NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> TFederatedTopicClient::GetAllClusterInfo(bool withClients) {
+    return Impl_->GetAllClusterInfo(withClients);
 }
 
 void TFederatedTopicClient::TClusterInfo::AdjustTopicClientSettings(NTopic::TTopicClientSettings& settings) const {

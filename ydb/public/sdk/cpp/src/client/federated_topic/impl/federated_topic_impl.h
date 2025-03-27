@@ -17,8 +17,9 @@ namespace NYdb::inline Dev::NFederatedTopic {
 class TFederatedTopicClient::TImpl {
 public:
     // Constructor for main client.
-    TImpl(std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TFederatedTopicClientSettings& settings)
+    TImpl(const TDriver& driver, std::shared_ptr<TGRpcConnectionsImpl>&& connections, const TFederatedTopicClientSettings& settings)
         : Connections(std::move(connections))
+        , Driver(driver)
         , ClientSettings(settings)
     {
         InitObserver();
@@ -65,7 +66,7 @@ public:
     std::shared_ptr<NTopic::ISimpleBlockingWriteSession> CreateSimpleBlockingWriteSession(const TFederatedWriteSessionSettings& settings);
     std::shared_ptr<NTopic::IWriteSession> CreateWriteSession(const TFederatedWriteSessionSettings& settings);
 
-    NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> GetAllClusterInfo();
+    NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> GetAllClusterInfo(bool withClients = false);
 
     std::shared_ptr<TFederatedDbObserver> GetObserver() {
         std::lock_guard guard(Lock);
@@ -81,6 +82,7 @@ private:
 
 private:
     std::shared_ptr<TGRpcConnectionsImpl> Connections;
+    TDriver Driver;
     const TFederatedTopicClientSettings ClientSettings;
     std::shared_ptr<TFederatedDbObserver> Observer;
     std::shared_ptr<std::unordered_map<NTopic::ECodec, std::unique_ptr<NTopic::ICodec>>> ProvidedCodecs =

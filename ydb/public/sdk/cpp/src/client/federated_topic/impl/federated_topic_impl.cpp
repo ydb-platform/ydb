@@ -5,6 +5,8 @@
 
 namespace NYdb::inline Dev::NFederatedTopic {
 
+NTopic::TTopicClientSettings FromFederated(const TFederatedTopicClientSettings& settings);
+
 std::shared_ptr<IFederatedReadSession>
 TFederatedTopicClient::TImpl::CreateReadSession(const TFederatedReadSessionSettings& settings) {
     InitObserver();
@@ -72,10 +74,10 @@ IOutputStream& operator<<(IOutputStream& out, NTopic::TDescribeTopicSettings con
     return out;
 }
 
-NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> TFederatedTopicClient::TImpl::GetAllClusterInfo() {
+NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> TFederatedTopicClient::TImpl::GetAllClusterInfo(bool withClients) {
     InitObserver();
     return Observer->WaitForFirstState().Apply(
-            [weakObserver = std::weak_ptr(Observer)] (const auto& ) {
+            [weakObserver = std::weak_ptr(Observer), clientSettings = ClientSettings, driver = Driver, withClients] (const auto& ) {
                 auto observer = weakObserver.lock();
                 if (!observer) {
                     throw yexception() << "Lost observer"; // TODO better message?
@@ -101,6 +103,11 @@ NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> TFederated
                     dbinfo.Name = db->name();
                     dbinfo.Endpoint = db->endpoint();
                     dbinfo.Path = db->path();
+                    if (withClients) {
+                        auto topicClientSettings = FromFederated(clientSettings);
+                        dbinfo.AdjustTopicClientSettings(topicClientSettings);
+                        dbinfo.TopicClient = std::make_shared<NTopic::TTopicClient>(driver, topicClientSettings);
+                    }
                 }
                 return result;
             });

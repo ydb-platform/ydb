@@ -70,7 +70,7 @@ protected:
     TDuration BatchMaxDelay;
     THolder<NScripting::TExplainYqlResult> ValidateResult;
     bool ReadingSomethingFromStdin = false;
-    NYdb::NQuery::ESyntax SyntaxType = NYdb::NQuery::ESyntax::YqlV1;
+    NQuery::ESyntax SyntaxType = NQuery::ESyntax::YqlV1;
 };
 
 }

@@ -183,6 +183,7 @@ class TestRestartNodes(object):
                     logger.error(f"In progress: Caught an exception during node killing executing: {x}")
                 except:
                     logger.error(f"In progress: Caught an unknown exception during node killing executing")
+                break
         logger.info(f"In progress: finished killing nodes")
                 
 
@@ -229,8 +230,8 @@ class TestRestartNodes(object):
         time.sleep(35)
         logger.info("In progress: woke up, starting nodes again")
         # TODO: investigate, maybe here should be no repeating start() calls
-        for node in self.cluster.nodes.values():
-            node.start()
+        # for node in self.cluster.nodes.values():
+        #     node.start()
         logger.info("In progress: stared nodes again")
 
         logger.info("In progress: starting altering table")

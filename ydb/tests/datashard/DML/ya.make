@@ -1,6 +1,9 @@
 PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
+FORK_SUBTESTS()
+SPLIT_FACTOR(13)
+
 SIZE(LARGE)
 TAG(ya:fat)
 

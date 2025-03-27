@@ -6,7 +6,7 @@ import pytest
 
 from ydb.tests.sql.lib.test_base import TestBase
 from ydb.tests.stress.oltp_workload.workload import cleanup_type_name
-from ydb.tests.datashard.lib.create_table import create_table, pk_types, non_pk_types, index_first, index_second, index_first_not_Bool
+from ydb.tests.datashard.lib.create_table import create_table, create_ttl, pk_types, non_pk_types, index_first, index_second, index_first_not_Bool
 
 
 ttl_types = {
@@ -114,12 +114,10 @@ class TestTTL(TestBase):
         sql_create_table = create_table(
             table_name, columns, pk_columns, index_columns, unique, sync)
         self.query(sql_create_table)
-        if ttl == "Uint32" or ttl == "Uint64" or ttl == "DyNumber":
-            os.system(
-                f"ydb -e {self.get_endpoint()} -d {self.get_database()} table ttl set --column ttl_{ttl} --expire-after 1 --unit seconds {table_name}")
-        else:
-            os.system(
-                f"ydb -e {self.get_endpoint()} -d {self.get_database()} table ttl set --column ttl_{ttl} --expire-after 1 {table_name}")
+        if ttl != "":
+            sql_ttl = create_ttl(f"ttl_{cleanup_type_name(ttl)}", {"PT0S": ""}, "SECONDS" if ttl ==
+                                 "Uint32" or ttl == "Uint64" or ttl == "DyNumber" else "", table_name)
+            self.query(sql_ttl)
         self.insert(table_name, pk_types, all_types, index, ttl)
         self.select(table_name, pk_types, all_types, index)
 
@@ -192,7 +190,7 @@ class TestTTL(TestBase):
             sql_select += f"col_index_{cleanup_type_name(type_name)}={index[type_name].format(value)} and "
         sql_select += f"""pk_Int64={pk_types["Int64"].format(value)}"""
         start_time = time.time()
-        max_wait_time = 300
+        max_wait_time = 150
         while True:
             rows = self.query(sql_select)
             if (len(rows) == 1 and rows[0].count == expected_count_rows) or expected_count_rows == 1:

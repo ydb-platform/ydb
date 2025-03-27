@@ -57,7 +57,7 @@
 
 #### Общая схема работы с ветками {#release_branch_scheme}
 
-![release_branches](_assets/release_branches.png)
+![release_branches](_assets/release_branch.svg)
 
 Цикл выпуска для нечетного мажорного релиза начинается с отведения от `main` ветки участником [команды {{ ydb-short-name }}](https://github.com/orgs/ydb-platform/teams/engineering). Название релизной ветки начинается с префикса `stable-`, за которым следует мажорная версия с точками, замененными на дефис (например, `stable-23-1`).
 

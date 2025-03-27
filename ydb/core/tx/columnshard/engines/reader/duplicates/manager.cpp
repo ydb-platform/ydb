@@ -225,8 +225,6 @@ void TDuplicateFilterConstructor::DoGetFilter(
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "request_duplicates_filter")("source_id", reqSourceId);
     const auto reqSourceRange = Intervals.GetRangeBySourceId(reqSourceId);
 
-    AFL_VERIFY(SortedSources.empty() || SortedSources.front()->GetSourceId() == reqSourceId || Intervals.GetRangeBySourceId(SortedSources.front()->GetSourceId()).GetFirstIdx() > Intervals.GetRangeBySourceId(reqSourceId).GetLastIdx())("sorted_sources", SortedSources.size());
-
     while (!SkippedSources.empty() || !SortedSources.empty()) {
         std::shared_ptr<NCommon::IDataSource> source = SkippedSources.empty() ? SortedSources.front() : SkippedSources.front();
         const TIntervalsRange range = Intervals.GetRangeBySourceId(source->GetSourceId());

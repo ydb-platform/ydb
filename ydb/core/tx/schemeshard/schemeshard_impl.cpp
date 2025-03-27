@@ -2984,12 +2984,12 @@ void TSchemeShard::PersistExternalTable(NIceDb::TNiceDb &db, TPathId pathId, con
     }
 }
 
-void TSchemeShard::PersistAlterExternalTable(NIceDb::TNiceDb &db, TPathId pathId, const TExternalTableInfo::TPtr newExternalTable, const TExternalTableInfo::TPtr previousExternalTable) {
+void TSchemeShard::PersistAlterExternalTable(NIceDb::TNiceDb &db, TPathId pathId, const TExternalTableInfo::TPtr newExternalTable, const TExternalTableInfo::TPtr oldExternalTable) {
     Y_ABORT_UNLESS(IsLocalId(pathId));
 
-    for (const auto& [previousColId, _] : previousExternalTable->Columns) {
-        if (!newExternalTable->Columns.contains(previousColId)) {
-            db.Table<Schema::MigratedColumns>().Key(pathId.OwnerId, pathId.LocalPathId, previousColId).Delete();
+    for (const auto& [oldColId, _] : oldExternalTable->Columns) {
+        if (!newExternalTable->Columns.contains(oldColId)) {
+            db.Table<Schema::MigratedColumns>().Key(pathId.OwnerId, pathId.LocalPathId, oldColId).Delete();
         }
     }
 

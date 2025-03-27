@@ -842,7 +842,7 @@ public:
 
     // ExternalTable
     void PersistExternalTable(NIceDb::TNiceDb &db, TPathId pathId, const TExternalTableInfo::TPtr externalTable);
-    void PersistAlterExternalTable(NIceDb::TNiceDb &db, TPathId pathId, const TExternalTableInfo::TPtr newExternalTable, const TExternalTableInfo::TPtr previousExternalTable);
+    void PersistAlterExternalTable(NIceDb::TNiceDb &db, TPathId pathId, const TExternalTableInfo::TPtr newExternalTable, const TExternalTableInfo::TPtr oldExternalTable);
     void PersistRemoveExternalTable(NIceDb::TNiceDb& db, TPathId pathId);
 
     // ExternalDataSource

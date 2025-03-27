@@ -182,6 +182,7 @@ public:
                 return ProgressTargets(ctx);
             }
         case EState::Done:
+        case EState::Paused:
         case EState::Error:
             return;
         }

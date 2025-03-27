@@ -27,6 +27,7 @@ public:
         Ready,
         Done,
         Removing,
+        Paused,
         Error = 255
     };
 

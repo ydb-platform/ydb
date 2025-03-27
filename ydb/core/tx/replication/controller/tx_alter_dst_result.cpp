@@ -99,6 +99,7 @@ public:
         case TReplication::EState::Ready:
             return TReplication::EDstState::Ready;
         case TReplication::EState::Error:
+        case TReplication::EState::Paused:
             return TReplication::EDstState::Error;
         case TReplication::EState::Removing:
             return TReplication::EDstState::Removing;

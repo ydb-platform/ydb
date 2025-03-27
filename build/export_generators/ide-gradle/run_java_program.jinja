@@ -27,8 +27,8 @@ val runJav{{ loop.index }} = task<JavaExec>("runJavaProgram{{ loop.index }}") {
 {%-                if not loop.first %}
 {%-                    if proto_template and (run.out_dir|select("eq", arg)|length or run.out|select("eq", arg)|length) %}
         {{ PatchGeneratedProto(arg) }},
-{%-                    else -%}
-        {{ PatchRoots(arg) }},
+{%-                    else %}
+        {{ PatchRoots(arg, run.tool|select("in", arg)|length) }},
 {%-                    endif -%}
 {%-                endif -%}
 {%-            endfor %}

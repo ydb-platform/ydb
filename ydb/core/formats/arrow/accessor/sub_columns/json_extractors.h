@@ -20,7 +20,7 @@ public:
 class IJsonObjectExtractor {
 private:
     const TStringBuf Prefix;
-    virtual TConclusionStatus DoFill(TDataBuilder& dataBuilder, std::deque<std::shared_ptr<IJsonObjectExtractor>>& iterators) = 0;
+    virtual TConclusionStatus DoFill(TDataBuilder& dataBuilder, std::deque<std::unique_ptr<IJsonObjectExtractor>>& iterators) = 0;
 
 protected:
     TStringBuf GetPrefix() const {
@@ -34,7 +34,7 @@ public:
         : Prefix(prefix) {
     }
 
-    [[nodiscard]] TConclusionStatus Fill(TDataBuilder& dataBuilder, std::deque<std::shared_ptr<IJsonObjectExtractor>>& iterators) {
+    [[nodiscard]] TConclusionStatus Fill(TDataBuilder& dataBuilder, std::deque<std::unique_ptr<IJsonObjectExtractor>>& iterators) {
         return DoFill(dataBuilder, iterators);
     }
 };
@@ -43,7 +43,7 @@ class TKVExtractor: public IJsonObjectExtractor {
 private:
     using TBase = IJsonObjectExtractor;
     NBinaryJson::TObjectIterator Iterator;
-    virtual TConclusionStatus DoFill(TDataBuilder& dataBuilder, std::deque<std::shared_ptr<IJsonObjectExtractor>>& iterators) override;
+    virtual TConclusionStatus DoFill(TDataBuilder& dataBuilder, std::deque<std::unique_ptr<IJsonObjectExtractor>>& iterators) override;
 
 public:
     TKVExtractor(const NBinaryJson::TObjectIterator& iterator, const TStringBuf prefix)
@@ -57,7 +57,7 @@ private:
     using TBase = IJsonObjectExtractor;
     NBinaryJson::TArrayIterator Iterator;
 
-    virtual TConclusionStatus DoFill(TDataBuilder& dataBuilder, std::deque<std::shared_ptr<IJsonObjectExtractor>>& iterators) override;
+    virtual TConclusionStatus DoFill(TDataBuilder& dataBuilder, std::deque<std::unique_ptr<IJsonObjectExtractor>>& iterators) override;
 
 public:
     TArrayExtractor(const NBinaryJson::TArrayIterator& iterator, const TStringBuf prefix)

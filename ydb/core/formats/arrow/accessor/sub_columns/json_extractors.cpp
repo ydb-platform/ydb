@@ -10,7 +10,7 @@
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
-TConclusionStatus TArrayExtractor::DoFill(TDataBuilder& dataBuilder, std::deque<std::shared_ptr<IJsonObjectExtractor>>& iterators) {
+TConclusionStatus TArrayExtractor::DoFill(TDataBuilder& dataBuilder, std::deque<std::unique_ptr<IJsonObjectExtractor>>& iterators) {
     ui32 idx = 0;
     while (Iterator.HasNext()) {
         auto value = Iterator.Next();
@@ -34,9 +34,9 @@ TConclusionStatus TArrayExtractor::DoFill(TDataBuilder& dataBuilder, std::deque<
         } else if (value.GetType() == NBinaryJson::EEntryType::Container) {
             auto container = value.GetContainer();
             if (container.GetType() == NBinaryJson::EContainerType::Array) {
-                iterators.emplace_back(std::make_shared<TArrayExtractor>(container.GetArrayIterator(), key));
+                iterators.emplace_back(std::make_unique<TArrayExtractor>(container.GetArrayIterator(), key));
             } else if (container.GetType() == NBinaryJson::EContainerType::Object) {
-                iterators.emplace_back(std::make_shared<TKVExtractor>(container.GetObjectIterator(), key));
+                iterators.emplace_back(std::make_unique<TKVExtractor>(container.GetObjectIterator(), key));
             } else {
                 return TConclusionStatus::Fail("unexpected top value scalar in container iterator");
             }
@@ -50,7 +50,7 @@ TConclusionStatus TArrayExtractor::DoFill(TDataBuilder& dataBuilder, std::deque<
     return TConclusionStatus::Success();
 }
 
-TConclusionStatus TKVExtractor::DoFill(TDataBuilder& dataBuilder, std::deque<std::shared_ptr<IJsonObjectExtractor>>& iterators) {
+TConclusionStatus TKVExtractor::DoFill(TDataBuilder& dataBuilder, std::deque<std::unique_ptr<IJsonObjectExtractor>>& iterators) {
     while (Iterator.HasNext()) {
         auto [jsonKey, value] = Iterator.Next();
         if (jsonKey.GetType() != NBinaryJson::EEntryType::String) {
@@ -76,9 +76,10 @@ TConclusionStatus TKVExtractor::DoFill(TDataBuilder& dataBuilder, std::deque<std
         } else if (value.GetType() == NBinaryJson::EEntryType::Container) {
             auto container = value.GetContainer();
             if (container.GetType() == NBinaryJson::EContainerType::Array) {
-                iterators.emplace_back(std::make_shared<TArrayExtractor>(container.GetArrayIterator(), key));
+                continue;
+                iterators.emplace_back(std::make_unique<TArrayExtractor>(container.GetArrayIterator(), key));
             } else if (container.GetType() == NBinaryJson::EContainerType::Object) {
-                iterators.emplace_back(std::make_shared<TKVExtractor>(container.GetObjectIterator(), key));
+                iterators.emplace_back(std::make_unique<TKVExtractor>(container.GetObjectIterator(), key));
             } else {
                 return TConclusionStatus::Fail("unexpected top value scalar in container iterator");
             }

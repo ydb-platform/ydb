@@ -18,7 +18,7 @@ namespace NKikimr::NArrow::NAccessor::NSubColumns {
 class TColumnElements {
 private:
     YDB_READONLY_DEF(TStringBuf, KeyName);
-    YDB_READONLY_DEF(std::deque<std::optional<TStringBuf>>, Values);
+    YDB_READONLY_DEF(std::deque<TStringBuf>, Values);
     YDB_READONLY_DEF(std::vector<ui32>, RecordIndexes);
     YDB_READONLY(ui32, DataSize, 0);
     std::shared_ptr<IChunkedArray> Accessor;
@@ -34,11 +34,6 @@ public:
 
     TColumnElements(const TStringBuf key)
         : KeyName(key) {
-    }
-
-    void AddNull(const ui32 index) {
-        Values.emplace_back(std::nullopt);
-        RecordIndexes.emplace_back(index);
     }
 
     void AddData(const TStringBuf sb, const ui32 index) {
@@ -66,39 +61,8 @@ public:
         ++CurrentRecordIndex;
     }
 
-    TStringBuf AddKeyOwn(const TStringBuf currentPrefix, std::string&& key) {
-        if (key.find(".") != std::string::npos) {
-            if (currentPrefix.size()) {
-                Storage.emplace_back(std::string(currentPrefix.data(), currentPrefix.size()) + ".\"" + key + "\"");
-            } else {
-                Storage.emplace_back(std::string("\"") + key + "\"");
-            }
-        } else {
-            if (currentPrefix.size()) {
-                Storage.emplace_back(std::string(currentPrefix.data(), currentPrefix.size()) + "." + key);
-            } else {
-                Storage.emplace_back(std::move(key));
-            }
-        }
-        return TStringBuf(Storage.back().data(), Storage.back().size());
-    }
-
-    TStringBuf AddKey(const TStringBuf currentPrefix, const TStringBuf key) {
-        if (key.find(".") != std::string::npos) {
-            if (currentPrefix.size()) {
-                Storage.emplace_back(std::string(currentPrefix.data(), currentPrefix.size()) + ".\"" + std::string(key.data(), key.size()) + "\"");
-            } else {
-                Storage.emplace_back(std::string("\"") + std::string(key.data(), key.size()) + "\"");
-            }
-        } else {
-            if (currentPrefix.size()) {
-                Storage.emplace_back(std::string(currentPrefix.data(), currentPrefix.size()) + "." + std::string(key.data(), key.size()));
-            } else {
-                return key;
-            }
-        }
-        return TStringBuf(Storage.back().data(), Storage.back().size());
-    }
+    TStringBuf AddKeyOwn(const TStringBuf currentPrefix, std::string&& key);
+    TStringBuf AddKey(const TStringBuf currentPrefix, const TStringBuf key);
 
     void AddKVNull(const TStringBuf key) {
         auto itElements = Elements.find(key);
@@ -152,11 +116,7 @@ public:
         }
 
         const TStringBuf* GetValuePointer() const {
-            if (Elements->GetValues()[Index].has_value()) {
-                return &*Elements->GetValues()[Index];
-            } else {
-                return nullptr;
-            }
+            return &Elements->GetValues()[Index];
         }
 
         bool operator<(const THeapElements& item) const {

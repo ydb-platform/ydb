@@ -26,11 +26,11 @@ TConclusionStatus TFirstLevelSchemaData::DoAddDataToBuilders(
             //        const NBinaryJson::TBinaryJson* bJsonParsed = &bJson;
             auto reader = NBinaryJson::TBinaryJsonReader::Make(TStringBuf(view.data(), view.size()));
             auto cursor = reader->GetRootCursor();
-            std::deque<std::shared_ptr<IJsonObjectExtractor>> iterators;
+            std::deque<std::unique_ptr<IJsonObjectExtractor>> iterators;
             if (cursor.GetType() == NBinaryJson::EContainerType::Object) {
-                iterators.push_back(std::make_shared<TKVExtractor>(cursor.GetObjectIterator(), TStringBuf()));
+                iterators.push_back(std::make_unique<TKVExtractor>(cursor.GetObjectIterator(), TStringBuf()));
             } else if (cursor.GetType() == NBinaryJson::EContainerType::Array) {
-                iterators.push_back(std::make_shared<TArrayExtractor>(cursor.GetArrayIterator(), TStringBuf()));
+                iterators.push_back(std::make_unique<TArrayExtractor>(cursor.GetArrayIterator(), TStringBuf()));
             }
             while (iterators.size()) {
                 const auto conclusion = iterators.front()->Fill(dataBuilder, iterators);

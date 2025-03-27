@@ -11,11 +11,7 @@ void TColumnElements::BuildSparsedAccessor(const ui32 recordsCount) {
     AFL_VERIFY(!Accessor);
     auto recordsBuilder = TSparsedArray::MakeBuilderUtf8(RecordIndexes.size(), DataSize);
     for (ui32 idx = 0; idx < RecordIndexes.size(); ++idx) {
-        if (Values[idx]) {
-            recordsBuilder.AddRecord(RecordIndexes[idx], *Values[idx]);
-        } else {
-            recordsBuilder.AddNull(RecordIndexes[idx]);
-        }
+        recordsBuilder.AddRecord(RecordIndexes[idx], Values[idx]);
     }
     Accessor = recordsBuilder.Finish(recordsCount);
 }
@@ -24,11 +20,7 @@ void TColumnElements::BuildPlainAccessor(const ui32 recordsCount) {
     AFL_VERIFY(!Accessor);
     auto builder = TTrivialArray::MakeBuilderUtf8(recordsCount, DataSize);
     for (auto it = RecordIndexes.begin(); it != RecordIndexes.end(); ++it) {
-        if (auto v = Values[it - RecordIndexes.begin()]) {
-            builder.AddRecord(*it, *v);
-        } else {
-            builder.AddNull(*it);
-        }
+        builder.AddRecord(*it, Values[it - RecordIndexes.begin()]);
     }
     Accessor = builder.Finish(recordsCount);
 }
@@ -113,6 +105,40 @@ TOthersData TDataBuilder::MergeOthers(const std::vector<TColumnElements*>& other
         }
     }
     return othersBuilder->Finish(TOthersData::TFinishContext(BuildStats(otherKeys, Settings, recordsCount)));
+}
+
+TStringBuf TDataBuilder::AddKeyOwn(const TStringBuf currentPrefix, std::string&& key) {
+    if (key.find(".") != std::string::npos) {
+        if (currentPrefix.size()) {
+            Storage.emplace_back(Sprintf("%s.\"%s\"", currentPrefix.data(), key.data()));
+        } else {
+            Storage.emplace_back(Sprintf("\"%s\"", key.data()));
+        }
+    } else {
+        if (currentPrefix.size()) {
+            Storage.emplace_back(Sprintf("%s.%s", currentPrefix.data(), key.data()));
+        } else {
+            Storage.emplace_back(std::move(key));
+        }
+    }
+    return TStringBuf(Storage.back().data(), Storage.back().size());
+}
+
+TStringBuf TDataBuilder::AddKey(const TStringBuf currentPrefix, const TStringBuf key) {
+    if (key.find(".") != std::string::npos) {
+        if (currentPrefix.size()) {
+            Storage.emplace_back(Sprintf("%s.\"%s\"", currentPrefix.data(), key.data()));
+        } else {
+            Storage.emplace_back(Sprintf("\"%s\"", key.data()));
+        }
+    } else {
+        if (currentPrefix.size()) {
+            Storage.emplace_back(Sprintf("%s.%s", currentPrefix.data(), key.data()));
+        } else {
+            return key;
+        }
+    }
+    return TStringBuf(Storage.back().data(), Storage.back().size());
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

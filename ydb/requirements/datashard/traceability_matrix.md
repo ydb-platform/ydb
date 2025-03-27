@@ -37,24 +37,3 @@
 | REQ-DS-001-1.3 | Import from Parquet - 100GB | Validate import from Parquet file. |  | Pending |
 | REQ-DS-001-1.4 | Export to CSV - 1TB | Validate export to CSV data. |  | Pending |
 
-### Performance 
-#### REQ-DS-002: Performance Testing of Import/Export Operations
-**Description**: Measure and document performance metrics for import/export operations to ensure scalability and efficiency.
-
-| Case ID | Name | Description | Issues |  Status |
-|---------|------|-------------|--------|:--------|
-| REQ-DS-002-2.1 | Import Performance - 1GB | Measure import speed with 1GB of data. |  | Pending |
-| REQ-DS-002-2.2 | Export Performance - 10GB | Measure export speed with 10GB of data. |  | Pending |
-| REQ-DS-002-2.3 | Import Performance - 100GB | Measure import speed with 100GB of data. |  | Pending |
-| REQ-DS-002-2.4 | Export Performance - 1TB | Measure export speed with 1TB of data. |  | Pending |
-
-#### REQ-DS-003: Performance Testing of Datashard Operations
-**Description**: Ensure that operations such as splitting and merging datashards perform efficiently under various conditions.
-
-| Case ID | Name | Description | Issues |  Status |
-|---------|------|-------------|--------|:--------|
-| REQ-DS-003-3.1 | Split Performance - Moderate Load | Measure performance of split operations under moderate load. |  | Pending |
-| REQ-DS-003-3.2 | Merge Performance - Heavy Load | Measure performance of merge operations under heavy load. |  | Pending |
-| REQ-DS-003-3.3 | Split/Merge Performance - Mixed Workload | Measure performance of split and merge operations under mixed workload conditions. |  | Pending |
-| REQ-DS-003-3.4 | Split/Merge Stability - Large Datasets | Ensure stability of split and merge operations with large datasets. |  | Pending |
-

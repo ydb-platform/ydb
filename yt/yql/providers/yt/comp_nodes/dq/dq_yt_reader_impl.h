@@ -154,7 +154,7 @@ public:
         const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
 
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TState::FetchRecord));
+        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TState::FetchRecord>());
         const auto funcType = FunctionType::get(valueType, { statePtrType }, false);
         const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funcType), "fetch_func", block);
         const auto fetch = CallInst::Create(funcType, funcPtr, { stateArg }, "fetch", block);

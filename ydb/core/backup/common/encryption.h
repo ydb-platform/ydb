@@ -10,6 +10,8 @@
 
 namespace NKikimr::NBackup {
 
+TString NormalizeEncryptionAlgorithmName(const TString& name);
+
 // Backup file type.
 // Must be different for all files in one backup item folder.
 // Must be one byte size.
@@ -17,6 +19,7 @@ enum class EBackupFileType : unsigned char {
     // All items
     Metadata = 0,
     Permissions = 1,
+    SchemaMapping = 2,
 
     // Table
     TableSchema = 10,
@@ -82,6 +85,8 @@ struct TEncryptionIV {
     static TEncryptionIV CombineForChunk(const TEncryptionIV& fileIV, uint32_t chunkNumber);
 
     static TEncryptionIV FromBinaryString(const TString& s);
+
+    static TEncryptionIV FromHexString(const TString& s);
 
     operator bool() const {
         return !IV.empty();

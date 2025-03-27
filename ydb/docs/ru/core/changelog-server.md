@@ -14,9 +14,12 @@
   * режим [автопартиционирования](./concepts/topic.md#autopartitioning) топиков
   * [транзакции](./concepts/transactions.md#topic-table-transactions) с участием топиков и строковых таблиц
   * [волатильные распределенные транзакции](./contributor/datashard-distributed-txs.md#osobennosti-vypolneniya-volatilnyh-tranzakcij)
-  * [автоматический выбор индекса](./dev/secondary-indexes.md#avtomaticheskoe-ispolzovanie-indeksov-pri-vyborke) при выполнении запроса.
 
 * Добавлена возможность [чтения и записи в топик](./reference/kafka-api/examples.md#primery-raboty-s-kafka-api) с использованием Kafka API без аутентификации.
+
+#### Производительность
+
+* Включен по умолчанию [автоматический выбор индекса](./dev/secondary-indexes.md#avtomaticheskoe-ispolzovanie-indeksov-pri-vyborke) при выполнении запроса.
 
 #### Исправления ошибок
 

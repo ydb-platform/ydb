@@ -935,9 +935,16 @@ void TPartitionFixture::SendDataRangeResponse(ui32 partitionId,
     auto read = event->Record.AddReadRangeResult();
     read->SetStatus(NKikimrProto::OK);
     auto pair = read->AddPair();
-    NPQ::TKey key(NPQ::TKeyPrefix::TypeData, TPartitionId(partitionId), begin, 0, end - begin, 0, isHead);
+
+    TKey key;
+    if (isHead) {
+        key = TKey::ForHead(TKeyPrefix::TypeData, TPartitionId(partitionId), begin, 0, end - begin, 0);
+    } else {
+        key = TKey::ForBody(TKeyPrefix::TypeData, TPartitionId(partitionId), begin, 0, end - begin, 0);
+    }
+
     pair->SetStatus(NKikimrProto::OK);
-    pair->SetKey(key.ToString());
+    pair->SetKey(key.Data(), key.Size());
     pair->SetValueSize(684);
     pair->SetCreationUnixTime(TInstant::Now().Seconds());
 

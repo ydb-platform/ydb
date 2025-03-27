@@ -1,15 +1,17 @@
-#include <library/cpp/testing/unittest/registar.h>
 #include <ydb/public/lib/ydb_cli/common/yql_parser/yql_parser.h>
+
+#include <library/cpp/testing/unittest/registar.h>
+
+#include <iostream>
 
 using namespace NYdb;
 using namespace NYdb::NConsoleClient;
 
 Y_UNIT_TEST_SUITE(TYqlParserTest) {
     Y_UNIT_TEST(TestBasicTypes) {
-        // Тестируем базовые типы
         {
-            TString query = "DECLARE $id AS Uint64;";
-            auto types = TYqlParser::GetParamTypes(query);
+            auto types = *TYqlParser::GetParamTypes("DECLARE $id AS Uint64;");
+            std::cout << types.size() << std::endl;
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$id");
             UNIT_ASSERT(it != types.end());
@@ -19,8 +21,7 @@ Y_UNIT_TEST_SUITE(TYqlParserTest) {
         }
 
         {
-            TString query = "DECLARE $name AS Utf8;";
-            auto types = TYqlParser::GetParamTypes(query);
+            auto types = *TYqlParser::GetParamTypes("DECLARE $name AS Utf8;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$name");
             UNIT_ASSERT(it != types.end());
@@ -31,10 +32,8 @@ Y_UNIT_TEST_SUITE(TYqlParserTest) {
     }
 
     Y_UNIT_TEST(TestComplexTypes) {
-        // Тестируем сложные типы (List, Struct)
         {
-            TString query = "DECLARE $values AS List<Uint64>;";
-            auto types = TYqlParser::GetParamTypes(query);
+            auto types = *TYqlParser::GetParamTypes("DECLARE $values AS List<Uint64>;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$values");
             UNIT_ASSERT(it != types.end());
@@ -48,8 +47,7 @@ Y_UNIT_TEST_SUITE(TYqlParserTest) {
         }
 
         {
-            TString query = "DECLARE $user AS Struct<id:Uint64,name:Utf8>;";
-            auto types = TYqlParser::GetParamTypes(query);
+            auto types = *TYqlParser::GetParamTypes("DECLARE $user AS Struct<id:Uint64,name:Utf8>;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$user");
             UNIT_ASSERT(it != types.end());
@@ -74,13 +72,12 @@ Y_UNIT_TEST_SUITE(TYqlParserTest) {
     }
 
     Y_UNIT_TEST(TestMultipleParams) {
-        // Тестируем несколько параметров в одном запросе
         TString query = R"(
             DECLARE $id AS Uint64;
             DECLARE $name AS Utf8;
             DECLARE $age AS Uint32;
         )";
-        auto types = TYqlParser::GetParamTypes(query);
+        auto types = *TYqlParser::GetParamTypes(query);
         UNIT_ASSERT_VALUES_EQUAL(types.size(), 3);
 
         {
@@ -107,9 +104,7 @@ Y_UNIT_TEST_SUITE(TYqlParserTest) {
     }
 
     Y_UNIT_TEST(TestDecimalType) {
-        // Тестируем тип Decimal
-        TString query = "DECLARE $price AS Decimal(22,9);";
-        auto types = TYqlParser::GetParamTypes(query);
+        auto types = *TYqlParser::GetParamTypes("DECLARE $price AS Decimal(22,9);");
         UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
         auto it = types.find("$price");
         UNIT_ASSERT(it != types.end());
@@ -121,9 +116,7 @@ Y_UNIT_TEST_SUITE(TYqlParserTest) {
     }
 
     Y_UNIT_TEST(TestDictType) {
-        // Тестируем тип Dict
-        TString query = "DECLARE $dict AS Dict<Utf8,Uint64>;";
-        auto types = TYqlParser::GetParamTypes(query);
+        auto types = *TYqlParser::GetParamTypes("DECLARE $dict AS Dict<Utf8,Uint64>;");
         UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
         auto it = types.find("$dict");
         UNIT_ASSERT(it != types.end());
@@ -144,9 +137,7 @@ Y_UNIT_TEST_SUITE(TYqlParserTest) {
     }
 
     Y_UNIT_TEST(TestTupleType) {
-        // Тестируем тип Tuple
-        TString query = "DECLARE $tuple AS Tuple<Uint64,Utf8,Bool>;";
-        auto types = TYqlParser::GetParamTypes(query);
+        auto types = *TYqlParser::GetParamTypes("DECLARE $tuple AS Tuple<Uint64,Utf8,Bool>;");
         UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
         auto it = types.find("$tuple");
         UNIT_ASSERT(it != types.end());
@@ -172,7 +163,6 @@ Y_UNIT_TEST_SUITE(TYqlParserTest) {
     }
 
     Y_UNIT_TEST(TestNestedTypes) {
-        // Тестируем вложенные типы
         TString query = R"(
             DECLARE $nested AS List<Struct<
                 id: Uint64,
@@ -181,7 +171,7 @@ Y_UNIT_TEST_SUITE(TYqlParserTest) {
                 meta: Dict<Utf8, List<Uint32>>
             >>;
         )";
-        auto types = TYqlParser::GetParamTypes(query);
+        auto types = *TYqlParser::GetParamTypes(query);
         UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
         auto it = types.find("$nested");
         UNIT_ASSERT(it != types.end());
@@ -194,19 +184,16 @@ Y_UNIT_TEST_SUITE(TYqlParserTest) {
 
         parser.OpenStruct();
 
-        // Проверяем id
         UNIT_ASSERT(parser.TryNextMember());
         UNIT_ASSERT_VALUES_EQUAL(parser.GetMemberName(), "id");
         UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
         UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Uint64);
 
-        // Проверяем name
         UNIT_ASSERT(parser.TryNextMember());
         UNIT_ASSERT_VALUES_EQUAL(parser.GetMemberName(), "name");
         UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
         UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Utf8);
 
-        // Проверяем tags
         UNIT_ASSERT(parser.TryNextMember());
         UNIT_ASSERT_VALUES_EQUAL(parser.GetMemberName(), "tags");
         UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::List);
@@ -215,7 +202,6 @@ Y_UNIT_TEST_SUITE(TYqlParserTest) {
         UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Utf8);
         parser.CloseList();
 
-        // Проверяем meta
         UNIT_ASSERT(parser.TryNextMember());
         UNIT_ASSERT_VALUES_EQUAL(parser.GetMemberName(), "meta");
         UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Dict);
@@ -241,11 +227,8 @@ Y_UNIT_TEST_SUITE(TYqlParserTest) {
     }
 
     Y_UNIT_TEST(TestCaseInsensitiveTypes) {
-        // Тестируем регистронезависимую обработку типов
         {
-            // Проверяем базовые типы в разных регистрах
-            TString query = "DECLARE $id AS UINT64;";
-            auto types = TYqlParser::GetParamTypes(query);
+            auto types = *TYqlParser::GetParamTypes("DECLARE $id AS UINT64;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$id");
             UNIT_ASSERT(it != types.end());
@@ -255,9 +238,7 @@ Y_UNIT_TEST_SUITE(TYqlParserTest) {
         }
 
         {
-            // Проверяем сложные типы в разных регистрах
-            TString query = "DECLARE $list AS LIST<UINT32>;";
-            auto types = TYqlParser::GetParamTypes(query);
+            auto types = *TYqlParser::GetParamTypes("DECLARE $list AS LIST<UINT32>;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$list");
             UNIT_ASSERT(it != types.end());
@@ -270,9 +251,7 @@ Y_UNIT_TEST_SUITE(TYqlParserTest) {
         }
 
         {
-            // Проверяем структуры с полями в разных регистрах
-            TString query = "DECLARE $struct AS STRUCT<ID:UINT64,NAME:UTF8>;";
-            auto types = TYqlParser::GetParamTypes(query);
+            auto types = *TYqlParser::GetParamTypes("DECLARE $struct AS STRUCT<ID:UINT64,NAME:UTF8>;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$struct");
             UNIT_ASSERT(it != types.end());
@@ -296,9 +275,7 @@ Y_UNIT_TEST_SUITE(TYqlParserTest) {
         }
 
         {
-            // Проверяем словари в разных регистрах
-            TString query = "DECLARE $dict AS DICT<UTF8,UINT64>;";
-            auto types = TYqlParser::GetParamTypes(query);
+            auto types = *TYqlParser::GetParamTypes("DECLARE $dict AS DICT<UTF8,UINT64>;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$dict");
             UNIT_ASSERT(it != types.end());
@@ -319,9 +296,7 @@ Y_UNIT_TEST_SUITE(TYqlParserTest) {
         }
 
         {
-            // Проверяем кортежи в разных регистрах
-            TString query = "DECLARE $tuple AS TUPLE<UINT64,UTF8,BOOL>;";
-            auto types = TYqlParser::GetParamTypes(query);
+            auto types = *TYqlParser::GetParamTypes("DECLARE $tuple AS TUPLE<UINT64,UTF8,BOOL>;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$tuple");
             UNIT_ASSERT(it != types.end());
@@ -347,9 +322,7 @@ Y_UNIT_TEST_SUITE(TYqlParserTest) {
         }
 
         {
-            // Проверяем DECIMAL в разных регистрах
-            TString query = "DECLARE $price AS DECIMAL(22,9);";
-            auto types = TYqlParser::GetParamTypes(query);
+            auto types = *TYqlParser::GetParamTypes("DECLARE $price AS DECIMAL(22,9);");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$price");
             UNIT_ASSERT(it != types.end());
@@ -361,9 +334,7 @@ Y_UNIT_TEST_SUITE(TYqlParserTest) {
         }
 
         {
-            // Проверяем ключевые слова DECLARE и AS в разных регистрах
-            TString query = "declare $id as UINT64;";
-            auto types = TYqlParser::GetParamTypes(query);
+            auto types = *TYqlParser::GetParamTypes("declare $id as UINT64;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$id");
             UNIT_ASSERT(it != types.end());
@@ -372,4 +343,4 @@ Y_UNIT_TEST_SUITE(TYqlParserTest) {
             UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Uint64);
         }
     }
-} 
+}

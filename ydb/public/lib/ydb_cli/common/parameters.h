@@ -31,7 +31,7 @@ protected:
     void AddLegacyBatchParametersOptions(TClientCommand::TConfig& config);
     void AddDefaultParamFormats(TClientCommand::TConfig& config);
     void AddLegacyStdinFormats(TClientCommand::TConfig& config);
-    bool GetNextParams(const TString& queryText, THolder<TParamsBuilder>& paramBuilder);
+    bool GetNextParams(const TDriver& driver, const TString& queryText, THolder<TParamsBuilder>& paramBuilder);
     
     THashMap<EDataFormat, TString>& GetInputFormatDescriptions() override;
 
@@ -42,6 +42,7 @@ private:
     void SetParamsInput(IInputStream* input);
     void SetParamsInputFromFile(TString& file);
     void SetParamsInputFromStdin();
+    void InitParamTypes(const TDriver& driver, const TString& queryText);
 
     TMaybe<TString> ReadData();
 

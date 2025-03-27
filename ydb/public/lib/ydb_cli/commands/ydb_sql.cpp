@@ -154,7 +154,7 @@ int TCommandSql::RunCommand(TConfig& config) {
     if (!Parameters.empty() || InputParamStream) {
         // Execute query with parameters
         THolder<TParamsBuilder> paramBuilder;
-        while (!IsInterrupted() && GetNextParams(Query, paramBuilder)) {
+        while (!IsInterrupted() && GetNextParams(driver, Query, paramBuilder)) {
             auto asyncResult = client.StreamExecuteQuery(
                     Query,
                     NQuery::TTxControl::NoTx(),

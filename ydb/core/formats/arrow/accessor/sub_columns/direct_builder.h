@@ -69,9 +69,9 @@ public:
     TStringBuf AddKeyOwn(const TStringBuf currentPrefix, std::string&& key) {
         if (key.find(".") != std::string::npos) {
             if (currentPrefix.size()) {
-                Storage.emplace_back(std::string(currentPrefix.data(), currentPrefix.size()) + ".'" + key + "'");
+                Storage.emplace_back(std::string(currentPrefix.data(), currentPrefix.size()) + ".\"" + key + "\"");
             } else {
-                Storage.emplace_back(std::string("'") + key + "'");
+                Storage.emplace_back(std::string("\"") + key + "\"");
             }
         } else {
             if (currentPrefix.size()) {
@@ -86,9 +86,9 @@ public:
     TStringBuf AddKey(const TStringBuf currentPrefix, const TStringBuf key) {
         if (key.find(".") != std::string::npos) {
             if (currentPrefix.size()) {
-                Storage.emplace_back(std::string(currentPrefix.data(), currentPrefix.size()) + ".'" + std::string(key.data(), key.size()) + "'");
+                Storage.emplace_back(std::string(currentPrefix.data(), currentPrefix.size()) + ".\"" + std::string(key.data(), key.size()) + "\"");
             } else {
-                Storage.emplace_back(std::string("'") + std::string(key.data(), key.size()) + "'");
+                Storage.emplace_back(std::string("\"") + std::string(key.data(), key.size()) + "\"");
             }
         } else {
             if (currentPrefix.size()) {

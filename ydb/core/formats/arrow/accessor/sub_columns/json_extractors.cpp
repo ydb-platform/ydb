@@ -6,6 +6,8 @@
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/binary_json/write.h>
 
+#include <math.h>
+
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
 TConclusionStatus TArrayExtractor::DoFill(TDataBuilder& dataBuilder, std::deque<std::shared_ptr<IJsonObjectExtractor>>& iterators) {
@@ -16,7 +18,13 @@ TConclusionStatus TArrayExtractor::DoFill(TDataBuilder& dataBuilder, std::deque<
         if (value.GetType() == NBinaryJson::EEntryType::String) {
             dataBuilder.AddKV(key, value.GetString());
         } else if (value.GetType() == NBinaryJson::EEntryType::Number) {
-            dataBuilder.AddKVOwn(key, std::to_string(value.GetNumber()));
+            const double val = value.GetNumber();
+            double integer;
+            if (modf(val, &integer)) {
+                dataBuilder.AddKVOwn(key, std::to_string(val));
+            } else {
+                dataBuilder.AddKVOwn(key, std::to_string((i64)integer));
+            }
         } else if (value.GetType() == NBinaryJson::EEntryType::BoolFalse) {
             static const TString zeroString = "0";
             dataBuilder.AddKV(key, TStringBuf(zeroString.data(), zeroString.size()));
@@ -52,7 +60,13 @@ TConclusionStatus TKVExtractor::DoFill(TDataBuilder& dataBuilder, std::deque<std
         if (value.GetType() == NBinaryJson::EEntryType::String) {
             dataBuilder.AddKV(key, value.GetString());
         } else if (value.GetType() == NBinaryJson::EEntryType::Number) {
-            dataBuilder.AddKVOwn(key, std::to_string(value.GetNumber()));
+            const double val = value.GetNumber();
+            double integer;
+            if (modf(val, &integer)) {
+                dataBuilder.AddKVOwn(key, std::to_string(val));
+            } else {
+                dataBuilder.AddKVOwn(key, std::to_string((i64)integer));
+            }
         } else if (value.GetType() == NBinaryJson::EEntryType::BoolFalse) {
             static const TString zeroString = "0";
             dataBuilder.AddKV(key, TStringBuf(zeroString.data(), zeroString.size()));

@@ -13,6 +13,8 @@ ENDIF()
 PEERDIR(
     ydb/core/kqp/tools/combiner_perf
     library/cpp/lfalloc/alloc_profiler
+    library/cpp/dwarf_backtrace
+    library/cpp/dwarf_backtrace/registry
 )
 
 SRCS(

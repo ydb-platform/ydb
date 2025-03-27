@@ -6,7 +6,7 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 template<bool LLVM, bool Spilling>
-void RunTestCombineLastSimple(const TRunParams& params);
+void RunTestBlockCombineHashedSimple(const TRunParams& params);
 
 }
 }

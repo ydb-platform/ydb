@@ -1,6 +1,7 @@
 #include "simple_last.h"
 
 #include "factories.h"
+#include "converters.h"
 
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
@@ -56,35 +57,6 @@ TString64Samples MakeKeyedString64Samples(const size_t numSamples, const unsigne
     );
 
     return samples;
-}
-
-template<bool Embedded>
-void NativeToUnboxed(const uint64_t value, NUdf::TUnboxedValue& result)
-{
-    result = NUdf::TUnboxedValuePod(value);
-}
-
-template<bool Embedded>
-void NativeToUnboxed(const std::string& value, NUdf::TUnboxedValue& result)
-{
-    if constexpr (Embedded) {
-        result = NUdf::TUnboxedValue::Embedded(value);
-    } else {
-        result = NUdf::TUnboxedValuePod(NUdf::TStringValue(value));
-    }
-}
-
-template<typename T>
-T UnboxedToNative(const NUdf::TUnboxedValue& result)
-{
-    return result.template Get<T>();
-}
-
-template<>
-std::string UnboxedToNative(const NUdf::TUnboxedValue& result)
-{
-    const NUdf::TStringRef val = result.AsStringRef();
-    return std::string(val.data(), val.size());
 }
 
 struct IWideStream : public NUdf::TBoxedValue
@@ -275,7 +247,7 @@ public:
 };
 
 template<bool LLVM, bool Spilling>
-void RunTestLastSimple(const TRunParams& params)
+void RunTestCombineLastSimple(const TRunParams& params)
 {
     TSetup<LLVM, Spilling> setup(GetPerfTestFactory());
 
@@ -342,10 +314,10 @@ void RunTestLastSimple(const TRunParams& params)
     Cerr << "WideLastCombiner graph runtime is: " << t2 - t1 << " vs. reference C++ implementation: " << cppTime << "" << Endl << Endl;
 }
 
-template void RunTestLastSimple<false, false>(const TRunParams& params);
-template void RunTestLastSimple<false, true>(const TRunParams& params);
-template void RunTestLastSimple<true, false>(const TRunParams& params);
-template void RunTestLastSimple<true, true>(const TRunParams& params);
+template void RunTestCombineLastSimple<false, false>(const TRunParams& params);
+template void RunTestCombineLastSimple<false, true>(const TRunParams& params);
+template void RunTestCombineLastSimple<true, false>(const TRunParams& params);
+template void RunTestCombineLastSimple<true, true>(const TRunParams& params);
 
 }
 }

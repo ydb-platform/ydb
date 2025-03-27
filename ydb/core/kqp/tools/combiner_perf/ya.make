@@ -42,6 +42,7 @@ ENDIF()
 
 SRCS(
     factories.cpp
+    converters.cpp
     simple.cpp
     simple_last.cpp
     tpch_last.cpp

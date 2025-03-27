@@ -334,11 +334,33 @@ void TCommandWithParameters::SetParamsInputFromFile(TString& file) {
     SetParamsInput(InputFileHolder.Get());
 }
 
-bool TCommandWithParameters::GetNextParams(const TString& queryText, THolder<TParamsBuilder>& paramBuilder) {
+void TCommandWithParameters::InitParamTypes(const TDriver& driver, const TString& queryText) {
+    auto paramTypesOpt = NYdb::NConsoleClient::TYqlParser::GetParamTypes(queryText);
+    if (paramTypesOpt) {
+        ParamTypes = std::move(*paramTypesOpt);
+        return;
+    }
+
+    // Fallback to ExplainYql
+    NYdb::NScripting::TScriptingClient client(driver);
+    auto explainSettings = NYdb::NScripting::TExplainYqlRequestSettings()
+        .Mode(NYdb::NScripting::ExplainYqlRequestMode::Validate);
+
+    auto result = client.ExplainYqlScript(
+        queryText,
+        explainSettings
+    ).GetValueSync();
+
+    NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
+    ParamTypes = result.GetParameterTypes();
+}
+
+bool TCommandWithParameters::GetNextParams(const TDriver& driver, const TString& queryText, THolder<TParamsBuilder>& paramBuilder) {
     paramBuilder = MakeHolder<TParamsBuilder>();
     if (IsFirstEncounter) {
         IsFirstEncounter = false;
-        ParamTypes = TYqlParser::GetParamTypes(queryText);
+        InitParamTypes(driver, queryText);
+
         if (!InputParamStream) {
             AddParams(*paramBuilder);
             return true;

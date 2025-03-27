@@ -457,7 +457,7 @@ int TCommandExecuteQuery::ExecuteDataQuery(TConfig& config) {
 
     if (!Parameters.empty() || InputParamStream) {
         THolder<TParamsBuilder> paramBuilder;
-        while (GetNextParams(Query, paramBuilder)) {
+        while (GetNextParams(driver, Query, paramBuilder)) {
             TParams params = paramBuilder->Build();
             auto operation = [this, &txSettings, &params, &settings, &asyncResult](NTable::TSession session) {
                 auto promise = NThreading::NewPromise<NTable::TDataQueryResult>();
@@ -723,7 +723,7 @@ int TCommandExecuteQuery::ExecuteQueryImpl(TConfig& config) {
     SetInterruptHandlers();
     if (!Parameters.empty() || InputParamStream) {
         THolder<TParamsBuilder> paramBuilder;
-        while (GetNextParams(Query, paramBuilder)) {
+        while (GetNextParams(driver, Query, paramBuilder)) {
             auto operation = [this, &paramBuilder, &settings, &asyncResult](TClient client) {
                 auto promise = NThreading::NewPromise<TPartIterator<TClient>>();
                 asyncResult = promise.GetFuture();
@@ -1136,7 +1136,7 @@ namespace {
             throw TMisuseException() << "Can't parse string \"" << jsonString << "\" (--" << optionName << " option) as json";
         }
         if (!jsonValue.IsArray()) {
-            throw TMisuseException() << "json string in \"--" << optionName
+            throw TMisuseException() << "json string in \"" << optionName
                 << "\" should contain array of elements representing tuple with key prefix, but it doesn't";
         }
         TTypeBuilder typebuilder;
@@ -1146,7 +1146,7 @@ namespace {
         for (const auto& element : jsonValue.GetArray()) {
             Y_UNUSED(element);
             if (pkColumnNamesIterator == pkColumnNames.end()) {
-                throw TMisuseException() << "json string in \"--" << optionName << "\" option contains more elements ("
+                throw TMisuseException() << "json string in \"" << optionName << "\" option contains more elements ("
                     << jsonValue.GetArray().size() << ") then columns in table primary key (" << pkColumnNames.size() << ")";
             }
             for (const auto& column : tableDescription.GetTableColumns()) {

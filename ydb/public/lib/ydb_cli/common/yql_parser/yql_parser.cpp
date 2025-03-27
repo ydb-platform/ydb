@@ -14,27 +14,35 @@
 namespace NYdb {
 namespace NConsoleClient {
 
-std::map<std::string, TType> TYqlParser::GetParamTypes(const TString& queryText) {
+TString TYqlParser::ToLower(const TString& s) {
+    TString result = s;
+    for (char& c : result) {
+        c = std::tolower(c);
+    }
+    return result;
+}
+
+std::optional<std::map<std::string, TType>> TYqlParser::GetParamTypes(const TString& queryText) {
     std::map<std::string, TType> result;
-    
-    // Создаем лексер
+
     NSQLTranslationV1::TLexers lexers;
     lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
     lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
 
     auto lexer = MakeLexer(lexers, /* ansi = */ false, /* antlr4 = */ true);
 
-    // Токенизируем запрос
     TVector<NSQLTranslation::TParsedToken> tokens;
     NYql::TIssues issues;
-    [[maybe_unused]] auto tokenizeResult = NSQLTranslation::Tokenize(*lexer, queryText, "Query", tokens, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS);
+    if (!NSQLTranslation::Tokenize(*lexer, queryText, "Query", tokens, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
+        return std::nullopt;
+    }
 
     // Анализируем токены для поиска параметров
     for (size_t i = 0; i < tokens.size(); ++i) {
         const auto& token = tokens[i];
         
         // Ищем объявление параметра (DECLARE $name AS type)
-        if (token.Content == "DECLARE" || token.Content == "declare") {
+        if (ToLower(token.Content) == "declare") {
             // Пропускаем пробелы
             size_t j = i + 1;
             while (j < tokens.size() && tokens[j].Name == "WS") {
@@ -44,21 +52,21 @@ std::map<std::string, TType> TYqlParser::GetParamTypes(const TString& queryText)
             // Проверяем, что следующий токен - $
             if (j < tokens.size() && tokens[j].Content == "$") {
                 j++;
-                
+
                 // Получаем имя параметра
                 if (j < tokens.size()) {
                     TString paramName = "$" + tokens[j].Content;
                     j++;
-                    
+
                     // Пропускаем пробелы
                     while (j < tokens.size() && tokens[j].Name == "WS") {
                         j++;
                     }
-                    
+
                     // Проверяем наличие AS
-                    if (j < tokens.size() && (tokens[j].Content == "AS" || tokens[j].Content == "as")) {
+                    if (j < tokens.size() && (ToLower(tokens[j].Content) == "as")) {
                         j++;
-                        
+
                         // Пропускаем пробелы после AS
                         while (j < tokens.size() && tokens[j].Name == "WS") {
                             j++;
@@ -68,7 +76,7 @@ std::map<std::string, TType> TYqlParser::GetParamTypes(const TString& queryText)
                         TString typeStr;
                         int angleBrackets = 0;
                         int parentheses = 0;
-                        
+
                         while (j < tokens.size() && tokens[j].Content != ";") {
                             if (tokens[j].Name != "WS") {
                                 if (tokens[j].Content == "<") {
@@ -95,66 +103,63 @@ std::map<std::string, TType> TYqlParser::GetParamTypes(const TString& queryText)
                                 }
                             }
                             j++;
-                            
+
                             if (angleBrackets == 0 && parentheses == 0 && j < tokens.size() && tokens[j].Content == ";") {
                                 break;
                             }
                         }
-                        
+
                         if (!typeStr.empty()) {
-                            // Удаляем лишние пробелы
-                            typeStr = StripString(typeStr);
-                            
                             // Создаем тип на основе строкового представления
                             TTypeBuilder builder;
                             ProcessType(typeStr, builder);
-                            
+
                             // Сохраняем тип параметра
                             result.emplace(paramName, builder.Build());
                         }
                     }
                 }
             }
-            
+
             // Обновляем индекс
             i = j;
         }
     }
-    
+
     return result;
 }
 
 void TYqlParser::ProcessType(const TString& typeStr, TTypeBuilder& builder) {
     // Удаляем лишние пробелы
     TString cleanTypeStr = StripString(typeStr);
-    
+
     // Проверяем на опциональный тип
     bool isOptional = cleanTypeStr.EndsWith("?");
     if (isOptional) {
-        cleanTypeStr = cleanTypeStr.substr(0, cleanTypeStr.length() - 1);
+        cleanTypeStr = cleanTypeStr.substr(0, cleanTypeStr.size() - 1);
         builder.BeginOptional();
     }
-    
+
     // Приводим к нижнему регистру для сравнения
     TString lowerTypeStr;
     for (char c : cleanTypeStr) {
         lowerTypeStr += std::tolower(c);
     }
-    
+
     // Обрабатываем базовые типы
     if (lowerTypeStr == "bool") {
         builder.Primitive(EPrimitiveType::Bool);
     } else if (lowerTypeStr == "int8") {
         builder.Primitive(EPrimitiveType::Int8);
-    } else if (lowerTypeStr == "uint8" || lowerTypeStr == "uint8") {
+    } else if (lowerTypeStr == "uint8") {
         builder.Primitive(EPrimitiveType::Uint8);
     } else if (lowerTypeStr == "int16") {
         builder.Primitive(EPrimitiveType::Int16);
-    } else if (lowerTypeStr == "uint16" || lowerTypeStr == "uint16") {
+    } else if (lowerTypeStr == "uint16") {
         builder.Primitive(EPrimitiveType::Uint16);
     } else if (lowerTypeStr == "int32") {
         builder.Primitive(EPrimitiveType::Int32);
-    } else if (lowerTypeStr == "uint32" || lowerTypeStr == "uint32") {
+    } else if (lowerTypeStr == "uint32") {
         builder.Primitive(EPrimitiveType::Uint32);
     } else if (lowerTypeStr == "int64") {
         builder.Primitive(EPrimitiveType::Int64);
@@ -203,12 +208,12 @@ void TYqlParser::ProcessType(const TString& typeStr, TTypeBuilder& builder) {
         // Обработка структур
         builder.BeginStruct();
         TString fields = cleanTypeStr.substr(7, cleanTypeStr.length() - 8);
-        
+
         // Разбираем поля с учетом вложенных типов
         TVector<TString> fieldParts;
         int angleBrackets = 0;
         TString currentField;
-        
+
         for (size_t i = 0; i < fields.length(); ++i) {
             if (fields[i] == '<') {
                 angleBrackets++;
@@ -229,7 +234,7 @@ void TYqlParser::ProcessType(const TString& typeStr, TTypeBuilder& builder) {
         if (!currentField.empty()) {
             fieldParts.push_back(StripString(currentField));
         }
-        
+
         for (const auto& field : fieldParts) {
             size_t colonPos = field.find(':');
             if (colonPos != TString::npos) {
@@ -245,7 +250,7 @@ void TYqlParser::ProcessType(const TString& typeStr, TTypeBuilder& builder) {
         TString elements = cleanTypeStr.substr(6, cleanTypeStr.length() - 7);
         TVector<TString> elementTypes;
         StringSplitter(elements).Split(',').SkipEmpty().Collect(&elementTypes);
-        
+
         builder.BeginTuple();
         for (const auto& elementType : elementTypes) {
             builder.AddElement();
@@ -268,11 +273,12 @@ void TYqlParser::ProcessType(const TString& typeStr, TTypeBuilder& builder) {
             builder.EndDict();
         }
     }
-    
+
     if (isOptional) {
         builder.EndOptional();
     }
 }
 
 } // namespace NConsoleClient
-} // namespace NYdb 
+} // namespace NYdb
+

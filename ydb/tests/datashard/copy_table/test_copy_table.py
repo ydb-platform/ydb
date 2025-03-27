@@ -1,34 +1,34 @@
 import os
+import pytest
 
 from ydb.tests.sql.lib.test_base import TestBase
 from ydb.tests.stress.oltp_workload.workload import cleanup_type_name
-from ydb.tests.datashard.lib.create_table import create_table, pk_types, non_pk_types, index_first, index_second, unique, index_sync, index_first_not_Bool, ttl_types, create_ttl
+from ydb.tests.datashard.lib.create_table import create_table, pk_types, non_pk_types, index_first, index_second, index_first_not_Bool, ttl_types, create_ttl
 
 
 class TestCopyTable(TestBase):
-    def test_copy_table(self):
-        # all index
-        for i in range(2):
-            for uniq in unique:
-                for sync in index_sync:
-                    if uniq != "UNIQUE" or sync != "ASYNC":
-                        if i == 1:
-                            index = index_second
-                        elif uniq == "UNIQUE":
-                            index = index_first_not_Bool
-                        else:
-                            index = index_first
-                        self.copy_table(
-                            f"table_index_{i}_{uniq}_{sync}", pk_types, {}, index, "", uniq, sync)
-
-        # all ttl
-        for ttl in ttl_types.keys():
-            self.copy_table(f"table_ttl_{ttl}", pk_types, {}, {}, ttl, "", "")
-
-        self.copy_table("table_all_types", pk_types, {
-                        **pk_types, **non_pk_types}, {}, "", "", "")
-
-    def copy_table(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
+    @pytest.mark.parametrize(
+        "table_name, pk_types, all_types, index, ttl, unique, sync",
+        [
+            ("table_index_1_UNIQUE_SYNC", pk_types, {},
+             index_second, "", "UNIQUE", "SYNC"),
+            ("table_index_0_UNIQUE_SYNC", pk_types, {},
+             index_first_not_Bool, "", "UNIQUE", "SYNC"),
+            ("table_index_1__SYNC", pk_types, {}, index_second, "", "", "SYNC"),
+            ("table_index_0__SYNC", pk_types, {}, index_first, "", "", "SYNC"),
+            ("table_index_1__ASYNC", pk_types, {}, index_second, "", "", "ASYNC"),
+            ("table_index_0__ASYNC", pk_types, {}, index_first, "", "", "ASYNC"),
+            ("table_all_types", pk_types, {
+             **pk_types, **non_pk_types}, {}, "", "", ""),
+            ("table_ttl_DyNumber", pk_types, {}, {}, "DyNumber", "", ""),
+            ("table_ttl_Uint32", pk_types, {}, {}, "Uint32", "", ""),
+            ("table_ttl_Uint64", pk_types, {}, {}, "Uint64", "", ""),
+            ("table_ttl_Datetime", pk_types, {}, {}, "Datetime", "", ""),
+            ("table_ttl_Timestamp", pk_types, {}, {}, "Timestamp", "", ""),
+            ("table_ttl_Date", pk_types, {}, {}, "Date", "", ""),
+        ]
+    )
+    def test_copy_table(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
         self.create_table(table_name, pk_types, all_types,
                           index, ttl, unique, sync)
         self.insert(table_name, all_types, pk_types, index, ttl)

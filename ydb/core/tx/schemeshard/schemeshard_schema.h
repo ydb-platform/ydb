@@ -1197,6 +1197,8 @@ struct Schema : NIceDb::Schema {
         struct EnableChecksums : Column<17, NScheme::NTypeIds::Bool> {};
         struct EnablePermissions : Column<18, NScheme::NTypeIds::Bool> {};
 
+        struct ExportMetadata : Column<19, NScheme::NTypeIds::String> { using Type = NKikimrSchemeOp::TExportMetadata; };
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -1216,7 +1218,8 @@ struct Schema : NIceDb::Schema {
             EndTime,
             PeerName,
             EnableChecksums,
-            EnablePermissions
+            EnablePermissions,
+            ExportMetadata
         >;
     };
 

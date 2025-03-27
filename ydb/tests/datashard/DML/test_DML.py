@@ -1,5 +1,5 @@
-
 import pytest
+
 from ydb.tests.sql.lib.test_base import TestBase
 from ydb.tests.stress.oltp_workload.workload import cleanup_type_name
 from ydb.tests.datashard.lib.create_table import create_table, create_ttl, pk_types, non_pk_types, index_first, index_first_not_Bool, index_second, ttl_types

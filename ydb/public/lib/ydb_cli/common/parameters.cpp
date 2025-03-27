@@ -335,6 +335,11 @@ void TCommandWithParameters::SetParamsInputFromFile(TString& file) {
 }
 
 void TCommandWithParameters::InitParamTypes(const TDriver& driver, const TString& queryText) {
+    if (SyntaxType == NYdb::NQuery::ESyntax::Pg) {
+        ParamTypes.clear();
+        return;
+    }
+
     auto paramTypesOpt = NYdb::NConsoleClient::TYqlParser::GetParamTypes(queryText);
     if (paramTypesOpt) {
         ParamTypes = std::move(*paramTypesOpt);

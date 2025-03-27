@@ -434,7 +434,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockGraceJoinTestBasic) {
     }
 } // Y_UNIT_TEST_SUITE
 
-Y_UNIT_TEST_SUITE(TMiniKQLBlockMapJoinTestOptional) {
+Y_UNIT_TEST_SUITE(TMiniKQLBlockGraceJoinTestOptional) {
     constexpr size_t testSize = 1 << 14;
     constexpr size_t valueSize = 3;
     static const TVector<TString> threeLetterValues = GenerateValues(valueSize);

@@ -1,0 +1,84 @@
+#pragma once
+
+#include <yql/essentials/minikql/mkql_node.h>
+#include <yql/essentials/public/udf/udf_types.h>
+#include <unordered_map>
+
+namespace NKikimr::NMiniKQL {
+
+// -------------------------------------------------------------------
+// This class is used for benchmarks only. Doesnt take part in any logic
+class TResourceMeter {
+private:
+    struct TStatistics {
+        std::pair<ui64, ui64>   avgMemoryConsumpted{0, 0};
+        ui64                    memoryConsumptionPeak{0};
+        ui64                    processedTime{0}; // in microseconds
+    };
+
+public:
+    TResourceMeter() {
+        MakeNewHistoryPage();
+    }
+
+    void MakeNewHistoryPage() {
+        History_.emplace_back();
+    }
+
+    // Accumulate time
+    void UpdateSpentTime(TString id, ui64 msec) {
+        auto& page = History_.back();
+        page[id].processedTime += msec;
+    }
+
+    // Upate memory consumption stats
+    void UpdateConsumptedMemory(TString id, ui64 memoryConsumpted) {
+        using std::max;
+        auto& page = History_.back();
+        page[id].avgMemoryConsumpted.first += memoryConsumpted;
+        page[id].avgMemoryConsumpted.second++;
+        page[id].memoryConsumptionPeak = max(page[id].memoryConsumptionPeak, memoryConsumpted);
+    }
+
+    void Clear() {
+        History_.clear();
+    }
+
+    void ClearLastHistoryPage() {
+        if (History_.empty()) {
+            return;
+        }
+        History_.pop_back();
+    }
+
+    TString GetFullLog(ui64 datasetSize /* in bytes */) {
+        TStringStream out;
+        out << "=========================================\n";
+        for (size_t i = 0; i < History_.size(); ++i) {
+            const auto& page = History_[i];
+            out << "---------- Run N. " << i << " begin  -----------\n";
+            for (const auto& [id, stats]: page) {
+                out << "Node: " << id << "\n"
+                    << " > Dataset size: " << datasetSize / 1024 << " [KB]\n"
+                    << " > Time spent:   " << stats.processedTime << " [us]\n"
+                    << " > Speed:        " << datasetSize / stats.processedTime << " [MB/s]\n"
+                    << " > Avg. memory consumption: " << stats.avgMemoryConsumpted.first / (stats.avgMemoryConsumpted.second * 1024) << " [KB]\n"
+                    << " > Max memory consumption:  " << stats.memoryConsumptionPeak / 1024 << " [KB]\n\n";
+            }
+            out << "----------- Run N. " << i << " end  ------------\n";
+            if (i != History_.size() - 1) {
+                out << "\n";
+            }
+        }
+        out << "=========================================\n";
+        return out.Str();
+    }
+
+private:
+    std::vector<std::unordered_map<TString, TStatistics>>   History_;
+};
+
+// -------------------------------------------------------------------
+extern TResourceMeter globalResourceMeter;
+
+} // namespace NKikimr::NMiniKQL

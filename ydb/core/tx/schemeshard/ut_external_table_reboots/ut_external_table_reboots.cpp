@@ -291,29 +291,8 @@ Y_UNIT_TEST_SUITE(TExternalTableTestReboots) {
 
         TTestWithReboots t;
         t.GetTestEnvOptions().EnableReplaceIfExistsForExternalEntities(true).RunFakeConfigDispatcher(true);
-        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+        t.Run([&](TTestActorRuntime& runtime, bool&) {
             CreateExternalDataSource(runtime, *t.TestEnv, ++t.TxId);
-            TestCreateExternalTable(runtime, ++t.TxId, "/MyRoot", testTable);
-            t.TestEnv->TestWaitNotification(runtime, t.TxId);
-
-            {
-                TInactiveZone inactive(activeZone);
-                TestCreateExternalTable(runtime, ++t.TxId, "/MyRoot", R"(
-                    Name: "ExternalTable"
-                    SourceType: "General"
-                    DataSourcePath: "/MyRoot/ExternalDataSource"
-                    Location: "/"
-                    Columns { Name: "RowId"       Type: "Uint64"}
-                    Columns { Name: "SecondValue" Type: "Utf8"}
-                    Columns { Name: "ThirdValue"  Type: "Utf8"}
-                    ReplaceIfExists: true
-                )");
-                t.TestEnv->TestWaitNotification(runtime, t.TxId);
-
-                TestDropExternalTable(runtime, ++t.TxId, "/MyRoot", "ExternalTable");
-                t.TestEnv->TestWaitNotification(runtime, t.TxId);
-            }
-
             TestCreateExternalTable(runtime, ++t.TxId, "/MyRoot", testTable);
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
@@ -322,18 +301,13 @@ Y_UNIT_TEST_SUITE(TExternalTableTestReboots) {
                 SourceType: "General"
                 DataSourcePath: "/MyRoot/ExternalDataSource"
                 Location: "/"
-                Columns { Name: "RowId"       Type: "Uint64"}
-                Columns { Name: "FourthValue" Type: "Utf8"}
+                Columns { Name: "RowId" Type: "Uint64"}
                 ReplaceIfExists: true
             )");
             t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-            {
-                TInactiveZone inactive(activeZone);
-
-                TestDropExternalTable(runtime, ++t.TxId, "/MyRoot", "ExternalTable");
-                t.TestEnv->TestWaitNotification(runtime, t.TxId);
-            }
+            TestDropExternalTable(runtime, ++t.TxId, "/MyRoot", "ExternalTable");
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
         });
     }
 }

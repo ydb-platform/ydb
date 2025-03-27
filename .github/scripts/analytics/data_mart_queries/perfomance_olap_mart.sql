@@ -142,12 +142,12 @@ FROM (
             IF(Success > 0, MinDuration / 1000) AS YdbSumMin,
             CAST(RunId / 1000 AS Timestamp) AS RunTs,
             IF (JSON_VALUE(Stats, "$.errors.other") = "true",
-                "red",
+                "red"u,
                 IF (JSON_VALUE(Stats, "$.errors.timeout") = "true",
-                "blue",
+                "blue"u,
                     IF (JSON_VALUE(Stats, "$.errors.warning") = "true",
-                        "yellow",
-                        "green"
+                        "yellow"u,
+                        "green"u
                     )
                 )
             ) as Color
@@ -281,12 +281,12 @@ Full OUTER join
                 IF(Success > 0, MinDuration / 1000) AS YdbSumMin,
                 CAST(RunId / 1000 AS Timestamp) AS RunTs,
                 IF (JSON_VALUE(Stats, "$.errors.other") = "true",
-                    "red",
+                    "red"u,
                     IF (JSON_VALUE(Stats, "$.errors.timeout") = "true",
-                    "blue",
+                    "blue"u,
                         IF (JSON_VALUE(Stats, "$.errors.warning") = "true",
-                            "yellow",
-                            "green"
+                            "yellow"u,
+                            "green"u
                         )
                     )
                 ) as Color

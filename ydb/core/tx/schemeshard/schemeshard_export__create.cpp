@@ -3,7 +3,7 @@
 #include "schemeshard_export.h"
 #include "schemeshard_export_flow_proposals.h"
 #include "schemeshard_export_helpers.h"
-#include "schemeshard_export_scheme_uploader.h"
+#include "schemeshard_export_uploaders.h"
 #include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
 

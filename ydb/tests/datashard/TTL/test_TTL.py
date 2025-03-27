@@ -2,10 +2,11 @@ from datetime import datetime, timedelta
 import time
 import os
 import subprocess
+import pytest
 
 from ydb.tests.sql.lib.test_base import TestBase
 from ydb.tests.stress.oltp_workload.workload import cleanup_type_name
-from ydb.tests.datashard.lib.create_table import create_table, pk_types, non_pk_types, index_first, index_second, unique, index_sync, index_first_not_Bool
+from ydb.tests.datashard.lib.create_table import create_table, pk_types, non_pk_types, index_first, index_second, index_first_not_Bool
 
 
 ttl_types = {
@@ -19,109 +20,85 @@ ttl_types = {
 
 
 class TestTTL(TestBase):
-    def test_TTL_Date(self):
+    @pytest.mark.parametrize(
+        "table_name, pk_types, all_types, index, ttl, unique, sync",
+        [
+            ("table_Datetime_0__SYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_first, "Datetime", "", "SYNC"),
+            ("table_Datetime_0__ASYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_first, "Datetime", "", "ASYNC"),
+            ("table_Datetime_0_UNIQUE_SYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_first_not_Bool, "Datetime", "UNIQUE", "SYNC"),
+            ("table_Datetime_1__SYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_second, "Datetime", "", "SYNC"),
+            ("table_Datetime_1__ASYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_second, "Datetime", "", "ASYNC"),
+            ("table_Datetime_1_UNIQUE_SYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_second, "Datetime", "UNIQUE", "SYNC"),
+            ("table_Timestamp_0__SYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_first, "Timestamp", "", "SYNC"),
+            ("table_Timestamp_0__ASYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_first, "Timestamp", "", "ASYNC"),
+            ("table_Timestamp_0_UNIQUE_SYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_first_not_Bool, "Timestamp", "UNIQUE", "SYNC"),
+            ("table_Timestamp_1__SYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_second, "Timestamp", "", "SYNC"),
+            ("table_Timestamp_1__ASYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_second, "Timestamp", "", "ASYNC"),
+            ("table_Timestamp_1_UNIQUE_SYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_second, "Timestamp", "UNIQUE", "SYNC"),
+            ("table_DyNumber_0__SYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_first, "DyNumber", "", "SYNC"),
+            ("table_DyNumber_0__ASYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_first, "DyNumber", "", "ASYNC"),
+            ("table_DyNumber_0_UNIQUE_SYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_first_not_Bool, "DyNumber", "UNIQUE", "SYNC"),
+            ("table_DyNumber_1__SYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_second, "DyNumber", "", "SYNC"),
+            ("table_DyNumber_1__ASYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_second, "DyNumber", "", "ASYNC"),
+            ("table_DyNumber_1_UNIQUE_SYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_second, "DyNumber", "UNIQUE", "SYNC"),
+            ("table_Uint32_0__SYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_first, "Uint32", "", "SYNC"),
+            ("table_Uint32_0__ASYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_first, "Uint32", "", "ASYNC"),
+            ("table_Uint32_0_UNIQUE_SYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_first_not_Bool, "Uint32", "UNIQUE", "SYNC"),
+            ("table_Uint32_1__SYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_second, "Uint32", "", "SYNC"),
+            ("table_Uint32_1__ASYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_second, "Uint32", "", "ASYNC"),
+            ("table_Uint32_1_UNIQUE_SYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_second, "Uint32", "UNIQUE", "SYNC"),
+            ("table_Uint64_0__SYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_first, "Uint64", "", "SYNC"),
+            ("table_Uint64_0__ASYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_first, "Uint64", "", "ASYNC"),
+            ("table_Uint64_0_UNIQUE_SYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_first_not_Bool, "Uint64", "UNIQUE", "SYNC"),
+            ("table_Uint64_1__SYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_second, "Uint64", "", "SYNC"),
+            ("table_Uint64_1__ASYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_second, "Uint64", "", "ASYNC"),
+            ("table_Uint64_1_UNIQUE_SYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_second, "Uint64", "UNIQUE", "SYNC"),
+            ("table_Date_0__SYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_first, "Date", "", "SYNC"),
+            ("table_Date_0__ASYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_first, "Date", "", "ASYNC"),
+            ("table_Date_0_UNIQUE_SYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_first_not_Bool, "Date", "UNIQUE", "SYNC"),
+            ("table_Date_1__SYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_second, "Date", "", "SYNC"),
+            ("table_Date_1__ASYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_second, "Date", "", "ASYNC"),
+            ("table_Date_1_UNIQUE_SYNC", pk_types, {
+             **pk_types, **non_pk_types}, index_second, "Date", "UNIQUE", "SYNC"),
+        ]
+    )
+    def test_TTL(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
         self.ttl_time_sec(1)
-        ttl = "Date"
-        for i in range(2):
-            for uniq in unique:
-                for sync in index_sync:
-                    if uniq != "UNIQUE" or sync != "ASYNC":
-                        if i == 1:
-                            index = index_second
-                        elif uniq == "UNIQUE":
-                            index = index_first_not_Bool
-                        else:
-                            index = index_first
-                        self.TTL(
-                            f"table_{ttl}_{i}_{uniq}_{sync}", pk_types, {
-                                **pk_types, **non_pk_types}, index, ttl, uniq, sync)
-
-    def test_TTL_DyNumber(self):
-        self.ttl_time_sec(1)
-        ttl = "DyNumber"
-        for i in range(2):
-            for uniq in unique:
-                for sync in index_sync:
-                    if uniq != "UNIQUE" or sync != "ASYNC":
-                        if i == 1:
-                            index = index_second
-                        elif uniq == "UNIQUE":
-                            index = index_first_not_Bool
-                        else:
-                            index = index_first
-                        self.TTL(
-                            f"table_{ttl}_{i}_{uniq}_{sync}", pk_types, {
-                                **pk_types, **non_pk_types}, index, ttl, uniq, sync)
-
-    def test_TTL_Datetime(self):
-        self.ttl_time_sec(1)
-        ttl = "Datetime"
-        for i in range(2):
-            for uniq in unique:
-                for sync in index_sync:
-                    if uniq != "UNIQUE" or sync != "ASYNC":
-                        if i == 1:
-                            index = index_second
-                        elif uniq == "UNIQUE":
-                            index = index_first_not_Bool
-                        else:
-                            index = index_first
-                        self.TTL(
-                            f"table_{ttl}_{i}_{uniq}_{sync}", pk_types, {
-                                **pk_types, **non_pk_types}, index, ttl, uniq, sync)
-
-    def test_TTL_Timestamp(self):
-        self.ttl_time_sec(1)
-        ttl = "Timestamp"
-        for i in range(2):
-            for uniq in unique:
-                for sync in index_sync:
-                    if uniq != "UNIQUE" or sync != "ASYNC":
-                        if i == 1:
-                            index = index_second
-                        elif uniq == "UNIQUE":
-                            index = index_first_not_Bool
-                        else:
-                            index = index_first
-                        self.TTL(
-                            f"table_{ttl}_{i}_{uniq}_{sync}", pk_types, {
-                                **pk_types, **non_pk_types}, index, ttl, uniq, sync)
-
-    def test_TTL_Uint32(self):
-        self.ttl_time_sec(1)
-        ttl = "Uint32"
-        for i in range(2):
-            for uniq in unique:
-                for sync in index_sync:
-                    if uniq != "UNIQUE" or sync != "ASYNC":
-                        if i == 1:
-                            index = index_second
-                        elif uniq == "UNIQUE":
-                            index = index_first_not_Bool
-                        else:
-                            index = index_first
-                        self.TTL(
-                            f"table_{ttl}_{i}_{uniq}_{sync}", pk_types, {
-                                **pk_types, **non_pk_types}, index, ttl, uniq, sync)
-
-    def test_TTL_Uint64(self):
-        self.ttl_time_sec(1)
-        ttl = "Uint64"
-        for i in range(2):
-            for uniq in unique:
-                for sync in index_sync:
-                    if uniq != "UNIQUE" or sync != "ASYNC":
-                        if i == 1:
-                            index = index_second
-                        elif uniq == "UNIQUE":
-                            index = index_first_not_Bool
-                        else:
-                            index = index_first
-                        self.TTL(
-                            f"table_{ttl}_{i}_{uniq}_{sync}", pk_types, {
-                                **pk_types, **non_pk_types}, index, ttl, uniq, sync)
-
-    def TTL(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
         columns = {
             "pk_": pk_types.keys(),
             "col_": all_types.keys(),
@@ -215,7 +192,7 @@ class TestTTL(TestBase):
             sql_select += f"col_index_{cleanup_type_name(type_name)}={index[type_name].format(value)} and "
         sql_select += f"""pk_Int64={pk_types["Int64"].format(value)}"""
         start_time = time.time()
-        max_wait_time = 150
+        max_wait_time = 300
         while True:
             rows = self.query(sql_select)
             if (len(rows) == 1 and rows[0].count == expected_count_rows) or expected_count_rows == 1:

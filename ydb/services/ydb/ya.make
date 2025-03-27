@@ -1,18 +1,19 @@
 LIBRARY()
 
 SRCS(
+    ydb_bscontroller.cpp
     ydb_clickhouse_internal.cpp
     ydb_debug.cpp
     ydb_dummy.cpp
     ydb_export.cpp
     ydb_import.cpp
     ydb_logstore.cpp
+    ydb_object_storage.cpp
     ydb_operation.cpp
     ydb_query.cpp
     ydb_scheme.cpp
     ydb_scripting.cpp
     ydb_table.cpp
-    ydb_object_storage.cpp
 )
 
 PEERDIR(

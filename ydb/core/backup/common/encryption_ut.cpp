@@ -125,14 +125,40 @@ Y_UNIT_TEST_SUITE(EncryptedFileSerializerTest) {
         UNIT_ASSERT_VALUES_EQUAL(buffer.Size(), 0);
         UNIT_ASSERT_EQUAL(iv, headerIV);
 
-        TEncryptedFileDeserializer deserializer(Key16);
-        deserializer.AddData(fileData, true);
-        auto maybeBuffer = deserializer.GetNextBlock();
-        UNIT_ASSERT(maybeBuffer);
-        UNIT_ASSERT_VALUES_EQUAL(maybeBuffer->Size(), 0);
-        // Calls after last block got
-        UNIT_ASSERT(!deserializer.GetNextBlock());
-        UNIT_ASSERT(!deserializer.GetNextBlock());
+        {
+            TEncryptedFileDeserializer deserializer(Key16);
+            deserializer.AddData(fileData, true);
+            auto maybeBuffer = deserializer.GetNextBlock();
+            UNIT_ASSERT(maybeBuffer);
+            UNIT_ASSERT_VALUES_EQUAL(maybeBuffer->Size(), 0);
+            // Calls after last block got
+            UNIT_ASSERT(!deserializer.GetNextBlock());
+            UNIT_ASSERT(!deserializer.GetNextBlock());
+        }
+
+        // Add empty data twice
+        {
+            TEncryptedFileSerializer serializer("AES-256-GCM", Key32, iv);
+            TBuffer fileData;
+            {
+                TBuffer part = serializer.AddBlock("", false);
+                fileData.Append(part.Data(), part.Size());
+            }
+            {
+                TBuffer part = serializer.AddBlock("", false);
+                UNIT_ASSERT_C(part.Size() == 0, part.Size());
+            }
+            {
+                TBuffer part = serializer.AddBlock("", true);
+                fileData.Append(part.Data(), part.Size());
+            }
+            TEncryptedFileDeserializer deserializer(Key32);
+            deserializer.AddData(fileData, true);
+            auto maybeBuffer = deserializer.GetNextBlock();
+            UNIT_ASSERT(maybeBuffer);
+            UNIT_ASSERT_VALUES_EQUAL(maybeBuffer->Size(), 0);
+            UNIT_ASSERT(!deserializer.GetNextBlock());
+        }
     }
 
     Y_UNIT_TEST(ReadPartial) {

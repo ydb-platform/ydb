@@ -24,6 +24,8 @@ enum class EBackupFileType : unsigned char {
     // Table
     TableSchema = 10,
     TableData = 11,
+    TableChangefeed = 12,
+    TableTopic = 13,
 
     // Topic
     TopicDescription = 10,

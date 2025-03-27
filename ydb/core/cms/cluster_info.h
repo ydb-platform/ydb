@@ -978,6 +978,10 @@ private:
         return PDiskRef(id);
     }
 
+    TPDiskInfo &PDiskRef(const TString &hostName, const TString &path) {
+        return PDiskRef(HostNamePathToPDiskId(hostName, path));
+    }
+
     TVDiskInfo &VDiskRef(const TVDiskID &vdId) {
         Y_ABORT_UNLESS(HasVDisk(vdId));
         return *VDisks.find(vdId)->second;

@@ -1,4 +1,4 @@
 RECURSE(
     lib
-    DML
+    dump_restore
 )

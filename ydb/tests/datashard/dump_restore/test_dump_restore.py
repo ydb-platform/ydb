@@ -1,16 +1,15 @@
 import os
-import yatest.common
 
 from ydb.tests.sql.lib.test_base import TestBase
 from ydb.tests.stress.oltp_workload.workload import cleanup_type_name
 from ydb.tests.datashard.lib.create_table import create_table, pk_types, non_pk_types, index_first, index_second, unique, index_sync, index_first_not_Bool, ttl_types, create_ttl
 
 
-class testDumpRestore(TestBase):
+class TestDumpRestore(TestBase):
     def test_T(self):
-        ydb = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY", "ydb/apps/ydbd/ydbd"))
+        ydb = os.environ.get("YDB_DRIVER_BINARY")
         print("ccscds")
-        self.query("create table a(pk Int64, prymary key(pk))")
+        self.query("CREATE TABLE a(pk Int64, PRIMARY KEY(pk))")
         self.query("insert into a(pk) values(1)")
         self.query("insert into a(pk) values(2)")
         self.query("insert into a(pk) values(3)")
@@ -19,7 +18,7 @@ class testDumpRestore(TestBase):
                   """)
         self.query("drop table a")
         os.system(f"""
-                  ydb -e {self.get_endpoint()} -d {self.get_database()} admin database restore -i ./dump_bd
+                  {ydb} -e {self.get_endpoint()} -d {self.get_database()} admin database restore -i ./dump_bd
                   """)
         rows = self.query("select count(*) as COUNT from a")
         assert len(

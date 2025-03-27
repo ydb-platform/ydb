@@ -14,9 +14,7 @@ class TBuildDuplicateFilters: public NConveyor::ITask {
 
         void AddImpl(const ui64 sourceId, const bool value) {
             auto* findFilter = Filters.FindPtr(sourceId);
-            if (!findFilter) {
-                findFilter = &Filters.emplace(sourceId, NArrow::TColumnFilter::BuildAllowFilter()).first->second;
-            }
+            AFL_VERIFY(findFilter);
             findFilter->Add(value);
         }
 
@@ -40,25 +38,26 @@ class TBuildDuplicateFilters: public NConveyor::ITask {
         THashMap<ui64, NArrow::TColumnFilter>&& ExtractFilters() && {
             return std::move(Filters);
         }
+
+        void AddSource(const ui64 sourceId) {
+            AFL_VERIFY(Filters.emplace(sourceId, NArrow::TColumnFilter::BuildAllowFilter()).second);
+        }
     };
 
     class TSourceMergingInfo {
     private:
         YDB_READONLY_DEF(std::shared_ptr<NArrow::TGeneralContainer>, Data);
         YDB_READONLY_DEF(std::shared_ptr<NArrow::TColumnFilter>, Filter);
-        YDB_READONLY_DEF(ui64, SourceId);
 
     public:
-        TSourceMergingInfo(
-            const std::shared_ptr<NArrow::TGeneralContainer>& data, const std::shared_ptr<NArrow::TColumnFilter>& filter, const ui64 sourceId)
+        TSourceMergingInfo(const std::shared_ptr<NArrow::TGeneralContainer>& data, const std::shared_ptr<NArrow::TColumnFilter>& filter)
             : Data(data)
-            , Filter(filter)
-            , SourceId(sourceId) {
+            , Filter(filter) {
         }
     };
 
 private:
-    std::vector<TSourceMergingInfo> Sources;
+    THashMap<ui64, TSourceMergingInfo> SourcesById;
     std::shared_ptr<arrow::Schema> PKSchema;
     std::vector<std::string> VersionColumnNames;
     ui32 IntervalIdx;
@@ -83,7 +82,7 @@ public:
 
     void AddSource(
         const std::shared_ptr<NArrow::TGeneralContainer>& source, const std::shared_ptr<NArrow::TColumnFilter>& filter, const ui64 sourceId) {
-        Sources.emplace_back(source, filter, sourceId);
+        AFL_VERIFY(SourcesById.emplace(sourceId, TSourceMergingInfo(source, filter)).second);
     }
 };
 

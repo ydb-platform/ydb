@@ -92,6 +92,77 @@ ydb import file csv --header --null-value "" --path <путь_к_таблице>
 ydb import file csv --header --null-value "" --path ecommerce_table 2019-Nov.csv
 ```
 
+### Video Game Sales
+
+Данные о продажах видеоигр.
+
+**Источник**: [Kaggle - Video Game Sales](https://www.kaggle.com/datasets/gregorut/videogamesales)
+
+**Размер**: 1.36 MB
+
+**Пример загрузки**:
+
+1. Скачайте и разархивируйте файл `vgsales.csv` с Kaggle
+
+2. Создайте таблицу в {{ ydb-short-name }} одним из следующих способов:
+
+<details>
+  <summary>Выполнив запрос в WEB-интерфейсе</summary>
+
+  Подробнее про [WEB-интерфейс](../../reference/embedded-ui/ydb-monitoring).
+
+  ```sql
+  CREATE TABLE `vgsales` (
+      `Rank` Uint64 NOT NULL,
+      `Name` Text NOT NULL,
+      `Platform` Text NOT NULL,
+      `Year` Text NOT NULL,
+      `Genre` Text NOT NULL,
+      `Publisher` Text NOT NULL,
+      `NA_Sales` Double NOT NULL,
+      `EU_Sales` Double NOT NULL,
+      `JP_Sales` Double NOT NULL,
+      `Other_Sales` Double NOT NULL,
+      `Global_Sales` Double NOT NULL,
+      PRIMARY KEY (`Rank`)
+  )
+  WITH (
+      STORE = COLUMN
+  );
+  ```
+</details>
+
+<details>
+  <summary>Выполнив команду YDB CLI</summary>
+
+  ```bash
+  ydb sql -s \
+  'CREATE TABLE `vgsales` (
+      `Rank` Uint64 NOT NULL,
+      `Name` Text NOT NULL,
+      `Platform` Text NOT NULL,
+      `Year` Text NOT NULL,
+      `Genre` Text NOT NULL,
+      `Publisher` Text NOT NULL,
+      `NA_Sales` Double NOT NULL,
+      `EU_Sales` Double NOT NULL,
+      `JP_Sales` Double NOT NULL,
+      `Other_Sales` Double NOT NULL,
+      `Global_Sales` Double NOT NULL,
+      PRIMARY KEY (`Rank`)
+  )
+  WITH (
+      STORE = COLUMN
+  );'
+  ```
+</details>
+
+3. Выполните команду импорта
+
+```bash
+ydb import file csv --header --null-value "" --path vgsales vgsales.csv
+```
+
 ### COVID-19 Open Research Dataset
 
 Открытый набор данных исследований COVID-19.
@@ -250,77 +321,6 @@ ydb import file csv --header --null-value "" --path covid_research metadata.csv
 
 ```bash
 ydb import file csv --header --null-value "" --path netflix netflix_titles.csv
-```
-
-### Video Game Sales
-
-Данные о продажах видеоигр.
-
-**Источник**: [Kaggle - Video Game Sales](https://www.kaggle.com/datasets/gregorut/videogamesales)
-
-**Размер**: 1.36 MB
-
-**Пример загрузки**:
-
-1. Скачайте и разархивируйте файл `vgsales.csv` с Kaggle
-
-2. Создайте таблицу в {{ ydb-short-name }} одним из следующих способов:
-
-<details>
-  <summary>Выполнив запрос в WEB-интерфейсе</summary>
-
-  Подробнее про [WEB-интерфейс](../../reference/embedded-ui/ydb-monitoring).
-
-  ```sql
-  CREATE TABLE `vgsales` (
-      `Rank` Uint64 NOT NULL,
-      `Name` Text NOT NULL,
-      `Platform` Text NOT NULL,
-      `Year` Text NOT NULL,
-      `Genre` Text NOT NULL,
-      `Publisher` Text NOT NULL,
-      `NA_Sales` Double NOT NULL,
-      `EU_Sales` Double NOT NULL,
-      `JP_Sales` Double NOT NULL,
-      `Other_Sales` Double NOT NULL,
-      `Global_Sales` Double NOT NULL,
-      PRIMARY KEY (`Rank`)
-  )
-  WITH (
-      STORE = COLUMN
-  );
-  ```
-</details>
-
-<details>
-  <summary>Выполнив команду YDB CLI</summary>
-
-  ```bash
-  ydb sql -s \
-  'CREATE TABLE `vgsales` (
-      `Rank` Uint64 NOT NULL,
-      `Name` Text NOT NULL,
-      `Platform` Text NOT NULL,
-      `Year` Text NOT NULL,
-      `Genre` Text NOT NULL,
-      `Publisher` Text NOT NULL,
-      `NA_Sales` Double NOT NULL,
-      `EU_Sales` Double NOT NULL,
-      `JP_Sales` Double NOT NULL,
-      `Other_Sales` Double NOT NULL,
-      `Global_Sales` Double NOT NULL,
-      PRIMARY KEY (`Rank`)
-  )
-  WITH (
-      STORE = COLUMN
-  );'
-  ```
-</details>
-
-3. Выполните команду импорта
-
-```bash
-ydb import file csv --header --null-value "" --path vgsales vgsales.csv
 ```
 
 ### Animal Crossing New Horizons Catalog

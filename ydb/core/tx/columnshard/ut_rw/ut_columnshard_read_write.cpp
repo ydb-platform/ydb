@@ -1507,7 +1507,8 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key", TTypeInfo(NTypeIds::Uint64)),
             NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
         const std::vector<ui32> columnsIds = { 1, 2 };
-        PrepareTablet(runtime, tableId, schema);
+        const auto schemaPlanStep = PrepareTablet(runtime, tableId, schema);
+        UNIT_ASSERT(schemaPlanStep);
         const ui64 txId = 111;
 
         NConstruction::IArrayBuilder::TPtr keyColumn =
@@ -1525,15 +1526,14 @@ Y_UNIT_TEST_SUITE(EvWrite) {
             NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 444);
             AFL_VERIFY(writer.StartCommit(444) == NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
         }
-
         {
-            auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(10, txId), schema);
+            auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(*schemaPlanStep, txId), schema);
             UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 0);
-
-            PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(11, txId));
         }
+        const auto writePlanStep = *schemaPlanStep + 1;
+        PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(writePlanStep, txId));
 
-        auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot::MaxForPlanStep(11), schema);
+        auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot::MaxForPlanStep(writePlanStep), schema);
         UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 2048);
     }
 
@@ -1548,7 +1548,9 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key", TTypeInfo(NTypeIds::Uint64)),
             NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
         const std::vector<ui32> columnsIds = { 1, 2 };
-        PrepareTablet(runtime, tableId, schema);
+        const auto schemaPlanStep = PrepareTablet(runtime, tableId, schema);
+        UNIT_ASSERT(schemaPlanStep);
+        const auto planStep = *schemaPlanStep;
         const ui64 txId = 111;
 
         NConstruction::IArrayBuilder::TPtr keyColumn =
@@ -1561,9 +1563,9 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         AFL_VERIFY(writer.Write(batch, {1, 2}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         AFL_VERIFY(writer.Abort(txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
 
-        PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(10, txId + 1), false);
+        PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(planStep, txId + 1), false);
 
-        auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot::MaxForPlanStep(10), schema);
+        auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot::MaxForPlanStep(planStep), schema);
         UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 0);
     }
 
@@ -1577,8 +1579,9 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         const ui64 tableId = 1;
         const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key", TTypeInfo(NTypeIds::Uint64)),
             NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
-        const auto schemaSnapshot = PrepareTablet(runtime, tableId, schema);
-        UNIT_ASSERT(schemaSnapshot);
+        const auto schemaPlanStep = PrepareTablet(runtime, tableId, schema);
+        UNIT_ASSERT(schemaPlanStep);
+        const auto planStep = *schemaPlanStep + 1;
         const ui64 txId = 111;
 
         NConstruction::IArrayBuilder::TPtr keyColumn =
@@ -1594,9 +1597,9 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         AFL_VERIFY(writer.Write(batch, {1, 2}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
         AFL_VERIFY(writer.StartCommit(txId) == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
 
-        PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(*schemaSnapshot + 1, txId));
+        PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(planStep, txId));
 
-        auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot::MaxForPlanStep(*schemaSnapshot + 1), schema);
+        auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot::MaxForPlanStep(planStep), schema);
         UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 2048);
     }
 
@@ -1611,7 +1614,8 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key", TTypeInfo(NTypeIds::Uint64)),
             NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
         const std::vector<ui32> columnIds = { 1, 2 };
-        PrepareTablet(runtime, tableId, schema);
+        const auto schemaPlanStep = PrepareTablet(runtime, tableId, schema);
+        UNIT_ASSERT(schemaPlanStep);
         const ui64 txId = 111;
 
         NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
@@ -1624,7 +1628,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
             auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
             AFL_VERIFY(writer.Write(batch, columnIds, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
             {
-                auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(10, txId), schema);
+                auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(*schemaPlanStep, txId), schema);
                 UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 0);
             }
         }
@@ -1638,16 +1642,16 @@ Y_UNIT_TEST_SUITE(EvWrite) {
             AFL_VERIFY(writer.Write(batch, columnIds, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
 
             {
-                auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(10, txId), schema);
+                auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(*schemaPlanStep, txId), schema);
                 UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 0);
             }
         }
         {
             AFL_VERIFY(writer.StartCommit(txId) == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
-            PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(11, txId));
+            PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(*schemaPlanStep + 1, txId));
         }
 
-        auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(11, txId), schema);
+        auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(*schemaPlanStep + 1, txId), schema);
         UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 2 * 2048);
     }
 }
@@ -2387,7 +2391,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         auto ydbSchema = TTestSchema::YdbSchema();
         const auto schemaPlanStep = SetupSchema(runtime, sender, tableId);
         UNIT_ASSERT(schemaPlanStep);
-        const auto planStep = *schemaPlanStep + 1;
+        auto planStep = *schemaPlanStep + 1;
 
         TAutoPtr<IEventHandle> handle;
 
@@ -2399,7 +2403,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             std::vector<ui64> writeIds;
             UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
 
-            ProposeCommit(runtime, sender, txId, writeIds);
+            planStep = ProposeCommit(runtime, sender, txId, writeIds);
             PlanCommit(runtime, sender, planStep, txId);
         }
 
@@ -2426,7 +2430,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             // Cerr << response << Endl;
             UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), Ydb::StatusIds::BAD_REQUEST);
             UNIT_ASSERT_VALUES_EQUAL(response.IssuesSize(), 1);
-            UNIT_ASSERT_STRING_CONTAINS(response.GetIssues(0).message(), "Snapshot too old: {640000:max}");
+            UNIT_ASSERT_STRING_CONTAINS(response.GetIssues(0).message(), TStringBuilder() << "Snapshot too old: {" << planStep - TDuration::Minutes(6).MilliSeconds() << ":max}");
         }
 
         // Try to read snapshot that is too old

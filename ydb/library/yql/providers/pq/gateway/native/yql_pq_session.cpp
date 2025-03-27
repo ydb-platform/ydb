@@ -112,6 +112,7 @@ NPq::NConfigurationManager::TAsyncDescribePathResult TPqSession::DescribePath(co
             paths.reserve(allClustersInfo.size());
             for (auto& clusterInfo: allClustersInfo) {
                 if (!clusterInfo.IsAvailableForRead()) {
+                    results.emplace_back(NThreading::MakeErrorFuture<NYdb::NTopic::TDescribeTopicResult>(std::make_exception_ptr(NThreading::TFutureException())));
                     continue;
                 }
                 auto& clusterTopicPath = paths.emplace_back(path);
@@ -129,6 +130,8 @@ NPq::NConfigurationManager::TAsyncDescribePathResult TPqSession::DescribePath(co
                 yexception ex;
                 for (size_t i = 0; i != results.size(); ++i) {
                     auto& futureDescribe = results[i];
+                    if (futureDescribe.HasException())
+                        continue;
                     auto describeTopicResult = futureDescribe.ExtractValue();
                     if (!describeTopicResult.IsSuccess()) {
                         ex << "Failed to describe topic `" << cluster << "`.`" << path << "` (name '" << allClustersInfo[i].Name << "' endpoint '" << allClustersInfo[i].Endpoint << "' path '" << paths[i] << "') in the database `" << database << "`: " << describeTopicResult.GetIssues().ToString();

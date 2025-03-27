@@ -633,7 +633,7 @@ void TUserActionProcessorFixture::SendDataRangeResponse(ui64 begin, ui64 end)
     auto pair = read->AddPair();
     NPQ::TKey key(NPQ::TKeyPrefix::TypeData, 1, begin, 0, end - begin, 0);
     pair->SetStatus(NKikimrProto::OK);
-    pair->SetKey(key.ToString());
+    pair->SetKey(key.Data(), key.Size());
     //pair->SetValueSize();
     pair->SetCreationUnixTime(0);
 

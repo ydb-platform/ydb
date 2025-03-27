@@ -3,6 +3,10 @@
 #include "sql_context.h"
 #include "string_util.h"
 
+// FIXME(YQL-19747): unwanted dependency on a lexer implementation
+#include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_pure_ansi/lexer.h>
+
 #include <util/generic/algorithm.h>
 #include <util/charset/utf8.h>
 
@@ -10,8 +14,8 @@ namespace NSQLComplete {
 
     class TSqlCompletionEngine: public ISqlCompletionEngine {
     public:
-        TSqlCompletionEngine()
-            : ContextInference(MakeSqlContextInference())
+        explicit TSqlCompletionEngine(TLexerSupplier lexer)
+            : ContextInference(MakeSqlContextInference(lexer))
         {
         }
 
@@ -68,8 +72,18 @@ namespace NSQLComplete {
         ISqlContextInference::TPtr ContextInference;
     };
 
+    // FIXME(YQL-19747): unwanted dependency on a lexer implementation
     ISqlCompletionEngine::TPtr MakeSqlCompletionEngine() {
-        return ISqlCompletionEngine::TPtr(new TSqlCompletionEngine());
+        NSQLTranslationV1::TLexers lexers;
+        lexers.Antlr4Pure = NSQLTranslationV1::MakeAntlr4PureLexerFactory();
+        lexers.Antlr4PureAnsi = NSQLTranslationV1::MakeAntlr4PureAnsiLexerFactory();
+        return MakeSqlCompletionEngine([lexers = std::move(lexers)](bool ansi) {
+            return NSQLTranslationV1::MakeLexer(lexers, ansi, /* antlr4 = */ true, /* pure = */ true);
+        });
+    }
+
+    ISqlCompletionEngine::TPtr MakeSqlCompletionEngine(TLexerSupplier lexer) {
+        return ISqlCompletionEngine::TPtr(new TSqlCompletionEngine(lexer));
     }
 
 } // namespace NSQLComplete

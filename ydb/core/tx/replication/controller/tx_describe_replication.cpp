@@ -242,7 +242,6 @@ public:
         }
 
         auto& state = *Result->Record.MutableState();
-        Cerr << ">>>>> DESCRIBE = " << replication->GetState() << Endl << Flush;
         switch (replication->GetState()) {
         case TReplication::EState::Ready:
         case TReplication::EState::Removing:

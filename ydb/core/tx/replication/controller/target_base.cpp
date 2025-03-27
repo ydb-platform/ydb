@@ -185,7 +185,6 @@ void TTargetBase::Progress(const TActorContext& ctx) {
         }
         break;
     case EDstState::Alter:
-        Cerr  << ">>>>>> EDstState::Alter Workers " << Workers.size() << " !DstAlterer " << !DstAlterer << Endl << Flush;
         if (Workers) {
             RemoveWorkers(ctx);
         } else if (!DstAlterer) {

@@ -276,6 +276,24 @@ struct MainTestCase {
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
     }
 
+    void PauseTransfer() {
+        ExecuteDDL(Sprintf(R"(
+            ALTER TRANSFER `%s`
+            SET (
+                STATE = "Paused"
+            );
+        )", TransferName.data()));
+    }
+
+    void ResumeTransfer() {
+        ExecuteDDL(Sprintf(R"(
+            ALTER TRANSFER `%s`
+            SET (
+                STATE = "StandBy"
+            );
+        )", TransferName.data()));
+    }
+
     auto DescribeTransfer() {
         TReplicationClient client(Driver);
 
@@ -1413,12 +1431,7 @@ Y_UNIT_TEST_SUITE(Transfer)
 
         Cerr << "State: Paused" << Endl << Flush;
 
-        testCase.ExecuteDDL(Sprintf(R"(
-            ALTER TRANSFER `%s`
-            SET (
-                STATE = "Paused"
-            );
-        )", testCase.TransferName.data()));
+        testCase.PauseTransfer();
 
         Sleep(TDuration::Seconds(1));
         testCase.CheckTransferState(TReplicationDescription::EState::Paused);
@@ -1433,12 +1446,7 @@ Y_UNIT_TEST_SUITE(Transfer)
 
         Cerr << "State: StandBy" << Endl << Flush;
 
-        testCase.ExecuteDDL(Sprintf(R"(
-            ALTER TRANSFER `%s`
-            SET (
-                STATE = "StandBy"
-            );
-        )", testCase.TransferName.data()));
+        testCase.ResumeTransfer();
 
         // Transfer is resumed. New messages are added to the table.
         testCase.CheckTransferState(TReplicationDescription::EState::Running);
@@ -1447,6 +1455,13 @@ Y_UNIT_TEST_SUITE(Transfer)
         }, {
             _C("Message", TString("Message-2")),
         }});
+
+        // More cycles for pause/resume
+        testCase.PauseTransfer();
+        testCase.CheckTransferState(TReplicationDescription::EState::Paused);
+
+        testCase.ResumeTransfer();
+        testCase.CheckTransferState(TReplicationDescription::EState::Running);
     }
 }
 

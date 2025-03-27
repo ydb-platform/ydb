@@ -98,8 +98,9 @@ NPq::NConfigurationManager::TAsyncDescribePathResult TPqSession::DescribePath(co
             return client->DescribePath(path);
         }
 
-        auto futureClusterInfo = GetYdbPqClient(cluster, database, *config, credentialsProviderFactory).GetAllClusterInfo();
-        return futureClusterInfo.Apply([
+        return GetYdbPqClient(cluster, database, *config, credentialsProviderFactory)
+            .GetAllClusterInfo()
+            .Apply([
                 ydbDriver = YdbDriver, credentialsProviderFactory,
                 cluster, database, path,
                 topicSettings = GetYdbPqClientOptions(database, *config, credentialsProviderFactory)

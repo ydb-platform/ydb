@@ -19,7 +19,7 @@ TKey TKey::FromString(const TString& s, const TPartitionId& partition)
                 t.GetPartNo(),
                 t.GetCount(),
                 t.GetInternalPartsCount(),
-                t.IsHead());
+                t.GetSuffix());
 }
 
 TKey TKey::ForBody(EType type,
@@ -29,7 +29,7 @@ TKey TKey::ForBody(EType type,
                    const ui32 count,
                    const ui16 internalPartsCount)
 {
-    return {type, partition, offset, partNo, count, internalPartsCount, false};
+    return {type, partition, offset, partNo, count, internalPartsCount, Nothing()};
 }
 
 TKey TKey::ForHead(EType type,
@@ -39,7 +39,7 @@ TKey TKey::ForHead(EType type,
                    const ui32 count,
                    const ui16 internalPartsCount)
 {
-    return {type, partition, offset, partNo, count, internalPartsCount, true};
+    return {type, partition, offset, partNo, count, internalPartsCount, '|'};
 }
 
 TKey TKey::FromKey(const TKey& k,
@@ -47,7 +47,7 @@ TKey TKey::FromKey(const TKey& k,
                    const TPartitionId& partition,
                    ui64 offset)
 {
-    return {type, partition, offset, k.GetPartNo(), k.GetCount(), k.GetInternalPartsCount(), k.IsHead()};
+    return {type, partition, offset, k.GetPartNo(), k.GetCount(), k.GetInternalPartsCount(), k.GetSuffix()};
 }
 
 void TKeyPrefix::SetTypeImpl(EType type, bool isServicePartition)

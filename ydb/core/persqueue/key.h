@@ -176,7 +176,7 @@ public:
     {}
 
     TKey(const TKey& key)
-        : TKey(key.GetType(), key.GetPartition(), key.Offset, key.PartNo, key.Count, key.InternalPartsCount, key.IsHead())
+        : TKey(key.GetType(), key.GetPartition(), key.Offset, key.PartNo, key.Count, key.InternalPartsCount, key.GetSuffix())
     {
     }
 
@@ -184,50 +184,50 @@ public:
     {}
 
     void SetOffset(const ui64 offset) {
-        Y_ABORT_UNLESS(Size() == KeySize() + IsHead());
+        Y_ABORT_UNLESS(Size() == KeySize() + HasSuffix());
         Offset = offset;
         memcpy(PtrOffset(), Sprintf("%.20" PRIu64, offset).data(), 20);
     }
 
     ui64 GetOffset() const {
-        Y_ABORT_UNLESS(Size() == KeySize() + IsHead());
+        Y_ABORT_UNLESS(Size() == KeySize() + HasSuffix());
         return Offset;
     }
 
     void SetCount(const ui32 count) {
-        Y_ABORT_UNLESS(Size() == KeySize() + IsHead());
+        Y_ABORT_UNLESS(Size() == KeySize() + HasSuffix());
         Count = count;
         memcpy(PtrCount(), Sprintf("%.10" PRIu32, count).data(), 10);
     }
 
     ui32 GetCount() const {
-        Y_ABORT_UNLESS(Size() == KeySize() + IsHead());
+        Y_ABORT_UNLESS(Size() == KeySize() + HasSuffix());
         return Count;
     }
 
     void SetPartNo(const ui16 partNo) {
-        Y_ABORT_UNLESS(Size() == KeySize() + IsHead());
+        Y_ABORT_UNLESS(Size() == KeySize() + HasSuffix());
         PartNo = partNo;
         memcpy(PtrPartNo(), Sprintf("%.5" PRIu16, partNo).data(), 5);
     }
 
     ui16 GetPartNo() const {
-        Y_ABORT_UNLESS(Size() == KeySize() + IsHead());
+        Y_ABORT_UNLESS(Size() == KeySize() + HasSuffix());
         return PartNo;
     }
 
     void SetInternalPartsCount(const ui16 internalPartsCount) {
-        Y_ABORT_UNLESS(Size() == KeySize() + IsHead());
+        Y_ABORT_UNLESS(Size() == KeySize() + HasSuffix());
         InternalPartsCount = internalPartsCount;
         memcpy(PtrInternalPartsCount(), Sprintf("%.5" PRIu16, internalPartsCount).data(), 5);
     }
 
     ui16 GetInternalPartsCount() const {
-        Y_ABORT_UNLESS(Size() == KeySize() + IsHead());
+        Y_ABORT_UNLESS(Size() == KeySize() + HasSuffix());
         return InternalPartsCount;
     }
 
-    bool IsHead() const {
+    bool HasSuffix() const {
         return Size() == KeySize() + 1;
     }
 
@@ -242,7 +242,7 @@ public:
     }
 
 private:
-    TKey(EType type, const TPartitionId& partition, const ui64 offset, const ui16 partNo, const ui32 count, const ui16 internalPartsCount, const bool isHead)
+    TKey(EType type, const TPartitionId& partition, const ui64 offset, const ui16 partNo, const ui32 count, const ui16 internalPartsCount, const TMaybe<char> suffix)
         : TKeyPrefix(type, partition)
         , Offset(offset)
         , Count(count)
@@ -255,13 +255,13 @@ private:
         SetPartNo(partNo);
         SetCount(count);
         SetInternalPartsCount(InternalPartsCount);
-        SetHead(isHead);
+        SetSuffix(suffix);
     }
 
     TKey(const TString& data)
     {
         Assign(data.data(), data.size());
-        Y_ABORT_UNLESS(data.size() == KeySize() + IsHead());
+        Y_ABORT_UNLESS(data.size() == KeySize() + HasSuffix());
         Y_ABORT_UNLESS(*(PtrOffset() - 1) == '_');
         Y_ABORT_UNLESS(*(PtrCount() - 1) == '_');
         Y_ABORT_UNLESS(*(PtrPartNo() - 1) == '_');
@@ -304,10 +304,20 @@ private:
         InternalPartsCount = FromString<ui16>(TStringBuf{PtrInternalPartsCount(), 5});
     }
 
-    void SetHead(const bool isHead) {
-        Resize(KeySize() + isHead);
-        if (isHead)
-            Data()[KeySize()] = '|';
+    TMaybe<char> GetSuffix() const
+    {
+        if (HasSuffix()) {
+            return Data()[KeySize()];
+        }
+        return Nothing();
+    }
+
+    void SetSuffix(TMaybe<char> suffix)
+    {
+        Resize(KeySize() + suffix.Defined());
+        if (suffix.Defined()) {
+            Data()[KeySize()] = *suffix;
+        }
     }
 
     ui64 Offset;

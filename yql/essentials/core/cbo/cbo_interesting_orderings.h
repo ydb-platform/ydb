@@ -80,6 +80,28 @@ struct TFunctionalDependency {
  */
 class TFDStorage {
 public:
+    std::int64_t FindFDIdx(
+        const TJoinColumn& antecedentColumn,
+        const TJoinColumn& consequentColumn,
+        TFunctionalDependency::EType type
+    ) {
+        auto convertedAntecedent = ConvertColumnIntoIndexes({antecedentColumn});
+        auto convertedConsequent = ConvertColumnIntoIndexes({consequentColumn}).at(0);
+
+        for (std::size_t i = 0; i < FDs.size(); ++i) {
+            auto& fd = FDs[i];
+            if (
+                fd.AntecedentItems == convertedAntecedent &&
+                fd.ConsequentItem == convertedConsequent &&
+                fd.Type == type
+            ) {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
     std::size_t AddFD(
         const TJoinColumn& antecedentColumn,
         const TJoinColumn& consequentColumn,
@@ -97,21 +119,22 @@ public:
         return FDs.size() - 1;
     }
 
+    std::int64_t FindInterestingOrderingIdx(
+        const std::vector<TJoinColumn>& interestingOrdering,
+        TOrdering::EType type
+    ) {
+        const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, type);
+        return orderingIdx;
+    }
+
     std::size_t AddInterestingOrdering(
         const std::vector<TJoinColumn>& interestingOrdering,
         TOrdering::EType type
     ) {
-        std::vector<std::size_t> items;
-        items.reserve(interestingOrdering.size());
+        auto [items, foundIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, type);
 
-        for (const auto& column: interestingOrdering) {
-            items.push_back(GetIdxByColumn(column));
-        }
-
-        for (std::size_t i = 0; i < InterestingOrderings.size(); ++i) {
-            if (items == InterestingOrderings[i].Items) {
-                return i;
-            }
+        if (foundIdx != 0) {
+            return static_cast<std::size_t>(foundIdx);
         }
 
         InterestingOrderings.push_back(TOrdering{.Items = std::move(items), .Type = type });
@@ -145,6 +168,35 @@ public:
     std::vector<TOrdering> InterestingOrderings;
 
 private:
+    /*
+     * Returns converted columns (interestingOrdering -> inner representation),
+     * and index > 0 of the ordering if it has been already added, -1 otherwise
+     */
+    std::pair<std::vector<std::size_t>, std::int64_t> ConvertColumnsAndFindExistingOrdering(
+        const std::vector<TJoinColumn>& interestingOrdering,
+        TOrdering::EType type
+    ) {
+        std::vector<std::size_t> items = ConvertColumnIntoIndexes(interestingOrdering);
+        for (std::size_t i = 0; i < InterestingOrderings.size(); ++i) {
+            if (items == InterestingOrderings[i].Items && type == InterestingOrderings[i].Type) {
+                return {items, static_cast<std::int64_t>(i)};
+            }
+        }
+
+        return {items, -1};
+    }
+
+    std::vector<std::size_t> ConvertColumnIntoIndexes(const std::vector<TJoinColumn>& ordering) {
+        std::vector<std::size_t> items;
+        items.reserve(ordering.size());
+
+        for (const auto& column: ordering) {
+            items.push_back(GetIdxByColumn(column));
+        }
+
+        return items;
+    }
+
     std::size_t GetIdxByColumn(const TJoinColumn& column) {
         const std::string fullPath = column.RelName + "." + column.AttributeName;
         if (IdxByColumn.contains(fullPath)) {
@@ -277,28 +329,24 @@ public:
     }
 
 public:
-    TOrderingsStateMachine(
-        const std::vector<TFunctionalDependency>& fds,
-        const std::vector<TOrdering>& interestingOrderings
-    ) {
-        Build(fds, interestingOrderings);
-    }
-
     TOrderingsStateMachine() = default;
 
-public:
-    void Build(
-        const std::vector<TFunctionalDependency>& fds,
-        const std::vector<TOrdering>& interestingOrderings
-    ) {
-        std::vector<TFunctionalDependency> processedFDs = PruneFDs(fds, interestingOrderings);
-        NFSM.Build(processedFDs, interestingOrderings);
-        DFSM.Build(NFSM, processedFDs, interestingOrderings);
-        Built = true;
+    TOrderingsStateMachine(TFDStorage fdStorage)
+        : FDStorage(std::move(fdStorage))
+    {
+        Build(FDStorage.FDs, FDStorage.InterestingOrderings);
     }
+
+public:
+    TFDStorage FDStorage;
 
     bool IsBuilt() const {
         return Built;
+    }
+
+    TFDSet GetFDSet(std::int64_t fdIdx) {
+        if (fdIdx < 0) { return TFDSet(); }
+        return GetFDSet(std::vector<std::size_t> {static_cast<std::size_t>(fdIdx)});
     }
 
     TFDSet GetFDSet(std::size_t fdIdx) {
@@ -317,7 +365,16 @@ public:
         return fdSet;
     }
 
-    std::array<std::size_t, 64> ShuffleCountByColumnIdx;
+private:
+    void Build(
+        const std::vector<TFunctionalDependency>& fds,
+        const std::vector<TOrdering>& interestingOrderings
+    ) {
+        std::vector<TFunctionalDependency> processedFDs = PruneFDs(fds, interestingOrderings);
+        NFSM.Build(processedFDs, interestingOrderings);
+        DFSM.Build(NFSM, processedFDs, interestingOrderings);
+        Built = true;
+    }
 
 private:
     class TNFSM {

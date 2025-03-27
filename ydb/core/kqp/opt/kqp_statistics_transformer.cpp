@@ -176,7 +176,7 @@ void InferStatisticsForKqpTable(
     }
 
     stats->SortColumns = sortedPrefixPtr;
-    tablePathByStats[stats] = tableData;
+    tablePathByStats[stats] = path;
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for table: " << path.Value() << ": " << stats->ToString();
 
@@ -828,13 +828,16 @@ public:
     {}
 
 public:
-    TOrderingsStateMachine Build(const TExprNode::TPtr& node) {
+    TOrderingsStateMachine Build(
+        const TExprNode::TPtr& node
+    ) {
         VisitExpr(node, [this](const TExprNode::TPtr& node){
             return this->InterstingOrderingsCollector.Collect(node);
         });
 
         auto& fdStorage = InterstingOrderingsCollector.FDStorage;
-        return TOrderingsStateMachine(fdStorage.FDs, fdStorage.InterestingOrderings);
+        auto fsm = TOrderingsStateMachine(std::move(fdStorage));
+        return fsm;
     }
 
 private:
@@ -889,7 +892,7 @@ private:
                 const auto& tableDesc = KqpCtx.Tables->ExistingTable(KqpCtx.Cluster, tablePath);
 
                 TVector<TJoinColumn> shuffledBy;
-                shuffledBy.reserve(TablePathByStats[label].size());
+                shuffledBy.reserve(tableDesc.Metadata->PartitionedByColumns.size());
                 for (const auto& column: tableDesc.Metadata->PartitionedByColumns) {
                     shuffledBy.emplace_back(label, column);
                 }
@@ -952,7 +955,7 @@ IGraphTransformer::TStatus TKqpStatisticsTransformer::DoTransform(TExprNode::TPt
     if (!TypeCtx->OrderingsFSM.IsBuilt()) {
         TDqStatisticsTransformerBase::DoTransform(input, output, ctx);
         /* ^ we have to propogate KqpTable statistics to EquiJoin for working with its partitioning */
-        auto fsmBuilder = TInterestingOrderingsFSMBuilder(KqpCtx, TypeCtx, TablePathByStats);
+        auto fsmBuilder = TInterestingOrderingsFSMBuilder(KqpCtx, *TypeCtx, TablePathByStats);
         TypeCtx->OrderingsFSM = fsmBuilder.Build(input);
     }
 

@@ -1,6 +1,5 @@
 # Traceability Matrix
 
-### Datashards
 #### [ISSUE-14851](https://github.com/ydb-platform/ydb/issues/14851): Test Suite: datashard/types
 [![PROGRESS](https://img.shields.io/badge/PROGRESS-1%2F12:8%25-rgb(254%2C%20248%2C%20202%2C1)?style=for-the-badge&logo=database&labelColor=grey)](./summary.md#issue-14851-test-suite-datashardtypes)
 
@@ -26,4 +25,36 @@
 | #14989 | Test for split/merge for all types | 1. Create a table with:<br>\* all types of data;<br>\* all types of column features: regular column, primary key, indexed column, TTL column, ...<br><br>2. Insert some data.<br><br>3. Split table.<br><br>4. Check that all data exists.<br><br>5. Merge table.<br><br>6. Check that all data exists. | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14989)](https://github.com/ydb-platform/ydb/issues/14989) | Pending |
 | #14990 | Test for parametrized queries for all types | 1. Create a table with:<br>\* all types of data;<br>\* all types of column features: regular column, primary key, indexed column, TTL column, ...<br><br>2. Insert some data using parametrized queries.<br><br>3. Select all data using parametrized queries. | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14990)](https://github.com/ydb-platform/ydb/issues/14990) | Pending |
 | #14991 | Test for all clauses of SELECT for all types | 1. Create a table with:<br>\* all types of data;<br>\* all types of column features: regular column, primary key, indexed column, TTL column, ...<br><br>2. Insert some data.<br><br>3. Select data using [all the clauses of SELECT](https://ydb.tech/docs/en/yql/reference/syntax/select/\#clauses\-supported\-in\-select) | [![GitHub issue/pull request detail](https://img.shields.io/github/issues/detail/state/ydb-platform/ydb/14991)](https://github.com/ydb-platform/ydb/issues/14991) | Pending |
+
+### Import/Export via CLI
+#### REQ-DS-001: Import/Export via CLI
+**Description**: Provide robust CLI tools to facilitate data operations for users managing datashards.
+
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
+| REQ-DS-001-1.1 | Import from CSV - 1GB | Validate import from CSV file. |  | Pending |
+| REQ-DS-001-1.2 | Export to JSON - 10GB | Validate export to JSON data. |  | Pending |
+| REQ-DS-001-1.3 | Import from Parquet - 100GB | Validate import from Parquet file. |  | Pending |
+| REQ-DS-001-1.4 | Export to CSV - 1TB | Validate export to CSV data. |  | Pending |
+
+### Performance 
+#### REQ-DS-002: Performance Testing of Import/Export Operations
+**Description**: Measure and document performance metrics for import/export operations to ensure scalability and efficiency.
+
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
+| REQ-DS-002-2.1 | Import Performance - 1GB | Measure import speed with 1GB of data. |  | Pending |
+| REQ-DS-002-2.2 | Export Performance - 10GB | Measure export speed with 10GB of data. |  | Pending |
+| REQ-DS-002-2.3 | Import Performance - 100GB | Measure import speed with 100GB of data. |  | Pending |
+| REQ-DS-002-2.4 | Export Performance - 1TB | Measure export speed with 1TB of data. |  | Pending |
+
+#### REQ-DS-003: Performance Testing of Datashard Operations
+**Description**: Ensure that operations such as splitting and merging datashards perform efficiently under various conditions.
+
+| Case ID | Name | Description | Issues |  Status |
+|---------|------|-------------|--------|:--------|
+| REQ-DS-003-3.1 | Split Performance - Moderate Load | Measure performance of split operations under moderate load. |  | Pending |
+| REQ-DS-003-3.2 | Merge Performance - Heavy Load | Measure performance of merge operations under heavy load. |  | Pending |
+| REQ-DS-003-3.3 | Split/Merge Performance - Mixed Workload | Measure performance of split and merge operations under mixed workload conditions. |  | Pending |
+| REQ-DS-003-3.4 | Split/Merge Stability - Large Datasets | Ensure stability of split and merge operations with large datasets. |  | Pending |
 

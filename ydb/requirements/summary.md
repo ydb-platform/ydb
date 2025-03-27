@@ -4,7 +4,6 @@
 
 ## Non-functional Requirements
 
-### Datashards
 #### [ISSUE-14851](https://github.com/ydb-platform/ydb/issues/14851): Test Suite: datashard/types
 **Description**: * get all types of data;
 * get a column feature: regular column, primary key, indexed column, TTL column, ...;

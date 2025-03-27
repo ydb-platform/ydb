@@ -13,8 +13,14 @@
           ]
       },
       {
-        "op_name":"TableFullScan",
-        "table":"part"
+        "op_name":"HashShuffle",
+        "args":
+          [
+            {
+              "op_name":"TableFullScan",
+              "table":"part"
+            }
+          ]
       }
     ]
 }

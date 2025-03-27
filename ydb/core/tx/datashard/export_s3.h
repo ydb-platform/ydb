@@ -7,6 +7,8 @@
 #include "export_iface.h"
 #include "export_s3_buffer.h"
 
+#include <ydb/public/api/protos/ydb_export.pb.h>
+
 namespace NKikimr {
 namespace NDataShard {
 
@@ -48,6 +50,20 @@ public:
             break;
         case ECompressionCodec::Invalid:
             Y_ABORT("unreachable");
+        }
+
+        if (Task.HasEncryptionSettings()) {
+            NBackup::TEncryptionIV iv = NBackup::TEncryptionIV::Combine(
+                NBackup::TEncryptionIV::FromBinaryString(Task.GetEncryptionSettings().GetIV()),
+                NBackup::EBackupFileType::TableData,
+                0, // already combined
+                Task.GetShardNum());
+            bufferSettings.WithEncryption(
+                TS3ExportBufferSettings::TEncryptionSettings()
+                    .WithAlgorithm(Task.GetEncryptionSettings().GetEncryptionAlgorithm())
+                    .WithKey(NBackup::TEncryptionKey(Task.GetEncryptionSettings().GetSymmetricKey().key()))
+                    .WithIV(iv)
+            );
         }
 
         return CreateS3ExportBuffer(std::move(bufferSettings));

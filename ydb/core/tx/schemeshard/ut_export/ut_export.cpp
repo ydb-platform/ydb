@@ -1,3 +1,4 @@
+#include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/metering/metering.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tablet_flat/shared_cache_events.h>
@@ -329,17 +330,30 @@ namespace {
     class TExportFixture : public NUnitTest::TBaseFixture {
     public:
         void RunS3(TTestBasicRuntime& runtime, const TVector<TString>& tables, const TString& requestTpl, Ydb::StatusIds::StatusCode expectedStatus = Ydb::StatusIds::SUCCESS) {
-            auto request = Sprintf(requestTpl.c_str(), S3Port());
+            auto requestStr = Sprintf(requestTpl.c_str(), S3Port());
+            NKikimrExport::TCreateExportRequest request;
+            UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(requestStr, &request));
 
             TTestEnv env(runtime);
             runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
-            Run(runtime, env, tables, request, expectedStatus, "/MyRoot", false);
+
+            Run(runtime, env, tables, requestStr, expectedStatus, "/MyRoot", false);
+
+            auto calcPath = [&](const TString& targetPath, const TString& file) {
+                TString canonPath = (targetPath.StartsWith("/") || targetPath.empty()) ? targetPath : TString("/") + targetPath;
+                TString result = canonPath;
+                result += '/';
+                result += file;
+                if (request.GetExportToS3Settings().has_encryption_settings()) {
+                    result += ".enc";
+                }
+                return result;
+            };
 
             if (expectedStatus == Ydb::StatusIds::SUCCESS) {
-                for (auto& path : GetExportTargetPaths(request)) {
-                    auto canonPath = (path.StartsWith("/") || path.empty()) ? path : TString("/") + path;
-                    UNIT_ASSERT_C(HasS3File(canonPath + "/metadata.json"), canonPath + "/metadata.json");
-                    UNIT_ASSERT_C(HasS3File(canonPath + "/scheme.pb"), canonPath + "/scheme.pb");
+                for (auto& path : GetExportTargetPaths(requestStr)) {
+                    UNIT_ASSERT_C(HasS3File(calcPath(path, "metadata.json")), calcPath(path, "metadata.json"));
+                    UNIT_ASSERT_C(HasS3File(calcPath(path, "scheme.pb")), calcPath(path, "scheme.pb"));
                 }
             }
         }
@@ -2906,8 +2920,8 @@ attributes {
         UNIT_ASSERT(HasS3File("/my_export/metadata.json"));
         UNIT_ASSERT(HasS3File("/my_export/SchemaMapping/metadata.json.enc"));
         UNIT_ASSERT(HasS3File("/my_export/SchemaMapping/mapping.json.enc"));
-        UNIT_ASSERT(HasS3File("/my_export/001/scheme.pb"));
-        UNIT_ASSERT(HasS3File("/my_export/table2_prefix/scheme.pb"));
+        UNIT_ASSERT(HasS3File("/my_export/001/scheme.pb.enc"));
+        UNIT_ASSERT(HasS3File("/my_export/table2_prefix/scheme.pb.enc"));
     }
 
     Y_UNIT_TEST(SchemaMappingEncryptionIncorrectKey) {
@@ -2946,5 +2960,75 @@ attributes {
               }
             }
         )", Ydb::StatusIds::CANCELLED);
+    }
+
+    Y_UNIT_TEST(EncryptedExport) {
+        TTestBasicRuntime runtime;
+
+        RunS3(runtime, {
+            R"(
+                Name: "Table1"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+                UniformPartitionsCount: 2
+            )",
+            R"(
+                Name: "Table2"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+                UniformPartitionsCount: 2
+            )",
+        }, R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              destination_prefix: "my_export"
+              items {
+                source_path: "/MyRoot/Table1"
+              }
+              items {
+                source_path: "/MyRoot/Table2"
+              }
+              encryption_settings {
+                encryption_algorithm: "AES-128-GCM"
+                symmetric_key {
+                    key: "0123456789012345"
+                }
+              }
+            }
+        )");
+
+        UNIT_ASSERT(HasS3File("/my_export/metadata.json"));
+        UNIT_ASSERT(HasS3File("/my_export/SchemaMapping/metadata.json.enc"));
+        UNIT_ASSERT(HasS3File("/my_export/SchemaMapping/mapping.json.enc"));
+        UNIT_ASSERT(HasS3File("/my_export/001/scheme.pb.enc"));
+        UNIT_ASSERT(HasS3File("/my_export/001/data_00.csv.enc"));
+        UNIT_ASSERT(HasS3File("/my_export/001/data_01.csv.enc"));
+        UNIT_ASSERT(HasS3File("/my_export/002/scheme.pb.enc"));
+        UNIT_ASSERT(HasS3File("/my_export/002/data_00.csv.enc"));
+        UNIT_ASSERT(HasS3File("/my_export/002/data_01.csv.enc"));
+
+        THashSet<TString> ivs;
+        for (auto [key, content] : S3Mock().GetData()) {
+            if (key == "/my_export/metadata.json") {
+                continue;
+            }
+
+            // All files except backup metadata must be encrypted
+            UNIT_ASSERT_C(key.EndsWith(".enc"), key);
+
+            // Check that we can decrypt content with our key (== it is really encrypted with our key)
+            TBuffer decryptedData;
+            NBackup::TEncryptionIV iv;
+            UNIT_ASSERT_NO_EXCEPTION_C(std::tie(decryptedData, iv) = NBackup::TEncryptedFileDeserializer::DecryptFullFile(
+                NBackup::TEncryptionKey("0123456789012345"),
+                TBuffer(content.data(), content.size())
+            ), key);
+
+            // All ivs are unique
+            UNIT_ASSERT_C(ivs.insert(iv.GetBinaryString()).second, key);
+        }
     }
 }

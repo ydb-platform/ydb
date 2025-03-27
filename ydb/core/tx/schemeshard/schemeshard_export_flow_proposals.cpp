@@ -249,6 +249,14 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> BackupPropose(
 
             task.SetEnableChecksums(exportInfo->EnableChecksums);
             task.SetEnablePermissions(exportInfo->EnablePermissions);
+
+            if (exportSettings.has_encryption_settings()) {
+                auto& encryptionSettings = *task.MutableEncryptionSettings();
+                encryptionSettings.SetEncryptionAlgorithm(exportInfo->ExportMetadata.GetEncryptionAlgorithm());
+                Y_ABORT_UNLESS(itemIdx < exportInfo->ExportMetadata.SchemaMappingSize());
+                encryptionSettings.SetIV(exportInfo->ExportMetadata.GetSchemaMapping(itemIdx).GetIV());
+                *encryptionSettings.MutableSymmetricKey() = exportSettings.encryption_settings().symmetric_key();
+            }
         }
         break;
     }

@@ -193,21 +193,30 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     }
 
     template <typename T>
-    void PutDataWithChecksum(TString&& data, const TString& key, TString& checksum, T stateFunc) {
+    void PutDataWithChecksum(TString&& data, const TString& key, TString& checksum, T stateFunc, TMaybe<TEncryptionIV> iv) {
         if (EnableChecksums) {
             checksum = ComputeChecksum(data);
+        }
+        if (iv) {
+            try {
+                TBuffer encryptedData = TEncryptedFileSerializer::EncryptFullFile(Settings.EncryptionSettings.EncryptionAlgorithm, *Settings.EncryptionSettings.Key, *iv, data);
+                data = TString(encryptedData.Data(), encryptedData.Size());
+            } catch (const std::exception& ex) {
+                Finish(false, TStringBuilder() << "Failed to encrypt " << key << ": " << ex.what());
+                return;
+            }
         }
         PutData(std::move(data), key, stateFunc);
     }
 
     template <typename T>
-    void PutMessage(const google::protobuf::Message& message, const TString& key, TString& checksum, T stateFunc) {
+    void PutMessage(const google::protobuf::Message& message, const TString& key, TString& checksum, T stateFunc, TMaybe<TEncryptionIV> iv) {
         google::protobuf::TextFormat::PrintToString(message, &Buffer);
-        PutDataWithChecksum(std::move(Buffer), key, checksum, stateFunc);
+        PutDataWithChecksum(std::move(Buffer), key, checksum, stateFunc, iv);
     }
 
     void PutScheme(const Ydb::Table::CreateTableRequest& scheme) {
-        PutMessage(scheme, Settings.GetSchemeKey(), SchemeChecksum, &TThis::StateUploadScheme);
+        PutMessage(scheme, Settings.GetSchemeKey(), SchemeChecksum, &TThis::StateUploadScheme, Settings.EncryptionSettings.GetSchemeIV());
     }
 
     void UploadScheme() {
@@ -220,7 +229,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     }
 
     void PutPermissions(const Ydb::Scheme::ModifyPermissionsRequest& permissions) {
-        PutMessage(permissions, Settings.GetPermissionsKey(), PermissionsChecksum, &TThis::StateUploadPermissions);
+        PutMessage(permissions, Settings.GetPermissionsKey(), PermissionsChecksum, &TThis::StateUploadPermissions, Settings.EncryptionSettings.GetPermissionsIV());
     }
 
     void UploadPermissions() {
@@ -233,7 +242,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     }
 
     void PutChangefeedDescription(const Ydb::Table::ChangefeedDescription& changefeed, const TString& changefeedName) {
-        PutMessage(changefeed, Settings.GetChangefeedKey(changefeedName), ChangefeedChecksum, &TThis::StateUploadChangefeed);
+        PutMessage(changefeed, Settings.GetChangefeedKey(changefeedName), ChangefeedChecksum, &TThis::StateUploadChangefeed, Settings.EncryptionSettings.GetChangefeedIV());
     }
 
     const TString& GetCurrentChangefeedName() const {
@@ -254,7 +263,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
     }
 
     void PutTopicDescription(const Ydb::Topic::DescribeTopicResult& topic, const TString& changefeedName) {
-        PutMessage(topic, Settings.GetTopicKey(changefeedName), TopicChecksum, &TThis::StateUploadTopic);
+        PutMessage(topic, Settings.GetTopicKey(changefeedName), TopicChecksum, &TThis::StateUploadTopic, Settings.EncryptionSettings.GetTopicIV());
     }
 
     void UploadTopic() {
@@ -265,7 +274,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         Y_ABORT_UNLESS(!MetadataUploaded);
 
         Buffer = std::move(Metadata);
-        PutDataWithChecksum(std::move(Buffer), Settings.GetMetadataKey(), MetadataChecksum, &TThis::StateUploadMetadata);
+        PutDataWithChecksum(std::move(Buffer), Settings.GetMetadataKey(), MetadataChecksum, &TThis::StateUploadMetadata, Settings.EncryptionSettings.GetMetadataIV());
     }
 
     void UploadChecksum(TString&& checksum, const TString& checksumKey, const TString& objectKeySuffix, 
@@ -295,7 +304,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
         if (EnableChecksums) {
             TString checksumKey = ChecksumKey(Settings.GetSchemeKey());
-            UploadChecksum(std::move(SchemeChecksum), checksumKey, SchemeKeySuffix(), nextStep);
+            UploadChecksum(std::move(SchemeChecksum), checksumKey, SchemeKeySuffix(false), nextStep);
         } else {
             nextStep();
         }
@@ -319,7 +328,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
         if (EnableChecksums) {
             TString checksumKey = ChecksumKey(Settings.GetPermissionsKey());
-            UploadChecksum(std::move(PermissionsChecksum), checksumKey, PermissionsKeySuffix(), nextStep);
+            UploadChecksum(std::move(PermissionsChecksum), checksumKey, PermissionsKeySuffix(false), nextStep);
         } else {
             nextStep();
         }
@@ -341,7 +350,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         };
         if (EnableChecksums) {
             TString checksumKey = ChecksumKey(Settings.GetChangefeedKey(GetCurrentChangefeedName()));
-            UploadChecksum(std::move(ChangefeedChecksum), checksumKey, ChangefeedKeySuffix(), nextStep);
+            UploadChecksum(std::move(ChangefeedChecksum), checksumKey, ChangefeedKeySuffix(false), nextStep);
         } else {
             nextStep();
         }
@@ -364,7 +373,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         };
         if (EnableChecksums) {
             TString checksumKey = ChecksumKey(Settings.GetTopicKey(GetCurrentChangefeedName()));
-            UploadChecksum(std::move(TopicChecksum), checksumKey, TopicKeySuffix(), nextStep);
+            UploadChecksum(std::move(TopicChecksum), checksumKey, TopicKeySuffix(false), nextStep);
         } else {
             nextStep();
         }
@@ -392,7 +401,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
 
         if (EnableChecksums) {
             TString checksumKey = ChecksumKey(Settings.GetMetadataKey());
-            UploadChecksum(std::move(MetadataChecksum), checksumKey, MetadataKeySuffix(), nextStep);
+            UploadChecksum(std::move(MetadataChecksum), checksumKey, MetadataKeySuffix(false), nextStep);
         } else {
             nextStep();
         }
@@ -488,7 +497,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
         if (EnableChecksums) {
             // checksum is always calculated before compression
             TString checksumKey = ChecksumKey(Settings.GetDataKey(DataFormat, ECompressionCodec::None));
-            TString dataKeySuffix = DataKeySuffix(ShardNum, DataFormat, ECompressionCodec::None);
+            TString dataKeySuffix = DataKeySuffix(ShardNum, DataFormat, ECompressionCodec::None, false);
             UploadChecksum(std::move(DataChecksum), checksumKey, dataKeySuffix, nextStep);
         } else {
             nextStep();
@@ -582,7 +591,7 @@ class TS3Uploader: public TActorBootstrapped<TS3Uploader> {
             if (EnableChecksums) {
                 // checksum is always calculated before compression
                 TString checksumKey = ChecksumKey(Settings.GetDataKey(DataFormat, ECompressionCodec::None));
-                TString dataKeySuffix = DataKeySuffix(ShardNum, DataFormat, ECompressionCodec::None);
+                TString dataKeySuffix = DataKeySuffix(ShardNum, DataFormat, ECompressionCodec::None, false);
                 return UploadChecksum(std::move(DataChecksum), checksumKey, dataKeySuffix, nextStep);
             } else {
                 return nextStep();
@@ -950,11 +959,11 @@ IActor* TS3Export::CreateUploader(const TActorId& dataShard, ui64 txId) const {
         ? GenYdbPermissions(Task.GetTable())
         : Nothing();
 
-    NBackup::TMetadata metadata;
+    TMetadata metadata;
     metadata.SetVersion(Task.GetEnableChecksums() ? 1 : 0);
 
-    NBackup::TFullBackupMetadata::TPtr backup = new NBackup::TFullBackupMetadata{
-        .SnapshotVts = NBackup::TVirtualTimestamp(
+    TFullBackupMetadata::TPtr backup = new TFullBackupMetadata{
+        .SnapshotVts = TVirtualTimestamp(
             Task.GetSnapshotStep(),
             Task.GetSnapshotTxId())
     };

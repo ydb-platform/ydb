@@ -1260,6 +1260,17 @@ message TBackupTask {
     optional TCompressionOptions Compression = 13;
     optional bool EnableChecksums = 16; 
     optional bool EnablePermissions = 18;
+
+    // Encryption (currently available only for s3):
+    message TEncryptionSettings {
+        optional string EncryptionAlgorithm = 1;
+        optional bytes IV = 2;
+        oneof Key {
+            Ydb.Export.EncryptionSettings.SymmetricKey SymmetricKey = 3;
+        }
+    }
+
+    optional TEncryptionSettings EncryptionSettings = 19;
 }
 
 message TRestoreTask {

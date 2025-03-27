@@ -381,6 +381,7 @@ public:
     void NotifyCA();
     void SendStartSession(TSession& sessionInfo);
     void Init();
+    void InitChild();
     void ScheduleProcessState();
     void ProcessGlobalState();
     void ProcessSessionsState();
@@ -498,18 +499,14 @@ void TDqPqRdReadActor::Init() {
     LogPrefix = (TStringBuilder() << "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ", Cluster: " << Cluster << ". PQ source. ");
 
     Inited = true;
+
     if (Parent == this) {
-        for (auto& clusterState: Clusters) {
-            auto child = clusterState.Child;
-            if (child == nullptr) {
-                continue;
-            }
-            child->Init();
-        }
         ProcessState();
         Schedule(TDuration::Seconds(NotifyCAPeriodSec), new TEvPrivate::TEvNotifyCA());
-        return;
     }
+}
+
+void TDqPqRdReadActor::InitChild() {
     for (auto& [partitionKey, offset]: Parent->PartitionToOffset) {
         if (Cluster == partitionKey.Cluster) {
             NextOffsetFromRD[partitionKey.PartitionId] = offset;
@@ -517,7 +514,6 @@ void TDqPqRdReadActor::Init() {
     }
     SRC_LOG_I("Send TEvCoordinatorChangesSubscribe to local RD (" << LocalRowDispatcherActorId << ")");
     Send(LocalRowDispatcherActorId, new NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe());
-
     Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
 }
 
@@ -1266,6 +1262,8 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvDescribeTopicResult::TPtr& ev) {
         SourceParams.SetDatabase(TString(Clusters[clusterIndex].Info.Path));
         ReadParams.mutable_partitioningparams()->SetTopicPartitionsCount(Clusters[clusterIndex].PartitionCount);
         State = EState::INIT;
+        Init();
+        InitChild();
         ProcessState();
         return;
     }
@@ -1294,9 +1292,8 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvDescribeTopicResult::TPtr& ev) {
         this,
         TString(Clusters[clusterIndex].Info.Name));
     Clusters[clusterIndex].ChildId = RegisterWithSameMailbox(actor);
-    if (Inited) {
-        actor->Init();
-    }
+    actor->Init();
+    actor->InitChild();
     ProcessState();
 }
 

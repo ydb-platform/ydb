@@ -340,7 +340,6 @@ struct MainTestCase {
             if (res.first == expectations.size()) {
                 const Ydb::ResultSet& proto = res.second;
                 for (size_t i = 0; i < expectations.size(); ++i) {
-                    Cerr << ">>>>> Iteration " << i << Endl << Flush;
                     auto& row = proto.rows(i);
                     auto& rowExpectations = expectations[i];
                     for (size_t i = 0; i < rowExpectations.size(); ++i) {
@@ -1373,7 +1372,7 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.CheckTransferStateError(TStringBuilder() << "The target table `/local/" << testCase.TableName << "` does not exist");
     }
 
-    Y_UNIT_TEST(PauseTransfer)
+    Y_UNIT_TEST(PauseAndResumeTransfer)
     {
         MainTestCase testCase;
         testCase.CreateTable(R"(
@@ -1417,7 +1416,7 @@ Y_UNIT_TEST_SUITE(Transfer)
 
         testCase.Write({"Message-2"});
 
-        // Transfer is paused. New masages aren`t added to the table.
+        // Transfer is paused. New messages aren`t added to the table.
         Sleep(TDuration::Seconds(3));
         testCase.CheckResult({{
             _C("Message", TString("Message-1"))
@@ -1432,7 +1431,7 @@ Y_UNIT_TEST_SUITE(Transfer)
             );
         )", testCase.TransferName.data()));
 
-        // Transfer is resumed. New masages aren added to the table.
+        // Transfer is resumed. New messages are added to the table.
         testCase.CheckResult({{
             _C("Message", TString("Message-1"))
         }, {

@@ -13,7 +13,6 @@
 #include <yql/essentials/minikql/mkql_stats_registry.h>
 #include <yql/essentials/minikql/defs.h>
 #include <yql/essentials/utils/cast.h>
-#include <yql/essentials/utils/log/log.h>
 
 #include <util/string/cast.h>
 
@@ -1846,6 +1845,8 @@ private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
         NYql::NUdf::TLoggerPtr logger = ctx.MakeLogger();
         NYql::NUdf::TLogComponentId logComponentId = logger->RegisterComponent("WideLastCombine");
+        std::cerr << "MISHA DoCalculate. logger: " << std::endl;
+        logger->Log(logComponentId, NUdf::ELogLevel::Info, TStringBuilder() << "MISHA DoCalculate Log");
 
         state = ctx.HolderFactory.Create<TSpillingSupportState>(UsedInputItemType, KeyAndStateType,
             Nodes.KeyNodes.size(),
@@ -1883,8 +1884,6 @@ private:
     const ui32 WideFieldsIndex;
 
     const bool AllowSpilling;
-    const NUdf::TLoggerPtr Logger;
-    const NUdf::TLogComponentId LogComponent;
 #ifndef MKQL_DISABLE_CODEGEN
     TEqualsPtr Equals = nullptr;
     THashPtr Hash = nullptr;

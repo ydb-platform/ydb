@@ -25,6 +25,7 @@
 #include <yql/essentials/minikql/mkql_node_visitor.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
+#include <yql/essentials/utils/backtrace/backtrace.h>
 
 #include <util/generic/scope.h>
 
@@ -318,7 +319,7 @@ public:
 
         TComputationPatternOpts opts(alloc.Ref(), typeEnv, taskRunnerFactory,
             Context.FuncRegistry, NUdf::EValidateMode::None, validatePolicy, optLLVM, EGraphPerProcess::Multi,
-            AllocatedHolder->ProgramParsed.StatsRegistry.Get(), CollectFull() ? &CountersProvider : nullptr);
+            AllocatedHolder->ProgramParsed.StatsRegistry.Get(), CollectFull() ? &CountersProvider : nullptr, nullptr, LogProvider.Get());
 
         if (!SecureParamsProvider) {
             SecureParamsProvider = MakeSimpleSecureParamsProvider(Settings.SecureParams);
@@ -717,6 +718,18 @@ public:
 
         }
 
+        NUdf::TLogProviderFunc logProviderFunc = nullptr;
+        TStringStream ss;
+        NYql::NBacktrace::KikimrBackTraceFormatImpl(&ss);
+        std::cerr << "MISHA logfunc is set: " << (bool)LogFunc << "\n" << ss.Str() << std::endl;
+        if (LogFunc) {
+            logProviderFunc = [log=LogFunc](const NUdf::TStringRef& component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
+                log(TStringBuilder() << Now() << " " << component << " [" << level << "] " << message << "\n");
+            };
+        }
+
+        LogProvider = NUdf::MakeLogProvider(logProviderFunc);
+
         LOG(TStringBuilder() << "Prepare task: " << TaskId << ", takes " << prepareTime.MicroSeconds() << " us");
         if (Stats) {
             Stats->BuildCpuTime += prepareTime;
@@ -978,6 +991,7 @@ private:
 private:
     std::shared_ptr<ISpillerFactory> SpillerFactory;
     TIntrusivePtr<TSpillingTaskCounters> SpillingTaskCounters;
+    NUdf::TUniquePtr<NUdf::ILogProvider> LogProvider;
 
     ui64 TaskId = 0;
     TDqTaskRunnerContext Context;

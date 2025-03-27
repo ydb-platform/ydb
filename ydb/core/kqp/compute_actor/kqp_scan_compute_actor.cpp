@@ -260,7 +260,9 @@ void TKqpScanComputeActor::DoBootstrap() {
     }
 
     NDq::TLogFunc logger;
+    std::cerr << "MISHA taskRunner logger: " << (bool)logger << std::endl;
     if (IsDebugLogEnabled(actorSystem, NKikimrServices::KQP_TASKS_RUNNER)) {
+        std::cerr << "MISHA taskRunner logger enabled\n";
         logger = [actorSystem, txId = TxId, taskId = GetTask().GetId()](const TString& message) {
             LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_TASKS_RUNNER, "TxId: " << txId
                 << ", task: " << taskId << ": " << message);

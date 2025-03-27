@@ -6,7 +6,6 @@
 #include "yql/essentials/minikql/mkql_function_registry.h"
 #include "yql/essentials/minikql/mkql_utils.h"
 #include "yql/essentials/minikql/mkql_type_builder.h"
-#include "yql/essentials/core/sql_types/block.h"
 #include "yql/essentials/core/sql_types/match_recognize.h"
 #include "yql/essentials/core/sql_types/time_order_recover.h"
 #include <yql/essentials/parser/pg_catalog/catalog.h>
@@ -1494,24 +1493,6 @@ TRuntimeNode TProgramBuilder::WideToBlocks(TRuntimeNode stream) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
-TType* TProgramBuilder::BuildBlockStructType(const TStructType* structType) {
-    std::vector<std::pair<std::string_view, TType*>> blockStructItems;
-    blockStructItems.reserve(structType->GetMembersCount() + 1);
-    for (size_t i = 0; i < structType->GetMembersCount(); i++) {
-        auto itemType = structType->GetMemberType(i);
-        MKQL_ENSURE(!itemType->IsBlock() , "Block types are not allowed here");
-        blockStructItems.emplace_back(
-            structType->GetMemberName(i),
-            NewBlockType(itemType, TBlockType::EShape::Many)
-        );
-    }
-    blockStructItems.emplace_back(
-        NYql::BlockLengthColumnName,
-        NewBlockType(NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar)
-    );
-    return NewStructType(blockStructItems);
-}
-
 TRuntimeNode TProgramBuilder::ListToBlocks(TRuntimeNode list) {
     if constexpr (RuntimeVersion < 60U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
@@ -1561,6 +1542,24 @@ TRuntimeNode TProgramBuilder::WideFromBlocks(TRuntimeNode stream) {
     TType* outputMultiType = NewMultiType(outputItems);
     TCallableBuilder callableBuilder(Env, __func__, NewStreamType(outputMultiType));
     callableBuilder.Add(stream);
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::ListFromBlocks(TRuntimeNode list) {
+    if constexpr (RuntimeVersion < 61U) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+
+    MKQL_ENSURE(list.GetStaticType()->IsList(), "Expected List as input type");
+    const auto listType = AS_TYPE(TListType, list.GetStaticType());
+
+    MKQL_ENSURE(listType->GetItemType()->IsStruct(), "Expected List of Struct as input type");
+    const auto itemBlockStructType = AS_TYPE(TStructType, listType->GetItemType());
+
+    const auto itemStructType = ValidateBlockStructType(itemBlockStructType);
+
+    TCallableBuilder callableBuilder(Env, __func__, NewListType(itemStructType));
+    callableBuilder.Add(list);
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 

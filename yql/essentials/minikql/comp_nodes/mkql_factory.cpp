@@ -291,6 +291,7 @@ struct TCallableComputationNodeBuilderFuncMapFiller {
         {"WideTopSortBlocks", &WrapWideTopSortBlocks},
         {"WideSortBlocks", &WrapWideSortBlocks},
         {"ListToBlocks", &WrapListToBlocks},
+        {"ListFromBlocks", &WrapListFromBlocks},
         {"AsScalar", &WrapAsScalar},
         {"ReplicateScalar", &WrapReplicateScalar},
         {"BlockCoalesce", &WrapBlockCoalesce},

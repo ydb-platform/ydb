@@ -1,8 +1,11 @@
 PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
-SIZE(LARGE)
-TAG(ya:fat)
+FORK_SUBTESTS()
+SPLIT_FACTOR(13)
+SIZE(MEDIUM)
+
+
 
 TEST_SRCS(
     test_copy_table.py

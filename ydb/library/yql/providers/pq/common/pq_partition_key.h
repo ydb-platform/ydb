@@ -9,7 +9,7 @@ namespace NPq {
         bool operator==(const TPartitionKey& other) const = default;
     };
     struct TPartitionKeyHash {
-        ui64 operator()(const TPartitionKey &x) const {
+        ui64 operator()(const TPartitionKey& x) const {
             return CombineHashes<ui64>(
                     std::hash<TString>{} (x.Cluster),
                     std::hash<ui64>{} (x.PartitionId)

@@ -557,7 +557,7 @@ public:
             shuffleOrderingIdxByNodeIdx[i] = fdStorage.AddInterestingOrdering(shuffledBy, TOrdering::EShuffle);
         }
 
-        TOrderingsStateMachine orderingsFSM(fdStorage.FDs, fdStorage.InterestingOrderings);
+        TOrderingsStateMachine orderingsFSM(std::move(fdStorage));
 
         for (std::size_t i = 0; i < edges.size(); ++i) {
             edges[i].FDs = orderingsFSM.GetFDSet(fdsByEdgeIdx[i]);
@@ -573,6 +573,39 @@ public:
         }
 
         return orderingsFSM;
+    }
+
+private:
+    TJoinHypergraph<TNodeSet>& Graph_;
+};
+
+/*
+ * Assigns inner representation of the orderings (orderingIdx) and FD sets to edges of the hypergraph and to their nodes.
+ */
+template <typename TNodeSet>
+class TOrderingStatesAssigner {
+public:
+    TOrderingStatesAssigner(TJoinHypergraph<TNodeSet>& graph)
+        : Graph_(graph)
+    {}
+
+    void Assign(TOrderingsStateMachine& fsm) {
+        auto& edges = Graph_.GetEdges();
+        auto& fdStorage = fsm.FDStorage;
+
+        for (auto& e: edges) {
+            e.LeftJoinKeysShuffleOrderingIdx =
+                fdStorage.FindInterestingOrderingIdx(e.LeftJoinKeys, TOrdering::EShuffle);
+            e.RightJoinKeysShuffleOrderingIdx =
+                fdStorage.FindInterestingOrderingIdx(e.RightJoinKeys, TOrdering::EShuffle);
+
+            for (const auto& [lhs, rhs]: Zip(e.LeftJoinKeys, e.RightJoinKeys)) {
+                auto fdIdx = fdStorage.FindFDIdx(lhs, rhs, TFunctionalDependency::EEquivalence);
+                auto fdIdxRev = fdStorage.FindFDIdx(rhs, lhs, TFunctionalDependency::EEquivalence);
+                e.FDSet |= fsm.GetFDSet(fdIdx);
+                e.FDSet |= fsm.GetFDSet(fdIdxRev);
+            }
+        }
     }
 
 private:

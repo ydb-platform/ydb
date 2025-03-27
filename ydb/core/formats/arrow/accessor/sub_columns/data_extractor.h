@@ -100,6 +100,8 @@ private:
     using TBase = NBackgroundTasks::TInterfaceProtoContainer<IDataAdapter>;
 
 public:
+    static TDataAdapterContainer GetDefault();
+
     using TBase::TBase;
 };
 

@@ -50,4 +50,9 @@ TConclusionStatus IDataAdapter::AddDataToBuilders(const std::shared_ptr<arrow::A
     return DoAddDataToBuilders(sourceArray, dataBuilder);
 }
 
+TDataAdapterContainer TDataAdapterContainer::GetDefault() {
+    static TDataAdapterContainer result(std::make_shared<NSubColumns::TFirstLevelSchemaData>());
+    return result;
+}
+
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

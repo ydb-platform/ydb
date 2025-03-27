@@ -7,11 +7,19 @@ namespace Ydb::Export {
     class ExportToS3Settings;
 }
 
+namespace NKikimrSchemeOp {
+    class TExportMetadata;
+}
+
 namespace NKikimr::NSchemeShard {
 
 NActors::IActor* CreateSchemeUploader(NActors::TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
-    const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, const TString& metadata, 
+    const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, const TString& metadata,
     bool enablePermissions
+);
+
+NActors::IActor* CreateExportMetadataUploader(NActors::TActorId schemeShard, ui64 exportId,
+    const Ydb::Export::ExportToS3Settings& settings, const NKikimrSchemeOp::TExportMetadata& exportMetadata
 );
 
 }

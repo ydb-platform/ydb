@@ -2040,6 +2040,14 @@ const std::optional<std::string>& TDataQuery::GetText() const {
     return Impl_->GetText();
 }
 
+std::map<std::string, TType> TDataQuery::GetParameterTypes() const {
+    std::map<std::string, TType> typesMap;
+    for (const auto& param : Impl_->ParameterTypes_) {
+        typesMap.emplace(param.first, TType(param.second));
+    }
+    return typesMap;
+}
+
 TParamsBuilder TDataQuery::GetParamsBuilder() const {
     return TParamsBuilder(Impl_->ParameterTypes_);
 }

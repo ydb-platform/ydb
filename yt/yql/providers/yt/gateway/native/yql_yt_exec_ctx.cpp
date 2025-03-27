@@ -97,7 +97,8 @@ void TExecContextBase::SetInput(TExprBase input, bool forcePathColumns, const TH
         auto tableInfo = TYtTableBaseInfo::Parse(out.Cast());
         YQL_CLOG(INFO, ProviderYt) << "Runtime cluster: " << Cluster_ << ", Input: " << tableInfo->Cluster << '.' << tableInfo->Name;
         if (tableInfo->Cluster != Cluster_ && !allowRemoteClusters) {
-            throw yexception() << "Operation input from remote cluster " << tableInfo->Cluster << " is not allowed on cluster " << Cluster_;
+            YQL_LOG_CTX_THROW TErrorException(TIssuesIds::DEFAULT_ERROR) <<
+                "Operation input from remote cluster " << tableInfo->Cluster.Quote() << " is not allowed on cluster " << Cluster_.Quote();
         }
         NYT::TRichYPath richYPath(NYql::TransformPath(tmpFolder, tableInfo->Name, true, Session_->UserName_));
         if (tableInfo->Cluster != Cluster_) {
@@ -151,7 +152,8 @@ void TExecContextBase::SetInput(TExprBase input, bool forcePathColumns, const TH
                     YQL_CLOG(INFO, ProviderYt) << "Runtime cluster: " << Cluster_ << ", Input: " << pathCluster << '.' << pathInfo.Table->Name << '[' << group << ']';
                 }
                 if (pathCluster != Cluster_ && !allowRemoteClusters) {
-                    throw yexception() << "Operation input from remote cluster " << pathCluster << " is not allowed on cluster " << Cluster_;
+                    YQL_LOG_CTX_THROW TErrorException(TIssuesIds::DEFAULT_ERROR) <<
+                        "Operation input from remote cluster " << pathCluster.Quote() << " is not allowed on cluster " << Cluster_.Quote();
                 }
                 // Table may have aux columns. Exclude them by specifying explicit columns from the type
                 if (forcePathColumns && pathInfo.Table->RowSpec && !pathInfo.HasColumns()) {
@@ -378,8 +380,8 @@ TTransactionCache::TEntry::TPtr TExecContextBase::GetOrCreateEntry(const TYtSett
     auto token = GetAuth(settings);
     auto impersonationUser = GetImpersonationUser(settings);
     if (!token && DisableAnonymousClusterAccess_) {
-        // do not use ythrow here for better error message
-        throw yexception() << "Accessing YT cluster " << Cluster_ << " without OAuth token is not allowed";
+        YQL_LOG_CTX_THROW TErrorException(TIssuesIds::YT_ACCESS_DENIED) <<
+            "Accessing YT cluster " << Cluster_.Quote() << " without OAuth token is not allowed";
     }
 
     return Session_->TxCache_.GetOrCreateEntry(YtServer_, token, impersonationUser, [s = Session_]() { return s->CreateSpecWithDesc(); }, settings, Metrics);

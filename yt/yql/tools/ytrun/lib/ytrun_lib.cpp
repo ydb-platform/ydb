@@ -105,10 +105,10 @@ TYtRunTool::TYtRunTool(TString name)
                         << ", current stage: " << progress.Stage.first << Endl;
                 });
             });
-        opts.AddLongOption("threads", "gateway threads")
+        opts.AddLongOption("yt-threads", "YT gateway threads")
             .Optional()
             .RequiredArgument("COUNT")
-            .StoreResult(&NumThreads_);
+            .StoreResult(&NumYtThreads_);
         opts.AddLongOption("keep-temp", "keep temporary tables")
             .Optional()
             .NoArgument()
@@ -134,7 +134,7 @@ TYtRunTool::TYtRunTool(TString name)
         }
 
         auto ytConfig = GetRunOptions().GatewaysConfig->MutableYt();
-        ytConfig->SetGatewayThreads(NumThreads_);
+        ytConfig->SetGatewayThreads(NumYtThreads_);
         if (MrJobBin_.empty()) {
             ytConfig->ClearMrJobBin();
         } else {
@@ -154,9 +154,13 @@ TYtRunTool::TYtRunTool(TString name)
         FillClusterMapping(*ytConfig, TString{YtProviderName});
 
         DefYtServer_ = NYql::TConfigClusters::GetDefaultYtServer(*ytConfig);
+
+        if (GetRunOptions().GatewayTypes.contains(FastMapReduceGatewayName)) {
+            GetRunOptions().GatewayTypes.emplace(YtProviderName);
+        }
     });
 
-    GetRunOptions().SetSupportedGateways({TString{YtProviderName}});
+    GetRunOptions().SetSupportedGateways({TString{YtProviderName}, TString{FastMapReduceGatewayName}});
     GetRunOptions().GatewayTypes.emplace(YtProviderName);
 
     AddFsDownloadFactory([this]() -> NFS::IDownloaderPtr {

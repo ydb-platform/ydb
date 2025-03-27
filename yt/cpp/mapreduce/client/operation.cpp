@@ -2675,16 +2675,22 @@ void TOperation::TOperationImpl::UpdateAttributesAndCall(
         }
     }
 
+    auto filter = TOperationAttributeFilter()
+        .Add(EOperationAttribute::Result)
+        .Add(EOperationAttribute::State)
+        .Add(EOperationAttribute::BriefProgress);
+    // To avoid overloading Cypress, we only request the progress attribute as needed,
+    // typically when the user asks for job statistics.
+    if (needJobStatistics) {
+        filter.Add(EOperationAttribute::Progress);
+    }
+
     auto attributes = RequestWithRetry<TOperationAttributes>(
         ClientRetryPolicy_->CreatePolicyForGenericRequest(),
-        [this] (TMutationId /*mutationId*/) {
+        [this, &filter] (TMutationId /*mutationId*/) {
             return RawClient_->GetOperation(
                 *Id_,
-                TGetOperationOptions().AttributeFilter(TOperationAttributeFilter()
-                    .Add(EOperationAttribute::Result)
-                    .Add(EOperationAttribute::Progress)
-                    .Add(EOperationAttribute::State)
-                    .Add(EOperationAttribute::BriefProgress)));
+                TGetOperationOptions().AttributeFilter(filter));
         });
 
     func(attributes);

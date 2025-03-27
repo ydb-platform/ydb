@@ -1,6 +1,8 @@
 #include "schemeshard.h"
 #include "schemeshard_export_scheme_uploader.h"
 
+#include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/tx/datashard/export_common.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export_helpers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
@@ -12,7 +14,20 @@
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/public/lib/ydb_cli/dump/util/view_utils.h>
 
+#include <library/cpp/json/json_writer.h>
+
 namespace NKikimr::NSchemeShard {
+
+namespace {
+
+bool ShouldRetry(const Aws::S3::S3Error& error) {
+    if (error.ShouldRetry()) {
+        return true;
+    }
+    return error.GetExceptionName() == "TooManyRequests";
+}
+
+} // anonymous
 
 class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
 
@@ -189,13 +204,6 @@ class TSchemeUploader: public TActorBootstrapped<TSchemeUploader> {
         }
     }
 
-    static bool ShouldRetry(const Aws::S3::S3Error& error) {
-        if (error.ShouldRetry()) {
-            return true;
-        }
-        return error.GetExceptionName() == "TooManyRequests";
-    }
-
     void Retry() {
         Delay = Min(Delay * ++Attempt, MaxDelay);
         const TDuration random = TDuration::FromValue(TAppData::RandomProvider->GenRand64() % Delay.MicroSeconds());
@@ -340,12 +348,262 @@ private:
 
 }; // TSchemeUploader
 
+class TExportMetadataUploader: public TActorBootstrapped<TExportMetadataUploader> {
+    using TS3ExternalStorageConfig = NWrappers::NExternalStorage::TS3ExternalStorageConfig;
+    using TEvExternalStorage = NWrappers::TEvExternalStorage;
+    using TPutObjectResult = Aws::Utils::Outcome<Aws::S3::Model::PutObjectResult, Aws::S3::S3Error>;
+
+    struct TFileUpload {
+        TString Path;
+        TString Content;
+        size_t Attempt = 0;
+    };
+
+public:
+    TExportMetadataUploader(
+        TActorId schemeShard,
+        ui64 exportId,
+        const Ydb::Export::ExportToS3Settings& settings,
+        const NKikimrSchemeOp::TExportMetadata& exportMetadata
+    )
+        : SchemeShard(schemeShard)
+        , ExportId(exportId)
+        , Settings(settings)
+        , ExportMetadata(exportMetadata)
+        , ExternalStorageConfig(new TS3ExternalStorageConfig(Settings))
+    {
+    }
+
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::EXPORT_S3_UPLOADER_ACTOR;
+    }
+
+    void Bootstrap() {
+        Become(&TExportMetadataUploader::StateFunc);
+
+        StorageOperator = RegisterWithSameMailbox(
+            NWrappers::CreateS3Wrapper(ExternalStorageConfig->ConstructStorageOperator())
+        );
+
+        if (ExportMetadata.HasIV()) {
+            IV = NBackup::TEncryptionIV::FromBinaryString(ExportMetadata.GetIV());
+            Key = NBackup::TEncryptionKey(Settings.encryption_settings().symmetric_key().key());
+        }
+
+        if (!AddBackupMetadata() || !AddSchemaMappingMetadata() || !AddSchemaMappingJson()) {
+            return;
+        }
+
+        ProcessQueue();
+    }
+
+private:
+    bool AddFile(
+        TString filePath,
+        TString content,
+        const TMaybe<NBackup::TEncryptionIV>& iv = Nothing(),
+        const TMaybe<NBackup::TEncryptionKey>& key = Nothing())
+    {
+        if (iv && key) {
+            filePath += ".enc";
+            try {
+                TBuffer encContent = NBackup::TEncryptedFileSerializer::EncryptFullFile(
+                    ExportMetadata.GetEncryptionAlgorithm(),
+                    *key, *iv,
+                    content);
+                content.assign(encContent.Data(), encContent.Size());
+            } catch (const std::exception& ex) {
+                Fail(TStringBuilder() << "Failed to encrypt " << filePath << ": " << ex.what());
+                return false;
+            }
+        }
+        Files.emplace_back(TFileUpload{
+            .Path = filePath,
+            .Content = content
+        });
+        return true;
+    }
+
+    bool AddBackupMetadata() {
+        TString content;
+        TStringOutput ss(content);
+        NJson::TJsonWriter writer(&ss, false);
+
+        writer.OpenMap();
+        writer.Write("kind", "SimpleExportV0");
+        if (const TString& compression = ExportMetadata.GetCompressionAlgorithm()) {
+            writer.Write("compression", compression);
+        }
+        if (const TString& encryption = ExportMetadata.GetEncryptionAlgorithm()) {
+            writer.Write("encryption", encryption);
+        }
+        writer.CloseMap();
+
+        writer.Flush();
+        ss.Flush();
+
+        return AddFile("metadata.json", content);
+    }
+
+    bool AddSchemaMappingMetadata() {
+        TString content;
+        TStringOutput ss(content);
+        NJson::TJsonWriter writer(&ss, false);
+
+        writer.OpenMap();
+        writer.Write("kind", "SchemaMappingV0");
+        writer.CloseMap();
+
+        writer.Flush();
+        ss.Flush();
+
+        return AddFile("SchemaMapping/metadata.json", content, IV, Key);
+    }
+
+    bool AddSchemaMappingJson() {
+        TString content;
+        TStringOutput ss(content);
+        NJson::TJsonWriter writer(&ss, false);
+
+        writer.OpenMap();
+        writer.WriteKey("exportedObjects");
+        writer.OpenMap();
+        for (const auto& item : ExportMetadata.GetSchemaMapping()) {
+            writer.WriteKey(item.GetSourcePath());
+            writer.OpenMap();
+            writer.Write("exportPrefix", item.GetDestinationPrefix());
+            if (item.HasIV()) {
+                writer.Write("iv", NBackup::TEncryptionIV::FromBinaryString(item.GetIV()).GetHexString());
+            }
+            writer.CloseMap();
+        }
+        writer.Write("exportedObjects", "SchemaMappingV0");
+        writer.CloseMap();
+        writer.CloseMap();
+
+        writer.Flush();
+        ss.Flush();
+
+        TMaybe<NBackup::TEncryptionIV> iv;
+        if (IV) {
+            iv = NBackup::TEncryptionIV::Combine(*IV, NBackup::EBackupFileType::SchemaMapping, 0, 0);
+        }
+
+        return AddFile("SchemaMapping/mapping.json", content, iv, Key);
+    }
+
+    void ProcessQueue() {
+        if (Files.empty()) {
+            return Success();
+        }
+
+        const TFileUpload& upload = Files.front();
+
+        TStringBuilder path;
+        path << Settings.destination_prefix();
+        if (path.back() != '/') {
+            path << '/';
+        }
+        path << upload.Path;
+
+        auto request = Aws::S3::Model::PutObjectRequest().WithKey(path);
+
+        Send(StorageOperator, new TEvExternalStorage::TEvPutObjectRequest(request, TString(upload.Content)));
+    }
+
+    void Handle(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
+        const auto& result = ev->Get()->Result;
+        TFileUpload& upload = Files.front();
+
+        LOG_D("Put file response " << upload.Path
+            << ", self: " << SelfId()
+            << ", result: " << result
+        );
+
+        if (!result.IsSuccess()) {
+            return RetryOrFinish(result.GetError(), upload);
+        }
+
+        Files.pop_front();
+        ProcessQueue();
+    }
+
+    void RetryOrFinish(const Aws::S3::S3Error& error, TFileUpload& upload) {
+        if (upload.Attempt < Settings.number_of_retries() && ShouldRetry(error)) {
+            Retry(upload);
+        } else {
+            Fail(TStringBuilder() << upload.Path << ". S3 error: " << error.GetMessage());
+        }
+    }
+
+    void Retry(TFileUpload& upload) {
+        Delay = Min(Delay * ++upload.Attempt, MaxDelay);
+        const TDuration random = TDuration::FromValue(TAppData::RandomProvider->GenRand64() % Delay.MicroSeconds());
+        Schedule(Delay + random, new TEvents::TEvWakeup());
+    }
+
+    STATEFN(StateFunc) {
+        switch (ev->GetTypeRewrite()) {
+            sFunc(TEvents::TEvWakeup, ProcessQueue);
+            sFunc(TEvents::TEvPoisonPill, PassAway);
+            hFunc(TEvExternalStorage::TEvPutObjectResponse, Handle);
+        }
+    }
+
+    void Success() {
+        Finish(true, {});
+    }
+
+    void Fail(const TString& error) {
+        Finish(false, error);
+    }
+
+    void Finish(bool success, const TString& error) {
+        LOG_I("Finish uploading export metadata"
+            << ", self: " << SelfId()
+            << ", success: " << success
+            << ", error: " << error
+        );
+
+        Send(SchemeShard, new TEvPrivate::TEvExportUploadMetadataResult(ExportId, success, error));
+        PassAway();
+    }
+
+    void PassAway() override {
+        Send(StorageOperator, new TEvents::TEvPoisonPill());
+        IActor::PassAway();
+    }
+
+private:
+    TActorId SchemeShard;
+    ui64 ExportId;
+
+    Ydb::Export::ExportToS3Settings Settings;
+    NKikimrSchemeOp::TExportMetadata ExportMetadata;
+
+    NWrappers::IExternalStorageConfig::TPtr ExternalStorageConfig;
+    TActorId StorageOperator;
+    TMaybe<NBackup::TEncryptionIV> IV;
+    TMaybe<NBackup::TEncryptionKey> Key;
+
+    std::deque<TFileUpload> Files;
+
+    TDuration Delay = TDuration::Minutes(1);
+    static constexpr TDuration MaxDelay = TDuration::Minutes(10);
+};
+
 IActor* CreateSchemeUploader(TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
     const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, const TString& metadata,
     bool enablePermissions
 ) {
     return new TSchemeUploader(schemeShard, exportId, itemIdx, sourcePathId, settings, databaseRoot,
         metadata, enablePermissions);
+}
+
+NActors::IActor* CreateExportMetadataUploader(NActors::TActorId schemeShard, ui64 exportId,
+    const Ydb::Export::ExportToS3Settings& settings, const NKikimrSchemeOp::TExportMetadata& exportMetadata
+) {
+    return new TExportMetadataUploader(schemeShard, exportId, settings, exportMetadata);
 }
 
 } // NKikimr::NSchemeShard

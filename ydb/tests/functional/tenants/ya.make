@@ -19,6 +19,8 @@ TEST_SRCS(
 
 SPLIT_FACTOR(20)
 
+INCLUDE(${ARCADIA_ROOT}/ydb/tests/library/flavours/flavours_deps.inc)
+
 DEPENDS(
     ydb/apps/ydbd
 )
@@ -27,6 +29,7 @@ PEERDIR(
     contrib/python/requests
     ydb/tests/library
     ydb/tests/library/fixtures
+    ydb/tests/library/flavours
     ydb/tests/library/clients
     ydb/tests/oss/ydb_sdk_import
     ydb/public/sdk/python

@@ -535,14 +535,6 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         runtime.GetAppData().Icb->SetValue("BlobCache.MaxCacheDataSize", 0, unused);
     }
 
-    // Disable GC batching so that deleted blobs get collected without a delay
-    {
-        TAtomic unused;
-        runtime.GetAppData().Icb->SetValue("ColumnShardControls.BlobCountToTriggerGC", 1, unused);
-    }
-
-    //
-
     ui64 writeId = 0;
     ui64 tableId = 1;
     ui64 planStep = 1000000000; // greater then delays

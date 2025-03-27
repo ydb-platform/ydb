@@ -32,7 +32,7 @@ void TClientCommandTpchRoot::Config(TConfig& config) {
         .StoreResult(&Database);
     config.Opts->AddLongOption('p', "path", "Path to TPC-H tables (relative)")
         .Required()
-        .Handler1T<TStringBuf>([this](TStringBuf arg) {
+        .Handler([this](const TString& arg) {
             if (arg.StartsWith('/')) {
                 ythrow NLastGetopt::TUsageException() << "Path must be relative";
             }
@@ -44,7 +44,7 @@ void TClientCommandTpchRoot::Config(TConfig& config) {
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
     stream << " [options...] <subcommand>" << Endl << Endl
            << colors.BoldColor() << "Subcommands" << colors.OldColor() << ":" << Endl;
-    RenderCommandsDescription(stream, colors);
+    RenderCommandDescription(stream, config.HelpCommandVerbosiltyLevel > 1, colors);
     config.Opts->SetCmdLineDescr(stream.Str());
 }
 

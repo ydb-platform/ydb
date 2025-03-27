@@ -110,7 +110,8 @@ namespace NKikimr {
         memRec.SetDiskBlob(TDiskPart(0, 0, dataMerger.GetInplacedBlobSize(key.LogoBlobID())));
         memRec.SetType(dataMerger.GetType());
 
-        Y_ABORT_UNLESS(memRec.GetLocalParts(Top->GType) == dataMerger.GetParts());
+        Y_VERIFY_S(memRec.GetLocalParts(Top->GType) == dataMerger.GetParts(),
+            HullCtx->VCtx->VDiskLogPrefix);
     }
 
     template<>

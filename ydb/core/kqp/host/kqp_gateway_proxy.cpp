@@ -441,13 +441,13 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
 
         if (columnIt->second.IsDefaultFromSequence()) {
             code = Ydb::StatusIds::BAD_REQUEST;
-            error = TStringBuilder() << "Default value from sequence specified for column `" << columnIt->second.Name << "` is not supported in cases of column tables";
+            error = TStringBuilder() << "Default values are not supported in column tables";
             return false;
         }
 
         if (columnIt->second.IsDefaultFromLiteral()) {
             code = Ydb::StatusIds::BAD_REQUEST;
-            error = TStringBuilder() << "Default value from literal specified for column `" << columnIt->second.Name << "` is not supported in cases of column tables";
+            error = TStringBuilder() << "Default sequences are not supported in column tables";
             return false;
         }
 

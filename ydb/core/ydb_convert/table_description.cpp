@@ -743,13 +743,13 @@ bool FillColumnDescriptionImpl(TColumnTable& out, const google::protobuf::Repeat
 
         if (column.has_from_literal()) {
             status = Ydb::StatusIds::BAD_REQUEST;
-            error = TStringBuilder() << "Default value from literal specified for column `" << column.name() << "` is not supported in cases of column tables";
+            error = TStringBuilder() << "Default values are not supported in column tables";
             return false;
         }
 
         if (column.has_from_sequence()) {
             status = Ydb::StatusIds::BAD_REQUEST;
-            error = TStringBuilder() << "Default value from sequence specified for column `" << column.name() << "` is not supported in cases of column tables";
+            error = TStringBuilder() << "Default sequences are not supported in column tables";
             return false;
         }
     }

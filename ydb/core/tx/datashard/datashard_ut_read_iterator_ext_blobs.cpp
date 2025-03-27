@@ -76,9 +76,8 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
         TTestActorRuntime* Runtime;
 
         TNode(bool useExternalBlobs, int externalBlobColumns = 1) : ServerSettings(Pm.GetPort(2134)) {
-            
             TServerSettings::TControls controls;
-            controls.MutableDataShardControls()->SetReadIteratorKeysExtBlobsPrecharge(1);
+            controls.MutableDataShardControls()->SetReadIteratorKeysExtBlobsPrecharge(1); // sets to "true"
 
             ServerSettings.SetDomainName("Root")
                 .SetUseRealThreads(false)

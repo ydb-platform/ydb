@@ -1343,6 +1343,8 @@ private:
     IQueueClientContextProvider* Provider_;
 };
 
+grpc_socket_mutator* CreateGRpcKeepAliveSocketMutator(const TTcpKeepAliveSettings& TcpKeepAliveSettings_);
+
 class TGRpcClientLow
     :  public IQueueClientContextProvider
 {
@@ -1385,21 +1387,6 @@ public:
     std::unique_ptr<TServiceConnection<TGRpcService>> CreateGRpcServiceConnection(const TGRpcClientConfig& config) {
         return std::unique_ptr<TServiceConnection<TGRpcService>>(new TServiceConnection<TGRpcService>(CreateChannelInterface(config), this));
     }
-
-    grpc_socket_mutator* CreateGRpcKeepAliveSocketMutator(const TTcpKeepAliveSettings& TcpKeepAliveSettings_) {
-#if !defined(YDB_DISABLE_GRPC_SOCKET_MUTATOR)
-    TGRpcKeepAliveSocketMutator* mutator = nullptr;
-    if (TcpKeepAliveSettings_.Enabled) {
-        mutator = new TGRpcKeepAliveSocketMutator(
-                TcpKeepAliveSettings_.Idle,
-                TcpKeepAliveSettings_.Count,
-                TcpKeepAliveSettings_.Interval
-                );
-    }
-    return mutator;
-#endif
-    return nullptr;
-}
 
     template<typename TGRpcService>
     std::unique_ptr<TServiceConnection<TGRpcService>> CreateGRpcServiceConnection(const TGRpcClientConfig& config, const TTcpKeepAliveSettings& keepAlive) {

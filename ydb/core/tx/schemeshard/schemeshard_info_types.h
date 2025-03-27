@@ -272,6 +272,10 @@ struct TPartitionStats {
     ui64 MemDataSize = 0;
     ui32 ShardState = NKikimrTxDataShard::Unknown;
 
+    ui64 LocksAcquired = 0;
+    ui64 LocksWholeShard = 0;
+    ui64 LocksBroken = 0;
+
     // True when PartOwners has parts from other tablets
     bool HasBorrowedData = false;
 

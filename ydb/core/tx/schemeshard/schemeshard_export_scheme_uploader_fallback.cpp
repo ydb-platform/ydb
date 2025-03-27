@@ -1,4 +1,4 @@
-#include "schemeshard_export_scheme_uploader.h"
+#include "schemeshard_export_uploaders.h"
 
 #include <ydb/core/tx/schemeshard/schemeshard_private.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -29,6 +29,27 @@ private:
     ui32 ItemIdx;
 };
 
+class TExportMetadataUploaderFallback: public TActorBootstrapped<TExportMetadataUploaderFallback> {
+public:
+    TExportMetadataUploaderFallback(
+        TActorId schemeShard,
+        ui64 exportId
+    )
+        : SchemeShard(schemeShard)
+        , ExportId(exportId)
+    {
+    }
+
+    void Bootstrap() {
+        Send(SchemeShard, new TEvPrivate::TEvExportUploadMetadataResult(ExportId, false, "Exports to S3 are disabled"));
+        PassAway();
+    }
+
+private:
+    TActorId SchemeShard;
+    ui64 ExportId;
+};
+
 
 IActor* CreateSchemeUploader(TActorId schemeShard, ui64 exportId, ui32 itemIdx, TPathId sourcePathId,
     const Ydb::Export::ExportToS3Settings& settings, const TString& databaseRoot, const TString& metadata,
@@ -36,6 +57,13 @@ IActor* CreateSchemeUploader(TActorId schemeShard, ui64 exportId, ui32 itemIdx, 
 ) {
     Y_UNUSED(sourcePathId, settings, databaseRoot, metadata, enablePermissions);
     return new TSchemeUploaderFallback(schemeShard, exportId, itemIdx);
+}
+
+NActors::IActor* CreateExportMetadataUploader(NActors::TActorId schemeShard, ui64 exportId,
+    const Ydb::Export::ExportToS3Settings& settings, const NKikimrSchemeOp::TExportMetadata& exportMetadata
+) {
+    Y_UNUSED(settings, exportMetadata);
+    return new TExportMetadataUploaderFallback(schemeShard, exportId);
 }
 
 } // NKikimr::NSchemeShard

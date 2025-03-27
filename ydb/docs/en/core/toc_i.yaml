@@ -40,9 +40,7 @@ items:
     mode: link
     path: public-materials/toc_p.yaml
 - name: Downloads
-  include:
-    mode: link
-    path: downloads/toc_p.yaml
+  href: downloads/index.md
 - name: Changelog
   include:
     mode: link

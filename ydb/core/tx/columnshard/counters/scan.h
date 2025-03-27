@@ -232,6 +232,10 @@ public:
     NMonitoring::TDynamicCounters::TCounterPtr ProcessedSourceEmptyCount;
     NMonitoring::THistogramPtr HistogramFilteredResultCount;
 
+    NMonitoring::TDynamicCounters::TCounterPtr MergeRowsAccepted;
+    NMonitoring::TDynamicCounters::TCounterPtr MergeRowsRejected;
+    NMonitoring::TDynamicCounters::TCounterPtr MergeRowsBulkAccepted;
+
     TScanCounters(const TString& module = "Scan");
 
     void OnSourceFinished(const ui32 recordsCount, const ui64 rawBytes, const ui32 filteredRecordsCount) const {
@@ -314,6 +318,12 @@ public:
     }
     void OnReadingOverloaded() const {
         ReadingOverload->Add(1);
+    }
+
+    void OnRowsMerged(const ui64 accepted, const ui64 rejected, const ui64 bulkAccepted) const {
+        MergeRowsAccepted->Add(accepted);
+        MergeRowsRejected->Add(rejected);
+        MergeRowsBulkAccepted->Add(bulkAccepted);
     }
 
     TScanAggregations BuildAggregations();
@@ -435,6 +445,7 @@ public:
     }
 
     bool InWaiting() const {
+        // TODO: use specific counters in duplicates manager
         return MergeTasksCount->Val() || AssembleTasksCount->Val() || ReadTasksCount->Val() || ResourcesAllocationTasksCount->Val() ||
                FetchAccessorsCount->Val() || ResultsForSourceCount->Val() || FetchBlobsCount->Val() || ResultsForReplyGuard->Val() ||
                FilterFetchingGuard->Val();

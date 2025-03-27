@@ -7,9 +7,9 @@
 namespace NYdb {
 namespace NConsoleClient {
 
-class TYqlParser {
+class TYqlParamParser {
 public:
-    static std::optional<std::map<std::string, TType>> GetParamTypes(const TString& queryText);
+    static std::map<std::string, TType> GetParamTypes(const TString& queryText);
 
 private:
     static bool ProcessType(const TString& typeStr, TTypeBuilder& builder);

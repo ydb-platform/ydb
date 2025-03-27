@@ -335,21 +335,20 @@ void TCommandWithParameters::SetParamsInputFromFile(TString& file) {
 }
 
 void TCommandWithParameters::InitParamTypes(const TDriver& driver, const TString& queryText) {
-    if (SyntaxType == NYdb::NQuery::ESyntax::Pg) {
+    if (SyntaxType == NQuery::ESyntax::Pg) {
         ParamTypes.clear();
         return;
     }
 
-    auto paramTypesOpt = NYdb::NConsoleClient::TYqlParser::GetParamTypes(queryText);
-    if (paramTypesOpt) {
-        ParamTypes = std::move(*paramTypesOpt);
+    ParamTypes = TYqlParamParser::GetParamTypes(queryText);
+    if (ParamTypes.empty()) {
         return;
     }
 
     // Fallback to ExplainYql
-    NYdb::NScripting::TScriptingClient client(driver);
-    auto explainSettings = NYdb::NScripting::TExplainYqlRequestSettings()
-        .Mode(NYdb::NScripting::ExplainYqlRequestMode::Validate);
+    NScripting::TScriptingClient client(driver);
+    auto explainSettings = NScripting::TExplainYqlRequestSettings()
+        .Mode(NScripting::ExplainYqlRequestMode::Validate);
 
     auto result = client.ExplainYqlScript(
         queryText,

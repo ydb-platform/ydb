@@ -58,3 +58,4 @@ class TestCopyTable(TestBase):
         ]).stdout.decode("utf-8")
         dml.select_after_insert(
             f"copy_{table_name}", all_types, pk_types, index, ttl)
+

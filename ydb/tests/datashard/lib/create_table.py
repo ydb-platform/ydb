@@ -88,9 +88,6 @@ non_pk_types = {
     "Yson": "CAST('[{}]' AS Yson)"
 }
 
-unique = ["UNIQUE", ""]
-index_sync = ["SYNC", "ASYNC"]
-
 
 def create_table(table_name: str, columns: dict[str, dict[str]], pk_colums: dict[str, dict[str]], index_colums: dict[str, dict[str]], unique: str, sync: str) -> str:
     sql_create = f"CREATE TABLE {table_name} ("

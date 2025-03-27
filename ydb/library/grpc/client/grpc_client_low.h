@@ -1386,6 +1386,28 @@ public:
         return std::unique_ptr<TServiceConnection<TGRpcService>>(new TServiceConnection<TGRpcService>(CreateChannelInterface(config), this));
     }
 
+    grpc_socket_mutator* CreateGRpcKeepAliveSocketMutator(const TTcpKeepAliveSettings& TcpKeepAliveSettings_) {
+#if !defined(YDB_DISABLE_GRPC_SOCKET_MUTATOR)
+    TGRpcKeepAliveSocketMutator* mutator = nullptr;
+    if (TcpKeepAliveSettings_.Enabled) {
+        mutator = new TGRpcKeepAliveSocketMutator(
+                TcpKeepAliveSettings_.Idle,
+                TcpKeepAliveSettings_.Count,
+                TcpKeepAliveSettings_.Interval
+                );
+    }
+    return mutator;
+#endif
+    return nullptr;
+}
+
+    template<typename TGRpcService>
+    std::unique_ptr<TServiceConnection<TGRpcService>> CreateGRpcServiceConnection(const TGRpcClientConfig& config, const TTcpKeepAliveSettings& keepAlive) {
+         auto mutator = CreateGRpcKeepAliveSocketMutator(keepAlive);
+         // will be destroyed inside grpc
+         return std::unique_ptr<TServiceConnection<TGRpcService>>(new TServiceConnection<TGRpcService>(CreateChannelInterface(config, mutator), this));
+    }
+
     template<typename TGRpcService>
     std::unique_ptr<TServiceConnection<TGRpcService>> CreateGRpcServiceConnection(TStubsHolder& holder) {
         return std::unique_ptr<TServiceConnection<TGRpcService>>(new TServiceConnection<TGRpcService>(holder, this));

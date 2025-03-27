@@ -70,7 +70,11 @@ TScanCounters::TScanCounters(const TString& module)
     , ProcessedSourceRawBytes(TBase::GetDeriviative("ProcessedSource/RawBytes"))
     , ProcessedSourceRecords(TBase::GetDeriviative("ProcessedSource/Records"))
     , ProcessedSourceEmptyCount(TBase::GetDeriviative("ProcessedSource/Empty/Count"))
-    , HistogramFilteredResultCount(TBase::GetHistogram("ProcessedSource/Filtered/Count", NMonitoring::ExponentialHistogram(20, 2))) {
+    , HistogramFilteredResultCount(TBase::GetHistogram("ProcessedSource/Filtered/Count", NMonitoring::ExponentialHistogram(20, 2)))
+
+    , MergeRowsAccepted(TBase::GetDeriviative("SourcesMerging/RowsAccepted"))
+    , MergeRowsRejected(TBase::GetDeriviative("SourcesMerging/RowsRejected"))
+    , MergeRowsBulkAccepted(TBase::GetDeriviative("SourcesMerging/RowsBulkAccepted")) {
     SubColumnCounters = std::make_shared<TSubColumnCounters>(CreateSubGroup("Speciality", "SubColumns"));
 
     HistogramIntervalMemoryRequiredOnFail = TBase::GetHistogram("IntervalMemory/RequiredOnFail/Gb", NMonitoring::LinearHistogram(10, 1, 1));

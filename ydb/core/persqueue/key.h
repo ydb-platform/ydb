@@ -54,7 +54,7 @@ public:
     {}
 
     TString ToString() const {
-        return TString(Data(), Size());
+        return {Data(), Size()};
     }
 
     bool Marked(EMark mark) {
@@ -183,16 +183,6 @@ public:
     virtual ~TKey()
     {}
 
-    TString ToString() const {
-        return TString(Data(), Size());
-    }
-
-    void SetHead(const bool isHead) {
-        Resize(KeySize() + isHead);
-        if (isHead)
-            Data()[KeySize()] = '|';
-    }
-
     void SetOffset(const ui64 offset) {
         Y_ABORT_UNLESS(Size() == KeySize() + IsHead());
         Offset = offset;
@@ -312,6 +302,12 @@ private:
     void ParseInternalPartsCount()
     {
         InternalPartsCount = FromString<ui16>(TStringBuf{PtrInternalPartsCount(), 5});
+    }
+
+    void SetHead(const bool isHead) {
+        Resize(KeySize() + isHead);
+        if (isHead)
+            Data()[KeySize()] = '|';
     }
 
     ui64 Offset;

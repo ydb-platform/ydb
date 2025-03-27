@@ -1060,7 +1060,7 @@ void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobIn
                              const TActorContext& ctx)
 {
     auto write = request->Record.AddCmdWrite();
-    write->SetKey(newWrite->Key.ToString());
+    write->SetKey(newWrite->Key.Data(), newWrite->Key.Size());
     write->SetValue(newWrite->Value);
     Y_ABORT_UNLESS(!newWrite->Key.IsHead());
     auto channel = GetChannel(NextChannel(newWrite->Key.IsHead(), newWrite->Value.size()));
@@ -1118,7 +1118,7 @@ ui32 TPartition::RenameTmpCmdWrites(TEvKeyValue::TEvRequest* request)
         auto key = TKey::FromString(request->Record.GetCmdWrite(i).GetKey());
         if (key.GetType() == TKeyPrefix::TypeTmpData) {
             key.SetType(TKeyPrefix::TypeData);
-            request->Record.MutableCmdWrite(i)->SetKey(TString(key.Data(), key.Size()));
+            request->Record.MutableCmdWrite(i)->SetKey(key.Data(), key.Size());
             ++curWrites;
         }
     }

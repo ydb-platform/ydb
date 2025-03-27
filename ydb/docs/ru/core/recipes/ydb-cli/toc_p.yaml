@@ -1,5 +1,5 @@
 items:
-- name: Импорт популярных датасетов
+- name: Импорт датасетов
   href: datasets.md
 - name: Конвертация типов таблиц
   href: convert-table-type.md

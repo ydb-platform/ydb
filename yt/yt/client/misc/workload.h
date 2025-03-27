@@ -85,6 +85,8 @@ i64 GetBasicPriority(EWorkloadCategory category);
 
 IInvokerPtr GetCompressionInvoker(const TWorkloadDescriptor& workloadDescriptor);
 
+bool IsSystemWorkloadCategory(EWorkloadCategory category);
+
 void FormatValue(
     TStringBuilderBase* builder,
     const TWorkloadDescriptor& descriptor,

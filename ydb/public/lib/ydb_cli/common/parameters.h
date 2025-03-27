@@ -10,6 +10,7 @@
 #include <ydb/public/lib/ydb_cli/common/parameter_stream.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/params/params.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
 
 namespace NYdb {
 namespace NConsoleClient {
@@ -69,6 +70,7 @@ protected:
     TDuration BatchMaxDelay;
     THolder<NScripting::TExplainYqlResult> ValidateResult;
     bool ReadingSomethingFromStdin = false;
+    NYdb::NQuery::ESyntax SyntaxType = NYdb::NQuery::ESyntax::YqlV1;
 };
 
 }

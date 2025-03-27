@@ -46,7 +46,9 @@ void TCommandSql::Config(TConfig& config) {
     config.Opts->AddLongOption("diagnostics-file", "Path to file where the diagnostics will be saved.")
         .RequiredArgument("[String]").StoreResult(&DiagnosticsFile);
     config.Opts->AddLongOption("syntax", "Query syntax [yql, pg]")
-        .RequiredArgument("[String]").DefaultValue("yql").StoreResult(&Syntax)
+        .RequiredArgument("[String]").Handler1T<TString>("yql", [this](const TString& arg) {
+            SetSyntax(arg);
+        })
         .Hidden();
 
     AddOutputFormats(config, {
@@ -143,13 +145,8 @@ int TCommandSql::RunCommand(TConfig& config) {
         auto defaultStatsMode = ExplainAnalyzeMode ? NQuery::EStatsMode::Full : NQuery::EStatsMode::None;
         settings.StatsMode(ParseQueryStatsModeOrThrow(CollectStatsMode, defaultStatsMode));
     }
-    if (Syntax == "yql") {
-        settings.Syntax(NQuery::ESyntax::YqlV1);
-    } else if (Syntax == "pg") {
-        settings.Syntax(NQuery::ESyntax::Pg);
-    } else {
-        throw TMisuseException() << "Unknow syntax option \"" << Syntax << "\"";
-    }
+
+    settings.Syntax(SyntaxType);
 
     if (!Parameters.empty() || InputParamStream) {
         // Execute query with parameters
@@ -284,8 +281,14 @@ void TCommandSql::SetCollectStatsMode(TString&& collectStatsMode) {
     CollectStatsMode = std::move(collectStatsMode);
 }
 
-void TCommandSql::SetSyntax(TString&& syntax) {
-    Syntax = std::move(syntax);
+void TCommandSql::SetSyntax(const TString& syntax) {
+    if (syntax == "yql") {
+        SyntaxType = NYdb::NQuery::ESyntax::YqlV1;
+    } else if (syntax == "pg") {
+        SyntaxType = NYdb::NQuery::ESyntax::Pg;
+    } else {
+        throw TMisuseException() << "Unknown syntax option \"" << syntax << "\"";
+    }
 }
 
 }

@@ -343,4 +343,18 @@ Y_UNIT_TEST_SUITE(TYqlParserTest) {
             UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Uint64);
         }
     }
+
+    Y_UNIT_TEST(TestInvalidQuery) {
+        // Проверяем, что метод возвращает nullopt для некорректного запроса
+        auto types = TYqlParser::GetParamTypes("DECLARE $id AS @#$%^;");
+        UNIT_ASSERT(!types.has_value());
+
+        // Проверяем, что метод возвращает nullopt для незавершенного запроса
+        types = TYqlParser::GetParamTypes("DECLARE $id AS");
+        UNIT_ASSERT(!types.has_value());
+
+        // Проверяем, что метод возвращает nullopt для запроса с неправильным синтаксисом
+        types = TYqlParser::GetParamTypes("DECLARE AS $id Uint64;");
+        UNIT_ASSERT(!types.has_value());
+    }
 }

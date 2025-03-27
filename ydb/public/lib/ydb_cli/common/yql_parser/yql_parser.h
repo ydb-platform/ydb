@@ -12,7 +12,7 @@ public:
     static std::optional<std::map<std::string, TType>> GetParamTypes(const TString& queryText);
 
 private:
-    static void ProcessType(const TString& typeStr, TTypeBuilder& builder);
+    static bool ProcessType(const TString& typeStr, TTypeBuilder& builder);
 
     static TString ToLower(const TString& s);
 };

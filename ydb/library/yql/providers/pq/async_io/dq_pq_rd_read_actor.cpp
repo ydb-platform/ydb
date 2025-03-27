@@ -374,7 +374,6 @@ public:
     void PrintInternalState();
     void TrySendGetNextBatch(TSession& sessionInfo);
     TString GetInternalState();
-    void PrintInternalState(TStringStream& stream);
     template <class TEventPtr>
     TSession* FindAndUpdateSession(const TEventPtr& ev);
     void SendNoSession(const NActors::TActorId& recipient, ui64 cookie);

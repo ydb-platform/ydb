@@ -9,7 +9,7 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(20250127.0)
+VERSION(20250127.1)
 
 PEERDIR(
     contrib/restricted/abseil-cpp/absl/base

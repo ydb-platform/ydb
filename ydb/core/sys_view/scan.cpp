@@ -15,6 +15,7 @@
 #include <ydb/core/sys_view/query_stats/query_metrics.h>
 #include <ydb/core/sys_view/query_stats/query_stats.h>
 #include <ydb/core/sys_view/resource_pool_classifiers/resource_pool_classifiers.h>
+#include <ydb/core/sys_view/resource_pools/resource_pools.h>
 #include <ydb/core/sys_view/sessions/sessions.h>
 #include <ydb/core/sys_view/show_create/show_create.h>
 #include <ydb/core/sys_view/storage/groups.h>
@@ -242,12 +243,18 @@ THolder<NActors::IActor> CreateSystemViewScan(
         return CreateQueryMetricsScan(ownerId, scanId, tableId, tableRange, columns);
     }
 
-    if (tableId.SysViewInfo == TopPartitions1MinuteName ||
-        tableId.SysViewInfo == TopPartitions1HourName)
+    if (tableId.SysViewInfo == TopPartitionsByCpu1MinuteName ||
+        tableId.SysViewInfo == TopPartitionsByCpu1HourName)
     {
-        return CreateTopPartitionsScan(ownerId, scanId, tableId, tableRange, columns);
+        return CreateTopPartitionsByCpuScan(ownerId, scanId, tableId, tableRange, columns);
     }
 
+    if (tableId.SysViewInfo == TopPartitionsByTli1MinuteName ||
+        tableId.SysViewInfo == TopPartitionsByTli1HourName)
+    {
+        return CreateTopPartitionsByTliScan(ownerId, scanId, tableId, tableRange, columns);
+    }    
+    
     if (tableId.SysViewInfo == PgTablesName) {
         return CreatePgTablesScan(ownerId, scanId, tableId, tablePath, tableRange, columns);
     }
@@ -262,6 +269,10 @@ THolder<NActors::IActor> CreateSystemViewScan(
 
     if (tableId.SysViewInfo == ResourcePoolClassifiersName) {
         return CreateResourcePoolClassifiersScan(ownerId, scanId, tableId, tableRange, columns, std::move(userToken), database, reverse);
+    }
+
+    if (tableId.SysViewInfo == ResourcePoolsName) {
+        return CreateResourcePoolsScan(ownerId, scanId, tableId, tableRange, columns, std::move(userToken), database, reverse);
     }
 
     {

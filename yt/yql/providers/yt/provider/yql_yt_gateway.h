@@ -250,6 +250,7 @@ public:
         OPTION_FIELD(TString, OperationHash)
         OPTION_FIELD(TPosition, Pos)
         OPTION_FIELD(TSecureParams, SecureParams)
+        OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
     };
 
     struct TTableRangeResult : public NCommon::TOperationResult {
@@ -358,6 +359,7 @@ public:
         OPTION_FIELD(TString, OptLLVM)
         OPTION_FIELD(TString, OperationHash)
         OPTION_FIELD(TSecureParams, SecureParams)
+        OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
     };
 
     struct TResOrPullResult : public NCommon::TOperationResult {
@@ -383,6 +385,7 @@ public:
         OPTION_FIELD(TString, OptLLVM)
         OPTION_FIELD(TString, OperationHash)
         OPTION_FIELD(TSecureParams, SecureParams)
+        OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
         OPTION_FIELD_DEFAULT(TSet<TString>, AdditionalSecurityTags, {})
     };
 
@@ -428,6 +431,7 @@ public:
         OPTION_FIELD(TString, OptLLVM)
         OPTION_FIELD(TString, OperationHash)
         OPTION_FIELD(TSecureParams, SecureParams)
+        OPTION_FIELD_DEFAULT(NUdf::ELogLevel, RuntimeLogLevel, NUdf::ELogLevel::Info)
     };
 
     struct TCalcResult : public NCommon::TOperationResult {

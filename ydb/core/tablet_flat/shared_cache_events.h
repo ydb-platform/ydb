@@ -55,13 +55,10 @@ namespace NKikimr::NSharedCache {
 
     struct TEvAttach : public TEventLocal<TEvAttach, EvAttach> {
         TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
-        TActorId Owner;
 
-        TEvAttach(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, TActorId owner)
+        TEvAttach(TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection)
             : PageCollection(std::move(pageCollection))
-            , Owner(owner)
         {
-            Y_ABORT_UNLESS(Owner, "Cannot send request with empty owner");
         }
     };
 
@@ -81,14 +78,11 @@ namespace NKikimr::NSharedCache {
     struct TEvRequest : public TEventLocal<TEvRequest, EvRequest> {
         const EPriority Priority;
         TAutoPtr<NPageCollection::TFetch> Fetch;
-        TActorId Owner;
 
-        TEvRequest(EPriority priority, TAutoPtr<NPageCollection::TFetch> fetch, TActorId owner)
+        TEvRequest(EPriority priority, TAutoPtr<NPageCollection::TFetch> fetch)
             : Priority(priority)
             , Fetch(fetch)
-            , Owner(owner)
         {
-            Y_ABORT_UNLESS(Owner, "Cannot sent request with empty owner");
         }
     };
 

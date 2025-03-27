@@ -16,6 +16,34 @@ namespace NYT {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// This distribution of weights corresponds to the logic of the GetBasicPriority method.
+static const TEnumIndexedArray<EWorkloadCategory, double> DefaultFairShareWorkloadCategoryWeights = {
+    {EWorkloadCategory::Idle, 0},
+
+    {EWorkloadCategory::SystemReplication, 1},
+    {EWorkloadCategory::SystemMerge, 1},
+    {EWorkloadCategory::SystemReincarnation, 1},
+    {EWorkloadCategory::SystemTabletCompaction, 1},
+    {EWorkloadCategory::SystemTabletPartitioning, 1},
+    {EWorkloadCategory::SystemTabletPreload, 1},
+    {EWorkloadCategory::SystemTabletReplication, 1},
+    {EWorkloadCategory::SystemTabletStoreFlush, 1},
+    {EWorkloadCategory::SystemArtifactCacheDownload, 1},
+    {EWorkloadCategory::UserBatch, 1},
+
+    {EWorkloadCategory::SystemRepair, 2},
+    {EWorkloadCategory::SystemTabletSnapshot, 2},
+
+    {EWorkloadCategory::UserInteractive, 3},
+    {EWorkloadCategory::UserDynamicStoreRead, 3},
+    {EWorkloadCategory::SystemTabletRecovery, 3},
+
+    {EWorkloadCategory::UserRealtime, 4},
+    {EWorkloadCategory::SystemTabletLogging, 4},
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TWorkloadDescriptor
 {
     TWorkloadDescriptor(

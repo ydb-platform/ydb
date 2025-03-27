@@ -1458,6 +1458,7 @@ namespace NKikimr::NHttpProxy {
             entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
             entry.SyncVersion = false;
             schemeCacheRequest->ResultSet.emplace_back(entry);
+            schemeCacheRequest->DatabaseName = CanonizePath(DatabasePath);
             ctx.Send(MakeSchemeCacheID(), MakeHolder<TEvTxProxySchemeCache::TEvNavigateKeySet>(schemeCacheRequest.release()));
         }
 

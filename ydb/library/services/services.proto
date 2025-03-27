@@ -307,6 +307,7 @@ enum EServiceKikimr {
     TX_COLUMNSHARD_WRITE = 852;
     TX_COLUMNSHARD_TX = 853;
     TX_COLUMNSHARD_RESTORE = 854;
+    COLUMNSHARD_SCAN_EVLOG = 855;
 
     // System views
     SYSTEM_VIEWS = 900;

@@ -226,8 +226,8 @@ public:
             YQL_CLOG(INFO, ProviderYt) << "YtIODiscovery - finish, status: " << (TStatus::ELevel)status.Level;
             return status;
         }
-        
-        if (PendingRanges_.empty() && PendingFolders_.empty() 
+
+        if (PendingRanges_.empty() && PendingFolders_.empty()
             && PendingCanonizations_.empty() && PendingWalkFoldersKeys_.empty()) {
             YQL_CLOG(INFO, ProviderYt) << "YtIODiscovery - finish, status: " << (TStatus::ELevel)status.Level;
             return status;
@@ -306,6 +306,7 @@ public:
                     .UdfValidateMode(State_->Types->ValidateMode)
                     .Config(State_->Configuration->Snapshot())
                     .OptLLVM(State_->Types->OptLLVM.GetOrElse(TString()))
+                    .RuntimeLogLevel(State_->Types->RuntimeLogLevel)
                     .Pos(x.second.first)
             );
             allFutures.push_back(result.IgnoreResult());
@@ -427,7 +428,7 @@ public:
 
                 return BuildFolderTableResExpr(ctx, node->Pos(), read.World(), BuildFolderListExpr(ctx, node->Pos(), listItems).Ptr()).Ptr();
             }
-            
+
             if (keys.GetType() != TYtKey::EType::Table) {
                 return node;
             }
@@ -678,15 +679,15 @@ private:
         res->ChildRef(4) = Build<TCoNameValueTupleList>(ctx, read.Pos()).Add(readSettings).Done().Ptr();
         return res;
     }
-    
+
     [[nodiscard]]
     TExprNode::TPtr InitializeWalkFolders(TYtKey&& key, const TString& cluster, TPosition pos, TExprContext& ctx) {
         auto& args = key.GetWalkFolderArgs().GetRef();
 
-        TWalkFoldersImpl walkFolders {State_->SessionId, cluster, State_->Configuration->Snapshot(), 
+        TWalkFoldersImpl walkFolders {State_->SessionId, cluster, State_->Configuration->Snapshot(),
                          pos, args, State_->Gateway};
-        YQL_CLOG(INFO, ProviderYt) << "Initialized WalkFolders from " << cluster << ".`" 
-            << args.InitialFolder.Prefix << "`" << " with root attributes cnt: " 
+        YQL_CLOG(INFO, ProviderYt) << "Initialized WalkFolders from " << cluster << ".`"
+            << args.InitialFolder.Prefix << "`" << " with root attributes cnt: "
             << args.InitialFolder.Attributes.size();
         const auto instanceKey = ctx.NextUniqueId;
         State_->WalkFoldersState.emplace(instanceKey, std::move(walkFolders));
@@ -704,7 +705,7 @@ private:
 
         return walkFoldersImplNode;
     }
-    
+
     TStatus RewriteWalkFoldersOnAsyncOrEvalChanges(TExprNode::TPtr& output, TExprContext& ctx) {
         TStatus walkFoldersStatus = IGraphTransformer::TStatus::Ok;
 
@@ -726,7 +727,7 @@ private:
                 YQL_ENSURE(!walkFoldersInstanceIt.IsEnd());
                 auto& walkFoldersImpl = walkFoldersInstanceIt->second;
 
-                Y_ENSURE(walkFoldersImpl.GetAnyOpFuture().HasValue(), 
+                Y_ENSURE(walkFoldersImpl.GetAnyOpFuture().HasValue(),
                     "Called RewriteWalkFoldersOnAsyncChanges, but impl future is not ready");
 
                 auto nextState = parsedKey.GetWalkFolderImplArgs()->UserStateExpr;
@@ -793,7 +794,7 @@ private:
             }
             return readNode.Ptr();
         });
-        
+
         if (status == TStatus::Error) {
             YQL_CLOG(ERROR, ProviderYt) << "WalkFolders error transforming";
             return status;
@@ -802,7 +803,7 @@ private:
         YQL_CLOG(INFO, ProviderYt) << "WalkFolders next status: " << walkFoldersStatus;
         return walkFoldersStatus;
     }
-    
+
     IGraphTransformer::TStatus VisitInputKeys(TExprNode::TPtr& output,
         TExprContext& ctx, std::function<TExprNode::TPtr(TYtRead node, TYtInputKeys&&)> processKeys, bool visitChanges = false) {
         TOptimizeExprSettings settings(nullptr);
@@ -835,7 +836,7 @@ private:
                     return {};
                 }
                 return processKeys(read, std::move(keys));
-            } 
+            }
             return node;
         }, ctx, settings);
         return status;
@@ -871,15 +872,15 @@ private:
         }
         return res;
     }
-    
+
     TWalkFoldersImpl& GetCurrentWalkFoldersInstance() const {
         Y_ENSURE(!PendingWalkFoldersKeys_.empty());
         const auto key = PendingWalkFoldersKeys_.begin();
         auto stateIt = State_->WalkFoldersState.find(*key);
         YQL_ENSURE(stateIt != State_->WalkFoldersState.end());
-        return stateIt->second; 
+        return stateIt->second;
     }
-    
+
     TMaybe<NThreading::TFuture<void>> MaybeGetWalkFoldersFuture() const {
         // inflight 1
         if (!PendingWalkFoldersKeys_.empty()) {

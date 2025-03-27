@@ -36,6 +36,8 @@ SRCS(
     sort.h
     swap_bytes.cpp
     swap_bytes.h
+    time_provider.h
+    time_provider.cpp
     tty.cpp
     tty.h
     url_builder.cpp
@@ -47,11 +49,12 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/miniselect
+    library/cpp/time_provider
     library/cpp/digest/md5
     library/cpp/string_utils/quote
     library/cpp/threading/future
     library/cpp/deprecated/atomic
-    contrib/libs/miniselect
 )
 
 END()

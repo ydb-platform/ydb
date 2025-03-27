@@ -60,19 +60,21 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
         }
     };
 
-    auto includeOpt = config.Opts->AddLongOption("include",
-        "Run only specified queries (ex.: 0,1,2,3,5-10,20)")
+    auto& includeOpt = config.Opts->AddLongOption("include",
+        "Run only specified queries (ex.: 0,1,2,3,5-10,20)");
+    includeOpt
         .Optional()
-        .Handler1T<TStringBuf>([this, fillTestCases](TStringBuf line) {
+        .GetOpt().Handler1T<TStringBuf>([this, fillTestCases](TStringBuf line) {
             QueriesToRun.clear();
             fillTestCases(line, [this](ui32 q) {
                 QueriesToRun.insert(q);
             });
         });
-    auto excludeOpt = config.Opts->AddLongOption("exclude",
-        "Run all queries except given ones (ex.: 0,1,2,3,5-10,20)")
+    auto& excludeOpt = config.Opts->AddLongOption("exclude",
+        "Run all queries except given ones (ex.: 0,1,2,3,5-10,20)");
+    excludeOpt
         .Optional()
-        .Handler1T<TStringBuf>([this, fillTestCases](TStringBuf line) {
+        .GetOpt().Handler1T<TStringBuf>([this, fillTestCases](TStringBuf line) {
             fillTestCases(line, [this](ui32 q) {
                 QueriesToSkip.emplace(q);
             });
@@ -85,7 +87,7 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
             "scan - use scan queries;\n"
             "generic - use generic queries.")
         .DefaultValue(QueryExecuterType)
-        .Handler1T<TStringBuf>([this](TStringBuf arg) {
+        .GetOpt().Handler1T<TStringBuf>([this](TStringBuf arg) {
                 const auto l = to_lower(TString(arg));
                 if (!TryFromString(arg, QueryExecuterType)) {
                     throw yexception() << "Ivalid query executer type: " << arg;
@@ -488,7 +490,7 @@ int TWorkloadCommandBenchmark::RunBench(TClient* client, NYdbWorkload::IWorkload
         Cout << "Summary table saved in CSV format to " << CsvReportFileName << Endl;
     }
 
-    return queriesWithSomeFails ? EXIT_FAILURE : EXIT_SUCCESS;
+    return (queriesWithSomeFails || queriesWithDiff) ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
 void TWorkloadCommandBenchmark::PrintResult(const BenchmarkUtils::TQueryBenchmarkResult& res, IOutputStream& out, const std::string& expected) const {

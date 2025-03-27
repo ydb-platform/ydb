@@ -4,6 +4,7 @@
 #include "util_fmt_abort.h"
 #include "flat_sausage_grind.h"
 #include "flat_boot_cookie.h"
+#include "util_fmt_abort.h"
 #include <ydb/core/base/blobstorage.h>
 
 namespace NKikimr {
@@ -47,7 +48,7 @@ namespace NBoot {
                 if (one.Channel == 0) {
                     /* Zero channel is reserved for system tablet activity */
                 } else if (group == NPageCollection::TLargeGlobId::InvalidGroup) {
-                    Y_Fail(
+                    Y_TABLET_ERROR(
                         "Leader{" << Tablet << ":" << Gen << "} got reserved"
                         << " InvalidGroup value for channel " << one.Channel);
 
@@ -70,7 +71,7 @@ namespace NBoot {
             const auto mask = ui64(1) << unsigned(idx);
 
             if (std::exchange(Issued, Issued | mask) & mask) {
-                Y_Fail("Cookies cookieRange EIdx" << ui32(idx) << " is resued");
+                Y_TABLET_ERROR("Cookies cookieRange EIdx" << ui32(idx) << " is resued");
             }
         }
 

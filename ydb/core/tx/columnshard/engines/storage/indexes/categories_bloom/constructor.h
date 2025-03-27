@@ -1,18 +1,20 @@
 #pragma once
 #include <ydb/core/tx/columnshard/engines/scheme/indexes/abstract/constructor.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/abstract.h>
+#include <ydb/core/tx/columnshard/engines/storage/indexes/skip_index/constructor.h>
 namespace NKikimr::NOlap::NIndexes::NCategoriesBloom {
 
-class TBloomIndexConstructor: public IIndexMetaConstructor {
+class TBloomIndexConstructor: public TSkipBitmapIndexConstructor {
+private:
+    using TBase = TSkipBitmapIndexConstructor;
+
 public:
     static TString GetClassNameStatic() {
         return "CATEGORY_BLOOM_FILTER";
     }
 
 private:
-    std::set<TString> ColumnNames;
     double FalsePositiveProbability = 0.1;
-    TReadDataExtractorContainer DataExtractor;
     static inline auto Registrator = TFactory::TRegistrator<TBloomIndexConstructor>(GetClassNameStatic());
 
 protected:
@@ -32,4 +34,4 @@ public:
     }
 };
 
-}   // namespace NKikimr::NOlap::NIndexes
+}   // namespace NKikimr::NOlap::NIndexes::NCategoriesBloom

@@ -919,7 +919,7 @@ TInstant TPartition::GetWriteTimeEstimate(ui64 offset) const {
     Y_ABORT_UNLESS(it != container.begin(),
              "Tablet %lu StartOffset %lu, HeadOffset %lu, offset %lu, containter size %lu, first-elem: %s",
              TabletID, StartOffset, Head.Offset, offset, container.size(),
-             container.front().Key.ToString().c_str());
+             container.front().Key.ToString().data());
     Y_ABORT_UNLESS(it == container.end() ||
              it->Key.GetOffset() > offset ||
              it->Key.GetOffset() == offset && it->Key.GetPartNo() > 0);

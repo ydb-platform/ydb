@@ -73,6 +73,20 @@ DEFINE_REFCOUNTED_TYPE(TLogDigestConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TFairShareHierarchicalSchedulerDynamicConfig
+    : public NYTree::TYsonStruct
+{
+    TDuration WindowSize;
+
+    REGISTER_YSON_STRUCT(TFairShareHierarchicalSchedulerDynamicConfig);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TFairShareHierarchicalSchedulerDynamicConfig)
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct THistogramDigestConfig
     : public NYTree::TYsonStruct
 {

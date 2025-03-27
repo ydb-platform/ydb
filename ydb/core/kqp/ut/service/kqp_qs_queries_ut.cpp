@@ -1704,14 +1704,11 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         checkDrop(true, EEx::IfExists, 1);
 
         // rename
-        Y_UNUSED(checkRename);
-        /*
         checkCreate(true, EEx::Empty, 2);
         checkRename(true, 2, 3);
         checkRename(false, 2, 3); // already renamed, no such table
         checkDrop(false, EEx::Empty, 2); // no such table
         checkDrop(true, EEx::Empty, 3);
-        */
     }
 
     Y_UNIT_TEST(DdlColumnTable) {
@@ -2822,6 +2819,54 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
+    Y_UNIT_TEST(ShowCreateSysView) {
+        auto serverSettings = TKikimrSettings().SetEnableShowCreate(true
+
+        );
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                CREATE TABLE test_show_create (
+                    Key Uint32,
+                    Value Uint32,
+                    PRIMARY KEY (Key)
+                );
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                SELECT * FROM `.sys/show_create`;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+
+            UNIT_ASSERT_VALUES_EQUAL("<main>: Error: Type annotation, code: 1030\n    <main>:2:17: Error: At function: KiReadTable!\n        <main>:2:17: Error: Cannot find table 'db.[/Root/.sys/show_create]' because it does not exist or you do not have access permissions. Please check correctness of table path and user permissions., code: 2003\n",
+                result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                SELECT * FROM `.sys/show_create` WHERE Path = "/Root/test_show_create" and PathType = "Table";
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+
+            UNIT_ASSERT_VALUES_EQUAL("<main>: Error: Type annotation, code: 1030\n    <main>:2:17: Error: At function: KiReadTable!\n        <main>:2:17: Error: Cannot find table 'db.[/Root/.sys/show_create]' because it does not exist or you do not have access permissions. Please check correctness of table path and user permissions., code: 2003\n",
+                result.GetIssues().ToString());
+        }
+
+        {
+            auto tableClient = kikimr.GetTableClient();
+            auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+            NYdb::NTable::TDescribeTableResult describe = tableSession.DescribeTable("/Root/.sys/show_create").GetValueSync();
+            UNIT_ASSERT(!describe.IsSuccess());
+        }
+    }
+
     Y_UNIT_TEST(ShowCreateTableNotSuccess) {
         auto serverSettings = TKikimrSettings().SetEnableShowCreate(true);
 
@@ -2834,6 +2879,19 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 SHOW CREATE TABLE test_show_create;
             )", TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT(!result.IsSuccess());
+
+            UNIT_ASSERT_VALUES_EQUAL("<main>: Error: Type annotation, code: 1030\n    <main>:2:35: Error: At function: KiReadTable!\n        <main>:2:35: Error: Cannot find table 'db.[/Root/test_show_create]' because it does not exist or you do not have access permissions. Please check correctness of table path and user permissions., code: 2003\n",
+                result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                SHOW CREATE TABLE `/Root/.sys/show_create`;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+
+            UNIT_ASSERT_VALUES_EQUAL("<main>: Error: Type annotation, code: 1030\n    <main>:2:35: Error: At function: KiReadTable!\n        <main>:2:35: Error: Cannot find table 'db.[/Root/.sys/show_create]' because it does not exist or you do not have access permissions. Please check correctness of table path and user permissions., code: 2003\n",
+                result.GetIssues().ToString());
         }
     }
 
@@ -4879,6 +4937,47 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
 
     Y_UNIT_TEST(TableSink_OlapUpdate) {
         TUpdateFromTableTester tester;
+        tester.SetIsOlap(true);
+        tester.Execute();
+    }
+
+    class TSinkOrderTester: public TTableDataModificationTester {
+    protected:
+        void DoExecute() override {
+            auto client = Kikimr->GetQueryClient();
+
+            for (size_t index = 0; index < 100; ++index) {
+                auto session = client.GetSession().GetValueSync().GetSession();
+
+                auto result = session.ExecuteQuery(fmt::format(R"(
+                    UPSERT INTO `/Root/DataShard` (Col1, Col2) VALUES ({}u, 0);
+                )", index), NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW())).ExtractValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+                auto tx = result.GetTransaction();
+                UNIT_ASSERT(tx);
+
+                result = session.ExecuteQuery(fmt::format(R"(
+                    INSERT INTO `/Root/DataShard` (Col1, Col2) VALUES ({}u, 0);
+                )", index), NYdb::NQuery::TTxControl::Tx(tx->GetId()).CommitTx()).ExtractValueSync();
+                if (GetIsOlap()) {
+                    // https://github.com/ydb-platform/ydb/issues/14383
+                    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+                }
+            }
+        }
+    };
+
+    Y_UNIT_TEST(TableSink_OltpOrder) {
+        TSinkOrderTester tester;
+        tester.SetIsOlap(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TableSink_OlapOrder) {
+        TSinkOrderTester tester;
         tester.SetIsOlap(true);
         tester.Execute();
     }

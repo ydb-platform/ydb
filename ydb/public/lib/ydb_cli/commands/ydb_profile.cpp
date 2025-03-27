@@ -716,7 +716,7 @@ void TCommandProfileCommon::Config(TConfig& config) {
 
     config.SetFreeArgsMax(1);
     SetFreeArgTitle(0, "<name>", "Profile name");
-    NLastGetopt::TOpts& opts = *config.Opts;
+    TClientCommandOptions& opts = *config.Opts;
 
     opts.AddLongOption('e', "endpoint", "Endpoint to save in the profile").RequiredArgument("STRING").StoreResult(&Endpoint);
     opts.AddLongOption('d', "database", "Database to save in the profile").RequiredArgument("PATH").StoreResult(&Database);
@@ -1096,7 +1096,7 @@ void TCommandUpdateProfile::Config(TConfig& config) {
     TCommandProfileCommon::Config(config);
 
     config.SetFreeArgsMin(1);
-    NLastGetopt::TOpts& opts = *config.Opts;
+    TClientCommandOptions& opts = *config.Opts;
     opts.AddLongOption("no-endpoint", "Delete endpoint from the profile").StoreTrue(&NoEndpoint);
     opts.AddLongOption("no-database", "Delete database from the profile").StoreTrue(&NoDatabase);
     opts.AddLongOption("no-auth", "Delete authentication data from the profile").StoreTrue(&NoAuth);

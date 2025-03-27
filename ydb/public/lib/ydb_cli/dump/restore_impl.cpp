@@ -497,7 +497,7 @@ TRestoreResult TRestoreClient::Restore(const TString& fsPath, const TString& dbP
 
         switch (entry.Type) {
             case ESchemeEntryType::Directory:
-                result = RemoveDirectoryRecursive(SchemeClient, TableClient, nullptr, &QueryClient,
+                result = RemoveDirectoryRecursive(SchemeClient, TableClient, &TopicClient, &QueryClient, &CoordinationNodeClient,
                     TString{fullPath}, ERecursiveRemovePrompt::Never, {}, true, false);
                 break;
             case ESchemeEntryType::Table:

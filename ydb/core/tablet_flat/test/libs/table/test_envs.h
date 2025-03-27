@@ -89,7 +89,7 @@ namespace NTest {
         ~TFailEnv()
         {
             if (Touches == 0 || (Rate < 1. && Success == Touches)) {
-                Y_Fail("Fail env was touched " << Touches << " times w/o fails");
+                Y_ABORT_S("Fail env was touched " << Touches << " times w/o fails");
             }
         }
 
@@ -194,7 +194,7 @@ namespace NTest {
 
                 auto got = PageLoadingLogic->Get(this, pageId, type, lower);
 
-                Y_ABORT_UNLESS((Grow = got.Grow) || IndexFetch || GroupFetch || got.Page);
+                Y_ENSURE((Grow = got.Grow) || IndexFetch || GroupFetch || got.Page);
 
                 return { got.Need, got.Page };
             }
@@ -255,7 +255,7 @@ namespace NTest {
             auto* partStore = CheckedCast<const TPartStore*>(part);
 
             if ((lob != ELargeObj::Extern && lob != ELargeObj::Outer) || (ref >> 32)) {
-                Y_Fail("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}");
+                Y_TABLET_ERROR("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}");
             }
 
             const auto room = (lob == ELargeObj::Extern)
@@ -271,7 +271,7 @@ namespace NTest {
 
             auto* partStore = CheckedCast<const TPartStore*>(part);
 
-            Y_ABORT_UNLESS(groupId.Index < partStore->Store->GetGroupCount());
+            Y_ENSURE(groupId.Index < partStore->Store->GetGroupCount());
 
             auto type = partStore->GetPageType(pageId, groupId);
             if (groupId.IsMain() && IsIndexPage(type)) {
@@ -288,8 +288,8 @@ namespace NTest {
         {
             auto& partGroupQueues = PartGroupQueues[part];
 
-            Y_ABORT_UNLESS(queueIndex < partGroupQueues.size());
-            Y_ABORT_UNLESS(partGroupQueues[queueIndex]);
+            Y_ENSURE(queueIndex < partGroupQueues.size());
+            Y_ENSURE(partGroupQueues[queueIndex]);
 
             return *partGroupQueues[queueIndex];
         }
@@ -310,7 +310,7 @@ namespace NTest {
                     } else if (room == partStore->Store->GetExternRoom()) {
                         partGroupQueues.push_back(Settle(partStore, room, MakeExtern(partStore)));
                     } else {
-                        Y_ABORT("Don't know how to work with room %" PRIu32, room);
+                        Y_TABLET_ERROR("Don't know how to work with room " << room);
                     }
                 }
                 for (ui32 group : xrange(part->HistoricGroupsCount)) {
@@ -333,7 +333,7 @@ namespace NTest {
         THolder<NFwd::IPageLoadingLogic> MakeExtern(const TPartStore *part) const
         {
             if (auto &large = part->Large) {
-                Y_ABORT_UNLESS(part->Blobs, "Part has frames but not blobs");
+                Y_ENSURE(part->Blobs, "Part has frames but not blobs");
 
                 TVector<ui32> edges(large->Stats().Tags.size(), Edge);
 

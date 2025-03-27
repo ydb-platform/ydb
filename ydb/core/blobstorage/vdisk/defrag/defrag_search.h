@@ -235,7 +235,7 @@ namespace NKikimr {
                 auto it = PerChunkMap.find(part.ChunkIdx);
                 if (it == PerChunkMap.end()) {
                     const THugeSlotsMap::TSlotInfo *slotInfo = HugeBlobCtx->HugeSlotsMap->GetSlotInfo(part.Size);
-                    Y_ABORT_UNLESS(slotInfo, "size# %" PRIu32, part.Size);
+                    Y_VERIFY_S(slotInfo, HugeBlobCtx->VDiskLogPrefix << "size# " << part.Size);
                     it = PerChunkMap.emplace(std::piecewise_construct, std::make_tuple(part.ChunkIdx),
                         std::make_tuple(slotInfo->SlotSize, slotInfo->NumberOfSlotsInChunk)).first;
                 }
@@ -261,7 +261,7 @@ namespace NKikimr {
                 for (const auto *kv : chunks) {
                     const auto& [chunkIdx, chunk] = *kv;
                     auto it = aggrSlots.find(chunk.SlotSize);
-                    Y_ABORT_UNLESS(it != aggrSlots.end());
+                    Y_VERIFY_S(it != aggrSlots.end(), HugeBlobCtx->VDiskLogPrefix);
                     auto& a = it->second;
 
                     // if we can put all current used slots into UsedChunks - 1, then defragment this chunk
@@ -368,7 +368,11 @@ namespace NKikimr {
         };
 
     public:
-        TDefragQuantumFindRecords(TChunksToDefrag&& chunksToDefrag, const TDefragChunks& locked) {
+        TDefragQuantumFindRecords(
+                const TString& logPrefix,
+                TChunksToDefrag&& chunksToDefrag,
+                const TDefragChunks& locked)
+        {
             if (chunksToDefrag.IsShred) {
                 LockedChunks = Chunks = std::move(chunksToDefrag.ChunksToShred);
             } else {
@@ -378,7 +382,7 @@ namespace NKikimr {
                 for (const auto& chunk : locked) {
                     LockedChunks.insert(chunk.ChunkId);
                 }
-                Y_ABORT_UNLESS(Chunks.size() == chunksToDefrag.Chunks.size()); // ensure there are no duplicate numbers
+                Y_VERIFY_S(Chunks.size() == chunksToDefrag.Chunks.size(), logPrefix); // ensure there are no duplicate numbers
             }
         }
 
@@ -433,7 +437,7 @@ namespace NKikimr {
             Chunks.insert(part.ChunkIdx);
             if (useful) {
                 const THugeSlotsMap::TSlotInfo *slotInfo = HugeBlobCtx->HugeSlotsMap->GetSlotInfo(part.Size);
-                Y_ABORT_UNLESS(slotInfo, "size# %" PRIu32, part.Size);
+                Y_VERIFY_S(slotInfo, HugeBlobCtx->VDiskLogPrefix << "size# " << part.Size);
                 ++Map[slotInfo->NumberOfSlotsInChunk];
             }
             TDefragQuantumChunkFinder::Add(part, id, useful, sst);

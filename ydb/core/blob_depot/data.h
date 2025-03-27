@@ -451,6 +451,14 @@ namespace NKikimr::NBlobDepot {
         ui64 InFlightTrashSize = 0;
         ui64 TotalS3DataSize = 0;
 
+        ui64 LoadRestartTx = 0;
+        ui64 LoadRunSuccessorTx = 0;
+        ui64 LoadProcessingCycles = 0;
+        ui64 LoadFinishTxCycles = 0;
+        ui64 LoadRestartTxCycles = 0;
+        ui64 LoadRunSuccessorTxCycles = 0;
+        ui64 LoadTotalCycles = 0;
+
         friend class TGroupAssimilator;
 
         THashMultiMap<void*, TLogoBlobID> InFlightTrashBlobs; // being committed, but not yet confirmed
@@ -747,9 +755,10 @@ namespace NKikimr::NBlobDepot {
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        ui64 GetTotalStoredDataSize() const {
-            return TotalStoredDataSize;
-        }
+        ui64 GetTotalStoredDataSize() const { return TotalStoredDataSize; }
+        ui64 GetTotalStoredTrashSize() const { return TotalStoredTrashSize; }
+        ui64 GetInFlightTrashSize() const { return InFlightTrashSize; }
+        ui64 GetTotalS3DataSize() const { return TotalS3DataSize; }
 
         void RenderMainPage(IOutputStream& s);
 

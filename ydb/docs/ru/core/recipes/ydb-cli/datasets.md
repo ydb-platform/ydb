@@ -37,7 +37,7 @@ ydb import file csv --header --null-value "" --path <путь_к_таблице>
 
 **Пример загрузки**:
 
-1. Скачайте файл `2019-Nov.csv` с Kaggle
+1. Скачайте и разархивируйте файл `2019-Nov.csv` с Kaggle
 2. Создайте таблицу в {{ ydb-short-name }}
 
 <details>
@@ -103,7 +103,7 @@ ydb import file csv --header --null-value "" --path ecommerce_table 2019-Nov.csv
 
 **Пример загрузки**:
 
-1. Скачайте файл `accessories.csv` с Kaggle
+1. Скачайте и разархивируйте файл `accessories.csv` с Kaggle
 2. Удалите BOM-байты из начала файла. Например, выполнив команду:
 
 ```bash
@@ -194,6 +194,234 @@ sed -i '1s/ /_/g' accessories.csv
 
 ```bash
 ydb import file csv --header --path accessories accessories.csv
+```
+
+### COVID-19 Open Research Dataset
+
+Открытый набор данных исследований COVID-19.
+
+**Источник**: [Kaggle - COVID-19 Open Research Dataset Challenge](https://www.kaggle.com/datasets/allen-institute-for-ai/CORD-19-research-challenge?select=metadata.csv)
+
+**Размер**: 1.65 GB (файл metadata.csv)
+
+**Пример загрузки**:
+
+1. Скачайте и разархивируйте файл `metadata.csv` с Kaggle
+
+2. Создайте таблицу в {{ ydb-short-name }}
+<details>
+  <summary>Выполнив запрос в WEB-интерфейсе</summary>
+
+  Подробнее про [WEB-интерфейс](../../reference/embedded-ui/ydb-monitoring).
+
+  ```sql
+  CREATE TABLE `covid_research` (
+      `cord_uid` Text NOT NULL,
+      `sha` Text NOT NULL,
+      `source_x` Text NOT NULL,
+      `title` Text NOT NULL,
+      `doi` Text NOT NULL,
+      `pmcid` Text NOT NULL,
+      `pubmed_id` Text NOT NULL,
+      `license` Text NOT NULL,
+      `abstract` Text NOT NULL,
+      `publish_time` Text NOT NULL,
+      `authors` Text NOT NULL,
+      `journal` Text NOT NULL,
+      `mag_id` Text, -- No data in this column to infer type
+      `who_covidence_id` Text, -- No data in this column to infer type
+      `arxiv_id` Text, -- No data in this column to infer type
+      `pdf_json_files` Text NOT NULL,
+      `pmc_json_files` Text NOT NULL,
+      `url` Text NOT NULL,
+      `s2_id` Uint64,
+      PRIMARY KEY (`cord_uid`)
+  )
+  WITH (
+      STORE = COLUMN
+  );
+  ```
+</details>
+
+<details>
+  <summary>Выполнив команду YDB CLI</summary>
+
+  ```bash
+  ydb sql -s \
+  'CREATE TABLE `covid_research` (
+      `cord_uid` Text NOT NULL,
+      `sha` Text NOT NULL,
+      `source_x` Text NOT NULL,
+      `title` Text NOT NULL,
+      `doi` Text NOT NULL,
+      `pmcid` Text NOT NULL,
+      `pubmed_id` Text NOT NULL,
+      `license` Text NOT NULL,
+      `abstract` Text NOT NULL,
+      `publish_time` Text NOT NULL,
+      `authors` Text NOT NULL,
+      `journal` Text NOT NULL,
+      `mag_id` Text, -- No data in this column to infer type
+      `who_covidence_id` Text, -- No data in this column to infer type
+      `arxiv_id` Text, -- No data in this column to infer type
+      `pdf_json_files` Text NOT NULL,
+      `pmc_json_files` Text NOT NULL,
+      `url` Text NOT NULL,
+      `s2_id` Uint64,
+      PRIMARY KEY (`cord_uid`)
+  )
+  WITH (
+      STORE = COLUMN
+  );'
+  ```
+</details>
+
+3. Выполните команду импорта
+
+```bash
+ydb import file csv --header --null-value "" --path covid_research metadata.csv
+```
+
+### Netflix Movies and TV Shows
+
+Данные о фильмах и сериалах на платформе Netflix.
+
+**Источник**: [Kaggle - Netflix Movies and TV Shows](https://www.kaggle.com/datasets/shivamb/netflix-shows)
+
+**Размер**: 3.4 MB
+
+**Пример загрузки**:
+
+1. Скачайте и разархивируйте файл `netflix_titles.csv` с Kaggle
+
+2. Создайте таблицу в {{ ydb-short-name }}
+<details>
+  <summary>Выполнив запрос в WEB-интерфейсе</summary>
+
+  Подробнее про [WEB-интерфейс](../../reference/embedded-ui/ydb-monitoring).
+
+  ```sql
+  CREATE TABLE `netflix` (
+      `show_id` Text NOT NULL,
+      `type` Text NOT NULL,
+      `title` Text NOT NULL,
+      `director` Text NOT NULL,
+      `cast` Text,
+      `country` Text NOT NULL,
+      `date_added` Text NOT NULL,
+      `release_year` Uint64 NOT NULL,
+      `rating` Text NOT NULL,
+      `duration` Text NOT NULL,
+      `listed_in` Text NOT NULL,
+      `description` Text NOT NULL,
+      PRIMARY KEY (`show_id`)
+  )
+  WITH (
+      STORE = COLUMN
+  );
+  ```
+</details>
+
+<details>
+  <summary>Выполнив команду YDB CLI</summary>
+
+  ```bash
+  ydb sql -s \
+  'CREATE TABLE `netflix` (
+      `show_id` Text NOT NULL,
+      `type` Text NOT NULL,
+      `title` Text NOT NULL,
+      `director` Text NOT NULL,
+      `cast` Text,
+      `country` Text NOT NULL,
+      `date_added` Text NOT NULL,
+      `release_year` Uint64 NOT NULL,
+      `rating` Text NOT NULL,
+      `duration` Text NOT NULL,
+      `listed_in` Text NOT NULL,
+      `description` Text NOT NULL,
+      PRIMARY KEY (`show_id`)
+  )
+  WITH (
+      STORE = COLUMN
+  );'
+  ```
+</details>
+
+3. Выполните команду импорта
+
+```bash
+ydb import file csv --header --null-value "" --path netflix netflix_titles.csv
+```
+
+### Video Game Sales
+
+Данные о продажах видеоигр.
+
+**Источник**: [Kaggle - Video Game Sales](https://www.kaggle.com/datasets/gregorut/videogamesales)
+
+**Размер**: 1.36 MB
+
+**Пример загрузки**:
+
+1. Скачайте и разархивируйте файл `vgsales.csv` с Kaggle
+
+2. Создайте таблицу в {{ ydb-short-name }}
+<details>
+  <summary>Выполнив запрос в WEB-интерфейсе</summary>
+
+  Подробнее про [WEB-интерфейс](../../reference/embedded-ui/ydb-monitoring).
+
+  ```sql
+  CREATE TABLE `vgsales` (
+      `Rank` Uint64 NOT NULL,
+      `Name` Text NOT NULL,
+      `Platform` Text NOT NULL,
+      `Year` Text NOT NULL,
+      `Genre` Text NOT NULL,
+      `Publisher` Text NOT NULL,
+      `NA_Sales` Double NOT NULL,
+      `EU_Sales` Double NOT NULL,
+      `JP_Sales` Double NOT NULL,
+      `Other_Sales` Double NOT NULL,
+      `Global_Sales` Double NOT NULL,
+      PRIMARY KEY (`Rank`)
+  )
+  WITH (
+      STORE = COLUMN
+  );
+  ```
+</details>
+
+<details>
+  <summary>Выполнив команду YDB CLI</summary>
+
+  ```bash
+  ydb sql -s \
+  'CREATE TABLE `vgsales` (
+      `Rank` Uint64 NOT NULL,
+      `Name` Text NOT NULL,
+      `Platform` Text NOT NULL,
+      `Year` Text NOT NULL,
+      `Genre` Text NOT NULL,
+      `Publisher` Text NOT NULL,
+      `NA_Sales` Double NOT NULL,
+      `EU_Sales` Double NOT NULL,
+      `JP_Sales` Double NOT NULL,
+      `Other_Sales` Double NOT NULL,
+      `Global_Sales` Double NOT NULL,
+      PRIMARY KEY (`Rank`)
+  )
+  WITH (
+      STORE = COLUMN
+  );'
+  ```
+</details>
+
+3. Выполните команду импорта
+
+```bash
+ydb import file csv --header --null-value "" --path vgsales vgsales.csv
 ```
 
 ## Особенности и ограничения

@@ -3387,5 +3387,26 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         testHelper.ReadData("SELECT COUNT(*) FROM `/Root/ColumnTableTest` WHERE time > CurrentUtcTimestamp()", "[[1u]]");
     }
+
+    Y_UNIT_TEST(WithDefaultValue) {
+        std::unique_ptr<TKikimrRunner> Kikimr;
+        auto settings = TKikimrSettings().SetWithSampleTables(false);
+        auto kikimr = std::make_unique<TKikimrRunner>(settings);
+        Tests::NCommon::TLoggerInit(*kikimr).Initialize();
+        auto queryClient = kikimr->GetQueryClient();
+        {
+            auto result = queryClient.ExecuteQuery(R"(
+                CREATE TABLE Test (
+                    Id Uint32 not null,
+                    Value String DEFAULT "aba",
+                    PRIMARY KEY (Id)
+                ) WITH (
+                    STORE = COLUMN
+                );
+            )", NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), NYdb::EStatus::GENERIC_ERROR);
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Default values are not supported in column tables", result.GetIssues().ToString());
+        }
+    }
 }
 }

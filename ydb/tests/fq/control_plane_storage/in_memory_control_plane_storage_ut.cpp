@@ -102,7 +102,8 @@ Y_UNIT_TEST_SUITE(InMemoryControlPlaneStorage) {
     Y_UNIT_TEST_F(ExecuteSimpleQuery, TTestFuxture) {
         TString queryId;
         CheckSuccess(FqSetup->StreamRequest({
-            .Query = "SELECT 42 AS result_value"
+            .Query = "SELECT 42 AS result_value",
+            .Action = FederatedQuery::ExecuteMode::RUN
         }, queryId));
         UNIT_ASSERT(queryId);
 

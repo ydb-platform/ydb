@@ -1983,12 +1983,10 @@ TTxControl::TTxControl(const TTxSettings& begin)
 ////////////////////////////////////////////////////////////////////////////////
 
 TTransaction::TTransaction(const TSession& session, const std::string& txId)
-    : TransactionImpl_(new TTransaction::TImpl(session, txId))
-{}
-
-const std::string& TTransaction::GetId() const
+    : TransactionImpl_(std::make_shared<TTransaction::TImpl>(session, txId))
 {
-    return TransactionImpl_->GetId();
+    SessionId_ = &TransactionImpl_->Session_.GetId();
+    TxId_ = &TransactionImpl_->TxId_;
 }
 
 bool TTransaction::IsActive() const

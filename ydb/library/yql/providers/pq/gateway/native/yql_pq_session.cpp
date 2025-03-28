@@ -99,8 +99,9 @@ NPq::NConfigurationManager::TAsyncDescribePathResult TPqSession::DescribePath(co
         }
 
         return GetYdbPqClient(cluster, database, *config, credentialsProviderFactory)
-            .GetAllClusterInfo(true)
+            .GetAllClusterInfo()
             .Apply([
+                ydbDriver = YdbDriver, credentialsProviderFactory,
                 cluster, database, path,
                 topicSettings = GetYdbPqClientOptions(database, *config, credentialsProviderFactory)
         ](const auto& futureClusterInfo) mutable {
@@ -111,13 +112,14 @@ NPq::NConfigurationManager::TAsyncDescribePathResult TPqSession::DescribePath(co
             std::vector<std::string> paths;
             paths.reserve(allClustersInfo.size());
             for (auto& clusterInfo: allClustersInfo) {
-                if (!clusterInfo.IsAvailableForRead() || !clusterInfo.TopicClient) {
+                if (!clusterInfo.IsAvailableForRead()) {
                     results.emplace_back(NThreading::MakeErrorFuture<NYdb::NTopic::TDescribeTopicResult>(std::make_exception_ptr(NThreading::TFutureException())));
                     continue;
                 }
                 auto& clusterTopicPath = paths.emplace_back(path);
                 clusterInfo.AdjustTopicPath(clusterTopicPath);
-                results.emplace_back(clusterInfo.TopicClient->DescribeTopic(clusterTopicPath));
+                clusterInfo.AdjustTopicClientSettings(topicSettings);
+                results.emplace_back(NYdb::NTopic::TTopicClient(ydbDriver, topicSettings).DescribeTopic(clusterTopicPath));
             }
             // XXX This produces circular dependency until the future is fired
             // results references allFutureDescribe

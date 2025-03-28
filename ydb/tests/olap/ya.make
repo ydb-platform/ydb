@@ -8,5 +8,5 @@ RECURSE(
     s3_import
     scenario
     ttl_tiering
-    volume_limits
+    data_quotas
 )

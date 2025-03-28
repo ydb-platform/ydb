@@ -1,7 +1,6 @@
 import os
 import subprocess
 import sys
-import datetime
 import logging
 import time
 
@@ -189,7 +188,7 @@ class TestYdbWorkload(object):
         assert i == ROWS_CHUNKS_COUNT
 
         # Writes enabling after data deletion will be checked in separate PR
-    
+
     def wait_for(self, condition_func, timeout_seconds) -> bool:
         t0 = time.time()
         while time.time() - t0 < timeout_seconds:
@@ -233,4 +232,4 @@ class TestYdbWorkload(object):
         # Overflow the database
         self.upsert_until_overload(lambda i: self.upsert_test_chunk(session, table_path, 0, retries=0), timeout_seconds=200)
 
-        assert self.wait_for(lambda: self.try_upsert_test_chunk(session, table_path, 1), 200), f"can't write after overload by duplicates"
+        assert self.wait_for(lambda: self.try_upsert_test_chunk(session, table_path, 1), 200), "can't write after overload by duplicates"

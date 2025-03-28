@@ -33,6 +33,8 @@ class TestYdbWorkload(object):
 
     @classmethod
     def teardown_class(cls):
+        cls.session.stop()
+        cls.driver.stop()
         cls.cluster.stop()
 
     def make_session(self):
@@ -77,7 +79,8 @@ class TestYdbWorkload(object):
                 print(f"upsert #{i} ok, result:", res, file=sys.stderr)
                 described = self.cluster.client.describe('/Root', '')
                 print('Quota exceeded {}'.format(described.PathDescription.DomainDescription.DomainState.DiskQuotaExceeded), file=sys.stderr)
-                assert time.time() <= deadline, "deadline exceeded"
+                if timeout_seconds:
+                    assert time.time() <= deadline, "deadline exceeded"
             assert False, "overload not reached"
         except ydb.issues.Overloaded:
             print('upsert: got overload issue', file=sys.stderr)

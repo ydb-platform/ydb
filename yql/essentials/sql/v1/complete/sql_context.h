@@ -10,6 +10,7 @@ namespace NSQLComplete {
 
     struct TCompletionContext {
         TVector<TString> Keywords;
+        bool IsTypeName;
     };
 
     class ISqlContextInference {

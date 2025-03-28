@@ -530,7 +530,6 @@ public:
         std::string Path;
         EStatus Status;
         // TODO: Id, Weight, ...?
-        std::shared_ptr<NTopic::TTopicClient> TopicClient;
         //! Replaces Endpoint and Database for federated clusters
         void AdjustTopicClientSettings(NTopic::TTopicClientSettings& settings) const;
         //! Prepend Database for federated clusters
@@ -542,7 +541,7 @@ public:
 
     //! Discover all clusters for federated topic
     // (May signal exception in future if FederatedTopicClient was destroyed when future fired)
-    NThreading::TFuture<std::vector<TClusterInfo>> GetAllClusterInfo(bool withClients = false);
+    NThreading::TFuture<std::vector<TClusterInfo>> GetAllClusterInfo();
 
     static std::vector<NTopic::TTopicClient> GetAllTopicClients(const TDriver& driver, const std::vector<TClusterInfo>& clusterInfos, NTopic::TTopicClientSettings& clientSettings);
 

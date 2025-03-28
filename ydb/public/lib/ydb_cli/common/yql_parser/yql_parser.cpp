@@ -14,15 +14,9 @@
 namespace NYdb {
 namespace NConsoleClient {
 
-enum class EParseState {
-    Start,
-    Declare,
-    ParamName,
-    As,
-    Type
-};
+namespace {
 
-TString TYqlParamParser::ToLower(const TString& s) {
+TString ToLower(const TString& s) {
     TString result = s;
     for (char& c : result) {
         c = std::tolower(c);
@@ -30,7 +24,268 @@ TString TYqlParamParser::ToLower(const TString& s) {
     return result;
 }
 
+class TYqlTypeParser {
+public:
+    TYqlTypeParser(const TVector<NSQLTranslation::TParsedToken>& tokens)
+        : Tokens(tokens)
+    {}
+
+    std::optional<TType> Build(size_t& pos) {
+        auto node = Parse(pos);
+        if (!node || (pos < Tokens.size() && Tokens[pos].Content != ";")) {
+            return std::nullopt;
+        }
+
+        TTypeBuilder builder;
+        if (!BuildType(*node, builder)) {
+            return std::nullopt;
+        }
+        return builder.Build();
+    }
+
+private:
+    struct TypeNode {
+        TString TypeName;
+        std::vector<TypeNode> Children;
+        TString Name; // для полей структуры
+        bool IsKey = false; // для словарей
+    };
+
+    std::optional<TypeNode> Parse(size_t& pos) {
+        TypeNode node;
+
+        while (pos < Tokens.size() && Tokens[pos].Name == "WS") {
+            pos++;
+        }
+
+        if (pos >= Tokens.size()) {
+            return node;
+        }
+
+        TString content = Tokens[pos].Content;
+        TString lowerContent = ToLower(content);
+
+        if (lowerContent == "list" || lowerContent == "struct" ||
+            lowerContent == "tuple" || lowerContent == "dict") {
+
+            node.TypeName = lowerContent;
+            pos++;
+
+            if (pos >= Tokens.size() || Tokens[pos].Content != "<") {
+                return node;
+            }
+            pos++;
+
+            while (pos < Tokens.size() && Tokens[pos].Content != ">") {
+                if (Tokens[pos].Name == "WS" || Tokens[pos].Content == ",") {
+                    pos++;
+                    continue;
+                }
+
+                if (lowerContent == "struct") {
+                    TypeNode field;
+                    field.Name = Tokens[pos].Content;
+                    pos++;
+
+                    while (pos < Tokens.size() && Tokens[pos].Name == "WS") {
+                        pos++;
+                    }
+
+                    if (pos >= Tokens.size() || Tokens[pos].Content != ":") {
+                        return node;
+                    }
+                    pos++;
+
+                    auto parseResult = Parse(pos);
+                    if (!parseResult) {
+                        return std::nullopt;
+                    }
+                    field.Children.push_back(*parseResult);
+                    node.Children.push_back(field);
+                } else if (lowerContent == "dict") {
+                    auto parseResult = Parse(pos);
+                    if (!parseResult) {
+                        return std::nullopt;
+                    }
+                    TypeNode key = *parseResult;
+                    key.IsKey = true;
+                    node.Children.push_back(key);
+
+                    while (pos < Tokens.size() && (Tokens[pos].Name == "WS" || Tokens[pos].Content == ",")) {
+                        pos++;
+                    }
+
+                    parseResult = Parse(pos);
+                    if (!parseResult) {
+                        return std::nullopt;
+                    }
+                    node.Children.push_back(*parseResult);
+                } else {
+                    auto parseResult = Parse(pos);
+                    if (!parseResult) {
+                        return std::nullopt;
+                    }
+                    node.Children.push_back(*parseResult);
+                }
+            }
+
+            if (pos < Tokens.size() && Tokens[pos].Content == ">") {
+                pos++;
+            }
+        } else if (lowerContent == "decimal") {
+            node.TypeName = lowerContent;
+            pos++;
+
+            if (pos >= Tokens.size() || Tokens[pos].Content != "(") {
+                return node;
+            }
+            pos++;
+
+            TypeNode precision;
+            precision.TypeName = Tokens[pos].Content;
+            node.Children.push_back(precision);
+            pos++;
+
+            if (pos >= Tokens.size() || Tokens[pos].Content != ",") {
+                return node;
+            }
+            pos++;
+
+            TypeNode scale;
+            scale.TypeName = Tokens[pos].Content;
+            node.Children.push_back(scale);
+            pos++;
+
+            if (pos >= Tokens.size() || Tokens[pos].Content != ")") {
+                return node;
+            }
+            pos++;
+        } else {
+            node.TypeName = lowerContent;
+            pos++;
+        }
+
+        // Проверяем, является ли тип опциональным
+        while (pos < Tokens.size() && Tokens[pos].Name == "WS") {
+            pos++;
+        }
+
+        if (pos < Tokens.size() && Tokens[pos].Content == "?") {
+            TypeNode optionalNode;
+            optionalNode.TypeName = "optional";
+            optionalNode.Children.push_back(node);
+            pos++;
+            return optionalNode;
+        }
+
+        return node;
+    }
+
+    bool BuildType(const TypeNode& node, TTypeBuilder& builder) {
+        if (node.TypeName == "optional") {
+            builder.BeginOptional();
+            BuildType(node.Children[0], builder);
+            builder.EndOptional();
+        } else if (node.TypeName == "list") {
+            builder.BeginList();
+            BuildType(node.Children[0], builder);
+            builder.EndList();
+        } else if (node.TypeName == "struct") {
+            builder.BeginStruct();
+            for (const auto& field : node.Children) {
+                builder.AddMember(field.Name);
+                BuildType(field.Children[0], builder);
+            }
+            builder.EndStruct();
+        } else if (node.TypeName == "tuple") {
+            builder.BeginTuple();
+            for (const auto& element : node.Children) {
+                builder.AddElement();
+                BuildType(element, builder);
+            }
+            builder.EndTuple();
+        } else if (node.TypeName == "dict") {
+            builder.BeginDict();
+            builder.DictKey();
+            BuildType(node.Children[0], builder);
+            builder.DictPayload();
+            BuildType(node.Children[1], builder);
+            builder.EndDict();
+        } else if (node.TypeName == "decimal") {
+            ui32 precision = FromString<ui32>(node.Children[0].TypeName);
+            ui32 scale = FromString<ui32>(node.Children[1].TypeName);
+            builder.Decimal(TDecimalType(precision, scale));
+        } else {
+            auto primitiveType = GetPrimitiveType(node.TypeName);
+            if (!primitiveType) {
+                return false;
+            }
+
+            builder.Primitive(*primitiveType);
+        }
+
+        return true;
+    }
+
+    std::optional<EPrimitiveType> GetPrimitiveType(const TString& typeStr) {
+        if (typeStr == "bool") {
+            return EPrimitiveType::Bool;
+        } else if (typeStr == "int8") {
+            return EPrimitiveType::Int8;
+        } else if (typeStr == "uint8") {
+            return EPrimitiveType::Uint8;
+        } else if (typeStr == "int16") {
+            return EPrimitiveType::Int16;
+        } else if (typeStr == "uint16") {
+            return EPrimitiveType::Uint16;
+        } else if (typeStr == "int32") {
+            return EPrimitiveType::Int32;
+        } else if (typeStr == "uint32") {
+            return EPrimitiveType::Uint32;
+        } else if (typeStr == "int64") {
+            return EPrimitiveType::Int64;
+        } else if (typeStr == "uint64") {
+            return EPrimitiveType::Uint64;
+        } else if (typeStr == "float") {
+            return EPrimitiveType::Float;
+        } else if (typeStr == "double") {
+            return EPrimitiveType::Double;
+        } else if (typeStr == "string") {
+            return EPrimitiveType::String;
+        } else if (typeStr == "utf8") {
+            return EPrimitiveType::Utf8;
+        } else if (typeStr == "json") {
+            return EPrimitiveType::Json;
+        } else if (typeStr == "yson") {
+            return EPrimitiveType::Yson;
+        } else if (typeStr == "date") {
+            return EPrimitiveType::Date;
+        } else if (typeStr == "datetime") {
+            return EPrimitiveType::Datetime;
+        } else if (typeStr == "timestamp") {
+            return EPrimitiveType::Timestamp;
+        } else if (typeStr == "interval") {
+            return EPrimitiveType::Interval;
+        }
+
+        return std::nullopt;
+    }
+
+    const TVector<NSQLTranslation::TParsedToken>& Tokens;
+};
+
+}
+
+
 std::map<std::string, TType> TYqlParamParser::GetParamTypes(const TString& queryText) {
+    enum class EParseState {
+        Start,
+        Declare,
+        ParamName,
+        As,
+        Type
+    };
+
     std::map<std::string, TType> result;
 
     NSQLTranslationV1::TLexers lexers;
@@ -55,7 +310,7 @@ std::map<std::string, TType> TYqlParamParser::GetParamTypes(const TString& query
         }
 
         if (state == EParseState::Start) {
-            if (TYqlParamParser::ToLower(tokens[i].Content) != "declare") {
+            if (ToLower(tokens[i].Content) != "declare") {
                 continue;   
             }
 
@@ -71,213 +326,27 @@ std::map<std::string, TType> TYqlParamParser::GetParamTypes(const TString& query
             paramName = "$" + tokens[i].Content;
             state = EParseState::As;
         } else if (state == EParseState::As) {
-            if (TYqlParamParser::ToLower(tokens[i].Content) != "as") {
+            if (ToLower(tokens[i].Content) != "as") {
                 state = EParseState::Start;
                 continue;
             }
 
             state = EParseState::Type;
         } else if (state == EParseState::Type) {
-            if (tokens[i].Content == ";") {
-                state = EParseState::Start;
-                continue;
+            TYqlTypeParser parser(tokens);
+            auto root = parser.Build(i);
+
+            if (root) {
+                result.emplace(paramName, *root);
+            } else {
+                result.clear();
             }
 
-            TString typeStr;
-            int64_t angleBrackets = 0;
-            int64_t parentheses = 0;
-            while (i < tokens.size() && tokens[i].Content != ";") {
-                if (tokens[i].Name != "WS") {
-                    if (tokens[i].Content == "<") {
-                        angleBrackets++;
-                        typeStr += "<";
-                    } else if (tokens[i].Content == ">") {
-                        angleBrackets--;
-                        if (angleBrackets < 0) {
-                            typeStr.clear();
-                            break;
-                        }
-                        typeStr += ">";
-                    } else if (tokens[i].Content == "(") {
-                        parentheses++;
-                        typeStr += "(";
-                    } else if (tokens[i].Content == ")") {
-                        parentheses--;
-                        if (parentheses < 0) {
-                            typeStr.clear();
-                            break;
-                        }
-                        typeStr += ")";
-                    } else if (tokens[i].Content == ",") {
-                        typeStr += ",";
-                    } else if (tokens[i].Content == "?") {
-                        typeStr += "?";
-                    } else {
-                        if (!typeStr.empty() && typeStr.back() != '<' && typeStr.back() != '(' && typeStr.back() != ',' && typeStr.back() != '?') {
-                            typeStr += " ";
-                        }
-                        typeStr += tokens[i].Content;
-                    }
-                }
-                i++;
-
-                if (angleBrackets == 0 && parentheses == 0 && i < tokens.size() && tokens[i].Content == ";") {
-                    break;
-                }
-            }
-
-            if (!typeStr.empty()) {
-                TTypeBuilder builder;
-                if (ProcessType(typeStr, builder)) {
-                    result.emplace(paramName, builder.Build());
-                }
-            }
             state = EParseState::Start;
         }
     }
 
     return result;
-}
-
-bool TYqlParamParser::ProcessType(const TString& typeStr, TTypeBuilder& builder) {
-    TString cleanTypeStr = StripString(typeStr);
-
-    bool isOptional = cleanTypeStr.EndsWith("?");
-    if (isOptional) {
-        cleanTypeStr = cleanTypeStr.substr(0, cleanTypeStr.size() - 1);
-        builder.BeginOptional();
-    }
-
-    TString lowerTypeStr = TYqlParamParser::ToLower(cleanTypeStr);
-
-    if (lowerTypeStr == "bool") {
-        builder.Primitive(EPrimitiveType::Bool);
-    } else if (lowerTypeStr == "int8") {
-        builder.Primitive(EPrimitiveType::Int8);
-    } else if (lowerTypeStr == "uint8") {
-        builder.Primitive(EPrimitiveType::Uint8);
-    } else if (lowerTypeStr == "int16") {
-        builder.Primitive(EPrimitiveType::Int16);
-    } else if (lowerTypeStr == "uint16") {
-        builder.Primitive(EPrimitiveType::Uint16);
-    } else if (lowerTypeStr == "int32") {
-        builder.Primitive(EPrimitiveType::Int32);
-    } else if (lowerTypeStr == "uint32") {
-        builder.Primitive(EPrimitiveType::Uint32);
-    } else if (lowerTypeStr == "int64") {
-        builder.Primitive(EPrimitiveType::Int64);
-    } else if (lowerTypeStr == "uint64" || lowerTypeStr == "uint64") {
-        builder.Primitive(EPrimitiveType::Uint64);
-    } else if (lowerTypeStr == "float") {
-        builder.Primitive(EPrimitiveType::Float);
-    } else if (lowerTypeStr == "double") {
-        builder.Primitive(EPrimitiveType::Double);
-    } else if (lowerTypeStr == "string") {
-        builder.Primitive(EPrimitiveType::String);
-    } else if (lowerTypeStr == "utf8") {
-        builder.Primitive(EPrimitiveType::Utf8);
-    } else if (lowerTypeStr == "json") {
-        builder.Primitive(EPrimitiveType::Json);
-    } else if (lowerTypeStr == "yson") {
-        builder.Primitive(EPrimitiveType::Yson);
-    } else if (lowerTypeStr == "date") {
-        builder.Primitive(EPrimitiveType::Date);
-    } else if (lowerTypeStr == "datetime") {
-        builder.Primitive(EPrimitiveType::Datetime);
-    } else if (lowerTypeStr == "timestamp") {
-        builder.Primitive(EPrimitiveType::Timestamp);
-    } else if (lowerTypeStr == "interval") {
-        builder.Primitive(EPrimitiveType::Interval);
-    } else if (lowerTypeStr.StartsWith("decimal")) {
-        TString params = StripString(cleanTypeStr.substr(7)); // Убираем "Decimal"
-        if (params.StartsWith("(") && params.EndsWith(")")) {
-            params = params.substr(1, params.length() - 2);
-            TVector<TString> parts;
-            StringSplitter(params).Split(',').SkipEmpty().Collect(&parts);
-            if (parts.size() == 2) {
-                ui8 precision = FromString<ui8>(StripString(parts[0]));
-                ui8 scale = FromString<ui8>(StripString(parts[1]));
-                builder.Decimal(TDecimalType(precision, scale));
-            }
-        }
-    } else if (lowerTypeStr.StartsWith("list<")) {
-        TString itemType = cleanTypeStr.substr(5, cleanTypeStr.length() - 6);
-        builder.BeginList();
-        ProcessType(itemType, builder);
-        builder.EndList();
-    } else if (lowerTypeStr.StartsWith("struct<")) {
-        builder.BeginStruct();
-        TString fields = cleanTypeStr.substr(7, cleanTypeStr.length() - 8);
-
-        TVector<TString> fieldParts;
-        int angleBrackets = 0;
-        TString currentField;
-
-        for (size_t i = 0; i < fields.length(); ++i) {
-            if (fields[i] == '<') {
-                angleBrackets++;
-                currentField += fields[i];
-            } else if (fields[i] == '>') {
-                angleBrackets--;
-                currentField += fields[i];
-            } else if (fields[i] == ',' && angleBrackets == 0) {
-                if (!currentField.empty()) {
-                    fieldParts.push_back(StripString(currentField));
-                    currentField.clear();
-                }
-            } else {
-                currentField += fields[i];
-            }
-        }
-        
-        if (!currentField.empty()) {
-            fieldParts.push_back(StripString(currentField));
-        }
-
-        for (const auto& field : fieldParts) {
-            size_t colonPos = field.find(':');
-            if (colonPos != TString::npos) {
-                TString fieldName = StripString(field.substr(0, colonPos));
-                TString fieldType = StripString(field.substr(colonPos + 1));
-                builder.AddMember(fieldName);
-                ProcessType(fieldType, builder);
-            }
-        }
-        builder.EndStruct();
-    } else if (lowerTypeStr.StartsWith("tuple<")) {
-        TString elements = cleanTypeStr.substr(6, cleanTypeStr.length() - 7);
-        TVector<TString> elementTypes;
-        StringSplitter(elements).Split(',').SkipEmpty().Collect(&elementTypes);
-
-        builder.BeginTuple();
-        for (const auto& elementType : elementTypes) {
-            builder.AddElement();
-            ProcessType(StripString(elementType), builder);
-        }
-        builder.EndTuple();
-    } else if (lowerTypeStr.StartsWith("dict<")) {
-        TString params = cleanTypeStr.substr(5, cleanTypeStr.length() - 6);
-        size_t commaPos = params.find(',');
-        if (commaPos != TString::npos) {
-            TString keyType = StripString(params.substr(0, commaPos));
-            TString valueType = StripString(params.substr(commaPos + 1));
-            
-            builder.BeginDict();
-            builder.DictKey();
-            ProcessType(keyType, builder);
-            builder.DictPayload();
-            ProcessType(valueType, builder);
-            builder.EndDict();
-        }
-    } else {
-        return false;
-    }
-
-    if (isOptional) {
-        builder.EndOptional();
-    }
-
-    return true;
 }
 
 } // namespace NConsoleClient

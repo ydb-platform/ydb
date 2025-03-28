@@ -136,12 +136,11 @@ private:
         switch (status) {
             case NKikimrScheme::StatusSuccess: {
                 const auto& pathDescription = record.GetPathDescription();
-                if (pathDescription.GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeTable) {
+                if (pathDescription.GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeTable
+                        && pathDescription.GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeColumnTable) {
                     ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, "Invalid path type");
                     return;
                 }
-
-                const auto& tableDesc = pathDescription.GetTable();
 
                 std::pair<TString, TString> pathPair;
 
@@ -173,14 +172,37 @@ private:
                     temporary = true;
                 }
 
-                TCreateTableFormatter formatter;
-                auto formatterResult = formatter.Format(tablePath, tableDesc, temporary);
-                if (formatterResult.IsSuccess()) {
-                    path = tablePath;
-                    statement = formatterResult.ExtractOut();
-                } else {
-                    ReplyErrorAndDie(formatterResult.GetStatus(), formatterResult.GetError());
-                    return;
+                switch (pathDescription.GetSelf().GetPathType()) {
+                    case NKikimrSchemeOp::EPathTypeTable: {
+                        const auto& tableDesc = pathDescription.GetTable();
+                        TCreateTableFormatter formatter;
+                        auto formatterResult = formatter.Format(tablePath, tableDesc, temporary);
+                        if (formatterResult.IsSuccess()) {
+                            path = tablePath;
+                            statement = formatterResult.ExtractOut();
+                        } else {
+                            ReplyErrorAndDie(formatterResult.GetStatus(), formatterResult.GetError());
+                            return;
+                        }
+                        break;
+                    }
+                    case NKikimrSchemeOp::EPathTypeColumnTable: {
+                        const auto& columnTableDesc = pathDescription.GetColumnTableDescription();
+                        TCreateTableFormatter formatter;
+                        auto formatterResult = formatter.Format(tablePath, columnTableDesc, temporary);
+                        if (formatterResult.IsSuccess()) {
+                            path = tablePath;
+                            statement = formatterResult.ExtractOut();
+                        } else {
+                            ReplyErrorAndDie(formatterResult.GetStatus(), formatterResult.GetError());
+                            return;
+                        }
+                        break;
+                    }
+                    default: {
+                        ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, "Invalid path type");
+                        return;
+                    }
                 }
                 break;
             }

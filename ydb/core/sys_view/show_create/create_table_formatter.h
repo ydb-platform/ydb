@@ -4,6 +4,8 @@
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
+#include <ydb/core/tx/columnshard/engines/scheme/defaults/protos/data.pb.h>
+
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <yql/essentials/minikql/mkql_alloc.h>
@@ -74,6 +76,7 @@ public:
     }
 
     TResult Format(const TString& tablePath, const NKikimrSchemeOp::TTableDescription& tableDesc, bool temporary);
+    TResult Format(const TString& tablePath, const NKikimrSchemeOp::TColumnTableDescription& tableDesc, bool temporary);
 
 private:
 
@@ -87,6 +90,12 @@ private:
     bool Format(const Ydb::Table::TtlSettings& ttlSettings, TString& del, bool needWith);
 
     void Format(ui64 expireAfterSeconds, std::optional<TString> storage = std::nullopt);
+
+    void Format(const NKikimrSchemeOp::TOlapColumnDescription& olapColumnDesc);
+    void Format(const NKikimrSchemeOp::TColumnTableSharding& tableSharding);
+    void Format(const NKikimrSchemeOp::TColumnDataLifeCycle& ttlSettings);
+
+    void Format(const NKikimrColumnShardColumnDefaults::TColumnDefault& defaultValue);
 
     void Format(const Ydb::TypedValue& value, bool isPartition = false);
     void FormatValue(NYdb::TValueParser& parser, bool isPartition = false, TString del = "");

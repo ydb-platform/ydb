@@ -131,13 +131,12 @@ public:
 
         // Reserve size and return data.
         while (valuesCount--) {
-            const auto& value = Values.front().Value;
+            auto& value = Values.front().Value;
             if (std::holds_alternative<NUdf::TUnboxedValue>(value)) {
-                batch.emplace_back(std::get<NUdf::TUnboxedValue>(value));
+                batch.emplace_back(std::move(std::get<NUdf::TUnboxedValue>(value)));
             } else if (std::holds_alternative<NKikimr::NMiniKQL::TUnboxedValueVector>(value)) {
-                batch.PushRow([&multiValue = std::get<NKikimr::NMiniKQL::TUnboxedValueVector>(value)](ui32 i) {
-                    return multiValue[i];
-                });
+                auto multiValue = std::move(std::get<NKikimr::NMiniKQL::TUnboxedValueVector>(value));
+                batch.PushRow(multiValue.data(), multiValue.size());
             } else {
                 YQL_ENSURE(false, "Unsupported output value");
             }

@@ -2570,16 +2570,14 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         auto planStep = *schemaPlanStep + 1;
         ui64 txId = 1000;
 
-        // Overwrite the same data multiple times to produce multiple portions at different snapshots
+        // Overwrite the same data multiple times to produce multiple portions at different timestamps
         ui32 numWrites = 14;
-        for (ui32 i = 0; i < numWrites; ++i) {
+        for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++txId) {
             std::vector<ui64> writeIds;
             UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
 
             planStep = ProposeCommit(runtime, sender, txId, writeIds);
             PlanCommit(runtime, sender, planStep, txId);
-            ++writeId;
-            ++txId;
         }
 
         // Do a small write that is not indexed so that we will get a committed blob in read request
@@ -2617,17 +2615,13 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         // read request is in progress and keeps the portions
 
         // Advance the time in order to trigger GC
-        TDuration delay = TDuration::Minutes(6);
-        planStep += delay.MilliSeconds();
         numWrites = 10;
-        for (ui32 i = 0; i < numWrites; ++i) {
+        for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++txId) {
             std::vector<ui64> writeIds;
             UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
 
             planStep = ProposeCommit(runtime, sender, txId, writeIds);
             PlanCommit(runtime, sender, planStep, txId);
-            ++writeId;
-            ++txId;
         }
         {
             auto read = std::make_unique<NColumnShard::TEvPrivate::TEvPingSnapshotsUsage>();
@@ -2644,7 +2638,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         // Check that GC happened but it didn't collect some old portions
         UNIT_ASSERT_GT(compactionsHappened, previousCompactionsHappened);
         UNIT_ASSERT_EQUAL(cleanupsHappened, 0);
-        UNIT_ASSERT_GT_C(oldPortions.size(), deletedPortions.size(), "Some old portions must not be deleted because the are in use by read");
+        UNIT_ASSERT_GT_C(oldPortions.size(), deletedPortions.size(), "Some old portions must not be deleted because they are in use by read");
         UNIT_ASSERT_GT_C(delayedBlobs.size(), 0, "Read request is expected to have at least one committed blob, which deletion must be delayed");
         previousCompactionsHappened = compactionsHappened;
         previousCleanupsHappened = cleanupsHappened;
@@ -2658,12 +2652,12 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         }
 
         // Advance the time and trigger some more cleanups withno compactions
+        csDefaultControllerGuard->SetOverrideUsedSnapshotLivetime(csDefaultControllerGuard->GetMaxReadStalenessInMem() - TDuration::MilliSeconds(1));
         csDefaultControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
         {
             auto read = std::make_unique<NColumnShard::TEvPrivate::TEvPingSnapshotsUsage>();
             ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, read.release());
         }
-        planStep += (2 * delay).MilliSeconds();
         for (ui32 i = 0; i < numWrites; ++i, ++writeId, ++txId) {
             std::vector<ui64> writeIds;
             UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, ydbSchema, true, &writeIds));
@@ -2685,9 +2679,10 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             planStep = ProposeCommit(runtime, sender, txId, writeIds);
             PlanCommit(runtime, sender, planStep, txId);
         }
-        AFL_VERIFY(csDefaultControllerGuard->GetRequestTracingSnapshotsSave().Val() == 1);
-        AFL_VERIFY(csDefaultControllerGuard->GetRequestTracingSnapshotsRemove().Val() == 1);
-
+        UNIT_ASSERT_EQUAL(csDefaultControllerGuard->GetRequestTracingSnapshotsSave().Val(), 1);
+        UNIT_ASSERT_EQUAL(csDefaultControllerGuard->GetRequestTracingSnapshotsRemove().Val(), 1);
+        csDefaultControllerGuard->SetOverrideMaxReadStaleness(TDuration::Zero());
+        csDefaultControllerGuard->WaitCleaning(TDuration::Seconds(20), &runtime);
         Cerr << "Compactions happened: " << csDefaultControllerGuard->GetCompactionStartedCounter().Val() << Endl;
         Cerr << "Indexations happened: " << csDefaultControllerGuard->GetInsertStartedCounter().Val() << Endl;
         Cerr << "Cleanups happened: " << csDefaultControllerGuard->GetCleaningStartedCounter().Val() << Endl;

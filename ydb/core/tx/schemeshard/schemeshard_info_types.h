@@ -3658,7 +3658,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         TSerializedTableRange bound{range};
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
             "AddShardStatus id# " << Id << " shard " << shardIdx << 
-            " range " << KMeans.RangeToDebugStr(bound, buildInfo.IsBuildPrefixedVectorIndex() ? 2 : 1));
+            " range " << KMeans.RangeToDebugStr(bound, IsBuildPrefixedVectorIndex() ? 2 : 1));
         AddParent(bound, shardIdx);
         Shards.emplace(
             shardIdx, TIndexBuildInfo::TShardStatus(std::move(bound), std::move(lastKeyAck), Shards.size()));

@@ -58,8 +58,8 @@ public:
     void OnStage(const EWriteStage stage) const;
 
     ~TWriteMeta() {
-        if (CurrentStage != EWriteStage::Finished && CurrentStage != EWriteStage::Aborted) {
-            Counters->OnWriteAborted(TMonotonic::Now() - WriteStartInstant);
+        if (CurrentStage != EWriteStage::Replied) {
+            OnStage(EWriteStage::Aborted);
         }
     }
 

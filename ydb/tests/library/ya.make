@@ -32,7 +32,6 @@ PY_SRCS(
     harness/param_constants.py
     harness/util.py
     harness/tls_tools.py
-    harness/ydb_fixtures.py
     matchers/__init__.py
     matchers/collection.py
     matchers/datashard_matchers.py

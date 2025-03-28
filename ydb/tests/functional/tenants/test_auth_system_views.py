@@ -49,7 +49,7 @@ CLUSTER_CONFIG = dict(
 )
 
 
-# ydb_fixtures.ydb_cluster_configuration local override
+# fixtures.ydb_cluster_configuration local override
 @pytest.fixture(scope='module')
 def ydb_cluster_configuration():
     conf = copy.deepcopy(CLUSTER_CONFIG)

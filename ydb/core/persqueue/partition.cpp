@@ -2335,7 +2335,9 @@ TPartition::EProcessResult TPartition::BeginTransaction(const TEvPQ::TEvTxCalcPr
             PQ_LOG_D("Partition " << Partition <<
                 " Consumer '" << consumer << "'" <<
                 " Bad request (session already dead) " <<
-                " SessionId '" << operation.GetReadSessionId() << "'");
+                " RequestSessionId '" << operation.GetReadSessionId() <<
+                " CurrentSessionId '" << userInfo.Session <<
+                "'");
             result = false;
         } else if (operation.GetOnlyCheckCommitedToFinish()) {
             if (IsActive() || static_cast<ui64>(userInfo.Offset) != EndOffset) {

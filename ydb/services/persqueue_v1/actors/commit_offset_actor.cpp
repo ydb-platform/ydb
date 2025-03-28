@@ -29,7 +29,6 @@ TCommitOffsetActor::TCommitOffsetActor(
 }
 
 
-
 TCommitOffsetActor::~TCommitOffsetActor() = default;
 
 
@@ -76,7 +75,6 @@ void TCommitOffsetActor::Bootstrap(const TActorContext& ctx) {
     ));
 }
 
-
 void TCommitOffsetActor::Die(const TActorContext& ctx) {
     if (PipeClient)
         NTabletPipe::CloseClient(ctx, PipeClient);
@@ -108,19 +106,24 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
     if (partitionNode->AllParents.size() == 0 && partitionNode->DirectChildren.size() == 0) {
         SendCommit(topicInitInfo, commitRequest, ctx);
     } else {
+        auto killReadSession = !commitRequest->has_read_session_id();
         std::vector<TDistributedCommitHelper::TCommitInfo> commits;
 
         for (auto& parent: partitionNode->AllParents) {
-            TDistributedCommitHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>(), .KillReadSession = true, .OnlyCheckCommitedToFinish = false};
+            TDistributedCommitHelper::TCommitInfo commit {.PartitionId = parent->Id, .Offset = Max<i64>(), .KillReadSession = killReadSession, .OnlyCheckCommitedToFinish = false};
             commits.push_back(commit);
         }
 
         for (auto& child: partitionNode->AllChildren) {
-            TDistributedCommitHelper::TCommitInfo commit {.PartitionId = child->Id, .Offset = 0, .KillReadSession = true, .OnlyCheckCommitedToFinish = false};
+            TDistributedCommitHelper::TCommitInfo commit {.PartitionId = child->Id, .Offset = 0, .KillReadSession = killReadSession, .OnlyCheckCommitedToFinish = false};
             commits.push_back(commit);
         }
 
-        TDistributedCommitHelper::TCommitInfo commit {.PartitionId = partitionNode->Id, .Offset = commitRequest->offset(), .KillReadSession = true, .OnlyCheckCommitedToFinish = false};
+        TDistributedCommitHelper::TCommitInfo commit {.PartitionId = partitionNode->Id, .Offset = commitRequest->offset(), .KillReadSession = killReadSession, .OnlyCheckCommitedToFinish = false};
+
+        if (commitRequest->has_read_session_id()) {
+            commit.ReadSessionId = commitRequest->read_session_id();
+        }
         commits.push_back(commit);
 
         Kqp = std::make_unique<TDistributedCommitHelper>(Request().GetDatabaseName().GetOrElse(TString()), ClientId, topic, commits);
@@ -197,6 +200,9 @@ void TCommitOffsetActor::SendCommit(const TTopicInitInfo& topic, const Ydb::Topi
     commit->SetClientId(ClientId);
     commit->SetOffset(commitRequest->offset());
     commit->SetStrict(true);
+    if (commitRequest->has_read_session_id()) {
+        commit->SetSessionId(commitRequest->read_session_id());
+    }
 
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "strict CommitOffset, partition " << commitRequest->partition_id()
                         << " committing to position " << commitRequest->offset() /*<< " prev " << CommittedOffset

@@ -39,6 +39,7 @@ public:
 
     void AddData(const TStringBuf sb, const ui32 index) {
         Values.emplace_back(sb);
+        AFL_VERIFY(RecordIndexes.empty() || RecordIndexes.back() < index);
         RecordIndexes.emplace_back(index);
         DataSize += sb.size();
     }

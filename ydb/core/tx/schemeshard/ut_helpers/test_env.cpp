@@ -659,7 +659,7 @@ NSchemeShardUT_Private::TTestEnv::TTestEnv(TTestActorRuntime& runtime, const TTe
         SetupSchemeCache(runtime, node, app.Domains->GetDomain(TTestTxConfig::DomainUid).Name);
     }
 
-    SetupTabletServices(runtime, &app);
+    SetupTabletServices(runtime, &app, !opts.DSProxies_.empty(), {}, nullptr, false, opts.DSProxies_);
     if (opts.EnablePipeRetries_) {
         EnableSchemeshardPipeRetriesGuard = EnableSchemeshardPipeRetries(runtime);
     }

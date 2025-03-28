@@ -136,6 +136,9 @@ void TCommandSql::Parse(TConfig& config) {
             << "nor path to file with script text (\"--file\", \"-f\") were provided." << Endl;
         config.PrintHelpAndExit();
     }
+    if (Progress && Progress != "tty" && Progress != "none") {
+        throw TMisuseException() << "Unknow progress option \"" << Progress << "\".";
+    }
     // Should be called after setting ReadingSomethingFromStdin
     ParseParameters(config);
 }
@@ -161,6 +164,9 @@ int TCommandSql::RunCommand(TConfig& config) {
         auto statsMode = ParseQueryStatsModeOrThrow(CollectStatsMode, defaultStatsMode);
         settings.StatsMode(statsMode);
         if (Progress == "tty") {
+            if (statsMode == NQuery::EStatsMode::None) {
+                throw TMisuseException() << "Non-none statistics collection mode are required to print progress.";
+            }
             if (statsMode >= NQuery::EStatsMode::Full) {
                 settings.StatsCollectPeriod(std::chrono::milliseconds(3000));
             } else {

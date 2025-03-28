@@ -434,6 +434,18 @@ void BuildStreamLookupChannels(TKqpTasksGraph& graph, const TStageInfo& stageInf
         columnToProto(column, columnIt, columnProto);
     }
 
+    if (streamLookup.HasIndex()) {
+        settings->MutableIndex()->CopyFrom(streamLookup.GetIndex());
+
+        for (const auto& indexKeyColumn : streamLookup.GetIndexKeyColumns()) {
+            auto columnIt = tableInfo->Columns.find(indexKeyColumn);
+            YQL_ENSURE(columnIt != tableInfo->Columns.end(), "Unknown column: " << indexKeyColumn);
+
+            auto* columnProto = settings->AddIndexKeyColumns();
+            columnToProto(indexKeyColumn, columnIt, columnProto);
+        }
+    }
+
     settings->SetLookupStrategy(streamLookup.GetLookupStrategy());
     settings->SetKeepRowsOrder(streamLookup.GetKeepRowsOrder());
     settings->SetAllowNullKeysPrefixSize(streamLookup.GetAllowNullKeysPrefixSize());

@@ -55,7 +55,8 @@ struct TEvScanData: public NActors::TEventLocal<TEvScanData, TKqpComputeEvents::
     TOwnedCellVec LastKey;
     NKikimrKqp::TEvKqpScanCursor LastCursorProto;
     TDuration CpuTime;
-    TDuration WaitTime;
+    TDuration WaitInputTime;
+    TDuration WaitOutputTime;
     ui32 PageFaults = 0; // number of page faults occurred when filling in this message
     bool RequestedBytesLimitReached = false;
     bool Finished = false;

@@ -72,6 +72,7 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
         Become(&TColumnShardScan::StateScan);
         ContinueProcessing();
     }
+    StartWaitOutput = TInstant::Now();
 }
 
 void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResult::TPtr& ev) {
@@ -87,6 +88,10 @@ void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResu
             ScanIterator->Apply(result.GetResult());
         }
     }
+    if (StartWaitInput) {
+        WaitInputTime += TInstant::Now() - StartWaitInput;
+        StartWaitInput = TInstant::Zero();
+    }
     ContinueProcessing();
 }
 
@@ -95,6 +100,10 @@ void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev)
 
     AFL_VERIFY(!AckReceivedInstant);
     AckReceivedInstant = TMonotonic::Now();
+    if (StartWaitOutput) {
+        WaitOutputTime += TInstant::Now() - StartWaitOutput;
+        StartWaitOutput = TInstant::Zero();
+    }
 
     AFL_VERIFY(ev->Get()->Generation == ScanGen)("ev_gen", ev->Get()->Generation)("scan_gen", ScanGen);
 
@@ -287,6 +296,10 @@ void TColumnShardScan::ContinueProcessing() {
         LastResultInstant = TMonotonic::Now();
     }
 
+    if (ChunksLimiter.HasMore()) {
+        StartWaitInput = TInstant::Now();
+    }
+
     if (ScanIterator) {
         // Switch to the next range if the current one is finished
         if (ScanIterator->Finished()) {
@@ -388,6 +401,11 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch) {
     LastResultInstant = TMonotonic::Now();
 
     Result->CpuTime = ScanCountersPool.GetExecutionDuration();
+    Result->WaitOutputTime = WaitOutputTime;
+    Result->WaitInputTime = WaitInputTime;
+    if (Result->RequestedBytesLimitReached) {
+        StartWaitOutput = TInstant::Now();
+    }
 
     Send(ScanComputeActorId, Result.Release(), IEventHandle::FlagTrackDelivery);   // TODO: FlagSubscribeOnSession ?
 

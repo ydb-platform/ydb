@@ -142,7 +142,6 @@ class DefaultConfigExtension(ExtensionPoint):
         solomon_endpoint = os.environ.get('SOLOMON_URL')
         if solomon_endpoint is not None:
             kikimr.compute_plane.fq_config['common']['monitoring_endpoint'] = solomon_endpoint
-        kikimr.control_plane.fq_config['common']['show_query_timeline'] = True
         enable_external_data_sources(kikimr.compute_plane.qs_config)
 
         if 's3' not in kikimr.compute_plane.qs_config:

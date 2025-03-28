@@ -157,16 +157,15 @@ namespace NKikimr {
         StatisticsAggregatorLogFlushDelayOverrideUsec                               /* "StatisticsAggregator_LogFlushDelayOverrideUsec" */,
         GraphShardLogFlushDelayOverrideUsec                                         /* "GraphShard_LogFlushDelayOverrideUsec" */,
         BackupControllerLogFlushDelayOverrideUsec                                   /* "BackupController_LogFlushDelayOverrideUsec" */,
-        GrpcControlsRequestConfigsCoordinationServiceSessionMaxInFlight             /* "GrpcControls.RequestConfigs.CoordinationService_Session_MaxInFlight" */,
-        GrpcControlsRequestConfigsClickhouseInternalScanMaxInFlight                 /* "GrpcControls.RequestConfigs.ClickhouseInternal_Scan_MaxInFlight" */,
-        GrpcControlsRequestConfigsClickhouseInternalGetShardLocationsMaxInFlight    /* "GrpcControls.RequestConfigs.ClickhouseInternal_GetShardLocations_MaxInFlight" */,
-        GrpcControlsRequestConfigsClickhouseInternalDescribeTableMaxInFlight        /* "GrpcControls.RequestConfigs.ClickhouseInternal_DescribeTable_MaxInFlight" */,
-        GrpcControlsRequestConfigsClickhouseInternalCreateSnapshotMaxInFlight       /* "GrpcControls.RequestConfigs.ClickhouseInternal_CreateSnapshot_MaxInFlight" */,
-        GrpcControlsRequestConfigsClickhouseInternalRefreshSnapshotMaxInFlight      /* "GrpcControls.RequestConfigs.ClickhouseInternal_RefreshSnapshot_MaxInFlight" */,
-        GrpcControlsRequestConfigsClickhouseInternalDiscardSnapshotMaxInFlight      /* "GrpcControls.RequestConfigs.ClickhouseInternal_DiscardSnapshot_MaxInFlight" */,
-        GrpcControlsRequestConfigsTableServiceStreamExecuteScanQueryMaxInflight     /* "GrpcControls.RequestConfigs.TableService.StreamExecuteScanQuery_MaxInflight" */,
-        GrpcControlsRequestConfigsTableServiceStreamReadTableMaxInflight            /* "GrpcControls.RequestConfigs.TableService.StreamReadTable_MaxInflight" */,
-        GrpcControlsRequestConfigsTableServiceReadRowsMaxInflight                   /* "GrpcControls.RequestConfigs.TableService.ReadRows_MaxInflight" */
+        GRpcControlsRequestConfigsCoordinationServiceSessionMaxInFlight             /* "GRpcControls.RequestConfigs.CoordinationService_Session_MaxInFlight" */,
+        GRpcControlsRequestConfigsClickhouseInternalScanMaxInFlight                 /* "GRpcControls.RequestConfigs.ClickhouseInternal_Scan_MaxInFlight" */,
+        GRpcControlsRequestConfigsClickhouseInternalGetShardLocationsMaxInFlight    /* "GRpcControls.RequestConfigs.ClickhouseInternal_GetShardLocations_MaxInFlight" */,
+        GRpcControlsRequestConfigsClickhouseInternalDescribeTableMaxInFlight        /* "GRpcControls.RequestConfigs.ClickhouseInternal_DescribeTable_MaxInFlight" */,
+        GRpcControlsRequestConfigsClickhouseInternalCreateSnapshotMaxInFlight       /* "GRpcControls.RequestConfigs.ClickhouseInternal_CreateSnapshot_MaxInFlight" */,
+        GRpcControlsRequestConfigsClickhouseInternalRefreshSnapshotMaxInFlight      /* "GRpcControls.RequestConfigs.ClickhouseInternal_RefreshSnapshot_MaxInFlight" */,
+        GRpcControlsRequestConfigsClickhouseInternalDiscardSnapshotMaxInFlight      /* "GRpcControls.RequestConfigs.ClickhouseInternal_DiscardSnapshot_MaxInFlight" */,
+        GRpcControlsRequestConfigsTableServiceStreamExecuteScanQueryMaxInflight     /* "GRpcControls.RequestConfigs.TableService.StreamExecuteScanQuery_MaxInflight" */,
+        GRpcControlsRequestConfigsTableServiceStreamReadTableMaxInflight            /* "GRpcControls.RequestConfigs.TableService.StreamReadTable_MaxInflight" */,
+        GRpcControlsRequestConfigsTableServiceReadRowsMaxInflight                   /* "GRpcControls.RequestConfigs.TableService.ReadRows_MaxInflight" */
         };
->>>>>>> 8e3113b069... (+) add more grpc controls after rebase
 } // NKikimr

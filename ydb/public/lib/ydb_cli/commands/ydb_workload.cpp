@@ -389,7 +389,7 @@ int TWorkloadCommandBase::Run(TConfig& config) {
 
 void TWorkloadCommandBase::CleanTables(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, TConfig& config) {
     auto pathsToDelete = workloadGen.GetCleanPaths();
-    TRemovePathRecursiveSettings settings;
+    TRemoveDirectoryRecursiveSettings settings;
     settings.NotExistsIsOk(true);
     for (const auto& path : pathsToDelete) {
         Cout << "Remove path " << path << "..."  << Endl;
@@ -397,7 +397,7 @@ void TWorkloadCommandBase::CleanTables(NYdbWorkload::IWorkloadQueryGenerator& wo
         if (DryRun) {
             Cout << "Remove " << fullPath << Endl;
         } else {
-            NStatusHelpers::ThrowOnErrorOrPrintIssues(RemovePathRecursive(*SchemeClient, *TableClient, TopicClient.Get(), QueryClient.Get(), nullptr, fullPath, ERecursiveRemovePrompt::Never, settings));
+            NStatusHelpers::ThrowOnErrorOrPrintIssues(RemovePathRecursive(*Driver.Get(), fullPath, settings));
         }
         Cout << "Remove path " << path << "...Ok"  << Endl;
     }

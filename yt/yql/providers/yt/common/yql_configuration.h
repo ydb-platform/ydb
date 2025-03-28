@@ -51,7 +51,7 @@ constexpr bool DEFAULT_USE_NATIVE_DESC_SORT = false;
 
 constexpr ui64 DEFAULT_MAX_CHUNKS_FOR_DQ_READ = 500;
 
-constexpr bool DEFAULT_USE_KEY_BOUND_API = false;
+constexpr bool DEFAULT_USE_KEY_BOUND_API = true;
 
 constexpr ui32 DEFAULT_MAX_OPERATION_FILES = 1000;
 

@@ -65,6 +65,16 @@ namespace NSQLComplete {
             return KeywordRules;
         }
 
+        const TVector<TRuleId>& GetTypeNameRules() const override {
+            static const TVector<TRuleId> TypeNameRules = {
+                RULE(Type_name_simple),
+            };
+
+            STATIC_ASSERT_RULE_ID_MODE_INDEPENDENT(Type_name_simple);
+
+            return TypeNameRules;
+        }
+
     private:
         static const antlr4::dfa::Vocabulary* GetVocabulary(bool isAnsiLexer) {
             if (isAnsiLexer) { // Taking a reference is okay as vocabulary storage is static

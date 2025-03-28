@@ -527,7 +527,7 @@ private:
 
             for (size_t i = 0; i < blobRanges.size(); ++i) {
                 Y_ABORT_UNLESS(blobRanges[i].BlobId.GetTabletId() == tabletId);
-                ProcessSingleRangeResult(blobRanges[i], readCookie, NKikimrProto::EReplyStatus::NOTREADY, {}, ctx);
+                ProcessSingleRangeResult(blobRanges[i], readCookie, NKikimrProto::EReplyStatus::NOTREADY, {}, {}, ctx);
             }
         }
 

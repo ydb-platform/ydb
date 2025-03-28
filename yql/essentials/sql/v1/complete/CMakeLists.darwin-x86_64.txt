@@ -12,6 +12,8 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+add_subdirectory(name)
+
 add_library(sql-v1-complete)
 
 
@@ -20,14 +22,16 @@ target_link_libraries(sql-v1-complete PUBLIC
   yutil
   contrib-libs-antlr4_cpp_runtime
   contrib-libs-antlr4-c3
+  essentials-core-issue
   essentials-sql-settings
   sql-v1-format
   sql-v1-lexer
   v1-lexer-antlr4_pure
   v1-lexer-antlr4_pure_ansi
-  essentials-core-issue
   antlr_ast-gen-v1_ansi_antlr4
   antlr_ast-gen-v1_antlr4
+  v1-complete-name
+  complete-name-static
 )
 
 target_sources(sql-v1-complete PRIVATE

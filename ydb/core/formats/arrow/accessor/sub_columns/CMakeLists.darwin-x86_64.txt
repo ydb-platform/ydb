@@ -37,6 +37,7 @@ target_sources(arrow-accessor-sub_columns PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/accessor/sub_columns/header.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/accessor/sub_columns/partial.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/accessor/sub_columns/data_extractor.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/accessor/sub_columns/json_extractors.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/accessor/sub_columns/accessor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/accessor/sub_columns/direct_builder.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/formats/arrow/accessor/sub_columns/settings.cpp

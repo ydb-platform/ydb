@@ -20,6 +20,7 @@ target_link_libraries(changes-compaction-sub_columns PUBLIC
   contrib-libs-cxxsupp
   yutil
   changes-compaction-common
+  arrow-accessor-sub_columns
 )
 
 target_sources(changes-compaction-sub_columns PRIVATE
@@ -38,6 +39,7 @@ target_link_libraries(changes-compaction-sub_columns.global PUBLIC
   contrib-libs-cxxsupp
   yutil
   changes-compaction-common
+  arrow-accessor-sub_columns
 )
 
 target_sources(changes-compaction-sub_columns.global PRIVATE

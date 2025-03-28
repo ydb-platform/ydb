@@ -10056,9 +10056,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         );
     }
 
-    Y_UNIT_TEST(DoubleCreateResourcePoolClassifier) {
+    Y_UNIT_TEST_TWIN(DoubleCreateResourcePoolClassifier, UseSink) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableResourcePools(true);
+        config.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
 
         TKikimrRunner kikimr(NKqp::TKikimrSettings()
             .SetAppConfig(config)
@@ -10085,7 +10086,11 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Conflict with existing key", result.GetIssues().ToString());
+            if (UseSink) {
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Duplicate keys have been found", result.GetIssues().ToString());
+            } else {
+                UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Conflict with existing key", result.GetIssues().ToString());
+            }
         }
     }
 

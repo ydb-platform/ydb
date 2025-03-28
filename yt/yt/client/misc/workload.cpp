@@ -101,6 +101,37 @@ IInvokerPtr GetCompressionInvoker(const TWorkloadDescriptor& workloadDescriptor)
     }
 }
 
+bool IsSystemWorkloadCategory(EWorkloadCategory category)
+{
+    switch (category) {
+        case EWorkloadCategory::Idle:
+            return false;
+
+        case EWorkloadCategory::SystemArtifactCacheDownload:
+        case EWorkloadCategory::SystemRepair:
+        case EWorkloadCategory::SystemReincarnation:
+        case EWorkloadCategory::SystemReplication:
+        case EWorkloadCategory::SystemMerge:
+        case EWorkloadCategory::SystemTabletCompaction:
+        case EWorkloadCategory::SystemTabletLogging:
+        case EWorkloadCategory::SystemTabletPartitioning:
+        case EWorkloadCategory::SystemTabletPreload:
+        case EWorkloadCategory::SystemTabletRecovery:
+        case EWorkloadCategory::SystemTabletReplication:
+        case EWorkloadCategory::SystemTabletSnapshot:
+        case EWorkloadCategory::SystemTabletStoreFlush:
+            return true;
+
+        case EWorkloadCategory::UserBatch:
+        case EWorkloadCategory::UserInteractive:
+        case EWorkloadCategory::UserRealtime:
+        case EWorkloadCategory::UserDynamicStoreRead:
+            return false;
+    }
+
+    return false;
+}
+
 struct TSerializableWorkloadDescriptor
     : public TWorkloadDescriptor
     , public TYsonStructLite

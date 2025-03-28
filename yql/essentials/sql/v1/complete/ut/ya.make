@@ -5,4 +5,9 @@ SRCS(
     string_util_ut.cpp
 )
 
+PEERDIR(
+    yql/essentials/sql/v1/lexer/antlr4_pure
+    yql/essentials/sql/v1/lexer/antlr4_pure_ansi
+)
+
 END()

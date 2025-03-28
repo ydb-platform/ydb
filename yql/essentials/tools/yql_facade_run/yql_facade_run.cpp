@@ -512,6 +512,7 @@ TIntrusivePtr<NKikimr::NMiniKQL::IFunctionRegistry> TFacadeRunner::GetFuncRegist
 int TFacadeRunner::Main(int argc, const char *argv[]) {
     NYql::NBacktrace::RegisterKikimrFatalActions();
     NYql::NBacktrace::EnableKikimrSymbolize();
+    EnableKikimrBacktraceFormat();
 
     NYql::NLog::YqlLoggerScope logger(&Cerr);
     try {

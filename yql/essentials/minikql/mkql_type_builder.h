@@ -2,6 +2,7 @@
 
 #include "mkql_node.h"
 
+#include <yql/essentials/core/sql_types/block.h>
 #include <yql/essentials/public/udf/udf_type_builder.h>
 #include <yql/essentials/public/udf/arrow/block_type_helper.h>
 #include <yql/essentials/parser/pg_wrapper/interface/compare.h>
@@ -324,6 +325,9 @@ public:
 
     TType* NewResourceType(const std::string_view& tag) const;
     TType* NewVariantType(TType* underlyingType) const;
+
+    TType* BuildBlockStructType(const TStructType* structType) const;
+    TType* ValidateBlockStructType(const TStructType* structType) const;
 
 protected:
     const TTypeEnvironment& Env;

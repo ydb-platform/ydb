@@ -33,19 +33,23 @@ target_link_libraries(yql-dq-runtime PUBLIC
   contrib-libs-cxxsupp
   yutil
   libs-apache-arrow
-  ydb-library-yverify_stream
+  library-actors-util
+  library-formats-arrow
+  library-formats-arrow-hash
   ydb-library-mkql_proto
-  essentials-minikql-comp_nodes
-  parser-pg_wrapper-interface
-  essentials-public-udf
   dq-actors-protos
   yql-dq-common
   yql-dq-expr_nodes
   yql-dq-type_ann
+  ydb-library-yverify_stream
+  yql-essentials-minikql
+  essentials-minikql-arrow
+  essentials-minikql-comp_nodes
+  essentials-minikql-computation
+  parser-pg_wrapper-interface
   providers-common-comp_nodes
   common-schema-mkql
-  library-actors-util
-  library-formats-arrow-hash
+  essentials-public-udf
   tools-enum_parser-enum_serialization_runtime
 )
 

@@ -23,6 +23,7 @@ target_link_libraries(ut-federated_query-common PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  core-kqp-rm_service
   kqp-ut-common
   providers-s3-actors_factory
   src-client-operation

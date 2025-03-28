@@ -106,7 +106,7 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
     if (partitionNode->AllParents.size() == 0 && partitionNode->DirectChildren.size() == 0) {
         SendCommit(topicInitInfo, commitRequest, ctx);
     } else {
-        auto killReadSession = !commitRequest->has_read_session_id();
+        auto killReadSession = !(commitRequest->has_read_session_id() && !commitRequest->read_session_id().empty());
         std::vector<TDistributedCommitHelper::TCommitInfo> commits;
 
         for (auto& parent: partitionNode->AllParents) {
@@ -121,7 +121,7 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
 
         TDistributedCommitHelper::TCommitInfo commit {.PartitionId = partitionNode->Id, .Offset = commitRequest->offset(), .KillReadSession = killReadSession, .OnlyCheckCommitedToFinish = false};
 
-        if (commitRequest->has_read_session_id()) {
+        if (commitRequest->has_read_session_id() && !commitRequest->read_session_id().empty()) {
             commit.ReadSessionId = commitRequest->read_session_id();
         }
         commits.push_back(commit);
@@ -200,7 +200,7 @@ void TCommitOffsetActor::SendCommit(const TTopicInitInfo& topic, const Ydb::Topi
     commit->SetClientId(ClientId);
     commit->SetOffset(commitRequest->offset());
     commit->SetStrict(true);
-    if (commitRequest->has_read_session_id()) {
+    if (commitRequest->has_read_session_id() && !commitRequest->read_session_id().empty()) {
         commit->SetSessionId(commitRequest->read_session_id());
     }
 

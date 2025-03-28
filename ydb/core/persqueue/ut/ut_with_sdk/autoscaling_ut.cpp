@@ -1402,13 +1402,6 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
                 .AppendTopics(TTopicReadSettings(TEST_TOPIC))
                 .ConsumerName(TEST_CONSUMER));
 
-        auto describeConsumerSettings = TDescribeConsumerSettings().IncludeStats(true);
-
-        auto describeConsumerResult = client.DescribeConsumer(TEST_TOPIC, TEST_CONSUMER, describeConsumerSettings).GetValueSync();
-        UNIT_ASSERT(describeConsumerResult.IsSuccess());
-
-        auto consumerDescription = describeConsumerResult.GetConsumerDescription();
-
         TInstant deadlineTime = TInstant::Now() + TDuration::Seconds(5);
 
         auto commitSent = false;
@@ -1426,7 +1419,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
                             if (!commitSent) {
                                 commitSent = true;
                                 Sleep(TDuration::MilliSeconds(300));
-                                TCommitOffsetSettings commitSettings {.ReadSessionId_ = consumerDescription.GetPartitions().at(0).GetPartitionConsumerStats()->GetReadSessionId()};
+                                TCommitOffsetSettings commitSettings {.ReadSessionId_ = message.GetPartitionSession()->GetReadSessionId()};
                                 auto status = client.CommitOffset(TEST_TOPIC, 0, TEST_CONSUMER, 0, commitSettings).GetValueSync();
                                 UNIT_ASSERT(status.IsSuccess());
                             } else {

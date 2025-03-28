@@ -31,6 +31,11 @@ public:
         return TopicPath;
     }
 
+    //! Read session id.
+    const std::string& GetReadSessionId() const {
+        return ReadSessionId;
+    }
+
     //! Partition id.
     uint64_t GetPartitionId() const {
         return PartitionId;
@@ -39,6 +44,7 @@ public:
 protected:
     uint64_t PartitionSessionId;
     std::string TopicPath;
+    std::string ReadSessionId;
     uint64_t PartitionId;
 };
 

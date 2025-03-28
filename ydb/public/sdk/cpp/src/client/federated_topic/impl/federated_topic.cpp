@@ -115,48 +115,4 @@ bool TFederatedTopicClient::TClusterInfo::IsAvailableForWrite() const {
     return Status == TClusterInfo::EStatus::AVAILABLE;
 }
 
-std::vector<NTopic::TTopicClient> TFederatedTopicClient::GetAllTopicClients(const TDriver& driver, const std::vector<TClusterInfo>& clusterInfos, NTopic::TTopicClientSettings& clientSettings) {
-    std::vector<NTopic::TTopicClient> clients;
-    clients.reserve(clusterInfos.size());
-    for (auto& info: clusterInfos) {
-        info.AdjustTopicClientSettings(clientSettings);
-        clients.emplace_back(driver, clientSettings);
-    }
-    return clients;
-}
-
-std::vector<TAsyncDescribeTopicResult> TFederatedTopicClient::DescribeAllTopics(const std::string& path, std::vector<NTopic::TTopicClient>& topicClients, const std::vector<TClusterInfo>& clusterInfos, NTopic::TDescribeTopicSettings& describeSettings) {
-    Y_ENSURE(topicClients.size() == clusterInfos.size());
-    std::vector<TAsyncDescribeTopicResult> results;
-    results.reserve(topicClients.size());
-    for (size_t i = 0; i < topicClients.size(); ++i) {
-        const auto& info = clusterInfos[i];
-        if (!info.IsAvailableForRead()) {
-            results.emplace_back(NThreading::MakeErrorFuture<NTopic::TDescribeTopicResult>(std::exception_ptr())); // FIXME
-            continue;
-        }
-        std::string adjustedPath = path;
-        info.AdjustTopicPath(adjustedPath);
-        results.emplace_back(topicClients[i].DescribeTopic(adjustedPath, describeSettings));
-    }
-    return results;
-}
-
-std::vector<std::shared_ptr<NTopic::IReadSession>> TFederatedTopicClient::CreateAllTopicsReadSessions(std::vector<NTopic::TTopicClient>& topicClients, const std::vector<TClusterInfo>& clusterInfos, std::vector<NTopic::TReadSessionSettings>& readSettings) {
-    std::vector<std::shared_ptr<NTopic::IReadSession>> readSessions;
-    readSessions.reserve(topicClients.size());
-    for (size_t i = 0; i < topicClients.size(); ++i) {
-        const auto& info = clusterInfos[i];
-        if (!info.IsAvailableForRead()) {
-            readSessions.emplace_back();
-            continue;
-        }
-        for (auto& topicSettings: readSettings[i].Topics_) {
-            info.AdjustTopicPath(topicSettings.Path_);
-        }
-        readSessions.emplace_back(topicClients[i].CreateReadSession(readSettings[i]));
-    }
-    return readSessions;
-}
-
 } // namespace NYdb::NFederatedTopic

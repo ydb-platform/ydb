@@ -52,6 +52,7 @@ SET(ORIG_SOURCES
     mkql_group_ut.cpp
     mkql_dict_ut.cpp
     mkql_isa_detection_ut.cpp
+    mkql_join_benchmark.cpp
     mkql_join_ut.cpp
     mkql_join_dict_ut.cpp
     mkql_grace_join_ut.cpp

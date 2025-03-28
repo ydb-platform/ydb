@@ -13,9 +13,10 @@ namespace NMiniKQL {
 
 namespace {
 
-enum class BlockJoinType {
-    MapJoin,
-    GraceJoin,
+enum class JoinType {
+    BlockMapJoin,
+    BlockGraceJoin,
+    GraceJoin
 };
 
 TString GenerateRandomString(ui64 len) {
@@ -28,8 +29,8 @@ TString GenerateRandomString(ui64 len) {
 }
 
 // -------------------------------------------------------------------
-// List<Tuple<...>> -> Stream<Multi<...>>
-TRuntimeNode ToWideStream(TProgramBuilder& pgmBuilder, TRuntimeNode list) {
+// List<Tuple<...>> -> Flow<Multi<...>>
+TRuntimeNode ToWideFlow(TProgramBuilder& pgmBuilder, TRuntimeNode list) {
     auto wideFlow = pgmBuilder.ExpandMap(pgmBuilder.ToFlow(list),
         [&](TRuntimeNode tupleNode) -> TRuntimeNode::TList {
             TTupleType* tupleType = AS_TYPE(TTupleType, tupleNode.GetStaticType());
@@ -42,6 +43,21 @@ TRuntimeNode ToWideStream(TProgramBuilder& pgmBuilder, TRuntimeNode list) {
         }
     );
 
+    return wideFlow;
+}
+
+// Flow<Multi<...>> -> List<Tuple<...>>
+TRuntimeNode FromWideFlow(TProgramBuilder& pgmBuilder, TRuntimeNode flow) {
+    return pgmBuilder.Collect(pgmBuilder.NarrowMap(flow,
+        [&](TRuntimeNode::TList items) -> TRuntimeNode {
+            return pgmBuilder.NewTuple(items);
+        })
+    );
+}
+
+// List<Tuple<...>> -> Stream<Multi<...>>
+TRuntimeNode ToWideStream(TProgramBuilder& pgmBuilder, TRuntimeNode list) {
+    auto wideFlow = ToWideFlow(pgmBuilder, list);
     return pgmBuilder.FromFlow(wideFlow);
 }
 
@@ -59,7 +75,8 @@ TRuntimeNode FromWideStream(TProgramBuilder& pgmBuilder, TRuntimeNode stream) {
     );
 }
 
-TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, BlockJoinType blockJoinKind,
+// -------------------------------------------------------------------
+TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, JoinType blockJoinKind,
     TRuntimeNode leftList, const TVector<ui32>& leftKeyColumns, const TVector<ui32>& leftKeyDrops,
     TRuntimeNode rightList, const TVector<ui32>& rightKeyColumns, const TVector<ui32>& rightKeyDrops
 ) {
@@ -91,7 +108,7 @@ TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, BlockJoinType blockJoin
     joinReturnItems.push_back(pgmBuilder.NewBlockType(pgmBuilder.NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar));
 
     TType* joinReturnType = pgmBuilder.NewStreamType(pgmBuilder.NewMultiType(joinReturnItems));
-    if (blockJoinKind == BlockJoinType::MapJoin) {
+    if (blockJoinKind == JoinType::BlockMapJoin) {
         auto joinNode = pgmBuilder.BlockMapJoinCore(
             leftStream,
             rightStream,
@@ -121,7 +138,7 @@ TRuntimeNode BuildBlockJoin(TProgramBuilder& pgmBuilder, BlockJoinType blockJoin
 }
 
 NUdf::TUnboxedValue DoBenchBlockJoin(
-    TSetup<false>& setup, BlockJoinType blockJoinKind, ui64 maxItemSize,
+    TSetup<false>& setup, JoinType blockJoinKind, ui64 maxItemSize,
     TType* leftType, NUdf::TUnboxedValue&& leftListValue, const TVector<ui32>& leftKeyColumns, const TVector<ui32>& leftKeyDrops,
     TType* rightType, NUdf::TUnboxedValue&& rightListValue, const TVector<ui32>& rightKeyColumns, const TVector<ui32>& rightKeyDrops)
 {
@@ -162,7 +179,7 @@ NUdf::TUnboxedValue DoBenchBlockJoin(
 }
 
 void RunBenchBlockJoin(
-    TSetup<false>& setup, BlockJoinType blockJoinKind, ui64 maxItemSize,
+    TSetup<false>& setup, JoinType blockJoinKind, ui64 maxItemSize,
     TType* leftType, NUdf::TUnboxedValue&& leftListValue, const TVector<ui32>& leftKeyColumns,
     TType* rightType, NUdf::TUnboxedValue&& rightListValue, const TVector<ui32>& rightKeyColumns,
     const TVector<ui32>& leftKeyDrops = {}, const TVector<ui32>& rightKeyDrops = {})
@@ -174,6 +191,106 @@ void RunBenchBlockJoin(
     auto gotItems = ConvertListToVector(got);
     UNIT_ASSERT(gotItems.size() > 0);
 }
+
+// -------------------------------------------------------------------
+TRuntimeNode BuildGraceJoin(TProgramBuilder& pgmBuilder,
+    TRuntimeNode leftList, const TVector<ui32>& leftKeyColumns, const TVector<ui32>& leftKeyDrops,
+    TRuntimeNode rightList, const TVector<ui32>& rightKeyColumns, const TVector<ui32>& rightKeyDrops
+) {
+    const auto leftFlow = ToWideFlow(pgmBuilder, leftList);
+    const auto rightFlow = ToWideFlow(pgmBuilder, rightList);
+
+    const auto leftFlowItems = GetWideComponents(AS_TYPE(TFlowType, leftFlow));
+    const auto rightFlowItems = GetWideComponents(AS_TYPE(TFlowType, rightFlow));
+
+    TVector<TType*> joinReturnItems;
+
+    ui32 counter = 0;
+    TVector<ui32> leftRenames;
+    const THashSet<ui32> leftKeyDropsSet(leftKeyDrops.cbegin(), leftKeyDrops.cend());
+    for (size_t i = 0; i < leftFlowItems.size(); i++) {
+        if (leftKeyDropsSet.contains(i)) {
+            continue;
+        }
+        leftRenames.push_back(i);
+        leftRenames.push_back(counter);
+        counter++;
+        joinReturnItems.push_back(pgmBuilder.NewFlowType(leftFlowItems[i]));
+    }
+
+    TVector<ui32> rightRenames;
+    const THashSet<ui32> rightKeyDropsSet(rightKeyDrops.cbegin(), rightKeyDrops.cend());
+    for (size_t i = 0; i < rightFlowItems.size(); i++) {
+        if (rightKeyDropsSet.contains(i)) {
+            continue;
+        }
+        rightRenames.push_back(i);
+        rightRenames.push_back(counter);
+        counter++;
+        joinReturnItems.push_back(pgmBuilder.NewFlowType(rightFlowItems[i]));
+    }
+
+    TType* joinReturnType = pgmBuilder.NewFlowType(pgmBuilder.NewMultiType(joinReturnItems));
+    auto joinNode = pgmBuilder.GraceJoin(
+        leftFlow,
+        rightFlow,
+        EJoinKind::Inner,
+        leftKeyColumns,
+        rightKeyColumns,
+        leftRenames,
+        rightRenames,
+        joinReturnType
+    );
+    return FromWideFlow(pgmBuilder, joinNode);
+}
+
+NUdf::TUnboxedValue DoBenchGraceJoin(
+    TSetup<false>& setup,
+    TType* leftType, NUdf::TUnboxedValue&& leftListValue, const TVector<ui32>& leftKeyColumns, const TVector<ui32>& leftKeyDrops,
+    TType* rightType, NUdf::TUnboxedValue&& rightListValue, const TVector<ui32>& rightKeyColumns, const TVector<ui32>& rightKeyDrops)
+{
+    TProgramBuilder& pb = *setup.PgmBuilder;
+
+    Y_ENSURE(leftType->IsList(), "Left node has to be list");
+    const auto leftItemType = AS_TYPE(TListType, leftType)->GetItemType();
+    Y_ENSURE(leftItemType->IsTuple(), "List item has to be tuple");
+
+    Y_ENSURE(rightType->IsList(), "Right node has to be list");
+    const auto rightItemType = AS_TYPE(TListType, rightType)->GetItemType();
+    Y_ENSURE(rightItemType->IsTuple(), "Right item has to be tuple");
+
+    TRuntimeNode leftList = pb.Arg(pb.NewListType(leftItemType));
+    TRuntimeNode rightList = pb.Arg(pb.NewListType(rightItemType));
+    const auto joinNode = BuildGraceJoin(
+        pb, leftList, leftKeyColumns, leftKeyDrops, rightList, rightKeyColumns, rightKeyDrops);
+
+    const auto joinType = joinNode.GetStaticType();
+    Y_ENSURE(joinType->IsList(), "Join result has to be list");
+    const auto joinItemType = AS_TYPE(TListType, joinType)->GetItemType();
+    Y_ENSURE(joinItemType->IsTuple(), "List item has to be tuple");
+
+    const auto graph = setup.BuildGraph(joinNode, {leftList.GetNode(), rightList.GetNode()});
+    auto& ctx = graph->GetContext();
+
+    graph->GetEntryPoint(0, true)->SetValue(ctx, std::move(leftListValue));
+    graph->GetEntryPoint(1, true)->SetValue(ctx, std::move(rightListValue));
+    return graph->GetValue();
+}
+
+void RunBenchGraceJoin(
+    TSetup<false>& setup,
+    TType* leftType, NUdf::TUnboxedValue&& leftListValue, const TVector<ui32>& leftKeyColumns,
+    TType* rightType, NUdf::TUnboxedValue&& rightListValue, const TVector<ui32>& rightKeyColumns,
+    const TVector<ui32>& leftKeyDrops = {}, const TVector<ui32>& rightKeyDrops = {})
+{
+    const auto got = DoBenchGraceJoin(
+        setup,
+        leftType, std::move(leftListValue), leftKeyColumns, leftKeyDrops,
+        rightType, std::move(rightListValue), rightKeyColumns, rightKeyDrops);
+    auto gotItems = ConvertListToVector(got);
+    UNIT_ASSERT(gotItems.size() > 0);
+}
+
 
 // -------------------------------------------------------------------
 /**
@@ -740,7 +857,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinBenchmarks) {
         Cerr << ">>> Benchmark Q1:" << Endl;
         auto [lhs, rhs] = Query1GenerateData(datasetSize);
 
-        for (auto type: {BlockJoinType::GraceJoin, BlockJoinType::MapJoin}) {
+        for (auto type: {JoinType::BlockGraceJoin, JoinType::BlockMapJoin, JoinType::GraceJoin}) {
             TSetup<false> setup(GetNodeFactory());
 
             auto [leftType, leftList] = ConvertVectorsToTuples(setup,
@@ -748,12 +865,21 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinBenchmarks) {
             auto [rightType, rightList] = ConvertVectorsToTuples(setup,
                 std::get<0>(rhs), std::get<1>(rhs), std::get<2>(rhs), std::get<3>(rhs));
 
-            RunBenchBlockJoin(
-                setup, type, 32,
-                leftType, std::move(leftList), {0, 1},
-                rightType, std::move(rightList), {0, 1},
-                {}, {0, 1}
-            );
+            if (type == JoinType::GraceJoin) {
+                RunBenchGraceJoin(
+                    setup,
+                    leftType, std::move(leftList), {0, 1},
+                    rightType, std::move(rightList), {0, 1},
+                    {}, {0, 1}
+                );
+            } else {
+                RunBenchBlockJoin(
+                    setup, type, 32,
+                    leftType, std::move(leftList), {0, 1},
+                    rightType, std::move(rightList), {0, 1},
+                    {}, {0, 1}
+                );
+            }
         }
 
         Cerr << globalResourceMeter.GetFullLog(datasetSize) << Endl;
@@ -764,20 +890,29 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinBenchmarks) {
         Cerr << ">>> Benchmark Q2:" << Endl;
         auto [lhs, rhs] = Query2GenerateData(datasetSize);
 
-        for (auto type: {BlockJoinType::GraceJoin, BlockJoinType::MapJoin}) {
+        for (auto type: {JoinType::BlockGraceJoin, JoinType::BlockMapJoin, JoinType::GraceJoin}) {
             TSetup<false> setup(GetNodeFactory());
 
             auto [leftType, leftList] = ConvertVectorsToTuples(setup,
                 std::get<0>(lhs), std::get<1>(lhs), std::get<2>(lhs), std::get<3>(lhs), std::get<4>(lhs), std::get<5>(lhs));
             auto [rightType, rightList] = ConvertVectorsToTuples(setup,
                 std::get<0>(rhs), std::get<1>(rhs), std::get<2>(rhs), std::get<3>(rhs));
-    
-            RunBenchBlockJoin(
-                setup, type, 32,
-                leftType, std::move(leftList), {0, 1},
-                rightType, std::move(rightList), {0, 1},
-                {}, {0, 1}
-            );
+
+            if (type == JoinType::GraceJoin) {
+                RunBenchGraceJoin(
+                    setup,
+                    leftType, std::move(leftList), {0, 1},
+                    rightType, std::move(rightList), {0, 1},
+                    {}, {0, 1}
+                );
+            } else {
+                RunBenchBlockJoin(
+                    setup, type, 32,
+                    leftType, std::move(leftList), {0, 1},
+                    rightType, std::move(rightList), {0, 1},
+                    {}, {0, 1}
+                );
+            }
         }
 
         Cerr << globalResourceMeter.GetFullLog(datasetSize) << Endl;
@@ -788,20 +923,29 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinBenchmarks) {
         Cerr << ">>> Benchmark Q3:" << Endl;
         auto [lhs, rhs] = Query3GenerateData(datasetSize);
 
-        for (auto type: {BlockJoinType::GraceJoin, BlockJoinType::MapJoin}) {
+        for (auto type: {JoinType::BlockGraceJoin, JoinType::BlockMapJoin, JoinType::GraceJoin}) {
             TSetup<false> setup(GetNodeFactory());
 
             auto [leftType, leftList] = ConvertVectorsToTuples(setup,
                 std::get<0>(lhs), std::get<1>(lhs), std::get<2>(lhs), std::get<3>(lhs), std::get<4>(lhs), std::get<5>(lhs));
             auto [rightType, rightList] = ConvertVectorsToTuples(setup,
                 std::get<0>(rhs), std::get<1>(rhs), std::get<2>(rhs), std::get<3>(rhs));
-    
-            RunBenchBlockJoin(
-                setup, type, 32,
-                leftType, std::move(leftList), {0, 1},
-                rightType, std::move(rightList), {0, 1},
-                {}, {0, 1}
-            );
+
+            if (type == JoinType::GraceJoin) {
+                RunBenchGraceJoin(
+                    setup,
+                    leftType, std::move(leftList), {0, 1},
+                    rightType, std::move(rightList), {0, 1},
+                    {}, {0, 1}
+                );
+            } else {
+                RunBenchBlockJoin(
+                    setup, type, 32,
+                    leftType, std::move(leftList), {0, 1},
+                    rightType, std::move(rightList), {0, 1},
+                    {}, {0, 1}
+                );
+            }
         }
 
         Cerr << globalResourceMeter.GetFullLog(datasetSize) << Endl;
@@ -812,7 +956,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinBenchmarks) {
         Cerr << ">>> Benchmark Q4:" << Endl;
         auto [lhs, rhs] = Query4GenerateData(datasetSize);
 
-        for (auto type: {BlockJoinType::GraceJoin, BlockJoinType::MapJoin}) {
+        for (auto type: {JoinType::BlockGraceJoin, JoinType::BlockMapJoin, JoinType::GraceJoin}) {
             TSetup<false> setup(GetNodeFactory());
 
             auto [leftType, leftList] = ConvertVectorsToTuples(setup,
@@ -821,13 +965,22 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinBenchmarks) {
                 std::get<10>(lhs), std::get<11>(lhs), std::get<12>(lhs), std::get<13>(lhs), std::get<14>(lhs));
             auto [rightType, rightList] = ConvertVectorsToTuples(setup,
                 std::get<0>(rhs), std::get<1>(rhs), std::get<2>(rhs), std::get<3>(rhs));
-    
-            RunBenchBlockJoin(
-                setup, type, 32,
-                leftType, std::move(leftList), {0, 1},
-                rightType, std::move(rightList), {0, 1},
-                {}, {0, 1}
-            );
+
+            if (type == JoinType::GraceJoin) {
+                RunBenchGraceJoin(
+                    setup,
+                    leftType, std::move(leftList), {0, 1},
+                    rightType, std::move(rightList), {0, 1},
+                    {}, {0, 1}
+                );
+            } else {
+                RunBenchBlockJoin(
+                    setup, type, 32,
+                    leftType, std::move(leftList), {0, 1},
+                    rightType, std::move(rightList), {0, 1},
+                    {}, {0, 1}
+                );
+            }
         }
 
         Cerr << globalResourceMeter.GetFullLog(datasetSize) << Endl;
@@ -838,7 +991,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinBenchmarks) {
         Cerr << ">>> Benchmark Q5:" << Endl;
         auto [lhs, rhs] = Query5GenerateData(datasetSize);
 
-        for (auto type: {BlockJoinType::GraceJoin, BlockJoinType::MapJoin}) {
+        for (auto type: {JoinType::BlockGraceJoin, JoinType::BlockMapJoin, JoinType::GraceJoin}) {
             TSetup<false> setup(GetNodeFactory());
 
             auto [leftType, leftList] = ConvertVectorsToTuples(setup,
@@ -847,13 +1000,22 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinBenchmarks) {
                 std::get<0>(rhs), std::get<1>(rhs), std::get<2>(rhs), std::get<3>(rhs), std::get<4>(rhs),
                 std::get<5>(rhs), std::get<6>(rhs), std::get<7>(rhs), std::get<8>(rhs), std::get<9>(rhs),
                 std::get<10>(rhs), std::get<11>(rhs), std::get<12>(rhs), std::get<13>(rhs), std::get<14>(rhs));
-    
-            RunBenchBlockJoin(
-                setup, type, 32,
-                leftType, std::move(leftList), {0, 1},
-                rightType, std::move(rightList), {0, 1},
-                {}, {0, 1}
-            );
+
+            if (type == JoinType::GraceJoin) {
+                RunBenchGraceJoin(
+                    setup,
+                    leftType, std::move(leftList), {0, 1},
+                    rightType, std::move(rightList), {0, 1},
+                    {}, {0, 1}
+                );
+            } else {
+                RunBenchBlockJoin(
+                    setup, type, 32,
+                    leftType, std::move(leftList), {0, 1},
+                    rightType, std::move(rightList), {0, 1},
+                    {}, {0, 1}
+                );
+            }
         }
 
         Cerr << globalResourceMeter.GetFullLog(datasetSize) << Endl;
@@ -864,7 +1026,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinBenchmarks) {
         Cerr << ">>> Benchmark Q6:" << Endl;
         auto [lhs, rhs] = Query6GenerateData(datasetSize);
 
-        for (auto type: {BlockJoinType::GraceJoin, BlockJoinType::MapJoin}) {
+        for (auto type: {JoinType::BlockGraceJoin, JoinType::BlockMapJoin, JoinType::GraceJoin}) {
             TSetup<false> setup(GetNodeFactory());
 
             auto [leftType, leftList] = ConvertVectorsToTuples(setup,
@@ -872,12 +1034,21 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinBenchmarks) {
             auto [rightType, rightList] = ConvertVectorsToTuples(setup,
                 std::get<0>(rhs), std::get<1>(rhs), std::get<2>(rhs), std::get<3>(rhs));
 
-            RunBenchBlockJoin(
-                setup, type, 8,
-                leftType, std::move(leftList), {0},
-                rightType, std::move(rightList), {0},
-                {}, {0}
-            );
+            if (type == JoinType::GraceJoin) {
+                RunBenchGraceJoin(
+                    setup,
+                    leftType, std::move(leftList), {0},
+                    rightType, std::move(rightList), {0},
+                    {}, {0}
+                );
+            } else {
+                RunBenchBlockJoin(
+                    setup, type, 8,
+                    leftType, std::move(leftList), {0},
+                    rightType, std::move(rightList), {0},
+                    {}, {0}
+                );
+            }
         }
 
         Cerr << globalResourceMeter.GetFullLog(datasetSize) << Endl;
@@ -888,7 +1059,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinBenchmarks) {
         Cerr << ">>> Benchmark Q7:" << Endl;
         auto [lhs, rhs] = Query7GenerateData(datasetSize);
 
-        for (auto type: {BlockJoinType::GraceJoin, BlockJoinType::MapJoin}) {
+        for (auto type: {JoinType::BlockGraceJoin, JoinType::BlockMapJoin, JoinType::GraceJoin}) {
             TSetup<false> setup(GetNodeFactory());
 
             auto [leftType, leftList] = ConvertVectorsToTuples(setup,
@@ -896,16 +1067,26 @@ Y_UNIT_TEST_SUITE(TMiniKQLJoinBenchmarks) {
             auto [rightType, rightList] = ConvertVectorsToTuples(setup,
                 std::get<0>(rhs), std::get<1>(rhs), std::get<2>(rhs), std::get<3>(rhs));
 
-            RunBenchBlockJoin(
-                setup, type, 8,
-                leftType, std::move(leftList), {0},
-                rightType, std::move(rightList), {0},
-                {}, {0}
-            );
+            if (type == JoinType::GraceJoin) {
+                RunBenchGraceJoin(
+                    setup,
+                    leftType, std::move(leftList), {0},
+                    rightType, std::move(rightList), {0},
+                    {}, {0}
+                );
+            } else {
+                RunBenchBlockJoin(
+                    setup, type, 8,
+                    leftType, std::move(leftList), {0},
+                    rightType, std::move(rightList), {0},
+                    {}, {0}
+                );
+            }
         }
 
         Cerr << globalResourceMeter.GetFullLog(datasetSize) << Endl;
     } // Y_UNIT_TEST(BenchQ7)
+
 } // Y_UNIT_TEST_SUITE
 
 } // namespace NMiniKQL

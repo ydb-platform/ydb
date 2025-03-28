@@ -12,6 +12,7 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h>  // Y_IGNORE
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>
 #include <yql/essentials/minikql/computation/mkql_llvm_base.h>  // Y_IGNORE
+#include <yql/essentials/minikql/computation/mkql_resource_meter.h>
 
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
@@ -1076,11 +1077,17 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
         {}
 
         EFetchResult DoCalculate(NUdf::TUnboxedValue& state, TComputationContext& ctx, NUdf::TUnboxedValue*const* output)  const {
+            std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
             if (state.IsInvalid()) {
                 MakeSpillingSupportState(ctx, state);
             }
 
-            return static_cast<TGraceJoinSpillingSupportState*>(state.AsBoxed().Get())->FetchValues(ctx, output);
+            auto result = static_cast<TGraceJoinSpillingSupportState*>(state.AsBoxed().Get())->FetchValues(ctx, output);
+            std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
+            ui64 spent = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+            globalResourceMeter.UpdateSpentTime("CurrentGraceJoin", spent);
+            globalResourceMeter.UpdateConsumptedMemory("CurrentGraceJoin", TlsAllocState->GetUsed());
+            return result;
         }
 #ifndef MKQL_DISABLE_CODEGEN
     ICodegeneratorInlineWideNode::TGenerateResult DoGenGetValues(const TCodegenContext& ctx, Value* statePtr, BasicBlock*& block) const {

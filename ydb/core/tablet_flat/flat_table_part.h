@@ -65,20 +65,20 @@ namespace NTable {
 
             const TBtreeIndexMeta& GetBTree(TGroupId groupId) const {
                 if (groupId.IsHistoric()) {
-                    Y_ABORT_UNLESS(groupId.Index < BTreeHistoric.size());
+                    Y_ENSURE(groupId.Index < BTreeHistoric.size());
                     return BTreeHistoric[groupId.Index];
                 } else {
-                    Y_ABORT_UNLESS(groupId.Index < BTreeGroups.size());
+                    Y_ENSURE(groupId.Index < BTreeGroups.size());
                     return BTreeGroups[groupId.Index];
                 }
             }
 
             TPageId GetFlat(TGroupId groupId) const {
                 if (groupId.IsHistoric()) {
-                    Y_ABORT_UNLESS(groupId.Index < FlatHistoric.size());
+                    Y_ENSURE(groupId.Index < FlatHistoric.size());
                     return FlatHistoric[groupId.Index];
                 } else {
-                    Y_ABORT_UNLESS(groupId.Index < FlatGroups.size());
+                    Y_ENSURE(groupId.Index < FlatGroups.size());
                     return FlatGroups[groupId.Index];
                 }
             }
@@ -126,12 +126,10 @@ namespace NTable {
             , MinRowVersion(params.MinRowVersion)
             , MaxRowVersion(params.MaxRowVersion)
         {
-            Y_ABORT_UNLESS(Scheme->Groups.size() == GroupsCount,
-                "Part has scheme with %" PRISZT " groups, but %" PRISZT " indexes",
-                Scheme->Groups.size(), GroupsCount);
-            Y_ABORT_UNLESS(!HistoricGroupsCount || HistoricGroupsCount == GroupsCount,
-                "Part has %" PRISZT " indexes, but %" PRISZT " historic indexes",
-                GroupsCount, HistoricGroupsCount);
+            Y_ENSURE(Scheme->Groups.size() == GroupsCount,
+                "Part has scheme with " << Scheme->Groups.size() << " groups, but " << GroupsCount << " indexes");
+            Y_ENSURE(!HistoricGroupsCount || HistoricGroupsCount == GroupsCount,
+                "Part has " << GroupsCount << " indexes, but " << HistoricGroupsCount << " historic indexes");
         }
 
         virtual ~TPart() = default;

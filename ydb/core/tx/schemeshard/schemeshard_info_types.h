@@ -272,6 +272,10 @@ struct TPartitionStats {
     ui64 MemDataSize = 0;
     ui32 ShardState = NKikimrTxDataShard::Unknown;
 
+    ui64 LocksAcquired = 0;
+    ui64 LocksWholeShard = 0;
+    ui64 LocksBroken = 0;
+
     // True when PartOwners has parts from other tablets
     bool HasBorrowedData = false;
 
@@ -2675,10 +2679,11 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
 
     enum class EState: ui8 {
         Invalid = 0,
-        Waiting,
-        CreateExportDir,
-        CopyTables,
-        Transferring,
+        Waiting = 1,
+        CreateExportDir = 2,
+        CopyTables = 3,
+        Transferring = 4,
+        UploadExportMetadata = 5,
         Done = 240,
         Dropping = 241,
         Dropped = 242,
@@ -2752,6 +2757,9 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     bool EnableChecksums = false;
     bool EnablePermissions = false;
 
+    NKikimrSchemeOp::TExportMetadata ExportMetadata;
+    TActorId ExportMetadataUploader;
+
     explicit TExportInfo(
             const ui64 id,
             const TString& uid,
@@ -2785,7 +2793,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
     }
 
     bool IsPreparing() const {
-        return State == EState::CreateExportDir || State == EState::CopyTables;
+        return State == EState::CreateExportDir || State == EState::CopyTables || State == EState::UploadExportMetadata;
     }
 
     bool IsWorking() const {

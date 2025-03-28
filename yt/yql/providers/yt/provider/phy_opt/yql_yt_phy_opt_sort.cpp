@@ -71,10 +71,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Sort(TExprBase node, TE
     }
 
     auto keySelectorLambda = sort.KeySelectorLambda();
-    // FIXME
-    auto cluster = TString{GetClusterName(sort.Input())};
     const ERuntimeClusterSelectionMode selectionMode =
         State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+    auto cluster = DeriveClusterFromInput(sort.Input(), selectionMode);
 
     TSyncMap syncList;
     if (!IsYtCompleteIsolatedLambda(keySelectorLambda.Ref(), syncList, cluster, false, selectionMode)) {

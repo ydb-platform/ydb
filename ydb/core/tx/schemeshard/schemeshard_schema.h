@@ -391,6 +391,10 @@ struct Schema : NIceDb::Schema {
 
         struct ByKeyFilterSize : Column<34, NScheme::NTypeIds::Uint64> {};
 
+        struct LocksAcquired : Column<35, NScheme::NTypeIds::Uint64> {};
+        struct LocksWholeShard : Column<36, NScheme::NTypeIds::Uint64> {};
+        struct LocksBroken : Column<37, NScheme::NTypeIds::Uint64> {};
+
         using TKey = TableKey<TableOwnerId, TableLocalId, PartitionId>;
         using TColumns = TableColumns<
             TableOwnerId,
@@ -426,7 +430,10 @@ struct Schema : NIceDb::Schema {
             FullCompactionTs,
             MemDataSize,
             StoragePoolsStats,
-            ByKeyFilterSize
+            ByKeyFilterSize,
+            LocksAcquired,
+            LocksWholeShard,
+            LocksBroken
         >;
     };
 
@@ -1197,6 +1204,8 @@ struct Schema : NIceDb::Schema {
         struct EnableChecksums : Column<17, NScheme::NTypeIds::Bool> {};
         struct EnablePermissions : Column<18, NScheme::NTypeIds::Bool> {};
 
+        struct ExportMetadata : Column<19, NScheme::NTypeIds::String> { using Type = NKikimrSchemeOp::TExportMetadata; };
+
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
@@ -1216,7 +1225,8 @@ struct Schema : NIceDb::Schema {
             EndTime,
             PeerName,
             EnableChecksums,
-            EnablePermissions
+            EnablePermissions,
+            ExportMetadata
         >;
     };
 

@@ -50,7 +50,7 @@ namespace NTest {
         {
             for (const auto &slice : slices) {
                 auto got = Run.FindInsertHint(part.Get(), slice);
-                Y_ABORT_UNLESS(got.second, "Unexpected slices intersection");
+                Y_ENSURE(got.second, "Unexpected slices intersection");
                 Run.Insert(got.first, part, slice);
             }
         }
@@ -96,7 +96,7 @@ namespace NTest {
             if (Ready == EReady::Data)
                 Ready = RollUp();
 
-            Y_ABORT_UNLESS(Ready != EReady::Data || Iter->IsValid());
+            Y_ENSURE(Ready != EReady::Data || Iter->IsValid());
 
             return Ready;
         }
@@ -110,14 +110,14 @@ namespace NTest {
             if (Ready == EReady::Data)
                 Ready = RollUp();
 
-            Y_ABORT_UNLESS(Ready != EReady::Data || Iter->IsValid());
+            Y_ENSURE(Ready != EReady::Data || Iter->IsValid());
 
             return Ready;
         }
 
         TRowVersion GetRowVersion() const
         {
-            Y_ABORT_UNLESS(Ready == EReady::Data);
+            Y_ENSURE(Ready == EReady::Data);
 
             return Iter->GetRowVersion();
         }
@@ -133,14 +133,14 @@ namespace NTest {
             } else if (EReady::Data == (Ready = DoIterNext()))
                 Ready = RollUp();
 
-            Y_ABORT_UNLESS(Ready != EReady::Data || Iter->IsValid());
+            Y_ENSURE(Ready != EReady::Data || Iter->IsValid());
 
             return Ready;
         }
 
         const TRowState& Apply()
         {
-            Y_ABORT_UNLESS(Ready == EReady::Data, "Row state isn't ready");
+            Y_ENSURE(Ready == EReady::Data, "Row state isn't ready");
 
             return State;
         }

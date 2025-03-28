@@ -2166,9 +2166,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
     }
 
     Y_UNIT_TEST(InitProducerId_forPreviouslySeenTransactionalIdShouldReturnNewProducerIdIfEpochOverflown) {
-        return; // mute test till implementation
         TInsecureTestServer testServer;
-        ui16 maxEpoch = std::numeric_limits<ui16>::max();
 
         TKafkaTestClient kafkaClient(testServer.Port);
         // use random transactional id for each request top avoid parallel execution problems
@@ -2182,12 +2180,14 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         rows.BeginList();
         rows.AddListItem()
             .BeginStruct()
+                .AddMember("database").Utf8("/Root")
                 .AddMember("transactional_id").Utf8(transactionalId)
                 .AddMember("producer_id").Int64(resp1->ProducerId)
                 .AddMember("producer_epoch").Int16(std::numeric_limits<i16>::max() - 1)
+                .AddMember("updated_at").Datetime(TInstant::Now())
             .EndStruct();
         rows.EndList();
-        auto upsertResult = tableClient.BulkUpsert(NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant()->GetStorageTablePath().c_str(), rows.Build()).GetValueSync();
+        auto upsertResult = tableClient.BulkUpsert("//Root/.metadata/kafka_transactional_producers", rows.Build()).GetValueSync();
         UNIT_ASSERT_EQUAL(upsertResult.GetStatus(), EStatus::SUCCESS);
         
         auto resp2 = kafkaClient.InitProducerId(transactionalId);
@@ -2195,7 +2195,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         // validate first response
         UNIT_ASSERT_VALUES_EQUAL(resp1->ErrorCode, EKafkaErrors::NONE_ERROR);
         UNIT_ASSERT_GT(resp1->ProducerId, 0);
-        UNIT_ASSERT_VALUES_EQUAL(resp1->ProducerEpoch, maxEpoch);
+        UNIT_ASSERT_VALUES_EQUAL(resp1->ProducerEpoch, 0);
         // validate second response
         UNIT_ASSERT_VALUES_EQUAL(resp2->ErrorCode, EKafkaErrors::NONE_ERROR);
         UNIT_ASSERT_GT(resp2->ProducerId, 0);

@@ -24,7 +24,7 @@ namespace NActors {
     }
 
     void TRopeStream::BackUp(int count) {
-        Y_ABORT_UNLESS(count <= TotalByteCount);
+        Y_ENSURE(count <= TotalByteCount);
         Iter -= count;
         TotalByteCount -= count;
     }
@@ -218,7 +218,7 @@ namespace NActors {
     }
 
     bool TAllocChunkSerializer::WriteAliasedRaw(const void*, int) {
-        Y_ABORT_UNLESS(false);
+        Y_ENSURE(false);
         return false;
     }
 
@@ -317,7 +317,7 @@ namespace NActors {
     {
         // check marker
         if (!iter.Valid() || (*iter.ContiguousData() != PayloadMarker && *iter.ContiguousData() != ExtendedPayloadMarker)) {
-            Y_ABORT("invalid event");
+            Y_ENSURE(false, "invalid event");
         }
 
         const bool dataIsSeparate = *iter.ContiguousData() == ExtendedPayloadMarker; // ropes go after sizes
@@ -336,7 +336,7 @@ namespace NActors {
         // parse number of payload ropes
         size_t numRopes = DeserializeNumber(iter, size);
         if (numRopes == Max<size_t>()) {
-            Y_ABORT("invalid event");
+            Y_ENSURE(false, "invalid event");
         }
         TStackVec<size_t, 16> ropeLens;
         if (dataIsSeparate) {
@@ -347,7 +347,7 @@ namespace NActors {
             // parse length of the rope
             const size_t len = DeserializeNumber(iter, size);
             if (len == Max<size_t>() || size < len) {
-                Y_ABORT("invalid event len# %zu size# %" PRIu64, len, size);
+                Y_ENSURE(false, "invalid event len# " << len << " size# " << size);
             }
             // extract the rope
             if (dataIsSeparate) {
@@ -404,8 +404,8 @@ namespace NActors {
                     total += section.Size;
                 }
                 size_t serialized = CalculateSerializedSizeImpl(payload, recordSize);
-                Y_ABORT_UNLESS(total == serialized, "total# %zu serialized# %zu byteSize# %zd payload.size# %zu", total,
-                    serialized, byteSize, payload.size());
+                Y_ENSURE(total == serialized, "total# " << total << " serialized# " << serialized
+                    << " byteSize# " << byteSize << " payload.size# " << payload.size());
 #endif
             }
 

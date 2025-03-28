@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    table_data_service.cpp
+    yql_yt_table_data_service_local.cpp
 )
 
 PEERDIR(

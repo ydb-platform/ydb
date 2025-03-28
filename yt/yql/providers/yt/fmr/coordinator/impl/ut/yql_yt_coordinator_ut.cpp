@@ -314,7 +314,8 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
         UNIT_ASSERT_VALUES_EQUAL(status, EOperationStatus::Failed);
         UNIT_ASSERT(errorMessages.size() == 1);
         auto& error = errorMessages[0];
-        UNIT_ASSERT_NO_DIFF(error.ErrorMessage, "Function crashed");
+        TString expectedErrorMessage = "Function crashed";
+        UNIT_ASSERT(error.ErrorMessage.Contains(expectedErrorMessage));
         UNIT_ASSERT_VALUES_EQUAL(error.Component, EFmrComponent::Job);
     }
 

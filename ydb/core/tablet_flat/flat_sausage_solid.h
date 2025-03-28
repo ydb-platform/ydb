@@ -1,5 +1,7 @@
 #pragma once
 
+#include "util_fmt_abort.h"
+
 #include <ydb/core/base/logoblob.h>
 #include <ydb/library/actors/util/shared_data.h>
 
@@ -28,8 +30,8 @@ namespace NPageCollection {
             , Bytes(bytes)
             , Lead(lead)
         {
-            //Y_ABORT_UNLESS(Group != InvalidGroup, "Invalid TLargeGlobId storage group");
-            Y_ABORT_UNLESS(Lead && Lead.BlobSize() && Lead.BlobSize() <= Bytes);
+            //Y_ENSURE(Group != InvalidGroup, "Invalid TLargeGlobId storage group");
+            Y_ENSURE(Lead && Lead.BlobSize() && Lead.BlobSize() <= Bytes);
         }
 
         void Describe(IOutputStream &out) const
@@ -239,17 +241,17 @@ namespace NPageCollection {
                 if (Blobs[idx] != id) {
                     continue;
                 }
-                Y_ABORT_UNLESS(!Bodies[idx],
-                    "Apply blob %s multiple times", id.ToString().c_str());
-                Y_ABORT_UNLESS(id.BlobSize() == body.size(),
-                    "Apply blob %s and body size mismatch", id.ToString().c_str());
+                Y_ENSURE(!Bodies[idx],
+                    "Apply called for blob " << id << " multiple times");
+                Y_ENSURE(id.BlobSize() == body.size(),
+                    "Apply called for blob " << id << " with body size " << body.size());
                 // N.B. we store individual bodies to minimize upfront memory requirements
                 BytesLoaded += body.size();
                 Bodies[idx] = std::move(body);
                 return ++BlobsLoaded == Blobs.size();
             }
 
-            Y_ABORT("Apply unknown blob %s", id.ToString().c_str());
+            Y_TABLET_ERROR("Apply called for unknown blob " << id);
         }
 
         explicit operator bool() const {

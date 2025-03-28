@@ -83,16 +83,35 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName internName) {
         if (EPhase::Content == Phase_ || EPhase::All == Phase_) {
             return [&, name, useBlocks](NMiniKQL::TCallable& callable, const TTypeEnvironment& env) {
                 if (useBlocks) {
-                    YQL_ENSURE(callable.GetInputsCount() == 5, "Expected 5 args");
-                } else {
                     YQL_ENSURE(callable.GetInputsCount() == 4, "Expected 4 args");
+                } else {
+                    YQL_ENSURE(callable.GetInputsCount() == 3, "Expected 3 args");
                 }
 
-                const TString cluster(AS_VALUE(TDataLiteral, callable.GetInput(0))->AsValue().AsStringRef());
-                const TString& server = ExecCtx_.Clusters_->GetServer(cluster);
+                const TString cluster = ExecCtx_.Cluster_;
                 const TString tmpFolder = GetTablesTmpFolder(*Settings_);
-                TTransactionCache::TEntry::TPtr entry = ExecCtx_.Session_->TxCache_.GetEntry(server);
+                TTransactionCache::TEntry::TPtr entry = ExecCtx_.GetEntry();
                 auto tx = entry->Tx;
+
+                TListLiteral* groupList = AS_VALUE(TListLiteral, callable.GetInput(0));
+                YQL_ENSURE(groupList->GetItemsCount() == 1);
+                TListLiteral* tableList = AS_VALUE(TListLiteral, groupList->GetItems()[0]);
+
+                TVector<NYT::TRichYPath> richPaths;
+                for (ui32 i = 0; i < tableList->GetItemsCount(); ++i) {
+                    TTupleLiteral* tuple = AS_VALUE(TTupleLiteral, tableList->GetItems()[i]);
+                    YQL_ENSURE(tuple->GetValuesCount() == 7, "Expect 7 elements in the Tuple item");
+
+                    NYT::TRichYPath richYPath;
+                    NYT::Deserialize(richYPath, NYT::NodeFromYsonString(TString(AS_VALUE(TDataLiteral, tuple->GetValue(0))->AsValue().AsStringRef())));
+                    YQL_ENSURE(richYPath.Cluster_ && !richYPath.Cluster_->empty());
+
+                    YQL_ENSURE(*richYPath.Cluster_ == cluster,
+                        "Reading from remote cluster is not supported in " << name << ", runtime cluster = " << cluster.Quote() <<
+                        ", input[" << i << "] cluster = " << richYPath.Cluster_->Quote());
+                    richYPath.Cluster_.Clear();
+                    richPaths.push_back(richYPath);
+                }
 
                 auto deliveryMode = ForceLocalTableContent_ ? ETableContentDeliveryMode::File : Settings_->TableContentDeliveryMode.Get(cluster).GetOrElse(ETableContentDeliveryMode::Native);
                 bool useSkiff = !useBlocks && Settings_->TableContentUseSkiff.Get(cluster).GetOrElse(DEFAULT_USE_SKIFF);
@@ -108,15 +127,10 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName internName) {
 
                 TString uniqueId = GetGuidAsString(ExecCtx_.Session_->RandomProvider_->GenGuid());
 
-                TListLiteral* groupList = AS_VALUE(TListLiteral, callable.GetInput(1));
-                YQL_ENSURE(groupList->GetItemsCount() == 1);
-                TListLiteral* tableList = AS_VALUE(TListLiteral, groupList->GetItems()[0]);
-
                 NYT::TNode specNode = NYT::TNode::CreateMap();
                 NYT::TNode& tablesNode = specNode[YqlIOSpecTables];
                 NYT::TNode& registryNode = specNode[YqlIOSpecRegistry];
                 THashMap<TString, TString> uniqSpecs;
-                TVector<NYT::TRichYPath> richPaths;
                 TVector<NYT::TNode> formats;
 
                 THashMap<TString, ui32> structColumns;
@@ -141,8 +155,7 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName internName) {
                     TString specStr = TString(AS_VALUE(TDataLiteral, tuple->GetValue(2))->AsValue().AsStringRef());
                     const auto specNode = NYT::NodeFromYsonString(specStr);
 
-                    NYT::TRichYPath richYPath;
-                    NYT::Deserialize(richYPath, NYT::NodeFromYsonString(TString(AS_VALUE(TDataLiteral, tuple->GetValue(0))->AsValue().AsStringRef())));
+                    NYT::TRichYPath& richYPath = richPaths[i];
                     const bool isTemporary = AS_VALUE(TDataLiteral, tuple->GetValue(1))->AsValue().Get<bool>();
                     const bool isAnonymous = AS_VALUE(TDataLiteral, tuple->GetValue(5))->AsValue().Get<bool>();
                     const ui32 epoch = AS_VALUE(TDataLiteral, tuple->GetValue(6))->AsValue().Get<ui32>();
@@ -174,11 +187,12 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName internName) {
                     if (isTemporary && !isAnonymous) {
                         richYPath.Path_ = NYT::AddPathPrefix(tablePath, NYT::TConfig::Get()->Prefix);
                     } else {
-                        auto p = entry->Snapshots.FindPtr(std::make_pair(tablePath, epoch));
-                        YQL_ENSURE(p, "Table " << tablePath << " has no snapshot");
-                        richYPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p));
+                        with_lock (entry->Lock_) {
+                            auto p = entry->Snapshots.FindPtr(std::make_pair(tablePath, epoch));
+                            YQL_ENSURE(p, "Table " << tablePath << " has no snapshot");
+                            richYPath.Path(std::get<0>(*p)).TransactionId(std::get<1>(*p));
+                        }
                     }
-                    richPaths.push_back(richYPath);
 
                     const ui64 chunkCount = AS_VALUE(TDataLiteral, tuple->GetValue(3))->AsValue().Get<ui64>();
                     if (chunkCount > maxChunksForNativeDelivery) {
@@ -212,7 +226,7 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName internName) {
                             richYPath.TransactionId_.Clear();
                         }
 
-                        TTupleLiteral* samplingTuple = AS_VALUE(TTupleLiteral, callable.GetInput(2));
+                        TTupleLiteral* samplingTuple = AS_VALUE(TTupleLiteral, callable.GetInput(1));
                         if (samplingTuple->GetValuesCount() != 0) {
                             YQL_ENSURE(samplingTuple->GetValuesCount() == 3);
                             double samplingPercent = AS_VALUE(TDataLiteral, samplingTuple->GetValue(0))->AsValue().Get<double>();
@@ -317,18 +331,18 @@ TCallableVisitFunc TGatewayTransformer::operator()(TInternName internName) {
                     callable.GetType()->GetReturnType());
                 if (useBlocks) {
                     call.Add(PgmBuilder_.NewDataLiteral<NUdf::EDataSlot::String>(uniqueId));
-                    call.Add(callable.GetInput(4));  // orig struct type
+                    call.Add(callable.GetInput(3));  // orig struct type
                     call.Add(PgmBuilder_.NewDataLiteral(tableList->GetItemsCount()));
                     call.Add(PgmBuilder_.NewDataLiteral<NUdf::EDataSlot::String>(NYT::NodeToYsonString(specNode)));
                     call.Add(PgmBuilder_.NewDataLiteral(ETableContentDeliveryMode::File == deliveryMode)); // use compression
-                    call.Add(callable.GetInput(3)); // length
+                    call.Add(callable.GetInput(2)); // length
                 } else {
                     call.Add(PgmBuilder_.NewDataLiteral<NUdf::EDataSlot::String>(uniqueId));
                     call.Add(PgmBuilder_.NewDataLiteral(tableList->GetItemsCount()));
                     call.Add(PgmBuilder_.NewDataLiteral<NUdf::EDataSlot::String>(NYT::NodeToYsonString(specNode)));
                     call.Add(PgmBuilder_.NewDataLiteral(useSkiff));
                     call.Add(PgmBuilder_.NewDataLiteral(ETableContentDeliveryMode::File == deliveryMode)); // use compression
-                    call.Add(callable.GetInput(3)); // length
+                    call.Add(callable.GetInput(2)); // length
                 }
 
                 return TRuntimeNode(call.Build(), false);

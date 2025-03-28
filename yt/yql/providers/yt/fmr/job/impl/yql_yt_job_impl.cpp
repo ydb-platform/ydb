@@ -6,8 +6,7 @@
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_reader.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_table_data_service_writer.h>
 #include <yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h>
-#include <yt/yql/providers/yt/fmr/table_data_service/interface/table_data_service.h>
-#include <yt/yql/providers/yt/fmr/utils/parse_records.h>
+#include <yt/yql/providers/yt/fmr/utils/yql_yt_parse_records.h>
 #include <yt/yql/providers/yt/fmr/yt_service/impl/yql_yt_yt_service_impl.h>
 
 #include <yql/essentials/utils/log/log.h>

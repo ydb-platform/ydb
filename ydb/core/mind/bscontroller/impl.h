@@ -1571,6 +1571,7 @@ private:
     bool AllowMultipleRealmsOccupation = true;
     bool StorageConfigObtained = false;
     bool Loaded = false;
+    bool EnableConfigV2 = false;
     std::shared_ptr<TControlWrapper> EnableSelfHealWithDegraded;
 
     struct TLifetimeToken {};
@@ -1989,7 +1990,8 @@ private:
         std::optional<std::optional<TString>>&& storageYamlConfig,
         std::optional<NKikimrBlobStorage::TStorageConfig>&& storageConfig,
         std::optional<ui64> expectedStorageYamlConfigVersion,
-        std::unique_ptr<IEventHandle> handle);
+        std::unique_ptr<IEventHandle> handle,
+        std::optional<bool> switchEnableConfigV2);
 
     struct TVDiskAvailabilityTiming {
         TVSlotId VSlotId;

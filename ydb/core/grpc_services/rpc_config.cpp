@@ -226,13 +226,17 @@ public:
 
         auto shim = ConvertConfigReplaceRequest(*request);
 
+        const auto& ff = AppData()->FeatureFlags;
+
         return std::make_unique<TEvBlobStorage::TEvControllerReplaceConfigRequest>(
             shim.MainConfig,
             shim.StorageConfig,
             shim.SwitchDedicatedStorageSection,
             shim.DedicatedConfigMode,
             request->allow_unknown_fields() || request->bypass_checks(),
-            request->bypass_checks());
+            request->bypass_checks(),
+            /*enableConfigV2=*/ ff.GetSwitchToConfigV2(),
+            /*disableConfigV2=*/ ff.GetSwitchToConfigV1());
     }
 
 private:

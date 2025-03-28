@@ -897,7 +897,7 @@ void TCommandExplain::Config(TConfig& config) {
     config.Opts->AddLongOption('t', "type", "Query type [data, scan, generic]")
         .RequiredArgument("[String]").DefaultValue("data").StoreResult(&QueryType);
     config.Opts->AddLongOption("analyze", "Run query and collect execution statistics")
-        .NoArgument().SetFlag(&Analyze);
+        .StoreTrue(&Analyze);
     config.Opts->AddLongOption("flame-graph", "Builds resource usage flame graph, based on analyze info")
             .RequiredArgument("PATH").StoreResult(&FlameGraphPath);
     config.Opts->AddLongOption("collect-diagnostics", "Collects diagnostics and saves it to file")
@@ -1080,13 +1080,13 @@ void TCommandReadTable::Config(TConfig& config) {
     TYdbCommand::Config(config);
 
     config.Opts->AddLongOption("ordered", "Result should be ordered by primary key")
-        .NoArgument().SetFlag(&Ordered);
+        .StoreTrue(&Ordered);
     config.Opts->AddLongOption("limit", "Limit result rows count")
         .RequiredArgument("NUM").StoreResult(&RowLimit);
     config.Opts->AddLongOption("columns", "Comma separated list of columns to read")
         .RequiredArgument("CSV").StoreResult(&Columns);
     config.Opts->AddLongOption("count-only", "Print only rows count")
-        .NoArgument().SetFlag(&CountOnly);
+        .StoreTrue(&CountOnly);
     config.Opts->AddLongOption("from", "Key prefix value to start read from.\n"
             "  Format should be a json-string containing array of elements representing a tuple - key prefix.\n"
             "  Option \"--input-format\" defines how to parse binary strings.\n"
@@ -1100,9 +1100,9 @@ void TCommandReadTable::Config(TConfig& config) {
             "  Same format as for \"--from\" option.")
         .RequiredArgument("JSON").StoreResult(&To);
     config.Opts->AddLongOption("from-exclusive", "Don't include the left border element into response")
-        .NoArgument().SetFlag(&FromExclusive);
+        .StoreTrue(&FromExclusive);
     config.Opts->AddLongOption("to-exclusive", "Don't include the right border element into response")
-        .NoArgument().SetFlag(&ToExclusive);
+        .StoreTrue(&ToExclusive);
 
     AddLegacyJsonInputFormats(config);
 
@@ -1376,7 +1376,7 @@ void TCommandAttributeAdd::Config(TConfig& config) {
     TYdbCommand::Config(config);
 
     config.Opts->AddLongOption("attribute", "[At least one] key=value pair(s) to add.")
-        .RequiredArgument("KEY=VALUE").KVHandler([&](TString key, TString value) {
+        .RequiredArgument("KEY=VALUE").GetOpt().KVHandler([&](TString key, TString value) {
             Attributes[key] = value;
         });
 
@@ -1411,7 +1411,7 @@ void TCommandAttributeDrop::Config(TConfig& config) {
     TYdbCommand::Config(config);
 
     config.Opts->AddLongOption("attributes", "Attribute keys to drop.")
-        .RequiredArgument("KEY,[KEY...]").SplitHandler(&AttributeKeys, ',');
+        .RequiredArgument("KEY,[KEY...]").GetOpt().SplitHandler(&AttributeKeys, ',');
 
     config.SetFreeArgsNum(1);
     SetFreeArgTitle(0, "<table path>", "Path to a table");
@@ -1450,7 +1450,7 @@ void TCommandTtlSet::Config(TConfig& config) {
     config.Opts->AddLongOption("column", "Name of date- or integral-type column to be used to calculate expiration threshold.")
         .RequiredArgument("NAME").StoreResult(&ColumnName);
     config.Opts->AddLongOption("expire-after", "Additional time that must pass since expiration threshold.")
-        .RequiredArgument("SECONDS").DefaultValue(0).Handler1T<TDuration::TValue>(0, [this](const TDuration::TValue& arg) {
+        .RequiredArgument("SECONDS").DefaultValue(0).GetOpt().Handler1T<TDuration::TValue>(0, [this](const TDuration::TValue& arg) {
             ExpireAfter = TDuration::Seconds(arg);
         });
 
@@ -1459,7 +1459,7 @@ void TCommandTtlSet::Config(TConfig& config) {
         << "Interpretation of the value stored in integral-type column." << Endl
         << "Allowed units: " << allowedUnits;
     config.Opts->AddLongOption("unit", unitHelp)
-        .RequiredArgument("STRING").Handler1T<TString>("", [this, allowedUnits](const TString& arg) {
+        .RequiredArgument("STRING").GetOpt().Handler1T<TString>("", [this, allowedUnits](const TString& arg) {
             if (!arg) {
                 return;
             }
@@ -1473,7 +1473,7 @@ void TCommandTtlSet::Config(TConfig& config) {
         });
 
     config.Opts->AddLongOption("run-interval", "[Advanced] How often to run cleanup operation on the same partition.")
-        .RequiredArgument("SECONDS").Handler1T<TDuration::TValue>([this](const TDuration::TValue& arg) {
+        .RequiredArgument("SECONDS").GetOpt().Handler1T<TDuration::TValue>([this](const TDuration::TValue& arg) {
             RunInterval = TDuration::Seconds(arg);
         });
 

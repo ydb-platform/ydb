@@ -217,6 +217,7 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
     auto meta = MutableStageData().GetRemapDataToIndex(fetchContext);
     if (!meta) {
         NYDBTest::TControllers::GetColumnShardController()->OnIndexSelectProcessed({});
+        GetContext()->GetCommonContext()->GetCounters().OnNoIndex(GetRecordsCount());
         return NArrow::TColumnFilter::BuildAllowFilter();
     }
     AFL_VERIFY(meta->IsSkipIndex());
@@ -232,6 +233,7 @@ TConclusion<NArrow::TColumnFilter> TPortionDataSource::DoCheckIndex(
     const std::optional<ui64> cat = meta->CalcCategory(fetchContext.GetSubColumnName());
     const NIndexes::TIndexColumnChunked* infoPointer = GetStageData().GetIndexes()->GetIndexDataOptional(meta->GetIndexId());
     if (!infoPointer) {
+        GetContext()->GetCommonContext()->GetCounters().OnNoIndexBlobs(GetRecordsCount());
         return filter;
     }
     const auto info = *infoPointer;

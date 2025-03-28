@@ -22,6 +22,7 @@ import "ydb/library/actors/protos/actors.proto";
 import "ydb/library/formats/arrow/protos/accessor.proto";
 import "ydb/library/mkql_proto/protos/minikql.proto";
 import "ydb/public/api/protos/ydb_coordination.proto";
+import "ydb/public/api/protos/ydb_export.proto";
 import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_topic.proto";
 import "ydb/public/api/protos/ydb_value.proto";
@@ -1242,6 +1243,17 @@ message TBackupTask {
     optional TCompressionOptions Compression = 13;
     optional bool EnableChecksums = 16;
     optional bool EnablePermissions = 18;
+
+    // Encryption (currently available only for s3):
+    message TEncryptionSettings {
+        optional string EncryptionAlgorithm = 1;
+        optional bytes IV = 2;
+        oneof Key {
+            Ydb.Export.EncryptionSettings.SymmetricKey SymmetricKey = 3;
+        }
+    }
+
+    optional TEncryptionSettings EncryptionSettings = 19;
 }
 
 message TRestoreTask {
@@ -1533,6 +1545,7 @@ message TApplyIf {
     optional uint64 PathVersion = 2;
     optional uint64 LockedTxId = 3;
     optional bool CheckEntityVersion = 4 [default = false];
+    repeated EPathType PathTypes = 5;
 }
 
 message TUpgradeSubDomain {
@@ -2129,4 +2142,20 @@ message TImportTableChangefeeds {
 
 message TChangefeedUnderlyingTopics {
     repeated TPathDescription ChangefeedUnderlyingTopics = 1;
+}
+
+message TExportMetadata {
+    message TSchemaMappingItem {
+        optional string SourcePath = 1;
+        optional string DestinationPrefix = 2;
+
+        // encryption details
+        optional bytes IV = 3;
+    }
+
+    repeated TSchemaMappingItem SchemaMapping = 1;
+
+    optional string CompressionAlgorithm = 2;
+    optional string EncryptionAlgorithm = 3;
+    optional bytes IV = 4;
 }

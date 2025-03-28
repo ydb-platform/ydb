@@ -277,7 +277,7 @@ struct TCompare {
         : Info(keys)
         , KeyCellDefaults(keyDefaults)
     {
-        Y_ABORT_UNLESS(KeyCellDefaults->size() >= Info.size());
+        Y_ENSURE(KeyCellDefaults->size() >= Info.size());
     }
 
     bool operator()(const TRecord &record, TCells key) const

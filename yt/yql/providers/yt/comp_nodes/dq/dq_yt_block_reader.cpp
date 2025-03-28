@@ -15,6 +15,7 @@
 #include <yql/essentials/minikql/mkql_stats_registry.h>
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_type_builder.h>
+#include <yql/essentials/parser/pg_wrapper/interface/codec.h>
 
 #include <yt/yt/core/concurrency/thread_pool.h>
 #include <yt/yt/core/threading/thread.h>
@@ -309,25 +310,26 @@ public:
     }
 
     arrow::Status OnRecordBatchDecoded(std::shared_ptr<arrow::RecordBatch> batch) override {
-        NKikimr::NMiniKQL::TScopedAlloc scope(__LOCATION__);
-        TThrowingBindTerminator t;
-
-        YQL_ENSURE(batch);
-        MKQL_ADD_STAT(JobStats_, BlockCount, 1);
         std::vector<arrow::Datum> result;
-        YQL_ENSURE((size_t)batch->num_columns() == ColumnConverters_.size());
-        result.resize(ColumnConverters_.size());
-        size_t matchedColumns = 0;
-        for (size_t i = 0; i < ColumnConverters_.size(); ++i) {
-            auto columnIdxIt = ColumnOrderMapping.find(batch->schema()->field_names()[i]);
-            if (ColumnOrderMapping.end() == columnIdxIt) {
-                continue;
+        {
+            auto ctx = NCommon::CreateMemoryArenaContext();
+
+            YQL_ENSURE(batch);
+            MKQL_ADD_STAT(JobStats_, BlockCount, 1);
+            YQL_ENSURE((size_t)batch->num_columns() == ColumnConverters_.size());
+            result.resize(ColumnConverters_.size());
+            size_t matchedColumns = 0;
+            for (size_t i = 0; i < ColumnConverters_.size(); ++i) {
+                auto columnIdxIt = ColumnOrderMapping.find(batch->schema()->field_names()[i]);
+                if (ColumnOrderMapping.end() == columnIdxIt) {
+                    continue;
+                }
+                ++matchedColumns;
+                auto columnIdx =  columnIdxIt->second;
+                result[columnIdx] = std::move(ColumnConverters_[columnIdx]->Convert(batch->column(i)->data()));
             }
-            ++matchedColumns;
-            auto columnIdx =  columnIdxIt->second;
-            result[columnIdx] = std::move(ColumnConverters_[columnIdx]->Convert(batch->column(i)->data()));
+            Y_ENSURE(matchedColumns == ColumnOrderMapping.size());
         }
-        Y_ENSURE(matchedColumns == ColumnOrderMapping.size());
         Consumer_->HandleResult(std::make_shared<TResultBatch>(batch->num_rows(), std::move(result)));
         return arrow::Status::OK();
     }

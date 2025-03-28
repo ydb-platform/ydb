@@ -11,7 +11,7 @@
 LWTRACE_USING(ACTORLIB_PROVIDER);
 
 namespace NActors {
-    bool TEventOutputChannel::FeedDescriptor(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed) {
+    bool TEventOutputChannel::FeedDescriptor(TTcpPacketOutTask& task, TEventHolder& event) {
         const size_t amount = sizeof(TChannelPart) + sizeof(TEventDescr2);
         if (task.GetInternalFreeAmount() < amount) {
             return false;
@@ -48,8 +48,6 @@ namespace NActors {
         // append them to the packet
         task.Write<false>(&part, sizeof(part));
         task.Write<false>(&descr, sizeof(descr));
-
-        *weightConsumed += amount;
         OutputQueueSize -= sizeof(TEventDescr2);
         Metrics->UpdateOutputChannelEvents(ChannelId);
 
@@ -63,7 +61,7 @@ namespace NActors {
         }
     }
 
-    bool TEventOutputChannel::FeedBuf(TTcpPacketOutTask& task, ui64 serial, ui64 *weightConsumed) {
+    bool TEventOutputChannel::FeedBuf(TTcpPacketOutTask& task, ui64 serial) {
         for (;;) {
             Y_ABORT_UNLESS(!Queue.empty());
             TEventHolder& event = Queue.front();
@@ -101,7 +99,7 @@ namespace NActors {
                     break;
 
                 case EState::BODY:
-                    if (FeedPayload(task, event, weightConsumed)) {
+                    if (FeedPayload(task, event)) {
                         State = EState::DESCRIPTOR;
                     } else {
                         return false;
@@ -109,7 +107,7 @@ namespace NActors {
                     break;
 
                 case EState::DESCRIPTOR:
-                    if (!FeedDescriptor(task, event, weightConsumed)) {
+                    if (!FeedDescriptor(task, event)) {
                         return false;
                     }
                     event.Serial = serial;
@@ -230,7 +228,7 @@ namespace NActors {
         return complete;
     }
 
-    bool TEventOutputChannel::FeedPayload(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed) {
+    bool TEventOutputChannel::FeedPayload(TTcpPacketOutTask& task, TEventHolder& event) {
         for (;;) {
             // calculate inline or external part size (it may cover a few sections, not just single one)
             while (!PartLenRemain) {
@@ -255,8 +253,8 @@ namespace NActors {
 
             // serialize bytes
             const auto complete = IsPartInline
-                ? FeedInlinePayload(task, event, weightConsumed)
-                : FeedExternalPayload(task, event, weightConsumed);
+                ? FeedInlinePayload(task, event)
+                : FeedExternalPayload(task, event);
             if (!complete) { // no space to serialize
                 return false;
             } else if (*complete) { // event serialized
@@ -265,7 +263,7 @@ namespace NActors {
         }
     }
 
-    std::optional<bool> TEventOutputChannel::FeedInlinePayload(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed) {
+    std::optional<bool> TEventOutputChannel::FeedInlinePayload(TTcpPacketOutTask& task, TEventHolder& event) {
         if (task.GetInternalFreeAmount() <= sizeof(TChannelPart)) {
             return std::nullopt;
         }
@@ -284,13 +282,12 @@ namespace NActors {
         };
 
         task.WriteBookmark(std::move(partBookmark), &part, sizeof(part));
-        *weightConsumed += sizeof(TChannelPart) + part.Size;
         OutputQueueSize -= part.Size;
 
         return complete;
     }
 
-    std::optional<bool> TEventOutputChannel::FeedExternalPayload(TTcpPacketOutTask& task, TEventHolder& event, ui64 *weightConsumed) {
+    std::optional<bool> TEventOutputChannel::FeedExternalPayload(TTcpPacketOutTask& task, TEventHolder& event) {
         const size_t partSize = sizeof(TChannelPart) + sizeof(ui8) + sizeof(ui16) + (Params.Encryption ? 0 : sizeof(ui32));
         if (task.GetInternalFreeAmount() < partSize || task.GetExternalFreeAmount() == 0) {
             return std::nullopt;
@@ -330,8 +327,6 @@ namespace NActors {
         }
 
         task.WriteBookmark(std::move(partBookmark), buffer, partSize);
-
-        *weightConsumed += partSize + bytesSerialized;
         OutputQueueSize -= bytesSerialized;
 
         return complete;

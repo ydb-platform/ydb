@@ -170,7 +170,12 @@ class Nodes(object):
     def _download_sky(self, url, remote_path):
         self._logger.info(f"download from '{url}' to '{remote_path}'")
         tmp_path = url.split(":")[-1]
-        running_jobs = self.execute_async_ret(f'sky get -w -d {tmp_path} {url} && sudo mv {tmp_path}/* {remote_path} && rm -rf {tmp_path}')
+        script = (
+            f'sky get -wu -d {tmp_path} {url} && '
+            f'for FILE in `find {tmp_path} -name *.tgz -or -name *.tar`; do tar -C {tmp_path} -xf $FILE && rm $FILE; done && '
+            f'sudo mv {tmp_path}/* {remote_path} && rm -rf {tmp_path}'
+        )
+        running_jobs = self.execute_async_ret(script)
         self._check_async_execution(running_jobs, retry_attemps=2)
 
     def _download_http(self, url, remote_path):

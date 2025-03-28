@@ -5,6 +5,7 @@
 #include "flat_row_remap.h"
 #include "flat_row_state.h"
 #include "flat_range_cache.h"
+#include "util_fmt_abort.h"
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 
@@ -414,7 +415,7 @@ private:
 
     static TIteratorIndex IteratorIndexFromSize(size_t size) {
         TIteratorIndex index = size;
-        Y_ABORT_UNLESS(index == size, "Iterator index overflow");
+        Y_ENSURE(index == size, "Iterator index overflow");
         return index;
     }
 
@@ -552,7 +553,7 @@ inline void TTableIterBase<TIteratorOps>::Push(TAutoPtr<TRunIter> it)
 template<class TIteratorOps>
 inline void TTableIterBase<TIteratorOps>::StopBefore(TArrayRef<const TCell> key)
 {
-    Y_ABORT_UNLESS(!StopKey, "Using multiple stop keys not allowed");
+    Y_ENSURE(!StopKey, "Using multiple stop keys not allowed");
 
     if (Y_UNLIKELY(!key)) {
         return;
@@ -569,7 +570,7 @@ inline void TTableIterBase<TIteratorOps>::StopBefore(TArrayRef<const TCell> key)
 template<class TIteratorOps>
 inline void TTableIterBase<TIteratorOps>::StopAfter(TArrayRef<const TCell> key)
 {
-    Y_ABORT_UNLESS(!StopKey, "Using multiple stop keys not allowed");
+    Y_ENSURE(!StopKey, "Using multiple stop keys not allowed");
 
     if (Y_UNLIKELY(!key)) {
         return;
@@ -672,12 +673,12 @@ inline EReady TTableIterBase<TIteratorOps>::Turn()
                         break;
 
                     default:
-                        Y_ABORT("Unexpected EReady value");
+                        Y_TABLET_ERROR("Unexpected EReady value");
                 }
                 break;
             }
             default: {
-                Y_ABORT("Unexpected iterator type");
+                Y_TABLET_ERROR("Unexpected iterator type");
             }
         }
     }
@@ -764,7 +765,7 @@ inline TRowVersion TTableIterBase<TIteratorOps>::GetRowVersion() const
             return RunIters[ai.Index]->GetRowVersion();
         }
         default:
-            Y_ABORT("Unexpected iterator type");
+            Y_TABLET_ERROR("Unexpected iterator type");
     }
 }
 
@@ -833,7 +834,7 @@ inline EReady TTableIterBase<TIteratorOps>::Snap(TRowVersion rowVersion)
                 break;
             }
             default:
-                Y_ABORT("Unexpected iterator type");
+                Y_TABLET_ERROR("Unexpected iterator type");
         }
 
         // The last iterator becomes inactive
@@ -873,7 +874,7 @@ inline EReady TTableIterBase<TIteratorOps>::DoSkipUncommitted()
                 break;
             }
             default:
-                Y_ABORT("Unexpected iterator type");
+                Y_TABLET_ERROR("Unexpected iterator type");
         }
 
         // The last iterator becomes inactive
@@ -946,7 +947,7 @@ inline EReady TTableIterBase<TIteratorOps>::Apply()
                 break;
             }
             default:
-                Y_ABORT("Unexpected iterator type");
+                Y_TABLET_ERROR("Unexpected iterator type");
         }
 
         if (State.IsFinalized() || !committed)
@@ -984,7 +985,7 @@ inline void TTableIterBase<TIteratorOps>::InitLastKey(ERowOp op)
             break;
         }
         default: {
-            Y_ABORT("Unexpected iterator type");
+            Y_TABLET_ERROR("Unexpected iterator type");
         }
     }
 
@@ -1077,12 +1078,12 @@ inline bool TTableIterBase<TIteratorOps>::SeekInternal(TArrayRef<const TCell> ke
                         break;
 
                     default:
-                        Y_ABORT("Unexpected EReady value");
+                        Y_TABLET_ERROR("Unexpected EReady value");
                 }
                 break;
             }
             default: {
-                Y_ABORT("Unexpected iterator type");
+                Y_TABLET_ERROR("Unexpected iterator type");
             }
         }
     }

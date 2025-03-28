@@ -1955,6 +1955,7 @@ public:
     const std::string& GetId() const;
     const std::optional<std::string>& GetText() const;
     TParamsBuilder GetParamsBuilder() const;
+    std::map<std::string, TType> GetParameterTypes() const;
 
     TAsyncDataQueryResult Execute(const TTxControl& txControl,
         const TExecDataQuerySettings& settings = TExecDataQuerySettings());

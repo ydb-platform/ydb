@@ -49,40 +49,16 @@ void TFederatedTopicClient::TImpl::InitObserver() {
     }
 }
 
-IOutputStream& operator<<(IOutputStream& out, NTopic::TTopicClientSettings const& settings) {
-    out << "{"
-        << " Database: " << settings.Database_
-        << " DiscoveryEndpoint: " << settings.DiscoveryEndpoint_
-        << " DiscoveryMode: " << (settings.DiscoveryMode_ ? (int)*settings.DiscoveryMode_ : -1)
-        << " }";
-    return out;
-}
-
-IOutputStream& operator<<(IOutputStream& out, NTopic::TDescribeTopicSettings const& settings) {
-    out << "{"
-        << " TraceId: " << settings.TraceId_
-        << " ClientTimeout: " << settings.ClientTimeout_
-        << " CancelAfter: " << settings.CancelAfter_
-        << " ForgetAfter: " << settings.ForgetAfter_
-        << " OperationTimeout: " << settings.OperationTimeout_
-        << " IncludeLocation: " << settings.IncludeLocation_
-        << " IncludeStats: " << settings.IncludeStats_
-        << " RequestType: " << settings.RequestType_
-        << " }";
-    return out;
-}
-
 NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> TFederatedTopicClient::TImpl::GetAllClusterInfo() {
     InitObserver();
     return Observer->WaitForFirstState().Apply(
             [weakObserver = std::weak_ptr(Observer)] (const auto& ) {
+                std::vector<TClusterInfo> result;
                 auto observer = weakObserver.lock();
                 if (!observer) {
-                    throw yexception() << "Lost observer"; // TODO better message?
+                    return result;
                 }
                 auto state = observer->GetState();
-                NYdb::NStatusHelpers::ThrowOnError(state->Status);
-                std::vector<TClusterInfo> result;
                 result.reserve(state->DbInfos.size());
                 for (const auto& db: state->DbInfos) {
                     auto& dbinfo = result.emplace_back();

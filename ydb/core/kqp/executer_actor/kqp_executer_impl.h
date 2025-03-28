@@ -70,6 +70,7 @@ using EExecType = TEvKqpExecuter::TEvTxResponse::EExecutionType;
 
 const ui64 MaxTaskSize = 48_MB;
 constexpr ui64 PotentialUnsigned64OverflowLimit = (std::numeric_limits<ui64>::max() >> 1);
+constexpr ui64 PriorityTxShift = 32;
 
 std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const TStageInfo& stageInfo, const TTask& task);
 
@@ -265,6 +266,9 @@ protected:
         for (auto& [shardId, nodeId] : ShardIdToNodeId) {
             ShardsOnNode[nodeId].push_back(shardId);
             ParticipantNodes.emplace(nodeId);
+            if (TxManager) {
+                TxManager->AddParticipantNode(nodeId);
+            }
         }
 
         if (IsDebugLogEnabled()) {
@@ -960,6 +964,8 @@ protected:
             if (!settings.GetInconsistentTx() && TasksGraph.GetMeta().LockMode) {
                 settings.SetLockMode(*TasksGraph.GetMeta().LockMode);
             }
+
+            settings.SetPriority((task.StageId.TxId << PriorityTxShift) + settings.GetPriority());
 
             output.SinkSettings.ConstructInPlace();
             output.SinkSettings->PackFrom(settings);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/generic/utility.h>
+#include <util/generic/yexception.h>
 #include <util/system/align.h>
 #include <util/system/yassert.h>
 #include <memory>
@@ -141,19 +142,19 @@ namespace NKikimr::NUtil {
         }
 
         void BeginTransaction() {
-            Y_ABORT_UNLESS(!RollbackState_);
+            Y_ENSURE(!RollbackState_);
             auto& state = RollbackState_.emplace();
             state.Chunk = Current;
             state.Ptr = Current->Ptr;
         }
 
         void CommitTransaction() {
-            Y_ABORT_UNLESS(RollbackState_);
+            Y_ENSURE(RollbackState_);
             RollbackState_.reset();
         }
 
         void RollbackTransaction() {
-            Y_ABORT_UNLESS(RollbackState_);
+            Y_ENSURE(RollbackState_);
             auto& state = *RollbackState_;
             DoRollback(state.Chunk, state.Ptr);
             RollbackState_.reset();
@@ -193,7 +194,7 @@ namespace NKikimr::NUtil {
         }
 
         TChunk* AddChunk(size_t size) {
-            Y_ABORT_UNLESS(!Current->Next);
+            Y_ENSURE(!Current->Next);
             size_t hint = Max(AlignUp<size_t>(sizeof(TChunk), PLATFORM_DATA_ALIGN) + size, Current->ChunkSize() + 1);
             TChunk* next = AllocateChunk(hint);
             Total_ += next->ChunkSize();
@@ -229,7 +230,7 @@ namespace NKikimr::NUtil {
                     Wasted_ -= nextWasted;
                     // Switch to the next chunk in the chain
                     chunk = chunk->Next;
-                    Y_ABORT_UNLESS(chunk, "Rollback cannot find current chunk in the chain");
+                    Y_ENSURE(chunk, "Rollback cannot find current chunk in the chain");
                     // Reset chunk and add it to stats as wasted/free space
                     nextUsed = chunk->Used();
                     nextWasted = chunk->Wasted();

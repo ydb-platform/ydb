@@ -7,6 +7,7 @@
 #include "logic_redo_entry.h"
 #include "logic_redo_queue.h"
 #include "probes.h"
+#include "util_fmt_abort.h"
 #include "util_string.h"
 #include <ydb/core/tablet_flat/flat_executor.pb.h>
 #include <util/system/sanitizers.h>
@@ -121,7 +122,7 @@ void TLogicRedo::FlushBatchedLog()
         CommitManager->Commit(commit);
     }
 
-    Y_ABORT_UNLESS(Batch->Commit == nullptr, "Batch still has acquired commit");
+    Y_ENSURE(Batch->Commit == nullptr, "Batch still has acquired commit");
 }
 
 TLogicRedo::TCommitRWTransactionResult TLogicRedo::CommitRWTransaction(
@@ -129,7 +130,7 @@ TLogicRedo::TCommitRWTransactionResult TLogicRedo::CommitRWTransaction(
 {
     seat->CommitTimer.Reset();
 
-    Y_ABORT_UNLESS(force || !(change.Scheme || change.Annex));
+    Y_ENSURE(force || !(change.Scheme || change.Annex));
 
     const TTxType txType = seat->TxType;
 
@@ -164,7 +165,7 @@ TLogicRedo::TCommitRWTransactionResult TLogicRedo::CommitRWTransaction(
 
         for (auto &one: change.Annex) {
             if (one.GId.Logo.Step() != commit->Step) {
-                Y_Fail(
+                Y_TABLET_ERROR(
                     "Leader{" << Cookies->Tablet << ":" << Cookies->Gen << "}"
                     << " got for " << NFmt::Do(*commit) << " annex blob "
                     << one.GId.Logo << " out of step order");
@@ -178,12 +179,7 @@ TLogicRedo::TCommitRWTransactionResult TLogicRedo::CommitRWTransaction(
             ref.Tactic = TEvBlobStorage::TEvPut::ETactic::TacticMaxThroughput;
         }
 
-        /* Sometimes clang drops the last emplace_back above if move was used
-            before for data field. This hacky Y_ABORT_UNLESS prevents this and check
-            that emplace always happens.
-         */
-
-        Y_ABORT_UNLESS(was + change.Annex.size() == commit->GcDelta.Created.size());
+        Y_ENSURE(was + change.Annex.size() == commit->GcDelta.Created.size());
 
         return { commit, false };
     } else {
@@ -245,16 +241,17 @@ void TLogicRedo::MakeLogEntry(TLogCommit &commit, TString redo, TArrayRef<const 
 }
 
 ui64 TLogicRedo::Confirm(ui32 step, const TActorContext &ctx, const TActorId &ownerId) {
-    Y_ABORT_UNLESS(!CompletionQueue.empty(), "t: %" PRIu64
-        " non-expected confirmation %" PRIu32
-        ", prev %" PRIu32, Cookies->Tablet, step, PrevConfirmedStep);
+    Y_ENSURE(!CompletionQueue.empty(),
+        "tablet: " << Cookies->Tablet
+        << " unexpected confirmation step: " << step
+        << ", prev: " << PrevConfirmedStep);
 
-    Y_ABORT_UNLESS(CompletionQueue.front().Step == step, "t: %" PRIu64
-        " inconsistent confirmation head: %" PRIu32
-        ", step: %" PRIu32
-        ", queue size: %" PRISZT
-        ", prev confimed: %" PRIu32
-        , Cookies->Tablet, CompletionQueue.front().Step, step, CompletionQueue.size(), PrevConfirmedStep);
+    Y_ENSURE(CompletionQueue.front().Step == step,
+        "tablet: " << Cookies->Tablet
+        << " inconsistent confirmation step: " << step
+        << ", queue head: " << CompletionQueue.front().Step
+        << ", queue size: " << CompletionQueue.size()
+        << ", prev confimed: " << PrevConfirmedStep);
 
     PrevConfirmedStep = step;
 
@@ -263,8 +260,9 @@ ui64 TLogicRedo::Confirm(ui32 step, const TActorContext &ctx, const TActorId &ow
     do {
         TCompletionEntry &entry = CompletionQueue.front();
 
-        Y_ABORT_UNLESS(entry.Transactions,
-            "tablet: %" PRIu64 " entry without transactions, step: %" PRIu32, Cookies->Tablet, step);
+        Y_ENSURE(entry.Transactions,
+            "tablet: " << Cookies->Tablet
+            << " entry without transactions, step: " << step);
 
         std::unique_ptr<TSeat> seat{entry.Transactions.PopFront()};
 
@@ -308,7 +306,7 @@ ui64 TLogicRedo::Confirm(ui32 step, const TActorContext &ctx, const TActorId &ow
 
 void TLogicRedo::SnapToLog(NKikimrExecutorFlat::TLogSnapshot &snap)
 {
-    Y_ABORT_UNLESS(Batch->Commit == nullptr);
+    Y_ENSURE(Batch->Commit == nullptr);
 
     Queue->Flush(snap);
 

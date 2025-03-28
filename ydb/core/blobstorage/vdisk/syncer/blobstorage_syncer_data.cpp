@@ -166,7 +166,7 @@ namespace NKikimr {
                                    const TActorId &notifyId,
                                    const TVDiskIdShort &self,
                                    std::shared_ptr<TBlobStorageGroupInfo::TTopology> top)
-        : LogPrefix(logPrefix)
+        : VDiskLogPrefix(logPrefix)
         , NotifyId(notifyId)
         , Neighbors(self, top)
         , QuorumTracker(self, top, false)
@@ -188,29 +188,29 @@ namespace NKikimr {
     }
 
     void TSyncNeighbors::OldParse(IInputStream &str) {
-        TOldDes des(str);
+        TOldDes des(VDiskLogPrefix, str);
         Neighbors.GenericParse(des);
     }
 
     void TSyncNeighbors::OldParse(const TString &data) {
-        Y_ABORT_UNLESS(!data.empty());
+        Y_VERIFY_S(!data.empty(), VDiskLogPrefix);
         TStringInput str(data);
         OldParse(str);
     }
 
     void TSyncNeighbors::Parse(IInputStream &str) {
-        TDes des(str);
+        TDes des(VDiskLogPrefix, str);
         Neighbors.GenericParse(des);
     }
 
     void TSyncNeighbors::Parse(const TString &data) {
-        Y_ABORT_UNLESS(!data.empty());
+        Y_VERIFY_S(!data.empty(), VDiskLogPrefix);
         TStringInput str(data);
         Parse(str);
     }
 
     void TSyncNeighbors::Parse(const NKikimrVDiskData::TSyncerEntryPoint &pb) {
-        TDes des(&pb);
+        TDes des(VDiskLogPrefix, &pb);
         Neighbors.GenericParse(des);
     }
 
@@ -220,7 +220,7 @@ namespace NKikimr {
     void TSyncNeighbors::ApplyChanges(const TActorContext &ctx,
                                       const NSyncer::TSyncerJobTask *task,
                                       TDuration syncTimeInterval) {
-        LOG_INFO(ctx, BS_SYNCER, VDISKP(LogPrefix, "JOB_DONE: %s", task->ToString().data()));
+        LOG_INFO(ctx, BS_SYNCER, VDISKP(VDiskLogPrefix, "JOB_DONE: %s", task->ToString().data()));
 
         TDuration timeout = task->IsFullRecoveryTask() ? TDuration::Seconds(0) : syncTimeInterval;
         TInstant schTime = TAppData::TimeProvider->Now() + timeout;
@@ -268,7 +268,7 @@ namespace NKikimr {
         if (!serProto.empty()) {
             NKikimrVDiskData::TSyncerEntryPoint proto;
             auto status = proto.ParseFromString(serProto);
-            Y_ABORT_UNLESS(status);
+            Y_VERIFY_S(status, VDiskLogPrefix);
             LocalSyncerState.Parse(proto.GetLocalGuidInfo());
             Neighbors->Parse(proto);
 
@@ -323,7 +323,8 @@ namespace NKikimr {
                              const TVDiskIdShort &selfVDisk,
                              std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
                              const TString &entryPoint)
-        : Neighbors(MakeIntrusive<TSyncNeighbors>(logPrefix,
+        : VDiskLogPrefix(logPrefix)
+        , Neighbors(MakeIntrusive<TSyncNeighbors>(logPrefix,
                                                   notifyId,
                                                   selfVDisk,
                                                   top))
@@ -331,7 +332,7 @@ namespace NKikimr {
         , NotifyId(notifyId)
         , CurrentCompatibilityInfo(CompatibilityInfo.MakeStored(NKikimrConfig::TCompatibilityRule::VDisk))
     {
-        TString serProto = WithoutSignature(Convert(selfVDisk, top, entryPoint));
+        TString serProto = WithoutSignature(Convert(logPrefix, selfVDisk, top, entryPoint));
         ParseWOSignature(serProto);
     }
 
@@ -340,7 +341,8 @@ namespace NKikimr {
                              const TVDiskIdShort &selfVDisk,
                              std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
                              TContiguousSpan entryPoint)
-        : Neighbors(MakeIntrusive<TSyncNeighbors>(logPrefix,
+        : VDiskLogPrefix(logPrefix)
+        , Neighbors(MakeIntrusive<TSyncNeighbors>(logPrefix,
                                                   notifyId,
                                                   selfVDisk,
                                                   top))
@@ -348,7 +350,7 @@ namespace NKikimr {
         , NotifyId(notifyId)
         , CurrentCompatibilityInfo(CompatibilityInfo.MakeStored(NKikimrConfig::TCompatibilityRule::VDisk))
     {
-        TString serProto = WithoutSignature(Convert(selfVDisk, top, entryPoint));
+        TString serProto = WithoutSignature(Convert(logPrefix, selfVDisk, top, entryPoint));
         ParseWOSignature(serProto);
     }
 
@@ -361,7 +363,7 @@ namespace NKikimr {
                                       bool suppressCompatibilityCheck) {
         try {
             TSyncerData n(logPrefix, notifyId, selfVDisk, top);
-            TString serProto = WithoutSignature(Convert(selfVDisk, top, entryPoint));
+            TString serProto = WithoutSignature(Convert(logPrefix, selfVDisk, top, entryPoint));
             n.ParseWOSignature(serProto);
             return suppressCompatibilityCheck || n.CheckCompatibility(errorReason);
         } catch (yexception e) {
@@ -379,7 +381,7 @@ namespace NKikimr {
                                       bool suppressCompatibilityCheck) {
         try {
             TSyncerData n(logPrefix, notifyId, selfVDisk, top);
-            TString serProto = WithoutSignature(Convert(selfVDisk, top, entryPoint)); //FIXME(innokentii) unnecessary copy
+            TString serProto = WithoutSignature(Convert(logPrefix, selfVDisk, top, entryPoint)); //FIXME(innokentii) unnecessary copy
             n.ParseWOSignature(serProto);
             return suppressCompatibilityCheck || n.CheckCompatibility(errorReason);
         } catch (yexception e) {
@@ -390,7 +392,8 @@ namespace NKikimr {
 
     // Convert from old entry point format to protobuf format
     // TODO: we can remove this function after migrating to the protobuf format
-    TString TSyncerData::Convert(const TVDiskIdShort &selfVDisk,
+    TString TSyncerData::Convert(const TString& logPrefix,
+                                const TVDiskIdShort &selfVDisk,
                                 std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
                                 const TString &entryPoint) {
         if (entryPoint.empty()) {
@@ -410,7 +413,7 @@ namespace NKikimr {
                 // create empty neighbors
                 TNeighbors n(selfVDisk, top);
                 // parse from old format data
-                TSyncNeighbors::TOldDes des(str);
+                TSyncNeighbors::TOldDes des(logPrefix, str);
                 n.GenericParse(des);
                 // recover groupId and groupGen for further conversion
                 TGroupId groupId = des.GetGroupId();
@@ -428,7 +431,8 @@ namespace NKikimr {
         }
     }
 
-    TString TSyncerData::Convert(const TVDiskIdShort &selfVDisk,
+    TString TSyncerData::Convert(const TString& logPrefix,
+                                const TVDiskIdShort &selfVDisk,
                                 std::shared_ptr<TBlobStorageGroupInfo::TTopology> top,
                                 const TContiguousSpan &entryPoint) {
         if (entryPoint.size() == 0) {
@@ -448,7 +452,7 @@ namespace NKikimr {
                 // create empty neighbors
                 TNeighbors n(selfVDisk, top);
                 // parse from old format data
-                TSyncNeighbors::TOldDes des(str);
+                TSyncNeighbors::TOldDes des(logPrefix, str);
                 n.GenericParse(des);
                 // recover groupId and groupGen for further conversion
                 TGroupId groupId = des.GetGroupId();

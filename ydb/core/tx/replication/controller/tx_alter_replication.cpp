@@ -58,6 +58,14 @@ public:
                     desiredState = TReplication::EState::Done;
                     alter = true;
                     break;
+                case NKikimrReplication::TReplicationState::kPaused:
+                    desiredState = TReplication::EState::Paused;
+                    alter = true;
+                    break;
+                case NKikimrReplication::TReplicationState::kStandBy:
+                    desiredState = TReplication::EState::Ready;
+                    alter = true;
+                    break;
                 default:
                     Y_ABORT("Invalid state");
                 }

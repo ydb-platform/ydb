@@ -2,10 +2,38 @@
 #include "fq_setup.h"
 
 #include <library/cpp/colorizer/colors.h>
+#include <library/cpp/json/json_prettifier.h>
+
+#include <regex>
 
 using namespace NKikimrRun;
 
 namespace NFqRun {
+
+namespace {
+
+TString CanonizeEndpoints(TString str, const NFq::NConfig::TGatewaysConfig& gatewaysConfig) {
+    // Replace endpoints.
+    for (const auto& pqCluster : gatewaysConfig.GetPq().GetClusterMapping()) {
+        TStringBuilder clusterEndpointName;
+        clusterEndpointName << "<pq_" << pqCluster.GetName() << "_endpoint>";
+        SubstGlobal(str, pqCluster.GetEndpoint(), clusterEndpointName);
+    }
+    for (const auto& solomonCluster : gatewaysConfig.GetSolomon().GetClusterMapping()) {
+        TStringBuilder clusterEndpointName;
+        clusterEndpointName << "<solomon_" << solomonCluster.GetName() << "_endpoint>";
+        SubstGlobal(str, solomonCluster.GetCluster(), clusterEndpointName);
+    }
+    return str;
+}
+
+TString CanonizeAstLogicalId(TString ast) {
+    // '('('"_logical_id" '171840)))) ---------> '('('"_logical_id" '0))))
+    std::regex re(R"foo(("_logical_id" ')(\d+))foo");
+    return std::regex_replace(ast.c_str(), re, "$010").c_str();
+}
+
+}  // anonymous namespace
 
 class TFqRunner::TImpl {
     using EVerbose = TFqSetupSettings::EVerbose;
@@ -156,6 +184,8 @@ private:
             Sleep(Options.PingPeriod);
         }
 
+        PrintQueryAst(ExecutionMeta.Ast);
+        PrintQueryPlan(ExecutionMeta.Plan);
         if (VerboseLevel >= EVerbose::Info) {
             Cout << CoutColors.Cyan() << "Query finished. Duration: " << TInstant::Now() - StartTime << CoutColors.Default() << Endl;
         }
@@ -176,6 +206,42 @@ private:
         if (Options.TraceOptAll || Options.TraceOptIds.contains(queryId)) {
             FqSetup.StartTraceOpt();
         }
+    }
+
+    void PrintQueryAst(TString ast) const {
+        if (!Options.AstOutput) {
+            return;
+        }
+        if (VerboseLevel >= EVerbose::Info) {
+            Cout << CoutColors.Cyan() << "Writing query ast" << CoutColors.Default() << Endl;
+        }
+        if (Options.CanonicalOutput) {
+            ast = CanonizeEndpoints(ast, Options.FqSettings.FqConfig.GetGateways());
+            ast = CanonizeAstLogicalId(ast);
+        }
+        Options.AstOutput->Write(ast);
+    }
+
+    void PrintQueryPlan(TString plan) const {
+        if (!Options.PlanOutput) {
+            return;
+        }
+        if (VerboseLevel >= EVerbose::Info) {
+            Cout << CoutColors.Cyan() << "Writing query plan" << CoutColors.Default() << Endl;
+        }
+        if (!plan) {
+            return;
+        }
+
+        NJson::TJsonValue planJson;
+        NJson::ReadJsonTree(plan, &planJson, true);
+        plan = NJson::PrettifyJson(plan, false);
+
+        if (Options.CanonicalOutput) {
+            plan = CanonizeEndpoints(plan, Options.FqSettings.FqConfig.GetGateways());
+        }
+
+        Options.PlanOutput->Write(plan);
     }
 
 private:

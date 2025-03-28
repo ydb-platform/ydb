@@ -498,12 +498,14 @@ private:
             return;
         }
 
+        // TODO support row tables
+        if (entry.Status == TNavigate::EStatus::PathNotTable || entry.Kind != TNavigate::KindColumnTable) {
+            return LogCritAndLeave("Only column tables are supported as transfer targets");
+        }
+
         if (!CheckEntrySucceeded(entry)) {
             return;
         }
-
-        // TODO support row tables
-        CheckEntryKind(entry, TNavigate::KindColumnTable);
 
         if (entry.Kind == TNavigate::KindColumnTable) {
             TableState = std::make_unique<TColumnTableState>(SelfId(), result);

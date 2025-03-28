@@ -94,7 +94,7 @@ namespace NKikimr {
                 it.Next();
                 ++lsn;
             }
-            Y_ABORT_UNLESS(lsn <= seg->Info.LastLsn + 1);
+            Y_VERIFY_S(lsn <= seg->Info.LastLsn + 1, VCtx->VDiskLogPrefix);
             // Check for memory overflow
             if (SyncLogPtr->GetNumberOfPagesInMemory() > MaxMemPages)
                 DelayedActions.SetMemOverflow();
@@ -335,7 +335,7 @@ namespace NKikimr {
                     SyncLogPtr->GetNumberOfPagesInMemory() - MaxMemPages : 0;
 
                 // if wantToCutRecoveryLog, then FreeUpToLsn must > 0
-                Y_ABORT_UNLESS(!wantToCutRecoveryLog || (FreeUpToLsn > 0));
+                Y_VERIFY_S(!wantToCutRecoveryLog || (FreeUpToLsn > 0), VCtx->VDiskLogPrefix);
                 const ui64 freeUpToLsn = wantToCutRecoveryLog ? FreeUpToLsn : 0;
 
                 // build swap snap
@@ -407,4 +407,3 @@ namespace NKikimr {
 
     } // NSyncLog
 } // NKikimr
-

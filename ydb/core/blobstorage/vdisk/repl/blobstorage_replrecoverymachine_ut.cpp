@@ -67,7 +67,7 @@ namespace NKikimr {
             auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
             auto vctx = MakeIntrusive<TVDiskContext>(TActorId(), info->PickTopology(), counters, TVDiskID(TGroupId::FromValue(0), 1, 0, 0, 0),
                 nullptr, NPDisk::DEVICE_TYPE_UNKNOWN);
-            auto hugeBlobCtx = std::make_shared<THugeBlobCtx>(nullptr, true);
+            auto hugeBlobCtx = std::make_shared<THugeBlobCtx>("", nullptr, true);
             auto replCtx = std::make_shared<TReplCtx>(
                 vctx,
                 nullptr, // HullCtx

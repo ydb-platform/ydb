@@ -248,7 +248,7 @@ namespace NActors {
                 }
             } else {
                 TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
-                if (const ui32 activation = std::visit([&revolvingCounter](auto &x) {return x.Pop(++revolvingCounter);}, Activations)) {
+                if (const ui32 activation = std::visit([&revolvingCounter](auto &x) {return x.Pop(revolvingCounter++);}, Activations)) {
                     EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "activation found");
                     Threads[workerId].SetWork();
                     AtomicDecrement(Semaphore);
@@ -381,6 +381,7 @@ namespace NActors {
             x = AtomicIncrement(Semaphore);
             needToChangeOldSemaphore = false;
             semaphore = TSemaphore::GetSemaphore(x);
+            EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "Semaphore incremented to ", semaphore.OldSemaphore, " CurrentSleepThreadCount == ", semaphore.CurrentSleepThreadCount);
         } else {
             x = *initSemaphore;
             semaphore = TSemaphore::GetSemaphore(x);
@@ -796,7 +797,7 @@ namespace NActors {
                 return nullptr;
             } else {
                 TInternalActorTypeGuard<EInternalActorSystemActivity::ACTOR_SYSTEM_GET_ACTIVATION_FROM_QUEUE, false> activityGuard;
-                if (const ui32 activation = std::visit([&revolvingCounter](auto &x) {return x.Pop(++revolvingCounter);}, Activations)) {
+                if (const ui32 activation = std::visit([&revolvingCounter](auto &x) {return x.Pop(revolvingCounter++);}, Activations)) {
                     SharedPool->Threads[workerId].SetWork();
                     AtomicDecrement(Semaphore);
                     EXECUTOR_POOL_BASIC_DEBUG(EDebugLevel::Activation, "activation == ", activation, " semaphore == ", semaphore.OldSemaphore);

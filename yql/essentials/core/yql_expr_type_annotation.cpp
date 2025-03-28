@@ -4313,7 +4313,7 @@ bool IsDataTypeTzDate(EDataSlot dataSlot) {
 }
 
 bool IsDataTypeBigDate(EDataSlot dataSlot) {
-    return (NUdf::GetDataTypeInfo(dataSlot).Features & NUdf::BigDateType);
+    return (NUdf::GetDataTypeInfo(dataSlot).Features & NUdf::ExtDateType);
 }
 
 EDataSlot WithTzDate(EDataSlot dataSlot) {

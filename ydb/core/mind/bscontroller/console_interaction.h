@@ -47,18 +47,20 @@ namespace NKikimr::NBsController {
         bool NeedRetrySession = false;
         bool Working = false;
         bool CommitInProgress = false;
+        std::optional<bool> SwitchEnableConfigV2;
+        TEvBlobStorage::TEvControllerReplaceConfigRequest::TPtr PendingReplaceRequest;
 
         std::optional<TString> PendingYamlConfig;
         bool AllowUnknownFields = false;
-
         std::optional<std::optional<TString>> PendingStorageYamlConfig;
+        std::optional<ui64> ExpectedYamlConfigVersion;
 
         void MakeCommitToConsole(TString& config, ui32 configVersion);
         void MakeGetBlock();
         void MakeRetrySession();
 
         void IssueGRpcResponse(NKikimrBlobStorage::TEvControllerReplaceConfigResponse::EStatus status,
-            std::optional<TString> errorReason = std::nullopt);
+            std::optional<TString> errorReason = std::nullopt, bool disabledConfigV2 = false);
     };
 
 }

@@ -736,7 +736,7 @@ struct TTestHelper {
         std::vector<ui32> columnIds(columnCount);
         std::iota(columnIds.begin(), columnIds.end(), 1);
 
-        Y_ABORT_UNLESS(values.size() == columnCount);
+        Y_ENSURE(values.size() == columnCount);
 
         TVector<TCell> cells;
         for (ui32 col = 0; col < columnCount; ++col)

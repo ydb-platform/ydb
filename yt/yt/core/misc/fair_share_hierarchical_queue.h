@@ -69,6 +69,9 @@ private:
     const double Weight_;
 };
 
+template <typename TTag>
+std::vector<TFairShareHierarchyLevel<TTag>> CreateHierarchyLevels(const std::vector<std::pair<TTag, double>>& tags);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TFairShareLogKey

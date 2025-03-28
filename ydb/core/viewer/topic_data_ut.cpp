@@ -23,11 +23,14 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
         UNIT_ASSERT(iter != map.end());
         UNIT_ASSERT_VALUES_EQUAL_C(iter->second, value, key);
     }
-    TString GetRequestUrl(TString topic, ui32 partition, ui64 offset = 0, ui32 limit = 10) {
+    TString GetRequestUrl(TString topic, ui32 partition, ui64 offset = 0, ui32 limit = 10, bool noTruncate = false) {
         TStringBuilder url;
         CGIUnescape(topic);
         url << "/viewer/topic_data" << "?path=" << topic << "&partition=" << partition << "&offset=" << offset
-            << "&limit=" << limit << "&encode_data=false";
+            << "&limit=" << limit;
+        if (noTruncate) {
+            url << "&truncate=false";
+        }
         return url;
     }
 
@@ -178,7 +181,6 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
             }
         }
         // Test 3 - large messages
-
         {
             writeData(ECodec::GZIP, 20, "producer3", 1_MB);
 
@@ -213,6 +215,23 @@ Y_UNIT_TEST_SUITE(ViewerTopicDataTests) {
                 UNIT_ASSERT(jsonMap.find("CreateTimestamp") != jsonMap.end());
                 UNIT_ASSERT(jsonMap.find("WriteTimestamp") != jsonMap.end());
             }
+        }
+        // large message with no truncate
+        {
+            writeData(ECodec::GZIP, 1, "producer4", 3_MB);
+
+            auto statusCode = MakeRequest(httpClient, GetRequestUrl(topicPath, 0, 60, 1, true), json);
+            UNIT_ASSERT_EQUAL(statusCode, HTTP_OK);
+            const auto& overalResponse = json.GetMap();
+            const auto& messages = overalResponse.find("Messages")->second.GetArray();
+
+
+            UNIT_ASSERT_C(messages.size() == 1, messages.size());
+            const auto& item = messages[0];
+            const auto& jsonMap = item.GetMap();
+            UNIT_ASSERT(jsonMap.find("Message") != jsonMap.end());
+            Cerr << "Size: " << jsonMap.find("Message")->second.GetString().size() << Endl;
+            UNIT_ASSERT(jsonMap.find("Message")->second.GetString().size() > 1500_KB);
         }
         // Test 4 - bad topic, partition, offset
         {

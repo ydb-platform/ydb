@@ -1,6 +1,7 @@
 #pragma once
 
 #include "defs.h"
+#include <ydb/core/tablet_flat/util_fmt_abort.h>
 #include <ydb/core/tablet_flat/util_fmt_desc.h>
 #include <util/system/yassert.h>
 
@@ -23,7 +24,7 @@ namespace NFmt {
             if (sponge == ESponge::Fnv)   return "fnv";
             if (sponge == ESponge::Xor)   return "xor";
 
-            Y_ABORT("Unreachable code");
+            Y_TABLET_ERROR("Unreachable code");
         }
     };
 }

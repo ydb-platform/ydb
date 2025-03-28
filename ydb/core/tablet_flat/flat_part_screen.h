@@ -2,6 +2,7 @@
 
 #include "flat_row_eggs.h"
 #include "util_basics.h"
+#include "util_fmt_abort.h"
 #include <util/generic/deque.h>
 #include <util/generic/vector.h>
 #include <util/generic/ptr.h>
@@ -64,7 +65,7 @@ namespace NTable {
 
             void Pass(TRowId ref)
             {
-                Y_ABORT_UNLESS(Tail <= ref, "Got page ref from the past");
+                Y_ENSURE(Tail <= ref, "Got page ref from the past");
 
                 if (Open != Max<TRowId>() && Tail != ref) {
                     auto begin = std::exchange(Open, Max<TRowId>());
@@ -137,7 +138,7 @@ namespace NTable {
 
         size_t Lookup(TRowId rowId, int dir) const
         {
-            Y_ABORT_UNLESS(dir == +1, "Only forward direction supported");
+            Y_ENSURE(dir == +1, "Only forward direction supported");
 
             auto less = [](TRowId rowId, const THole &hole) {
                 return rowId < hole.End;
@@ -165,7 +166,7 @@ namespace NTable {
         {
             TRowId last = 0;
             for (const auto &hole : Holes) {
-                Y_ABORT_UNLESS(std::exchange(last, hole.End) <= hole.Begin,
+                Y_ENSURE(std::exchange(last, hole.End) <= hole.Begin,
                     "Screen not sorted or has intersections");
             }
         }
@@ -198,7 +199,7 @@ namespace NTable {
                 sub.back() = hole.Cut(sub.back());
 
                 if (!sub.front() || !sub.back()) {
-                    Y_ABORT("Produced trival edges on screen cutting");
+                    Y_TABLET_ERROR("Produced trival edges on screen cutting");
                 }
 
                 return new TScreen(std::move(sub));
@@ -215,7 +216,7 @@ namespace NTable {
             } else if (two == nullptr || two->Size() == 0) {
                 return one;
             } else if (one->Bounds().Cut(two->Bounds())) {
-                Y_ABORT("Cannot join two intersecting screens");
+                Y_TABLET_ERROR("Cannot join two intersecting screens");
             } else if (one->Bounds().End > two->Bounds().Begin) {
                 std::swap(one, two);
             }

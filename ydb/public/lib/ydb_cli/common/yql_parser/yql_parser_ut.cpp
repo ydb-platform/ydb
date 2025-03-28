@@ -8,7 +8,7 @@ using namespace NYdb::NConsoleClient;
 Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
     Y_UNIT_TEST(TestBasicTypes) {
         {
-            auto types = TYqlParamParser::GetParamTypes("DECLARE $id AS Uint64;");
+            auto types = *TYqlParamParser::GetParamTypes("DECLARE $id AS Uint64;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$id");
             UNIT_ASSERT(it != types.end());
@@ -18,7 +18,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
         }
 
         {
-            auto types = TYqlParamParser::GetParamTypes("DECLARE $name AS Utf8;");
+            auto types = *TYqlParamParser::GetParamTypes("DECLARE $name AS Utf8;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$name");
             UNIT_ASSERT(it != types.end());
@@ -29,7 +29,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
     }
 
     Y_UNIT_TEST(TestListType) {
-        auto types = TYqlParamParser::GetParamTypes("DECLARE $values AS List<Uint64>;");
+        auto types = *TYqlParamParser::GetParamTypes("DECLARE $values AS List<Uint64>;");
         UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
         auto it = types.find("$values");
         UNIT_ASSERT(it != types.end());
@@ -43,7 +43,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
     }
 
     Y_UNIT_TEST(TestStructType) {
-        auto types = TYqlParamParser::GetParamTypes("DECLARE $user AS Struct<id:Uint64,name:Utf8>;");
+        auto types = *TYqlParamParser::GetParamTypes("DECLARE $user AS Struct<id:Uint64,name:Utf8>;");
         UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
         auto it = types.find("$user");
         UNIT_ASSERT(it != types.end());
@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
             DECLARE $name AS Utf8;
             DECLARE $age AS Uint32;
         )";
-        auto types = TYqlParamParser::GetParamTypes(query);
+        auto types = *TYqlParamParser::GetParamTypes(query);
         UNIT_ASSERT_VALUES_EQUAL(types.size(), 3);
 
         {
@@ -99,7 +99,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
     }
 
     Y_UNIT_TEST(TestDecimalType) {
-        auto types = TYqlParamParser::GetParamTypes("DECLARE $price AS Decimal(22,9);");
+        auto types = *TYqlParamParser::GetParamTypes("DECLARE $price AS Decimal(22,9);");
         UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
         auto it = types.find("$price");
         UNIT_ASSERT(it != types.end());
@@ -111,7 +111,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
     }
 
     Y_UNIT_TEST(TestDictType) {
-        auto types = TYqlParamParser::GetParamTypes("DECLARE $dict AS Dict<Utf8,Uint64>;");
+        auto types = *TYqlParamParser::GetParamTypes("DECLARE $dict AS Dict<Utf8,Uint64>;");
         UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
         auto it = types.find("$dict");
         UNIT_ASSERT(it != types.end());
@@ -132,7 +132,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
     }
 
     Y_UNIT_TEST(TestTupleType) {
-        auto types = TYqlParamParser::GetParamTypes("DECLARE $tuple AS Tuple<Uint64,Utf8,Bool>;");
+        auto types = *TYqlParamParser::GetParamTypes("DECLARE $tuple AS Tuple<Uint64,Utf8,Bool>;");
         UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
         auto it = types.find("$tuple");
         UNIT_ASSERT(it != types.end());
@@ -166,7 +166,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
                 meta: Dict<Utf8, List<Uint32>>
             >>;
         )";
-        auto types = TYqlParamParser::GetParamTypes(query);
+        auto types = *TYqlParamParser::GetParamTypes(query);
         UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
         auto it = types.find("$nested");
         UNIT_ASSERT(it != types.end());
@@ -223,7 +223,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
 
     Y_UNIT_TEST(TestCaseInsensitiveTypes) {
         {
-            auto types = TYqlParamParser::GetParamTypes("DECLARE $id AS UINT64;");
+            auto types = *TYqlParamParser::GetParamTypes("DECLARE $id AS UINT64;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$id");
             UNIT_ASSERT(it != types.end());
@@ -233,7 +233,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
         }
 
         {
-            auto types = TYqlParamParser::GetParamTypes("DECLARE $list AS LIST<UINT32>;");
+            auto types = *TYqlParamParser::GetParamTypes("DECLARE $list AS LIST<UINT32>;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$list");
             UNIT_ASSERT(it != types.end());
@@ -246,7 +246,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
         }
 
         {
-            auto types = TYqlParamParser::GetParamTypes("DECLARE $struct AS STRUCT<ID:UINT64,NAME:UTF8>;");
+            auto types = *TYqlParamParser::GetParamTypes("DECLARE $struct AS STRUCT<ID:UINT64,NAME:UTF8>;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$struct");
             UNIT_ASSERT(it != types.end());
@@ -270,7 +270,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
         }
 
         {
-            auto types = TYqlParamParser::GetParamTypes("DECLARE $dict AS DICT<UTF8,UINT64>;");
+            auto types = *TYqlParamParser::GetParamTypes("DECLARE $dict AS DICT<UTF8,UINT64>;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$dict");
             UNIT_ASSERT(it != types.end());
@@ -291,7 +291,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
         }
 
         {
-            auto types = TYqlParamParser::GetParamTypes("DECLARE $tuple AS TUPLE<UINT64,UTF8,BOOL>;");
+            auto types = *TYqlParamParser::GetParamTypes("DECLARE $tuple AS TUPLE<UINT64,UTF8,BOOL>;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$tuple");
             UNIT_ASSERT(it != types.end());
@@ -317,7 +317,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
         }
 
         {
-            auto types = TYqlParamParser::GetParamTypes("DECLARE $price AS DECIMAL(22,9);");
+            auto types = *TYqlParamParser::GetParamTypes("DECLARE $price AS DECIMAL(22,9);");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$price");
             UNIT_ASSERT(it != types.end());
@@ -329,7 +329,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
         }
 
         {
-            auto types = TYqlParamParser::GetParamTypes("declare $id as UINT64;");
+            auto types = *TYqlParamParser::GetParamTypes("declare $id as UINT64;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$id");
             UNIT_ASSERT(it != types.end());
@@ -341,7 +341,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
 
     Y_UNIT_TEST(TestOptionalTypes) {
         {
-            auto types = TYqlParamParser::GetParamTypes("DECLARE $id AS Uint64?;");
+            auto types = *TYqlParamParser::GetParamTypes("DECLARE $id AS Uint64?;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$id");
             UNIT_ASSERT(it != types.end());
@@ -354,7 +354,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
         }
 
         {
-            auto types = TYqlParamParser::GetParamTypes("DECLARE $id AS Optional<Uint64>;");
+            auto types = *TYqlParamParser::GetParamTypes("DECLARE $id AS Optional<Uint64>;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$id");
             UNIT_ASSERT(it != types.end());
@@ -367,7 +367,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
         }
 
         {
-            auto types = TYqlParamParser::GetParamTypes("DECLARE $list AS Optional<List<Uint64>>;");
+            auto types = *TYqlParamParser::GetParamTypes("DECLARE $list AS Optional<List<Uint64>>;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$list");
             UNIT_ASSERT(it != types.end());
@@ -383,7 +383,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
         }
 
         {
-            auto types = TYqlParamParser::GetParamTypes("DECLARE $struct AS Struct<id:Uint64,name:Utf8>?;");
+            auto types = *TYqlParamParser::GetParamTypes("DECLARE $struct AS Struct<id:Uint64,name:Utf8>?;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$struct");
             UNIT_ASSERT(it != types.end());
@@ -409,7 +409,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
         }
 
         {
-            auto types = TYqlParamParser::GetParamTypes("DECLARE $dict AS Optional<Dict<Utf8,Uint64>>;");
+            auto types = *TYqlParamParser::GetParamTypes("DECLARE $dict AS Optional<Dict<Utf8,Uint64>>;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$dict");
             UNIT_ASSERT(it != types.end());
@@ -432,7 +432,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
         }
 
         {
-            auto types = TYqlParamParser::GetParamTypes("DECLARE $tuple AS Optional<Tuple<Uint64,Utf8>>;");
+            auto types = *TYqlParamParser::GetParamTypes("DECLARE $tuple AS Optional<Tuple<Uint64,Utf8>>;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$tuple");
             UNIT_ASSERT(it != types.end());
@@ -457,7 +457,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
         }
 
         {
-            auto types = TYqlParamParser::GetParamTypes("DECLARE $decimal AS Optional<Decimal(10,2)>;");
+            auto types = *TYqlParamParser::GetParamTypes("DECLARE $decimal AS Optional<Decimal(10,2)>;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$decimal");
             UNIT_ASSERT(it != types.end());
@@ -472,7 +472,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
         }
 
         {
-            auto types = TYqlParamParser::GetParamTypes("DECLARE $nested AS Optional<List<Struct<id:Uint64,name:Utf8>>>;");
+            auto types = *TYqlParamParser::GetParamTypes("DECLARE $nested AS Optional<List<Struct<id:Uint64,name:Utf8>>>;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$nested");
             UNIT_ASSERT(it != types.end());
@@ -501,34 +501,40 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
             
             parser.CloseOptional();
         }
+    }
+
+    Y_UNIT_TEST(TestInvalidQuery) {
+        {
+            auto types = TYqlParamParser::GetParamTypes("DECLARE $id AS @#$%^;");
+            UNIT_ASSERT(!types.has_value());
+        }
+
+        {
+            auto types = TYqlParamParser::GetParamTypes("DECLARE $id AS");
+            UNIT_ASSERT(!types.has_value());
+        }
+
+        {
+            auto types = TYqlParamParser::GetParamTypes("DECLARE AS $id Uint64;");
+            UNIT_ASSERT(!types.has_value());
+        }
 
         {
             auto types = TYqlParamParser::GetParamTypes("DECLARE $invalid AS Optional;");
-            UNIT_ASSERT(types.empty());
+            UNIT_ASSERT(!types.has_value());
         }
 
         {
             auto types = TYqlParamParser::GetParamTypes("DECLARE $invalid AS Optional<>;");
-            UNIT_ASSERT(types.empty());
+            UNIT_ASSERT(!types.has_value());
         }
 
         {
             auto types = TYqlParamParser::GetParamTypes("DECLARE $invalid AS Optional<Uint64,Utf8>;");
-            UNIT_ASSERT(types.empty());
+            UNIT_ASSERT(!types.has_value());
         }
-    }
 
-    Y_UNIT_TEST(TestInvalidQuery) {
-        auto types = TYqlParamParser::GetParamTypes("DECLARE $id AS @#$%^;");
-        UNIT_ASSERT(types.empty());
-
-        types = TYqlParamParser::GetParamTypes("DECLARE $id AS");
-        UNIT_ASSERT(types.empty());
-
-        types = TYqlParamParser::GetParamTypes("DECLARE AS $id Uint64;");
-        UNIT_ASSERT(types.empty());
-
-        types = TYqlParamParser::GetParamTypes(R"(
+        auto types = *TYqlParamParser::GetParamTypes(R"(
             DECLARE $id AS Uint64;
             abacaba abacaba;
             lol lol lol
@@ -556,7 +562,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
 
     Y_UNIT_TEST(TestWhitespace) {
         {
-            auto types = TYqlParamParser::GetParamTypes("DECLARE  $id  AS  Uint64;");
+            auto types = *TYqlParamParser::GetParamTypes("DECLARE  $id  AS  Uint64;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$id");
             UNIT_ASSERT(it != types.end());
@@ -566,7 +572,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
         }
 
         {
-            auto types = TYqlParamParser::GetParamTypes("DECLARE\t$id\tAS\tUint64;");
+            auto types = *TYqlParamParser::GetParamTypes("DECLARE\t$id\tAS\tUint64;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$id");
             UNIT_ASSERT(it != types.end());
@@ -576,7 +582,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
         }
 
         {
-            auto types = TYqlParamParser::GetParamTypes("DECLARE\n$id\nAS\nUint64;");
+            auto types = *TYqlParamParser::GetParamTypes("DECLARE\n$id\nAS\nUint64;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$id");
             UNIT_ASSERT(it != types.end());
@@ -586,7 +592,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
         }
 
         {
-            auto types = TYqlParamParser::GetParamTypes("DECLARE $id AS List< Uint64 >;");
+            auto types = *TYqlParamParser::GetParamTypes("DECLARE $id AS List< Uint64 >;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$id");
             UNIT_ASSERT(it != types.end());
@@ -599,7 +605,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
         }
 
         {
-            auto types = TYqlParamParser::GetParamTypes("DECLARE $id AS Struct< id : Uint64, name : Utf8 >;");
+            auto types = *TYqlParamParser::GetParamTypes("DECLARE $id AS Struct< id : Uint64, name : Utf8 >;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$id");
             UNIT_ASSERT(it != types.end());
@@ -622,7 +628,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
         }
 
         {
-            auto types = TYqlParamParser::GetParamTypes("DECLARE $id AS Tuple< Uint64, Utf8 >;");
+            auto types = *TYqlParamParser::GetParamTypes("DECLARE $id AS Tuple< Uint64, Utf8 >;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$id");
             UNIT_ASSERT(it != types.end());
@@ -643,7 +649,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
         }
 
         {
-            auto types = TYqlParamParser::GetParamTypes("DECLARE $id AS Dict< Utf8, Uint64 >;");
+            auto types = *TYqlParamParser::GetParamTypes("DECLARE $id AS Dict< Utf8, Uint64 >;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$id");
             UNIT_ASSERT(it != types.end());
@@ -662,7 +668,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
         }
 
         {
-            auto types = TYqlParamParser::GetParamTypes("DECLARE $id AS Decimal( 10, 2 );");
+            auto types = *TYqlParamParser::GetParamTypes("DECLARE $id AS Decimal( 10, 2 );");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$id");
             UNIT_ASSERT(it != types.end());
@@ -674,7 +680,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
         }
 
         {
-            auto types = TYqlParamParser::GetParamTypes("DECLARE $id AS Uint64 ?;");
+            auto types = *TYqlParamParser::GetParamTypes("DECLARE $id AS Uint64 ?;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$id");
             UNIT_ASSERT(it != types.end());
@@ -687,7 +693,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
         }
 
         {
-            auto types = TYqlParamParser::GetParamTypes("DECLARE $id AS Optional < Uint64 >;");
+            auto types = *TYqlParamParser::GetParamTypes("DECLARE $id AS Optional < Uint64 >;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$id");
             UNIT_ASSERT(it != types.end());
@@ -700,7 +706,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
         }
 
         {
-            auto types = TYqlParamParser::GetParamTypes(R"(
+            auto types = *TYqlParamParser::GetParamTypes(R"(
                 DECLARE $id AS Uint64;
                 DECLARE $name AS Utf8;
                 DECLARE $age AS Uint32;
@@ -761,7 +767,7 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
             FROM users;
         )";
 
-        auto types = TYqlParamParser::GetParamTypes(query);
+        auto types = *TYqlParamParser::GetParamTypes(query);
         UNIT_ASSERT_VALUES_EQUAL(types.size(), 5);
 
         {

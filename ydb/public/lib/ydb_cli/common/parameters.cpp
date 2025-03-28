@@ -340,8 +340,9 @@ void TCommandWithParameters::InitParamTypes(const TDriver& driver, const TString
         return;
     }
 
-    ParamTypes = TYqlParamParser::GetParamTypes(queryText);
-    if (!ParamTypes.empty()) {
+    auto types = TYqlParamParser::GetParamTypes(queryText);
+    if (types.has_value()) {
+        ParamTypes = *types;
         return;
     }
 

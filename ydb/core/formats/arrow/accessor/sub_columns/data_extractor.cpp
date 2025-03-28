@@ -1,4 +1,6 @@
 #include "data_extractor.h"
+#include "direct_builder.h"
+#include "json_extractors.h"
 
 #include <util/string/split.h>
 #include <util/string/vector.h>
@@ -25,27 +27,18 @@ TConclusionStatus TFirstLevelSchemaData::DoAddDataToBuilders(
             //        const NBinaryJson::TBinaryJson* bJsonParsed = &bJson;
             auto reader = NBinaryJson::TBinaryJsonReader::Make(TStringBuf(view.data(), view.size()));
             auto cursor = reader->GetRootCursor();
+            std::deque<std::unique_ptr<IJsonObjectExtractor>> iterators;
             if (cursor.GetType() == NBinaryJson::EContainerType::Object) {
-                auto it = cursor.GetObjectIterator();
-                while (it.HasNext()) {
-                    auto [key, value] = it.Next();
-                    if (key.GetType() != NBinaryJson::EEntryType::String) {
-                        continue;
-                    }
-                    if (value.GetType() == NBinaryJson::EEntryType::String) {
-                        dataBuilder.AddKV(key.GetString(), value.GetString());
-                    } else if (value.GetType() == NBinaryJson::EEntryType::Number) {
-                        dataBuilder.AddKVOwn(key.GetString(), ::ToString(value.GetNumber()));
-                    } else if (value.GetType() == NBinaryJson::EEntryType::BoolFalse) {
-                        dataBuilder.AddKVOwn(key.GetString(), "0");
-                    } else if (value.GetType() == NBinaryJson::EEntryType::BoolTrue) {
-                        dataBuilder.AddKVOwn(key.GetString(), "1");
-                    } else {
-                        continue;
-                    }
+                iterators.push_back(std::make_unique<TKVExtractor>(cursor.GetObjectIterator(), TStringBuf(), FirstLevelOnly));
+            } else if (cursor.GetType() == NBinaryJson::EContainerType::Array) {
+                iterators.push_back(std::make_unique<TArrayExtractor>(cursor.GetArrayIterator(), TStringBuf(), FirstLevelOnly));
+            }
+            while (iterators.size()) {
+                const auto conclusion = iterators.front()->Fill(dataBuilder, iterators);
+                if (conclusion.IsFail()) {
+                    return conclusion;
                 }
-            } else {
-            //    return TConclusionStatus::Fail("incorrect json data: " + ::ToString((int)cursor.GetType()));
+                iterators.pop_front();
             }
         }
         dataBuilder.StartNextRecord();
@@ -55,6 +48,11 @@ TConclusionStatus TFirstLevelSchemaData::DoAddDataToBuilders(
 
 TConclusionStatus IDataAdapter::AddDataToBuilders(const std::shared_ptr<arrow::Array>& sourceArray, TDataBuilder& dataBuilder) const noexcept {
     return DoAddDataToBuilders(sourceArray, dataBuilder);
+}
+
+TDataAdapterContainer TDataAdapterContainer::GetDefault() {
+    static TDataAdapterContainer result(std::make_shared<NSubColumns::TFirstLevelSchemaData>());
+    return result;
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

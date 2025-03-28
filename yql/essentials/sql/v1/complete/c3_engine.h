@@ -19,6 +19,15 @@ namespace NSQLComplete {
         TTokenId Number;
     };
 
+    struct TMatchedRule {
+        TRuleId Index;
+    };
+
+    struct TC3Candidates {
+        TVector<TSuggestedToken> Tokens;
+        TVector<TMatchedRule> Rules;
+    };
+
     class IC3Engine {
     public:
         using TPtr = THolder<IC3Engine>;
@@ -29,7 +38,7 @@ namespace NSQLComplete {
             std::unordered_set<TRuleId> PreferredRules;
         };
 
-        virtual TVector<TSuggestedToken> Complete(TStringBuf queryPrefix) = 0;
+        virtual TC3Candidates Complete(TStringBuf queryPrefix) = 0;
         virtual const antlr4::dfa::Vocabulary& GetVocabulary() const = 0;
         virtual ~IC3Engine() = default;
     };
@@ -59,7 +68,7 @@ namespace NSQLComplete {
             CompletionCore.preferredRules = std::move(config.PreferredRules);
         }
 
-        TVector<TSuggestedToken> Complete(TStringBuf queryPrefix) override {
+        TC3Candidates Complete(TStringBuf queryPrefix) override {
             Assign(queryPrefix);
             const auto caretTokenIndex = CaretTokenIndex(queryPrefix);
             auto candidates = CompletionCore.collectCandidates(caretTokenIndex);
@@ -87,10 +96,13 @@ namespace NSQLComplete {
             return tokensCount - 1;
         }
 
-        static TVector<TSuggestedToken> Converted(c3::CandidatesCollection candidates) {
-            TVector<TSuggestedToken> converted;
+        static TC3Candidates Converted(c3::CandidatesCollection candidates) {
+            TC3Candidates converted;
             for (const auto& [token, _] : candidates.tokens) {
-                converted.emplace_back(token);
+                converted.Tokens.emplace_back(token);
+            }
+            for (const auto& [rule, _] : candidates.rules) {
+                converted.Rules.emplace_back(rule);
             }
             return converted;
         }

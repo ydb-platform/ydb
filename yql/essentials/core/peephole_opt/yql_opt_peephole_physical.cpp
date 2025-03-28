@@ -396,7 +396,7 @@ TExprNode::TPtr ExpandBlockExtend(const TExprNode::TPtr& node, TExprContext& ctx
         newChildren.push_back(ctx.WrapByCallableIf(hasScalars, "ReplicateScalars", std::move(child)));
     }
 
-    const TStringBuf newName = node->IsCallable("BlockOrdredExtend") ? "OrdredExtend" : "Extend";
+    const TStringBuf newName = node->IsCallable("BlockExtend") ? "Extend" : "OrderedExtend";
     if (!seenScalars) {
         return ctx.RenameNode(*node, newName);
     }
@@ -3521,7 +3521,7 @@ TExprNode::TPtr OptimizeExtend(const TExprNode::TPtr& node, TExprContext& ctx) {
 
         if (allWide) {
             return ctx.NewCallable(node->Pos(), "Collect", {
-                MakeNarrowMap(node->Pos(), columns, ctx.NewCallable(node->Pos(), "Extend", std::move(wideChildren)), ctx)
+                MakeNarrowMap(node->Pos(), columns, ctx.NewCallable(node->Pos(), node->Content(), std::move(wideChildren)), ctx)
             });
         }
     }
@@ -8945,6 +8945,7 @@ struct TPeepHoleRules {
 
     const TPeepHoleOptimizerMap FinalStageRules = {
         {"Extend", &OptimizeExtend},
+        {"OrderedExtend", &OptimizeExtend},
         {"Take", &OptimizeTake},
         {"Skip", &OptimizeSkip},
         {"GroupByKey", &PeepHoleConvertGroupBySingleKey},

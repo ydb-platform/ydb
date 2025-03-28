@@ -27,7 +27,7 @@ public:
         bool DeserializeFromProto(const NKikimrSchemeOp::TOlapColumn::TSerializer& serializer);
         TString BuildQuery() const;
 
-        bool IsEqual(const TCompression& rhs, TString& errorMessage) const;
+        TConclusionStatus IsEqual(const TCompression& rhs) const;
 
         TString ToString() const;
     };
@@ -37,12 +37,13 @@ public:
         YDB_ACCESSOR_DEF(TString, FamilyName);
         YDB_ACCESSOR_DEF(TString, Data);
         YDB_ACCESSOR_DEF(TCompression, Compression);
+        YDB_ACCESSOR_DEF(TString, DataAccessor);
 
     public:
         bool DeserializeFromProto(const NKikimrSchemeOp::TFamilyDescription& family);
         TString BuildQuery() const;
 
-        bool IsEqual(const TColumnFamily& rhs, TString& errorMessage) const;
+        TConclusionStatus IsEqual(const TColumnFamily& rhs) const;
 
         TString ToString() const;
     };

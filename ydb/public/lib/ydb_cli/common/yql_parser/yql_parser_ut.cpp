@@ -28,44 +28,42 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
         }
     }
 
-    Y_UNIT_TEST(TestComplexTypes) {
-        {
-            auto types = TYqlParamParser::GetParamTypes("DECLARE $values AS List<Uint64>;");
-            UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
-            auto it = types.find("$values");
-            UNIT_ASSERT(it != types.end());
-            TTypeParser parser(it->second);
-            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::List);
-            
-            parser.OpenList();
-            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
-            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Uint64);
-            parser.CloseList();
-        }
+    Y_UNIT_TEST(TestListType) {
+        auto types = TYqlParamParser::GetParamTypes("DECLARE $values AS List<Uint64>;");
+        UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
+        auto it = types.find("$values");
+        UNIT_ASSERT(it != types.end());
+        TTypeParser parser(it->second);
+        UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::List);
+        
+        parser.OpenList();
+        UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+        UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Uint64);
+        parser.CloseList();
+    }
 
-        {
-            auto types = TYqlParamParser::GetParamTypes("DECLARE $user AS Struct<id:Uint64,name:Utf8>;");
-            UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
-            auto it = types.find("$user");
-            UNIT_ASSERT(it != types.end());
-            TTypeParser parser(it->second);
-            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Struct);
+    Y_UNIT_TEST(TestStructType) {
+        auto types = TYqlParamParser::GetParamTypes("DECLARE $user AS Struct<id:Uint64,name:Utf8>;");
+        UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
+        auto it = types.find("$user");
+        UNIT_ASSERT(it != types.end());
+        TTypeParser parser(it->second);
+        UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Struct);
 
-            parser.OpenStruct();
-            
-            UNIT_ASSERT(parser.TryNextMember());
-            UNIT_ASSERT_VALUES_EQUAL(parser.GetMemberName(), "id");
-            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
-            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Uint64);
+        parser.OpenStruct();
+        
+        UNIT_ASSERT(parser.TryNextMember());
+        UNIT_ASSERT_VALUES_EQUAL(parser.GetMemberName(), "id");
+        UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+        UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Uint64);
 
-            UNIT_ASSERT(parser.TryNextMember());
-            UNIT_ASSERT_VALUES_EQUAL(parser.GetMemberName(), "name");
-            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
-            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Utf8);
+        UNIT_ASSERT(parser.TryNextMember());
+        UNIT_ASSERT_VALUES_EQUAL(parser.GetMemberName(), "name");
+        UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+        UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Utf8);
 
-            UNIT_ASSERT(!parser.TryNextMember());
-            parser.CloseStruct();
-        }
+        UNIT_ASSERT(!parser.TryNextMember());
+        parser.CloseStruct();
     }
 
     Y_UNIT_TEST(TestMultipleParams) {
@@ -356,7 +354,20 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
         }
 
         {
-            auto types = TYqlParamParser::GetParamTypes("DECLARE $list AS List<Uint64>?;");
+            auto types = TYqlParamParser::GetParamTypes("DECLARE $id AS Optional<Uint64>;");
+            UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
+            auto it = types.find("$id");
+            UNIT_ASSERT(it != types.end());
+            TTypeParser parser(it->second);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Optional);
+            parser.OpenOptional();
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Uint64);
+            parser.CloseOptional();
+        }
+
+        {
+            auto types = TYqlParamParser::GetParamTypes("DECLARE $list AS Optional<List<Uint64>>;");
             UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
             auto it = types.find("$list");
             UNIT_ASSERT(it != types.end());
@@ -396,6 +407,115 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
             parser.CloseStruct();
             parser.CloseOptional();
         }
+
+        {
+            auto types = TYqlParamParser::GetParamTypes("DECLARE $dict AS Optional<Dict<Utf8,Uint64>>;");
+            UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
+            auto it = types.find("$dict");
+            UNIT_ASSERT(it != types.end());
+            TTypeParser parser(it->second);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Optional);
+            parser.OpenOptional();
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Dict);
+            
+            parser.OpenDict();
+            parser.DictKey();
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Utf8);
+
+            parser.DictPayload();
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Uint64);
+            parser.CloseDict();
+            
+            parser.CloseOptional();
+        }
+
+        {
+            auto types = TYqlParamParser::GetParamTypes("DECLARE $tuple AS Optional<Tuple<Uint64,Utf8>>;");
+            UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
+            auto it = types.find("$tuple");
+            UNIT_ASSERT(it != types.end());
+            TTypeParser parser(it->second);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Optional);
+            parser.OpenOptional();
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Tuple);
+            
+            parser.OpenTuple();
+            UNIT_ASSERT(parser.TryNextElement());
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Uint64);
+
+            UNIT_ASSERT(parser.TryNextElement());
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Utf8);
+
+            UNIT_ASSERT(!parser.TryNextElement());
+            parser.CloseTuple();
+            
+            parser.CloseOptional();
+        }
+
+        {
+            auto types = TYqlParamParser::GetParamTypes("DECLARE $decimal AS Optional<Decimal(10,2)>;");
+            UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
+            auto it = types.find("$decimal");
+            UNIT_ASSERT(it != types.end());
+            TTypeParser parser(it->second);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Optional);
+            parser.OpenOptional();
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Decimal);
+            auto decimal = parser.GetDecimal();
+            UNIT_ASSERT_VALUES_EQUAL(decimal.Precision, 10);
+            UNIT_ASSERT_VALUES_EQUAL(decimal.Scale, 2);
+            parser.CloseOptional();
+        }
+
+        {
+            auto types = TYqlParamParser::GetParamTypes("DECLARE $nested AS Optional<List<Struct<id:Uint64,name:Utf8>>>;");
+            UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
+            auto it = types.find("$nested");
+            UNIT_ASSERT(it != types.end());
+            TTypeParser parser(it->second);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Optional);
+            parser.OpenOptional();
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::List);
+            
+            parser.OpenList();
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Struct);
+            parser.OpenStruct();
+            
+            UNIT_ASSERT(parser.TryNextMember());
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetMemberName(), "id");
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Uint64);
+
+            UNIT_ASSERT(parser.TryNextMember());
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetMemberName(), "name");
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Utf8);
+
+            UNIT_ASSERT(!parser.TryNextMember());
+            parser.CloseStruct();
+            parser.CloseList();
+            
+            parser.CloseOptional();
+        }
+
+        {
+            auto types = TYqlParamParser::GetParamTypes("DECLARE $invalid AS Optional;");
+            UNIT_ASSERT(types.empty());
+        }
+
+        {
+            auto types = TYqlParamParser::GetParamTypes("DECLARE $invalid AS Optional<>;");
+            UNIT_ASSERT(types.empty());
+        }
+
+        {
+            auto types = TYqlParamParser::GetParamTypes("DECLARE $invalid AS Optional<Uint64,Utf8>;");
+            UNIT_ASSERT(types.empty());
+        }
     }
 
     Y_UNIT_TEST(TestInvalidQuery) {
@@ -431,6 +551,313 @@ Y_UNIT_TEST_SUITE(TYqlParamParserTest) {
             TTypeParser parser(it->second);
             UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
             UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Utf8);
+        }
+    }
+
+    Y_UNIT_TEST(TestWhitespace) {
+        {
+            auto types = TYqlParamParser::GetParamTypes("DECLARE  $id  AS  Uint64;");
+            UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
+            auto it = types.find("$id");
+            UNIT_ASSERT(it != types.end());
+            TTypeParser parser(it->second);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Uint64);
+        }
+
+        {
+            auto types = TYqlParamParser::GetParamTypes("DECLARE\t$id\tAS\tUint64;");
+            UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
+            auto it = types.find("$id");
+            UNIT_ASSERT(it != types.end());
+            TTypeParser parser(it->second);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Uint64);
+        }
+
+        {
+            auto types = TYqlParamParser::GetParamTypes("DECLARE\n$id\nAS\nUint64;");
+            UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
+            auto it = types.find("$id");
+            UNIT_ASSERT(it != types.end());
+            TTypeParser parser(it->second);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Uint64);
+        }
+
+        {
+            auto types = TYqlParamParser::GetParamTypes("DECLARE $id AS List< Uint64 >;");
+            UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
+            auto it = types.find("$id");
+            UNIT_ASSERT(it != types.end());
+            TTypeParser parser(it->second);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::List);
+            parser.OpenList();
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Uint64);
+            parser.CloseList();
+        }
+
+        {
+            auto types = TYqlParamParser::GetParamTypes("DECLARE $id AS Struct< id : Uint64, name : Utf8 >;");
+            UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
+            auto it = types.find("$id");
+            UNIT_ASSERT(it != types.end());
+            TTypeParser parser(it->second);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Struct);
+            parser.OpenStruct();
+            
+            UNIT_ASSERT(parser.TryNextMember());
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetMemberName(), "id");
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Uint64);
+
+            UNIT_ASSERT(parser.TryNextMember());
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetMemberName(), "name");
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Utf8);
+
+            UNIT_ASSERT(!parser.TryNextMember());
+            parser.CloseStruct();
+        }
+
+        {
+            auto types = TYqlParamParser::GetParamTypes("DECLARE $id AS Tuple< Uint64, Utf8 >;");
+            UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
+            auto it = types.find("$id");
+            UNIT_ASSERT(it != types.end());
+            TTypeParser parser(it->second);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Tuple);
+            parser.OpenTuple();
+            
+            UNIT_ASSERT(parser.TryNextElement());
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Uint64);
+
+            UNIT_ASSERT(parser.TryNextElement());
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Utf8);
+
+            UNIT_ASSERT(!parser.TryNextElement());
+            parser.CloseTuple();
+        }
+
+        {
+            auto types = TYqlParamParser::GetParamTypes("DECLARE $id AS Dict< Utf8, Uint64 >;");
+            UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
+            auto it = types.find("$id");
+            UNIT_ASSERT(it != types.end());
+            TTypeParser parser(it->second);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Dict);
+            parser.OpenDict();
+            
+            parser.DictKey();
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Utf8);
+
+            parser.DictPayload();
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Uint64);
+            parser.CloseDict();
+        }
+
+        {
+            auto types = TYqlParamParser::GetParamTypes("DECLARE $id AS Decimal( 10, 2 );");
+            UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
+            auto it = types.find("$id");
+            UNIT_ASSERT(it != types.end());
+            TTypeParser parser(it->second);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Decimal);
+            auto decimal = parser.GetDecimal();
+            UNIT_ASSERT_VALUES_EQUAL(decimal.Precision, 10);
+            UNIT_ASSERT_VALUES_EQUAL(decimal.Scale, 2);
+        }
+
+        {
+            auto types = TYqlParamParser::GetParamTypes("DECLARE $id AS Uint64 ?;");
+            UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
+            auto it = types.find("$id");
+            UNIT_ASSERT(it != types.end());
+            TTypeParser parser(it->second);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Optional);
+            parser.OpenOptional();
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Uint64);
+            parser.CloseOptional();
+        }
+
+        {
+            auto types = TYqlParamParser::GetParamTypes("DECLARE $id AS Optional < Uint64 >;");
+            UNIT_ASSERT_VALUES_EQUAL(types.size(), 1);
+            auto it = types.find("$id");
+            UNIT_ASSERT(it != types.end());
+            TTypeParser parser(it->second);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Optional);
+            parser.OpenOptional();
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Uint64);
+            parser.CloseOptional();
+        }
+
+        {
+            auto types = TYqlParamParser::GetParamTypes(R"(
+                DECLARE $id AS Uint64;
+                DECLARE $name AS Utf8;
+                DECLARE $age AS Uint32;
+            )");
+            UNIT_ASSERT_VALUES_EQUAL(types.size(), 3);
+            auto it = types.find("$id");
+            UNIT_ASSERT(it != types.end());
+            TTypeParser parser(it->second);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Uint64);
+        }
+    }
+
+    Y_UNIT_TEST(TestComplexQuery) {
+        TString query = R"(
+            DECLARE $user_id AS Uint64;
+            DECLARE $start_date AS Date;
+            
+            SELECT 
+                user_id,
+                name,
+                email,
+                created_at,
+                last_login
+            FROM users
+            WHERE user_id = $user_id
+            AND created_at >= $start_date;
+            
+            DECLARE $user_data AS Struct<
+                name: Utf8,
+                email: Utf8,
+                age: Uint32?,
+                preferences: Dict<Utf8, Json>
+            >;
+            
+            DECLARE $user_tags AS List<Utf8>;
+            
+            UPDATE users
+            SET 
+                name = $user_data.name,
+                email = $user_data.email,
+                age = $user_data.age,
+                preferences = $user_data.preferences,
+                tags = $user_tags,
+                updated_at = CurrentUtcTimestamp()
+            WHERE user_id = $user_id;
+            
+            DECLARE $stats AS Struct<
+                total_users: Uint64,
+                active_users: Uint64,
+                avg_age: Decimal(5,2)
+            >;
+            
+            SELECT 
+                COUNT(*) as total_users,
+                COUNT(CASE WHEN last_login >= $start_date THEN 1 END) as active_users,
+                AVG(CAST(age AS Decimal(5,2))) as avg_age
+            FROM users;
+        )";
+
+        auto types = TYqlParamParser::GetParamTypes(query);
+        UNIT_ASSERT_VALUES_EQUAL(types.size(), 5);
+
+        {
+            auto it = types.find("$user_id");
+            UNIT_ASSERT(it != types.end());
+            TTypeParser parser(it->second);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Uint64);
+        }
+
+        {
+            auto it = types.find("$start_date");
+            UNIT_ASSERT(it != types.end());
+            TTypeParser parser(it->second);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Date);
+        }
+
+        {
+            auto it = types.find("$user_data");
+            UNIT_ASSERT(it != types.end());
+            TTypeParser parser(it->second);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Struct);
+            parser.OpenStruct();
+            
+            UNIT_ASSERT(parser.TryNextMember());
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetMemberName(), "name");
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Utf8);
+
+            UNIT_ASSERT(parser.TryNextMember());
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetMemberName(), "email");
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Utf8);
+
+            UNIT_ASSERT(parser.TryNextMember());
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetMemberName(), "age");
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Optional);
+            parser.OpenOptional();
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Uint32);
+            parser.CloseOptional();
+
+            UNIT_ASSERT(parser.TryNextMember());
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetMemberName(), "preferences");
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Dict);
+            parser.OpenDict();
+            parser.DictKey();
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Utf8);
+            parser.DictPayload();
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Json);
+            parser.CloseDict();
+
+            UNIT_ASSERT(!parser.TryNextMember());
+            parser.CloseStruct();
+        }
+
+        {
+            auto it = types.find("$user_tags");
+            UNIT_ASSERT(it != types.end());
+            TTypeParser parser(it->second);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::List);
+            parser.OpenList();
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Utf8);
+            parser.CloseList();
+        }
+
+        {
+            auto it = types.find("$stats");
+            UNIT_ASSERT(it != types.end());
+            TTypeParser parser(it->second);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Struct);
+            parser.OpenStruct();
+            
+            UNIT_ASSERT(parser.TryNextMember());
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetMemberName(), "total_users");
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Uint64);
+
+            UNIT_ASSERT(parser.TryNextMember());
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetMemberName(), "active_users");
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Primitive);
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetPrimitive(), EPrimitiveType::Uint64);
+
+            UNIT_ASSERT(parser.TryNextMember());
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetMemberName(), "avg_age");
+            UNIT_ASSERT_VALUES_EQUAL(parser.GetKind(), TTypeParser::ETypeKind::Decimal);
+            auto decimal = parser.GetDecimal();
+            UNIT_ASSERT_VALUES_EQUAL(decimal.Precision, 5);
+            UNIT_ASSERT_VALUES_EQUAL(decimal.Scale, 2);
+
+            UNIT_ASSERT(!parser.TryNextMember());
+            parser.CloseStruct();
         }
     }
 }

@@ -8,6 +8,7 @@
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/public/issue/yql_issue.h>
 
+#include <util/generic/scope.h>
 #include <util/string/split.h>
 #include <util/string/strip.h>
 
@@ -31,7 +32,7 @@ public:
     {}
 
     std::optional<TType> Build(size_t& pos) {
-        auto node = Parse(pos);
+        auto node = Parse(SkipWS(pos));
         if (!node || (pos < Tokens.size() && Tokens[pos].Content != ";")) {
             return std::nullopt;
         }
@@ -45,230 +46,256 @@ public:
 
 private:
     struct TypeNode {
-        TString TypeName;
+        TTypeParser::ETypeKind TypeKind;
         std::vector<TypeNode> Children;
-        TString Name; // для полей структуры
-        bool IsKey = false; // для словарей
+
+        // For primitive type
+        EPrimitiveType PrimitiveType;
+
+        // For struct type
+        TString Name;
+
+        // For decimal type
+        ui32 precision = 0;
+        ui32 scale = 0;
     };
 
     std::optional<TypeNode> Parse(size_t& pos) {
         TypeNode node;
 
-        while (pos < Tokens.size() && Tokens[pos].Name == "WS") {
-            pos++;
-        }
+        TString lowerContent = ToLower(Tokens[pos].Content);
 
-        if (pos >= Tokens.size()) {
-            return node;
-        }
+        if (lowerContent == "struct" || lowerContent == "tuple") {
+            node.TypeKind = lowerContent == "struct" ? TTypeParser::ETypeKind::Struct :
+                            lowerContent == "tuple" ? TTypeParser::ETypeKind::Tuple :
+                            TTypeParser::ETypeKind::Dict;
+            std::cout << "struct or tuple" << std::endl;
 
-        TString content = Tokens[pos].Content;
-        TString lowerContent = ToLower(content);
-
-        if (lowerContent == "list" || lowerContent == "struct" ||
-            lowerContent == "tuple" || lowerContent == "dict") {
-
-            node.TypeName = lowerContent;
-            pos++;
-
-            if (pos >= Tokens.size() || Tokens[pos].Content != "<") {
-                return node;
+            if (SkipCurrentTokenAndWS(pos) >= Tokens.size() || Tokens[pos].Content != "<") {
+                return std::nullopt;
             }
-            pos++;
 
             while (pos < Tokens.size() && Tokens[pos].Content != ">") {
-                if (Tokens[pos].Name == "WS" || Tokens[pos].Content == ",") {
-                    pos++;
-                    continue;
-                }
-
                 if (lowerContent == "struct") {
-                    TypeNode field;
-                    field.Name = Tokens[pos].Content;
-                    pos++;
+                    SkipCurrentTokenAndWS(pos);
+                    auto name = Tokens[pos].Content;
+                    std::cout << "struct name: " << name << std::endl;
 
-                    while (pos < Tokens.size() && Tokens[pos].Name == "WS") {
-                        pos++;
-                    }
-
-                    if (pos >= Tokens.size() || Tokens[pos].Content != ":") {
-                        return node;
-                    }
-                    pos++;
-
-                    auto parseResult = Parse(pos);
-                    if (!parseResult) {
+                    if (SkipCurrentTokenAndWS(pos) >= Tokens.size() || Tokens[pos].Content != ":") {
                         return std::nullopt;
                     }
-                    field.Children.push_back(*parseResult);
-                    node.Children.push_back(field);
-                } else if (lowerContent == "dict") {
-                    auto parseResult = Parse(pos);
-                    if (!parseResult) {
-                        return std::nullopt;
-                    }
-                    TypeNode key = *parseResult;
-                    key.IsKey = true;
-                    node.Children.push_back(key);
 
-                    while (pos < Tokens.size() && (Tokens[pos].Name == "WS" || Tokens[pos].Content == ",")) {
-                        pos++;
-                    }
-
-                    parseResult = Parse(pos);
+                    auto parseResult = Parse(SkipCurrentTokenAndWS(pos));
                     if (!parseResult) {
                         return std::nullopt;
                     }
                     node.Children.push_back(*parseResult);
+                    node.Children.back().Name = name;
                 } else {
-                    auto parseResult = Parse(pos);
+                    auto parseResult = Parse(SkipCurrentTokenAndWS(pos));
                     if (!parseResult) {
                         return std::nullopt;
                     }
                     node.Children.push_back(*parseResult);
                 }
+
+                if (pos >= Tokens.size() || (Tokens[pos].Content != "," && Tokens[pos].Content != ">")) {
+                    return std::nullopt;
+                }
+            }
+        } else if (lowerContent == "list" ||
+                   lowerContent == "optional" ||
+                   lowerContent == "dict") {
+            std::cout << "list or optional or dict" << std::endl;
+            node.TypeKind = lowerContent == "list" ? TTypeParser::ETypeKind::List :
+                           lowerContent == "optional" ? TTypeParser::ETypeKind::Optional :
+                           TTypeParser::ETypeKind::Dict;
+
+            if (SkipCurrentTokenAndWS(pos) >= Tokens.size() || Tokens[pos].Content != "<") {
+                return std::nullopt;
             }
 
-            if (pos < Tokens.size() && Tokens[pos].Content == ">") {
-                pos++;
+            auto parseResult = Parse(SkipCurrentTokenAndWS(pos));
+            if (!parseResult) {
+                std::cout << "list or optional or dict parse failed" << std::endl;
+                return std::nullopt;
             }
+            node.Children.push_back(*parseResult);
+
+            if (lowerContent == "dict") {
+                if (pos >= Tokens.size() || Tokens[pos].Content != ",") {
+                    return std::nullopt;
+                }
+
+                parseResult = Parse(SkipCurrentTokenAndWS(pos));
+                if (!parseResult) {
+                    return std::nullopt;
+                }
+                node.Children.push_back(*parseResult);
+            }
+
+            if (pos >= Tokens.size() || Tokens[pos].Content != ">") {
+                std::cout << "list or optional or dict end failed" << std::endl;
+                return std::nullopt;
+            }
+
+            std::cout << "list or optional or dict end" << std::endl;
         } else if (lowerContent == "decimal") {
-            node.TypeName = lowerContent;
-            pos++;
-
-            if (pos >= Tokens.size() || Tokens[pos].Content != "(") {
-                return node;
+            std::cout << "decimal" << std::endl;
+            auto parseResult = ParseDecimal(pos);
+            if (!parseResult) {
+                return std::nullopt;
             }
-            pos++;
-
-            TypeNode precision;
-            precision.TypeName = Tokens[pos].Content;
-            node.Children.push_back(precision);
-            pos++;
-
-            if (pos >= Tokens.size() || Tokens[pos].Content != ",") {
-                return node;
-            }
-            pos++;
-
-            TypeNode scale;
-            scale.TypeName = Tokens[pos].Content;
-            node.Children.push_back(scale);
-            pos++;
-
-            if (pos >= Tokens.size() || Tokens[pos].Content != ")") {
-                return node;
-            }
-            pos++;
+            node = *parseResult;
         } else {
-            node.TypeName = lowerContent;
-            pos++;
+            std::cout << "primitive: " << lowerContent << std::endl;
+            auto parseResult = ParsePrimitive(lowerContent);
+            if (!parseResult) {
+                std::cout << "primitive: " << lowerContent << " failed" << std::endl;
+                return std::nullopt;
+            }
+            node = *parseResult;
         }
 
-        // Проверяем, является ли тип опциональным
-        while (pos < Tokens.size() && Tokens[pos].Name == "WS") {
-            pos++;
-        }
-
-        if (pos < Tokens.size() && Tokens[pos].Content == "?") {
+        if (SkipCurrentTokenAndWS(pos) < Tokens.size() && Tokens[pos].Content == "?") {
             TypeNode optionalNode;
-            optionalNode.TypeName = "optional";
+            optionalNode.TypeKind = TTypeParser::ETypeKind::Optional;
             optionalNode.Children.push_back(node);
-            pos++;
+            SkipCurrentTokenAndWS(pos);
+
             return optionalNode;
         }
 
         return node;
     }
 
+    std::optional<TypeNode> ParsePrimitive(const TString& content) {
+        TypeNode node;
+        node.TypeKind = TTypeParser::ETypeKind::Primitive;
+
+        if (content == "bool") {
+            node.PrimitiveType = EPrimitiveType::Bool;
+        } else if (content == "int8") {
+            node.PrimitiveType = EPrimitiveType::Int8;
+        } else if (content == "uint8") {
+            node.PrimitiveType = EPrimitiveType::Uint8;
+        } else if (content == "int16") {
+            node.PrimitiveType = EPrimitiveType::Int16;
+        } else if (content == "uint16") {
+            node.PrimitiveType = EPrimitiveType::Uint16;
+        } else if (content == "int32") {
+            node.PrimitiveType = EPrimitiveType::Int32;
+        } else if (content == "uint32") {
+            node.PrimitiveType = EPrimitiveType::Uint32;
+        } else if (content == "int64") {
+            node.PrimitiveType = EPrimitiveType::Int64;
+        } else if (content == "uint64") {
+            node.PrimitiveType = EPrimitiveType::Uint64;
+        } else if (content == "float") {
+            node.PrimitiveType = EPrimitiveType::Float;
+        } else if (content == "double") {
+            node.PrimitiveType = EPrimitiveType::Double;
+        } else if (content == "string") {
+            node.PrimitiveType = EPrimitiveType::String;
+        } else if (content == "utf8") {
+            node.PrimitiveType = EPrimitiveType::Utf8;
+        } else if (content == "json") {
+            node.PrimitiveType = EPrimitiveType::Json;
+        } else if (content == "yson") {
+            node.PrimitiveType = EPrimitiveType::Yson;
+        } else if (content == "date") {
+            node.PrimitiveType = EPrimitiveType::Date;
+        } else if (content == "datetime") {
+            node.PrimitiveType = EPrimitiveType::Datetime;
+        } else if (content == "timestamp") {
+            node.PrimitiveType = EPrimitiveType::Timestamp;
+        } else if (content == "interval") {
+            node.PrimitiveType = EPrimitiveType::Interval;
+        } else {
+            return std::nullopt;
+        }
+
+        return node;
+    }
+
+    std::optional<TypeNode> ParseDecimal(size_t& pos) {
+        TypeNode node;
+        node.TypeKind = TTypeParser::ETypeKind::Decimal;
+
+        if (SkipCurrentTokenAndWS(pos) >= Tokens.size() || Tokens[pos].Content != "(") {
+            return std::nullopt;
+        }
+
+        if (SkipCurrentTokenAndWS(pos) >= Tokens.size() || !TryFromString<ui32>(Tokens[pos].Content, node.precision)) {
+            return std::nullopt;
+        }
+
+        if (SkipCurrentTokenAndWS(pos) >= Tokens.size() || Tokens[pos].Content != ",") {
+            return std::nullopt;
+        }
+
+        if (SkipCurrentTokenAndWS(pos) >= Tokens.size() || !TryFromString<ui32>(Tokens[pos].Content, node.scale)) {
+            return std::nullopt;
+        }
+
+        if (SkipCurrentTokenAndWS(pos) >= Tokens.size() || Tokens[pos].Content != ")") {
+            return std::nullopt;
+        }
+
+        return node;
+    }
+
+    size_t& SkipWS(size_t& pos) {
+        while (pos < Tokens.size() && Tokens[pos].Name == "WS") {
+            pos++;
+        }
+        return pos;
+    }
+
+    size_t& SkipCurrentTokenAndWS(size_t& pos) {
+        pos++;
+        return SkipWS(pos);
+    }
+
     bool BuildType(const TypeNode& node, TTypeBuilder& builder) {
-        if (node.TypeName == "optional") {
+        if (node.TypeKind == TTypeParser::ETypeKind::Optional) {
             builder.BeginOptional();
             BuildType(node.Children[0], builder);
             builder.EndOptional();
-        } else if (node.TypeName == "list") {
+        } else if (node.TypeKind == TTypeParser::ETypeKind::List) {
             builder.BeginList();
             BuildType(node.Children[0], builder);
             builder.EndList();
-        } else if (node.TypeName == "struct") {
+        } else if (node.TypeKind == TTypeParser::ETypeKind::Struct) {
             builder.BeginStruct();
             for (const auto& field : node.Children) {
                 builder.AddMember(field.Name);
-                BuildType(field.Children[0], builder);
+                BuildType(field, builder);
             }
             builder.EndStruct();
-        } else if (node.TypeName == "tuple") {
+        } else if (node.TypeKind == TTypeParser::ETypeKind::Tuple) {
             builder.BeginTuple();
             for (const auto& element : node.Children) {
                 builder.AddElement();
                 BuildType(element, builder);
             }
             builder.EndTuple();
-        } else if (node.TypeName == "dict") {
+        } else if (node.TypeKind == TTypeParser::ETypeKind::Dict) {
             builder.BeginDict();
             builder.DictKey();
             BuildType(node.Children[0], builder);
             builder.DictPayload();
             BuildType(node.Children[1], builder);
             builder.EndDict();
-        } else if (node.TypeName == "decimal") {
-            ui32 precision = FromString<ui32>(node.Children[0].TypeName);
-            ui32 scale = FromString<ui32>(node.Children[1].TypeName);
-            builder.Decimal(TDecimalType(precision, scale));
+        } else if (node.TypeKind == TTypeParser::ETypeKind::Decimal) {
+            builder.Decimal(TDecimalType(node.precision, node.scale));
+        } else if (node.TypeKind == TTypeParser::ETypeKind::Primitive) {
+            builder.Primitive(node.PrimitiveType);
         } else {
-            auto primitiveType = GetPrimitiveType(node.TypeName);
-            if (!primitiveType) {
-                return false;
-            }
-
-            builder.Primitive(*primitiveType);
+            return false;
         }
 
         return true;
-    }
-
-    std::optional<EPrimitiveType> GetPrimitiveType(const TString& typeStr) {
-        if (typeStr == "bool") {
-            return EPrimitiveType::Bool;
-        } else if (typeStr == "int8") {
-            return EPrimitiveType::Int8;
-        } else if (typeStr == "uint8") {
-            return EPrimitiveType::Uint8;
-        } else if (typeStr == "int16") {
-            return EPrimitiveType::Int16;
-        } else if (typeStr == "uint16") {
-            return EPrimitiveType::Uint16;
-        } else if (typeStr == "int32") {
-            return EPrimitiveType::Int32;
-        } else if (typeStr == "uint32") {
-            return EPrimitiveType::Uint32;
-        } else if (typeStr == "int64") {
-            return EPrimitiveType::Int64;
-        } else if (typeStr == "uint64") {
-            return EPrimitiveType::Uint64;
-        } else if (typeStr == "float") {
-            return EPrimitiveType::Float;
-        } else if (typeStr == "double") {
-            return EPrimitiveType::Double;
-        } else if (typeStr == "string") {
-            return EPrimitiveType::String;
-        } else if (typeStr == "utf8") {
-            return EPrimitiveType::Utf8;
-        } else if (typeStr == "json") {
-            return EPrimitiveType::Json;
-        } else if (typeStr == "yson") {
-            return EPrimitiveType::Yson;
-        } else if (typeStr == "date") {
-            return EPrimitiveType::Date;
-        } else if (typeStr == "datetime") {
-            return EPrimitiveType::Datetime;
-        } else if (typeStr == "timestamp") {
-            return EPrimitiveType::Timestamp;
-        } else if (typeStr == "interval") {
-            return EPrimitiveType::Interval;
-        }
-
-        return std::nullopt;
     }
 
     const TVector<NSQLTranslation::TParsedToken>& Tokens;

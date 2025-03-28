@@ -17,25 +17,25 @@ logger = logging.getLogger(__name__)
 
 class TestYdbWorkload(object):
     @classmethod
-    def setup_class(cls):
-        cls.cluster = KiKiMR(KikimrConfigGenerator(
+    def setup_method(self):
+        self.cluster = KiKiMR(KikimrConfigGenerator(
             column_shard_config={
                 "alter_object_enabled": True,
             },
             static_pdisk_size=10 * 1024 * 1024,
             dynamic_pdisk_size=5 * 1024 * 1024
         ))
-        cls.cluster.start()
+        self.cluster.start()
 
-        cls.driver = ydb.Driver(endpoint=f'grpc://localhost:{cls.cluster.nodes[1].grpc_port}', database='/Root')
-        cls.session = ydb.QuerySessionPool(cls.driver)
-        cls.driver.wait(5, fail_fast=True)
+        self.driver = ydb.Driver(endpoint=f'grpc://localhost:{self.cluster.nodes[1].grpc_port}', database='/Root')
+        self.session = ydb.QuerySessionPool(self.driver)
+        self.driver.wait(5, fail_fast=True)
 
     @classmethod
-    def teardown_class(cls):
-        cls.session.stop()
-        cls.driver.stop()
-        cls.cluster.stop()
+    def teardown_method(self):
+        self.session.stop()
+        self.driver.stop()
+        self.cluster.stop()
 
     def make_session(self):
         driver = ydb.Driver(endpoint=f'grpc://localhost:{self.cluster.nodes[1].grpc_port}', database=self.database_name)

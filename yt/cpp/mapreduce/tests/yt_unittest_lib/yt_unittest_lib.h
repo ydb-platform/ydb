@@ -7,7 +7,7 @@
 
 #include <library/cpp/yson/node/node_io.h>
 
-#include <util/generic/bt_exception.h>
+#include <util/generic/yexception.h>
 
 #include <util/datetime/base.h>
 

@@ -7,7 +7,7 @@ env:
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   BRANCH_FOR_PR: update-muted-ya
   TITLE: "Update muted_ya.txt"
-  BASE_BRANCH: main
+  BASE_BRANCH: dev_update_muted_v4
   REVIEWERS: ydb-platform/ci
 
 jobs:
@@ -84,6 +84,8 @@ jobs:
         id: pr_description
         run: |
           PR_BODY=''
+          PR_BODY_FILE="pr_body_content.txt"
+
           if [ -s mute_update/deleted_tests_in_mute_debug.txt ]; then
               DELETED_COUNT=$(wc -l < mute_update/deleted_tests_in_mute_debug.txt)
               PR_BODY+=$'**Removed from mute: '"${DELETED_COUNT}**"$'\n\n'
@@ -106,8 +108,10 @@ jobs:
               PR_BODY+=$'\n```\n\n'
           fi
 
-          # Use printf to handle special characters and newlines
-          printf "PR_BODY<<EOF\n%s\nEOF\n" "$PR_BODY" >> $GITHUB_ENV
+          # Save PR_BODY to the file
+          echo "$PR_BODY" > "$PR_BODY_FILE"
+          # Export the path to the file to the GitHub environment
+          echo "PR_BODY_PATH=$PR_BODY_FILE" >> $GITHUB_ENV
 
       - name: Stage changes if any
         if: env.changes == 'true'
@@ -141,7 +145,25 @@ jobs:
           BRANCH_FOR_PR: ${{ env.BRANCH_FOR_PR }}
           TITLE: ${{ env.TITLE }}
           BASE_BRANCH: ${{ env.BASE_BRANCH }}
-          BODY: ${{ env.PR_BODY }}
+          BODY: ${{ env.PR_BODY_PATH }}
           REVIEWERS: ${{ env.REVIEWERS }}
         run: |
-          python .github/scripts/create_or_update_pr.py
+          python .github/scripts/create_or_update_pr.py create_or_update --base_branch ${{ env.BASE_BRANCH }} --branch_for_pr ${{ env.BRANCH_FOR_PR }} --title ${{ env.TITLE }} --body ${{ env.BODY }} --reviewers ${{ env.REVIEWERS }}
+      
+      - name: Display PR Number in Markdown
+        run: |
+          echo "## Pull Request Created or Updated" >> pr_summary.md
+          echo "- PR Number: #${{ steps.create_or_update_pr.outputs.pr_number }}" >> pr_summary.md
+      
+      - name: Display Markdown
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const fs = require('fs');
+            const content = fs.readFileSync('pr_summary.md', 'utf8');
+            github.issues.createComment({
+              ...context.repo,
+              issue_number: context.issue.number,
+              body: content
+            });
+  

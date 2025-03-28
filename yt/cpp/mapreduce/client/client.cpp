@@ -1561,6 +1561,7 @@ TClientContext CreateClientContext(
     context.Config = options.Config_ ? options.Config_ : TConfig::Get();
     context.TvmOnly = options.TvmOnly_;
     context.ProxyAddress = options.ProxyAddress_;
+    context.ProxyUnixDomainSocket = options.ProxyUnixDomainSocket_;
 
     if (options.UseTLS_) {
         context.UseTLS = *options.UseTLS_;

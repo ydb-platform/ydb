@@ -1,5 +1,5 @@
 PY3TEST()
-FORK_TESTS()
+FORK_SUBTESTS()
 
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")

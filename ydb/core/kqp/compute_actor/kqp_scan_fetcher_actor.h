@@ -182,7 +182,7 @@ private:
     ui32 TotalRetries = 0;
 
     std::set<ui32> TrackingNodes;
-    ui32 MaxInFlight = 1024;
+    ui32 MaxInFlight = 2;
     bool IsAggregationRequest = false;
 };
 

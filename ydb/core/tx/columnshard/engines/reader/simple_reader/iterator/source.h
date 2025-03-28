@@ -89,6 +89,10 @@ public:
     TString DebugString() const {
         return TStringBuilder() << "point:{" << Value.DebugString() << "};reverse:" << Reverse << ";";
     }
+
+    const NArrow::TReplaceKey& GetReplaceKey() const {
+        return Value;
+    }
 };
 
 class IDataSource: public NCommon::IDataSource {
@@ -138,7 +142,7 @@ public:
     const TReplaceKeyAdapter& GetStart() const {
         return Start;
     }
-    const TReplaceKeyAdapter GetFinish() const {
+    const TReplaceKeyAdapter& GetFinish() const {
         return Finish;
     }
 
@@ -371,6 +375,13 @@ public:
 
     virtual ui64 PredictAccessorsSize(const std::set<ui32>& entityIds) const override {
         return Portion->GetApproxChunksCount(entityIds.size()) * sizeof(TColumnRecord);
+    }
+
+    virtual const NArrow::TReplaceKey& GetMinPK() const override {
+        return Portion->IndexKeyStart();
+    }
+    virtual const NArrow::TReplaceKey& GetMaxPK() const override {
+        return Portion->IndexKeyEnd();
     }
 
     virtual std::shared_ptr<arrow::RecordBatch> GetStartPKRecordBatch() const override {

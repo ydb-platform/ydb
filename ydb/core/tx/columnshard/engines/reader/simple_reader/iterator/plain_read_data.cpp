@@ -19,9 +19,11 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
             insertedPortionsBytes += i->GetTotalBlobBytes();
         }
 
+        // FIXME: if memory group == idx, then first sources **in scan order** does not have priority in memory allocator
         sources.emplace_back(std::make_shared<TPortionDataSource>(sourceIdx++, i, SpecialReadContext));
     }
     std::sort(sources.begin(), sources.end(), IDataSource::TCompareStartForScanSequence());
+    SpecialReadContext->RegisterDuplicatesManager(sources);
     Scanner = std::make_shared<TScanHead>(std::move(sources), SpecialReadContext);
 
     auto& stats = GetReadMetadata()->ReadStats;

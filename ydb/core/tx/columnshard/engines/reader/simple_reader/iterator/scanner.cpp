@@ -58,6 +58,7 @@ void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::s
             break;
         }
         AFL_VERIFY(FetchingSourcesByIdx.erase(frontSource->GetSourceIdx()));
+        Context->OnSourceFinished(frontSource);
         FetchingSources.pop_front();
         frontSource->ClearResult();
         if (Context->GetCommonContext()->GetReadMetadata()->HasLimit()) {
@@ -106,19 +107,26 @@ TScanHead::TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const s
         InFlightLimit = MaxInFlight;
     }
     bool started = !context->GetCommonContext()->GetScanCursor()->IsInitialized();
+    std::vector<std::shared_ptr<NCommon::IDataSource>> skipped;
     for (auto&& i : sources) {
         if (!started) {
             bool usage = false;
             if (!context->GetCommonContext()->GetScanCursor()->CheckEntityIsBorder(i, usage)) {
+                skipped.emplace_back(i);
                 continue;
             }
             started = true;
             if (!usage) {
+                skipped.emplace_back(i);
                 continue;
             }
             i->SetIsStartedByCursor();
         }
         SortedSources.emplace_back(i);
+    }
+    AFL_VERIFY(skipped.size() + SortedSources.size() == sources.size());
+    if (!skipped.empty()) {
+        Context->OnSourcesSkipped(skipped);
     }
 }
 

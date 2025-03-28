@@ -432,6 +432,14 @@ public:
         return UseFilter ? nullptr : Filter;
     }
 
+    TColumnFilter AdaptFullFilter(TColumnFilter filter) const {
+        if (!UseFilter || Filter->IsTotalAllowFilter()) {
+            return filter;
+        } else {
+            return filter.ApplyFilter(*Filter);
+        }
+    }
+
     void AddFilter(const TColumnFilter& filter) {
         if (!UseFilter) {
             *Filter = Filter->And(filter);
@@ -439,6 +447,7 @@ public:
             *Filter = Filter->CombineSequentialAnd(filter);
             for (auto&& i : Accessors) {
                 i.second = TAccessorCollectedContainer(i.second.GetData()->ApplyFilter(filter, i.second.GetData()));
+                AFL_VERIFY(i.second.GetData()->GetRecordsCount() == Filter->GetFilteredCountVerified()); // TODO: remove
             }
         }
         RecordsCountActual = Filter->GetFilteredCount();

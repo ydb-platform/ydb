@@ -2,6 +2,7 @@
 #include "source.h"
 
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/fetch_steps.h>
+#include <ydb/core/tx/columnshard/engines/reader/duplicates/manager.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 namespace NKikimr::NOlap::NReader::NSimple {
@@ -91,6 +92,9 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::BuildColumnsFetchingPlan(c
             acc.AddAssembleStep(*GetSpecColumns(), "SPEC", EStageFeaturesIndexes::Filter, false);
             acc.AddStep(std::make_shared<TSnapshotFilter>());
         }
+        acc.AddFetchingStep(*GetMergeColumns(), EStageFeaturesIndexes::Filter);
+        acc.AddAssembleStep(*GetMergeColumns(), "DUPLICATE", EStageFeaturesIndexes::Filter, false);
+        acc.AddStep(std::make_shared<TDuplicateFilter>());
         const auto& chainProgram = GetReadMetadata()->GetProgram().GetChainVerified();
         acc.AddStep(std::make_shared<NCommon::TProgramStep>(chainProgram));
     }
@@ -116,6 +120,23 @@ TString TSpecialReadContext::ProfileDebugString() const {
         }
     }
     return sb;
+}
+
+void TSpecialReadContext::RegisterDuplicatesManager(const std::deque<std::shared_ptr<IDataSource>>& sources) {
+    AFL_VERIFY(!DuplicatesManager);
+    DuplicatesManager = NActors::TActivationContext::Register(new TDuplicateFilterConstructor(sources));
+}
+
+void TSpecialReadContext::OnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source) {
+    if (DuplicatesManager) {
+        NActors::TActivationContext::AsActorContext().Send(DuplicatesManager, new TEvNotifyReadingFinished({ source }));
+    }
+}
+
+void TSpecialReadContext::OnSourcesSkipped(const std::vector<std::shared_ptr<NCommon::IDataSource>>& sources) {
+    if (DuplicatesManager) {
+        NActors::TActivationContext::AsActorContext().Send(DuplicatesManager, new TEvNotifyReadingFinished(sources));
+    }
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

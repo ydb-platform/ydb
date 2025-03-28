@@ -69,6 +69,11 @@ struct TEvPrivate {
         EvRemovePortionDataAccessor,
         EvMetadataAccessorsInfo,
 
+        EvRequestFilter,
+        EvDuplicateFilterIntervalResult,
+        EvDuplicateFilterDataFetched,
+        EvNotifyReadingFinished,
+
         EvEnd
     };
 

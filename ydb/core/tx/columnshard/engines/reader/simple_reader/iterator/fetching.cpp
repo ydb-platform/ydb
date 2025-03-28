@@ -3,6 +3,7 @@
 #include "source.h"
 
 #include <ydb/core/tx/columnshard/engines/filter.h>
+#include <ydb/core/tx/columnshard/engines/reader/duplicates/events.h>
 #include <ydb/core/tx/conveyor/usage/service.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
@@ -22,9 +23,10 @@ ui64 IFetchingStep::GetProcessingDataSize(const std::shared_ptr<NCommon::IDataSo
 
 TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     auto filter = source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(
-        source->GetStageData().GetTable()->ToTable(source->GetContext()->GetReadMetadata()->GetPKRangesFilter().GetColumnIds(
-                                                       source->GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo()),
-            source->GetContext()->GetCommonContext()->GetResolver(), true));
+        *source->GetStageData().GetTable()->ToGeneralContainer(source->GetContext()->GetCommonContext()->GetResolver(),
+            source->GetContext()->GetReadMetadata()->GetPKRangesFilter().GetColumnIds(
+                source->GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo()),
+            true));
     source->MutableStageData().AddFilter(filter);
     return true;
 }
@@ -188,6 +190,29 @@ TConclusion<bool> TPrepareResultStep::DoExecuteInplace(const std::shared_ptr<IDa
     TFetchingScriptCursor cursor(plan, 0);
     auto task = std::make_shared<TStepAction>(source, std::move(cursor), source->GetContext()->GetCommonContext()->GetScanActorId());
     NConveyor::TScanServiceOperator::SendTaskToExecute(task);
+    return false;
+}
+
+void TDuplicateFilter::TFilterSubscriber::OnFilterReady(const NArrow::TColumnFilter& filter) {
+    Source->MutableStageData().AddFilter(Source->GetStageData().AdaptFullFilter(filter));
+    Step.Next();
+    auto task = std::make_shared<TStepAction>(Source, std::move(Step), Source->GetContext()->GetCommonContext()->GetScanActorId());
+    NConveyor::TScanServiceOperator::SendTaskToExecute(task, Source->GetContext()->GetCommonContext()->GetConveyorProcessId());
+}
+
+void TDuplicateFilter::TFilterSubscriber::OnFailure(const TString& reason) {
+    Source->GetContext()->GetCommonContext()->AbortWithError("cannot build duplicate filter : " + reason);
+}
+
+TDuplicateFilter::TFilterSubscriber::TFilterSubscriber(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step)
+    : Source(source)
+    , Step(step)
+    , TaskGuard(source->GetContext()->GetCommonContext()->GetCounters().GetResultsForSourceGuard()) {
+}
+
+TConclusion<bool> TDuplicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& step) const {
+    NActors::TActivationContext::AsActorContext().Send(source->GetContextAsVerified<TSpecialReadContext>()->GetDuplicatesManager(),
+        new TEvRequestFilter(source, std::make_shared<TFilterSubscriber>(source, step)));
     return false;
 }
 

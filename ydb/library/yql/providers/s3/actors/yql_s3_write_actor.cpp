@@ -522,7 +522,7 @@ public:
     static constexpr char ActorName[] = "S3_WRITE_ACTOR";
 
     void Bootstrap() {
-        LOG_D("TS3WriteActorBase", "Bootstrap");
+        LOG_D("TS3WriteActor", "Bootstrap");
         Become(&TS3WriteActorBase::StateFunc);
     }
 

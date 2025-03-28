@@ -107,6 +107,7 @@ PEERDIR(
     ydb/core/debug
     ydb/core/erasure
     ydb/core/graph/api
+    ydb/core/control/lib
     ydb/core/jaeger_tracing
     ydb/core/protos
     ydb/core/protos/out

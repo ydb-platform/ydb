@@ -71,7 +71,7 @@ namespace NInternal {
     ) {
         TVector<const NScheme::TSchemeEntry*> entriesToRemoveInSecondPass;
         for (const NScheme::TSchemeEntry& entry : std::ranges::subrange(begin, end)) {
-            if (NInternal::MightHaveDependents(entry.Type)) {
+            if (MightHaveDependents(entry.Type)) {
                 entriesToRemoveInSecondPass.emplace_back(&entry);
                 continue;
             }

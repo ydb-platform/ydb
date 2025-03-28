@@ -22,6 +22,10 @@ target_link_libraries(sql-v1-complete PUBLIC
   contrib-libs-antlr4-c3
   essentials-sql-settings
   sql-v1-format
+  sql-v1-lexer
+  v1-lexer-antlr4_pure
+  v1-lexer-antlr4_pure_ansi
+  essentials-core-issue
   antlr_ast-gen-v1_ansi_antlr4
   antlr_ast-gen-v1_antlr4
 )

@@ -276,6 +276,24 @@ struct MainTestCase {
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
     }
 
+    void PauseTransfer() {
+        ExecuteDDL(Sprintf(R"(
+            ALTER TRANSFER `%s`
+            SET (
+                STATE = "Paused"
+            );
+        )", TransferName.data()));
+    }
+
+    void ResumeTransfer() {
+        ExecuteDDL(Sprintf(R"(
+            ALTER TRANSFER `%s`
+            SET (
+                STATE = "StandBy"
+            );
+        )", TransferName.data()));
+    }
+
     auto DescribeTransfer() {
         TReplicationClient client(Driver);
 
@@ -324,9 +342,9 @@ struct MainTestCase {
         }
 
 
-        auto res = Session.ExecuteQuery(
-            Sprintf("SELECT %s FROM `%s`", columns.data(), TableName.data()),
-                TTxControl::NoTx()).GetValueSync();
+        auto query = Sprintf("SELECT %s FROM `%s` ORDER BY %s", columns.data(), TableName.data(), columns.data());
+        Cerr << ">>>>> Query: " << query << Endl << Flush;
+        auto res = Session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
         UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
     
         const auto proto = NYdb::TProtoAccessor::GetProto(res.GetResultSet(0));
@@ -340,7 +358,7 @@ struct MainTestCase {
             if (res.first == expectations.size()) {
                 const Ydb::ResultSet& proto = res.second;
                 for (size_t i = 0; i < expectations.size(); ++i) {
-                    auto& row = proto.rows(0);
+                    auto& row = proto.rows(i);
                     auto& rowExpectations = expectations[i];
                     for (size_t i = 0; i < rowExpectations.size(); ++i) {
                         auto& c = rowExpectations[i];
@@ -357,19 +375,25 @@ struct MainTestCase {
         }
     }
 
-    void CheckTransferStateError(const TString& expectedMessage) {
+    TReplicationDescription CheckTransferState(TReplicationDescription::EState expected) {
         for (size_t i = 20; i--;) {
             auto result = DescribeTransfer().GetReplicationDescription();
-            if (TReplicationDescription::EState::Error == result.GetState()) {
-                Cerr << ">>>>> ACTUAL: " << result.GetErrorState().GetIssues().ToOneLineString() << Endl << Flush;
-                Cerr << ">>>>> EXPECTED: " << expectedMessage << Endl << Flush;
-                UNIT_ASSERT(result.GetErrorState().GetIssues().ToOneLineString().contains(expectedMessage));
-                break;
+            if (expected == result.GetState()) {
+                return result;
             }
     
-            UNIT_ASSERT_C(i, "Unable to wait transfer error");
+            UNIT_ASSERT_C(i, "Unable to wait transfer state. Expected: " << expected << ", actual: " << result.GetState());
             Sleep(TDuration::Seconds(1));
         }
+
+        Y_UNREACHABLE();
+    }
+
+    void CheckTransferStateError(const TString& expectedMessage) {
+        auto result = CheckTransferState(TReplicationDescription::EState::Error);
+        Cerr << ">>>>> ACTUAL: " << result.GetErrorState().GetIssues().ToOneLineString() << Endl << Flush;
+        Cerr << ">>>>> EXPECTED: " << expectedMessage << Endl << Flush;
+        UNIT_ASSERT(result.GetErrorState().GetIssues().ToOneLineString().contains(expectedMessage));
     }
 
     void Run(const TConfig& config) {
@@ -1370,6 +1394,74 @@ Y_UNIT_TEST_SUITE(Transfer)
             )");
 
         testCase.CheckTransferStateError(TStringBuilder() << "The target table `/local/" << testCase.TableName << "` does not exist");
+    }
+
+    Y_UNIT_TEST(PauseAndResumeTransfer)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )");
+        testCase.CreateTopic(1);
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )", MainTestCase::CreateTransferSettings::WithBatching(TDuration::Seconds(1), 1));
+
+        testCase.Write({"Message-1"});
+
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }});
+
+        testCase.CheckTransferState(TReplicationDescription::EState::Running);
+
+        Cerr << "State: Paused" << Endl << Flush;
+
+        testCase.PauseTransfer();
+
+        Sleep(TDuration::Seconds(1));
+        testCase.CheckTransferState(TReplicationDescription::EState::Paused);
+
+        testCase.Write({"Message-2"});
+
+        // Transfer is paused. New messages aren`t added to the table.
+        Sleep(TDuration::Seconds(3));
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }});
+
+        Cerr << "State: StandBy" << Endl << Flush;
+
+        testCase.ResumeTransfer();
+
+        // Transfer is resumed. New messages are added to the table.
+        testCase.CheckTransferState(TReplicationDescription::EState::Running);
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }, {
+            _C("Message", TString("Message-2")),
+        }});
+
+        // More cycles for pause/resume
+        testCase.PauseTransfer();
+        testCase.CheckTransferState(TReplicationDescription::EState::Paused);
+
+        testCase.ResumeTransfer();
+        testCase.CheckTransferState(TReplicationDescription::EState::Running);
     }
 }
 

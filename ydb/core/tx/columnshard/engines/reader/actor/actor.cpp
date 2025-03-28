@@ -353,8 +353,6 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch) {
     if (ScanIterator) {
         Result->AvailablePacks = ScanIterator->GetAvailableResultsCount();
     }
-    TDuration totalElapsedTime = TDuration::Seconds(GetElapsedTicksAsSeconds());
-    LastReportedElapsedTime = totalElapsedTime;
 
     PageFaults = 0;
 

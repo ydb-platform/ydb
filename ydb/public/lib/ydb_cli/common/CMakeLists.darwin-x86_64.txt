@@ -37,6 +37,7 @@ target_link_libraries(common PUBLIC
   public-lib-json_value
   src-library-operation_id
   public-lib-yson_value
+  src-client-coordination
   src-client-draft
   src-client-query
   src-client-result

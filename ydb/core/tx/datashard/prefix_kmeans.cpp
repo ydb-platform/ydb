@@ -100,6 +100,7 @@ protected:
     TActorId ResponseActorId;
     TAutoPtr<TEvDataShard::TEvPrefixKMeansResponse> Response;
 
+    // FIXME: save PrefixRows as std::vector<std::pair<TSerializedCellVec, TSerializedCellVec>> to avoid parsing
     ui32 PrefixColumns;
     TSerializedCellVec Prefix;
     TBufferData PrefixRows;

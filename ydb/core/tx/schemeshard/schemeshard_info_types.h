@@ -3257,7 +3257,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             return {parentFrom, parentTo};
         }
 
-        TString RangeToDebugStr(const TSerializedTableRange& range) const {
+        TString RangeToDebugStr(const TSerializedTableRange& range, ui32 rootLevel) const {
             auto toStr = [&](const TSerializedCellVec& v) -> TString {
                 const auto cells = v.GetCells();
                 if (cells.empty()) {
@@ -3267,8 +3267,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
                     return "-inf";
                 }
                 auto str = TStringBuilder{} << "{ count: " << cells.size();
-                if (Parent != 0) {
-                    Y_ASSERT(Level != 0);
+                if (Level > rootLevel) {
                     str << ", parent: " << cells[0].AsValue<NTableIndex::TClusterId>();
                     if (cells.size() != 1 && cells[1].IsNull()) {
                         str << ", pk: null";
@@ -3658,7 +3657,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         TSerializedTableRange bound{range};
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
-            "AddShardStatus id# " << Id << " shard " << shardIdx << " range " << KMeans.RangeToDebugStr(bound));
+            "AddShardStatus id# " << Id << " shard " << shardIdx << 
+            " range " << KMeans.RangeToDebugStr(bound, buildInfo.IsBuildPrefixedVectorIndex() ? 2 : 1));
         AddParent(bound, shardIdx);
         Shards.emplace(
             shardIdx, TIndexBuildInfo::TShardStatus(std::move(bound), std::move(lastKeyAck), Shards.size()));

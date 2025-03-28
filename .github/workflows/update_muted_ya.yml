@@ -54,12 +54,8 @@ jobs:
             # Reset the branch to BASE_BRANCH
             git reset --hard origin/${{ env.BASE_BRANCH }}
             
-            # Force push the reset branch to remote
-            git push origin ${{ env.BRANCH_FOR_PR }} --force
-          else
-            # If rebase is successful, push the updated branch
-            git push origin ${{ env.BRANCH_FOR_PR }} --force
           fi
+          git push origin ${{ env.BRANCH_FOR_PR }} --force
         
       - name: Run the script
         run: |
@@ -148,7 +144,7 @@ jobs:
           BODY: ${{ env.PR_BODY_PATH }}
           REVIEWERS: ${{ env.REVIEWERS }}
         run: |
-          python .github/scripts/create_or_update_pr.py create_or_update --base_branch ${{ env.BASE_BRANCH }} --branch_for_pr ${{ env.BRANCH_FOR_PR }} --title ${{ env.TITLE }} --body ${{ env.BODY }} --reviewers ${{ env.REVIEWERS }}
+          python .github/scripts/create_or_update_pr.py create_or_update --base_branch="${{ env.BASE_BRANCH }}" --branch_for_pr="${{ env.BRANCH_FOR_PR }}" --title="${{ env.TITLE }}" --body="${{ env.BODY }}" --reviewers="${{ env.REVIEWERS }}"
       
       - name: Display PR Number in Markdown
         run: |

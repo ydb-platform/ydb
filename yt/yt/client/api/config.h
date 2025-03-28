@@ -209,6 +209,8 @@ struct TJournalWriterConfig
 
     TDuration PrerequisiteTransactionProbePeriod;
 
+    bool EnableChecksums;
+
     // For testing purposes only.
     bool DontClose;
     bool DontSeal;

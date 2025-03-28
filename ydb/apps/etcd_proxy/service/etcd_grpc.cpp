@@ -17,7 +17,7 @@ class TEtcdRequestWrapperImpl
     : public IRequestCtx
     , public TEvProxyRuntimeEvent
 {
-friend class TProtoResponseHelper;
+friend class ::NKikimr::NGRpcService::TProtoResponseHelper;
 public:
     using TRequest = TReq;
     using TResonse = TRes;

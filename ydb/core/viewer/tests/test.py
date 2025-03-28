@@ -360,6 +360,7 @@ def normalize_result_nodes(result):
                                           'NumberOfCpus',
                                           'CoresUsed',
                                           'CoresTotal',
+                                          'RealNumberOfCpus',
                                           'CreateTime',
                                           'MaxDiskUsage',
                                           'Roles',

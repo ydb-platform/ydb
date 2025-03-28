@@ -97,6 +97,12 @@ if [ -f "${kikimr_auth_token_file}" ]; then
     kikimr_arg="${kikimr_arg}${kikimr_auth_token_file:+ --auth-token-file ${kikimr_auth_token_file}}"
 fi
 
+if [ ! -z "${kikimr_kafka_port}" ]; then
+    kikimr_arg="${kikimr_arg}${kikimr_kafka_port:+ --kafka-port ${kikimr_kafka_port}}"
+else
+    echo "Kafka port is not defined."
+fi
+
 if [ ! -z "${kikimr_grpcs_port}" ]; then
     kikimr_arg="${kikimr_arg}${kikimr_grpcs_port:+ --grpcs-port ${kikimr_grpcs_port}}"
 else

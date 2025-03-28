@@ -36,6 +36,7 @@ private:
 
         void SetBlobData(const TString& data) {
             AFL_VERIFY(!Data);
+            BlobRange.reset();
             Data.emplace(data);
         }
     };

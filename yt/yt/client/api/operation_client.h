@@ -3,8 +3,9 @@
 #include "client_common.h"
 
 #include <yt/yt/client/scheduler/operation_id_or_alias.h>
-
 #include <yt/yt/client/scheduler/public.h>
+
+#include <yt/yt/client/node_tracker_client/public.h>
 
 namespace NYT::NApi {
 
@@ -368,6 +369,7 @@ struct TJob
     std::optional<TInstant> StartTime;
     std::optional<TInstant> FinishTime;
     std::optional<TString> Address;
+    std::optional<NNodeTrackerClient::TAddressMap> Addresses;
     std::optional<double> Progress;
     std::optional<ui64> StderrSize;
     std::optional<ui64> FailContextSize;

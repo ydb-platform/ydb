@@ -26,7 +26,8 @@ The following system view stores detailed information about individual [partitio
 
 The system view is designed to detect various irregularities in the load on a table partition or show the size of table partition data.
 
-Cumulative fields (`RowReads`, `RowUpdates`, and so on) store the accumulated values since the last start of the tablet serving the partition.
+Instant metrics (`NodeID`, `AccessTime`, `CPUCores`, etc.) contain instantaneous values.
+Cumulative metrics (`RowReads`, `RowUpdate`, `LockAcquired`, etc.) store accumulated values since the last launch of the tablet serving the batch.
 
 Table structure:
 
@@ -38,25 +39,28 @@ Table structure:
 | `DataSize` | Approximate partition size in bytes.<br/>Type: `Uint64`. |
 | `RowCount` | Approximate number of rows.<br/>Type: `Uint64`. |
 | `IndexSize` | Partition index size in a tablet.<br/>Type: `Uint64`. |
-| `CPUCores` | Double Instant value of load per partition (CPU share) |
+| `CPUCores` | Instantaneous value of the load on the partition (share of the core).<br/>Type: `Double` |
 | `TabletId` | ID of the tablet serving the partition.<br/>Type: `Uint64`. |
 | `Path` | Full path to the table.<br/>Type: `Utf8`. |
 | `NodeId` | ID of the node that the partition is being served on.<br/>Type: `Uint32`. |
 | `StartTime` | Last time when the tablet serving the partition was started.<br/>Type: `Timestamp`. |
 | `AccessTime` | Last time when data from the partition was read.<br/>Type: `Timestamp`. |
 | `UpdateTime` | Last time when data was written to the partition.<br/>Type: `Timestamp`. |
-| `RowReads` | Number of point reads since the start of the partition tablet.<br/>Type: `Uint64`. |
-| `RowUpdates` | Number of rows written since the start.<br/>Type: `Uint64`. |
-| `RowDeletes` | Number of rows deleted since the start.<br/>Type: `Uint64`. |
-| `RangeReads` | Number of row range reads since the start.<br/>Type: `Uint64`. |
-| `RangeReadRows` | Number of rows read in the ranges since the start.<br/>Type: `Uint64`. |
+| `RowReads` | Number of point reads.<br/>Type: `Uint64`.<br/>Cumulative metric |
+| `RowUpdates` | Number of rows written.<br/>Type: `Uint64`.<br/>Cumulative metric |
+| `RowDeletes` | Number of rows deleted.<br/>Type: `Uint64`.<br/>Cumulative metric |
+| `RangeReads` | Number of range reads.<br/>Type: `Uint64`.<br/>Cumulative metric |
+| `RangeReadRows` | Number of rows read in ranges.<br/>Type: `Uint64`.<br/>Cumulative metric |
 | `InFlightTxCount` | Number of in-flight transactions.<br/>Type: `Uint64`. |
-| `ImmediateTxCompleted` | Number of one-shard transactions completed since the start.<br/>Type: `Uint64`. |
-| `CoordinatedTxCompleted` | Number of coordinated transactions completed since the start.<br/>Type: `Uint64`. |
-| `TxRejectedByOverload` | Number of transactions rejected due to overload (since the start).<br/>Type: `Uint64`. |
-| `TxRejectedByOutOfStorage` | Number of transactions rejected due to lack of storage space (since the start).<br/>Type: `Uint64`. |
+| `ImmediateTxCompleted` | Number of completed single-shard transactions.<br/>Type: `Uint64`.<br/>Cumulative metric |
+| `CoordinatedTxCompleted` | Number of completed coordinated transactions.<br/>Type: `Uint64`.<br/>Cumulative metric |
+| `TxRejectedByOverload` | Number of transactions canceled due to overload.<br/>Type: `Uint64`.<br/>Cumulative metric |
+| `TxRejectedByOutOfStorage` | Number of transactions canceled due to lack of space.<br/>Type: `Uint64`.<br/>Cumulative metric |
+| `LocksAcquired` | Number of acquired [locks](../contributor/datashard-locks-and-change-visibility.md) "on a range of keys".<br/>Type: `Uint64`.<br/>Cumulative metric |
+| `LocksWholeShard` | Number of acquired locks "on the whole partition".<br/>Type: `Uint64`.<br/>Cumulative metric |
+| `LocksBroken` | Number of broken locks.<br/>Type: `Uint64`.<br/>Cumulative metric |
 
-### Example queries
+### Example queries {#partitions-examples}
 
 Top 5 of most loaded partitions among all DB tables:
 
@@ -81,6 +85,18 @@ SELECT
     SUM(CPUCores) as CPU
 FROM `.sys/partition_stats`
 GROUP BY Path
+```
+
+List of DB tables with the largest number of broken locks:
+
+```yql
+SELECT
+    Path,
+    COUNT(*) as Partitions,
+    SUM(LocksBroken) as TotalLocksBroken
+FROM `.sys/partition_stats`
+GROUP BY Path
+ORDER BY TotalLocksBroken DESC
 ```
 
 ## Top queries {#top-queries}
@@ -133,7 +149,7 @@ All tables have the same structure:
 | `CompileCPUTime` | CPU time used to compile a query.<br/>Type: `Uint64`. |
 | `ProcessCPUTime` | CPU time used for overall query handling.<br/>Type: `Uint64`. |
 
-### Example queries
+### Example queries {#top-queries-examples}
 
 Top queries by execution time for the last minute when queries were made:
 
@@ -209,8 +225,7 @@ Table structure:
 | `MinDeleteRows` | Minimum number of rows deleted.<br/>Type: `Uint64`. |
 | `MaxDeleteRows` | Maximum number of rows deleted.<br/>Type: `Uint64`. |
 
-
-### Example queries
+### Example queries {#query-metrics-examples}
 
 Top 10 queries for the last 6 hours by the total number of rows updated per minute:
 
@@ -247,14 +262,21 @@ The following system views (tables) store the history of points in time when the
 * `top_partitions_one_minute`: The data is split into one-minute intervals, contains the history for the last 6 hours.
 * `top_partitions_one_hour`: The data is split into one-hour intervals, contains the history for the last 2 weeks.
 
-These tables contain partitions with peak loads of more than 70% (`CPUCores` > 0.7). Partitions within a single interval are ranked by peak load value.
+These views contain partitions with peak loads of more than 70% (`CPUCores` > 0.7). Partitions within a single interval are ranked by peak load value.
+
+The keys of the views are:
+
+* `IntervalEnd` - the moment when the interval is closed;
+* `Rank` - the rank of the partition according to the peak load of `CPUCores` in this interval.
+
+For example, `top_partitions_one_hour` for the hour interval `"20.12.2024 10:00-11:00"` will return 10 rows sorted in descending order of `CPUCores`. They will have a `Rank` from 1 to 10 and the same `IntervalEnd` `"20.12.2024 11:00"`.
 
 All tables have the same structure:
 
 | Column | Description |
 |--------|-------------|
 | `IntervalEnd` | The end of a one-minute or one-hour interval.<br/>Type: `Timestamp`.<br/>Key: `0`. |
-| `Rank` | Partition rank within an interval (by CPUCores).<br/>Type: `Uint32`.<br/>Key: `1`. |
+| `Rank` | Partition rank within an interval (by `CPUCores`).<br/>Type: `Uint32`.<br/>Key: `1`. |
 | `TabletId` | ID of the tablet serving the partition.<br/>Type: `Uint64`. |
 | `Path` | Full path to the table.<br/>Type: `Utf8`. |
 | `PeakTime` | Peak time within an interval.<br/>Type: `Timestamp`. |
@@ -265,7 +287,7 @@ All tables have the same structure:
 | `IndexSize` | Partition index size per tablet during the peak load.<br/>Type: `Uint64`. |
 | `InFlightTxCount` | The number of in-flight transactions during the peak load.<br/>Type: `Uint32`. |
 
-### Example queries
+### Example queries {#top-overload-partitions-examples}
 
 The following query returns partitions with CPU usage of more than 70% in the specified interval, with tablet IDs and sizes as of the time when the percentage was exceeded. The query is made to the `.sys/top_partitions_one_minute` table with data over the last six hours split into one-minute intervals:
 
@@ -300,6 +322,53 @@ ORDER BY IntervalEnd desc, CPUCores desc
 ```
 
 * `"YYYY-MM-DDTHH:MM:SS.UUUUUUZ"`: Time in the UTC 0 zone (`YYYY` stands for year, `MM`, for month, `DD`, for date, `hh`, for hours, `mm`, for minutes, `ss`, for seconds, and `uuuuuu`, for microseconds). For example, `"2023-01-26T13:00:00.000000Z"`.
+
+## History of partitions with broken locks {#top-tli-partitions}
+
+The following system views contain a history of moments with a non-zero number of broken [locks](../contributor/datashard-locks-and-change-visibility.md) `LocksBroken` in individual partitions of DB tables:
+
+* `top_partitions_by_tli_one_minute`: The data is split into one-minute intervals, contains the history for the last 6 hours.
+* `top_partitions_by_tli_one_hour`: The data is split into one-hour intervals, contains the history for the last 2 weeks.
+
+The views provide the top 10 partitions with a non-zero number of broken locks `LocksBroken`. Within a single interval, partitions are ranked by the number of broken locks `LocksBroken`.
+
+The keys of the views are:
+
+* `IntervalEnd` - the moment of interval closure;
+* `Rank` - the rank of the partition by the number of broken locks `LocksBroken` in this interval.
+
+For example, `top_partitions_by_tli_one_hour` for the hourly interval `"20.12.2024 10:00-11:00"` will output 10 rows, sorted in descending order by `LocksBroken`. They will have `Rank` from 1 to 10 and the same `IntervalEnd` `"20.12.2024 11:00"`.
+
+All tables have the same structure:
+
+| Column | Description |
+|--------|-------------|
+| `IntervalEnd` | The end of a one-minute or one-hour interval.<br/>Type: `Timestamp`.<br/>Key: `0`. |
+| `Rank` | Partition rank within an interval (by `CPUCores`).<br/>Type: `Uint32`.<br/>Key: `1`. |
+| `TabletId` | ID of the tablet serving the partition.<br/>Type: `Uint64`. |
+| `Path` | Full path to the table.<br/>Type: `Utf8`. |
+| `LocksAcquired` | Number of locks acquired "on a range of keys" in this interval.<br />Type: `Uint64`. |
+| `LocksWholeShard` | Number of locks acquired "on the entire partition" in this interval.<br />Type: `Uint64`. |
+| `LocksBroken` | Number of broken locks in this interval.<br />Type: `Uint64`. |
+| `NodeId` | ID of the node where the partition was located during the peak load.<br/>Type: `Uint32`. |
+| `DataSize` | Approximate partition size, in bytes, during the peak load.<br/>Type: `Uint64`. |
+| `RowCount` | Approximate row count during the peak load.<br/>Type: `Uint64`. |
+| `IndexSize` | Partition index size per tablet during the peak load.<br/>Type: `Uint64`. |
+
+### Example queries {#top-tli-partitions-examples}
+
+The following query returns partitions in the specified time interval, with tablet identifiers and the number of broken locks. The query is made to the `.sys/top_partitions_by_tli_one_minute` table with data over the last 6 hours split into one-minute intervals:
+
+```yql
+SELECT
+    IntervalEnd,
+    LocksBroken,
+    Path,
+    TabletId
+FROM `.sys/top_partitions_by_tli_one_hour`
+WHERE IntervalEnd BETWEEN Timestamp("YYYY-MM-DDThh:mm:ss.uuuuuuZ") AND Timestamp("YYYY-MM-DDThh:mm:ss.uuuuuuZ")
+ORDER BY IntervalEnd desc, LocksBroken desc
+```
 
 ## Access control entities {#auth}
 
@@ -368,7 +437,7 @@ Table structure:
 | `Sid` | SID of the [access subject](../concepts/glossary.md#access-subject).<br />Type: `Utf8`.<br />Key: `1`. |
 | `Permission` | Name of the {{ ydb-short-name }} [access right](../yql/reference/syntax/grant.md#permissions-list).<br />Type: `Utf8`.<br />Key: `2`. |
 
-#### Example queries
+#### Example queries {#auth-permissions-examples}
 
 All the directly assigned permissions for the table located at the path `my_table`:
 

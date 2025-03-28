@@ -219,6 +219,9 @@ public:
 
             alterConfig.MutablePartitionKeySchema()->Swap(tabletConfig->MutablePartitionKeySchema());
             Y_PROTOBUF_SUPPRESS_NODISCARD alterConfig.SerializeToString(&params->TabletConfig);
+
+            alterConfig.MutableMigrations()->CopyFrom(tabletConfig->GetMigrations());
+
             alterConfig.Swap(tabletConfig);
         }
         if (alter.PartitionsToDeleteSize()) {
@@ -557,6 +560,7 @@ public:
         }
 
         NKikimrPQ::TPQTabletConfig tabletConfig = topic->GetTabletConfig();
+        NKikimr::NPQ::Migrate(tabletConfig);
         NKikimrPQ::TPQTabletConfig newTabletConfig = tabletConfig;
 
         TTopicInfo::TPtr alterData = ParseParams(context, &newTabletConfig, alter, errStr);

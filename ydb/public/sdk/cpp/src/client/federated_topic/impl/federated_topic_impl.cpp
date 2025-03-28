@@ -53,12 +53,12 @@ NThreading::TFuture<std::vector<TFederatedTopicClient::TClusterInfo>> TFederated
     InitObserver();
     return Observer->WaitForFirstState().Apply(
             [weakObserver = std::weak_ptr(Observer)] (const auto& ) {
+                std::vector<TClusterInfo> result;
                 auto observer = weakObserver.lock();
                 if (!observer) {
-                    throw yexception() << "Lost observer"; // TODO better message?
+                    return result;
                 }
                 auto state = observer->GetState();
-                std::vector<TClusterInfo> result;
                 result.reserve(state->DbInfos.size());
                 for (const auto& db: state->DbInfos) {
                     auto& dbinfo = result.emplace_back();

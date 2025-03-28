@@ -539,8 +539,9 @@ public:
         bool IsAvailableForWrite() const;
     };
 
-    //! Discover all clusters for federated topic
-    // (May signal exception in future if FederatedTopicClient was destroyed when future fired)
+    //! Discover all clusters for federated topic.
+    // Will return single cluster with empty name for non-federated clusters.
+    // May return empty list if FederatedTopicClient was destroyed when future fired.
     NThreading::TFuture<std::vector<TClusterInfo>> GetAllClusterInfo();
 
 protected:

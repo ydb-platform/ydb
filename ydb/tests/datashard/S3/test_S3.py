@@ -20,7 +20,7 @@ class TestYdbS3TTL(TestBase, S3Base):
             )""")
         for i in range(100):
             self.query(f"insert into a(pk) values({i})")
-        os.system(f"""ydb -p quickstart export s3 \
+        os.system(f"""ydb -e grpc://{self.get_endpoint()} -d {self.get_database()} export s3 \
                   --s3-endpoint {self.s3_endpoint} \
                   --access-key {self.s3_access_key}  \
                   --secret-key {self.s3_secret_access_key} \
@@ -28,7 +28,7 @@ class TestYdbS3TTL(TestBase, S3Base):
                   """)
         self.query("drop table a")
         
-        os.system(f"""ydb -p quickstart import s3 \
+        os.system(f"""ydb -e grpc://{self.get_endpoint()} -d {self.get_database()}  quickstart import s3 \
                   --s3-endpoint {self.s3_endpoint} \
                   --access-key {self.s3_access_key}  \
                   --secret-key {self.s3_secret_access_key} \

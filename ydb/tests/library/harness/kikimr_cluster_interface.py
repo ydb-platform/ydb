@@ -189,6 +189,7 @@ class KiKiMRClusterInterface(object):
             disable_external_subdomain=False,
             timeout_seconds=120,
             token=None,
+            options=None,
     ):
         req = CreateTenantRequest(database_name)
         for storage_pool_type_name, units_count in storage_pool_units_count.items():
@@ -202,6 +203,9 @@ class KiKiMRClusterInterface(object):
 
         if token is not None:
             req.set_user_token(token)
+
+        if options is not None:
+            req.set_options(**options)
 
         response = self.client.send_request(req.protobuf, method='ConsoleRequest')
         operation = response.CreateTenantResponse.Response.operation

@@ -693,16 +693,16 @@ TConclusionStatus TGraph::Collapse() {
                 }
             }
 
-            {
-                auto conclusion = OptimizeConditionsForHeadersCheck(n.get());
-                if (conclusion.IsFail()) {
-                    return conclusion;
-                }
-                if (*conclusion) {
-                    hasChanges = true;
-                    break;
-                }
-            }
+//            {
+//                auto conclusion = OptimizeConditionsForHeadersCheck(n.get());
+//                if (conclusion.IsFail()) {
+//                    return conclusion;
+//                }
+//                if (*conclusion) {
+//                    hasChanges = true;
+//                    break;
+//                }
+//            }
 
             {
                 auto conclusion = OptimizeConditionsForStream(n.get());

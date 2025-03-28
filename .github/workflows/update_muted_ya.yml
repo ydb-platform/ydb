@@ -8,7 +8,7 @@ env:
   BRANCH_FOR_PR: update-muted-ya
   TITLE: "Update muted_ya.txt"
   BASE_BRANCH: dev_update_muted_v4
-  REVIEWERS: ydb-platform/ci
+  REVIEWERS: ci
 
 jobs:
   create-or-update-muted-ya:
@@ -138,15 +138,12 @@ jobs:
         id: create_or_update_pr
         env:
           GITHUB_TOKEN: ${{ env.GH_TOKEN }}
-          BRANCH_FOR_PR: ${{ env.BRANCH_FOR_PR }}
-          TITLE: ${{ env.TITLE }}
-          BASE_BRANCH: ${{ env.BASE_BRANCH }}
-          BODY: ${{ env.PR_BODY_PATH }}
-          REVIEWERS: ${{ env.REVIEWERS }}
         run: |
           python .github/scripts/create_or_update_pr.py create_or_update --base_branch="${{ env.BASE_BRANCH }}" --branch_for_pr="${{ env.BRANCH_FOR_PR }}" --title="${{ env.TITLE }}" --body="${{ env.BODY }}" --reviewers="${{ env.REVIEWERS }}"
       
       - name: Display PR Number in Markdown
+        env:
+            GITHUB_TOKEN: ${{ env.GH_TOKEN }}
         run: |
           echo "## Pull Request Created or Updated" >> pr_summary.md
           echo "- PR Number: #${{ steps.create_or_update_pr.outputs.pr_number }}" >> pr_summary.md

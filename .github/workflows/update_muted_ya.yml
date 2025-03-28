@@ -58,7 +58,7 @@ jobs:
             git push origin ${{ env.BRANCH_FOR_PR }} --force
           else
             # If rebase is successful, push the updated branch
-            git push origin ${{ env.BRANCH_FOR_PR }}
+            git push origin ${{ env.BRANCH_FOR_PR }} --force
           fi
         
       - name: Run the script

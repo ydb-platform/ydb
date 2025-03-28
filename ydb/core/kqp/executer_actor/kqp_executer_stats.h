@@ -282,8 +282,6 @@ public:
     ui64 ResultBytes = 0;
     ui64 ResultRows = 0;
     TDuration ExecuterCpuTime;
-    ui64 TotalReadRows = 0;
-    ui64 TotalReadBytes = 0;
 
     TInstant StartTs;
     TInstant FinishTs;

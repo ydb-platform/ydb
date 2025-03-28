@@ -237,8 +237,12 @@ public:
                     }
 
                     const auto& protoStats = TProtoAccessor::GetProto(execStats.GetRef());
-                    progressIndication.UpdateProgress({protoStats.total_read_rows(), protoStats.total_read_bytes(),
-                        0, 0, 0, 0, protoStats.total_duration_us()});
+                    for (const auto& queryPhase : protoStats.query_phases()) {
+                        for (const auto& tableAccessStats : queryPhase.table_access()) {
+                            progressIndication.UpdateProgress({tableAccessStats.reads().rows(), tableAccessStats.reads().bytes()});
+                        }
+                    }
+                    progressIndication.SetDurationUs(protoStats.total_duration_us());
 
                     progressIndication.Render();
                 }

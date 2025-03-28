@@ -15,6 +15,10 @@ void TProgressIndication::UpdateProgress(const TCurrentStats& stats)
     CurrentStats = stats;
 }
 
+void TProgressIndication::SetDurationUs(ui64 durationUs) {
+    DurationUs = durationUs;
+}
+
 TProgressIndication::~TProgressIndication() {
     if (!Finished) {
         Finish();
@@ -44,9 +48,9 @@ void TProgressIndication::Render()
     Cerr << colors.Default() << "Progress: " << colors.Default();
 
     Cerr << colors.Default() << PrettyNumber(CurrentStats.ReadRows) << " rows read, " << PrettySize(CurrentStats.ReadBytes) << " read";
-    if (CurrentStats.DurationUs) {
-        Cerr << colors.Default() << " (" << PrettyNumber(CurrentStats.ReadRows * 1000000.0 / CurrentStats.DurationUs) << "/s" << ", " <<
-            PrettySize(CurrentStats.ReadBytes * 1000000.0 / CurrentStats.DurationUs) << "/s" << ")";
+    if (DurationUs) {
+        Cerr << colors.Default() << " (" << PrettyNumber(CurrentStats.ReadRows * 1000000.0 / DurationUs) << "/s" << ", " <<
+            PrettySize(CurrentStats.ReadBytes * 1000000.0 / DurationUs) << "/s" << ")";
     }
 
     Cerr << colors.Default() << ".";

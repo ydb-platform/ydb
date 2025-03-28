@@ -1548,7 +1548,7 @@ public:
             }
 
             if (QueryState->ReportStats()) {
-                if (QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
+                if (QueryState->GetStatsMode() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC) {
                     NKqpProto::TKqpStatsQuery& stats = *ev->Get()->Record.MutableQueryStats();
                     NKqpProto::TKqpStatsQuery executionStats;
                     executionStats.Swap(&stats);

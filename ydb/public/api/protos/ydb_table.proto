@@ -1211,8 +1211,7 @@ message ReadTableResult {
 }
 
 message ReadRowsRequest {
-    // Session identifier
-    string session_id = 1;
+    reserved 1; // session_id
     // Path to table to read
     string path = 2;
     // Keys to read. Must be a list of structs where each stuct is a key

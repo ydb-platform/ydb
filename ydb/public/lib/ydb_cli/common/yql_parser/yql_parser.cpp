@@ -293,7 +293,7 @@ private:
 }
 
 
-std::map<std::string, TType> TYqlParamParser::GetParamTypes(const TString& queryText) {
+std::optional<std::map<std::string, TType>> TYqlParamParser::GetParamTypes(const TString& queryText) {
     enum class EParseState {
         Start,
         Declare,
@@ -314,7 +314,7 @@ std::map<std::string, TType> TYqlParamParser::GetParamTypes(const TString& query
     NYql::TIssues issues;
     if (!NSQLTranslation::Tokenize(*lexer, queryText, "Query", tokens, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS) ||
         !issues.Empty()) {
-        return {};
+        return std::nullopt;
     }
 
     EParseState state = EParseState::Start;
@@ -333,8 +333,7 @@ std::map<std::string, TType> TYqlParamParser::GetParamTypes(const TString& query
             state = EParseState::Declare;
         } else if (state == EParseState::Declare) {
             if (tokens[i].Content != "$") { 
-                state = EParseState::Start;
-                continue;
+                return std::nullopt;
             }
 
             state = EParseState::ParamName;
@@ -343,21 +342,19 @@ std::map<std::string, TType> TYqlParamParser::GetParamTypes(const TString& query
             state = EParseState::As;
         } else if (state == EParseState::As) {
             if (ToLower(tokens[i].Content) != "as") {
-                state = EParseState::Start;
-                continue;
+                return std::nullopt;
             }
 
             state = EParseState::Type;
         } else if (state == EParseState::Type) {
             TYqlTypeParser parser(tokens);
-            auto root = parser.Build(i);
+            auto parsedType = parser.Build(i);
 
-            if (root) {
-                result.emplace(paramName, *root);
-            } else {
-                result.clear();
+            if (!parsedType) {
+                return std::nullopt;
             }
 
+            result.emplace(paramName, *parsedType);
             state = EParseState::Start;
         }
     }

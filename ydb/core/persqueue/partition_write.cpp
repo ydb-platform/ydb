@@ -1394,7 +1394,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     return true;
 }
 
-std::pair<TKey, ui32> TPartition::GetNewWriteKeyImpl(bool headCleared, bool needCompaction, ui32 HeadSize)
+std::pair<TKey, ui32> TPartition::GetNewWriteKeyImpl(bool headCleared, bool needCompaction, ui32 headSize)
 {
     TKey key;
     if (needCompaction) {
@@ -1405,7 +1405,7 @@ std::pair<TKey, ui32> TPartition::GetNewWriteKeyImpl(bool headCleared, bool need
 
     if (WorkZone.NewHead.PackedSize > 0)
         WorkZone.DataKeysHead[TotalLevels - 1].AddKey(key, WorkZone.NewHead.PackedSize);
-    Y_ABORT_UNLESS(HeadSize + WorkZone.NewHead.PackedSize <= 3 * MaxSizeCheck);
+    Y_ABORT_UNLESS(headSize + WorkZone.NewHead.PackedSize <= 3 * MaxSizeCheck);
 
     std::pair<TKey, ui32> res;
 
@@ -1417,7 +1417,7 @@ std::pair<TKey, ui32> TPartition::GetNewWriteKeyImpl(bool headCleared, bool need
             key = TKey::ForBody(TKeyPrefix::TypeData, Partition, WorkZone.Head.Offset, WorkZone.Head.PartNo, WorkZone.NewHead.GetCount() + WorkZone.Head.GetCount(),
                                 WorkZone.Head.GetInternalPartsCount() +  WorkZone.NewHead.GetInternalPartsCount());
         } //otherwise KV blob is not from head (!key.HasSuffix()) and contains only new data from NewHead
-        res = std::make_pair(key, HeadSize + WorkZone.NewHead.PackedSize);
+        res = std::make_pair(key, headSize + WorkZone.NewHead.PackedSize);
     } else {
         res = Compact(key, WorkZone.NewHead.PackedSize, headCleared);
         Y_ABORT_UNLESS(res.first.HasSuffix());//may compact some KV blobs from head, but new KV blob is from head too
@@ -1429,8 +1429,8 @@ std::pair<TKey, ui32> TPartition::GetNewWriteKeyImpl(bool headCleared, bool need
 
 std::pair<TKey, ui32> TPartition::GetNewWriteKey(bool headCleared) {
     bool needCompaction = false;
-    ui32 HeadSize = headCleared ? 0 : WorkZone.Head.PackedSize;
-    if (HeadSize + WorkZone.NewHead.PackedSize > 0 && HeadSize + WorkZone.NewHead.PackedSize
+    ui32 headSize = headCleared ? 0 : WorkZone.Head.PackedSize;
+    if (headSize + WorkZone.NewHead.PackedSize > 0 && headSize + WorkZone.NewHead.PackedSize
                                                         >= Min<ui32>(MaxBlobSize, Config.GetPartitionConfig().GetLowWatermark()))
         needCompaction = true;
 
@@ -1440,7 +1440,7 @@ std::pair<TKey, ui32> TPartition::GetNewWriteKey(bool headCleared) {
 
     Y_ABORT_UNLESS(WorkZone.NewHead.PackedSize > 0 || needCompaction); //smthing must be here
 
-    return GetNewWriteKeyImpl(headCleared, needCompaction, HeadSize);
+    return GetNewWriteKeyImpl(headCleared, needCompaction, headSize);
 }
 
 void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, bool headCleared, const TActorContext& ctx) {

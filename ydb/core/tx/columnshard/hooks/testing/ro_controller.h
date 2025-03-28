@@ -119,7 +119,9 @@ public:
             }
             Cerr << "WAIT_CLEANING: " << GetCleaningStartedCounter().Val() << Endl;
             if (testRuntime) {
-                testRuntime->SimulateSleep(TDuration::MilliSeconds(100));
+                testRuntime->SimulateSleep(TDuration::Seconds(1));
+            } else {
+                Sleep(TDuration::Seconds(1));
             }
         }
     }

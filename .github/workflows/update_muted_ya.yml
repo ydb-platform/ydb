@@ -5,7 +5,7 @@ on:
 
 env:
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-  BRANCH_FOR_PR: update_muted_ya
+  BRANCH_FOR_PR: main
   TITLE: "Update muted_ya.txt"
   BASE_BRANCH: dev_wf_update_mute_v3
   REVIEWERS: ydb-platform/ci

@@ -260,6 +260,14 @@ public:
             AllocatedHolder->SelfTypeEnv = std::make_unique<TTypeEnvironment>(alloc);
         }
 
+        NUdf::TLogProviderFunc logProviderFunc = nullptr;
+        if (LogFunc) {
+            logProviderFunc = [log=LogFunc](const NUdf::TStringRef& component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
+                log(TStringBuilder() << "[" << component << "][" << level << "]: " << message << "\n");
+            };
+        }
+
+        ComputationLogProvider = NUdf::MakeLogProvider(std::move(logProviderFunc), NUdf::ELogLevel::Debug);
     }
 
     ~TDqTaskRunner() {
@@ -319,7 +327,7 @@ public:
 
         TComputationPatternOpts opts(alloc.Ref(), typeEnv, taskRunnerFactory,
             Context.FuncRegistry, NUdf::EValidateMode::None, validatePolicy, optLLVM, EGraphPerProcess::Multi,
-            AllocatedHolder->ProgramParsed.StatsRegistry.Get(), CollectFull() ? &CountersProvider : nullptr, nullptr, LogProvider.Get());
+            AllocatedHolder->ProgramParsed.StatsRegistry.Get(), CollectFull() ? &CountersProvider : nullptr, nullptr, ComputationLogProvider.Get());
 
         if (!SecureParamsProvider) {
             SecureParamsProvider = MakeSimpleSecureParamsProvider(Settings.SecureParams);
@@ -525,19 +533,6 @@ public:
         const IDqTaskRunnerExecutionContext& execCtx) override
     {
 
-        NUdf::TLogProviderFunc logProviderFunc = nullptr;
-        TStringStream ss;
-        NYql::NBacktrace::KikimrBackTraceFormatImpl(&ss);
-
-        std::cerr << "MISHA logfunc is set: " << (bool)LogFunc << "\n" << ss.Str() << std::endl;
-        if (LogFunc) {
-            std::cerr << "MISHA setting logProviderFunc\n";
-            logProviderFunc = [log=LogFunc](const NUdf::TStringRef& component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
-                log(TStringBuilder() << Now() << " " << component << " [" << level << "] " << message << "\n");
-            };
-        }
-
-        LogProvider = NUdf::MakeLogProvider(std::move(logProviderFunc));
         TaskId = task.GetId();
         auto entry = BuildTask(task);
 
@@ -993,7 +988,7 @@ private:
 private:
     std::shared_ptr<ISpillerFactory> SpillerFactory;
     TIntrusivePtr<TSpillingTaskCounters> SpillingTaskCounters;
-    NUdf::TUniquePtr<NUdf::ILogProvider> LogProvider;
+    NUdf::TUniquePtr<NUdf::ILogProvider> ComputationLogProvider;
 
     ui64 TaskId = 0;
     TDqTaskRunnerContext Context;

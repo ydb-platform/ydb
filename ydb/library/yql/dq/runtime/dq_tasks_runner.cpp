@@ -727,6 +727,11 @@ public:
 
         // }
 
+        // TStringStream ss;
+        // NYql::NBacktrace::KikimrBackTraceFormatImpl(&ss);
+
+        // std::cerr << "MISHA logfunc is set: " << (bool)LogFunc << "\n" << ss.Str() << std::endl;
+
         LOG(TStringBuilder() << "Prepare task: " << TaskId << ", takes " << prepareTime.MicroSeconds() << " us");
         if (Stats) {
             Stats->BuildCpuTime += prepareTime;

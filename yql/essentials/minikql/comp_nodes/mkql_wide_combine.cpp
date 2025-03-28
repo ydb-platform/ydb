@@ -1412,6 +1412,7 @@ private:
     void MakeState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
         NYql::NUdf::TLoggerPtr logger = ctx.MakeLogger();
         NYql::NUdf::TLogComponentId logComponentId = logger->RegisterComponent("WideCombine");
+        logger->Log(logComponentId, NUdf::ELogLevel::Debug, TStringBuilder() << "State initialized");
 #ifdef MKQL_DISABLE_CODEGEN
         state = ctx.HolderFactory.Create<TState>(Nodes.KeyNodes.size(), Nodes.StateNodes.size(), TMyValueHasher(KeyTypes), TMyValueEqual(KeyTypes), logger, logComponentId);
 #else
@@ -1846,7 +1847,7 @@ private:
         NYql::NUdf::TLoggerPtr logger = ctx.MakeLogger();
         NYql::NUdf::TLogComponentId logComponentId = logger->RegisterComponent("WideLastCombine");
         std::cerr << "MISHA DoCalculate. logger: " << std::endl;
-        logger->Log(logComponentId, NUdf::ELogLevel::Info, TStringBuilder() << "MISHA DoCalculate Log");
+        logger->Log(logComponentId, NUdf::ELogLevel::Debug, TStringBuilder() << "State initialized");
 
         state = ctx.HolderFactory.Create<TSpillingSupportState>(UsedInputItemType, KeyAndStateType,
             Nodes.KeyNodes.size(),

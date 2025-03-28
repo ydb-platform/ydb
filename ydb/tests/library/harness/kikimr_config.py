@@ -260,7 +260,7 @@ class KikimrConfigGenerator(object):
 
         # dirty hack for internal ydbd flavour
         if "cert" in self.get_binary_path(0):
-            # Hardcoded feature flags. Should be harcoded in binary itself
+            # Hardcoded feature flags. Should be hardcoded in binary itself
             self.yaml_config["feature_flags"]["enable_strict_acl_check"] = True
             self.yaml_config["feature_flags"]["enable_strict_user_management"] = True
             self.yaml_config["feature_flags"]["enable_database_admin"] = True

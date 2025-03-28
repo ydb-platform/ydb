@@ -2936,6 +2936,20 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     TInstant StartTime = TInstant::Zero();
     TInstant EndTime = TInstant::Zero();
 
+    TString GetItemSrcPrefix(size_t i) const {
+        if (i < Items.size() && Items[i].SrcPrefix) {
+            return Items[i].SrcPrefix;
+        }
+
+        // Backward compatibility.
+        // But there can be no paths in settings at all.
+        if (i < ui32(Settings.items_size())) {
+            return Settings.items(i).source_prefix();
+        }
+
+        return {};
+    }
+
     explicit TImportInfo(
             const ui64 id,
             const TString& uid,
@@ -3202,8 +3216,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             Parent = ParentEnd();
         }
 
-        void Set(ui32 level, 
-                 NTableIndex::TClusterId parentBegin, NTableIndex::TClusterId parent, 
+        void Set(ui32 level,
+                 NTableIndex::TClusterId parentBegin, NTableIndex::TClusterId parent,
                  NTableIndex::TClusterId childBegin, NTableIndex::TClusterId child,
                  ui32 state, ui64 tableSize) {
             Level = level;
@@ -3672,7 +3686,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         TSerializedTableRange bound{range};
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
-            "AddShardStatus id# " << Id << " shard " << shardIdx << 
+            "AddShardStatus id# " << Id << " shard " << shardIdx <<
             " range " << KMeans.RangeToDebugStr(bound, IsBuildPrefixedVectorIndex() ? 2 : 1));
         AddParent(bound, shardIdx);
         Shards.emplace(

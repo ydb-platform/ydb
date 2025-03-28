@@ -1778,7 +1778,7 @@ value {
         auto contentOriginalTable = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", readKeyDesc, readColumns);
         NKqp::CompareYson(expectedJson, contentOriginalTable);
 
-        auto contentRestoredTable = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 2, "Restored", readKeyDesc, readColumns);
+        auto contentRestoredTable = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 2, commonPrefix ? "Table" : "Restored", readKeyDesc, readColumns);
         NKqp::CompareYson(expectedJson, contentRestoredTable);
     }
 

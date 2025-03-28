@@ -161,11 +161,7 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> RestorePropose(
             restoreSettings.SetBucket(importInfo->Settings.bucket());
             restoreSettings.SetAccessKey(importInfo->Settings.access_key());
             restoreSettings.SetSecretKey(importInfo->Settings.secret_key());
-            if (item.SrcPrefix) {
-                restoreSettings.SetObjectKeyPattern(item.SrcPrefix);
-            } else { // backward compatibility
-                restoreSettings.SetObjectKeyPattern(importInfo->Settings.items(itemIdx).source_prefix());
-            }
+            restoreSettings.SetObjectKeyPattern(importInfo->GetItemSrcPrefix(itemIdx));
             restoreSettings.SetUseVirtualAddressing(!importInfo->Settings.disable_virtual_addressing());
 
             switch (importInfo->Settings.scheme()) {

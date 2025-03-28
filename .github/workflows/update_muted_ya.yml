@@ -34,24 +34,31 @@ jobs:
           git config user.name YDBot
           git config user.email ydbot@ydb.tech
       
-          # Создаём локальную ветку Branch_for_pr, если её нет
-          if ! git show-ref --quiet refs/heads/${{ env.BRANCH_FOR_PR }}; then
-            git checkout -b ${{ env.BRANCH_FOR_PR }}
-          else
+          # Fetch the latest changes from remote
+          git fetch origin
+      
+          # Checkout BRANCH_FOR_PR, create if it doesn't exist based on BASE_BRANCH
+          if git show-ref --quiet refs/heads/${{ env.BRANCH_FOR_PR }}; then
             git checkout ${{ env.BRANCH_FOR_PR }}
+          else
+            git checkout -b ${{ env.BRANCH_FOR_PR }} origin/${{ env.BASE_BRANCH }}
           fi
       
-          # Пытаемся сделать rebase с использованием стратегии theirs
-          if ! git rebase ${{ env.BASE_BRANCH }} -X theirs; then
-            echo "Rebase failed, force deleting remote branch and retrying..."
-            if [ -n "$(git ls-remote --heads origin ${{ env.BRANCH_FOR_PR }})" ]; then
-              git push origin --delete ${{ env.BRANCH_FOR_PR }}
-            fi
-            # Пересоздаём локальную ветку от BASE_BRANCH
-            git checkout ${{ env.BASE_BRANCH }}
-            git branch -D ${{ env.BRANCH_FOR_PR }}
-            git checkout -b ${{ env.BRANCH_FOR_PR }}
+          # Attempt to rebase BRANCH_FOR_PR onto BASE_BRANCH
+          if ! git rebase origin/${{ env.BASE_BRANCH }}; then
+            echo "Rebase failed, resetting branch to match BASE_BRANCH..."
       
+            # Abort the rebase process
+            git rebase --abort
+      
+            # Reset the branch to BASE_BRANCH
+            git reset --hard origin/${{ env.BASE_BRANCH }}
+            
+            # Force push the reset branch to remote
+            git push origin ${{ env.BRANCH_FOR_PR }} --force
+          else
+            # If rebase is successful, push the updated branch
+            git push origin ${{ env.BRANCH_FOR_PR }}
           fi
         
       - name: Run the script

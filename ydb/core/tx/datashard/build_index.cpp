@@ -141,7 +141,10 @@ struct TStatus {
     }
 
     bool IsRetriable() const {
-        return StatusCode == Ydb::StatusIds::UNAVAILABLE || StatusCode == Ydb::StatusIds::OVERLOADED;
+        return StatusCode == Ydb::StatusIds::UNAVAILABLE
+            || StatusCode == Ydb::StatusIds::OVERLOADED
+            || StatusCode == Ydb::StatusIds::TIMEOUT
+            ;
     }
 
     TString ToString() const {

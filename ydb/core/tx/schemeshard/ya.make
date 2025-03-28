@@ -332,12 +332,12 @@ YQL_LAST_ABI_VERSION()
 
 IF (OS_WINDOWS)
     SRCS(
-        schemeshard_export_scheme_uploader_fallback.cpp
+        schemeshard_export_uploaders_fallback.cpp
         schemeshard_import_scheme_getter_fallback.cpp
     )
 ELSE()
     SRCS(
-        schemeshard_export_scheme_uploader.cpp
+        schemeshard_export_uploaders.cpp
         schemeshard_import_scheme_getter.cpp
     )
 ENDIF()

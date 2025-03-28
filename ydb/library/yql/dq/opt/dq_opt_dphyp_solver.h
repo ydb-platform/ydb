@@ -47,13 +47,11 @@ public:
     TDPHypSolverBase(
         TJoinHypergraph<TNodeSet>& graph,
         IProviderContext& ctx,
-        TOrderingsStateMachine& orderingFSM,
         TDerived& derived
     )
         : Graph_(graph)
         , NNodes_(graph.GetNodes().size())
         , Pctx_(ctx)
-        , OrderingsFSM(orderingFSM)
         , Derived(derived)
     {}
 
@@ -96,7 +94,6 @@ protected:
     IProviderContext& Pctx_;  // Provider specific contexts?
     // FIXME: This is a temporary structure that needs to be extended to multiple providers, also we need to remove virtual functions, they are really expensive #10578.
 
-    TOrderingsStateMachine& OrderingsFSM;
     TDerived& Derived; // this class owns DPTable and chose best plan in EmitCsgCmp method. It exists for avoiding slow virtual functions
 
     #ifndef NDEBUG
@@ -126,7 +123,8 @@ public:
         IProviderContext& ctx,
         TOrderingsStateMachine& orderingFSM
     )
-        : TDPHypSolverBase<TNodeSet, TDPHypSolverShuffleElimination<TNodeSet>>(graph, ctx, orderingFSM, *this)
+        : TDPHypSolverBase<TNodeSet, TDPHypSolverShuffleElimination<TNodeSet>>(graph, ctx, *this)
+        , OrderingsFSM(orderingFSM)
     {}
 
     std::string Type() const {
@@ -216,6 +214,7 @@ public:
     );
 
     THashMap<TNodeSet, std::vector<std::shared_ptr<IBaseOptimizerNode>>, std::hash<TNodeSet>> DpTable_;
+    TOrderingsStateMachine& OrderingsFSM;
 };
 
 template <typename TNodeSet>
@@ -223,10 +222,9 @@ class TDPHypSolverClassic : public TDPHypSolverBase<TNodeSet, TDPHypSolverClassi
 public:
     TDPHypSolverClassic(
         TJoinHypergraph<TNodeSet>& graph,
-        IProviderContext& ctx,
-        TOrderingsStateMachine& orderingFSM
+        IProviderContext& ctx
     )
-        : TDPHypSolverBase<TNodeSet, TDPHypSolverClassic<TNodeSet>>(graph, ctx, orderingFSM, *this)
+        : TDPHypSolverBase<TNodeSet, TDPHypSolverClassic<TNodeSet>>(graph, ctx, *this)
     {}
 
     std::string Type() const {
@@ -907,14 +905,14 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 3> 
     std::shared_ptr<TJoinOptimizerNodeInternal> tree;
     // switch (minCostTree) {
         // case EMinCostTree::EShuffleLeftSideAndMapJoin: {
-        //     tree = MakeJoinInternal(std::move(shuffleLeftSideAndMapJoinStats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.LeftAny, edge.RightAny, this->OrderingsFSM.CreateState());
+        //     tree = MakeJoinInternal(std::move(shuffleLeftSideAndMapJoinStats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.LeftAny, edge.RightAny, OrderingsFSM.CreateState());
         //     tree->LogicalOrderings.SetOrdering(edge.LeftJoinKeysShuffleOrderingIdx);
         //     tree->LogicalOrderings.InduceNewOrderings(edge.FDs | left->LogicalOrderings.GetFDs() | right->LogicalOrderings.GetFDs());
         //     tree->ShuffleLeftSideByOrderingIdx = edge.LeftJoinKeysShuffleOrderingIdx;
         //     break;
         // }
         // case EMinCostTree::EShuffleRightSideAndReversedMapJoin: {
-        //     tree = MakeJoinInternal(std::move(shuffleRightSideAndReversedMapJoinStats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.RightAny, edge.LeftAny, this->OrderingsFSM.CreateState());
+        //     tree = MakeJoinInternal(std::move(shuffleRightSideAndReversedMapJoinStats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, EJoinAlgoType::MapJoin, edge.RightAny, edge.LeftAny, OrderingsFSM.CreateState());
         //     tree->LogicalOrderings.SetOrdering(edge.RightJoinKeysShuffleOrderingIdx);
         //     tree->LogicalOrderings.InduceNewOrderings(edge.FDs | left->LogicalOrderings.GetFDs() | right->LogicalOrderings.GetFDs());
         //     tree->ShuffleLeftSideByOrderingIdx = edge.RightJoinKeysShuffleOrderingIdx;
@@ -922,13 +920,13 @@ template <typename TNodeSet> std::array<std::shared_ptr<IBaseOptimizerNode>, 3> 
         // }
         // case EMinCostTree::EShuffleBothSides: {
             if (!shuffleBothSidesBestJoin.IsReversed) {
-                tree = MakeJoinInternal(std::move(shuffleBothSidesBestJoin.Stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, shuffleBothSidesBestJoin.Algo, edge.LeftAny, edge.RightAny, this->OrderingsFSM.CreateState());
+                tree = MakeJoinInternal(std::move(shuffleBothSidesBestJoin.Stats), left, right, edge.LeftJoinKeys, edge.RightJoinKeys, edge.JoinKind, shuffleBothSidesBestJoin.Algo, edge.LeftAny, edge.RightAny, OrderingsFSM.CreateState());
                 tree->LogicalOrderings.SetOrdering(edge.LeftJoinKeysShuffleOrderingIdx);
                 tree->LogicalOrderings.InduceNewOrderings(edge.FDs | left->LogicalOrderings.GetFDs() | right->LogicalOrderings.GetFDs());
                 tree->ShuffleLeftSideByOrderingIdx = edge.LeftJoinKeysShuffleOrderingIdx;
                 tree->ShuffleRightSideByOrderingIdx = edge.RightJoinKeysShuffleOrderingIdx;
             } else {
-                tree = MakeJoinInternal(std::move(shuffleBothSidesBestJoin.Stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, shuffleBothSidesBestJoin.Algo, edge.RightAny, edge.LeftAny, this->OrderingsFSM.CreateState());
+                tree = MakeJoinInternal(std::move(shuffleBothSidesBestJoin.Stats), right, left, edge.RightJoinKeys, edge.LeftJoinKeys, edge.JoinKind, shuffleBothSidesBestJoin.Algo, edge.RightAny, edge.LeftAny, OrderingsFSM.CreateState());
                 tree->LogicalOrderings.SetOrdering(edge.LeftJoinKeysShuffleOrderingIdx);
                 tree->LogicalOrderings.InduceNewOrderings(edge.FDs | left->LogicalOrderings.GetFDs() | right->LogicalOrderings.GetFDs());
                 tree->ShuffleLeftSideByOrderingIdx = edge.RightJoinKeysShuffleOrderingIdx;

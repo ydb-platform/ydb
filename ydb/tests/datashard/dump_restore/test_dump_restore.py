@@ -1,55 +1,69 @@
 import os
+import yatest
+import pytest
 
 from ydb.tests.sql.lib.test_base import TestBase
 from ydb.tests.stress.oltp_workload.workload import cleanup_type_name
-from ydb.tests.datashard.lib.create_table import create_table, pk_types, non_pk_types, index_first, index_second, unique, index_sync, index_first_not_Bool, ttl_types, create_ttl
+from ydb.tests.datashard.lib.create_table import create_table, create_ttl, pk_types, non_pk_types, index_first, index_second, ttl_types, \
+    index_first_sync, index_second_sync, index_three_sync, index_three_sync_not_Bool, index_four_sync, index_zero_sync
 
 
 class TestDumpRestore(TestBase):
-    def test_T(self):
-        ydb = os.environ.get("YDB_DRIVER_BINARY")
-        print("ccscds")
-        self.query("CREATE TABLE a(pk Int64, PRIMARY KEY(pk))")
-        self.query("insert into a(pk) values(1)")
-        self.query("insert into a(pk) values(2)")
-        self.query("insert into a(pk) values(3)")
-        os.system(f"""
-                  {ydb} -e {self.get_endpoint()} -d {self.get_database()} admin database dump -o ./dump_bd
-                  """)
-        self.query("drop table a")
-        os.system(f"""
-                  {ydb} -e {self.get_endpoint()} -d {self.get_database()} admin database restore -i ./dump_bd
-                  """)
-        rows = self.query("select count(*) as COUNT from a")
-        assert len(
-            rows) == 1 and rows[0].count == 2, "scsdc"
-
-    def est_dump_restore(self):
-        # all index
-        for i in range(2):
-            for uniq in unique:
-                for sync in index_sync:
-                    if uniq != "UNIQUE" or sync != "ASYNC":
-                        if i == 1:
-                            index = index_second
-                        elif uniq == "UNIQUE":
-                            index = index_first_not_Bool
-                        else:
-                            index = index_first
-                        self.before_dump(
-                            f"table_index_{i}_{uniq}_{sync}", pk_types, {}, index, "", uniq, sync)
-
-        # all ttl
-        for ttl in ttl_types.keys():
-            self.before_dump(f"table_ttl_{ttl}", pk_types, {}, {}, ttl, "", "")
-
-        self.before_dump("table_all_types", pk_types, {
-            **pk_types, **non_pk_types}, {}, "", "", "")
-
-    def before_dump(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
+    @pytest.mark.parametrize(
+        "table_name, pk_types, all_types, index, ttl, unique, sync",
+        [
+            ("table_index_4_UNIQUE_SYNC", pk_types, {},
+             index_four_sync, "", "UNIQUE", "SYNC"),
+            ("table_index_3_UNIQUE_SYNC", pk_types, {},
+             index_three_sync_not_Bool, "", "UNIQUE", "SYNC"),
+            ("table_index_2_UNIQUE_SYNC", pk_types, {},
+             index_second_sync, "", "UNIQUE", "SYNC"),
+            ("table_index_1_UNIQUE_SYNC", pk_types, {},
+             index_first_sync, "", "UNIQUE", "SYNC"),
+            ("table_index_0_UNIQUE_SYNC", pk_types, {},
+             index_zero_sync, "", "UNIQUE", "SYNC"),
+            ("table_index_4__SYNC", pk_types, {},
+             index_four_sync, "", "", "SYNC"),
+            ("table_index_3__SYNC", pk_types, {},
+             index_three_sync, "", "", "SYNC"),
+            ("table_index_2__SYNC", pk_types, {},
+             index_second_sync, "", "", "SYNC"),
+            ("table_index_1__SYNC", pk_types, {},
+             index_first_sync, "", "", "SYNC"),
+            ("table_index_0__SYNC", pk_types, {},
+             index_zero_sync, "", "", "SYNC"),
+            ("table_index_1__ASYNC", pk_types, {}, index_second, "", "", "ASYNC"),
+            ("table_index_0__ASYNC", pk_types, {}, index_first, "", "", "ASYNC"),
+            ("table_all_types", pk_types, {
+             **pk_types, **non_pk_types}, {}, "", "", ""),
+            ("table_ttl_DyNumber", pk_types, {}, {}, "DyNumber", "", ""),
+            ("table_ttl_Uint32", pk_types, {}, {}, "Uint32", "", ""),
+            ("table_ttl_Uint64", pk_types, {}, {}, "Uint64", "", ""),
+            ("table_ttl_Datetime", pk_types, {}, {}, "Datetime", "", ""),
+            ("table_ttl_Timestamp", pk_types, {}, {}, "Timestamp", "", ""),
+            ("table_ttl_Date", pk_types, {}, {}, "Date", "", ""),
+        ]
+    )
+    def test_T(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
         self.create_table(table_name, pk_types, all_types,
                           index, ttl, unique, sync)
         self.insert(table_name, all_types, pk_types, index, ttl)
+        self.is_dump_or_restore(True, table_name)
+        self.query(f"drop table {table_name}")
+        self.is_dump_or_restore(False, table_name)
+        self.select_after_insert(table_name, all_types, pk_types, index, ttl)
+
+    def is_dump_or_restore(self, is_dump: bool, table_name: str):
+        yatest.common.execute([
+            yatest.common.binary_path(os.getenv('YDB_CLI_BINARY')),
+            '-e', 'grpc://'+self.get_endpoint(),
+            "--database", self.get_database(),
+            "tools",
+            "dump" if is_dump else "restore",
+            "--path", "/Root",
+            "--output" if is_dump else "--input",
+            f"dump_{table_name}"
+        ])
 
     # После мерджа test_DML убрать эти методы https://github.com/ydb-platform/ydb/pull/16117/files
     def create_table(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
@@ -78,7 +92,7 @@ class TestDumpRestore(TestBase):
 
         if ttl != "":
             number_of_columns += 1
-        for count in range(1, number_of_columns + 1):
+        for count in range(1, number_of_columns+1):
             self.create_insetr(table_name, count, all_types,
                                pk_types, index, ttl)
 

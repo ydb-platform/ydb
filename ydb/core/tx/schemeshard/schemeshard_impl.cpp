@@ -4680,7 +4680,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
 
     ConfigureBackgroundCleaningQueue(appData->BackgroundCleaningConfig, ctx);
     ConfigureDataErasureManager(appData->DataErasureConfig);
-    ConfigureQueryService(appData->QueryServiceConfig, ctx);
+    ConfigureExternalSources(appData->QueryServiceConfig, ctx);
 
     if (appData->ChannelProfiles) {
         ChannelProfiles = appData->ChannelProfiles;
@@ -7263,7 +7263,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
 
     if (appConfig.HasQueryServiceConfig()) {
         const auto& queryServiceConfig = appConfig.GetQueryServiceConfig();
-        ConfigureQueryService(queryServiceConfig, ctx);
+        ConfigureExternalSources(queryServiceConfig, ctx);
     }
 
     if (appConfig.HasAuthConfig()) {
@@ -7518,7 +7518,7 @@ void TSchemeShard::ConfigureAccountLockout(
                  << ", AttemptResetDuration# " << accountLockoutInitializer.AttemptResetDuration);
 }
 
-void TSchemeShard::ConfigureQueryService(
+void TSchemeShard::ConfigureExternalSources(
     const NKikimrConfig::TQueryServiceConfig& config,
     const TActorContext& ctx)
 {
@@ -7537,7 +7537,7 @@ void TSchemeShard::ConfigureQueryService(
     );
 
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                 "QueryService configured: HostnamePatterns# [" << Join(", ", hostnamePatterns) << "]"
+                 "ExternalSources configured: HostnamePatterns# [" << Join(", ", hostnamePatterns) << "]"
                  << ", AvailableExternalDataSources# [" << Join(", ", availableExternalDataSources) << "]"
                  << ", PathsLimit# " << pathsLimit
                  << ", EnableExternalSourceSchemaInference# " << (EnableExternalSourceSchemaInference ? "true" : "false")

@@ -512,7 +512,7 @@ public:
         const ::NKikimrProto::TAuthConfig& config,
         const TActorContext &ctx);
 
-    void ConfigureQueryService(
+    void ConfigureExternalSources(
         const NKikimrConfig::TQueryServiceConfig& config,
         const TActorContext& ctx);
 

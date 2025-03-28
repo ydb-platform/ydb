@@ -25,7 +25,6 @@
 #include <yql/essentials/minikql/mkql_node_visitor.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 #include <yql/essentials/providers/common/schema/mkql/yql_mkql_schema.h>
-#include <yql/essentials/utils/backtrace/backtrace.h>
 
 #include <util/generic/scope.h>
 
@@ -532,7 +531,6 @@ public:
     void Prepare(const TDqTaskSettings& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
         const IDqTaskRunnerExecutionContext& execCtx) override
     {
-
         TaskId = task.GetId();
         auto entry = BuildTask(task);
 
@@ -719,18 +717,6 @@ public:
         }
 
         auto prepareTime = TInstant::Now() - startTime;
-        // if (LogFunc) {
-        //     TLogFunc logger = [taskId = TaskId, log = LogFunc](const TString& message) {
-        //         log(TStringBuilder() << "Run task: " << taskId << ", " << message);
-        //     };
-        //     LogFunc = logger;
-
-        // }
-
-        // TStringStream ss;
-        // NYql::NBacktrace::KikimrBackTraceFormatImpl(&ss);
-
-        // std::cerr << "MISHA logfunc is set: " << (bool)LogFunc << "\n" << ss.Str() << std::endl;
 
         LOG(TStringBuilder() << "Prepare task: " << TaskId << ", takes " << prepareTime.MicroSeconds() << " us");
         if (Stats) {

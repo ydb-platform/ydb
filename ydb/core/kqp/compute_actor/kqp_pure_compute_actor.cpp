@@ -7,8 +7,7 @@ namespace NKqp {
 
 bool TKqpComputeActor::IsDebugLogEnabled(const TActorSystem* actorSystem) {
     auto* settings = actorSystem->LoggerSettings();
-    std::cerr << "MISHA logger settings: " << (bool)settings << " " << settings->Satisfies(NActors::NLog::EPriority::PRI_DEBUG, NKikimrServices::KQP_TASKS_RUNNER) << std::endl;
-    return true;// settings && settings->Satisfies(NActors::NLog::EPriority::PRI_DEBUG, NKikimrServices::KQP_TASKS_RUNNER);
+    return settings && settings->Satisfies(NActors::NLog::EPriority::PRI_DEBUG, NKikimrServices::KQP_TASKS_RUNNER);
 }
 
 TKqpComputeActor::TKqpComputeActor(const TActorId& executerId, ui64 txId, NDqProto::TDqTask* task,
@@ -42,7 +41,6 @@ void TKqpComputeActor::DoBootstrap() {
 
     TLogFunc logger;
     if (IsDebugLogEnabled(actorSystem)) {
-        std::cerr << "MISHA pure compute actor log enabled\n";
         logger = [actorSystem, txId = this->GetTxId(), taskId = GetTask().GetId()] (const TString& message) {
             LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_TASKS_RUNNER, "TxId: " << txId
                 << ", task: " << taskId << ": " << message);

@@ -1652,11 +1652,12 @@ protected:
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         auto& columnShardHashV1Params = stageInfo.Meta.ColumnShardHashV1Params;
-        if (enableShuffleElimination && stageInfo.Meta.ColumnTableInfoPtr) {
+        if (enableShuffleElimination && stage.GetIsShuffleEliminated() && stageInfo.Meta.ColumnTableInfoPtr) {
             const auto& tableDesc = stageInfo.Meta.ColumnTableInfoPtr->Description;
             columnShardHashV1Params.SourceShardCount = tableDesc.GetColumnShardCount();
             columnShardHashV1Params.SourceTableKeyColumnTypes = std::make_shared<TVector<NScheme::TTypeInfo>>();
             for (const auto& column: tableDesc.GetSharding().GetHashSharding().GetColumns()) {
+                Y_ENSURE(stageInfo.Meta.TableConstInfo->Columns.contains(column), TStringBuilder{} << "Table doesn't have column: " << column);
                 auto columnType = stageInfo.Meta.TableConstInfo->Columns.at(column).Type;
                 columnShardHashV1Params.SourceTableKeyColumnTypes->push_back(columnType);
             }

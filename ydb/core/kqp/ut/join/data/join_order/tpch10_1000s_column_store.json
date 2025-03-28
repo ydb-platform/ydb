@@ -7,22 +7,16 @@
         "args":
           [
             {
-              "op_name":"HashShuffle",
+              "op_name":"InnerJoin (MapJoin)",
               "args":
                 [
                   {
-                    "op_name":"InnerJoin (MapJoin)",
-                    "args":
-                      [
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"customer"
-                        },
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"nation"
-                        }
-                      ]
+                    "op_name":"TableFullScan",
+                    "table":"customer"
+                  },
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"nation"
                   }
                 ]
             },
@@ -35,14 +29,8 @@
                     "args":
                       [
                         {
-                          "op_name":"HashShuffle",
-                          "args":
-                            [
-                              {
-                                "op_name":"TableFullScan",
-                                "table":"orders"
-                              }
-                            ]
+                          "op_name":"TableFullScan",
+                          "table":"orders"
                         },
                         {
                           "op_name":"HashShuffle",

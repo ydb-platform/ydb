@@ -11,14 +11,8 @@
               "args":
                 [
                   {
-                    "op_name":"HashShuffle",
-                    "args":
-                      [
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"supplier"
-                        }
-                      ]
+                    "op_name":"TableFullScan",
+                    "table":"supplier"
                   },
                   {
                     "op_name":"HashShuffle",
@@ -33,14 +27,8 @@
                                 "args":
                                   [
                                     {
-                                      "op_name":"HashShuffle",
-                                      "args":
-                                        [
-                                          {
-                                            "op_name":"TableFullScan",
-                                            "table":"customer"
-                                          }
-                                        ]
+                                      "op_name":"TableFullScan",
+                                      "table":"customer"
                                     },
                                     {
                                       "op_name":"HashShuffle",
@@ -51,14 +39,8 @@
                                             "args":
                                               [
                                                 {
-                                                  "op_name":"HashShuffle",
-                                                  "args":
-                                                    [
-                                                      {
-                                                        "op_name":"TableFullScan",
-                                                        "table":"orders"
-                                                      }
-                                                    ]
+                                                  "op_name":"TableFullScan",
+                                                  "table":"orders"
                                                 },
                                                 {
                                                   "op_name":"HashShuffle",
@@ -69,14 +51,8 @@
                                                         "args":
                                                           [
                                                             {
-                                                              "op_name":"HashShuffle",
-                                                              "args":
-                                                                [
-                                                                  {
-                                                                    "op_name":"TableFullScan",
-                                                                    "table":"part"
-                                                                  }
-                                                                ]
+                                                              "op_name":"TableFullScan",
+                                                              "table":"part"
                                                             },
                                                             {
                                                               "op_name":"HashShuffle",

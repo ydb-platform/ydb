@@ -919,7 +919,7 @@ private:
             i.MutableProgram()->MutableSettings()->SetLevelDataPrediction(rPredictor.GetLevelDataVolume(i.GetProgram().GetSettings().GetStageLevel()));
         }
 
-        txProto.SetEnableShuffleElimination(Config->OptShuffleElimination.Get().GetOrElse(false));
+        txProto.SetEnableShuffleElimination(Config->OptShuffleElimination.Get().GetOrElse(Config->DefaultEnableShuffleElimination));
         txProto.SetHasEffects(hasEffectStage);
 
         for (const auto& paramBinding : tx.ParamBindings()) {
@@ -1336,7 +1336,7 @@ private:
                 shuffleProto.AddKeyColumns(TString(keyColumn));
             }
 
-            if (Config->OptShuffleElimination.Get().GetOrElse(false)) {
+            if (Config->OptShuffleElimination.Get().GetOrElse(Config->DefaultEnableShuffleElimination)) {
                 auto& columnHashV1 = *shuffleProto.MutableColumnShardHashV1();
 
                 const auto& outputType = NYql::NDq::GetDqConnectionType(connection, ctx);

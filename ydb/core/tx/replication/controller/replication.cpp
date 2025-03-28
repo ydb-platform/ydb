@@ -170,6 +170,7 @@ public:
 
         switch (State) {
         case EState::Ready:
+        case EState::Paused:
             if (!Targets) {
                 return DiscoverTargets(ctx);
             } else {
@@ -387,7 +388,7 @@ void TReplication::RemovePendingAlterTarget(ui64 id) {
 }
 
 bool TReplication::CheckAlterDone() const {
-    return Impl->State == EState::Ready && Impl->PendingAlterTargets.empty();
+    return (Impl->State == EState::Ready || Impl->State == EState::Paused) && Impl->PendingAlterTargets.empty();
 }
 
 void TReplication::UpdateLag(ui64 targetId, TDuration lag) {

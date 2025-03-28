@@ -708,6 +708,10 @@ namespace {
                 auto value = ToString(setting.Value().Cast<TCoDataCtor>().Literal().Cast<TCoAtom>().Value());
                 if (to_lower(value) == "done") {
                     dstSettings.EnsureStateDone();
+                } else if (to_lower(value) == "paused") {
+                    dstSettings.StatePaused = true;
+                } else if (to_lower(value) == "standby") {
+                    dstSettings.StateStandBy = true;
                 } else {
                     ctx.AddError(TIssue(ctx.GetPosition(setting.Name().Pos()),
                         TStringBuilder() << "Unknown " << objectName << " state: " << value));

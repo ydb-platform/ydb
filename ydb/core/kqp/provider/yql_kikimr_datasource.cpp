@@ -9,6 +9,7 @@
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
@@ -94,6 +95,15 @@ namespace {
 
 using namespace NKikimr;
 using namespace NNodes;
+
+bool IsShowCreate(const TExprNode& read) {
+    if (read.ChildrenSize() <= TKiReadTable::idx_Settings) {
+        return false;
+    }
+    const auto& settings = *read.Child(TKiReadTable::idx_Settings);
+    return HasSetting(settings, "showCreateTable")
+        || HasSetting(settings, "showCreateView");
+}
 
 class TKiSourceIntentDeterminationTransformer: public TKiSourceVisitorTransformer {
 public:
@@ -792,7 +802,7 @@ public:
                     retChildren[0] = newRead;
                     return ctx.ChangeChildren(*node, std::move(retChildren));
                 }
-            } else if (tableDesc.Metadata->Kind == EKikimrTableKind::View) {
+            } else if (tableDesc.Metadata->Kind == EKikimrTableKind::View && !IsShowCreate(*read)) {
                 if (!SessionCtx->Config().FeatureFlags.GetEnableViews()) {
                     ctx.AddError(TIssue(node->Pos(ctx),
                                         "Views are disabled. Please contact your system administrator to enable the feature"));

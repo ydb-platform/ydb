@@ -1009,7 +1009,7 @@ All the metadata provided when writing a message is sent to a consumer with the 
 
   To write to a topic within a transaction, create a transactional writer by calling `topic_client.tx_writer` with the `tx` argument. Once created, you can send messages as usual. There's no need to close the transactional writer manually, as it will be closed automatically when the transaction ends.
 
-  In the example below, there is no explicit call to `tx.commit()` - it occurs implicitly upon successful completion of the lambda `callee`.
+  In the example below, there is no explicit call to `tx.commit()`; it occurs implicitly upon the successful execution of the `callee` lambda.
 
   [Example on GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_example.py)
 
@@ -1033,7 +1033,7 @@ All the metadata provided when writing a message is sent to a consumer with the 
 
   To write to a topic within a transaction, create a transactional writer by calling `topic_client.tx_writer` with the `tx` argument. Once created, you can send messages as usual. There's no need to close the transactional writer manually, as it will be closed automatically when the transaction ends.
 
-  In the example below, there is no explicit call to `tx.commit()` - it occurs implicitly upon successful completion of the lambda `callee`.
+  In the example below, there is no explicit call to `tx.commit()`; it occurs implicitly upon the successful execution of the `callee` lambda.
 
   [Example on GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_async_example.py)
 

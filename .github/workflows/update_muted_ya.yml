@@ -150,16 +150,6 @@ jobs:
         run: |
           echo "## Pull Request Created or Updated" >> pr_summary.md
           echo "- PR Number: #${{ steps.create_or_update_pr.outputs.pr_number }}" >> pr_summary.md
+          python .github/scripts/tests/comment-pr.py pr_summary.md
       
-      - name: Display Markdown
-        uses: actions/github-script@v6
-        with:
-          script: |
-            const fs = require('fs');
-            const content = fs.readFileSync('pr_summary.md', 'utf8');
-            github.issues.createComment({
-              ...context.repo,
-              issue_number: context.issue.number,
-              body: content
-            });
   

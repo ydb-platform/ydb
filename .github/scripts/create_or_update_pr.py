@@ -17,6 +17,7 @@ def get_body_content(body_input):
         return body_input
 
 def create_or_update_pr(args, repo):
+    current_pr = None
     pr_number = None
     body = get_body_content(args.body)
 
@@ -25,22 +26,21 @@ def create_or_update_pr(args, repo):
     existing_pr = None
     for pr in existing_prs:
         if pr.base.ref == args.base_branch and pr.head.ref == args.branch_for_pr:
-            existing_pr = pr
+            current_pr = pr
             break
-
-    if existing_pr:
-        print(f"Existing PR found. Updating PR #{existing_pr.number}.")
-        existing_pr.edit(title=args.title, body=body)
-        if args.reviewers:
-            existing_pr.create_review_request(reviewers=args.reviewers.split(','))
-        pr_number = existing_pr.number
+    if current_pr:
+        print(f"Existing PR found. Updating PR #{current_pr.number}.")
+        current_pr.edit(title=args.title, body=body)
     else:
         print("No existing PR found. Creating a new PR.")
-        pr = repo.create_pull(title=args.title, body=body, head=args.branch_for_pr, base=args.base_branch)
-        if args.reviewers:
-            pr.create_review_request(reviewers=args.reviewers.split(','))
+        current_pr = repo.create_pull(title=args.title, body=body, head=args.branch_for_pr, base=args.base_branch)
         
-        pr_number = pr.number
+    if args.reviewers:
+        reviewers = args.reviewers.split(',')
+        print(f"Requesting review from: {', '.join(reviewers)}")
+        current_pr.create_review_request(reviewers=reviewers)
+
+    pr_number = current_pr.number
     if os.environ['GITHUB_OUTPUT']:
         with open(os.environ['GITHUB_OUTPUT'], 'a') as gh_out:
             print(f"pr_number={pr_number}", file=gh_out)

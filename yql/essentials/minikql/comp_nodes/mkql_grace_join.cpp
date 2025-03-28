@@ -1167,6 +1167,11 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
         }
 
         void MakeSpillingSupportState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
+
+            NYql::NUdf::TLoggerPtr logger = ctx.MakeLogger();
+            NYql::NUdf::TLogComponentId logComponentId = logger->RegisterComponent("GraceJoin");
+            logger->Log(logComponentId, NUdf::ELogLevel::Debug, TStringBuilder() << "State initialized");
+
             state = ctx.HolderFactory.Create<TGraceJoinSpillingSupportState>(
                 FlowLeft, FlowRight, JoinKind, AnyJoinSettings_, LeftKeyColumns, RightKeyColumns,
                 LeftRenames, RightRenames, LeftColumnsTypes, RightColumnsTypes,

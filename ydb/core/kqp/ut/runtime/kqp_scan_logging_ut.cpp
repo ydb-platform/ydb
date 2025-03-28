@@ -37,12 +37,7 @@ void FillTableWithData(NQuery::TQueryClient& db, ui64 numRows=300) {
     }
 }
 
-} // anonymous namespace
-
-Y_UNIT_TEST_SUITE(KqpScanLogs) {
-
-
-Y_UNIT_TEST(WideCombine) {
+void RunTestForQuery(const std::string& query, const std::string& expectedLog) {
     TStringStream logsStream;
 
     Cerr << "cwd: " << NFs::CurrentWorkingDirectory() << Endl;
@@ -53,19 +48,6 @@ Y_UNIT_TEST(WideCombine) {
     auto db = kikimr.GetQueryClient();
 
     FillTableWithData(db);
-
-    // auto query = R"(
-    //     --!syntax_v1
-    //     PRAGMA ydb.CostBasedOptimizationLevel='0';
-    //     select t1.Key, t1.Value, t2.Key, t2.Value
-    //     from `/Root/KeyValue` as t1 join `/Root/KeyValue` as t2 on t1.Value = t2.Value
-    //     order by t1.Key
-    // )";
-
-    auto query = R"(
-        --!syntax_v1
-        select count(t.Key) from `/Root/KeyValue` as t group by t.Value
-    )";
 
     auto explainMode = NYdb::NQuery::TExecuteQuerySettings().ExecMode(NYdb::NQuery::EExecMode::Explain);
     auto planres = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), explainMode).ExtractValueSync();
@@ -80,17 +62,42 @@ Y_UNIT_TEST(WideCombine) {
     TString output = FormatResultSetYson(result.GetResultSet(0));
     Cout << output << Endl;
 
-    bool hasCombinerLog = false;
+    bool hasExpectedLog = false;
     TString line;
     while (logsStream.ReadLine(line)) {
-        Cerr << "LOG: " << line << Endl;
-        if (line.Contains("[WideCombine]")) {
-            hasCombinerLog = true;
+        if (line.Contains(expectedLog)) {
+            hasExpectedLog = true;
             break;
         }
     }
 
-    UNIT_ASSERT(hasCombinerLog);
+    UNIT_ASSERT(hasExpectedLog);
+}
+
+} // anonymous namespace
+
+Y_UNIT_TEST_SUITE(KqpScanLogs) {
+
+Y_UNIT_TEST(WideCombine) {
+    auto query = R"(
+        --!syntax_v1
+        select count(t.Key) from `/Root/KeyValue` as t group by t.Value
+    )";
+
+    RunTestForQuery(query, "[WideCombine]");
+}
+
+Y_UNIT_TEST(GraceJoin) {
+    auto query = R"(
+        --!syntax_v1
+        PRAGMA ydb.CostBasedOptimizationLevel='0';
+        PRAGMA ydb.HashJoinMode='graceandself';
+        select t1.Key, t1.Value, t2.Key, t2.Value
+        from `/Root/KeyValue` as t1 full join `/Root/KeyValue` as t2 on t1.Value = t2.Value
+        order by t1.Value
+    )";
+
+    RunTestForQuery(query, "[GraceJoin]");
 }
 
 

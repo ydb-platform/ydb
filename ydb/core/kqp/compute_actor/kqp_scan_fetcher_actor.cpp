@@ -82,6 +82,7 @@ void TKqpScanFetcherActor::Bootstrap() {
     AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "bootstrap")("compute", ComputeActorIds.size())("shards", PendingShards.size());
     StartTableScan();
     Become(&TKqpScanFetcherActor::StateFunc);
+    Schedule(TDuration::Seconds(30), new NActors::TEvents::TEvWakeup());
 }
 
 void TKqpScanFetcherActor::HandleExecute(TEvScanExchange::TEvAckData::TPtr& ev) {
@@ -674,6 +675,11 @@ void TKqpScanFetcherActor::CheckFinish() {
         );
         PassAway();
     }
+}
+
+void TKqpScanFetcherActor::HandleExecute(NActors::TEvents::TEvWakeup::TPtr&) {
+    InFlightShards.PingAllScanners();
+    Schedule(TDuration::Seconds(30), new NActors::TEvents::TEvWakeup());
 }
 
 }

@@ -938,4 +938,4 @@ resource_broker_config: !inherit
 
 ## Примеры конфигураций кластеров {#examples}
 
-В [репозитории](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/yaml_config_examples/)  можно найти модельные примеры конфигураций кластеров для самостоятельного развертывания. Ознакомьтесь с ними перед развертыванием кластера.
+В [репозитории](https://github.com/ydb-platform/ydb/tree/main/ydb/deploy/yaml_config_examples/)  можно найти модельные примеры конфигураций кластеров для самостоятельного развертывания. Ознакомьтесь с ними перед развертыванием кластера.s

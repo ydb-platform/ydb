@@ -74,7 +74,7 @@ std::pair<std::vector<TPartitionSplit>, std::vector<TPartitionMerge>> TPartition
     auto partitionId = PartitionsToSplit.begin();
     while (allowedSplitsCount > 0 && partitionId != PartitionsToSplit.end()) {
         auto* node = PartitionGraph.GetPartition(*partitionId);
-        if (node->Children.empty()) {
+        if (node->DirectChildren.empty()) {
             auto from = node->From;
             auto to = node->To;
             auto mid = MiddleOf(from, to);

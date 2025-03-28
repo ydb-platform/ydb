@@ -9,7 +9,7 @@
 
 #include <library/cpp/yson/node/node.h>
 
-#include <util/generic/bt_exception.h>
+#include <util/generic/yexception.h>
 #include <util/generic/guid.h>
 #include <util/generic/string.h>
 #include <util/generic/vector.h>

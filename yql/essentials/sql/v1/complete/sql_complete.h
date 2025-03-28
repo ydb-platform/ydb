@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yql/essentials/sql/v1/complete/name/name_service.h>
 #include <yql/essentials/sql/v1/lexer/lexer.h>
 
 #include <util/generic/string.h>
@@ -19,6 +20,7 @@ namespace NSQLComplete {
 
     enum class ECandidateKind {
         Keyword,
+        TypeName,
     };
 
     struct TCandidate {
@@ -37,6 +39,10 @@ namespace NSQLComplete {
     public:
         using TPtr = THolder<ISqlCompletionEngine>;
 
+        struct TConfiguration {
+            size_t Limit = 256;
+        };
+
         virtual TCompletion Complete(TCompletionInput input) = 0;
         virtual ~ISqlCompletionEngine() = default;
     };
@@ -46,6 +52,9 @@ namespace NSQLComplete {
     // FIXME(YQL-19747): unwanted dependency on a lexer implementation
     ISqlCompletionEngine::TPtr MakeSqlCompletionEngine();
 
-    ISqlCompletionEngine::TPtr MakeSqlCompletionEngine(TLexerSupplier lexer);
+    ISqlCompletionEngine::TPtr MakeSqlCompletionEngine(
+        TLexerSupplier lexer,
+        INameService::TPtr names,
+        ISqlCompletionEngine::TConfiguration configuration = {});
 
 } // namespace NSQLComplete

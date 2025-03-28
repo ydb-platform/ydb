@@ -2016,7 +2016,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         appConfig.MutableTableServiceConfig()->SetEnableCreateTableAs(true);
         appConfig.MutableTableServiceConfig()->SetEnablePerStatementQueryExecution(true);
         appConfig.MutableFeatureFlags()->SetEnableTempTables(true);
-        auto kikimr = NTestUtils::MakeKikimrRunner(appConfig, "TestDomain");
+        auto kikimr = NTestUtils::MakeKikimrRunner(appConfig, {.DomainRoot = "TestDomain"});
 
         CreateBucketWithObject(bucket, "test_object", TEST_CONTENT);
 
@@ -2515,7 +2515,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         const TString source = "source";
         const TString table1 = "table1";
         const TString table2 = "table2";
-        const TString bucket  = "bucket";
+        const TString bucket = "bucket";
 
         CreateBucket(bucket);
 
@@ -2628,6 +2628,109 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
             NYdb::NQuery::TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
             UNIT_ASSERT_EQUAL_C(readyOp.Metadata().ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToString());
         }
+    }
+
+    void ReadLargeParquetFiles(std::shared_ptr<NKikimr::NKqp::TKikimrRunner> kikimr, const TString& bucket) {
+        CreateBucket(bucket);
+
+        auto tc = kikimr->GetTableClient();
+        auto session = tc.CreateSession().GetValueSync().GetSession();
+        {
+            const TString query = fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `test_bucket` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{location}",
+                    AUTH_METHOD="NONE"
+                );)",
+                "location"_a = GetBucketLocation(bucket)
+            );
+            const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto db = kikimr->GetQueryClient();
+        {
+            const TString query = R"(
+                INSERT INTO test_bucket.`test-inset-splitting/` WITH (FORMAT = "parquet")
+                SELECT Random(data) AS data FROM AS_TABLE(ListReplicate(
+                    <|data: "x"|>,
+                    1000000
+                ));
+            )";
+
+            // Create two large parquet files
+            {
+                const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+            {
+                const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+            }
+        }
+
+        {   // Actual splitting here:
+            // start two read tasks on different nodes
+            // write tasks will be scheduled locally
+            // so one of the channels is remote
+            const TString query = R"(
+                PRAGMA s3.UseRuntimeListing = "false";
+                PRAGMA ydb.OverridePlanner = @@ [
+                    { "tx": 0, "stage": 0, "tasks": 2 }
+                ] @@;
+
+                INSERT INTO test_bucket.`/result/` WITH (FORMAT = "parquet")
+                SELECT * FROM test_bucket.`/test-inset-splitting/` WITH (
+                    FORMAT = "parquet",
+                    SCHEMA (
+                        data Double
+                    )
+                )
+            )";
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const TString query = R"(
+            SELECT COUNT(*) FROM test_bucket.`/result/` WITH (
+                FORMAT = "parquet",
+                SCHEMA (
+                    data Double
+                )
+            )
+        )";
+        const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+
+        TResultSetParser parser(result.GetResultSet(0));
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnsCount(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
+        UNIT_ASSERT(parser.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetUint64(), 2000000);
+    }
+
+    Y_UNIT_TEST(TestReadLargeParquetFile) {
+        NKikimrConfig::TAppConfig config;
+        auto& tableService = *config.MutableTableServiceConfig();
+        tableService.SetArrayBufferMinFillPercentage(75);
+        tableService.SetBlockChannelsMode(NKikimrConfig::TTableServiceConfig::BLOCK_CHANNELS_FORCE);
+        tableService.MutableResourceManager()->SetChannelChunkSizeLimit(100000);
+
+        auto kikimr = NTestUtils::MakeKikimrRunner(config, {.NodeCount = 2});
+        WaitResourcesPublish(*kikimr);
+        ReadLargeParquetFiles(kikimr, "test_read_large_file_bucket");
+    }
+
+    Y_UNIT_TEST(TestLocalReadLargeParquetFile) {
+        NKikimrConfig::TAppConfig config;
+        auto& tableService = *config.MutableTableServiceConfig();
+        tableService.ClearArrayBufferMinFillPercentage();
+        tableService.SetBlockChannelsMode(NKikimrConfig::TTableServiceConfig::BLOCK_CHANNELS_FORCE);
+        tableService.MutableResourceManager()->SetChannelChunkSizeLimit(100000);
+
+        auto kikimr = NTestUtils::MakeKikimrRunner(config);
+        ReadLargeParquetFiles(kikimr, "test_local_read_large_file_bucket");
     }
 }
 

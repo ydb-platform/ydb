@@ -84,6 +84,16 @@ std::shared_ptr<arrow::Array> DeserializeArray(const std::string& blob, std::sha
  */
 void AppendElement(NYql::NUdf::TUnboxedValue value, arrow::ArrayBuilder* builder, const NKikimr::NMiniKQL::TType* type);
 
+class IBlockSplitter : public TThrRefBase {
+public:
+    using TPtr = TIntrusivePtr<IBlockSplitter>;
+
+    virtual bool ShouldSplitItem(const NUdf::TUnboxedValuePod* values, ui32 count) = 0;
+
+    virtual std::vector<std::vector<arrow::Datum>> SplitItem(const NUdf::TUnboxedValuePod* values, ui32 count) = 0;
+};
+
+IBlockSplitter::TPtr CreateBlockSplitter(const NKikimr::NMiniKQL::TType* type, ui64 chunkSizeLimit);
 
 } // NArrow
 } // NYql

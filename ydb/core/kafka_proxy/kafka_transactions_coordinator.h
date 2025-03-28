@@ -35,7 +35,7 @@ namespace NKafka {
             }
 
             TStringBuilder LogPrefix() const {
-                return TStringBuilder() << "KafkaTransactionsCoordinator";
+                return TStringBuilder() << "KafkaTransactionsCoordinator ";
             }
         private:
             STFUNC(StateWork) {

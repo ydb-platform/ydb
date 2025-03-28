@@ -196,6 +196,47 @@ namespace {
             UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
         }
 
+        Y_UNIT_TEST(OnAnyTransactionalRequest_ShouldForwardItToExistingTransactionActorIfProducerIsValid) {
+            // send valid message
+            ui64 correlationId = 123;
+            TString txnId = "my-tx-id";
+            i64 producerId = 1;
+            i16 producerEpoch = 0;
+            SaveTxnProducer(txnId, producerId, producerEpoch);
+            // observe TEvAddPartitionsToTxnRequest to a different actor
+            bool seenEvent = false;
+            ui32 eventCounter = 0;
+            TActorId txnActorId;
+            auto observer = [&](TAutoPtr<IEventHandle>& input) {
+                if (auto* event = input->CastAsLocal<NKafka::TEvKafka::TEvEndTxnRequest>()) {
+                    // There will be four events TEvEndTxnRequest. We need only two of them 
+                    // with recipient not equal to our TKafkaTransactionCoordinatorActor id. 
+                    // Those are event sent from TKafkaTransactionCoordinatorActor to TKafkaTransactionActor
+                    if (input->Recipient != ActorId) {
+                        if (eventCounter == 0) {
+                            txnActorId = input->Recipient;
+                            eventCounter++;
+                        } else {
+                            UNIT_ASSERT_VALUES_EQUAL(txnActorId, input->Recipient);
+                            seenEvent = true;
+                        }
+                    } 
+                }
+
+                return TTestActorRuntimeBase::EEventAction::PROCESS;
+            };
+            Ctx->Runtime->SetObserverFunc(observer);
+
+            SendEndTxnRequest(correlationId, txnId, producerId, producerEpoch);
+            SendEndTxnRequest(correlationId, txnId, producerId, producerEpoch);
+
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&seenEvent]() {
+                return seenEvent;
+            };
+            UNIT_ASSERT(Ctx->Runtime->DispatchEvents(options));
+        }
+
         Y_UNIT_TEST(OnAddPartitions_ShouldSendBack_PRODUCER_FENCED_ErrorIfProducerIsNotInitialized) {
             ui64 correlationId = 123;
             SendAddPartitionsToTxnRequest(correlationId, "my-tx-id", 1, 0, {{"topic1", {0, 1}}, {"topic2", {0}}});

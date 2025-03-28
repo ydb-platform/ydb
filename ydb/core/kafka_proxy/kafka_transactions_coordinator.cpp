@@ -82,11 +82,11 @@ namespace NKafka {
         } else {
             txnActorId = ctx.Register(new TKafkaTransactionActor());
             TxnActorByTransactionalId[ev->Request->TransactionalId->c_str()] = txnActorId;
-            KAFKA_LOG_D(TStringBuilder() << "Registered transactional actor for transactionalId " << ev->Request->TransactionalId->c_str() << " and ApiKey " << ev->Request->ApiKey());
+            KAFKA_LOG_D(TStringBuilder() << "Registered TKafkaTransactionActor with id " << txnActorId << " for transactionalId " << ev->Request->TransactionalId->c_str() << " and ApiKey " << ev->Request->ApiKey());
         }
         TAutoPtr<IEventHandle> tmpPtr = evHandle.Release();
         ctx.Forward(tmpPtr, txnActorId);
-        KAFKA_LOG_D(TStringBuilder() << "Forwarded message for transactionalId " << ev->Request->TransactionalId->c_str() << " and ApiKey " << ev->Request->ApiKey());
+        KAFKA_LOG_D(TStringBuilder() << "Forwarded message to TKafkaTransactionActor with id " << txnActorId << " for transactionalId " << ev->Request->TransactionalId->c_str() << " and ApiKey " << ev->Request->ApiKey());
     };
 
     template<class ResponseType, class RequestType>

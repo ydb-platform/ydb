@@ -314,7 +314,7 @@ private:
         TMaybe<TString> CteRefName;
         TMap<TString, NJson::TJsonValue> NodeInfo;
         TVector<TOperator> Operators;
-        THashSet<ui32> Plans;
+        TSet<ui32> Plans;
         const NKqpProto::TKqpPhyStage* StageProto;
         TMap<TString, TString> OptEstimates;
     };

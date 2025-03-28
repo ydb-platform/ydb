@@ -6,11 +6,12 @@
 #include <arrow/util/type_fwd.h>
 
 #include <library/cpp/string_utils/base64/base64.h>
-#include <library/cpp/string_utils/quote/quote.h>
 
 #include <parquet/arrow/writer.h>
 
 #include <util/generic/size_literals.h>
+
+#include <ydb/library/yql/providers/s3/compressors/factory.h>  // defines NO_SANITIZE_THREAD
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
@@ -21,7 +22,6 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_default_retry_policy.h>
 #include <ydb/library/yql/providers/s3/common/util.h>
-#include <ydb/library/yql/providers/s3/compressors/factory.h>
 #include <ydb/library/yql/providers/s3/credentials/credentials.h>
 
 #include <yql/essentials/minikql/mkql_program_builder.h>

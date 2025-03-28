@@ -161,6 +161,9 @@ private:
 private:
     TStatus HandleKey(const TStringBuf& cluster, const TKikimrKey& key, bool sysViewRewritten = false) {
         switch (key.GetKeyType()) {
+            case TKikimrKey::Type::Database:
+                return TStatus::Ok;
+
             case TKikimrKey::Type::Table:
             case TKikimrKey::Type::TableScheme: {
                 auto& table = SessionCtx->Tables().GetOrAddTable(TString(cluster), SessionCtx->GetDatabase(),

@@ -951,7 +951,7 @@ void TWriteSessionImpl::OnReadDone(NYdbGrpc::TGrpcStatus&& grpcStatus, size_t co
     TProcessSrvMessageResult processResult;
     bool needSetValue = false;
     if (!grpcStatus.Ok()) {
-        errorStatus = TPlainStatus(std::move(grpcStatus));
+        errorStatus = TPlainStatus(grpcStatus);
     }
     bool doRead = false;
     {

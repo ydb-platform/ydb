@@ -326,7 +326,7 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse, const T
         Partition()->StartOffset = meta.GetStartOffset();
         Partition()->EndOffset = meta.GetEndOffset();
         if (Partition()->StartOffset == Partition()->EndOffset) {
-           Partition()->NewHead.Offset = Partition()->Head.Offset = Partition()->EndOffset;
+           Partition()->WorkZone.NewHead.Offset = Partition()->WorkZone.Head.Offset = Partition()->EndOffset;
         }
         if (meta.HasStartOffset()) {
             GetContext().StartOffset = meta.GetStartOffset();
@@ -575,11 +575,11 @@ THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TR
 void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext&) {
     auto& endOffset = Partition()->EndOffset;
     auto& startOffset = Partition()->StartOffset;
-    auto& head = Partition()->Head;
-    auto& dataKeysBody = Partition()->DataKeysBody;
+    auto& head = Partition()->WorkZone.Head;
+    auto& dataKeysBody = Partition()->WorkZone.DataKeysBody;
     auto& gapOffsets = Partition()->GapOffsets;
     auto& gapSize = Partition()->GapSize;
-    auto& bodySize = Partition()->BodySize;
+    auto& bodySize = Partition()->WorkZone.BodySize;
 
     // If there are multiple keys for a message, then only the key that contains more messages remains.
     //
@@ -632,9 +632,9 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
 void TInitDataRangeStep::FormHeadAndProceed() {
     auto& endOffset = Partition()->EndOffset;
     auto& startOffset = Partition()->StartOffset;
-    auto& head = Partition()->Head;
-    auto& headKeys = Partition()->HeadKeys;
-    auto& dataKeysBody = Partition()->DataKeysBody;
+    auto& head = Partition()->WorkZone.Head;
+    auto& headKeys = Partition()->WorkZone.HeadKeys;
+    auto& dataKeysBody = Partition()->WorkZone.DataKeysBody;
 
     head.Offset = endOffset;
     head.PartNo = 0;
@@ -667,7 +667,7 @@ TInitDataStep::TInitDataStep(TInitializer* initializer)
 void TInitDataStep::Execute(const TActorContext &ctx) {
     TVector<TString> keys;
     //form head request
-    for (auto& p : Partition()->HeadKeys) {
+    for (auto& p : Partition()->WorkZone.HeadKeys) {
         keys.push_back({p.Key.Data(), p.Key.Size()});
     }
     Y_ABORT_UNLESS(keys.size() < Partition()->TotalMaxCount);
@@ -693,9 +693,9 @@ void TInitDataStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActorConte
     auto& response = ev->Get()->Record;
     Y_ABORT_UNLESS(response.ReadResultSize());
 
-    auto& head = Partition()->Head;
-    auto& headKeys = Partition()->HeadKeys;
-    auto& dataKeysHead = Partition()->DataKeysHead;
+    auto& head = Partition()->WorkZone.Head;
+    auto& headKeys = Partition()->WorkZone.HeadKeys;
+    auto& dataKeysHead = Partition()->WorkZone.DataKeysHead;
     auto& compactLevelBorder = Partition()->CompactLevelBorder;
     auto totalLevels = Partition()->TotalLevels;
 
@@ -768,16 +768,17 @@ TInitEndWriteTimestampStep::TInitEndWriteTimestampStep(TInitializer* initializer
 }
 
 void TInitEndWriteTimestampStep::Execute(const TActorContext &ctx) {
-    if (Partition()->EndWriteTimestamp != TInstant::Zero() || (Partition()->HeadKeys.empty() && Partition()->DataKeysBody.empty())) {
+    if (Partition()->EndWriteTimestamp != TInstant::Zero() ||
+        (Partition()->WorkZone.HeadKeys.empty() && Partition()->WorkZone.DataKeysBody.empty())) {
         PQ_LOG_I("Initializing EndWriteTimestamp skipped because already initialized.");
         return Done(ctx);
     }
 
     TDataKey* lastKey = nullptr;
-    if (!Partition()->HeadKeys.empty()) {
-        lastKey = &Partition()->HeadKeys.back();
-    } else if (!Partition()->DataKeysBody.empty()) {
-        lastKey = &Partition()->DataKeysBody.back();
+    if (!Partition()->WorkZone.HeadKeys.empty()) {
+        lastKey = &Partition()->WorkZone.HeadKeys.back();
+    } else if (!Partition()->WorkZone.DataKeysBody.empty()) {
+        lastKey = &Partition()->WorkZone.DataKeysBody.back();
     }
 
     if (lastKey) {
@@ -860,7 +861,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
     ui32 border = LEVEL0;
     MaxSizeCheck = 0;
     MaxBlobSize = AppData(ctx)->PQConfig.GetMaxBlobSize();
-    PartitionedBlob = TPartitionedBlob(Partition, 0, "", 0, 0, 0, Head, NewHead, true, false, MaxBlobSize);
+    WorkZone.PartitionedBlob = TPartitionedBlob(Partition, 0, "", 0, 0, 0, WorkZone.Head, WorkZone.NewHead, true, false, MaxBlobSize);
     for (ui32 i = 0; i < TotalLevels; ++i) {
         CompactLevelBorder.push_back(border);
         MaxSizeCheck += border;
@@ -873,7 +874,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
     std::reverse(CompactLevelBorder.begin(), CompactLevelBorder.end());
 
     for (ui32 i = 0; i < TotalLevels; ++i) {
-        DataKeysHead.push_back(TKeyLevel(CompactLevelBorder[i]));
+        WorkZone.DataKeysHead.emplace_back(CompactLevelBorder[i]);
     }
 
     if (Config.HasOffloadConfig() && !OffloadActor && !IsSupportive()) {

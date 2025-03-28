@@ -201,10 +201,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , WriteInflightSize(0)
     , Tablet(tablet)
     , BlobCache(blobCache)
-    , PartitionedBlob(partition, 0, "", 0, 0, 0, Head, NewHead, true, false, 8_MB)
-    , NewHeadKey{TKey{}, 0, TInstant::Zero(), 0}
-    , BodySize(0)
-    , MaxWriteResponsesSize(0)
+    , WorkZone(partition)
     , GapSize(0)
     , IsServerless(isServerless)
     , ReadingTimestamp(false)
@@ -257,7 +254,7 @@ void TPartition::EmplaceResponse(TMessage&& message, const TActorContext& ctx) {
 }
 
 ui64 TPartition::UserDataSize() const {
-    if (DataKeysBody.size() <= 1) {
+    if (WorkZone.DataKeysBody.size() <= 1) {
         // tiny optimization - we do not meter very small queues up to 16MB
         return 0;
     }
@@ -266,7 +263,7 @@ ui64 TPartition::UserDataSize() const {
     // maintained by the background process. However, the last block may contain several irrelevant
     // messages. Because of them, we throw out the size of the entire blob.
     auto size = Size();
-    auto lastBlobSize = DataKeysBody[0].Size;
+    auto lastBlobSize = WorkZone.DataKeysBody[0].Size;
     Y_DEBUG_ABORT_UNLESS(size >= lastBlobSize, "Metering data size must be positive");
     return size >= lastBlobSize ? size - lastBlobSize : 0;
 }
@@ -278,8 +275,8 @@ ui64 TPartition::MeteringDataSize(TInstant now) const {
         // We only add the amount of data that is blocked by an important consumer.
         ui64 size = 0;
         auto expirationTimestamp = now - TDuration::Seconds(Config.GetPartitionConfig().GetLifetimeSeconds()) - WAKE_TIMEOUT;
-        for (size_t i = 1; i < DataKeysBody.size() && DataKeysBody[i].Timestamp < expirationTimestamp; ++i) {
-            size += DataKeysBody[i].Size;
+        for (size_t i = 1; i < WorkZone.DataKeysBody.size() && WorkZone.DataKeysBody[i].Timestamp < expirationTimestamp; ++i) {
+            size += WorkZone.DataKeysBody[i].Size;
         }
         return size;
     }
@@ -329,7 +326,7 @@ TInstant TPartition::GetEndWriteTimestamp() const {
 }
 
 THead& TPartition::GetHead() {
-    return Head;
+    return WorkZone.Head;
 }
 
 void TPartition::HandleWakeup(const TActorContext& ctx) {
@@ -378,7 +375,7 @@ void TPartition::AddMetaKey(TEvKeyValue::TEvRequest* request) {
 
     NKikimrPQ::TPartitionMeta meta;
     meta.SetStartOffset(StartOffset);
-    meta.SetEndOffset(Max(NewHead.GetNextOffset(), EndOffset));
+    meta.SetEndOffset(Max(WorkZone.NewHead.GetNextOffset(), EndOffset));
     meta.SetSubDomainOutOfSpace(SubDomainOutOfSpace);
     meta.SetEndWriteTimestamp(PendingWriteTimestamp.MilliSeconds());
 
@@ -420,7 +417,7 @@ bool TPartition::CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& 
 }
 
 bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorContext& ctx) {
-    if (StartOffset == EndOffset || DataKeysBody.size() <= 1) {
+    if (StartOffset == EndOffset || WorkZone.DataKeysBody.size() <= 1) {
         return false;
     }
 
@@ -432,8 +429,8 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
     const ui64 importantConsumerMinOffset = ImportantClientsMinOffset();
 
     bool hasDrop = false;
-    while (DataKeysBody.size() > 1) {
-        auto& nextKey = DataKeysBody[1].Key;
+    while (WorkZone.DataKeysBody.size() > 1) {
+        auto& nextKey = WorkZone.DataKeysBody[1].Key;
         if (importantConsumerMinOffset < nextKey.GetOffset()) {
             // The first message in the next blob was not read by an important consumer.
             // We also save the current blob, since not all messages from it could be read.
@@ -446,7 +443,7 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
 
         auto& firstKey = DataKeysBody.front();
         if (hasStorageLimit) {
-            const auto bodySize = BodySize - firstKey.Size;
+            const auto bodySize = WorkZone.BodySize - firstKey.Size;
             if (bodySize < partConfig.GetStorageLimitBytes()) {
                 break;
             }
@@ -456,8 +453,8 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
             }
         }
 
-        BodySize -= firstKey.Size;
-        DataKeysBody.pop_front();
+        WorkZone.BodySize -= firstKey.Size;
+        WorkZone.DataKeysBody.pop_front();
 
         if (!GapOffsets.empty() && nextKey.GetOffset() == GapOffsets.front().second) {
             GapSize -= GapOffsets.front().second - GapOffsets.front().first;
@@ -467,13 +464,13 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
         hasDrop = true;
     }
 
-    Y_ABORT_UNLESS(!DataKeysBody.empty());
+    Y_ABORT_UNLESS(!WorkZone.DataKeysBody.empty());
 
     if (!hasDrop) {
         return false;
     }
 
-    const auto& lastKey = DataKeysBody.front().Key;
+    const auto& lastKey = WorkZone.DataKeysBody.front().Key;
 
     StartOffset = lastKey.GetOffset();
     if (lastKey.GetPartNo() > 0) {
@@ -559,7 +556,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
     if (StartOffset == EndOffset && EndOffset == 0) {
         for (auto& [user, info] : UsersInfoStorage->GetAll()) {
             if (info.Offset > 0 && StartOffset < (ui64)info.Offset) {
-                 Head.Offset = EndOffset = StartOffset = info.Offset;
+                 WorkZone.Head.Offset = EndOffset = StartOffset = info.Offset;
             }
         }
     }
@@ -568,15 +565,15 @@ void TPartition::InitComplete(const TActorContext& ctx) {
 
     TStringBuilder ss;
     ss << "SYNC INIT topic " << TopicName() << " partitition " << Partition
-       << " so " << StartOffset << " endOffset " << EndOffset << " Head " << Head << "\n";
+       << " so " << StartOffset << " endOffset " << EndOffset << " Head " << WorkZone.Head << "\n";
     for (const auto& s : SourceIdStorage.GetInMemorySourceIds()) {
         ss << "SYNC INIT sourceId " << s.first << " seqNo " << s.second.SeqNo << " offset " << s.second.Offset << "\n";
     }
-    for (const auto& h : DataKeysBody) {
-        ss << "SYNC INIT DATA KEY: " << TString(h.Key.Data(), h.Key.Size()) << " size " << h.Size << "\n";
+    for (const auto& h : WorkZone.DataKeysBody) {
+        ss << "SYNC INIT DATA KEY: " << h.Key.ToString() << " size " << h.Size << "\n";
     }
-    for (const auto& h : HeadKeys) {
-        ss << "SYNC INIT HEAD KEY: " << TString(h.Key.Data(), h.Key.Size()) << " size " << h.Size << "\n";
+    for (const auto& h : WorkZone.HeadKeys) {
+        ss << "SYNC INIT HEAD KEY: " << h.Key.ToString() << " size " << h.Size << "\n";
     }
     PQ_LOG_D(ss);
 
@@ -724,7 +721,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
     }
     result.SetLastInitDurationSeconds(InitDuration.Seconds());
     result.SetCreationTimestamp(CreationTime.Seconds());
-    ui64 headGapSize = DataKeysBody.empty() ? 0 : (Head.Offset - (DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount()));
+    ui64 headGapSize = WorkZone.DataKeysBody.empty() ? 0 : (WorkZone.Head.Offset - (WorkZone.DataKeysBody.back().Key.GetOffset() + WorkZone.DataKeysBody.back().Key.GetCount()));
     ui32 gapsCount = GapOffsets.size() + (headGapSize ? 1 : 0);
     result.SetGapCount(gapsCount);
     result.SetGapSize(headGapSize + GapSize);
@@ -953,7 +950,7 @@ TInstant TPartition::GetWriteTimeEstimate(ui64 offset) const {
     if (offset >= EndOffset)
         return TInstant::Zero();
     const std::deque<TDataKey>& container =
-        (offset < Head.Offset || offset == Head.Offset && Head.PartNo > 0) ? DataKeysBody : HeadKeys;
+        (offset < WorkZone.Head.Offset || offset == WorkZone.Head.Offset && WorkZone.Head.PartNo > 0) ? WorkZone.DataKeysBody : WorkZone.HeadKeys;
     Y_ABORT_UNLESS(!container.empty());
     auto it = std::upper_bound(container.begin(), container.end(), offset,
                     [](const ui64 offset, const TDataKey& p) {
@@ -963,7 +960,7 @@ TInstant TPartition::GetWriteTimeEstimate(ui64 offset) const {
     // Always greater
     Y_ABORT_UNLESS(it != container.begin(),
              "Tablet %lu StartOffset %lu, HeadOffset %lu, offset %lu, containter size %lu, first-elem: %s",
-             TabletID, StartOffset, Head.Offset, offset, container.size(),
+             TabletID, StartOffset, WorkZone.Head.Offset, offset, container.size(),
              container.front().Key.ToString().data());
     Y_ABORT_UNLESS(it == container.end() ||
              it->Key.GetOffset() > offset ||
@@ -1235,7 +1232,7 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvGetWriteInfoReque
     ClosedInternalPartition = true;
     auto response = new TEvPQ::TEvGetWriteInfoResponse();
     response->Cookie = Partition.InternalPartitionId;
-    response->BodyKeys = std::move(DataKeysBody);
+    response->BodyKeys = std::move(WorkZone.DataKeysBody);
     response->SrcIdInfo = std::move(SourceIdStorage.ExtractInMemorySourceIds());
     ui32 rcount = 0, rsize = 0;
     ui64 insideHeadOffset = 0;
@@ -1527,44 +1524,44 @@ void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {
 
 void TPartition::CheckHeadConsistency() const {
     ui32 p = 0;
-    for (ui32 j = 0; j < DataKeysHead.size(); ++j) {
+    for (ui32 j = 0; j < WorkZone.DataKeysHead.size(); ++j) {
         ui32 s = 0;
-        for (ui32 k = 0; k < DataKeysHead[j].KeysCount(); ++k) {
-            Y_ABORT_UNLESS(p < HeadKeys.size());
-            Y_ABORT_UNLESS(DataKeysHead[j].GetKey(k) == HeadKeys[p].Key);
-            Y_ABORT_UNLESS(DataKeysHead[j].GetSize(k) == HeadKeys[p].Size);
-            s += DataKeysHead[j].GetSize(k);
-            Y_ABORT_UNLESS(j + 1 == TotalLevels || DataKeysHead[j].GetSize(k) >= CompactLevelBorder[j + 1]);
+        for (ui32 k = 0; k < WorkZone.DataKeysHead[j].KeysCount(); ++k) {
+            Y_ABORT_UNLESS(p < WorkZone.HeadKeys.size());
+            Y_ABORT_UNLESS(WorkZone.DataKeysHead[j].GetKey(k) == WorkZone.HeadKeys[p].Key);
+            Y_ABORT_UNLESS(WorkZone.DataKeysHead[j].GetSize(k) == WorkZone.HeadKeys[p].Size);
+            s += WorkZone.DataKeysHead[j].GetSize(k);
+            Y_ABORT_UNLESS(j + 1 == TotalLevels || WorkZone.DataKeysHead[j].GetSize(k) >= CompactLevelBorder[j + 1]);
             ++p;
         }
-        Y_ABORT_UNLESS(s < DataKeysHead[j].Border());
+        Y_ABORT_UNLESS(s < WorkZone.DataKeysHead[j].Border());
     }
-    Y_ABORT_UNLESS(DataKeysBody.empty() ||
-             Head.Offset >= DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount());
-    Y_ABORT_UNLESS(p == HeadKeys.size());
-    if (!HeadKeys.empty()) {
-        Y_ABORT_UNLESS(HeadKeys.size() <= TotalMaxCount);
-        Y_ABORT_UNLESS(HeadKeys.front().Key.GetOffset() == Head.Offset);
-        Y_ABORT_UNLESS(HeadKeys.front().Key.GetPartNo() == Head.PartNo);
-        for (p = 1; p < HeadKeys.size(); ++p) {
-            Y_ABORT_UNLESS(HeadKeys[p].Key.GetOffset() == HeadKeys[p-1].Key.GetOffset() + HeadKeys[p-1].Key.GetCount());
-            Y_ABORT_UNLESS(HeadKeys[p].Key.ToString() > HeadKeys[p-1].Key.ToString());
+    Y_ABORT_UNLESS(WorkZone.DataKeysBody.empty() ||
+             WorkZone.Head.Offset >= WorkZone.DataKeysBody.back().Key.GetOffset() + WorkZone.DataKeysBody.back().Key.GetCount());
+    Y_ABORT_UNLESS(p == WorkZone.HeadKeys.size());
+    if (!WorkZone.HeadKeys.empty()) {
+        Y_ABORT_UNLESS(WorkZone.HeadKeys.size() <= TotalMaxCount);
+        Y_ABORT_UNLESS(WorkZone.HeadKeys.front().Key.GetOffset() == WorkZone.Head.Offset);
+        Y_ABORT_UNLESS(WorkZone.HeadKeys.front().Key.GetPartNo() == WorkZone.Head.PartNo);
+        for (p = 1; p < WorkZone.HeadKeys.size(); ++p) {
+            Y_ABORT_UNLESS(WorkZone.HeadKeys[p].Key.GetOffset() == WorkZone.HeadKeys[p-1].Key.GetOffset() + WorkZone.HeadKeys[p-1].Key.GetCount());
+            Y_ABORT_UNLESS(WorkZone.HeadKeys[p].Key.ToString() > WorkZone.HeadKeys[p-1].Key.ToString());
         }
     }
 }
 
 ui64 TPartition::GetSizeLag(i64 offset) {
     ui64 sizeLag = 0;
-    if (!DataKeysBody.empty() && (offset < (i64)Head.Offset || offset == (i64)Head.Offset && Head.PartNo > 0)) { //there will be something in body
-        auto it = std::upper_bound(DataKeysBody.begin(), DataKeysBody.end(), std::make_pair(offset, 0),
+    if (!WorkZone.DataKeysBody.empty() && (offset < (i64)WorkZone.Head.Offset || offset == (i64)WorkZone.Head.Offset && WorkZone.Head.PartNo > 0)) { //there will be something in body
+        auto it = std::upper_bound(WorkZone.DataKeysBody.begin(), WorkZone.DataKeysBody.end(), std::make_pair(offset, 0),
                 [](const std::pair<ui64, ui16>& offsetAndPartNo, const TDataKey& p) { return offsetAndPartNo.first < p.Key.GetOffset() || offsetAndPartNo.first == p.Key.GetOffset() && offsetAndPartNo.second < p.Key.GetPartNo();});
-        if (it != DataKeysBody.begin())
+        if (it != WorkZone.DataKeysBody.begin())
             --it; //point to blob with this offset
-        Y_ABORT_UNLESS(it != DataKeysBody.end());
-        sizeLag = it->Size + DataKeysBody.back().CumulativeSize - it->CumulativeSize;
-        Y_ABORT_UNLESS(BodySize == DataKeysBody.back().CumulativeSize + DataKeysBody.back().Size - DataKeysBody.front().CumulativeSize);
+        Y_ABORT_UNLESS(it != WorkZone.DataKeysBody.end());
+        sizeLag = it->Size + WorkZone.DataKeysBody.back().CumulativeSize - it->CumulativeSize;
+        Y_ABORT_UNLESS(WorkZone.BodySize == WorkZone.DataKeysBody.back().CumulativeSize + WorkZone.DataKeysBody.back().Size - WorkZone.DataKeysBody.front().CumulativeSize);
     }
-    for (auto& b : HeadKeys) {
+    for (const auto& b : WorkZone.HeadKeys) {
         if ((i64)b.Key.GetOffset() >= offset)
             sizeLag += b.Size;
     }
@@ -1709,7 +1706,7 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
         PartitionCountersLabeled->GetCounters()[METRIC_MIN_SID_LIFETIME].Set(lifetimeNow.MilliSeconds());
     }
 
-    const ui64 headGapSize = DataKeysBody.empty() ? 0 : (Head.Offset - (DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount()));
+    const ui64 headGapSize = WorkZone.DataKeysBody.empty() ? 0 : (WorkZone.Head.Offset - (WorkZone.DataKeysBody.back().Key.GetOffset() + WorkZone.DataKeysBody.back().Key.GetCount()));
     const ui64 gapSize = GapSize + headGapSize;
     if (gapSize != PartitionCountersLabeled->GetCounters()[METRIC_GAPS_SIZE].Get()) {
         haveChanges = true;
@@ -2466,7 +2463,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
     PQ_LOG_D("TPartition::CommitWriteOperations TxId: " << t.GetTxId());
 
     Y_ABORT_UNLESS(PersistRequest);
-    Y_ABORT_UNLESS(!PartitionedBlob.IsInited());
+    Y_ABORT_UNLESS(!WorkZone.PartitionedBlob.IsInited());
 
     if (!t.WriteInfo) {
         return;
@@ -2491,40 +2488,40 @@ void TPartition::CommitWriteOperations(TTransaction& t)
 
     PQ_LOG_D("t.WriteInfo->BodyKeys.size=" << t.WriteInfo->BodyKeys.size() <<
              ", t.WriteInfo->BlobsFromHead.size=" << t.WriteInfo->BlobsFromHead.size());
-    PQ_LOG_D("Head=" << Head << ", NewHead=" << NewHead);
+    PQ_LOG_D("Head=" << WorkZone.Head << ", NewHead=" << WorkZone.NewHead);
 
     auto oldHeadOffset = NewHead.Offset;
 
     if (!t.WriteInfo->BodyKeys.empty()) {
         bool needCompactHead =
-            (Parameters->FirstCommitWriteOperations ? Head : NewHead).PackedSize != 0;
+            (Parameters->FirstCommitWriteOperations ? WorkZone.Head : WorkZone.NewHead).PackedSize != 0;
 
-        PartitionedBlob = TPartitionedBlob(Partition,
-                                           NewHead.Offset,
-                                           "", // SourceId
-                                           0,  // SeqNo
-                                           0,  // TotalParts
-                                           0,  // TotalSize
-                                           Head,
-                                           NewHead,
-                                           Parameters->HeadCleared,  // headCleared
-                                           needCompactHead,          // needCompactHead
-                                           MaxBlobSize);
+        WorkZone.PartitionedBlob = TPartitionedBlob(Partition,
+                                                    WorkZone.NewHead.Offset,
+                                                    "", // SourceId
+                                                    0,  // SeqNo
+                                                    0,  // TotalParts
+                                                    0,  // TotalSize
+                                                    WorkZone.Head,
+                                                    WorkZone.NewHead,
+                                                    Parameters->HeadCleared,  // headCleared
+                                                    needCompactHead,          // needCompactHead
+                                                    MaxBlobSize);
 
         for (auto& k : t.WriteInfo->BodyKeys) {
             PQ_LOG_D("add key " << k.Key.ToString());
-            auto write = PartitionedBlob.Add(k.Key, k.Size);
+            auto write = WorkZone.PartitionedBlob.Add(k.Key, k.Size);
             if (write && !write->Value.empty()) {
                 AddCmdWrite(write, PersistRequest.Get(), ctx);
-                CompactedKeys.emplace_back(write->Key, write->Value.size());
+                WorkZone.CompactedKeys.emplace_back(write->Key, write->Value.size());
             }
             Parameters->CurOffset += k.Key.GetCount();
             // The key does not need to be deleted, as it will be renamed
             k.BlobKeyToken->NeedDelete = false;
         }
 
-        PQ_LOG_D("PartitionedBlob.GetFormedBlobs().size=" << PartitionedBlob.GetFormedBlobs().size());
-        if (const auto& formedBlobs = PartitionedBlob.GetFormedBlobs(); !formedBlobs.empty()) {
+        PQ_LOG_D("PartitionedBlob.GetFormedBlobs().size=" << WorkZone.PartitionedBlob.GetFormedBlobs().size());
+        if (const auto& formedBlobs = WorkZone.PartitionedBlob.GetFormedBlobs(); !formedBlobs.empty()) {
             ui32 curWrites = RenameTmpCmdWrites(PersistRequest.Get());
             RenameFormedBlobs(formedBlobs,
                               *Parameters,
@@ -2533,32 +2530,32 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                               ctx);
         }
 
-        PartitionedBlob = TPartitionedBlob(Partition, 0, "", 0, 0, 0, Head, NewHead, true, false, MaxBlobSize);
+        WorkZone.PartitionedBlob = TPartitionedBlob(Partition, 0, "", 0, 0, 0, WorkZone.Head, WorkZone.NewHead, true, false, MaxBlobSize);
 
-        NewHead.Clear();
-        NewHead.Offset = Parameters->CurOffset;
+        WorkZone.NewHead.Clear();
+        WorkZone.NewHead.Offset = Parameters->CurOffset;
     }
 
     if (!t.WriteInfo->BlobsFromHead.empty()) {
         auto& first = t.WriteInfo->BlobsFromHead.front();
         // In one operation, a partition can write blocks of several transactions. Some of them can be broken down
         // into parts. We need to take this division into account.
-        NewHead.PartNo += first.GetPartNo();
+        WorkZone.NewHead.PartNo += first.GetPartNo();
 
         Parameters->HeadCleared = Parameters->HeadCleared || !t.WriteInfo->BodyKeys.empty();
 
-        PartitionedBlob = TPartitionedBlob(Partition,
-                                           NewHead.Offset,
-                                           first.SourceId,
-                                           first.SeqNo,
-                                           first.GetTotalParts(),
-                                           first.GetTotalSize(),
-                                           Head,
-                                           NewHead,
-                                           Parameters->HeadCleared, // headCleared
-                                           false,                   // needCompactHead
-                                           MaxBlobSize,
-                                           first.GetPartNo());
+        WorkZone.PartitionedBlob = TPartitionedBlob(Partition,
+                                                    WorkZone.NewHead.Offset,
+                                                    first.SourceId,
+                                                    first.SeqNo,
+                                                    first.GetTotalParts(),
+                                                    first.GetTotalSize(),
+                                                    WorkZone.Head,
+                                                    WorkZone.NewHead,
+                                                    Parameters->HeadCleared, // headCleared
+                                                    false,                   // needCompactHead
+                                                    MaxBlobSize,
+                                                    first.GetPartNo());
 
         for (auto& blob : t.WriteInfo->BlobsFromHead) {
             TWriteMsg msg{Max<ui64>(), Nothing(), TEvPQ::TEvWrite::TMsg{
@@ -3639,7 +3636,7 @@ void TPartition::ScheduleUpdateAvailableSize(const TActorContext& ctx) {
 }
 
 void TPartition::ClearOldHead(const ui64 offset, const ui16 partNo, TEvKeyValue::TEvRequest* request) {
-    for (auto it = HeadKeys.rbegin(); it != HeadKeys.rend(); ++it) {
+    for (auto it = WorkZone.HeadKeys.rbegin(); it != WorkZone.HeadKeys.rend(); ++it) {
         if (it->Key.GetOffset() > offset || it->Key.GetOffset() == offset && it->Key.GetPartNo() >= partNo) {
             // The repackaged blocks will be deleted after writing.
             DefferedKeysForDeletion.push_back(std::move(it->BlobKeyToken));

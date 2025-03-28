@@ -12,6 +12,7 @@
 #include "user_info.h"
 #include "utils.h"
 #include "read_quoter.h"
+#include "partition_workzone.h"
 
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
@@ -471,7 +472,7 @@ public:
     void Bootstrap(const TActorContext& ctx);
 
     ui64 Size() const {
-        return BodySize + Head.PackedSize;
+        return WorkZone.BodySize + WorkZone.Head.PackedSize;
     }
 
     // The size of the data realy was persisted in the storage by the partition
@@ -700,18 +701,7 @@ private:
     std::deque<TString> DeletedKeys;
     std::deque<TBlobKeyTokenPtr> DefferedKeysForDeletion;
 
-    THead Head;
-    THead NewHead;
-    TPartitionedBlob PartitionedBlob;
-    std::deque<std::pair<TKey, ui32>> CompactedKeys; //key and blob size
-    TDataKey NewHeadKey;
-
-    ui64 BodySize;
-    ui32 MaxWriteResponsesSize;
-
-    std::deque<TDataKey> DataKeysBody;
-    TVector<TKeyLevel> DataKeysHead;
-    std::deque<TDataKey> HeadKeys;
+    TPartitionWorkZone WorkZone;
 
     std::deque<std::pair<ui64,ui64>> GapOffsets;
     ui64 GapSize;

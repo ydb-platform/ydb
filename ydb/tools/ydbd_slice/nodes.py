@@ -167,20 +167,15 @@ class Nodes(object):
 
         self._check_async_execution(running_jobs, retry_attemps=2)
 
-    def _download_rbtorrent(self, url, remote_path):
+    def _download_sky(self, url, remote_path):
         self._logger.info(f"download from '{url}' to '{remote_path}'")
-        running_jobs = self.execute_async_ret(f'sudo sky get -w -d {remote_path} {url}')
+        tmp_path = url.split(":")[-1]
+        running_jobs = self.execute_async_ret(f'sky get -w -d {tmp_path} {url}; sudo mv {tmp_path}/* {remote_path};rm -rf {tmp_path}')
         self._check_async_execution(running_jobs, retry_attemps=2)
 
     def _download_http(self, url, remote_path):
         self._logger.info(f"download from '{url}' to '{remote_path}'")
         running_jobs = self.execute_async_ret(f'sudo curl --output {remote_path} {url}')
-        self._check_async_execution(running_jobs, retry_attemps=2)
-
-    def _download_sbr(self, url:str, remote_path):
-        self._logger.info(f"download from '{url}' to '{remote_path}'")
-        tmp_path = url.split(":")[-1]
-        running_jobs = self.execute_async_ret(f'ya download --output {tmp_path} --overwrite {url}; sudo mv {tmp_path} {remote_path}')
         self._check_async_execution(running_jobs, retry_attemps=2)
 
     def copy(self, local_path: str, remote_path, directory=False, compressed_path=None):
@@ -213,12 +208,10 @@ class Nodes(object):
             remote_path += '.zstd'
 
         self.execute_async("sudo mkdir -p {}".format(os.path.dirname(remote_path)))
-        if local_path.startswith('rbtorrent:'):
-            self._download_rbtorrent(local_path, remote_path)
+        if local_path.startswith('rbtorrent:') or local_path.startswith('sbr:'):
+            self._download_sky(local_path, remote_path)
         elif local_path.startswith('http:') or local_path.startswith('https:'):
             self._download_https(local_path, remote_path)
-        elif local_path.startswith('sbr:'):
-            self._download_sbr(local_path, remote_path)
         else:
             hub = self._nodes[0]
             self._copy_on_node(local_path, hub, remote_path)

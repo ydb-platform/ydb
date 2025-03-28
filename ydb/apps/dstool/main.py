@@ -19,14 +19,7 @@ def get_version():
 
 
 def main():
-    parser = ArgumentParser(description='YDB Distributed Storage Administration Tool')
-
-    parser.add_argument('--version', '-v', action='store_true', help='Show version')
-    args = parser.parse_args()
-
-    if args.version:
-        print(get_version())
-        sys.exit(0)
+    parser = ArgumentParser(description='YDB Distributed Storage Administration Tool', version=get_version())
 
     # common options
     common.add_host_access_options(parser)

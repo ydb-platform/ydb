@@ -1,5 +1,39 @@
 # {{ ydb-short-name }} Server changelog
 
+## Version 24.4 {#24-4}
+
+### Version 24.4.2 {#24-4-2}
+
+Release date:
+
+#### Functionality
+
+* Enabled by default:
+
+  * support for [views](./concepts/datamodel/view.md)
+  * [auto-partitioning mode](./concepts/topic.md#autopartitioning) for topics
+  * transactions involving [topics](./concepts/glossary.md#topic) and [row-oriented tables](./concepts/glossary.md#row-oriented-table) simultaneously
+  * [volatile distributed transactions](./contributor/datashard-distributed-txs.md#volatile-transactions)
+ 
+
+* Added the ability to [read and write to a topic](./reference/kafka-api/examples.md#primery-rabot-s-kafka-api) using the Kafka API without authentication.
+
+#### Performance
+
+* Enabled by default [automatic index selection](./dev/secondary-indexes.md#avtomaticheskoe-ispolzovanie-indeksov-pri-vyborke) for queries.
+
+#### Bug Fixes
+
+* [Fixed](https://github.com/ydb-platform/ydb/pull/14811) an error that led to a significant decrease in reading speed from [tablet followers](./concepts/glossary.md#tablet-follower).
+* [Fixed](https://github.com/ydb-platform/ydb/pull/14516) an error that caused volatile distributed transactions to sometimes wait for confirmations until the next reboot.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/15077) a rare assertion failure (server process crash) when followers attached to leaders with an inconsistent snapshot.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/15074) a rare crash in datashard when a dropped table shard is restarted with uncommitted persistent changes.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/15194) an error that could disrupt the order of message processing in a topic.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/15308) a rare error that could stop reading from a topic partition.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/15160) an issue where a transaction could hang if a user performed a control plane operation on a topic (for example, adding partitions or a consumer) while the PQ tablet is moving to another node.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/15233) an issue where the counter value for UserInfo was leaking. As a result, the reading session would eventually return a "too big in flight" error.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/15467) a proxy crash due to duplicate topics in a request.
+
 ## Version 24.3 {#24-3}
 
 ### Version 24.3.15.5 {#24-3-15-5}

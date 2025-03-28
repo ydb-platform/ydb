@@ -1,9 +1,8 @@
 #include "sql_complete.h"
 
-#include "sql_context.h"
-#include "string_util.h"
-
+#include <yql/essentials/sql/v1/complete/text/word.h>
 #include <yql/essentials/sql/v1/complete/name/static/name_service.h>
+#include <yql/essentials/sql/v1/complete/syntax/local.h>
 
 // FIXME(YQL-19747): unwanted dependency on a lexer implementation
 #include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
@@ -19,10 +18,9 @@ namespace NSQLComplete {
         explicit TSqlCompletionEngine(
             TLexerSupplier lexer,
             INameService::TPtr names,
-            ISqlCompletionEngine::TConfiguration configuration
-        )
+            ISqlCompletionEngine::TConfiguration configuration)
             : Configuration(std::move(configuration))
-            , ContextInference(MakeSqlContextInference(lexer))
+            , SyntaxAnalysis(MakeLocalSyntaxAnalysis(lexer))
             , Names(std::move(names))
         {
         }
@@ -31,7 +29,7 @@ namespace NSQLComplete {
             auto prefix = input.Text.Head(input.CursorPosition);
             auto completedToken = GetCompletedToken(prefix);
 
-            auto context = ContextInference->Analyze(input);
+            auto context = SyntaxAnalysis->Analyze(input);
 
             TVector<TCandidate> candidates;
             EnrichWithKeywords(candidates, std::move(context.Keywords), completedToken);
@@ -67,7 +65,7 @@ namespace NSQLComplete {
 
         void EnrichWithNames(
             TVector<TCandidate>& candidates,
-            const TCompletionContext& context,
+            const TLocalSyntaxContext& context,
             const TCompletedToken& prefix) {
             if (candidates.size() == Configuration.Limit) {
                 return;
@@ -80,6 +78,10 @@ namespace NSQLComplete {
 
             if (context.IsTypeName) {
                 request.Constraints.TypeName = TTypeName::TConstraints();
+            }
+
+            if (context.IsFunctionName) {
+                request.Constraints.Function = TFunctionName::TConstraints();
             }
 
             if (request.IsEmpty()) {
@@ -96,8 +98,11 @@ namespace NSQLComplete {
             for (auto& name : names) {
                 candidates.emplace_back(std::visit([](auto&& name) -> TCandidate {
                     using T = std::decay_t<decltype(name)>;
-                    if constexpr (std::is_base_of_v<TIndentifier, T>) {
+                    if constexpr (std::is_base_of_v<TTypeName, T>) {
                         return {ECandidateKind::TypeName, std::move(name.Indentifier)};
+                    }
+                    if constexpr (std::is_base_of_v<TFunctionName, T>) {
+                        return {ECandidateKind::FunctionName, std::move(name.Indentifier)};
                     }
                 }, std::move(name)));
             }
@@ -112,7 +117,7 @@ namespace NSQLComplete {
         }
 
         TConfiguration Configuration;
-        ISqlContextInference::TPtr ContextInference;
+        ILocalSyntaxAnalysis::TPtr SyntaxAnalysis;
         INameService::TPtr Names;
     };
 
@@ -136,7 +141,7 @@ namespace NSQLComplete {
         INameService::TPtr names,
         ISqlCompletionEngine::TConfiguration configuration) {
         return ISqlCompletionEngine::TPtr(
-            new TSqlCompletionEngine(lexer, std::move(names), std::move(configuration)));   
+            new TSqlCompletionEngine(lexer, std::move(names), std::move(configuration)));
     }
 
 } // namespace NSQLComplete
@@ -149,6 +154,9 @@ void Out<NSQLComplete::ECandidateKind>(IOutputStream& out, NSQLComplete::ECandid
             break;
         case NSQLComplete::ECandidateKind::TypeName:
             out << "TypeName";
+            break;
+        case NSQLComplete::ECandidateKind::FunctionName:
+            out << "FunctionName";
             break;
     }
 }

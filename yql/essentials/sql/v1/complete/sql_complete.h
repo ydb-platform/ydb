@@ -21,6 +21,7 @@ namespace NSQLComplete {
     enum class ECandidateKind {
         Keyword,
         TypeName,
+        FunctionName,
     };
 
     struct TCandidate {

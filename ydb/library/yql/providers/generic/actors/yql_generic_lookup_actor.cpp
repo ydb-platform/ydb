@@ -16,7 +16,6 @@
 #include <ydb/library/yql/providers/generic/proto/source.pb.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
 #include <ydb/library/yql/providers/generic/connector/libcpp/utils.h>
-#include <ydb/library/yql/providers/generic/proto/range.pb.h>
 #include <ydb/library/yql/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/public/udf/arrow/util.h>
 #include <ydb/library/yql/utils/log/log.h>
@@ -66,7 +65,7 @@ namespace NYql::NDq {
             NActors::TActorId&& parentId,
             std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
             std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> keyTypeHelper,
-            NYql::Generic::TLookupSource&& lookupSource,
+            NYql::NGeneric::TLookupSource&& lookupSource,
             const NKikimr::NMiniKQL::TStructType* keyType,
             const NKikimr::NMiniKQL::TStructType* payloadType,
             const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,
@@ -359,7 +358,7 @@ namespace NYql::NDq {
         const NActors::TActorId ParentId;
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
         std::shared_ptr<TKeyTypeHelper> KeyTypeHelper;
-        const NYql::Generic::TLookupSource LookupSource;
+        const NYql::NGeneric::TLookupSource LookupSource;
         const NKikimr::NMiniKQL::TStructType* const KeyType;
         const NKikimr::NMiniKQL::TStructType* const PayloadType;
         const NKikimr::NMiniKQL::TStructType* const SelectResultType; //columns from KeyType + PayloadType
@@ -378,7 +377,7 @@ namespace NYql::NDq {
         NActors::TActorId parentId,
         std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> alloc,
         std::shared_ptr<IDqAsyncLookupSource::TKeyTypeHelper> keyTypeHelper,
-        NYql::Generic::TLookupSource&& lookupSource,
+        NYql::NGeneric::TLookupSource&& lookupSource,
         const NKikimr::NMiniKQL::TStructType* keyType,
         const NKikimr::NMiniKQL::TStructType* payloadType,
         const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv,

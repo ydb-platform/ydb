@@ -1343,6 +1343,8 @@ private:
     IQueueClientContextProvider* Provider_;
 };
 
+grpc_socket_mutator* CreateGRpcKeepAliveSocketMutator(const TTcpKeepAliveSettings& TcpKeepAliveSettings_);
+
 class TGRpcClientLow
     :  public IQueueClientContextProvider
 {
@@ -1384,6 +1386,13 @@ public:
     template<typename TGRpcService>
     std::unique_ptr<TServiceConnection<TGRpcService>> CreateGRpcServiceConnection(const TGRpcClientConfig& config) {
         return std::unique_ptr<TServiceConnection<TGRpcService>>(new TServiceConnection<TGRpcService>(CreateChannelInterface(config), this));
+    }
+
+    template<typename TGRpcService>
+    std::unique_ptr<TServiceConnection<TGRpcService>> CreateGRpcServiceConnection(const TGRpcClientConfig& config, const TTcpKeepAliveSettings& keepAlive) {
+         auto mutator = CreateGRpcKeepAliveSocketMutator(keepAlive);
+         // will be destroyed inside grpc
+         return std::unique_ptr<TServiceConnection<TGRpcService>>(new TServiceConnection<TGRpcService>(CreateChannelInterface(config, mutator), this));
     }
 
     template<typename TGRpcService>

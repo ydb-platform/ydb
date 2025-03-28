@@ -2,9 +2,10 @@
 
 #include <grpcpp/support/status.h>
 
-#include <ydb/library/yql/ast/yql_expr.h>
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
+#include <ydb/library/yql/public/issue/yql_issue.h>
+#include <ydb/library/yql/utils/yql_panic.h>
 #include <ydb/library/grpc/client/grpc_client_low.h>
 
 namespace NYql::NConnector {
@@ -29,11 +30,9 @@ namespace NYql::NConnector {
         return ok;
     }
 
-    TIssues ErrorToIssues(const NApi::TError& error);
+    TIssues ErrorToIssues(const NApi::TError& error, TString prefix = "");
 
     NDqProto::StatusIds::StatusCode ErrorToDqStatus(const NApi::TError& error);
-
-    void ErrorToExprCtx(const NApi::TError& error, TExprContext& ctx, const TPosition& position, const TString& summary);
 
     NApi::TError ErrorFromGRPCStatus(const NYdbGrpc::TGrpcStatus& status);
 

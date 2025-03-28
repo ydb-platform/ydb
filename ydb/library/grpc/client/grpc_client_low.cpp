@@ -588,4 +588,21 @@ void TGRpcClientLow::ForgetContext(TContextImpl* context) {
     }
 }
 
+grpc_socket_mutator* CreateGRpcKeepAliveSocketMutator(const TTcpKeepAliveSettings& TcpKeepAliveSettings_) {
+#if !defined(YDB_DISABLE_GRPC_SOCKET_MUTATOR)
+    TGRpcKeepAliveSocketMutator* mutator = nullptr;
+    if (TcpKeepAliveSettings_.Enabled) {
+        mutator = new TGRpcKeepAliveSocketMutator(
+                TcpKeepAliveSettings_.Idle,
+                TcpKeepAliveSettings_.Count,
+                TcpKeepAliveSettings_.Interval
+                );
+    }
+    return mutator;
+#endif
+    return nullptr;
+}
+
+
+
 } // namespace NGRpc

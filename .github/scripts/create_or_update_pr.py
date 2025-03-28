@@ -23,7 +23,6 @@ def create_or_update_pr(args, repo):
 
     # Check for an existing PR
     existing_prs = repo.get_pulls(head=args.branch_for_pr, base=args.base_branch, state='open')
-    existing_pr = None
     for pr in existing_prs:
         if pr.base.ref == args.base_branch and pr.head.ref == args.branch_for_pr:
             current_pr = pr

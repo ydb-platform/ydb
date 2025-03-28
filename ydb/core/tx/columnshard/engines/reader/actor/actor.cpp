@@ -173,10 +173,10 @@ void TColumnShardScan::HandleScan(TEvents::TEvWakeup::TPtr& /*ev*/) {
                 << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
 
     CheckHanging(true);
-    if (!!AckReceivedInstant && TMonotonic::Now() >= *AckReceivedInstant + SCAN_HARD_TIMEOUT) {
+    if (!!AckReceivedInstant && TMonotonic::Now() >= GetScanDeadline()) {
         SendScanError("ColumnShard scanner timeout: HAS_ACK=1");
         Finish(NColumnShard::TScanCounters::EStatusFinish::Deadline);
-    } else if (!AckReceivedInstant && TMonotonic::Now() >= (LastResultInstant ? *LastResultInstant : *StartInstant) + Timeout) {
+    } else if (!AckReceivedInstant && TMonotonic::Now() >= GetComputeDeadline()) {
         SendScanError("ColumnShard scanner timeout: HAS_ACK=0");
         Finish(NColumnShard::TScanCounters::EStatusFinish::Deadline);
     } else {
@@ -431,6 +431,16 @@ void TColumnShardScan::ScheduleWakeup(const TMonotonic deadline) {
     if (deadline != TMonotonic::Max()) {
         Schedule(deadline, new TEvents::TEvWakeup);
     }
+}
+
+TMonotonic TColumnShardScan::GetScanDeadline() const {
+    AFL_VERIFY(!!AckReceivedInstant);
+    return *AckReceivedInstant + SCAN_HARD_TIMEOUT;
+}
+
+TMonotonic TColumnShardScan::GetComputeDeadline() const {
+    AFL_VERIFY(!AckReceivedInstant);
+    return (LastResultInstant ? *LastResultInstant : *StartInstant) + Timeout;
 }
 
 }   // namespace NKikimr::NOlap::NReader

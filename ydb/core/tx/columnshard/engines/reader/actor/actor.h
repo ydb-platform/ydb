@@ -109,6 +109,10 @@ private:
 
     void ScheduleWakeup(const TMonotonic deadline);
 
+    TMonotonic GetScanDeadline();
+
+    TMonotonic GetComputeDeadline();
+
 private:
     const TActorId ColumnShardActorId;
     const TActorId ReadBlobsActorId;

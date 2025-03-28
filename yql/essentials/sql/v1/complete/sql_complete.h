@@ -1,5 +1,7 @@
 #pragma once
 
+#include <yql/essentials/sql/v1/lexer/lexer.h>
+
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
@@ -39,6 +41,11 @@ namespace NSQLComplete {
         virtual ~ISqlCompletionEngine() = default;
     };
 
+    using TLexerSupplier = std::function<NSQLTranslation::ILexer::TPtr(bool ansi)>;
+
+    // FIXME(YQL-19747): unwanted dependency on a lexer implementation
     ISqlCompletionEngine::TPtr MakeSqlCompletionEngine();
+
+    ISqlCompletionEngine::TPtr MakeSqlCompletionEngine(TLexerSupplier lexer);
 
 } // namespace NSQLComplete

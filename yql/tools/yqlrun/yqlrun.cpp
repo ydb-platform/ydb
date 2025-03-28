@@ -116,6 +116,7 @@ int RunUI(int argc, const char* argv[])
 
     NYql::NBacktrace::RegisterKikimrFatalActions();
     NYql::NBacktrace::EnableKikimrSymbolize();
+    EnableKikimrBacktraceFormat();
 
     TVector<TString> udfsPaths;
     TString udfsDir;

@@ -3,6 +3,7 @@
 #include "c3_engine.h"
 #include "sql_syntax.h"
 
+#include <yql/essentials/core/issue/yql_issue.h>
 #include <yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 #include <yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Parser.h>
 #include <yql/essentials/parser/antlr_ast/gen/v1_ansi_antlr4/SQLv1Antlr4Lexer.h>
@@ -30,14 +31,19 @@ namespace NSQLComplete {
             TDefaultYQLGrammar>;
 
     public:
-        TSpecializedSqlContextInference()
+        explicit TSpecializedSqlContextInference(TLexerSupplier lexer)
             : Grammar(&GetSqlGrammar(IsAnsiLexer))
+            , Lexer_(lexer(/* ansi = */ IsAnsiLexer))
             , C3(ComputeC3Config())
         {
         }
 
         TCompletionContext Analyze(TCompletionInput input) override {
-            auto prefix = input.Text.Head(input.CursorPosition);
+            TStringBuf prefix;
+            if (!GetC3Prefix(input, &prefix)) {
+                return {};
+            }
+
             auto tokens = C3.Complete(prefix);
             return {
                 .Keywords = SiftedKeywords(tokens),
@@ -71,6 +77,26 @@ namespace NSQLComplete {
             return preferredRules;
         }
 
+        bool GetC3Prefix(TCompletionInput input, TStringBuf* prefix) {
+            *prefix = input.Text.Head(input.CursorPosition);
+
+            TVector<TString> statements;
+            NYql::TIssues issues;
+            if (!NSQLTranslationV1::SplitQueryToStatements(
+                    TString(*prefix) + (prefix->EndsWith(';') ? ";" : ""), Lexer_,
+                    statements, issues, /* file = */ "",
+                    /* areBlankSkipped = */ false)) {
+                return false;
+            }
+
+            if (statements.empty()) {
+                return true;
+            }
+
+            *prefix = prefix->Last(statements.back().size());
+            return true;
+        }
+
         TVector<TString> SiftedKeywords(const TVector<TSuggestedToken>& tokens) {
             const auto& vocabulary = Grammar->GetVocabulary();
             const auto& keywordTokens = Grammar->GetKeywordTokens();
@@ -85,11 +111,18 @@ namespace NSQLComplete {
         }
 
         const ISqlGrammar* Grammar;
+        NSQLTranslation::ILexer::TPtr Lexer_;
         TC3Engine<G> C3;
     };
 
     class TSqlContextInference: public ISqlContextInference {
     public:
+        explicit TSqlContextInference(TLexerSupplier lexer)
+            : DefaultEngine(lexer)
+            , AnsiEngine(lexer)
+        {
+        }
+
         TCompletionContext Analyze(TCompletionInput input) override {
             auto isAnsiLexer = IsAnsiQuery(TString(input.Text));
             auto& engine = GetSpecializedEngine(isAnsiLexer);
@@ -108,8 +141,8 @@ namespace NSQLComplete {
         TSpecializedSqlContextInference</* IsAnsiLexer = */ true> AnsiEngine;
     };
 
-    ISqlContextInference::TPtr MakeSqlContextInference() {
-        return TSqlContextInference::TPtr(new TSqlContextInference());
+    ISqlContextInference::TPtr MakeSqlContextInference(TLexerSupplier lexer) {
+        return TSqlContextInference::TPtr(new TSqlContextInference(lexer));
     }
 
 } // namespace NSQLComplete

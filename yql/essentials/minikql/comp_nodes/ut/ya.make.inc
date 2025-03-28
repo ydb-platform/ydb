@@ -2,6 +2,10 @@ FORK_SUBTESTS()
 
 SPLIT_FACTOR(60)
 
+IF (SANITIZER_TYPE  == "address")
+    SPLIT_FACTOR(100)
+ENDIF()
+
 IF (SANITIZER_TYPE == "thread" OR WITH_VALGRIND)
     TIMEOUT(3600)
     SIZE(LARGE)
@@ -22,6 +26,7 @@ SET(ORIG_SOURCES
     mkql_test_factory.cpp
     mkql_bit_utils_ut.cpp
     mkql_block_compress_ut.cpp
+    mkql_block_coalesce_ut.cpp
     mkql_block_exists_ut.cpp
     mkql_block_skiptake_ut.cpp
     mkql_block_map_join_ut_utils.cpp
@@ -75,6 +80,8 @@ SET(ORIG_SOURCES
 )
 
 PEERDIR(
+    yql/essentials/core/arrow_kernels/request
+    yql/essentials/core/arrow_kernels/registry
     yql/essentials/public/udf
     yql/essentials/public/udf/arrow
     yql/essentials/public/udf/service/exception_policy

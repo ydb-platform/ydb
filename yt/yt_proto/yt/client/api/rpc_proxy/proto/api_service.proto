@@ -14,6 +14,7 @@ import "yt_proto/yt/core/ytree/proto/request_complexity_limits.proto";
 import "yt_proto/yt/client/chunk_client/proto/data_statistics.proto";
 import "yt_proto/yt/client/chaos_client/proto/replication_card.proto";
 import "yt_proto/yt/client/hive/proto/timestamp_map.proto";
+import "yt_proto/yt/client/node_tracker_client/proto/node.proto";
 import "yt_proto/yt/client/scheduler/proto/spec_patch.proto";
 import "yt_proto/yt/client/table_client/proto/versioned_io_options.proto";
 import "yt_proto/yt/client/tablet_client/proto/lock_mask.proto";
@@ -3211,6 +3212,7 @@ message TJob
     optional string monitoring_descriptor = 30;
     optional string operation_incarnation = 31;
     optional NYT.NProto.TGuid allocation_id = 32;
+    optional NNodeTrackerClient.NProto.TAddressMap addresses = 33;
 }
 
 message TListJobsStatistics

@@ -285,7 +285,14 @@ private:
             context.SS->PersistExternalDataSource(db, externalDataSourcePathId, externalDataSource);
             context.SS->PersistExternalDataSource(db, oldExternalDataSourcePathId, oldExternalDataSource);
         }
-        context.SS->PersistAlterExternalTable(db, externalTable->PathId, externalTableInfo, oldExternalTableInfo);
+
+        for (const auto& [oldColId, _] : oldExternalTableInfo->Columns) {
+            if (!externalTableInfo->Columns.contains(oldColId)) {
+                db.Table<Schema::MigratedColumns>().Key(externalTable->PathId.OwnerId, externalTable->PathId.LocalPathId, oldColId).Delete();
+            }
+        }
+
+        context.SS->PersistExternalTable(db, externalTable->PathId, externalTableInfo);
         context.SS->PersistTxState(db, OperationId);
     }
 

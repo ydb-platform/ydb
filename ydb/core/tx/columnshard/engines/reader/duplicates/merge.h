@@ -66,7 +66,7 @@ private:
     std::vector<std::string> VersionColumnNames;
     ui32 IntervalIdx;
     TActorId Owner;
-    std::shared_ptr<NColumnShard::TScanCounters> Counters;
+    NColumnShard::TScanCounters Counters;
 
 private:
     virtual TConclusionStatus DoExecute(const std::shared_ptr<ITask>& /*taskPtr*/) override;
@@ -78,11 +78,12 @@ private:
 
 public:
     TBuildDuplicateFilters(const std::shared_ptr<arrow::Schema>& pkSchema, const std::vector<std::string>& versionColumnNames,
-        const ui32 intervalIdx, const TActorId& owner, const std::shared_ptr<NColumnShard::TScanCounters>& counters)
+        const ui32 intervalIdx, const TActorId& owner, const NColumnShard::TScanCounters& counters)
         : PKSchema(pkSchema)
         , VersionColumnNames(versionColumnNames)
         , IntervalIdx(intervalIdx)
-        , Owner(owner), Counters(counters) {
+        , Owner(owner)
+        , Counters(counters) {
     }
 
     void AddSource(

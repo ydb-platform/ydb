@@ -149,6 +149,18 @@ void DeserializeVector(T& value, INodePtr node)
 }
 
 template <class T>
+void DeserializeProtobufRepeated(T& value, INodePtr node)
+{
+    auto listNode = node->AsList();
+    auto size = listNode->GetChildCount();
+    value.Clear();
+    value.Reserve(size);
+    for (int i = 0; i < size; ++i) {
+        Deserialize(*value.Add(), listNode->GetChildOrThrow(i));
+    }
+}
+
+template <class T>
 void DeserializeSet(T& value, INodePtr node)
 {
     auto listNode = node->AsList();
@@ -604,6 +616,20 @@ template <class T, size_t N>
 void Deserialize(TCompactVector<T, N>& value, INodePtr node)
 {
     NDetail::DeserializeVector(value, node);
+}
+
+// RepeatedPtrField
+template <class T>
+void Deserialize(google::protobuf::RepeatedPtrField<T>& value, INodePtr node)
+{
+    NDetail::DeserializeProtobufRepeated(value, node);
+}
+
+// RepeatedField
+template <class T>
+void Deserialize(google::protobuf::RepeatedField<T>& value, INodePtr node)
+{
+    NDetail::DeserializeProtobufRepeated(value, node);
 }
 
 // TErrorOr

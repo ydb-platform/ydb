@@ -187,6 +187,10 @@ private:
     ui64 Bytes = 0;
     ui32 PageFaults = 0;
     TDuration LastReportedElapsedTime;
+    TInstant StartWaitInput;
+    TDuration WaitInputTime;
+    TInstant StartWaitOutput;
+    TDuration WaitOutputTime;
 };
 
 }   // namespace NKikimr::NOlap::NReader

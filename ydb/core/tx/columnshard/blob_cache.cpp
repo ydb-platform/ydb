@@ -237,7 +237,7 @@ private:
         if (it != Cache.End()) {
             Hits->Inc();
             HitsBytes->Add(blobRange.Size);
-            SendResult(sender, blobRange, NKikimrProto::OK, it.Value(), ctx, true);
+            SendResult(sender, blobRange, NKikimrProto::OK, it.Value(),  {}, ctx, true);
             return true;
         }
 

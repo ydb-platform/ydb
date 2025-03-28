@@ -149,7 +149,8 @@ private:
     NMonitoring::THistogramPtr HistogramIntervalMemoryRequiredOnFail;
     NMonitoring::THistogramPtr HistogramIntervalMemoryReduceSize;
     NMonitoring::THistogramPtr HistogramIntervalMemoryRequiredAfterReduce;
-    NMonitoring::TDynamicCounters::TCounterPtr NotIndexBlobs;
+    NMonitoring::TDynamicCounters::TCounterPtr NoIndexBlobs;
+    NMonitoring::TDynamicCounters::TCounterPtr NoIndex;
     NMonitoring::TDynamicCounters::TCounterPtr RecordsAcceptedByIndex;
     NMonitoring::TDynamicCounters::TCounterPtr RecordsDeniedByIndex;
     NMonitoring::TDynamicCounters::TCounterPtr RecordsAcceptedByHeader;
@@ -162,8 +163,11 @@ public:
         return SubColumnCounters;
     }
 
-    void OnNotIndexBlobs() const {
-        NotIndexBlobs->Add(1);
+    void OnNoIndexBlobs(const ui32 recordsCount) const {
+        NoIndexBlobs->Add(recordsCount);
+    }
+    void OnNoIndex(const ui32 recordsCount) const {
+        NoIndex->Add(recordsCount);
     }
     void OnAcceptedByIndex(const ui32 recordsCount) const {
         RecordsAcceptedByIndex->Add(recordsCount);

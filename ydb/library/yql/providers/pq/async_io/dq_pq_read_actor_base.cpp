@@ -76,7 +76,7 @@ void TDqPqReadActorBase::LoadState(const TSourceState& state) {
     TStringStream str;
     str << "SessionId: " << GetSessionId() << " Restoring offset: ";
     for (const auto& [key, value] : PartitionToOffset) {
-        str << "{" << key.first << "," << key.second << "," << value << "},";
+        str << "{" << key << "," << value << "},";
     }
     SRC_LOG_D(str.Str());
     StartingMessageTimestamp = minStartingMessageTs;

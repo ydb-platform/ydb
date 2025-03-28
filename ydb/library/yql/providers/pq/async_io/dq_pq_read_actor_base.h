@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
+#include <ydb/library/yql/providers/pq/common/pq_partition_key.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
 
@@ -9,10 +10,11 @@ namespace NYql::NDq::NInternal {
 class TDqPqReadActorBase : public IDqComputeActorAsyncInput {
     
 public:
-    using TPartitionKey = std::pair<TString, ui64>; // Cluster, partition id.
+    using TPartitionKey = ::NPq::TPartitionKey;
+    using TPartitionKeyHash = ::NPq::TPartitionKeyHash;
 
     const ui64 InputIndex;
-    THashMap<TPartitionKey, ui64> PartitionToOffset; // {cluster, partition} -> offset of next event.
+    THashMap<TPartitionKey, ui64, TPartitionKeyHash> PartitionToOffset; // {cluster, partition} -> offset of next event.
     const TTxId TxId;
     const NPq::NProto::TDqPqTopicSource SourceParams;
     TDqAsyncStats IngressStats;

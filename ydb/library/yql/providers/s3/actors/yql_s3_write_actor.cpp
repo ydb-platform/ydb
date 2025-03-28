@@ -493,7 +493,6 @@ public:
         bool DirtyWrite;
     };
 
-public:
     explicit TS3WriteActorBase(const TParams& params)
         : TxId(params.TxId)
         , OutputIndex(params.OutputIndex)
@@ -789,7 +788,6 @@ public:
         ui64 MaxBlockSize;
     };
 
-public:
     TS3BlockWriteActor(const TBlockSettings& blockSettings, const TBase::TParams& params)
         : TBase(params)
         , ArrowSchema(blockSettings.ArrowSchema)

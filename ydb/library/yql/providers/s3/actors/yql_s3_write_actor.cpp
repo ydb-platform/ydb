@@ -526,11 +526,6 @@ public:
         Become(&TS3WriteActorBase::StateFunc);
     }
 
-    STRICT_STFUNC(StateFunc,
-        hFunc(TEvPrivate::TEvUploadError, Handle);
-        hFunc(TEvPrivate::TEvUploadFinished, Handle);
-    )
-
 protected:
     virtual void DoSendData(TUnboxedValueBatch& data, bool finished) = 0;
 
@@ -564,6 +559,16 @@ private:
                 return free - std::accumulate(item.second.cbegin(), item.second.cend(), i64(0), [](i64 sum, TS3FileWriteActor* actor) { return sum += actor->GetMemoryUsed(); });
             });
     }
+
+    TString MakeOutputName() const {
+        const auto rand = std::make_tuple(RandomProvider->GenUuid4(), RandomProvider->GenRand());
+        return Prefix + Base64EncodeUrl(TStringBuf(reinterpret_cast<const char*>(&rand), sizeof(rand)));
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvPrivate::TEvUploadError, Handle);
+        hFunc(TEvPrivate::TEvUploadFinished, Handle);
+    )
 
     void SendData(TUnboxedValueBatch&& data, i64, const TMaybe<NDqProto::TCheckpoint>&, bool finished) final {
         ProcessedActors.clear();
@@ -599,6 +604,13 @@ private:
         }
 
         Callbacks->OnAsyncOutputError(OutputIndex, issues, status);
+    }
+
+    void FinishIfNeeded() const {
+        if (FileWriteActors.empty() && Finished) {
+            LOG_D("TS3WriteActor", "Finished, notify owner");
+            Callbacks->OnAsyncOutputFinished(OutputIndex);
+        }
     }
 
     void Handle(TEvPrivate::TEvUploadFinished::TPtr& result) {
@@ -640,19 +652,6 @@ private:
         }
 
         TBase::PassAway();
-    }
-
-private:
-    void FinishIfNeeded() const {
-        if (FileWriteActors.empty() && Finished) {
-            LOG_D("TS3WriteActor", "Finished, notify owner");
-            Callbacks->OnAsyncOutputFinished(OutputIndex);
-        }
-    }
-
-    TString MakeOutputName() const {
-        const auto rand = std::make_tuple(RandomProvider->GenUuid4(), RandomProvider->GenRand());
-        return Prefix + Base64EncodeUrl(TStringBuf(reinterpret_cast<const char*>(&rand), sizeof(rand)));
     }
 
     TS3FileWriteActor* GetOrCreateFileWriter(const TString& key) {

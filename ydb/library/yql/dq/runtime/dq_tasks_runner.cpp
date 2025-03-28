@@ -524,6 +524,20 @@ public:
     void Prepare(const TDqTaskSettings& task, const TDqTaskRunnerMemoryLimits& memoryLimits,
         const IDqTaskRunnerExecutionContext& execCtx) override
     {
+
+        NUdf::TLogProviderFunc logProviderFunc = nullptr;
+        TStringStream ss;
+        NYql::NBacktrace::KikimrBackTraceFormatImpl(&ss);
+
+        std::cerr << "MISHA logfunc is set: " << (bool)LogFunc << "\n" << ss.Str() << std::endl;
+        if (LogFunc) {
+            std::cerr << "MISHA setting logProviderFunc\n";
+            logProviderFunc = [log=LogFunc](const NUdf::TStringRef& component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
+                log(TStringBuilder() << Now() << " " << component << " [" << level << "] " << message << "\n");
+            };
+        }
+
+        LogProvider = NUdf::MakeLogProvider(std::move(logProviderFunc));
         TaskId = task.GetId();
         auto entry = BuildTask(task);
 
@@ -710,25 +724,13 @@ public:
         }
 
         auto prepareTime = TInstant::Now() - startTime;
-        if (LogFunc) {
-            TLogFunc logger = [taskId = TaskId, log = LogFunc](const TString& message) {
-                log(TStringBuilder() << "Run task: " << taskId << ", " << message);
-            };
-            LogFunc = logger;
+        // if (LogFunc) {
+        //     TLogFunc logger = [taskId = TaskId, log = LogFunc](const TString& message) {
+        //         log(TStringBuilder() << "Run task: " << taskId << ", " << message);
+        //     };
+        //     LogFunc = logger;
 
-        }
-
-        NUdf::TLogProviderFunc logProviderFunc = nullptr;
-        TStringStream ss;
-        NYql::NBacktrace::KikimrBackTraceFormatImpl(&ss);
-        std::cerr << "MISHA logfunc is set: " << (bool)LogFunc << "\n" << ss.Str() << std::endl;
-        if (LogFunc) {
-            logProviderFunc = [log=LogFunc](const NUdf::TStringRef& component, NUdf::ELogLevel level, const NUdf::TStringRef& message) {
-                log(TStringBuilder() << Now() << " " << component << " [" << level << "] " << message << "\n");
-            };
-        }
-
-        LogProvider = NUdf::MakeLogProvider(logProviderFunc);
+        // }
 
         LOG(TStringBuilder() << "Prepare task: " << TaskId << ", takes " << prepareTime.MicroSeconds() << " us");
         if (Stats) {

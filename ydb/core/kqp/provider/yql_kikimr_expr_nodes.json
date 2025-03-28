@@ -26,6 +26,17 @@
             ]
         },
         {
+            "Name": "TKiAlterDatabase",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KiAlterDatabase!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TKiDataSink"},
+                {"Index": 2, "Name": "DatabasePath", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
             "Name": "TKiVersionedTable",
             "Base": "TExprBase",
             "Match": {"Type": "Tuple"},

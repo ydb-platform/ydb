@@ -1,10 +1,14 @@
-name: Update Muted YA
+name: Update Muted tests
 
 on:
   workflow_dispatch:
-env:
-  GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
 
+env:
+  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  BRANCH_FOR_PR: update_muted_ya
+  TITLE: "Update muted_ya.txt"
+  BASE_BRANCH: dev_wf_update_mute_v3
+  REVIEWERS: ydb-platform/ci
 
 jobs:
   create-or-update-muted-ya:
@@ -13,7 +17,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ env.BASE_BRANCH }}
 
       - name: Install dependencies
         run: |
@@ -24,24 +28,35 @@ jobs:
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
-          
-      - name: Update branch with main
+
+      - name: Update branch with base branch
         run: |
           git config user.name YDBot
-          git config user.email ydbot@ydb.tech 
-          git checkout main
-          git pull --rebase origin main
-          git fetch origin create-muted-ya || true
-          if [ -n "$(git branch -a | grep remotes/origin/create-muted-ya)" ]; then
-            git checkout create-muted-ya
-            git rebase main
+          git config user.email ydbot@ydb.tech
+      
+          # Создаём локальную ветку Branch_for_pr, если её нет
+          if ! git show-ref --quiet refs/heads/${{ env.BRANCH_FOR_PR }}; then
+            git checkout -b ${{ env.BRANCH_FOR_PR }}
           else
-            git checkout -b create-muted-ya
+            git checkout ${{ env.BRANCH_FOR_PR }}
           fi
-
+      
+          # Пытаемся сделать rebase с использованием стратегии theirs
+          if ! git rebase ${{ env.BASE_BRANCH }} -X theirs; then
+            echo "Rebase failed, force deleting remote branch and retrying..."
+            if [ -n "$(git ls-remote --heads origin ${{ env.BRANCH_FOR_PR }})" ]; then
+              git push origin --delete ${{ env.BRANCH_FOR_PR }}
+            fi
+            # Пересоздаём локальную ветку от BASE_BRANCH
+            git checkout ${{ env.BASE_BRANCH }}
+            git branch -D ${{ env.BRANCH_FOR_PR }}
+            git checkout -b ${{ env.BRANCH_FOR_PR }}
+      
+          fi
+        
       - name: Run the script
         run: |
-          .github/scripts/tests/create_new_muted_ya.py
+          .github/scripts/tests/create_new_muted_ya.py update_muted_ya
 
       - name: Move new_muted_ya_with_flaky.txt to muted_ya.txt
         run: |
@@ -52,7 +67,7 @@ jobs:
         run: |
           if git diff --quiet .github/config/muted_ya.txt; then
             echo "No changes detected in muted_ya.txt"
-            exit 0
+            echo "changes=false" >> $GITHUB_ENV
           else
             echo "Changes detected in muted_ya.txt"
             echo "changes=true" >> $GITHUB_ENV
@@ -61,25 +76,40 @@ jobs:
       - name: Collect PR description
         id: pr_description
         run: |
-          PR_BODY="Automatically updated muted YA file by GitHub Actions.\n\n"
+          PR_BODY=''
           if [ -s mute_update/deleted_tests_in_mute_debug.txt ]; then
-            DELETED_COUNT=$(wc -l < mute_update/deleted_tests_in_mute_debug.txt)
-            PR_BODY="${PR_BODY}Remove deleted from mute: ${DELETED_COUNT}\n```\n$(cat mute_update/deleted_tests_in_mute_debug.txt)\n```\n\n"
+              DELETED_COUNT=$(wc -l < mute_update/deleted_tests_in_mute_debug.txt)
+              PR_BODY+=$'**Removed from mute: '"${DELETED_COUNT}**"$'\n\n'
+              PR_BODY+=$'```\n'
+              PR_BODY+=$(cat mute_update/deleted_tests_in_mute_debug.txt)
+              PR_BODY+=$'\n```\n\n'
           fi
           if [ -s mute_update/flaky_debug.txt ]; then
-            FLAKY_COUNT=$(wc -l < mute_update/flaky_debug.txt)
-            PR_BODY="${PR_BODY}Mute flaky: ${FLAKY_COUNT}\n```\n$(cat mute_update/flaky_debug.txt)\n```\n\n"
+              FLAKY_COUNT=$(wc -l < mute_update/flaky_debug.txt)
+              PR_BODY+=$'**Muted flaky: '"${FLAKY_COUNT}**"$'\n\n'
+              PR_BODY+=$'```\n'
+              PR_BODY+=$(cat mute_update/flaky_debug.txt)
+              PR_BODY+=$'\n```\n\n'
           fi
           if [ -s mute_update/muted_stable_debug.txt ]; then
-            MUTED_STABLE_COUNT=$(wc -l < mute_update/muted_stable_debug.txt)
-            PR_BODY="${PR_BODY}Unmute stable: ${MUTED_STABLE_COUNT}\n```\n$(cat mute_update/muted_stable_debug.txt)\n```\n\n"
+              MUTED_STABLE_COUNT=$(wc -l < mute_update/muted_stable_debug.txt)
+              PR_BODY+=$'**Unmuted stable: '"${MUTED_STABLE_COUNT}**"$'\n\n'
+              PR_BODY+=$'```\n'
+              PR_BODY+=$(cat mute_update/muted_stable_debug.txt)
+              PR_BODY+=$'\n```\n\n'
           fi
-          echo "PR_BODY=${PR_BODY}" >> $GITHUB_ENV
+
+          # Use printf to handle special characters and newlines
+          printf "PR_BODY<<EOF\n%s\nEOF\n" "$PR_BODY" >> $GITHUB_ENV
 
       - name: Stage changes if any
         if: env.changes == 'true'
         run: |
           git add .github/config/muted_ya.txt
+
+      - name: Delete other files
+        run: |
+          rm -rf mute_update
 
       - name: Commit changes
         if: env.changes == 'true'
@@ -87,43 +117,24 @@ jobs:
           git commit -m "Update muted YA file"
 
       - name: Push changes
-        if: env.changes == 'true'
         uses: ad-m/github-push-action@v0.8.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          branch: create-muted-ya
+          branch: ${{ env.BRANCH_FOR_PR }}
           force: true
 
-      - name: Create or update pull request
-        if: env.changes == 'true'
-        id: cpr
-        uses: peter-evans/create-pull-request@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          branch: create-muted-ya
-          base: main
-          title: "Update Muted YA File"
-          body: ${{ env.PR_BODY }}
-          labels: "Automated PR"
-          reviewers: "ydb-platform/engineering"
-          create-when-empty: false
-          allow-empty-commit: false
-          draft: false
+      - name: Install PyGithub
+        run: |
+          pip install PyGithub
 
-      - name: Update pull request if exists
-        if: env.changes == 'true' && steps.cpr.outputs.pull_request_number != ''
-        uses: peter-evans/create-pull-request@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          pull-request-number: ${{ steps.cpr.outputs.pull_request_number }}
-          branch: create-muted-ya
-          base: main
-          title: "Update Muted YA File"
-          body: ${{ env.PR_BODY }}
-          labels: "Automated PR"
-          reviewers: "ydb-platform/engineering"
-
-      - name: Log message if no changes
-        if: env.changes != 'true'
-        run: echo "No changes to commit. Exiting Workflow without further actions."
-
+      - name: Create or update PR
+        id: create_or_update_pr
+        env:
+          GITHUB_TOKEN: ${{ env.GH_TOKEN }}
+          BRANCH_FOR_PR: ${{ env.BRANCH_FOR_PR }}
+          TITLE: ${{ env.TITLE }}
+          BASE_BRANCH: ${{ env.BASE_BRANCH }}
+          BODY: ${{ env.PR_BODY }}
+          REVIEWERS: ${{ env.REVIEWERS }}
+        run: |
+          python .github/scripts/create_or_update_pr.py

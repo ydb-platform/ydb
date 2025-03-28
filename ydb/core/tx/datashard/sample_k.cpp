@@ -80,7 +80,7 @@ public:
         , MaxProbability(maxProbability)
         , Rng(seed) {
         Y_ASSERT(MaxProbability != 0);
-        LOG_D("Create " << Debug());
+        LOG_I("Create " << Debug());
     }
 
     ~TSampleKScan() final = default;
@@ -88,7 +88,7 @@ public:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
 
-        LOG_D("Prepare " << Debug());
+        LOG_I("Prepare " << Debug());
 
         Driver = driver;
 
@@ -156,7 +156,7 @@ public:
         } else {
             Response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
         }
-        LOG_D("Finish " << Debug());
+        LOG_N("Finish" << Debug() << " " << Response->Record.ShortDebugString());
         Send(ResponseActorId, Response.Release());
         Driver = nullptr;
         PassAway();

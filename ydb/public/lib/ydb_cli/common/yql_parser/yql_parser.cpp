@@ -67,9 +67,7 @@ private:
 
         if (lowerContent == "struct" || lowerContent == "tuple") {
             node.TypeKind = lowerContent == "struct" ? TTypeParser::ETypeKind::Struct :
-                            lowerContent == "tuple" ? TTypeParser::ETypeKind::Tuple :
-                            TTypeParser::ETypeKind::Dict;
-            std::cout << "struct or tuple" << std::endl;
+                            TTypeParser::ETypeKind::Tuple;
 
             if (SkipCurrentTokenAndWS(pos) >= Tokens.size() || Tokens[pos].Content != "<") {
                 return std::nullopt;
@@ -79,7 +77,6 @@ private:
                 if (lowerContent == "struct") {
                     SkipCurrentTokenAndWS(pos);
                     auto name = Tokens[pos].Content;
-                    std::cout << "struct name: " << name << std::endl;
 
                     if (SkipCurrentTokenAndWS(pos) >= Tokens.size() || Tokens[pos].Content != ":") {
                         return std::nullopt;
@@ -106,10 +103,9 @@ private:
         } else if (lowerContent == "list" ||
                    lowerContent == "optional" ||
                    lowerContent == "dict") {
-            std::cout << "list or optional or dict" << std::endl;
             node.TypeKind = lowerContent == "list" ? TTypeParser::ETypeKind::List :
-                           lowerContent == "optional" ? TTypeParser::ETypeKind::Optional :
-                           TTypeParser::ETypeKind::Dict;
+                            lowerContent == "optional" ? TTypeParser::ETypeKind::Optional :
+                            TTypeParser::ETypeKind::Dict;
 
             if (SkipCurrentTokenAndWS(pos) >= Tokens.size() || Tokens[pos].Content != "<") {
                 return std::nullopt;
@@ -117,7 +113,6 @@ private:
 
             auto parseResult = Parse(SkipCurrentTokenAndWS(pos));
             if (!parseResult) {
-                std::cout << "list or optional or dict parse failed" << std::endl;
                 return std::nullopt;
             }
             node.Children.push_back(*parseResult);
@@ -135,23 +130,17 @@ private:
             }
 
             if (pos >= Tokens.size() || Tokens[pos].Content != ">") {
-                std::cout << "list or optional or dict end failed" << std::endl;
                 return std::nullopt;
             }
-
-            std::cout << "list or optional or dict end" << std::endl;
         } else if (lowerContent == "decimal") {
-            std::cout << "decimal" << std::endl;
             auto parseResult = ParseDecimal(pos);
             if (!parseResult) {
                 return std::nullopt;
             }
             node = *parseResult;
         } else {
-            std::cout << "primitive: " << lowerContent << std::endl;
             auto parseResult = ParsePrimitive(lowerContent);
             if (!parseResult) {
-                std::cout << "primitive: " << lowerContent << " failed" << std::endl;
                 return std::nullopt;
             }
             node = *parseResult;

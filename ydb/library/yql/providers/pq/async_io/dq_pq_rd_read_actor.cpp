@@ -118,11 +118,15 @@ struct TEvPrivate {
     struct TEvNotifyCA : public NActors::TEventLocal<TEvNotifyCA, EvNotifyCA> {};
     struct TEvRefreshClusters : public NActors::TEventLocal<TEvRefreshClusters, EvRefreshClusters> {};
     struct TEvReceivedClusters : public NActors::TEventLocal<TEvReceivedClusters, EvReceivedClusters> {
-        TEvReceivedClusters(
+        explicit TEvReceivedClusters(
             std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>&& federatedClusters)
             : FederatedClusters(std::move(federatedClusters))
         {}
+        explicit TEvReceivedClusters(const std::exception& ex)
+            : ExceptionMessage(ex.what())
+        {}
         std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo> FederatedClusters;
+        std::optional<std::string> ExceptionMessage;
     };
     struct TEvDescribeTopicResult : public NActors::TEventLocal<TEvDescribeTopicResult, EvDescribeTopicResult> {
         TEvDescribeTopicResult(ui32 clusterIndex, ui32 partitionCount)
@@ -1147,14 +1151,31 @@ void TDqPqRdReadActor::StartClusterDiscovery() {
             actorSystem = NActors::TActivationContext::ActorSystem(),
             selfId = SelfId()](const auto& future)
             {
-                auto federatedClusters = future.GetValue();
-                actorSystem->Send(selfId, new TEvPrivate::TEvReceivedClusters(std::move(federatedClusters)));
+                try {
+                    auto federatedClusters = future.GetValue();
+                    actorSystem->Send(selfId, new TEvPrivate::TEvReceivedClusters(std::move(federatedClusters)));
+                } catch (std::exception &ex) {
+                    actorSystem->Send(selfId, new TEvPrivate::TEvReceivedClusters(ex));
+                }
             });
 }
 
 void TDqPqRdReadActor::Handle(TEvPrivate::TEvReceivedClusters::TPtr& ev) {
     SRC_LOG_D("Got cluster info");
     auto& federatedClusters = ev->Get()->FederatedClusters;
+    if (federatedClusters.empty()) {
+        TStringBuilder message;
+        message << "Failed to discover clusters for topic \"" << SourceParams.GetTopicPath() << "\"";
+        if (ev->Get()->ExceptionMessage) {
+            message << ", got exception: " << *ev->Get()->ExceptionMessage;
+        } else {
+            message << ", empty clusters list";
+        }
+        SRC_LOG_E(message);
+        TIssue issue(message);
+        Send(ComputeActorId, new TEvAsyncInputError(InputIndex, TIssues({issue}), NYql::NDqProto::StatusIds::BAD_REQUEST));
+        return;
+    }
     Y_ENSURE(federatedClusters.size() > 0);
     Clusters.reserve(federatedClusters.size());
     ui32 index = 0;
@@ -1171,7 +1192,7 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvReceivedClusters::TPtr& ev) {
                 actorSystem = NActors::TActivationContext::ActorSystem(),
                 selfId = SelfId()](const auto& describeTopicFuture)
             {
-                try { // XXX do we need to catch exceptions here?
+                try {
                     auto& describeTopic = describeTopicFuture.GetValue();
                     if (!describeTopic.IsSuccess()) {
                         actorSystem->Send(selfId, new TEvPrivate::TEvDescribeTopicResult(index, describeTopic));

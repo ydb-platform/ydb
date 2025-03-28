@@ -4,7 +4,7 @@
 
 * Subject: Scale it easy: YDB's high performance in a nutshell.
 
-  * [About the event](https://highload.rs/2023/abstracts/9754).
+  * [About the event](https://highload.rs/2023/abstracts/9754).d
   * [Presentation](https://presentations.ydb.tech/2023/en/highload_serbia/ydb_performance/presentation.pdf).
   * [Broadcast recording](https://youtu.be/iMjq96GQTHQ?si=moMbI3Je90s3zY60).
   * Description: Implementing a distributed database with strong consistency isn’t difficult; the challenge lies in ensuring speed and scalability. YDB excels in these aspects. In this talk, we’ll discuss YDB’s architecture and its high performance, present results of benchmarks, and compare YDB to top competitors.

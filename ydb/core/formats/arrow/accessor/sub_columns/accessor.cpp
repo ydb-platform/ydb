@@ -162,7 +162,7 @@ public:
                     } else {
                         ui32 keyIndex;
                         if (key.StartsWith("[") && key.EndsWith("]") && TryFromString<ui32>(key.data() + 1, key.size() - 2, keyIndex)) {
-                            AFL_VERIFY(current->IsArray() || (current->IsMap() && current->GetMapSafe().empty()));
+                            AFL_VERIFY(!current->IsDefined() || current->IsArray() || (current->IsMap() && current->GetMapSafe().empty()));
                             current->SetType(NJson::JSON_ARRAY);
                             if (current->GetArraySafe().size() <= keyIndex) {
                                 current->GetArraySafe().resize(keyIndex + 1);
@@ -187,7 +187,7 @@ public:
             TStringBuf key(path.data() + start, (path.size()) - start);
             ui32 keyIndex;
             if (key.StartsWith("[") && key.EndsWith("]") && TryFromString<ui32>(key.data() + 1, key.size() - 2, keyIndex)) {
-                AFL_VERIFY(current->IsArray() || (current->IsMap() && current->GetMapSafe().empty()));
+                AFL_VERIFY(!current->IsDefined() || current->IsArray() || (current->IsMap() && current->GetMapSafe().empty()));
                 current->SetType(NJson::JSON_ARRAY);
 
                 if (current->GetArraySafe().size() <= keyIndex) {

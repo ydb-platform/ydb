@@ -171,6 +171,9 @@ bool TIndexMeta::DoCheckValueImpl(
     AFL_VERIFY(!!category);
     AFL_VERIFY(op == EOperation::Equals)("op", op);
     const ui32 bitsCount = data.GetBitsCount();
+    if (!bitsCount) {
+        return false;
+    }
     for (ui64 hashSeed = 0; hashSeed < HashesCount; ++hashSeed) {
         const ui64 hash = NArrow::NHash::TXX64::CalcForScalar(value, hashSeed);
         if (!data.Get(hash % bitsCount)) {

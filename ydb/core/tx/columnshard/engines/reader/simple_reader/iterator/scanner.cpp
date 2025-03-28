@@ -146,7 +146,7 @@ TConclusion<bool> TScanHead::BuildNextInterval() {
         }
         ui32 inFlightCountLocal = GetInFlightIntervalsCount();
         AFL_VERIFY(IntervalsInFlightCount == inFlightCountLocal)("count_global", IntervalsInFlightCount)("count_local", inFlightCountLocal);
-        while (SortedSources.size() && inFlightCountLocal < InFlightLimit && Context->IsActive()) {
+        while (SortedSources.size() && inFlightCountLocal < InFlightLimit && FetchingInFlightSources.size() < InFlightLimit && Context->IsActive()) {
             FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, SortedSources.front()->AddEvent("f"));
             SortedSources.front()->StartProcessing(SortedSources.front());
             FetchingSources.emplace_back(SortedSources.front());

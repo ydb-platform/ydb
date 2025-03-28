@@ -49,6 +49,7 @@ target_sources(ydb-core-util PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/util/cache.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/concurrent_rw_hash.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/console.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/util/cpuinfo.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/failure_injection.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/fast_tls.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/util/format.cpp
@@ -73,6 +74,7 @@ target_sources(ydb-core-util PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/util/concurrent_rw_hash.h
   ${PROJECT_SOURCE_DIR}/ydb/core/util/console.h
   ${PROJECT_SOURCE_DIR}/ydb/core/util/counted_leaky_bucket.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/util/cpuinfo.h
   ${PROJECT_SOURCE_DIR}/ydb/core/util/defs.h
   ${PROJECT_SOURCE_DIR}/ydb/core/util/event_priority_queue.h
   ${PROJECT_SOURCE_DIR}/ydb/core/util/failure_injection.h

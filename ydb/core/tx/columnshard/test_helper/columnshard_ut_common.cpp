@@ -218,23 +218,23 @@ ui64 ProposeCommitCheck(TTestBasicRuntime& runtime, TActorId& sender, ui64 shard
     auto* lock = write->Record.MutableLocks()->AddLocks();
     lock->SetLockId(lockId);
     write->Record.MutableLocks()->SetOp(NKikimrDataEvents::TKqpLocks::Commit);
-    const auto now = runtime.GetTimeProvider()->Now();
     ForwardToTablet(runtime, shardId, sender, write.release());
     TAutoPtr<IEventHandle> handle;
     auto event = runtime.GrabEdgeEvent<NEvents::TDataEvents::TEvWriteResult>(handle);
     UNIT_ASSERT(event);
     auto& res = event->Record;
-    UNIT_ASSERT_LE(now.MilliSeconds(), res.GetMinStep());
-    UNIT_ASSERT_UNEQUAL(res.GetMaxStep(), std::numeric_limits<ui64>::max());
-    UNIT_ASSERT_LE(res.GetMinStep(), res.GetMaxStep());
     checker(res);
     return res.GetMinStep();
 }
 
 ui64 ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId) {
+    const auto now = runtime.GetTimeProvider()->Now();
     return ProposeCommitCheck(runtime, sender, shardId, txId, writeIds, lockId, [&](auto& res) {
         AFL_VERIFY(res.GetTxId() == txId)("tx_id", txId)("res", res.GetTxId());
         UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+        UNIT_ASSERT_LE(now.MilliSeconds(), res.GetMinStep());
+        UNIT_ASSERT_UNEQUAL(res.GetMaxStep(), std::numeric_limits<ui64>::max());
+        UNIT_ASSERT_LE(res.GetMinStep(), res.GetMaxStep());
     });
 }
 

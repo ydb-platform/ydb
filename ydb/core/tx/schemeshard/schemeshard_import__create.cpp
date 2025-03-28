@@ -317,6 +317,7 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
 
     explicit TTxProgress(TSelf* self, TEvPrivate::TEvImportSchemaMappingReady::TPtr& ev)
         : TXxport::TTxBase(self)
+        , Id(ev->Get()->ImportId)
         , SchemaMappingResult(ev)
     {
     }
@@ -361,7 +362,7 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
         if (SchemeResult) {
             OnSchemeResult(txc, ctx);
         } else if (SchemaMappingResult) {
-            OnSchemaMappingResult(txc);
+            OnSchemaMappingResult(txc, ctx);
         } else if (SchemeQueryResult) {
             OnSchemeQueryPreparation(txc, ctx);
         } else if (AllocateResult) {
@@ -994,7 +995,7 @@ private:
             // Send the creation query to KQP to prepare.
             const auto database = GetDatabase(*Self);
             const TString source = TStringBuilder()
-                << importInfo->Settings.items(msg.ItemIdx).source_prefix() << NYdb::NDump::NFiles::CreateView().FileName;
+                << importInfo->GetItemSrcPrefix(msg.ItemIdx) << NYdb::NDump::NFiles::CreateView().FileName;
 
             NYql::TIssues issues;
             if (!NYdb::NDump::RewriteCreateViewQuery(item.CreationQuery, database, true, item.DstPathName, issues)) {
@@ -1016,7 +1017,7 @@ private:
         }
     }
 
-    void OnSchemaMappingResult(TTransactionContext& txc) {
+    void OnSchemaMappingResult(TTransactionContext& txc, const TActorContext& ctx) {
         Y_ABORT_UNLESS(SchemaMappingResult);
 
         const auto& msg = *SchemaMappingResult->Get();
@@ -1039,7 +1040,7 @@ private:
         Self->RunningImportSchemeGetters.erase(std::exchange(importInfo->SchemaMappingGetter, {}));
 
         if (!msg.Success) {
-            return CancelAndPersist(db, importInfo, -1, msg.Error, "cannot get schema mapping");
+            return CancelAndPersist(db, importInfo, -1, {}, TStringBuilder() << "cannot get schema mapping: " << msg.Error);
         }
 
         if (!importInfo->SchemaMapping->Items.empty()) {
@@ -1065,6 +1066,12 @@ private:
             dstObjectPath.insert(dstObjectPath.end(), objectPath.begin(), objectPath.end());
             return CombinePath(dstObjectPath.begin(), dstObjectPath.end());
         };
+        auto init = [&](const NBackup::TSchemaMapping::TItem& schemaMappingItem, NSchemeShard::TImportInfo::TItem& item) {
+            TStringBuf exportPrefix(schemaMappingItem.ExportPrefix);
+            exportPrefix.SkipPrefix("/");
+            item.SrcPrefix = TStringBuilder() << sourcePrefix << exportPrefix;
+            item.ExportItemIV = schemaMappingItem.IV;
+        };
         if (importInfo->Items.empty()) { // Fill the whole list from schema mapping
             for (const auto& schemaMappingItem : importInfo->SchemaMapping->Items) {
                 TString dstPath = combineDstPath(schemaMappingItem.ObjectPath);
@@ -1074,8 +1081,7 @@ private:
                 }
 
                 auto& item = importInfo->Items.emplace_back(dstPath);
-                item.SrcPrefix = sourcePrefix + schemaMappingItem.ExportPrefix;
-                item.ExportItemIV = schemaMappingItem.IV;
+                init(schemaMappingItem, item);
             }
         } else { // Take existing items from items list
             THashMap<TString, size_t> schemaMappingIndex;
@@ -1089,14 +1095,14 @@ private:
                     return CancelAndPersist(db, importInfo, -1, {}, TStringBuilder() << "cannot find path " << dstPath << " in schema mapping");
                 }
                 const auto& schemaMappingItem = importInfo->SchemaMapping->Items[mappingIt->second];
-                item.SrcPrefix = sourcePrefix + schemaMappingItem.ExportPrefix;
-                item.ExportItemIV = schemaMappingItem.IV;
+                init(schemaMappingItem, item);
             }
         }
 
         importInfo->State = EState::Waiting;
         PersistImportState(db, importInfo);
         PersistSchemaMappingImportFields(db, importInfo);
+        Resume(txc, ctx);
     }
 
     void OnSchemeQueryPreparation(TTransactionContext& txc, const TActorContext& ctx) {

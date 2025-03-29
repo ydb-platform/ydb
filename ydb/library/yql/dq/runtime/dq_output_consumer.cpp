@@ -202,6 +202,11 @@ struct TColumnShardHashV1 {
                 HashCalcer.Update(reinterpret_cast<const ui8*>(value.Data()), value.Size());
                 break;
             }
+            case NYql::NProto::Decimal: {
+                auto value = uv.GetInt128();
+                HashCalcer.Update(reinterpret_cast<const ui8*>(&value), sizeof(value));
+                break;
+            }
             default: {
                 Y_ENSURE(false, TStringBuilder{} << "HashFunc for HashShuffle isn't supported with such type: " << static_cast<ui64>(KeyColumnTypes[keyIdx]));
                 break;
@@ -869,7 +874,7 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
                 TVector<TString> stringNames;
                 stringNames.reserve(keyColumns.size());
                 for (const auto& keyColumn: keyColumns) {
-                    stringNames.push_back(keyColumn.Name);
+                    stringNames.push_back(keyColumn.Name);а
                 }
                 return "[" + JoinSeq(",", stringNames) + "]";
             };

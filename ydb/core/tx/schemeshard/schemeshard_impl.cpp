@@ -4707,9 +4707,12 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableReplaceIfExistsForExternalEntities = appData->FeatureFlags.GetEnableReplaceIfExistsForExternalEntities();
     EnableTempTables = appData->FeatureFlags.GetEnableTempTables();
     EnableTableDatetime64 = appData->FeatureFlags.GetEnableTableDatetime64();
+    EnableResourcePoolsOnServerless = appData->FeatureFlags.GetEnableResourcePoolsOnServerless();
     EnableVectorIndex = appData->FeatureFlags.GetEnableVectorIndex();
+    EnableExternalDataSourcesOnServerless = appData->FeatureFlags.GetEnableExternalDataSourcesOnServerless();
     EnableParameterizedDecimal = appData->FeatureFlags.GetEnableParameterizedDecimal();
     EnableDataErasure = appData->FeatureFlags.GetEnableDataErasure();
+    EnableExternalSourceSchemaInference = appData->FeatureFlags.GetEnableExternalSourceSchemaInference();
 
     ConfigureCompactionQueues(appData->CompactionConfig, ctx);
     ConfigureStatsBatching(appData->SchemeShardConfig, ctx);
@@ -4719,6 +4722,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
 
     ConfigureBackgroundCleaningQueue(appData->BackgroundCleaningConfig, ctx);
     ConfigureDataErasureManager(appData->DataErasureConfig);
+    ConfigureExternalSources(appData->QueryServiceConfig, ctx);
 
     if (appData->ChannelProfiles) {
         ChannelProfiles = appData->ChannelProfiles;
@@ -7301,17 +7305,8 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TAppConfig& appConfi
     }
 
     if (appConfig.HasQueryServiceConfig()) {
-        const auto& hostnamePatterns = appConfig.GetQueryServiceConfig().GetHostnamePatterns();
-        const auto& availableExternalDataSources = appConfig.GetQueryServiceConfig().GetAvailableExternalDataSources();
-        ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(
-            std::vector<TString>(hostnamePatterns.begin(), hostnamePatterns.end()),
-            nullptr,
-            appConfig.GetQueryServiceConfig().GetS3().GetGeneratorPathsLimit(),
-            nullptr,
-            appConfig.GetFeatureFlags().GetEnableExternalSourceSchemaInference(),
-            appConfig.GetQueryServiceConfig().GetS3().GetAllowLocalFiles(),
-            std::set<TString>(availableExternalDataSources.cbegin(), availableExternalDataSources.cend())
-        );
+        const auto& queryServiceConfig = appConfig.GetQueryServiceConfig();
+        ConfigureExternalSources(queryServiceConfig, ctx);
     }
 
     if (appConfig.HasAuthConfig()) {
@@ -7357,6 +7352,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableExternalDataSourcesOnServerless = featureFlags.GetEnableExternalDataSourcesOnServerless();
     EnableParameterizedDecimal = featureFlags.GetEnableParameterizedDecimal();
     EnableDataErasure = featureFlags.GetEnableDataErasure();
+    EnableExternalSourceSchemaInference = featureFlags.GetEnableExternalSourceSchemaInference();
 }
 
 void TSchemeShard::ConfigureStatsBatching(const NKikimrConfig::TSchemeShardConfig& config, const TActorContext& ctx) {
@@ -7563,6 +7559,32 @@ void TSchemeShard::ConfigureAccountLockout(
     LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                  "AccountLockout configured: AttemptThreshold# " << accountLockoutInitializer.AttemptThreshold
                  << ", AttemptResetDuration# " << accountLockoutInitializer.AttemptResetDuration);
+}
+
+void TSchemeShard::ConfigureExternalSources(
+    const NKikimrConfig::TQueryServiceConfig& config,
+    const TActorContext& ctx)
+{
+    const auto& hostnamePatterns = config.GetHostnamePatterns();
+    const auto& availableExternalDataSources = config.GetAvailableExternalDataSources();
+    const auto pathsLimit = config.GetS3().GetGeneratorPathsLimit();
+    const auto allowLocalFiles = config.GetS3().GetAllowLocalFiles();
+    ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory(
+        std::vector<TString>(hostnamePatterns.begin(), hostnamePatterns.end()),
+        nullptr,
+        pathsLimit,
+        nullptr,
+        EnableExternalSourceSchemaInference,
+        allowLocalFiles,
+        std::set<TString>(availableExternalDataSources.cbegin(), availableExternalDataSources.cend())
+    );
+
+    LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                 "ExternalSources configured: HostnamePatterns# [" << Join(", ", hostnamePatterns) << "]"
+                 << ", AvailableExternalDataSources# [" << Join(", ", availableExternalDataSources) << "]"
+                 << ", PathsLimit# " << pathsLimit
+                 << ", EnableExternalSourceSchemaInference# " << (EnableExternalSourceSchemaInference ? "true" : "false")
+                 << ", AllowLocalFiles# " << (allowLocalFiles ? "true" : "false"));
 }
 
 void TSchemeShard::StartStopCompactionQueues() {

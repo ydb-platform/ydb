@@ -19,9 +19,26 @@ namespace NKikimr {
 namespace NMiniKQL {
 namespace NPackedTuple {
 
-constexpr ui32 PrefetchBatchSize = 64;  /// TODO
+struct TTupleEqual {
+    bool operator()(const TTupleLayout *layout, const ui8 *lhsRow,
+                    const ui8 *lhsOverflow, const ui8 *rhsRow,
+                    const ui8 *rhsOverflow) {
+        return layout->KeysEqual(lhsRow, lhsOverflow, rhsRow, rhsOverflow);
+    }
+};
 
-template <typename TEqual, typename THash,
+struct TTupleHash {
+    ui32 operator()(const TTupleLayout * /*layout*/, const ui8 *tuple,
+                    const ui8 * /*overflow*/) {
+        return ((const ui32 *)tuple)[0];
+    }
+};
+
+constexpr ui32 PrefetchBatchSize = 64; /// TODO
+
+template <bool ConsecutiveDuplicates = true,
+          typename TEqual = TTupleEqual,
+          typename THash = TTupleHash,
           typename TAllocator = TMKQLAllocator<ui8>>
 class TRobinHoodHashBase {
     struct TCellStatus {
@@ -29,13 +46,9 @@ class TRobinHoodHashBase {
         static constexpr ui32 kStart = 2;
 
         bool IsValid() const { return value; }
-
         bool IsList() const { return value & 1; }
-
         void ToList() { value = value | 1; }
-
         void operator++() { value += 2; }
-
         bool operator<(TCellStatus rhs) const { return value < rhs.value; }
 
       public:
@@ -44,7 +57,7 @@ class TRobinHoodHashBase {
 
     struct TListCell {
         ui32 Index;
-        ui32 Size;
+        ui32 Size_;
     };
 
     struct TPSLStorage {
@@ -67,19 +80,19 @@ class TRobinHoodHashBase {
     static_assert(sizeof(TPSLOutStorage) <= kEmbeddedSize);
 
   public:
-    TRobinHoodHashBase() : SelfHash(GetSelfHash(this)) {
+    TRobinHoodHashBase() : SelfHash_(GetSelfHash(this)) {
         Init(256);
     }
 
     explicit TRobinHoodHashBase(const TTupleLayout *layout)
-        : SelfHash(GetSelfHash(this)) {
+        : SelfHash_(GetSelfHash(this)) {
         Init(256);
         SetTupleLayout(layout);
     }
 
     ~TRobinHoodHashBase() {
-        if (Data) {
-            Allocator.deallocate(Data, DataEnd - Data);
+        if (Data_) {
+            Allocator_.deallocate(Data_, DataEnd_ - Data_);
         }
     }
 
@@ -98,8 +111,8 @@ class TRobinHoodHashBase {
 
     Y_FORCE_INLINE void Apply(const ui8 *const tuple, const ui8 *const overflow,
                               auto &&onMatch) {
-        const ui32 hash = HashLocal(Layout_, tuple, overflow);
-        auto ptr = MakeIterator(hash, Data, CapacityShift);
+        const ui32 hash = HashLocal_(Layout_, tuple, overflow);
+        auto ptr = MakeIterator(hash, Data_, CapacityShift_);
 
         TCellStatus currCellStatus;
         for (;;) {
@@ -108,55 +121,67 @@ class TRobinHoodHashBase {
                 return;
             }
 
-            if (OnEqual<false>(
-                    hash, ptr, DupSeq, tuple, overflow,
+            if (OnEqual<!ConsecutiveDuplicates>(
+                    hash, ptr, DupSeq_, tuple, overflow,
                     [&](const ui8 *matched) { onMatch(matched); },
                     [&](const ui8 *matched) {
                         auto &ptrPsl = GetPSLOut(ptr);
-                        for (ui32 i = 0; i != ptrPsl.ListCell.Size;
-                             ++i, matched += DupPayloadSize_) {
+                        for (ui32 i = 0; i != ptrPsl.ListCell.Size_; ++i) {
                             onMatch(matched);
+                            if constexpr (ConsecutiveDuplicates) {
+                                matched += DupPayloadSize_;
+                            } else {
+                                ui32 dupCellIndex = ReadUnaligned<ui32>(matched + DupPayloadSize_);
+                                matched = &DupSeq_[dupCellIndex *
+                                    (DupPayloadSize_ + sizeof(ui32))];
+                            }
                         }
                     },
                     [&](const ui8 *matched) { onMatch(matched); },
                     [&](const ui8 *matched) {
                         auto &ptrPsl = GetPSLOut(ptr);
-                        for (ui32 i = 0; i != ptrPsl.ListCell.Size;
-                             ++i, matched += DupPayloadSize_) {
+                        for (ui32 i = 0; i != ptrPsl.ListCell.Size_; ++i) {
                             onMatch(GetTupleOut(ReadUnaligned<ui32>(matched)));
+                            if constexpr (ConsecutiveDuplicates) {
+                                matched += DupPayloadSize_;
+                            } else {
+                                ui32 dupCellIndex = ReadUnaligned<ui32>(matched + DupPayloadSize_);
+                                matched = &DupSeq_[dupCellIndex *
+                                    (DupPayloadSize_ + sizeof(ui32))];
+                            }
                         }
                     })) {
                 return;
             }
 
             ++currCellStatus;
-            AdvancePointer(ptr, Data, DataEnd);
+            AdvancePointer(ptr, Data_, DataEnd_);
         }
     }
 
     void Build(const ui8 *const tuples, const ui8 *const overflow,
                ui32 nItems) {
-        Y_ASSERT(Size == 0);
-        Y_ASSERT(Listed == 0);
+        Y_ASSERT(Size_ == 0);
+        Y_ASSERT(Listed_ == 0);
 
         Tuples_ = tuples;
         Overflow_ = overflow;
 
         /// heuristic to decrease number of growths
-        if (RHHashTableNeedsGrow(nItems / 16, Capacity)) {
+        if (RHHashTableNeedsGrow(nItems / 16, Capacity_)) {
             Grow(nItems / 16);
         }
 
-        auto duplicates = TVector<ui8, TAllocator>(Allocator);
+        auto duplicates = TVector<ui8, TAllocator>(Allocator_);
 
         for (ui32 index = 0; index < nItems; ++index) {
-            if (RHHashTableNeedsGrow(Size, Capacity)) {
-                Grow(Size);
+            if (RHHashTableNeedsGrow(Size_, Capacity_)) {
+                Grow(Size_);
             }
 
             const ui8 *const tuple = tuples + index * Layout_->TotalRowSize;
-            const auto hash = HashLocal(Layout_, tuple, overflow);
-            const auto ptr = MakeIterator(hash, Data, CapacityShift);
+            const auto hash = HashLocal_(Layout_, tuple, overflow);
+            const auto ptr = MakeIterator(hash, Data_, CapacityShift_);
 
             ui8 cell[kEmbeddedSize];
             if (IsInplace_) {
@@ -166,18 +191,23 @@ class TRobinHoodHashBase {
                 new (cell) TPSLOutStorage(index, hash);
             }
 
-            Size += InsertImpl(cell, hash, ptr, Data, DataEnd, &duplicates,
+            Size_ += InsertImpl(cell, hash, ptr, Data_, DataEnd_, duplicates,
                                EqualInsertHandler);
         }
 
-        if (Listed == 0) {
+        if (Listed_ == 0) {
             return;
         }
 
-        DupSeq.resize(Listed * DupPayloadSize_);
+        if constexpr (!ConsecutiveDuplicates) {
+            DupSeq_ = std::move(duplicates);
+            return;
+        }
+
+        DupSeq_.resize(Listed_ * DupPayloadSize_);
         ui32 dupSeqIndex = 0;
 
-        for (auto ptr = Data; ptr != DataEnd; ptr += CellSize_) {
+        for (auto ptr = Data_; ptr != DataEnd_; ptr += CellSize_) {
             auto &ptrPsl = GetPSL(ptr);
             if (!ptrPsl.CellStatus.IsValid() || !ptrPsl.CellStatus.IsList()) {
                 continue;
@@ -186,29 +216,29 @@ class TRobinHoodHashBase {
             TListCell &ptrListCell = GetPSLOut(ptr).ListCell;
             ui32 dupCellIndex = ptrListCell.Index;
             ptrListCell.Index = dupSeqIndex;
-            ui8 *ptrDupSeq = DupSeq.data() + dupSeqIndex * DupPayloadSize_;
+            ui8 *ptrDupSeq = DupSeq_.data() + dupSeqIndex * DupPayloadSize_;
 
             while (dupCellIndex != -1u) {
                 const auto *const ptrDup =
-                    (ui8 *)&duplicates[dupCellIndex *
+                    &duplicates[dupCellIndex *
                                        (DupPayloadSize_ + sizeof(ui32))];
                 std::memcpy(ptrDupSeq, ptrDup, DupPayloadSize_);
                 ptrDupSeq += DupPayloadSize_;
                 dupCellIndex = ReadUnaligned<ui32>(ptrDup + DupPayloadSize_);
             }
 
-            dupSeqIndex += ptrListCell.Size;
+            dupSeqIndex += ptrListCell.Size_;
         }
     }
 
     void Clear() {
-        ui8 *ptr = Data;
-        for (ui64 i = 0; i < Capacity; ++i) {
+        ui8 *ptr = Data_;
+        for (ui64 i = 0; i < Capacity_; ++i) {
             GetPSL(ptr).CellStatus.value = TCellStatus::kInvalid;
             ptr += CellSize_;
         }
-        Size = 0;
-        Listed = 0;
+        Size_ = 0;
+        Listed_ = 0;
     }
 
   private:
@@ -247,16 +277,16 @@ class TRobinHoodHashBase {
         if (IsInplace_) {
             if (!ptrPsl.CellStatus.IsList()) {
                 auto *const ptrTuple = GetTuple(ptr);
-                if (EqualLocal(Layout_, ptrTuple, Overflow_, tuple, overflow)) {
+                if (EqualLocal_(Layout_, ptrTuple, Overflow_, tuple, overflow)) {
                     FInplaceCell(ptrTuple);
                     return true;
                 }
             } else {
                 auto &ptrPsl = GetPSLOut(ptr);
                 auto *const ptrDup =
-                    (ui8 *)&duplicates[ptrPsl.ListCell.Index *
+                    &duplicates[ptrPsl.ListCell.Index *
                                        (DupPayloadSize_ + buildOffset)];
-                if (EqualLocal(Layout_, ptrDup, Overflow_, tuple, overflow)) {
+                if (EqualLocal_(Layout_, ptrDup, Overflow_, tuple, overflow)) {
                     FInplaceList(ptrDup);
                     return true;
                 }
@@ -269,16 +299,16 @@ class TRobinHoodHashBase {
 
             if (!ptrPsl.CellStatus.IsList()) {
                 auto *const ptrTuple = GetTupleOut(ptrPsl.ListCell.Index);
-                if (EqualLocal(Layout_, ptrTuple, Overflow_, tuple, overflow)) {
+                if (EqualLocal_(Layout_, ptrTuple, Overflow_, tuple, overflow)) {
                     FOutplaceCell(ptrTuple);
                     return true;
                 }
             } else {
                 auto *const ptrDup =
-                    (ui8 *)&duplicates[ptrPsl.ListCell.Index *
+                    &duplicates[ptrPsl.ListCell.Index *
                                        (DupPayloadSize_ + buildOffset)];
                 auto *const ptrTuple = GetTupleOut(ReadUnaligned<ui32>(ptrDup));
-                if (EqualLocal(Layout_, ptrTuple, Overflow_, tuple, overflow)) {
+                if (EqualLocal_(Layout_, ptrTuple, Overflow_, tuple, overflow)) {
                     FOutplaceList(ptrDup);
                     return true;
                 }
@@ -292,14 +322,14 @@ class TRobinHoodHashBase {
                                      ui64 capacityShift) {
         // https://probablydance.com/2018/06/16/fibonacci-hashing-the-optimization-that-the-world-forgot-or-a-better-alternative-to-integer-modulo/
         ui64 bucket =
-            ((SelfHash ^ hash) * 11400714819323198485llu) >> capacityShift;
+            ((SelfHash_ ^ hash) * 11400714819323198485llu) >> capacityShift;
         ui8 *ptr = data + CellSize_ * bucket;
         return ptr;
     }
 
     Y_FORCE_INLINE bool InsertImpl(ui8 *const cell, const ui32 hash, ui8 *ptr,
                                    ui8 *const data, ui8 *const dataEnd,
-                                   TVector<ui8, TAllocator> *duplicatesPtr,
+                                   TVector<ui8, TAllocator> &duplicates,
                                    auto EqualHandler) {
         auto &psl = GetPSL(cell);
 
@@ -310,7 +340,7 @@ class TRobinHoodHashBase {
                 return true;
             }
 
-            if (EqualHandler(*this, cell, hash, ptr, duplicatesPtr)) {
+            if (EqualHandler(*this, cell, hash, ptr, duplicates)) {
                 return false;
             }
 
@@ -346,8 +376,7 @@ class TRobinHoodHashBase {
     Y_FORCE_INLINE static bool
     EqualInsertHandler(TRobinHoodHashBase &self, ui8 *const cell,
                        const ui32 hash, ui8 *ptr,
-                       TVector<ui8, TAllocator> *duplicatesPtr) {
-        auto &duplicates = *duplicatesPtr;
+                       TVector<ui8, TAllocator> &duplicates) {
         const ui8 *const tuple =
             self.IsInplace_ ? GetTuple(cell)
                             : self.Tuples_ + GetPSLOut(cell).ListCell.Index *
@@ -358,65 +387,65 @@ class TRobinHoodHashBase {
             [&](const ui8 * /*matched*/) {
                 auto &ptrPsl = GetPSLOut(ptr);
 
-                ui8 *ptrDup = self.GetDuplicatesData(duplicates, self.Listed);
+                ui8 *ptrDup = self.GetDuplicatesData(duplicates, self.Listed_);
                 std::memcpy(ptrDup, GetTuple(ptr), self.DupPayloadSize_);
                 WriteUnaligned<ui32>(ptrDup + self.DupPayloadSize_, -1u);
 
-                ++self.Listed;
+                ++self.Listed_;
 
-                ptrDup = self.GetDuplicatesData(duplicates, self.Listed);
+                ptrDup = self.GetDuplicatesData(duplicates, self.Listed_);
                 std::memcpy(ptrDup, tuple, self.DupPayloadSize_);
                 WriteUnaligned<ui32>(ptrDup + self.DupPayloadSize_,
-                                     self.Listed - 1);
+                                     self.Listed_ - 1);
 
                 ptrPsl.Hash = hash;
-                ptrPsl.ListCell.Index = self.Listed;
-                ptrPsl.ListCell.Size = 2;
+                ptrPsl.ListCell.Index = self.Listed_;
+                ptrPsl.ListCell.Size_ = 2;
                 ptrPsl.CellStatus.ToList();
-                ++self.Listed;
+                ++self.Listed_;
             },
             [&](const ui8 * /*matched*/) {
                 auto &ptrPsl = GetPSLOut(ptr);
 
-                ui8 *ptrDup = self.GetDuplicatesData(duplicates, self.Listed);
+                ui8 *ptrDup = self.GetDuplicatesData(duplicates, self.Listed_);
                 std::memcpy(ptrDup, tuple, self.DupPayloadSize_);
                 WriteUnaligned<ui32>(ptrDup + self.DupPayloadSize_,
                                      ptrPsl.ListCell.Index);
 
-                ptrPsl.ListCell.Index = self.Listed;
-                ptrPsl.ListCell.Size++;
-                ++self.Listed;
+                ptrPsl.ListCell.Index = self.Listed_;
+                ptrPsl.ListCell.Size_++;
+                ++self.Listed_;
             },
             [&](const ui8 * /*matched*/) {
                 auto &ptrPsl = GetPSLOut(ptr);
 
-                ui8 *ptrDup = self.GetDuplicatesData(duplicates, self.Listed);
+                ui8 *ptrDup = self.GetDuplicatesData(duplicates, self.Listed_);
                 WriteUnaligned<ui32>(ptrDup, ptrPsl.ListCell.Index);
                 WriteUnaligned<ui32>(ptrDup + self.DupPayloadSize_, -1u);
 
-                ++self.Listed;
+                ++self.Listed_;
 
-                ptrDup = self.GetDuplicatesData(duplicates, self.Listed);
+                ptrDup = self.GetDuplicatesData(duplicates, self.Listed_);
                 WriteUnaligned<ui32>(ptrDup, GetPSLOut(cell).ListCell.Index);
                 WriteUnaligned<ui32>(ptrDup + self.DupPayloadSize_,
-                                     self.Listed - 1);
+                                     self.Listed_ - 1);
 
-                ptrPsl.ListCell.Index = self.Listed;
-                ptrPsl.ListCell.Size = 2;
+                ptrPsl.ListCell.Index = self.Listed_;
+                ptrPsl.ListCell.Size_ = 2;
                 ptrPsl.CellStatus.ToList();
-                ++self.Listed;
+                ++self.Listed_;
             },
             [&](const ui8 * /*matched*/) {
                 auto &ptrPsl = GetPSLOut(ptr);
 
-                ui8 *ptrDup = self.GetDuplicatesData(duplicates, self.Listed);
+                ui8 *ptrDup = self.GetDuplicatesData(duplicates, self.Listed_);
                 WriteUnaligned<ui32>(ptrDup, GetPSLOut(cell).ListCell.Index);
                 WriteUnaligned<ui32>(ptrDup + self.DupPayloadSize_,
                                      ptrPsl.ListCell.Index);
 
-                ptrPsl.ListCell.Index = self.Listed;
-                ptrPsl.ListCell.Size++;
-                ++self.Listed;
+                ptrPsl.ListCell.Index = self.Listed_;
+                ptrPsl.ListCell.Size_++;
+                ++self.Listed_;
             });
     }
 
@@ -443,9 +472,9 @@ class TRobinHoodHashBase {
 
     void Init(ui64 capacity) {
         Y_ASSERT((capacity & (capacity - 1)) == 0);
-        Capacity = capacity;
-        CapacityShift = 64 - MostSignificantBit(capacity);
-        Allocate(Capacity, Data, DataEnd);
+        Capacity_ = capacity;
+        CapacityShift_ = 64 - MostSignificantBit(capacity);
+        Allocate(Capacity_, Data_, DataEnd_);
     }
 
     Y_NO_INLINE void Grow(ui64 size) {
@@ -454,9 +483,9 @@ class TRobinHoodHashBase {
         auto newCapacityShift = 64 - MostSignificantBit(newCapacity);
         ui8 *newData, *newDataEnd;
         Allocate(newCapacity, newData, newDataEnd);
-        Y_DEFER { Allocator.deallocate(newData, newDataEnd - newData); };
+        Y_DEFER { Allocator_.deallocate(newData, newDataEnd - newData); };
 
-        for (auto cell = Data; cell != DataEnd; cell += CellSize_) {
+        for (auto cell = Data_; cell != DataEnd_; cell += CellSize_) {
             auto &psl = GetPSL(cell);
             if (!psl.CellStatus.IsValid()) {
                 continue;
@@ -464,10 +493,10 @@ class TRobinHoodHashBase {
 
             const ui32 hash =
                 IsInplace_ && !psl.CellStatus.IsList()
-                    ? HashLocal(Layout_, GetTuple(cell), Overflow_)
+                    ? HashLocal_(Layout_, GetTuple(cell), Overflow_)
                     : GetPSLOut(cell).Hash;
             const auto ptr = MakeIterator(hash, newData, newCapacityShift);
-            
+
             if (psl.CellStatus.IsList()) {
                 psl.CellStatus.value = TCellStatus::kStart;
                 psl.CellStatus.ToList();
@@ -475,19 +504,19 @@ class TRobinHoodHashBase {
                 psl.CellStatus.value = TCellStatus::kStart;
             }
 
-            InsertImpl(cell, hash, ptr, newData, newDataEnd, nullptr,
+            InsertImpl(cell, hash, ptr, newData, newDataEnd, DupSeq_,
                        [](auto &&...) { return false; });
         }
 
-        Capacity = newCapacity;
-        CapacityShift = newCapacityShift;
-        std::swap(Data, newData);
-        std::swap(DataEnd, newDataEnd);
+        Capacity_ = newCapacity;
+        CapacityShift_ = newCapacityShift;
+        std::swap(Data_, newData);
+        std::swap(DataEnd_, newDataEnd);
     }
 
     void Allocate(ui64 capacity, ui8 *&data, ui8 *&dataEnd) {
         ui64 bytes = capacity * CellSize_;
-        data = Allocator.allocate(bytes);
+        data = Allocator_.allocate(bytes);
         dataEnd = data + bytes;
         ui8 *ptr = data;
         for (ui64 i = 0; i < capacity; ++i) {
@@ -499,10 +528,10 @@ class TRobinHoodHashBase {
   private:
     static constexpr ui32 CellSize_ = kEmbeddedSize;
 
-    const ui64 SelfHash;
+    const ui64 SelfHash_;
 
-    THash HashLocal;
-    TEqual EqualLocal;
+    THash HashLocal_;
+    TEqual EqualLocal_;
 
     const TTupleLayout * Layout_ = nullptr;
 
@@ -512,15 +541,15 @@ class TRobinHoodHashBase {
     bool IsInplace_ = true;
     ui32 DupPayloadSize_ = 0;
 
-    ui64 Size = 0;
-    ui64 Listed = 0;
-    ui64 Capacity;
-    ui64 CapacityShift;
+    ui64 Size_ = 0;
+    ui64 Listed_ = 0;
+    ui64 Capacity_;
+    ui64 CapacityShift_;
 
-    TAllocator Allocator;
-    ui8 *Data = nullptr;
-    ui8 *DataEnd = nullptr;
-    TVector<ui8, TAllocator> DupSeq;
+    TAllocator Allocator_;
+    ui8 *Data_ = nullptr;
+    ui8 *DataEnd_ = nullptr;
+    TVector<ui8, TAllocator> DupSeq_;
 };
 
 } // namespace NPackedTuple

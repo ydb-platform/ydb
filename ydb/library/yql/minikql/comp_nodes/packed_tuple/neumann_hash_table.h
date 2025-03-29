@@ -26,11 +26,11 @@ namespace NPackedTuple {
 
 template <class T> class TBloomFilterMasks {
 
-    static constexpr size_t BinomCoeff(size_t n, size_t k) noexcept {
+    static consteval size_t BinomCoeff(size_t n, size_t k) noexcept {
         return k == 0 ? 1 : BinomCoeff(n - 1, k - 1) * n / k;
     }
 
-    static constexpr size_t Pow2Round(size_t n) {
+    static consteval size_t Pow2Round(size_t n) {
         return n == 0 ? 0
                       : 1ul << (sizeof(size_t) * 8 - std::countl_zero(n - 1));
     }
@@ -50,7 +50,7 @@ template <class T> class TBloomFilterMasks {
 
   public:
     template <unsigned BloomBits, unsigned BloomMaskBits>
-    static constexpr auto Gen() {
+    static consteval auto Gen() {
         constexpr size_t BloomMasksNum = BinomCoeff(BloomBits, BloomMaskBits);
         constexpr size_t BloomMasksNumRounded = Pow2Round(BloomMasksNum);
 
@@ -135,7 +135,6 @@ class TNeumannHashTable {
         Clear();
     }
 
-    /// TODO: memory management
     TNeumannHashTable(const TNeumannHashTable &) = delete;
     TNeumannHashTable &operator=(const TNeumannHashTable &) = delete;
 

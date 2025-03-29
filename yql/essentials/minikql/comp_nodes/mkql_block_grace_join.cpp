@@ -35,24 +35,8 @@ size_t CalcMaxBlockLength(const TVector<TType*>& items) {
 }
 
 // -------------------------------------------------------------------
-struct TTupleEqual {
-    bool operator()(
-        const NPackedTuple::TTupleLayout *layout,
-        const ui8 *lhsRow, const ui8 *lhsOverflow,
-        const ui8 *rhsRow, const ui8 *rhsOverflow)
-    {
-        return layout->KeysEqual(lhsRow, lhsOverflow, rhsRow, rhsOverflow);
-    }
-};
 
-struct TTupleHash {
-    ui32 operator()(
-        const NPackedTuple::TTupleLayout * /*layout*/, const ui8 *tuple, const ui8 * /*overflow*/) {
-        return ((const ui32 *)tuple)[0];
-    }
-};
-
-using TRobinHoodTable = NPackedTuple::TRobinHoodHashBase<TTupleEqual, TTupleHash, TMKQLAllocator<ui8>>;
+using TRobinHoodTable = NPackedTuple::TRobinHoodHashBase<>;
 using TNeumannTable = NPackedTuple::TNeumannHashTable;
 
 size_t CalculateExpectedOverflowSize(const NPackedTuple::TTupleLayout* layout, size_t nTuples) {

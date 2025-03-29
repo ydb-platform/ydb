@@ -26,23 +26,7 @@ static volatile bool IsVerbose = true;
 
 namespace {
 
-struct TTupleEqual {
-    bool operator()(const TTupleLayout *layout, const ui8 *lhsRow,
-                    const ui8 *lhsOverflow, const ui8 *rhsRow,
-                    const ui8 *rhsOverflow) {
-        return layout->KeysEqual(lhsRow, lhsOverflow, rhsRow, rhsOverflow);
-    }
-};
-
-struct TTupleHash {
-    ui32 operator()(const TTupleLayout * /*layout*/, const ui8 *tuple,
-                    const ui8 * /*overflow*/) {
-        return ((const ui32 *)tuple)[0];
-    }
-};
-
-using TRobinHoodTable =
-    TRobinHoodHashBase<TTupleEqual, TTupleHash, TMKQLAllocator<ui8>>;
+using TRobinHoodTable = TRobinHoodHashBase<>;
 
 } // namespace
 

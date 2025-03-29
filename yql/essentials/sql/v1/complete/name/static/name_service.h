@@ -6,6 +6,7 @@ namespace NSQLComplete {
 
     struct NameSet {
         TVector<TString> Types;
+        TVector<TString> Functions;
     };
 
     NameSet MakeDefaultNameSet();

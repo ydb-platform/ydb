@@ -1,4 +1,4 @@
-#include "sql_syntax.h"
+#include "ansi.h"
 
 #include <yql/essentials/public/issue/yql_issue.h>
 #include <yql/essentials/sql/settings/translation_settings.h>

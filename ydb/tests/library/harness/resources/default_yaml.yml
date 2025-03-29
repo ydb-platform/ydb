@@ -260,6 +260,9 @@ federated_query_config:
       uri: ""
   pinger:
     ping_period: "30s"
+  task_controller:
+    ping_period: "1s"
+    aggr_period: "3s"
 query_service_config:
   available_external_data_sources:
     - ObjectStorage

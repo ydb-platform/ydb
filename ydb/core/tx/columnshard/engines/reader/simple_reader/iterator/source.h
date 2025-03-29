@@ -370,13 +370,6 @@ public:
         return Portion->GetApproxChunksCount(entityIds.size()) * sizeof(TColumnRecord);
     }
 
-    virtual const NArrow::TReplaceKey& GetMinPK() const override {
-        return Portion->IndexKeyStart();
-    }
-    virtual const NArrow::TReplaceKey& GetMaxPK() const override {
-        return Portion->IndexKeyEnd();
-    }
-
     virtual std::shared_ptr<arrow::RecordBatch> GetStartPKRecordBatch() const override {
         if (GetContext()->GetReadMetadata()->IsDescSorted()) {
             AFL_VERIFY(Portion->GetMeta().GetFirstLastPK().GetBatch()->num_rows());

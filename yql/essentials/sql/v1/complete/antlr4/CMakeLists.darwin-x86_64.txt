@@ -12,28 +12,14 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(antlr4)
-add_subdirectory(text)
-add_subdirectory(name)
-add_subdirectory(syntax)
-
-add_library(sql-v1-complete)
+add_library(v1-complete-antlr4 INTERFACE)
 
 
-target_link_libraries(sql-v1-complete PUBLIC
+target_link_libraries(v1-complete-antlr4 INTERFACE
   contrib-libs-cxxsupp
   yutil
-  sql-v1-lexer
-  v1-lexer-antlr4_pure
-  v1-lexer-antlr4_pure_ansi
-  v1-complete-antlr4
-  v1-complete-name
-  complete-name-static
-  v1-complete-syntax
+  contrib-libs-antlr4_cpp_runtime
+  contrib-libs-antlr4-c3
   v1-complete-text
-)
-
-target_sources(sql-v1-complete PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/sql_complete.cpp
 )
 

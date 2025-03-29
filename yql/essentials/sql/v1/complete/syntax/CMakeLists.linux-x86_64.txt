@@ -12,28 +12,29 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(antlr4)
-add_subdirectory(text)
-add_subdirectory(name)
-add_subdirectory(syntax)
-
-add_library(sql-v1-complete)
+add_library(v1-complete-syntax)
 
 
-target_link_libraries(sql-v1-complete PUBLIC
-  contrib-libs-cxxsupp
-  yutil
-  sql-v1-lexer
-  v1-lexer-antlr4_pure
-  v1-lexer-antlr4_pure_ansi
-  v1-complete-antlr4
-  v1-complete-name
-  complete-name-static
-  v1-complete-syntax
-  v1-complete-text
+target_include_directories(v1-complete-syntax PRIVATE
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete
 )
 
-target_sources(sql-v1-complete PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/sql_complete.cpp
+target_link_libraries(v1-complete-syntax PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  essentials-core-issue
+  antlr_ast-gen-v1_ansi_antlr4
+  antlr_ast-gen-v1_antlr4
+  essentials-sql-settings
+  sql-v1-lexer
+  sql-v1-format
+)
+
+target_sources(v1-complete-syntax PRIVATE
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/syntax/ansi.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/syntax/grammar.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/syntax/local.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/syntax/parser_call_stack.cpp
 )
 

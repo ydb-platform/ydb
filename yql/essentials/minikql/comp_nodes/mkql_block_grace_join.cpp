@@ -10,6 +10,7 @@
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
 #include <ydb/library/yql/minikql/comp_nodes/packed_tuple/robin_hood_table.h>
+#include <ydb/library/yql/minikql/comp_nodes/packed_tuple/neumann_hash_table.h>
 
 #include <util/generic/serialized_enum.h>
 
@@ -52,6 +53,25 @@ struct TTupleHash {
 };
 
 using TRobinHoodTable = NPackedTuple::TRobinHoodHashBase<TTupleEqual, TTupleHash, TMKQLAllocator<ui8>>;
+using TNeumannTable = NPackedTuple::TNeumannHashTable;
+
+size_t CalculateExpectedOverflowSize(const NPackedTuple::TTupleLayout* layout, size_t nTuples) {
+    size_t varSizedCount = 0;
+    for (const auto& column: layout->Columns) {
+        if (column.SizeType == NPackedTuple::EColumnSizeType::Variable) {
+            varSizedCount++;
+        }
+    }
+
+    if (varSizedCount == 0) {
+        return 0;
+    }
+
+    // Some weird heuristic.
+    // Lets expect that there will be no more than 10% of var sized values with length
+    // bigger than 64 bytes.
+    return varSizedCount * nTuples * 64 / 10;
+}
 
 // -------------------------------------------------------------------
 // Class is used as temporary storage for join algorithm quick start.
@@ -77,7 +97,8 @@ public:
 
     enum class TStatus {
         Unknown,
-        StreamFinished, // One stream is finished
+        OneStreamFinished, // Only one stream is finished
+        BothStreamsFinished, // Both streams are finished
         MemoryLimitExceeded // We have to use Grace Hash Join algorithm
     };
 
@@ -121,7 +142,7 @@ public:
 
     NUdf::EFetchStatus FetchStreams() {
         auto resultLeft = NUdf::EFetchStatus::Finish;
-        if (LeftEstimatedSize_ < MEMORY_THRESHOLD) {
+        if (!LeftIsFinished_ && LeftEstimatedSize_ < MEMORY_THRESHOLD) {
             resultLeft = LeftStream_.WideFetch(LeftInputs_.data(), LeftInputs_.size());
             if (resultLeft == NUdf::EFetchStatus::Ok) {
                 TBlock leftBlock;
@@ -134,7 +155,7 @@ public:
         }
         
         auto resultRight = NUdf::EFetchStatus::Finish;
-        if (RightEstimatedSize_ < MEMORY_THRESHOLD) {
+        if (!RightIsFinished_ && RightEstimatedSize_ < MEMORY_THRESHOLD) {
             resultRight = RightStream_.WideFetch(RightInputs_.data(), RightInputs_.size());
             if (resultRight == NUdf::EFetchStatus::Ok) {
                 TBlock rightBlock;
@@ -153,8 +174,12 @@ public:
     }
 
     TStatus GetStatus() {
-        if (LeftIsFinished_ || RightIsFinished_) {
-            return TStatus::StreamFinished;
+        if (LeftIsFinished_ && RightIsFinished_) {
+            return TStatus::BothStreamsFinished;
+        }
+        if ((LeftIsFinished_ && RightEstimatedSize_ >= MEMORY_THRESHOLD) ||
+            (LeftEstimatedSize_ >= MEMORY_THRESHOLD && RightIsFinished_)) {
+          return TStatus::OneStreamFinished;
         }
         if (LeftEstimatedSize_ >= MEMORY_THRESHOLD && RightEstimatedSize_ >= MEMORY_THRESHOLD) {
             return TStatus::MemoryLimitExceeded;
@@ -204,121 +229,134 @@ private:
     bool                RightIsFinished_{false};
     IBlockLayoutConverter::TPtr RightConverter_;
 
-    static constexpr size_t MEMORY_THRESHOLD{L2_CACHE_SIZE / 2}; // heuristic value of maximum data size for hash table
+    static constexpr size_t MEMORY_THRESHOLD{L3_CACHE_SIZE / 2}; // heuristic value of maximum data size for hash table
 };
+
+// -------------------------------------------------------------------
+struct TJoinState : public TBlockState {
+public:
+    TJoinState(
+        TMemoryUsageInfo*       memInfo,
+        const TVector<TType*>*  resultItemTypes,
+        IBlockLayoutConverter*  buildConverter,
+        IBlockLayoutConverter*  probeConverter,
+        const TVector<ui32>&    leftIOMap,
+        const TVector<ui32>&    rightIOMap,
+        bool                    wasSwapped
+    )
+        : TBlockState(memInfo, resultItemTypes->size())
+        , MaxLength_(CalcMaxBlockLength(*resultItemTypes))
+        , WasSwapped_(wasSwapped)
+        , LeftIOMap_(leftIOMap)
+        , RightIOMap_(rightIOMap)
+    {
+        LeftPackedTuple_ = &BuildPackedOutput;
+        LeftOverflow_ = &BuildPackedInput.Overflow;
+        LeftConverter_ = buildConverter;
+
+        RightPackedTuple_ = &ProbePackedOutput;
+        RightOverflow_ = &ProbePackedInput.Overflow;
+        RightConverter_ = probeConverter;
+
+        // Check if was swapped.
+        // If was not swapped, left stream is build and right is probe
+        if (wasSwapped) {
+            using std::swap;
+            swap(LeftPackedTuple_, RightPackedTuple_);
+            swap(LeftOverflow_, RightOverflow_);
+            swap(LeftConverter_, RightConverter_);
+        }
+    }
+
+    bool GetSwapped() const { return WasSwapped_; }
+    void SetSwapped(bool wasSwapped) {
+        if (wasSwapped != WasSwapped_) {
+            using std::swap;
+            swap(LeftPackedTuple_, RightPackedTuple_);
+            swap(LeftOverflow_, RightOverflow_);
+            WasSwapped_ = wasSwapped;
+        }
+    }
+
+    void MakeBlocks(const THolderFactory& holderFactory)
+    {
+        Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(OutputRows)));
+
+        size_t index = 0;
+        IBlockLayoutConverter::PackResult leftPackResult{std::move(*LeftPackedTuple_), std::move(*LeftOverflow_), OutputRows};
+        TVector<arrow::Datum> leftColumns;
+        LeftConverter_->Unpack(leftPackResult, leftColumns);
+        for (size_t i = 0; i < LeftIOMap_.size(); i++, index++) {
+            Values[index] = holderFactory.CreateArrowBlock(std::move(leftColumns[LeftIOMap_[i]]));
+        }
+
+        IBlockLayoutConverter::PackResult rightPackResult{std::move(*RightPackedTuple_), std::move(*RightOverflow_), OutputRows};
+        TVector<arrow::Datum> rightColumns;
+        RightConverter_->Unpack(rightPackResult, rightColumns);
+        for (size_t i = 0; i < RightIOMap_.size(); i++, index++) {
+            Values[index] = holderFactory.CreateArrowBlock(std::move(rightColumns[RightIOMap_[i]]));
+        }
+
+        FillArrays();
+        // Move values back from packed view
+        *LeftPackedTuple_ = std::move(leftPackResult.PackedTuples);
+        *LeftOverflow_ = std::move(leftPackResult.Overflow);
+        *RightPackedTuple_ = std::move(rightPackResult.PackedTuples);
+        *RightOverflow_ = std::move(rightPackResult.Overflow);
+    }
+
+    bool IsNotFull() const {
+        return OutputRows < MaxLength_ && HasEnoughMemory();
+    }
+
+    void Reset() {
+        OutputRows = 0;
+        ProbePackedInput.PackedTuples.clear();
+        ProbePackedInput.Overflow.clear();
+        ProbePackedInput.NTuples = 0;
+        // Do not clear build one, because it is constant for all DoProbe calls
+        BuildPackedOutput.clear();
+        ProbePackedOutput.clear();
+    }
+
+private:    
+    bool HasEnoughMemory() const {
+        return ProbePackedInput.Overflow.size() * 5 < ProbePackedInput.Overflow.capacity() * 4;
+    }
+
+public:
+    IBlockLayoutConverter::PackResult BuildPackedInput;   // converted data right after fetch
+    IBlockLayoutConverter::PackResult ProbePackedInput;
+
+    IBlockLayoutConverter::TPackedTuple BuildPackedOutput;   // packed output after join operation
+    IBlockLayoutConverter::TPackedTuple ProbePackedOutput;
+
+    ui32 OutputRows{0};
+
+private:
+    ui32 MaxLength_{0};
+    bool WasSwapped_;
+
+    IBlockLayoutConverter*                  LeftConverter_;
+    IBlockLayoutConverter::TPackedTuple*    LeftPackedTuple_;
+    IBlockLayoutConverter::TOverflow*       LeftOverflow_;
+    const TVector<ui32>&                    LeftIOMap_;
+
+    IBlockLayoutConverter*                  RightConverter_;
+    IBlockLayoutConverter::TPackedTuple*    RightPackedTuple_;
+    IBlockLayoutConverter::TOverflow*       RightOverflow_;
+    const TVector<ui32>&                    RightIOMap_;
+
+    NUdf::TUnboxedValue Table_; // Hash table for smaller stream
+};
+
 
 // -------------------------------------------------------------------
 class THashJoin : public TComputationValue<THashJoin> {
 private:
     using TBase = TComputationValue<THashJoin>;
     using TBlock = TTempJoinStorage::TBlock;
-
-private:
-    struct TState : public TBlockState {
-    public:
-        TState(
-            TMemoryUsageInfo*       memInfo,
-            const TVector<TType*>*  resultItemTypes,
-            IBlockLayoutConverter*  buildConverter,
-            IBlockLayoutConverter*  probeConverter,
-            const TVector<ui32>&    leftIOMap,
-            const TVector<ui32>&    rightIOMap,
-            bool                    wasSwapped
-        )
-            : TBlockState(memInfo, resultItemTypes->size())
-            , Table(buildConverter->GetTupleLayout())
-            , MaxLength_(CalcMaxBlockLength(*resultItemTypes))
-            , LeftIOMap_(leftIOMap)
-            , RightIOMap_(rightIOMap)
-        {
-            LeftPackedTuple_ = &BuildPackedOutput;
-            LeftOverflow_ = &BuildPackedInput.Overflow;
-            LeftConverter_ = buildConverter;
-
-            RightPackedTuple_ = &ProbePackedOutput;
-            RightOverflow_ = &ProbePackedInput.Overflow;
-            RightConverter_ = probeConverter;
-
-            // Check if was swapped.
-            // If was not swapped, left stream is build and right is probe
-            if (wasSwapped) {
-                using std::swap;
-                swap(LeftPackedTuple_, RightPackedTuple_);
-                swap(LeftOverflow_, RightOverflow_);
-                swap(LeftConverter_, RightConverter_);
-            }
-        }
-
-        void MakeBlocks(const THolderFactory& holderFactory)
-        {
-            Values.back() = holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(OutputRows)));
-
-            size_t index = 0;
-            IBlockLayoutConverter::PackResult leftPackResult{std::move(*LeftPackedTuple_), std::move(*LeftOverflow_), OutputRows};
-            TVector<arrow::Datum> leftColumns;
-            LeftConverter_->Unpack(leftPackResult, leftColumns);
-            for (size_t i = 0; i < LeftIOMap_.size(); i++, index++) {
-                Values[index] = holderFactory.CreateArrowBlock(std::move(leftColumns[LeftIOMap_[i]]));
-            }
-
-            IBlockLayoutConverter::PackResult rightPackResult{std::move(*RightPackedTuple_), std::move(*RightOverflow_), OutputRows};
-            TVector<arrow::Datum> rightColumns;
-            RightConverter_->Unpack(rightPackResult, rightColumns);
-            for (size_t i = 0; i < RightIOMap_.size(); i++, index++) {
-                Values[index] = holderFactory.CreateArrowBlock(std::move(rightColumns[RightIOMap_[i]]));
-            }
-
-            FillArrays();
-            // Move values back from packed view
-            *LeftPackedTuple_ = std::move(leftPackResult.PackedTuples);
-            *LeftOverflow_ = std::move(leftPackResult.Overflow);
-            *RightPackedTuple_ = std::move(rightPackResult.PackedTuples);
-            *RightOverflow_ = std::move(rightPackResult.Overflow);
-        }
-
-        bool IsNotFull() const {
-            return OutputRows < MaxLength_ && HasEnoughMemory();
-        }
-
-        void Reset() {
-            OutputRows = 0;
-            ProbePackedInput.PackedTuples.clear();
-            ProbePackedInput.Overflow.clear();
-            ProbePackedInput.NTuples = 0;
-            // Do not clear build one, because it is constant for all DoProbe calls
-            BuildPackedOutput.clear();
-            ProbePackedOutput.clear();
-        }
-    
-    private:
-        bool HasEnoughMemory() const {
-            return ProbePackedInput.Overflow.size() < ProbePackedInput.Overflow.capacity() * 4 / 5;
-        }
-
-    public:
-        IBlockLayoutConverter::PackResult BuildPackedInput;   // converted data right after fetch
-        IBlockLayoutConverter::PackResult ProbePackedInput;
-
-        IBlockLayoutConverter::TPackedTuple BuildPackedOutput;   // packed output after join operation
-        IBlockLayoutConverter::TPackedTuple ProbePackedOutput;
-
-        TRobinHoodTable Table; // Hash table for smaller stream
-    
-        ui32 OutputRows{0};
-    
-    private:
-        ui32 MaxLength_{0};
-
-        IBlockLayoutConverter*                  LeftConverter_;
-        IBlockLayoutConverter::TPackedTuple*    LeftPackedTuple_;
-        IBlockLayoutConverter::TOverflow*       LeftOverflow_;
-        const TVector<ui32>&                    LeftIOMap_;
-
-        IBlockLayoutConverter*                  RightConverter_;
-        IBlockLayoutConverter::TPackedTuple*    RightPackedTuple_;
-        IBlockLayoutConverter::TOverflow*       RightOverflow_;
-        const TVector<ui32>&                    RightIOMap_;
-    };
+    using TTable = TRobinHoodTable;
 
 public:
     THashJoin(
@@ -342,13 +380,14 @@ public:
         auto& tempStorage = *static_cast<TTempJoinStorage*>(tempStorageValue.AsBoxed().Get());
         auto [leftData, rightData] = tempStorage.DetachData();
         auto [isLeftFinished, isRightFinished] = tempStorage.IsFinished(); 
+        bool wasSwapped = false;
         if (!isLeftFinished && isRightFinished) { // assume that finished stream has less size than unfinished
             using std::swap;
             swap(leftStream, rightStream); // so swap them
             swap(leftData, rightData);
             swap(leftItemTypesArg, rightItemTypesArg);
             swap(leftKeyColumns, rightKeyColumns);
-            WasSwapped_ = true;
+            wasSwapped = true;
         }
 
         BuildData_ = std::move(leftData);
@@ -382,10 +421,12 @@ public:
         }
         ProbeConverter_ = MakeBlockLayoutConverter(TTypeInfoHelper(), rightItemTypes, probeRoles, pool);
 
+        Table_.SetTupleLayout(BuildConverter_->GetTupleLayout());
+
         // Create inner hash join state
-        State_ = Ctx_.HolderFactory.Create<TState>(
-            ResultItemTypes_, BuildConverter_.get(), ProbeConverter_.get(), leftIOMap, rightIOMap, WasSwapped_);
-        auto& joinState = *static_cast<TState*>(State_.AsBoxed().Get());
+        JoinState_ = Ctx_.HolderFactory.Create<TJoinState>(
+            ResultItemTypes_, BuildConverter_.get(), ProbeConverter_.get(), leftIOMap, rightIOMap, wasSwapped);
+        auto& joinState = *static_cast<TJoinState*>(JoinState_.AsBoxed().Get());
 
         // Reserve buffers for overflow
         size_t nTuplesBuild = 0;
@@ -411,7 +452,7 @@ public:
     }
 
     void BuildIndex() {
-        auto& joinState = *static_cast<TState*>(State_.AsBoxed().Get());
+        auto& joinState = *static_cast<TJoinState*>(JoinState_.AsBoxed().Get());
 
         for (auto& block: BuildData_) {
             BuildConverter_->Pack(block.Columns, joinState.BuildPackedInput);
@@ -419,12 +460,12 @@ public:
         BuildData_.clear(); // we don't need this data anymore, so don't waste memory
 
         auto& packed = joinState.BuildPackedInput;
-        joinState.Table.Build(packed.PackedTuples.data(), packed.Overflow.data(), packed.NTuples);
+        Table_.Build(packed.PackedTuples.data(), packed.Overflow.data(), packed.NTuples);
     }
 
     NUdf::EFetchStatus DoProbe() {
         NUdf::EFetchStatus status{NUdf::EFetchStatus::Finish};
-        auto& joinState = *static_cast<TState*>(State_.AsBoxed().Get());
+        auto& joinState = *static_cast<TJoinState*>(JoinState_.AsBoxed().Get());
 
         while (joinState.IsNotFull()) {
             if (!IsFinished_) {
@@ -486,7 +527,7 @@ public:
     }
 
     void FillOutput(NUdf::TUnboxedValue* output, ui32 width) {
-        auto& joinState = *static_cast<TState*>(State_.AsBoxed().Get());
+        auto& joinState = *static_cast<TJoinState*>(JoinState_.AsBoxed().Get());
         auto sliceSize = joinState.Slice();
         for (size_t i = 0; i < width; i++) {
             output[i] = joinState.Get(sliceSize, Ctx_.HolderFactory, i);
@@ -494,8 +535,7 @@ public:
     }
 
 private:
-    void DoBatchLookup(TState& joinState) {
-        auto& ht = joinState.Table;
+    void DoBatchLookup(TJoinState& joinState) {
         auto* buildLayout = BuildConverter_->GetTupleLayout();
         auto* probeLayout = ProbeConverter_->GetTupleLayout();
         auto  tuple = joinState.ProbePackedInput.PackedTuples.data();
@@ -503,7 +543,7 @@ private:
         auto  overflow = joinState.ProbePackedInput.Overflow.data();
 
         for (size_t i = 0; i < nTuples; i++, tuple += probeLayout->TotalRowSize) {
-            ht.Apply(tuple, overflow, [&joinState, buildLayout, probeLayout, tuple](const ui8* foundTuple){
+            Table_.Apply(tuple, overflow, [&joinState, buildLayout, probeLayout, tuple](const ui8* foundTuple){
                 // Copy tuple from build part into output
                 auto prevSize = joinState.BuildPackedOutput.size();
                 joinState.BuildPackedOutput.resize(prevSize + buildLayout->TotalRowSize);
@@ -520,24 +560,6 @@ private:
         }
     }
 
-    size_t CalculateExpectedOverflowSize(const NPackedTuple::TTupleLayout* layout, size_t nTuples) {
-        size_t varSizedCount = 0;
-        for (const auto& column: layout->Columns) {
-            if (column.SizeType == NPackedTuple::EColumnSizeType::Variable) {
-                varSizedCount++;
-            }
-        }
-
-        if (varSizedCount == 0) {
-            return 0;
-        }
-
-        // Some weird heuristic.
-        // Lets expect that there will be no more than 10% of var sized values with length
-        // bigger than 64 bytes.
-        return varSizedCount * nTuples * 64 / 10;
-    }
-
 private:
     TComputationContext&        Ctx_;
     const TVector<TType*>*      ResultItemTypes_;
@@ -552,23 +574,228 @@ private:
     const TVector<ui32>*        ProbeKeyColumns_;
     IBlockLayoutConverter::TPtr ProbeConverter_;
 
-    NUdf::TUnboxedValue         State_;
-    bool                        WasSwapped_{false}; // was left and right streams swapped
+    NUdf::TUnboxedValue         JoinState_;
+    TTable                      Table_;
     bool                        IsFinished_{false};
 };
+
+// -------------------------------------------------------------------
+class TInMemoryGraceJoin : public TComputationValue<TInMemoryGraceJoin> {
+private:
+    using TBase = TComputationValue<TInMemoryGraceJoin>;
+    using TBlock = TTempJoinStorage::TBlock;
+    using TTable = TNeumannTable;
+
+public:
+    TInMemoryGraceJoin(
+        TMemoryUsageInfo*       memInfo,
+        TComputationContext&    ctx,
+        const TVector<TType*>*  resultItemTypes,
+        const TVector<TType*>*  leftItemTypesArg,
+        const TVector<ui32>*    leftKeyColumns,
+        const TVector<ui32>&    leftIOMap,
+        const TVector<TType*>*  rightItemTypesArg,
+        const TVector<ui32>*    rightKeyColumns,
+        const TVector<ui32>&    rightIOMap,
+        NUdf::TUnboxedValue     tempStorageValue
+    )
+        : TBase(memInfo)
+        , Ctx_(ctx)
+        , ResultItemTypes_(resultItemTypes)
+    {
+        auto& tempStorage = *static_cast<TTempJoinStorage*>(tempStorageValue.AsBoxed().Get());
+        auto [leftData, rightData] = tempStorage.DetachData();
+        
+        size_t leftRowsNum = 0;
+        for (const auto& block : leftData) {
+            leftRowsNum += block.Size;
+        }
+
+        size_t rightRowsNum = 0;
+        for (const auto& block : rightData) {
+            rightRowsNum += block.Size;
+        }
+
+        // Create converters
+        auto pool = &Ctx_.ArrowMemoryPool;
+
+        TVector<TType*> leftItemTypes;
+        for (size_t i = 0; i < leftItemTypesArg->size() - 1; i++) { // ignore last column, because this is block size
+            leftItemTypes.push_back(AS_TYPE(TBlockType, (*leftItemTypesArg)[i])->GetItemType());
+        }
+        TVector<NPackedTuple::EColumnRole> leftRoles(leftItemTypes.size(), NPackedTuple::EColumnRole::Payload);
+        for (auto keyCol: *leftKeyColumns) {
+            leftRoles[keyCol] = NPackedTuple::EColumnRole::Key;
+        }
+        LeftConverter_ = MakeBlockLayoutConverter(TTypeInfoHelper(), leftItemTypes, leftRoles, pool);
+
+        TVector<TType*> rightItemTypes;
+        for (size_t i = 0; i < rightItemTypesArg->size() - 1; i++) { // ignore last column, because this is block size
+            rightItemTypes.push_back(AS_TYPE(TBlockType, (*rightItemTypesArg)[i])->GetItemType());
+        }
+        TVector<NPackedTuple::EColumnRole> rightRoles(rightItemTypes.size(), NPackedTuple::EColumnRole::Payload);
+        for (auto keyCol: *rightKeyColumns) {
+            rightRoles[keyCol] = NPackedTuple::EColumnRole::Key;
+        }
+        RightConverter_ = MakeBlockLayoutConverter(TTypeInfoHelper(), rightItemTypes, rightRoles, pool);
+
+        const size_t leftTupleSize = leftRowsNum * LeftConverter_->GetTupleLayout()->TotalRowSize;
+        const size_t rightTupleSize = rightRowsNum * RightConverter_->GetTupleLayout()->TotalRowSize;
+        const size_t minTupleSize = std::min(leftTupleSize, rightTupleSize);
+        constexpr size_t bucketDesiredSize = L1_CACHE_SIZE;
+
+        BucketsLogNum_ = minTupleSize ? sizeof(size_t) * 8 - std::countl_zero((minTupleSize - 1) / bucketDesiredSize) : 0;
+        LeftBuckets_.resize(1u << BucketsLogNum_);
+        RightBuckets_.resize(1u << BucketsLogNum_);
+
+        const size_t leftOverflowSizeEst = CalculateExpectedOverflowSize(LeftConverter_->GetTupleLayout(), leftRowsNum >> BucketsLogNum_);
+        const size_t rightOverflowSizeEst = CalculateExpectedOverflowSize(RightConverter_->GetTupleLayout(), rightRowsNum >> BucketsLogNum_);
+        for (ui32 bucket = 0; bucket < (1u << BucketsLogNum_); ++bucket) {
+            LeftBuckets_[bucket].Overflow.reserve(leftOverflowSizeEst);
+            RightBuckets_[bucket].Overflow.reserve(rightOverflowSizeEst);
+        }
+
+        for (auto &block : leftData) {
+            LeftConverter_->BucketPack(block.Columns, LeftBuckets_.data(), BucketsLogNum_);
+        }
+        leftData.clear();
+
+        for (auto &block : rightData) {
+            RightConverter_->BucketPack(block.Columns, RightBuckets_.data(), BucketsLogNum_);
+        }
+        rightData.clear();
+
+        // Create inner hash join state
+        JoinState_ = Ctx_.HolderFactory.Create<TJoinState>(
+            ResultItemTypes_, LeftConverter_.get(), RightConverter_.get(), leftIOMap, rightIOMap, false);
+        auto& joinState = *static_cast<TJoinState*>(JoinState_.AsBoxed().Get());
+        
+        // Reserve memory for output
+        joinState.BuildPackedOutput.reserve(
+            CalcMaxBlockLength(*leftItemTypesArg) * LeftConverter_->GetTupleLayout()->TotalRowSize);
+        joinState.ProbePackedOutput.reserve(
+            CalcMaxBlockLength(*rightItemTypesArg) * RightConverter_->GetTupleLayout()->TotalRowSize);
+    }
+
+    NUdf::EFetchStatus DoProbe() {
+        if (CurrBucket_ >> BucketsLogNum_) {
+            return NUdf::EFetchStatus::Finish;
+        }
+
+        auto& joinState = *static_cast<TJoinState*>(JoinState_.AsBoxed().Get());
+
+        if (NeedNextBucket_) {
+            NeedNextBucket_ = false;
+            BuildIndex(joinState);
+        }
+
+        /// Fill output buffers and signal if next bucket is needed
+        DoBatchLookup(joinState);
+
+        if (joinState.OutputRows == 0) {
+            return DoProbe();
+        }
+
+        // Make output
+        joinState.MakeBlocks(Ctx_.HolderFactory);
+        joinState.Reset();
+        return NUdf::EFetchStatus::Ok;
+    }
+
+    void FillOutput(NUdf::TUnboxedValue* output, ui32 width) {
+        auto& joinState = *static_cast<TJoinState*>(JoinState_.AsBoxed().Get());
+        auto sliceSize = joinState.Slice();
+        for (size_t i = 0; i < width; i++) {
+            output[i] = joinState.Get(sliceSize, Ctx_.HolderFactory, i);
+        }
+    }
+
+private:
+    void BuildIndex(TJoinState& joinState) {
+        auto& leftPack = LeftBuckets_[CurrBucket_];
+        auto& rightPack = RightBuckets_[CurrBucket_];
+
+        if (leftPack.NTuples < rightPack.NTuples) {
+            joinState.SetSwapped(false);
+            joinState.BuildPackedInput = std::move(leftPack);
+            joinState.ProbePackedInput = std::move(rightPack);
+            Table_.SetTupleLayout(LeftConverter_->GetTupleLayout());
+        } else {
+            joinState.SetSwapped(true);
+            joinState.BuildPackedInput = std::move(rightPack);
+            joinState.ProbePackedInput = std::move(leftPack);
+            Table_.SetTupleLayout(RightConverter_->GetTupleLayout());
+        }
+        
+        auto& packed = joinState.BuildPackedInput;
+        Table_.Build(packed.PackedTuples.data(), packed.Overflow.data(), packed.NTuples);
+    }
+
+    void DoBatchLookup(TJoinState& joinState) {
+        const bool wasSwapped = joinState.GetSwapped();
+        auto *const buildLayout = wasSwapped ? RightConverter_->GetTupleLayout() : LeftConverter_->GetTupleLayout();
+        auto *const probeLayout = wasSwapped ? LeftConverter_->GetTupleLayout() : RightConverter_->GetTupleLayout();
+        
+        const auto nTuples = joinState.ProbePackedInput.NTuples;
+        auto *const overflow = joinState.ProbePackedInput.Overflow.data();
+        auto *tuple = joinState.ProbePackedInput.PackedTuples.data() + CurrProbeRow_ * probeLayout->TotalRowSize;
+
+        /// TODO: batching
+        for (; CurrProbeRow_ < nTuples; CurrProbeRow_++, tuple += probeLayout->TotalRowSize) {
+            Table_.Apply(tuple, overflow, [&joinState, buildLayout, probeLayout, tuple](const ui8* foundTuple){
+                // Copy tuple from build part into output
+                auto prevSize = joinState.BuildPackedOutput.size();
+                joinState.BuildPackedOutput.resize(prevSize + buildLayout->TotalRowSize);
+                std::copy(foundTuple, foundTuple + buildLayout->TotalRowSize, joinState.BuildPackedOutput.data() + prevSize);
+
+                // Copy tuple from probe part into output
+                prevSize = joinState.ProbePackedOutput.size();
+                joinState.ProbePackedOutput.resize(prevSize + probeLayout->TotalRowSize);
+                std::copy(tuple, tuple + probeLayout->TotalRowSize, joinState.ProbePackedOutput.data() + prevSize);
+
+                // New row added
+                joinState.OutputRows++;
+            });
+        }
+
+        if (CurrProbeRow_ == nTuples) {
+            NeedNextBucket_ = true;
+            ++CurrBucket_;
+            CurrProbeRow_ = 0;
+        }
+    }
+
+private:
+    TComputationContext&        Ctx_;
+    const TVector<TType*>*      ResultItemTypes_;
+
+    std::unique_ptr<IBlockLayoutConverter> LeftConverter_;
+    std::unique_ptr<IBlockLayoutConverter> RightConverter_;
+
+    ui32 BucketsLogNum_;
+    TVector<IBlockLayoutConverter::PackResult> LeftBuckets_;
+    TVector<IBlockLayoutConverter::PackResult> RightBuckets_;
+    NUdf::TUnboxedValue JoinState_;
+    TTable Table_;
+
+    ui32 CurrBucket_ = 0;
+    ui32 CurrProbeRow_ = 0;
+    bool NeedNextBucket_{true};  // if need to get to next bucket
+};
+
 
 // -------------------------------------------------------------------
 class TStreamValue : public TComputationValue<TStreamValue> {
 private:
     using TBase = TComputationValue<TStreamValue>;
 
-private:
     enum class TMode {
         Start,  // trying to decide what algorithm use: hash join or grace hash join
         HashJoin,
+        InMemoryGraceJoin,
         GraceHashJoin,
     };
-
+    
 public:
     TStreamValue(
         TMemoryUsageInfo*       memInfo,
@@ -622,17 +849,28 @@ private:
                 status = tempStorage.GetStatus();
             }
 
-            if (status == TStatus::StreamFinished) {
+            switch (status) {
+            case TTempJoinStorage::TStatus::BothStreamsFinished: 
+            {
+                MakeInMemoryGraceJoin();
+                SwitchModeTo(TMode::InMemoryGraceJoin);
+                return WideFetch(output, width);
+            }    
+            case TTempJoinStorage::TStatus::OneStreamFinished: {
                 MakeHashJoin();
                 auto& hashJoin = *GetHashJoin();
                 hashJoin.BuildIndex();
 
                 SwitchModeTo(TMode::HashJoin);
                 return NUdf::EFetchStatus::Yield; // return from WideFetch to switch to the next state
-            } else {
+            }
+            case TTempJoinStorage::TStatus::MemoryLimitExceeded: {
                 Y_ASSERT(false); // Grace hash join not implemented yet
                 SwitchModeTo(TMode::GraceHashJoin);
                 return NUdf::EFetchStatus::Yield;
+            }
+            case TTempJoinStorage::TStatus::Unknown:
+                Y_ASSERT(false);
             }
         }
         break;
@@ -642,6 +880,16 @@ private:
             auto status = hashJoin.DoProbe();
             if (status == NUdf::EFetchStatus::Ok) {
                 hashJoin.FillOutput(output, width);
+            }
+            return status;
+        }
+        break;
+        case TMode::InMemoryGraceJoin:
+        {
+            auto& join = *GetInMemoryGraceJoin();
+            auto status = join.DoProbe();
+            if (status == NUdf::EFetchStatus::Ok) {
+                join.FillOutput(output, width);
             }
             return status;
         }
@@ -662,7 +910,7 @@ private:
     }
 
     void MakeHashJoin() {
-        HashJoin_ = Ctx_.HolderFactory.Create<THashJoin>(
+        Join_ = Ctx_.HolderFactory.Create<THashJoin>(
             Ctx_, &ResultItemTypes_,
             &LeftStream_, &LeftItemTypes_, &LeftKeyColumns_, LeftIOMap_,
             &RightStream_, &RightItemTypes_, &RightKeyColumns_, RightIOMap_,
@@ -670,7 +918,19 @@ private:
     }
 
     THashJoin* GetHashJoin() {
-        return static_cast<THashJoin*>(HashJoin_.AsBoxed().Get());
+        return static_cast<THashJoin*>(Join_.AsBoxed().Get());
+    }
+
+    void MakeInMemoryGraceJoin() {
+        Join_ = Ctx_.HolderFactory.Create<TInMemoryGraceJoin>(
+            Ctx_, &ResultItemTypes_,
+            &LeftItemTypes_, &LeftKeyColumns_, LeftIOMap_,
+            &RightItemTypes_, &RightKeyColumns_, RightIOMap_,
+            std::move(TempStorage_));
+    }
+
+    TInMemoryGraceJoin* GetInMemoryGraceJoin() {
+        return static_cast<TInMemoryGraceJoin*>(Join_.AsBoxed().Get());
     }
 
     TMode GetMode() const {
@@ -697,7 +957,7 @@ private:
     const TVector<ui32>&    RightIOMap_;
 
     NUdf::TUnboxedValue     TempStorage_;
-    NUdf::TUnboxedValue     HashJoin_;
+    NUdf::TUnboxedValue     Join_;
 };
 
 // -------------------------------------------------------------------

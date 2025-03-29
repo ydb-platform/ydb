@@ -547,4 +547,55 @@ Y_UNIT_TEST_SUITE(TBlockLayoutConverterTest) {
         }
     }
     #endif
+
+    Y_UNIT_TEST(TestBuckets) {
+        TBlockLayoutConverterTestData data;
+
+        const auto int64Type = data.PgmBuilder.NewDataType(NUdf::EDataSlot::Int64, false);
+        TVector< NKikimr::NMiniKQL::TType*> types{int64Type};
+        TVector<NPackedTuple::EColumnRole> roles{NPackedTuple::EColumnRole::Key};
+
+        size_t itemSize = NMiniKQL::CalcMaxBlockItemSize(int64Type);
+        size_t blockLen = NMiniKQL::CalcBlockLen(itemSize);
+        Y_ENSURE(blockLen > 8);
+
+        constexpr auto testSize = NMiniKQL::MaxBlockSizeInBytes / sizeof(i64);
+
+        auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), int64Type, *data.ArrowPool, blockLen, nullptr);
+        auto converter = MakeBlockLayoutConverter(NMiniKQL::TTypeInfoHelper(), types, roles, data.ArrowPool);
+
+        for (size_t i = 0; i < testSize; i++) {
+            builder->Add(TBlockItem(i));
+        }
+        auto datum = builder->Build(true);
+        Y_ENSURE(datum.is_array());
+        TVector<arrow::Datum> columns{datum};
+
+        IBlockLayoutConverter::PackResult packRes;
+        converter->Pack(columns, packRes);
+        UNIT_ASSERT_VALUES_EQUAL_C(packRes.NTuples, testSize, "Expected the same dataset sizes after conversion");
+
+        static constexpr ui32 bucketsLogNum = 5;
+        auto packReses = std::array<IBlockLayoutConverter::PackResult, 1u << bucketsLogNum>{};
+        converter->BucketPack(columns, packReses.data(), bucketsLogNum);
+        
+        const ui32 bucketedTuplesNum = std::accumulate(packReses.begin(), packReses.end(), 0, [](size_t lhs, const IBlockLayoutConverter::PackResult& rhs) {
+            return lhs + rhs.NTuples;
+        });
+        UNIT_ASSERT_EQUAL(testSize, bucketedTuplesNum);
+
+        const size_t totalRowSize = converter->GetTupleLayout()->TotalRowSize;
+
+        ui32 hashsum = 0;
+        for (size_t i = 0; i < packRes.PackedTuples.size(); i += totalRowSize) {
+            hashsum += ReadUnaligned<ui32>(packRes.PackedTuples.data() + i);
+        }
+        ui32 bhashsum = 0;
+        for (const auto& packRes : packReses) {
+            for (size_t i = 0; i < packRes.PackedTuples.size(); i += totalRowSize) {
+                bhashsum += ReadUnaligned<ui32>(packRes.PackedTuples.data() + i);
+            }
+        }
+        UNIT_ASSERT_EQUAL(hashsum, bhashsum);
+    }
 }

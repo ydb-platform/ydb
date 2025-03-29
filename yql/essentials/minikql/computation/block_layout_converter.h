@@ -28,6 +28,7 @@ public:
 
     // Can be called multiple times to accumulate packed data in one storage
     virtual void Pack(const TVector<arrow::Datum>& columns, PackResult& packed) = 0;
+    virtual void BucketPack(const TVector<arrow::Datum>& columns, PackResult packs[], ui32 bucketsLogNum) = 0;
     // Can not be called multiple times due to immutability of arrow arrays
     virtual void Unpack(const PackResult& packed, TVector<arrow::Datum>& columns) = 0;
     virtual const NPackedTuple::TTupleLayout* GetTupleLayout() const = 0;

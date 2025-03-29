@@ -406,6 +406,29 @@ struct TColumnDataExtractorTraits {
 // ------------------------------------------------------------
 
 class TBlockLayoutConverter : public IBlockLayoutConverter {
+    auto GetColumns_(const TVector<arrow::Datum>& columns) {
+        Y_ENSURE(columns.size() == Extractors_.size());
+
+        std::fill(IsBitmapNull_.begin(), IsBitmapNull_.end(), false);
+        TVector<const ui8*> columnsData;
+        TVector<const ui8*> columnsNullBitmap;
+
+        for (size_t i = 0; i < columns.size(); ++i) {
+            const auto& column = columns[i];
+
+            auto data = Extractors_[i]->GetColumnsData(column.array());
+            columnsData.insert(columnsData.end(), data.begin(), data.end());
+
+            auto nullBitmap = Extractors_[i]->GetNullBitmap(column.array());
+            columnsNullBitmap.insert(columnsNullBitmap.end(), nullBitmap.begin(), nullBitmap.end());
+            if (nullBitmap.front() == nullptr) {
+                IsBitmapNull_[i] = true;
+            }
+        }
+
+        return std::pair{std::move(columnsData), std::move(columnsNullBitmap)};
+    }
+
 public:
     TBlockLayoutConverter(
         TVector<IColumnDataExtractor::TPtr>&& extractors,
@@ -446,23 +469,7 @@ public:
     }
 
     void Pack(const TVector<arrow::Datum>& columns, PackResult& packed) override {
-        Y_ENSURE(columns.size() == Extractors_.size());
-        std::fill(IsBitmapNull_.begin(), IsBitmapNull_.end(), false);
-        TVector<const ui8*> columnsData;
-        TVector<const ui8*> columnsNullBitmap;
-
-        for (size_t i = 0; i < columns.size(); ++i) {
-            const auto& column = columns[i];
-
-            auto data = Extractors_[i]->GetColumnsData(column.array());
-            columnsData.insert(columnsData.end(), data.begin(), data.end());
-
-            auto nullBitmap = Extractors_[i]->GetNullBitmap(column.array());
-            columnsNullBitmap.insert(columnsNullBitmap.end(), nullBitmap.begin(), nullBitmap.end());
-            if (nullBitmap.front() == nullptr) {
-                IsBitmapNull_[i] = true;
-            }
-        }
+        auto [columnsData, columnsNullBitmap] = GetColumns_(columns);
 
         auto& packedTuples = packed.PackedTuples;
         auto& overflow = packed.Overflow;
@@ -478,7 +485,24 @@ public:
             columnsData.data(), columnsNullBitmap.data(),
             packedTuples.data() + currentSize, overflow, 0, tuplesToPack);
     }
-    
+
+    void BucketPack(const TVector<arrow::Datum>& columns, PackResult packs[], ui32 bucketsLogNum) override {
+        auto [columnsData, columnsNullBitmap] = GetColumns_(columns);
+        auto tuplesToPack = columns.front().array()->length;
+
+        const auto reses = PaddedPtr(&packs[0].PackedTuples, sizeof(PackResult));
+        const auto overflows = PaddedPtr(&packs[0].Overflow, sizeof(PackResult));
+
+        TupleLayout_->BucketPack(
+            columnsData.data(), columnsNullBitmap.data(),
+            reses, overflows, 0, tuplesToPack, bucketsLogNum);
+
+        for (ui32 bucket = 0; bucket < (1u << bucketsLogNum); ++bucket) {
+            auto& pack = packs[bucket];
+            pack.NTuples = pack.PackedTuples.size() / TupleLayout_->TotalRowSize;
+        }
+    }
+
     void Unpack(const PackResult& packed, TVector<arrow::Datum>& columns) override {
         columns.resize(Extractors_.size());
 

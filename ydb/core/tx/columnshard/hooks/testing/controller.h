@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/tx/columnshard/common/path_id.h>
 #include "ro_controller.h"
 
 #include <ydb/core/tx/columnshard/blob.h>
@@ -48,6 +49,10 @@ private:
 
     TMutex ActiveTabletsMutex;
     std::set<ui64> ActiveTablets;
+    THashMap<
+        ui64, //tabletId
+        THashMap<NKikimr::NColumnShard::TLocalPathId, NKikimr::NColumnShard::TInternalPathId>
+    > PathMapping;
 
     THashMap<TString, std::shared_ptr<NOlap::NDataLocks::ILock>> ExternalLocks;
 
@@ -328,8 +333,41 @@ public:
         RestartOnLocalDbTxCommitted = std::move(txInfo);
     }
 
+    const auto& GetPathMapping() const {
+        return PathMapping;
+    }
+
+    const NKikimr::NColumnShard::TInternalPathId GetInternalPathIdVerified(const ui64 tabletId, const NKikimr::NColumnShard::TLocalPathId localPathId) {
+        TGuard<TMutex> g(ActiveTabletsMutex);
+        const auto* tabletMapping = PathMapping.FindPtr(tabletId);
+        AFL_VERIFY(tabletMapping);;
+        const auto* p = tabletMapping->FindPtr(localPathId);
+        AFL_VERIFY(p);
+        return *p;
+    }
+
     virtual void OnAfterLocalTxCommitted(
         const NActors::TActorContext& ctx, const ::NKikimr::NColumnShard::TColumnShard& shard, const TString& txInfo) override;
+
+
+    virtual void OnAddPathIdMapping(const ui64 tabletId, const NKikimr::NColumnShard::TInternalPathId internalPathId, const NKikimr::NColumnShard::TLocalPathId localPathId) override {
+        TGuard<TMutex> g(ActiveTabletsMutex);
+        if (auto tabletMapping = PathMapping.FindPtr(tabletId)) {
+            tabletMapping->emplace(localPathId, internalPathId);
+        } else {
+            PathMapping.emplace(tabletId, THashMap<NKikimr::NColumnShard::TLocalPathId, NKikimr::NColumnShard::TInternalPathId>{{localPathId, internalPathId}});
+        }
+    }
+    virtual void OnDeletePathIdMapping(const ui64 tabletId, const NKikimr::NColumnShard::TInternalPathId internalPathId, const NKikimr::NColumnShard::TLocalPathId localPathId) override {
+        Y_UNUSED(internalPathId);
+        auto* tabletMapping = PathMapping.FindPtr(tabletId);
+        AFL_VERIFY(tabletMapping);
+        tabletMapping->erase(localPathId);
+        if (tabletMapping->empty()) {
+            PathMapping.erase(tabletId);
+        }
+    }
+
 };
 
 }

@@ -15,7 +15,7 @@ private:
     YDB_READONLY_DEF(NSharding::TGranuleShardingLogicContainer, ShardingInfo);
     YDB_READONLY(TSnapshot, SinceSnapshot, TSnapshot::Zero());
     YDB_READONLY(ui64, SnapshotVersion, 0);
-    YDB_READONLY_DEF(TInternalPathId, PathId);
+    YDB_READONLY(TInternalPathId, PathId, TInternalPathId{});
 
 public:
     TGranuleShardingInfo(const NSharding::TGranuleShardingLogicContainer& shardingInfo, const TSnapshot& sinceSnapshot, const ui64 version, const TInternalPathId pathId)

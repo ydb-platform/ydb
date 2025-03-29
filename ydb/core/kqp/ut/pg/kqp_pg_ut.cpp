@@ -1247,6 +1247,111 @@ Y_UNIT_TEST_SUITE(KqpPg) {
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
     }
 
+    Y_UNIT_TEST(YQL_NewRBO1) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(R"(
+            SELECT 1 as a, 2 as b;
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(YQL_NewRBO2) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/foo` (
+                id	Int64	NOT NULL,	
+	            name	String,
+                primary key(id)	
+            );
+        )").GetValueSync();
+
+        db = kikimr.GetTableClient();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session2.ExecuteDataQuery(R"(
+            PRAGMA TablePathPrefix = "/Root/";
+            SELECT id as id2 FROM foo WHERE name = 'some_name';
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(YQL_NewRBO3) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/foo` (
+                id	Int64	NOT NULL,	
+	            name	String,
+                primary key(id)	
+            );
+
+            CREATE TABLE `/Root/bar` (
+                id	Int64	NOT NULL,	
+	            lastname	String,
+                primary key(id)	
+            );
+        )").GetValueSync();
+
+        db = kikimr.GetTableClient();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session2.ExecuteDataQuery(R"(
+            PRAGMA TablePathPrefix = "/Root/";
+            SELECT f.id as id2 FROM foo AS f CROSS JOIN bar WHERE name = 'some_name';
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    Y_UNIT_TEST(YQL_NewRBO4) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        TKikimrRunner kikimr(NKqp::TKikimrSettings().SetWithSampleTables(false).SetAppConfig(appConfig));
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        session.ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/foo` (
+                id	Int64	NOT NULL,	
+	            name	String,
+                primary key(id)	
+            );
+
+            CREATE TABLE `/Root/bar` (
+                id	Int64	NOT NULL,	
+	            lastname	String,
+                primary key(id)	
+            );
+        )").GetValueSync();
+
+        db = kikimr.GetTableClient();
+        auto session2 = db.CreateSession().GetValueSync().GetSession();
+
+        auto result = session2.ExecuteDataQuery(R"(
+            PRAGMA TablePathPrefix = "/Root/";
+            PRAGMA ydb.OptOverrideStatistics = '{"/Root/foo": {"n_rows": 1e9}, "/Root/bar": {"n_rows" : 1e9}}';
+            SELECT f.id as id2 FROM foo AS f CROSS JOIN bar WHERE f.id = bar.id and name = 'some_name';
+        )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
     Y_UNIT_TEST(ReadPgArray) {
         NKikimr::NMiniKQL::TScopedAlloc alloc(__LOCATION__);
         auto binaryStr = NPg::PgNativeBinaryFromNativeText("{1,1}", INT2ARRAYOID).Str;

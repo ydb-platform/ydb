@@ -157,7 +157,7 @@ public:
     }
 
     virtual void ClearResult() {
-        StageData.reset();
+        ClearStageData();
         StageResult.reset();
         ResourceGuards.clear();
         SourceGroupGuard = nullptr;
@@ -264,12 +264,11 @@ public:
         : TBase(sourceId, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions)
         , Start(context->GetReadMetadata()->IsDescSorted() ? finish : start, context->GetReadMetadata()->IsDescSorted())
         , Finish(context->GetReadMetadata()->IsDescSorted() ? start : finish, context->GetReadMetadata()->IsDescSorted()) {
-        StageData = std::make_unique<TFetchedData>(true, recordsCount);
         UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(start, finish);
         AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::NoUsage);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugString())(
             "finish", Finish.DebugString());
-        Y_ABORT_UNLESS(Start.Compare(Finish) != std::partial_ordering::greater);
+        AFL_VERIFY_DEBUG(Start.Compare(Finish) != std::partial_ordering::greater);
     }
 
     virtual ~IDataSource() = default;
@@ -286,7 +285,7 @@ private:
 
     virtual void InitUsedRawBytes() override {
         AFL_VERIFY(!UsedRawBytes);
-        UsedRawBytes = StageData->GetPortionAccessor().GetColumnRawBytes(GetContext()->GetAllUsageColumns()->GetColumnIds(), false);
+        UsedRawBytes = GetStageData().GetPortionAccessor().GetColumnRawBytes(GetContext()->GetAllUsageColumns()->GetColumnIds(), false);
     }
 
     virtual bool DoStartFetchingColumns(

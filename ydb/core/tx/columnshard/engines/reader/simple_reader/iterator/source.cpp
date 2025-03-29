@@ -27,6 +27,7 @@ void IDataSource::InitFetchingPlan(const std::shared_ptr<TFetchingScript>& fetch
 
 void IDataSource::StartProcessing(const std::shared_ptr<IDataSource>& sourcePtr) {
     AFL_VERIFY(!ProcessingStarted);
+    InitStageData(std::make_unique<TFetchedData>(true, sourcePtr->GetRecordsCount()));
     AFL_VERIFY(FetchingPlan);
     ProcessingStarted = true;
     SourceGroupGuard = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildGroupGuard(
@@ -58,7 +59,7 @@ void IDataSource::DoOnEmptyStageData(const std::shared_ptr<NCommon::IDataSource>
     ResourceGuards.clear();
     StageResult = TFetchedResult::BuildEmpty();
     StageResult->SetPages({ TPortionDataAccessor::TReadPage(0, GetRecordsCount(), 0) });
-    StageData.reset();
+    ClearStageData();
 }
 
 void IDataSource::DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>& /*sourcePtr*/) {
@@ -68,14 +69,14 @@ void IDataSource::DoBuildStageResult(const std::shared_ptr<NCommon::IDataSource>
 void IDataSource::Finalize(const std::optional<ui64> memoryLimit) {
     TMemoryProfileGuard mpg("SCAN_PROFILE::STAGE_RESULT", IS_DEBUG_LOG_ENABLED(NKikimrServices::TX_COLUMNSHARD_SCAN_MEMORY));
     if (memoryLimit && !IsSourceInMemory()) {
-        const auto accessor = StageData->GetPortionAccessor();
-        StageResult = std::make_unique<TFetchedResult>(std::move(StageData), *GetContext()->GetCommonContext()->GetResolver());
+        const auto accessor = GetStageData().GetPortionAccessor();
+        StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
         StageResult->SetPages(accessor.BuildReadPages(*memoryLimit, GetContext()->GetProgramInputColumns()->GetColumnIds()));
     } else {
-        StageResult = std::make_unique<TFetchedResult>(std::move(StageData), *GetContext()->GetCommonContext()->GetResolver());
+        StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
         StageResult->SetPages({ TPortionDataAccessor::TReadPage(0, GetRecordsCount(), 0) });
     }
-    StageData.reset();
+    ClearStageData();
 }
 
 void TPortionDataSource::NeedFetchColumns(const std::set<ui32>& columnIds, TBlobsAction& blobsAction,
@@ -114,15 +115,15 @@ bool TPortionDataSource::DoStartFetchingColumns(
     const std::shared_ptr<NCommon::IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step.GetName());
     AFL_VERIFY(columns.GetColumnsCount());
-    AFL_VERIFY(!StageData->GetAppliedFilter() || !StageData->GetAppliedFilter()->IsTotalDenyFilter());
+    AFL_VERIFY(!GetStageData().GetAppliedFilter() || !GetStageData().GetAppliedFilter()->IsTotalDenyFilter());
     auto& columnIds = columns.GetColumnIds();
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step.GetName())("fetching_info", step.DebugString());
 
     TBlobsAction action(GetContext()->GetCommonContext()->GetStoragesManager(), NBlobOperations::EConsumer::SCAN);
     {
         THashMap<TChunkAddress, TPortionDataAccessor::TAssembleBlobInfo> nullBlocks;
-        NeedFetchColumns(columnIds, action, nullBlocks, StageData->GetAppliedFilter());
-        StageData->AddDefaults(std::move(nullBlocks));
+        NeedFetchColumns(columnIds, action, nullBlocks, GetStageData().GetAppliedFilter());
+        MutableStageData().AddDefaults(std::move(nullBlocks));
     }
 
     auto readActions = action.GetReadingActions();
@@ -387,7 +388,7 @@ public:
 }   // namespace
 
 bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
-    AFL_VERIFY(!StageData->HasPortionAccessor());
+    AFL_VERIFY(!GetStageData().HasPortionAccessor());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step.GetName())("fetching_info", step.DebugString());
 
     std::shared_ptr<TDataAccessorsRequest> request = std::make_shared<TDataAccessorsRequest>("SIMPLE::" + step.GetName());

@@ -47,6 +47,9 @@ private:
 
     virtual bool DoCheckValue(const TString& data, const std::optional<ui64> cat, const std::shared_ptr<arrow::Scalar>& value,
         const EOperation op) const override final {
+        if (data.empty()) {
+            return false;
+        }
         auto storageConclusion = BitsStorageConstructor->Build(data);
         return DoCheckValueImpl(*storageConclusion.GetResult(), cat, value, op);
     }

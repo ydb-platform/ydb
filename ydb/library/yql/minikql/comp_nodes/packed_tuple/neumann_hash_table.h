@@ -128,11 +128,11 @@ class TNeumannHashTable {
     }
 
     void SetTupleLayout(const TTupleLayout *layout) {
+        Clear();
+
         Layout_ = layout;
         IsInplace_ = layout->TotalRowSize <= 16;
         BufferSlotSize_ = IsInplace_ ? layout->TotalRowSize : sizeof(TOutplace);
-
-        Clear();
     }
 
     TNeumannHashTable(const TNeumannHashTable &) = delete;

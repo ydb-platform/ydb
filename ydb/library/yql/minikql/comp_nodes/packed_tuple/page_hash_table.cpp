@@ -10,41 +10,27 @@ namespace NPackedTuple {
 
 
 // -----------------------------------------------------------------
-THolder<TPageHashTable> TPageHashTable::Create(const TTupleLayout* layout, ui32 capacity) {
+THolder<TPageHashTable> TPageHashTable::Create(const TTupleLayout* layout, ui32) {
     if (NX86::HaveAVX2()) {
-        return MakeHolder<TPageHashTableImpl<NSimd::TSimdAVX2Traits>>(layout, capacity);
+        return MakeHolder<TPageHashTableImpl<NSimd::TSimdAVX2Traits>>(layout);
     }
 
     if (NX86::HaveSSE42()) {
-        return MakeHolder<TPageHashTableImpl<NSimd::TSimdSSE42Traits>>(layout, capacity);
+        return MakeHolder<TPageHashTableImpl<NSimd::TSimdSSE42Traits>>(layout);
     }
 
-    return MakeHolder<TPageHashTableImpl<NSimd::TSimdFallbackTraits>>(layout, capacity);
+    return MakeHolder<TPageHashTableImpl<NSimd::TSimdFallbackTraits>>(layout);
 }
 
 
 // -----------------------------------------------------------------
 template <typename TTraits>
-TPageHashTableImpl<TTraits>::TPageHashTableImpl(const TTupleLayout* layout, ui32 capacity)
-    : KeySize_(layout->KeyColumnsSize)
-    , KeyOffset_(layout->KeyColumnsOffset)
-    , PayloadSize_(layout->PayloadSize)
-    , TupleSize_(layout->TotalRowSize)
-    , PageHeaderSize_(SlotsCount_ + 1 /* One byte is used for filled slots count */)
-    , PageSize_(PageHeaderSize_ + SlotSize_ * SlotsCount_)
-    , TotalSlots_((7 * (capacity + 7)) / 3)
-    , TotalPages_((TotalSlots_ * SlotSize_ + PageSize_ - 1) / PageSize_ + 7)
-    , Layout_(layout)
-    , OriginalData_(nullptr) {
-    Y_ASSERT(TotalPages_ > 0);
+void TPageHashTableImpl<TTraits>::Build(const ui8* data, const ui8 *const overflow, ui32 nItems) {
+    TotalSlots_ = (7 * (nItems + 7)) / 3;
+    TotalPages_ = (TotalSlots_ * SlotSize_ + PageSize_ - 1) / PageSize_ + 7;
     PageIndexOffset_ = 32 /* size of crc32 in bits */ - arrow::BitUtil::NumRequiredBits(TotalPages_ - 1);
-    Data_.resize(TotalPages_ * PageSize_, 0);
-}
+    Data_.assign(TotalPages_ * PageSize_, 0);
 
-
-// -----------------------------------------------------------------
-template <typename TTraits>
-void TPageHashTableImpl<TTraits>::Build(const ui8* data, const std::vector<ui8, TMKQLAllocator<ui8>>* overflow, ui32 nItems) {
     OriginalData_ = data;
     OriginalOverflow_ = overflow;
 
@@ -88,11 +74,13 @@ void TPageHashTableImpl<TTraits>::Build(const ui8* data, const std::vector<ui8, 
     }
 }
 
+template void TPageHashTableImpl<NSimd::TSimdFallbackTraits>::Build(const ui8* data, const ui8 *const overflow, ui32 nItems);
+
 template __attribute__((target("avx2"))) void
-TPageHashTableImpl<NSimd::TSimdAVX2Traits>::Build(const ui8* data, const std::vector<ui8, TMKQLAllocator<ui8>>* overflow, ui32 nItems);
+TPageHashTableImpl<NSimd::TSimdAVX2Traits>::Build(const ui8* data, const ui8 *const overflow, ui32 nItems);
 
 template __attribute__((target("sse4.2"))) void
-TPageHashTableImpl<NSimd::TSimdSSE42Traits>::Build(const ui8* data, const std::vector<ui8, TMKQLAllocator<ui8>>* overflow, ui32 nItems);
+TPageHashTableImpl<NSimd::TSimdSSE42Traits>::Build(const ui8* data, const ui8 *const overflow, ui32 nItems);
 
 
 // -----------------------------------------------------------------
@@ -203,7 +191,7 @@ ui32 TPageHashTableImpl<TTraits>::FindMatches(const TTupleLayout* layout, const 
                     continue;
                 }
                 bigKeySize: {
-                    if (CompareKeys(Layout_, tupleAddr, *OriginalOverflow_, layout, tupleToFind, overflow)) {
+                    if (Layout_->KeysEqual(tupleAddr, OriginalOverflow_, tupleToFind, overflow.data())) {
                         found++;
                     }
                     continue;
@@ -224,6 +212,8 @@ ui32 TPageHashTableImpl<TTraits>::FindMatches(const TTupleLayout* layout, const 
     return found;
 }
 
+template ui32 TPageHashTableImpl<NSimd::TSimdFallbackTraits>::FindMatches(const TTupleLayout* layout, const ui8* data, const std::vector<ui8, TMKQLAllocator<ui8>>& overflow, ui32 nItems);
+
 template __attribute__((target("avx2"))) ui32
 TPageHashTableImpl<NSimd::TSimdAVX2Traits>::FindMatches(const TTupleLayout* layout, const ui8* data, const std::vector<ui8, TMKQLAllocator<ui8>>& overflow, ui32 nItems);
 
@@ -234,6 +224,10 @@ TPageHashTableImpl<NSimd::TSimdSSE42Traits>::FindMatches(const TTupleLayout* lay
 // -----------------------------------------------------------------
 template <typename TTraits>
 void TPageHashTableImpl<TTraits>::Clear() {
+    if (OriginalData_ == nullptr) {
+        return;
+    }
+
     OriginalData_ = nullptr;
     for (ui32 i = 0; i < TotalPages_; i++) {
         ui8* pageAddr = Data_.data() + i * PageSize_;
@@ -241,6 +235,9 @@ void TPageHashTableImpl<TTraits>::Clear() {
     }
 }
 
+template void TPageHashTableImpl<NSimd::TSimdFallbackTraits>::Clear();
+template void TPageHashTableImpl<NSimd::TSimdSSE42Traits>::Clear();
+template void TPageHashTableImpl<NSimd::TSimdAVX2Traits>::Clear();
 
 }
 }

@@ -151,7 +151,7 @@ Y_UNIT_TEST(BenchBuild) {
         if (createUs == 0) createUs = 1;
 
         std::chrono::steady_clock::time_point buildBegin = std::chrono::steady_clock::now();
-        ht->Build(res.data(), &overflow, tuples);
+        ht->Build(res.data(), overflow.data(), tuples);
         std::chrono::steady_clock::time_point buildEnd = std::chrono::steady_clock::now();
         ui64 buildUs = std::chrono::duration_cast<std::chrono::microseconds>(buildEnd - buildBegin).count();
         if (buildUs == 0) buildUs = 1;
@@ -175,7 +175,7 @@ Y_UNIT_TEST(BenchBuild) {
         if (createUs == 0) createUs = 1;
 
         std::chrono::steady_clock::time_point buildBegin = std::chrono::steady_clock::now();
-        ht->Build(res.data(), &overflow, tuples);
+        ht->Build(res.data(), overflow.data(), tuples);
         std::chrono::steady_clock::time_point buildEnd = std::chrono::steady_clock::now();
         ui64 buildUs = std::chrono::duration_cast<std::chrono::microseconds>(buildEnd - buildBegin).count();
         if (buildUs == 0) buildUs = 1;
@@ -199,7 +199,7 @@ Y_UNIT_TEST(BenchBuild) {
         if (createUs == 0) createUs = 1;
 
         std::chrono::steady_clock::time_point buildBegin = std::chrono::steady_clock::now();
-        ht->Build(res.data(), &overflow, tuples);
+        ht->Build(res.data(), overflow.data(), tuples);
         std::chrono::steady_clock::time_point buildEnd = std::chrono::steady_clock::now();
         ui64 buildUs = std::chrono::duration_cast<std::chrono::microseconds>(buildEnd - buildBegin).count();
         if (buildUs == 0) buildUs = 1;
@@ -223,7 +223,7 @@ Y_UNIT_TEST(BenchBuild) {
         if (createUs == 0) createUs = 1;
 
         std::chrono::steady_clock::time_point buildBegin = std::chrono::steady_clock::now();
-        ht->Build(res.data(), &overflow, tuples);
+        ht->Build(res.data(), overflow.data(), tuples);
         std::chrono::steady_clock::time_point buildEnd = std::chrono::steady_clock::now();
         ui64 buildUs = std::chrono::duration_cast<std::chrono::microseconds>(buildEnd - buildBegin).count();
         if (buildUs == 0) buildUs = 1;
@@ -300,7 +300,7 @@ Y_UNIT_TEST(Find) {
     tl->Pack(cols, colsValid, res.data(), overflow, 0, NTuples1);
 
     auto ht = TPageHashTable::Create(tl.Get(), NTuples1);
-    ht->Build(res.data(), &overflow, NTuples1);
+    ht->Build(res.data(), overflow.data(), NTuples1);
 
     auto tuple = res.data() + 42 /* index */ * tl->TotalRowSize;
     auto count = ht->FindMatches(tl.Get(), tuple, overflow, 1);
@@ -357,7 +357,7 @@ Y_UNIT_TEST(BenchPositiveFind) { // find existent tuples
         ui64 bytes = (tl->TotalRowSize) * tuples;
 
         auto ht = TPageHashTable::Create(tl.Get(), tuples);
-        ht->Build(res.data(), &overflow, tuples);
+        ht->Build(res.data(), overflow.data(), tuples);
 
         auto selected = tuples / 10;
         auto selectedBytes = selected * tl->TotalRowSize;
@@ -383,7 +383,7 @@ Y_UNIT_TEST(BenchPositiveFind) { // find existent tuples
         ui64 bytes = (tl->TotalRowSize) * tuples;
 
         auto ht = TPageHashTable::Create(tl.Get(), tuples);
-        ht->Build(res.data(), &overflow, tuples);
+        ht->Build(res.data(), overflow.data(), tuples);
 
         auto selected = tuples / 10;
         auto selectedBytes = selected * tl->TotalRowSize;
@@ -409,7 +409,7 @@ Y_UNIT_TEST(BenchPositiveFind) { // find existent tuples
         ui64 bytes = (tl->TotalRowSize) * tuples;
 
         auto ht = TPageHashTable::Create(tl.Get(), tuples);
-        ht->Build(res.data(), &overflow, tuples);
+        ht->Build(res.data(), overflow.data(), tuples);
 
         auto selected = tuples / 10;
         auto selectedBytes = selected * tl->TotalRowSize;
@@ -435,7 +435,7 @@ Y_UNIT_TEST(BenchPositiveFind) { // find existent tuples
         ui64 bytes = (tl->TotalRowSize) * tuples;
 
         auto ht = TPageHashTable::Create(tl.Get(), tuples);
-        ht->Build(res.data(), &overflow, tuples);
+        ht->Build(res.data(), overflow.data(), tuples);
 
         auto selected = tuples / 10;
         auto selectedBytes = selected * tl->TotalRowSize;
@@ -509,7 +509,7 @@ Y_UNIT_TEST(BenchNegativeFind) { // find non-existent tuples
         ui64 bytes = (tl->TotalRowSize) * tuples;
 
         auto ht = TPageHashTable::Create(tl.Get(), tuples);
-        ht->Build(res.data(), &overflow, tuples);
+        ht->Build(res.data(), overflow.data(), tuples);
 
         auto selected = tuples / 10;
         auto selectedBytes = selected * tl->TotalRowSize;
@@ -535,7 +535,7 @@ Y_UNIT_TEST(BenchNegativeFind) { // find non-existent tuples
         ui64 bytes = (tl->TotalRowSize) * tuples;
 
         auto ht = TPageHashTable::Create(tl.Get(), tuples);
-        ht->Build(res.data(), &overflow, tuples);
+        ht->Build(res.data(), overflow.data(), tuples);
 
         auto selected = tuples / 10;
         auto selectedBytes = selected * tl->TotalRowSize;
@@ -561,7 +561,7 @@ Y_UNIT_TEST(BenchNegativeFind) { // find non-existent tuples
         ui64 bytes = (tl->TotalRowSize) * tuples;
 
         auto ht = TPageHashTable::Create(tl.Get(), tuples);
-        ht->Build(res.data(), &overflow, tuples);
+        ht->Build(res.data(), overflow.data(), tuples);
 
         auto selected = tuples / 10;
         auto selectedBytes = selected * tl->TotalRowSize;
@@ -587,7 +587,7 @@ Y_UNIT_TEST(BenchNegativeFind) { // find non-existent tuples
         ui64 bytes = (tl->TotalRowSize) * tuples;
 
         auto ht = TPageHashTable::Create(tl.Get(), tuples);
-        ht->Build(res.data(), &overflow, tuples);
+        ht->Build(res.data(), overflow.data(), tuples);
 
         auto selected = tuples / 10;
         auto selectedBytes = selected * tl->TotalRowSize;
@@ -693,7 +693,7 @@ Y_UNIT_TEST(BenchPositiveFindLargeTuple) { // Tuple size > 16
         ui64 bytes = (tl->TotalRowSize) * tuples;
 
         auto ht = TPageHashTable::Create(tl.Get(), tuples);
-        ht->Build(res.data(), &overflow, tuples);
+        ht->Build(res.data(), overflow.data(), tuples);
 
         auto selected = tuples / 10;
         auto selectedBytes = selected * tl->TotalRowSize;
@@ -719,7 +719,7 @@ Y_UNIT_TEST(BenchPositiveFindLargeTuple) { // Tuple size > 16
         ui64 bytes = (tl->TotalRowSize) * tuples;
 
         auto ht = TPageHashTable::Create(tl.Get(), tuples);
-        ht->Build(res.data(), &overflow, tuples);
+        ht->Build(res.data(), overflow.data(), tuples);
 
         auto selected = tuples / 10;
         auto selectedBytes = selected * tl->TotalRowSize;
@@ -745,7 +745,7 @@ Y_UNIT_TEST(BenchPositiveFindLargeTuple) { // Tuple size > 16
         ui64 bytes = (tl->TotalRowSize) * tuples;
 
         auto ht = TPageHashTable::Create(tl.Get(), tuples);
-        ht->Build(res.data(), &overflow, tuples);
+        ht->Build(res.data(), overflow.data(), tuples);
 
         auto selected = tuples / 10;
         auto selectedBytes = selected * tl->TotalRowSize;
@@ -771,7 +771,7 @@ Y_UNIT_TEST(BenchPositiveFindLargeTuple) { // Tuple size > 16
         ui64 bytes = (tl->TotalRowSize) * tuples;
 
         auto ht = TPageHashTable::Create(tl.Get(), tuples);
-        ht->Build(res.data(), &overflow, tuples);
+        ht->Build(res.data(), overflow.data(), tuples);
 
         auto selected = tuples / 10;
         auto selectedBytes = selected * tl->TotalRowSize;
@@ -877,7 +877,7 @@ Y_UNIT_TEST(BenchNegativeFindLargeTuple) { // Tuple size > 16
         ui64 bytes = (tl->TotalRowSize) * tuples;
 
         auto ht = TPageHashTable::Create(tl.Get(), tuples);
-        ht->Build(res.data(), &overflow, tuples);
+        ht->Build(res.data(), overflow.data(), tuples);
 
         auto selected = tuples / 10;
         auto selectedBytes = selected * tl->TotalRowSize;
@@ -903,7 +903,7 @@ Y_UNIT_TEST(BenchNegativeFindLargeTuple) { // Tuple size > 16
         ui64 bytes = (tl->TotalRowSize) * tuples;
 
         auto ht = TPageHashTable::Create(tl.Get(), tuples);
-        ht->Build(res.data(), &overflow, tuples);
+        ht->Build(res.data(), overflow.data(), tuples);
 
         auto selected = tuples / 10;
         auto selectedBytes = selected * tl->TotalRowSize;
@@ -929,7 +929,7 @@ Y_UNIT_TEST(BenchNegativeFindLargeTuple) { // Tuple size > 16
         ui64 bytes = (tl->TotalRowSize) * tuples;
 
         auto ht = TPageHashTable::Create(tl.Get(), tuples);
-        ht->Build(res.data(), &overflow, tuples);
+        ht->Build(res.data(), overflow.data(), tuples);
 
         auto selected = tuples / 10;
         auto selectedBytes = selected * tl->TotalRowSize;
@@ -955,7 +955,7 @@ Y_UNIT_TEST(BenchNegativeFindLargeTuple) { // Tuple size > 16
         ui64 bytes = (tl->TotalRowSize) * tuples;
 
         auto ht = TPageHashTable::Create(tl.Get(), tuples);
-        ht->Build(res.data(), &overflow, tuples);
+        ht->Build(res.data(), overflow.data(), tuples);
 
         auto selected = tuples / 10;
         auto selectedBytes = selected * tl->TotalRowSize;
@@ -1053,7 +1053,7 @@ Y_UNIT_TEST(BenchVariableSizedKeyPositiveFind) { // key is variable sized
         ui64 bytes = (tl->TotalRowSize) * tuples;
 
         auto ht = TPageHashTable::Create(tl.Get(), tuples);
-        ht->Build(res.data(), &overflow, tuples);
+        ht->Build(res.data(), overflow.data(), tuples);
 
         auto selected = tuples / 10;
         auto selectedBytes = selected * tl->TotalRowSize;
@@ -1079,7 +1079,7 @@ Y_UNIT_TEST(BenchVariableSizedKeyPositiveFind) { // key is variable sized
         ui64 bytes = (tl->TotalRowSize) * tuples;
 
         auto ht = TPageHashTable::Create(tl.Get(), tuples);
-        ht->Build(res.data(), &overflow, tuples);
+        ht->Build(res.data(), overflow.data(), tuples);
 
         auto selected = tuples / 10;
         auto selectedBytes = selected * tl->TotalRowSize;
@@ -1105,7 +1105,7 @@ Y_UNIT_TEST(BenchVariableSizedKeyPositiveFind) { // key is variable sized
         ui64 bytes = (tl->TotalRowSize) * tuples;
 
         auto ht = TPageHashTable::Create(tl.Get(), tuples);
-        ht->Build(res.data(), &overflow, tuples);
+        ht->Build(res.data(), overflow.data(), tuples);
 
         auto selected = tuples / 10;
         auto selectedBytes = selected * tl->TotalRowSize;
@@ -1131,7 +1131,7 @@ Y_UNIT_TEST(BenchVariableSizedKeyPositiveFind) { // key is variable sized
         ui64 bytes = (tl->TotalRowSize) * tuples;
 
         auto ht = TPageHashTable::Create(tl.Get(), tuples);
-        ht->Build(res.data(), &overflow, tuples);
+        ht->Build(res.data(), overflow.data(), tuples);
 
         auto selected = tuples / 10;
         auto selectedBytes = selected * tl->TotalRowSize;

@@ -3,6 +3,7 @@
 #include <chrono>
 #include <random>
 #include <vector>
+#include <fstream>
 
 #include <util/stream/null.h>
 #include <util/system/compiler.h>
@@ -10,7 +11,7 @@
 #include <util/system/mem_info.h>
 
 #include <ydb/library/yql/minikql/comp_nodes/packed_tuple/neumann_hash_table.h>
-// #include <ydb/library/yql/minikql/comp_nodes/packed_tuple/page_hash_table.h>
+#include <ydb/library/yql/minikql/comp_nodes/packed_tuple/page_hash_table.h>
 #include <ydb/library/yql/minikql/comp_nodes/packed_tuple/robin_hood_table.h>
 
 #include <cxxabi.h> // demangled names
@@ -26,7 +27,189 @@ static volatile bool IsVerbose = true;
 
 namespace {
 
-using TRobinHoodTable = TRobinHoodHashBase<>;
+using TRobinHoodTableList = TRobinHoodHashBase<false>;
+using TRobinHoodTableSeq = TRobinHoodHashBase<true>;
+
+using TPageTable = TPageHashTableImpl<NSimd::TSimdAVX2Traits>;
+
+} // namespace
+
+namespace {
+
+constexpr ui64 CachelineBits = 9;
+constexpr ui64 CachelineSize = ui64(1) << CachelineBits;
+
+template <typename Alloc> class TBloomFilter {
+    std::vector<ui64, Alloc> Storage_;
+    ui64 *Ptr_;
+    ui64 Bits_;
+    bool Finalized_ = false;
+
+  public:
+    static constexpr ui64 BlockBits = CachelineBits;
+    static constexpr ui64 BlockSize = CachelineSize;
+
+    TBloomFilter() {}
+    TBloomFilter(ui64 size) { Resize(size); }
+
+    void Resize(ui64 size) {
+        size = std::max(size, CachelineSize);
+        Bits_ = 6;
+
+        for (; (ui64(1) << Bits_) < size; ++Bits_)
+            ;
+
+        Bits_ += 3; // -> multiply by 8
+        size = 1u << (Bits_ - 6);
+
+        Storage_.assign(size + CachelineSize / sizeof(ui64) - 1, 0);
+
+        // align Ptr_ up to BlockSize
+        Ptr_ = (ui64 *)((uintptr_t(Storage_.data()) + BlockSize - 1) &
+                        ~(BlockSize - 1));
+        Finalized_ = false;
+    }
+
+    void Add(ui64 hash) {
+        Y_DEBUG_ABORT_UNLESS(!Finalized_);
+
+        auto bit = (hash >> (64 - Bits_));
+        Ptr_[bit / 64] |= (ui64(1) << (bit % 64));
+        // replace low BlockBits with next part of hash
+        auto low = hash >> (64 - Bits_ - BlockBits);
+        bit &= ~(BlockSize - 1);
+        bit ^= low & (BlockSize - 1);
+        Ptr_[bit / 64] |= (ui64(1) << (bit % 64));
+    }
+
+    bool IsMissing(ui64 hash) const {
+        Y_DEBUG_ABORT_UNLESS(Finalized_);
+
+        auto bit = (hash >> (64 - Bits_));
+        if (!(Ptr_[bit / 64] & (ui64(1) << (bit % 64))))
+            return true;
+        // replace low BlockBits with next part of hash
+        auto low = hash >> (64 - Bits_ - BlockBits);
+        bit &= ~(BlockSize - 1);
+        bit ^= low & (BlockSize - 1);
+        if (!(Ptr_[bit / 64] & (ui64(1) << (bit % 64))))
+            return true;
+        return false;
+    }
+
+    constexpr bool IsFinalized() const { return Finalized_; }
+
+    void Finalize() { Finalized_ = true; }
+
+    void Shrink() {
+        Finalized_ = false;
+        Bits_ = 1;
+        Storage_.clear();
+        Storage_.resize(1, ~ui64(0));
+        Storage_.shrink_to_fit();
+        Ptr_ = Storage_.data();
+    }
+};
+
+template <typename Alloc> class TBloomFilter2 {
+    using THash = ui32;
+    using TBloom = ui16;
+
+    static constexpr unsigned kBloomBits = 16;
+    static constexpr unsigned kBloomMaskBits = 4;
+
+    static_assert(kBloomBits != 0 && kBloomMaskBits != 0 &&
+                  kBloomMaskBits < kBloomBits &&
+                  kBloomBits <= sizeof(TBloom) * 8);
+
+    alignas(64) static constexpr auto kBloomTags =
+        TBloomFilterMasks<TBloom>::template Gen<kBloomBits, kBloomMaskBits>();
+    static constexpr unsigned kBloomHashBits =
+        std::countr_zero(kBloomTags.size());
+
+    static constexpr unsigned kHashBucketLogSize = 4;
+
+  public:
+    TBloomFilter2() {}
+    TBloomFilter2(ui64 size) { Resize(size); }
+
+    void Resize(ui64 size) {
+        Y_ASSERT(size);
+
+        BucketBits_ = sizeof(size) * 8 - std::countl_zero(size - 1);
+        BucketBits_ = BucketBits_ < kHashBucketLogSize
+                          ? 0
+                          : BucketBits_ - kHashBucketLogSize;
+        Storage_.assign(1ull << BucketBits_, 0);
+    }
+
+    void Add(THash hash) {
+        const auto [bucket, tagInd] = GetBucket(hash);
+        Storage_[bucket] |= kBloomTags[tagInd];
+    }
+
+    bool IsMissing(THash hash) const {
+        const auto [bucket, tagInd] = GetBucket(hash);
+        return (~Storage_[bucket]) & kBloomTags[tagInd];
+    }
+
+    constexpr bool IsFinalized() const { return true; }
+
+    void Finalize() {}
+
+    void Shrink() {
+        Storage_.clear();
+        Storage_.shrink_to_fit();
+    }
+
+  private:
+    auto GetBucket(THash hash) const {
+        const auto bucket = hash & ((THash(1) << BucketBits_) - 1);
+        hash = (hash >> BucketBits_) & ((1ul << kBloomHashBits) - 1);
+        return std::pair{bucket, hash};
+    }
+
+  private:
+    std::vector<TBloom, Alloc> Storage_;
+    THash BucketBits_;
+};
+
+template <class T, class F> class TBloomedTable {
+  public:
+    explicit TBloomedTable(const TTupleLayout *layout)
+        : Layout_(layout), Table_(layout) {}
+
+    void Apply(const ui8 *const tuple, const ui8 *const overflow,
+               auto &&onMatch) {
+        const auto hash = TTupleHash{}(Layout_, tuple, overflow);
+        if (!Filter_.IsMissing(hash)) {
+            Table_.Apply(tuple, overflow, std::move(onMatch));
+        }
+    }
+
+    void Build(const ui8 *const tuples, const ui8 *const overflow,
+               ui32 nItems) {
+        Filter_.Resize(nItems);
+        for (ui32 i = 0; i != nItems; ++i) {
+            const auto hash = TTupleHash{}(
+                Layout_, tuples + i * Layout_->TotalRowSize, overflow);
+            Filter_.Add(hash);
+        }
+        Filter_.Finalize();
+
+        Table_.Build(tuples, overflow, nItems);
+    }
+
+    void Clear() {
+        Filter_.Shrink();
+        Table_.Clear();
+    }
+
+  private:
+    const TTupleLayout *Layout_;
+    F Filter_;
+    T Table_;
+};
 
 } // namespace
 
@@ -35,8 +218,8 @@ namespace {
 class IDistribution {
   public:
     virtual ui32 operator()(std::mt19937 &gen) = 0;
-    virtual ui32 Max() const = 0;
     virtual ui32 Min() const = 0;
+    virtual ui32 Max() const = 0;
 };
 
 class TSingleValueDistribution : public IDistribution {
@@ -44,8 +227,8 @@ class TSingleValueDistribution : public IDistribution {
     TSingleValueDistribution(ui32 a) : Value_(a) {}
 
     virtual ui32 operator()(std::mt19937 &) override { return Value_; }
-    virtual ui32 Max() const override { return Value_; }
     virtual ui32 Min() const override { return Value_; }
+    virtual ui32 Max() const override { return Value_; }
 
   private:
     const ui32 Value_;
@@ -58,11 +241,30 @@ class TUniformDistribution : public IDistribution {
     virtual ui32 operator()(std::mt19937 &gen) override {
         return Distribution_(gen);
     }
-    virtual ui32 Max() const override { return Distribution_.max(); }
     virtual ui32 Min() const override { return Distribution_.min(); }
+    virtual ui32 Max() const override { return Distribution_.max(); }
 
   private:
     std::uniform_int_distribution<ui32> Distribution_;
+};
+
+class TNormalDistribution : public IDistribution {
+  public:
+    TNormalDistribution(ui32 mean, ui32 std)
+        : Distribution_(mean, std), Min_{mean > 3 * std ? mean - 3 * std : 0},
+          Max_{mean + 3 * std} {}
+
+    virtual ui32 operator()(std::mt19937 &gen) override {
+        return std::max(Min_,
+                        std::min(Max_, ui32(std::lround(Distribution_(gen)))));
+    }
+    virtual ui32 Min() const override { return Min_; }
+    virtual ui32 Max() const override { return Max_; }
+
+  private:
+    std::normal_distribution<double> Distribution_;
+    ui32 Min_;
+    ui32 Max_;
 };
 
 class TMixtureDistribution : public IDistribution {
@@ -73,11 +275,11 @@ class TMixtureDistribution : public IDistribution {
     virtual ui32 operator()(std::mt19937 &gen) override {
         return PLeft_(gen) ? Left_(gen) : Right_(gen);
     }
-    virtual ui32 Max() const override {
-        return std::max(Left_.Max(), Right_.Max());
-    }
     virtual ui32 Min() const override {
         return std::min(Left_.Min(), Right_.Min());
+    }
+    virtual ui32 Max() const override {
+        return std::max(Left_.Max(), Right_.Max());
     }
 
   private:
@@ -90,17 +292,37 @@ class TMixtureDistribution : public IDistribution {
 
 namespace {
 
-template <typename... Args> class Benchmark {
+template <typename... Args> class TBenchmark {
     struct TResult {
-        ui64 coldBuildTime;
-        ui64 warmBuildTime;
-        ui64 lookupTime;
+        ui64 coldBuildTime = 0;
+        ui64 warmBuildTime = 0;
+        ui64 lookupTime = 0;
+        ui64 memUsed = 0;
     };
+
+    friend std::ostream &operator<<(std::ostream &out, TResult res) {
+        out << res.coldBuildTime << ',' << res.warmBuildTime << ','
+            << res.lookupTime << ',' << res.memUsed;
+        return out;
+    }
 
     struct TInfo {
         ui64 uniqueMatches = 0;
         ui64 totalMatches = 0;
+        ui32 checksum = 0;
     };
+
+    static constexpr auto kBuildLookupSize = std::array{
+        std::pair<ui32, ui32>{10000, 2000000},
+        std::pair<ui32, ui32>{40000, 2000000},
+        std::pair<ui32, ui32>{100000, 2000000},
+        std::pair<ui32, ui32>{400000, 2000000},
+        std::pair<ui32, ui32>{1000000, 2000000},
+        std::pair<ui32, ui32>{2000000, 2000000},
+        std::pair<ui32, ui32>{4000000, 2000000},
+        std::pair<ui32, ui32>{8000000, 2000000},
+    };
+    static constexpr ui32 kIters = 3;
 
   public:
     struct TConfig {
@@ -109,28 +331,36 @@ template <typename... Args> class Benchmark {
         IDistribution &lookupKeyDistribution;
     };
 
-    Benchmark(ui32 payloadSize) : PayloadSize_(payloadSize) {
+    TBenchmark(ui32 payloadSize, const char *benchName)
+        : Alloc_(__LOCATION__), PayloadSize_(payloadSize),
+          BenchName_(benchName) {
+        UNIT_ASSERT(payloadSize != 0);
         Init();
-
-        CTEST << "Hash tables being benchmarked:\n";
-        ApplyNumbered([&]<class Arg, size_t Ind> {
-            PrintArg<Arg>("  (" + std::to_string(Ind) + ") ",
-                          "(" + std::to_string(payloadSize) + ")\n");
-        });
-        CTEST << Endl;
     }
 
     void Register(TConfig config) { Configs_.emplace_back(std::move(config)); }
 
-    void Run() {
-        static constexpr auto buildLookupSize = std::array{
-            std::pair<ui32, ui32>{1000, 4000},
-            std::pair<ui32, ui32>{100000, 400000},
-            std::pair<ui32, ui32>{10000000, 40000000},
-        };
+    void Run(bool toCSV = false) {
+        CTEST << "================================\n";
+        CTEST << "-------- " << BenchName_ << " --------\n";
+        CTEST << "Hash tables being benchmarked:\n";
+        ApplyNumbered([&]<class Arg, size_t Ind> {
+            PrintArg<Arg>("  (" + std::to_string(Ind) + ") ",
+                          "(" + std::to_string(PayloadSize_) + ")\n");
+        });
+        CTEST << Endl;
 
         for (const auto &config : Configs_) {
-            for (const auto [buildSize, lookupSize] : buildLookupSize) {
+            CTEST << "----------------";
+
+            std::ofstream out;
+            if (toCSV) {
+                const auto dir = std::filesystem::path(__FILE__).parent_path() /= "results";
+                std::filesystem::create_directory(dir);
+                out = std::ofstream(dir.string() + "/" + BenchName_ + "_" + config.name + ".csv");
+            }
+    
+            for (const auto [buildSize, lookupSize] : kBuildLookupSize) {
                 auto [buildKeys, buildOverflow] =
                     GenData(buildSize, config.buildKeyDistribution);
                 auto [lookupKeys, lookupOverflow] =
@@ -139,9 +369,17 @@ template <typename... Args> class Benchmark {
                     GetInfo(config.buildKeyDistribution.Max(), buildKeys.data(),
                             buildSize, lookupKeys.data(), lookupSize);
 
-                RunTest(config, info, buildKeys.data(), buildOverflow.data(),
+                const auto results = RunTest(config, info, buildKeys.data(), buildOverflow.data(),
                         buildSize, lookupKeys.data(), lookupOverflow.data(),
                         lookupSize);
+
+                if (toCSV) {
+                    out << buildSize << ',' << lookupSize << ',';
+                    for (size_t ind = 0; ind != results.size(); ++ind) {
+                        out << results[ind] << (ind + 1 == results.size() ? '\n' : ',');
+                    }
+                    out << std::flush;
+                }
             }
         }
     }
@@ -182,9 +420,8 @@ template <typename... Args> class Benchmark {
         };
 
         const ui64 DataSize = Layout_->TotalRowSize * size;
-        auto result = std::make_pair(
-            std::vector<ui8, TMKQLAllocator<ui8>>(DataSize + 64, 0),
-            std::vector<ui8, TMKQLAllocator<ui8>>{});
+        auto result = std::make_pair(std::vector<ui8>(DataSize + 64, 0),
+                                     std::vector<ui8, TMKQLAllocator<ui8>>{});
         Layout_->Pack(cols, colsValid, result.first.data(), result.second, 0,
                       size);
 
@@ -205,6 +442,8 @@ template <typename... Args> class Benchmark {
 
         TInfo result;
         for (ui32 ind = 0; ind != rightSize; ++ind) {
+            const ui32 hash =
+                ReadUnaligned<ui32>(rightData + ind * Layout_->TotalRowSize);
             const ui32 key =
                 ReadUnaligned<ui32>(rightData + ind * Layout_->TotalRowSize +
                                     Layout_->KeyColumnsOffset);
@@ -217,37 +456,38 @@ template <typename... Args> class Benchmark {
                 result.uniqueMatches++;
             }
             result.totalMatches += keyCount[key];
+            result.checksum += keyCount[key] * hash;
         }
 
         return result;
     }
 
-    void RunTest(const TConfig &config, const TInfo info, ui8 *buildKeys,
+    auto RunTest(const TConfig &config, const TInfo info, ui8 *buildKeys,
                  ui8 *buildOverflow, ui32 buildSize, ui8 *lookupKeys,
                  ui8 *lookupOverflow, ui32 lookupSize) {
-        CTEST << "------------------------------------------" << Endl;
-
-        CTEST << "Params\t" << " config: " << config.name
-              << ", keys: " << buildSize << ", lookups: " << lookupSize << Endl;
-
-        CTEST << "Info\t" << " unique matches: " << info.uniqueMatches
-              << ", total matches: " << info.totalMatches << Endl;
-
-        CTEST << "\nTime measurements (us):" << Endl;
-
         std::array<TResult, sizeof...(Args)> results;
         ApplyNumbered([&]<class Arg, size_t Ind> {
             results[Ind] =
                 RunArgTest<Arg>(buildKeys, buildOverflow, buildSize, lookupKeys,
-                                lookupOverflow, lookupSize, info.totalMatches);
+                                lookupOverflow, lookupSize, info);
         });
 
+        CTEST << "--------" << Endl;
+        CTEST << "Params\t" << " config: " << config.name
+              << ", keys: " << buildSize << ", lookups: " << lookupSize << Endl;
+        CTEST << "Info\t" << " unique matches: " << info.uniqueMatches
+              << ", total matches: " << info.totalMatches << Endl;
+        CTEST << "\nTime measurements (us):" << Endl;
         PrintResult("1st build", results,
                     [](TResult arg) { return arg.coldBuildTime; });
         PrintResult("2nd build", results,
                     [](TResult arg) { return arg.warmBuildTime; });
         PrintResult("lookups", results,
                     [](TResult arg) { return arg.lookupTime; });
+        PrintResult("memory KiB", results,
+                    [](TResult arg) { return arg.memUsed; });
+
+        return results;
     }
 
     void PrintResult(const std::string &name,
@@ -273,27 +513,45 @@ template <typename... Args> class Benchmark {
     template <typename Arg>
     TResult RunArgTest(ui8 *buildKeys, ui8 *buildOverflow, ui32 buildSize,
                        ui8 *lookupKeys, ui8 *lookupOverflow, ui32 lookupSize,
-                       size_t expectedMatches) {
-        Arg arg(Layout_.Get());
+                       TInfo info) {
+        TResult result;
 
-        const ui64 coldBuildTime =
-            Measure([&] { arg.Build(buildKeys, buildOverflow, buildSize); });
-        arg.Clear();
-        const ui64 warmBuildTime =
-            Measure([&] { arg.Build(buildKeys, buildOverflow, buildSize); });
+        for (ui32 iter = 0; iter != kIters; ++iter) {
+            UNIT_ASSERT_LE(Alloc_.GetUsed(), 1024);
 
-        size_t matches = 0;
-        const ui64 lookupTime = Measure([&] {
-            ui8 *const end = lookupKeys + Layout_->TotalRowSize * lookupSize;
-            for (ui8 *it = lookupKeys; it != end; it += Layout_->TotalRowSize) {
-                arg.Apply(it, lookupOverflow, [&](...) { ++matches; });
-            }
-        });
-        arg.Clear();
+            Arg arg(Layout_.Get());
 
-        UNIT_ASSERT_EQUAL(matches, expectedMatches);
+            result.coldBuildTime += Measure(
+                [&] { arg.Build(buildKeys, buildOverflow, buildSize); });
+            arg.Clear();
+            result.warmBuildTime += Measure(
+                [&] { arg.Build(buildKeys, buildOverflow, buildSize); });
+            result.memUsed = Alloc_.GetUsed() / 1024;
 
-        return {coldBuildTime, warmBuildTime, lookupTime};
+            ui64 matches = 0;
+            ui32 checksum = 0;
+            result.lookupTime = Measure([&] {
+                ui8 *const end =
+                    lookupKeys + Layout_->TotalRowSize * lookupSize;
+                for (ui8 *it = lookupKeys; it != end;
+                     it += Layout_->TotalRowSize) {
+                    arg.Apply(it, lookupOverflow, [&](const ui8 *const row) {
+                        ++matches;
+                        checksum += ReadUnaligned<ui32>(row);
+                    });
+                }
+            });
+            arg.Clear();
+
+            UNIT_ASSERT_EQUAL(matches, info.totalMatches);
+            UNIT_ASSERT_EQUAL(checksum, info.checksum);
+        }
+
+        result.coldBuildTime /= kIters;
+        result.warmBuildTime /= kIters;
+        result.lookupTime /= kIters;
+
+        return result;
     }
 
     void ApplyNumbered(auto f) {
@@ -323,32 +581,81 @@ template <typename... Args> class Benchmark {
     }
 
   private:
+    TScopedAlloc Alloc_;
+
     ui32 PayloadSize_;
+    const char *BenchName_;
+
     THolder<TTupleLayout> Layout_;
 
-    TVector<TConfig> Configs_;
+    std::vector<TConfig> Configs_;
 };
 
 } // namespace
 
 // -----------------------------------------------------------------
-Y_UNIT_TEST_SUITE(HashTable) {
 
-    Y_UNIT_TEST(TablesBenchmark) {
-        TScopedAlloc alloc(__LOCATION__);
+using TTablesBenchmark =
+    TBenchmark<TRobinHoodTableSeq, TNeumannHashTable, TPageTable>;
 
-        TSingleValueDistribution single(1);
+static constexpr bool toCSV = false;
+
+Y_UNIT_TEST_SUITE(HashTablesBenchmark) {
+
+    Y_UNIT_TEST(Uniform) {
         TUniformDistribution uni1M(0, 999999);
         TUniformDistribution uni1B(0, 999999999); /// oof, info may take some
-        TMixtureDistribution mixSingleUni1B(single, uni1B, 0.2);
 
-        auto benchmark = Benchmark<TRobinHoodTable, TNeumannHashTable>(4);
+        auto benchmark = TTablesBenchmark(1, Name_);
 
         benchmark.Register({"uniform 1M", uni1M, uni1M});
-        benchmark.Register({"uniform 1M, 1B", uni1M, uni1B});
-        benchmark.Register({"uniform 1B", uni1B, uni1B});
+        // benchmark.Register({"uniform 1M, 1B", uni1M, uni1B});
+        // benchmark.Register({"uniform 1B, 1M", uni1B, uni1M});
+        // benchmark.Register({"uniform 1B", uni1B, uni1B});
 
-        benchmark.Run();
+        benchmark.Run(toCSV);
+    }
+
+    Y_UNIT_TEST(UniformPayloaded) {
+        TUniformDistribution uni1M(0, 999999);
+        TUniformDistribution uni1B(0, 999999999); /// oof, info may take some
+
+        auto benchmark = TTablesBenchmark(21, Name_);
+
+        benchmark.Register({"uniform 1M", uni1M, uni1M});
+        // benchmark.Register({"uniform 1M, 1B", uni1M, uni1B});
+        // benchmark.Register({"uniform 1B, 1M", uni1B, uni1M});
+        // benchmark.Register({"uniform 1B", uni1B, uni1B});
+
+        benchmark.Run(toCSV);
+    }
+
+    Y_UNIT_TEST(NormalPayloaded) {
+        TNormalDistribution norm1M(1000000 / 2, 1000000 / 6);
+        TNormalDistribution norm1B(1000000000 / 2,
+                                   1000000000 / 6); /// oof, info may take some
+
+        auto benchmark = TTablesBenchmark(21, Name_);
+
+        benchmark.Register({"norm 1M", norm1M, norm1M});
+        // benchmark.Register({"norm 1M, 1B", norm1M, norm1B});
+        benchmark.Register({"norm 1B, 1M", norm1M, norm1B});
+        benchmark.Register({"norm 1B", norm1B, norm1B});
+
+        // benchmark.Run(toCSV);
+    }
+
+    Y_UNIT_TEST(SingleMixPayloaded) {
+        TSingleValueDistribution single(1);
+        TUniformDistribution uni1M(0, 999999);
+        TMixtureDistribution mixSingleUni1B(single, uni1M, 0.1);
+
+        auto benchmark = TTablesBenchmark(21, Name_);
+
+        benchmark.Register({"uniform 1M, mix", uni1M, mixSingleUni1B});
+        benchmark.Register({"mix, uniform 1M", mixSingleUni1B, uni1M});
+
+        // benchmark.Run(toCSV);
     }
 
 } // Y_UNIT_TEST_SUITE(RobinHoodCheck)

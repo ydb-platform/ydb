@@ -81,12 +81,11 @@ class TRobinHoodHashBase {
 
   public:
     TRobinHoodHashBase() : SelfHash_(GetSelfHash(this)) {
-        Init(256);
+        // Init(256);
     }
 
     explicit TRobinHoodHashBase(const TTupleLayout *layout)
-        : SelfHash_(GetSelfHash(this)) {
-        Init(256);
+        : TRobinHoodHashBase() {
         SetTupleLayout(layout);
     }
 
@@ -97,11 +96,11 @@ class TRobinHoodHashBase {
     }
 
     void SetTupleLayout(const TTupleLayout *layout) {
+        Clear();
+
         Layout_ = layout;
         IsInplace_ = sizeof(TPSLStorage) + layout->TotalRowSize <= kEmbeddedSize;
         DupPayloadSize_ = IsInplace_ ? Layout_->TotalRowSize : sizeof(ui32);
-
-        Clear();
     }
 
     TRobinHoodHashBase(const TRobinHoodHashBase &) = delete;
@@ -232,10 +231,13 @@ class TRobinHoodHashBase {
     }
 
     void Clear() {
+        if (Size_ == 0) {
+            return;
+        }
+
         ui8 *ptr = Data_;
-        for (ui64 i = 0; i < Capacity_; ++i) {
+        for (ui64 i = 0; i < Capacity_; ++i, ptr += CellSize_) {
             GetPSL(ptr).CellStatus.value = TCellStatus::kInvalid;
-            ptr += CellSize_;
         }
         Size_ = 0;
         Listed_ = 0;
@@ -483,7 +485,6 @@ class TRobinHoodHashBase {
         auto newCapacityShift = 64 - MostSignificantBit(newCapacity);
         ui8 *newData, *newDataEnd;
         Allocate(newCapacity, newData, newDataEnd);
-        Y_DEFER { Allocator_.deallocate(newData, newDataEnd - newData); };
 
         for (auto cell = Data_; cell != DataEnd_; cell += CellSize_) {
             auto &psl = GetPSL(cell);
@@ -512,6 +513,9 @@ class TRobinHoodHashBase {
         CapacityShift_ = newCapacityShift;
         std::swap(Data_, newData);
         std::swap(DataEnd_, newDataEnd);
+        if (newData) {
+            Allocator_.deallocate(newData, newDataEnd - newData);
+        }
     }
 
     void Allocate(ui64 capacity, ui8 *&data, ui8 *&dataEnd) {
@@ -535,15 +539,15 @@ class TRobinHoodHashBase {
 
     const TTupleLayout * Layout_ = nullptr;
 
-    const ui8 *Tuples_;
-    const ui8 *Overflow_;
+    const ui8 *Tuples_ = nullptr;
+    const ui8 *Overflow_ = nullptr;
 
-    bool IsInplace_ = true;
-    ui32 DupPayloadSize_ = 0;
+    bool IsInplace_;
+    ui32 DupPayloadSize_;
 
     ui64 Size_ = 0;
     ui64 Listed_ = 0;
-    ui64 Capacity_;
+    ui64 Capacity_ = 0;
     ui64 CapacityShift_;
 
     TAllocator Allocator_;

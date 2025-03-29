@@ -324,10 +324,11 @@ public:
         StageData = std::move(data);
     }
 
-    TFetchedData&& ExtractStageData() {
+    std::unique_ptr<TFetchedData> ExtractStageData() {
         AFL_VERIFY(StageData);
-        auto result = std::move(*StageData);
+        auto result = std::move(StageData);
         StageData.reset();
+        return std::move(result);
     }
 
     void ClearStageData() {
@@ -337,6 +338,10 @@ public:
     const TFetchedData& GetStageData() const {
         AFL_VERIFY(StageData);
         return *StageData;
+    }
+
+    bool HasStageData() const {
+        return !!StageData;
     }
 
     TFetchedData& MutableStageData() {

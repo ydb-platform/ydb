@@ -65,7 +65,7 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
         ScheduleWakeup(TMonotonic::Now() + Timeout / 5);
 
         // propagate self actor id // TODO: FlagSubscribeOnSession ?
-        Send(ScanComputeActorId, new NKqp::TEvKqpCompute::TEvScanInitActor(ScanId, ctx.SelfID, ScanGen, TabletId),
+        Send(ScanComputeActorId, new NKqp::TEvKqpCompute::TEvScanInitActor(ScanId, ctx.SelfID, ScanGen, TabletId, true),
             IEventHandle::FlagTrackDelivery);
 
         Become(&TColumnShardScan::StateScan);
@@ -94,13 +94,6 @@ void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResu
 void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev) {
     auto g = Stats->MakeGuard("ack");
 
-    if (ev->Get()->FreeSpace == 0 && ev->Get()->MaxChunksCount == 0) {
-        if (!AckReceivedInstant) {
-            LastResultInstant = TMonotonic::Now();
-        }
-        return;
-    }
-
     AFL_VERIFY(!AckReceivedInstant);
     AckReceivedInstant = TMonotonic::Now();
 
@@ -117,6 +110,12 @@ void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev)
         }
     }
     ContinueProcessing();
+}
+
+void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanPing::TPtr&) {
+    if (!AckReceivedInstant) {
+        LastResultInstant = TMonotonic::Now();
+    }
 }
 
 void TColumnShardScan::HandleScan(NActors::TEvents::TEvPoison::TPtr& /*ev*/) noexcept {

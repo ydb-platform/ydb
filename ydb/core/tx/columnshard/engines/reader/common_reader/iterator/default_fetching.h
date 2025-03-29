@@ -16,6 +16,13 @@ private:
         return source->GetContext()->GetReadMetadata()->GetResultSchema()->GetColumnLoaderVerified(GetEntityId());
     }
 
+    std::shared_ptr<NArrow::NAccessor::TColumnLoader> GetColumnLoader(const std::shared_ptr<NCommon::IDataSource>& source) const {
+        if (auto loader = source->GetSourceSchema()->GetColumnLoaderOptional(GetEntityId())) {
+            return loader;
+        }
+        return source->GetContext()->GetReadMetadata()->GetResultSchema()->GetColumnLoaderVerified(GetEntityId());
+    }
+
     class TChunkRestoreInfo {
     private:
         std::optional<TBlobRange> BlobRange;

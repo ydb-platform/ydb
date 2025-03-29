@@ -18,7 +18,7 @@ namespace NKikimr::NOlap::NDataSharing::NEvents {
 
 class TPathIdData {
 private:
-    YDB_READONLY_DEF(TInternalPathId, PathId);
+    YDB_READONLY_DEF(TInternalPathId, PathId); //TODO LocalPathId?
     YDB_ACCESSOR_DEF(std::vector<TPortionDataAccessor>, Portions);
 
     TPathIdData() = default;

@@ -2130,6 +2130,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         ui64 txId = 100;
 
         SetupSchema(runtime, sender, tableId, table, "lz4");
+        const auto internalPathId = csDefaultControllerGuard->GetInternalPathIdVerified(TTestTxConfig::TxTablet0, NColumnShard::TLocalPathId::FromRawValue(tableId));
         TAutoPtr<IEventHandle> handle;
 
         bool isStrPk0 = table.Pk[0].GetType() == TTypeInfo(NTypeIds::String) || table.Pk[0].GetType() == TTypeInfo(NTypeIds::Utf8);
@@ -2160,10 +2161,11 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         // TODO: Move tablet's time to the future with mediator timecast instead
         --planStep;
         --txId;
-
+        Cerr << __LINE__ << " QQQ\n";
         const ui32 fullNumRows = numWrites * (triggerPortionSize - overlapSize) + overlapSize;
 
         for (ui32 i = 0; i < 2; ++i) {
+            Cerr << __LINE__ << " QQQ\n";
             {
                 TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, txId));
                 reader.SetReplyColumnIds(table.GetColumnIds({ "timestamp", "message" }));
@@ -2179,6 +2181,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                                          : DataHas({ rb }, { 0, fullNumRows }, true, "timestamp"));
                 }
             }
+            Cerr << __LINE__ << " QQQ\n";
             std::vector<ui32> val0 = { 0 };
             std::vector<ui32> val1 = { 1 };
             std::vector<ui32> val9990 = { 99990 };
@@ -2203,7 +2206,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 valNumRows_1 = { sameValue, fullNumRows - 1 };
                 valNumRows_2 = { sameValue, fullNumRows - 2 };
             }
-
+            Cerr << __LINE__ << " QQQ\n";
             using TBorder = TTabletReadPredicateTest::TBorder;
 
             TTabletReadPredicateTest testAgent(runtime, planStep, txId, table.Pk);
@@ -2218,7 +2221,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             testAgent.Test("outscope1").SetFrom(TBorder(val1M, true)).SetTo(TBorder(val1M_1, true)).SetExpectedCount(0);
             //            VERIFIED AS INCORRECT INTERVAL (its good)
             //            testAgent.Test("[0-0)").SetFrom(TTabletReadPredicateTest::TBorder(0, true)).SetTo(TBorder(0, false)).SetExpectedCount(0);
-
+            Cerr << __LINE__ << " QQQ\n";
             if (isStrPk0) {
                 testAgent.Test("(99990:").SetFrom(TBorder(val9990, false)).SetExpectedCount(109);
                 testAgent.Test("(99990:99999)").SetFrom(TBorder(val9990, false)).SetTo(TBorder(val9999, false)).SetExpectedCount(98);
@@ -2230,14 +2233,20 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                 testAgent.Test("(numRows-2:").SetFrom(TBorder(valNumRows_2, false)).SetExpectedCount(1);
                 testAgent.Test("[numRows-1:").SetFrom(TBorder(valNumRows_1, true)).SetExpectedCount(1);
             }
-
+            Cerr << __LINE__ << " QQQ\n";
             RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+            Cerr << __LINE__ << " QQQ\n";
         }
+
         const TInstant start = TInstant::Now();
         bool success = false;
         while (!success && TInstant::Now() - start < TDuration::Seconds(30)) {   // Get index stats
-            ScanIndexStats(runtime, sender, { tableId, 42 }, NOlap::TSnapshot(planStep, txId), 0);
-            auto scanInited = runtime.GrabEdgeEvent<NKqp::TEvKqpCompute::TEvScanInitActor>(handle);
+            ScanIndexStats(runtime, sender, {internalPathId, NColumnShard::TLocalPathId::FromRawValue(tableId)}, NOlap::TSnapshot(planStep, txId), 0);
+            Cerr << __LINE__ << " QQQ\n";
+            auto ev = runtime.GrabEdgeEvents<NKqp::TEvKqpCompute::TEvScanInitActor, NKqp::TEvKqpCompute::TEvScanError>(handle);
+            UNIT_ASSERT(std::get<NKqp::TEvKqpCompute::TEvScanInitActor*>(ev) != nullptr);
+            auto scanInited = std::get<NKqp::TEvKqpCompute::TEvScanInitActor*>(ev);
+            Cerr << __LINE__ << " QQQ\n";
             auto& msg = scanInited->Record;
             auto scanActorId = ActorIdFromProto(msg.GetScanActorId());
 
@@ -2245,6 +2254,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             ui64 sumCompactedRows = 0;
             ui64 sumInsertedBytes = 0;
             ui64 sumInsertedRows = 0;
+            Cerr << __LINE__ << " QQQ\n";
+
             while (true) {
                 ui32 resultLimit = 1024 * 1024;
                 runtime.Send(new IEventHandle(scanActorId, sender, new NKqp::TEvKqpCompute::TEvScanDataAck(resultLimit, 0, 1)));
@@ -2277,7 +2288,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                     Cerr << "[" << __LINE__ << "] " << activity << " " << table.Pk[0].GetType().GetTypeId() << " " << pathId << " " << kindStr
                          << " " << numRows << " " << numBytes << " " << numRawBytes << "\n";
 
-                    if (pathId.GetRawValue() == tableId) {
+                    if (pathId == internalPathId) {
                         if (kindStr == ::ToString(NOlap::NPortion::EProduced::COMPACTED) ||
                             kindStr == ::ToString(NOlap::NPortion::EProduced::SPLIT_COMPACTED) || numBytes > (4LLU << 20)) {
                             sumCompactedBytes += numBytes;
@@ -2289,12 +2300,15 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
                             //UNIT_ASSERT(numRawBytes > numBytes);
                         }
                     } else {
+                        UNIT_ASSERT(false);
                         UNIT_ASSERT_VALUES_EQUAL(numRows, 0);
                         UNIT_ASSERT_VALUES_EQUAL(numBytes, 0);
                         UNIT_ASSERT_VALUES_EQUAL(numRawBytes, 0);
                     }
                 }
             }
+            Cerr << __LINE__ << " QQQ\n";
+
             Cerr << "compacted=" << sumCompactedRows << ";inserted=" << sumInsertedRows << ";expected=" << fullNumRows << ";" << Endl;
             if (sumCompactedRows && sumInsertedRows + sumCompactedRows == fullNumRows) {
                 success = true;

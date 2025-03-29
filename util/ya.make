@@ -194,7 +194,6 @@ JOIN_SRCS(
     stream/aligned.cpp
     stream/buffer.cpp
     stream/buffered.cpp
-    stream/debug.cpp
     stream/direct_io.cpp
     stream/file.cpp
     stream/format.cpp

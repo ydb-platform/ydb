@@ -1,4 +1,4 @@
-#include "string_util.h"
+#include "word.h"
 
 #include <util/generic/strbuf.h>
 

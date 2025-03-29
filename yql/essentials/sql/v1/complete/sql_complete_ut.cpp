@@ -35,6 +35,7 @@ public:
 };
 
 Y_UNIT_TEST_SUITE(SqlCompleteTests) {
+    using ECandidateKind::FunctionName;
     using ECandidateKind::Keyword;
     using ECandidateKind::TypeName;
 
@@ -43,7 +44,9 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         lexers.Antlr4Pure = NSQLTranslationV1::MakeAntlr4PureLexerFactory();
         lexers.Antlr4PureAnsi = NSQLTranslationV1::MakeAntlr4PureAnsiLexerFactory();
         return [lexers = std::move(lexers)](bool ansi) {
-            return NSQLTranslationV1::MakeLexer(lexers, ansi, /* antlr4 = */ true, /* pure = */ true);
+            return NSQLTranslationV1::MakeLexer(
+                lexers, ansi, /* antlr4 = */ true, 
+                NSQLTranslationV1::ELexerFlavor::Pure);
         };
     }
 
@@ -51,6 +54,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         TLexerSupplier lexer = MakePureLexerSupplier();
         INameService::TPtr names = MakeStaticNameService({
             .Types = {"Uint64"},
+            .Functions = {"StartsWith"},
         });
         return MakeSqlCompletionEngine(std::move(lexer), std::move(names));
     }
@@ -261,18 +265,6 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
     Y_UNIT_TEST(Pragma) {
         TVector<TCandidate> expected = {
             {Keyword, "ANSI"},
-            {Keyword, "CALLABLE"},
-            {Keyword, "DICT"},
-            {Keyword, "ENUM"},
-            {Keyword, "FLOW"},
-            {Keyword, "LIST"},
-            {Keyword, "OPTIONAL"},
-            {Keyword, "RESOURCE"},
-            {Keyword, "SET"},
-            {Keyword, "STRUCT"},
-            {Keyword, "TAGGED"},
-            {Keyword, "TUPLE"},
-            {Keyword, "VARIANT"},
         };
 
         auto engine = MakeSqlCompletionEngineUT();
@@ -311,10 +303,48 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
             {Keyword, "TRUE"},
             {Keyword, "TUPLE"},
             {Keyword, "VARIANT"},
+            {FunctionName, "StartsWith"},
         };
 
         auto engine = MakeSqlCompletionEngineUT();
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"SELECT "}), expected);
+    }
+
+    Y_UNIT_TEST(SelectWhere) {
+        TVector<TCandidate> expected = {
+            {Keyword, "BITCAST"},
+            {Keyword, "CALLABLE"},
+            {Keyword, "CASE"},
+            {Keyword, "CAST"},
+            {Keyword, "CURRENT_DATE"},
+            {Keyword, "CURRENT_TIME"},
+            {Keyword, "CURRENT_TIMESTAMP"},
+            {Keyword, "DICT"},
+            {Keyword, "EMPTY_ACTION"},
+            {Keyword, "ENUM"},
+            {Keyword, "EXISTS"},
+            {Keyword, "FALSE"},
+            {Keyword, "FLOW"},
+            {Keyword, "JSON_EXISTS"},
+            {Keyword, "JSON_QUERY"},
+            {Keyword, "JSON_VALUE"},
+            {Keyword, "LIST"},
+            {Keyword, "NOT"},
+            {Keyword, "NULL"},
+            {Keyword, "OPTIONAL"},
+            {Keyword, "RESOURCE"},
+            {Keyword, "SET"},
+            {Keyword, "STREAM"},
+            {Keyword, "STRUCT"},
+            {Keyword, "TAGGED"},
+            {Keyword, "TRUE"},
+            {Keyword, "TUPLE"},
+            {Keyword, "VARIANT"},
+            {FunctionName, "StartsWith"},
+        };
+
+        auto engine = MakeSqlCompletionEngineUT();
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"SELECT * FROM a WHERE "}), expected);
     }
 
     Y_UNIT_TEST(Upsert) {
@@ -360,7 +390,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
 
     Y_UNIT_TEST(WordBreak) {
         auto engine = MakeSqlCompletionEngineUT();
-        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"SELECT ("}).size(), 28);
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"SELECT ("}).size(), 29);
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"SELECT (1)"}).size(), 30);
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"SELECT 1;"}).size(), 35);
     }
@@ -446,6 +476,7 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         auto engine = MakeSqlCompletionEngine(MakePureLexerSupplier(), std::move(fallback));
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"SELECT CAST (1 AS U"}).size(), 6);
         UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"SELECT CAST (1 AS "}).size(), 47);
+        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"SELECT "}).size(), 55);
     }
 
 } // Y_UNIT_TEST_SUITE(SqlCompleteTests)

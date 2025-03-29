@@ -8,10 +8,10 @@ Here is a hands-on example of pattern recognizing in a data table produced by an
 
 The structure of the data to transmit is as follows:
 
-```json
-{"ts": 1700000000, "button": 1, "device_id": 1, "zone_id": 24}
-{"ts": 1701000000, "button": 2, "device_id": 2, "zone_id": 12}
-```
+|ts|button|device_id|zone_id|
+|:-:|:-:|:-:|:-:|
+|1700000000|1|1|24|
+|1701000000|2|2|12|
 
 The body of the SQL query looks like this:
 
@@ -43,8 +43,8 @@ MATCH_RECOGNIZE (
     [ PARTITION BY <partition_1> [ ... , <partition_N> ] ]
     [ ORDER BY <sort_key_1> [ ... , <sort_key_N> ] ]
     [ MEASURES <expression_1> AS <column_name_1> [ ... , <expression_N> AS <column_name_N> ] ]
-    [ ONE ROW PER MATCH | ALL ROWS PER MATCH ]
-    [ AFTER MATCH SKIP (TO NEXT ROW | PAST LAST ROW) ]
+    [ ROWS PER MATCH ]
+    [ AFTER MATCH SKIP ]
     PATTERN (<search_pattern>)
     DEFINE <variable_1> AS <predicate_1> [ ... , <variable_N> AS <predicate_N> ]
 )
@@ -52,13 +52,13 @@ MATCH_RECOGNIZE (
 
 Here is a brief description of the SQL syntax elements of the `MATCH_RECOGNIZE` command:
 
-* [`DEFINE`](#define): Conditions the rows must meet for each variable: `<variable_1> AS <predicate_1> [ ... , <variable_N> AS <predicate_N> ]`.
-* [`PATTERN`](#pattern): Pattern to search for across the data. It consists of variables and search rules of the pattern described in `<search_pattern>`. `PATTERN` works similarly to [regular expressions](https://en.wikipedia.org/wiki/Regular_expressions).
-* [`MEASURES`](#measures): Specifies the list of output columns. Each column of the `<expression_1> AS <column_name_1> [ ... , <expression_N> AS <column_name_N> ]` list is an independent construct that sets output columns and describes expressions for their computation.
-* [`ONE ROW PER MATCH`](#rows_per_match): Determines the amount of output data for each hit match.
+* [`DEFINE`](#define): Block for declaring variables that describe the search pattern and the conditions that rows must meet for each variable.
+* [`PATTERN`](#pattern): [Regular expressions](https://en.wikipedia.org/wiki/Regular_expressions) describing the search pattern.
+* [`MEASURES`](#measures): Defines the list of columns for the returned data. Each column is specified by an SQL expression for its computation.
+* [`ROWS PER MATCH`](#rows_per_match): Determines the structure of the returned data and the number of rows for each match found.
 * [`AFTER MATCH SKIP`](#after_match_skip): Defines the method of moving to the point of the next match search.
 * [`ORDER BY`](#order_by): Determines sorting of input data. Pattern search is performed within the data sorted according to the list of columns or expressions listed in `<sort_key_1> [ ... , <sort_key_N> ]`.
-* [`PARTITION BY`](#partition_by) divides the input data flow as per the specified rules in accordance with `<partition_1> [ ... , <partition_N> ]`. Pattern search is performed independently in each part.
+* [`PARTITION BY`](#partition_by): Divides the input table according to the specified rules in accordance with `<partition_1> [ ... , <partition_N> ]`. Pattern search is performed independently in each part.
 
 ### DEFINE {#define}
 
@@ -112,24 +112,24 @@ If a variable used in the `PATTERN` section has not been previously described in
 You can use [quantifiers](https://en.wikipedia.org/wiki/Regular_expression#Quantification) in `PATTERN`. In regular expressions, they determine the number of repetitions of an element or subsequence in the matched pattern. Here is the list of supported quantifiers:
 
 |Quantifier|Description|
-|----|-----|
+|-|-|
 |`A+`|One or more occurrences of `A`|
 |`A*`|Zero or more occurrences of `A`|
 |`A?`|Zero or one occurrence of `A`|
 |`B{n}`|Exactly `n` occurrences of `B`|
-|`C{n, m}`|From `n` to `m` occurrences of `C` (`m` inclusive)|
+|`C{n, m}`|From `n` to `m` occurrences of `C`|
 |`D{n,}`|At least `n` occurrences of `D`|
 |`(A\|B)`|Occurrence of `A` or `B` in the data|
-|`(A\|B){,m}`|No more than `m` occurrences of `A` or `B` (`m` inclusive)|
+|`(A\|B){,m}`|From zero to `m` occurrences of `A` or `B`|
 
 Supported pattern search sequences:
 
 |Supported sequences|Syntax|Description|
-|---|---|----|
+|-|-|-|
 |Sequence|`A B+ C+ D+`|The system searches for the exact specified sequence, the occurrence of other variables within the sequence is not allowed. The pattern search is performed in the order of the pattern variables.|
 |One of|`A \| B \| C`|Variables are listed in any order with a pipe \| between them. The search is performed for any variable from the specified list.|
 |Grouping|`(A \| B)+ \| C`|Variables inside round brackets are considered a single group. In this case, quantifiers apply to the entire group.|
-|Exclusion from result|`{- A B+ C -}`|Strings found by the pattern in parentheses will be excluded from the result in [`ALL ROWS PER MATCH`](#rows_per_match) mode|
+|Exclusion from result|`{- A B+ C -}`|Rows found by the pattern in parentheses will be excluded from the result in [`ALL ROWS PER MATCH`](#rows_per_match) mode|
 
 #### **Example** {#pattern-example}
 
@@ -155,12 +155,12 @@ MEASURES <expression_1> AS <column_name_1> [ ... , <expression_N> AS <column_nam
 
 The input data for the example are:
 
-```json
-{"ts": 100, "button": 1, "device_id": 3, "zone_id": 0}
-{"ts": 200, "button": 1, "device_id": 3, "zone_id": 1}
-{"ts": 300, "button": 2, "device_id": 2, "zone_id": 0}
-{"ts": 400, "button": 3, "device_id": 1, "zone_id": 1}
-```
+|ts|button|device_id|zone_id|
+|:-:|:-:|:-:|:-:|
+|100|1|3|0|
+|200|1|3|1|
+|300|2|2|0|
+|400|3|1|1|
 
 ```sql
 MEASURES
@@ -178,14 +178,14 @@ DEFINE
 Result:
 
 |ids|count_zones|time_diff|meaning_of_life|
-|--|--|--|--|
+|:-:|:-:|:-:|:-:|
 |[3,13]|2|300|42|
 
 The `ids` column contains the list of `zone_id * 10 + device_id` values counted among the rows matched with the `B1` variable. The `count_zones` column contains the number of unique values of the `zone_id` column among the rows matched with the `B1` variable. Column `time_diff` contains the difference between the value of column `ts` in the last row of the set of rows matched with variable `B3` and the value of column `ts` in the first row of the set of rows matched with variable `B1`. The `meaning_of_life` column contains the constant `42`. Thus, an expression in `MEASURES` may contain aggregate functions over multiple variables, but there must be only one variable within a single aggregate function.
 
 ### ROWS PER MATCH {#rows_per_match}
 
-`ROWS PER MATCH` determines the number of pattern matches, as well as the number of columns returned. Default mode - `ONE ROW PER MATCH`.
+`ROWS PER MATCH` determines the number of pattern matches, as well as the number of columns returned. The default mode is `ONE ROW PER MATCH`.
 
 `ONE ROW PER MATCH` sets the `ROWS PER MATCH` mode to output one row per recognized pattern. The structure of the returned data corresponds to the columns listed in [`PARTITION BY`](#partition_by) and [`MEASURES`](#measures).
 
@@ -195,11 +195,11 @@ The `ids` column contains the list of `zone_id * 10 + device_id` values counted 
 
 The input data for all examples are:
 
-```json
-{"button": 1, "ts": 100}
-{"button": 2, "ts": 200}
-{"button": 3, "ts": 300}
-```
+|ts|button|
+|:-:|:-:|
+|100|1|
+|200|2|
+|300|3|
 
 ##### **Example 1** {#rows_per_match-example1}
 
@@ -219,7 +219,7 @@ DEFINE
 Result:
 
 |first_ts|mid_ts|last_ts|
-|--|--|--|
+|:-:|:-:|:-:|
 |100|200|300|
 
 ##### **Example 2** {#rows_per_match-example2}
@@ -240,24 +240,24 @@ DEFINE
 Result:
 
 |first_ts|mid_ts|last_ts|button|ts|
-|--|--|--|--|--|
+|:-:|:-:|:-:|:-:|:-:|
 |100|200|300|1|100|
 |100|200|300|3|300|
 
 ### AFTER MATCH SKIP {#after_match_skip}
 
-`AFTER MATCH SKIP TO NEXT ROW` determines the method of transitioning from the found match to searching the next match. Only the `AFTER MATCH SKIP TO NEXT ROW` and `AFTER MATCH SKIP PAST LAST ROW` modes are supported. Default mode - `PAST LAST ROW`.
+`AFTER MATCH SKIP` determines the method of transitioning from the found match to searching for the next one. In the `AFTER MATCH SKIP TO NEXT ROW` mode, the search for the next match starts after the first row of the previous one, while in the `AFTER MATCH SKIP PAST LAST ROW` mode it starts after the last row of the previous match. The default mode is `PAST LAST ROW`.
 
 #### Examples {#after_match_skip-examples}
 
 The input data for all examples are:
 
-```json
-{"button": 1, "ts": 100}
-{"button": 1, "ts": 200}
-{"button": 2, "ts": 300}
-{"button": 3, "ts": 400}
-```
+|ts|button|
+|:-:|:-:|
+|100|1|
+|200|1|
+|300|2|
+|400|3|
 
 ##### **Example 1** {#after_match_skip-example1}
 
@@ -276,7 +276,7 @@ DEFINE
 Result:
 
 |first_ts|last_ts|
-|--|--|
+|:-:|:-:|
 |100|400|
 |200|400|
 
@@ -297,7 +297,7 @@ DEFINE
 Result:
 
 |first_ts|last_ts|
-|--|--|
+|:-:|:-:|
 |100|400|
 
 ### ORDER BY {#order_by}
@@ -324,7 +324,7 @@ PARTITION BY <partition_1> [ ... , <partition_N> ]
 <partition> ::= { <column_names> | <expression> }
 ```
 
-`PARTITION BY` - the expression partitions the source data into multiple non-overlapping groups, each used for an independent pattern search. If the command is not specified, all data is processed as a single group. Records with the same values of the columns listed after `PARTITION BY` fall into the same group.
+`PARTITION BY` is the expression partitions the source data into multiple non-overlapping groups, each used for an independent pattern search. If the command is not specified, all data is processed as a single group. Records with the same values of the columns listed after `PARTITION BY` fall into the same group.
 
 #### **Example** {#partition_by-example}
 
@@ -337,6 +337,6 @@ PARTITION BY device_id, zone_id
 Our support for the `MATCH_RECOGNIZE` command will eventually comply with [SQL-2016](https://ru.wikipedia.org/wiki/SQL:2016); currently, however, the following limitations apply:
 
 - [`MEASURES`](#measures). Functions `PREV`/`NEXT` are not supported.
-- - [`AFTER MATCH SKIP`](#after_match_skip). Only the `AFTER MATCH SKIP TO NEXT ROW` and `AFTER MATCH SKIP PAST LAST ROW` modes are supported.
+- [`AFTER MATCH SKIP`](#after_match_skip). Only the `AFTER MATCH SKIP TO NEXT ROW` and `AFTER MATCH SKIP PAST LAST ROW` modes are supported.
 - [`PATTERN`](#pattern). Union pattern variables are not implemented.
 - [`DEFINE`](#define). Aggregation functions are not supported.

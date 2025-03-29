@@ -121,10 +121,17 @@ class TNeumannHashTable {
   public:
     using OnMatchCallback = void(const ui8 *tuple);
 
-    TNeumannHashTable(const TTupleLayout *layout)
-        : Layout_(layout), IsInplace_(layout->TotalRowSize <= 16),
-          BufferSlotSize_(IsInplace_ ? layout->TotalRowSize
-                                     : sizeof(TOutplace)) {
+    TNeumannHashTable() = default;
+
+    explicit TNeumannHashTable(const TTupleLayout *layout) {
+        SetTupleLayout(layout);
+    }
+
+    void SetTupleLayout(const TTupleLayout *layout) {
+        Layout_ = layout;
+        IsInplace_ = layout->TotalRowSize <= 16;
+        BufferSlotSize_ = IsInplace_ ? layout->TotalRowSize : sizeof(TOutplace);
+
         Clear();
     }
 
@@ -134,6 +141,7 @@ class TNeumannHashTable {
 
     void Build(const ui8 *const tuples, const ui8 *const overflow, ui32 nItems,
                ui32 estimatedLogSize = 0) {
+        Y_ASSERT(Layout_ != nullptr);
         Y_ASSERT(Directories_.empty() && Buffer_.empty() &&
                  Tuples_ == nullptr && Overflow_ == nullptr);
 
@@ -192,6 +200,7 @@ class TNeumannHashTable {
 
     void Apply(const ui8 *const row, const ui8 *const overflow,
                auto &&onMatch) {
+        Y_ASSERT(Layout_ != nullptr);
         Y_ASSERT(!Directories_.empty() && Tuples_ != nullptr);
 
         const THash &thash = reinterpret_cast<const THash &>(row[0]);
@@ -231,7 +240,7 @@ class TNeumannHashTable {
             }
 
             if (Layout_->KeysEqual(row, overflow, matchRow, Overflow_)) {
-                onMatch(row);
+                onMatch(matchRow);
             }
         }
     }
@@ -244,18 +253,19 @@ class TNeumannHashTable {
     }
 
   private:
-    const TTupleLayout *const Layout_;
+    const TTupleLayout * Layout_ = nullptr;
 
     unsigned DirectoryHashBits_;
     unsigned DirectoryHashShift_;
     std::vector<TDirectory, TMKQLAllocator<TDirectory>> Directories_;
 
     std::vector<ui8, TMKQLAllocator<ui8>> Buffer_;
-    const bool IsInplace_;
-    const ui32 BufferSlotSize_;
+    
+    bool IsInplace_;
+    ui32 BufferSlotSize_;
 
-    const ui8 *Tuples_;
-    const ui8 *Overflow_;
+    const ui8 *Tuples_ = nullptr;
+    const ui8 *Overflow_ = nullptr;
 };
 
 } // namespace NPackedTuple

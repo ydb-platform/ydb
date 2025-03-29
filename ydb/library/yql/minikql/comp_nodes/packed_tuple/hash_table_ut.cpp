@@ -358,7 +358,7 @@ Y_UNIT_TEST_SUITE(HashTable) {
         TUniformDistribution uni1B(0, 999999999); /// oof, info may take some
         TMixtureDistribution mixSingleUni1B(single, uni1B, 0.2);
 
-        auto benchmark = Benchmark<TRobinHoodTable, TNeumannHashTable>(0);
+        auto benchmark = Benchmark<TRobinHoodTable, TNeumannHashTable>(4);
 
         benchmark.Register({"uniform 1M", uni1M, uni1M});
         benchmark.Register({"uniform 1M, 1B", uni1M, uni1B});

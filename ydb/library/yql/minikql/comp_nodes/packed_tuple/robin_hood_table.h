@@ -24,10 +24,6 @@ constexpr ui32 PrefetchBatchSize = 64;  /// TODO
 template <typename TEqual, typename THash,
           typename TAllocator = TMKQLAllocator<ui8>>
 class TRobinHoodHashBase {
-  public:
-    using iterator = ui8 *;
-    using const_iterator = const ui8 *;
-
     struct TCellStatus {
         static constexpr ui32 kInvalid = 0;
         static constexpr ui32 kStart = 2;
@@ -70,20 +66,15 @@ class TRobinHoodHashBase {
     static constexpr ui32 kEmbeddedSize = 16;
     static_assert(sizeof(TPSLOutStorage) <= kEmbeddedSize);
 
-    explicit TRobinHoodHashBase(const TTupleLayout *layout, THash hash = {},
-                                TEqual equal = {})
-        : HashLocal(std::move(hash)), EqualLocal(std::move(equal)),
-          Layout_(layout),
-          IsInplace_(sizeof(TPSLStorage) + layout->TotalRowSize <=
-                     kEmbeddedSize)
-          // , CellSize_(IsInplace_ ? std::max(sizeof(TPSLOutStorage),
-          // sizeof(TPSLStorage) + layout->TotalRowSize) :
-          // sizeof(TPSLOutStorage))
-          ,
-          DupPayloadSize_(IsInplace_ ? Layout_->TotalRowSize : sizeof(ui32)),
-          Allocator(), SelfHash(GetSelfHash(this)) {
-        Y_ENSURE((Capacity & (Capacity - 1)) == 0);
+  public:
+    TRobinHoodHashBase() : SelfHash(GetSelfHash(this)) {
         Init(256);
+    }
+
+    explicit TRobinHoodHashBase(const TTupleLayout *layout)
+        : SelfHash(GetSelfHash(this)) {
+        Init(256);
+        SetTupleLayout(layout);
     }
 
     ~TRobinHoodHashBase() {
@@ -92,12 +83,19 @@ class TRobinHoodHashBase {
         }
     }
 
+    void SetTupleLayout(const TTupleLayout *layout) {
+        Layout_ = layout;
+        IsInplace_ = sizeof(TPSLStorage) + layout->TotalRowSize <= kEmbeddedSize;
+        DupPayloadSize_ = IsInplace_ ? Layout_->TotalRowSize : sizeof(ui32);
+
+        Clear();
+    }
+
     TRobinHoodHashBase(const TRobinHoodHashBase &) = delete;
     TRobinHoodHashBase(TRobinHoodHashBase &&) = delete;
     void operator=(const TRobinHoodHashBase &) = delete;
     void operator=(TRobinHoodHashBase &&) = delete;
 
-  public:
     Y_FORCE_INLINE void Apply(const ui8 *const tuple, const ui8 *const overflow,
                               auto &&onMatch) {
         const ui32 hash = HashLocal(Layout_, tuple, overflow);
@@ -444,6 +442,7 @@ class TRobinHoodHashBase {
     }
 
     void Init(ui64 capacity) {
+        Y_ASSERT((capacity & (capacity - 1)) == 0);
         Capacity = capacity;
         CapacityShift = 64 - MostSignificantBit(capacity);
         Allocate(Capacity, Data, DataEnd);
@@ -451,6 +450,7 @@ class TRobinHoodHashBase {
 
     Y_NO_INLINE void Grow(ui64 size) {
         auto newCapacity = CalculateRHHashTableCapacity(size);
+        Y_ASSERT((newCapacity & (newCapacity - 1)) == 0);
         auto newCapacityShift = 64 - MostSignificantBit(newCapacity);
         ui8 *newData, *newDataEnd;
         Allocate(newCapacity, newData, newDataEnd);
@@ -497,25 +497,27 @@ class TRobinHoodHashBase {
     }
 
   private:
+    static constexpr ui32 CellSize_ = kEmbeddedSize;
+
+    const ui64 SelfHash;
+
     THash HashLocal;
     TEqual EqualLocal;
 
-    const TTupleLayout *const Layout_;
+    const TTupleLayout * Layout_ = nullptr;
 
     const ui8 *Tuples_;
     const ui8 *Overflow_;
 
-    const bool IsInplace_ = true;
-    static constexpr ui32 CellSize_ = kEmbeddedSize;
-    // const ui32 CellSize_ = 0;
-    const ui32 DupPayloadSize_ = 0;
+    bool IsInplace_ = true;
+    ui32 DupPayloadSize_ = 0;
 
     ui64 Size = 0;
     ui64 Listed = 0;
-    ui64 Capacity = 0;
+    ui64 Capacity;
     ui64 CapacityShift;
+
     TAllocator Allocator;
-    const ui64 SelfHash;
     ui8 *Data = nullptr;
     ui8 *DataEnd = nullptr;
     TVector<ui8, TAllocator> DupSeq;

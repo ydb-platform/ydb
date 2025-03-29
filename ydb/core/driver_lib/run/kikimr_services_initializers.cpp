@@ -72,6 +72,7 @@
 #include <ydb/core/kafka_proxy/actors/kafka_metrics_actor.h>
 #include <ydb/core/kafka_proxy/kafka_metrics.h>
 #include <ydb/core/kafka_proxy/kafka_proxy.h>
+#include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
 
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
@@ -2769,6 +2770,12 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
             TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings, Config.GetKafkaProxyConfig(),
                                                        NKafka::MakeKafkaDiscoveryCacheID()),
                            TMailboxType::HTSwap, appData->UserPoolId)
+        );
+        setup->LocalServices.emplace_back(
+            TActorId(),
+            TActorSetupCmd(NKafka::CreateKafkaTransactionsCoordinator(),
+                TMailboxType::HTSwap, appData->UserPoolId
+            )
         );
 
         IActor* metricsActor = CreateKafkaMetricsActor(NKafka::TKafkaMetricsSettings{appData->Counters});

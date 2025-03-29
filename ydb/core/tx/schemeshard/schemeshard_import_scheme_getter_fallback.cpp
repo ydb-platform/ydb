@@ -45,7 +45,7 @@ private:
     TImportInfo::TPtr ImportInfo;
 }; // TSchemeGetterFallback
 
-IActor* CreateSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx) {
+IActor* CreateSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx, TMaybe<NBackup::TEncryptionIV>) {
     return new TSchemeGetterFallback(replyTo, std::move(importInfo), itemIdx);
 }
 

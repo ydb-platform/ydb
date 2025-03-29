@@ -968,6 +968,11 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                                       << " bytes_size=" << resp.direct_read_response().bytes_size() << Endl);
 
             const auto& data = resp.direct_read_response().partition_data();
+            if (data.batches_size() == 0) {
+                // This case is possible on DirectRead restarts. See test DirectReadBudgetOnRestart.
+                return { .Range = {0, 0}, .Response = resp };
+            }
+            UNIT_ASSERT_C(data.batches_size() == 1, resp.DebugString());
             const auto& firstBatch = data.batches(0);
             const auto firstOffset = firstBatch.message_data(0).offset();
             const auto& lastBatch = data.batches(data.batches_size() - 1);

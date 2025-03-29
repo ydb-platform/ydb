@@ -315,10 +315,6 @@ public:
         return false;
     }
 
-    bool HasStageData() const {
-        return !!StageData;
-    }
-
     void InitStageData(std::unique_ptr<TFetchedData>&& data) {
         AFL_VERIFY(!StageData);
         StageData = std::move(data);

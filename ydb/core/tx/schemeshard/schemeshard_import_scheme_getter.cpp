@@ -34,9 +34,10 @@ static constexpr TDuration MaxDelay = TDuration::Minutes(10);
 template <class TDerived>
 class TGetterFromS3 : public TActorBootstrapped<TDerived> {
 protected:
-    explicit TGetterFromS3(TImportInfo::TPtr importInfo)
+    explicit TGetterFromS3(TImportInfo::TPtr importInfo, TMaybe<NBackup::TEncryptionIV> iv)
         : ImportInfo(std::move(importInfo))
         , ExternalStorageConfig(new NWrappers::NExternalStorage::TS3ExternalStorageConfig(ImportInfo->Settings))
+        , IV(std::move(iv))
         , Retries(ImportInfo->Settings.number_of_retries())
     {
         if (ImportInfo->Settings.has_encryption_settings()) {
@@ -44,23 +45,23 @@ protected:
         }
     }
 
-    void HeadObject(const TString& key) {
+    void HeadObject(const TString& key, bool autoAddEncSuffix = true) {
         auto request = Model::HeadObjectRequest()
-            .WithKey(GetKey(key));
+            .WithKey(GetKey(key, autoAddEncSuffix));
 
         this->Send(Client, new TEvExternalStorage::TEvHeadObjectRequest(request));
     }
 
-    void GetObject(const TString& key, const std::pair<ui64, ui64>& range) {
+    void GetObject(const TString& key, const std::pair<ui64, ui64>& range, bool autoAddEncSuffix = true) {
         auto request = Model::GetObjectRequest()
-            .WithKey(GetKey(key))
+            .WithKey(GetKey(key, autoAddEncSuffix))
             .WithRange(TStringBuilder() << "bytes=" << range.first << "-" << range.second);
 
         this->Send(Client, new TEvExternalStorage::TEvGetObjectRequest(request));
     }
 
-    void GetObject(const TString& key, ui64 contentLength) {
-        GetObject(key, std::make_pair(0, contentLength - 1));
+    void GetObject(const TString& key, ui64 contentLength, bool autoAddEncSuffix = true) {
+        GetObject(key, std::make_pair(0, contentLength - 1), autoAddEncSuffix);
     }
 
     void ListObjects(const TString& prefix) {
@@ -70,9 +71,9 @@ protected:
         this->Send(Client, new TEvExternalStorage::TEvListObjectsRequest(request));
     }
 
-    void Download(const TString& key) {
+    void Download(const TString& key, bool autoAddEncSuffix = true) {
         CreateClient();
-        HeadObject(key);
+        HeadObject(key, autoAddEncSuffix);
     }
 
     void CreateClient() {
@@ -87,8 +88,8 @@ protected:
         TActorBootstrapped<TDerived>::PassAway();
     }
 
-    TString GetKey(TString key) {
-        if (ImportInfo->Settings.has_encryption_settings()) {
+    TString GetKey(TString key, bool autoAddEncSuffix = true) {
+        if (autoAddEncSuffix && ImportInfo->Settings.has_encryption_settings()) {
             key += ".enc";
         }
         return key;
@@ -268,7 +269,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             return;
         }
 
-        GetObject(NBackup::ChecksumKey(CurrentObjectKey), result.GetResult().GetContentLength());
+        GetObject(NBackup::ChecksumKey(CurrentObjectKey), result.GetResult().GetContentLength(), false);
     }
 
     void HandleChangefeed(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
@@ -313,14 +314,19 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             return;
         }
 
+        TString content;
+        if (!MaybeDecrypt(msg.Body, content, NBackup::EBackupFileType::Metadata)) {
+            return;
+        }
+
         Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
         auto& item = ImportInfo->Items.at(ItemIdx);
 
         LOG_T("Trying to parse metadata"
             << ": self# " << SelfId()
-            << ", body# " << SubstGlobalCopy(msg.Body, "\n", "\\n"));
+            << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
 
-        item.Metadata = NBackup::TMetadata::Deserialize(msg.Body);
+        item.Metadata = NBackup::TMetadata::Deserialize(content);
 
         if (item.Metadata.HasVersion() && item.Metadata.GetVersion() == 0) {
             NeedValidateChecksums = false;
@@ -331,7 +337,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         };
 
         if (NeedValidateChecksums) {
-            StartValidatingChecksum(MetadataKey, msg.Body, nextStep);
+            StartValidatingChecksum(MetadataKey, content, nextStep);
         } else {
             nextStep();
         }
@@ -349,6 +355,11 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             return;
         }
 
+        TString content;
+        if (!MaybeDecrypt(msg.Body, content, NBackup::EBackupFileType::TableSchema)) {
+            return;
+        }
+
         Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
         auto& item = ImportInfo->Items.at(ItemIdx);
 
@@ -356,11 +367,11 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             << ": self# " << SelfId()
             << ", itemIdx# " << ItemIdx
             << ", schemeKey# " << SchemeKey
-            << ", body# " << SubstGlobalCopy(msg.Body, "\n", "\\n"));
+            << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
 
         if (IsView(SchemeKey)) {
-            item.CreationQuery = msg.Body;
-        } else if (!google::protobuf::TextFormat::ParseFromString(msg.Body, &item.Scheme)) {
+            item.CreationQuery = content;
+        } else if (!google::protobuf::TextFormat::ParseFromString(content, &item.Scheme)) {
             return Reply(false, "Cannot parse scheme");
         }
 
@@ -373,7 +384,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         };
 
         if (NeedValidateChecksums) {
-            StartValidatingChecksum(SchemeKey, msg.Body, nextStep);
+            StartValidatingChecksum(SchemeKey, content, nextStep);
         } else {
             nextStep();
         }
@@ -391,15 +402,20 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             return;
         }
 
+        TString content;
+        if (!MaybeDecrypt(msg.Body, content, NBackup::EBackupFileType::Permissions)) {
+            return;
+        }
+
         Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
         auto& item = ImportInfo->Items.at(ItemIdx);
 
         LOG_T("Trying to parse permissions"
             << ": self# " << SelfId()
-            << ", body# " << SubstGlobalCopy(msg.Body, "\n", "\\n"));
+            << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
 
         Ydb::Scheme::ModifyPermissionsRequest permissions;
-        if (!google::protobuf::TextFormat::ParseFromString(msg.Body, &permissions)) {
+        if (!google::protobuf::TextFormat::ParseFromString(content, &permissions)) {
             return Reply(false, "Cannot parse permissions");
         }
         item.Permissions = std::move(permissions);
@@ -409,7 +425,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         };
 
         if (NeedValidateChecksums) {
-            StartValidatingChecksum(PermissionsKey, msg.Body, nextStep);
+            StartValidatingChecksum(PermissionsKey, content, nextStep);
         } else {
             nextStep();
         }
@@ -449,15 +465,20 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             return;
         }
 
+        TString content;
+        if (!MaybeDecrypt(msg.Body, content, NBackup::EBackupFileType::TableChangefeed)) {
+            return;
+        }
+
         Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
         auto& item = ImportInfo->Items.at(ItemIdx);
 
         LOG_T("Trying to parse changefeed"
             << ": self# " << SelfId()
-            << ", body# " << SubstGlobalCopy(msg.Body, "\n", "\\n"));
+            << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
 
         Ydb::Table::ChangefeedDescription changefeed;
-        if (!google::protobuf::TextFormat::ParseFromString(msg.Body, &changefeed)) {
+        if (!google::protobuf::TextFormat::ParseFromString(content, &changefeed)) {
             return Reply(false, "Cannot parse сhangefeed");
         }
 
@@ -469,7 +490,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         };
 
         if (NeedValidateChecksums) {
-            StartValidatingChecksum(ChangefeedDescriptionKeyFromSettings(ImportInfo, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]), msg.Body, nextStep);
+            StartValidatingChecksum(ChangefeedDescriptionKeyFromSettings(ImportInfo, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]), content, nextStep);
         } else {
             nextStep();
         }
@@ -487,15 +508,20 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
             return;
         }
 
+        TString content;
+        if (!MaybeDecrypt(msg.Body, content, NBackup::EBackupFileType::TableTopic)) {
+            return;
+        }
+
         Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
         auto& item = ImportInfo->Items.at(ItemIdx);
 
         LOG_T("Trying to parse topic"
             << ": self# " << SelfId()
-            << ", body# " << SubstGlobalCopy(msg.Body, "\n", "\\n"));
+            << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
 
         Ydb::Topic::DescribeTopicResult topic;
-        if (!google::protobuf::TextFormat::ParseFromString(msg.Body, &topic)) {
+        if (!google::protobuf::TextFormat::ParseFromString(content, &topic)) {
             return Reply(false, "Cannot parse topic");
         }
         *item.Changefeeds.MutableChangefeeds(IndexDownloadedChangefeed)->MutableTopic() = std::move(topic);
@@ -510,7 +536,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         };
 
         if (NeedValidateChecksums) {
-            StartValidatingChecksum(TopicDescriptionKeyFromSettings(ImportInfo, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]), msg.Body, nextStep);
+            StartValidatingChecksum(TopicDescriptionKeyFromSettings(ImportInfo, ItemIdx, ChangefeedsNames[IndexDownloadedChangefeed]), content, nextStep);
         } else {
             nextStep();
         }
@@ -582,7 +608,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
     }
 
     void DownloadChecksum() {
-        Download(NBackup::ChecksumKey(CurrentObjectKey));
+        Download(NBackup::ChecksumKey(CurrentObjectKey), false);
     }
 
     void DownloadChangefeeds() {
@@ -618,8 +644,8 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
     }
 
 public:
-    explicit TSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx)
-        : TGetterFromS3<TSchemeGetter>(std::move(importInfo))
+    explicit TSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx, TMaybe<NBackup::TEncryptionIV> iv)
+        : TGetterFromS3<TSchemeGetter>(std::move(importInfo), std::move(iv))
         , ReplyTo(replyTo)
         , ItemIdx(itemIdx)
         , MetadataKey(MetadataKeyFromSettings(ImportInfo, itemIdx))
@@ -857,7 +883,7 @@ class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
 
 public:
     TSchemaMappingGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo)
-        : TGetterFromS3<TSchemaMappingGetter>(std::move(importInfo))
+        : TGetterFromS3<TSchemaMappingGetter>(std::move(importInfo), Nothing())
         , ReplyTo(replyTo)
         , MetadataKey(SchemaMappingMetadataKeyFromSettings(ImportInfo))
         , SchemaMappingKey(SchemaMappingKeyFromSettings(ImportInfo))
@@ -895,8 +921,8 @@ private:
     const TString SchemaMappingKey;
 }; // TSchemaMappingGetter
 
-IActor* CreateSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx) {
-    return new TSchemeGetter(replyTo, std::move(importInfo), itemIdx);
+IActor* CreateSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx, TMaybe<NBackup::TEncryptionIV> iv) {
+    return new TSchemeGetter(replyTo, std::move(importInfo), itemIdx, std::move(iv));
 }
 
 IActor* CreateSchemaMappingGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo) {

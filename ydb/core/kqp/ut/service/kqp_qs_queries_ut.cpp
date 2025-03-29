@@ -2895,6 +2895,31 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
+    Y_UNIT_TEST(ShowCreateTableOnView) {
+        auto serverSettings = TKikimrSettings().SetEnableShowCreate(true);
+
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            // note: KeyValue is one of the sample tables created in KikimrRunner
+            auto result = session.ExecuteQuery(R"(
+                CREATE VIEW test_view WITH security_invoker = TRUE AS
+                    SELECT * FROM KeyValue;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteQuery(R"(
+                SHOW CREATE TABLE test_view;
+            )", TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid path type");
+        }
+    }
+
     Y_UNIT_TEST(DdlCache) {
         NKikimrConfig::TAppConfig appConfig;
         auto setting = NKikimrKqp::TKqpSetting();

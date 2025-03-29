@@ -158,19 +158,18 @@ THolder<TTupleLayout>
 TTupleLayout::Create(const std::vector<TColumnDesc> &columns) {
 
     if (NX86::HaveAVX2())
-        return MakeHolder<TTupleLayoutFallback<NSimd::TSimdAVX2Traits>>(
+        return MakeHolder<TTupleLayoutSIMD<NSimd::TSimdAVX2Traits>>(
             columns);
 
     if (NX86::HaveSSE42())
-        return MakeHolder<TTupleLayoutFallback<NSimd::TSimdSSE42Traits>>(
+        return MakeHolder<TTupleLayoutSIMD<NSimd::TSimdSSE42Traits>>(
             columns);
 
-    return MakeHolder<TTupleLayoutFallback<NSimd::TSimdFallbackTraits>>(
+    return MakeHolder<TTupleLayoutFallback>(
         columns);
 }
 
-template <typename TTraits>
-TTupleLayoutFallback<TTraits>::TTupleLayoutFallback(
+TTupleLayoutFallback::TTupleLayoutFallback(
     const std::vector<TColumnDesc> &columns)
     : TTupleLayout(columns) {
 
@@ -275,7 +274,12 @@ TTupleLayoutFallback<TTraits>::TTupleLayoutFallback(
             FixedNPOTColumns_.push_back(col);
         }
     }
+}
 
+template <typename TTraits>
+TTupleLayoutSIMD<TTraits>::TTupleLayoutSIMD(
+    const std::vector<TColumnDesc> &columns)
+    : TTupleLayoutFallback(columns) {
     BlockRows_ = 128 * std::max(1ul, 128ul / TotalRowSize);
     const bool use_simd = true;
 
@@ -481,14 +485,18 @@ TTupleLayoutFallback<TTraits>::TTupleLayoutFallback(
 //       u8 [DataSize - 1 - 2*4] initial bytes of data
 // Data is expected to be consistent with isValidBitmask (0 for fixed-size,
 // empty for variable-size)
-template <>
-void TTupleLayoutFallback<NSimd::TSimdFallbackTraits>::Pack(
+void TTupleLayoutFallback::Pack(
     const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,
     std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
     ui32 count) const {
     using TTraits = NSimd::TSimdFallbackTraits;
 
+    const ui64 bitmaskTail =
+        BitmaskSize * 8 == OrigColumns.size()
+            ? 0
+            : ~0ull << ((OrigColumns.size() + 8 - BitmaskSize * 8) * 8);
     std::vector<ui64> bitmaskMatrix(BitmaskSize, 0);
+    bitmaskMatrix.back() = bitmaskTail;
 
     if (auto off = (start % 8)) {
         auto bitmaskIdx = start / 8;
@@ -508,27 +516,12 @@ void TTupleLayoutFallback<NSimd::TSimdFallbackTraits>::Pack(
     }
 
     for (; count--; ++start, res += TotalRowSize) {
-        ui32 hash = 0;
         auto bitmaskIdx = start / 8;
-
-        bool anyOverflow = false;
-
-        for (ui32 i = KeyColumnsFixedNum; i < KeyColumns.size(); ++i) {
-            auto &col = KeyColumns[i];
-            ui32 dataOffset = ReadUnaligned<ui32>(columns[col.OriginalIndex] +
-                                                  sizeof(ui32) * start);
-            ui32 nextOffset = ReadUnaligned<ui32>(columns[col.OriginalIndex] +
-                                                  sizeof(ui32) * (start + 1));
-            auto size = nextOffset - dataOffset;
-
-            if (size >= col.DataSize) {
-                anyOverflow = true;
-                break;
-            }
-        }
 
         if ((start % 8) == 0) {
             std::fill(bitmaskMatrix.begin(), bitmaskMatrix.end(), 0);
+            bitmaskMatrix.back() = bitmaskTail;
+
             for (ui32 j = Columns.size(); j--;) {
                 const ui64 byte =
                 isValidBitmask[Columns[j].OriginalIndex]
@@ -565,31 +558,50 @@ void TTupleLayoutFallback<NSimd::TSimdFallbackTraits>::Pack(
         PackPOTColumn(4);
 #undef PackPOTColumn
 
-        for (auto &col : VariableColumns_) {
-            auto dataOffset = ReadUnaligned<ui32>(columns[col.OriginalIndex] +
-                                                  sizeof(ui32) * start);
-            auto nextOffset = ReadUnaligned<ui32>(columns[col.OriginalIndex] +
-                                                  sizeof(ui32) * (start + 1));
+        ui32 hash = CalculateCRC32<TTraits>(
+            res + KeyColumnsOffset, KeyColumnsFixedEnd - KeyColumnsOffset);
+
+        for (ui32 i = KeyColumnsFixedNum; i < KeyColumns.size(); ++i) {
+            auto &col = KeyColumns[i];
+            auto dataOffset = ReadUnaligned<ui32>(
+                columns[col.OriginalIndex] + sizeof(ui32) * start);
+            auto nextOffset = ReadUnaligned<ui32>(
+                columns[col.OriginalIndex] + sizeof(ui32) * (start + 1));
             auto size = nextOffset - dataOffset;
             auto data = columns[col.OriginalIndex + 1] + dataOffset;
 
+            // hash = CalculateCRC32<TTraits>((ui8 *)&size, sizeof(size), hash);
+            hash = CalculateCRC32<TTraits>(data, size, hash);
+        }
+
+        // isValid bitmap is NOT included into hashed data
+        WriteUnaligned<ui32>(res, hash);
+
+        for (auto &col : VariableColumns_) {
+            auto dataOffset = ReadUnaligned<ui32>(
+                columns[col.OriginalIndex] + sizeof(ui32) * start);
+            auto nextOffset = ReadUnaligned<ui32>(
+                columns[col.OriginalIndex] + sizeof(ui32) * (start + 1));
+            auto size = nextOffset - dataOffset;
+            auto data = columns[col.OriginalIndex + 1] + dataOffset;
             if (size >= col.DataSize) {
                 res[col.Offset] = 255;
 
-                ui32 prefixSize = (col.DataSize - 1 - 2 * sizeof(ui32));
+                auto prefixSize = (col.DataSize - 1 - 2 * sizeof(ui32));
                 auto overflowSize = size - prefixSize;
                 auto overflowOffset = overflow.size();
 
                 overflow.resize(overflowOffset + overflowSize);
 
-                WriteUnaligned<ui32>(res + col.Offset + 1 + 0 * sizeof(ui32),
-                                     overflowOffset);
-                WriteUnaligned<ui32>(res + col.Offset + 1 + 1 * sizeof(ui32),
-                                     overflowSize);
+                WriteUnaligned<ui32>(res + col.Offset + 1 +
+                                        0 * sizeof(ui32),
+                                    overflowOffset);
+                WriteUnaligned<ui32>(
+                    res + col.Offset + 1 + 1 * sizeof(ui32), overflowSize);
                 std::memcpy(res + col.Offset + 1 + 2 * sizeof(ui32), data,
                             prefixSize);
-                std::memcpy(overflow.data() + overflowOffset, data + prefixSize,
-                            overflowSize);
+                std::memcpy(overflow.data() + overflowOffset,
+                            data + prefixSize, overflowSize);
             } else {
                 Y_DEBUG_ABORT_UNLESS(size < 255);
                 res[col.Offset] = size;
@@ -597,29 +609,11 @@ void TTupleLayoutFallback<NSimd::TSimdFallbackTraits>::Pack(
                 std::memset(res + col.Offset + 1 + size, 0,
                             col.DataSize - (size + 1));
             }
-
-            if (anyOverflow && col.Role == EColumnRole::Key) {
-                hash =
-                    CalculateCRC32<TTraits>((ui8 *)&size, sizeof(ui32), hash);
-                hash = CalculateCRC32<TTraits>(data, size, hash);
-            }
         }
-
-        // isValid bitmap is NOT included into hashed data
-        if (anyOverflow) {
-            hash = CalculateCRC32<TTraits>(
-                res + KeyColumnsOffset, KeyColumnsFixedEnd - KeyColumnsOffset,
-                hash);
-        } else {
-            hash = CalculateCRC32<TTraits>(res + KeyColumnsOffset,
-                                           KeyColumnsEnd - KeyColumnsOffset);
-        }
-        WriteUnaligned<ui32>(res, hash);
     }
 }
 
-template <>
-void TTupleLayoutFallback<NSimd::TSimdFallbackTraits>::Unpack(
+void TTupleLayoutFallback::Unpack(
     ui8 **columns, ui8 **isValidBitmask, const ui8 *res,
     const std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
     ui32 count) const {
@@ -748,11 +742,170 @@ void TTupleLayoutFallback<NSimd::TSimdFallbackTraits>::Unpack(
     }
 }
 
+void TTupleLayoutFallback::BucketPack(
+    const ui8 **columns, const ui8 **isValidBitmask,
+    PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
+    PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows, ui32 start,
+    ui32 count, ui32 bucketsLogNum) const {
+    using TTraits = NSimd::TSimdFallbackTraits;
+
+    if (bucketsLogNum == 0) {
+        auto& bres = reses[0];
+        const auto size = bres.size();
+
+        bres.resize(size + count * TotalRowSize);
+        auto* const res = bres.data() + size;
+
+        Pack(columns, isValidBitmask, res, overflows[0], start, count);
+        return;
+    }
+
+    std::vector<ui8> resbuf(TotalRowSize);
+    ui8 *const res = resbuf.data();
+
+    for (ui32 bucket = 0; bucket < (1u << bucketsLogNum); ++bucket) {
+        auto &bres = reses[bucket];
+        /// memory reserve heuristic
+        bres.reserve(bres.size() + ((count >> bucketsLogNum) + 1) * 9 / 8);
+    }
+
+    const ui64 bitmaskTail =
+        BitmaskSize * 8 == OrigColumns.size()
+            ? 0
+            : ~0ull << ((OrigColumns.size() + 8 - BitmaskSize * 8) * 8);
+    std::vector<ui64> bitmaskMatrix(BitmaskSize, 0);
+    bitmaskMatrix.back() = bitmaskTail;
+
+    if (auto off = (start % 8)) {
+        auto bitmaskIdx = start / 8;
+
+        for (ui32 j = Columns.size(); j--;) {
+            const ui64 byte =
+                isValidBitmask[Columns[j].OriginalIndex]
+                    ? isValidBitmask[Columns[j].OriginalIndex][bitmaskIdx]
+                    : 0xFF;
+            bitmaskMatrix[j / 8] |= byte << ((j % 8) * 8);
+        }
+
+        for (auto &m : bitmaskMatrix) {
+            m = transposeBitmatrix(m);
+            m >>= off * 8;
+        }
+    }
+
+    for (; count--; ++start) {
+        auto bitmaskIdx = start / 8;
+
+        if ((start % 8) == 0) {
+            std::fill(bitmaskMatrix.begin(), bitmaskMatrix.end(), 0);
+            bitmaskMatrix.back() = bitmaskTail;
+
+            for (ui32 j = Columns.size(); j--;) {
+                const ui64 byte =
+                isValidBitmask[Columns[j].OriginalIndex]
+                    ? isValidBitmask[Columns[j].OriginalIndex][bitmaskIdx]
+                    : 0xFF;
+                bitmaskMatrix[j / 8] |= byte << ((j % 8) * 8);
+            }
+            for (auto &m : bitmaskMatrix)
+                m = transposeBitmatrix(m);
+        }
+
+        for (ui32 j = 0; j < BitmaskSize; ++j) {
+            res[BitmaskOffset + j] = ui8(bitmaskMatrix[j]);
+            bitmaskMatrix[j] >>= 8;
+        }
+
+        for (auto &col : FixedNPOTColumns_) {
+            std::memcpy(res + col.Offset,
+                        columns[col.OriginalIndex] + start * col.DataSize,
+                        col.DataSize);
+        }
+
+#define PackPOTColumn(POT)                                                     \
+    for (auto &col : FixedPOTColumns_[POT]) {                                  \
+        std::memcpy(res + col.Offset,                                          \
+                    columns[col.OriginalIndex] + start * (1u << POT),          \
+                    1u << POT);                                                \
+    }
+
+        PackPOTColumn(0);
+        PackPOTColumn(1);
+        PackPOTColumn(2);
+        PackPOTColumn(3);
+        PackPOTColumn(4);
+#undef PackPOTColumn
+
+        ui32 hash = CalculateCRC32<TTraits>(
+            res + KeyColumnsOffset, KeyColumnsFixedEnd - KeyColumnsOffset);
+
+        for (ui32 i = KeyColumnsFixedNum; i < KeyColumns.size(); ++i) {
+            auto &col = KeyColumns[i];
+            auto dataOffset = ReadUnaligned<ui32>(
+                columns[col.OriginalIndex] + sizeof(ui32) * start);
+            auto nextOffset = ReadUnaligned<ui32>(
+                columns[col.OriginalIndex] + sizeof(ui32) * (start + 1));
+            auto size = nextOffset - dataOffset;
+            auto data = columns[col.OriginalIndex + 1] + dataOffset;
+
+            // hash = CalculateCRC32<TTraits>((ui8 *)&size, sizeof(size), hash);
+            hash = CalculateCRC32<TTraits>(data, size, hash);
+        }
+
+        // isValid bitmap is NOT included into hashed data
+        WriteUnaligned<ui32>(res, hash);
+
+        /// most-significant bits of hash
+        const auto bucket = hash >> (sizeof(hash) * 8 - bucketsLogNum);
+
+        auto& overflow = overflows[bucket];
+
+        for (auto &col : VariableColumns_) {
+            auto dataOffset = ReadUnaligned<ui32>(
+                columns[col.OriginalIndex] + sizeof(ui32) * start);
+            auto nextOffset = ReadUnaligned<ui32>(
+                columns[col.OriginalIndex] + sizeof(ui32) * (start + 1));
+            auto size = nextOffset - dataOffset;
+            auto data = columns[col.OriginalIndex + 1] + dataOffset;
+
+            if (size >= col.DataSize) {
+                res[col.Offset] = 255;
+
+                auto prefixSize = (col.DataSize - 1 - 2 * sizeof(ui32));
+                auto overflowSize = size - prefixSize;
+                auto overflowOffset = overflow.size();
+
+                overflow.resize(overflowOffset + overflowSize);
+
+                WriteUnaligned<ui32>(res + col.Offset + 1 +
+                                        0 * sizeof(ui32),
+                                    overflowOffset);
+                WriteUnaligned<ui32>(
+                    res + col.Offset + 1 + 1 * sizeof(ui32), overflowSize);
+                std::memcpy(res + col.Offset + 1 + 2 * sizeof(ui32), data,
+                            prefixSize);
+                std::memcpy(overflow.data() + overflowOffset,
+                            data + prefixSize, overflowSize);
+            } else {
+                Y_DEBUG_ABORT_UNLESS(size < 255);
+                res[col.Offset] = size;
+                std::memcpy(res + col.Offset + 1, data, size);
+                std::memset(res + col.Offset + 1 + size, 0,
+                            col.DataSize - (size + 1));
+            }
+        }
+
+        auto &bres = reses[bucket];
+        bres.resize_uninitialized(bres.size() + TotalRowSize);
+        std::memcpy(bres.data() + bres.size() - TotalRowSize, res, TotalRowSize);
+    }
+}
+
 #define MULTI_8_I(C, i) C(i, 0) C(i, 1) C(i, 2) C(i, 3)
 #define MULTI_8(C, A) C(A, 0) C(A, 1) C(A, 2) C(A, 3)
 
 template <typename TTraits>
-void TTupleLayoutFallback<TTraits>::Pack(
+void TTupleLayoutSIMD<TTraits>::Pack(
     const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,
     std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
     ui32 count) const {
@@ -877,8 +1030,8 @@ void TTupleLayoutFallback<TTraits>::Pack(
             const auto new_res = res + block_row_ind * TotalRowSize;
             const auto res = new_res;
 
-            ui32 hash = 0;
-            bool anyOverflow = false;
+            ui32 hash = CalculateCRC32<TTraits>(
+                res + KeyColumnsOffset, KeyColumnsFixedEnd - KeyColumnsOffset);
 
             for (ui32 i = KeyColumnsFixedNum; i < KeyColumns.size(); ++i) {
                 auto &col = KeyColumns[i];
@@ -887,12 +1040,14 @@ void TTupleLayoutFallback<TTraits>::Pack(
                 auto nextOffset = ReadUnaligned<ui32>(
                     columns[col.OriginalIndex] + sizeof(ui32) * (start + 1));
                 auto size = nextOffset - dataOffset;
+                auto data = columns[col.OriginalIndex + 1] + dataOffset;
 
-                if (size >= col.DataSize) {
-                    anyOverflow = true;
-                    break;
-                }
+                // hash = CalculateCRC32<TTraits>((ui8 *)&size, sizeof(size), hash);
+                hash = CalculateCRC32<TTraits>(data, size, hash);
             }
+
+            // isValid bitmap is NOT included into hashed data
+            WriteUnaligned<ui32>(res, hash);
 
             for (auto &col : VariableColumns_) {
                 auto dataOffset = ReadUnaligned<ui32>(
@@ -926,23 +1081,7 @@ void TTupleLayoutFallback<TTraits>::Pack(
                     std::memset(res + col.Offset + 1 + size, 0,
                                 col.DataSize - (size + 1));
                 }
-                if (anyOverflow && col.Role == EColumnRole::Key) {
-                    hash = CalculateCRC32<TTraits>((ui8 *)&size, sizeof(ui32),
-                                                   hash);
-                    hash = CalculateCRC32<TTraits>(data, size, hash);
-                }
             }
-
-            // isValid bitmap is NOT included into hashed data
-            if (anyOverflow) {
-                hash = CalculateCRC32<TTraits>(
-                    res + KeyColumnsOffset,
-                    KeyColumnsFixedEnd - KeyColumnsOffset, hash);
-            } else {
-                hash = CalculateCRC32<TTraits>(
-                    res + KeyColumnsOffset, KeyColumnsEnd - KeyColumnsOffset);
-            }
-            WriteUnaligned<ui32>(res, hash);
         }
 
         start += cur_block_size;
@@ -951,7 +1090,7 @@ void TTupleLayoutFallback<TTraits>::Pack(
 }
 
 template <typename TTraits>
-void TTupleLayoutFallback<TTraits>::Unpack(
+void TTupleLayoutSIMD<TTraits>::Unpack(
     ui8 **columns, ui8 **isValidBitmask, const ui8 *res,
     const std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
     ui32 count) const {
@@ -1122,34 +1261,260 @@ void TTupleLayoutFallback<TTraits>::Unpack(
     }
 }
 
-template __attribute__((target("avx2"))) void
-TTupleLayoutFallback<NSimd::TSimdAVX2Traits>::Pack(
-    const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,
-    std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
-    ui32 count) const;
-template __attribute__((target("sse4.2"))) void
-TTupleLayoutFallback<NSimd::TSimdSSE42Traits>::Pack(
-    const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,
-    std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
-    ui32 count) const;
-
-template __attribute__((target("avx2"))) void
-TTupleLayoutFallback<NSimd::TSimdAVX2Traits>::Unpack(
-    ui8 **columns, ui8 **isValidBitmask, const ui8 *res,
-    const std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
-    ui32 count) const;
-template __attribute__((target("sse4.2"))) void
-TTupleLayoutFallback<NSimd::TSimdSSE42Traits>::Unpack(
-    ui8 **columns, ui8 **isValidBitmask, const ui8 *res,
-    const std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
-    ui32 count) const;
-
 template <typename TTraits>
-void TTupleLayoutFallback<TTraits>::CalculateColumnSizes(
-    const ui8* res,
-    ui32 count,
-    std::vector<ui64, TMKQLAllocator<ui64>>& bytes) const {
-    
+void TTupleLayoutSIMD<TTraits>::BucketPack(
+    const ui8 **columns, const ui8 **isValidBitmask,
+    PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
+    PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows, ui32 start,
+    ui32 count, ui32 bucketsLogNum) const {
+    if (bucketsLogNum == 0) {
+        auto& bres = reses[0];
+        const auto size = bres.size();
+
+        bres.resize(size + count * TotalRowSize);
+        auto* const res = bres.data() + size;
+
+        Pack(columns, isValidBitmask, res, overflows[0], start, count);
+        return;
+    }
+
+    std::vector<ui8> resbuf(BlockRows_ * TotalRowSize);
+    ui8 *const res = resbuf.data();
+
+    for (ui32 bucket = 0; bucket < (1u << bucketsLogNum); ++bucket) {
+        auto &bres = reses[bucket];
+        /// memory reserve heuristic
+        bres.reserve(bres.size() + ((count >> bucketsLogNum) + 1) * 9 / 8);
+    }
+
+    std::vector<const ui8 *> block_columns;
+    for (const auto col_ind : BlockColumnsOrigInds_) {
+        block_columns.push_back(columns[col_ind]);
+    }
+
+    for (size_t row_ind = 0; row_ind < count; row_ind += BlockRows_) {
+        const size_t cur_block_size = std::min(count - row_ind, BlockRows_);
+        size_t cols_past = 0;
+
+        if (SIMDSmallTuple_.Cols) {
+
+#define CASE(i, j)                                                             \
+    case i *kSIMDMaxCols + j:                                                  \
+        SIMDPack<TTraits>::template PackTupleOr<i + 1, j + 1>(                 \
+            block_columns.data() + cols_past, res + SIMDSmallTuple_.RowOffset, \
+            cur_block_size, BlockFixedColsSizes_.data() + cols_past,           \
+            BlockColsOffsets_.data() + cols_past,                              \
+            SIMDSmallTuple_.SmallTupleSize, TotalRowSize,                      \
+            SIMDPermMasks_.data(), start);                                     \
+        break;
+
+            switch ((SIMDSmallTuple_.InnerLoopIters - 1) * kSIMDMaxCols +
+                    SIMDSmallTuple_.Cols - 1) {
+                MULTI_8(MULTI_8_I, CASE)
+
+            default:
+                std::abort();
+            }
+
+#undef CASE
+
+            cols_past += SIMDSmallTuple_.Cols;
+        }
+
+        for (size_t trnsps_ind = 0; trnsps_ind != SIMDTranspositions_.size();
+             ++trnsps_ind) {
+            if (SIMDTranspositions_[trnsps_ind].Cols) {
+                SIMDPack<TTraits>::PackColSize(
+                    block_columns.data() + cols_past,
+                    res + SIMDTranspositions_[trnsps_ind].RowOffset,
+                    cur_block_size,
+                    SIMDTranspositionsColSizes_
+                        [trnsps_ind % SIMDTranspositionsColSizes_.size()],
+                    SIMDTranspositions_[trnsps_ind].Cols, TotalRowSize, start);
+                cols_past += SIMDTranspositions_[trnsps_ind].Cols;
+            }
+        }
+
+        PackTupleFallbackColImpl(
+            block_columns.data() + cols_past, res,
+            BlockColsOffsets_.size() - cols_past, cur_block_size,
+            BlockFixedColsSizes_.data() + cols_past,
+            BlockColsOffsets_.data() + cols_past, TotalRowSize, start);
+
+        for (ui32 cols_ind = 0; cols_ind < Columns.size(); cols_ind += 8) {
+            const size_t cols = std::min<size_t>(8ul, Columns.size() - cols_ind);
+            const ui8 ones_byte = 0xFF;  // dereferencable + all-ones fast path
+            const ui8 *bitmasks[8];
+
+            for (size_t ind = 0; ind != cols; ++ind) {
+                const auto &col = Columns[cols_ind + ind];
+                bitmasks[ind] = 
+                    isValidBitmask[col.OriginalIndex]
+                    ? isValidBitmask[col.OriginalIndex] + start / 8
+                    : &ones_byte;
+            }
+            for (size_t ind = cols; ind != 8; ++ind) {
+                bitmasks[ind] = &ones_byte;
+            }
+
+            const auto advance_masks = [&] {
+                for (size_t ind = 0; ind != 8; ++ind) {
+                    if (bitmasks[ind] != &ones_byte) {
+                        ++bitmasks[ind];
+                    }
+                }
+            };
+
+            const size_t first_full_byte =
+                std::min<size_t>((8ul - start) & 7, cur_block_size);
+            size_t block_row_ind = 0;
+
+            const auto simple_mask_transpose = [&](const size_t until) {
+                for (; block_row_ind < until; ++block_row_ind) {
+                    const auto shift = (start + block_row_ind) % 8;
+
+                    const auto new_res = res + block_row_ind * TotalRowSize;
+                    const auto res = new_res;
+
+                    res[BitmaskOffset + cols_ind / 8] = 0;
+                    for (size_t col_ind = 0; col_ind != 8; ++col_ind) {
+                        res[BitmaskOffset + cols_ind / 8] |=
+                            ((bitmasks[col_ind][0] >> shift) & 1u) << col_ind;
+                    }
+                }
+            };
+
+            simple_mask_transpose(first_full_byte);
+            if (first_full_byte) {
+                advance_masks();
+            }
+
+            for (; block_row_ind + 7 < cur_block_size; block_row_ind += 8) {
+                transposeBitmatrix(res + block_row_ind * TotalRowSize +
+                                       BitmaskOffset + cols_ind / 8,
+                                   bitmasks, TotalRowSize);
+                advance_masks();
+            }
+
+            simple_mask_transpose(cur_block_size);
+        }
+
+        for (size_t block_row_ind = 0; block_row_ind != cur_block_size;
+            ++block_row_ind) {
+
+            const auto new_start = start + block_row_ind;
+            const auto start = new_start;
+
+            const auto new_res = res + block_row_ind * TotalRowSize;
+            const auto res = new_res;
+
+            ui32 hash = CalculateCRC32<TTraits>(
+                res + KeyColumnsOffset, KeyColumnsFixedEnd - KeyColumnsOffset);
+
+            for (ui32 i = KeyColumnsFixedNum; i < KeyColumns.size(); ++i) {
+                auto &col = KeyColumns[i];
+                auto dataOffset = ReadUnaligned<ui32>(
+                    columns[col.OriginalIndex] + sizeof(ui32) * start);
+                auto nextOffset = ReadUnaligned<ui32>(
+                    columns[col.OriginalIndex] + sizeof(ui32) * (start + 1));
+                auto size = nextOffset - dataOffset;
+                auto data = columns[col.OriginalIndex + 1] + dataOffset;
+
+                // hash = CalculateCRC32<TTraits>((ui8 *)&size, sizeof(size), hash);
+                hash = CalculateCRC32<TTraits>(data, size, hash);
+            }
+
+            // isValid bitmap is NOT included into hashed data
+            WriteUnaligned<ui32>(res, hash);
+
+            /// most-significant bits of hash
+            const auto bucket = hash >> (sizeof(hash) * 8 - bucketsLogNum);
+
+            auto& overflow = overflows[bucket];
+
+            for (auto &col : VariableColumns_) {
+                auto dataOffset = ReadUnaligned<ui32>(
+                    columns[col.OriginalIndex] + sizeof(ui32) * start);
+                auto nextOffset = ReadUnaligned<ui32>(
+                    columns[col.OriginalIndex] + sizeof(ui32) * (start + 1));
+                auto size = nextOffset - dataOffset;
+                auto data = columns[col.OriginalIndex + 1] + dataOffset;
+
+                if (size >= col.DataSize) {
+                    res[col.Offset] = 255;
+
+                    auto prefixSize = (col.DataSize - 1 - 2 * sizeof(ui32));
+                    auto overflowSize = size - prefixSize;
+                    auto overflowOffset = overflow.size();
+
+                    overflow.resize(overflowOffset + overflowSize);
+
+                    WriteUnaligned<ui32>(res + col.Offset + 1 +
+                                            0 * sizeof(ui32),
+                                        overflowOffset);
+                    WriteUnaligned<ui32>(
+                        res + col.Offset + 1 + 1 * sizeof(ui32), overflowSize);
+                    std::memcpy(res + col.Offset + 1 + 2 * sizeof(ui32), data,
+                                prefixSize);
+                    std::memcpy(overflow.data() + overflowOffset,
+                                data + prefixSize, overflowSize);
+                } else {
+                    Y_DEBUG_ABORT_UNLESS(size < 255);
+                    res[col.Offset] = size;
+                    std::memcpy(res + col.Offset + 1, data, size);
+                    std::memset(res + col.Offset + 1 + size, 0,
+                                col.DataSize - (size + 1));
+                }
+           }
+
+            auto &bres = reses[bucket];
+            bres.resize_uninitialized(bres.size() + TotalRowSize);
+            std::memcpy(bres.data() + bres.size() - TotalRowSize, res, TotalRowSize);
+        }
+
+        start += cur_block_size;
+    }
+}
+
+template __attribute__((target("avx2"))) void
+TTupleLayoutSIMD<NSimd::TSimdAVX2Traits>::Pack(
+    const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,
+    std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
+    ui32 count) const;
+template __attribute__((target("sse4.2"))) void
+TTupleLayoutSIMD<NSimd::TSimdSSE42Traits>::Pack(
+    const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,
+    std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
+    ui32 count) const;
+
+template __attribute__((target("avx2"))) void
+TTupleLayoutSIMD<NSimd::TSimdAVX2Traits>::Unpack(
+    ui8 **columns, ui8 **isValidBitmask, const ui8 *res,
+    const std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
+    ui32 count) const;
+template __attribute__((target("sse4.2"))) void
+TTupleLayoutSIMD<NSimd::TSimdSSE42Traits>::Unpack(
+    ui8 **columns, ui8 **isValidBitmask, const ui8 *res,
+    const std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
+    ui32 count) const;
+
+template __attribute__((target("avx2"))) void
+TTupleLayoutSIMD<NSimd::TSimdAVX2Traits>::BucketPack(
+    const ui8 **columns, const ui8 **isValidBitmask,
+    PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
+    PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows, ui32 start,
+    ui32 count, ui32 bucketsLogNum) const;
+template __attribute__((target("sse4.2"))) void
+TTupleLayoutSIMD<NSimd::TSimdSSE42Traits>::BucketPack(
+    const ui8 **columns, const ui8 **isValidBitmask,
+    PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
+    PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows, ui32 start,
+    ui32 count, ui32 bucketsLogNum) const;
+
+void TTupleLayoutFallback::CalculateColumnSizes(
+    const ui8 *res, ui32 count,
+    std::vector<ui64, TMKQLAllocator<ui64>> &bytes) const {
+
     bytes.resize(Columns.size());
 
     // handle fixed size columns

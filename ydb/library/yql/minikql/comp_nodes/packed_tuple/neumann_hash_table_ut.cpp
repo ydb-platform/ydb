@@ -20,7 +20,7 @@ namespace NPackedTuple {
 
 using namespace std::chrono_literals;
 
-static volatile bool IsVerbose = true;
+static volatile bool IsVerbose = false;
 #define CTEST (IsVerbose ? Cerr : Cnull)
 
 namespace {
@@ -492,7 +492,7 @@ Y_UNIT_TEST(BenchNeumannHashTable_VarTuple){
     static const ui8 expected_data[54*3] = {
         // row1
 
-        0xe2,0x47,0x16,0x6c, // hash
+        0x29,0x8f,0xdf,0xc0, // hash
         0x1, 0, 0, 0x20, // col1
         0x1, 0, 0, 0, 0, 0, 0, 0x10, // col2
         0x3, 0x61, 0x62, 0x63, 0, 0, 0, 0, 0, // vcol1
@@ -501,7 +501,7 @@ Y_UNIT_TEST(BenchNeumannHashTable_VarTuple){
         0x1, 0, 0, 0x40, // col3
         0x1, 0, 0, 0, 0, 0, 0, 0x30, // col4
         // row2
-        0xc2, 0x1c, 0x1b, 0xa8, // hash
+        0x42, 0xb2, 0x58, 0xc0, // hash
         0x2, 0, 0, 0x20, // col1
         0x2, 0, 0, 0, 0, 0, 0, 0x10, // col2
         0xff,  0, 0, 0, 0,  0xf, 0, 0, 0, // vcol1 [overflow offset, overflow size]
@@ -510,7 +510,7 @@ Y_UNIT_TEST(BenchNeumannHashTable_VarTuple){
         0x2, 0, 0, 0x40, // col3
         0x2, 0, 0, 0, 0, 0, 0, 0x30, // col4
         // row3
-        0xfa, 0x49, 0x5, 0xe9, // hash
+        0xc3, 0xc9, 0xc4, 0x64, // hash
         0x3, 0, 0, 0x20, // col1
         0x3, 0, 0, 0, 0, 0, 0, 0x10, // col2
         0xff,  0xf, 0, 0, 0,  0xa, 0, 0, 0, // vcol1 [overflow offset, overflow size]

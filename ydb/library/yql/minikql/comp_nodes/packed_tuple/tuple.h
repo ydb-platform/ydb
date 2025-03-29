@@ -11,6 +11,47 @@
 
 namespace NKikimr {
 namespace NMiniKQL {
+
+template <typename T>
+class PaddedPtr {
+  public:
+    PaddedPtr(T* ptr, size_t step): Ptr_(reinterpret_cast<char*>(ptr)), Step_(step) {}
+
+    T& operator[](size_t ind) {
+        return *reinterpret_cast<T*>(Ptr_ + Step_ * ind);
+    }
+    const T& operator[](size_t ind) const {
+        return const_cast<PaddedPtr*>(this)->operator[](ind);
+    }
+
+    T& operator*() {
+        return *reinterpret_cast<T*>(Ptr_);
+    }
+    const T& operator*() const {
+        return const_cast<PaddedPtr*>(this)->operator*();
+    }
+    
+    T* operator->() {
+        return reinterpret_cast<T*>(Ptr_);
+    }
+    const T* operator->() const {
+        return const_cast<PaddedPtr*>(this)->operator->();
+    }
+    
+    PaddedPtr& operator++() {
+        Ptr_ += Step_;
+        return *this;
+    }
+
+    bool operator==(const PaddedPtr& rhs) const {
+        return Ptr_ == rhs.Ptr_;
+    }
+
+  private:
+    char* Ptr_;
+    size_t Step_;
+};
+
 namespace NPackedTuple {
 
 // Defines if data type of particular column variable or fixed
@@ -79,7 +120,13 @@ struct TTupleLayout {
     virtual void Unpack(ui8 **columns, ui8 **isValidBitmask, const ui8 *res,
                         const std::vector<ui8, TMKQLAllocator<ui8>> &overflow,
                         ui32 start, ui32 count) const = 0;
-    
+
+    virtual void
+    BucketPack(const ui8 **columns, const ui8 **isValidBitmask,
+                 PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
+                 PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows,
+                 ui32 start, ui32 count, ui32 bucketsLogNum) const = 0;
+
     // Takes packed rows,
     // outputs vector of column sizes in bytes
     virtual void CalculateColumnSizes(
@@ -88,9 +135,9 @@ struct TTupleLayout {
     bool KeysEqual(const ui8 *lhsRow, const ui8 *lhsOverflow, const ui8 *rhsRow, const ui8 *rhsOverflow) const;
 };
 
-template <typename TTrait> struct TTupleLayoutFallback : public TTupleLayout {
+struct TTupleLayoutFallback : public TTupleLayout {
 
-    TTupleLayoutFallback(const std::vector<TColumnDesc> &columns);
+    explicit TTupleLayoutFallback(const std::vector<TColumnDesc> &columns);
 
     void Pack(const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,
               std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
@@ -99,18 +146,46 @@ template <typename TTrait> struct TTupleLayoutFallback : public TTupleLayout {
     void Unpack(ui8 **columns, ui8 **isValidBitmask, const ui8 *res,
                 const std::vector<ui8, TMKQLAllocator<ui8>> &overflow,
                 ui32 start, ui32 count) const override;
-    
+
+    void
+    BucketPack(const ui8 **columns, const ui8 **isValidBitmask,
+                 PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
+                 PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows,
+                 ui32 start, ui32 count, ui32 bucketsLogNum) const override;
+
     void CalculateColumnSizes(
         const ui8* res, ui32 count, std::vector<ui64, TMKQLAllocator<ui64>>& bytes) const override;
 
-  private:
+  protected:
     std::array<std::vector<TColumnDesc>, 5>
         FixedPOTColumns_; // Fixed-size columns for power-of-two sizes from 1 to
                           // 16 bytes
     std::vector<TColumnDesc> FixedNPOTColumns_; // Remaining fixed-size columns
     std::vector<TColumnDesc> VariableColumns_;  // Variable-size columns only
-    using TSimdI8 = typename TTrait::TSimdI8;
-    template <class T> using TSimd = typename TTrait::template TSimd8<T>;
+};
+
+
+template <typename TTraits> struct TTupleLayoutSIMD : public TTupleLayoutFallback {
+
+    explicit TTupleLayoutSIMD(const std::vector<TColumnDesc> &columns);
+
+    void Pack(const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,
+        std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
+        ui32 count) const override;
+
+    void Unpack(ui8 **columns, ui8 **isValidBitmask, const ui8 *res,
+            const std::vector<ui8, TMKQLAllocator<ui8>> &overflow,
+            ui32 start, ui32 count) const override;
+
+    void
+    BucketPack(const ui8 **columns, const ui8 **isValidBitmask,
+                 PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> reses,
+                 PaddedPtr<std::vector<ui8, TMKQLAllocator<ui8>>> overflows,
+                 ui32 start, ui32 count, ui32 bucketsLogNum) const override;
+
+  private:
+    using TSimdI8 = typename TTraits::TSimdI8;
+    template <class T> using TSimd = typename TTraits::template TSimd8<T>;
 
     static constexpr ui8 kSIMDMaxCols = 4;
     static constexpr ui8 kSIMDMaxInnerLoopSize = 4;
@@ -139,17 +214,6 @@ template <typename TTrait> struct TTupleLayoutFallback : public TTupleLayout {
                                                                           4, 8};
 };
 
-template <>
-void TTupleLayoutFallback<NSimd::TSimdFallbackTraits>::Pack(
-    const ui8 **columns, const ui8 **isValidBitmask, ui8 *res,
-    std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
-    ui32 count) const;
-
-template <>
-void TTupleLayoutFallback<NSimd::TSimdFallbackTraits>::Unpack(
-    ui8 **columns, ui8 **isValidBitmask, const ui8 *res,
-    const std::vector<ui8, TMKQLAllocator<ui8>> &overflow, ui32 start,
-    ui32 count) const;
 
 // It is expected that key columns layout is same for lhs and rhs
 Y_FORCE_INLINE

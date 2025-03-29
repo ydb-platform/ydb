@@ -1343,6 +1343,9 @@ private:
                 auto structType = outputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
                 for (const auto& column: shuffle.KeyColumns().Ptr()->Children()) {
                     auto ty = NYql::NDq::GetColumnType(connection, *structType, column->Content(), column->Pos(), ctx);
+                    if (ty->GetKind() == ETypeAnnotationKind::List) {
+                        ty = ty->Cast<TListExprType>()->GetItemType();
+                    }
                     NYql::NUdf::EDataSlot slot;
                     switch (ty->GetKind()) {
                         case ETypeAnnotationKind::Data: {
@@ -1351,6 +1354,9 @@ private:
                         }
                         case ETypeAnnotationKind::Optional: {
                             auto optionalType = ty->Cast<TOptionalExprType>()->GetItemType();
+                            if (optionalType->GetKind() == ETypeAnnotationKind::List) {
+                                optionalType = optionalType->Cast<TListExprType>()->GetItemType();
+                            }
                             Y_ENSURE(
                                 optionalType->GetKind() == ETypeAnnotationKind::Data,
                                 TStringBuilder{} << "Can't retrieve type from optional" << static_cast<std::int64_t>(optionalType->GetKind()) << "for ColumnHashV1 Shuffling"

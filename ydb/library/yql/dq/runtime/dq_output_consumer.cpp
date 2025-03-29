@@ -128,6 +128,28 @@ struct TColumnShardHashV1 {
             return;
         }
 
+        if (uv.IsBoxed()) {
+            if (auto list = uv.GetElements()) {
+                UpdateImpl(*list, keyIdx);
+                return;
+            }
+        }
+
+        UpdateImpl(uv, keyIdx);
+    }
+
+    ui64 Finish() {
+        ui64 hash = HashCalcer.Finish();
+        hash = std::min<ui32>(hash / (Max<ui64>() / ShardCount), ShardCount - 1);
+        return TaskIndexByHash[hash];
+    }
+
+    std::size_t ShardCount;
+    TVector<ui64> TaskIndexByHash;
+    TVector<NYql::NProto::TypeIds> KeyColumnTypes;
+private:
+    template <typename TValue>
+    void UpdateImpl(const TValue& uv, size_t keyIdx) {
         switch (KeyColumnTypes[keyIdx]) {
             case NYql::NProto::Bool: {
                 auto value = uv.template Get<bool>();
@@ -214,15 +236,6 @@ struct TColumnShardHashV1 {
         }
     }
 
-    ui64 Finish() {
-        ui64 hash = HashCalcer.Finish();
-        hash = std::min<ui32>(hash / (Max<ui64>() / ShardCount), ShardCount - 1);
-        return TaskIndexByHash[hash];
-    }
-
-    std::size_t ShardCount;
-    TVector<ui64> TaskIndexByHash;
-    TVector<NYql::NProto::TypeIds> KeyColumnTypes;
 private:
     NArrow::NHash::NXX64::TStreamStringHashCalcer HashCalcer;
 };
@@ -874,7 +887,7 @@ IDqOutputConsumer::TPtr CreateOutputHashPartitionConsumer(
                 TVector<TString> stringNames;
                 stringNames.reserve(keyColumns.size());
                 for (const auto& keyColumn: keyColumns) {
-                    stringNames.push_back(keyColumn.Name);а
+                    stringNames.push_back(keyColumn.Name);
                 }
                 return "[" + JoinSeq(",", stringNames) + "]";
             };

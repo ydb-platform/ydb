@@ -11,9 +11,18 @@ struct TLexers {
     NSQLTranslation::TLexerFactoryPtr Antlr4Ansi;
     NSQLTranslation::TLexerFactoryPtr Antlr4Pure;
     NSQLTranslation::TLexerFactoryPtr Antlr4PureAnsi;
+    NSQLTranslation::TLexerFactoryPtr Regex;
+    NSQLTranslation::TLexerFactoryPtr RegexAnsi;
 };
 
-NSQLTranslation::ILexer::TPtr MakeLexer(const TLexers& lexers, bool ansi, bool antlr4, bool pure = false);
+enum class ELexerFlavor {
+    Default,
+    Pure,
+    Regex,
+};
+
+NSQLTranslation::ILexer::TPtr MakeLexer(
+    const TLexers& lexers, bool ansi, bool antlr4, ELexerFlavor flavor = ELexerFlavor::Default);
 
 // "Probably" because YQL keyword can be an identifier
 // depending on a query context. For example

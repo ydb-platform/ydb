@@ -1,7 +1,11 @@
-#include "sql_context.h"
+#include "local.h"
 
-#include "c3_engine.h"
-#include "sql_syntax.h"
+#include "ansi.h"
+#include "parser_call_stack.h"
+#include "grammar.h"
+
+#include <yql/essentials/sql/v1/complete/antlr4/c3i.h>
+#include <yql/essentials/sql/v1/complete/antlr4/c3t.h>
 
 #include <yql/essentials/core/issue/yql_issue.h>
 
@@ -9,7 +13,7 @@
 #include <util/stream/output.h>
 
 #ifdef TOKEN_QUERY // Conflict with the winnt.h
-#undef TOKEN_QUERY
+    #undef TOKEN_QUERY
 #endif
 #include <yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Lexer.h>
 #include <yql/essentials/parser/antlr_ast/gen/v1_antlr4/SQLv1Antlr4Parser.h>
@@ -19,7 +23,7 @@
 namespace NSQLComplete {
 
     template <bool IsAnsiLexer>
-    class TSpecializedSqlContextInference: public ISqlContextInference {
+    class TSpecializedLocalSyntaxAnalysis: public ILocalSyntaxAnalysis {
     private:
         using TDefaultYQLGrammar = TAntlrGrammar<
             NALADefaultAntlr4::SQLv1Antlr4Lexer,
@@ -35,14 +39,14 @@ namespace NSQLComplete {
             TDefaultYQLGrammar>;
 
     public:
-        explicit TSpecializedSqlContextInference(TLexerSupplier lexer)
-            : Grammar(&GetSqlGrammar(IsAnsiLexer))
+        explicit TSpecializedLocalSyntaxAnalysis(TLexerSupplier lexer)
+            : Grammar(&GetSqlGrammar())
             , Lexer_(lexer(/* ansi = */ IsAnsiLexer))
             , C3(ComputeC3Config())
         {
         }
 
-        TCompletionContext Analyze(TCompletionInput input) override {
+        TLocalSyntaxContext Analyze(TCompletionInput input) override {
             TStringBuf prefix;
             if (!GetC3Prefix(input, &prefix)) {
                 return {};
@@ -52,6 +56,7 @@ namespace NSQLComplete {
             return {
                 .Keywords = SiftedKeywords(candidates),
                 .IsTypeName = IsTypeNameMatched(candidates),
+                .IsFunctionName = IsFunctionNameMatched(candidates),
             };
         }
 
@@ -72,17 +77,7 @@ namespace NSQLComplete {
         }
 
         std::unordered_set<TRuleId> ComputePreferredRules() {
-            const auto& keywordRules = Grammar->GetKeywordRules();
-            const auto& typeNameRules = Grammar->GetTypeNameRules();
-
-            std::unordered_set<TRuleId> preferredRules;
-
-            // Excludes tokens obtained from keyword rules
-            preferredRules.insert(std::begin(keywordRules), std::end(keywordRules));
-
-            preferredRules.insert(std::begin(typeNameRules), std::end(typeNameRules));
-
-            return preferredRules;
+            return GetC3PreferredRules();
         }
 
         bool GetC3Prefix(TCompletionInput input, TStringBuf* prefix) {
@@ -119,10 +114,15 @@ namespace NSQLComplete {
         }
 
         bool IsTypeNameMatched(const TC3Candidates& candidates) {
-            const auto& typeNameRules = Grammar->GetTypeNameRules();
-            return FindIf(candidates.Rules, [&](const TMatchedRule& rule) {
-                       return Find(typeNameRules, rule.Index) != std::end(typeNameRules);
-                   }) != std::end(candidates.Rules);
+            return AnyOf(candidates.Rules, [&](const TMatchedRule& rule) {
+                return IsLikelyTypeStack(rule.ParserCallStack);
+            });
+        }
+
+        bool IsFunctionNameMatched(const TC3Candidates& candidates) {
+            return AnyOf(candidates.Rules, [&](const TMatchedRule& rule) {
+                return IsLikelyFunctionStack(rule.ParserCallStack);
+            });
         }
 
         const ISqlGrammar* Grammar;
@@ -130,34 +130,34 @@ namespace NSQLComplete {
         TC3Engine<G> C3;
     };
 
-    class TSqlContextInference: public ISqlContextInference {
+    class TLocalSyntaxAnalysis: public ILocalSyntaxAnalysis {
     public:
-        explicit TSqlContextInference(TLexerSupplier lexer)
+        explicit TLocalSyntaxAnalysis(TLexerSupplier lexer)
             : DefaultEngine(lexer)
             , AnsiEngine(lexer)
         {
         }
 
-        TCompletionContext Analyze(TCompletionInput input) override {
+        TLocalSyntaxContext Analyze(TCompletionInput input) override {
             auto isAnsiLexer = IsAnsiQuery(TString(input.Text));
             auto& engine = GetSpecializedEngine(isAnsiLexer);
             return engine.Analyze(std::move(input));
         }
 
     private:
-        ISqlContextInference& GetSpecializedEngine(bool isAnsiLexer) {
+        ILocalSyntaxAnalysis& GetSpecializedEngine(bool isAnsiLexer) {
             if (isAnsiLexer) {
                 return AnsiEngine;
             }
             return DefaultEngine;
         }
 
-        TSpecializedSqlContextInference</* IsAnsiLexer = */ false> DefaultEngine;
-        TSpecializedSqlContextInference</* IsAnsiLexer = */ true> AnsiEngine;
+        TSpecializedLocalSyntaxAnalysis</* IsAnsiLexer = */ false> DefaultEngine;
+        TSpecializedLocalSyntaxAnalysis</* IsAnsiLexer = */ true> AnsiEngine;
     };
 
-    ISqlContextInference::TPtr MakeSqlContextInference(TLexerSupplier lexer) {
-        return TSqlContextInference::TPtr(new TSqlContextInference(lexer));
+    ILocalSyntaxAnalysis::TPtr MakeLocalSyntaxAnalysis(TLexerSupplier lexer) {
+        return TLocalSyntaxAnalysis::TPtr(new TLocalSyntaxAnalysis(lexer));
     }
 
 } // namespace NSQLComplete

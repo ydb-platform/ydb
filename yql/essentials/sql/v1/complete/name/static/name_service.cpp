@@ -26,8 +26,11 @@ namespace NSQLComplete {
     size_t KindWeight(const TGenericName& name) {
         return std::visit([](const auto& name) {
             using T = std::decay_t<decltype(name)>;
-            if constexpr (std::is_same_v<T, TTypeName>) {
+            if constexpr (std::is_same_v<T, TFunctionName>) {
                 return 1;
+            }
+            if constexpr (std::is_same_v<T, TTypeName>) {
+                return 2;
             }
         }, name);
     }
@@ -60,6 +63,7 @@ namespace NSQLComplete {
             : NameSet_(std::move(names))
         {
             Sort(NameSet_.Types);
+            Sort(NameSet_.Functions);
         }
 
         TFuture<TNameResponse> Lookup(TNameRequest request) override {
@@ -70,10 +74,15 @@ namespace NSQLComplete {
                                     FilteredByPrefix(request.Prefix, NameSet_.Types));
             }
 
+            if (request.Constraints.Function) {
+                AppendAs<TFunctionName>(
+                    response.RankedNames,
+                    FilteredByPrefix(request.Prefix, NameSet_.Functions));
+            }
+
             Sort(response.RankedNames);
 
             response.RankedNames.crop(request.Limit);
-
             return NThreading::MakeFuture(std::move(response));
         }
 

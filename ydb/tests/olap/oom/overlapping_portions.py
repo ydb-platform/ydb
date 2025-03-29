@@ -66,7 +66,7 @@ class TestOverlappingPortions(object):
             timestamp_from_ms += current_chunk_size
             rows -= current_chunk_size
             assert rows >= 0
-    
+
     def write_and_check(self, table_path, count):
         ts_start = int(datetime.datetime.now().timestamp() * 1000000)
         for value in range(count):

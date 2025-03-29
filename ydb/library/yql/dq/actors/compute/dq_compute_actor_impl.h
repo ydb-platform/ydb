@@ -359,7 +359,7 @@ protected:
                 MemoryQuota->TryShrinkMemory(alloc);
             }
 
-            ReportStats(TInstant::Now(), ESendStats::IfPossible);
+            ReportStats();
         }
         if (Terminated) {
             DoTerminateImpl();
@@ -1131,9 +1131,10 @@ protected:
             }
             case EEvWakeupTag::PeriodicStatsTag: {
                 const auto maxInterval = RuntimeSettings.ReportStatsSettings->MaxInterval;
-                this->Schedule(maxInterval, new NActors::TEvents::TEvWakeup(EEvWakeupTag::PeriodicStatsTag));
-
-                ReportStats(NActors::TActivationContext::Now(), ESendStats::IfRequired);
+                if (Running && ProcessOutputsState.LastRunStatus != ERunStatus::Finished) {
+                    DoExecute();
+                    this->Schedule(maxInterval, new NActors::TEvents::TEvWakeup(EEvWakeupTag::PeriodicStatsTag));
+                }
                 break;
             }
             default:
@@ -1985,26 +1986,12 @@ public:
     }
 
 protected:
-    enum class ESendStats {
-        IfPossible,
-        IfRequired
-    };
-    void ReportStats(TInstant now, ESendStats condition) {
-        if (!RuntimeSettings.ReportStatsSettings) {
+    void ReportStats() {
+        auto now = TInstant::Now();
+        if (!RuntimeSettings.ReportStatsSettings || now - LastSendStatsTime < RuntimeSettings.ReportStatsSettings->MinInterval) {
             return;
         }
-        auto dT = now - LastSendStatsTime;
-        switch(condition) {
-            case ESendStats::IfPossible:
-                if (dT < RuntimeSettings.ReportStatsSettings->MinInterval) {
-                    return;
-                }
-                break;
-            case ESendStats::IfRequired:
-                if (dT < RuntimeSettings.ReportStatsSettings->MaxInterval) {
-                    return;
-                }
-        }
+
         auto evState = std::make_unique<TEvDqCompute::TEvState>();
         evState->Record.SetState(NDqProto::COMPUTE_STATE_EXECUTING);
         evState->Record.SetTaskId(Task.GetId());

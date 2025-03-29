@@ -134,7 +134,7 @@ public:
     TComputeActorAsyncInputHelperAsync CreateInputHelper(const TString& logPrefix,
         ui64 index,
         NDqProto::EWatermarksMode watermarksMode
-    ) 
+    )
     {
         return TComputeActorAsyncInputHelperAsync(logPrefix, index, watermarksMode, Cookie, ProcessSourcesState.Inflight);
     }
@@ -808,7 +808,7 @@ private:
         }
         ProcessOutputsImpl(status);
         if (status == ERunStatus::Finished) {
-            ReportStats(TInstant::Now(), ESendStats::IfPossible);
+            ReportStats();
         }
 
         if (UseCpuQuota()) {

@@ -524,6 +524,7 @@ public:
         const IDqTaskRunnerExecutionContext& execCtx) override
     {
         TaskId = task.GetId();
+        StageId = task.GetStageId();
         auto entry = BuildTask(task);
 
         LOG(TStringBuilder() << "Prepare task: " << TaskId);
@@ -980,6 +981,7 @@ private:
     TIntrusivePtr<TSpillingTaskCounters> SpillingTaskCounters;
 
     ui64 TaskId = 0;
+    ui32 StageId = 0;
     TDqTaskRunnerContext Context;
     TDqTaskRunnerSettings Settings;
     TLogFunc LogFunc;
@@ -1044,28 +1046,41 @@ private:
     std::unique_ptr<NUdf::IPgBuilder> PgBuilder_ = CreatePgBuilder();
 
     void StartWaitingInput() {
-        if (!StartWaitInputTime) {
-            StartWaitInputTime = TInstant::Now();
+        auto now = TInstant::Now();
+        if (Y_LIKELY(StartWaitInputTime)) {
+            auto delta = now - *StartWaitInputTime;
+            if (Y_LIKELY(Stats->StartTs)) {
+                Stats->WaitInputTime += delta;
+            } else {
+                Stats->WaitStartTime += delta;
+            }
         }
+        StartWaitInputTime = now;
     }
 
     void StartWaitingOutput() {
-        if (!StartWaitOutputTime) {
-            StartWaitOutputTime = TInstant::Now();
+        auto now = TInstant::Now();
+        if (Y_LIKELY(StartWaitOutputTime)) {
+            auto delta = now - *StartWaitOutputTime;
+            Stats->WaitOutputTime += delta;
         }
+        StartWaitOutputTime = now;
     }
 
     void StopWaiting() {
+        auto now = TInstant::Now();
         if (StartWaitInputTime) {
+            auto delta = now - *StartWaitInputTime;
             if (Y_LIKELY(Stats->StartTs)) {
-                Stats->WaitInputTime += (TInstant::Now() - *StartWaitInputTime);
+                Stats->WaitInputTime += delta;
             } else {
-                Stats->WaitStartTime += (TInstant::Now() - *StartWaitInputTime);
+                Stats->WaitStartTime += delta;
             }
             StartWaitInputTime.reset();
         }
         if (StartWaitOutputTime) {
-            Stats->WaitOutputTime += (TInstant::Now() - *StartWaitOutputTime);
+            auto delta = now - *StartWaitOutputTime;
+            Stats->WaitOutputTime += delta;
             StartWaitOutputTime.reset();
         }
     }

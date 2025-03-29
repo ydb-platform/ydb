@@ -906,10 +906,6 @@ void TPartitionActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const 
 
     TabletGeneration = msg->Generation;
     NodeId = msg->ServerId.NodeId();
-
-    if (InitDone) {
-        ctx.Send(ParentId, new TEvPQProxy::TEvUpdateSession(Partition, NodeId, TabletGeneration));
-    }
 }
 
 void TPartitionActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {
@@ -1160,6 +1156,10 @@ void TPartitionActor::OnDirectReadsRestored() {
     const auto& ctx = ActorContext();
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
                             << "Restore direct reads done, continue working");
+
+    if (InitDone) {
+        ctx.Send(ParentId, new TEvPQProxy::TEvUpdateSession(Partition, NodeId, TabletGeneration));
+    }
     ResendRecentRequests();
 }
 
@@ -1320,7 +1320,7 @@ void TPartitionActor::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TActorContext&
     auto request = MakeReadRequest(ReadOffset, 0, req->MaxCount, req->MaxSize, req->MaxTimeLagMs, req->ReadTimestampMs, DirectReadId);
     RequestInfly = true;
     CurrentRequest = request;
-    
+
     if (!PipeClient) //Pipe will be recreated soon
         return;
 

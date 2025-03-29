@@ -154,10 +154,10 @@ private:
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) = 0;
 
     NEvLog::TLogsThread Events;
+    std::unique_ptr<TFetchedData> StageData;
 
 protected:
     std::vector<std::shared_ptr<NGroupedMemoryManager::TAllocationGuard>> ResourceGuards;
-    std::unique_ptr<TFetchedData> StageData;
     std::unique_ptr<TFetchedResult> StageResult;
 
 public:
@@ -317,6 +317,21 @@ public:
 
     bool HasStageData() const {
         return !!StageData;
+    }
+
+    void InitStageData(std::unique_ptr<TFetchedData>&& data) {
+        AFL_VERIFY(!StageData);
+        StageData = std::move(data);
+    }
+
+    TFetchedData&& ExtractStageData() {
+        AFL_VERIFY(StageData);
+        auto result = std::move(*StageData);
+        StageData.reset();
+    }
+
+    void ClearStageData() {
+        StageData.reset();
     }
 
     const TFetchedData& GetStageData() const {

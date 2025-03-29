@@ -101,6 +101,7 @@ namespace NKikimr {
     struct TDomainsInfo;
     class TResourceProfiles;
     class TControlBoard;
+    class TStaticControlBoard;
     class TFeatureFlags;
 }
 
@@ -207,6 +208,7 @@ struct TAppData {
     NActors::TMon* Mon;
     ::NMonitoring::TDynamicCounterPtr Counters;
     TIntrusivePtr<NKikimr::TControlBoard> Icb;
+    TIntrusivePtr<NKikimr::TStaticControlBoard> StaticControlBoard;
     TIntrusivePtr<NGRpcService::TInFlightLimiterRegistry> InFlightLimiterRegistry;
     TIntrusivePtr<NSharedCache::TSharedCachePages> SharedCachePages;
 

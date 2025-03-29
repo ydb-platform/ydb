@@ -22,7 +22,7 @@ class TestOverlappingPortions(object):
         ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
         logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
         config = KikimrConfigGenerator(
-            column_shard_config={"alter_object_enabled": True, "compaction_enabled": False},
+            column_shard_config={"compaction_enabled": False},
             grouped_memory_limiter_config={
                 "enabled": True,
                 "memory_limit": 100 * 1024 * 1024,
@@ -66,6 +66,17 @@ class TestOverlappingPortions(object):
             timestamp_from_ms += current_chunk_size
             rows -= current_chunk_size
             assert rows >= 0
+    
+    def write_and_check(self, table_path, count):
+        ts_start = int(datetime.datetime.now().timestamp() * 1000000)
+        for value in range(count):
+            self.write_data(table_path, ts_start, 100, value)
+
+        self.ydb_client.query(
+            f"""
+            select * from `{table_path}`
+            """
+        )
 
     @link_test_case("#15512")
     def test(self):
@@ -87,22 +98,7 @@ class TestOverlappingPortions(object):
             """
         )
 
-        ts_start = int(datetime.datetime.now().timestamp() * 1000000)
-        for value in range(1):
-            self.write_data(table_path, ts_start, 100, value)
-
-        self.ydb_client.query(
-            f"""
-            select * from `{table_path}`
-            """
-        )
-
-        for value in range(100):
-            self.write_data(table_path, ts_start, 100, value)
+        self.write_and_check(table_path, 1)
 
         with pytest.raises(ydb.issues.GenericError, match=r'.*cannot allocate memory.*'):
-            self.ydb_client.query(
-                f"""
-                select * from `{table_path}`
-                """
-            )
+            self.write_and_check(table_path, 100)

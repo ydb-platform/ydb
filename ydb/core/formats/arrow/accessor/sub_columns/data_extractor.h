@@ -64,7 +64,7 @@ public:
 
 private:
     virtual bool HasInternalConversion() const override {
-        return false;
+        return true;
     }
 
     bool FirstLevelOnly = false;

@@ -82,9 +82,11 @@ private:
                 AFL_VERIFY(sv.size() >= 2);
                 return std::string_view(sv.data() + 1, sv.size() - 2);
             }
-            case simdjson::ondemand::json_type::number:
-            case simdjson::ondemand::json_type::boolean:
             case simdjson::ondemand::json_type::null: {
+                return TDataBuilder::GetNullStringView();
+            }
+            case simdjson::ondemand::json_type::number:
+            case simdjson::ondemand::json_type::boolean: {
                 return (std::string_view)value.raw_json_token();
             }
             case simdjson::ondemand::json_type::object: {
@@ -110,8 +112,11 @@ private:
                 dataBuilder.AddKV(currentKey, TStringBuf(sv.data() + 1, sv.size() - 2));
                 break;
             }
+            case simdjson::ondemand::json_type::null: {
+                dataBuilder.AddKVNull(currentKey);
+                break;
+            }
             case simdjson::ondemand::json_type::number:
-            case simdjson::ondemand::json_type::null:
             case simdjson::ondemand::json_type::boolean: {
                 dataBuilder.AddKV(currentKey, (std::string_view)value.raw_json_token());
                 break;

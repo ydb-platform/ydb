@@ -109,8 +109,16 @@ public:
         if (itElements == Elements.end()) {
             itElements = Elements.emplace(key, key).first;
         }
+        itElements->second.AddData(GetNullString(), CurrentRecordIndex);
+    }
+
+    static const TString& GetNullString() {
         const static TString nullString = "NULL";
-        itElements->second.AddData(nullString, CurrentRecordIndex);
+        return nullString;
+    }
+
+    static std::string_view GetNullStringView() {
+        return std::string_view(GetNullString().data(), GetNullString().size());
     }
 
     void AddKV(const TStringBuf key, const TStringBuf value) {

@@ -145,8 +145,9 @@ private:
                 for (auto item : v) {
                     RETURN_IF_NOT_SUCCESS(item.error());
                     auto& keyValue = item.value_unsafe();
-                    const auto key = keyValue.key();
-                    const auto sbKey = dataBuilder.AddKey(currentKey, key);
+                    const auto key = keyValue.unescaped_key();
+                    RETURN_IF_NOT_SUCCESS(key.error());
+                    const auto sbKey = dataBuilder.AddKey(currentKey, key.value_unsafe());
                     if (FirstLevelOnly) {
                         auto conclusion = PrintObject(keyValue.value());
                         if (conclusion.IsFail()) {

@@ -6,10 +6,6 @@
 namespace NKikimr {
 namespace NKqp {
 
-//class TKqpBufferMemoryManager {
-//private:
-//};
-
 struct TKqpBufferWriterSettings {
     TActorId SessionActorId;
     IKqpTransactionManagerPtr TxManager;

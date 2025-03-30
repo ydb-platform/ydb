@@ -32,7 +32,7 @@ TConclusionStatus TRequestedConstuctor::DoDeserializeFromRequest(NYql::TFeatures
         }
         Settings.SetDataExtractor(std::shared_ptr<IDataAdapter>(extractor.Release()));
     } else {
-        Settings.SetDataExtractor(std::make_shared<TFirstLevelSchemaData>(false));
+        Settings.SetDataExtractor(std::make_shared<TJsonScanExtractor>(false));
     }
     if (auto memLimit = features.Extract<ui32>("MEM_LIMIT_CHUNK")) {
         Settings.SetChunkMemoryLimit(*memLimit);

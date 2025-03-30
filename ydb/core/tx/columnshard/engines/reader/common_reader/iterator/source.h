@@ -331,21 +331,6 @@ public:
         StageData.reset();
     }
 
-    void InitStageData(std::unique_ptr<TFetchedData>&& data) {
-        AFL_VERIFY(!StageData);
-        StageData = std::move(data);
-    }
-
-    TFetchedData&& ExtractStageData() {
-        AFL_VERIFY(StageData);
-        auto result = std::move(*StageData);
-        StageData.reset();
-    }
-
-    void ClearStageData() {
-        StageData.reset();
-    }
-
     const TFetchedData& GetStageData() const {
         AFL_VERIFY(StageData);
         return *StageData;

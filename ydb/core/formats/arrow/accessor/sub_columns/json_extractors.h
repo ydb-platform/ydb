@@ -152,7 +152,8 @@ private:
                     auto& keyValue = item.value_unsafe();
                     const auto key = keyValue.unescaped_key();
                     RETURN_IF_NOT_SUCCESS(key.error());
-                    const auto sbKey = dataBuilder.AddKey(currentKey, key.value_unsafe());
+                    const std::string_view svKey = key.value_unsafe();
+                    const auto sbKey = dataBuilder.AddKeyOwn(currentKey, std::string(svKey.data(), svKey.size()));
                     if (FirstLevelOnly) {
                         auto conclusion = PrintObject(keyValue.value());
                         if (conclusion.IsFail()) {

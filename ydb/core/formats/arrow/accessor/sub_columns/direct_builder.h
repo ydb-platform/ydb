@@ -83,7 +83,7 @@ private:
     const std::shared_ptr<arrow::DataType> Type;
     const TSettings Settings;
     std::deque<simdjson::padded_string> PaddedStrings;
-    std::deque<simdjson::ondemand::parser> Parsers;
+    simdjson::ondemand::parser Parser;
 
 public:
     TDataBuilder(const std::shared_ptr<arrow::DataType>& type, const TSettings& settings)
@@ -92,9 +92,9 @@ public:
     }
 
     simdjson::simdjson_result<simdjson::ondemand::document> ParseJsonOnDemand(const TStringBuf sv) {
-        Parsers.emplace_back(simdjson::ondemand::parser());
+        Parser = simdjson::ondemand::parser();
         PaddedStrings.emplace_back(simdjson::padded_string(sv.data(), sv.size()));
-        return Parsers.back().iterate(PaddedStrings.back());
+        return Parser.iterate(PaddedStrings.back());
     }
 
     void StartNextRecord() {

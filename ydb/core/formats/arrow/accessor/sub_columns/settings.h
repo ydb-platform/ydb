@@ -96,7 +96,7 @@ public:
         ChunkMemoryLimit = proto.GetChunkMemoryLimit();
         OthersAllowedFraction = proto.GetOthersAllowedFraction();
         if (!proto.HasDataExtractor()) {
-            AFL_VERIFY(DataExtractor.Initialize(TFirstLevelSchemaData::GetClassNameStatic()));
+            AFL_VERIFY(DataExtractor.Initialize(TJsonScanExtractor::GetClassNameStatic()));
         } else if (!DataExtractor.DeserializeFromProto(proto.GetDataExtractor())) {
             return false;
         }

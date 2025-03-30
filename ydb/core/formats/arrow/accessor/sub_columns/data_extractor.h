@@ -21,7 +21,7 @@ public:
 
 private:
     virtual TConclusionStatus DoAddDataToBuilders(
-        const std::shared_ptr<arrow::Array>& sourceArray, TDataBuilder& dataBuilder) const noexcept = 0;
+        const std::shared_ptr<arrow::Array>& sourceArray, TDataBuilder& dataBuilder) const = 0;
     virtual bool DoDeserializeFromProto(const TProto& proto) = 0;
     virtual void DoSerializeToProto(TProto& proto) const = 0;
     virtual NJson::TJsonValue DoDebugJson() const {
@@ -30,6 +30,7 @@ private:
     virtual TConclusionStatus DoDeserializeFromRequest(NYql::TFeaturesExtractor& features) = 0;
 
 public:
+    virtual bool HasInternalConversion() const = 0;
     virtual TString GetClassName() const = 0;
     bool DeserializeFromProto(const TProto& proto) {
         return DoDeserializeFromProto(proto);
@@ -55,42 +56,54 @@ public:
         const std::shared_ptr<arrow::Array>& sourceArray, TDataBuilder& dataBuilder) const noexcept;
 };
 
-class TFirstLevelSchemaData: public IDataAdapter {
+class TJsonScanExtractor: public IDataAdapter {
 public:
     static TString GetClassNameStatic() {
         return "JSON_SCANNER";
     }
 
 private:
+    virtual bool HasInternalConversion() const override {
+        return true;
+    }
+
     bool FirstLevelOnly = false;
+    bool ForceSIMDJsonParsing = false;
     virtual TConclusionStatus DoDeserializeFromRequest(NYql::TFeaturesExtractor& features) override {
         if (auto scanFlag = features.Extract<bool>("SCAN_FIRST_LEVEL_ONLY")) {
             FirstLevelOnly = *scanFlag;
+        }
+        if (auto scanFlag = features.Extract<bool>("FORCE_SIMD_PARSING")) {
+            ForceSIMDJsonParsing = *scanFlag;
         }
         return TConclusionStatus::Success();
     }
 
     virtual TConclusionStatus DoAddDataToBuilders(
-        const std::shared_ptr<arrow::Array>& sourceArray, TDataBuilder& dataBuilder) const noexcept override;
+        const std::shared_ptr<arrow::Array>& sourceArray, TDataBuilder& dataBuilder) const override;
     virtual bool DoDeserializeFromProto(const TProto& proto) override {
-        if (!proto.HasJsonScanner()) {
+        if (!proto.HasJsonScanner() && !proto.HasSIMDJsonScanner()) {
             return true;
         }
-        FirstLevelOnly = proto.GetJsonScanner().GetFirstLevelOnly();
+        FirstLevelOnly = proto.GetJsonScanner().GetFirstLevelOnly() || proto.GetSIMDJsonScanner().GetFirstLevelOnly();
+        ForceSIMDJsonParsing = proto.GetJsonScanner().GetForceSIMDJsonParsing();
         return true;
     }
     virtual void DoSerializeToProto(TProto& proto) const override {
         proto.MutableJsonScanner()->SetFirstLevelOnly(FirstLevelOnly);
+        proto.MutableJsonScanner()->SetForceSIMDJsonParsing(ForceSIMDJsonParsing);
     }
     virtual TString GetClassName() const override {
         return GetClassNameStatic();
     }
 
-    static const inline auto Registrator = TFactory::TRegistrator<TFirstLevelSchemaData>(GetClassNameStatic());
+    static const inline auto Registrator = TFactory::TRegistrator<TJsonScanExtractor>(GetClassNameStatic());
+    static const inline auto Registrator1 = TFactory::TRegistrator<TJsonScanExtractor>("BINARY_JSON_SCANNER");
+    static const inline auto Registrator2 = TFactory::TRegistrator<TJsonScanExtractor>("SIMD_JSON_SCANNER");
 
 public:
-    TFirstLevelSchemaData() = default;
-    TFirstLevelSchemaData(const bool firstLevelOnly)
+    TJsonScanExtractor() = default;
+    TJsonScanExtractor(const bool firstLevelOnly)
         : FirstLevelOnly(firstLevelOnly) {
     }
 };

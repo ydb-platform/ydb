@@ -42,7 +42,10 @@ TString TConstructor::DoSerializeToString(const std::shared_ptr<IChunkedArray>& 
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(
     const std::shared_ptr<IChunkedArray>& originalArray, const TChunkConstructionData& externalInfo) const {
-    AFL_VERIFY(originalArray);
+    if (!externalInfo.GetColumnType()->Equals(originalArray->GetDataType())) {
+        return TConclusionStatus::Fail("sparsed accessor cannot convert types for transfer: " + originalArray->GetDataType()->ToString() + " to " +
+                                       externalInfo.GetColumnType()->ToString());
+    }
     return TSparsedArray::Make(*originalArray, externalInfo.GetDefaultValue());
 }
 

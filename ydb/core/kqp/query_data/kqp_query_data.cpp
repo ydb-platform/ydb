@@ -180,13 +180,18 @@ TQueryData::TQueryData(TTxAllocatorState::TPtr allocatorState)
 TQueryData::~TQueryData() {
     {
         auto g = TypeEnv().BindAllocator();
-        THashMap<ui32, TVector<TKqpExecuterTxResult>> emptyResultMap;
-        TxResults.swap(emptyResultMap);
+        //Params.clear();
+        //ParamsProtobuf.clear();
+        TxResults.clear();
+        //TxHolders.clear();
+        //UnboxedData.clear();
+        PartitionedParams.clear();
+        //THashMap<ui32, TVector<TKqpExecuterTxResult>> emptyResultMap;
+        //TxResults.swap(emptyResultMap);
         TUnboxedParamsMap emptyMap;
         UnboxedData.swap(emptyMap);
-
-        TPartitionedParamMap empty;
-        empty.swap(PartitionedParams);
+        //TPartitionedParamMap empty;
+        //empty.swap(PartitionedParams);
     }
 }
 

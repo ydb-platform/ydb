@@ -108,6 +108,7 @@ public:
     TKqpDbCountersPtr DbCounters;
     TActorId Sender;
     ui64 ProxyRequestId = 0;
+    TQueryData::TPtr QueryData;
     std::unique_ptr<TEvKqp::TEvQueryRequest> RequestEv;
     ui64 ParametersSize = 0;
     TPreparedQueryHolder::TConstPtr PreparedQuery;
@@ -115,7 +116,6 @@ public:
     TVector<NKikimrKqp::TParameterDescription> ResultParams;
     TKqpStatsCompile CompileStats;
     TIntrusivePtr<TKqpTransactionContext> TxCtx;
-    TQueryData::TPtr QueryData;
     NKikimrKqp::EQueryAction QueryAction;
     NKikimrKqp::EQueryType QueryType;
 

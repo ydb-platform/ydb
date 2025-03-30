@@ -150,10 +150,8 @@ private:
                 for (auto item : v) {
                     RETURN_IF_NOT_SUCCESS(item.error());
                     auto& keyValue = item.value_unsafe();
-                    const auto key = keyValue.unescaped_key();
-                    RETURN_IF_NOT_SUCCESS(key.error());
-                    const std::string_view svKey = key.value_unsafe();
-                    const auto sbKey = dataBuilder.AddKeyOwn(currentKey, std::string(svKey.data(), svKey.size()));
+                    const auto key = keyValue.escaped_key();
+                    const auto sbKey = dataBuilder.AddKey(currentKey, key);
                     if (FirstLevelOnly) {
                         auto conclusion = PrintObject(keyValue.value());
                         if (conclusion.IsFail()) {

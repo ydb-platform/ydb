@@ -34,7 +34,8 @@ FROM
 WITH(
   FORMAT = "<file_format>",
   COMPRESSION = "<compression>",
-  SCHEMA = (<schema_definition>))
+  SCHEMA = (<schema_definition>),
+  <format_settings>)
 WHERE
   <filter>;
 ```
@@ -46,6 +47,7 @@ WHERE
 * `file_format` — [формат данных](formats.md#formats) в файлах.
 * `compression` — [формат сжатия](formats.md#compression_formats) файлов.
 * `schema_definition` — [описание схемы хранимых данных](#schema) в файлах.
+* `format_settings` — опциональные [параметры форматирования](#format_settings)
 
 ### Описание схемы данных {#schema}
 
@@ -97,11 +99,21 @@ WHERE
 
 В результате выполнения такого запроса будут автоматически выведены названия и типы полей.
 
-### Форматы путей к данным {#path_format}
+### Форматы путей к данным задаваемых в параметре `file_path` {#path_format} 
 
 В {{ ydb-full-name }} поддерживаются следующие пути к данным:
 
 {% include [!](_includes/path_format.md) %}
+
+### Параметры форматирования {#format_settings}
+
+В {{ ydb-full-name }} поддерживаются следующие параметры форматирования:
+
+{% include [!](_includes/format_settings.md) %}
+
+Параметр `file_pattern` можно использовать только в том случае, если `file_path` – путь к каталогу. В строках форматирования можно использовать любые шаблонные переменные, поддерживаемые функцией [`strftime`(C99)](https://en.cppreference.com/w/c/chrono/strftime). В {{ ydb-full-name }} поддерживаются следующие форматы типов `Datetime` и `Timestamp`:
+
+{% include [!](_includes/date_formats.md) %}
 
 ## Пример {#read_example}
 
@@ -111,21 +123,28 @@ WHERE
 SELECT
   *
 FROM
-  connection.`folder/filename.csv`
+  connection.`folder/`
 WITH(
   FORMAT = "csv_with_names",
+  COMPRESSION="gzip"
   SCHEMA =
   (
-    Year Int32,
-    Manufacturer Utf8,
-    Model Utf8,
-    Price Double
-  )
+    Id Int32 NOT NULL,
+    UserId Int32 NOT NULL,
+    TripDate Date NOT NULL,
+    TripDistance Double NOT NULL,
+    UserComment Utf8
+  ),
+  FILE_PATTERN="*.csv.gz",
+  `DATA.DATE.FORMAT`="%Y-%m-%d",
+  CSV_DELIMITER='/'
 );
 ```
 
 Где:
 
 * `connection` — название внешнего источника данных, ведущего на бакет S3 ({{ objstorage-full-name }}).
-* `folder/filename.csv` — путь к файлу в бакете S3 ({{ objstorage-full-name }}).
+* `folder/` — путь к папке с данными в бакете S3 ({{ objstorage-full-name }}).
 * `SCHEMA` — описание схемы данных в файле.
+* `*.csv.gz` — шаблон имени файлов с данными.
+* `%Y-%m-%d` — формат записи данных типа `Date` в S3.

@@ -28,7 +28,7 @@ private:
 
     std::shared_ptr<TSpecialReadContext> Context;
     THashMap<ui64, std::shared_ptr<IDataSource>> FetchingSourcesByIdx;
-    std::deque<std::shared_ptr<IDataSource>> SortedSources;
+    std::deque<TSourceConstructor> HeapSources;
     std::deque<std::shared_ptr<IDataSource>> FetchingSources;
     std::map<TCompareKeyForScanSequence, std::shared_ptr<IDataSource>> FinishedSources;
     std::map<TCompareKeyForScanSequence, std::shared_ptr<IDataSource>> FetchingInFlightSources;
@@ -39,6 +39,7 @@ private:
     TPositiveControlInteger SourcesInFlightCount;
 
     ui32 GetInFlightIntervalsCount() const;
+    std::shared_ptr<TPortionDataSource> StartNextSource();
 
 public:
     ~TScanHead();
@@ -53,7 +54,7 @@ public:
     void Abort();
 
     bool IsFinished() const {
-        return FetchingSources.empty() && SortedSources.empty();
+        return FetchingSources.empty() && HeapSources.empty();
     }
 
     const TReadContext& GetContext() const;
@@ -61,8 +62,8 @@ public:
     TString DebugString() const {
         TStringBuilder sb;
         sb << "S:";
-        for (auto&& i : SortedSources) {
-            sb << i->GetSourceId() << ";";
+        for (auto&& i : HeapSources) {
+            sb << i.GetSourceId() << ";";
         }
         sb << "F:";
         for (auto&& i : FetchingSources) {
@@ -76,7 +77,7 @@ public:
 
     TConclusionStatus Start();
 
-    TScanHead(std::deque<std::shared_ptr<IDataSource>>&& sources, const std::shared_ptr<TSpecialReadContext>& context);
+    TScanHead(std::deque<TSourceConstructor>&& sources, const std::shared_ptr<TSpecialReadContext>& context);
 
     [[nodiscard]] TConclusion<bool> BuildNextInterval();
 

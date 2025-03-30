@@ -17,7 +17,7 @@ using namespace NTxUT;
 
 Y_UNIT_TEST_SUITE(Backup) {
 
-    std::optional<ui64> ProposeTx(TTestBasicRuntime& runtime, TActorId& sender, NKikimrTxColumnShard::ETransactionKind txKind, const TString& txBody, const ui64 txId) {
+    [[nodiscard]] ui64 ProposeTx(TTestBasicRuntime& runtime, TActorId& sender, NKikimrTxColumnShard::ETransactionKind txKind, const TString& txBody, const ui64 txId) {
         auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
             txKind, sender, txId, txBody);
 
@@ -26,11 +26,8 @@ Y_UNIT_TEST_SUITE(Backup) {
         const auto& res = ev->Get()->Record;
         UNIT_ASSERT_EQUAL(res.GetTxId(), txId);
         UNIT_ASSERT_EQUAL(res.GetTxKind(), txKind);
-        if (res.GetStatus() == NKikimrTxColumnShard::PREPARED) {
-            return res.GetMinStep();
-        } else {
-            return std::nullopt;
-        }
+        UNIT_ASSERT_EQUAL(res.GetStatus(),  NKikimrTxColumnShard::PREPARED);
+        return res.GetMinStep();
     }
 
     void PlanTx(TTestBasicRuntime& runtime, TActorId& sender, NKikimrTxColumnShard::ETransactionKind txKind, NOlap::TSnapshot snap, bool waitResult = true) {
@@ -71,10 +68,8 @@ Y_UNIT_TEST_SUITE(Backup) {
                                                                     NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8) )
                                                                 };
         auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
-        PrepareTablet(runtime, tableId, schema, 2);
+        auto planStep = PrepareTablet(runtime, tableId, schema, 2);
         ui64 txId = 111;
-        ui64 planStep = 0;
-
         ui64 writeId = 1;
 
         TActorId sender = runtime.AllocateEdgeActor();
@@ -83,7 +78,6 @@ Y_UNIT_TEST_SUITE(Backup) {
             std::vector<ui64> writeIds;
             UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({0, 100}, schema), schema, true, &writeIds));
             planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
-            UNIT_ASSERT(planStep);
             PlanCommit(runtime, sender, planStep, txId);
         }
 
@@ -92,7 +86,7 @@ Y_UNIT_TEST_SUITE(Backup) {
             ++writeId;
             std::vector<ui64> writeIds;
             WriteData(runtime, sender, writeId, tableId, MakeTestBlob({writeId * 100, (writeId + 1) * 100}, schema), schema, true, &writeIds);
-            const auto planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+            planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             PlanCommit(runtime, sender, planStep, txId);
             return true;
         }, TDuration::Seconds(1000));
@@ -106,9 +100,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         txBody.MutableBackupTask()->MutableS3Settings()->SetEndpoint("fake.fake");
         txBody.MutableBackupTask()->MutableS3Settings()->SetSecretKey("fakeSecret");
         AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 0);
-        auto opitionalPlanStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), ++txId);
-        UNIT_ASSERT(opitionalPlanStep);
-        planStep = *opitionalPlanStep;
+        planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), ++txId);
         AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 1);
         PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, txId), false);
         TestWaitCondition(runtime, "export",

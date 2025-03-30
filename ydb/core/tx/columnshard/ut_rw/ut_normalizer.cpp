@@ -246,6 +246,8 @@ public:
 Y_UNIT_TEST_SUITE(Normalizers) {
     template <class TLocalDBModifier>
     void TestNormalizerImpl(const TNormalizerChecker& checker = TNormalizerChecker()) {
+        Cerr << __LINE__ << " QQQ" << Endl;
+
         using namespace NArrow;
         auto csControllerGuard = NYDBTest::TControllers::RegisterCSControllerGuard<TPrepareLocalDBController<TLocalDBModifier>>();
 
@@ -259,9 +261,10 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key1", TTypeInfo(NTypeIds::Uint64)),
             NArrow::NTest::TTestColumn("key2", TTypeInfo(NTypeIds::Uint64)), NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
         const std::vector<ui32> columnsIds = { 1, 2, 3 };
-        const auto initPlanStep = PrepareTablet(runtime, tableId, schema, 2);
-        UNIT_ASSERT(initPlanStep);
-        auto planStep = *initPlanStep;
+        const auto schemaPlanStep = PrepareTablet(runtime, tableId, schema, 2);
+        Y_UNUSED(schemaPlanStep);
+        Cerr << __LINE__ << " QQQ " << schemaPlanStep << Endl;
+
         const ui64 txId = 111;
 
         NConstruction::IArrayBuilder::TPtr key1Column =
@@ -274,17 +277,24 @@ Y_UNIT_TEST_SUITE(Normalizers) {
         auto batch = NConstruction::TRecordBatchConstructor({ key1Column, key2Column, column }).BuildBatch(20048);
         NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
         AFL_VERIFY(writer.Write(batch, {1, 2, 3}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-        AFL_VERIFY(writer.StartCommit(txId) == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
-        PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(++planStep, txId));
+        Cerr << __LINE__ << " QQQ" << Endl;
+        const auto writePlanStep = writer.StartCommit(txId);
+        Cerr << __LINE__ << " QQQ " << writePlanStep << Endl;
 
+        PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(writePlanStep, txId));
+        Cerr << __LINE__ << " QQQ" << Endl;
         {
-            auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(planStep, txId), schema);
+            auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(writePlanStep, txId), schema);
+            Cerr << __LINE__ << " QQQ" << Endl;
             UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 20048);
         }
+        Cerr << __LINE__ << " QQQ" << Endl;
         RebootTablet(runtime, TTestTxConfig::TxTablet0, writer.GetSender());
+        Cerr << __LINE__ << " QQQ" << Endl;
 
         {
-            auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(planStep, txId), schema);
+            auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(writePlanStep, txId), schema);
+            Cerr << __LINE__ << " QQQ" << Endl;
             UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), checker.RecordsCountAfterReboot(20048));
         }
     }

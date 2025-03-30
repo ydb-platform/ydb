@@ -233,10 +233,10 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
     spec.TtlColumn = ttlColumnName;
     spec.EvictAfter = TDuration::Seconds(ttlSec);
 
-    auto minPlanStep = SetupSchema(runtime, sender,
+    const auto tableStorePlanStep = SetupSchema(runtime, sender,
                               TTestSchema::CreateInitShardTxBody(tableId, ydbSchema, testYdbPk, spec, "/Root/olapStore"),
                               ++txId);
-    auto planStep = *minPlanStep;
+    Y_UNUSED(tableStorePlanStep);
     if (spec.HasTiers()) {
         csControllerGuard->OverrideTierConfigs(runtime, sender, TTestSchema::BuildSnapshot(spec));
     }
@@ -245,11 +245,12 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
     auto blobs = MakeData(ts, PORTION_ROWS, PORTION_ROWS / 2, spec.TtlColumn, ydbSchema);
     UNIT_ASSERT_EQUAL(blobs.size(), 2);
     auto lastTtlFinishedCount = csControllerGuard->GetTTLFinishedCounter().Val();
+    ui64 lastWritePlanStep = Max<ui64>();
     for (auto& data : blobs) {
         std::vector<ui64> writeIds;
         UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, data, ydbSchema, true, &writeIds));
-        planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
-        PlanCommit(runtime, sender, ++planStep, txId);
+        lastWritePlanStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+        PlanCommit(runtime, sender, lastWritePlanStep, txId);
     }
 
     // TODO: write into path 2 (no ttl)
@@ -270,7 +271,7 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
     }
 
     {
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(lastWritePlanStep, Max<ui64>()));
         reader.SetReplyColumnIds(TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { spec.TtlColumn }));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -284,11 +285,9 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
     } else {
         spec.EvictAfter = TDuration::Seconds(ttlSec);
     }
-    minPlanStep = SetupSchema(runtime, sender,
+    const auto setTtlPlanStep = SetupSchema(runtime, sender,
                          TTestSchema::AlterTableTxBody(tableId, 2, spec),
                          ++txId);
-    UNIT_ASSERT(!!minPlanStep);
-    planStep = *minPlanStep;
     if (spec.HasTiers()) {
         csControllerGuard->OverrideTierConfigs(runtime, sender, TTestSchema::BuildSnapshot(spec));
     }
@@ -299,7 +298,7 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
     }
 
     {
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(setTtlPlanStep, Max<ui64>()));
         auto columnIds = TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { spec.TtlColumn });
         columnIds.emplace_back((ui32)NOlap::IIndexInfo::ESpecialColumn::PLAN_STEP);
         reader.SetReplyColumnIds(columnIds);
@@ -310,26 +309,24 @@ void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::
 
     // Disable TTL
     lastTtlFinishedCount = csControllerGuard->GetTTLFinishedCounter().Val();
-    minPlanStep = ProposeSchemaTx(runtime, sender,
+    const auto clearTtlPlanStep = SetupSchema(runtime, sender,
                          TTestSchema::AlterTableTxBody(tableId, 3, TTestSchema::TTableSpecials()),
                          ++txId);
-    UNIT_ASSERT(!!minPlanStep);
-    planStep = *minPlanStep;
     if (spec.HasTiers()) {
         csControllerGuard->OverrideTierConfigs(runtime, sender, TTestSchema::BuildSnapshot(TTestSchema::TTableSpecials()));
     }
-    PlanSchemaTx(runtime, sender, NOlap::TSnapshot(planStep, txId));
+    PlanSchemaTx(runtime, sender, NOlap::TSnapshot(clearTtlPlanStep, txId));
 
 
     std::vector<ui64> writeIds;
     UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, blobs[0], ydbSchema, true, &writeIds));
-    planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
-    PlanCommit(runtime, sender, ++planStep, txId);
+    lastWritePlanStep  = ProposeCommit(runtime, sender, ++txId, writeIds);
+    PlanCommit(runtime, sender, lastWritePlanStep, txId);
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, new TEvPrivate::TEvPeriodicWakeup(true));
 
     {
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(lastWritePlanStep, Max<ui64>()));
         reader.SetReplyColumnIds(TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { spec.TtlColumn }));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -554,14 +551,14 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
 
     ui64 writeId = 0;
     ui64 tableId = 1;
+    ui64 lastKnownPlanStep = Max<ui64>();
     ui64 txId = 100;
 //    const TDuration exportTimeout = TDuration::Seconds(40);
 
     UNIT_ASSERT(specs.size() > 0);
-    auto minPlanStep = SetupSchema(runtime, sender,
+    const auto initShardPlanStep = SetupSchema(runtime, sender,
             TTestSchema::CreateInitShardTxBody(tableId, testYdbSchema, testYdbPk, specs[0], "/Root/olapStore"), ++txId);
-    UNIT_ASSERT(minPlanStep);
-    auto planStep = *minPlanStep;
+    Y_UNUSED(initShardPlanStep);
     if (specs[0].Tiers.size()) {
         csControllerGuard->OverrideTierConfigs(runtime, sender, TTestSchema::BuildSnapshot(specs[0]));
     }
@@ -569,8 +566,8 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
     for (auto& data : blobs) {
         std::vector<ui64> writeIds;
         UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, data, testYdbSchema, true, &writeIds));
-        planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
-        PlanCommit(runtime, sender, ++planStep, txId);
+        lastKnownPlanStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+        PlanCommit(runtime, sender, lastKnownPlanStep, txId);
     }
 
     if (reboots) {
@@ -611,9 +608,8 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         }
         if (i) {
             const ui32 version = 2 * i + 1;
-            minPlanStep = SetupSchema(runtime, sender,
+            lastKnownPlanStep = SetupSchema(runtime, sender,
                 TTestSchema::AlterTableTxBody(tableId, version, specs[i]), ++txId);
-            planStep = *minPlanStep;
         }
         if (specs[i].HasTiers() || reboots) {
             csControllerGuard->OverrideTierConfigs(runtime, sender, TTestSchema::BuildSnapshot(specs[i]));
@@ -633,7 +629,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         {
             std::unique_ptr<TShardReader> reader;
             if (!misconfig) {
-                reader = std::make_unique<TShardReader>(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
+                reader = std::make_unique<TShardReader>(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(lastKnownPlanStep - 1, Max<ui64>()));
                 reader->SetReplyColumnIds(TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { specs[i].TtlColumn }));
                 counter.CaptureReadEvents = specs[i].WaitEmptyAfter ? 0 : 1; // TODO: we need affected by tiering blob here
                 counter.WaitReadsCaptured(runtime);
@@ -671,7 +667,7 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         // Read data after eviction
         TString columnToRead = specs[i].TtlColumn;
 
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(lastKnownPlanStep, Max<ui64>()));
         reader.SetReplyColumnIds(TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { columnToRead }));
         auto rb = reader.ReadAll();
         if (expectedReadResult == EExpectedResult::ERROR) {
@@ -950,9 +946,8 @@ void TestDrop(bool reboots) {
     ui64 tableId = 1;
     ui64 txId = 100;
 
-    auto minPlanStep = SetupSchema(runtime, sender, TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk), ++txId);
-    UNIT_ASSERT(minPlanStep);
-    auto planStep = *minPlanStep;
+    const auto createTablePlanStep = SetupSchema(runtime, sender, TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk), ++txId);
+    Y_UNUSED(createTablePlanStep);
 
     TString data1 = MakeTestBlob({0, PORTION_ROWS}, testYdbSchema);
     UNIT_ASSERT(data1.size() > NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
@@ -964,23 +959,22 @@ void TestDrop(bool reboots) {
     // Write into index
     std::vector<ui64> writeIds;
     UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, data1, testYdbSchema, true, &writeIds));
-    planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
-    PlanCommit(runtime, sender, ++planStep, txId);
+    auto writePlanStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+    PlanCommit(runtime, sender, writePlanStep, txId);
 
     // Write into InsertTable
     writeIds.clear();
     UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, data2, testYdbSchema, true, &writeIds));
-    planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
-    PlanCommit(runtime, sender, ++planStep, txId);
+    writePlanStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+    PlanCommit(runtime, sender, writePlanStep, txId);
 
     if (reboots) {
         RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
     }
 
     // Drop table
-    minPlanStep = SetupSchema(runtime, sender, TTestSchema::DropTableTxBody(tableId, 2), ++txId);
-    UNIT_ASSERT(minPlanStep);
-    planStep = *minPlanStep;
+    const auto dropTablePlanStep = SetupSchema(runtime, sender, TTestSchema::DropTableTxBody(tableId, 2), ++txId);
+    Y_UNUSED(dropTablePlanStep);
 
     if (reboots) {
         RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
@@ -988,7 +982,7 @@ void TestDrop(bool reboots) {
 
     TAutoPtr<IEventHandle> handle;
     {
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(planStep, Max<ui64>()));
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(writePlanStep, Max<ui64>()));
         reader.SetReplyColumnIds(TTestSchema::GetColumnIds(TTestSchema::YdbSchema(), { TTestSchema::DefaultTtlColumn }));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -1019,28 +1013,25 @@ void TestDropWriteRace() {
     NLongTxService::TLongTxId longTxId;
     UNIT_ASSERT(longTxId.ParseString("ydb://long-tx/01ezvvxjdk2hd4vdgjs68knvp8?node_id=1"));
 
-    auto minPlanStep = SetupSchema(runtime, sender, TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk), ++txId);
-    UNIT_ASSERT(minPlanStep);
-    auto planStep = *minPlanStep;
+    auto createTablePlanStep = SetupSchema(runtime, sender, TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk), ++txId);
+    Y_UNUSED(createTablePlanStep);
     TString data = MakeTestBlob({0, 100}, testYdbSchema);
     UNIT_ASSERT(data.size() < NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
 
     // Write into InsertTable
     ++txId;
     AFL_VERIFY(WriteData(runtime, sender, ++writeId, tableId, data, testYdbSchema));
-    planStep = ProposeCommit(runtime, sender, txId, { writeId });
+    const auto writeDataPlanStep = ProposeCommit(runtime, sender, txId, { writeId });
+    Y_UNUSED(writeDataPlanStep);
     auto commitTxId = txId;
 
     // Drop table
-    minPlanStep = ProposeSchemaTx(runtime, sender, TTestSchema::DropTableTxBody(tableId, 2), ++txId);
-    UNIT_ASSERT(minPlanStep);
-    planStep = *minPlanStep;
-
-    PlanSchemaTx(runtime, sender, NOlap::TSnapshot(planStep, txId));
+    const auto dropTablePlanStep = ProposeSchemaTx(runtime, sender, TTestSchema::DropTableTxBody(tableId, 2), ++txId);
+    PlanSchemaTx(runtime, sender, NOlap::TSnapshot(dropTablePlanStep, txId));
 
     // Plan commit
-    PlanCommit(runtime, sender, ++planStep, commitTxId);
-}
+    PlanCommit(runtime, sender, dropTablePlanStep + 1, commitTxId);
+} 
 
 void TestCompaction(std::optional<ui32> numWrites = {}) {
     TTestBasicRuntime runtime;
@@ -1061,9 +1052,8 @@ void TestCompaction(std::optional<ui32> numWrites = {}) {
     ui64 tableId = 1;
     ui64 txId = 100;
 
-    auto minPlanStep = SetupSchema(runtime, sender, TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk), ++txId);
-    UNIT_ASSERT(minPlanStep);
-    auto planStep = *minPlanStep;
+    const auto createTablePlanStep = SetupSchema(runtime, sender, TTestSchema::CreateTableTxBody(tableId, testYdbSchema, testYdbPk), ++txId);
+    UNIT_ASSERT(createTablePlanStep);
     // Set tiering
 
     ui64 ts = 1620000000;
@@ -1079,10 +1069,9 @@ void TestCompaction(std::optional<ui32> numWrites = {}) {
     spec.Tiers.back().EvictAfter = allow;
     spec.Tiers.back().S3 = TTestSchema::TStorageTier::FakeS3();
 
-    minPlanStep = SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, 1, spec),
+    const auto setTieringPlanStep = SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, 1, spec),
                            ++txId);
-    UNIT_ASSERT(minPlanStep);
-    planStep = *minPlanStep;
+    Y_UNUSED(setTieringPlanStep);
     csControllerGuard->OverrideTierConfigs(runtime, sender, TTestSchema::BuildSnapshot(spec));
 
     // Writes
@@ -1096,13 +1085,12 @@ void TestCompaction(std::optional<ui32> numWrites = {}) {
         numWrites = NOlap::TCompactionLimits().GranuleOverloadSize / triggerData.size();
     }
 
-    ++planStep;
     ++txId;
-    for (ui32 i = 0; i < *numWrites; ++i, ++writeId, ++planStep, ++txId) {
+    for (ui32 i = 0; i < *numWrites; ++i, ++writeId, ++txId) {
         std::vector<ui64> writeIds;
         UNIT_ASSERT(WriteData(runtime, sender, writeId, tableId, triggerData, testYdbSchema, true, &writeIds));
 
-        planStep = ProposeCommit(runtime, sender, txId, writeIds);
+        const auto planStep = ProposeCommit(runtime, sender, txId, writeIds);
         PlanCommit(runtime, sender, planStep, txId);
 
     }
@@ -1160,7 +1148,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
             schema[0].SetType(TTypeInfo(ydbType));
             pk[0].SetType(TTypeInfo(ydbType));
             auto txBody = TTestSchema::CreateTableTxBody(tableId++, schema, pk, {}, ++generation);
-            SetupSchema(runtime, sender, txBody, txId++);
+            const auto planStep = SetupSchema(runtime, sender, txBody, txId++);
+            Y_UNUSED(planStep);
         }
 
         // TODO: support float types
@@ -1173,7 +1162,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
             schema[0].SetType(TTypeInfo(ydbType));
             pk[0].SetType(TTypeInfo(ydbType));
             auto txBody = TTestSchema::CreateTableTxBody(tableId++, schema, pk, {}, ++generation);
-            SetupSchema(runtime, sender, txBody, txId++, false);
+            ProposeSchemaTxFail(runtime, sender, txBody, txId++);
         }
 
         std::vector<TTypeId> strTypes = {
@@ -1185,7 +1174,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
             schema[0].SetType(TTypeInfo(ydbType));
             pk[0].SetType(TTypeInfo(ydbType));
             auto txBody = TTestSchema::CreateTableTxBody(tableId++, schema, pk, {}, ++generation);
-            SetupSchema(runtime, sender, txBody, txId++);
+            const auto planStep = SetupSchema(runtime, sender, txBody, txId++);
+            Y_UNUSED(planStep);
         }
 
         std::vector<TTypeId> xsonTypes = {
@@ -1198,7 +1188,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
             schema[0].SetType(TTypeInfo(ydbType));
             pk[0].SetType(TTypeInfo(ydbType));
             auto txBody = TTestSchema::CreateTableTxBody(tableId++, schema, pk, {}, ++generation);
-            SetupSchema(runtime, sender, txBody, txId++, false);
+            ProposeSchemaTxFail(runtime, sender, txBody, txId++);
         }
     }
 

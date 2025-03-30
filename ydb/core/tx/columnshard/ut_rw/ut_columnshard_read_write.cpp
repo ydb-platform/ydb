@@ -355,7 +355,7 @@ void TestWrite(const TestTableDescription& table) {
     ui64 tableId = 1;
 
     auto schemaPlanStep = SetupSchema(runtime, sender, tableId, table);
-    UNIT_ASSERT(schemaPlanStep);
+    Y_UNUSED(schemaPlanStep);
 
     const auto& ydbSchema = table.Schema;
 
@@ -452,7 +452,7 @@ void TestWriteOverload(const TestTableDescription& table) {
     ui64 tableId = 1;
 
     auto schemaPlanStep = SetupSchema(runtime, sender, tableId, table);
-    UNIT_ASSERT(schemaPlanStep);
+    Y_UNUSED(schemaPlanStep);
 
     TString testBlob = MakeTestBlob({ 0, 100 * 1000 }, table.Schema);
     UNIT_ASSERT(testBlob.size() > NOlap::TCompactionLimits::MAX_BLOB_SIZE / 2);
@@ -521,7 +521,6 @@ void TestWriteReadDup(const TestTableDescription& table = {}) {
 
     auto ydbSchema = table.Schema;
     const auto schemaPlanStep = SetupSchema(runtime, sender, tableId);
-    UNIT_ASSERT(schemaPlanStep);
 
     constexpr ui32 numRows = 10;
     std::pair<ui64, ui64> portion = { 10, 10 + numRows };
@@ -529,17 +528,16 @@ void TestWriteReadDup(const TestTableDescription& table = {}) {
     TAutoPtr<IEventHandle> handle;
 
     ui64 txId = 0;
-    auto preWritePlanStep = *schemaPlanStep;
+    auto prevPlanStep = schemaPlanStep;
     for (auto count = 0; count != 50; ++count) {
         TSet<ui64> txIds;
         
-        ui64 planStep = 0;
+        ui64 planStep = Max<ui64>();
         for (ui32 i = 0; i <= 5; ++i) {
             std::vector<ui64> writeIds;
             ++txId;
             UNIT_ASSERT(
-                WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Upsert, txId)
-            );
+                WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Upsert, txId));
             planStep = ProposeCommit(runtime, sender, txId, writeIds, txId);
             txIds.insert(txId);
         }
@@ -547,14 +545,14 @@ void TestWriteReadDup(const TestTableDescription& table = {}) {
 
         // read
        if (count != 0) {
-            TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(preWritePlanStep, Max<ui64>()));
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(prevPlanStep, Max<ui64>()));
             reader.SetReplyColumnIds(table.GetColumnIds({ "timestamp" }));
             auto rb = reader.ReadAll();
             UNIT_ASSERT(reader.IsCorrectlyFinished());
             UNIT_ASSERT(CheckOrdered(rb));
             UNIT_ASSERT(DataHas({ rb }, portion, true));
        }
-       preWritePlanStep = planStep;
+       prevPlanStep = planStep;
     }
 }
 
@@ -606,7 +604,6 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     ui64 tableId = 1;
 
     const auto schemaPlanStep = SetupSchema(runtime, sender, tableId, table, codec);
-    UNIT_ASSERT(schemaPlanStep);
     const std::vector<NArrow::NTest::TTestColumn>& ydbSchema = table.Schema;
     const std::vector<NArrow::NTest::TTestColumn>& testYdbPk = table.Pk;
 
@@ -643,7 +640,7 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
     {
         NActors::TLogContextGuard guard = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("TEST_STEP", 2);
 
-        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(*schemaPlanStep, 1));
+        TShardReader reader(runtime, TTestTxConfig::TxTablet0, tableId, NOlap::TSnapshot(schemaPlanStep, 1));
         reader.SetReplyColumnIds(table.GetColumnIds({ "resource_type" }));
         auto rb = reader.ReadAll();
         UNIT_ASSERT(reader.IsCorrectlyFinished());
@@ -921,8 +918,7 @@ void TestCompactionInGranuleImpl(bool reboots, const TestTableDescription& table
     ui64 txId = 100;
 
     const auto schemaPlanStep = SetupSchema(runtime, sender, tableId, table);
-    UNIT_ASSERT(schemaPlanStep);
-    auto planStep = *schemaPlanStep;
+    auto planStep = schemaPlanStep;
     TAutoPtr<IEventHandle> handle;
     const auto& ydbSchema = table.Schema;
     const auto& ydbPk = table.Pk;
@@ -941,7 +937,7 @@ void TestCompactionInGranuleImpl(bool reboots, const TestTableDescription& table
 
     // inserts triggered by count
     ui32 pos = triggerPortionSize;
-    for (ui32 i = 0; i < 1; ++i, ++planStep, ++txId) {
+    for (ui32 i = 0; i < 1; ++i, ++txId) {
         std::vector<ui64> ids;
         ids.reserve(numWrites);
         for (ui32 w = 0; w < numWrites; ++w, ++writeId, pos += portionSize) {
@@ -1178,17 +1174,14 @@ void TestReadWithProgram(const TestTableDescription& table = {}) {
     ui64 txId = 100;
 
     const auto schemaPlanStep = SetupSchema(runtime, sender, tableId, table);
-    UNIT_ASSERT(schemaPlanStep);
-    const auto planStep = *schemaPlanStep + 1;
+    Y_UNUSED(schemaPlanStep);
 
-    {   // write some data
-        std::vector<ui64> writeIds;
-        bool ok = WriteData(runtime, sender, writeId, tableId, MakeTestBlob({ 0, 100 }, table.Schema), table.Schema, true, &writeIds);
-        UNIT_ASSERT(ok);
-
-        ProposeCommit(runtime, sender, txId, writeIds);
-        PlanCommit(runtime, sender, planStep, txId);
-    }
+    // write some data
+    std::vector<ui64> writeIds;
+    bool ok = WriteData(runtime, sender, writeId, tableId, MakeTestBlob({ 0, 100 }, table.Schema), table.Schema, true, &writeIds);
+    UNIT_ASSERT(ok);
+    const auto planStep = ProposeCommit(runtime, sender, txId, writeIds);
+    PlanCommit(runtime, sender, planStep, txId);
 
     ui32 numWrong = 1;
     std::vector<TString> programs;
@@ -1263,17 +1256,15 @@ void TestReadWithProgramLike(const TestTableDescription& table = {}) {
     ui64 txId = 100;
 
     const auto schemaPlanStep = SetupSchema(runtime, sender, tableId, table);
-    UNIT_ASSERT(schemaPlanStep);
-    const auto planStep = *schemaPlanStep + 1;
+    Y_UNUSED(schemaPlanStep);
 
-    {   // write some data
-        std::vector<ui64> writeIds;
-        bool ok = WriteData(runtime, sender, writeId, tableId, MakeTestBlob({ 0, 100 }, table.Schema), table.Schema, true, &writeIds);
-        UNIT_ASSERT(ok);
+    // write some data
+    std::vector<ui64> writeIds;
+    bool ok = WriteData(runtime, sender, writeId, tableId, MakeTestBlob({ 0, 100 }, table.Schema), table.Schema, true, &writeIds);
+    UNIT_ASSERT(ok);
 
-        ProposeCommit(runtime, sender, txId, writeIds);
-        PlanCommit(runtime, sender, planStep, txId);
-    }
+    const auto planStep = ProposeCommit(runtime, sender, txId, writeIds);
+    PlanCommit(runtime, sender, planStep, txId);
 
     TString pattern = "1";
     std::vector<NKikimrSSA::TProgram> ssas = { MakeSelectLike(TAssignment::FUNC_STR_MATCH, pattern),
@@ -1329,16 +1320,14 @@ void TestSomePrograms(const TestTableDescription& table) {
 
     const auto schemaPlanStep = SetupSchema(runtime, sender, tableId, table);
     UNIT_ASSERT(schemaPlanStep);
-    const auto planStep = *schemaPlanStep + 1;
 
-    {   // write some data
-        std::vector<ui64> writeIds;
-        bool ok = WriteData(runtime, sender, writeId, tableId, MakeTestBlob({ 0, 100 }, table.Schema), table.Schema, true, &writeIds);
-        UNIT_ASSERT(ok);
+    // write some data
+    std::vector<ui64> writeIds;
+    bool ok = WriteData(runtime, sender, writeId, tableId, MakeTestBlob({ 0, 100 }, table.Schema), table.Schema, true, &writeIds);
+    UNIT_ASSERT(ok);
 
-        ProposeCommit(runtime, sender, txId, writeIds);
-        PlanCommit(runtime, sender, planStep, txId);
-    }
+    const auto planStep = ProposeCommit(runtime, sender, txId, writeIds);
+    PlanCommit(runtime, sender, planStep, txId);
 
     std::vector<TString> programs;
     // SELECT COUNT(*) FROM /Root/olapStore/olapTable WHERE level = 2 -- bug: "level = 2" appears two times
@@ -1393,18 +1382,16 @@ void TestReadAggregate(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
     auto pk = NArrow::NTest::TTestColumn::CropSchema(ydbSchema, 4);
     TestTableDescription table{ .Schema = ydbSchema, .Pk = pk };
     const auto schemaPlanStep = SetupSchema(runtime, sender, tableId, table);
-    UNIT_ASSERT(schemaPlanStep);
-    const auto planStep = *schemaPlanStep + 1;
+    Y_UNUSED(schemaPlanStep);
 
 
-    {   // write some data
-        std::vector<ui64> writeIds;
-        bool ok = WriteData(runtime, sender, writeId, tableId, testDataBlob, table.Schema, true, &writeIds);
-        UNIT_ASSERT(ok);
+    // write some data
+    std::vector<ui64> writeIds;
+    bool ok = WriteData(runtime, sender, writeId, tableId, testDataBlob, table.Schema, true, &writeIds);
+    UNIT_ASSERT(ok);
 
-        ProposeCommit(runtime, sender, txId, writeIds);
-        PlanCommit(runtime, sender, planStep, txId);
-    }
+    const auto planStep = ProposeCommit(runtime, sender, txId, writeIds);
+    PlanCommit(runtime, sender, planStep, txId);
 
     // TODO: write some into index
 
@@ -1520,17 +1507,16 @@ Y_UNIT_TEST_SUITE(EvWrite) {
 
         NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
         AFL_VERIFY(writer.Write(batch, {1, 2}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-        AFL_VERIFY(writer.StartCommit(txId) == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+        const auto writePlanStep = writer.StartCommit(txId);
 
         {
             NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 444);
-            AFL_VERIFY(writer.StartCommit(444) == NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
+            writer.StartCommitFail(444);
         }
         {
-            auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(*schemaPlanStep, txId), schema);
+            auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(schemaPlanStep, txId), schema); //??
             UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 0);
         }
-        const auto writePlanStep = *schemaPlanStep + 1;
         PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(writePlanStep, txId));
 
         auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot::MaxForPlanStep(writePlanStep), schema);
@@ -1549,8 +1535,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
             NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
         const std::vector<ui32> columnsIds = { 1, 2 };
         const auto schemaPlanStep = PrepareTablet(runtime, tableId, schema);
-        UNIT_ASSERT(schemaPlanStep);
-        const auto planStep = *schemaPlanStep;
+        const auto planStep = schemaPlanStep + 1;
         const ui64 txId = 111;
 
         NConstruction::IArrayBuilder::TPtr keyColumn =
@@ -1579,9 +1564,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         const ui64 tableId = 1;
         const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key", TTypeInfo(NTypeIds::Uint64)),
             NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
-        const auto schemaPlanStep = PrepareTablet(runtime, tableId, schema);
-        UNIT_ASSERT(schemaPlanStep);
-        const auto planStep = *schemaPlanStep + 1;
+        auto planStep = PrepareTablet(runtime, tableId, schema);
         const ui64 txId = 111;
 
         NConstruction::IArrayBuilder::TPtr keyColumn =
@@ -1595,7 +1578,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
 
         NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
         AFL_VERIFY(writer.Write(batch, {1, 2}, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
-        AFL_VERIFY(writer.StartCommit(txId) == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
+        planStep = writer.StartCommit(txId);
 
         PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(planStep, txId));
 
@@ -1615,7 +1598,6 @@ Y_UNIT_TEST_SUITE(EvWrite) {
             NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
         const std::vector<ui32> columnIds = { 1, 2 };
         const auto schemaPlanStep = PrepareTablet(runtime, tableId, schema);
-        UNIT_ASSERT(schemaPlanStep);
         const ui64 txId = 111;
 
         NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, tableId, 222);
@@ -1628,7 +1610,7 @@ Y_UNIT_TEST_SUITE(EvWrite) {
             auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
             AFL_VERIFY(writer.Write(batch, columnIds, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
             {
-                auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(*schemaPlanStep, txId), schema);
+                auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(schemaPlanStep, txId), schema);
                 UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 0);
             }
         }
@@ -1642,16 +1624,15 @@ Y_UNIT_TEST_SUITE(EvWrite) {
             AFL_VERIFY(writer.Write(batch, columnIds, txId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
 
             {
-                auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(*schemaPlanStep, txId), schema);
+                auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(schemaPlanStep, txId), schema);
                 UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 0);
             }
         }
-        {
-            AFL_VERIFY(writer.StartCommit(txId) == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
-            PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(*schemaPlanStep + 1, txId));
-        }
+        
+        const auto writePlanStep = writer.StartCommit(txId);
+        PlanWriteTx(runtime, writer.GetSender(), NOlap::TSnapshot(writePlanStep, txId));
 
-        auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(*schemaPlanStep + 1, txId), schema);
+        auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(writePlanStep, txId), schema);
         UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 2 * 2048);
     }
 }
@@ -1716,7 +1697,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
         auto ydbSchema = table.Schema;
         const auto schemaPlanStep = SetupSchema(runtime, sender, tableId);
-        UNIT_ASSERT(schemaPlanStep);
+        Y_UNUSED(schemaPlanStep);
 
         constexpr ui32 numRows = 10;
         std::pair<ui64, ui64> portion = { 10, 10 + numRows };
@@ -1724,13 +1705,12 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         TAutoPtr<IEventHandle> handle;
 
         ui64 txId = 0;
-        auto planStep = *schemaPlanStep + 1;
         {
             TSet<ui64> txIds;
             std::vector<ui64> writeIds;
             UNIT_ASSERT(
                 WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Update));
-            ProposeCommit(runtime, sender, ++txId, writeIds);
+            const auto planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             txIds.insert(txId);
             PlanCommit(runtime, sender, planStep, txIds);
 
@@ -1739,14 +1719,13 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             auto rb = reader.ReadAll();
             UNIT_ASSERT(reader.IsCorrectlyFinished());
             UNIT_ASSERT(!rb || rb->num_rows() == 0);
-            ++planStep;
         }
         {
             TSet<ui64> txIds;
             std::vector<ui64> writeIds;
             UNIT_ASSERT(
                 WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Insert));
-            ProposeCommit(runtime, sender, ++txId, writeIds);
+            const auto planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             txIds.insert(txId);
             PlanCommit(runtime, sender, planStep, txIds);
 
@@ -1756,14 +1735,13 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             UNIT_ASSERT(reader.IsCorrectlyFinished());
             UNIT_ASSERT(CheckOrdered(rb));
             UNIT_ASSERT(DataHas({ rb }, portion, true));
-            ++planStep;
         }
         {
             TSet<ui64> txIds;
             std::vector<ui64> writeIds;
             UNIT_ASSERT(
                 WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Upsert));
-            ProposeCommit(runtime, sender, ++txId, writeIds);
+            const auto planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             txIds.insert(txId);
             PlanCommit(runtime, sender, planStep, txIds);
 
@@ -1773,14 +1751,13 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             UNIT_ASSERT(reader.IsCorrectlyFinished());
             UNIT_ASSERT(CheckOrdered(rb));
             UNIT_ASSERT(DataHas({ rb }, portion, true));
-            ++planStep;
         }
         {
             TSet<ui64> txIds;
             std::vector<ui64> writeIds;
             UNIT_ASSERT(
                 WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Update));
-            ProposeCommit(runtime, sender, ++txId, writeIds);
+            const auto planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             txIds.insert(txId);
             PlanCommit(runtime, sender, planStep, txIds);
 
@@ -1790,7 +1767,6 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             UNIT_ASSERT(reader.IsCorrectlyFinished());
             UNIT_ASSERT(CheckOrdered(rb));
             UNIT_ASSERT(DataHas({ rb }, portion, true));
-            ++planStep;
         }
         {
             TSet<ui64> txIds;
@@ -1803,7 +1779,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             std::vector<ui64> writeIds;
             UNIT_ASSERT(
                 WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds, NEvWrite::EModificationType::Delete));
-            ProposeCommit(runtime, sender, ++txId, writeIds);
+            const auto planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
             txIds.insert(txId);
             PlanCommit(runtime, sender, planStep, txIds);
 
@@ -1812,7 +1788,6 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             auto rb = reader.ReadAll();
             UNIT_ASSERT(reader.IsCorrectlyFinished());
             AFL_VERIFY(!rb || rb->num_rows() == 0)("count", rb->num_rows());
-            ++planStep;
         }
     }
 
@@ -2146,8 +2121,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         ui64 txId = 100;
 
         const auto schemaPlanStep = SetupSchema(runtime, sender, tableId, table, "lz4");
-        UNIT_ASSERT(schemaPlanStep);
-        auto planStep = *schemaPlanStep + 1;
+        auto planStep = schemaPlanStep + 1;
 
         TAutoPtr<IEventHandle> handle;
 
@@ -2390,8 +2364,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
         auto ydbSchema = TTestSchema::YdbSchema();
         const auto schemaPlanStep = SetupSchema(runtime, sender, tableId);
-        UNIT_ASSERT(schemaPlanStep);
-        auto planStep = *schemaPlanStep + 1;
+        auto planStep = schemaPlanStep + 1;
 
         TAutoPtr<IEventHandle> handle;
 
@@ -2465,7 +2438,6 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
         auto ydbSchema = TTestSchema::YdbSchema();
         const auto schemaPlanStep = SetupSchema(runtime, sender, tableId);
-        UNIT_ASSERT(schemaPlanStep);
         TAutoPtr<IEventHandle> handle;
 
         bool blockReadFinished = true;
@@ -2567,7 +2539,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         UNIT_ASSERT(triggerData.size() > NColumnShard::TLimits::MIN_BYTES_TO_INSERT);
         UNIT_ASSERT(triggerData.size() < NColumnShard::TLimits::GetMaxBlobSize());
 
-        auto planStep = *schemaPlanStep + 1;
+        auto planStep = schemaPlanStep + 1;
         ui64 txId = 1000;
 
         // Overwrite the same data multiple times to produce multiple portions at different timestamps
@@ -2679,8 +2651,8 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             planStep = ProposeCommit(runtime, sender, txId, writeIds);
             PlanCommit(runtime, sender, planStep, txId);
         }
-        UNIT_ASSERT_EQUAL(csDefaultControllerGuard->GetRequestTracingSnapshotsSave().Val(), 1);
-        UNIT_ASSERT_EQUAL(csDefaultControllerGuard->GetRequestTracingSnapshotsRemove().Val(), 1);
+        AFL_VERIFY(csDefaultControllerGuard->GetRequestTracingSnapshotsSave().Val() == 1);
+        AFL_VERIFY(csDefaultControllerGuard->GetRequestTracingSnapshotsRemove().Val() == 1);
         csDefaultControllerGuard->SetOverrideMaxReadStaleness(TDuration::Zero());
         csDefaultControllerGuard->WaitCleaning(TDuration::Seconds(20), &runtime);
         Cerr << "Compactions happened: " << csDefaultControllerGuard->GetCompactionStartedCounter().Val() << Endl;

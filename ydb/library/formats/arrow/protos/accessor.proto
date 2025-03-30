@@ -3,8 +3,9 @@ package NKikimrArrowAccessorProto;
 message TDataExtractor {
     optional string ClassName = 1;
 
-    message TBinaryJsonScanner {
+    message TJsonScanner {
         optional bool FirstLevelOnly = 1 [default = false];
+        optional bool ForceSIMDJsonParsing = 2 [default = false];
     }
 
     message TSIMDJsonScanner {
@@ -12,7 +13,7 @@ message TDataExtractor {
     }
 
     oneof Implementation {
-        TBinaryJsonScanner BinaryJsonScanner = 20;
+        TJsonScanner JsonScanner = 20;
         TSIMDJsonScanner SIMDJsonScanner = 21;
     }
 }

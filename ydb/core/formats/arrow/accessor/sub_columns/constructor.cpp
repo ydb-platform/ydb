@@ -67,7 +67,7 @@ bool TConstructor::DoDeserializeFromProto(const NKikimrArrowAccessorProto::TCons
 
 TConclusion<std::shared_ptr<IChunkedArray>> TConstructor::DoConstruct(
     const std::shared_ptr<IChunkedArray>& originalData, const TChunkConstructionData& /*externalInfo*/) const {
-    return NAccessor::TSubColumnsArray::Make(originalData, Settings).DetachResult();
+    return NAccessor::TSubColumnsArray::Make(originalData, Settings);
 }
 
 TString TConstructor::DoSerializeToString(const std::shared_ptr<IChunkedArray>& columnData, const TChunkConstructionData& externalInfo) const {

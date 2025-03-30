@@ -10,30 +10,48 @@
 
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
-TConclusionStatus TFirstLevelSchemaData::DoAddDataToBuilders(
-    const std::shared_ptr<arrow::Array>& sourceArray, TDataBuilder& dataBuilder) const noexcept {
-    if (sourceArray->type()->id() != arrow::binary()->id()) {
-        return TConclusionStatus::Fail("incorrect base type for subcolumns schema usage");
+TConclusionStatus TJsonScanExtractor::DoAddDataToBuilders(
+    const std::shared_ptr<arrow::Array>& sourceArray, TDataBuilder& dataBuilder) const {
+    auto arr = std::static_pointer_cast<arrow::BinaryArray>(sourceArray);
+    std::optional<bool> isBinaryJson;
+    if (arr->type()->id() == arrow::utf8()->id()) {
+        isBinaryJson = false;
     }
-
-    auto arr = std::static_pointer_cast<arrow::StringArray>(sourceArray);
     for (ui32 i = 0; i < arr->length(); ++i) {
         const auto view = arr->GetView(i);
         if (view.size() && !arr->IsNull(i)) {
-            auto reader = NBinaryJson::TBinaryJsonReader::Make(TStringBuf(view.data(), view.size()));
-            auto cursor = reader->GetRootCursor();
-            std::deque<std::unique_ptr<IJsonObjectExtractor>> iterators;
-            if (cursor.GetType() == NBinaryJson::EContainerType::Object) {
-                iterators.push_back(std::make_unique<TKVExtractor>(cursor.GetObjectIterator(), TStringBuf(), FirstLevelOnly));
-            } else if (cursor.GetType() == NBinaryJson::EContainerType::Array) {
-                iterators.push_back(std::make_unique<TArrayExtractor>(cursor.GetArrayIterator(), TStringBuf(), FirstLevelOnly));
+            TStringBuf sbJson(view.data(), view.size());
+            if (!isBinaryJson) {
+                isBinaryJson = NBinaryJson::IsValidBinaryJson(sbJson);
             }
-            while (iterators.size()) {
-                const auto conclusion = iterators.front()->Fill(dataBuilder, iterators);
+            TString json;
+            if (*isBinaryJson && ForceSIMDJsonParsing) {
+                json = NBinaryJson::SerializeToJson(sbJson);
+                sbJson = TStringBuf(json.data(), json.size());
+            }
+            if (!json && *isBinaryJson) {
+                auto reader = NBinaryJson::TBinaryJsonReader::Make(sbJson);
+                auto cursor = reader->GetRootCursor();
+                std::deque<std::unique_ptr<IJsonObjectExtractor>> iterators;
+                if (cursor.GetType() == NBinaryJson::EContainerType::Object) {
+                    iterators.push_back(std::make_unique<TKVExtractor>(cursor.GetObjectIterator(), TStringBuf(), FirstLevelOnly));
+                } else if (cursor.GetType() == NBinaryJson::EContainerType::Array) {
+                    iterators.push_back(std::make_unique<TArrayExtractor>(cursor.GetArrayIterator(), TStringBuf(), FirstLevelOnly));
+                }
+                while (iterators.size()) {
+                    const auto conclusion = iterators.front()->Fill(dataBuilder, iterators);
+                    if (conclusion.IsFail()) {
+                        return conclusion;
+                    }
+                    iterators.pop_front();
+                }
+            } else {
+                std::deque<std::unique_ptr<IJsonObjectExtractor>> iterators;
+                auto doc = dataBuilder.ParseJsonOnDemand(sbJson);
+                auto conclusion = TSIMDExtractor(doc, FirstLevelOnly).Fill(dataBuilder, iterators);
                 if (conclusion.IsFail()) {
                     return conclusion;
                 }
-                iterators.pop_front();
             }
         }
         dataBuilder.StartNextRecord();
@@ -42,38 +60,16 @@ TConclusionStatus TFirstLevelSchemaData::DoAddDataToBuilders(
 }
 
 TConclusionStatus IDataAdapter::AddDataToBuilders(const std::shared_ptr<arrow::Array>& sourceArray, TDataBuilder& dataBuilder) const noexcept {
-    return DoAddDataToBuilders(sourceArray, dataBuilder);
+    try {
+        return DoAddDataToBuilders(sourceArray, dataBuilder);
+    } catch (...) {
+        return TConclusionStatus::Fail("exception on data extraction: " + CurrentExceptionMessage());
+    }
 }
 
 TDataAdapterContainer TDataAdapterContainer::GetDefault() {
-    static TDataAdapterContainer result(std::make_shared<NSubColumns::TFirstLevelSchemaData>());
+    static TDataAdapterContainer result(std::make_shared<NSubColumns::TJsonScanExtractor>());
     return result;
-}
-
-TConclusionStatus TSIMDJsonExtractor::DoAddDataToBuilders(
-    const std::shared_ptr<arrow::Array>& sourceArray, TDataBuilder& dataBuilder) const noexcept {
-    if (sourceArray->type()->id() != arrow::binary()->id() && sourceArray->type()->id() != arrow::utf8()->id()) {
-        return TConclusionStatus::Fail("incorrect base type for subcolumns schema usage");
-    }
-
-    auto arr = std::static_pointer_cast<arrow::StringArray>(sourceArray);
-    for (ui32 i = 0; i < arr->length(); ++i) {
-        const auto view = arr->GetView(i);
-        if (view.size() && !arr->IsNull(i)) {
-            std::deque<std::unique_ptr<IJsonObjectExtractor>> iterators;
-            try {
-                auto doc = dataBuilder.ParseJsonOnDemand(std::string_view(view.data(), view.size()));
-                auto conclusion = TSIMDExtractor(doc, FirstLevelOnly).Fill(dataBuilder, iterators);
-                if (conclusion.IsFail()) {
-                    return conclusion;
-                }
-            } catch (const simdjson::simdjson_error& e) {
-                return TConclusionStatus::Fail("cannot parse json exception: " + TString(e.what()));
-            }
-        }
-        dataBuilder.StartNextRecord();
-    }
-    return TConclusionStatus::Success();
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

@@ -89,7 +89,8 @@ void TWorkloadGeneratorBase::GenerateDDLForTable(IOutputStream& result, const NJ
         if (Params.GetStoreType() == TWorkloadBaseParams::EStoreType::Column) {
             result << "    STORE = COLUMN," << Endl;
         }
-        result << "    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << table["partitioning"].GetUIntegerSafe(64) << Endl;
+        result << "    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << table["partitioning"].GetUIntegerSafe(64) << ", " << Endl;
+        result << "    AUTO_PARTITIONING_PARTITION_SIZE_MB = 50" << Endl;
     }
     result << ");" << Endl;
 }

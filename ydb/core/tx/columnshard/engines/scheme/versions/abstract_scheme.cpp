@@ -104,14 +104,14 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
         const auto& incomingColumn = incomingBatch->column(incomingIdx);
         const auto hasNull = NArrow::HasNulls(incomingColumn);
         const TColumnFeatures& features = GetIndexInfo().GetColumnFeaturesVerifiedByIndex(targetIdx);
-        if (!features.GetDataAccessorConstructor()->HasInternalConversion()) {
+        const std::optional<i32> pkFieldIdx = features.GetPKColumnIndex();
+        if (!features.GetDataAccessorConstructor()->HasInternalConversion() || !!pkFieldIdx) {
             if (!features.GetArrowField()->type()->Equals(incomingColumn->type())) {
                 return TConclusionStatus::Fail(
                     "not equal type for column: " + features.GetColumnName() + ": " + features.GetArrowField()->type()->ToString()
                     + " vs " + incomingColumn->type()->ToString());
             }
         }
-        const std::optional<i32> pkFieldIdx = features.GetPKColumnIndex();
         if (pkFieldIdx && hasNull && !AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK()) {
             return TConclusionStatus::Fail("null data for pk column is impossible for '" + dstSchema.field(targetIdx)->name() + "'");
         }

@@ -5,10 +5,16 @@ message TDataExtractor {
 
     message TJsonScanner {
         optional bool FirstLevelOnly = 1 [default = false];
+        optional bool ForceSIMDJsonParsing = 2 [default = false];
+    }
+
+    message TSIMDJsonScanner {
+        optional bool FirstLevelOnly = 1 [default = false];
     }
 
     oneof Implementation {
         TJsonScanner JsonScanner = 20;
+        TSIMDJsonScanner SIMDJsonScanner = 21;
     }
 }
 

@@ -21,19 +21,20 @@ TConclusionStatus TRequestedConstuctor::DoDeserializeFromRequest(NYql::TFeatures
     if (auto kff = features.Extract<ui32>("SPARSED_DETECTOR_KFF")) {
         Settings.SetSparsedDetectorKff(*kff);
     }
+    THolder<IDataAdapter> extractor;
     if (auto dataExtractorClassName = features.Extract<TString>("DATA_EXTRACTOR_CLASS_NAME")) {
-        auto extractor = IDataAdapter::TFactory::MakeHolder(*dataExtractorClassName);
+        extractor = IDataAdapter::TFactory::MakeHolder(*dataExtractorClassName);
         if (!extractor) {
             return TConclusionStatus::Fail("incorrect data extractor class name");
         }
-        auto parseConclusion = extractor->DeserializeFromRequest(features);
-        if (parseConclusion.IsFail()) {
-            return parseConclusion;
-        }
-        Settings.SetDataExtractor(std::shared_ptr<IDataAdapter>(extractor.Release()));
     } else {
-        Settings.SetDataExtractor(std::make_shared<TFirstLevelSchemaData>(false));
+        extractor = MakeHolder<TJsonScanExtractor>(false);
     }
+    auto parseConclusion = extractor->DeserializeFromRequest(features);
+    if (parseConclusion.IsFail()) {
+        return parseConclusion;
+    }
+    Settings.SetDataExtractor(std::shared_ptr<IDataAdapter>(extractor.Release()));
     if (auto memLimit = features.Extract<ui32>("MEM_LIMIT_CHUNK")) {
         Settings.SetChunkMemoryLimit(*memLimit);
     }

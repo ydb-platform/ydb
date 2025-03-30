@@ -92,7 +92,6 @@ public:
     }
 
     simdjson::simdjson_result<simdjson::ondemand::document> ParseJsonOnDemand(const TStringBuf sv) {
-        Parser = simdjson::ondemand::parser();
         PaddedStrings.emplace_back(simdjson::padded_string(sv.data(), sv.size()));
         return Parser.iterate(PaddedStrings.back());
     }

@@ -134,9 +134,10 @@ TStringBuf TDataBuilder::AddKeyOwn(const TStringBuf currentPrefix, std::string&&
 }
 
 TStringBuf TDataBuilder::AddKey(const TStringBuf currentPrefix, const TStringBuf key) {
-    auto it = StorageHash.find(TStorageAddress(currentPrefix, key));
+    TStorageAddress keyAddress(currentPrefix, key);
+    auto it = StorageHash.find(keyAddress);
     if (it == StorageHash.end()) {
-        it = StorageHash.emplace(TStorageAddress(currentPrefix, key), BuildString(currentPrefix, key)).first;
+        it = StorageHash.emplace(keyAddress, BuildString(currentPrefix, key)).first;
     }
     return TStringBuf(it->second.data(), it->second.size());
 }

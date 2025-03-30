@@ -110,13 +110,13 @@ TOthersData TDataBuilder::MergeOthers(const std::vector<TColumnElements*>& other
 std::string BuildString(const TStringBuf currentPrefix, const TStringBuf key) {
     if (key.find(".") != std::string::npos) {
         if (currentPrefix.size()) {
-            return Sprintf("%s.\"%s\"", currentPrefix.data(), key.data());
+            return Sprintf("%.*s.\"%.*s\"", currentPrefix.size(), currentPrefix.data(), key.size(), key.data());
         } else {
-            return Sprintf("\"%s\"", key.data());
+            return Sprintf("\"%.*s\"", key.size(), key.data());
         }
     } else {
         if (currentPrefix.size()) {
-            return Sprintf("%s.%s", currentPrefix.data(), key.data());
+            return Sprintf("%.*s.%.*s", currentPrefix.size(), currentPrefix.data(), key.size(), key.data());
         } else {
             return std::string(key.data(), key.size());
         }

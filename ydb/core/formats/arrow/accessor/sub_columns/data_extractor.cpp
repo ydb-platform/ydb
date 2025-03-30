@@ -20,11 +20,6 @@ TConclusionStatus TFirstLevelSchemaData::DoAddDataToBuilders(
     for (ui32 i = 0; i < arr->length(); ++i) {
         const auto view = arr->GetView(i);
         if (view.size() && !arr->IsNull(i)) {
-            //        NBinaryJson::TBinaryJson bJson(view.data(), view.size());
-            //        auto bJson = NBinaryJson::SerializeToBinaryJson(TStringBuf(view.data(), view.size()));
-            //        const NBinaryJson::TBinaryJson* bJsonParsed = std::get_if<NBinaryJson::TBinaryJson>(&bJson);
-            //        AFL_VERIFY(bJsonParsed)("error", *std::get_if<TString>(&bJson))("json", TStringBuf(view.data(), view.size()));
-            //        const NBinaryJson::TBinaryJson* bJsonParsed = &bJson;
             auto reader = NBinaryJson::TBinaryJsonReader::Make(TStringBuf(view.data(), view.size()));
             auto cursor = reader->GetRootCursor();
             std::deque<std::unique_ptr<IJsonObjectExtractor>> iterators;
@@ -53,6 +48,32 @@ TConclusionStatus IDataAdapter::AddDataToBuilders(const std::shared_ptr<arrow::A
 TDataAdapterContainer TDataAdapterContainer::GetDefault() {
     static TDataAdapterContainer result(std::make_shared<NSubColumns::TFirstLevelSchemaData>());
     return result;
+}
+
+TConclusionStatus TSIMDJsonExtractor::DoAddDataToBuilders(
+    const std::shared_ptr<arrow::Array>& sourceArray, TDataBuilder& dataBuilder) const noexcept {
+    if (sourceArray->type()->id() != arrow::binary()->id() && sourceArray->type()->id() != arrow::utf8()->id()) {
+        return TConclusionStatus::Fail("incorrect base type for subcolumns schema usage");
+    }
+
+    auto arr = std::static_pointer_cast<arrow::StringArray>(sourceArray);
+    for (ui32 i = 0; i < arr->length(); ++i) {
+        const auto view = arr->GetView(i);
+        if (view.size() && !arr->IsNull(i)) {
+            std::deque<std::unique_ptr<IJsonObjectExtractor>> iterators;
+            try {
+                auto doc = dataBuilder.ParseJsonOnDemand(std::string_view(view.data(), view.size()));
+                auto conclusion = TSIMDExtractor(doc, FirstLevelOnly).Fill(dataBuilder, iterators);
+                if (conclusion.IsFail()) {
+                    return conclusion;
+                }
+            } catch (const simdjson::simdjson_error& e) {
+                return TConclusionStatus::Fail("cannot parse json exception: " + TString(e.what()));
+            }
+        }
+        dataBuilder.StartNextRecord();
+    }
+    return TConclusionStatus::Success();
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

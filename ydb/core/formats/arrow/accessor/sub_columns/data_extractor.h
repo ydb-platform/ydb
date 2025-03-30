@@ -30,6 +30,7 @@ private:
     virtual TConclusionStatus DoDeserializeFromRequest(NYql::TFeaturesExtractor& features) = 0;
 
 public:
+    virtual bool HasInternalConversion() const = 0;
     virtual TString GetClassName() const = 0;
     bool DeserializeFromProto(const TProto& proto) {
         return DoDeserializeFromProto(proto);
@@ -58,10 +59,14 @@ public:
 class TFirstLevelSchemaData: public IDataAdapter {
 public:
     static TString GetClassNameStatic() {
-        return "JSON_SCANNER";
+        return "BINARY_JSON_SCANNER";
     }
 
 private:
+    virtual bool HasInternalConversion() const override {
+        return false;
+    }
+
     bool FirstLevelOnly = false;
     virtual TConclusionStatus DoDeserializeFromRequest(NYql::TFeaturesExtractor& features) override {
         if (auto scanFlag = features.Extract<bool>("SCAN_FIRST_LEVEL_ONLY")) {
@@ -73,24 +78,69 @@ private:
     virtual TConclusionStatus DoAddDataToBuilders(
         const std::shared_ptr<arrow::Array>& sourceArray, TDataBuilder& dataBuilder) const noexcept override;
     virtual bool DoDeserializeFromProto(const TProto& proto) override {
-        if (!proto.HasJsonScanner()) {
+        if (!proto.HasBinaryJsonScanner()) {
             return true;
         }
-        FirstLevelOnly = proto.GetJsonScanner().GetFirstLevelOnly();
+        FirstLevelOnly = proto.GetBinaryJsonScanner().GetFirstLevelOnly();
         return true;
     }
     virtual void DoSerializeToProto(TProto& proto) const override {
-        proto.MutableJsonScanner()->SetFirstLevelOnly(FirstLevelOnly);
+        proto.MutableBinaryJsonScanner()->SetFirstLevelOnly(FirstLevelOnly);
     }
     virtual TString GetClassName() const override {
         return GetClassNameStatic();
     }
 
     static const inline auto Registrator = TFactory::TRegistrator<TFirstLevelSchemaData>(GetClassNameStatic());
+    static const inline auto Registrator1 = TFactory::TRegistrator<TFirstLevelSchemaData>("JSON_SCANNER");
 
 public:
     TFirstLevelSchemaData() = default;
     TFirstLevelSchemaData(const bool firstLevelOnly)
+        : FirstLevelOnly(firstLevelOnly) {
+    }
+};
+
+class TSIMDJsonExtractor: public IDataAdapter {
+public:
+    static TString GetClassNameStatic() {
+        return "SIMD_JSON_SCANNER";
+    }
+
+private:
+    virtual bool HasInternalConversion() const override {
+        return true;
+    }
+
+    bool FirstLevelOnly = false;
+    virtual TConclusionStatus DoDeserializeFromRequest(NYql::TFeaturesExtractor& features) override {
+        if (auto scanFlag = features.Extract<bool>("SCAN_FIRST_LEVEL_ONLY")) {
+            FirstLevelOnly = *scanFlag;
+        }
+        return TConclusionStatus::Success();
+    }
+
+    virtual TConclusionStatus DoAddDataToBuilders(
+        const std::shared_ptr<arrow::Array>& sourceArray, TDataBuilder& dataBuilder) const noexcept override;
+    virtual bool DoDeserializeFromProto(const TProto& proto) override {
+        if (!proto.HasSIMDJsonScanner()) {
+            return true;
+        }
+        FirstLevelOnly = proto.GetSIMDJsonScanner().GetFirstLevelOnly();
+        return true;
+    }
+    virtual void DoSerializeToProto(TProto& proto) const override {
+        proto.MutableSIMDJsonScanner()->SetFirstLevelOnly(FirstLevelOnly);
+    }
+    virtual TString GetClassName() const override {
+        return GetClassNameStatic();
+    }
+
+    static const inline auto Registrator = TFactory::TRegistrator<TSIMDJsonExtractor>(GetClassNameStatic());
+
+public:
+    TSIMDJsonExtractor() = default;
+    TSIMDJsonExtractor(const bool firstLevelOnly)
         : FirstLevelOnly(firstLevelOnly) {
     }
 };

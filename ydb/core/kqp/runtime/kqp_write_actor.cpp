@@ -2186,7 +2186,6 @@ public:
         }
 
         for (auto& [_, info] : WriteInfos) {
-            TGuard guard(*Alloc);
             if (info.WriteTableActor) {
                 info.WriteTableActor->Terminate();
             }

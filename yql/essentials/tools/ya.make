@@ -8,6 +8,7 @@ RECURSE(
     purebench
     sql2yql
     sql_formatter
+    sql_functions_dump
     types_dump
     udf_dep_stub
     udf_probe

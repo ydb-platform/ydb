@@ -315,8 +315,20 @@ public:
         return false;
     }
 
-    bool HasStageData() const {
-        return !!StageData;
+    void InitStageData(std::unique_ptr<TFetchedData>&& data) {
+        AFL_VERIFY(!StageData);
+        StageData = std::move(data);
+    }
+
+    std::unique_ptr<TFetchedData> ExtractStageData() {
+        AFL_VERIFY(StageData);
+        auto result = std::move(StageData);
+        StageData.reset();
+        return std::move(result);
+    }
+
+    void ClearStageData() {
+        StageData.reset();
     }
 
     void InitStageData(std::unique_ptr<TFetchedData>&& data) {
@@ -337,6 +349,10 @@ public:
     const TFetchedData& GetStageData() const {
         AFL_VERIFY(StageData);
         return *StageData;
+    }
+
+    bool HasStageData() const {
+        return !!StageData;
     }
 
     TFetchedData& MutableStageData() {

@@ -282,11 +282,18 @@ void ComputeStatistics(const std::shared_ptr<TJoinOptimizerNode>& join, IProvide
 
 class TOptimizerNativeNew: public IOptimizerNew {
 public:
-    TOptimizerNativeNew(IProviderContext& ctx, ui32 maxDPhypDPTableSize, TExprContext& exprCtx, bool enableShuffleElimination)
+    TOptimizerNativeNew(
+        IProviderContext& ctx,
+        ui32 maxDPhypDPTableSize,
+        TExprContext& exprCtx,
+        bool enableShuffleElimination,
+        TOrderingsStateMachine* orderingsFSM
+    )
         : IOptimizerNew(ctx)
         , MaxDPHypTableSize_(maxDPhypDPTableSize)
         , ExprCtx(exprCtx)
-        , EnableShuffleElimination(enableShuffleElimination)
+        , EnableShuffleElimination(enableShuffleElimination && orderingsFSM != nullptr)
+        , OrderingsFSM(orderingsFSM)
     {}
 
     std::shared_ptr<TJoinOptimizerNode> JoinSearch(
@@ -294,6 +301,8 @@ public:
         const TOptimizerHints& hints = {}
     ) override {
         auto relsCount = joinTree->Labels().size();
+
+        Y_ENSURE(EnableShuffleElimination && OrderingsFSM != nullptr);
 
         if (EnableShuffleElimination && relsCount <= 14) {
             return JoinSearchImpl<TNodeSet64, TDPHypSolverShuffleElimination<TNodeSet64>>(joinTree, false, hints);
@@ -318,6 +327,17 @@ private:
     using TNodeSet128 = std::bitset<128>;
     using TNodeSet192 = std::bitset<192>;
 
+    template <typename TNodeSet, typename TDpHypImpl>
+    auto GetDPHypImpl(auto hypergraph) {
+        if constexpr (std::is_same_v<TDpHypImpl, TDPHypSolverClassic<TNodeSet>>) {
+            return TDPHypSolverClassic<TNodeSet>(hypergraph, this->Pctx);
+        } else if constexpr (std::is_same_v<TDpHypImpl, TDPHypSolverShuffleElimination<TNodeSet>>) {
+            return TDPHypSolverShuffleElimination<TNodeSet>(hypergraph, this->Pctx, *OrderingsFSM);
+        } else {
+            static_assert(false, "No such DPHyp implementation");
+        }
+    }
+
     template <
         typename TNodeSet,
         typename TDPHypImpl
@@ -328,10 +348,7 @@ private:
         const TOptimizerHints& hints = {}
     ) {
         TJoinHypergraph<TNodeSet> hypergraph = MakeJoinHypergraph<TNodeSet>(joinTree, hints);
-        TFDStorage fdStorage;
-        auto orderingsFSM = TOrderingsStateMachineConstructor(hypergraph).Construct(fdStorage);
-
-        TDPHypImpl solver(hypergraph, this->Pctx, orderingsFSM);
+        TDPHypImpl solver = GetDPHypImpl<TNodeSet, TDPHypImpl>(hypergraph);
         YQL_CLOG(TRACE, CoreDq) << "Enumeration algorithm chosen: " << solver.Type();
         if (solver.CountCC(MaxDPHypTableSize_) >= MaxDPHypTableSize_) {
             YQL_CLOG(TRACE, CoreDq) << "Maximum DPhyp threshold exceeded";
@@ -348,9 +365,13 @@ private:
 
         auto bestJoinOrder = solver.Solve(hints);
         if (postEnumerationShuffleElimination) {
-            EliminateShuffles(hypergraph, bestJoinOrder, orderingsFSM);
+            Y_ENSURE(OrderingsFSM != nullptr);
+
+            EliminateShuffles(hypergraph, bestJoinOrder, *OrderingsFSM);
         }
-        auto resTree = ConvertFromInternal(bestJoinOrder, fdStorage, EnableShuffleElimination);
+
+        auto resTree = ConvertFromInternal(bestJoinOrder, EnableShuffleElimination, OrderingsFSM? &OrderingsFSM->FDStorage: nullptr);
+
         AddMissingConditions(hypergraph, resTree);
         return resTree;
     }
@@ -455,10 +476,18 @@ private:
     ui32 MaxDPHypTableSize_;
     TExprContext& ExprCtx;
     bool EnableShuffleElimination;
+
+    TOrderingsStateMachine* OrderingsFSM;
 };
 
-IOptimizerNew* MakeNativeOptimizerNew(IProviderContext& pctx, const ui32 maxDPhypDPTableSize, TExprContext& ectx, bool enableShuffleElimination) {
-    return new TOptimizerNativeNew(pctx, maxDPhypDPTableSize, ectx, enableShuffleElimination);
+IOptimizerNew* MakeNativeOptimizerNew(
+    IProviderContext& pctx,
+    const ui32 maxDPhypDPTableSize,
+    TExprContext& ectx,
+    bool enableShuffleElimination,
+    TOrderingsStateMachine* orderingsFSM
+) {
+    return new TOptimizerNativeNew(pctx, maxDPhypDPTableSize, ectx, enableShuffleElimination, orderingsFSM);
 }
 
 TExprBase DqOptimizeEquiJoinWithCosts(

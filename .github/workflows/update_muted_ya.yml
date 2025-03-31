@@ -9,6 +9,7 @@ env:
   TITLE: "Update muted_ya.txt"
   BASE_BRANCH: main
   REVIEWERS: "['ci']"
+  LABEL: mute-unmute
 
 jobs:
   create-or-update-muted-ya:
@@ -155,7 +156,7 @@ jobs:
             const path = require('path');
             
             const workflowUrl = `https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
-            const filePath = path.join(process.env.GITHUB_WORKSPACE, 'pr_body.txt');
+            const filePath = path.join(process.env.GITHUB_WORKSPACE, 'pr_body_content.txt');
             const bodyText = fs.readFileSync(filePath, 'utf8');
             const completeBody = `Collected in workflow [#${{ github.run_number }}](${workflowUrl})\n\n${bodyText}`;
       
@@ -169,7 +170,7 @@ jobs:
             github.rest.issues.addLabels({
               ...context.repo,
               issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
-              labels: ['mute-unmute ']
+              labels: ['${{ env.LABEL }}']
             });
 
       - name: Add reviewers

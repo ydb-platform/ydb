@@ -60,7 +60,7 @@ class TestStress(object):
             + ["--path", path]
         )
 
-    @pytest.mark.parametrize("store_type", ["row"])
+    @pytest.mark.parametrize("store_type", ["row", "column"])
     def test_log(self, store_type):
         timeout_scale = 60
 
@@ -126,13 +126,13 @@ class TestStress(object):
         select.wait()
 
     @pytest.mark.skip(reason="Too huge logs")
-    @pytest.mark.parametrize("mode", ["row"])
+    @pytest.mark.parametrize("store_type", ["row", "column"])
     def test_simple_queue(self, mode: str):
         with Workload(f"grpc://localhost:{self.cluster.nodes[1].grpc_port}", "/Root", 180, mode) as workload:
             for handle in workload.loop():
                 handle()
 
-    @pytest.mark.parametrize("store_type", ["row"])
+    @pytest.mark.parametrize("store_type", ["row", "column"])
     def test_kv(self, store_type):
         init_command_prefix = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
@@ -257,7 +257,7 @@ class TestStress(object):
         yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)
 
     @pytest.mark.skip(reason="Not stabilized yet")
-    @pytest.mark.parametrize("store_type", ["row"])
+    @pytest.mark.parametrize("store_type", ["row", "column"])
     def test_tpcds1(self, store_type):
         init_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),

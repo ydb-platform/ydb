@@ -15,8 +15,8 @@ You can download binary releases from [{#T}](../../downloads/index.md#ydbops).
     ```
 
 2. There are two ways to build `ydbops`:
-    2.1. [Directly with Go](#go)
-    2.2. [Inside a Docker container](#docker)
+    1. [Directly with Go](#go)
+    2. [Inside a Docker container](#docker)
 
 The second approach requires a prepared [Docker](https://en.wikipedia.org/wiki/Docker_(software)) environment and uses the official Docker image for [Golang](https://en.wikipedia.org/wiki/Go_(programming_language)) [v1.22](https://hub.docker.com/_/golang/tags?name=1.22), guaranteeing a successful build. The Docker container operates using the `Dockerfile` from the repository. The build process in Docker also performs additional tasks: running linter checks and substituting the version for the `ydbops` assembly to register it in the executable file.
 

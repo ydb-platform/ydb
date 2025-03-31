@@ -1275,9 +1275,15 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                 }
             }
         }
-        WorkZone.PartitionedBlob = TPartitionedBlob(Partition, curOffset, p.Msg.SourceId, p.Msg.SeqNo,
-                                                    p.Msg.TotalParts, p.Msg.TotalSize, WorkZone.Head, WorkZone.NewHead,
-                                                    parameters.HeadCleared, needCompactHead, MaxBlobSize);
+        WorkZone.NewPartitionedBlob(Partition,
+                                    curOffset,
+                                    p.Msg.SourceId,
+                                    p.Msg.SeqNo,
+                                    p.Msg.TotalParts,
+                                    p.Msg.TotalSize,
+                                    parameters.HeadCleared,
+                                    needCompactHead,
+                                    MaxBlobSize);
     }
 
     PQ_LOG_D("Topic '" << TopicName() << "' partition " << Partition
@@ -1389,7 +1395,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         sourceId.Update(p.Msg.SeqNo, curOffset, CurrentTimestamp);
 
         ++curOffset;
-        WorkZone.PartitionedBlob = TPartitionedBlob(Partition, 0, "", 0, 0, 0, WorkZone.Head, WorkZone.NewHead, true, false, MaxBlobSize);
+        WorkZone.ClearPartitionedBlob(Partition, MaxBlobSize);
     }
     return true;
 }

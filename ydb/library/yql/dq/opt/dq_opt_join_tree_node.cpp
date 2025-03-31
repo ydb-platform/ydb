@@ -39,10 +39,10 @@ std::shared_ptr<TJoinOptimizerNode> ConvertFromInternal(
     auto right = join->RightArg;
 
     if (left->Kind == EOptimizerNodeKind::JoinNodeType) {
-        left = ConvertFromInternal(left, fdStorage, enableShuffleElimination);
+        left = ConvertFromInternal(left, enableShuffleElimination, fdStorage);
     }
     if (right->Kind == EOptimizerNodeKind::JoinNodeType) {
-        right = ConvertFromInternal(right, fdStorage, enableShuffleElimination);
+        right = ConvertFromInternal(right, enableShuffleElimination, fdStorage);
     }
 
     auto newJoin = std::make_shared<TJoinOptimizerNode>(left, right, join->LeftJoinKeys, join->RightJoinKeys, join->JoinType, join->JoinAlgo, join->LeftAny, join->RightAny);
@@ -54,7 +54,7 @@ std::shared_ptr<TJoinOptimizerNode> ConvertFromInternal(
                 new TOptimizerStatistics::TShuffledByColumns(join->LeftJoinKeys)
             );
     } else if (join->ShuffleLeftSideByOrderingIdx != -1 && fdStorage) {
-        auto shuffledBy = fdStorage.GetInterestingOrderingsColumnNamesByIdx(join->ShuffleLeftSideByOrderingIdx);
+        auto shuffledBy = fdStorage->GetInterestingOrderingsColumnNamesByIdx(join->ShuffleLeftSideByOrderingIdx);
 
         left->Stats.ShuffledByColumns =
             TIntrusivePtr<TOptimizerStatistics::TShuffledByColumns>(
@@ -70,7 +70,7 @@ std::shared_ptr<TJoinOptimizerNode> ConvertFromInternal(
                 new TOptimizerStatistics::TShuffledByColumns(join->RightJoinKeys)
             );
     } else if (join->ShuffleRightSideByOrderingIdx != -1 && fdStorage) {
-        auto shuffledBy = fdStorage.GetInterestingOrderingsColumnNamesByIdx(join->ShuffleRightSideByOrderingIdx);
+        auto shuffledBy = fdStorage->GetInterestingOrderingsColumnNamesByIdx(join->ShuffleRightSideByOrderingIdx);
 
         right->Stats.ShuffledByColumns =
             TIntrusivePtr<TOptimizerStatistics::TShuffledByColumns>(

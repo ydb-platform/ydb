@@ -173,7 +173,7 @@ jobs:
             github.rest.issues.addLabels({
               ...context.repo,
               issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
-              labels: ['update_muted_ya']
+              labels: ['mute-unmute ']
             });
 
       - name: Add reviewers

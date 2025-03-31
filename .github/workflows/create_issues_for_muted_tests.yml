@@ -16,7 +16,7 @@ env:
 jobs:
   run-python-script:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request_review' && github.event.review.state == 'approved' && contains(github.pull_request.labels.*.name, 'update_muted_ya') 
+    if: github.event_name == 'pull_request_review' && github.event.review.state == 'approved' && contains(github.pull_request.labels.*.name, 'mute-unmute') 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

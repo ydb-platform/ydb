@@ -11,6 +11,7 @@
 namespace NKikimr::NOlap::NReader::NSimple {
 
 class IDataSource;
+class TSourceConstructor;
 using TColumnsSet = NCommon::TColumnsSet;
 using EStageFeaturesIndexes = NCommon::EStageFeaturesIndexes;
 using TColumnsSetIds = NCommon::TColumnsSetIds;
@@ -48,7 +49,7 @@ public:
         }
     }
 
-    void RegisterDuplicatesManager(const std::deque<std::shared_ptr<IDataSource>>& sources);
+    void RegisterDuplicatesManager(const std::deque<TSourceConstructor>& sources, const std::shared_ptr<TSpecialReadContext>& self);
     void OnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source);
     void OnSourcesSkipped(const std::vector<std::shared_ptr<NCommon::IDataSource>>& sources);
 };

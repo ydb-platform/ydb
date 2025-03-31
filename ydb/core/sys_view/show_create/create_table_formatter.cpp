@@ -921,6 +921,10 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tabl
     }
     Stream << ",\n";
 
+    if (!schema.GetIndexes().empty()) {
+        return TResult(Ydb::StatusIds::UNSUPPORTED, "Indexes are not supported yet for column tables.");
+    }
+
     bool isFamilyPrinted = false;
     if (!schema.GetColumnFamilies().empty()) {
         try {
@@ -950,6 +954,22 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tabl
     }
     Stream << ")\n";
     Stream << ") ";
+
+    if (schema.HasOptions()) {
+        const auto& options = schema.GetOptions();
+        if (options.GetSchemeNeedActualization()) {
+            return TResult(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: SCHEME_NEED_ACTUALIZATION");
+        }
+        if (options.HasScanReaderPolicyName() && !options.GetScanReaderPolicyName().empty()) {
+            return TResult(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: SCAN_READER_POLICY_NAME");
+        }
+        if (options.HasCompactionPlannerConstructor()) {
+            return TResult(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: COMPACTION_PLANNER");
+        }
+        if (options.HasMetadataManagerConstructor()) {
+            return TResult(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: METADATA_MEMORY_MANAGER");
+        }
+    }
 
     if (tableDesc.HasSharding()) {
         Format(tableDesc.GetSharding());
@@ -995,6 +1015,18 @@ void TCreateTableFormatter::Format(const TOlapColumnDescription& olapColumnDesc)
     }
     if (olapColumnDesc.HasDefaultValue()) {
         Format(olapColumnDesc.GetDefaultValue());
+    }
+
+    if (olapColumnDesc.HasStorageId() && !olapColumnDesc.GetStorageId().empty()) {
+        ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: STORAGE_ID");
+    }
+
+    if (olapColumnDesc.HasDataAccessorConstructor()) {
+        ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: DATA_ACCESSOR_CONSTRUCTOR");
+    }
+
+    if (olapColumnDesc.HasDictionaryEncoding()) {
+        ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: ENCODING.DICTIONARY");
     }
 }
 

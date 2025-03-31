@@ -195,11 +195,7 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: DataShard"), 0);
     }
 
-<<<<<<< HEAD
-    Y_UNIT_TEST_TWIN(UpsertViaLegacyScripting, Streaming) {
-=======
     Y_UNIT_TEST_TWIN(BrokenReadLock, UseSink) {
->>>>>>> 9c6936d6ff5 (Fix tests for default EvWrite (#15319))
         TStringStream ss;
         {
             NKikimrConfig::TAppConfig AppConfig;

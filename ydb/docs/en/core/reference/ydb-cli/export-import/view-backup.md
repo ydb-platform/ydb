@@ -36,7 +36,7 @@ Let's consider the following scenario:
 As the result of the steps described above, the `root_view` view is restored and selects from the `root_table` table:
 
 ```bash
-ydb sql --script 'select * from root_view' --explain
+ydb sql --script 'SELECT * FROM root_view' --explain
 ```
 
 The output of the command includes: `TableFullScan (Table: root_table, ...`
@@ -67,7 +67,7 @@ Let's consider the following scenario:
 As the result of the steps described above, the `a/b/c/my_view` view is restored and selects from the `a/b/c/my_table` table:
 
 ```bash
-ydb sql --script 'select * from `a/b/c/my_view`' --explain
+ydb sql --script 'SELECT * FROM `a/b/c/my_view`' --explain
 ```
 
 The output of the command includes: `TableFullScan (Table: a/b/c/my_table, ...`
@@ -98,7 +98,7 @@ Let's consider the following scenario:
 As the result of the steps described above, the `my_view` view is restored and selects from the `my_table` table:
 
 ```bash
-ydb sql --script 'select * from my_view' --explain
+ydb sql --script 'SELECT * FROM my_view' --explain
 ```
 
 The output of the command includes: `TableFullScan (Table: my_table, ...`
@@ -133,7 +133,7 @@ Let's consider the following scenario:
 As the result of the steps described above, the `root_view` view is restored and selects from the `root_table` table located in the `/restored_database`:
 
 ```bash
-ydb --endpoint <endpoint> --database /restored_database sql --script 'select * from root_view' --explain
+ydb --endpoint <endpoint> --database /restored_database sql --script 'SELECT * FROM root_view' --explain
 ```
 
 The output of the command includes: `TableFullScan (Table: root_table, ...`

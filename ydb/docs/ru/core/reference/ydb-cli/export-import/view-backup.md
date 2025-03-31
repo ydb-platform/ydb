@@ -36,7 +36,7 @@
 В результате описанных выше шагов представление `root_view` восстанавливается и читает из таблицы `root_table`:
 
 ```bash
-ydb sql --script 'select * from root_view' --explain
+ydb sql --script 'SELECT * FROM root_view' --explain
 ```
 
 В выводе выполненной команды отображается: `TableFullScan (Table: root_table, ...`
@@ -67,7 +67,7 @@ ydb sql --script 'select * from root_view' --explain
 В результате описанных выше шагов представление `a/b/c/my_view` восстанавливается и читает из таблицы `a/b/c/my_table`:
 
 ```bash
-ydb sql --script 'select * from `a/b/c/my_view`' --explain
+ydb sql --script 'SELECT * FROM `a/b/c/my_view`' --explain
 ```
 
 В выводе выполненной команды отображается: `TableFullScan (Table: a/b/c/my_table, ...`
@@ -98,7 +98,7 @@ ydb sql --script 'select * from `a/b/c/my_view`' --explain
 В результате описанных выше шагов представление `my_view` восстанавливается и читает из таблицы `my_table`:
 
 ```bash
-ydb sql --script 'select * from my_view' --explain
+ydb sql --script 'SELECT * FROM my_view' --explain
 ```
 
 В выводе выполненной команды отображается: `TableFullScan (Table: my_table, ...`
@@ -133,7 +133,7 @@ ydb sql --script 'select * from my_view' --explain
 В результате описанных выше шагов представление `root_view` восстанавливается и читает из таблицы `root_table`, расположенной в `/restored_database`:
 
 ```bash
-ydb --endpoint <endpoint> --database /restored_database sql --script 'select * from root_view' --explain
+ydb --endpoint <endpoint> --database /restored_database sql --script 'SELECT * FROM root_view' --explain
 ```
 
 В выводе выполненной команды отображается: `TableFullScan (Table: root_table, ...`

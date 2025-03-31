@@ -4,10 +4,15 @@ on:
   pull_request_review:
     types:
       - submitted
+  workflow_dispatch:
+    inputs:
+        pr_number: 
+            description: 'The pull request number'
+            required: true
+            type: number
+        
 env:
   GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
-  BRANCH_FOR_PR: update-muted-ya
-  BASE_BRANCH: main
   MUTED_YA_FILE_PATH: .github/scripts/tests/muted_ya.txt
 
 jobs:
@@ -18,10 +23,15 @@ jobs:
         github.event.review.state == 'approved' && 
         contains(github.event.pull_request.labels.*.name, 'mute-unmute') 
     steps:
+      - name: Set environment variables for branches
+        run: |
+          echo "BRANCH_FOR_PR=${{ github.event.pull_request.head.ref || github.head_ref }}" >> $GITHUB_ENV
+          echo "BASE_BRANCH=${{ github.event.pull_request.base.ref || github.base_ref }}" >> $GITHUB_ENV
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-            ref: ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}
+            ref: ${{ github.event.pull_request.head.ref || github.head_ref }}
 
       - name: Install dependencies
         run: |
@@ -47,6 +57,5 @@ jobs:
         env:
             GITHUB_TOKEN: ${{ env.GH_TOKEN }}
         run: |
-            #python .github/scripts/create_or_update_pr.py append_pr_body --pr_number=${{ github.event.pull_request.number }} --body=${{ steps.create_issues.outputs.created_issues_file }}
-            python .github/scripts/create_or_update_pr.py append_pr_body --pr_number=${{ github.event.pull_request.number }} --body=issues_info.txt
-        
+            #python .github/scripts/create_or_update_pr.py append_pr_body --pr_number=${{ github.event.pull_request.number || github.event.inputs.pr_number }} --body=${{ steps.create_issues.outputs.created_issues_file }}
+            python .github/scripts/create_or_update_pr.py append_pr_body --pr_number=${{ github.event.pull_request.number || github.event.inputs.pr_number  }} --body=issues_info.txt

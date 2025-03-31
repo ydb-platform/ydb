@@ -123,9 +123,10 @@ TString TSpecialReadContext::ProfileDebugString() const {
     return sb;
 }
 
-void TSpecialReadContext::RegisterDuplicatesManager(const std::deque<std::shared_ptr<IDataSource>>& sources) {
+void TSpecialReadContext::RegisterDuplicatesManager(
+    const std::deque<TSourceConstructor>& sources, const std::shared_ptr<TSpecialReadContext>& self) {
     AFL_VERIFY(!DuplicatesManager);
-    DuplicatesManager = NActors::TActivationContext::Register(new TDuplicateFilterConstructor(sources));
+    DuplicatesManager = NActors::TActivationContext::Register(new TDuplicateFilterConstructor(sources, self));
 }
 
 void TSpecialReadContext::OnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source) {

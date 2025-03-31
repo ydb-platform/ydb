@@ -38,7 +38,7 @@ jobs:
           git fetch origin ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}
       
           # Checkout BRANCH_FOR_PR, create if it doesn't exist based on BASE_BRANCH
-          if [ git show-ref --quiet refs/heads/${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }} ] ; then
+          if git show-ref --quiet origin ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}; then
             echo 'Branch ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }} exists.'
             git checkout ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}
           else
@@ -47,7 +47,7 @@ jobs:
           fi
       
           # Attempt to rebase BRANCH_FOR_PR onto BASE_BRANCH
-          if [! git rebase origin/${{ env.BASE_BRANCH }}]; then
+          if ! git rebase origin/${{ env.BASE_BRANCH }}; then
             echo "Rebase failed, resetting branch to match BASE_BRANCH..."
       
             # Abort the rebase process
@@ -148,33 +148,31 @@ jobs:
       - name: Comment PR first attempt
         continue-on-error: true
         run: |
+          echo "${{ env.PR_BODY }}" > pr_body.txt
           curl -X POST \
-          -H "Authorization: token ${{ secrets.YDBOT_TOKEN}}" \
-          -H "Accept: application/vnd.github.v3+json" \
-          https://api.github.com/repos/${{ github.repository }}/issues/${{ steps.create_or_update_pr.outputs.pr_number }}/comments \
-          -d @- <<EOF
-          {
-            "body":"${{env.PR_BODY}}"
-          }
-          EOF
+            -H "Authorization: token ${{ secrets.YDBOT_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/issues/${{ steps.create_or_update_pr.outputs.pr_number }}/comments \
+            -d @pr_body.txt
         
       - name: Comment PR
         continue-on-error: true
         uses: actions/github-script@v7
         with:
-          script: |    
+          script: |
+            const bodyText = process.env.PR_BODY;
+      
             github.rest.issues.createComment({
               issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
-              owner: ${{ github.repository_owner }},
-              repo: ${{ github.event.repository.name }},
-              body: ${{ env.PR_BODY }}
-
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: bodyText
             });
-
+      
             github.rest.issues.addLabels({
-                ...context.repo,
-                issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
-                labels: 'update_muted_ya'
+              ...context.repo,
+              issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
+              labels: ['update_muted_ya']
             });
 
       - name: Add reviewers

@@ -14,17 +14,17 @@
 
 ```yql
 SELECT ...
-    FROM ИмяТаблицы VIEW ИмяИндекса
+    FROM TableName VIEW IndexName
     WHERE ...
-    ORDER BY Knn::ФункцияРасстояния(...)
+    ORDER BY Knn::DistanceFunction(...)
     LIMIT ...
 ```
 
 ```yql
 SELECT ...
-    FROM ИмяТаблицы VIEW ИмяИндекса
+    FROM TableName VIEW IndexName
     WHERE ...
-    ORDER BY Knn::ФункцияСхожести(...) DESC
+    ORDER BY Knn::SimilarityFunction(...) DESC
     LIMIT ...
 ```
 

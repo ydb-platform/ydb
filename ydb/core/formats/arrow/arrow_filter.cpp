@@ -16,127 +16,6 @@ namespace NKikimr::NArrow {
 
 #define Y_VERIFY_OK(status) Y_ABORT_UNLESS(status.ok(), "%s", status.ToString().c_str())
 
-namespace {
-enum class ECompareResult : i8 {
-    LESS = -1,
-    BORDER = 0,
-    GREATER = 1
-};
-
-template <typename TArray>
-inline auto GetValue(const std::shared_ptr<TArray>& array, int pos) {
-    return array->GetView(pos);
-}
-
-template <typename T>
-inline void UpdateCompare(const T& value, const T& border, ECompareResult& res) {
-    if (res == ECompareResult::BORDER) {
-        if constexpr (std::is_same_v<T, arrow::util::string_view>) {
-            size_t minSize = (value.size() < border.size()) ? value.size() : border.size();
-            int cmp = memcmp(value.data(), border.data(), minSize);
-            if (cmp < 0) {
-                res = ECompareResult::LESS;
-            } else if (cmp > 0) {
-                res = ECompareResult::GREATER;
-            } else {
-                UpdateCompare(value.size(), border.size(), res);
-            }
-        } else {
-            if (value < border) {
-                res = ECompareResult::LESS;
-            } else if (value > border) {
-                res = ECompareResult::GREATER;
-            }
-        }
-    }
-}
-
-template <typename TArray, typename T>
-bool CompareImpl(const std::shared_ptr<arrow::Array>& column, const T& border, std::vector<NArrow::ECompareResult>& rowsCmp) {
-    bool hasBorder = false;
-    ECompareResult* res = &rowsCmp[0];
-    auto array = std::static_pointer_cast<TArray>(column);
-
-    for (int i = 0; i < array->length(); ++i, ++res) {
-        UpdateCompare(GetValue(array, i), border, *res);
-        hasBorder = hasBorder || (*res == ECompareResult::BORDER);
-    }
-    return !hasBorder;
-}
-
-template <typename TArray, typename T>
-bool CompareImpl(const std::shared_ptr<arrow::ChunkedArray>& column, const T& border, std::vector<NArrow::ECompareResult>& rowsCmp) {
-    bool hasBorder = false;
-    ECompareResult* res = &rowsCmp[0];
-
-    for (auto& chunk : column->chunks()) {
-        auto array = std::static_pointer_cast<TArray>(chunk);
-
-        for (int i = 0; i < chunk->length(); ++i, ++res) {
-            UpdateCompare(GetValue(array, i), border, *res);
-            hasBorder = hasBorder || (*res == ECompareResult::BORDER);
-        }
-    }
-    return !hasBorder;
-}
-
-/// @return true in case we have no borders in compare: no need for future keys, allow early exit
-template <typename TArray>
-bool Compare(const arrow::Datum& column, const std::shared_ptr<arrow::Array>& borderArray, std::vector<NArrow::ECompareResult>& rowsCmp) {
-    auto border = GetValue(std::static_pointer_cast<TArray>(borderArray), 0);
-
-    switch (column.kind()) {
-        case arrow::Datum::ARRAY:
-            return CompareImpl<TArray>(column.make_array(), border, rowsCmp);
-        case arrow::Datum::CHUNKED_ARRAY:
-            return CompareImpl<TArray>(column.chunked_array(), border, rowsCmp);
-        default:
-            break;
-    }
-    Y_ABORT_UNLESS(false);
-    return false;
-}
-
-bool SwitchCompare(const arrow::Datum& column, const std::shared_ptr<arrow::Array>& border, std::vector<NArrow::ECompareResult>& rowsCmp) {
-    Y_ABORT_UNLESS(border->length() == 1);
-
-    // first time it's empty
-    if (rowsCmp.empty()) {
-        rowsCmp.resize(column.length(), ECompareResult::BORDER);
-    }
-
-    return SwitchArrayType(column, [&](const auto& type) -> bool {
-        using TWrap = std::decay_t<decltype(type)>;
-        using TArray = typename arrow::TypeTraits<typename TWrap::T>::ArrayType;
-        return Compare<TArray>(column, border, rowsCmp);
-    });
-}
-
-template <typename T>
-void CompositeCompare(std::shared_ptr<T> some, std::shared_ptr<arrow::RecordBatch> borderBatch, std::vector<NArrow::ECompareResult>& rowsCmp) {
-    AFL_VERIFY(some);
-    AFL_VERIFY(borderBatch);
-    auto key = borderBatch->schema()->fields();
-    AFL_VERIFY(key.size());
-
-    for (size_t i = 0; i < key.size(); ++i) {
-        auto& field = key[i];
-        auto typeId = field->type()->id();
-        auto column = some->GetColumnByName(field->name());
-        std::shared_ptr<arrow::Array> border = borderBatch->GetColumnByName(field->name());
-        AFL_VERIFY(column)("schema1", some->schema()->ToString())("schema2", borderBatch->schema()->ToString())("f", field->name());
-        AFL_VERIFY(border)("schema1", some->schema()->ToString())("schema2", borderBatch->schema()->ToString())("f", field->name());
-        AFL_VERIFY(some->schema()->GetFieldByName(field->name())->type()->id() == typeId)("schema1", some->schema()->ToString())(
-            "schema2", borderBatch->schema()->ToString())("f", field->name());
-
-        if (SwitchCompare(column, border, rowsCmp)) {
-            break;   // early exit in case we have all rows compared: no borders, can omit key tail
-        }
-    }
-}
-
-}   // namespace
-
 TColumnFilter::TSlicesIterator::TSlicesIterator(const TColumnFilter& owner, const std::optional<ui32> start, const std::optional<ui32> count)
     : Owner(owner)
     , StartIndex(start)
@@ -307,61 +186,6 @@ ui32 TColumnFilter::CrossSize(const ui32 s1, const ui32 f1, const ui32 s2, const
     return f - s;
 }
 
-NKikimr::NArrow::TColumnFilter TColumnFilter::MakePredicateFilter(
-    const arrow::Datum& datum, const arrow::Datum& border, ECompareType compareType) {
-    std::vector<ECompareResult> cmps;
-
-    switch (datum.kind()) {
-        case arrow::Datum::ARRAY:
-            Y_ABORT_UNLESS(border.kind() == arrow::Datum::ARRAY);
-            SwitchCompare(datum, border.make_array(), cmps);
-            break;
-        case arrow::Datum::CHUNKED_ARRAY:
-            Y_ABORT_UNLESS(border.kind() == arrow::Datum::ARRAY);
-            SwitchCompare(datum, border.make_array(), cmps);
-            break;
-        case arrow::Datum::RECORD_BATCH:
-            Y_ABORT_UNLESS(border.kind() == arrow::Datum::RECORD_BATCH);
-            CompositeCompare(datum.record_batch(), border.record_batch(), cmps);
-            break;
-        case arrow::Datum::TABLE:
-            Y_ABORT_UNLESS(border.kind() == arrow::Datum::RECORD_BATCH);
-            CompositeCompare(datum.table(), border.record_batch(), cmps);
-            break;
-        default:
-            Y_ABORT_UNLESS(false);
-            break;
-    }
-
-    std::vector<bool> bits;
-    bits.reserve(cmps.size());
-
-    switch (compareType) {
-        case ECompareType::LESS:
-            for (size_t i = 0; i < cmps.size(); ++i) {
-                bits.emplace_back(cmps[i] < ECompareResult::BORDER);
-            }
-            break;
-        case ECompareType::LESS_OR_EQUAL:
-            for (size_t i = 0; i < cmps.size(); ++i) {
-                bits.emplace_back(cmps[i] <= ECompareResult::BORDER);
-            }
-            break;
-        case ECompareType::GREATER:
-            for (size_t i = 0; i < cmps.size(); ++i) {
-                bits.emplace_back(cmps[i] > ECompareResult::BORDER);
-            }
-            break;
-        case ECompareType::GREATER_OR_EQUAL:
-            for (size_t i = 0; i < cmps.size(); ++i) {
-                bits.emplace_back(cmps[i] >= ECompareResult::BORDER);
-            }
-            break;
-    }
-
-    return NArrow::TColumnFilter(std::move(bits));
-}
-
 template <class TData>
 void ApplyImpl(const TColumnFilter& filter, std::shared_ptr<TData>& batch, const TColumnFilter::TApplyContext& context) {
     if (!batch || !batch->num_rows()) {
@@ -473,6 +297,9 @@ const std::vector<bool>& TColumnFilter::BuildSimpleFilter() const {
 class TMergePolicyAnd {
 private:
 public:
+    static bool HasValue(const bool /*a*/, const bool /*b*/) {
+        return true;
+    }
     static bool Calc(const bool a, const bool b) {
         return a && b;
     }
@@ -483,11 +310,17 @@ public:
             return TColumnFilter::BuildDenyFilter();
         }
     }
+    static TColumnFilter MergeWithSimple(const bool simpleValue, const TColumnFilter& filter) {
+        return MergeWithSimple(filter, simpleValue);
+    }
 };
 
 class TMergePolicyOr {
 private:
 public:
+    static bool HasValue(const bool /*a*/, const bool /*b*/) {
+        return true;
+    }
     static bool Calc(const bool a, const bool b) {
         return a || b;
     }
@@ -496,6 +329,34 @@ public:
             return TColumnFilter::BuildAllowFilter();
         } else {
             return filter;
+        }
+    }
+    static TColumnFilter MergeWithSimple(const bool simpleValue, const TColumnFilter& filter) {
+        return MergeWithSimple(filter, simpleValue);
+    }
+};
+
+class TMergePolicyApplyFilter {
+private:
+public:
+    static bool HasValue(const bool /*a*/, const bool b) {
+        return b;
+    }
+    static bool Calc(const bool a, const bool /*b*/) {
+        return a;
+    }
+    static TColumnFilter MergeWithSimple(const TColumnFilter& filter, const bool simpleValue) {
+        if (simpleValue) {
+            return filter;
+        } else {
+            return TColumnFilter::BuildAllowFilter();
+        }
+    }
+    static TColumnFilter MergeWithSimple(const bool simpleValue, const TColumnFilter& /*filter*/) {
+        if (simpleValue) {
+            return TColumnFilter::BuildAllowFilter();
+        } else {
+            return TColumnFilter::BuildDenyFilter();
         }
     }
 };
@@ -516,7 +377,7 @@ public:
         if (Filter1.empty() && Filter2.empty()) {
             return TColumnFilter(TMergePolicy::Calc(Filter1.DefaultFilterValue, Filter2.DefaultFilterValue));
         } else if (Filter1.empty()) {
-            return TMergePolicy::MergeWithSimple(Filter2, Filter1.DefaultFilterValue);
+            return TMergePolicy::MergeWithSimple(Filter1.DefaultFilterValue, Filter2);
         } else if (Filter2.empty()) {
             return TMergePolicy::MergeWithSimple(Filter1, Filter2.DefaultFilterValue);
         } else {
@@ -535,7 +396,7 @@ public:
 
             while (it1 != Filter1.Filter.cend() && it2 != Filter2.Filter.cend()) {
                 const ui32 delta = TColumnFilter::CrossSize(pos2, pos2 + *it2, pos1, pos1 + *it1);
-                if (delta) {
+                if (delta && TMergePolicy::HasValue(curValue1, curValue2)) {
                     if (!count || curCurrent != TMergePolicy::Calc(curValue1, curValue2)) {
                         resultFilter.emplace_back(delta);
                         curCurrent = TMergePolicy::Calc(curValue1, curValue2);
@@ -581,10 +442,15 @@ TColumnFilter TColumnFilter::Or(const TColumnFilter& extFilter) const {
     return TMergerImpl(*this, extFilter).Merge<TMergePolicyOr>();
 }
 
+TColumnFilter TColumnFilter::ApplyFilter(const TColumnFilter& extFilter) const {
+    ResetCaches();
+    return TMergerImpl(*this, extFilter).Merge<TMergePolicyApplyFilter>();
+}
+
 TColumnFilter TColumnFilter::CombineSequentialAnd(const TColumnFilter& extFilter) const {
     ResetCaches();
     if (Filter.empty()) {
-        return TMergePolicyAnd::MergeWithSimple(extFilter, DefaultFilterValue);
+        return TMergePolicyAnd::MergeWithSimple(DefaultFilterValue, extFilter);
     } else if (extFilter.Filter.empty()) {
         return TMergePolicyAnd::MergeWithSimple(*this, extFilter.DefaultFilterValue);
     } else {

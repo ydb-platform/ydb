@@ -11,15 +11,19 @@
 namespace NKikimr::NOlap::NReader::NSimple {
 
 class IDataSource;
+class TSourceConstructor;
 using TColumnsSet = NCommon::TColumnsSet;
 using EStageFeaturesIndexes = NCommon::EStageFeaturesIndexes;
 using TColumnsSetIds = NCommon::TColumnsSetIds;
 using EMemType = NCommon::EMemType;
 using TFetchingScript = NCommon::TFetchingScript;
 
-class TSpecialReadContext: public NCommon::TSpecialReadContext {
+class TSpecialReadContext: public NCommon::TSpecialReadContext, TNonCopyable {
 private:
     using TBase = NCommon::TSpecialReadContext;
+    YDB_READONLY_DEF(TActorId, DuplicatesManager);
+
+private:
     std::shared_ptr<TFetchingScript> BuildColumnsFetchingPlan(const bool needSnapshots, const bool partialUsageByPredicateExt,
         const bool useIndexes, const bool needFilterSharding, const bool needFilterDeletion) const;
     TMutex Mutex;
@@ -27,11 +31,27 @@ private:
     std::shared_ptr<TFetchingScript> AskAccumulatorsScript;
 
     virtual std::shared_ptr<TFetchingScript> DoGetColumnsFetchingPlan(const std::shared_ptr<NCommon::IDataSource>& source) override;
+    virtual void DoAbort() override {
+        if (DuplicatesManager) {
+            NActors::TActivationContext::AsActorContext().Send(DuplicatesManager, new NActors::TEvents::TEvPoison());
+            DuplicatesManager = TActorId();
+        }
+    }
 
 public:
     virtual TString ProfileDebugString() const override;
 
     TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext);
+
+    ~TSpecialReadContext() {
+        if (DuplicatesManager) {
+            NActors::TActivationContext::AsActorContext().Send(DuplicatesManager, new NActors::TEvents::TEvPoison());
+        }
+    }
+
+    void RegisterDuplicatesManager(const std::deque<TSourceConstructor>& sources, const std::shared_ptr<TSpecialReadContext>& self);
+    void OnSourceFinished(const std::shared_ptr<NCommon::IDataSource>& source);
+    void OnSourcesSkipped(const std::vector<std::shared_ptr<NCommon::IDataSource>>& sources);
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

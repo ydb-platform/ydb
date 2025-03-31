@@ -265,9 +265,7 @@ public:
 
     TColumnFilter And(const TColumnFilter& extFilter) const Y_WARN_UNUSED_RESULT;
     TColumnFilter Or(const TColumnFilter& extFilter) const Y_WARN_UNUSED_RESULT;
-
-    // It makes a filter using composite predicate
-    static TColumnFilter MakePredicateFilter(const arrow::Datum& datum, const arrow::Datum& border, ECompareType compareType);
+    TColumnFilter ApplyFilter(const TColumnFilter& filter) const Y_WARN_UNUSED_RESULT;
 
     class TApplyContext {
     private:

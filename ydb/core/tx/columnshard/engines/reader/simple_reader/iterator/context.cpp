@@ -11,7 +11,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
     const bool needSnapshots = GetReadMetadata()->GetRequestSnapshot() < source->GetRecordSnapshotMax();
     const bool dontNeedColumns = !needSnapshots && GetFFColumns()->GetColumnIds().size() == 1 &&
                                  GetFFColumns()->GetColumnIds().contains(NOlap::NPortion::TSpecialColumns::SPEC_COL_PLAN_STEP_INDEX);
-    if (!dontNeedColumns && !source->GetStageData().HasPortionAccessor()) {
+    if (!dontNeedColumns && !source->HasStageData()) {
         if (!AskAccumulatorsScript) {
             NCommon::TFetchingScriptBuilder acc(*this);
             acc.AddStep(std::make_shared<NCommon::TAllocateMemoryStep>

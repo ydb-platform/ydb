@@ -86,7 +86,6 @@ JOIN_SRCS(
     generic/array_size.cpp
     generic/bitmap.cpp
     generic/bitops.cpp
-    generic/bt_exception.cpp
     generic/buffer.cpp
     generic/cast.cpp
     generic/deque.cpp
@@ -195,7 +194,6 @@ JOIN_SRCS(
     stream/aligned.cpp
     stream/buffer.cpp
     stream/buffered.cpp
-    stream/debug.cpp
     stream/direct_io.cpp
     stream/file.cpp
     stream/format.cpp

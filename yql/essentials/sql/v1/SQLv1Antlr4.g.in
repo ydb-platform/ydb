@@ -1775,9 +1775,7 @@ bool_value: (TRUE | FALSE);
 real: REAL;
 integer: DIGITS | INTEGER_VALUE;
 
-//
-// Lexer
-//
+//! section:punctuation
 
 EQUALS:        '=';
 EQUALS2:       '==';
@@ -1823,6 +1821,8 @@ fragment QUOTE_SINGLE:  '\'';
 fragment BACKTICK:      '`';
 fragment DOUBLE_COMMAT: '@@';
 
+//! section:letter
+
 // http://www.antlr.org/wiki/pages/viewpage.action?pageId=1782
 fragment A:('a'|'A');
 fragment B:('b'|'B');
@@ -1850,6 +1850,8 @@ fragment W:('w'|'W');
 fragment X:('x'|'X');
 fragment Y:('y'|'Y');
 fragment Z:('z'|'Z');
+
+//! section:keyword
 
 ABORT: A B O R T;
 ACTION: A C T I O N;
@@ -2144,13 +2146,7 @@ WRAPPER: W R A P P E R;
 //WRITE: W R I T E;
 XOR: X O R;
 
-// YQL Default Lexer:
-// GRAMMAR_STRING_CORE_SINGLE = ~(QUOTE_SINGLE | BACKSLASH) | (BACKSLASH .)
-// GRAMMAR_STRING_CORE_DOUBLE = ~(QUOTE_DOUBLE | BACKSLASH) | (BACKSLASH .)
-
-// ANSI Lexer:
-// GRAMMAR_STRING_CORE_SINGLE = ~QUOTE_SINGLE | (QUOTE_SINGLE QUOTE_SINGLE)
-// GRAMMAR_STRING_CORE_DOUBLE = ~QUOTE_DOUBLE | (QUOTE_DOUBLE QUOTE_DOUBLE)
+//! section:other
 
 fragment STRING_CORE_SINGLE: @GRAMMAR_STRING_CORE_SINGLE@;
 fragment STRING_CORE_DOUBLE: @GRAMMAR_STRING_CORE_DOUBLE@;
@@ -2163,7 +2159,7 @@ STRING_VALUE: ((STRING_SINGLE | STRING_DOUBLE | STRING_MULTILINE) (S | U | Y | J
 
 ID_PLAIN: ('a'..'z' | 'A'..'Z' | '_') ('a'..'z' | 'A'..'Z' | '_' | DIGIT)*;
 
-fragment ID_QUOTED_CORE: '\\'. | '``' | ~('`' | '\\');
+fragment ID_QUOTED_CORE: '\\' . | '``' | ~('`' | '\\');
 ID_QUOTED: BACKTICK ID_QUOTED_CORE* BACKTICK;
 
 fragment DIGIT: '0'..'9';
@@ -2177,23 +2173,18 @@ DIGITS: DECDIGITS | HEXDIGITS | OCTDIGITS | BINDIGITS;
 // not all combinations of P/U with L/S/T/I/B/N are actually valid - this is resolved in sql.cpp
 INTEGER_VALUE: DIGITS ((P | U)? (L | S | T | I | B | N)?);
 
-fragment FLOAT_EXP : E (PLUS | MINUS)? DECDIGITS ;
+fragment FLOAT_EXP: E (PLUS | MINUS)? DECDIGITS;
 REAL:
     (
         DECDIGITS DOT DIGIT* FLOAT_EXP?
     |   DECDIGITS FLOAT_EXP
 //  |   DOT DECDIGITS FLOAT_EXP?    // Conflicts with tuple element access through DOT
-    ) (F | P (F ('4'|'8') | N)?)?
+    ) (F | P (F ('4' | '8') | N)?)?
     ;
 
 BLOB: X QUOTE_SINGLE HEXDIGIT+ QUOTE_SINGLE;
 
-// YQL Default Lexer:
-// GRAMMAR_MULTILINE_COMMENT_CORE = .
-// ANSI Lexer:
-// GRAMMAR_MULTILINE_COMMENT_CORE = MULTILINE_COMMENT | .
-
 fragment MULTILINE_COMMENT: '/*' ( @GRAMMAR_MULTILINE_COMMENT_CORE@ )*? '*/';
-fragment LINE_COMMENT: '--' ~('\n'|'\r')* ('\r' '\n'? | '\n' | EOF);
-WS: (' '|'\r'|'\t'|'\u000C'|'\n')->channel(HIDDEN);
-COMMENT: (MULTILINE_COMMENT|LINE_COMMENT)->channel(HIDDEN);
+fragment LINE_COMMENT: '--' ~('\n' | '\r')* ('\r' '\n'? | '\n' | EOF);
+WS: (' ' | '\r' | '\t' | '\u000C' | '\n') -> channel(HIDDEN);
+COMMENT: (MULTILINE_COMMENT | LINE_COMMENT) -> channel(HIDDEN);

@@ -167,7 +167,23 @@ class Nodes(object):
 
         self._check_async_execution(running_jobs, retry_attemps=2)
 
-    def copy(self, local_path, remote_path, directory=False, compressed_path=None):
+    def _download_sky(self, url, remote_path):
+        self._logger.info(f"download from '{url}' to '{remote_path}'")
+        tmp_path = url.split(":")[-1]
+        script = (
+            f'sky get -wu -d {tmp_path} {url} && '
+            f'for FILE in `find {tmp_path} -name *.tgz -or -name *.tar`; do tar -C {tmp_path} -xf $FILE && rm $FILE; done && '
+            f'sudo mv {tmp_path}/* {remote_path} && rm -rf {tmp_path}'
+        )
+        running_jobs = self.execute_async_ret(script)
+        self._check_async_execution(running_jobs, retry_attemps=2)
+
+    def _download_http(self, url, remote_path):
+        self._logger.info(f"download from '{url}' to '{remote_path}'")
+        running_jobs = self.execute_async_ret(f'sudo curl --output {remote_path} {url}')
+        self._check_async_execution(running_jobs, retry_attemps=2)
+
+    def copy(self, local_path: str, remote_path, directory=False, compressed_path=None):
         """
         Copies a file or directory from a local path to a remote path, with optional compression.
         Args:
@@ -197,9 +213,13 @@ class Nodes(object):
             remote_path += '.zstd'
 
         self.execute_async("sudo mkdir -p {}".format(os.path.dirname(remote_path)))
-
-        hub = self._nodes[0]
-        self._copy_on_node(local_path, hub, remote_path)
-        self._copy_between_nodes(hub, remote_path, self._nodes[1:], remote_path)
+        if local_path.startswith('rbtorrent:') or local_path.startswith('sbr:'):
+            self._download_sky(local_path, remote_path)
+        elif local_path.startswith('http:') or local_path.startswith('https:'):
+            self._download_http(local_path, remote_path)
+        else:
+            hub = self._nodes[0]
+            self._copy_on_node(local_path, hub, remote_path)
+            self._copy_between_nodes(hub, remote_path, self._nodes[1:], remote_path)
         if compressed_path is not None:
             self.execute_async('if [ "{from_}" -nt "{to}" -o "{to}" -nt "{from_}" ]; then sudo zstd -df "{from_}" -o "{to}" -T0; fi'.format(from_=remote_path, to=original_remote_path))

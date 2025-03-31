@@ -11,6 +11,7 @@
 #include <util/string/ascii.h>
 #include <util/string/builder.h>
 #include <util/string/strip.h>
+#include <util/string/join.h>
 
 #if defined(_tsan_enabled_)
 #include <util/system/mutex.h>
@@ -29,8 +30,8 @@ using NSQLTranslation::MakeDummyLexerFactory;
 
 class TV1Lexer : public ILexer {
 public:
-    explicit TV1Lexer(const TLexers& lexers, bool ansi, bool antlr4, bool pure)
-        : Factory(GetFactory(lexers, ansi, antlr4, pure))
+    explicit TV1Lexer(const TLexers& lexers, bool ansi, bool antlr4, ELexerFlavor flavor)
+        : Factory(GetFactory(lexers, ansi, antlr4, flavor))
     {
     }
 
@@ -42,42 +43,60 @@ public:
     }
 
 private:
-    static NSQLTranslation::TLexerFactoryPtr GetFactory(const TLexers& lexers, bool ansi, bool antlr4, bool pure = false) {
-        if (!ansi && !antlr4 && !pure) {
-            if (lexers.Antlr3) {
-                return lexers.Antlr3;
-            }
-            return MakeDummyLexerFactory("antlr3");
-        } else if (ansi && !antlr4 && !pure) {
-            if (lexers.Antlr3Ansi) {
-                return lexers.Antlr3Ansi;
-            }
-            return MakeDummyLexerFactory("antlr3_ansi");
-        } else if (!ansi && antlr4 && !pure) {
-            if (lexers.Antlr4) {
-                return lexers.Antlr4;
-            }
-            return MakeDummyLexerFactory("antlr4");
-        } else if (ansi && antlr4 && !pure) {
-            if (lexers.Antlr4Ansi) {
-                return lexers.Antlr4Ansi;
-            }
-            return MakeDummyLexerFactory("antlr4_ansi");
-        } else if (!ansi && antlr4 && pure) {
-            if (lexers.Antlr4Pure) {
-                return lexers.Antlr4Pure;
-            }
-            return MakeDummyLexerFactory("antlr4_pure");
-        } else if (ansi && antlr4 && pure) {
-            if (lexers.Antlr4PureAnsi) {
-                return lexers.Antlr4PureAnsi;
-            }
-            return MakeDummyLexerFactory("antlr4_pure_ansi");
-        } else if (!ansi && !antlr4 && pure) {
-            return MakeDummyLexerFactory("antlr3_pure");
-        } else {
-            return MakeDummyLexerFactory("antlr3_pure_ansi");
+    static NSQLTranslation::TLexerFactoryPtr GetFactory(const TLexers& lexers, bool ansi, bool antlr4, ELexerFlavor flavor) {
+        if (auto ptr = GetMaybeFactory(lexers, ansi, antlr4, flavor)) {
+            return ptr;
         }
+        return MakeDummyLexerFactory(GetLexerName(ansi, antlr4, flavor));
+    }
+
+    static NSQLTranslation::TLexerFactoryPtr GetMaybeFactory(const TLexers& lexers, bool ansi, bool antlr4, ELexerFlavor flavor) {
+        if (!ansi && !antlr4 && flavor == ELexerFlavor::Default) {
+            return lexers.Antlr3;
+        } else if (ansi && !antlr4 && flavor == ELexerFlavor::Default) {
+            return lexers.Antlr3Ansi;
+        } else if (!ansi && antlr4 && flavor == ELexerFlavor::Default) {
+            return lexers.Antlr4;
+        } else if (ansi && antlr4 && flavor == ELexerFlavor::Default) {
+            return lexers.Antlr4Ansi;
+        } else if (!ansi && antlr4 && flavor == ELexerFlavor::Pure) {
+            return lexers.Antlr4Pure;
+        } else if (ansi && antlr4 && flavor == ELexerFlavor::Pure) {
+            return lexers.Antlr4PureAnsi;
+        } else if (!ansi && !antlr4 && flavor == ELexerFlavor::Regex) {
+            return lexers.Regex;
+        } else if (ansi && !antlr4 && flavor == ELexerFlavor::Regex) {
+            return lexers.RegexAnsi;
+        } else {
+            return nullptr;
+        }
+    }
+
+    static TString GetLexerName(bool ansi, bool antlr4, ELexerFlavor flavor) {
+        TVector<const TStringBuf> parts;
+
+        if (antlr4) {
+            parts.emplace_back("antlr4");
+        } else if (!antlr4 && flavor != ELexerFlavor::Regex) {
+            parts.emplace_back("antlr3");
+        }
+
+        switch (flavor) {
+        case ELexerFlavor::Default: {
+        } break;
+        case ELexerFlavor::Pure: {
+            parts.emplace_back("pure");
+        } break;
+        case ELexerFlavor::Regex: {
+            parts.emplace_back("regex");
+        } break;
+        }
+
+        if (ansi) {
+            parts.emplace_back("ansi");
+        }
+
+        return JoinSeq("_", parts);
     }
 
 private:
@@ -86,8 +105,8 @@ private:
 
 } // namespace
 
-NSQLTranslation::ILexer::TPtr MakeLexer(const TLexers& lexers, bool ansi, bool antlr4, bool pure) {
-    return NSQLTranslation::ILexer::TPtr(new TV1Lexer(lexers, ansi, antlr4, pure));
+NSQLTranslation::ILexer::TPtr MakeLexer(const TLexers& lexers, bool ansi, bool antlr4, ELexerFlavor flavor) {
+    return NSQLTranslation::ILexer::TPtr(new TV1Lexer(lexers, ansi, antlr4, flavor));
 }
 
 bool IsProbablyKeyword(const NSQLTranslation::TParsedToken& token) {

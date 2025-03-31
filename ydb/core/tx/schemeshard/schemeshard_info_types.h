@@ -3121,6 +3121,9 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
         NTableIndex::TClusterId ChildBegin = 1;  // included
         NTableIndex::TClusterId Child = ChildBegin;
 
+        ui64 TableSize = 0;
+
+
         ui64 ParentEnd() const noexcept {  // included
             return ChildBegin - 1;
         }
@@ -3181,25 +3184,28 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             return true;
         }
 
-        bool PrefixTableDone(ui64 tableSize, ui64 shards) {
-            if (!NeedsAnotherLevel()) {
-                return false;
-            }
+        void PrefixIndexDone(ui64 shards) {
+            Y_ABORT_UNLESS(NeedsAnotherLevel());
             State = MultiLocal;
-            NextLevel((1 + tableSize) * shards);
+            // There's two worst cases, but in both one shard contains TableSize rows
+            // 1. all rows have unique prefix (*), in such case we need 1 id for each row (parent, id in prefix table)
+            // 2. all unique prefixes have size K, so we have TableSize/K parents + TableSize childs
+            // * it doesn't work now, because now prefix should have at least K embeddings, but it's bug
+            NextLevel((2 * TableSize) * shards);
             Parent = ParentEnd();
-            return true;
         }
 
-        void Set(ui32 level, NTableIndex::TClusterId parent, ui32 state) {
-            // TODO(mbkkt) make it without cycles
-            while (Level < level) {
-                NextLevel();
-            }
-            while (Parent < parent) {
-                NextParent();
-            }
+        void Set(ui32 level, 
+                 NTableIndex::TClusterId parentBegin, NTableIndex::TClusterId parent, 
+                 NTableIndex::TClusterId childBegin, NTableIndex::TClusterId child,
+                 ui32 state, ui64 tableSize) {
+            Level = level;
+            ParentBegin = parentBegin;
+            Parent = parent;
+            ChildBegin = childBegin;
+            Child = child;
             State = static_cast<EState>(state);
+            TableSize = tableSize;
         }
 
         NKikimrTxDataShard::TEvLocalKMeansRequest::EState GetUpload() const {
@@ -3259,7 +3265,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
             return {parentFrom, parentTo};
         }
 
-        TString RangeToDebugStr(const TSerializedTableRange& range) const {
+        TString RangeToDebugStr(const TSerializedTableRange& range, ui32 rootLevel) const {
             auto toStr = [&](const TSerializedCellVec& v) -> TString {
                 const auto cells = v.GetCells();
                 if (cells.empty()) {
@@ -3269,8 +3275,7 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
                     return "-inf";
                 }
                 auto str = TStringBuilder{} << "{ count: " << cells.size();
-                if (Parent != 0) {
-                    Y_ASSERT(Level != 0);
+                if (Level > rootLevel) {
                     str << ", parent: " << cells[0].AsValue<NTableIndex::TClusterId>();
                     if (cells.size() != 1 && cells[1].IsNull()) {
                         str << ", pk: null";
@@ -3660,7 +3665,8 @@ struct TIndexBuildInfo: public TSimpleRefCount<TIndexBuildInfo> {
 
         TSerializedTableRange bound{range};
         LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::BUILD_INDEX,
-            "AddShardStatus id# " << Id << " shard " << shardIdx << " range " << KMeans.RangeToDebugStr(bound));
+            "AddShardStatus id# " << Id << " shard " << shardIdx << 
+            " range " << KMeans.RangeToDebugStr(bound, IsBuildPrefixedVectorIndex() ? 2 : 1));
         AddParent(bound, shardIdx);
         Shards.emplace(
             shardIdx, TIndexBuildInfo::TShardStatus(std::move(bound), std::move(lastKeyAck), Shards.size()));

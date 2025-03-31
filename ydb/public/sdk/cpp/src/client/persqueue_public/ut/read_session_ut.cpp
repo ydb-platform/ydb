@@ -595,7 +595,7 @@ TReadSessionImplTestSetup::TReadSessionImplTestSetup() {
 }
 
 TReadSessionImplTestSetup::~TReadSessionImplTestSetup() noexcept(false) {
-    if (!std::uncaught_exception()) { // Exiting from test successfully. Check additional expectations.
+    if (!std::uncaught_exceptions()) { // Exiting from test successfully. Check additional expectations.
         MockProcessorFactory->Wait();
         MockProcessor->Wait();
 

@@ -49,6 +49,7 @@ public:
     TEvPollerReady* InactivityEvent = nullptr;
 
     const TActorId ListenerActorId;
+    const TActorId KafkaTxnCoordinatorActorId;
 
     TIntrusivePtr<TSocketDescriptor> Socket;
     TSocketAddressType Address;
@@ -86,8 +87,10 @@ public:
                      TIntrusivePtr<TSocketDescriptor> socket,
                      TNetworkConfig::TSocketAddressType address,
                      const NKikimrConfig::TKafkaProxyConfig& config,
-                     const TActorId& discoveryCacheActorId)
+                     const TActorId& discoveryCacheActorId,
+                     const TActorId& transactionsCoordinatorActorId)
         : ListenerActorId(listenerActorId)
+        , KafkaTxnCoordinatorActorId(transactionsCoordinatorActorId)
         , Socket(std::move(socket))
         , Address(address)
         , Buffer(Socket.Get(), config.GetPacketSize())
@@ -806,8 +809,9 @@ NActors::IActor* CreateKafkaConnection(const TActorId& listenerActorId,
                                        TIntrusivePtr<TSocketDescriptor> socket,
                                        TNetworkConfig::TSocketAddressType address,
                                        const NKikimrConfig::TKafkaProxyConfig& config,
-                                       const TActorId& discoveryCacheActorId) {
-    return new TKafkaConnection(listenerActorId, std::move(socket), std::move(address), config, discoveryCacheActorId);
+                                       const TActorId& discoveryCacheActorId,
+                                       const TActorId& transactionsCoordinatorActorId) {
+    return new TKafkaConnection(listenerActorId, std::move(socket), std::move(address), config, discoveryCacheActorId, transactionsCoordinatorActorId);
 }
 
 } // namespace NKafka

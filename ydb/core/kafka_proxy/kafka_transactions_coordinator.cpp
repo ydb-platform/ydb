@@ -207,5 +207,10 @@ namespace NKafka {
         return new TKafkaTransactionsCoordinator();
     };
 
+    TActorId MakeKafkaTransactionsServiceID() {
+        static const char x[12] = "kafka_txns";
+        return TActorId(0, TStringBuf(x, 12));
+    }
+
 
 } // namespace NKafka

@@ -2765,17 +2765,18 @@ void TKafkaProxyServiceInitializer::InitializeServices(NActors::TActorSystemSetu
             TActorSetupCmd(CreateDiscoveryCache(NGRpcService::KafkaEndpointId),
                 TMailboxType::HTSwap, appData->UserPoolId)
         );
+        
         setup->LocalServices.emplace_back(
-            TActorId(),
-            TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings, Config.GetKafkaProxyConfig(),
-                                                       NKafka::MakeKafkaDiscoveryCacheID()),
-                           TMailboxType::HTSwap, appData->UserPoolId)
-        );
-        setup->LocalServices.emplace_back(
-            TActorId(),
+            NKafka::MakeKafkaTransactionsServiceID(),
             TActorSetupCmd(NKafka::CreateKafkaTransactionsCoordinator(),
                 TMailboxType::HTSwap, appData->UserPoolId
             )
+        );
+        setup->LocalServices.emplace_back(
+            TActorId(),
+            TActorSetupCmd(NKafka::CreateKafkaListener(MakePollerActorId(), settings, Config.GetKafkaProxyConfig(),
+                                                       NKafka::MakeKafkaDiscoveryCacheID(), NKafka::MakeKafkaTransactionsServiceID()),
+                           TMailboxType::HTSwap, appData->UserPoolId)
         );
 
         IActor* metricsActor = CreateKafkaMetricsActor(NKafka::TKafkaMetricsSettings{appData->Counters});

@@ -143,12 +143,17 @@ jobs:
   
       
       - name: Comment PR first attempt
-        id: build
-        shell: bash
         run: |
-          set -ex
-          echo "cat ${{env.PR_BODY_PATH}}" | GITHUB_TOKEN="${{ secrets.YDBOT_TOKEN }}" .github/scripts/tests/comment-pr.py    
-
+          curl -X POST \
+          -H "Authorization: token ${{ secrets.YDBOT_TOKEN}}" \
+          -H "Accept: application/vnd.github.v3+json" \
+          https://api.github.com/repos/${{ github.repository }}/issues/${{ steps.create_or_update_pr.outputs.pr_number }}/comments \
+          -d @- <<EOF
+          {
+            "body":"${{env.PR_BODY}}"
+          }
+          EOF
+        
       - name: Comment PR
         uses: actions/github-script@v7
         with:

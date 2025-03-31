@@ -631,7 +631,7 @@ class StaticConfigGenerator(object):
             'selector_config': [],
         }
 
-        if self.__cluster_details.use_auto_config:
+        if self.__cluster_details.use_auto_config or normalized_config.get('actor_system_config', {}).get('use_auto_config', False):
             dynconfig['selector_config'].append({
                 'description': 'actor system config for dynnodes',
                 'selector': {

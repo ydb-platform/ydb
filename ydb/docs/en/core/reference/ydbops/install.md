@@ -14,7 +14,7 @@
     2.1. [Directly with Go](#go)
     2.2. [Inside a Docker container](#docker)
 
-We are using official docker image for Golang v1.22. It gurantiees successful build. Description Docker container works in the Dockerfile in the repository. The assembly in Docker also performs additional manipulations: linter checks, the version for the ydbops assembly is substituted so that it is registered in the ydbops executable file.
+The second approach requires a prepared [Docker](https://en.wikipedia.org/wiki/Docker_(software)) environment and uses the official Docker image for [Golang](https://en.wikipedia.org/wiki/Go_(programming_language)) v1.22, guaranteeing a successful build. The Docker container operates using the `Dockerfile` from the repository. The build process in Docker also performs additional tasks: running linter checks and substituting the version for the `ydbops` assembly to register it in the executable file.
 
 ### Building directly with Go {#go}
 

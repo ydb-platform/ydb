@@ -3,13 +3,49 @@
 ├───┼───┤
 │ 1 │ 1 │
 └───┴───┘
+
+Statistics:
+query_phases {
+  duration_us: 1680
+  cpu_time_us: 1525
+}
+compilation {
+  from_cache: true
+}
+process_cpu_time_us: 131
+total_duration_us: 3390
+total_cpu_time_us: 1656
 ┌───┬───┐
 │ a │ b │
 ├───┼───┤
 │ 2 │ 2 │
 └───┴───┘
+
+Statistics:
+query_phases {
+  duration_us: 1725
+  cpu_time_us: 1590
+}
+compilation {
+  from_cache: true
+}
+process_cpu_time_us: 122
+total_duration_us: 3390
+total_cpu_time_us: 1712
 ┌───┬───┐
 │ a │ b │
 ├───┼───┤
 │ 3 │ 3 │
 └───┴───┘
+
+Statistics:
+query_phases {
+  duration_us: 2183
+  cpu_time_us: 2071
+}
+compilation {
+  from_cache: true
+}
+process_cpu_time_us: 169
+total_duration_us: 4331
+total_cpu_time_us: 2240

@@ -3,3 +3,16 @@
 ├───────────────┼─────┤
 │ "Some_string" │ 32  │
 └───────────────┴─────┘
+
+Statistics:
+query_phases {
+  duration_us: 2761
+  cpu_time_us: 2576
+}
+compilation {
+  duration_us: 67210
+  cpu_time_us: 64883
+}
+process_cpu_time_us: 450
+total_duration_us: 72932
+total_cpu_time_us: 67909

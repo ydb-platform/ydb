@@ -3,13 +3,49 @@
 ├─────────────┼─────┤
 │ "Some text" │ 1   │
 └─────────────┴─────┘
+
+Statistics:
+query_phases {
+  duration_us: 1722
+  cpu_time_us: 1574
+}
+compilation {
+  from_cache: true
+}
+process_cpu_time_us: 163
+total_duration_us: 3467
+total_cpu_time_us: 1737
 ┌─────────────────────┬─────┐
 │ s                   │ num │
 ├─────────────────────┼─────┤
 │ "Строка 1\nСтрока2" │ 2   │
 └─────────────────────┴─────┘
+
+Statistics:
+query_phases {
+  duration_us: 1586
+  cpu_time_us: 1430
+}
+compilation {
+  from_cache: true
+}
+process_cpu_time_us: 145
+total_duration_us: 3349
+total_cpu_time_us: 1575
 ┌───────────┬─────┐
 │ s         │ num │
 ├───────────┼─────┤
 │ "Abacaba" │ 3   │
 └───────────┴─────┘
+
+Statistics:
+query_phases {
+  duration_us: 2006
+  cpu_time_us: 1815
+}
+compilation {
+  from_cache: true
+}
+process_cpu_time_us: 189
+total_duration_us: 4099
+total_cpu_time_us: 2004

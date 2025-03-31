@@ -3,13 +3,49 @@
 ├─────────┤
 │ "Line1" │
 └─────────┘
+
+Statistics:
+query_phases {
+  duration_us: 2073
+  cpu_time_us: 1873
+}
+compilation {
+  from_cache: true
+}
+process_cpu_time_us: 131
+total_duration_us: 4058
+total_cpu_time_us: 2004
 ┌─────────┐
 │ s       │
 ├─────────┤
 │ "Line2" │
 └─────────┘
+
+Statistics:
+query_phases {
+  duration_us: 1595
+  cpu_time_us: 1399
+}
+compilation {
+  from_cache: true
+}
+process_cpu_time_us: 119
+total_duration_us: 3216
+total_cpu_time_us: 1518
 ┌─────────┐
 │ s       │
 ├─────────┤
 │ "Line3" │
 └─────────┘
+
+Statistics:
+query_phases {
+  duration_us: 1332
+  cpu_time_us: 1186
+}
+compilation {
+  from_cache: true
+}
+process_cpu_time_us: 103
+total_duration_us: 2907
+total_cpu_time_us: 1289

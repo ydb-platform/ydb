@@ -3,3 +3,25 @@
 ├──────┼─────┼───────┤
 │ 1111 │ 1   │ "one" │
 └──────┴─────┴───────┘
+
+Statistics:
+query_phases {
+  duration_us: 3362
+  table_access {
+    name: "/Root/test_uint320"
+    reads {
+      rows: 1
+      bytes: 15
+    }
+    partitions_count: 1
+  }
+  cpu_time_us: 2548
+  affected_shards: 1
+}
+compilation {
+  duration_us: 85265
+  cpu_time_us: 81840
+}
+process_cpu_time_us: 510
+total_duration_us: 92049
+total_cpu_time_us: 84898

@@ -2,3 +2,21 @@
 │ box │ container_id │ context │ host │ log_level │ log_level_int │ logger_name │ message │ node_fqdn │ pod │ pod_persistent_fqdn │ pod_transient_fqdn │ request_id │ saved_at │ seq │ stack_trace │ thread_name │ timestamp │ user_id │ version │ workload │
 ├─────┼──────────────┼─────────┼──────┼───────────┼───────────────┼─────────────┼─────────┼───────────┼─────┼─────────────────────┼────────────────────┼────────────┼──────────┼─────┼─────────────┼─────────────┼───────────┼─────────┼─────────┼──────────┤
 └─────┴──────────────┴─────────┴──────┴───────────┴───────────────┴─────────────┴─────────┴───────────┴─────┴─────────────────────┴────────────────────┴────────────┴──────────┴─────┴─────────────┴─────────────┴───────────┴─────────┴─────────┴──────────┘
+
+Statistics:
+query_phases {
+  duration_us: 9505
+  table_access {
+    name: "/Root/test_wide_table0"
+    partitions_count: 1
+  }
+  cpu_time_us: 10341
+  affected_shards: 1
+}
+compilation {
+  duration_us: 95886
+  cpu_time_us: 91195
+}
+process_cpu_time_us: 452
+total_duration_us: 109834
+total_cpu_time_us: 101988

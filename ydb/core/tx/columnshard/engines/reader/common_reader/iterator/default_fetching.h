@@ -6,11 +6,13 @@ namespace NKikimr::NOlap::NReader::NCommon {
 class TDefaultFetchLogic: public IKernelFetchLogic {
 private:
     using TBase = IKernelFetchLogic;
+    std::optional<bool> IsEmptyChunks;
 
     std::shared_ptr<NArrow::NAccessor::TColumnLoader> GetColumnLoader(const std::shared_ptr<NCommon::IDataSource>& source) const {
         if (auto loader = source->GetSourceSchema()->GetColumnLoaderOptional(GetEntityId())) {
             return loader;
         }
+        AFL_VERIFY(IsEmptyChunks && *IsEmptyChunks);
         return source->GetContext()->GetReadMetadata()->GetResultSchema()->GetColumnLoaderVerified(GetEntityId());
     }
 
@@ -77,6 +79,7 @@ private:
     virtual void DoStart(TReadActionsCollection& nextRead, TFetchingResultContext& context) override {
         auto source = context.GetSource();
         auto columnChunks = source->GetStageData().GetPortionAccessor().GetColumnChunksPointers(GetEntityId());
+        IsEmptyChunks.emplace(columnChunks.empty());
         if (columnChunks.empty()) {
             ColumnChunks.emplace_back(source->GetRecordsCount(),
                 TPortionDataAccessor::TAssembleBlobInfo(source->GetRecordsCount(), GetColumnLoader(context.GetSource())->GetDefaultValue()));

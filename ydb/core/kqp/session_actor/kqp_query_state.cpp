@@ -373,6 +373,7 @@ std::unique_ptr<TEvKqp::TEvCompileRequest> TKqpQueryState::BuildCompileSplittedR
 
     switch (GetAction()) {
         case NKikimrKqp::QUERY_ACTION_EXECUTE:
+        case NKikimrKqp::QUERY_ACTION_EXPLAIN:
             query = TKqpQueryId(Cluster, Database, UserRequestContext->DatabaseId, GetQuery(), settings, GetQueryParameterTypes(), gUCSettings);
             break;
         default:

@@ -35,17 +35,19 @@ jobs:
           git config user.email ydbot@ydb.tech
       
           # Fetch the latest changes from remote
-          git fetch origin
+          git fetch origin ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}
       
           # Checkout BRANCH_FOR_PR, create if it doesn't exist based on BASE_BRANCH
-          if git show-ref --quiet refs/heads/${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}; then
+          if [ git show-ref --quiet refs/heads/${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }} ] ; then
+            echo 'Branch ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }} exists.
             git checkout ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}
           else
+            echo 'Branch ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }} does not exist. Creating based on ${{ env.BASE_BRANCH }}'
             git checkout -b ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }} origin/${{ env.BASE_BRANCH }}
           fi
       
           # Attempt to rebase BRANCH_FOR_PR onto BASE_BRANCH
-          if ! git rebase origin/${{ env.BASE_BRANCH }}; then
+          if [! git rebase origin/${{ env.BASE_BRANCH }}]; then
             echo "Rebase failed, resetting branch to match BASE_BRANCH..."
       
             # Abort the rebase process

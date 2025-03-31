@@ -110,7 +110,6 @@ jobs:
           echo "$PR_BODY" > "$PR_BODY_FILE"
           # Export the path to the file to the GitHub environment
           echo "PR_BODY_PATH=$PR_BODY_FILE" >> $GITHUB_ENV
-          echo "PR_BODY=$PR_BODY" >> $GITHUB_ENV
 
       - name: Stage changes if any
         if: env.changes == 'true'

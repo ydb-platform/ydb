@@ -125,4 +125,43 @@ void TPartitionWorkZone::SyncNewHeadKey()
     NewHeadKey = TDataKey{TKey{}, 0, TInstant::Zero(), 0};
 }
 
+void TPartitionWorkZone::SyncDataKeysBody(TInstant now,
+                                          TBlobKeyTokenCreator makeBlobKeyToken,
+                                          ui64& startOffset,
+                                          std::deque<std::pair<ui64, ui64>>& gapOffsets,
+                                          ui64& gapSize)
+{
+    auto getNextOffset = [](const TKey& k) {
+        return k.GetOffset() + k.GetCount();
+    };
+    auto getDataSize = [](const TDataKey& k) {
+        return k.CumulativeSize + k.Size;
+    };
+
+    while (!CompactedKeys.empty()) {
+        const auto& [key, blobSize] = CompactedKeys.front();
+        Y_ABORT_UNLESS(!key.HasSuffix());
+
+        BodySize += blobSize;
+
+        ui64 lastOffset = DataKeysBody.empty() ? 0 : getNextOffset(DataKeysBody.back().Key);
+        Y_ABORT_UNLESS(lastOffset <= key.GetOffset());
+
+        if (DataKeysBody.empty()) {
+            startOffset = key.GetOffset() + (key.GetPartNo() > 0 ? 1 : 0);
+        } else if (lastOffset < key.GetOffset()) {
+            gapOffsets.emplace_back(lastOffset, key.GetOffset());
+            gapSize += key.GetOffset() - lastOffset;
+        }
+
+        DataKeysBody.emplace_back(key,
+                                  blobSize,
+                                  now,
+                                  DataKeysBody.empty() ? 0 : getDataSize(DataKeysBody.back()),
+                                  makeBlobKeyToken(key.ToString()));
+
+        CompactedKeys.pop_front();
+    } // head cleared, all data moved to body
+}
+
 }

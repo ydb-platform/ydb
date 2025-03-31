@@ -704,7 +704,7 @@ private:
 
     TPartitionWorkZone WorkZone;
 
-    std::deque<std::pair<ui64,ui64>> GapOffsets;
+    std::deque<std::pair<ui64, ui64>> GapOffsets;
     ui64 GapSize;
 
     TString CloudId;

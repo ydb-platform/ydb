@@ -405,28 +405,11 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
         WorkZone.Head.ClearBatches();
     }
 
-    while (!WorkZone.CompactedKeys.empty()) {
-        const auto& ck = WorkZone.CompactedKeys.front();
-        WorkZone.BodySize += ck.second;
-        Y_ABORT_UNLESS(!ck.first.HasSuffix());
-        ui64 lastOffset = WorkZone.DataKeysBody.empty() ? 0 : (WorkZone.DataKeysBody.back().Key.GetOffset() + WorkZone.DataKeysBody.back().Key.GetCount());
-        Y_ABORT_UNLESS(lastOffset <= ck.first.GetOffset());
-        if (WorkZone.DataKeysBody.empty()) {
-            StartOffset = ck.first.GetOffset() + (ck.first.GetPartNo() > 0 ? 1 : 0);
-        } else {
-            if (lastOffset < ck.first.GetOffset()) {
-                GapOffsets.emplace_back(lastOffset, ck.first.GetOffset());
-                GapSize += ck.first.GetOffset() - lastOffset;
-            }
-        }
-        WorkZone.DataKeysBody.emplace_back(ck.first,
-                                           ck.second,
-                                           ctx.Now(),
-                                           WorkZone.DataKeysBody.empty() ? 0 : WorkZone.DataKeysBody.back().CumulativeSize + WorkZone.DataKeysBody.back().Size,
-                                           MakeBlobKeyToken(ck.first.ToString()));
-
-        WorkZone.CompactedKeys.pop_front();
-    } // head cleared, all data moved to body
+    WorkZone.SyncDataKeysBody(ctx.Now(),
+                              [this](const TString& key){ return MakeBlobKeyToken(key); },
+                              StartOffset,
+                              GapOffsets,
+                              GapSize);
 
     //append Head with newHead
     while (!WorkZone.NewHead.GetBatches().empty()) {

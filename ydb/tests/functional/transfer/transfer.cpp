@@ -481,8 +481,8 @@ Y_UNIT_TEST_SUITE(Transfer)
     Y_UNIT_TEST(DropTransfer)
     {
         MainTestCase testCase;
-        testCase.Run({
-            .TableDDL = R"(
+
+        testCase.CreateTable(R"(
                 CREATE TABLE `%s` (
                     Key Uint64 NOT NULL,
                     Message Utf8 NOT NULL,
@@ -490,9 +490,9 @@ Y_UNIT_TEST_SUITE(Transfer)
                 )  WITH (
                     STORE = COLUMN
                 );
-            )",
-
-            .Lambda = R"(
+            )");
+        testCase.CreateTopic();
+        testCase.CreateTransfer(R"(
                 $l = ($x) -> {
                     return [
                         <|
@@ -501,15 +501,13 @@ Y_UNIT_TEST_SUITE(Transfer)
                         |>
                     ];
                 };
-            )",
+            )");
 
-            .Messages = {{"Message-1"}},
-
-            .Expectations = {{
-                _C("Key", ui64(0)),
-                _C("Message", TString("Message-1")),
-            }}
-        });
+        testCase.Write({"Message-1"});
+        testCase.CheckResult({{
+            _C("Key", ui64(0)),
+            _C("Message", TString("Message-1")),
+        }});
 
         {
             auto result = testCase.DescribeTransfer();
@@ -523,6 +521,9 @@ Y_UNIT_TEST_SUITE(Transfer)
             UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToOneLineString());
             UNIT_ASSERT_VALUES_EQUAL(EStatus::SCHEME_ERROR, result.GetStatus());
         }
+
+        testCase.DropTable();
+        testCase.DropTopic();
     }
 
     Y_UNIT_TEST(CreateAndDropConsumer)
@@ -579,6 +580,9 @@ Y_UNIT_TEST_SUITE(Transfer)
             UNIT_ASSERT_C(i, "Unable to wait consumer has been removed");
             Sleep(TDuration::Seconds(1));
         }
+
+        testCase.DropTable();
+        testCase.DropTopic();
     }
 
     Y_UNIT_TEST(DescribeError_OnLambdaCompilation)
@@ -602,6 +606,10 @@ Y_UNIT_TEST_SUITE(Transfer)
             )");
         
         testCase.CheckTransferStateError("_unknown_field_for_lambda_compilation_error");
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+        testCase.DropTopic();
     }
 /*
     Y_UNIT_TEST(DescribeError_OnWriteToShard)
@@ -682,6 +690,9 @@ Y_UNIT_TEST_SUITE(Transfer)
             UNIT_ASSERT_VALUES_EQUAL(1, consumers.size());
             UNIT_ASSERT_VALUES_EQUAL("PredefinedConsumer", consumers[0].GetConsumerName());
         }
+
+        testCase.DropTable();
+        testCase.DropTopic();
     }
 
     Y_UNIT_TEST(CustomFlushInterval)
@@ -729,6 +740,10 @@ Y_UNIT_TEST_SUITE(Transfer)
             UNIT_ASSERT_C(attempt, "Unable to wait transfer result");
             Sleep(TDuration::Seconds(1));
         }
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+        testCase.DropTopic();
     }
 
     Y_UNIT_TEST(AlterFlushInterval)
@@ -780,6 +795,10 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.CheckResult({{
             _C("Message", TString("Message-1"))
         }});
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+        testCase.DropTopic();
     }
 
     Y_UNIT_TEST(AlterBatchSize)
@@ -823,6 +842,10 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.CheckResult({{
             _C("Message", TString("Message-1"))
         }});
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+        testCase.DropTopic();
     }
 
     Y_UNIT_TEST(CreateTransferSourceNotExists)
@@ -850,6 +873,9 @@ Y_UNIT_TEST_SUITE(Transfer)
             )");
 
         testCase.CheckTransferStateError("Discovery error: local/Topic_");
+
+        testCase.DropTransfer();
+        testCase.DropTable();
     }
 
     Y_UNIT_TEST(CreateTransferSourceIsNotTopic)
@@ -865,7 +891,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                 );
             )");
         
-            testCase.ExecuteDDL(Sprintf(R"(
+        testCase.ExecuteDDL(Sprintf(R"(
                 CREATE TABLE `%s` (
                     Key Uint64 NOT NULL,
                     PRIMARY KEY (Key)
@@ -884,6 +910,9 @@ Y_UNIT_TEST_SUITE(Transfer)
             )");
 
         testCase.CheckTransferStateError("Discovery error: local/Topic_");
+
+        testCase.DropTransfer();
+        testCase.DropTable();
     }
 
     Y_UNIT_TEST(CreateTransferRowTable)
@@ -910,6 +939,10 @@ Y_UNIT_TEST_SUITE(Transfer)
             )");
 
         testCase.CheckTransferStateError("Only column tables are supported as transfer targets");
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+        testCase.DropTopic();
     }
 
     Y_UNIT_TEST(CreateTransferTargetIsNotTable)
@@ -932,6 +965,9 @@ Y_UNIT_TEST_SUITE(Transfer)
             )");
 
         testCase.CheckTransferStateError("Only column tables are supported as transfer targets");
+
+        testCase.DropTransfer();
+        testCase.DropTopic();
     }
 
     Y_UNIT_TEST(CreateTransferTargetNotExists)
@@ -951,6 +987,9 @@ Y_UNIT_TEST_SUITE(Transfer)
             )");
 
         testCase.CheckTransferStateError(TStringBuilder() << "The target table `/local/" << testCase.TableName << "` does not exist");
+
+        testCase.DropTransfer();
+        testCase.DropTopic();
     }
 
     Y_UNIT_TEST(PauseAndResumeTransfer)
@@ -1019,6 +1058,10 @@ Y_UNIT_TEST_SUITE(Transfer)
 
         testCase.ResumeTransfer();
         testCase.CheckTransferState(TReplicationDescription::EState::Running);
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+        testCase.DropTopic();
     }
 }
 

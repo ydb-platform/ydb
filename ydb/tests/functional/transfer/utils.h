@@ -142,10 +142,12 @@ struct MainTestCase {
     {
     }
 
-    void ExecuteDDL(const TString& ddl) {
+    void ExecuteDDL(const TString& ddl, bool checkResult = true) {
         Cerr << "DDL: " << ddl << Endl << Flush;
         auto res = Session.ExecuteQuery(ddl, TTxControl::NoTx()).GetValueSync();
-        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        if (checkResult) {
+            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        }
     }
 
     auto ExecuteSourceTableQuery(const TString& query) {
@@ -166,8 +168,16 @@ struct MainTestCase {
         ExecuteDDL(Sprintf(tableDDL.data(), TableName.data()));
     }
 
+    void DropTable() {
+        ExecuteDDL(Sprintf("DROP TABLE `%s`", TableName.data()));
+    }
+
     void CreateSourceTable(const TString& tableDDL) {
         ExecuteDDL(Sprintf(tableDDL.data(), SourceTableName.data()));
+    }
+
+    void DropSourceTable() {
+        ExecuteDDL(Sprintf("DROP TABLE `%s`", SourceTableName.data()));
     }
 
     void CreateTopic(size_t partitionCount = 10) {
@@ -177,6 +187,10 @@ struct MainTestCase {
                 min_active_partitions = %d
             );
         )", TopicName.data(), partitionCount));
+    }
+
+    void DropTopic() {
+        ExecuteDDL(Sprintf("DROP TOPIC `%s`", TopicName.data()));
     }
 
     void CreateConsumer(const TString& consumerName) {
@@ -291,10 +305,7 @@ struct MainTestCase {
     }
 
     void DropTransfer() {
-        auto res = Session.ExecuteQuery(Sprintf(R"(
-            DROP TRANSFER `%s`;
-        )", TransferName.data()), TTxControl::NoTx()).GetValueSync();
-        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        ExecuteDDL(Sprintf("DROP TRANSFER `%s`;", TransferName.data()));
     }
 
     void PauseTransfer() {
@@ -334,6 +345,10 @@ struct MainTestCase {
         )", ReplicationName.data(), SourceTableName.data(), TableName.data(), ConnectionString.data());
 
         ExecuteDDL(ddl);
+    }
+
+    void DropReplicatopn() {
+        ExecuteDDL(Sprintf("DROP ASYNC REPLICATION `%s`;", ReplicationName.data()));
     }
 
     auto DescribeReplication() {
@@ -404,7 +419,7 @@ struct MainTestCase {
         writeSession->Close(TDuration::Seconds(1));
     }
 
-    std::pair<ui64, Ydb::ResultSet> DoRead(const TExpectations& expectations) {
+    std::pair<i64, Ydb::ResultSet> DoRead(const TExpectations& expectations) {
         auto& e = expectations.front();
 
         TStringBuilder columns;
@@ -419,7 +434,11 @@ struct MainTestCase {
         auto query = Sprintf("SELECT %s FROM `%s` ORDER BY %s", columns.data(), TableName.data(), columns.data());
         Cerr << ">>>>> Query: " << query << Endl << Flush;
         auto res = Session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-        UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+        if (!res.IsSuccess()) {
+            Cerr << ">>>>> Query error: " << res.GetIssues().ToString() << Endl << Flush;
+            TResultSet r{Ydb::ResultSet()};
+            return {-1, NYdb::TProtoAccessor::GetProto(r)};
+        }
     
         const auto proto = NYdb::TProtoAccessor::GetProto(res.GetResultSet(0));
         return {proto.rowsSize(), proto};
@@ -429,7 +448,7 @@ struct MainTestCase {
         for (size_t attempt = 20; attempt--; ) {
             auto res = DoRead(expectations);
             Cerr << "Attempt=" << attempt << " count=" << res.first << Endl << Flush;
-            if (res.first == expectations.size()) {
+            if (res.first == (ssize_t)expectations.size()) {
                 const Ydb::ResultSet& proto = res.second;
                 for (size_t i = 0; i < expectations.size(); ++i) {
                     auto& row = proto.rows(i);
@@ -499,6 +518,10 @@ struct MainTestCase {
         }
 
         CheckResult(config.Expectations);
+
+        DropTransfer();
+        DropTable();
+        DropTopic();
     }
 
     const size_t Id;

@@ -58,6 +58,8 @@ Y_UNIT_TEST_SUITE(Replication)
 
         testCase.ResumeReplication();
         testCase.CheckReplicationState(TReplicationDescription::EState::Running);
+
+        testCase.DropReplicatopn();
     }
 }
 

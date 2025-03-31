@@ -8,7 +8,7 @@ env:
   BRANCH_FOR_PR: update-muted-ya
   TITLE: "Update muted_ya.txt"
   BASE_BRANCH: main
-  REVIEWERS: ci
+  REVIEWERS: "ci"
 
 jobs:
   create-or-update-muted-ya:
@@ -147,19 +147,21 @@ jobs:
       - name: Comment PR first attempt
         continue-on-error: true
         run: |
-          echo "${{ env.PR_BODY }}" > pr_body.txt
           curl -X POST \
             -H "Authorization: token ${{ secrets.YDBOT_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/${{ github.repository }}/issues/${{ steps.create_or_update_pr.outputs.pr_number }}/comments \
-            -d @pr_body.txt
+            -d @pr_body_content.txt
         
       - name: Comment PR
         continue-on-error: true
         uses: actions/github-script@v7
         with:
           script: |
-            const bodyText = process.env.PR_BODY;
+            const fs = require('fs');
+            const path = require('path');
+            const filePath = path.join(process.env.GITHUB_WORKSPACE, 'pr_body_content.txt');
+            const bodyText = fs.readFileSync(filePath, 'utf8');
       
             github.rest.issues.createComment({
               issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
@@ -181,7 +183,7 @@ jobs:
           owner: ${{ github.repository_owner }}
           repo: ${{ github.event.repository.name }}
           pull_number: ${{ steps.create_or_update_pr.outputs.pr_number }}
-          team_reviewers: ${{ env.REVIEWERS }}  
+          team_reviewers: "['${{ env.REVIEWERS }}']"
           token: ${{ secrets.YDBOT_TOKEN }}
   
   

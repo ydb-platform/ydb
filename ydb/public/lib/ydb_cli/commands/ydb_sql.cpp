@@ -56,7 +56,7 @@ void TCommandSql::Config(TConfig& config) {
     description << "\nDefault: " << colors.CyanColor() << "\"tty\"" << colors.OldColor() << ".";
 
     config.Opts->AddLongOption("progress", description.Str())
-        .RequiredArgument("[String]").StoreResult(&Progress);
+        .RequiredArgument("[String]").DefaultValue("tty").StoreResult(&Progress);
     config.Opts->AddLongOption("diagnostics-file", "Path to file where the diagnostics will be saved.")
         .RequiredArgument("[String]").StoreResult(&DiagnosticsFile);
     config.Opts->AddLongOption("syntax", "Query syntax [yql, pg]")

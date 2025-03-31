@@ -3,13 +3,49 @@
 ├───────────────────────────┤
 │ ["Line1","Line2","Line3"] │
 └───────────────────────────┘
+
+Statistics:
+query_phases {
+  duration_us: 2127
+  cpu_time_us: 1941
+}
+compilation {
+  from_cache: true
+}
+process_cpu_time_us: 163
+total_duration_us: 4035
+total_cpu_time_us: 2104
 ┌───────────────────────────┐
 │ s                         │
 ├───────────────────────────┤
 │ ["Line4","Line5","Line6"] │
 └───────────────────────────┘
+
+Statistics:
+query_phases {
+  duration_us: 1636
+  cpu_time_us: 1463
+}
+compilation {
+  from_cache: true
+}
+process_cpu_time_us: 141
+total_duration_us: 3393
+total_cpu_time_us: 1604
 ┌───────────────────────────┐
 │ s                         │
 ├───────────────────────────┤
 │ ["Line7","Line8","Line9"] │
 └───────────────────────────┘
+
+Statistics:
+query_phases {
+  duration_us: 1848
+  cpu_time_us: 1696
+}
+compilation {
+  from_cache: true
+}
+process_cpu_time_us: 155
+total_duration_us: 3749
+total_cpu_time_us: 1851

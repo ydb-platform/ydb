@@ -5,3 +5,25 @@
 ├──────┼─────┼─────────┤
 │ 7777 │ 7   │ "seven" │
 └──────┴─────┴─────────┘
+
+Statistics:
+query_phases {
+  duration_us: 6623
+  table_access {
+    name: "/Root/test_uint64_and_string0"
+    reads {
+      rows: 5
+      bytes: 80
+    }
+    partitions_count: 1
+  }
+  cpu_time_us: 4538
+  affected_shards: 1
+}
+compilation {
+  duration_us: 121480
+  cpu_time_us: 117896
+}
+process_cpu_time_us: 578
+total_duration_us: 130235
+total_cpu_time_us: 123012

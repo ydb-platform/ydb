@@ -5,3 +5,16 @@
 ├─────┼───────┤
 │ 2   │ "two" │
 └─────┴───────┘
+
+Statistics:
+query_phases {
+  duration_us: 2139
+  cpu_time_us: 1946
+}
+compilation {
+  duration_us: 80703
+  cpu_time_us: 78581
+}
+process_cpu_time_us: 419
+total_duration_us: 86190
+total_cpu_time_us: 80946

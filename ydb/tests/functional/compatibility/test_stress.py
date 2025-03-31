@@ -31,6 +31,10 @@ class TestStress(object):
             binary_paths=binary_paths,
             # uncomment for 64 datetime in tpc-h/tpc-ds
             # extra_feature_flags={"enable_table_datetime64": True},
+
+            column_shard_config={
+                'disabled_on_scheme_shard': False,
+            },
         )
 
         self.cluster = KiKiMR(self.config)
@@ -198,7 +202,7 @@ class TestStress(object):
         yatest.common.execute(init_command, wait=True, stdout=self.output_f, stderr=self.output_f)
         yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)
 
-    @pytest.mark.parametrize("store_type", ["row"])
+    @pytest.mark.parametrize("store_type", ["row", "column"])
     def test_tpch1(self, store_type):
         init_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),

@@ -28,8 +28,7 @@ public:
     {
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxInitScheme Complete");
 
-        Self->ProcessTx(Self->CreateTxLoadState(), ctx);
-        Self->TxCompleted(this, ctx);
+        Self->Execute(Self->CreateTxLoadState(), ctx);
     }
 };
 

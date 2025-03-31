@@ -21,7 +21,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
-            ref: ${{ env.BRANCH_FOR_PR }}
+            ref: ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}
 
       - name: Install dependencies
         run: |

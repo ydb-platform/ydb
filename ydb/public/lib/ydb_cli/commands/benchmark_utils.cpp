@@ -131,23 +131,6 @@ TString FullTablePath(const TString& database, const TString& table) {
     return prefixPathSplit.Reconstruct();
 }
 
-
-TMaybe<TQueryBenchmarkResult> ResultByStatus(const TStatus& status, const TString& deadlineName) {
-    if (status.IsSuccess()) {
-        return Nothing();
-    }
-    TStringBuilder errorInfo;
-    switch (status.GetStatus()) {
-        case NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED:
-            errorInfo << deadlineName << " deadline expiried: " << status.GetIssues();
-            break;
-        default:
-            errorInfo << "Operation failed with status " << status.GetStatus() << ": " << status.GetIssues().ToString();
-            break;
-    }
-    return TQueryBenchmarkResult::Error(errorInfo, "", "");
-}
-
 bool HasCharsInString(const TString& str) {
     for(TStringBuf q(str), line; q.ReadLine(line);) {
         line = line.NextTok("--");
@@ -184,7 +167,7 @@ public:
     }
 
     template <typename TIterator>
-    bool Scan(TIterator& it, std::optional<TString> planFileName = std::nullopt) {
+    TStatus Scan(TIterator& it, std::optional<TString> planFileName = std::nullopt) {
 
         TProgressIndication progressIndication(true);
         TMaybe<NQuery::TExecStats> execStats;
@@ -254,7 +237,7 @@ public:
             if (!streamPart.IsSuccess()) {
                 if (!streamPart.EOS()) {
                     OnError(streamPart.GetStatus(), streamPart.GetIssues().ToString());
-                    return false;
+                    return streamPart;
                 }
                 break;
             }
@@ -268,9 +251,38 @@ public:
             QueryPlan = execStats->GetPlan().value_or("");
             PlanAst = execStats->GetAst().value_or("");
         }
-        return true;
+        return TStatus(EStatus::SUCCESS, NIssue::TIssues());
     }
 };
+
+TQueryBenchmarkResult  ConstructResultByStatus(const TStatus& status, const THolder<TQueryResultScanner>& scaner, const TQueryBenchmarkSettings& becnhmarkSettings) {
+    if (status.IsSuccess()) {
+        Y_ENSURE(scaner);
+        return TQueryBenchmarkResult::Result(
+            scaner->ExtractRawResults(),
+            scaner->GetServerTiming(),
+            scaner->GetQueryPlan(),
+            scaner->GetPlanAst()
+        );
+    }
+    TStringBuilder errorInfo;
+    TString plan, ast;
+    switch (status.GetStatus()) {
+        case NYdb::EStatus::CLIENT_DEADLINE_EXCEEDED:
+            errorInfo << becnhmarkSettings.Deadline.Name << " deadline expiried: " << status.GetIssues();
+            break;
+        default:
+            if (scaner) {
+                errorInfo << scaner->GetErrorInfo();
+                plan = scaner->GetQueryPlan();
+                ast = scaner->GetPlanAst();
+            } else {
+                errorInfo << "Operation failed with status " << status.GetStatus() << ": " << status.GetIssues().ToString();
+            }
+            break;
+    }
+    return TQueryBenchmarkResult::Error(errorInfo, plan, ast);
+}
 
 template<class TSettings>
 TMaybe<TQueryBenchmarkResult> SetTimeoutSettings(TSettings& settings, const TQueryBenchmarkDeadline& deadline) {
@@ -284,39 +296,32 @@ TMaybe<TQueryBenchmarkResult> SetTimeoutSettings(TSettings& settings, const TQue
     return Nothing();
 }
 
-TQueryBenchmarkResult ExecuteImpl(const TString& query, NTable::TTableClient& client, const TQueryBenchmarkDeadline& deadline, bool explainOnly) {
+TQueryBenchmarkResult ExecuteImpl(const TString& query, NTable::TTableClient& client, const TQueryBenchmarkSettings& benchmarkSettings, bool explainOnly) {
     TStreamExecScanQuerySettings settings;
     settings.CollectQueryStats(ECollectQueryStatsMode::Full);
     settings.Explain(explainOnly);
-    if (const auto error = SetTimeoutSettings(settings, deadline)) {
+    if (const auto error = SetTimeoutSettings(settings, benchmarkSettings.Deadline)) {
         return *error;
     }
-    auto it = client.StreamExecuteScanQuery(query, settings).GetValueSync();
-    if (const auto error = ResultByStatus(it, deadline.Name)) {
-        return *error;
-    }
-
-    TQueryResultScanner composite;
-    composite.SetDeadlineName(deadline.Name);
-    if (!composite.Scan(it)) {
-        return TQueryBenchmarkResult::Error(
-            composite.GetErrorInfo(), composite.GetQueryPlan(), composite.GetPlanAst());
-    } else {
-        return TQueryBenchmarkResult::Result(
-            composite.ExtractRawResults(),
-            composite.GetServerTiming(),
-            composite.GetQueryPlan(),
-            composite.GetPlanAst()
-            );
-    }
+    THolder<TQueryResultScanner> composite;
+    const auto resStatus = client.RetryOperationSync([&composite, &benchmarkSettings, &query, &settings](NTable::TTableClient& tc) -> TStatus {
+        auto it = tc.StreamExecuteScanQuery(query, settings).GetValueSync();
+        if (!it.IsSuccess()) {
+            return it;
+        }
+        composite = MakeHolder<TQueryResultScanner>();
+        composite->SetDeadlineName(benchmarkSettings.Deadline.Name);
+        return composite->Scan(it);
+    }, benchmarkSettings.RetrySettings);
+    return ConstructResultByStatus(resStatus, composite, benchmarkSettings);
 }
 
 TQueryBenchmarkResult Execute(const TString& query, NTable::TTableClient& client, const TQueryBenchmarkSettings& settings) {
-    return ExecuteImpl(query, client, settings.Deadline, false);
+    return ExecuteImpl(query, client, settings, false);
 }
 
-TQueryBenchmarkResult Explain(const TString& query, NTable::TTableClient& client, const TQueryBenchmarkDeadline& deadline) {
-    return ExecuteImpl(query, client, deadline, true);
+TQueryBenchmarkResult Explain(const TString& query, NTable::TTableClient& client, const TQueryBenchmarkSettings& settings) {
+    return ExecuteImpl(query, client, settings, true);
 }
 
 TQueryBenchmarkResult ExecuteImpl(const TString& query, NQuery::TQueryClient& client, const TQueryBenchmarkSettings& benchmarkSettings, bool explainOnly) {
@@ -329,36 +334,27 @@ TQueryBenchmarkResult ExecuteImpl(const TString& query, NQuery::TQueryClient& cl
     if (auto error = SetTimeoutSettings(settings, benchmarkSettings.Deadline)) {
         return *error;
     }
-    auto it = client.StreamExecuteQuery(
-        query,
-        NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
-        settings).GetValueSync();
-    if (auto error = ResultByStatus(it, benchmarkSettings.Deadline.Name)) {
-        return *error;
-    }
-
-    TQueryResultScanner composite;
-    composite.SetDeadlineName(benchmarkSettings.Deadline.Name);
-    if (!composite.Scan(it, benchmarkSettings.PlanFileName)) {
-        return TQueryBenchmarkResult::Error(
-            composite.GetErrorInfo(), composite.GetQueryPlan(), composite.GetPlanAst());
-    } else {
-        return TQueryBenchmarkResult::Result(
-            composite.ExtractRawResults(),
-            composite.GetServerTiming(),
-            composite.GetQueryPlan(),
-            composite.GetPlanAst()
-            );
-    }
+    THolder<TQueryResultScanner> composite;
+    const auto resStatus = client.RetryQuerySync([&composite, &benchmarkSettings, &query, &settings](NQuery::TQueryClient& qc) -> TStatus {
+        auto it = qc.StreamExecuteQuery(
+            query,
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx(),
+            settings).GetValueSync();
+        if (!it.IsSuccess()) {
+            return it;
+        }
+        composite = MakeHolder<TQueryResultScanner>();
+        composite->SetDeadlineName(benchmarkSettings.Deadline.Name);
+        return composite->Scan(it);
+    }, benchmarkSettings.RetrySettings);
+    return ConstructResultByStatus(resStatus, composite, benchmarkSettings);
 }
 
 TQueryBenchmarkResult Execute(const TString& query, NQuery::TQueryClient& client, const TQueryBenchmarkSettings& settings) {
     return ExecuteImpl(query, client, settings, false);
 }
 
-TQueryBenchmarkResult Explain(const TString& query, NQuery::TQueryClient& client, const TQueryBenchmarkDeadline& deadline) {
-    TQueryBenchmarkSettings settings;
-    settings.Deadline = deadline;
+TQueryBenchmarkResult Explain(const TString& query, NQuery::TQueryClient& client, const TQueryBenchmarkSettings& settings) {
     return ExecuteImpl(query, client, settings, true);
 }
 

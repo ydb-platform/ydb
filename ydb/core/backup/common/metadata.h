@@ -1,4 +1,5 @@
 #pragma once
+#include "encryption.h"
 
 #include <ydb/core/base/row_version.h>
 
@@ -54,6 +55,22 @@ private:
     TMap<TVirtualTimestamp, TFullBackupMetadata::TPtr> FullBackups;
     TMap<TVirtualTimestamp, TLogMetadata::TPtr> Logs;
     TMaybeFail<ui64> Version;
+};
+
+class TSchemaMapping {
+public:
+    struct TItem {
+        TString ExportPrefix;
+        TString ObjectPath;
+        TMaybe<NBackup::TEncryptionIV> IV;
+    };
+
+    TSchemaMapping() = default;
+
+    bool Deserialize(const TString& jsonContent, TString& error);
+
+public:
+    std::vector<TItem> Items;
 };
 
 } // namespace NKikimr::NBackup

@@ -7,7 +7,7 @@ env:
   GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
   BRANCH_FOR_PR: update-muted-ya
   TITLE: "Update muted_ya.txt"
-  BASE_BRANCH: dev_update_muted_v4
+  BASE_BRANCH: main
   REVIEWERS: ci
 
 jobs:
@@ -139,14 +139,35 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ env.GH_TOKEN }}
         run: |
-          python .github/scripts/create_or_update_pr.py create_or_update --base_branch="${{ env.BASE_BRANCH }}" --branch_for_pr="${{ env.BRANCH_FOR_PR }}" --title="${{ env.TITLE }}" --body="${{ env.BODY }}" --reviewers="${{ env.REVIEWERS }}"
+          python .github/scripts/create_or_update_pr.py create_or_update --base_branch="${{ env.BASE_BRANCH }}" --branch_for_pr="${{ env.BRANCH_FOR_PR }}" --title="${{ env.TITLE }}" --body="${{ env.BODY }}"
+  
       
-      - name: Display PR Number in Markdown
-        env:
-            GITHUB_TOKEN: ${{ env.GH_TOKEN }}
-        run: |
-          echo "## Pull Request Created or Updated" >> pr_summary.md
-          echo "- PR Number: #${{ steps.create_or_update_pr.outputs.pr_number }}" >> pr_summary.md
-          python .github/scripts/tests/comment-pr.py pr_summary.md
-      
+      - name: Comment PR
+        uses: actions/github-script@v7
+        with:
+          script: |    
+            github.rest.issues.createComment({
+              issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
+              owner: ${{ github.repository_owner }},
+              repo: ${{ github.event.repository.name }},
+              body: ${{ env.PR_BODY }}
+
+            });
+
+            github.rest.issues.addLabels({
+                ...context.repo,
+                issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
+                labels: 'update_muted_ya'
+            });
+
+      - name: Add reviewers
+        uses: octokit/request-action@v2.x
+        with:
+          route: POST /repos/{owner}/{repo}/pulls/{pull_number}/requested_reviewers
+          owner: ${{ github.repository_owner }}
+          repo: ${{ github.event.repository.name }}
+          pull_number: ${{ steps.create_or_update_pr.outputs.pr_number }}
+          team_reviewers: ${{ env.REVIEWERS }}  
+          token: ${{ secrets.GITHUB_TOKEN }}
+  
   

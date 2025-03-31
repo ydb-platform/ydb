@@ -1,4 +1,4 @@
-# .github/scripts/create_or_update_pr.py
+#!/usr/bin/env python3
 import os
 import argparse
 from github import Github
@@ -83,8 +83,6 @@ if __name__ == '__main__':
     append_parser = subparsers.add_parser('append_pr_body', help='Append text to the body of an existing pull request')
     group = append_parser.add_mutually_exclusive_group(required=True)
     group.add_argument('--pr_number', type=int, help='Pull request number')
-    append_parser.add_argument('--base_branch', type=str, help='Base branch for the PR')
-    append_parser.add_argument('--branch_for_pr', type=str, help='Branch of the PR')
     append_parser.add_argument('--body', type=str, required=True, help='Text to append to the PR body')
 
     args = parser.parse_args()

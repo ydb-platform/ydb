@@ -217,11 +217,10 @@ public:
                 TPath::Resolve(alterConfig.GetOffloadConfig().GetIncrementalBackup().GetDstPath(), context.SS).Base()->PathId.ToProto(pathId);
             }
 
-            alterConfig.MutablePartitionKeySchema()->Swap(tabletConfig->MutablePartitionKeySchema());
-            Y_PROTOBUF_SUPPRESS_NODISCARD alterConfig.SerializeToString(&params->TabletConfig);
-
             alterConfig.MutableMigrations()->CopyFrom(tabletConfig->GetMigrations());
 
+            alterConfig.MutablePartitionKeySchema()->Swap(tabletConfig->MutablePartitionKeySchema());
+            Y_PROTOBUF_SUPPRESS_NODISCARD alterConfig.SerializeToString(&params->TabletConfig);
             alterConfig.Swap(tabletConfig);
         }
         if (alter.PartitionsToDeleteSize()) {

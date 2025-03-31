@@ -3,50 +3,13 @@
 ├───┼───┤
 │ 1 │ 1 │
 └───┴───┘
-
-Statistics:
-query_phases {
-  duration_us: 2238
-  cpu_time_us: 2013
-}
-compilation {
-  duration_us: 55383
-  cpu_time_us: 53421
-}
-process_cpu_time_us: 413
-total_duration_us: 60509
-total_cpu_time_us: 55847
 ┌───┬───┐
 │ a │ b │
 ├───┼───┤
 │ 2 │ 2 │
 └───┴───┘
-
-Statistics:
-query_phases {
-  duration_us: 1703
-  cpu_time_us: 1539
-}
-compilation {
-  from_cache: true
-}
-process_cpu_time_us: 137
-total_duration_us: 3454
-total_cpu_time_us: 1676
 ┌───┬───┐
 │ a │ b │
 ├───┼───┤
 │ 3 │ 3 │
 └───┴───┘
-
-Statistics:
-query_phases {
-  duration_us: 1965
-  cpu_time_us: 1784
-}
-compilation {
-  from_cache: true
-}
-process_cpu_time_us: 166
-total_duration_us: 3686
-total_cpu_time_us: 1950

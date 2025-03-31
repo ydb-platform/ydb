@@ -3,15 +3,3 @@
 ├────┤
 │ 12 │
 └────┘
-
-Statistics:
-query_phases {
-  duration_us: 2192
-  cpu_time_us: 1918
-}
-compilation {
-  from_cache: true
-}
-process_cpu_time_us: 168
-total_duration_us: 4219
-total_cpu_time_us: 2086

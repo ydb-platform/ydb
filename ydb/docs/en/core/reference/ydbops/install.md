@@ -20,7 +20,7 @@ We are using official docker image for Golang v1.22. It gurantiees successful bu
 
 #### Prerequsites
 
-[Install Go](https://go.dev/doc/install). The recommended version is 1.22
+[Install Go](https://go.dev/doc/install). The recommended version is 1.22.
 
 
 #### Compiling

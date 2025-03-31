@@ -908,7 +908,6 @@ TExprBase KqpAddColumnForEmptyColumnsOlapRead(TExprBase node, TExprContext& ctx,
         .Settings(readOlap.Settings())
         .ExplainPrompt(readOlap.ExplainPrompt())
         .Process(readOlap.Process())
-        .DontOptimize(ctx.NewAtom(node.Pos(), "true"))
         .Done();
 }
 

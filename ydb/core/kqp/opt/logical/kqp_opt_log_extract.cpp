@@ -157,8 +157,7 @@ TExprBase KqpApplyExtractMembersToReadOlapTable(TExprBase node, TExprContext& ct
 
     auto read = node.Cast<TKqpReadOlapTableRangesBase>();
 
-    const auto maybeDontOptimize = read.DontOptimize().Maybe<TCoAtom>();
-    if (maybeDontOptimize) {
+    if (read.Columns().Size() == 1) {
         return node;
     }
 

@@ -126,7 +126,7 @@ jobs:
       - name: Push changes
         uses: ad-m/github-push-action@v0.8.0
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.YDBOT_TOKEN }}
           branch: ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}
           force: true
 
@@ -137,7 +137,7 @@ jobs:
       - name: Create or update PR
         id: create_or_update_pr
         env:
-          GITHUB_TOKEN: ${{ env.GH_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
         run: |
           python .github/scripts/create_or_update_pr.py create_or_update --base_branch="${{ env.BASE_BRANCH }}" --branch_for_pr="${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}" --title="${{ env.TITLE }}" --body="${{ env.BODY }}"
   
@@ -168,6 +168,6 @@ jobs:
           repo: ${{ github.event.repository.name }}
           pull_number: ${{ steps.create_or_update_pr.outputs.pr_number }}
           team_reviewers: ${{ env.REVIEWERS }}  
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.YDBOT_TOKEN }}
   
   

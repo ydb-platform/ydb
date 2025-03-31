@@ -71,7 +71,7 @@ jobs:
   build-platform-specific-binary:
     strategy:
       matrix: ${{ fromJSON(needs.build-matrix.outputs.matrix) }}
-    name: Build ${{ matrix.os }} YDB CLI binary
+    name: Build ${{ matrix.os }} YDB DSTool binary
     needs: build-matrix
     runs-on: ${{ matrix.runner }}
     defaults:
@@ -115,10 +115,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ inputs.commit_sha }}
-      - name: Get YDB CLI version from ydb/apps/dstool/version.txt
+      - name: Get YDB DSTool version from ydb/apps/dstool/version.txt
         id: getver
         run: echo "dstool_version=$(cat ydb/apps/dstool/version.txt)" >> $GITHUB_OUTPUT
-      - name: Print YDB CLI version ${{ steps.getver.outputs.dstool_version }}
+      - name: Print YDB DSTool version ${{ steps.getver.outputs.dstool_version }}
         run: echo ${{ steps.getver.outputs.dstool_version }}
 
       - name: Prepare directory for linux-amd binary

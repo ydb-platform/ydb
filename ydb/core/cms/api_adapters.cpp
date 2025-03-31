@@ -4,6 +4,7 @@
 #include <ydb/public/api/protos/draft/ydb_maintenance.pb.h>
 #include <yql/essentials/public/issue/protos/issue_severity.pb.h>
 
+#include <ydb/core/base/hive.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
@@ -59,6 +60,13 @@ namespace {
 
     void ConvertAction(const NKikimrCms::TAction& cmsAction, Ydb::Maintenance::LockAction& action) {
         *action.mutable_duration() = TimeUtil::MicrosecondsToDuration(cmsAction.GetDuration());
+    }
+
+    template <typename TApiAction>
+    void ConvertAction(const NKikimrCms::TAction& cmsAction, TApiAction& action) {
+        if constexpr (std::is_same_v<TApiAction, Ydb::Maintenance::LockAction>) {
+            *action.mutable_duration() = TimeUtil::MicrosecondsToDuration(cmsAction.GetDuration());
+        }
 
         if (cmsAction.DevicesSize() > 0) {
             Y_ABORT_UNLESS(cmsAction.DevicesSize() == 1);
@@ -106,7 +114,15 @@ namespace {
     }
 
     void ConvertAction(const NKikimrCms::TAction& cmsAction, Ydb::Maintenance::ActionState& actionState) {
-        ConvertAction(cmsAction, *actionState.mutable_action()->mutable_lock_action());
+        switch (cmsAction.GetType()) {
+        default:
+            ConvertAction(cmsAction, *actionState.mutable_action()->mutable_lock_action());
+            break;
+        case NKikimrCms::TAction::DRAIN_NODE:
+            ConvertAction(cmsAction, *actionState.mutable_action()->mutable_drain_action());
+            break;
+        }
+
         // FIXME: specify action_uid
         actionState.set_status(Ydb::Maintenance::ActionState::ACTION_STATUS_PENDING);
         actionState.set_reason(ConvertReason(cmsAction.GetIssue().GetType()));
@@ -123,7 +139,14 @@ namespace {
     void ConvertPermission(const TString& taskUid, const NKikimrCms::TPermission& permission,
             Ydb::Maintenance::ActionState& actionState)
     {
-        ConvertAction(permission.GetAction(), *actionState.mutable_action()->mutable_lock_action());
+        switch (permission.GetAction().GetType()) {
+        default:
+            ConvertAction(permission.GetAction(), *actionState.mutable_action()->mutable_lock_action());
+            break;
+        case NKikimrCms::TAction::DRAIN_NODE:
+            ConvertAction(permission.GetAction(), *actionState.mutable_action()->mutable_drain_action());
+            break;
+        }
         ConvertActionUid(taskUid, permission.GetId(), *actionState.mutable_action_uid());
 
         actionState.set_status(Ydb::Maintenance::ActionState::ACTION_STATUS_PERFORMED);
@@ -194,6 +217,35 @@ private:
     const TCmsStatePtr CmsState;
 
 }; // TAdapterActor
+
+class THiveInteractor {
+protected:
+    TActorId HivePipe(const TActorContext& ctx) {
+        if (HivePipeActor == TActorId()) {
+            auto hiveId = AppData()->DomainsInfo->GetHive();
+            NTabletPipe::TClientConfig config;
+            config.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
+            auto* client = NTabletPipe::CreateClient(ctx.SelfID, hiveId, config);
+            HivePipeActor = ctx.Register(client);
+        }
+        return HivePipeActor;
+    }
+
+    void Close(const TActorContext& ctx) {
+        if (HivePipeActor) {
+            NTabletPipe::CloseClient(ctx, HivePipeActor);
+            HivePipeActor = TActorId();
+        }
+    }
+
+    ui64 NewCookie() {
+        return ++Cookie;
+    }
+
+private:
+    TActorId HivePipeActor;
+    ui64 Cookie = 0;
+};
 
 class TListClusterNodes: public TAdapterActor<
         TListClusterNodes,
@@ -271,12 +323,27 @@ public:
 
 class TCompositeActionGroupHandler {
 protected:
+    using TActionIdx = std::pair<int, int>; // [group idx, action idx]
+
     template <typename TResult>
     Ydb::Maintenance::ActionGroupStates* GetActionGroupState(TResult& result) const {
         if (HasSingleCompositeActionGroup && !result.action_group_states().empty()) {
             return result.mutable_action_group_states(0);
         }
         return result.add_action_group_states();
+    }
+
+    template <typename TResult>
+    TActionIdx GetLastIdx(const TResult& result) const {
+        Y_ABORT_UNLESS(!result.action_group_states().empty());
+        int groupIdx = result.action_group_states_size() - 1;
+        int actionIdx = result.action_group_states(groupIdx).action_states_size() - 1;
+        return {groupIdx, actionIdx};
+    }
+
+    template <typename TResult>
+    Ydb::Maintenance::ActionState* GetActionState(TResult& result, TActionIdx idx) const {
+        return result.mutable_action_group_states(idx.first)->mutable_action_states(idx.second);
     }
 
 protected:
@@ -377,23 +444,41 @@ public:
 class TCreateMaintenanceTask: public TPermissionResponseProcessor<
         TCreateMaintenanceTask,
         TEvCms::TEvCreateMaintenanceTaskRequest>
+        , public THiveInteractor
 {
+    using EActionCase = Ydb::Maintenance::Action::ActionCase;
+    using EScopeCase = Ydb::Maintenance::ActionScope::ScopeCase;
+
+    template<EActionCase>
+    static std::vector<EScopeCase> SupportedScopes();
+
+    template<>
+    std::vector<EScopeCase> SupportedScopes<EActionCase::kLockAction>() {
+        return {EScopeCase::kNodeId, EScopeCase::kHost, EScopeCase::kPdisk};
+    }
+
+    template<>
+    std::vector<EScopeCase> SupportedScopes<EActionCase::kDrainAction>() {
+        return {EScopeCase::kNodeId};
+    }
+
+    template <EActionCase Action>
     bool ValidateScope(const Ydb::Maintenance::ActionScope& scope) {
-        switch (scope.scope_case()) {
-        case Ydb::Maintenance::ActionScope::kNodeId:
-        case Ydb::Maintenance::ActionScope::kHost:
-        case Ydb::Maintenance::ActionScope::kPdisk:
-            return true;
-        default:
-            Reply(Ydb::StatusIds::BAD_REQUEST, "Unknown scope");
+        const auto supportedScopes = SupportedScopes<Action>();
+        const auto it = std::find(supportedScopes.begin(), supportedScopes.end(), scope.scope_case());
+        if (it == supportedScopes.end()) {
+            Reply(Ydb::StatusIds::BAD_REQUEST, "Unsupported scope");
             return false;
         }
+        return true;
     }
 
     bool ValidateAction(const Ydb::Maintenance::Action& action) {
         switch (action.action_case()) {
-        case Ydb::Maintenance::Action::kLockAction:
-            return ValidateScope(action.lock_action().scope());
+        case EActionCase::kLockAction:
+            return ValidateScope<EActionCase::kLockAction>(action.lock_action().scope());
+        case EActionCase::kDrainAction:
+            return ValidateScope<EActionCase::kDrainAction>(action.lock_action().scope());
         default:
             Reply(Ydb::StatusIds::BAD_REQUEST, "Unknown action");
             return false;
@@ -443,10 +528,7 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
         out = Sprintf("pdisk-%" PRIu32 "-%" PRIu32, pdiskId.node_id(), pdiskId.pdisk_id());
     }
 
-    static void ConvertAction(const Ydb::Maintenance::LockAction& action, NKikimrCms::TAction& cmsAction) {
-        cmsAction.SetDuration(TimeUtil::DurationToMicroseconds(action.duration()));
-
-        const auto& scope = action.scope();
+    static void ConvertScope(const Ydb::Maintenance::ActionScope& scope, NKikimrCms::TAction& cmsAction) {
         switch (scope.scope_case()) {
         case Ydb::Maintenance::ActionScope::kNodeId:
             cmsAction.SetType(NKikimrCms::TAction::SHUTDOWN_HOST);
@@ -471,6 +553,19 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
         default:
             Y_ABORT("unreachable");
         }
+    }
+
+    static void ConvertAction(const Ydb::Maintenance::LockAction& action, NKikimrCms::TAction& cmsAction) {
+        cmsAction.SetType(NKikimrCms::TAction::SHUTDOWN_HOST);
+        cmsAction.SetDuration(TimeUtil::DurationToMicroseconds(action.duration()));
+
+        ConvertScope(action.scope(), cmsAction);
+    }
+
+    static void ConvertAction(const Ydb::Maintenance::DrainAction& action, NKikimrCms::TAction& cmsAction) {
+        cmsAction.SetType(NKikimrCms::TAction::DRAIN_NODE);
+
+        ConvertScope(action.scope(), cmsAction);
     }
 
     void ConvertRequest(const TString& user, const Ydb::Maintenance::CreateMaintenanceTaskRequest& request,
@@ -499,12 +594,58 @@ class TCreateMaintenanceTask: public TPermissionResponseProcessor<
             for (const auto& action : group.actions()) {
                 if (action.has_lock_action()) {
                     ConvertAction(action.lock_action(), *cmsRequest.AddActions());
+                } else if (action.has_drain_action()) {
+                    int actionNo = cmsRequest.ActionsSize();
+                    ConvertAction(action.drain_action(), *cmsRequest.AddActions());
+                    ui32 nodeId = action.drain_action().scope().node_id();
+                    Send(HivePipe(TActivationContext::AsActorContext()), new TEvHive::TEvDrainNode(nodeId), 0, actionNo);
+                    PendingDrainActions.insert(actionNo);
                 } else {
                     Y_ABORT("unreachable");
                 }
             }
         }
     }
+
+    void CheckPendingDrainActions() {
+        if (PendingDrainActions.empty()) {
+            Send(CmsActorId, std::move(CmsRequest));
+            Become(&TThis::StateWork);
+        }
+    }
+
+    void Handle(TEvHive::TEvDrainNodeAck::TPtr& ev) {
+        int actionNo = ev->Cookie;
+        if (!PendingDrainActions.erase(actionNo)) {
+            return;
+        }
+        ui64 drainSeqNo = ev->Get()->Record.GetSeqNo();
+        CmsRequest->Record.MutableActions(actionNo)->SetMaintenanceTaskContext(ToString(drainSeqNo));
+        CheckPendingDrainActions();
+    }
+
+    void Handle(TEvHive::TEvDrainNodeResult::TPtr& ev) {
+        auto status = ev->Get()->Record.GetStatus();
+        if (status != NKikimrProto::OK) {
+            Reply(Ydb::StatusIds::GENERIC_ERROR, "Drain failed");
+        }
+    }
+
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
+        THiveInteractor::Close(TActivationContext::AsActorContext());
+    }
+
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev)
+    {
+        TEvTabletPipe::TEvClientConnected *msg = ev->Get();
+        if (msg->Status != NKikimrProto::OK) {
+            THiveInteractor::Close(TActivationContext::AsActorContext());
+        }
+    }
+
+private:
+    THolder<TEvCms::TEvPermissionRequest> CmsRequest = MakeHolder<TEvCms::TEvPermissionRequest>();
+    std::unordered_set<int> PendingDrainActions;
 
 public:
     using TBase::TBase;
@@ -517,18 +658,32 @@ public:
             return;
         }
 
-        auto cmsRequest = MakeHolder<TEvCms::TEvPermissionRequest>();
-        ConvertRequest(user, request, cmsRequest->Record);
+        ConvertRequest(user, request, CmsRequest->Record);
 
-        Send(CmsActorId, std::move(cmsRequest));
-        Become(&TThis::StateWork);
+        Become(&TThis::StateWaitHive);
+
+        CheckPendingDrainActions();
     }
 
     const TString& GetTaskUid() const {
         return Request->Get()->Record.GetRequest().task_options().task_uid();
     }
 
-    // using processor's handler
+    void Die(const TActorContext& ctx) override {
+        THiveInteractor::Close(ctx);
+        return TBase::Die(ctx);
+    }
+
+    STFUNC(StateWaitHive) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(TEvHive::TEvDrainNodeAck, Handle);
+            hFunc(TEvHive::TEvDrainNodeResult, Handle);
+            hFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+        }
+    }
+
+    // using processor's handler for StateWork
 
 }; // TCreateMaintenanceTask
 
@@ -603,6 +758,7 @@ class TGetMaintenanceTask
         TEvCms::TEvGetMaintenanceTaskRequest,  
         TEvCms::TEvGetMaintenanceTaskResponse>  
     , public TCompositeActionGroupHandler 
+    , public THiveInteractor
 {
 public:
     using TBase::TBase;
@@ -618,36 +774,48 @@ public:
 
         const auto& task = it->second;
         HasSingleCompositeActionGroup = task.HasSingleCompositeActionGroup;
+        Response->Record.SetStatus(Ydb::StatusIds::SUCCESS);
 
-        if (!cmsState->ScheduledRequests.contains(task.RequestId)) {
-            auto response = MakeHolder<TEvCms::TEvGetMaintenanceTaskResponse>();
-            response->Record.SetStatus(Ydb::StatusIds::SUCCESS);
+        auto& result = *Response->Record.MutableResult();
+        result.mutable_task_options()->set_task_uid(taskUid);
+        ConvertInstant(task.CreateTime, *result.mutable_create_time());
+        ConvertInstant(task.LastRefreshTime, *result.mutable_last_refresh_time());
+        ConvertPermissions(task, result);
 
-            auto& result = *response->Record.MutableResult();
-            result.mutable_task_options()->set_task_uid(taskUid);
-            ConvertInstant(task.CreateTime, *result.mutable_create_time());
-            ConvertInstant(task.LastRefreshTime, *result.mutable_last_refresh_time());
 
-            // performed actions
-            for (const auto& id : task.Permissions) {
-                if (!cmsState->Permissions.contains(id)) {
-                    continue;
-                }
+        if (cmsState->ScheduledRequests.contains(task.RequestId)) {
+            auto cmsRequest = MakeHolder<TEvCms::TEvManageRequestRequest>();
+            cmsRequest->Record.SetUser(task.Owner);
+            cmsRequest->Record.SetRequestId(task.RequestId);
+            cmsRequest->Record.SetCommand(NKikimrCms::TManageRequestRequest::GET);
 
-                ConvertPermission(taskUid, cmsState->Permissions.at(id),
-                    *GetActionGroupState(result)->add_action_states());
+            Send(CmsActorId, std::move(cmsRequest));
+            WaitingForCms = true;
+        }
+        Become(&TThis::StateWork);
+
+        MaybeReply();
+    }
+
+    void ConvertPermissions(const TTaskInfo& task, Ydb::Maintenance::GetMaintenanceTaskResult& result) {
+        auto cmsState = GetCmsState();
+        const auto& taskUid = GetTaskUid();
+        for (const auto& id : task.Permissions) {
+            if (!cmsState->Permissions.contains(id)) {
+                continue;
             }
 
-            return Reply(std::move(response));
+            const auto& permission = cmsState->Permissions.at(id);
+            ConvertPermission(taskUid, permission, *GetActionGroupState(result)->add_action_states());
+            if (permission.Action.GetType() == NKikimrCms::TAction::DRAIN_NODE) {
+                TActionIdx actionIdx = GetLastIdx(result);
+                ui64 cookie = NewCookie();
+                PendingDrainActions[cookie] = actionIdx;
+                ui32 nodeId = FromString(permission.Action.GetHost());
+
+                Send(HivePipe(TActivationContext::AsActorContext()), new TEvHive::TEvRequestDrainInfo(nodeId), 0, cookie);
+            }
         }
-
-        auto cmsRequest = MakeHolder<TEvCms::TEvManageRequestRequest>();
-        cmsRequest->Record.SetUser(task.Owner);
-        cmsRequest->Record.SetRequestId(task.RequestId);
-        cmsRequest->Record.SetCommand(NKikimrCms::TManageRequestRequest::GET);
-
-        Send(CmsActorId, std::move(cmsRequest));
-        Become(&TThis::StateWork);
     }
 
     const TString& GetTaskUid() const {
@@ -657,10 +825,20 @@ public:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvCms::TEvManageRequestResponse, Handle);
+            hFunc(TEvHive::TEvResponseDrainInfo, Handle);
+            hFunc(TEvTabletPipe::TEvClientConnected, Handle);
+            hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
+        }
+    }
+
+    void MaybeReply() {
+        if (PendingDrainActions.empty() && !WaitingForCms) {
+            Reply(std::move(Response));
         }
     }
 
     void Handle(TEvCms::TEvManageRequestResponse::TPtr& ev) {
+        WaitingForCms = false;
         const auto& taskUid = GetTaskUid();
         const auto& record = ev->Get()->Record;
 
@@ -674,9 +852,8 @@ public:
         }
 
         auto response = MakeHolder<TEvCms::TEvGetMaintenanceTaskResponse>();
-        response->Record.SetStatus(Ydb::StatusIds::SUCCESS);
 
-        auto& result = *response->Record.MutableResult();
+        auto& result = *Response->Record.MutableResult();
         for (const auto& request : record.GetRequests()) {
             auto& opts = *result.mutable_task_options();
             opts.set_task_uid(taskUid);
@@ -690,26 +867,67 @@ public:
             }
         }
 
-        auto cmsState = GetCmsState();
-        // performed actions
-        if (cmsState->MaintenanceTasks.contains(taskUid)) {
-            const auto& task = cmsState->MaintenanceTasks.at(taskUid);
+        MaybeReply();
+    }
 
-            ConvertInstant(task.CreateTime, *result.mutable_create_time());
-            ConvertInstant(task.LastRefreshTime, *result.mutable_last_refresh_time());
+    void Handle(TEvHive::TEvResponseDrainInfo::TPtr& ev) {
+        auto cookie = ev->Cookie;
+        auto it = PendingDrainActions.find(cookie);
+        if (it == PendingDrainActions.end()) {
+            return;
+        }
+        TActionIdx actionIdx = it->second;
+        PendingDrainActions.erase(it);
 
-            for (const auto& id : task.Permissions) {
-                if (!cmsState->Permissions.contains(id)) {
-                    continue;
-                }
+        auto& result = *Response->Record.MutableResult();
+        auto& actionInfo = *GetActionState(result, actionIdx);
+        const auto& record = ev->Get()->Record;
 
-                ConvertPermission(taskUid, cmsState->Permissions.at(id),
-                    *GetActionGroupState(result)->add_action_states());
-            }
+        auto nodeId = record.GetNodeId();
+        if (nodeId == 0) {
+            actionInfo.set_status(Ydb::Maintenance::ActionState::ACTION_STATUS_UNSPECIFIED);
         }
 
-        Reply(std::move(response));
+        auto cmsState = GetCmsState();
+        auto permissionId = actionInfo.action_uid().action_id();
+        auto cmsIt = cmsState->Permissions.find(permissionId);
+        if (cmsIt == cmsState->Permissions.end()) {
+            MaybeReply();
+            return;
+        }
+        ui64 expectedSeqNo = FromString(cmsIt->second.Action.GetMaintenanceTaskContext());
+        ui64 seqNo = record.GetDrainSeqNo();
+        if (seqNo > expectedSeqNo || (seqNo == expectedSeqNo && !record.GetDrainInProgress())) {
+            actionInfo.set_status(Ydb::Maintenance::ActionState::ACTION_STATUS_PERFORMED);
+        } else if (seqNo == expectedSeqNo && record.GetDrainInProgress()) {
+            actionInfo.set_status(Ydb::Maintenance::ActionState::ACTION_STATUS_IN_PROGRESS);
+        } else {
+            actionInfo.set_status(Ydb::Maintenance::ActionState::ACTION_STATUS_UNSPECIFIED);
+        }
+
+        MaybeReply();
     }
+
+    void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
+        THiveInteractor::Close(TActivationContext::AsActorContext());
+    }
+
+    void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev)
+    {
+        TEvTabletPipe::TEvClientConnected *msg = ev->Get();
+        if (msg->Status != NKikimrProto::OK) {
+            THiveInteractor::Close(TActivationContext::AsActorContext());
+        }
+    }
+
+    void Die(const TActorContext& ctx) override {
+        THiveInteractor::Close(ctx);
+        return TBase::Die(ctx);
+    }
+
+    THolder<TEvCms::TEvGetMaintenanceTaskResponse> Response = MakeHolder<TEvCms::TEvGetMaintenanceTaskResponse>();
+    std::unordered_map<ui64, TActionIdx> PendingDrainActions;
+    bool WaitingForCms = false;
 
 }; // TGetMaintenanceTask
 

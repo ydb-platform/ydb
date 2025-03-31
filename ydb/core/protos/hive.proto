@@ -384,6 +384,10 @@ message TEvDrainNodeResult {
     optional uint32 Movements = 2;
 }
 
+message TEvDrainNodeAck {
+    optional uint64 SeqNo = 1;
+}
+
 message TEvFillNode {
     optional uint32 NodeID = 1;
 }
@@ -635,4 +639,14 @@ message TEvConfigureScaleRecommender {
 
 message TEvConfigureScaleRecommenderReply {
     optional NKikimrProto.EReplyStatus Status = 1;
+}
+
+message TEvRequestDrainInfo {
+    optional uint32 NodeId = 1;
+}
+
+message TEvResponseDrainInfo {
+    optional uint32 NodeId = 1;
+    optional uint64 DrainSeqNo = 2;
+    optional bool DrainInProgress = 3;
 }

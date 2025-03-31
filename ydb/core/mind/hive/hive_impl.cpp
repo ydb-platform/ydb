@@ -2187,7 +2187,7 @@ void THive::Handle(TEvHive::TEvDrainNode::TPtr& ev) {
         .Persist = ev->Get()->Record.GetPersist(),
         .DownPolicy = policy,
         .DrainInFlight = ev->Get()->Record.GetDrainInFlight(),
-    }, ev->Sender, ev->Get()->Record.GetSeqNo()));
+    }, ev->Sender, ev->Get()->Record.GetSeqNo(), ev->Cookie));
 }
 
 void THive::Handle(TEvHive::TEvFillNode::TPtr& ev) {

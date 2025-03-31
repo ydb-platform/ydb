@@ -15,14 +15,8 @@
                     "args":
                       [
                         {
-                          "op_name":"HashShuffle",
-                          "args":
-                            [
-                              {
-                                "op_name":"TableFullScan",
-                                "table":"customer"
-                              }
-                            ]
+                          "op_name":"TableFullScan",
+                          "table":"customer"
                         },
                         {
                           "op_name":"HashShuffle",
@@ -43,14 +37,8 @@
               "args":
                 [
                   {
-                    "op_name":"HashShuffle",
-                    "args":
-                      [
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"lineitem"
-                        }
-                      ]
+                    "op_name":"TableFullScan",
+                    "table":"lineitem"
                   }
                 ]
             }

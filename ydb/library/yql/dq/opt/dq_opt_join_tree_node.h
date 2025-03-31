@@ -1,6 +1,6 @@
 #pragma once
 
-#include <yql/essentials/core/cbo/cbo_optimizer_new.h> 
+#include <yql/essentials/core/cbo/cbo_optimizer_new.h>
 
 const TString& ToString(NYql::EJoinKind);
 const TString& ToString(NYql::EJoinAlgoType);
@@ -19,15 +19,15 @@ namespace NYql::NDq {
 */
 struct TJoinOptimizerNodeInternal : public IBaseOptimizerNode {
     TJoinOptimizerNodeInternal(
-        const std::shared_ptr<IBaseOptimizerNode>& left, 
+        const std::shared_ptr<IBaseOptimizerNode>& left,
         const std::shared_ptr<IBaseOptimizerNode>& right,
         const TVector<TJoinColumn>& leftJoinKeys,
-        const TVector<TJoinColumn>& rightJoinKeys, 
-        const EJoinKind joinType, 
+        const TVector<TJoinColumn>& rightJoinKeys,
+        const EJoinKind joinType,
         const EJoinAlgoType joinAlgo,
         const bool leftAny,
         const bool rightAny
-    ) 
+    )
         : IBaseOptimizerNode(JoinNodeType)
         , LeftArg(left)
         , RightArg(right)
@@ -55,9 +55,9 @@ struct TJoinOptimizerNodeInternal : public IBaseOptimizerNode {
         stream << ToString(JoinType) << "," << ToString(JoinAlgo) << " ";
 
         for (size_t i = 0; i < LeftJoinKeys.size(); ++i){
-            stream 
+            stream
                 << LeftJoinKeys[i].RelName << "." << LeftJoinKeys[i].AttributeName
-                << "=" 
+                << "="
                 << RightJoinKeys[i].RelName << "." << RightJoinKeys[i].AttributeName << ",";
         }
         stream << "\n";
@@ -75,7 +75,7 @@ struct TJoinOptimizerNodeInternal : public IBaseOptimizerNode {
             stream << "   ";
         }
         stream << "  ";
-        stream << "Shuffled By: " << ShuffleRightSideByOrderingIdx << "\n"; 
+        stream << "Shuffled By: " << ShuffleRightSideByOrderingIdx << "\n";
         RightArg->Print(stream, ntabs + 1);
     }
 
@@ -90,7 +90,7 @@ struct TJoinOptimizerNodeInternal : public IBaseOptimizerNode {
 
     // for interesting orderings framework
     std::int64_t ShuffleLeftSideByOrderingIdx  = -1;
-    std::int64_t ShuffleRightSideByOrderingIdx = -1; 
+    std::int64_t ShuffleRightSideByOrderingIdx = -1;
 };
 
 /**
@@ -118,7 +118,8 @@ std::shared_ptr<TJoinOptimizerNodeInternal> MakeJoinInternal(
 */
 std::shared_ptr<TJoinOptimizerNode> ConvertFromInternal(
     const std::shared_ptr<IBaseOptimizerNode>& internal,
-    const TFDStorage& fdStorage
+    const TFDStorage& fdStorage,
+    bool enableShuffleElimination
 );
 
 } // namespace NYql::NDq

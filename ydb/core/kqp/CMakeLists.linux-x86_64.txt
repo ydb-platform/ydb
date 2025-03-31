@@ -42,6 +42,7 @@ add_subdirectory(proxy_service)
 add_subdirectory(run_script_actor)
 add_subdirectory(finalize_script_service)
 add_subdirectory(ut)
+add_subdirectory(tools)
 add_subdirectory(tests)
 
 add_library(ydb-core-kqp INTERFACE)

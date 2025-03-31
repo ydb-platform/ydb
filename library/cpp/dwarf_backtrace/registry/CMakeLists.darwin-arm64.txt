@@ -12,18 +12,11 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(registry)
-
-add_library(library-cpp-dwarf_backtrace)
+add_library(cpp-dwarf_backtrace-registry INTERFACE)
 
 
-target_link_libraries(library-cpp-dwarf_backtrace PUBLIC
+target_link_libraries(cpp-dwarf_backtrace-registry INTERFACE
   contrib-libs-cxxsupp
   yutil
-  contrib-libs-backtrace
-)
-
-target_sources(library-cpp-dwarf_backtrace PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/dwarf_backtrace/backtrace.cpp
 )
 

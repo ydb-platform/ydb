@@ -12,18 +12,40 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_subdirectory(registry)
-
-add_library(library-cpp-dwarf_backtrace)
+add_executable(combiner_perf)
 
 
-target_link_libraries(library-cpp-dwarf_backtrace PUBLIC
+target_compile_options(combiner_perf PRIVATE
+  -DUSE_CURRENT_UDF_ABI_VERSION
+)
+
+target_link_libraries(combiner_perf PUBLIC
+  contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  contrib-libs-backtrace
+  kqp-tools-combiner_perf
+  cpp-lfalloc-alloc_profiler
+  library-cpp-dwarf_backtrace
+  cpp-dwarf_backtrace-registry
 )
 
-target_sources(library-cpp-dwarf_backtrace PRIVATE
-  ${PROJECT_SOURCE_DIR}/library/cpp/dwarf_backtrace/backtrace.cpp
+target_allocator(combiner_perf
+  cpp-lfalloc-dbg
 )
 
+target_link_options(combiner_perf PRIVATE
+  -ldl
+  -lrt
+  -Wl,--no-as-needed
+  -fPIC
+  -fPIC
+  -lrt
+  -ldl
+)
+
+target_sources(combiner_perf PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/tools/combiner_perf/bin/main.cpp
+)
+
+
+vcs_info(combiner_perf)

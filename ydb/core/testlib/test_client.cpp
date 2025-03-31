@@ -66,6 +66,7 @@
 #include <ydb/core/kafka_proxy/kafka_listener.h>
 #include <ydb/core/kafka_proxy/actors/kafka_metadata_actor.h>
 #include <ydb/core/kafka_proxy/kafka_metrics.h>
+#include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
@@ -1406,7 +1407,10 @@ namespace Tests {
 
             IActor* discoveryCache = CreateDiscoveryCache(NGRpcService::KafkaEndpointId);
             TActorId discoveryCacheId = Runtime->Register(discoveryCache, nodeIdx, userPoolId);
-	    Runtime->RegisterService(NKafka::MakeKafkaDiscoveryCacheID(), discoveryCacheId, nodeIdx);
+	        Runtime->RegisterService(NKafka::MakeKafkaDiscoveryCacheID(), discoveryCacheId, nodeIdx);
+            
+            TActorId kafkaTxnCoordinatorActorId = Runtime->Register(NKafka::CreateKafkaTransactionsCoordinator(), nodeIdx, userPoolId);
+	        Runtime->RegisterService(NKafka::MakeKafkaTransactionsServiceID(), kafkaTxnCoordinatorActorId, nodeIdx);
 
             NKafka::TListenerSettings settings;
             settings.Port = Settings->AppConfig->GetKafkaProxyConfig().GetListeningPort();
@@ -1417,7 +1421,7 @@ namespace Tests {
             }
 
             IActor* actor = NKafka::CreateKafkaListener(MakePollerActorId(), settings, Settings->AppConfig->GetKafkaProxyConfig(),
-                                                        discoveryCacheId);
+                                                        discoveryCacheId, kafkaTxnCoordinatorActorId);
             TActorId actorId = Runtime->Register(actor, nodeIdx, userPoolId);
             Runtime->RegisterService(TActorId{}, actorId, nodeIdx);
 

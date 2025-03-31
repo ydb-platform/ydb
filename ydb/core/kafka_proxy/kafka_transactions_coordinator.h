@@ -18,8 +18,8 @@ namespace NKafka {
         using TBase = NActors::TActorBootstrapped<TKafkaTransactionsCoordinator>;
     
         struct TProducerState {
-            i64 ProducerId;
-            i32 ProducerEpoch;
+            i64 Id;
+            i32 Epoch;
         };
 
         struct TTransactionalRequest {
@@ -45,6 +45,7 @@ namespace NKafka {
                     HFunc(TEvKafka::TEvAddOffsetsToTxnRequest, Handle);
                     HFunc(TEvKafka::TEvTxnOffsetCommitRequest, Handle);
                     HFunc(TEvKafka::TEvEndTxnRequest, Handle);
+                    HFunc(TEvents::TEvPoison, Handle);
                 }
             }
             
@@ -56,9 +57,11 @@ namespace NKafka {
             void Handle(TEvKafka::TEvAddOffsetsToTxnRequest::TPtr& ev, const TActorContext& ctx);
             void Handle(TEvKafka::TEvTxnOffsetCommitRequest::TPtr& ev, const TActorContext& ctx);
             void Handle(TEvKafka::TEvEndTxnRequest::TPtr& ev, const TActorContext& ctx);
+            // Will kill all txn actors
+            void Handle(TEvents::TEvPoison::TPtr& ev, const TActorContext& ctx);
 
             template<class ErrorResponseType, class EventType>
-            void HandleTransacationalRequest(TAutoPtr<TEventHandle<EventType>>& evHandle, const TActorContext& ctx);
+            void HandleTransactionalRequest(TAutoPtr<TEventHandle<EventType>>& evHandle, const TActorContext& ctx);
             template<class ErrorResponseType, class RequestType>
             void SendProducerFencedResponse(TMessagePtr<RequestType> kafkaRequest, const TString& error, const TTransactionalRequest& request);
             template<class EventType> 
@@ -77,6 +80,13 @@ namespace NKafka {
             std::unordered_map<TString, TActorId> TxnActorByTransactionalId;
     };
 
-    NActors::IActor* CreateKafkaTransactionsCoordinator();
+    inline NActors::IActor* CreateKafkaTransactionsCoordinator() {
+        return new TKafkaTransactionsCoordinator();
+    };
+
+    inline TActorId MakeKafkaTransactionsServiceID() {
+        static const char x[12] = "kafka_txns";
+        return TActorId(0, TStringBuf(x, 12));
+    };
     
 } // namespace NKafka

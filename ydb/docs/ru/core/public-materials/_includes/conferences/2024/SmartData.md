@@ -2,7 +2,7 @@
 
 {% include notitle [testing_tag](../../tags.md#testing) %}
 
-[{{ team.ivanov.name }}]({{ team.ivanov.profile }}) ({{ team.ivanov.position }}) и [{{ team.bondar.name }}]({{ team.bondar.profile }}) ({{ team.bondar.position }}) рассказали, чем отличаются распределенные СУБД от шардированных. Особое внимание уделили тому, почему Citus-подобные решения не ACID в случае широких транзакций. В конце выступления на примере бенчмарка TPC-C показали, что в PostgreSQL вертикальное масштабирование ограничено ботлнеком в синхронной репликации, и сравнили производительность PostgreSQL и распределенных СУБД CockroachDB и YDB.
+[{{ team.ivanov.name }}]({{ team.ivanov.profile }}) ({{ team.ivanov.position }}) и [{{ team.bondar.name }}]({{ team.bondar.profile }}) ({{ team.bondar.position }}) рассказали, чем отличаются распределённые СУБД от шардированных. Особое внимание уделили тому, почему решения, подобные Citus, не являются ACID в случае широких транзакций. В конце выступления на примере бенчмарка TPC-C показали, что в PostgreSQL вертикальное масштабирование ограничено ботлнеком в синхронной репликации, и сравнили производительность PostgreSQL и распределённых СУБД CockroachDB и YDB.
 
 @[YouTube](https://youtu.be/BDpLLmV37hY)
 

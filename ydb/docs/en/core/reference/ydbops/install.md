@@ -35,7 +35,7 @@ The `ydbops` executable will be available in the repository root folder.
 
 #### Installing
 
-You can copy executable file manually or use `make`
+You can copy the executable file manually or use `make`:
 
 ```bash
 make install INSTALL_DIR=install_folder BUILD_DIR=.

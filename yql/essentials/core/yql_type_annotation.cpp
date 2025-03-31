@@ -303,7 +303,7 @@ IGraphTransformer::TStatus TTypeAnnotationContext::SetColumnOrder(const TExprNod
         allColumns.erase(it);
     }
 
-    if (!allColumns.empty()) {
+    if (!allColumns.empty() && !(allColumns.size() == 1 && *allColumns.begin() == BlockLengthColumnName)) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
             TStringBuilder() << "Some columns are left unordered with column order " << FormatColumnOrder(columnOrder) << " for node "
                              << node.Content() << " with type: " << *node.GetTypeAnn()));

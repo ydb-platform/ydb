@@ -11,4 +11,14 @@ TPartitionWorkZone::TPartitionWorkZone(const TPartitionId& partition)
 {
 }
 
+bool TPartitionWorkZone::PositionInBody(ui64 offset, ui32 partNo) const
+{
+    return offset < Head.Offset || ((Head.Offset == offset) && (partNo < Head.PartNo));
+}
+
+bool TPartitionWorkZone::PositionInHead(ui64 offset, ui32 partNo) const
+{
+    return Head.Offset < offset || ((Head.Offset == offset) && (Head.PartNo < partNo));
+}
+
 }

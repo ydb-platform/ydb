@@ -2,6 +2,7 @@
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/abstract/optimizer.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/sbuckets/counters/counters.h>
 #include <ydb/core/tx/columnshard/engines/storage/optimizer/sbuckets/index/index.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr::NOlap::NStorageOptimizer::NSBuckets {
 
@@ -73,7 +74,7 @@ public:
         Buckets.ResetLogic(logic);
     }
 
-    TOptimizerPlanner(const ui64 pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
+    TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
         const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::shared_ptr<IOptimizationLogic>& logic);
 };
 

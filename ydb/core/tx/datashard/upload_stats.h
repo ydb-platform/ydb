@@ -56,7 +56,10 @@ struct TUploadStatus {
     }
 
     bool IsRetriable() const {
-        return StatusCode == Ydb::StatusIds::UNAVAILABLE || StatusCode == Ydb::StatusIds::OVERLOADED;
+        return StatusCode == Ydb::StatusIds::UNAVAILABLE
+            || StatusCode == Ydb::StatusIds::OVERLOADED
+            || StatusCode == Ydb::StatusIds::TIMEOUT
+            ;
     }
 
     TString ToString() const {
@@ -78,8 +81,8 @@ struct TUploadRetryLimits {
 };
 
 struct TUploadLimits: TUploadRetryLimits {
-    ui64 BatchRowsLimit = 500;
-    ui64 BatchBytesLimit = 1u << 23; // 8MB
+    ui64 BatchRowsLimit = 50000;
+    ui64 BatchBytesLimit = 8388608; // 8MB
 };
 
 }

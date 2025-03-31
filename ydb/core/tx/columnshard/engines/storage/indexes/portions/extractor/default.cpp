@@ -46,9 +46,6 @@ bool TDefaultDataExtractor::DoCheckForIndex(const NRequest::TOriginalDataAddress
                 return std::string_view(request.GetSubColumnName().data(), request.GetSubColumnName().size());
             }
         }();
-        if (sv.starts_with("\"") && sv.ends_with("\"")) {
-            sv = std::string_view(sv.data() + 1, sv.size() - 2);
-        }
         hashBase = NRequest::TOriginalDataAddress::CalcSubColumnHash(sv);
     }
     return true;

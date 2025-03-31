@@ -7,6 +7,13 @@ class TDefaultFetchLogic: public IKernelFetchLogic {
 private:
     using TBase = IKernelFetchLogic;
 
+    std::shared_ptr<NArrow::NAccessor::TColumnLoader> GetColumnLoader(const std::shared_ptr<NCommon::IDataSource>& source) const {
+        if (auto loader = source->GetSourceSchema()->GetColumnLoaderOptional(GetEntityId())) {
+            return loader;
+        }
+        return source->GetContext()->GetReadMetadata()->GetResultSchema()->GetColumnLoaderVerified(GetEntityId());
+    }
+
     class TChunkRestoreInfo {
     private:
         std::optional<TBlobRange> BlobRange;
@@ -36,6 +43,7 @@ private:
 
         void SetBlobData(const TString& data) {
             AFL_VERIFY(!Data);
+            BlobRange.reset();
             Data.emplace(data);
         }
     };
@@ -49,8 +57,7 @@ private:
             chunks.emplace_back(i.ExtractDataVerified());
         }
 
-        TPortionDataAccessor::TPreparedColumn column(
-            std::move(chunks), context.GetSource()->GetSourceSchema()->GetColumnLoaderVerified(GetEntityId()));
+        TPortionDataAccessor::TPreparedColumn column(std::move(chunks), GetColumnLoader(context.GetSource()));
         context.GetAccessors().AddVerified(GetEntityId(), column.AssembleAccessor().DetachResult(), true);
     }
 
@@ -71,8 +78,8 @@ private:
         auto source = context.GetSource();
         auto columnChunks = source->GetStageData().GetPortionAccessor().GetColumnChunksPointers(GetEntityId());
         if (columnChunks.empty()) {
-            ColumnChunks.emplace_back(source->GetRecordsCount(), TPortionDataAccessor::TAssembleBlobInfo(source->GetRecordsCount(),
-                                                                     source->GetSourceSchema()->GetExternalDefaultValueVerified(GetEntityId())));
+            ColumnChunks.emplace_back(source->GetRecordsCount(),
+                TPortionDataAccessor::TAssembleBlobInfo(source->GetRecordsCount(), GetColumnLoader(context.GetSource())->GetDefaultValue()));
             return;
         }
         StorageId = source->GetColumnStorageId(GetEntityId());

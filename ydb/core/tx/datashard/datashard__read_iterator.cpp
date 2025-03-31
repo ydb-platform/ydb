@@ -294,7 +294,7 @@ class TReader {
     absl::flat_hash_set<ui64> VolatileReadDependencies;
     bool VolatileWaitForCommit = false;
 
-    const bool UseNewPrecharge;
+    const bool UsePrechargeForExtBlobs;
 
     enum class EReadStatus {
         Done,
@@ -317,7 +317,7 @@ public:
         , FirstUnprocessedQuery(State.FirstUnprocessedQuery)
         , LastProcessedKey(State.LastProcessedKey)
         , LastProcessedKeyErased(State.LastProcessedKeyErased)
-        , UseNewPrecharge(Self->GetUseNewPrecharge())
+        , UsePrechargeForExtBlobs(Self->GetUsePrechargeForExtBlobs())
     {
         GetTimeFast(&StartTime);
         EndTime = StartTime;
@@ -470,7 +470,9 @@ public:
         TTransactionContext& txc,
         ui32 queryIndex)
     {
-        if (UseNewPrecharge) {
+        if (UsePrechargeForExtBlobs) {
+            // This is slower for a general case, but faster for the case when we know 
+            // that we have external blobs.
             ui64 rowsLeft = GetRowsLeft();
             ui64 prechargedRowsSize = 0;
             ui64 prechargedCount = 0;
@@ -487,19 +489,18 @@ public:
                 if (!(queryIndex < State.Request->Keys.size())) {
                     break;
                 }
-                if (!PrechargeKey(txc, State.Request->Keys[queryIndex])) {
+                
+                const auto key = ToRawTypeValue(State.Request->Keys[queryIndex].GetCells(), TableInfo, true);
+
+                NTable::TRowState rowState;
+                rowState.Init(State.Columns.size());
+                NTable::TSelectStats stats;
+                txc.DB.Select(TableInfo.LocalTid, key, State.Columns, rowState, stats, 0, State.ReadVersion);
+
+                if (txc.Env.MissingReferencesSize()) {
                     ready = false;
-                } else {
-                    const auto key = ToRawTypeValue(State.Request->Keys[queryIndex].GetCells(), TableInfo, true);
-
-                    NTable::TRowState rowState;
-                    rowState.Init(State.Columns.size());
-                    NTable::TSelectStats stats;
-                    txc.DB.Select(TableInfo.LocalTid, key, State.Columns, rowState, stats, 0, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
-
-                    if (txc.Env.MissingReferencesSize()) {
-                        prechargedRowsSize += EstimateSize(*rowState);
-                    }
+                    
+                    prechargedRowsSize += EstimateSize(*rowState);
                 }
 
                 prechargedCount++;

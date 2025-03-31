@@ -2,5 +2,6 @@
 {%- set libraries = target.consumer|selectattr('type', 'eq', 'library') -%}
 {%- set with_kotlin = target.with_kotlin -%}
 {%- set kotlin_version = target.kotlin_version -%}
+{%- set proto_template = true -%}
 
 {%- include "[generator]/jdk.jinja" -%}

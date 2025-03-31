@@ -275,7 +275,7 @@ namespace NKikimr {
             // chunks to commit
             msg->CommitChunks = IsAborting ? TVector<ui32>() : Worker.GetCommitChunks();
 
-            Y_ABORT_UNLESS(emptyWrite == msg->CommitChunks.empty()); // both empty or not
+            Y_VERIFY_S(emptyWrite == msg->CommitChunks.empty(), HullCtx->VCtx->VDiskLogPrefix); // both empty or not
 
             msg->SegVec = IsAborting ? nullptr : std::move(Result);
             msg->FreshSegment = IsAborting ? nullptr : FreshSegment;

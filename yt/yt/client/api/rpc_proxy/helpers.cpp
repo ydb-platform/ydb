@@ -840,6 +840,7 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     YT_OPTIONAL_SET_PROTO(protoJob, finish_time, job.FinishTime);
 
     YT_OPTIONAL_TO_PROTO(protoJob, address, job.Address);
+    YT_OPTIONAL_TO_PROTO(protoJob, addresses, job.Addresses);
     if (job.Progress) {
         protoJob->set_progress(*job.Progress);
     }
@@ -905,6 +906,11 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
     job->StartTime = YT_OPTIONAL_FROM_PROTO(protoJob, start_time, TInstant);
     job->FinishTime = YT_OPTIONAL_FROM_PROTO(protoJob, finish_time, TInstant);
     job->Address = YT_OPTIONAL_FROM_PROTO(protoJob, address);
+    if (protoJob.has_addresses()) {
+        job->Addresses = FromProto<NNodeTrackerClient::TAddressMap>(protoJob.addresses());
+    } else {
+        job->Addresses = {};
+    }
     job->Progress = YT_OPTIONAL_FROM_PROTO(protoJob, progress);
     job->StderrSize = YT_OPTIONAL_FROM_PROTO(protoJob, stderr_size);
     job->FailContextSize = YT_OPTIONAL_FROM_PROTO(protoJob, fail_context_size);

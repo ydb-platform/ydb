@@ -34,6 +34,7 @@ struct TExecutionOptions {
     bool ContinueAfterFail = false;
 
     EExecutionCase ExecutionCase = EExecutionCase::Stream;
+    FederatedQuery::ExecuteMode QueryAction;
 
     bool HasResults() const {
         return !Query.empty();
@@ -42,6 +43,7 @@ struct TExecutionOptions {
     TRequestOptions GetQueryOptions(ui64 queryId) const {
         return {
             .Query = Query,
+            .Action = QueryAction,
             .QueryId = queryId
         };
     }
@@ -331,6 +333,18 @@ protected:
             .Choices(resultFormat.GetChoices())
             .StoreMappedResultT<TString>(&RunnerOptions.ResultOutputFormat, resultFormat);
 
+        options.AddLongOption("ast-file", "File with query ast (use '-' to write in stdout)")
+            .RequiredArgument("file")
+            .StoreMappedResultT<TString>(&RunnerOptions.AstOutput, &GetDefaultOutput);
+
+        options.AddLongOption("plan-file", "File with query plan (use '-' to write in stdout)")
+            .RequiredArgument("file")
+            .StoreMappedResultT<TString>(&RunnerOptions.PlanOutput, &GetDefaultOutput);
+
+        options.AddLongOption("canonical-output", "Make ast and plan output suitable for canonization (replace volatile data such as endpoints with stable one)")
+            .NoArgument()
+            .SetFlag(&RunnerOptions.CanonicalOutput);
+
         // Pipeline settings
 
         TChoices<TExecutionOptions::EExecutionCase> executionCase({
@@ -368,6 +382,20 @@ protected:
             .RequiredArgument("uint")
             .DefaultValue(100)
             .StoreMappedResultT<ui64>(&RunnerOptions.PingPeriod, &TDuration::MilliSeconds<ui64>);
+
+        TChoices<FederatedQuery::ExecuteMode> queryAction({
+            {"save", FederatedQuery::ExecuteMode::SAVE},
+            {"parse", FederatedQuery::ExecuteMode::PARSE},
+            {"compile", FederatedQuery::ExecuteMode::COMPILE},
+            {"validate", FederatedQuery::ExecuteMode::VALIDATE},
+            {"explain", FederatedQuery::ExecuteMode::EXPLAIN},
+            {"run", FederatedQuery::ExecuteMode::RUN}
+        });
+        options.AddLongOption('A', "action", "Query execute action")
+            .RequiredArgument("action")
+            .DefaultValue("run")
+            .Choices(queryAction.GetChoices())
+            .StoreMappedResultT<TString>(&ExecutionOptions.QueryAction, queryAction);
 
         options.AddLongOption("loop-count", "Number of runs of the query (use 0 to start infinite loop)")
             .RequiredArgument("uint")

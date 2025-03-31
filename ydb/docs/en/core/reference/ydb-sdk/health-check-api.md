@@ -192,9 +192,9 @@ The status (severity) of the current issue:
 
 #### Group layout is incorrect
 
-**Description:** Storage group was configure incorrectly.
+**Description:** The storage group was configured incorrectly.
 
-**Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, use the known group `id` to check the configuration of nodes and disks on the nodes.
+**Actions:** In the [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the database page, select the `Storage` tab, and use the known group `id` to check the configuration of nodes and disks on the nodes.
 
 #### Group degraded
 

@@ -71,7 +71,7 @@ Below is an example of getting access keys for the [{{ yandex-cloud }} Object St
 
    You can indicate any account name except `s3account`, or use your existing account name (be sure to replace it when copying the commands below).
 
-3. [Grant roles to your service account]{% if lang == "ru" %}(https://cloud.yandex.ru/docs/iam/operations/sa/assign-role-for-sa){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/docs/iam/operations/sa/assign-role-for-sa){% endif %} according to your intended S3 access level by running the command:
+4. [Grant roles to your service account]{% if lang == "ru" %}(https://cloud.yandex.ru/docs/iam/operations/sa/assign-role-for-sa){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/docs/iam/operations/sa/assign-role-for-sa){% endif %} according to your intended S3 access level by running the command:
 
    {% list tabs %}
 
@@ -79,23 +79,23 @@ Below is an example of getting access keys for the [{{ yandex-cloud }} Object St
 
       ```bash
       yc resource-manager folder add-access-binding <folder-id> \
-        --role storage.viewer --subject serviceAccount:s3account
+        --role storage.viewer --subject serviceAccount:<s3-account-id>
       ```
 
    - Write (to export data from the YDB database)
 
       ```bash
       yc resource-manager folder add-access-binding <folder-id> \
-        --role storage.editor --subject serviceAccount:s3account
+        --role storage.editor --subject serviceAccount:<s3-account-id>
       ```
 
    {% endlist %}
 
-   Where `<folder-id>` is the cloud folder ID that you retrieved at step 2.
+   Where `<folder-id>` is the cloud folder ID that you retrieved at step 2 and `<s3-account-id>` is the id of the account you created at step 3.
 
    You can also read a [full list]{% if lang == "ru" %}(https://cloud.yandex.ru/docs/iam/concepts/access-control/roles#object-storage){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/docs/iam/concepts/access-control/roles#object-storage){% endif %} of {{ yandex-cloud }} roles.
 
-4. Get [static access keys]{% if lang == "ru" %}(https://cloud.yandex.ru/docs/iam/operations/sa/create-access-key){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/docs/iam/operations/sa/create-access-key){% endif %} by running the command:
+5. Get [static access keys]{% if lang == "ru" %}(https://cloud.yandex.ru/docs/iam/operations/sa/create-access-key){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/docs/iam/operations/sa/create-access-key){% endif %} by running the command:
 
    ```bash
    yc iam access-key create --service-account-name s3account

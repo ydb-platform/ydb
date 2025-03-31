@@ -80,19 +80,19 @@
 
      ```bash
      yc resource-manager folder add-access-binding <folder-id> \
-       --role storage.viewer --subject serviceAccount:s3account
+       --role storage.viewer --subject serviceAccount:<s3-account-id>
      ```
 
    - Запись (для выгрузки из базы данных {{ ydb-short-name }})
 
      ```bash
      yc resource-manager folder add-access-binding <folder-id> \
-       --role storage.editor --subject serviceAccount:s3account
+       --role storage.editor --subject serviceAccount:<s3-account-id>
      ```
 
    {% endlist %}
 
-   , где `<folder-id>` - это идентификатор каталога в облаке, полученный на шаге 2.
+   , где `<folder-id>` - это идентификатор каталога в облаке, полученный на шаге 2, а `<s3-account-id>` - идентификатор аккаунта, созданного на шаге 3.
 
    Вы можете также ознакомиться с [полным перечнем](https://cloud.yandex.ru/docs/iam/concepts/access-control/roles#object-storage) ролей {{ yandex-cloud }}.
 

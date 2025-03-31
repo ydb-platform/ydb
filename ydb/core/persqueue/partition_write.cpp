@@ -385,24 +385,12 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
 void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
     PQ_LOG_T("TPartition::SyncMemoryStateWithKVState.");
 
-    if (!WorkZone.CompactedKeys.empty()) {
-        WorkZone.HeadKeys.clear();
-    }
+    WorkZone.SyncHeadKeys();
 
     // New blocks have been recorded. You can now delete the keys of the repackaged blocks.
     DefferedKeysForDeletion.clear();
 
-    if (WorkZone.NewHeadKey.Size > 0) {
-        while (!WorkZone.HeadKeys.empty() &&
-               (WorkZone.HeadKeys.back().Key.GetOffset() > WorkZone.NewHeadKey.Key.GetOffset() ||
-                (WorkZone.HeadKeys.back().Key.GetOffset() == WorkZone.NewHeadKey.Key.GetOffset() && WorkZone.HeadKeys.back().Key.GetPartNo() >= WorkZone.NewHeadKey.Key.GetPartNo()))) {
-            WorkZone.HeadKeys.pop_back();
-        }
-
-        WorkZone.HeadKeys.push_back(std::move(WorkZone.NewHeadKey));
-
-        WorkZone.NewHeadKey = TDataKey{TKey{}, 0, TInstant::Zero(), 0};
-    }
+    WorkZone.SyncNewHeadKey();
 
     if (WorkZone.CompactedKeys.empty() && WorkZone.NewHead.PackedSize == 0) { //Nothing writed at all
         return;

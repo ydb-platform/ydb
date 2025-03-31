@@ -92,4 +92,37 @@ void TPartitionWorkZone::ClearPartitionedBlob(const TPartitionId& partitionId, u
                                        maxBlobSize);
 }
 
+void TPartitionWorkZone::SyncHeadKeys()
+{
+    if (!CompactedKeys.empty()) {
+        HeadKeys.clear();
+    }
+}
+
+void TPartitionWorkZone::SyncNewHeadKey()
+{
+    if (NewHeadKey.Size <= 0) {
+        return;
+    }
+
+    auto isLess = [](const TKey& lhs, const TKey& rhs) {
+        if (lhs.GetOffset() < rhs.GetOffset()) {
+            return true;
+        }
+        if (lhs.GetOffset() == rhs.GetOffset()) {
+            return lhs.GetPartNo() < rhs.GetPartNo();
+        }
+        return false;
+    };
+
+    while (!HeadKeys.empty() && !isLess(HeadKeys.back().Key, NewHeadKey.Key)) {
+        // HeadKeys.back >= NewHeadKey
+        HeadKeys.pop_back();
+    }
+
+    HeadKeys.push_back(std::move(NewHeadKey));
+
+    NewHeadKey = TDataKey{TKey{}, 0, TInstant::Zero(), 0};
+}
+
 }

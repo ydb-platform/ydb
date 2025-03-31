@@ -32,6 +32,9 @@ struct TPartitionWorkZone {
                             ui16 nextPartNo = 0);
     void ClearPartitionedBlob(const TPartitionId& partitionId, ui32 maxBlobSize);
 
+    void SyncHeadKeys();
+    void SyncNewHeadKey();
+
     THead Head;
     THead NewHead;
     TPartitionedBlob PartitionedBlob;

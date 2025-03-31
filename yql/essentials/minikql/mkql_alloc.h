@@ -82,27 +82,6 @@ struct TAllocState : public TAlignedPagePool
 #endif
     bool SupportsSizedAllocators = false;
 
-    void* LargeAlloc(size_t size) {
-#if defined(ALLOW_DEFAULT_ALLOCATOR)
-        if (Y_UNLIKELY(IsDefaultAllocatorUsed())) {
-            return malloc(size);
-        }
-#endif
-
-        return Alloc(size);
-    }
-
-    void LargeFree(void* ptr, size_t size) noexcept {
-#if defined(ALLOW_DEFAULT_ALLOCATOR)
-        if (Y_UNLIKELY(IsDefaultAllocatorUsed())) {
-            free(ptr);
-            return;
-        }
-#endif
-
-        Free(ptr, size);
-    }
-
     using TCurrentPages = std::array<TAllocPageHeader*, (TMemorySubPoolIdx)EMemorySubPool::Count>;
 
     static TAllocPageHeader EmptyPageHeader;

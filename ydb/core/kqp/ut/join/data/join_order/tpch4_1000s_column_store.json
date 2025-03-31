@@ -21,14 +21,8 @@
               "args":
                 [
                   {
-                    "op_name":"HashShuffle",
-                    "args":
-                      [
-                        {
-                          "op_name":"TableFullScan",
-                          "table":"lineitem"
-                        }
-                      ]
+                    "op_name":"TableFullScan",
+                    "table":"lineitem"
                   }
                 ]
             }

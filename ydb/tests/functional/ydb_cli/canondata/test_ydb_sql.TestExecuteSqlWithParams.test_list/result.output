@@ -3,3 +3,16 @@
 ├─────────┤
 │ [1,2,3] │
 └─────────┘
+
+Statistics:
+query_phases {
+  duration_us: 2163
+  cpu_time_us: 1985
+}
+compilation {
+  duration_us: 58302
+  cpu_time_us: 55688
+}
+process_cpu_time_us: 442
+total_duration_us: 63521
+total_cpu_time_us: 58115

@@ -101,8 +101,17 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
         if (targetIdx == -1) {
             return TConclusionStatus::Success();
         }
-        const auto hasNull = NArrow::HasNulls(incomingBatch->column(incomingIdx));
-        const std::optional<i32> pkFieldIdx = GetIndexInfo().GetPKColumnIndexByIndexVerified(targetIdx);
+        const auto& incomingColumn = incomingBatch->column(incomingIdx);
+        const auto hasNull = NArrow::HasNulls(incomingColumn);
+        const TColumnFeatures& features = GetIndexInfo().GetColumnFeaturesVerifiedByIndex(targetIdx);
+        const std::optional<i32> pkFieldIdx = features.GetPKColumnIndex();
+        if (!features.GetDataAccessorConstructor()->HasInternalConversion() || !!pkFieldIdx) {
+            if (!features.GetArrowField()->type()->Equals(incomingColumn->type())) {
+                return TConclusionStatus::Fail(
+                    "not equal type for column: " + features.GetColumnName() + ": " + features.GetArrowField()->type()->ToString()
+                    + " vs " + incomingColumn->type()->ToString());
+            }
+        }
         if (pkFieldIdx && hasNull && !AppData()->ColumnShardConfig.GetAllowNullableColumnsInPK()) {
             return TConclusionStatus::Fail("null data for pk column is impossible for '" + dstSchema.field(targetIdx)->name() + "'");
         }
@@ -130,7 +139,7 @@ TConclusion<NArrow::TContainerWithIndexes<arrow::RecordBatch>> ISnapshotSchema::
     const auto nameResolver = [&](const std::string& fieldName) -> i32 {
         return GetIndexInfo().GetColumnIndexOptional(fieldName).value_or(-1);
     };
-    auto batchConclusion = NArrow::TColumnOperator().SkipIfAbsent().ErrorOnDifferentFieldTypes().AdaptIncomingToDestinationExt(
+    auto batchConclusion = NArrow::TColumnOperator().SkipIfAbsent().IgnoreOnDifferentFieldTypes().AdaptIncomingToDestinationExt(
         incomingBatch, dstSchema, pred, nameResolver);
     if (batchConclusion.IsFail()) {
         return batchConclusion;

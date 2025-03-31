@@ -110,13 +110,13 @@ TOthersData TDataBuilder::MergeOthers(const std::vector<TColumnElements*>& other
 std::string BuildString(const TStringBuf currentPrefix, const TStringBuf key) {
     if (key.find(".") != std::string::npos) {
         if (currentPrefix.size()) {
-            return Sprintf("%s.\"%s\"", currentPrefix.data(), key.data());
+            return Sprintf("%.*s.\"%.*s\"", currentPrefix.size(), currentPrefix.data(), key.size(), key.data());
         } else {
-            return Sprintf("\"%s\"", key.data());
+            return Sprintf("\"%.*s\"", key.size(), key.data());
         }
     } else {
         if (currentPrefix.size()) {
-            return Sprintf("%s.%s", currentPrefix.data(), key.data());
+            return Sprintf("%.*s.%.*s", currentPrefix.size(), currentPrefix.data(), key.size(), key.data());
         } else {
             return std::string(key.data(), key.size());
         }
@@ -134,9 +134,10 @@ TStringBuf TDataBuilder::AddKeyOwn(const TStringBuf currentPrefix, std::string&&
 }
 
 TStringBuf TDataBuilder::AddKey(const TStringBuf currentPrefix, const TStringBuf key) {
-    auto it = StorageHash.find(TStorageAddress(currentPrefix, key));
+    TStorageAddress keyAddress(currentPrefix, key);
+    auto it = StorageHash.find(keyAddress);
     if (it == StorageHash.end()) {
-        it = StorageHash.emplace(TStorageAddress(currentPrefix, key), BuildString(currentPrefix, key)).first;
+        it = StorageHash.emplace(keyAddress, BuildString(currentPrefix, key)).first;
     }
     return TStringBuf(it->second.data(), it->second.size());
 }

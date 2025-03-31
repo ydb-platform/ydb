@@ -8,7 +8,7 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
     : TBase(context)
     , SpecialReadContext(std::make_shared<TSpecialReadContext>(context)) {
     ui32 sourceIdx = 0;
-    std::deque<std::shared_ptr<IDataSource>> sources;
+    std::deque<TSourceConstructor> sources;
     const auto& portions = GetReadMetadata()->SelectInfo->Portions;
     ui64 compactedPortionsBytes = 0;
     ui64 insertedPortionsBytes = 0;
@@ -19,9 +19,9 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
             insertedPortionsBytes += i->GetTotalBlobBytes();
         }
 
-        sources.emplace_back(std::make_shared<TPortionDataSource>(sourceIdx++, i, SpecialReadContext));
+        sources.emplace_back(TSourceConstructor(sourceIdx++, i, context));
     }
-    std::sort(sources.begin(), sources.end(), IDataSource::TCompareStartForScanSequence());
+    std::make_heap(sources.begin(), sources.end());
     Scanner = std::make_shared<TScanHead>(std::move(sources), SpecialReadContext);
 
     auto& stats = GetReadMetadata()->ReadStats;

@@ -114,7 +114,7 @@ public:
     }
 };
 
-class IDataSource: public ICursorEntity, public NArrow::NSSA::IDataSource, public NColumnShard::TMonitoringObjectsCounter<IDataSource> {
+class IDataSource: public ICursorEntity, public NArrow::NSSA::IDataSource {
 private:
     YDB_READONLY(ui64, SourceId, 0);
     YDB_READONLY(ui32, SourceIdx, 0);
@@ -153,7 +153,7 @@ private:
         const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step, const TColumnsSetIds& columns) = 0;
     virtual void DoAssembleColumns(const std::shared_ptr<TColumnsSet>& columns, const bool sequential) = 0;
 
-    NEvLog::TLogsThread Events;
+    std::optional<NEvLog::TLogsThread> Events;
     std::unique_ptr<TFetchedData> StageData;
 
 protected:
@@ -162,11 +162,12 @@ protected:
 
 public:
     void AddEvent(const TString& evDescription) {
-        Events.AddEvent(evDescription);
+        AFL_VERIFY(!!Events);
+        Events->AddEvent(evDescription);
     }
 
     TString GetEventsReport() const {
-        return Events.DebugString();
+        return Events ? Events->DebugString() : Default<TString>();
     }
 
     TExecutionContext& MutableExecutionContext() {
@@ -212,6 +213,7 @@ public:
         , RecordsCount(recordsCount)
         , ShardingVersionOptional(shardingVersion)
         , HasDeletions(hasDeletions) {
+        FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, Events.emplace(NEvLog::TLogsThread()));
         FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, AddEvent("c"));
     }
 

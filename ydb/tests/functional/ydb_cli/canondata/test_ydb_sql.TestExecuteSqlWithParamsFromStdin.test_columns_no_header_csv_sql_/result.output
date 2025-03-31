@@ -3,49 +3,13 @@
 ├───┼───┤
 │ 1 │ 1 │
 └───┴───┘
-
-Statistics:
-query_phases {
-  duration_us: 1866
-  cpu_time_us: 1669
-}
-compilation {
-  from_cache: true
-}
-process_cpu_time_us: 167
-total_duration_us: 3693
-total_cpu_time_us: 1836
 ┌───┬───┐
 │ a │ b │
 ├───┼───┤
 │ 2 │ 2 │
 └───┴───┘
-
-Statistics:
-query_phases {
-  duration_us: 1539
-  cpu_time_us: 1375
-}
-compilation {
-  from_cache: true
-}
-process_cpu_time_us: 149
-total_duration_us: 3366
-total_cpu_time_us: 1524
 ┌───┬───┐
 │ a │ b │
 ├───┼───┤
 │ 3 │ 3 │
 └───┴───┘
-
-Statistics:
-query_phases {
-  duration_us: 1473
-  cpu_time_us: 1337
-}
-compilation {
-  from_cache: true
-}
-process_cpu_time_us: 111
-total_duration_us: 3128
-total_cpu_time_us: 1448

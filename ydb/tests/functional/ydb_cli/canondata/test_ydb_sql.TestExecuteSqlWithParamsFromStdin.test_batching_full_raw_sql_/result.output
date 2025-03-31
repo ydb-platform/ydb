@@ -3,16 +3,3 @@
 ├───────────────────────────┤
 │ ["Line1","Line2","Line3"] │
 └───────────────────────────┘
-
-Statistics:
-query_phases {
-  duration_us: 3438
-  cpu_time_us: 3169
-}
-compilation {
-  duration_us: 53925
-  cpu_time_us: 51626
-}
-process_cpu_time_us: 397
-total_duration_us: 60404
-total_cpu_time_us: 55192

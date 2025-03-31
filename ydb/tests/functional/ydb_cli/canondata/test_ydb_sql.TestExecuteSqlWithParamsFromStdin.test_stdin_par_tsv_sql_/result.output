@@ -3,3 +3,15 @@
 ├──────────────────────────┤
 │ {"id":1,"value":"ab\ta"} │
 └──────────────────────────┘
+
+Statistics:
+query_phases {
+  duration_us: 1711
+  cpu_time_us: 1561
+}
+compilation {
+  from_cache: true
+}
+process_cpu_time_us: 205
+total_duration_us: 3592
+total_cpu_time_us: 1766

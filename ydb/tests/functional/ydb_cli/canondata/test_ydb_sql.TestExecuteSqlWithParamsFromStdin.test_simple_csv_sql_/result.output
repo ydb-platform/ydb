@@ -3,3 +3,15 @@
 ├────────────────┼─────┤
 │ "Some_s,tring" │ 32  │
 └────────────────┴─────┘
+
+Statistics:
+query_phases {
+  duration_us: 1655
+  cpu_time_us: 1514
+}
+compilation {
+  from_cache: true
+}
+process_cpu_time_us: 165
+total_duration_us: 3363
+total_cpu_time_us: 1679

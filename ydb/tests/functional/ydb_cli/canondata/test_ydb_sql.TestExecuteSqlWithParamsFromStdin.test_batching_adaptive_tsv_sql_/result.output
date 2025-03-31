@@ -3,13 +3,49 @@
 ├──────────────────────────────────────────────────────────────────┤
 │ [{"id":1,"s":"Line1"},{"id":2,"s":"Line2"},{"id":3,"s":"Line3"}] │
 └──────────────────────────────────────────────────────────────────┘
+
+Statistics:
+query_phases {
+  duration_us: 1854
+  cpu_time_us: 1689
+}
+compilation {
+  from_cache: true
+}
+process_cpu_time_us: 198
+total_duration_us: 3601
+total_cpu_time_us: 1887
 ┌──────────────────────────────────────────────────────────────────┐
 │ arr                                                              │
 ├──────────────────────────────────────────────────────────────────┤
 │ [{"id":4,"s":"Line4"},{"id":5,"s":"Line5"},{"id":6,"s":"Line6"}] │
 └──────────────────────────────────────────────────────────────────┘
+
+Statistics:
+query_phases {
+  duration_us: 1674
+  cpu_time_us: 1547
+}
+compilation {
+  from_cache: true
+}
+process_cpu_time_us: 189
+total_duration_us: 3462
+total_cpu_time_us: 1736
 ┌──────────────────────────────────────────────────────────────────┐
 │ arr                                                              │
 ├──────────────────────────────────────────────────────────────────┤
 │ [{"id":7,"s":"Line7"},{"id":8,"s":"Line8"},{"id":9,"s":"Line9"}] │
 └──────────────────────────────────────────────────────────────────┘
+
+Statistics:
+query_phases {
+  duration_us: 1742
+  cpu_time_us: 1579
+}
+compilation {
+  from_cache: true
+}
+process_cpu_time_us: 187
+total_duration_us: 3486
+total_cpu_time_us: 1766

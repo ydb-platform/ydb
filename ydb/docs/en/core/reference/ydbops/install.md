@@ -2,6 +2,10 @@
 
 {% include [warning.md](_includes/warning.md) %}
 
+## Download the binary from releases page
+
+You can download binary releases from [{#T}](../../downloads/index.md#ydbops).
+
 ## Building from source
 
 1. Clone the `ydbops` repository from GitHub:
@@ -14,7 +18,7 @@
     2.1. [Directly with Go](#go)
     2.2. [Inside a Docker container](#docker)
 
-The second approach requires a prepared [Docker](https://en.wikipedia.org/wiki/Docker_(software)) environment and uses the official Docker image for [Golang](https://en.wikipedia.org/wiki/Go_(programming_language)) v1.22, guaranteeing a successful build. The Docker container operates using the `Dockerfile` from the repository. The build process in Docker also performs additional tasks: running linter checks and substituting the version for the `ydbops` assembly to register it in the executable file.
+The second approach requires a prepared [Docker](https://en.wikipedia.org/wiki/Docker_(software)) environment and uses the official Docker image for [Golang](https://en.wikipedia.org/wiki/Go_(programming_language)) [v1.22](https://hub.docker.com/_/golang/tags?name=1.22), guaranteeing a successful build. The Docker container operates using the `Dockerfile` from the repository. The build process in Docker also performs additional tasks: running linter checks and substituting the version for the `ydbops` assembly to register it in the executable file.
 
 ### Building directly with Go {#go}
 
@@ -85,6 +89,3 @@ Sample command to install into `install_folder` from the current folder:
 make install INSTALL_DIR=install_folder BUILD_DIR=.
 ```
 
-## Download the binary from releases page
-
-You can download binary releases from [{#T}](../../downloads/index.md#ydbops).

@@ -43,7 +43,7 @@ void TWorkloadCommandBenchmark::Config(TConfig& config) {
     config.Opts->AddLongOption("query-prefix", "Query prefix.\nEvery prefix is a line that will be added to the beginning of each query. For multiple prefixes lines use this option several times.")
         .AppendTo(&QuerySettings);
     config.Opts->MutuallyExclusive("query-prefix", "query-settings");
-    config.Opts->AddLongOption("retries", "Max count max retries for every request.").StoreResult(&RetrySettings.MaxRetries_).DefaultValue(RetrySettings.MaxRetries_);
+    config.Opts->AddLongOption("retries", "Max retry count for every request.").StoreResult(&RetrySettings.MaxRetries_).DefaultValue(RetrySettings.MaxRetries_);
     auto fillTestCases = [](TStringBuf line, std::function<void(ui32)>&& op) {
         for (const auto& token : StringSplitter(line).Split(',').SkipEmpty()) {
             TStringBuf part = token.Token();

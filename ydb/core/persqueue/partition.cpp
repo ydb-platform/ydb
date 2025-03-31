@@ -449,7 +449,7 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
         auto& firstKey = DataKeysBody.front();
 
         auto expiredByLifetime = hasLifetime && now >= firstKey.Timestamp + lifetimeLimit;
-        auto expiredByStorageLimit = hasStorageLimit && (BodySize - firstKey.Size) >= partConfig.GetStorageLimitBytes();
+        auto expiredByStorageLimit = hasStorageLimit && BodySize > firstKey.Size && (BodySize - firstKey.Size) >= partConfig.GetStorageLimitBytes();
         if (!expiredByLifetime && !expiredByStorageLimit) {
             break;
         }

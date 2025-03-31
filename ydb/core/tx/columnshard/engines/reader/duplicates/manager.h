@@ -288,7 +288,7 @@ private:
 
             AFL_VERIFY(ColumnData);
             IntervalOffsets.emplace_back(0);
-            for (ui32 intervalIdx = FirstIntervalIdx + 1; intervalIdx < FirstIntervalIdx + IntervalFilters.size(); ++intervalIdx) {
+            for (ui32 localIntervalIdx = 1; localIntervalIdx < RightIntervalBorders.size(); ++localIntervalIdx) {
                 NArrow::TGeneralContainer keysData = [this]() {
                     // TODO: optimize?
                     // TODO: simplify?
@@ -300,8 +300,9 @@ private:
                     return NArrow::TGeneralContainer(
                         Source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPrimaryKey(), std::move(columns));
                 }();
-                const NArrow::NAccessor::IChunkedArray::TRowRange findLeftBorder = keysData.EqualRange(
-                    *RightIntervalBorders[intervalIdx - 1].ToBatch(Source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPrimaryKey()));
+                const NArrow::NAccessor::IChunkedArray::TRowRange findLeftBorder =
+                    keysData.EqualRange(*RightIntervalBorders[localIntervalIdx - 1].ToBatch(
+                        Source->GetContext()->GetReadMetadata()->GetIndexInfo().GetPrimaryKey()));
                 // TODO: hide decision in a class?
                 IntervalOffsets.emplace_back(Source->GetContext()->GetReadMetadata()->IsDescSorted()
                                                  ? ColumnData->GetRecordsCount() - findLeftBorder.GetBegin()

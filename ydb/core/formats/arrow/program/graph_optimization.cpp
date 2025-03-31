@@ -345,12 +345,6 @@ std::optional<TResourceAddress> TGraph::GetOriginalAddress(TGraphNode* condNode)
             if (path.StartsWith("$.")) {
                 path = path.substr(2);
             }
-            if (path.StartsWith("\"") && path.EndsWith("\"")) {
-                if (path.size() < 2) {
-                    return std::nullopt;
-                }
-                path = path.substr(1, path.size() - 2);
-            }
             if (!path) {
                 return std::nullopt;
             }

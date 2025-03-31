@@ -109,7 +109,9 @@ private:
 
     void ScheduleWakeup(const TMonotonic deadline);
 
-    TMonotonic GetDeadline() const;
+    TMonotonic GetScanDeadline() const;
+
+    TMonotonic GetComputeDeadline() const;
 
 private:
     const TActorId ColumnShardActorId;
@@ -186,7 +188,6 @@ private:
     ui64 PacksSum = 0;
     ui64 Bytes = 0;
     ui32 PageFaults = 0;
-    TDuration LastReportedElapsedTime;
 };
 
 }   // namespace NKikimr::NOlap::NReader

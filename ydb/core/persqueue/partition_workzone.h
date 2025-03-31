@@ -11,6 +11,9 @@ class TKeyLevel;
 struct TPartitionWorkZone {
     explicit TPartitionWorkZone(const TPartitionId& partition);
 
+    bool PositionInBody(ui64 offset, ui32 partNo) const;
+    bool PositionInHead(ui64 offset, ui32 partNo) const;
+
     THead Head;
     THead NewHead;
     TPartitionedBlob PartitionedBlob;

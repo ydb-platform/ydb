@@ -950,7 +950,7 @@ TInstant TPartition::GetWriteTimeEstimate(ui64 offset) const {
     if (offset >= EndOffset)
         return TInstant::Zero();
     const std::deque<TDataKey>& container =
-        (offset < WorkZone.Head.Offset || offset == WorkZone.Head.Offset && WorkZone.Head.PartNo > 0) ? WorkZone.DataKeysBody : WorkZone.HeadKeys;
+        WorkZone.PositionInBody(offset, 0) ? WorkZone.DataKeysBody : WorkZone.HeadKeys;
     Y_ABORT_UNLESS(!container.empty());
     auto it = std::upper_bound(container.begin(), container.end(), offset,
                     [](const ui64 offset, const TDataKey& p) {
@@ -1552,7 +1552,7 @@ void TPartition::CheckHeadConsistency() const {
 
 ui64 TPartition::GetSizeLag(i64 offset) {
     ui64 sizeLag = 0;
-    if (!WorkZone.DataKeysBody.empty() && (offset < (i64)WorkZone.Head.Offset || offset == (i64)WorkZone.Head.Offset && WorkZone.Head.PartNo > 0)) { //there will be something in body
+    if (!WorkZone.DataKeysBody.empty() && WorkZone.PositionInBody(offset, 0)) { // there will be something in body
         auto it = std::upper_bound(WorkZone.DataKeysBody.begin(), WorkZone.DataKeysBody.end(), std::make_pair(offset, 0),
                 [](const std::pair<ui64, ui16>& offsetAndPartNo, const TDataKey& p) { return offsetAndPartNo.first < p.Key.GetOffset() || offsetAndPartNo.first == p.Key.GetOffset() && offsetAndPartNo.second < p.Key.GetPartNo();});
         if (it != WorkZone.DataKeysBody.begin())

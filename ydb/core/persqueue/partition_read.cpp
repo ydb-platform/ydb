@@ -614,7 +614,7 @@ TVector<TRequestedBlob> TPartition::GetReadRequestFromBody(
     ui32& size = *rsize;
     count = size = 0;
     TVector<TRequestedBlob> blobs;
-    if (!WorkZone.DataKeysBody.empty() && (WorkZone.Head.Offset > startOffset || WorkZone.Head.Offset == startOffset && WorkZone.Head.PartNo > partNo)) { //will read smth from body
+    if (!WorkZone.DataKeysBody.empty() && WorkZone.PositionInBody(startOffset, partNo)) { //will read smth from body
         auto it = std::upper_bound(WorkZone.DataKeysBody.begin(), WorkZone.DataKeysBody.end(), std::make_pair(startOffset, partNo),
             [](const std::pair<ui64, ui16>& offsetAndPartNo, const TDataKey& p) { return offsetAndPartNo.first < p.Key.GetOffset() || offsetAndPartNo.first == p.Key.GetOffset() && offsetAndPartNo.second < p.Key.GetPartNo();});
         if (it == WorkZone.DataKeysBody.begin()) //could be true if data is deleted or gaps are created
@@ -667,7 +667,7 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
     TVector<TClientBlob> res;
     std::optional<ui64> firstAddedBlobOffset{};
     ui32 pos = 0;
-    if (startOffset > WorkZone.Head.Offset || startOffset == WorkZone.Head.Offset && partNo > WorkZone.Head.PartNo) {
+    if (WorkZone.PositionInHead(startOffset, partNo)) {
         pos = WorkZone.Head.FindPos(startOffset, partNo);
         Y_ABORT_UNLESS(pos != Max<ui32>());
     }

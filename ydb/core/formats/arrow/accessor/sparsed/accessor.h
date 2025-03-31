@@ -224,7 +224,7 @@ public:
         std::unique_ptr<arrow::ArrayBuilder> ValueBuilder;
         ui32 RecordsCount = 0;
         const std::shared_ptr<arrow::Scalar> DefaultValue;
-
+        std::optional<ui32> LastRecordIndex;
     public:
         TSparsedBuilder(const std::shared_ptr<arrow::Scalar>& defaultValue, const ui32 reserveItems, const ui32 reserveData)
             : DefaultValue(defaultValue) {
@@ -233,9 +233,24 @@ public:
         }
 
         void AddRecord(const ui32 recordIndex, const std::string_view value) {
+            if (!!LastRecordIndex) {
+                AFL_VERIFY(*LastRecordIndex < recordIndex);
+            }
+            LastRecordIndex = recordIndex;
             AFL_VERIFY(NArrow::Append<arrow::UInt32Type>(*IndexBuilder, recordIndex));
             AFL_VERIFY(NArrow::Append<TDataType>(*ValueBuilder, arrow::util::string_view(value.data(), value.size())));
             ++RecordsCount;
+        }
+
+        void AddNull(const ui32 recordIndex) {
+            if (!!LastRecordIndex) {
+                AFL_VERIFY(*LastRecordIndex < recordIndex);
+            }
+            LastRecordIndex = recordIndex;
+            if (!!DefaultValue && DefaultValue->type->id() != arrow::null()->id()) {
+                AFL_VERIFY(NArrow::Append<arrow::UInt32Type>(*IndexBuilder, recordIndex));
+                TStatusValidator::Validate(ValueBuilder->AppendNull());
+            }
         }
 
         std::shared_ptr<IChunkedArray> Finish(const ui32 recordsCount) {

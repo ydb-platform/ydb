@@ -14,6 +14,7 @@ import "yt_proto/yt/core/ytree/proto/request_complexity_limits.proto";
 import "yt_proto/yt/client/chunk_client/proto/data_statistics.proto";
 import "yt_proto/yt/client/chaos_client/proto/replication_card.proto";
 import "yt_proto/yt/client/hive/proto/timestamp_map.proto";
+import "yt_proto/yt/client/node_tracker_client/proto/node.proto";
 import "yt_proto/yt/client/scheduler/proto/spec_patch.proto";
 import "yt_proto/yt/client/table_client/proto/versioned_io_options.proto";
 import "yt_proto/yt/client/tablet_client/proto/lock_mask.proto";
@@ -1456,6 +1457,7 @@ message TIndexInfo
     optional string predicate = 3;
     optional string unfolded_column = 4;
     optional int32 index_correspondence = 6; // NTableClient::ESecondaryIndexState
+    optional TTableSchema evaluated_columns_schema = 7;
 }
 
 message TReqGetTableMountInfo
@@ -2150,6 +2152,11 @@ message TReqPartitionTables
     optional bool enable_key_guarantee = 8;
     optional bool adjust_data_weight_per_partition = 9;
 
+    optional bool enable_cookies = 10;
+
+    // COMPAT(apollo1321): Remove in 25.2 release.
+    optional bool use_new_slicing_implementation_in_ordered_pool = 11 [default=true];
+
     optional TTransactionalOptions transactional_options = 100;
 }
 
@@ -2165,11 +2172,38 @@ message TMultiTablePartition
     }
 
     optional TStatistics aggregate_statistics = 2;
+
+    optional bytes cookie = 3;
 }
 
 message TRspPartitionTables
 {
     repeated TMultiTablePartition partitions = 1;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+message TReqReadTablePartition
+{
+    optional bytes cookie = 1;
+
+    optional bool unordered = 2 [default = false];
+    optional bool omit_inaccessible_columns = 3 [default = false];
+    optional bool enable_table_index = 5 [default = false];
+    optional bool enable_row_index = 6 [default = false];
+    optional bool enable_range_index = 7 [default = false];
+    optional bytes config = 4; // YSON-serialized TTableReaderConfig
+    optional ERowsetFormat desired_rowset_format = 8 [default = RF_YT_WIRE];
+    optional ERowsetFormat arrow_fallback_rowset_format = 10 [default = RF_YT_WIRE];
+    optional bytes format = 9; // YSON-serialized TFormat
+}
+
+message TRspReadTablePartition
+{
+}
+
+message TRspReadTablePartitionMeta
+{
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3181,6 +3215,7 @@ message TJob
     optional string monitoring_descriptor = 30;
     optional string operation_incarnation = 31;
     optional NYT.NProto.TGuid allocation_id = 32;
+    optional NNodeTrackerClient.NProto.TAddressMap addresses = 33;
 }
 
 message TListJobsStatistics
@@ -3286,6 +3321,14 @@ message TReqStartQuery
         repeated string items = 1;
     }
 
+    message TSecret
+    {
+        optional string id = 1;
+        optional string category = 2;
+        optional string subcategory = 3;
+        optional string ypath = 4;
+    }
+
     required string query_tracker_stage = 1;
     required EQueryEngine engine = 2;
     required string query = 3;
@@ -3295,6 +3338,7 @@ message TReqStartQuery
     repeated TQueryFile files = 7;
     optional string access_control_object = 8; // COMPAT(mpereskokova)
     optional TAccessControlObjects access_control_objects = 9;
+    repeated TSecret secrets = 10;
 }
 
 message TRspStartQuery

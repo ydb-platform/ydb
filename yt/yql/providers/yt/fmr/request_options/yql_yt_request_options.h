@@ -46,6 +46,7 @@ struct TFmrError {
     TMaybe<ui32> WorkerId;
     TMaybe<TString> TaskId;
     TMaybe<TString> OperationId;
+    TMaybe<TString> JobId;
 };
 
 struct TError {

@@ -27,7 +27,7 @@ public:
 
 private:
     static TLogoBlobID ExtractLabel(const TVector<NPageCollection::TLargeGlobId>& largeGlobIds) {
-        Y_ABORT_UNLESS(!largeGlobIds.empty());
+        Y_ENSURE(!largeGlobIds.empty());
         return largeGlobIds[0].Lead;
     }
 
@@ -75,7 +75,7 @@ public:
 
     ui64 GetPageSize(NPage::TPageId pageId, NPage::TGroupId groupId) const override
     {
-        Y_ABORT_UNLESS(groupId.Index < PageCollections.size());
+        Y_ENSURE(groupId.Index < PageCollections.size());
         return PageCollections[groupId.Index]->GetPageSize(pageId);
     }
 
@@ -88,20 +88,20 @@ public:
 
     NPage::EPage GetPageType(NPage::TPageId pageId, NPage::TGroupId groupId) const override
     {
-        Y_ABORT_UNLESS(groupId.Index < PageCollections.size());
+        Y_ENSURE(groupId.Index < PageCollections.size());
         return PageCollections[groupId.Index]->GetPageType(pageId);
     }
 
     ui8 GetGroupChannel(NPage::TGroupId groupId) const override
     {
-        Y_ABORT_UNLESS(groupId.Index < PageCollections.size());
+        Y_ENSURE(groupId.Index < PageCollections.size());
         return PageCollections[groupId.Index]->Id.Channel();
     }
 
     ui8 GetPageChannel(ELargeObj lob, ui64 ref) const override
     {
         if ((lob != ELargeObj::Extern && lob != ELargeObj::Outer) || (ref >> 32)) {
-            Y_Fail("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}");
+            Y_TABLET_ERROR("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}");
         }
 
         if (lob == ELargeObj::Extern) {
@@ -128,7 +128,7 @@ public:
     TCache* Locate(ELargeObj lob, ui64 ref) const
     {
         if ((lob != ELargeObj::Extern && lob != ELargeObj::Outer) || (ref >> 32)) {
-            Y_Fail("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}");
+            Y_TABLET_ERROR("Invalid ref ELargeObj{" << int(lob) << ", " << ref << "}");
         }
 
         return (lob == ELargeObj::Extern ? Pseudo : PageCollections.at(GroupsCount)).Get();
@@ -136,7 +136,7 @@ public:
 
     TAutoPtr<NPageCollection::TFetch> GetPages(ui32 room) const
     {
-        Y_ABORT_UNLESS(room < PageCollections.size());
+        Y_ENSURE(room < PageCollections.size());
 
         auto total = PageCollections[room]->PageCollection->Total();
 
@@ -163,7 +163,7 @@ public:
     {
         auto *part = partView.As<TPartStore>();
 
-        Y_ABORT_UNLESS(!partView || part, "Got an unexpected type of TPart part");
+        Y_ENSURE(!partView || part, "Got an unexpected type of TPart part");
 
         return part ? part->PageCollections : TArrayRef<const TIntrusivePtr<TCache>> { };
     }

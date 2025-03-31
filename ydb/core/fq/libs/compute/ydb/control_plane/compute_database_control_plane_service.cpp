@@ -289,8 +289,13 @@ public:
     void FillRequest(TEvYdbCompute::TEvCreateDatabaseRequest::TPtr& ev, const NConfig::TComputeDatabaseConfig& config) {
         NYdb::NFq::TScope scope(ev.Get()->Get()->Scope);
         ev.Get()->Get()->BasePath = config.GetControlPlaneConnection().GetDatabase();
-        const TString databaseName = TStringBuilder{} << Config.GetYdb().GetControlPlane().GetDatabasePrefix() << (config.GetId() ? config.GetId() + "_"  : TString{}) << scope.ParseFolder();
-        ev.Get()->Get()->Path = config.GetTenant() ? config.GetTenant() + "/" + databaseName: databaseName;
+
+        const auto& tenant = config.GetTenant();
+        if (const auto& previousPath = Result.connection().database(); previousPath && (!tenant || previousPath.StartsWith(tenant + "/"))) {
+            ev.Get()->Get()->Path = previousPath;
+        } else {
+            ev.Get()->Get()->Path = TStringBuilder() << (tenant ? tenant + "/" : TString{}) << Config.GetYdb().GetControlPlane().GetDatabasePrefix() << (config.GetId() ? config.GetId() + "_" : TString{}) << scope.ParseFolder();
+        }
     }
 
 private:

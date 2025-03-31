@@ -1639,6 +1639,7 @@ namespace NSQLTranslationV1 {
         return {};
     }
 
+    void EnumerateBuiltins(const std::function<void(std::string_view name, std::string_view kind)>& callback);
     bool Parseui32(TNodePtr from, ui32& to);
     TNodePtr GroundWithExpr(const TNodePtr& ground, const TNodePtr& expr);
     const TString* DeriveCommonSourceName(const TVector<TNodePtr> &nodes);

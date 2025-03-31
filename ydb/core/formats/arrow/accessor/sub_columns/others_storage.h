@@ -173,11 +173,16 @@ public:
         std::optional<ui32> LastKeyIndex;
         ui32 RecordsCount = 0;
         YDB_READONLY_DEF(std::vector<TDictStats::TRTStatsValue>, StatsByKeyIndex);
-
     public:
         TBuilderWithStats();
 
-        void Add(const ui32 recordIndex, const ui32 keyIndex, const std::string_view value);
+        void AddImpl(const ui32 recordIndex, const ui32 keyIndex, const std::string_view* value);
+        void Add(const ui32 recordIndex, const ui32 keyIndex, const std::string_view value) {
+            return AddImpl(recordIndex, keyIndex, &value);
+        }
+        void AddNull(const ui32 recordIndex, const ui32 keyIndex) {
+            return AddImpl(recordIndex, keyIndex, nullptr);
+        }
 
         TOthersData Finish(const TFinishContext& finishContext);
     };

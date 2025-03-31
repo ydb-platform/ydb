@@ -10,6 +10,7 @@
 #include "flat_part_shrink.h"
 #include "flat_util_misc.h"
 #include "flat_sausage_grind.h"
+#include "util_fmt_abort.h"
 #include <ydb/core/util/pb.h>
 #include <ydb/core/scheme_types/scheme_type_registry.h>
 #include <util/generic/cast.h>
@@ -80,7 +81,7 @@ TAutoPtr<TTableIter> TDatabase::Iterate(ui32 table, TRawVals key, TTagsRef tags,
             }
         }
 
-        Y_ABORT("Don't know how to convert ELookup to ESeek mode");
+        Y_TABLET_ERROR("Don't know how to convert ELookup to ESeek mode");
     };
 
     return Require(table)->Iterate(key, tags, Env, seekBy(key, mode), TRowVersion::Max());
@@ -292,7 +293,7 @@ void TDatabase::Update(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUp
 
     for (size_t index = 0; index < key.size(); ++index) {
         if (auto error = NScheme::HasUnexpectedValueSize(key[index])) {
-            Y_ABORT("Key index %" PRISZT " validation failure: %s", index, error.c_str());
+            Y_TABLET_ERROR("Key index " << index << " validation failure: " << error);
         }
     }
 
@@ -307,7 +308,7 @@ void TDatabase::Update(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUp
     for (size_t index = 0; index < ModifiedOps.size(); ++index) {
         TUpdateOp& op = ModifiedOps[index];
         if (auto error = NScheme::HasUnexpectedValueSize(op.Value)) {
-            Y_ABORT("Op index %" PRISZT " tag %" PRIu32 " validation failure: %s", index, op.Tag, error.c_str());
+            Y_TABLET_ERROR("Op index " << index << " tag " << op.Tag << " validation failure: " << error);
         }
 
         if (op.Value.IsEmpty()) {
@@ -317,7 +318,7 @@ void TDatabase::Update(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const TUp
             op.Op = op.NormalizedCellOp();
         }
 
-        Y_ABORT_UNLESS(op.Op == ELargeObj::Inline, "User provided an invalid ECellOp");
+        Y_ENSURE(op.Op == ELargeObj::Inline, "User provided an invalid ECellOp");
 
         TArrayRef<const char> raw = op.AsRef();
         if (limit.IsExtern(raw.size())) {
@@ -338,7 +339,7 @@ void TDatabase::UpdateTx(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const T
 {
     for (size_t index = 0; index < key.size(); ++index) {
         if (auto error = NScheme::HasUnexpectedValueSize(key[index])) {
-            Y_ABORT("Key index %" PRISZT " validation failure: %s", index, error.c_str());
+            Y_TABLET_ERROR("Key index " << index << " validation failure: " << error);
         }
     }
 
@@ -346,7 +347,7 @@ void TDatabase::UpdateTx(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const T
     for (size_t index = 0; index < ModifiedOps.size(); ++index) {
         TUpdateOp& op = ModifiedOps[index];
         if (auto error = NScheme::HasUnexpectedValueSize(op.Value)) {
-            Y_ABORT("Op index %" PRISZT " tag %" PRIu32 " validation failure: %s", index, op.Tag, error.c_str());
+            Y_TABLET_ERROR("Op index " << index << " tag " << op.Tag << " validation failure: " << error);
         }
 
         if (op.Value.IsEmpty()) {
@@ -356,7 +357,7 @@ void TDatabase::UpdateTx(ui32 table, ERowOp rop, TRawVals key, TArrayRef<const T
             op.Op = op.NormalizedCellOp();
         }
 
-        Y_ABORT_UNLESS(op.Op == ELargeObj::Inline, "User provided an invalid ECellOp");
+        Y_ENSURE(op.Op == ELargeObj::Inline, "User provided an invalid ECellOp");
 
         // FIXME: we cannot handle blob references during scans, so we
         //        avoid creating large objects when they are in deltas
@@ -435,8 +436,8 @@ void TDatabase::NoMoreUnprechargedReadsForTx() {
 
 void TDatabase::Begin(TTxStamp stamp, IPages& env)
 {
-    Y_ABORT_UNLESS(!Redo, "Transaction already in progress");
-    Y_ABORT_UNLESS(!Env);
+    Y_ENSURE(!Redo, "Transaction already in progress");
+    Y_ENSURE(!Env);
     Annex = new TAnnex(*DatabaseImpl->Scheme, DatabaseImpl->Stats.NormalizedFreeSpaceShareByChannel);
     Redo = new NRedo::TWriter;
     DatabaseImpl->BeginTransaction();
@@ -449,8 +450,8 @@ void TDatabase::Begin(TTxStamp stamp, IPages& env)
 
 void TDatabase::RollbackChanges()
 {
-    Y_ABORT_UNLESS(Redo, "Transaction is not in progress");
-    Y_ABORT_UNLESS(Env);
+    Y_ENSURE(Redo, "Transaction is not in progress");
+    Y_ENSURE(Env);
 
     TTxStamp stamp = Change->Stamp;
     IPages& env = *Env;
@@ -548,7 +549,7 @@ TDatabase::TChangeCounter TDatabase::Head(ui32 table) const
 
 TString TDatabase::SnapshotToLog(ui32 table, TTxStamp stamp)
 {
-    Y_ABORT_UNLESS(!Redo, "Cannot SnapshotToLog inside a transaction");
+    Y_ENSURE(!Redo, "Cannot SnapshotToLog inside a transaction");
 
     auto scn = DatabaseImpl->Serial() + 1;
     auto epoch = DatabaseImpl->Get(table, true)->Snapshot();
@@ -563,7 +564,7 @@ TString TDatabase::SnapshotToLog(ui32 table, TTxStamp stamp)
 
 TEpoch TDatabase::TxSnapTable(ui32 table)
 {
-    Y_ABORT_UNLESS(Redo, "Cannot TxSnapTable outside a transaction");
+    Y_ENSURE(Redo, "Cannot TxSnapTable outside a transaction");
     ++Change->Snapshots;
     return DatabaseImpl->FlushTable(table);
 }
@@ -583,8 +584,8 @@ TAutoPtr<TSubset> TDatabase::Subset(ui32 table, TEpoch before, TRawVals from, TR
     auto subset = Require(table)->Subset(before);
 
     if (from || to) {
-        Y_ABORT_UNLESS(!subset->Frozen, "Got subset with frozens, cannot shrink it");
-        Y_ABORT_UNLESS(!subset->ColdParts, "Got subset with cold parts, cannot shrink it");
+        Y_ENSURE(!subset->Frozen, "Got subset with frozens, cannot shrink it");
+        Y_ENSURE(!subset->ColdParts, "Got subset with cold parts, cannot shrink it");
 
         TShrink shrink(Env, subset->Scheme->Keys);
 
@@ -649,7 +650,7 @@ void TDatabase::MergeDone(ui32 table)
 
 TAlter& TDatabase::Alter()
 {
-    Y_ABORT_UNLESS(Redo, "Scheme change must be done within a transaction");
+    Y_ENSURE(Redo, "Scheme change must be done within a transaction");
 
     return *(Alter_ ? Alter_ : (Alter_ = new TAlter(DatabaseImpl.Get())));
 }
@@ -681,13 +682,13 @@ TKeyRangeCache* TDatabase::DebugGetTableErasedKeysCache(ui32 table) const {
 
 size_t TDatabase::GetCommitRedoBytes() const
 {
-    Y_ABORT_UNLESS(Redo, "Transaction is not in progress");
+    Y_ENSURE(Redo, "Transaction is not in progress");
     return Redo->Bytes();
 }
 
 bool TDatabase::HasChanges() const
 {
-    Y_ABORT_UNLESS(Redo, "Transaction is not in progress");
+    Y_ENSURE(Redo, "Transaction is not in progress");
 
     return *Redo || (Alter_ && *Alter_) || Change->Snapshots || Change->RemovedRowVersions;
 }
@@ -717,8 +718,8 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
     TempIterators.clear();
 
     if (commit && HasChanges()) {
-        Y_ABORT_UNLESS(stamp >= Change->Stamp);
-        Y_ABORT_UNLESS(DatabaseImpl->Serial() == Change->Serial);
+        Y_ENSURE(stamp >= Change->Stamp);
+        Y_ENSURE(DatabaseImpl->Serial() == Change->Serial);
 
         // FIXME: Temporary hack for using up to date change stamp when scan
         //        is queued inside a transaction. In practice we just need to
@@ -739,7 +740,7 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
 
         auto annex = Annex->Unwrap();
         if (annex) {
-            Y_ABORT_UNLESS(cookieAllocator, "Have to provide TCookieAllocator with enabled annex");
+            Y_ENSURE(cookieAllocator, "Have to provide TCookieAllocator with enabled annex");
 
             TVector<NPageCollection::TGlobId> blobs;
 
@@ -750,7 +751,7 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
 
                 blobs.emplace_back(one.GId = glob);
 
-                Y_ABORT_UNLESS(glob.Logo.BlobSize(), "Blob cannot have zero bytes");
+                Y_ENSURE(glob.Logo.BlobSize(), "Blob cannot have zero bytes");
             }
 
             prefix.EvAnnex(blobs);
@@ -785,15 +786,15 @@ TDatabase::TProd TDatabase::Commit(TTxStamp stamp, bool commit, TCookieAllocator
         }
 
         if (Change->Redo.size() > offset && !Change->Affects) {
-            Y_Fail(
+            Y_TABLET_ERROR(
                 NFmt::Do(*Change) << " produced " << (Change->Redo.size() - offset)
                 << "b of non technical redo without leaving effects on data");
         } else if (Change->Redo && Change->Serial != DatabaseImpl->Serial()) {
-            Y_Fail(
+            Y_TABLET_ERROR(
                 NFmt::Do(*Change) << " serial diverged from current db "
                 << DatabaseImpl->Serial() << " after rolling up redo log");
         } else if (Change->Deleted.size() != Change->Garbage.size()) {
-            Y_Fail(NFmt::Do(*Change) << " has inconsistent garbage data");
+            Y_TABLET_ERROR(NFmt::Do(*Change) << " has inconsistent garbage data");
         }
     } else {
         DatabaseImpl->RollbackTransaction();
@@ -821,7 +822,7 @@ TTable* TDatabase::RequireForUpdate(ui32 table) const
 
 void TDatabase::CheckReadAllowed(ui32 table) const
 {
-    Y_ABORT_UNLESS(!NoMoreReadsFlag, "Trying to read after reads prohibited, table %u", table);
+    Y_ENSURE(!NoMoreReadsFlag, "Trying to read after reads prohibited, table " << table);
     if (NoMoreUnprechargedReadsFlag) [[unlikely]] {
         Y_DEBUG_ABORT_UNLESS(
             std::find(PrechargedTables.begin(), PrechargedTables.end(), table) != PrechargedTables.end(),
@@ -831,7 +832,7 @@ void TDatabase::CheckReadAllowed(ui32 table) const
 
 void TDatabase::CheckPrechargeAllowed(ui32 table, TRawVals minKey, TRawVals maxKey) const
 {
-    Y_ABORT_UNLESS(!NoMoreReadsFlag, "Trying to precharge after reads prohibited, table %u", table);
+    Y_ENSURE(!NoMoreReadsFlag, "Trying to precharge after reads prohibited, table " << table);
     if (NoMoreUnprechargedReadsFlag) [[unlikely]] {
         Y_DEBUG_ABORT_UNLESS(
             std::find(PrechargedTables.begin(), PrechargedTables.end(), table) != PrechargedTables.end(),
@@ -846,14 +847,14 @@ void TDatabase::CheckPrechargeAllowed(ui32 table, TRawVals minKey, TRawVals maxK
 TGarbage TDatabase::RollUp(TTxStamp stamp, TArrayRef<const char> delta, TArrayRef<const char> redo,
                                 TMemGlobs annex)
 {
-    Y_ABORT_UNLESS(!annex || redo, "Annex have to be rolled up with redo log");
+    Y_ENSURE(!annex || redo, "Annex have to be rolled up with redo log");
 
     DatabaseImpl->Switch(stamp);
 
     if (delta) {
         TSchemeChanges changes;
         bool parseOk = ParseFromStringNoSizeLimit(changes, delta);
-        Y_ABORT_UNLESS(parseOk);
+        Y_ENSURE(parseOk);
 
         DatabaseImpl->ApplySchema(changes);
     }

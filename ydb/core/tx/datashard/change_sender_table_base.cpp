@@ -153,11 +153,11 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
 
         switch(Type) {
             case ETableChangeSenderType::AsyncIndex:
-                Y_ABORT_UNLESS(record.HasAsyncIndex());
+                Y_ENSURE(record.HasAsyncIndex());
                 AdjustTags(*record.MutableAsyncIndex());
                 break;
             case ETableChangeSenderType::IncrementalRestore:
-                Y_ABORT_UNLESS(record.HasIncrementalRestore());
+                Y_ENSURE(record.HasIncrementalRestore());
                 AdjustTags(*record.MutableIncrementalRestore());
                 break;
         }
@@ -181,7 +181,7 @@ class TTableChangeSenderShard: public TActorBootstrapped<TTableChangeSenderShard
     void AdjustTags(google::protobuf::RepeatedField<ui32>& tags) const {
         for (int i = 0; i < tags.size(); ++i) {
             auto it = TagMap.find(tags[i]);
-            Y_ABORT_UNLESS(it != TagMap.end());
+            Y_ENSURE(it != TagMap.end());
             tags[i] = it->second;
         }
     }

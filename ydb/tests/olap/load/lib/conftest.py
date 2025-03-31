@@ -249,7 +249,7 @@ class LoadSuiteBase:
     @classmethod
     def setup_class(cls) -> None:
         start_time = time()
-        error = YdbCluster.wait_ydb_alive(20 * 60)
+        error = YdbCluster.wait_ydb_alive(int(os.getenv('WAIT_CLUSTER_ALIVE_TIMEOUT', 20 * 60)))
         tb = None
         if not error and hasattr(cls, 'do_setup_class'):
             try:

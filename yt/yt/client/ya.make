@@ -33,6 +33,8 @@ SRCS(
     api/sticky_transaction_pool.cpp
     api/options.cpp
     api/shuffle_client.cpp
+    api/table_partition_reader.cpp
+    api/private.cpp
 
     api/rpc_proxy/address_helpers.cpp
     api/rpc_proxy/public.cpp

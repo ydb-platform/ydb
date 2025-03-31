@@ -1,0 +1,1 @@
+RECURSE(block_coalesce)

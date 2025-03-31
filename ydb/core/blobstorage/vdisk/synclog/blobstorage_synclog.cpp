@@ -106,7 +106,7 @@ namespace NKikimr {
             friend class TActorBootstrapped<TSyncLogActor>;
 
             ui64 GetDbBirthLsn() {
-                Y_ABORT_UNLESS(DbBirthLsn.Defined());
+                Y_VERIFY_S(DbBirthLsn.Defined(), SlCtx->VCtx->VDiskLogPrefix);
                 return *DbBirthLsn;
             }
 
@@ -230,12 +230,10 @@ namespace NKikimr {
                     NeighborsPtr->UpdateSyncedLsn(vdisk, syncedLsn);
                     // get current min value
                     ui64 curMinLsn = NeighborsPtr->GlobalSyncedLsn();
-                    Y_ABORT_UNLESS(prevMinLsn <= curMinLsn,
-                             "TSyncLogActor::CutLog: currentSyncedLsn# %" PRIu64
-                             " syncedLsn# %" PRIu64 " vdisk# %s prevMinLsn# %" PRIu64
-                             " curMinLsn# %" PRIu64,
-                             currentSyncedLsn, syncedLsn, vdisk.ToString().data(),
-                             prevMinLsn, curMinLsn);
+                    Y_VERIFY_S(prevMinLsn <= curMinLsn, SlCtx->VCtx->VDiskLogPrefix
+                            << "TSyncLogActor::CutLog: currentSyncedLsn# " << currentSyncedLsn
+                            << " syncedLsn# " << syncedLsn << " vdisk# " << vdisk.ToString()
+                            << " prevMinLsn# " << prevMinLsn << " curMinLsn# " << curMinLsn);
                     if (prevMinLsn < curMinLsn) {
                         ctx.Send(KeeperId, new TEvSyncLogTrim(curMinLsn));
                     }
@@ -269,7 +267,8 @@ namespace NKikimr {
                 Y_UNUSED(ctx);
                 auto *msg = ev->Get();
                 GInfo = msg->NewInfo;
-                Y_ABORT_UNLESS(msg->NewVDiskId == msg->NewInfo->GetVDiskId(SlCtx->VCtx->ShortSelfVDisk));
+                Y_VERIFY_S(msg->NewVDiskId == msg->NewInfo->GetVDiskId(SlCtx->VCtx->ShortSelfVDisk),
+                    SlCtx->VCtx->VDiskLogPrefix);
                 SelfVDiskId = msg->NewVDiskId;
             }
 

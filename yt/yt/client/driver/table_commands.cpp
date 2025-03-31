@@ -4,11 +4,16 @@
 
 #include <yt/yt/client/api/rowset.h>
 #include <yt/yt/client/api/skynet.h>
+#include <yt/yt/client/api/table_partition_reader.h>
 
 #include <yt/yt/client/chaos_client/replication_card_serialization.h>
 
 #include <yt/yt/client/formats/config.h>
 #include <yt/yt/client/formats/parser.h>
+
+#include <yt/yt/client/signature/generator.h>
+#include <yt/yt/client/signature/signature.h>
+#include <yt/yt/client/signature/validator.h>
 
 #include <yt/yt/client/table_client/adapters.h>
 #include <yt/yt/client/table_client/blob_reader.h>
@@ -33,6 +38,7 @@
 namespace NYT::NDriver {
 
 using namespace NApi;
+using namespace NApi::NDetail;
 using namespace NChaosClient;
 using namespace NChunkClient;
 using namespace NCodegen;
@@ -230,6 +236,51 @@ void TReadBlobTableCommand::DoExecute(ICommandContextPtr context)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+void TReadTablePartitionCommand::Register(TRegistrar registrar)
+{
+    registrar.Parameter("cookie", &TThis::Cookie);
+}
+
+void TReadTablePartitionCommand::DoExecute(ICommandContextPtr context)
+{
+    auto client = context->GetClient();
+
+    auto cookie = ConvertTo<TTablePartitionCookiePtr>(TYsonString(Cookie));
+
+    auto valid = WaitFor(context->GetDriver()->GetSignatureValidator()->Validate(cookie.Underlying()))
+        .ValueOrThrow();
+
+    if (!valid) {
+        THROW_ERROR_EXCEPTION("Signature validation failed");
+    }
+
+    auto reader = WaitFor(client->CreateTablePartitionReader(cookie))
+        .ValueOrThrow();
+
+    auto format = context->GetOutputFormat();
+    auto formatWriter = CreateStaticTableWriterForFormat(
+        /*format*/ format,
+        /*nameTable*/ reader->GetNameTable(),
+        /*tableSchemas*/ GetTableSchemas(reader),
+        /*columnFilters*/ GetColumnFilters(reader),
+        /*output*/ context->Request().OutputStream,
+        /*enableContextSaving*/ false,
+        /*controlAttributesConfig*/ New<TControlAttributesConfig>(),
+        /*keyColumnCount*/ 0);
+
+    TRowBatchReadOptions options{
+        .MaxRowsPerRead = context->GetConfig()->ReadBufferRowCount,
+        .Columnar = (format.GetType() == EFormatType::Arrow),
+    };
+
+    PipeReaderToWriterByBatches(
+        reader,
+        formatWriter,
+        options);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 void TLocateSkynetShareCommand::Register(TRegistrar registrar)
 {
     registrar.Parameter("path", &TThis::Path);
@@ -298,7 +349,8 @@ void TWriteTableCommand::DoExecuteImpl(const ICommandContextPtr& context)
     TWritingValueConsumer valueConsumer(
         schemalessWriter,
         ConvertTo<TTypeConversionConfigPtr>(context->GetInputFormat().Attributes()),
-        MaxRowBufferSize);
+        MaxRowBufferSize,
+        context->Request().MemoryUsageTracker);
 
     TTableOutput output(CreateParserForFormat(
         context->GetInputFormat(),
@@ -454,6 +506,8 @@ void TPartitionTablesCommand::Register(TRegistrar registrar)
         .Default(false);
     registrar.Parameter("adjust_data_weight_per_partition", &TThis::AdjustDataWeightPerPartition)
         .Default(true);
+    registrar.Parameter("enable_cookies", &TThis::EnableCookies)
+        .Default(false);
 }
 
 void TPartitionTablesCommand::DoExecute(ICommandContextPtr context)
@@ -467,9 +521,16 @@ void TPartitionTablesCommand::DoExecute(ICommandContextPtr context)
     Options.MaxPartitionCount = MaxPartitionCount;
     Options.EnableKeyGuarantee = EnableKeyGuarantee;
     Options.AdjustDataWeightPerPartition = AdjustDataWeightPerPartition;
+    Options.EnableCookies = EnableCookies;
 
     auto partitions = WaitFor(context->GetClient()->PartitionTables(Paths, Options))
         .ValueOrThrow();
+
+    for (auto& partition : partitions.Partitions) {
+        if (partition.Cookie) {
+            context->GetDriver()->GetSignatureGenerator()->Sign(partition.Cookie.Underlying());
+        }
+    }
 
     context->ProduceOutputValue(ConvertToYsonString(partitions));
 }

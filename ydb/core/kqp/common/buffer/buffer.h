@@ -12,6 +12,7 @@ struct TKqpBufferWriterSettings {
     NWilson::TTraceId TraceId;
     TIntrusivePtr<TKqpCounters> Counters;
     TIntrusivePtr<NTxProxy::TTxProxyMon> TxProxyMon;
+    std::shared_ptr<NKikimr::NMiniKQL::TScopedAlloc> Alloc;
 };
 
 NActors::IActor* CreateKqpBufferWriterActor(TKqpBufferWriterSettings&& settings);

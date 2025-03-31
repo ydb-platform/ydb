@@ -112,7 +112,7 @@ std::shared_ptr<IChunkedArray> IChunkedArray::DoApplyFilter(const TColumnFilter&
     auto schema = std::make_shared<arrow::Schema>(fields);
     auto table = arrow::Table::Make(schema, { arr }, GetRecordsCount());
     AFL_VERIFY(table->num_columns() == 1);
-    AFL_VERIFY(filter.Apply(table));
+    filter.Apply(table);
     if (table->column(0)->num_chunks() == 1) {
         return std::make_shared<TTrivialArray>(table->column(0)->chunk(0));
     } else {

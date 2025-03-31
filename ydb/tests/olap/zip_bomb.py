@@ -5,6 +5,7 @@ import ydb
 from threading import Thread
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
+from ydb.tests.library.harness.util import LogLevels
 
 ROWS_CHUNK_SIZE = 100000
 ROWS_CHUNKS_COUNT = 2
@@ -15,6 +16,9 @@ class TestZipBomb(object):
     def setup_class(cls):
         cls.cluster = KiKiMR(KikimrConfigGenerator(
             column_shard_config={},
+            additional_log_configs={'MEMORY_CONTROLLER': LogLevels.INFO, "TX_COLUMNSHARD": LogLevels.DEBUG},
+            extra_feature_flags={'enable_write_portions_on_insert': True},
+            memory_controller_config={'hard_limit_bytes': 12 * 1024 * 1024 * 1024},
             static_pdisk_size=10 * 1024 * 1024,
             dynamic_pdisk_size=5 * 1024 * 1024
         ))

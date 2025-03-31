@@ -447,11 +447,11 @@ TVector<NYql::TExprNode::TPtr> RewriteExpression(
             if (IsCreateTableAs(node, exprCtx)) {
                 const auto rewriteResult = RewriteCreateTableAs(node, exprCtx, sessionCtx, insertDataPtr);
                 if (rewriteResult) {
-                    //result.push_back(rewriteResult->CreateTable);
+                    result.push_back(rewriteResult->CreateTable);
                     result.push_back(rewriteResult->ReplaceInto);
-                    //if (rewriteResult->MoveTable) {
-                    //    result.push_back(rewriteResult->MoveTable);
-                    //}
+                    if (rewriteResult->MoveTable) {
+                        result.push_back(rewriteResult->MoveTable);
+                    }
                 }
             }
         }

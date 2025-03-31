@@ -1,3 +1,5 @@
+#pragma once
+
 #include <yql/essentials/public/udf/udf_value.h>
 
 #if defined(_msan_enabled_) && defined(__linux__)

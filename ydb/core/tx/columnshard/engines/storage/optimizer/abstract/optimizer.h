@@ -173,12 +173,14 @@ public:
         YDB_READONLY_DEF(TInternalPathId, PathId);
         YDB_READONLY_DEF(std::shared_ptr<IStoragesManager>, Storages);
         YDB_READONLY_DEF(std::shared_ptr<arrow::Schema>, PKSchema);
+        YDB_READONLY(bool, OptimizeForManyTable, false);
 
     public:
-        TBuildContext(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema)
+        TBuildContext(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storages, const std::shared_ptr<arrow::Schema>& pkSchema, const ui64 optimizeForManyTable)
             : PathId(pathId)
             , Storages(storages)
-            , PKSchema(pkSchema) {
+            , PKSchema(pkSchema)
+            , OptimizeForManyTable(optimizeForManyTable) {
         }
     };
 
@@ -195,7 +197,7 @@ private:
 
 public:
     static std::shared_ptr<IOptimizerPlannerConstructor> BuildDefault() {
-        auto result = TFactory::MakeHolder("l-buckets");
+        auto result = TFactory::MakeHolder("lc-buckets");
         AFL_VERIFY(!!result);
         return std::shared_ptr<IOptimizerPlannerConstructor>(result.Release());
     }

@@ -60,7 +60,7 @@ public:
     }
 
 private:
-    std::vector<TLevelConstructorContainer> Levels;
+    std::vector<TLevelConstructorContainer> LevelConstructors;
 
     static inline const TFactory::TRegistrator<TOptimizerPlannerConstructor> Registrator =
         TFactory::TRegistrator<TOptimizerPlannerConstructor>(GetClassNameStatic());

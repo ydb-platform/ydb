@@ -140,7 +140,8 @@ public:
     }
 
     TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
-        const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::vector<TLevelConstructorContainer>& levelConstructors);
+        const std::shared_ptr<arrow::Schema>& primaryKeysSchema, std::shared_ptr<TCounters> counters,
+        std::vector<std::shared_ptr<IPortionsLevel>> levels);
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

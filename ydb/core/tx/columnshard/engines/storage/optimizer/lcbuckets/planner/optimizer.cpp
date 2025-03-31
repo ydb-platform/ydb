@@ -10,33 +10,14 @@
 namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets {
 
 TOptimizerPlanner::TOptimizerPlanner(const TInternalPathId pathId, const std::shared_ptr<IStoragesManager>& storagesManager,
-    const std::shared_ptr<arrow::Schema>& primaryKeysSchema, const std::vector<TLevelConstructorContainer>& levelConstructors)
+    const std::shared_ptr<arrow::Schema>& primaryKeysSchema, std::shared_ptr<TCounters> counters,
+    std::vector<std::shared_ptr<IPortionsLevel>> levels)
     : TBase(pathId)
-    , Counters(std::make_shared<TCounters>())
+    , Counters(counters)
+    , Levels(std::move(levels))
     , StoragesManager(storagesManager)
-    , PrimaryKeysSchema(primaryKeysSchema) {
-    std::shared_ptr<IPortionsLevel> nextLevel;
-    /*
-    const ui64 maxPortionBlobBytes = (ui64)1 << 20;
-    Levels.emplace_back(
-        std::make_shared<TLevelPortions>(2, 0.9, maxPortionBlobBytes, nullptr, PortionsInfo, Counters->GetLevelCounters(2)));
-*/
-    if (levelConstructors.size()) {
-        std::shared_ptr<IPortionsLevel> nextLevel;
-        ui32 idx = levelConstructors.size();
-        for (auto it = levelConstructors.rbegin(); it != levelConstructors.rend(); ++it) {
-            --idx;
-            Levels.emplace_back((*it)->BuildLevel(nextLevel, idx, Counters->GetLevelCounters(idx)));
-            nextLevel = Levels.back();
-        }
-    } else {
-        Levels.emplace_back(std::make_shared<TZeroLevelPortions>(2, nullptr, Counters->GetLevelCounters(2), TDuration::Max(), 1 << 20, 10));
-        Levels.emplace_back(
-            std::make_shared<TZeroLevelPortions>(1, Levels.back(), Counters->GetLevelCounters(1), TDuration::Max(), 1 << 20, 10));
-        Levels.emplace_back(
-            std::make_shared<TZeroLevelPortions>(0, Levels.back(), Counters->GetLevelCounters(0), TDuration::Seconds(180), 1 << 20, 10));
-    }
-    std::reverse(Levels.begin(), Levels.end());
+    , PrimaryKeysSchema(primaryKeysSchema)
+    {
     RefreshWeights();
 }
 

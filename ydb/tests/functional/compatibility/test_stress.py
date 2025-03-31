@@ -127,8 +127,8 @@ class TestStress(object):
 
     @pytest.mark.skip(reason="Too huge logs")
     @pytest.mark.parametrize("store_type", ["row", "column"])
-    def test_simple_queue(self, mode: str):
-        with Workload(f"grpc://localhost:{self.cluster.nodes[1].grpc_port}", "/Root", 180, mode) as workload:
+    def test_simple_queue(self, store_type: str):
+        with Workload(f"grpc://localhost:{self.cluster.nodes[1].grpc_port}", "/Root", 180, store_type) as workload:
             for handle in workload.loop():
                 handle()
 

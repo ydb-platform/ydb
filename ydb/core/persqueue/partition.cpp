@@ -2496,17 +2496,15 @@ void TPartition::CommitWriteOperations(TTransaction& t)
         bool needCompactHead =
             (Parameters->FirstCommitWriteOperations ? WorkZone.Head : WorkZone.NewHead).PackedSize != 0;
 
-        WorkZone.PartitionedBlob = TPartitionedBlob(Partition,
-                                                    WorkZone.NewHead.Offset,
-                                                    "", // SourceId
-                                                    0,  // SeqNo
-                                                    0,  // TotalParts
-                                                    0,  // TotalSize
-                                                    WorkZone.Head,
-                                                    WorkZone.NewHead,
-                                                    Parameters->HeadCleared,  // headCleared
-                                                    needCompactHead,          // needCompactHead
-                                                    MaxBlobSize);
+        WorkZone.NewPartitionedBlob(Partition,
+                                    WorkZone.NewHead.Offset,
+                                    "", // SourceId
+                                    0,  // SeqNo
+                                    0,  // TotalParts
+                                    0,  // TotalSize
+                                    Parameters->HeadCleared,  // headCleared
+                                    needCompactHead,          // needCompactHead
+                                    MaxBlobSize);
 
         for (auto& k : t.WriteInfo->BodyKeys) {
             PQ_LOG_D("add key " << k.Key.ToString());
@@ -2530,7 +2528,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
                               ctx);
         }
 
-        WorkZone.PartitionedBlob = TPartitionedBlob(Partition, 0, "", 0, 0, 0, WorkZone.Head, WorkZone.NewHead, true, false, MaxBlobSize);
+        WorkZone.ClearPartitionedBlob(Partition, MaxBlobSize);
 
         WorkZone.NewHead.Clear();
         WorkZone.NewHead.Offset = Parameters->CurOffset;
@@ -2544,18 +2542,16 @@ void TPartition::CommitWriteOperations(TTransaction& t)
 
         Parameters->HeadCleared = Parameters->HeadCleared || !t.WriteInfo->BodyKeys.empty();
 
-        WorkZone.PartitionedBlob = TPartitionedBlob(Partition,
-                                                    WorkZone.NewHead.Offset,
-                                                    first.SourceId,
-                                                    first.SeqNo,
-                                                    first.GetTotalParts(),
-                                                    first.GetTotalSize(),
-                                                    WorkZone.Head,
-                                                    WorkZone.NewHead,
-                                                    Parameters->HeadCleared, // headCleared
-                                                    false,                   // needCompactHead
-                                                    MaxBlobSize,
-                                                    first.GetPartNo());
+        WorkZone.NewPartitionedBlob(Partition,
+                                    WorkZone.NewHead.Offset,
+                                    first.SourceId,
+                                    first.SeqNo,
+                                    first.GetTotalParts(),
+                                    first.GetTotalSize(),
+                                    Parameters->HeadCleared, // headCleared
+                                    false,                   // needCompactHead
+                                    MaxBlobSize,
+                                    first.GetPartNo());
 
         for (auto& blob : t.WriteInfo->BlobsFromHead) {
             TWriteMsg msg{Max<ui64>(), Nothing(), TEvPQ::TEvWrite::TMsg{

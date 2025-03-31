@@ -21,7 +21,7 @@ TPlainReadData::TPlainReadData(const std::shared_ptr<TReadContext>& context)
 
         sources.emplace_back(TSourceConstructor(sourceIdx++, i, context));
     }
-    SpecialReadContext->RegisterDuplicatesManager();
+    SpecialReadContext->RegisterDuplicatesManager(SpecialReadContext);
     Scanner = std::make_shared<TScanHead>(std::move(sources), SpecialReadContext);
 
     auto& stats = GetReadMetadata()->ReadStats;

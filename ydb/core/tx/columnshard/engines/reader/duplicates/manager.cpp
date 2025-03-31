@@ -320,9 +320,20 @@ void TDuplicateFilterConstructor::AbortConstruction(const TString& reason) {
     PassAway();
 }
 
-TDuplicateFilterConstructor::TDuplicateFilterConstructor(const std::deque<std::shared_ptr<NSimple::IDataSource>>& sources)
+TDuplicateFilterConstructor::TDuplicateFilterConstructor(const std::deque<NSimple::TSourceConstructor>& sources, const std::shared_ptr<NSimple::TSpecialReadContext>& context)
     : TActor(&TDuplicateFilterConstructor::StateMain)
-    , Intervals(sources)
+    , SortedSources([&sources, context]() {
+        // TODO: avoid construction of sorted array of sources
+        // FIXME: performance, code duplication
+        // TODO: Consider using LRU-cache to avoid depending on fetching order entirely
+        std::deque<std::shared_ptr<NSimple::IDataSource>> sortedSources;
+        for (const auto& source : sources) {
+            sortedSources.emplace_back(source.Construct(context));
+        }
+        std::sort(sortedSources.begin(), sortedSources.end(), NSimple::IDataSource::TCompareStartForScanSequence<false>());
+        return sortedSources;
+    }())
+    , Intervals(SortedSources)
     , NotFetchedSourcesCount([this]() {
         std::vector<std::pair<ui32, ui32>> intervals;
         for (const auto& [_, interval] : Intervals.GetSourceRanges()) {
@@ -331,8 +342,7 @@ TDuplicateFilterConstructor::TDuplicateFilterConstructor(const std::deque<std::s
         return intervals;
     }())
     , NextIntervalToMerge(&Intervals)
-    , RequestsBuffer(Intervals)
-    , SortedSources(sources) {
+    , RequestsBuffer(Intervals) {
 }
 
 void TDuplicateFilterConstructor::StartFetchingColumns(const std::shared_ptr<TSourceFilterConstructor>& source, const ui64 memoryGroupId) const {

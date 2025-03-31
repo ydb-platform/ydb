@@ -39,7 +39,7 @@ jobs:
       
           # Checkout BRANCH_FOR_PR, create if it doesn't exist based on BASE_BRANCH
           if [ git show-ref --quiet refs/heads/${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }} ] ; then
-            echo 'Branch ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }} exists.
+            echo 'Branch ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }} exists.'
             git checkout ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}
           else
             echo 'Branch ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }} does not exist. Creating based on ${{ env.BASE_BRANCH }}'
@@ -159,6 +159,7 @@ jobs:
           EOF
         
       - name: Comment PR
+        continue-on-error: true
         uses: actions/github-script@v7
         with:
           script: |    

@@ -34,6 +34,11 @@ struct TPartitionWorkZone {
 
     void SyncHeadKeys();
     void SyncNewHeadKey();
+    void SyncDataKeysBody(TInstant now,
+                          TBlobKeyTokenCreator makeBlobKeyToken,
+                          ui64& startOffset,
+                          std::deque<std::pair<ui64, ui64>>& gapOffsets,
+                          ui64& gapSize);
 
     THead Head;
     THead NewHead;

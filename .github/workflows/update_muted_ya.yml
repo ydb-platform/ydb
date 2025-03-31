@@ -139,9 +139,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
         run: |
-          python .github/scripts/create_or_update_pr.py create_or_update --base_branch="${{ env.BASE_BRANCH }}" --branch_for_pr="${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}" --title="${{ env.TITLE }}" --body="${{ env.BODY }}"
+          python .github/scripts/create_or_update_pr.py create_or_update --base_branch="${{ env.BASE_BRANCH }}" --branch_for_pr="${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}" --title="${{ env.TITLE }} in ${{ env.BASE_BRANCH }}" --body="${{ env.PR_BODY_PATH }}"
   
       
+      - name: Comment PR first attempt
+        id: build
+        shell: bash
+        run: |
+          set -ex
+          echo "cat ${{env.PR_BODY_PATH}}" | GITHUB_TOKEN="${{ secrets.YDBOT_TOKEN }}" .github/scripts/tests/comment-pr.py    
+
       - name: Comment PR
         uses: actions/github-script@v7
         with:

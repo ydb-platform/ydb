@@ -6,6 +6,7 @@
 #include <yql/essentials/sql/v1/lexer/antlr3/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
+#include <yql/essentials/sql/v1/lexer/regex/lexer.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -59,6 +60,42 @@ void AssertEquivialent(const TParsedTokenList& lhs, const TParsedTokenList& rhs)
 }
 
 Y_UNIT_TEST_SUITE(SQLv1Lexer) {
+    Y_UNIT_TEST(UnsupportedIssues) {
+        NSQLTranslationV1::TLexers factories;
+
+        TVector<ILexer::TPtr> lexers;    
+        for (auto ansi : {false, true}) {
+            for (auto antlr4 : {false, true}) {
+                for (auto flavor : {ELexerFlavor::Default, ELexerFlavor::Pure, ELexerFlavor::Regex}) {
+                    lexers.emplace_back(MakeLexer(factories, ansi, antlr4, flavor));
+                }
+            }
+        }
+
+        TVector<TString> actual;
+        for (auto& lexer : lexers) {
+            auto issues = GetIssueMessages(lexer, "");
+            actual.emplace_back(std::move(issues.at(0)));
+        }
+
+        TVector<TString> expected = {
+            "<main>: Error: Lexer antlr3 is not supported",
+            "<main>: Error: Lexer antlr3_pure is not supported",
+            "<main>: Error: Lexer regex is not supported",
+            "<main>: Error: Lexer antlr4 is not supported",
+            "<main>: Error: Lexer antlr4_pure is not supported",
+            "<main>: Error: Lexer antlr4_regex is not supported",
+            "<main>: Error: Lexer antlr3_ansi is not supported",
+            "<main>: Error: Lexer antlr3_pure_ansi is not supported",
+            "<main>: Error: Lexer regex_ansi is not supported",
+            "<main>: Error: Lexer antlr4_ansi is not supported",
+            "<main>: Error: Lexer antlr4_pure_ansi is not supported",
+            "<main>: Error: Lexer antlr4_regex_ansi is not supported",
+        };
+
+        UNIT_ASSERT_VALUES_EQUAL(actual, expected);
+    }
+
     Y_UNIT_TEST(AntlrVersionIndependent) {
         const TVector<TString> queriesUtf8 = {
             "",
@@ -85,7 +122,7 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
 
         auto lexer3 = MakeLexer(lexers, /* ansi = */ false, /* antlr4 = */ false);
         auto lexer4 = MakeLexer(lexers, /* ansi = */ false, /* antlr4 = */ true);
-        auto lexer4p = MakeLexer(lexers, /* ansi = */ false, /* antlr4 = */ true, /* pure = */ true);
+        auto lexer4p = MakeLexer(lexers, /* ansi = */ false, /* antlr4 = */ true, ELexerFlavor::Pure);
 
         for (const auto& query : queriesUtf8) {
             auto [tokens3, issues3] = Tokenize(lexer3, query);
@@ -164,19 +201,24 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
         NSQLTranslationV1::TLexers lexers;
         lexers.Antlr3 = NSQLTranslationV1::MakeAntlr3LexerFactory();
         lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+        lexers.Antlr4Pure = NSQLTranslationV1::MakeAntlr4PureLexerFactory();
+        lexers.Regex = NSQLTranslationV1::MakeRegexLexerFactory(/* ansi = */ false);
 
         auto lexer3 = MakeLexer(lexers, /* ansi = */ false, /* antlr4 = */ false);
         auto lexer4 = MakeLexer(lexers, /* ansi = */ false, /* antlr4 = */ true);
-        auto lexer4p = MakeLexer(lexers, /* ansi = */ false, /* antlr4 = */ true, /* pure = */ true);
+        auto lexer4p = MakeLexer(lexers, /* ansi = */ false, /* antlr4 = */ true, ELexerFlavor::Pure);
+        auto lexerR = MakeLexer(lexers, /* ansi = */ false, /* antlr4 = */ false, ELexerFlavor::Regex);
 
         for (const auto& query : InvalidQueries()) {
             auto issues3 = GetIssueMessages(lexer3, query);
             auto issues4 = GetIssueMessages(lexer4, query);
             auto issues4p = GetIssueMessages(lexer4p, query);
+            auto issuesR = GetIssueMessages(lexerR, query);
 
             UNIT_ASSERT(!issues3.empty());
             UNIT_ASSERT(!issues4.empty());
             UNIT_ASSERT(!issues4p.empty());
+            UNIT_ASSERT(!issuesR.empty());
         }
     }
 

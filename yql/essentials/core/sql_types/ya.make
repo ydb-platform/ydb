@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    block.h
     match_recognize.h
     match_recognize.cpp
     simple_types.h

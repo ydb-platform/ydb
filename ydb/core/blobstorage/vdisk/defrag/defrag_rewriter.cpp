@@ -125,11 +125,11 @@ namespace NKikimr {
 
             const auto &gtype = DCtx->VCtx->Top->GType;
             ui8 partId = rec.LogoBlobId.PartId();
-            Y_ABORT_UNLESS(partId);
+            Y_VERIFY_S(partId, DCtx->VCtx->VDiskLogPrefix);
 
             TRcBuf data = msg->Data.ToString();
-            Y_ABORT_UNLESS(data.size() == TDiskBlob::HeaderSize + gtype.PartSize(rec.LogoBlobId) ||
-                data.size() == gtype.PartSize(rec.LogoBlobId));
+            Y_VERIFY_S(data.size() == TDiskBlob::HeaderSize + gtype.PartSize(rec.LogoBlobId) ||
+                data.size() == gtype.PartSize(rec.LogoBlobId), DCtx->VCtx->VDiskLogPrefix);
 
             ui32 trim = 0;
             if (data.size() == TDiskBlob::HeaderSize + gtype.PartSize(rec.LogoBlobId)) {
@@ -137,8 +137,9 @@ namespace NKikimr {
                 ui32 fullDataSize;
                 memcpy(&fullDataSize, header, sizeof(fullDataSize));
                 header += sizeof(fullDataSize);
-                Y_ABORT_UNLESS(fullDataSize == rec.LogoBlobId.BlobSize());
-                Y_ABORT_UNLESS(NMatrix::TVectorType::MakeOneHot(partId - 1, gtype.TotalPartCount()).Raw() == static_cast<ui8>(*header));
+                Y_VERIFY_S(fullDataSize == rec.LogoBlobId.BlobSize(), DCtx->VCtx->VDiskLogPrefix);
+                Y_VERIFY_S(NMatrix::TVectorType::MakeOneHot(partId - 1, gtype.TotalPartCount()).Raw() == static_cast<ui8>(*header),
+                    DCtx->VCtx->VDiskLogPrefix);
                 trim += TDiskBlob::HeaderSize;
             }
 
@@ -146,7 +147,7 @@ namespace NKikimr {
             if (trim) {
                 rope.EraseFront(trim);
             }
-            Y_ABORT_UNLESS(rope.size() == gtype.PartSize(rec.LogoBlobId));
+            Y_VERIFY_S(rope.size() == gtype.PartSize(rec.LogoBlobId), DCtx->VCtx->VDiskLogPrefix);
 
             LOG_DEBUG_S(ctx, NKikimrServices::BS_VDISK_DEFRAG, DCtx->VCtx->VDiskLogPrefix << "rewriting BlobId# "
                 << rec.LogoBlobId << " from Location# " << rec.OldDiskPart);

@@ -935,9 +935,7 @@ void RemoveClusterDirectory(const TDriver& driver, const TString& path) {
 
 void RemoveClusterDirectoryRecursive(const TDriver& driver, const TString& path) {
     LOG_I("Remove temporary directory " << path.Quote() << " in database");
-    NScheme::TSchemeClient schemeClient(driver);
-    NTable::TTableClient tableClient(driver);
-    TStatus status = NConsoleClient::RemoveDirectoryRecursive(schemeClient, tableClient, path, {}, true, false);
+    TStatus status = NConsoleClient::RemoveDirectoryRecursive(driver, path);
     VerifyStatus(status, TStringBuilder() << "Remove temporary directory " << path.Quote() << " failed");
 }
 

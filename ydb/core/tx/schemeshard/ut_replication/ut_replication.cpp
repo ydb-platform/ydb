@@ -259,7 +259,15 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
               Paused {
               }
             }
-        )", {NKikimrScheme::StatusInvalidParameter});
+        )");
+
+        TestAlterReplication(runtime, ++txId, "/MyRoot", R"(
+          Name: "Replication"
+          State {
+            StandBy {
+            }
+          }
+        )");
 
         TestAlterReplication(runtime, ++txId, "/MyRoot", R"(
             Name: "Replication"
@@ -275,14 +283,6 @@ Y_UNIT_TEST_SUITE(TReplicationTests) {
             NLs::PathExist,
             NLs::ReplicationState(NKikimrReplication::TReplicationState::kDone),
         });
-
-        TestAlterReplication(runtime, ++txId, "/MyRoot", R"(
-            Name: "Replication"
-            State {
-              StandBy {
-              }
-            }
-        )", {NKikimrScheme::StatusInvalidParameter});
     }
 
     Y_UNIT_TEST(Describe) {

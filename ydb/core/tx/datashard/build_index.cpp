@@ -25,6 +25,7 @@ namespace NKikimr::NDataShard {
 
 #define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
 #define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
+#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
 #define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, stream)
@@ -32,7 +33,7 @@ namespace NKikimr::NDataShard {
 static std::shared_ptr<NTxProxy::TUploadTypes> BuildTypes(const TUserTable& tableInfo, const NKikimrIndexBuilder::TColumnBuildSettings& buildSettings) {
     auto types = GetAllTypes(tableInfo);
 
-    Y_ABORT_UNLESS(buildSettings.columnSize() > 0);
+    Y_ENSURE(buildSettings.columnSize() > 0);
     auto result = std::make_shared<NTxProxy::TUploadTypes>();
     result->reserve(tableInfo.KeyColumnIds.size() + buildSettings.columnSize());
 
@@ -185,7 +186,7 @@ public:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) override {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
 
-        LOG_D("Prepare " << Debug());
+        LOG_I("Prepare " << Debug());
 
         Driver = driver;
 
@@ -254,9 +255,8 @@ public:
 
         UploadStatusToMessage(progress->Record);
 
+        LOG_N("Finish" << Debug() << " " << progress->Record.ShortDebugString());
         this->Send(ProgressActorId, progress.Release());
-
-        LOG_D("Finish " << Debug());
 
         Driver = nullptr;
         this->PassAway();
@@ -320,12 +320,12 @@ private:
               << " ev->Sender: " << ev->Sender.ToString());
 
         if (Uploader) {
-            Y_VERIFY_S(Uploader == ev->Sender,
+            Y_ENSURE(Uploader == ev->Sender,
                        "Mismatch"
                            << " Uploader: " << Uploader.ToString()
                            << " ev->Sender: " << ev->Sender.ToString());
         } else {
-            Y_ABORT_UNLESS(Driver == nullptr);
+            Y_ENSURE(Driver == nullptr);
             return;
         }
 
@@ -366,7 +366,7 @@ private:
         if (RetryCount < Limits.MaxUploadRowsRetryCount && UploadStatus.IsRetriable()) {
             LOG_N("Got retriable error, " << Debug());
 
-            ctx.Schedule(Limits.GetTimeoutBackouff(RetryCount), new TEvents::TEvWakeup());
+            ctx.Schedule(Limits.GetTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
             return;
         }
 
@@ -425,9 +425,9 @@ public:
             const auto rowCells = *row;
 
             ReadBuf.AddRow(
-                TSerializedCellVec(key),
                 TSerializedCellVec(rowCells.Slice(0, TargetDataColumnPos)),
-                TSerializedCellVec::Serialize(rowCells.Slice(TargetDataColumnPos)));
+                TSerializedCellVec::Serialize(rowCells.Slice(TargetDataColumnPos)),
+                TSerializedCellVec(key));
         });
     }
 };
@@ -446,14 +446,14 @@ public:
                       const TUserTable& tableInfo,
                       TUploadLimits limits)
         : TBuildScanUpload(buildIndexId, target, seqNo, dataShardId, progressActorId, range, tableInfo, limits) {
-        Y_ABORT_UNLESS(columnBuildSettings.columnSize() > 0);
+        Y_ENSURE(columnBuildSettings.columnSize() > 0);
         UploadColumnsTypes = BuildTypes(tableInfo, columnBuildSettings);
         UploadMode = NTxProxy::EUploadRowsMode::UpsertIfExists;
 
         TMemoryPool valueDataPool(256);
         TVector<TCell> cells;
         TString err;
-        Y_ABORT_UNLESS(BuildExtraColumns(cells, columnBuildSettings, err, valueDataPool));
+        Y_ENSURE(BuildExtraColumns(cells, columnBuildSettings, err, valueDataPool));
         ValueSerialized = TSerializedCellVec::Serialize(cells);
     }
 
@@ -463,9 +463,9 @@ public:
             auto pkTarget = pk;
             auto valueTarget = ValueSerialized;
             ReadBuf.AddRow(
-                std::move(pk),
                 std::move(pkTarget),
-                std::move(valueTarget));
+                std::move(valueTarget),
+                std::move(pk));
         });
     }
 };
@@ -517,6 +517,9 @@ void TDataShard::Handle(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, cons
 void TDataShard::HandleSafe(TEvDataShard::TEvBuildIndexCreateRequest::TPtr& ev, const TActorContext& ctx) {
     const auto& record = ev->Get()->Record;
     TRowVersion rowVersion(record.GetSnapshotStep(), record.GetSnapshotTxId());
+
+    LOG_N("Starting TBuildIndexScan " << record.ShortDebugString()
+        << " row version " << rowVersion);
 
     // Note: it's very unlikely that we have volatile txs before this snapshot
     if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {

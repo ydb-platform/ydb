@@ -16,7 +16,10 @@ enum class EDiscoveryMode {
     //! we got endpoint list. The error will be returned if the endpoint list
     //! is empty and discovery failed
     //! This method is a bit more "user friendly" but can produce additional hidden latency
-    Async
+    Async,
+    //! Do not perform discovery.
+    //! This option disables database discovery and allow to use user provided endpoint for grpc connections
+    Off
 };
 
 enum class EBalancingPolicy {

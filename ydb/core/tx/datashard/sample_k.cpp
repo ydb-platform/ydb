@@ -38,7 +38,6 @@ protected:
         ui64 P = 0;
         ui64 I = 0;
 
-        bool operator==(const TProbability&) const noexcept = default;
         auto operator<=>(const TProbability&) const noexcept = default;
     };
 
@@ -81,7 +80,7 @@ public:
         , MaxProbability(maxProbability)
         , Rng(seed) {
         Y_ASSERT(MaxProbability != 0);
-        LOG_D("Create " << Debug());
+        LOG_I("Create " << Debug());
     }
 
     ~TSampleKScan() final = default;
@@ -89,7 +88,7 @@ public:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
 
-        LOG_D("Prepare " << Debug());
+        LOG_I("Prepare " << Debug());
 
         Driver = driver;
 
@@ -97,7 +96,7 @@ public:
     }
 
     EScan Seek(TLead& lead, ui64 seq) final {
-        Y_ABORT_UNLESS(seq == 0);
+        Y_ENSURE(seq == 0);
         LOG_D("Seek " << Debug());
 
         auto scanRange = Intersect(KeyTypes, RequestedRange.ToTableRange(), TableRange.ToTableRange());
@@ -149,7 +148,7 @@ public:
     }
 
     TAutoPtr<IDestructable> Finish(EAbort abort) final {
-        Y_ABORT_UNLESS(Response);
+        Y_ENSURE(Response);
         Response->Record.SetReadRows(ReadRows);
         Response->Record.SetReadBytes(ReadBytes);
         if (abort == EAbort::None) {
@@ -157,7 +156,7 @@ public:
         } else {
             Response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
         }
-        LOG_D("Finish " << Debug());
+        LOG_N("Finish" << Debug() << " " << Response->Record.ShortDebugString());
         Send(ResponseActorId, Response.Release());
         Driver = nullptr;
         PassAway();
@@ -273,7 +272,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvSampleKRequest::TPtr& ev, const TAc
         badRequest(TStringBuilder() << "Unknown table id: " << pathId.LocalPathId);
         return;
     }
-    Y_ABORT_UNLESS(*userTableIt);
+    Y_ENSURE(*userTableIt);
     const auto& userTable = **userTableIt;
 
     if (const auto* recCard = ScanManager.Get(id)) {

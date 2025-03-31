@@ -106,8 +106,8 @@ public:
     void Bootstrap() override {
         NodesInfoResponse = MakeRequest<TEvInterconnect::TEvNodesInfo>(GetNameserviceActorId(), new TEvInterconnect::TEvListNodes());
         NodeStateResponse = MakeWhiteboardRequest(TActivationContext::ActorSystem()->NodeId, new TEvWhiteboard::TEvNodeStateRequest());
-        PDisksResponse = RequestBSControllerPDisks();
-        StorageStatsResponse = RequestBSControllerStorageStats();
+        PDisksResponse = MakeCachedRequestBSControllerPDisks();
+        StorageStatsResponse = MakeCachedRequestBSControllerStorageStats();
         ListTenantsResponse = MakeRequestConsoleListTenants();
         if (AppData()->DomainsInfo && AppData()->DomainsInfo->Domain) {
             TIntrusivePtr<TDomainsInfo> domains = AppData()->DomainsInfo;
@@ -346,6 +346,7 @@ private:
         request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kCoresTotalFieldNumber);
         request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kNetworkUtilizationFieldNumber);
         request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kNetworkWriteThroughputFieldNumber);
+        request->AddFieldsRequired(NKikimrWhiteboard::TSystemStateInfo::kRealNumberOfCpusFieldNumber);
     }
 
     void InitTabletWhiteboardRequest(NKikimrWhiteboard::TEvTabletStateRequest* request) {
@@ -832,6 +833,9 @@ private:
         }
         for (const auto& [type, size] : ClusterInfo.GetMapStorageUsed()) {
             ClusterInfo.SetStorageUsed(ClusterInfo.GetStorageUsed() + size);
+        }
+        if (CachedDataMaxAge) {
+            ClusterInfo.SetCachedDataMaxAge(CachedDataMaxAge.MilliSeconds());
         }
         NKikimrWhiteboard::EFlag worstState = NKikimrWhiteboard::EFlag::Grey;
         ui64 worstNodes = 0;

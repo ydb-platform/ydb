@@ -1,3 +1,7 @@
+* Fixed bugs in `ydb scheme rmdir`: 1) do not try to delete subdomains, 2) order the deletion of external tables before the deletion of external data sources.
+* YDB CLI help message improvements. Different display for detailed help and brief help.
+* Support coordination nodes in `ydb scheme rmdir --recursive`.
+* Fixed return code of command `ydb workload * run --check-canonical` for the case when benchmark query results differ from canonical ones.
 
 ## 2.20.0 ##
 

@@ -149,6 +149,15 @@ private:
         return true;
     }
 
+    static bool EnsureDataSinkClusterMatchesTable(const TYtDSink& sink, const TYtTable& table, TExprContext& ctx) {
+        if (sink.Cluster().Value() != table.Cluster().Value()) {
+            ctx.AddError(TIssue(ctx.GetPosition(sink.Pos()), TStringBuilder() << "Datasink cluster doesn't match table cluster: '"
+                << sink.Cluster().Value() << "' != '" << table.Cluster().Value() << "'"));
+            return false;
+        }
+        return true;
+    }
+
     TStatus ValidateAndUpdateTransientOpBase(const TExprNode::TPtr& input, TExprNode::TPtr& output,
         TExprContext& ctx, bool multiIO, EYtSettingTypes allowedSectionSettings) const {
         if (!ValidateOutputOpBase(input, ctx, multiIO)) {
@@ -432,12 +441,18 @@ private:
         }
         const bool initialWrite = NYql::HasSetting(settings, EYtSettingType::Initial);
         const bool monotonicKeys = NYql::HasSetting(settings, EYtSettingType::MonotonicKeys);
-        TString columnGroups;
+        TString columnGroup;
+        TSet<TString> columnGroupAlts;
         if (auto setting = NYql::GetSetting(settings, EYtSettingType::ColumnGroups)) {
             if (!ValidateColumnGroups(*setting, *itemType->Cast<TStructExprType>(), ctx)) {
                 return TStatus::Error;
             }
-            columnGroups.assign(setting->Tail().Content());
+            columnGroup = setting->Tail().Content();
+            columnGroupAlts.insert(columnGroup);
+            TString exandedSpec;
+            if (ExpandDefaultColumnGroup(setting->Tail().Content(), *itemType->Cast<TStructExprType>(), exandedSpec)) {
+                columnGroupAlts.insert(std::move(exandedSpec));
+            }
         }
 
         if (!initialWrite && mode != EYtWriteMode::Append) {
@@ -472,15 +487,6 @@ private:
                 << "Insert with "
                 << ToString(EYtSettingType::MonotonicKeys).Quote()
                 << " setting cannot be used with a non-existent table"));
-            return TStatus::Error;
-        }
-
-        if (initialWrite && !replaceMeta && columnGroups != description.ColumnGroupSpec) {
-            ctx.AddError(TIssue(pos, TStringBuilder()
-                << "Insert with "
-                << (outTableInfo.Epoch.GetOrElse(0) ? "different " : "")
-                << ToString(EYtSettingType::ColumnGroups).Quote()
-                << " to existing table is not allowed"));
             return TStatus::Error;
         }
 
@@ -581,6 +587,14 @@ private:
                     << GetTypeDiff(*description.RowType, *itemType)));
                 return TStatus::Error;
             }
+
+            if (!columnGroupAlts.empty() && !AnyOf(columnGroupAlts, [&](const auto& grp) { return description.ColumnGroupSpecAlts.contains(grp); })) {
+                ctx.AddError(TIssue(pos, TStringBuilder()
+                    << "Insert with different "
+                    << ToString(EYtSettingType::ColumnGroups).Quote()
+                    << " to existing table is not allowed"));
+                return TStatus::Error;
+            }
         }
 
         if (auto commitEpoch = outTableInfo.CommitEpoch.GetOrElse(0)) {
@@ -601,13 +615,18 @@ private:
                     nextRowSpec->SetType(itemType->Cast<TStructExprType>(), State_->Configuration->UseNativeYtTypes.Get().GetOrElse(DEFAULT_USE_NATIVE_YT_TYPES) ? NTCF_ALL : NTCF_NONE);
                     YQL_CLOG(INFO, ProviderYt) << "Saving column order: " << FormatColumnOrder(contentColumnOrder, 10);
                     nextRowSpec->SetColumnOrder(contentColumnOrder);
+
+                    nextDescription.ColumnGroupSpec = columnGroup;
+                    nextDescription.ColumnGroupSpecAlts = columnGroupAlts;
                 } else {
                     nextRowSpec->CopyType(*description.RowSpec);
-                }
-
-                if (!replaceMeta) {
                     nextRowSpec->StrictSchema = !description.RowSpec || description.RowSpec->StrictSchema;
+
                     nextMetadata->Attrs = meta->Attrs;
+
+                    nextDescription.ColumnGroupSpec = description.ColumnGroupSpec;
+                    nextDescription.ColumnGroupSpecAlts = description.ColumnGroupSpecAlts;
+                    nextDescription.ColumnGroupSpecInherited = true;
                 }
             }
             else {
@@ -627,9 +646,17 @@ private:
                 }
             }
 
-            if (initialWrite) {
-                nextDescription.ColumnGroupSpec = columnGroups;
-            } else if (columnGroups != nextDescription.ColumnGroupSpec) {
+            if (!columnGroupAlts.empty()) {
+                nextDescription.ColumnGroupSpecInherited = false;
+                if (!AnyOf(columnGroupAlts, [&](const auto& grp) { return nextDescription.ColumnGroupSpecAlts.contains(grp); })) {
+                    ctx.AddError(TIssue(pos, TStringBuilder()
+                        << "All appends within the same commit should have the equal "
+                        << ToString(EYtSettingType::ColumnGroups).Quote()
+                        << " value"));
+                    return TStatus::Error;
+                }
+                nextDescription.ColumnGroupSpecAlts.insert(columnGroupAlts.begin(), columnGroupAlts.end());
+            } else if (!nextDescription.ColumnGroupSpecInherited && !nextDescription.ColumnGroupSpecAlts.empty()) {
                 ctx.AddError(TIssue(pos, TStringBuilder()
                     << "All appends within the same commit should have the equal "
                     << ToString(EYtSettingType::ColumnGroups).Quote()
@@ -980,23 +1007,33 @@ private:
             outGroup = setting->Tail().Content();
         }
 
-        TStringBuf inputColGroupSpec;
+        bool diffGroups = false;
         const auto& path = copy.Input().Item(0).Paths().Item(0);
         if (auto table = path.Table().Maybe<TYtTable>()) {
             if (auto tableDesc = State_->TablesData->FindTable(copy.DataSink().Cluster().StringValue(), TString{TYtTableInfo::GetTableLabel(table.Cast())}, TEpochInfo::Parse(table.Cast().Epoch().Ref()))) {
-                inputColGroupSpec = tableDesc->ColumnGroupSpec;
+                diffGroups = tableDesc->ColumnGroupSpecAlts.empty() != outGroup.empty() || (!outGroup.empty() && !tableDesc->ColumnGroupSpecAlts.contains(outGroup));
+                if (diffGroups && !outGroup.empty() && !tableDesc->ColumnGroupSpecAlts.empty()) {
+                    TString expanded;
+                    if (ExpandDefaultColumnGroup(outGroup, *GetSeqItemType(*copy.Output().Item(0).Ref().GetTypeAnn()).Cast<TStructExprType>(), expanded)) {
+                        diffGroups = !tableDesc->ColumnGroupSpecAlts.contains(expanded);
+                    }
+                }
             }
         } else if (auto out = path.Table().Maybe<TYtOutput>()) {
+            TStringBuf inGroup;
             if (auto setting = NYql::GetSetting(GetOutputOp(out.Cast()).Output().Item(FromString<ui32>(out.Cast().OutIndex().Value())).Settings().Ref(), EYtSettingType::ColumnGroups)) {
-                inputColGroupSpec = setting->Tail().Content();
+                inGroup = setting->Tail().Content();
             }
+            diffGroups = inGroup != outGroup;
         } else if (auto outTable = path.Table().Maybe<TYtOutTable>()) {
+            TStringBuf inGroup;
             if (auto setting = NYql::GetSetting(outTable.Cast().Settings().Ref(), EYtSettingType::ColumnGroups)) {
-                inputColGroupSpec = setting->Tail().Content();
+                inGroup = setting->Tail().Content();
             }
+            diffGroups = inGroup != outGroup;
         }
 
-        if (outGroup != inputColGroupSpec) {
+        if (diffGroups) {
             ctx.AddError(TIssue(ctx.GetPosition(copy.Output().Item(0).Settings().Pos()), TStringBuilder() << TYtCopy::CallableName()
                 << " has input/output tables with different " << EYtSettingType::ColumnGroups << " values"));
             return TStatus::Error;
@@ -1294,7 +1331,7 @@ private:
 
         auto mapReduce = TYtMapReduce(input);
 
-        const auto acceptedSettings = EYtSettingType::ReduceBy
+        auto acceptedSettings = EYtSettingType::ReduceBy
             | EYtSettingType::ReduceFilterBy
             | EYtSettingType::SortBy
             | EYtSettingType::Limit
@@ -1306,6 +1343,10 @@ private:
             | EYtSettingType::ReduceInputType
             | EYtSettingType::NoDq
             | EYtSettingType::QLFilter;
+
+        if (hasMapLambda) {
+            acceptedSettings |= EYtSettingType::BlockInputReady | EYtSettingType::BlockInputApplied;
+        }
         if (!ValidateSettings(mapReduce.Settings().Ref(), acceptedSettings, ctx)) {
             return TStatus::Error;
         }
@@ -1343,11 +1384,12 @@ private:
 
         auto itemType = GetInputItemType(mapReduce.Input(), ctx);
         const auto useFlow = NYql::GetSetting(mapReduce.Settings().Ref(), EYtSettingType::Flow);
+        const auto blockInputApplied = NYql::GetSetting(mapReduce.Settings().Ref(), EYtSettingType::BlockInputApplied);
 
         auto& mapLambda = input->ChildRef(TYtMapReduce::idx_Mapper);
         TTypeAnnotationNode::TListType mapDirectOutputTypes;
         if (hasMapLambda) {
-            const auto mapLambdaInputType = MakeInputType(itemType, useFlow, TExprNode::TPtr(), ctx);
+            const auto mapLambdaInputType = MakeInputType(itemType, useFlow, blockInputApplied, ctx);
 
             if (!UpdateLambdaAllArgumentsTypes(mapLambda, {mapLambdaInputType}, ctx)) {
                 return TStatus::Error;
@@ -1541,6 +1583,10 @@ private:
             return TStatus::Error;
         }
 
+        if (!EnsureDataSinkClusterMatchesTable(TYtDSink(input->ChildPtr(TYtWriteTable::idx_DataSink)), TYtTable(table), ctx)) {
+            return TStatus::Error;
+        }
+
         auto settings = input->Child(TYtWriteTable::idx_Settings);
         if (!EnsureTuple(*settings, ctx)) {
             return TStatus::Error;
@@ -1687,6 +1733,9 @@ private:
                 << " callable, but got " << table->Content()));
             return TStatus::Error;
         }
+        if (!EnsureDataSinkClusterMatchesTable(TYtDSink(input->ChildPtr(TYtWriteTable::idx_DataSink)), TYtTable(table), ctx)) {
+            return TStatus::Error;
+        }
 
         auto dropTable = TYtDropTable(input);
         if (!TYtTableInfo::HasSubstAnonymousLabel(dropTable.Table())) {
@@ -1811,6 +1860,10 @@ private:
         if (!table->IsCallable(TYtTable::CallableName())) {
             ctx.AddError(TIssue(ctx.GetPosition(table->Pos()), TStringBuilder() << "Expected " << TYtTable::CallableName()
                 << " callable, but got " << table->Content()));
+            return TStatus::Error;
+        }
+
+        if (!EnsureDataSinkClusterMatchesTable(TYtDSink(input->ChildPtr(TYtWriteTable::idx_DataSink)), TYtTable(table), ctx)) {
             return TStatus::Error;
         }
 

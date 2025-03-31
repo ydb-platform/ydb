@@ -2,8 +2,10 @@
 
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/providers/common/transform/yql_optimize.h>
-#include <yt/yql/providers/yt/common/yql_names.h>
 #include <yql/essentials/utils/log/log.h>
+#include <yt/yql/providers/yt/common/yql_names.h>
+#include <yt/yql/providers/yt/provider/yql_yt_block_io_utils.h>
+#include <yt/yql/providers/yt/provider/yql_yt_helpers.h>
 
 namespace NYql {
 
@@ -22,54 +24,48 @@ public:
         , State_(std::move(state))
     {
 #define HNDL(name) "YtBlockInput-"#name, Hndl(&TYtBlockInputTransformer::name)
-        AddHandler(0, &TYtMap::Match, HNDL(TryTransformMap));
+        AddHandler(0, &TYtMap::Match, HNDL(TryTransformMap<TYtMap>));
+        AddHandler(0, &TYtMapReduce::Match, HNDL(TryTransformMap<TYtMapReduce>));
         AddHandler(0, &TYtTableContent::Match, HNDL(TryTransformTableContent));
 #undef HNDL
     }
 
 private:
+    template<typename TYtOpWithMap>
     TMaybeNode<TExprBase> TryTransformMap(TExprBase node, TExprContext& ctx) const {
-        auto map = node.Cast<TYtMap>();
+        auto op = node.Cast<TYtOpWithMap>();
         if (
-            NYql::HasSetting(map.Settings().Ref(), EYtSettingType::BlockInputApplied)
-            || !NYql::HasSetting(map.Settings().Ref(), EYtSettingType::BlockInputReady)
-            || !CanRewriteMap(map, ctx)
+            NYql::HasSetting(op.Settings().Ref(), EYtSettingType::BlockInputApplied)
+            || !NYql::HasSetting(op.Settings().Ref(), EYtSettingType::BlockInputReady)
+            || !CanRewriteMap(op, ctx)
         ) {
-            return map;
+            return op;
         }
 
-        YQL_CLOG(INFO, ProviderYt) << "Rewrite YtMap with block input";
+        YQL_CLOG(INFO, ProviderYt) << "Rewrite " << TYtOpWithMap::CallableName() << " with block input";
 
-        auto settings = RemoveSetting(map.Settings().Ref(), EYtSettingType::BlockInputReady, ctx);
+        auto settings = RemoveSetting(op.Settings().Ref(), EYtSettingType::BlockInputReady, ctx);
         settings = AddSetting(*settings, EYtSettingType::BlockInputApplied, TExprNode::TPtr(), ctx);
-        auto mapperLambda = Build<TCoLambda>(ctx, map.Mapper().Pos())
-            .Args({"flow"})
-            .Body<TExprApplier>()
-                .Apply(map.Mapper())
-                .With<TCoToFlow>(0)
-                    .Input<TCoWideFromBlocks>()
-                        .Input<TCoFromFlow>()
-                            .Input("flow")
-                        .Build()
-                    .Build()
-                .Build()
-            .Build()
-            .Done()
-            .Ptr();
 
-        return Build<TYtMap>(ctx, node.Pos())
-            .InitFrom(map)
+        auto mapperLambda = WrapLambdaWithBlockInput(op.Mapper().template Cast<TCoLambda>(), ctx);
+        return Build<TYtOpWithMap>(ctx, node.Pos())
+            .InitFrom(op)
             .Settings(settings)
             .Mapper(mapperLambda)
             .Done();
     }
 
-    bool CanRewriteMap(const TYtMap& map, TExprContext& ctx) const {
-        if (auto flowSetting = NYql::GetSetting(map.Settings().Ref(), EYtSettingType::Flow); !flowSetting || flowSetting->ChildrenSize() < 2) {
+    bool CanRewriteMap(const TYtWithUserJobsOpBase& op, TExprContext& ctx) const {
+        auto mapLambda = GetMapLambda(op);
+        if (!mapLambda) {
             return false;
         }
 
-        return EnsureWideFlowType(map.Mapper().Args().Arg(0).Ref(), ctx);
+        if (auto flowSetting = NYql::GetSetting(op.Settings().Ref(), EYtSettingType::Flow); !flowSetting || flowSetting->ChildrenSize() < 2) {
+            return false;
+        }
+
+        return EnsureWideFlowType(mapLambda.Cast().Args().Arg(0).Ref(), ctx);
     }
 
     TMaybeNode<TExprBase> TryTransformTableContent(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {

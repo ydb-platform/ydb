@@ -49,7 +49,7 @@ namespace NTable {
         TTable* Table(ui32 tid) const
         {
             auto* table = Scheme.GetTableInfo(tid);
-            Y_ABORT_UNLESS(table, "Acccessing table that doesn't exist");
+            Y_ENSURE(table, "Acccessing table that doesn't exist");
             return table;
         }
 

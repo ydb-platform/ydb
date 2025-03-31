@@ -53,7 +53,7 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
     ctx.Send(writeMeta.GetSource(), event.release(), 0, cookie);
 }
 
-TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedWait(const ui64 pathId) const {
+TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedWait(const TInternalPathId pathId) const {
     if (InsertTable && InsertTable->IsOverloadedByCommitted(pathId)) {
         return EOverloadStatus::InsertTable;
     }
@@ -64,7 +64,7 @@ TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedWait(const ui64 pathI
     return EOverloadStatus::None;
 }
 
-TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedImmediate(const ui64 /* pathId */) const {
+TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedImmediate(const TInternalPathId /* pathId */) const {
     if (IsAnyChannelYellowStop()) {
         return EOverloadStatus::Disk;
     }
@@ -179,7 +179,7 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     Counters.GetCSCounters().OnStartWriteRequest();
 
     const auto& record = Proto(ev->Get());
-    const ui64 pathId = record.GetTableId();
+    const auto pathId = TInternalPathId::FromRawValue(record.GetTableId());
     const ui64 writeId = record.GetWriteId();
     const ui64 cookie = ev->Cookie;
     const TString dedupId = record.GetDedupId();
@@ -550,7 +550,7 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
         return;
     }
 
-    const auto pathId = operation.GetTableId().GetTableId();
+    const auto pathId = TInternalPathId::FromRawValue(operation.GetTableId().GetTableId());
 
     if (!TablesManager.IsReadyForStartWrite(pathId, false)) {
         sendError("table not writable", NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR);

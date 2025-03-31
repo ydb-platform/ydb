@@ -643,13 +643,6 @@ class LintConfigs:
 
     @classmethod
     def cpp_configs(cls, unit, flat_args, spec_args):
-        custom_config = spec_args.get('CUSTOM_CONFIG')
-        if custom_config:
-            # TODO delete CUSTOM_CONFIG, it's used only by arc
-            config = custom_config[0]
-            assert_file_exists(unit, config)
-            return {cls.KEY: serialize_list([config])}
-
         if config := cls._from_config_type(unit, spec_args):
             # specified by config type, autoincludes scheme
             return {cls.KEY: serialize_list([config])}
@@ -704,7 +697,6 @@ class LintName:
     def value(cls, unit, flat_args, spec_args):
         lint_name = spec_args['NAME'][0]
         if lint_name in ('flake8', 'py2_flake8') and (unit.get('DISABLE_FLAKE8') or 'no') == 'yes':
-            unit.message(['INFO', 'Flake8 linting is disabled by `DISABLE_FLAKE8`'])
             raise DartValueError()
         return {cls.KEY: lint_name}
 
@@ -1153,6 +1145,7 @@ class TestFiles:
         'grut/libs/bigrt/queue_info_config',
         'grut/libs/bigrt/resharder/compute_shard_number',
         'grut/libs/bigrt/server',
+        'grut/libs/bigrt/testlib',
         'grut/libs/bigrt/transaction',
         'grut/libs/shooter',
     )

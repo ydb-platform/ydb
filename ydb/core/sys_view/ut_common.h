@@ -23,6 +23,7 @@ struct TTestEnvSettings {
     bool EnableSVP = false;
     bool EnableForceFollowers = false;
     bool ShowCreateTable = false;
+    NKikimrProto::TAuthConfig AuthConfig;
 };
 
 class TTestEnv {

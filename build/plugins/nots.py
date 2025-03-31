@@ -802,6 +802,11 @@ def on_node_modules_configure(unit: NotsUnitType) -> None:
         if not unit.get("TS_TEST_FOR"):
             __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives(["hide", "output"], sorted(outs)))
 
+        lf = pm.load_lockfile_from_dir(pm.sources_path)
+
+        if hasattr(lf, "validate_importers"):
+            lf.validate_importers()
+
         if pj.get_use_prebuilder():
             unit.on_peerdir_ts_resource("@yatool/prebuilder")
             unit.set(
@@ -817,7 +822,6 @@ def on_node_modules_configure(unit: NotsUnitType) -> None:
 
             if prebuilder_major == "0":
                 # TODO: FBP-1408
-                lf = pm.load_lockfile_from_dir(pm.sources_path)
                 is_valid, invalid_keys = lf.validate_has_addons_flags()
 
                 if not is_valid:
@@ -831,7 +835,6 @@ def on_node_modules_configure(unit: NotsUnitType) -> None:
                         + "\n  - ".join(invalid_keys)
                     )
             else:
-                lf = pm.load_lockfile_from_dir(pm.sources_path)
                 requires_build_packages = lf.get_requires_build_packages()
                 is_valid, validation_messages = pj.validate_prebuilds(requires_build_packages)
 

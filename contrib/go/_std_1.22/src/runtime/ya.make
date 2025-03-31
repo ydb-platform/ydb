@@ -1,9 +1,21 @@
 GO_LIBRARY()
+
+IF(SANITIZER_TYPE == "memory")
+    SRCS(msan.go msan_${GO_HOST_ARCH}.s)
+ELSE()
+    SRCS(msan0.go)
+ENDIF()
+
+IF(SANITIZER_TYPE == "address")
+    SRCS(asan.go asan_${GO_HOST_ARCH}.s)
+ELSE()
+    SRCS(asan0.go)
+ENDIF()
+
 IF (OS_DARWIN AND ARCH_ARM64 AND RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_ARM64 AND RACE AND NOT CGO_ENABLED)
     SRCS(
         alg.go
         arena.go
-        asan0.go
         asm.s
         asm_arm64.s
         atomic_arm64.s
@@ -79,7 +91,6 @@ IF (OS_DARWIN AND ARCH_ARM64 AND RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH_ARM6
         mpallocbits.go
         mprof.go
         mranges.go
-        msan0.go
         msize_noallocheaders.go
         mspanset.go
         mstats.go
@@ -162,7 +173,6 @@ ELSEIF (OS_DARWIN AND ARCH_ARM64 AND NOT RACE AND CGO_ENABLED OR OS_DARWIN AND A
     SRCS(
         alg.go
         arena.go
-        asan0.go
         asm.s
         asm_arm64.s
         atomic_arm64.s
@@ -238,7 +248,6 @@ ELSEIF (OS_DARWIN AND ARCH_ARM64 AND NOT RACE AND CGO_ENABLED OR OS_DARWIN AND A
         mpallocbits.go
         mprof.go
         mranges.go
-        msan0.go
         msize_noallocheaders.go
         mspanset.go
         mstats.go
@@ -320,7 +329,6 @@ ELSEIF (OS_DARWIN AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH
     SRCS(
         alg.go
         arena.go
-        asan0.go
         asm.s
         asm_amd64.s
         atomic_pointer.go
@@ -396,7 +404,6 @@ ELSEIF (OS_DARWIN AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_DARWIN AND ARCH
         mpallocbits.go
         mprof.go
         mranges.go
-        msan0.go
         msize_noallocheaders.go
         mspanset.go
         mstats.go
@@ -477,7 +484,6 @@ ELSEIF (OS_DARWIN AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_DARWIN AND 
     SRCS(
         alg.go
         arena.go
-        asan0.go
         asm.s
         asm_amd64.s
         atomic_pointer.go
@@ -553,7 +559,6 @@ ELSEIF (OS_DARWIN AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_DARWIN AND 
         mpallocbits.go
         mprof.go
         mranges.go
-        msan0.go
         msize_noallocheaders.go
         mspanset.go
         mstats.go
@@ -633,7 +638,6 @@ ELSEIF (OS_LINUX AND ARCH_AARCH64 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_
     SRCS(
         alg.go
         arena.go
-        asan0.go
         asm.s
         asm_arm64.s
         atomic_arm64.s
@@ -711,7 +715,6 @@ ELSEIF (OS_LINUX AND ARCH_AARCH64 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_
         mpallocbits.go
         mprof.go
         mranges.go
-        msan0.go
         msize_noallocheaders.go
         mspanset.go
         mstats.go
@@ -797,7 +800,6 @@ ELSEIF (OS_LINUX AND ARCH_AARCH64 AND NOT RACE AND CGO_ENABLED OR OS_LINUX AND A
     SRCS(
         alg.go
         arena.go
-        asan0.go
         asm.s
         asm_arm64.s
         atomic_arm64.s
@@ -875,7 +877,6 @@ ELSEIF (OS_LINUX AND ARCH_AARCH64 AND NOT RACE AND CGO_ENABLED OR OS_LINUX AND A
         mpallocbits.go
         mprof.go
         mranges.go
-        msan0.go
         msize_noallocheaders.go
         mspanset.go
         mstats.go
@@ -960,7 +961,6 @@ ELSEIF (OS_LINUX AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_X
     SRCS(
         alg.go
         arena.go
-        asan0.go
         asm.s
         asm_amd64.s
         atomic_pointer.go
@@ -1038,7 +1038,6 @@ ELSEIF (OS_LINUX AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_LINUX AND ARCH_X
         mpallocbits.go
         mprof.go
         mranges.go
-        msan0.go
         msize_noallocheaders.go
         mspanset.go
         mstats.go
@@ -1125,7 +1124,6 @@ ELSEIF (OS_LINUX AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_LINUX AND AR
     SRCS(
         alg.go
         arena.go
-        asan0.go
         asm.s
         asm_amd64.s
         atomic_pointer.go
@@ -1203,7 +1201,6 @@ ELSEIF (OS_LINUX AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_LINUX AND AR
         mpallocbits.go
         mprof.go
         mranges.go
-        msan0.go
         msize_noallocheaders.go
         mspanset.go
         mstats.go
@@ -1289,7 +1286,6 @@ ELSEIF (OS_WINDOWS AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_WINDOWS AND AR
     SRCS(
         alg.go
         arena.go
-        asan0.go
         asm.s
         asm_amd64.s
         atomic_pointer.go
@@ -1367,7 +1363,6 @@ ELSEIF (OS_WINDOWS AND ARCH_X86_64 AND RACE AND CGO_ENABLED OR OS_WINDOWS AND AR
         mpallocbits.go
         mprof.go
         mranges.go
-        msan0.go
         msize_noallocheaders.go
         mspanset.go
         mstats.go
@@ -1442,7 +1437,6 @@ ELSEIF (OS_WINDOWS AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_WINDOWS AN
     SRCS(
         alg.go
         arena.go
-        asan0.go
         asm.s
         asm_amd64.s
         atomic_pointer.go
@@ -1520,7 +1514,6 @@ ELSEIF (OS_WINDOWS AND ARCH_X86_64 AND NOT RACE AND CGO_ENABLED OR OS_WINDOWS AN
         mpallocbits.go
         mprof.go
         mranges.go
-        msan0.go
         msize_noallocheaders.go
         mspanset.go
         mstats.go

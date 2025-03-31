@@ -840,6 +840,7 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     YT_OPTIONAL_SET_PROTO(protoJob, finish_time, job.FinishTime);
 
     YT_OPTIONAL_TO_PROTO(protoJob, address, job.Address);
+    YT_OPTIONAL_TO_PROTO(protoJob, addresses, job.Addresses);
     if (job.Progress) {
         protoJob->set_progress(*job.Progress);
     }
@@ -884,6 +885,7 @@ void ToProto(NProto::TJob* protoJob, const NApi::TJob& job)
     }
     YT_OPTIONAL_TO_PROTO(protoJob, monitoring_descriptor, job.MonitoringDescriptor);
     YT_OPTIONAL_SET_PROTO(protoJob, operation_incarnation, job.OperationIncarnation);
+    YT_OPTIONAL_TO_PROTO(protoJob, allocation_id, job.AllocationId);
 }
 
 void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
@@ -904,6 +906,11 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
     job->StartTime = YT_OPTIONAL_FROM_PROTO(protoJob, start_time, TInstant);
     job->FinishTime = YT_OPTIONAL_FROM_PROTO(protoJob, finish_time, TInstant);
     job->Address = YT_OPTIONAL_FROM_PROTO(protoJob, address);
+    if (protoJob.has_addresses()) {
+        job->Addresses = FromProto<NNodeTrackerClient::TAddressMap>(protoJob.addresses());
+    } else {
+        job->Addresses = {};
+    }
     job->Progress = YT_OPTIONAL_FROM_PROTO(protoJob, progress);
     job->StderrSize = YT_OPTIONAL_FROM_PROTO(protoJob, stderr_size);
     job->FailContextSize = YT_OPTIONAL_FROM_PROTO(protoJob, fail_context_size);
@@ -970,6 +977,11 @@ void FromProto(NApi::TJob* job, const NProto::TJob& protoJob)
     }
     job->MonitoringDescriptor = YT_OPTIONAL_FROM_PROTO(protoJob, monitoring_descriptor);
     job->OperationIncarnation = YT_OPTIONAL_FROM_PROTO(protoJob, operation_incarnation);
+    if (protoJob.has_allocation_id()) {
+        job->AllocationId = NScheduler::TAllocationId(FromProto<TGuid>(protoJob.allocation_id()));
+    } else {
+        job->AllocationId = {};
+    }
 }
 
 void ToProto(
@@ -1105,6 +1117,18 @@ void ToProto(
     aggregateStatistics->set_chunk_count(multiTablePartition.AggregateStatistics.ChunkCount);
     aggregateStatistics->set_data_weight(multiTablePartition.AggregateStatistics.DataWeight);
     aggregateStatistics->set_row_count(multiTablePartition.AggregateStatistics.RowCount);
+
+    if (multiTablePartition.Cookie) {
+        ToProto(protoMultiTablePartition->mutable_cookie(), multiTablePartition.Cookie);
+    }
+}
+
+void ToProto(
+    TProtobufString* protoCookie,
+    const TTablePartitionCookiePtr& cookie)
+{
+    auto cookieBytes = ConvertToYsonString(cookie);
+    *protoCookie = cookieBytes.ToString();
 }
 
 void FromProto(
@@ -1121,6 +1145,10 @@ void FromProto(
         multiTablePartition->AggregateStatistics.DataWeight = aggregateStatistics.data_weight();
         multiTablePartition->AggregateStatistics.RowCount = aggregateStatistics.row_count();
     }
+
+    if (protoMultiTablePartition.has_cookie()) {
+        FromProto(&multiTablePartition->Cookie, protoMultiTablePartition.cookie());
+    }
 }
 
 void FromProto(
@@ -1130,6 +1158,13 @@ void FromProto(
     FromProto(
         &multiTablePartitions->Partitions,
         protoRspPartitionTables.partitions());
+}
+
+void FromProto(
+    TTablePartitionCookiePtr* cookie,
+    const TProtobufString& protoCookie)
+{
+    *cookie = ConvertTo<TTablePartitionCookiePtr>(TYsonStringBuf(protoCookie));
 }
 
 void ToProto(

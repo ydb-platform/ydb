@@ -1695,7 +1695,7 @@ void TPersQueue::Handle(TEvPersQueue::TEvDropTablet::TPtr& ev, const TActorConte
 {
     PQ_LOG_D("Handle TEvPersQueue::TEvDropTablet");
 
-    auto& record = ev->Get()->Record;
+    const auto& record = ev->Get()->Record;
     ui64 txId = record.GetTxId();
 
     TChangeNotification stateRequest(ev->Sender, txId);
@@ -4578,6 +4578,31 @@ void TPersQueue::InitMediatorTimeCast(const TActorContext& ctx)
 
 bool TPersQueue::AllTransactionsHaveBeenProcessed() const
 {
+    bool existDataTx = false;
+    bool existPlannedConfigTx = false;
+    bool existUnplannedConfigTx = false;
+
+    for (const auto& [_, tx] : Txs) {
+        switch (tx.Kind) {
+        case NKikimrPQ::TTransaction::KIND_CONFIG:
+            ((tx.Step == Max<ui64>()) ? existUnplannedConfigTx : existPlannedConfigTx) = true;
+            break;
+        case NKikimrPQ::TTransaction::KIND_DATA:
+            existDataTx = true;
+            break;
+        case NKikimrPQ::TTransaction::KIND_UNKNOWN:
+            Y_ABORT_UNLESS(false);
+        }
+    }
+
+    if (existDataTx || existPlannedConfigTx) {
+        return false;
+    }
+
+    if (existUnplannedConfigTx) {
+        return true;
+    }
+
     return EvProposeTransactionQueue.empty() && Txs.empty();
 }
 

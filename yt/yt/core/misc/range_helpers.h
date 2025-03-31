@@ -22,6 +22,10 @@ auto ZipMutable(TRanges&&... ranges);
 template <class TContainer, std::ranges::input_range TRange>
 auto RangeTo(TRange&& range);
 
+//! Shortcut for `RangeTo(std::ranges::views::transform)`.
+template <class TContainer, std::ranges::input_range TRange, class TTransformFunction>
+auto TransformRangeTo(TRange&& range, TTransformFunction&& function);
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT

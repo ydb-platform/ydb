@@ -183,7 +183,7 @@ void TCommandLatency::Config(TConfig& config) {
             .OptionalArgument("INT").StoreResult(&ChainConfig->WorkUsec_).DefaultValue(ChainConfig->WorkUsec_);
     config.Opts->AddLongOption(
         "no-tail-chain", TStringBuilder() << "Don't use Tail sends and registrations (ActorChain kind only)")
-            .NoArgument().SetFlag(&ChainConfig->NoTailChain_).DefaultValue(ChainConfig->NoTailChain_);
+            .StoreTrue(&ChainConfig->NoTailChain_).DefaultValue(ChainConfig->NoTailChain_);
 }
 
 void TCommandLatency::Parse(TConfig& config) {

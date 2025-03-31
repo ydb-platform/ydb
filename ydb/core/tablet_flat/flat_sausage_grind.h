@@ -37,20 +37,20 @@ namespace NPageCollection {
             , Slots(Max<ui8>(), Max<ui8>())
         {
             if ((cookieRange.Head & ~Mask) || (cookieRange.Tail & ~Mask)) {
-                Y_ABORT("CookieRange range can use only lower 24 bits");
+                Y_TABLET_ERROR("CookieRange range can use only lower 24 bits");
             } else if (cookieRange.Head > cookieRange.Tail) {
-                Y_ABORT("Invalid TLogoBlobID cookieRange capacity range");
+                Y_TABLET_ERROR("Invalid TLogoBlobID cookieRange capacity range");
             }
 
             for (auto &one: row) {
                 auto &place = Slots[one.Channel];
 
-                Y_ABORT_UNLESS(one.Channel != Max<ui8>(),
+                Y_ENSURE(one.Channel != Max<ui8>(),
                     "Channel cannot be set to Max<ui8>() value");
 
                 if (place != Max<ui8>()) {
                     /* Channel already associated with a group */
-                    Y_ABORT_UNLESS(Group[place] == one.Group,
+                    Y_ENSURE(Group[place] == one.Group,
                         "Channel assigned to different groups");
                     continue;
                 }
@@ -109,7 +109,7 @@ namespace NPageCollection {
         {
             auto slot = Slots[channel];
 
-            Y_ABORT_UNLESS(slot != Max<ui8>(), "Requested unknown channel");
+            Y_ENSURE(slot != Max<ui8>(), "Requested unknown channel");
 
             return slot;
         }
@@ -122,8 +122,9 @@ namespace NPageCollection {
 
             num += left;
 
-            if (num > Span || Span - num <= (Mask & value))
-                Y_Fail(NFmt::Do(*this) << " #" << slot << " was exhausted");
+            if (num > Span || Span - num <= (Mask & value)) {
+                Y_TABLET_ERROR(NFmt::Do(*this) << " #" << slot << " was exhausted");
+            }
 
             ui32 to = ((Mask & value) + num) | (gap ? Spacer : 0);
 
@@ -151,9 +152,9 @@ namespace NPageCollection {
         void Switch(const ui32 step, bool strict)
         {
             if (step == Max<ui32>()) {
-                Y_Fail(NFmt::Do(*this) << " is out of steps capacity");
+                Y_TABLET_ERROR(NFmt::Do(*this) << " is out of steps capacity");
             } else if (Step + (strict ? 1 : 0) > step && Step != Max<ui32>()) {
-                Y_Fail(
+                Y_TABLET_ERROR(
                     NFmt::Do(*this) << " got stuck on step switch to "
                     <<  step << ", " << (strict ? "strict" : "weak"));
             } else if (std::exchange(Step, step) != step) {

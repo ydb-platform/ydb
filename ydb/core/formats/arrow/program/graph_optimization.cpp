@@ -345,12 +345,6 @@ std::optional<TResourceAddress> TGraph::GetOriginalAddress(TGraphNode* condNode)
             if (path.StartsWith("$.")) {
                 path = path.substr(2);
             }
-            if (path.StartsWith("\"") && path.EndsWith("\"")) {
-                if (path.size() < 2) {
-                    return std::nullopt;
-                }
-                path = path.substr(1, path.size() - 2);
-            }
             if (!path) {
                 return std::nullopt;
             }
@@ -693,16 +687,16 @@ TConclusionStatus TGraph::Collapse() {
                 }
             }
 
-            {
-                auto conclusion = OptimizeConditionsForHeadersCheck(n.get());
-                if (conclusion.IsFail()) {
-                    return conclusion;
-                }
-                if (*conclusion) {
-                    hasChanges = true;
-                    break;
-                }
-            }
+//            {
+//                auto conclusion = OptimizeConditionsForHeadersCheck(n.get());
+//                if (conclusion.IsFail()) {
+//                    return conclusion;
+//                }
+//                if (*conclusion) {
+//                    hasChanges = true;
+//                    break;
+//                }
+//            }
 
             {
                 auto conclusion = OptimizeConditionsForStream(n.get());

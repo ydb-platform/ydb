@@ -26,12 +26,13 @@ PY3TEST()
 END()
 
 RECURSE(
-    lib
-    s3_import
-    scenario
-    docs
-    load
-    ttl_tiering
     column_family
     common
+    docs
+    high_load
+    lib
+    load
+    s3_import
+    scenario
+    ttl_tiering
 )

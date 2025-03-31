@@ -23,15 +23,9 @@ select
     max(Report) OVER (PARTITION  by Db , Run_start_timestamp, Suite) as Report,
     max(RunId) OVER (PARTITION  by Db , Run_start_timestamp, Suite) as RunId,
     max(RunTs) OVER (PARTITION  by Db , Run_start_timestamp, Suite) as RunTs,
-    CASE
-        WHEN YdbSumMeans IS NULL THEN true
-        ELSE false
-    END AS errors,
-    CASE
-        WHEN max(Report) OVER (PARTITION  by Db , Run_start_timestamp, Suite) IS NULL THEN true
-        ELSE false
-    END AS Suite_not_runned
-
+    YdbSumMeans IS NULL AS errors,
+    max(Report) OVER (PARTITION  by Db , Run_start_timestamp, Suite) IS NULL AS Suite_not_runned,
+    Color
  from (
 
 SELECT
@@ -57,7 +51,8 @@ SELECT
     COALESCE(real_data.YdbSumMax, null_template.YdbSumMax) AS YdbSumMax,
     COALESCE(real_data.YdbSumMeans, null_template.YdbSumMeans) AS YdbSumMeans,
     COALESCE(real_data.YdbSumMin, null_template.YdbSumMin) AS YdbSumMin,
-    COALESCE(real_data.diff_response, null_template.diff_response) AS diff_response
+    COALESCE(real_data.diff_response, null_template.diff_response) AS diff_response,
+    COALESCE(real_data.Color, null_template.Color) AS Color,
 
 FROM (
     SELECT 
@@ -145,7 +140,17 @@ FROM (
             IF(Success > 0, MeanDuration / 1000) AS YdbSumMeans,
             IF(Success > 0, MaxDuration / 1000) AS YdbSumMax,
             IF(Success > 0, MinDuration / 1000) AS YdbSumMin,
-            CAST(RunId / 1000 AS Timestamp) AS RunTs
+            CAST(RunId / 1000 AS Timestamp) AS RunTs,
+            IF (JSON_VALUE(Stats, "$.errors.other") = "true",
+                "red",
+                IF (JSON_VALUE(Stats, "$.errors.timeout") = "true",
+                "blue",
+                    IF (JSON_VALUE(Stats, "$.errors.warning") = "true",
+                        "yellow",
+                        "green"
+                    )
+                )
+            ) as Color
         FROM `perfomance/olap/tests_results` AS all_tests
         Where   JSON_VALUE(all_tests.Info, "$.cluster.version") is Null --and Test != '_Verification'
         and Timestamp >= CurrentUtcDate() - 30*Interval("P1D")
@@ -184,7 +189,8 @@ Full OUTER join
     real_data.YdbSumMeans AS YdbSumMeans,
     real_data.YdbSumMin AS YdbSumMin,
     real_data.diff_response AS diff_response,
-    
+    real_data.Color AS Color,
+
     FROM (
         SELECT 
             all_tests.*,
@@ -273,7 +279,17 @@ Full OUTER join
                 IF(Success > 0, MeanDuration / 1000) AS YdbSumMeans,
                 IF(Success > 0, MaxDuration / 1000) AS YdbSumMax,
                 IF(Success > 0, MinDuration / 1000) AS YdbSumMin,
-                CAST(RunId / 1000 AS Timestamp) AS RunTs
+                CAST(RunId / 1000 AS Timestamp) AS RunTs,
+                IF (JSON_VALUE(Stats, "$.errors.other") = "true",
+                    "red",
+                    IF (JSON_VALUE(Stats, "$.errors.timeout") = "true",
+                    "blue",
+                        IF (JSON_VALUE(Stats, "$.errors.warning") = "true",
+                            "yellow",
+                            "green"
+                        )
+                    )
+                ) as Color
             FROM `perfomance/olap/tests_results` AS all_tests
             WHere Timestamp >= CurrentUtcDate() - 30*Interval("P1D")
         ) AS all_tests

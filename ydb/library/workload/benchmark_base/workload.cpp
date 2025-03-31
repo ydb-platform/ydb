@@ -82,13 +82,18 @@ void TWorkloadGeneratorBase::GenerateDDLForTable(IOutputStream& result, const NJ
     }
 
     result << "WITH (" << Endl;
-    if (Params.GetStoreType() == TWorkloadBaseParams::EStoreType::ExternalS3) {
+    switch (Params.GetStoreType()) {
+    case TWorkloadBaseParams::EStoreType::ExternalS3:
         result << "    DATA_SOURCE = \""+ Params.GetFullTableName(nullptr) + "_s3_external_source\", FORMAT = \"parquet\", LOCATION = \"" << Params.GetS3Prefix()
             << "/" << (single ? TFsPath(Params.GetPath()).GetName() : (tableName + "/")) << "\"" << Endl;
-    } else {
-        if (Params.GetStoreType() == TWorkloadBaseParams::EStoreType::Column) {
-            result << "    STORE = COLUMN," << Endl;
-        }
+        break;
+    case TWorkloadBaseParams::EStoreType::Column:
+        result << "    STORE = COLUMN," << Endl;
+        result << "    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << table["partitioning"].GetUIntegerSafe(64) << Endl;
+        break;
+    case TWorkloadBaseParams::EStoreType::Row:
+        result << "    STORE = ROW," << Endl;
+        result << "    AUTO_PARTITIONING_PARTITION_SIZE_MB = " << Params.GetPartitionSizeMb() << ", " << Endl;
         result << "    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = " << table["partitioning"].GetUIntegerSafe(64) << Endl;
     }
     result << ");" << Endl;
@@ -170,6 +175,8 @@ void TWorkloadBaseParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommand
         opts.AddLongOption("string", "Use String type in tables instead Utf8 one.").NoArgument().StoreValue(&StringType, "String");
         opts.AddLongOption("datetime", "Use Date and Timestamp types in tables instead Date32 and Timestamp64 ones.").NoArgument()
             .StoreValue(&DateType, "Date").StoreValue(&TimestampType, "Timestamp");
+        opts.AddLongOption("partition-size", "Maximum partition size in megabytes (AUTO_PARTITIONING_PARTITION_SIZE_MB) for row tables.")
+            .DefaultValue(PartitionSizeMb).StoreResult(&PartitionSizeMb);
         break;
     case TWorkloadParams::ECommandType::Root:
         opts.AddLongOption('p', "path", "Path where benchmark tables are located")

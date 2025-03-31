@@ -798,9 +798,11 @@ namespace NKikimr::NPDisk {
         return true;
     }
 
-    std::optional<TMetadataFormatSector> TPDisk::CheckMetadataFormatSector(const ui8 *data, size_t len, const TMainKey& mainKey) {
+    std::optional<TMetadataFormatSector> TPDisk::CheckMetadataFormatSector(const ui8 *data, size_t len,
+            const TMainKey& mainKey, const TString& logPrefix) {
         if (len != FormatSectorSize * ReplicationFactor) {
-            Y_DEBUG_ABORT_S(PCtx->PDiskLogPrefix << "unexpected metadata format sector size");
+            Y_UNUSED(logPrefix);
+            Y_DEBUG_ABORT_S(logPrefix << "unexpected metadata format sector size");
             return {}; // definitely not correct
         }
 

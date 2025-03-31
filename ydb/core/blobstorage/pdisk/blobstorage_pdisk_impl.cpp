@@ -207,7 +207,7 @@ bool TPDisk::IsFormatMagicValid(ui8 *magicData8, ui32 magicDataSize, const TMain
     if (magicOr == 0ull || isIncompleteFormatMagicPresent) {
         return true;
     }
-    auto format = CheckMetadataFormatSector(magicData8, magicDataSize, mainKey);
+    auto format = CheckMetadataFormatSector(magicData8, magicDataSize, mainKey, PCtx->PDiskLogPrefix);
     return format.has_value();
 }
 

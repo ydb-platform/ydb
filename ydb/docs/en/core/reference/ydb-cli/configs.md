@@ -1,30 +1,30 @@
 ## Working with configuration
 
-### Common command flags
-
-* `-f, --filename <filename.yaml>` — read input from a file, `-` for STDIN. It can be specified multiple times for commands accepting multiple files (e.g., resolve). The metadata field will determine the file type.
-* `--output-directory <dir>` — dump/resolve files to a directory.
-* `--strip-metadata` — remove the metadata field from the output.
-* `--all` — extend command output to the entire configuration (see advanced configuration).
-* `--allow-unknown-fields` — allow ignoring unknown fields in the configuration.
+This section contains commands for working with the {{ ydb-short-name }} cluster configuration.
 
 ```bash
 # Apply the configuration dynconfig.yaml to the cluster
-{{ ydb-cli }} admin config replace -f dynconfig.yaml
+{{ ydb-cli }} admin cluster config replace -f dynconfig.yaml
 # Check if it is possible to apply the configuration dynconfig.yaml to the cluster (validate all validators, version, and cluster match)
-{{ ydb-cli }} admin config replace -f dynconfig.yaml --dry-run
+{{ ydb-cli }} admin cluster config replace -f dynconfig.yaml --dry-run
 # Apply the configuration dynconfig.yaml to the cluster, ignoring version and cluster checks (version and cluster will still be overwritten with correct ones)
-{{ ydb-cli }} admin config replace -f dynconfig.yaml --force
+{{ ydb-cli }} admin cluster config replace -f dynconfig.yaml --force
 # Fetch the main cluster configuration
-{{ ydb-cli }} admin config fetch
+{{ ydb-cli }} admin cluster config fetch
 # Fetch all current configuration files of the cluster
-{{ ydb-cli }} admin config fetch --all
+{{ ydb-cli }} admin cluster config fetch --all
 # Generate all possible final configurations for dynconfig.yaml
-{{ ydb-cli }} admin config resolve --all -f dynconfig.yaml
+{{ ydb-cli }} admin cluster config resolve --all -f dynconfig.yaml
 # Generate the final configuration for dynconfig.yaml with labels tenant=/Root/test and canary=true
-{{ ydb-cli }} admin config resolve -f dynconfig.yaml --label tenant=/Root/test --label canary=true
+{{ ydb-cli }} admin cluster config resolve -f dynconfig.yaml --label tenant=/Root/test --label canary=true
 # Generate the final configuration for dynconfig.yaml for labels from node 1003
-{{ ydb-cli }} admin config resolve -f dynconfig.yaml --node-id 1003
+{{ ydb-cli }} admin cluster config resolve -f dynconfig.yaml --node-id 1003
+# Generate dynamic configuration file, based on static configuration on cluster
+{{ ydb-cli }} admin cluster config genereate
+# Initialize directory with configuration, using path to configuration file
+{{ ydb-cli }} admin node config init --config-dir <path_to_directory> --from-config <path_to_configuration_file>
+# Initialize directory with configuration, using configuration from the cluster
+{{ ydb-cli }} admin node config init --config-dir <path_to_directory> --seed-node <cluster_node_endpoint>
 # Fetch all temporary configurations of the cluster
 {{ ydb-cli }} admin volatile-config fetch --all --output-directory <dir>
 # Fetch the temporary configuration with id 1 from the cluster
@@ -43,17 +43,17 @@
 
  ```bash
 # Fetch the cluster configuration
-{{ ydb-cli }} admin config fetch > dynconfig.yaml
+{{ ydb-cli }} admin cluster config fetch > dynconfig.yaml
 # Edit the configuration with your favorite editor
 vim dynconfig.yaml
 # Apply the configuration dynconfig.yaml to the cluster
-{{ ydb-cli }} admin config replace -f dynconfig.yaml
+{{ ydb-cli }} admin cluster config replace -f dynconfig.yaml
 ```
 
 Similarly, in one line:
 
 ```bash
-{{ ydb-cli }} admin config fetch | yq '.config.actor_system_config.scheduler.resolution = 128' | {{ ydb-cli }} admin config replace -f -
+{{ ydb-cli }} admin cluster config fetch | yq '.config.actor_system_config.scheduler.resolution = 128' | {{ ydb-cli }} admin cluster config replace -f -
 ```
 
 Command output:
@@ -65,7 +65,7 @@ OK
 ### View the configuration for a specific set of labels
 
 ```bash
-{{ ydb-cli }} admin config resolve --remote --label tenant=/Root/db1 --label canary=true
+{{ ydb-cli }} admin cluster config resolve --remote --label tenant=/Root/db1 --label canary=true
 ```
 
 Command output:
@@ -86,7 +86,7 @@ config:
 ### View the configuration for a specific node
 
 ```bash
-{{ ydb-cli }} admin config resolve --remote --node-id <node_id>
+{{ ydb-cli }} admin cluster config resolve --remote --node-id <node_id>
 ```
 
 Command output:
@@ -107,7 +107,7 @@ config:
 ### Save all configurations locally
 
 ```bash
-{{ ydb-cli }} admin config fetch --all --output-directory <configs_dir>
+{{ ydb-cli }} admin cluster config fetch --all --output-directory <configs_dir>
 ls <configs_dir>
 ```
 
@@ -120,7 +120,7 @@ dynconfig.yaml volatile_1.yaml volatile_3.yaml
 ### View all configurations locally
 
 ```bash
-{{ ydb-cli }} admin config fetch --all
+{{ ydb-cli }} admin cluster config fetch --all
 ```
 
 Command output:
@@ -158,7 +158,7 @@ selectors:
 ### View the final configuration for a specific node from the locally saved original configuration
 
 ```bash
-{{ ydb-cli }} admin config resolve -k <configs_dir> --node-id <node_id>
+{{ ydb-cli }} admin cluster config resolve -k <configs_dir> --node-id <node_id>
 ```
 
 Command output:

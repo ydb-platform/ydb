@@ -123,7 +123,8 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
     TExprContext& ctx,
     const TTypeAnnotationContext& typeCtx,
     TVector<TString>& subtreeLabels,
-    const NYql::TOptimizerHints& hints
+    const NYql::TOptimizerHints& hints,
+    bool useCBO
 )
 {
     TMaybe<TJoinInputDesc> left;
@@ -133,7 +134,7 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
         left = inputs.at(joinTuple.LeftScope().Cast<TCoAtom>().Value());
         YQL_ENSURE(left, "unknown scope " << joinTuple.LeftScope().Cast<TCoAtom>().Value());
     } else {
-        left = BuildDqJoin(joinTuple.LeftScope().Cast<TCoEquiJoinTuple>(), inputs, mode, ctx, typeCtx, lhsLabels, hints);
+        left = BuildDqJoin(joinTuple.LeftScope().Cast<TCoEquiJoinTuple>(), inputs, mode, ctx, typeCtx, lhsLabels, hints, useCBO);
         if (!left) {
             return {};
         }
@@ -146,7 +147,7 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
         right = inputs.at(joinTuple.RightScope().Cast<TCoAtom>().Value());
         YQL_ENSURE(right, "unknown scope " << joinTuple.RightScope().Cast<TCoAtom>().Value());
     } else {
-        right = BuildDqJoin(joinTuple.RightScope().Cast<TCoEquiJoinTuple>(), inputs, mode, ctx, typeCtx, rhsLabels, hints);
+        right = BuildDqJoin(joinTuple.RightScope().Cast<TCoEquiJoinTuple>(), inputs, mode, ctx, typeCtx, rhsLabels, hints, useCBO);
         if (!right) {
             return {};
         }
@@ -260,7 +261,7 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
                 .Build()
             .JoinAlgo(joinAlgo);
 
-    auto getShuffleByExprList = [&](const TVector<NDq::TJoinColumn>& shuffleBy) -> TExprNode::TListType {
+    auto getShuffleByExprListFromSettings = [&](const TVector<NDq::TJoinColumn>& shuffleBy) -> TExprNode::TListType {
         TExprNode::TListType shuffleByExprList;
 
         for (const auto& column: shuffleBy) {
@@ -278,13 +279,40 @@ TMaybe<TJoinInputDesc> BuildDqJoin(
         return shuffleByExprList;
     };
 
-    TExprNode::TListType shuffleLhsBy = getShuffleByExprList(linkSettings.ShuffleLhsBy);
+    auto getShuffleByExprListFromJoinKeys = [&](const TVector<TCoAtom>& joinKeys) {
+        TExprNode::TListType shuffleByExprList;
+
+        for (const auto& column: joinKeys) {
+            auto node =
+                ctx.Builder(joinTuple.Pos())
+                    .List()
+                        .Atom(0, column.StringValue())
+                    .Seal()
+                .Build();
+
+            shuffleByExprList.emplace_back(std::move(node));
+        }
+
+        return shuffleByExprList;
+    };
+
+    TExprNode::TListType shuffleLhsBy;
+    if (useCBO) {
+        shuffleLhsBy = getShuffleByExprListFromSettings(linkSettings.ShuffleLhsBy);
+    } else {
+        shuffleLhsBy = getShuffleByExprListFromJoinKeys(leftJoinKeys);
+    }
     dqJoinBuilder
         .ShuffleLeftSideBy()
             .Add(std::move(shuffleLhsBy))
             .Build();
 
-    TExprNode::TListType shuffleRhsBy = getShuffleByExprList(linkSettings.ShuffleRhsBy);
+    TExprNode::TListType shuffleRhsBy;
+    if (useCBO) {
+        shuffleRhsBy = getShuffleByExprListFromSettings(linkSettings.ShuffleRhsBy);
+    } else {
+        shuffleRhsBy = getShuffleByExprListFromJoinKeys(rightJoinKeys);
+    }
     dqJoinBuilder
         .ShuffleRightSideBy()
             .Add(std::move(shuffleRhsBy))
@@ -478,7 +506,7 @@ TExprBase DqRewriteEquiJoin(
 TExprBase DqRewriteEquiJoin(
     const TExprBase& node,
     EHashJoinMode mode,
-    bool /* useCBO */,
+    bool useCBO,
     TExprContext& ctx,
     const TTypeAnnotationContext& typeCtx,
     int& joinCounter,
@@ -501,7 +529,7 @@ TExprBase DqRewriteEquiJoin(
 
     auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();
     TVector<TString> dummy;
-    auto result = BuildDqJoin(joinTuple, inputs, mode, ctx, typeCtx, dummy, hints);
+    auto result = BuildDqJoin(joinTuple, inputs, mode, ctx, typeCtx, dummy, hints, useCBO);
     if (!result) {
         return node;
     }

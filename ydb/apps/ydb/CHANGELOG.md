@@ -1,3 +1,5 @@
+* Added `--retries` to `ydb workload <clickbenh|tpch|tpcds> run` command.
+* Added `--partition-size` param to `ydb workload <clickbench/tpcds/tpch> init`.
 * Fixed bugs in `ydb scheme rmdir`: 1) do not try to delete subdomains, 2) order the deletion of external tables before the deletion of external data sources.
 * YDB CLI help message improvements. Different display for detailed help and brief help.
 * Support coordination nodes in `ydb scheme rmdir --recursive`.

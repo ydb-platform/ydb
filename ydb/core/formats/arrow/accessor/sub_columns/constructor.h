@@ -42,6 +42,10 @@ public:
         : TBase(IChunkedArray::EType::SubColumnsArray) {
     }
 
+    virtual bool HasInternalConversion() const override {
+        return Settings.GetDataExtractor()->HasInternalConversion();
+    }
+
     static TConclusion<std::shared_ptr<TGeneralContainer>> BuildOthersContainer(
         const TStringBuf data, const NKikimrArrowAccessorProto::TSubColumnsAccessor& proto, const TChunkConstructionData& externalInfo, const bool deserialize);
 

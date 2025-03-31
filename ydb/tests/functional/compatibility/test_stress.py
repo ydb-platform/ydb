@@ -56,21 +56,6 @@ class TestStress(object):
             + ["--path", path]
         )
 
-    def set_auto_partitioning_size_mb(self, path, size_mb):
-        yatest.common.execute(
-            [
-                yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
-                "--verbose",
-                "--endpoint",
-                "grpc://localhost:%d" % self.cluster.nodes[1].grpc_port,
-                "--database=/Root",
-                "sql", "-s",
-                "ALTER TABLE `{}` SET (AUTO_PARTITIONING_PARTITION_SIZE_MB={})".format(path, size_mb),
-            ],
-            stdout=self.output_f,
-            stderr=self.output_f,
-        )
-
     @pytest.mark.parametrize("store_type", ["row"])
     def test_log(self, store_type):
         timeout_scale = 60
@@ -228,6 +213,7 @@ class TestStress(object):
             "init",
             "--store={}".format(store_type),
             "--datetime",  # use 32 bit dates instead of 64 (not supported in 24-4)
+            "--partition-size=25",
         ]
         import_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
@@ -262,20 +248,6 @@ class TestStress(object):
         ]
 
         yatest.common.execute(init_command, wait=True, stdout=self.output_f, stderr=self.output_f)
-
-        # make tables distributed across nodes
-        tables = [
-            "lineitem",
-            "nation",
-            "orders",
-            "part",
-            "partsupp",
-            "region",
-            "supplier",
-        ]
-        for table in tables:
-            self.set_auto_partitioning_size_mb("tpch/{}".format(table), 25)
-
         yatest.common.execute(import_command, wait=True, stdout=self.output_f, stderr=self.output_f)
         yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)
 
@@ -296,6 +268,7 @@ class TestStress(object):
             "init",
             "--store={}".format(store_type),
             "--datetime",  # use 32 bit dates instead of 64 (not supported in 24-4)
+            "--partition-size=25",
         ]
         import_command = [
             yatest.common.binary_path(os.getenv("YDB_CLI_BINARY")),
@@ -330,36 +303,5 @@ class TestStress(object):
         ]
 
         yatest.common.execute(init_command, wait=True, stdout=self.output_f, stderr=self.output_f)
-
-        # make table distributed across nodes
-        tables = [
-            "call_center",
-            "catalog_page",
-            "catalog_returns",
-            "catalog_sales",
-            "customer",
-            "customer_demographics",
-            "date_dim",
-            "household_demographics",
-            "income_band",
-            "inventory",
-            "item",
-            "promotion",
-            "reason",
-            "ship_mode",
-            "store",
-            "store_returns",
-            "store_sales",
-            "time_dim",
-            "warehouse",
-            "web_page",
-            "web_returns",
-            "web_sales",
-            "web_site",
-        ]
-
-        for table in tables:
-            self.set_auto_partitioning_size_mb("tpcds/{}".format(table), 25)
-
         yatest.common.execute(import_command, wait=True, stdout=self.output_f, stderr=self.output_f)
         yatest.common.execute(run_command, wait=True, stdout=self.output_f, stderr=self.output_f)

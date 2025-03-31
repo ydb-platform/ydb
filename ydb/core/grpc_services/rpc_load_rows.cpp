@@ -208,9 +208,7 @@ private:
         return true;
     }
 
-    TVector<std::pair<TString, Ydb::Type>> GetRequestColumns(TString& errorMessage) const override {
-        Y_UNUSED(errorMessage);
-
+    TConclusion<TVector<std::pair<TString, Ydb::Type>>> GetRequestColumns() const override {
         const auto& type = GetProtoRequest(Request.get())->Getrows().Gettype();
         const auto& rowType = type.Getlist_type();
         const auto& rowFields = rowType.Getitem().Getstruct_type().Getmembers();
@@ -398,19 +396,18 @@ private:
         return true;
     }
 
-    TVector<std::pair<TString, Ydb::Type>> GetRequestColumns(TString& errorMessage) const override {
+    TConclusion<TVector<std::pair<TString, Ydb::Type>>> GetRequestColumns() const override {
+        TVector<std::pair<TString, Ydb::Type>> out;
         if (GetSourceType() == EUploadSource::CSV) {
             // TODO: for CSV with header we have to extract columns from data (from first batch in file stream)
-            return {};
+            return out;
         }
 
         auto schema = NArrow::DeserializeSchema(GetSourceSchema());
         if (!schema) {
-            errorMessage = TString("Wrong schema in bulk upsert data");
-            return {};
+            return TConclusionStatus::Fail("Wrong schema in bulk upsert data");
         }
 
-        TVector<std::pair<TString, Ydb::Type>> out;
         out.reserve(schema->num_fields());
 
         for (auto& field : schema->fields()) {
@@ -419,8 +416,7 @@ private:
 
             Ydb::Type ydbType;
             if (!ConvertArrowToYdbPrimitive(*type, ydbType)) {
-                errorMessage = TString("Cannot convert arrow type to ydb one: " + type->ToString());
-                return {};
+                return TConclusionStatus::Fail("Cannot convert arrow type to ydb one: " + type->ToString());
             }
             out.emplace_back(name, std::move(ydbType));
         }

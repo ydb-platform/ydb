@@ -6,6 +6,7 @@ SIZE(MEDIUM)
 
 SRCS(
     kqp_scan_spilling_ut.cpp
+    kqp_scan_logging_ut.cpp
 )
 
 PEERDIR(

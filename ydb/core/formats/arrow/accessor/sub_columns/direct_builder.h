@@ -7,6 +7,12 @@
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/array/builder_base.h>
+#include <contrib/libs/simdjson/include/simdjson/dom/array-inl.h>
+#include <contrib/libs/simdjson/include/simdjson/dom/document-inl.h>
+#include <contrib/libs/simdjson/include/simdjson/dom/element-inl.h>
+#include <contrib/libs/simdjson/include/simdjson/dom/object-inl.h>
+#include <contrib/libs/simdjson/include/simdjson/dom/parser-inl.h>
+#include <contrib/libs/simdjson/include/simdjson/ondemand.h>
 #include <contrib/libs/xxhash/xxhash.h>
 #include <util/string/join.h>
 
@@ -52,12 +58,12 @@ private:
         const TStringBuf Prefix;
         const TStringBuf Key;
         const size_t Hash;
+
     public:
         TStorageAddress(const TStringBuf prefix, const TStringBuf key)
             : Prefix(prefix)
             , Key(key)
-            , Hash(XXH3_64bits(Prefix.data(), Prefix.size()) ^ XXH3_64bits(Key.data(), Key.size()))
-        {
+            , Hash(XXH3_64bits(Prefix.data(), Prefix.size()) ^ XXH3_64bits(Key.data(), Key.size())) {
         }
 
         operator size_t() const {
@@ -76,11 +82,18 @@ private:
     std::deque<TString> StorageStrings;
     const std::shared_ptr<arrow::DataType> Type;
     const TSettings Settings;
+    std::deque<simdjson::padded_string> PaddedStrings;
+    simdjson::ondemand::parser Parser;
 
 public:
     TDataBuilder(const std::shared_ptr<arrow::DataType>& type, const TSettings& settings)
         : Type(type)
         , Settings(settings) {
+    }
+
+    simdjson::simdjson_result<simdjson::ondemand::document> ParseJsonOnDemand(const TStringBuf sv) {
+        PaddedStrings.emplace_back(simdjson::padded_string(sv.data(), sv.size()));
+        return Parser.iterate(PaddedStrings.back());
     }
 
     void StartNextRecord() {
@@ -95,8 +108,16 @@ public:
         if (itElements == Elements.end()) {
             itElements = Elements.emplace(key, key).first;
         }
+        itElements->second.AddData(GetNullString(), CurrentRecordIndex);
+    }
+
+    static const TString& GetNullString() {
         const static TString nullString = "NULL";
-        itElements->second.AddData(nullString, CurrentRecordIndex);
+        return nullString;
+    }
+
+    static std::string_view GetNullStringView() {
+        return std::string_view(GetNullString().data(), GetNullString().size());
     }
 
     void AddKV(const TStringBuf key, const TStringBuf value) {

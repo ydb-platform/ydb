@@ -657,7 +657,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
     std::shared_ptr<Fq::Private::PingTaskResult> response = std::make_shared<Fq::Private::PingTaskResult>();
     std::shared_ptr<TFinalStatus> finalStatus = std::make_shared<TFinalStatus>();
 
-    auto pingTaskParams = DoesPingTaskUpdateQueriesTable(request) ?
+    bool isHard = DoesPingTaskUpdateQueriesTable(request);
+    Counters.Counters->GetCounter(isHard ? "HardPing" : "SoftPing", true)->Inc();
+    auto pingTaskParams = isHard ?
         ConstructHardPingTask(request, response, finalStatus, requestCounters.Common) :
         ConstructSoftPingTask(request, response, requestCounters.Common);
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};

@@ -1,9 +1,17 @@
 #include "query_utils.h"
 #include "view_utils.h"
 
-#include <yql/essentials/parser/proto_ast/gen/v1/SQLv1Lexer.h>
 #include <yql/essentials/parser/proto_ast/gen/v1_proto_split/SQLv1Parser.pb.main.h>
 #include <yql/essentials/public/issue/yql_issue.h>
+#include <yql/essentials/sql/v1/lexer/antlr3/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr3_ansi/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr3/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr3_ansi/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
+#include <yql/essentials/sql/v1/sql.h>
 
 #include <util/string/builder.h>
 
@@ -11,31 +19,13 @@
 
 namespace NYdb::NDump {
 
+using namespace NSQLTranslationV1;
 using namespace NSQLv1Generated;
+using namespace NYql;
 
 namespace {
 
-struct TViewQuerySplit {
-    TString ContextRecreation;
-    TString Select;
-};
-
-TViewQuerySplit SplitViewQuery(TStringInput query) {
-    // to do: make the implementation more versatile
-    TViewQuerySplit split;
-
-    TString line;
-    while (query.ReadLine(line)) {
-        (line.StartsWith("--") || line.StartsWith("PRAGMA ")
-            ? split.ContextRecreation
-            : split.Select
-        ) += line;
-    }
-
-    return split;
-}
-
-bool ValidateViewQuery(const TString& query, NYql::TIssues& issues) {
+bool ValidateViewQuery(const TString& query, TIssues& issues) {
     TRule_sql_query queryProto;
     if (!SqlToProtoAst(query, queryProto, issues)) {
         return false;
@@ -43,25 +33,25 @@ bool ValidateViewQuery(const TString& query, NYql::TIssues& issues) {
     return ValidateTableRefs(queryProto, issues);
 }
 
-void ValidateViewQuery(const TString& query, const TString& dbPath, NYql::TIssues& issues) {
-    NYql::TIssues subIssues;
+void ValidateViewQuery(const TString& query, const TString& dbPath, TIssues& issues) {
+    TIssues subIssues;
     if (!ValidateViewQuery(query, subIssues)) {
-        NYql::TIssue restorabilityIssue(
+        TIssue restorabilityIssue(
             TStringBuilder() << "Restorability of the view: " << dbPath.Quote()
             << " storing the following query:\n"
-            << query
+            << query.Quote()
             << "\ncannot be guaranteed. For more information, please refer to the 'ydb tools dump' documentation."
         );
-        restorabilityIssue.Severity = NYql::TSeverityIds::S_WARNING;
+        restorabilityIssue.Severity = TSeverityIds::S_WARNING;
         for (const auto& subIssue : subIssues) {
-            restorabilityIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(subIssue));
+            restorabilityIssue.AddSubIssue(MakeIntrusive<TIssue>(subIssue));
         }
         issues.AddIssue(std::move(restorabilityIssue));
     }
 }
 
 bool RewriteTablePathPrefix(TString& query, TStringBuf backupRoot, TStringBuf restoreRoot,
-    bool restoreRootIsDatabase, NYql::TIssues& issues
+    bool restoreRootIsDatabase, TIssues& issues
 ) {
     if (backupRoot == restoreRoot) {
         return true;
@@ -77,7 +67,7 @@ bool RewriteTablePathPrefix(TString& query, TStringBuf backupRoot, TStringBuf re
 
             size_t contextRecreationEnd = query.find("CREATE VIEW");
             if (contextRecreationEnd == TString::npos) {
-                issues.AddIssue(TStringBuilder() << "no create view statement in the query: " << query);
+                issues.AddIssue(TStringBuilder() << "no create view statement in the query: " << query.Quote());
                 return false;
             }
             query.insert(contextRecreationEnd, TString(
@@ -104,21 +94,66 @@ bool RewriteTablePathPrefix(TString& query, TStringBuf backupRoot, TStringBuf re
 
 } // anonymous
 
+TViewQuerySplit::TViewQuerySplit(const TVector<TString>& statements) {
+    TStringBuilder context;
+    for (int i = 0; i < std::ssize(statements) - 1; ++i) {
+        context << statements[i] << '\n';
+    }
+    ContextRecreation = context;
+    Y_ENSURE(!statements.empty());
+    Select = statements.back();
+}
+
+bool SplitViewQuery(const TString& query, TViewQuerySplit& split, TIssues& issues) {
+    google::protobuf::Arena Arena;
+    NSQLTranslation::TTranslationSettings translationSettings;
+    translationSettings.Arena = &Arena;
+    if (!NSQLTranslation::ParseTranslationSettings(query, translationSettings, issues)) {
+        return false;
+    }
+
+    TLexers lexers;
+    lexers.Antlr3 = MakeAntlr3LexerFactory();
+    lexers.Antlr3Ansi = MakeAntlr3AnsiLexerFactory();
+    lexers.Antlr4 = MakeAntlr4LexerFactory();
+    lexers.Antlr4Ansi = MakeAntlr4AnsiLexerFactory();
+    TParsers parsers;
+    parsers.Antlr3 = MakeAntlr3ParserFactory();
+    parsers.Antlr3Ansi = MakeAntlr3AnsiParserFactory();
+    parsers.Antlr4 = MakeAntlr4ParserFactory();
+    parsers.Antlr4Ansi = MakeAntlr4AnsiParserFactory();
+
+    TVector<TString> statements;
+    if (!SplitQueryToStatements(lexers, parsers, query, statements, issues, translationSettings)) {
+        return false;
+    }
+    if (statements.empty()) {
+        issues.AddIssue(TStringBuilder() << "No select statement in the view query: " << query.Quote());
+        return false;
+    }
+
+    split = TViewQuerySplit(statements);
+    return true;
+}
+
 TString BuildCreateViewQuery(
     const TString& name, const TString& dbPath, const TString& viewQuery, const TString& backupRoot,
-    NYql::TIssues& issues
+    TIssues& issues
 ) {
-    auto [contextRecreation, select] = SplitViewQuery(viewQuery);
+    TViewQuerySplit split;
+    if (!SplitViewQuery(viewQuery, split, issues)) {
+        return "";
+    }
 
     const TString creationQuery = std::format(
         "-- backup root: \"{}\"\n"
         "{}\n"
         "CREATE VIEW IF NOT EXISTS `{}` WITH (security_invoker = TRUE) AS\n"
         "    {};\n",
-        backupRoot.data(),
-        contextRecreation.data(),
-        name.data(),
-        select.data()
+        backupRoot.c_str(),
+        split.ContextRecreation.c_str(),
+        name.c_str(),
+        split.Select.c_str()
     );
 
     ValidateViewQuery(creationQuery, dbPath, issues);
@@ -131,7 +166,7 @@ TString BuildCreateViewQuery(
 }
 
 bool RewriteCreateViewQuery(TString& query, const TString& restoreRoot, bool restoreRootIsDatabase,
-    const TString& dbPath, NYql::TIssues& issues
+    const TString& dbPath, TIssues& issues
 ) {
     const auto backupRoot = GetBackupRoot(query);
 

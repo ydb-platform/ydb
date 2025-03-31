@@ -10,6 +10,9 @@ SRCS(
 
 PEERDIR(
     ydb/apps/ydb/commands
+    yql/essentials/parser/pg_wrapper
+    yql/essentials/public/udf/service/exception_policy
+    yql/essentials/sql/pg
 )
 
 RESOURCE(

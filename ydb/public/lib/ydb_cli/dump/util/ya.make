@@ -7,6 +7,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/protobuf/util
     ydb/public/lib/ydb_cli/common
     ydb/public/sdk/cpp/src/client/scheme
     ydb/public/sdk/cpp/src/client/table
@@ -14,17 +15,17 @@ PEERDIR(
     yql/essentials/parser/proto_ast/gen/v1
     yql/essentials/parser/proto_ast/gen/v1_proto_split
     yql/essentials/sql/settings
+    yql/essentials/sql/v1
     yql/essentials/sql/v1/format
-    yql/essentials/sql/v1/proto_parser
-    yql/essentials/sql/v1/lexer/antlr4
-    yql/essentials/sql/v1/lexer/antlr4_ansi
-    yql/essentials/sql/v1/proto_parser/antlr4
-    yql/essentials/sql/v1/proto_parser/antlr4_ansi
     yql/essentials/sql/v1/lexer/antlr3
     yql/essentials/sql/v1/lexer/antlr3_ansi
+    yql/essentials/sql/v1/lexer/antlr4
+    yql/essentials/sql/v1/lexer/antlr4_ansi
+    yql/essentials/sql/v1/proto_parser
     yql/essentials/sql/v1/proto_parser/antlr3
     yql/essentials/sql/v1/proto_parser/antlr3_ansi
-    library/cpp/protobuf/util
+    yql/essentials/sql/v1/proto_parser/antlr4
+    yql/essentials/sql/v1/proto_parser/antlr4_ansi
 )
 
 END()

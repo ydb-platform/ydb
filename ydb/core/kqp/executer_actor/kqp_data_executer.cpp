@@ -216,14 +216,14 @@ public:
                     }
                 }
 
-                if (info.HasBatchMaxKey()) {
-                    if (ResponseEv->BatchEndRows.empty()) {
-                        for (auto keyId : info.GetBatchKeyIds()) {
-                            ResponseEv->BatchKeyIds.push_back(keyId);
+                if (info.HasBatchOperationMaxKey()) {
+                    if (ResponseEv->BatchOperationMaxKeys.empty()) {
+                        for (auto keyId : info.GetBatchOperationKeyIds()) {
+                            ResponseEv->BatchOperationKeyIds.push_back(keyId);
                         }
                     }
 
-                    ResponseEv->BatchEndRows.emplace_back(info.GetBatchMaxKey());
+                    ResponseEv->BatchOperationMaxKeys.emplace_back(info.GetBatchOperationMaxKey());
                 }
             } else if (data.GetData().template Is<NKikimrKqp::TEvKqpOutputActorResultInfo>()) {
                 NKikimrKqp::TEvKqpOutputActorResultInfo info;

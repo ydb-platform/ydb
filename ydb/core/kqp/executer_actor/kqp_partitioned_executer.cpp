@@ -233,6 +233,7 @@ public:
             .TraceId = PhysicalRequest.TraceId.GetTraceId(),
             .Counters = Counters,
             .TxProxyMon = RequestCounters->TxProxyMon,
+            .Alloc = txAlloc->Alloc
         };
 
         auto* bufferActor = CreateKqpBufferWriterActor(std::move(settings));
@@ -339,35 +340,38 @@ public:
 
         PE_LOG_I("Got success response from ExId = " << exId);
 
-        auto partInfo = ExecuterPartition[exId];
-        auto endRows = ev->BatchEndRows;
-        auto endKeyIds = ev->BatchKeyIds;
+        auto& partInfo = ExecuterPartition[exId];
+        const auto& maxReadKeys = ev->BatchOperationMaxKeys;
+        const auto& keyIds = ev->BatchOperationKeyIds;
 
-        if (!endKeyIds.empty()) {
-            TryReorderKeysByIds(endKeyIds);
+        if (!keyIds.empty()) {
+            TryReorderKeysByIds(keyIds);
         }
 
-        TSerializedCellVec maxRow;
-        if (!endRows.empty()) {
-            maxRow = endRows.front();
-            YQL_ENSURE(maxRow.GetCells().size() == KeyColumnInfo.size());
-        }
+        TSerializedCellVec maxKey;
+        for (size_t i = 0; i < maxReadKeys.size(); ++i) {
+            auto row = maxReadKeys[i];
+            if (i == 0) {
+                maxKey = row;
+                continue;
+            }
 
-        for (size_t i = 1; i < endRows.size(); ++i) {
-            auto row = endRows[i];
-            YQL_ENSURE(row.GetCells().size() == maxRow.GetCells().size());
+            auto max_cells = maxKey.GetCells();
+            auto row_cells = row.GetCells();
+
+            YQL_ENSURE(row_cells.size() == max_cells.size());
 
             for (size_t j = 0; j < KeyColumnInfo.size(); ++j) {
                 NScheme::TTypeInfoOrder typeOrder(KeyColumnInfo[j].Type, NScheme::EOrder::Ascending);
-                if (CompareTypedCells(maxRow.GetCells()[j], row.GetCells()[j], typeOrder) < 0) {
-                    maxRow = row;
+                if (CompareTypedCells(max_cells[j], row_cells[j], typeOrder) < 0) {
+                    maxKey = row;
                     break;
                 }
             }
         }
 
-        if (!maxRow.GetCells().empty()) {
-            partInfo->BeginRange = TKeyDesc::TPartitionRangeInfo(maxRow,
+        if (!maxKey.GetCells().empty()) {
+            partInfo->BeginRange = TKeyDesc::TPartitionRangeInfo(maxKey,
                 /* IsInclusive */ false,
                 /* IsPoint */ false
             );

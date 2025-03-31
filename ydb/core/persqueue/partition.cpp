@@ -1522,32 +1522,9 @@ void TPartition::Handle(TEvPQ::TEvError::TPtr& ev, const TActorContext& ctx) {
     ProcessTimestampRead(ctx);
 }
 
-void TPartition::CheckHeadConsistency() const {
-    ui32 p = 0;
-    for (ui32 j = 0; j < WorkZone.DataKeysHead.size(); ++j) {
-        ui32 s = 0;
-        for (ui32 k = 0; k < WorkZone.DataKeysHead[j].KeysCount(); ++k) {
-            Y_ABORT_UNLESS(p < WorkZone.HeadKeys.size());
-            Y_ABORT_UNLESS(WorkZone.DataKeysHead[j].GetKey(k) == WorkZone.HeadKeys[p].Key);
-            Y_ABORT_UNLESS(WorkZone.DataKeysHead[j].GetSize(k) == WorkZone.HeadKeys[p].Size);
-            s += WorkZone.DataKeysHead[j].GetSize(k);
-            Y_ABORT_UNLESS(j + 1 == TotalLevels || WorkZone.DataKeysHead[j].GetSize(k) >= CompactLevelBorder[j + 1]);
-            ++p;
-        }
-        Y_ABORT_UNLESS(s < WorkZone.DataKeysHead[j].Border());
-    }
-    Y_ABORT_UNLESS(WorkZone.DataKeysBody.empty() ||
-             WorkZone.Head.Offset >= WorkZone.DataKeysBody.back().Key.GetOffset() + WorkZone.DataKeysBody.back().Key.GetCount());
-    Y_ABORT_UNLESS(p == WorkZone.HeadKeys.size());
-    if (!WorkZone.HeadKeys.empty()) {
-        Y_ABORT_UNLESS(WorkZone.HeadKeys.size() <= TotalMaxCount);
-        Y_ABORT_UNLESS(WorkZone.HeadKeys.front().Key.GetOffset() == WorkZone.Head.Offset);
-        Y_ABORT_UNLESS(WorkZone.HeadKeys.front().Key.GetPartNo() == WorkZone.Head.PartNo);
-        for (p = 1; p < WorkZone.HeadKeys.size(); ++p) {
-            Y_ABORT_UNLESS(WorkZone.HeadKeys[p].Key.GetOffset() == WorkZone.HeadKeys[p-1].Key.GetOffset() + WorkZone.HeadKeys[p-1].Key.GetCount());
-            Y_ABORT_UNLESS(WorkZone.HeadKeys[p].Key.ToString() > WorkZone.HeadKeys[p-1].Key.ToString());
-        }
-    }
+void TPartition::CheckHeadConsistency() const
+{
+    WorkZone.CheckHeadConsistency(CompactLevelBorder, TotalLevels, TotalMaxCount);
 }
 
 ui64 TPartition::GetSizeLag(i64 offset) {

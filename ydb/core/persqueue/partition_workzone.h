@@ -11,6 +11,12 @@ class TKeyLevel;
 struct TPartitionWorkZone {
     explicit TPartitionWorkZone(const TPartitionId& partition);
 
+    void CheckHeadConsistency(const TVector<ui32>& compactLevelBorder,
+                              const ui32 totalLevels,
+                              const ui32 totalMaxCount) const;
+
+    ui64 GetSize() const { return BodySize + Head.PackedSize; }
+
     bool PositionInBody(ui64 offset, ui32 partNo) const;
     bool PositionInHead(ui64 offset, ui32 partNo) const;
 

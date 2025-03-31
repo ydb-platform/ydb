@@ -11,6 +11,37 @@ TPartitionWorkZone::TPartitionWorkZone(const TPartitionId& partition)
 {
 }
 
+void TPartitionWorkZone::CheckHeadConsistency(const TVector<ui32>& compactLevelBorder,
+                                              const ui32 totalLevels,
+                                              const ui32 totalMaxCount) const
+{
+    ui32 p = 0;
+    for (ui32 j = 0; j < DataKeysHead.size(); ++j) {
+        ui32 s = 0;
+        for (ui32 k = 0; k < DataKeysHead[j].KeysCount(); ++k) {
+            Y_ABORT_UNLESS(p < HeadKeys.size());
+            Y_ABORT_UNLESS(DataKeysHead[j].GetKey(k) == HeadKeys[p].Key);
+            Y_ABORT_UNLESS(DataKeysHead[j].GetSize(k) == HeadKeys[p].Size);
+            s += DataKeysHead[j].GetSize(k);
+            Y_ABORT_UNLESS(j + 1 == totalLevels || DataKeysHead[j].GetSize(k) >= compactLevelBorder[j + 1]);
+            ++p;
+        }
+        Y_ABORT_UNLESS(s < DataKeysHead[j].Border());
+    }
+    Y_ABORT_UNLESS(DataKeysBody.empty() ||
+             Head.Offset >= DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount());
+    Y_ABORT_UNLESS(p == HeadKeys.size());
+    if (!HeadKeys.empty()) {
+        Y_ABORT_UNLESS(HeadKeys.size() <= totalMaxCount);
+        Y_ABORT_UNLESS(HeadKeys.front().Key.GetOffset() == Head.Offset);
+        Y_ABORT_UNLESS(HeadKeys.front().Key.GetPartNo() == Head.PartNo);
+        for (p = 1; p < HeadKeys.size(); ++p) {
+            Y_ABORT_UNLESS(HeadKeys[p].Key.GetOffset() == HeadKeys[p-1].Key.GetOffset() + HeadKeys[p-1].Key.GetCount());
+            Y_ABORT_UNLESS(HeadKeys[p].Key.ToString() > HeadKeys[p-1].Key.ToString());
+        }
+    }
+}
+
 bool TPartitionWorkZone::PositionInBody(ui64 offset, ui32 partNo) const
 {
     return offset < Head.Offset || ((Head.Offset == offset) && (partNo < Head.PartNo));

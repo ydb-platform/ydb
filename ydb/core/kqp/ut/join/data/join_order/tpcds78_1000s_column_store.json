@@ -3,13 +3,17 @@
   "args":
     [
       {
-        "op_name":"HashShuffle",
+        "op_name":"LeftJoin (Grace)",
         "args":
           [
             {
+<<<<<<< HEAD
               "op_name":"LeftJoin (Grace)",
 <<<<<<< HEAD
 =======
+=======
+              "op_name":"HashShuffle",
+>>>>>>> c0bd9099a5e ([KQP] Shuffle elimination flag bug fix (#16367))
               "args":
                 [
                   {
@@ -17,7 +21,55 @@
                     "args":
                       [
                         {
-                          "op_name":"HashShuffle",
+                          "op_name":"LeftJoin (Grace)",
+                          "args":
+                            [
+                              {
+                                "op_name":"HashShuffle",
+                                "args":
+                                  [
+                                    {
+                                      "op_name":"InnerJoin (MapJoin)",
+                                      "args":
+                                        [
+                                          {
+                                            "op_name":"TableFullScan",
+                                            "table":"test\/ds\/store_sales"
+                                          },
+                                          {
+                                            "op_name":"TableFullScan",
+                                            "table":"test\/ds\/date_dim"
+                                          }
+                                        ]
+                                    }
+                                  ]
+                              },
+                              {
+                                "op_name":"HashShuffle",
+                                "args":
+                                  [
+                                    {
+                                      "op_name":"TableFullScan",
+                                      "table":"test\/ds\/store_returns"
+                                    }
+                                  ]
+                              }
+                            ]
+                        }
+                      ]
+                  }
+                ]
+            },
+            {
+              "op_name":"HashShuffle",
+              "args":
+                [
+                  {
+                    "op_name":"HashShuffle",
+                    "args":
+                      [
+                        {
+                          "op_name":"InnerJoin (MapJoin)",
                           "args":
                             [
                               {
@@ -29,18 +81,8 @@
                                       "args":
                                         [
                                           {
-                                            "op_name":"InnerJoin (MapJoin)",
-                                            "args":
-                                              [
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"test\/ds\/store_sales"
-                                                },
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"test\/ds\/date_dim"
-                                                }
-                                              ]
+                                            "op_name":"TableFullScan",
+                                            "table":"test\/ds\/web_sales"
                                           }
                                         ]
                                     },
@@ -50,59 +92,15 @@
                                         [
                                           {
                                             "op_name":"TableFullScan",
-                                            "table":"test\/ds\/store_returns"
+                                            "table":"test\/ds\/web_returns"
                                           }
                                         ]
                                     }
                                   ]
-                              }
-                            ]
-                        }
-                      ]
-                  },
-                  {
-                    "op_name":"HashShuffle",
-                    "args":
-                      [
-                        {
-                          "op_name":"HashShuffle",
-                          "args":
-                            [
+                              },
                               {
-                                "op_name":"InnerJoin (MapJoin)",
-                                "args":
-                                  [
-                                    {
-                                      "op_name":"LeftJoin (Grace)",
-                                      "args":
-                                        [
-                                          {
-                                            "op_name":"HashShuffle",
-                                            "args":
-                                              [
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"test\/ds\/web_sales"
-                                                }
-                                              ]
-                                          },
-                                          {
-                                            "op_name":"HashShuffle",
-                                            "args":
-                                              [
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"test\/ds\/web_returns"
-                                                }
-                                              ]
-                                          }
-                                        ]
-                                    },
-                                    {
-                                      "op_name":"TableFullScan",
-                                      "table":"test\/ds\/date_dim"
-                                    }
-                                  ]
+                                "op_name":"TableFullScan",
+                                "table":"test\/ds\/date_dim"
                               }
                             ]
                         }

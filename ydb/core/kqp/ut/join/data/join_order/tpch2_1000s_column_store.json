@@ -3,16 +3,24 @@
   "args":
     [
       {
-        "op_name":"HashShuffle",
+        "op_name":"InnerJoin (Grace)",
         "args":
           [
             {
+<<<<<<< HEAD
 <<<<<<< HEAD
               "op_name":"TableFullScan",
               "table":"part"
             },
 =======
               "op_name":"InnerJoin (Grace)",
+=======
+              "op_name":"TableFullScan",
+              "table":"part"
+            },
+            {
+              "op_name":"HashShuffle",
+>>>>>>> c0bd9099a5e ([KQP] Shuffle elimination flag bug fix (#16367))
               "args":
                 [
                   {
@@ -20,60 +28,38 @@
                     "args":
                       [
                         {
-                          "op_name":"TableFullScan",
-                          "table":"part"
-                        }
-                      ]
-                  },
-                  {
-                    "op_name":"HashShuffle",
-                    "args":
-                      [
-                        {
-                          "op_name":"HashShuffle",
+                          "op_name":"InnerJoin (Grace)",
                           "args":
                             [
                               {
-                                "op_name":"InnerJoin (Grace)",
+                                "op_name":"HashShuffle",
                                 "args":
                                   [
                                     {
-                                      "op_name":"HashShuffle",
+                                      "op_name":"TableFullScan",
+                                      "table":"partsupp"
+                                    }
+                                  ]
+                              },
+                              {
+                                "op_name":"InnerJoin (MapJoin)",
+                                "args":
+                                  [
+                                    {
+                                      "op_name":"TableFullScan",
+                                      "table":"supplier"
+                                    },
+                                    {
+                                      "op_name":"InnerJoin (MapJoin)",
                                       "args":
                                         [
                                           {
                                             "op_name":"TableFullScan",
-                                            "table":"partsupp"
-                                          }
-                                        ]
-                                    },
-                                    {
-                                      "op_name":"HashShuffle",
-                                      "args":
-                                        [
+                                            "table":"nation"
+                                          },
                                           {
-                                            "op_name":"InnerJoin (MapJoin)",
-                                            "args":
-                                              [
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"supplier"
-                                                },
-                                                {
-                                                  "op_name":"InnerJoin (MapJoin)",
-                                                  "args":
-                                                    [
-                                                      {
-                                                        "op_name":"TableFullScan",
-                                                        "table":"nation"
-                                                      },
-                                                      {
-                                                        "op_name":"TableFullScan",
-                                                        "table":"region"
-                                                      }
-                                                    ]
-                                                }
-                                              ]
+                                            "op_name":"TableFullScan",
+                                            "table":"region"
                                           }
                                         ]
                                     }
@@ -101,30 +87,24 @@
                     "table":"partsupp"
                   },
                   {
-                    "op_name":"HashShuffle",
+                    "op_name":"InnerJoin (MapJoin)",
                     "args":
                       [
+                        {
+                          "op_name":"TableFullScan",
+                          "table":"supplier"
+                        },
                         {
                           "op_name":"InnerJoin (MapJoin)",
                           "args":
                             [
                               {
                                 "op_name":"TableFullScan",
-                                "table":"supplier"
+                                "table":"nation"
                               },
                               {
-                                "op_name":"InnerJoin (MapJoin)",
-                                "args":
-                                  [
-                                    {
-                                      "op_name":"TableFullScan",
-                                      "table":"nation"
-                                    },
-                                    {
-                                      "op_name":"TableFullScan",
-                                      "table":"region"
-                                    }
-                                  ]
+                                "op_name":"TableFullScan",
+                                "table":"region"
                               }
                             ]
                         }

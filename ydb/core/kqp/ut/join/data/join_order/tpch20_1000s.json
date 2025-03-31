@@ -43,6 +43,7 @@
                           "table":"partsupp"
                         },
                         {
+<<<<<<< HEAD:ydb/core/kqp/ut/join/data/join_order/tpch20_1000s.json
                           "op_name":"HashShuffle",
                           "args":
                             [
@@ -51,6 +52,10 @@
                                 "table":"lineitem"
                               }
                             ]
+=======
+                          "op_name":"TableFullScan",
+                          "table":"part"
+>>>>>>> c0bd9099a5e ([KQP] Shuffle elimination flag bug fix (#16367)):ydb/core/kqp/ut/join/data/join_order/tpch17_1000s_column_store.json
                         }
                       ]
                   }

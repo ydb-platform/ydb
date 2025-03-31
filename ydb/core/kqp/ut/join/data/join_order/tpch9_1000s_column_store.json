@@ -12,6 +12,7 @@
           [
             {
 <<<<<<< HEAD
+<<<<<<< HEAD
               "op_name":"TableFullScan",
               "table":"lineitem"
 =======
@@ -24,6 +25,10 @@
                   }
                 ]
 >>>>>>> 48ddc8cc3eb ([KQP / CBO] Shuffle Elimination turn on by default. (#15823))
+=======
+              "op_name":"TableFullScan",
+              "table":"orders"
+>>>>>>> c0bd9099a5e ([KQP] Shuffle elimination flag bug fix (#16367))
             },
             {
               "op_name":"InnerJoin (Grace)",
@@ -64,22 +69,16 @@
                                 "args":
                                   [
                                     {
-                                      "op_name":"HashShuffle",
+                                      "op_name":"InnerJoin (MapJoin)",
                                       "args":
                                         [
                                           {
-                                            "op_name":"InnerJoin (MapJoin)",
-                                            "args":
-                                              [
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"supplier"
-                                                },
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"nation"
-                                                }
-                                              ]
+                                            "op_name":"TableFullScan",
+                                            "table":"supplier"
+                                          },
+                                          {
+                                            "op_name":"TableFullScan",
+                                            "table":"nation"
                                           }
                                         ]
                                     },
@@ -102,14 +101,8 @@
                                                     ]
                                                 },
                                                 {
-                                                  "op_name":"HashShuffle",
-                                                  "args":
-                                                    [
-                                                      {
-                                                        "op_name":"TableFullScan",
-                                                        "table":"part"
-                                                      }
-                                                    ]
+                                                  "op_name":"TableFullScan",
+                                                  "table":"part"
                                                 }
                                               ]
                                           }

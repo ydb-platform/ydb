@@ -44,14 +44,8 @@
                                       "args":
                                         [
                                           {
-                                            "op_name":"HashShuffle",
-                                            "args":
-                                              [
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"test\/ds\/catalog_sales"
-                                                }
-                                              ]
+                                            "op_name":"TableFullScan",
+                                            "table":"test\/ds\/catalog_sales"
                                           },
                                           {
                                             "op_name":"HashShuffle",
@@ -120,6 +114,7 @@
                                                                             [
                                                                               {
 <<<<<<< HEAD
+<<<<<<< HEAD
                                                                                 "op_name":"TableFullScan",
                                                                                 "table":"test\/ds\/customer_demographics"
 =======
@@ -132,6 +127,10 @@
                                                                                     }
                                                                                   ]
 >>>>>>> 48ddc8cc3eb ([KQP / CBO] Shuffle Elimination turn on by default. (#15823))
+=======
+                                                                                "op_name":"TableFullScan",
+                                                                                "table":"test\/ds\/customer_address"
+>>>>>>> c0bd9099a5e ([KQP] Shuffle elimination flag bug fix (#16367))
                                                                               },
                                                                               {
                                                                                 "op_name":"InnerJoin (Grace)",
@@ -147,6 +146,7 @@
                                                                                         [
                                                                                           {
 <<<<<<< HEAD
+<<<<<<< HEAD
                                                                                             "op_name":"TableFullScan",
                                                                                             "table":"test\/ds\/store_returns"
 =======
@@ -159,6 +159,10 @@
                                                                                                 }
                                                                                               ]
 >>>>>>> 48ddc8cc3eb ([KQP / CBO] Shuffle Elimination turn on by default. (#15823))
+=======
+                                                                                            "op_name":"TableFullScan",
+                                                                                            "table":"test\/ds\/customer_demographics"
+>>>>>>> c0bd9099a5e ([KQP] Shuffle elimination flag bug fix (#16367))
                                                                                           },
                                                                                           {
                                                                                             "op_name":"InnerJoin (MapJoin)",
@@ -185,14 +189,8 @@
                                                                                                               "args":
                                                                                                                 [
                                                                                                                   {
-                                                                                                                    "op_name":"HashShuffle",
-                                                                                                                    "args":
-                                                                                                                      [
-                                                                                                                        {
-                                                                                                                          "op_name":"TableFullScan",
-                                                                                                                          "table":"test\/ds\/customer"
-                                                                                                                        }
-                                                                                                                      ]
+                                                                                                                    "op_name":"TableFullScan",
+                                                                                                                    "table":"test\/ds\/customer"
                                                                                                                   },
                                                                                                                   {
                                                                                                                     "op_name":"HashShuffle",
@@ -203,14 +201,8 @@
                                                                                                                           "args":
                                                                                                                             [
                                                                                                                               {
-                                                                                                                                "op_name":"HashShuffle",
-                                                                                                                                "args":
-                                                                                                                                  [
-                                                                                                                                    {
-                                                                                                                                      "op_name":"TableFullScan",
-                                                                                                                                      "table":"test\/ds\/customer_demographics"
-                                                                                                                                    }
-                                                                                                                                  ]
+                                                                                                                                "op_name":"TableFullScan",
+                                                                                                                                "table":"test\/ds\/customer_demographics"
                                                                                                                               },
                                                                                                                               {
                                                                                                                                 "op_name":"HashShuffle",
@@ -221,14 +213,8 @@
                                                                                                                                       "args":
                                                                                                                                         [
                                                                                                                                           {
-                                                                                                                                            "op_name":"HashShuffle",
-                                                                                                                                            "args":
-                                                                                                                                              [
-                                                                                                                                                {
-                                                                                                                                                  "op_name":"TableFullScan",
-                                                                                                                                                  "table":"test\/ds\/customer_address"
-                                                                                                                                                }
-                                                                                                                                              ]
+                                                                                                                                            "op_name":"TableFullScan",
+                                                                                                                                            "table":"test\/ds\/customer_address"
                                                                                                                                           },
                                                                                                                                           {
                                                                                                                                             "op_name":"HashShuffle",
@@ -239,14 +225,8 @@
                                                                                                                                                   "args":
                                                                                                                                                     [
                                                                                                                                                       {
-                                                                                                                                                        "op_name":"HashShuffle",
-                                                                                                                                                        "args":
-                                                                                                                                                          [
-                                                                                                                                                            {
-                                                                                                                                                              "op_name":"TableFullScan",
-                                                                                                                                                              "table":"test\/ds\/store_returns"
-                                                                                                                                                            }
-                                                                                                                                                          ]
+                                                                                                                                                        "op_name":"TableFullScan",
+                                                                                                                                                        "table":"test\/ds\/store_returns"
                                                                                                                                                       },
                                                                                                                                                       {
                                                                                                                                                         "op_name":"HashShuffle",
@@ -322,22 +302,16 @@
 =======
                                                 },
                                                 {
-                                                  "op_name":"HashShuffle",
+                                                  "op_name":"InnerJoin (MapJoin)",
                                                   "args":
                                                     [
                                                       {
-                                                        "op_name":"InnerJoin (MapJoin)",
-                                                        "args":
-                                                          [
-                                                            {
-                                                              "op_name":"TableFullScan",
-                                                              "table":"test\/ds\/household_demographics"
-                                                            },
-                                                            {
-                                                              "op_name":"TableFullScan",
-                                                              "table":"test\/ds\/income_band"
-                                                            }
-                                                          ]
+                                                        "op_name":"TableFullScan",
+                                                        "table":"test\/ds\/household_demographics"
+                                                      },
+                                                      {
+                                                        "op_name":"TableFullScan",
+                                                        "table":"test\/ds\/income_band"
                                                       }
                                                     ]
 >>>>>>> 48ddc8cc3eb ([KQP / CBO] Shuffle Elimination turn on by default. (#15823))
@@ -352,25 +326,23 @@
                                     },
                                     {
 <<<<<<< HEAD
+<<<<<<< HEAD
                                       "op_name":"TableFullScan",
                                       "table":"test\/ds\/date_dim"
 =======
                                       "op_name":"HashShuffle",
+=======
+                                      "op_name":"InnerJoin (MapJoin)",
+>>>>>>> c0bd9099a5e ([KQP] Shuffle elimination flag bug fix (#16367))
                                       "args":
                                         [
                                           {
-                                            "op_name":"InnerJoin (MapJoin)",
-                                            "args":
-                                              [
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"test\/ds\/household_demographics"
-                                                },
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"test\/ds\/income_band"
-                                                }
-                                              ]
+                                            "op_name":"TableFullScan",
+                                            "table":"test\/ds\/household_demographics"
+                                          },
+                                          {
+                                            "op_name":"TableFullScan",
+                                            "table":"test\/ds\/income_band"
                                           }
                                         ]
 >>>>>>> 48ddc8cc3eb ([KQP / CBO] Shuffle Elimination turn on by default. (#15823))
@@ -459,14 +431,8 @@
                                       "args":
                                         [
                                           {
-                                            "op_name":"HashShuffle",
-                                            "args":
-                                              [
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"test\/ds\/catalog_sales"
-                                                }
-                                              ]
+                                            "op_name":"TableFullScan",
+                                            "table":"test\/ds\/catalog_sales"
                                           },
                                           {
                                             "op_name":"HashShuffle",
@@ -535,6 +501,7 @@
                                                                             [
                                                                               {
 <<<<<<< HEAD
+<<<<<<< HEAD
                                                                                 "op_name":"TableFullScan",
                                                                                 "table":"test\/ds\/customer_demographics"
 =======
@@ -547,6 +514,10 @@
                                                                                     }
                                                                                   ]
 >>>>>>> 48ddc8cc3eb ([KQP / CBO] Shuffle Elimination turn on by default. (#15823))
+=======
+                                                                                "op_name":"TableFullScan",
+                                                                                "table":"test\/ds\/customer_address"
+>>>>>>> c0bd9099a5e ([KQP] Shuffle elimination flag bug fix (#16367))
                                                                               },
                                                                               {
                                                                                 "op_name":"InnerJoin (Grace)",
@@ -562,6 +533,7 @@
                                                                                         [
                                                                                           {
 <<<<<<< HEAD
+<<<<<<< HEAD
                                                                                             "op_name":"TableFullScan",
                                                                                             "table":"test\/ds\/store_returns"
 =======
@@ -574,6 +546,10 @@
                                                                                                 }
                                                                                               ]
 >>>>>>> 48ddc8cc3eb ([KQP / CBO] Shuffle Elimination turn on by default. (#15823))
+=======
+                                                                                            "op_name":"TableFullScan",
+                                                                                            "table":"test\/ds\/customer_demographics"
+>>>>>>> c0bd9099a5e ([KQP] Shuffle elimination flag bug fix (#16367))
                                                                                           },
                                                                                           {
                                                                                             "op_name":"InnerJoin (MapJoin)",
@@ -600,14 +576,8 @@
                                                                                                               "args":
                                                                                                                 [
                                                                                                                   {
-                                                                                                                    "op_name":"HashShuffle",
-                                                                                                                    "args":
-                                                                                                                      [
-                                                                                                                        {
-                                                                                                                          "op_name":"TableFullScan",
-                                                                                                                          "table":"test\/ds\/customer"
-                                                                                                                        }
-                                                                                                                      ]
+                                                                                                                    "op_name":"TableFullScan",
+                                                                                                                    "table":"test\/ds\/customer"
                                                                                                                   },
                                                                                                                   {
                                                                                                                     "op_name":"HashShuffle",
@@ -618,14 +588,8 @@
                                                                                                                           "args":
                                                                                                                             [
                                                                                                                               {
-                                                                                                                                "op_name":"HashShuffle",
-                                                                                                                                "args":
-                                                                                                                                  [
-                                                                                                                                    {
-                                                                                                                                      "op_name":"TableFullScan",
-                                                                                                                                      "table":"test\/ds\/customer_demographics"
-                                                                                                                                    }
-                                                                                                                                  ]
+                                                                                                                                "op_name":"TableFullScan",
+                                                                                                                                "table":"test\/ds\/customer_demographics"
                                                                                                                               },
                                                                                                                               {
                                                                                                                                 "op_name":"HashShuffle",
@@ -636,14 +600,8 @@
                                                                                                                                       "args":
                                                                                                                                         [
                                                                                                                                           {
-                                                                                                                                            "op_name":"HashShuffle",
-                                                                                                                                            "args":
-                                                                                                                                              [
-                                                                                                                                                {
-                                                                                                                                                  "op_name":"TableFullScan",
-                                                                                                                                                  "table":"test\/ds\/customer_address"
-                                                                                                                                                }
-                                                                                                                                              ]
+                                                                                                                                            "op_name":"TableFullScan",
+                                                                                                                                            "table":"test\/ds\/customer_address"
                                                                                                                                           },
                                                                                                                                           {
                                                                                                                                             "op_name":"HashShuffle",
@@ -654,14 +612,8 @@
                                                                                                                                                   "args":
                                                                                                                                                     [
                                                                                                                                                       {
-                                                                                                                                                        "op_name":"HashShuffle",
-                                                                                                                                                        "args":
-                                                                                                                                                          [
-                                                                                                                                                            {
-                                                                                                                                                              "op_name":"TableFullScan",
-                                                                                                                                                              "table":"test\/ds\/store_returns"
-                                                                                                                                                            }
-                                                                                                                                                          ]
+                                                                                                                                                        "op_name":"TableFullScan",
+                                                                                                                                                        "table":"test\/ds\/store_returns"
                                                                                                                                                       },
                                                                                                                                                       {
                                                                                                                                                         "op_name":"HashShuffle",
@@ -737,22 +689,16 @@
 =======
                                                 },
                                                 {
-                                                  "op_name":"HashShuffle",
+                                                  "op_name":"InnerJoin (MapJoin)",
                                                   "args":
                                                     [
                                                       {
-                                                        "op_name":"InnerJoin (MapJoin)",
-                                                        "args":
-                                                          [
-                                                            {
-                                                              "op_name":"TableFullScan",
-                                                              "table":"test\/ds\/household_demographics"
-                                                            },
-                                                            {
-                                                              "op_name":"TableFullScan",
-                                                              "table":"test\/ds\/income_band"
-                                                            }
-                                                          ]
+                                                        "op_name":"TableFullScan",
+                                                        "table":"test\/ds\/household_demographics"
+                                                      },
+                                                      {
+                                                        "op_name":"TableFullScan",
+                                                        "table":"test\/ds\/income_band"
                                                       }
                                                     ]
 >>>>>>> 48ddc8cc3eb ([KQP / CBO] Shuffle Elimination turn on by default. (#15823))
@@ -767,25 +713,23 @@
                                     },
                                     {
 <<<<<<< HEAD
+<<<<<<< HEAD
                                       "op_name":"TableFullScan",
                                       "table":"test\/ds\/date_dim"
 =======
                                       "op_name":"HashShuffle",
+=======
+                                      "op_name":"InnerJoin (MapJoin)",
+>>>>>>> c0bd9099a5e ([KQP] Shuffle elimination flag bug fix (#16367))
                                       "args":
                                         [
                                           {
-                                            "op_name":"InnerJoin (MapJoin)",
-                                            "args":
-                                              [
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"test\/ds\/household_demographics"
-                                                },
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"test\/ds\/income_band"
-                                                }
-                                              ]
+                                            "op_name":"TableFullScan",
+                                            "table":"test\/ds\/household_demographics"
+                                          },
+                                          {
+                                            "op_name":"TableFullScan",
+                                            "table":"test\/ds\/income_band"
                                           }
                                         ]
 >>>>>>> 48ddc8cc3eb ([KQP / CBO] Shuffle Elimination turn on by default. (#15823))

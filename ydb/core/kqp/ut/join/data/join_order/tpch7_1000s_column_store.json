@@ -7,10 +7,6 @@
         "args":
           [
             {
-              "op_name":"TableFullScan",
-              "table":"customer"
-            },
-            {
               "op_name":"HashShuffle",
               "args":
                 [
@@ -19,8 +15,14 @@
                     "args":
                       [
                         {
-                          "op_name":"TableFullScan",
-                          "table":"orders"
+                          "op_name":"HashShuffle",
+                          "args":
+                            [
+                              {
+                                "op_name":"TableFullScan",
+                                "table":"lineitem"
+                              }
+                            ]
                         },
                         {
                           "op_name":"HashShuffle",
@@ -36,7 +38,7 @@
                                         [
                                           {
                                             "op_name":"TableFullScan",
-                                            "table":"lineitem"
+                                            "table":"orders"
                                           }
                                         ]
                                     },
@@ -46,21 +48,11 @@
                                         [
                                           {
                                             "op_name":"TableFullScan",
-                                            "table":"supplier"
+                                            "table":"customer"
                                           },
                                           {
-                                            "op_name":"InnerJoin (MapJoin)",
-                                            "args":
-                                              [
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"nation"
-                                                },
-                                                {
-                                                  "op_name":"TableFullScan",
-                                                  "table":"region"
-                                                }
-                                              ]
+                                            "op_name":"TableFullScan",
+                                            "table":"nation"
                                           }
                                         ]
                                     }
@@ -69,6 +61,20 @@
                             ]
                         }
                       ]
+                  }
+                ]
+            },
+            {
+              "op_name":"InnerJoin (MapJoin)",
+              "args":
+                [
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"supplier"
+                  },
+                  {
+                    "op_name":"TableFullScan",
+                    "table":"nation"
                   }
                 ]
             }

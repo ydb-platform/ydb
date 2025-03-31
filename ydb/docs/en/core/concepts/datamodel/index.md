@@ -1,8 +1,29 @@
-# Data model and schema
+# Cluster structure
 
-This section describes the entities that {{ ydb-short-name }} uses within DBs. The {{ ydb-short-name }} core lets you flexibly implement various storage primitives, so new entities may appear in the future.
+This section describes the {{ ydb-short-name }} entities.
 
-{{ ydb-short-name }} is a relational database where the data is stored in [tables](table.md) with each table consisting of rows and columns. Database objects in {{ ydb-short-name }} can be organized into a hierarchy of [folders](dir.md).
+## {{ ydb-short-name }} cluster scheme {#cluster-scheme}
+
+{{ ydb-short-name }} cluster scheme is a hierarchical namespace of a {{ ydb-short-name }} cluster. The only root element of this namespace is a **cluster scheme root**. A root of the cluster scheme can be a directory or a root database. Children elements of the cluster scheme root can be [databases](../../concepts/glossary.md#database) or other [scheme objects](../../concepts/glossary.md#scheme-object). Scheme objects can use nested directories to form a hierarchy.
+
+```plaintext
+Cluster scheme root/
+├── Database 1/
+│   ├── Table 1
+│   ├── Directory 1/
+│   │   ├── Table 2
+│   │   └── Table 3
+│   └── Directory 2/
+│       ├── Directory 3/
+│       │   └── ...
+│       └── ...
+└── Database 2/
+    └── ...
+```
+
+## Data model
+
+Scheme objects in {{ ydb-short-name }} databases:
 
 * [Folder](dir.md)
 * [Table](table.md)

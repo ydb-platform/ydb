@@ -20,7 +20,7 @@ Another essential characteristic of {{ ydb-short-name }} databases is that they 
 
 #### Root database {#root-database}
 
-A **root database** is a system database created for {{ ydb-short-name }}'s internal purposes at the root of the cluster scheme. This database contains service data such as [users], [access levels](#access-level) and [access rights](#access-right), tenant databases, and more.
+A **root database** is a system database created for {{ ydb-short-name }}'s internal purposes at the [root of the cluster scheme](#scheme-root). This database contains service data such as [users], [access levels](#access-level) and [access rights](#access-right), tenant databases, and more.
 
 ### Node {#node}
 
@@ -262,6 +262,18 @@ A **secret** is a sensitive piece of metadata that requires special handling. Fo
 An **authentication token** or **auth token** is a token that {{ ydb-short-name }} uses for [authentication](../security/authentication.md).
 
 {{ ydb-short-name }} supports various [authentication modes](../security/authentication.md) and token types.
+
+### Cluster scheme {#scheme}
+
+{{ ydb-short-name }} cluster scheme is a hierarchical namespace of a {{ ydb-short-name }} cluster. The only root element of this namespace is a [cluster scheme root](#scheme-root). A root of the cluster scheme can be a [directory](#folder) or a [root database](#root-database). Children elements of the cluster scheme root can be [databases](#database) or other [scheme objects](#scheme-object). Scheme objects can use nested directories to form a hierarchy.
+
+### Database scheme {#scheme-database}
+
+A database scheme is a subset of the hierarchical namespace of a {{ ydb-short-name }} cluster that belongs to a database.
+
+### Database root {#scheme-database-root}
+
+A database root is a path to a database in a {{ ydb-short-name }} cluster scheme. This path acts as a root for database scheme objects.
 
 ### Scheme object {#scheme-object}
 

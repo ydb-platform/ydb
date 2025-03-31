@@ -11,7 +11,9 @@
 namespace NKikimr::NOlap::NReader {
 
 namespace NSimple {
+class TSpecialReadContext;
 class IDataSource;
+class TSourceConstructor;
 }
 
 class TEvNotifyReadingFinished: public NActors::TEventLocal<TEvNotifyReadingFinished, NColumnShard::TEvPrivate::EvNotifyReadingFinished> {
@@ -400,16 +402,16 @@ private:
     };
 
 private:
+    std::deque<std::shared_ptr<NSimple::IDataSource>> SortedSources;
+    std::deque<std::shared_ptr<NSimple::IDataSource>> SkippedSources;
+    std::deque<std::shared_ptr<TSourceFilterConstructor>> ActiveSources;
+
     TSourceIntervals Intervals;
     THashSet<ui64> FinishedSourceIds;
     TIntervalCounter NotFetchedSourcesCount;
     TIntervalsCursor NextIntervalToMerge;
     THashMap<ui64, std::shared_ptr<TSourceFilterConstructor>> ActiveSourceById;
     TRequestQueue RequestsBuffer;
-
-    std::deque<std::shared_ptr<NSimple::IDataSource>> SortedSources;
-    std::deque<std::shared_ptr<NSimple::IDataSource>> SkippedSources;
-    std::deque<std::shared_ptr<TSourceFilterConstructor>> ActiveSources;
 
 private:
     STATEFN(StateMain) {
@@ -443,7 +445,7 @@ private:
     std::shared_ptr<TSourceFilterConstructor> GetConstructorBySourceSeqNumber(const ui32 seqNumber) const;
 
 public:
-    TDuplicateFilterConstructor(const std::deque<std::shared_ptr<NSimple::IDataSource>>& sources);
+    TDuplicateFilterConstructor(const std::deque<NSimple::TSourceConstructor>& sources, const std::shared_ptr<NSimple::TSpecialReadContext>& context);
 };
 
 }   // namespace NKikimr::NOlap::NReader

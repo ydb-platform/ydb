@@ -19,6 +19,8 @@ from ydb.core.protos import (
     bootstrap_pb2,
     cms_pb2,
     config_pb2,
+    blobstorage_config_pb2,
+    blobstorage_base3_pb2,
     feature_flags_pb2,
     key_pb2,
     netclassifier_pb2,
@@ -1104,8 +1106,59 @@ class StaticConfigGenerator(object):
         else:
             self.__generate_domains_from_proto(domains_config)
 
+    def __generate_default_pool_with_kind(self, pool_kind):
+        pool = config_pb2.TDomainsConfig.TStoragePoolType()
+        pool.Kind = pool_kind
+        pool_config = blobstorage_config_pb2.TDefineStoragePool()
+
+        pool_config.BoxId = 1
+        pool_config.Kind = pool_kind
+        pool_config.VDiskKind = "Default"
+        pdisk_filter = pool_config.PDiskFilter.add()
+        property = pdisk_filter.Property.add()
+        diskTypeToProto = {
+            'ssd': blobstorage_base3_pb2.EPDiskType.SSD,
+            'rot': blobstorage_base3_pb2.EPDiskType.ROT,
+            'ssdencrypted': blobstorage_base3_pb2.EPDiskType.SSD,
+            'rotencrypted': blobstorage_base3_pb2.EPDiskType.ROT,
+        }
+
+        property.Type = diskTypeToProto[pool_kind]
+
+        pool.PoolConfig.CopyFrom(pool_config)
+        return pool
+
     def __generate_domains_from_proto(self, domains_config):
-        self.__configure_security_config(domains_config)
+        domains = domains_config.Domain
+        if len(domains) > 1:
+            raise ValueError('Multiple domains specified: len(domains_config.domain) > 1. This is unsupported')
+
+        domain = domains[0]
+        pool_kinds = []
+        if not domain.StoragePoolTypes:
+            pool_kinds = ['ssd', 'rot', 'ssdencrypted', 'rotencrypted']
+            for pool_kind in pool_kinds:
+                storage_pool_type = domain.StoragePoolTypes.add()
+                default_storage_pool_type = self.__generate_default_pool_with_kind(pool_kind)
+                storage_pool_type.MergeFrom(default_storage_pool_type)
+        else:
+            for pool in domain.StoragePoolTypes:
+                # do a little dance to keep the specified fields prioritized
+                # while filling the remaining defaults (MergeFrom overwrites)
+                defaultPool = self.__generate_default_pool_with_kind(pool.Kind)
+                defaultPool.MergeFrom(pool)
+                pool.CopyFrom(defaultPool)
+
+        if not domain.DomainId:
+            domain.DomainId = 1
+        if not domain.PlanResolution:
+            domain.PlanResolution = base.DEFAULT_PLAN_RESOLUTION
+        if not domain.SchemeRoot:
+            domain.SchemeRoot = self.__tablet_types.FLAT_SCHEMESHARD.tablet_id_for(0)
+        if not domain.SSId:
+            domain.SSId.append(domain.DomainId)
+
+        self._configure_default_state_storage(domains_config, domain.DomainId)
         self.__proto_configs["domains.txt"] = domains_config
 
     def __generate_domains_from_old_domains_key(self):

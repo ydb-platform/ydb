@@ -242,9 +242,10 @@ class TestStress(object):
             "run",
             "--scale=1",
             "--exclude",
-            # not working for row tables
-            "17",
+            "17",  # not working for row tables
             "--check-canonical",
+            "--retries",
+            "5",  # in row tables we have to retry query by design 
         ]
 
         yatest.common.execute(init_command, wait=True, stdout=self.output_f, stderr=self.output_f)
@@ -300,6 +301,8 @@ class TestStress(object):
             "--exclude",
             # not working for row tables
             "5,7,14,18,22,23,24,26,27,31,33,39,46,51,54,56,58,60,61,64,66,67,68,72,75,77,78,79,80,93",
+            "--retries",
+            "5",  # in row tables we have to retry query by design 
         ]
 
         yatest.common.execute(init_command, wait=True, stdout=self.output_f, stderr=self.output_f)

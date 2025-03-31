@@ -33,11 +33,6 @@ def create_or_update_pr(args, repo):
     else:
         print("No existing PR found. Creating a new PR.")
         current_pr = repo.create_pull(title=args.title, body=body, head=args.branch_for_pr, base=args.base_branch)
-        
-    if args.reviewers:
-        reviewers = args.reviewers.split(',')
-        print(f"Requesting review from: {', '.join(reviewers)}")
-        current_pr.create_review_request(reviewers=reviewers)
 
     pr_number = current_pr.number
     if os.environ['GITHUB_OUTPUT']:
@@ -77,7 +72,6 @@ if __name__ == '__main__':
     create_parser.add_argument('--branch_for_pr', type=str, required=True, help='Branch from which to create the PR')
     create_parser.add_argument('--title', type=str, required=True, help='Title of the PR')
     create_parser.add_argument('--body', type=str, default='', required=False, help='Body content of the PR, or path to a file with the content')
-    create_parser.add_argument('--reviewers', type=str, default='', help='Comma separated list of reviewers')
 
     # Subparser for append PR body mode
     append_parser = subparsers.add_parser('append_pr_body', help='Append text to the body of an existing pull request')

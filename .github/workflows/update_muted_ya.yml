@@ -8,7 +8,8 @@ env:
   BRANCH_FOR_PR: update-muted-ya
   TITLE: "Update muted_ya.txt"
   BASE_BRANCH: main
-  REVIEWERS: ci
+  REVIEWERS: "['ci']"
+  LABEL: mute-unmute
 
 jobs:
   create-or-update-muted-ya:
@@ -35,17 +36,19 @@ jobs:
           git config user.email ydbot@ydb.tech
       
           # Fetch the latest changes from remote
-          git fetch origin
+          git fetch origin ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}
       
           # Checkout BRANCH_FOR_PR, create if it doesn't exist based on BASE_BRANCH
-          if git show-ref --quiet refs/heads/${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}; then
+          if git show-ref --quiet origin ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}; then
+            echo 'Branch ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }} exists.'
             git checkout ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}
           else
-            git checkout -b ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }} origin/${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}
+            echo 'Branch ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }} does not exist. Creating based on ${{ env.BASE_BRANCH }}'
+            git checkout -b ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }} origin/${{ env.BASE_BRANCH }}
           fi
       
           # Attempt to rebase BRANCH_FOR_PR onto BASE_BRANCH
-          if ! git rebase origin/${{ env.BASE_BRANCH }}; then
+          if ! git rebase origin/${{ env.BASE_BRANCH }} -X theirs; then
             echo "Rebase failed, resetting branch to match BASE_BRANCH..."
       
             # Abort the rebase process
@@ -126,7 +129,7 @@ jobs:
       - name: Push changes
         uses: ad-m/github-push-action@v0.8.0
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ secrets.YDBOT_TOKEN }}
           branch: ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}
           force: true
 
@@ -137,27 +140,37 @@ jobs:
       - name: Create or update PR
         id: create_or_update_pr
         env:
-          GITHUB_TOKEN: ${{ env.GH_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
         run: |
-          python .github/scripts/create_or_update_pr.py create_or_update --base_branch="${{ env.BASE_BRANCH }}" --branch_for_pr="${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}" --title="${{ env.TITLE }}" --body="${{ env.BODY }}"
-  
-      
+          python .github/scripts/create_or_update_pr.py create_or_update --base_branch="${{ env.BASE_BRANCH }}" --branch_for_pr="${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}" --title="${{ env.TITLE }} in ${{ env.BASE_BRANCH }}" --body="${{ env.PR_BODY_PATH }}"
+
+        
       - name: Comment PR
+        continue-on-error: true
         uses: actions/github-script@v7
+        
         with:
-          script: |    
+          github-token: ${{ secrets.YDBOT_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            const workflowUrl = `https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
+            const filePath = path.join(process.env.GITHUB_WORKSPACE, 'pr_body_content.txt');
+            const bodyText = fs.readFileSync(filePath, 'utf8');
+            const completeBody = `Collected in workflow [#${{ github.run_number }}](${workflowUrl})\n\n${bodyText}`;
+      
             github.rest.issues.createComment({
               issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
-              owner: ${{ github.repository_owner }},
-              repo: ${{ github.event.repository.name }},
-              body: ${{ env.PR_BODY }}
-
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: bodyText
             });
-
+      
             github.rest.issues.addLabels({
-                ...context.repo,
-                issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
-                labels: 'update_muted_ya'
+              ...context.repo,
+              issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
+              labels: ['${{ env.LABEL }}']
             });
 
       - name: Add reviewers
@@ -167,7 +180,7 @@ jobs:
           owner: ${{ github.repository_owner }}
           repo: ${{ github.event.repository.name }}
           pull_number: ${{ steps.create_or_update_pr.outputs.pr_number }}
-          team_reviewers: ${{ env.REVIEWERS }}  
-          token: ${{ secrets.GITHUB_TOKEN }}
+          team_reviewers: ${{ env.REVIEWERS }}
+          token: ${{ secrets.YDBOT_TOKEN }}
   
   

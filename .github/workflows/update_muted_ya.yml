@@ -8,7 +8,7 @@ env:
   BRANCH_FOR_PR: update-muted-ya
   TITLE: "Update muted_ya.txt"
   BASE_BRANCH: main
-  REVIEWERS: "ci"
+  REVIEWERS: "['ci']"
 
 jobs:
   create-or-update-muted-ya:
@@ -47,7 +47,7 @@ jobs:
           fi
       
           # Attempt to rebase BRANCH_FOR_PR onto BASE_BRANCH
-          if ! git rebase origin/${{ env.BASE_BRANCH }}; then
+          if ! git rebase origin/${{ env.BASE_BRANCH }} -X theirs; then
             echo "Rebase failed, resetting branch to match BASE_BRANCH..."
       
             # Abort the rebase process
@@ -142,26 +142,22 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
         run: |
           python .github/scripts/create_or_update_pr.py create_or_update --base_branch="${{ env.BASE_BRANCH }}" --branch_for_pr="${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}" --title="${{ env.TITLE }} in ${{ env.BASE_BRANCH }}" --body="${{ env.PR_BODY_PATH }}"
-  
-      
-      - name: Comment PR first attempt
-        continue-on-error: true
-        run: |
-          curl -X POST \
-            -H "Authorization: token ${{ secrets.YDBOT_TOKEN }}" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/${{ github.repository }}/issues/${{ steps.create_or_update_pr.outputs.pr_number }}/comments \
-            -d @pr_body_content.txt
+
         
       - name: Comment PR
         continue-on-error: true
         uses: actions/github-script@v7
+        
         with:
+          github-token: ${{ secrets.YDBOT_TOKEN }}
           script: |
             const fs = require('fs');
             const path = require('path');
-            const filePath = path.join(process.env.GITHUB_WORKSPACE, 'pr_body_content.txt');
+            
+            const workflowUrl = `https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
+            const filePath = path.join(process.env.GITHUB_WORKSPACE, 'pr_body.txt');
             const bodyText = fs.readFileSync(filePath, 'utf8');
+            const completeBody = `Collected in workflow [#${{ github.run_number }}](${workflowUrl})\n\n${bodyText}`;
       
             github.rest.issues.createComment({
               issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
@@ -183,7 +179,7 @@ jobs:
           owner: ${{ github.repository_owner }}
           repo: ${{ github.event.repository.name }}
           pull_number: ${{ steps.create_or_update_pr.outputs.pr_number }}
-          team_reviewers: "['${{ env.REVIEWERS }}']"
+          team_reviewers: ${{ env.REVIEWERS }}
           token: ${{ secrets.YDBOT_TOKEN }}
   
   

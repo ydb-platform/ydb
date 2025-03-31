@@ -155,7 +155,7 @@ public:
         }
         NYql::IssuesToMessage(UploadStatus.Issues, record.MutableIssues());
 
-        LOG_N("Finish" << Debug() << " " << Response->Record.ShortDebugString());
+        LOG_N("Finish " << Debug() << " " << Response->Record.ShortDebugString());
         Send(ResponseActorId, Response.Release());
 
         Driver = nullptr;
@@ -170,9 +170,9 @@ public:
 
     TString Debug() const
     {
-        return TStringBuilder() << " TReshuffleKMeansScan Id: " << BuildId << " Parent: " << Parent << " Child: " << Child
+        return TStringBuilder() << "TReshuffleKMeansScan Id: " << BuildId << " Parent: " << Parent << " Child: " << Child
             << " Target: " << TargetTable << " K: " << K << " Clusters: " << Clusters.size()
-            << " ReadBuf size: " << ReadBuf.Size() << " WriteBuf size: " << WriteBuf.Size() << " ";
+            << " ReadBuf size: " << ReadBuf.Size() << " WriteBuf size: " << WriteBuf.Size();
     }
 
     EScan PageFault() final
@@ -208,8 +208,9 @@ protected:
                                               << " ev->Sender: " << ev->Sender.ToString());
 
         if (Uploader) {
-            Y_ENSURE(Uploader == ev->Sender, "Mismatch Uploader: " << Uploader.ToString() << " ev->Sender: "
-                                                                     << ev->Sender.ToString() << Debug());
+            Y_ENSURE(Uploader == ev->Sender, "Mismatch"
+                << " Uploader: " << Uploader.ToString()
+                << " Sender: " << ev->Sender.ToString());
         } else {
             Y_ENSURE(Driver == nullptr);
             return;
@@ -231,13 +232,13 @@ protected:
         }
 
         if (RetryCount < Limits.MaxUploadRowsRetryCount && UploadStatus.IsRetriable()) {
-            LOG_N("Got retriable error, " << Debug() << UploadStatus.ToString());
+            LOG_N("Got retriable error, " << Debug() << " " << UploadStatus.ToString());
 
             Schedule(Limits.GetTimeoutBackoff(RetryCount), new TEvents::TEvWakeup);
             return;
         }
 
-        LOG_N("Got error, abort scan, " << Debug() << UploadStatus.ToString());
+        LOG_N("Got error, abort scan, " << Debug() << " " << UploadStatus.ToString());
 
         Driver->Touch(EScan::Final);
     }

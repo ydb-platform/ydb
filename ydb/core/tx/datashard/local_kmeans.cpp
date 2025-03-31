@@ -49,7 +49,7 @@ public:
         Size = 0;
         lock.unlock();
 
-        LOG_N("FinishTLocalKMeansScan " << Response->Record.ShortDebugString());
+        LOG_N("Finish TLocalKMeansScan " << Response->Record.ShortDebugString());
         ctx.Send(ResponseActorId, std::move(Response));
     }
 

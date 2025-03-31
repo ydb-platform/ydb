@@ -2,15 +2,11 @@
 
 {% if oss == true and backend_name == "YDB" %}
 
-{% if oss == true and backend_name == "YDB" %}
-
 {% note warning %}
 
 {% include [OLAP_not_allow_text](../../../../_includes/not_allow_for_olap_text.md) %}
 
 {% endnote %}
-
-{% endif %}
 
 {% endif %}
 

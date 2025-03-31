@@ -71,9 +71,9 @@ Vector indexes can be created:
 Required parameters for vector_kmeans_tree:
 * distance or similarity: The function to use (e.g., "cosine")
 * vector_type: Data type of vector elements ("float", "int8", "uint8")
-* vector_dimension: Dimensionality of vectors (≤16384)
+* vector_dimension: Dimensionality of vectors (<= 16384)
 * levels: Number of tree levels
-* clusters: Number of clusters per level (values >1000 may impact performance)
+* clusters: Number of clusters per level (values > 1000 may impact performance)
 
 ## Using vector indexes {#usage}
 

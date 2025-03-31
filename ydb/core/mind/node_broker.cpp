@@ -186,10 +186,34 @@ void TNodeBroker::TState::ClearState()
 {
     Nodes.clear();
     ExpiredNodes.clear();
+    RemovedNodes.clear();
     Hosts.clear();
 
     RecomputeFreeIds();
     RecomputeSlotIndexesPools();
+}
+
+void TNodeBroker::TState::UpdateLocation(TNodeInfo &node, const TNodeLocation& location)
+{
+    node.LastUpdateVersion = Epoch.Version;
+    node.Location = location;
+
+    LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
+                LogPrefix() << " Updated location of " << node.IdString()
+                << " to " << node.Location.ToString());
+}
+
+TNodeBroker::TNodeInfo* TNodeBroker::TState::FindActiveOrExpiredNode(ui32 nodeId)
+{
+    if (auto it = Nodes.find(nodeId); it != Nodes.end()) {
+        return &it->second;
+    }
+
+    if (auto it = ExpiredNodes.find(nodeId); it != ExpiredNodes.end()) {
+        return &it->second;
+    }
+
+    return nullptr;
 }
 
 void TNodeBroker::TState::AddNode(const TNodeInfo &info)
@@ -198,23 +222,27 @@ void TNodeBroker::TState::AddNode(const TNodeInfo &info)
     if (info.SlotIndex.has_value()) {
         SlotIndexesPools[info.ServicedSubDomain].Acquire(info.SlotIndex.value());
     }
+    RemovedNodes.erase(info.NodeId);
 
     if (info.Expire > Epoch.Start) {
         LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
                     LogPrefix() << " Added node " << info.IdString());
 
         Hosts.emplace(std::make_tuple(info.Host, info.Address, info.Port), info.NodeId);
-        Nodes.emplace(info.NodeId, info);
+        auto it = Nodes.emplace(info.NodeId, info);
+        it.first->second.State = ENodeState::Active;
     } else {
         LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
                     LogPrefix() << " Added expired node " << info.IdString());
 
-        ExpiredNodes.emplace(info.NodeId, info);
+        auto it = ExpiredNodes.emplace(info.NodeId, info);
+        it.first->second.State = ENodeState::Expired;
     }
 }
 
 void TNodeBroker::TState::ExtendLease(TNodeInfo &node)
 {
+    node.LastUpdateVersion = Epoch.Version;
     ++node.Lease;
     node.Expire = Epoch.NextEnd;
 
@@ -225,6 +253,7 @@ void TNodeBroker::TState::ExtendLease(TNodeInfo &node)
 
 void TNodeBroker::TState::FixNodeId(TNodeInfo &node)
 {
+    node.LastUpdateVersion = Epoch.Version;
     ++node.Lease;
     node.Expire = TInstant::Max();
 
@@ -415,6 +444,8 @@ void TNodeBroker::TState::ApplyStateDiff(const TStateDiff &diff)
                     LogPrefix() << " Node " << it->second.IdString() << " has expired");
 
         Hosts.erase(std::make_tuple(it->second.Host, it->second.Address, it->second.Port));
+        it->second.State = ENodeState::Expired;
+        it->second.LastUpdateVersion = diff.NewEpoch.Version;
         ExpiredNodes.emplace(id, std::move(it->second));
         Nodes.erase(it);
     }
@@ -432,6 +463,9 @@ void TNodeBroker::TState::ApplyStateDiff(const TStateDiff &diff)
         if (it->second.SlotIndex.has_value()) {
             SlotIndexesPools[it->second.ServicedSubDomain].Release(it->second.SlotIndex.value());
         }
+        it->second.State = ENodeState::Removed;
+        it->second.LastUpdateVersion = diff.NewEpoch.Version;
+        RemovedNodes.emplace(id, std::move(it->second));
         ExpiredNodes.erase(it);
     }
 
@@ -546,6 +580,13 @@ void TNodeBroker::TDirtyState::DbAddNode(const TNodeInfo &node,
                 << " authorizedbycertificate=" << (node.AuthorizedByCertificate ? "true" : "false"));
 
     NIceDb::TNiceDb db(txc.DB);
+
+    db.Table<Schema::NodesV2>().Key(node.NodeId)
+        .Update<Schema::NodesV2::NodeInfo>(node.SerializeToSchema())
+        .Update<Schema::NodesV2::State>(node.State)
+        .Update<Schema::NodesV2::LastUpdateVersion>(node.LastUpdateVersion)
+        .Update<Schema::NodesV2::SchemaVersion>(1);
+
     using T = Schema::Nodes;
     db.Table<T>().Key(node.NodeId)
         .Update<T::Host>(node.Host)
@@ -567,9 +608,27 @@ void TNodeBroker::TDirtyState::DbAddNode(const TNodeInfo &node,
     }
 }
 
+void TNodeBroker::TDirtyState::DbRemoveNode(ui32 nodeId,
+    TTransactionContext &txc)
+{
+    LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
+                DbLogPrefix() << " Removing node #" << nodeId << " from database");
+
+    NIceDb::TNiceDb db(txc.DB);
+    db.Table<Schema::NodesV2>().Key(nodeId)
+        .Update<Schema::NodesV2::State>(ENodeState::Removed)
+        .Update<Schema::NodesV2::LastUpdateVersion>(Epoch.Version);
+
+    db.Table<Schema::Nodes>().Key(nodeId).Delete();
+}
+
 void TNodeBroker::TDirtyState::DbApplyStateDiff(const TStateDiff &diff,
                                    TTransactionContext &txc)
 {
+    for (auto id : diff.NodesToExpire) {
+        const auto* node = FindActiveOrExpiredNode(id);
+        DbAddNode(*node, txc);
+    }
     DbRemoveNodes(diff.NodesToRemove, txc);
     DbUpdateEpoch(diff.NewEpoch, txc);
 }
@@ -591,6 +650,7 @@ bool TNodeBroker::TDirtyState::DbLoadState(TTransactionContext &txc,
 {
     NIceDb::TNiceDb db(txc.DB);
     bool updateEpoch = false;
+    bool updateLegacyEpoch = false;
 
     if (!db.Precharge<Schema>())
         return false;
@@ -609,12 +669,22 @@ bool TNodeBroker::TDirtyState::DbLoadState(TTransactionContext &txc,
         .Key(ParamKeyCurrentEpochEnd).Select<Schema::Params::Value>();
     auto nextEpochEndRow = db.Table<Schema::Params>()
         .Key(ParamKeyNextEpochEnd).Select<Schema::Params::Value>();
+    auto legacyEpochIdRow = db.Table<Schema::Params>()
+        .Key(ParamKeyLegacyEpochId).Select<Schema::Params::Value>();
+    auto legacyEpochVersionRow = db.Table<Schema::Params>()
+        .Key(ParamKeyLegacyEpochVersion).Select<Schema::Params::Value>();
+    auto mainNodesTableRow = db.Table<Schema::Params>()
+        .Key(ParamKeyMainNodesTable).Select<Schema::Params::Value>();
     auto nodesRowset = db.Table<Schema::Nodes>()
         .Range().Select<Schema::Nodes::TColumns>();
+    auto nodesV2Rowset = db.Table<Schema::NodesV2>()
+        .Range().Select<Schema::NodesV2::TColumns>();
 
     if (!IsReady(configRow, subscriptionRow, currentEpochIdRow,
                  currentEpochVersionRow, currentEpochStartRow,
-                 currentEpochEndRow, nextEpochEndRow, nodesRowset))
+                 currentEpochEndRow, nextEpochEndRow, legacyEpochIdRow,
+                 legacyEpochVersionRow, mainNodesTableRow, nodesRowset,
+                 nodesV2Rowset))
         return false;
 
     ClearState();
@@ -670,60 +740,177 @@ bool TNodeBroker::TDirtyState::DbLoadState(TTransactionContext &txc,
         updateEpoch = true;
     }
 
-    TVector<ui32> toRemove;
-    while (!nodesRowset.EndOfSet()) {
-        using T = Schema::Nodes;
-        auto id = nodesRowset.GetValue<T::ID>();
-        // We don't remove nodes with a different domain id when there's a
-        // single domain. We may have been running in a single domain allocation
-        // mode, and now temporarily restarted without this mode enabled. We
-        // should still support nodes that have been registered before we
-        // restarted, even though it's not available for allocation.
-        if (id <= Self->MaxStaticId || id > Self->MaxDynamicId) {
-            LOG_ERROR_S(ctx, NKikimrServices::NODE_BROKER,
-                        DbLogPrefix() << " Ignoring node with wrong ID " << id << " not in range ("
-                        << Self->MaxStaticId << ", " << Self->MaxDynamicId << "]");
-            toRemove.push_back(id);
-        } else {
-            auto expire = TInstant::FromValue(nodesRowset.GetValue<T::Expire>());
-            std::optional<TNodeLocation> modernLocation;
-            if (nodesRowset.HaveValue<T::Location>()) {
-                modernLocation.emplace(TNodeLocation::FromSerialized, nodesRowset.GetValue<T::Location>());
-            }
+    if (legacyEpochIdRow.IsValid()) {
+        Y_ABORT_UNLESS(legacyEpochVersionRow.IsValid());
 
-            TNodeLocation location;
+        LegacyEpochStart.Id = legacyEpochIdRow.GetValue<Schema::Params::Value>();
+        LegacyEpochStart.Version = legacyEpochVersionRow.GetValue<Schema::Params::Value>();
 
-            // only modern value found in database
-            Y_ABORT_UNLESS(modernLocation);
-            location = std::move(*modernLocation);
-
-            TNodeInfo info{id,
-                nodesRowset.GetValue<T::Address>(),
-                nodesRowset.GetValue<T::Host>(),
-                nodesRowset.GetValue<T::ResolveHost>(),
-                (ui16)nodesRowset.GetValue<T::Port>(),
-                location}; // format update pending
-
-            info.Lease = nodesRowset.GetValue<T::Lease>();
-            info.Expire = expire;
-            info.ServicedSubDomain = TSubDomainKey(nodesRowset.GetValueOrDefault<T::ServicedSubDomain>());
-            if (nodesRowset.HaveValue<T::SlotIndex>()) {
-                info.SlotIndex = nodesRowset.GetValue<T::SlotIndex>();
-            }
-            info.AuthorizedByCertificate = nodesRowset.GetValue<T::AuthorizedByCertificate>();
-            AddNode(info);
+        if (LegacyEpochStart.Id != Epoch.Id) {
+            LegacyEpochStart = Epoch;
 
             LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
-                        DbLogPrefix() << " Loaded node " << info.IdString()
-                        << " expiring " << info.ExpirationString());
-        }
+                DbLogPrefix() << " Legacy epoch is changed: " << LegacyEpochStart.ToString());
 
-        if (!nodesRowset.Next())
-            return false;
+            updateLegacyEpoch = true;
+        } else {
+            LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
+                DbLogPrefix() << " Loaded legacy epoch: " << LegacyEpochStart.ToString());
+        }
+    } else {
+        LegacyEpochStart = Epoch;
+
+        LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
+            DbLogPrefix() << " Loaded the first legacy epoch: " << LegacyEpochStart.ToString());
+
+        updateLegacyEpoch = true;
     }
 
-    DbRemoveNodes(toRemove, txc);
+    Schema::EMainNodesTable mainNodesTable = Schema::EMainNodesTable::Nodes;
+    if (mainNodesTableRow.IsValid()) {
+        mainNodesTable = static_cast<Schema::EMainNodesTable>(mainNodesTableRow.GetValue<Schema::Params::Value>());
+
+        LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
+                    DbLogPrefix() << " Loaded main nodes table: " << mainNodesTable);
+    }
+
+    // Ensure that after upgrade from old YDB version we have the correct main nodes table
+    db.Table<Schema::Params>().Key(ParamKeyMainNodesTable)
+        .Update<Schema::Params::Value>(static_cast<ui64>(Schema::EMainNodesTable::Nodes));
+
+    THashSet<ui32> toUpdateDbNode;
+    if (mainNodesTable == Schema::EMainNodesTable::Nodes) {
+        while (!nodesRowset.EndOfSet()) {
+            using T = Schema::Nodes;
+            auto id = nodesRowset.GetValue<T::ID>();
+            // We don't remove nodes with a different domain id when there's a
+            // single domain. We may have been running in a single domain allocation
+            // mode, and now temporarily restarted without this mode enabled. We
+            // should still support nodes that have been registered before we
+            // restarted, even though it's not available for allocation.
+            if (id <= Self->MaxStaticId || id > Self->MaxDynamicId) {
+                LOG_ERROR_S(ctx, NKikimrServices::NODE_BROKER,
+                            DbLogPrefix() << " Ignoring node with wrong ID " << id << " not in range ("
+                            << Self->MaxStaticId << ", " << Self->MaxDynamicId << "]");
+                toUpdateDbNode.insert(id);
+            } else {
+                auto expire = TInstant::FromValue(nodesRowset.GetValue<T::Expire>());
+                std::optional<TNodeLocation> modernLocation;
+                if (nodesRowset.HaveValue<T::Location>()) {
+                    modernLocation.emplace(TNodeLocation::FromSerialized, nodesRowset.GetValue<T::Location>());
+                }
+
+                TNodeLocation location;
+
+                // only modern value found in database
+                Y_ABORT_UNLESS(modernLocation);
+                location = std::move(*modernLocation);
+
+                TNodeInfo info{id,
+                    nodesRowset.GetValue<T::Address>(),
+                    nodesRowset.GetValue<T::Host>(),
+                    nodesRowset.GetValue<T::ResolveHost>(),
+                    (ui16)nodesRowset.GetValue<T::Port>(),
+                    location}; // format update pending
+
+                info.Lease = nodesRowset.GetValue<T::Lease>();
+                info.Expire = expire;
+                info.ServicedSubDomain = TSubDomainKey(nodesRowset.GetValueOrDefault<T::ServicedSubDomain>());
+                if (nodesRowset.HaveValue<T::SlotIndex>()) {
+                    info.SlotIndex = nodesRowset.GetValue<T::SlotIndex>();
+                }
+                info.AuthorizedByCertificate = nodesRowset.GetValue<T::AuthorizedByCertificate>();
+                AddNode(info);
+
+                LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
+                            DbLogPrefix() << " Loaded node " << info.IdString()
+                            << " expiring " << info.ExpirationString());
+            }
+
+            if (!nodesRowset.Next())
+                return false;
+        }
+
+        THashSet<ui32> nodesV2Ids;
+        while (!nodesV2Rowset.EndOfSet()) {
+            ui32 id = nodesV2Rowset.GetValue<Schema::NodesV2::NodeId>();
+            nodesV2Ids.insert(id);
+
+            auto info = nodesV2Rowset.GetValue<Schema::NodesV2::NodeInfo>();
+            ENodeState state = nodesV2Rowset.GetValue<Schema::NodesV2::State>();
+            TNodeInfo nodeV2(id, state, info);
+
+            auto* node = FindActiveOrExpiredNode(id);
+            const bool nodeRemoved = node == nullptr;
+            const bool nodeCacheChanged = !nodeRemoved && !node->EqualClientCached(nodeV2);
+            if (nodeCacheChanged) {
+                node->LastUpdateVersion = Epoch.Version + 1;
+            } else if (nodeRemoved) {
+                nodeV2.LastUpdateVersion = Epoch.Version + 1;
+                nodeV2.State = ENodeState::Removed;
+                RemovedNodes.emplace(id, std::move(nodeV2));
+            } else {
+                node->LastUpdateVersion = nodeV2.LastUpdateVersion;
+            }
+
+            // Always sync removed nodes
+            const bool needSyncV2 = nodeRemoved || (!nodeRemoved && !node->EqualExceptVersion(nodeV2));
+            if (needSyncV2) {
+                toUpdateDbNode.insert(id);
+            }
+
+            if (!nodesV2Rowset.Next())
+                return false;
+        }
+
+        for (const auto& [id, _] : Nodes) {
+            if (!nodesV2Ids.contains(id)) {
+                toUpdateDbNode.insert(id);
+            }
+        }
+
+        for (const auto& [id, _] : ExpiredNodes) {
+            if (!nodesV2Ids.contains(id)) {
+                toUpdateDbNode.insert(id);
+            }
+        }
+    } else if (mainNodesTable == Schema::EMainNodesTable::NodesV2) {
+        while (!nodesV2Rowset.EndOfSet()) {
+            ui32 id = nodesV2Rowset.GetValue<Schema::NodesV2::NodeId>();
+            auto info = nodesV2Rowset.GetValue<Schema::NodesV2::NodeInfo>();
+            ENodeState state = nodesV2Rowset.GetValue<Schema::NodesV2::State>();
+            TNodeInfo nodeV2(id, state, info);
+
+            switch (state) {
+                case ENodeState::Active:
+                case ENodeState::Expired:
+                    AddNode(nodeV2);
+                    break;
+                case ENodeState::Removed:
+                    RemovedNodes.emplace(id, nodeV2);
+                    break;
+            }
+            toUpdateDbNode.insert(id);
+        }
+    }
+
+    if (!toUpdateDbNode.empty() && mainNodesTable == Schema::EMainNodesTable::Nodes) {
+        ++Epoch.Version;
+        updateEpoch = true;
+    }
+
+    for (ui32 nodeId : toUpdateDbNode) {
+        auto* node = FindActiveOrExpiredNode(nodeId);
+        if (node != nullptr) {
+            DbAddNode(*node, txc);
+        } else {
+            DbRemoveNode(nodeId, txc);
+        }
+    }
+
     if (updateEpoch)
+        DbUpdateEpoch(Epoch, txc);
+    if (updateLegacyEpoch)
         DbUpdateEpoch(Epoch, txc);
 
     return true;
@@ -732,12 +919,8 @@ bool TNodeBroker::TDirtyState::DbLoadState(TTransactionContext &txc,
 void TNodeBroker::TDirtyState::DbRemoveNodes(const TVector<ui32> &nodes,
                                 TTransactionContext &txc)
 {
-    NIceDb::TNiceDb db(txc.DB);
     for (auto id : nodes) {
-        LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
-                    DbLogPrefix() << " Removing node #" << id << " from database");
-
-        db.Table<Schema::Nodes>().Key(id).Delete();
+        DbRemoveNode(id, txc);
     }
 }
 
@@ -784,6 +967,19 @@ void TNodeBroker::TDirtyState::DbUpdateEpoch(const TEpochInfo &epoch,
         .Update<Schema::Params::Value>(epoch.End.GetValue());
     db.Table<Schema::Params>().Key(ParamKeyNextEpochEnd)
         .Update<Schema::Params::Value>(epoch.NextEnd.GetValue());
+}
+
+void TNodeBroker::TDirtyState::DbUpdateLegacyEpoch(const TEpochInfo &epoch,
+                                    TTransactionContext &txc)
+{
+    LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::NODE_BROKER,
+    DbLogPrefix() << " Update legacy epoch in database: " << epoch.ToString());
+
+    NIceDb::TNiceDb db(txc.DB);
+    db.Table<Schema::Params>().Key(ParamKeyLegacyEpochId)
+        .Update<Schema::Params::Value>(epoch.Id);
+    db.Table<Schema::Params>().Key(ParamKeyLegacyEpochVersion)
+        .Update<Schema::Params::Value>(epoch.Version);
 }
 
 void TNodeBroker::TDirtyState::DbUpdateEpochVersion(ui64 version,

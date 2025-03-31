@@ -10,10 +10,10 @@
 
 * Включены по умолчанию:
 
-  * поддержка [представлений (VIEW)](./concepts/datamodel/view.md)
-  * режим [автопартиционирования](./concepts/topic.md#autopartitioning) топиков
-  * [транзакции](./concepts/transactions.md#topic-table-transactions) с участием топиков и строковых таблиц
-  * [волатильные распределенные транзакции](./contributor/datashard-distributed-txs.md#osobennosti-vypolneniya-volatilnyh-tranzakcij)
+  * поддержка [представлений (VIEW)](./concepts/datamodel/view.md);
+  * режим [автопартиционирования](./concepts/topic.md#autopartitioning) топиков;
+  * [транзакции](./concepts/transactions.md#topic-table-transactions) с участием топиков и строковых таблиц;
+  * [волатильные распределённые транзакции](./contributor/datashard-distributed-txs.md#osobennosti-vypolneniya-volatilnyh-tranzakcij).
 
 * Добавлена возможность [чтения и записи в топик](./reference/kafka-api/examples.md#primery-raboty-s-kafka-api) с использованием Kafka API без аутентификации.
 
@@ -23,14 +23,14 @@
 
 #### Исправления ошибок
 
-* [Исправлена](https://github.com/ydb-platform/ydb/pull/14811) ошибка, которая приводила к существенному снижению скорости чтения с  [подписчиков таблетки](./concepts/glossary.md#tablet-follower).
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/14811) ошибка, которая приводила к существенному снижению скорости чтения с [подписчиков таблетки](./concepts/glossary.md#tablet-follower).
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/14516) ошибка, которая приводила к ожиданию подтверждения волатильной распределённой транзакции до следующего рестарта.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/15077) редкая ошибка, которая приводила к сбою при подключении подписчиков таблетки к лидеру с несогласованным состоянием журнала команд.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/15074) редкая ошибка, которая приводила к сбою при перезапуске удалённого datashard с неконсистентными изменениями.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/15194) ошибка, из-за которой мог нарушаться порядок обработки сообщений в топике.
 * [Исправлена](https://github.com/ydb-platform/ydb/pull/15308) редкая ошибка, из-за которой могло зависать чтение из топика.
-* [Исправлена](https://github.com/ydb-platform/ydb/pull/15160) проблема, из-за которой транзакция зависала при одновременном управлением пользователем топиком и перемещением PQ таблетки на другой узел.
-* [Исправлена](https://github.com/db-platform/ydb/pull/15233) проблема с утечкой значения счетчика для userInfo, которая могла приводить к ошибке чтение `too big in flight`.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/15160) проблема, из-за которой транзакция зависала при одновременном управлении топиком пользователем и перемещении PQ таблетки на другой узел.
+* [Исправлена](https://github.com/ydb-platform/ydb/pull/15233) проблема с утечкой значения счётчика для userInfo, которая могла приводить к ошибке чтения `too big in flight`.
 * [Исправлен](https://github.com/ydb-platform/ydb/pull/15467) сбой прокси-сервера из-за дублирования топиков в запросе.
 
 ## Версия 24.3 {#24-3}

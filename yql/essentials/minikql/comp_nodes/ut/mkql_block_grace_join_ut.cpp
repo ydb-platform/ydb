@@ -383,7 +383,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockGraceJoinTestBasic) {
         );
     }
 
-    // TODO: working too slow, check possible reason
     Y_UNIT_TEST(TestInnerJoinHugeIterator) {
         TSetup<false> setup(GetNodeFactory());
 
@@ -430,6 +429,70 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockGraceJoinTestBasic) {
                          leftType, std::move(leftList), {0},
                          rightType, std::move(rightList), {0},
                          {}, {0}
+        );
+    }
+
+    Y_UNIT_TEST(TestInnerJoinWideProbeTuples) { // Test that external payload storage optimization works correctly
+        TSetup<false> setup(GetNodeFactory());
+
+        // 1. Make input for the "left" stream.
+        TVector<ui64> leftKeyInit(testSize);
+        std::iota(leftKeyInit.begin(), leftKeyInit.end(), 1);
+        TVector<ui64> leftSubkeyInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftSubkeyInit),
+            [](const auto key) { return key * 1001; });
+        TVector<TString> leftValueInit;
+        std::transform(leftKeyInit.cbegin(), leftKeyInit.cend(), std::back_inserter(leftValueInit),
+            [](const auto key) { return threeLetterValues[key]; });
+        TVector<ui64> leftIntValueInit(testSize);
+            std::iota(leftIntValueInit.begin(), leftIntValueInit.end(), 1);
+
+        // 2. Make input for the "right" stream. Right stream is index one
+        const TVector<ui64> rightKeyInit(fibonacci.cbegin(), fibonacci.cend());
+        TVector<TString> rightValueInit;
+        std::transform(rightKeyInit.cbegin(), rightKeyInit.cend(), std::back_inserter(rightValueInit),
+            [](const auto key) { return std::to_string(key); });
+
+        // 3. Make "expected" data.
+        TMap<ui64, TString> rightMap;
+        for (size_t i = 0; i < rightKeyInit.size(); i++) {
+            rightMap[rightKeyInit[i]] = rightValueInit[i];
+        }
+        TVector<ui64> expectedKey;
+        TVector<ui64> expectedSubkey;
+        TVector<TString> expectedValue;
+        TVector<ui64> expectedIntValue;
+        TVector<TString> expectedRightValue;
+        // Make join manually
+        for (size_t i = 0; i < leftKeyInit.size(); i++) {
+            const auto& found = rightMap.find(leftKeyInit[i]);
+            if (found != rightMap.cend()) {
+                expectedKey.push_back(leftKeyInit[i]);
+                expectedSubkey.push_back(leftSubkeyInit[i]);
+                expectedValue.push_back(leftValueInit[i]);
+                expectedRightValue.push_back(found->second);
+                expectedIntValue.push_back(leftIntValueInit[i]);
+            }
+        }
+
+        auto [leftType, leftList] = ConvertVectorsToTuples(setup,
+            leftKeyInit, leftSubkeyInit, leftValueInit,
+            leftIntValueInit, leftIntValueInit, leftIntValueInit, leftIntValueInit, // make wide tuple with width > 64
+            leftIntValueInit, leftIntValueInit, leftIntValueInit, leftIntValueInit);
+        auto [rightType, rightList] = ConvertVectorsToTuples(setup,
+            rightKeyInit, rightValueInit);
+        auto [expectedType, expected] = ConvertVectorsToTuples(setup,
+            expectedKey, expectedSubkey, expectedValue,
+            expectedIntValue, expectedIntValue, expectedIntValue, expectedIntValue, // make wide tuple with width > 64
+            expectedIntValue, expectedIntValue, expectedIntValue, expectedIntValue,
+            expectedRightValue);
+
+        RunTestBlockJoin(
+            setup, EJoinKind::Inner,
+            expectedType, expected,
+            leftType, std::move(leftList), {0},
+            rightType, std::move(rightList), {0},
+            {}, {0}
         );
     }
 } // Y_UNIT_TEST_SUITE

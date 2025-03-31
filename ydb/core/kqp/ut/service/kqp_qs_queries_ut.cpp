@@ -2908,15 +2908,15 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 CREATE VIEW test_view WITH security_invoker = TRUE AS
                     SELECT * FROM KeyValue;
             )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
         {
             auto result = session.ExecuteQuery(R"(
                 SHOW CREATE TABLE test_view;
             )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Invalid path type");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Expected path type: Table");
         }
     }
 

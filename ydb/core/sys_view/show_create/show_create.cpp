@@ -20,6 +20,13 @@ namespace {
 
 using namespace NActors;
 
+NKikimrSchemeOp::EPathType FromString(const TString& pathType) {
+    if (pathType == "Table") {
+        return NKikimrSchemeOp::EPathTypeTable;
+    }
+    return NKikimrSchemeOp::EPathTypeInvalid;
+}
+
 class TShowCreate : public TScanActorBase<TShowCreate> {
 public:
     using TBase  = TScanActorBase<TShowCreate>;
@@ -136,51 +143,59 @@ private:
         switch (status) {
             case NKikimrScheme::StatusSuccess: {
                 const auto& pathDescription = record.GetPathDescription();
-                if (pathDescription.GetSelf().GetPathType() != NKikimrSchemeOp::EPathTypeTable) {
-                    ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, "Invalid path type");
-                    return;
+                if (pathDescription.GetSelf().GetPathType() != FromString(PathType)) {
+                    return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                        << "Expected path type: " << PathType
+                        << ", actual path type: " << pathDescription.GetSelf().GetPathType()
+                    );
                 }
-
-                const auto& tableDesc = pathDescription.GetTable();
-
                 std::pair<TString, TString> pathPair;
-
                 {
                     TString error;
                     if (!TrySplitPathByDb(Path, Database, pathPair, error)) {
-                        ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, error);
-                        return;
+                        return ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, error);
                     }
                 }
 
-                auto [_, tablePath] = pathPair;
-                bool temporary = false;
+                switch (pathDescription.GetSelf().GetPathType()) {
+                    case NKikimrSchemeOp::EPathTypeTable: {
+                        const auto& tableDesc = pathDescription.GetTable();
+                        auto [_, tablePath] = pathPair;
 
-                if (NKqp::IsSessionsDirPath(Database, tablePath)) {
-                    auto pathVecTmp = SplitPath(tablePath);
-                    auto sz = pathVecTmp.size();
-                    Y_ENSURE(sz > 3  && pathVecTmp[0] == ".tmp" && pathVecTmp[1] == "sessions");
+                        bool temporary = false;
 
-                    auto pathTmp = JoinPath(TVector<TString>(pathVecTmp.begin() + 3, pathVecTmp.end()));
-                    std::pair<TString, TString> pathPairTmp;
-                    TString error;
-                    if (!TrySplitPathByDb(pathTmp, Database, pathPairTmp, error)) {
-                        ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, error);
-                        return;
+                        if (NKqp::IsSessionsDirPath(Database, tablePath)) {
+                            auto pathVecTmp = SplitPath(tablePath);
+                            auto sz = pathVecTmp.size();
+                            Y_ENSURE(sz > 3  && pathVecTmp[0] == ".tmp" && pathVecTmp[1] == "sessions");
+
+                            auto pathTmp = JoinPath(TVector<TString>(pathVecTmp.begin() + 3, pathVecTmp.end()));
+                            std::pair<TString, TString> pathPairTmp;
+                            TString error;
+                            if (!TrySplitPathByDb(pathTmp, Database, pathPairTmp, error)) {
+                                ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, error);
+                                return;
+                            }
+
+                            tablePath = pathPairTmp.second;
+                            temporary = true;
+                        }
+
+                        TCreateTableFormatter formatter;
+                        auto formatterResult = formatter.Format(tablePath, tableDesc, temporary);
+                        if (formatterResult.IsSuccess()) {
+                            path = tablePath;
+                            statement = formatterResult.ExtractOut();
+                        } else {
+                            ReplyErrorAndDie(formatterResult.GetStatus(), formatterResult.GetError());
+                            return;
+                        }
+                        break;
                     }
-
-                    tablePath = pathPairTmp.second;
-                    temporary = true;
-                }
-
-                TCreateTableFormatter formatter;
-                auto formatterResult = formatter.Format(tablePath, tableDesc, temporary);
-                if (formatterResult.IsSuccess()) {
-                    path = tablePath;
-                    statement = formatterResult.ExtractOut();
-                } else {
-                    ReplyErrorAndDie(formatterResult.GetStatus(), formatterResult.GetError());
-                    return;
+                    default:
+                        return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                            << "Unsupported path type: " << pathDescription.GetSelf().GetPathType()
+                        );
                 }
                 break;
             }

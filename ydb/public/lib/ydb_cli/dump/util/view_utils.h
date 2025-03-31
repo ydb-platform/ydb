@@ -8,6 +8,16 @@ namespace NYql {
 
 namespace NYdb::NDump {
 
+struct TViewQuerySplit {
+    TString ContextRecreation;
+    TString Select;
+
+    TViewQuerySplit() = default;
+    TViewQuerySplit(const TVector<TString>& statements);
+};
+
+bool SplitViewQuery(const TString& query, TViewQuerySplit& split, NYql::TIssues& issues);
+
 TString BuildCreateViewQuery(
     const TString& name, const TString& dbPath, const TString& viewQuery, const TString& backupRoot,
     NYql::TIssues& issues

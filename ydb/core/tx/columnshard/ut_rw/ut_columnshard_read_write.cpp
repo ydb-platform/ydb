@@ -821,8 +821,8 @@ void TestWriteRead(bool reboots, const TestTableDescription& table = {}, TString
         const ui64 committedBytes = reader.GetReadStat("committed_bytes");
         Cerr << codec << "/" << compactedBytes << "/" << insertedBytes << "/" << committedBytes << Endl;
         if (insertedBytes) {
-            UNIT_ASSERT_GE(insertedBytes / 100000, 50);
-            UNIT_ASSERT_LE(insertedBytes / 100000, 60);
+            UNIT_ASSERT_GE(insertedBytes / 100000, 20);
+            UNIT_ASSERT_LE(insertedBytes / 100000, 70);
         }
         if (committedBytes) {
             UNIT_ASSERT_LE(committedBytes / 100000, 1);

@@ -110,7 +110,12 @@ namespace NKikimr {
 
         bool IsReadable() const {
             Y_ABORT_UNLESS(IsCommited, "returned data was not commited");
-            return Gaps.empty();
+            if (!Gaps.empty()) {
+                return false;
+            } else {
+                bool allZeroes = std::all_of(Data.begin(), Data.end(), [](char c) {return c == 0;});
+                return !allZeroes;
+            }
         }
 
         bool IsReadable(ui32 offset, ui32 len) const {

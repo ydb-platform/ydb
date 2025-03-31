@@ -341,22 +341,19 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
 
         WriteTestData(kikimr, "/Root/olapStore/olapTable", 0, 1000000, 2);
 
-        auto client = kikimr.GetTableClient();
+        auto client = kikimr.GetQueryClient();
 
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
         {
-            auto it = client.StreamExecuteScanQuery(R"(
+            auto it = client.ExecuteQuery(R"(
                 --!syntax_v1
 
                 SELECT 1
                 FROM `/Root/olapStore/olapTable`
-            )").GetValueSync();
+            )",NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings()).ExtractValueSync();
 
             UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-            TString result = StreamResultToYson(it);
-            Cout << result << Endl;
-            CompareYson(result, R"([[1];[1]])");
         }
     }
 

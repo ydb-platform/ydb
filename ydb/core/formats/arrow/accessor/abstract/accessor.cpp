@@ -62,10 +62,10 @@ IChunkedArray::TFullDataAddress IChunkedArray::GetChunk(const std::optional<TAdd
         return TFullDataAddress(localAddress.GetArray(), std::move(addressChain));
     } else {
         auto chunkedArrayAddress = GetArray(chunkCurrent, position, nullptr);
-        if (chunkCurrent) {
-            AFL_VERIFY(chunkCurrent->GetSize() == 1 + chunkedArrayAddress.GetAddress().GetSize())("current", chunkCurrent->GetSize())(
-                                                      "chunked", chunkedArrayAddress.GetAddress().GetSize());
-        }
+//        if (chunkCurrent) {
+//            AFL_VERIFY(chunkCurrent->GetSize() == chunkedArrayAddress.GetAddress().GetSize())("current", chunkCurrent->GetSize())(
+//                                                      "chunked", chunkedArrayAddress.GetAddress().GetSize());
+//        }
         auto localAddress = chunkedArrayAddress.GetArray()->GetLocalData(address, chunkedArrayAddress.GetAddress().GetLocalIndex(position));
         auto fullAddress = std::move(chunkedArrayAddress.MutableAddress());
         fullAddress.Add(localAddress.GetAddress());

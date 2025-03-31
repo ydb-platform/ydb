@@ -1450,13 +1450,32 @@ public:
             txCtx->TxManager->SetTopicOperations(std::move(request.TopicOperations));
             txCtx->TxManager->AddTopicsToShards();
 
+            auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(
+                __LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false);
+
+            const auto& queryLimitsProto = Settings.TableService.GetQueryLimits();
+            const auto& bufferLimitsProto = queryLimitsProto.GetBufferLimits();
+            const ui64 writeBufferMemoryLimit = bufferLimitsProto.HasWriteBufferMemoryLimitBytes()
+                ? bufferLimitsProto.GetWriteBufferMemoryLimitBytes()
+                : ui64(Settings.MkqlMaxMemoryLimit);
+            const ui64 writeBufferInitialMemoryLimit = writeBufferMemoryLimit < ui64(Settings.MkqlInitialMemoryLimit)
+                ? writeBufferMemoryLimit
+                : ui64(Settings.MkqlInitialMemoryLimit);
+            alloc->SetLimit(writeBufferInitialMemoryLimit);
+            alloc->Ref().SetIncreaseMemoryLimitCallback([this, alloc=alloc.get(), writeBufferMemoryLimit](ui64 currentLimit, ui64 required) {
+                if (required < writeBufferMemoryLimit) {
+                    LOG_D("Increase memory limit from " << currentLimit << " to " << required);
+                    alloc->SetLimit(required);
+                }
+            });
+
             TKqpBufferWriterSettings settings {
                 .SessionActorId = SelfId(),
                 .TxManager = txCtx->TxManager,
                 .TraceId = request.TraceId.GetTraceId(),
                 .Counters = Counters,
                 .TxProxyMon = RequestCounters->TxProxyMon,
-                .Alloc = txCtx->TxAlloc->Alloc,
+                .Alloc = std::move(alloc),
             };
             auto* actor = CreateKqpBufferWriterActor(std::move(settings));
             txCtx->BufferActorId = RegisterWithSameMailbox(actor);

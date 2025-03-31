@@ -470,10 +470,10 @@ private:
 };
 
 void ParsePayloadFromSectorOffset(const TDiskFormat& format, ui64 firstSector, ui64 lastSector, ui64 currentSector,
-        ui64 *outPayloadBytes, ui64 *outPayloadOffset);
+        ui64 *outPayloadBytes, ui64 *outPayloadOffset, const TString& logPrefix);
 
 bool ParseSectorOffset(const TDiskFormat& format, TActorSystem *actorSystem, ui32 pDiskId, ui64 offset, ui64 size,
-        ui64 &outSectorIdx, ui64 &outLastSectorIdx, ui64 &outSectorOffset);
+        ui64 &outSectorIdx, ui64 &outLastSectorIdx, ui64 &outSectorOffset, const TString& logPrefix);
 
 } // NPDisk
 } // NKikimr

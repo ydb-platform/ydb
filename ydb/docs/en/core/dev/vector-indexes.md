@@ -19,13 +19,13 @@ ALTER TABLE my_table
   ADD INDEX my_index
   GLOBAL USING vector_kmeans_tree
   ON (user, embedding) COVER (data)
-  WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
+  WITH (distance=cosine, type="uint8", dimension=512, levels=2, clusters=128);
 ```
 
 Key parameters for vector_kmeans_tree:
 * distance/similarity: Metric function ("cosine", "euclidean", etc.)
-* vector_type: Data type ("float", "int8", "uint8")
-* vector_dimension: Number of dimensions (<= 16384)
+* type: Data type ("float", "int8", "uint8")
+* dimension: Number of dimensions (<= 16384)
 * levels: Tree depth
 * clusters: Number of clusters per level (values > 1000 may impact performance)
 

@@ -22,7 +22,7 @@ ALTER TABLE my_table
   ADD INDEX my_index
   GLOBAL USING vector_kmeans_tree
   ON (embedding)
-  WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
+  WITH (distance=cosine, type="uint8", dimension=512, levels=2, clusters=128);
 ```
 
 ### Vector index with covered columns {#covering}
@@ -34,7 +34,7 @@ ALTER TABLE my_table
   ADD INDEX my_index
   GLOBAL USING vector_kmeans_tree
   ON (embedding) COVER (data)
-  WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
+  WITH (distance=cosine, type="uint8", dimension=512, levels=2, clusters=128);
 ```
 
 ### Prefixed vector index {#prefixed}
@@ -46,7 +46,7 @@ ALTER TABLE my_table
   ADD INDEX my_index
   GLOBAL USING vector_kmeans_tree
   ON (user, embedding)
-  WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
+  WITH (distance=cosine, type="uint8", dimension=512, levels=2, clusters=128);
 ```
 
 ### Prefixed vector index with covered columns {#prefixed-covering}
@@ -58,7 +58,7 @@ ALTER TABLE my_table
   ADD INDEX my_index
   GLOBAL USING vector_kmeans_tree
   ON (user, embedding) COVER (data)
-  WITH (distance=cosine, vector_type="uint8", vector_dimension=512, levels=2, clusters=128);
+  WITH (distance=cosine, type="uint8", dimension=512, levels=2, clusters=128);
 ```
 
 ## Creating vector indexes {#creation}
@@ -70,8 +70,8 @@ Vector indexes can be created:
 
 Required parameters for vector_kmeans_tree:
 * distance or similarity: The function to use (e.g., "cosine")
-* vector_type: Data type of vector elements ("float", "int8", "uint8")
-* vector_dimension: Dimensionality of vectors (<= 16384)
+* type: Data type of vector elements ("float", "int8", "uint8")
+* dimension: Dimensionality of vectors (<= 16384)
 * levels: Number of tree levels
 * clusters: Number of clusters per level (values > 1000 may impact performance)
 

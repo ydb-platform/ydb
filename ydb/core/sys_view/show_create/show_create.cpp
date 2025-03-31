@@ -1,4 +1,5 @@
 #include "create_table_formatter.h"
+#include "create_view_formatter.h"
 #include "show_create.h"
 
 #include <ydb/core/base/tablet_pipe.h>
@@ -23,6 +24,9 @@ using namespace NActors;
 NKikimrSchemeOp::EPathType FromString(const TString& pathType) {
     if (pathType == "Table") {
         return NKikimrSchemeOp::EPathTypeTable;
+    }
+    if (pathType == "View") {
+        return NKikimrSchemeOp::EPathTypeView;
     }
     return NKikimrSchemeOp::EPathTypeInvalid;
 }
@@ -106,7 +110,7 @@ private:
         Path = cellsFrom[0].AsBuf();
         PathType = cellsFrom[1].AsBuf();
 
-        if (PathType != "Table") {
+        if (!IsIn({"Table", "View"}, PathType)) {
             ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, TStringBuilder() << "Invalid path type: " << PathType);
             return;
         }
@@ -118,8 +122,10 @@ private:
         }
         NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
         record->SetPath(Path);
-        record->MutableOptions()->SetReturnBoundaries(true);
-        record->MutableOptions()->SetShowPrivateTable(false);
+        if (PathType == "Table") {
+            record->MutableOptions()->SetReturnBoundaries(true);
+            record->MutableOptions()->SetShowPrivateTable(false);
+        }
 
         Send(MakeTxProxyID(), navigateRequest.release());
     }
@@ -189,6 +195,19 @@ private:
                         } else {
                             ReplyErrorAndDie(formatterResult.GetStatus(), formatterResult.GetError());
                             return;
+                        }
+                        break;
+                    }
+                    case NKikimrSchemeOp::EPathTypeView: {
+                        const auto& description = pathDescription.GetViewDescription();
+                        path = pathPair.second;
+
+                        TCreateViewFormatter formatter;
+                        auto formatterResult = formatter.Format(*path, description);
+                        if (formatterResult.IsSuccess()) {
+                            statement = formatterResult.ExtractOut();
+                        } else {
+                            return ReplyErrorAndDie(formatterResult.GetStatus(), formatterResult.GetError());
                         }
                         break;
                     }

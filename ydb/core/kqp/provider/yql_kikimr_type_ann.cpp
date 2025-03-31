@@ -167,8 +167,8 @@ private:
                 if (!SessionCtx->Config().FeatureFlags.GetEnableShowCreate()) {
                     for (auto setting : readTable.Settings()) {
                         auto name = setting.Name().Value();
-                        if (name == "showCreateTable") {
-                            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), 
+                        if (name == "showCreateTable" || name == "showCreateView") {
+                            ctx.AddError(TIssue(ctx.GetPosition(node.Pos()),
                                 TStringBuilder() << "SHOW CREATE statement is not supported"));
                             return TStatus::Error;
                         }

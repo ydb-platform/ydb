@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     create_table_formatter.cpp
+    create_view_formatter.cpp
     formatters_common.cpp
     show_create.cpp
 )
@@ -20,6 +21,7 @@ PEERDIR(
     ydb/public/lib/ydb_cli/dump/util
     ydb/public/sdk/cpp/src/client/types
     yql/essentials/ast
+    yql/essentials/public/issue
 )
 
 YQL_LAST_ABI_VERSION()

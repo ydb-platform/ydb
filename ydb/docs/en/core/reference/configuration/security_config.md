@@ -183,9 +183,11 @@ This level grants additional privileges to monitor and modify the cluster state.
 
 This level grants privileges to administer the {{ ydb-short-name }} cluster and its databases.
     ||
-|#
+|| `register_dynamic_node_allowed_sids` | The list of [SIDs](../../concepts/glossary.md#access-sid) that are allowed to register database nodes.
 
-[//]: # (TODO: wait for pull/9387, dinamic_node_registration to add info about `register_dynamic_node_allowed_sids`)
+For technical reasons, this list must include `root@builtin`.
+    ||
+|#
 
 {% note warning %}
 

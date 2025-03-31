@@ -53,6 +53,9 @@ void TSchemeShard::FromXxportInfo(NKikimrImport::TImport& import, const TImportI
     }
 
     switch (importInfo->State) {
+    case TImportInfo::EState::DownloadExportMetadata:
+        import.SetProgress(Ydb::Import::ImportProgress::PROGRESS_PREPARING);
+        break;
     case TImportInfo::EState::Waiting:
         switch (GetMinState(importInfo)) {
         case TImportInfo::EState::GetScheme:
@@ -129,8 +132,27 @@ void TSchemeShard::PersistCreateImport(NIceDb::TNiceDb& db, const TImportInfo::T
 
         db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
             NIceDb::TUpdate<Schema::ImportItems::DstPathName>(item.DstPathName),
-            NIceDb::TUpdate<Schema::ImportItems::State>(static_cast<ui8>(item.State))
+            NIceDb::TUpdate<Schema::ImportItems::State>(static_cast<ui8>(item.State)),
+            NIceDb::TUpdate<Schema::ImportItems::SrcPrefix>(item.SrcPrefix)
         );
+    }
+}
+
+void TSchemeShard::PersistSchemaMappingImportFields(NIceDb::TNiceDb& db, const TImportInfo::TPtr importInfo) {
+    // There can be new items, so do at least the same as for creation
+    for (ui32 itemIdx : xrange(importInfo->Items.size())) {
+        const auto& item = importInfo->Items.at(itemIdx);
+
+        db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
+            NIceDb::TUpdate<Schema::ImportItems::DstPathName>(item.DstPathName),
+            NIceDb::TUpdate<Schema::ImportItems::State>(static_cast<ui8>(item.State)),
+            NIceDb::TUpdate<Schema::ImportItems::SrcPrefix>(item.SrcPrefix)
+        );
+        if (item.ExportItemIV) {
+            db.Table<Schema::ImportItems>().Key(importInfo->Id, itemIdx).Update(
+                NIceDb::TUpdate<Schema::ImportItems::EncryptionIV>(item.ExportItemIV->GetBinaryString())
+            );
+        }
     }
 }
 
@@ -234,6 +256,10 @@ void TSchemeShard::Handle(TEvImport::TEvListImportsRequest::TPtr& ev, const TAct
 }
 
 void TSchemeShard::Handle(TEvPrivate::TEvImportSchemeReady::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxProgressImport(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvPrivate::TEvImportSchemaMappingReady::TPtr& ev, const TActorContext& ctx) {
     Execute(CreateTxProgressImport(ev), ctx);
 }
 

@@ -488,15 +488,32 @@ class TS3Downloader: public TActorBootstrapped<TS3Downloader> {
             return HeadObject(Settings.GetDataKey(DataFormat, CompressionCodec));
         }
 
+        THolder<IReadController> reader;
         switch (CompressionCodec) {
         case NBackupRestoreTraits::ECompressionCodec::None:
-            Reader.Reset(new TReadControllerRaw(ReadBatchSize, ReadBufferSizeLimit));
+            reader.Reset(new TReadControllerRaw(ReadBatchSize, ReadBufferSizeLimit));
             break;
         case NBackupRestoreTraits::ECompressionCodec::Zstd:
-            Reader.Reset(new TReadControllerZstd(ReadBatchSize, ReadBufferSizeLimit));
+            reader.Reset(new TReadControllerZstd(ReadBatchSize, ReadBufferSizeLimit));
             break;
         case NBackupRestoreTraits::ECompressionCodec::Invalid:
             Y_ABORT("unreachable");
+        }
+
+        if (Settings.EncryptionSettings.EncryptedBackup) {
+            NBackup::TEncryptionIV expectedIV = NBackup::TEncryptionIV::Combine(
+                *Settings.EncryptionSettings.IV,
+                NBackup::EBackupFileType::TableData,
+                0 /* already combined */,
+                Settings.Shard
+            );
+            Reader = MakeHolder<TEncryptionDeserializerController>(
+                *Settings.EncryptionSettings.Key,
+                expectedIV,
+                std::move(reader)
+            );
+        } else {
+            Reader = std::move(reader);
         }
 
         ETag = result.GetResult().GetETag();

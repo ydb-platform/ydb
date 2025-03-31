@@ -54,6 +54,7 @@ struct TSchemeShard::TImport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
         case TImportInfo::EState::Cancelled:
             return respond(Ydb::StatusIds::SUCCESS);
 
+        case TImportInfo::EState::DownloadExportMetadata:
         case TImportInfo::EState::Waiting:
         case TImportInfo::EState::Cancellation:
             importInfo->Issue = "Cancelled manually";

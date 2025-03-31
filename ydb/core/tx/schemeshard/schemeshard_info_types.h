@@ -12,6 +12,7 @@
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/control/immediate_control_board_impl.h>
 
+#include <ydb/core/backup/common/encryption.h>
 #include <ydb/core/backup/common/metadata.h>
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/base/table_vector_index.h>
@@ -2851,12 +2852,13 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
 
     enum class EState: ui8 {
         Invalid = 0,
-        Waiting,
-        GetScheme,
-        CreateSchemeObject,
-        Transferring,
-        BuildIndexes,
-        CreateChangefeed,
+        Waiting = 1,
+        GetScheme = 2,
+        CreateSchemeObject = 3,
+        Transferring = 4,
+        BuildIndexes = 5,
+        CreateChangefeed = 6,
+        DownloadExportMetadata = 7,
         Done = 240,
         Cancellation = 250,
         Cancelled = 251,
@@ -2880,6 +2882,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
 
         TString DstPathName;
         TPathId DstPathId;
+        TString SrcPrefix;
         Ydb::Table::CreateTableRequest Scheme;
         TString CreationQuery;
         TMaybe<NKikimrSchemeOp::TModifyScheme> PreparedCreationQuery;
@@ -2897,6 +2900,7 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
         int NextChangefeedIdx = 0;
         TString Issue;
         TPathId StreamImplPathId;
+        TMaybe<NBackup::TEncryptionIV> ExportItemIV;
 
         TItem() = default;
 
@@ -2923,6 +2927,9 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
     TPathId DomainPathId;
     TMaybe<TString> UserSID;
     TString PeerName;  // required for making audit log records
+    TMaybe<NBackup::TEncryptionIV> ExportIV;
+    TMaybe<NBackup::TSchemaMapping> SchemaMapping;
+    TActorId SchemaMappingGetter;
 
     EState State = EState::Invalid;
     TString Issue;
@@ -2933,6 +2940,20 @@ struct TImportInfo: public TSimpleRefCount<TImportInfo> {
 
     TInstant StartTime = TInstant::Zero();
     TInstant EndTime = TInstant::Zero();
+
+    TString GetItemSrcPrefix(size_t i) const {
+        if (i < Items.size() && Items[i].SrcPrefix) {
+            return Items[i].SrcPrefix;
+        }
+
+        // Backward compatibility.
+        // But there can be no paths in settings at all.
+        if (i < ui32(Settings.items_size())) {
+            return Settings.items(i).source_prefix();
+        }
+
+        return {};
+    }
 
     explicit TImportInfo(
             const ui64 id,

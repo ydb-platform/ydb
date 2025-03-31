@@ -6277,6 +6277,16 @@
                 "ColumnId": 16,
                 "ColumnName": "NextChangefeedIdx",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 17,
+                "ColumnName": "SrcPrefix",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 18,
+                "ColumnName": "EncryptionIV",
+                "ColumnType": "String"
             }
         ],
         "ColumnsDropped": [],
@@ -6298,7 +6308,9 @@
                     13,
                     14,
                     15,
-                    16
+                    16,
+                    17,
+                    18
                 ],
                 "RoomID": 0,
                 "Codec": 0,

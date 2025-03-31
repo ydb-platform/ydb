@@ -1534,9 +1534,10 @@ value {
         }
     }
 
-    Y_UNIT_TEST(ExportImportOnSupportedDatatypes) {
+    void ExportImportOnSupportedDatatypesImpl(bool encrypted, bool commonPrefix) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
+        runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
         ui64 txId = 100;
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"_(
@@ -1626,16 +1627,51 @@ value {
         TS3Mock s3Mock({}, TS3Mock::TSettings(port));
         UNIT_ASSERT(s3Mock.Start());
 
+        TString encryptionSettings;
+        if (encrypted) {
+            encryptionSettings = R"(encryption_settings {
+                encryption_algorithm: "ChaCha20-Poly1305"
+                symmetric_key {
+                    key: "Very very secret export key!!!!!"
+                }
+            })";
+        }
+        TString exportItems, importItems;
+        if (commonPrefix) {
+            exportItems = R"(
+                source_path: "/MyRoot"
+                destination_prefix: "BackupPrefix"
+                items {
+                    source_path: "Table"
+                }
+            )";
+            importItems = R"(
+                source_prefix: "BackupPrefix"
+                destination_path: "/MyRoot/Restored"
+            )";
+        } else {
+            exportItems = R"(
+                items {
+                    source_path: "/MyRoot/Table"
+                    destination_prefix: "Backup1"
+                }
+            )";
+            importItems = R"(
+                items {
+                    source_prefix: "Backup1"
+                    destination_path: "/MyRoot/Restored"
+                }
+            )";
+        }
+
         TestExport(runtime, ++txId, "/MyRoot", Sprintf(R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
-              items {
-                source_path: "/MyRoot/Table"
-                destination_prefix: "Backup1"
-              }
+              %s
+              %s
             }
-        )", port));
+        )", port, exportItems.c_str(), encryptionSettings.c_str()));
         env.TestWaitNotification(runtime, txId);
         TestGetExport(runtime, txId, "/MyRoot");
 
@@ -1643,12 +1679,10 @@ value {
             ImportFromS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
-              items {
-                source_prefix: "Backup1"
-                destination_path: "/MyRoot/Restored"
-              }
+              %s
+              %s
             }
-        )", port));
+        )", port, importItems.c_str(), encryptionSettings.c_str()));
         env.TestWaitNotification(runtime, txId);
         TestGetImport(runtime, txId, "/MyRoot");
 
@@ -1711,8 +1745,20 @@ value {
         auto contentOriginalTable = ReadTable(runtime, TTestTxConfig::FakeHiveTablets, "Table", {"key"}, readColumns);
         NKqp::CompareYson(expectedJson, contentOriginalTable);
 
-        auto contentRestoredTable = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 2, "Restored", {"key"}, readColumns);
+        auto contentRestoredTable = ReadTable(runtime, TTestTxConfig::FakeHiveTablets + 2, commonPrefix ? "Table" : "Restored", {"key"}, readColumns);
         NKqp::CompareYson(expectedJson, contentRestoredTable);
+    }
+
+    Y_UNIT_TEST(ExportImportOnSupportedDatatypes) {
+        ExportImportOnSupportedDatatypesImpl(false, false);
+    }
+
+    Y_UNIT_TEST(ExportImportOnSupportedDatatypesWithCommonDestPrefix) {
+        ExportImportOnSupportedDatatypesImpl(false, true);
+    }
+
+    Y_UNIT_TEST(ExportImportOnSupportedDatatypesEncrypted) {
+        ExportImportOnSupportedDatatypesImpl(true, true);
     }
 
     Y_UNIT_TEST(ExportImportPg) {

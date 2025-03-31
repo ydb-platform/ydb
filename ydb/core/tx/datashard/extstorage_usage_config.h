@@ -24,21 +24,11 @@ public:
         const TMaybe<NBackup::TEncryptionIV> IV;
 
         static TEncryptionSettings FromBackupTask(const NKikimrSchemeOp::TBackupTask& task) {
-            if (task.HasEncryptionSettings()) {
-                return TEncryptionSettings{
-                    .EncryptedBackup = true,
-                    .EncryptionAlgorithm = task.GetEncryptionSettings().GetEncryptionAlgorithm(),
-                    .Key = NBackup::TEncryptionKey(task.GetEncryptionSettings().GetSymmetricKey().key()),
-                    .IV = NBackup::TEncryptionIV::FromBinaryString(task.GetEncryptionSettings().GetIV()),
-                };
-            } else {
-                return TEncryptionSettings{
-                    .EncryptedBackup = false,
-                    .EncryptionAlgorithm = {},
-                    .Key = Nothing(),
-                    .IV = Nothing(),
-                };
-            }
+            return FromProto(task);
+        }
+
+        static TEncryptionSettings FromRestoreTask(const NKikimrSchemeOp::TRestoreTask& task) {
+            return FromProto(task);
         }
 
         TMaybe<NBackup::TEncryptionIV> GetMetadataIV() const {
@@ -69,6 +59,29 @@ public:
             }
             return iv;
         }
+
+        template <class TProto>
+        static TEncryptionSettings FromProto(const TProto& task) {
+            if (task.HasEncryptionSettings()) {
+                TString algorithm;
+                if constexpr (std::is_same_v<TProto, NKikimrSchemeOp::TBackupTask>) {
+                    algorithm = task.GetEncryptionSettings().GetEncryptionAlgorithm();
+                }
+                return TEncryptionSettings{
+                    .EncryptedBackup = true,
+                    .EncryptionAlgorithm = algorithm,
+                    .Key = NBackup::TEncryptionKey(task.GetEncryptionSettings().GetSymmetricKey().key()),
+                    .IV = NBackup::TEncryptionIV::FromBinaryString(task.GetEncryptionSettings().GetIV()),
+                };
+            } else {
+                return TEncryptionSettings{
+                    .EncryptedBackup = false,
+                    .EncryptionAlgorithm = {},
+                    .Key = Nothing(),
+                    .IV = Nothing(),
+                };
+            }
+        }
     };
 public:
     const TString Bucket;
@@ -92,7 +105,7 @@ public:
     }
 
     static TS3Settings FromRestoreTask(const NKikimrSchemeOp::TRestoreTask& task) {
-        return TS3Settings(task.GetS3Settings(), task.GetShardNum(), TEncryptionSettings{});
+        return TS3Settings(task.GetS3Settings(), task.GetShardNum(), TEncryptionSettings::FromRestoreTask(task));
     }
 
     inline const TString& GetBucket() const { return Bucket; }

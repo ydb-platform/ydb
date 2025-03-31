@@ -41,7 +41,7 @@ jobs:
           if git show-ref --quiet refs/heads/${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}; then
             git checkout ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}
           else
-            git checkout -b ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}} origin/${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}
+            git checkout -b ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }} origin/${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}
           fi
       
           # Attempt to rebase BRANCH_FOR_PR onto BASE_BRANCH

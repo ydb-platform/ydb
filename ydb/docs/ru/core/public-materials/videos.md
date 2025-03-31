@@ -20,6 +20,8 @@
 
   {% include [Heisenbug](./_includes/conferences/2024/Heisenbug.md) %}
 
+  {% include [SmartData](./_includes/conferences/2024/SmartData.md) %}
+
 - 2023
 
   {% include [JPoint](./_includes/conferences/2023/JPoint.md) %}

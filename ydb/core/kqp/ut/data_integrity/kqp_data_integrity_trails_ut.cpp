@@ -217,14 +217,9 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
                     (201u, "Value201");
             )";
 
-            if (Streaming) {
-                auto result = client.StreamExecuteYqlScript(query).GetValueSync();        
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-                CollectStreamResult(result);
-            } else {
-                auto result = client.ExecuteYqlScript(query).GetValueSync();        
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            }
+            auto result = client.StreamExecuteYqlScript(query).GetValueSync();        
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            CollectStreamResult(result);
         }
             
         // check executer logs

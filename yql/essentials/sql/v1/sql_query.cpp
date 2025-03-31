@@ -191,7 +191,7 @@ static bool TransferSettingsEntry(std::map<TString, TNodePtr>& out,
         ctx.Context().Error() << key.Name << " is not supported in ALTER";
         return false;
     }
-    
+
     if (!out.emplace(keyName, value).second) {
         ctx.Context().Error() << "Duplicate transfer setting: " << key.Name;
     }
@@ -1961,7 +1961,7 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             break;
         }
         case TRule_sql_stmt_core::kAltSqlStmtCore62: {
-            // show_create_table_stmt: SHOW CREATE TABLE table_ref
+            // show_create_table_stmt: SHOW CREATE (TABLE | VIEW) table_ref
             Ctx.BodyPart();
             const auto& rule = core.GetAlt_sql_stmt_core62().GetRule_show_create_table_stmt1();
 
@@ -1969,8 +1969,16 @@ bool TSqlQuery::Statement(TVector<TNodePtr>& blocks, const TRule_sql_stmt_core& 
             if (!SimpleTableRefImpl(rule.GetRule_simple_table_ref4(), tr)) {
                 return false;
             }
+            TString type;
+            if (auto typeToken = to_lower(rule.GetToken3().GetValue()); typeToken == "table") {
+                type = "showCreateTable";
+            } else if (typeToken == "view") {
+                type = "showCreateView";
+            } else {
+                YQL_ENSURE(false, "Unsupported SHOW CREATE statement type: " << typeToken);
+            }
 
-            AddStatementToBlocks(blocks, BuildShowCreate(Ctx.Pos(), tr, Ctx.Scoped));
+            AddStatementToBlocks(blocks, BuildShowCreate(Ctx.Pos(), tr, type, Ctx.Scoped));
             break;
         }
         case TRule_sql_stmt_core::ALT_NOT_SET:

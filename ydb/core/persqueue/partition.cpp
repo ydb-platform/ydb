@@ -429,6 +429,7 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
     const TDuration lifetimeLimit{TDuration::Seconds(partConfig.GetLifetimeSeconds())};
 
     const bool hasStorageLimit = partConfig.HasStorageLimitBytes();
+    const auto hasLifetime = !hasStorageLimit || (partConfig.HasLifetimeSeconds() && partConfig.GetLifetimeSeconds() > 0);
     const auto now = ctx.Now();
     const ui64 importantConsumerMinOffset = ImportantClientsMinOffset();
 
@@ -446,15 +447,11 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
         }
 
         auto& firstKey = DataKeysBody.front();
-        if (hasStorageLimit) {
-            const auto bodySize = BodySize - firstKey.Size;
-            if (bodySize < partConfig.GetStorageLimitBytes()) {
-                break;
-            }
-        } else {
-            if (now < firstKey.Timestamp + lifetimeLimit) {
-                break;
-            }
+
+        auto expiredByLifetime = hasLifetime && now >= firstKey.Timestamp + lifetimeLimit;
+        auto expiredByStorageLimit = hasStorageLimit && BodySize > firstKey.Size && (BodySize - firstKey.Size) >= partConfig.GetStorageLimitBytes();
+        if (!expiredByLifetime && !expiredByStorageLimit) {
+            break;
         }
 
         BodySize -= firstKey.Size;

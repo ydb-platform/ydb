@@ -5428,6 +5428,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
       Version: 567
       Important: true
     }
+    Migrations {
+      Lifetime: true
+    }
   }
   ErrorCode: OK
 }

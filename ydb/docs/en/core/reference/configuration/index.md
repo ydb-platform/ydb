@@ -699,7 +699,7 @@ node_broker_config:
 
 ## Configuring Health Check {#healthcheck-config}
 
-This section configures thresholds and timeout settings used by the {{ ydb-short-name }} [health check service](../ydb-sdk/health-check-api.md). These parameters help configure potential [issues](../ydb-sdk/health-check-api.md#issues) such as excessive restarts or time drift between dynamic nodes.
+This section configures thresholds and timeout settings used by the {{ ydb-short-name }} [health check service](../ydb-sdk/health-check-api.md). These parameters help configure detection of potential [issues](../ydb-sdk/health-check-api.md#issues), such as excessive restarts or time drift between dynamic nodes.
 
 ### Syntax
 

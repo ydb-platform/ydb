@@ -9,11 +9,11 @@ Video recordings from conferences and webinars. The materials are divided by cat
 
 - 2025
 
-  {% include [FOSDEM](./_includes/conferences/2025/fosdem.md) %}
+  {% include [FOSSASIA](./_includes/conferences/2025/fossasia.md) %}
 
   {% include [PGConfIndia](./_includes/conferences/2025/pgconfIndia.md) %}
 
-  {% include [FOSSASIA](./_includes/conferences/2025/fossasia.md) %}
+  {% include [FOSDEM](./_includes/conferences/2025/fosdem.md) %}
 
 - 2024
 

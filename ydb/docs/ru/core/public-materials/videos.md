@@ -10,6 +10,8 @@
 
 - 2024
 
+  {% include [SmartData](./_includes/conferences/2024/SmartData.md) %}
+
   {% include [HighLoad](./_includes/conferences/2024/HighLoad.md) %}
 
   {% include [Saint_HighLoad](./_includes/conferences/2024/Saint_HighLoad.md) %}
@@ -19,8 +21,6 @@
   {% include [True_Tech](./_includes/conferences/2024/True_Tech.md) %}
 
   {% include [Heisenbug](./_includes/conferences/2024/Heisenbug.md) %}
-
-  {% include [SmartData](./_includes/conferences/2024/SmartData.md) %}
 
 - 2023
 

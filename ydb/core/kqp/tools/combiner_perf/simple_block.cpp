@@ -162,8 +162,6 @@ void RunTestBlockCombineHashedSimple(const TRunParams& params)
 
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    // const auto streamItemType = pb.NewMultiType({pb.NewDataType(NUdf::TDataType<ui64>::Id), pb.NewDataType(NUdf::TDataType<ui64>::Id)});
-
     auto keyBaseType = pb.NewDataType(NUdf::TDataType<ui64>::Id);
     auto valueBaseType = pb.NewDataType(NUdf::TDataType<ui64>::Id);
     auto keyBlockType = pb.NewBlockType(keyBaseType, TBlockType::EShape::Many);
@@ -204,7 +202,6 @@ void RunTestBlockCombineHashedSimple(const TRunParams& params)
             {keyBaseType, valueBaseType}
         ));
     };
-
 
     std::unordered_map<uint64_t, uint64_t> rawResult;
     for (const auto& tuple : samples) {

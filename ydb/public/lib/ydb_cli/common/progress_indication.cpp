@@ -12,7 +12,8 @@ TProgressIndication::TProgressIndication() {
 
 void TProgressIndication::UpdateProgress(const TCurrentStats& stats)
 {
-    CurrentStats = stats;
+    CurrentStats.ReadRows += stats.ReadRows;
+    CurrentStats.ReadBytes += stats.ReadBytes;
 }
 
 void TProgressIndication::SetDurationUs(ui64 durationUs) {

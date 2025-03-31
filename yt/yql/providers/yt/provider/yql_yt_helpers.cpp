@@ -416,8 +416,11 @@ TString DeriveClusterFromInput(const NNodes::TExprBase& input, ERuntimeClusterSe
 
 TString GetRuntimeCluster(const TExprNode& op, const TYtState::TPtr& state) {
     auto settings = state->Configuration->GetSettingsForNode(op);
-    auto cluster = settings->RuntimeCluster.Get("$all").GetOrElse(
-        settings->DefaultCluster.Get().GetOrElse(state->Gateway->GetDefaultClusterName()));
+    auto cluster =
+        settings->RuntimeCluster.Get("$all").GetOrElse(
+            settings->DefaultRuntimeCluster.Get().GetOrElse(
+                settings->DefaultCluster.Get().GetOrElse(
+                    state->Gateway->GetDefaultClusterName())));
     YQL_ENSURE(cluster, "Runtime cluster is not configured");
     YQL_ENSURE(cluster != YtUnspecifiedCluster, "Invalid runtime cluster value '" << cluster << "'");
     return cluster;

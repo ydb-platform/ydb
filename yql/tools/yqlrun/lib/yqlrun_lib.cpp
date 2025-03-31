@@ -48,6 +48,7 @@ TYqlRunTool::TYqlRunTool()
 {
     GetRunOptions().UseRepeatableRandomAndTimeProviders = true;
     GetRunOptions().ResultsFormat = NYson::EYsonFormat::Pretty;
+    GetRunOptions().CustomTests = true;
 
     GetRunOptions().AddOptExtension([this](NLastGetopt::TOpts& opts) {
         opts.AddLongOption('t', "table", "Table mapping").RequiredArgument("table@file")
@@ -90,8 +91,6 @@ TYqlRunTool::TYqlRunTool()
                 });
             });
         opts.AddLongOption("tmp-dir", "Directory for temporary tables").RequiredArgument("DIR").StoreResult(&TmpDir_);
-        opts.AddLongOption("test-format", "Compare formatted query's AST with the original query's AST (only syntaxVersion=1 is supported)").NoArgument().SetFlag(&GetRunOptions().TestSqlFormat);
-        opts.AddLongOption("validate-result-format", "Check that result-format can parse Result").NoArgument().SetFlag(&GetRunOptions().ValidateResultFormat);
     });
 
     GetRunOptions().AddOptHandler([this](const NLastGetopt::TOptsParseResult& res) {

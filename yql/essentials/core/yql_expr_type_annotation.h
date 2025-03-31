@@ -5,6 +5,7 @@
 
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
+#include <yql/essentials/core/sql_types/block.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 #include <yql/essentials/parser/pg_catalog/catalog.h>
 
@@ -347,8 +348,6 @@ TExprNode::TPtr ExpandPgAggregationTraits(TPositionHandle pos, const NPg::TAggre
 const TTypeAnnotationNode* GetOriginalResultType(TPositionHandle pos, bool isMany, const TTypeAnnotationNode* originalExtractorType, TExprContext& ctx);
 bool ApplyOriginalType(TExprNode::TPtr input, bool isMany, const TTypeAnnotationNode* originalExtractorType, TExprContext& ctx);
 TExprNode::TPtr ConvertToMultiLambda(const TExprNode::TPtr& lambda, TExprContext& ctx);
-
-const TStringBuf BlockLengthColumnName = "_yql_block_length";
 
 TStringBuf NormalizeCallableName(TStringBuf name);
 

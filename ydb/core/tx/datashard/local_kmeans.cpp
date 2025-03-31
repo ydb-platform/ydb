@@ -114,7 +114,6 @@ protected:
         ui64 P = 0;
         ui64 I = 0;
 
-        bool operator==(const TProbability&) const noexcept = default;
         auto operator<=>(const TProbability&) const noexcept = default;
     };
 

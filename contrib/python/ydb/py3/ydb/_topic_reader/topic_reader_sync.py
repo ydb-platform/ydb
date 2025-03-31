@@ -1,5 +1,6 @@
 import asyncio
 import concurrent.futures
+import logging
 import typing
 from typing import List, Union, Optional
 
@@ -19,6 +20,11 @@ from ydb._topic_reader.topic_reader_asyncio import (
     PublicAsyncIOReader,
     TopicReaderClosedError,
 )
+
+if typing.TYPE_CHECKING:
+    from ..query.transaction import BaseQueryTxContext
+
+logger = logging.getLogger(__name__)
 
 
 class TopicReaderSync:
@@ -52,7 +58,8 @@ class TopicReaderSync:
         self._parent = _parent
 
     def __del__(self):
-        self.close(flush=False)
+        if not self._closed:
+            logger.warning("Topic reader was not closed properly. Consider using method close().")
 
     def __enter__(self):
         return self
@@ -104,6 +111,31 @@ class TopicReaderSync:
 
         return self._caller.safe_call_with_result(
             self._async_reader.receive_batch(
+                max_messages=max_messages,
+            ),
+            timeout,
+        )
+
+    def receive_batch_with_tx(
+        self,
+        tx: "BaseQueryTxContext",
+        *,
+        max_messages: typing.Union[int, None] = None,
+        max_bytes: typing.Union[int, None] = None,
+        timeout: Union[float, None] = None,
+    ) -> Union[PublicBatch, None]:
+        """
+        Get one messages batch with tx from reader
+        It has no async_ version for prevent lost messages, use async_wait_message as signal for new batches available.
+
+        if no new message in timeout seconds (default - infinite): raise TimeoutError()
+        if timeout <= 0 - it will fast wait only one event loop cycle - without wait any i/o operations or pauses, get messages from internal buffer only.
+        """
+        self._check_closed()
+
+        return self._caller.safe_call_with_result(
+            self._async_reader.receive_batch_with_tx(
+                tx=tx,
                 max_messages=max_messages,
             ),
             timeout,

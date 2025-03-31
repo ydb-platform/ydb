@@ -438,7 +438,7 @@ void TestWriteOverload(const TestTableDescription& table) {
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
     auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
-
+    csDefaultControllerGuard->SetOverrideBlobSplitSettings(std::nullopt);
     TActorId sender = runtime.AllocateEdgeActor();
     CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
 
@@ -462,9 +462,9 @@ void TestWriteOverload(const TestTableDescription& table) {
     TDeque<TAutoPtr<IEventHandle>> capturedWrites;
 
     auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
-        if (auto* msg = TryGetPrivateEvent<NColumnShard::TEvPrivate::TEvWriteBlobsResult>(ev)) {
-            Cerr << "CATCH TEvWrite, status " << msg->GetPutResult().GetPutStatus() << Endl;
-            if (toCatch && msg->GetPutResult().GetPutStatus() != NKikimrProto::UNKNOWN) {
+        if (auto* msg = TryGetPrivateEvent<NColumnShard::NPrivateEvents::NWrite::TEvWritePortionResult>(ev)) {
+            Cerr << "CATCH TEvWritePortionResult, status " << msg->GetWriteStatus() << Endl;
+            if (toCatch && msg->GetWriteStatus() != NKikimrProto::EReplyStatus::UNKNOWN) {
                 capturedWrites.push_back(ev.Release());
                 --toCatch;
                 return true;
@@ -474,14 +474,6 @@ void TestWriteOverload(const TestTableDescription& table) {
         }
         return false;
     };
-
-    auto resendOneCaptured = [&]() {
-        UNIT_ASSERT(capturedWrites.size());
-        Cerr << "RESEND TEvWrite" << Endl;
-        runtime.Send(capturedWrites.front().Release());
-        capturedWrites.pop_front();
-    };
-
     runtime.SetEventFilter(captureEvents);
 
     const ui32 toSend = toCatch + 1;
@@ -492,7 +484,9 @@ void TestWriteOverload(const TestTableDescription& table) {
     UNIT_ASSERT_VALUES_EQUAL(WaitWriteResult(runtime, TTestTxConfig::TxTablet0), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED);
 
     while (capturedWrites.size()) {
-        resendOneCaptured();
+        Cerr << "RESEND TEvWritePortionResult" << Endl;
+        runtime.Send(capturedWrites.front().Release());
+        capturedWrites.pop_front();
         UNIT_ASSERT_VALUES_EQUAL(WaitWriteResult(runtime, TTestTxConfig::TxTablet0), (ui32)NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
     }
 

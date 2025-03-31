@@ -1,6 +1,7 @@
 #include "node_broker_impl.h"
 #include "dynamic_nameserver_impl.h"
 
+#include <ydb/core/protos/tx_proxy.pb.h>
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/storage.h>
 #include <ydb/core/testlib/basics/helpers.h>
@@ -2077,6 +2078,91 @@ Y_UNIT_TEST_SUITE(TNodeBrokerTest) {
         epoch = GetEpoch(runtime, sender);
         CheckNodesList(runtime, sender, {}, {}, epoch.GetId());
         CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
+    }
+
+    void LocalMiniKQL(TTestBasicRuntime& runtime, TActorId sender, ui64 tabletId, const TString& query) {
+        auto request = MakeHolder<TEvTablet::TEvLocalMKQL>();
+        request->Record.MutableProgram()->MutableProgram()->SetText(query);
+        ForwardToTablet(runtime, tabletId, sender, request.Release());
+
+        auto ev = runtime.GrabEdgeEventRethrow<TEvTablet::TEvLocalMKQLResponse>(sender);
+        const auto& response = ev->Get()->Record;
+
+        UNIT_ASSERT_VALUES_EQUAL(response.GetStatus(), NKikimrProto::OK);
+    }
+
+    Y_UNIT_TEST(NodesToNodesV2Migration)
+    {
+        TTestBasicRuntime runtime(8, false);
+        Setup(runtime, 1);
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        auto epoch = GetEpoch(runtime, sender);
+
+        CheckNodesList(runtime, sender, {}, {}, epoch.GetId());
+        CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
+
+        // Register new node
+        LocalMiniKQL(runtime, sender, MakeNodeBrokerID(), Sprintf(R"(
+            (
+                (let key '('('ID (Uint32 '%u))))
+                (let row '(
+                    '('Host (Utf8 '"%s"))
+                    '('Port (Uint32 '%u))
+                    '('ResolveHost (Utf8 '"%s"))
+                    '('Address (Utf8 '"%s"))
+                    '('Lease (Uint32 '%u))
+                    '('Expire (Uint64 '%u))
+                    '('Location (String '"%s"))
+                ))
+                (return (AsList (UpdateRow 'Nodes key row)))
+            )
+        )", NODE1, "host1", 1001, "host1.yandex.net", "1.2.3.4", 1, epoch.GetNextEnd(),
+            TNodeLocation("1", "2", "3", "4").GetSerializedLocation().c_str()));
+        RestartNodeBroker(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion() + 1, GetEpoch(runtime, sender).GetVersion());
+
+        CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
+        CheckNodeInfo(runtime, sender, NODE1, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                      1, 2, 3, 4, epoch.GetNextEnd());
+
+        // Extend lease
+        ui64 extendedExpire = epoch.GetNextEnd() + 1000;
+        epoch = GetEpoch(runtime, sender);
+        LocalMiniKQL(runtime, sender, MakeNodeBrokerID(), Sprintf(R"(
+            (
+                (let key '('('ID (Uint32 '%u))))
+                (let row '(
+                    '('Lease (Uint32 '%u))
+                    '('Expire (Uint64 '%u))
+                ))
+                (return (AsList (UpdateRow 'Nodes key row)))
+            )
+        )", NODE1, 2, extendedExpire));
+
+        RestartNodeBroker(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion() + 1, GetEpoch(runtime, sender).GetVersion());
+
+        CheckNodesList(runtime, sender, {NODE1}, {}, epoch.GetId());
+        CheckNodeInfo(runtime, sender, NODE1, "host1", 1001, "host1.yandex.net", "1.2.3.4",
+                      1, 2, 3, 4, extendedExpire);
+
+        // Remove
+        epoch = GetEpoch(runtime, sender);
+        LocalMiniKQL(runtime, sender, MakeNodeBrokerID(), Sprintf(R"(
+            (
+                (let key '('('ID (Uint32 '%u))))
+                (return (AsList (EraseRow 'Nodes key)))
+            )
+        )", NODE1));
+        RestartNodeBroker(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(epoch.GetVersion() + 1, GetEpoch(runtime, sender).GetVersion());
+
+        CheckNodesList(runtime, sender, {}, {}, epoch.GetId());
+        CheckNodeInfo(runtime, sender, NODE1, TStatus::WRONG_REQUEST);
+
+        CheckRegistration(runtime, sender, "host2", 1001, "host2.yandex.net", "1.2.3.5",
+                          1, 2, 3, 5, TStatus::OK, NODE1);
     }
 }
 

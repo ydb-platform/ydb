@@ -59,8 +59,10 @@ public:
 
         auto &node = it->second;
         if (!node.IsFixed()) {
-            Self->Dirty.DbUpdateNodeLease(node, txc);
+            Self->Dirty.UpdateEpochVersion();
+            Self->Dirty.DbUpdateEpochVersion(Self->Dirty.Epoch.Version, txc);
             Self->Dirty.ExtendLease(node);
+            Self->Dirty.DbAddNode(node, txc);
             Response->Record.SetExpire(Self->Dirty.Epoch.NextEnd.GetValue());
             Update = true;
         } else {
@@ -82,8 +84,10 @@ public:
                     "TTxExtendLease reply with: " << Response->ToString());
         ctx.Send(Event->Sender, Response.Release());
 
-        if (Update)
+        if (Update) {
+            Self->Committed.UpdateEpochVersion();
             Self->Committed.ExtendLease(Self->Committed.Nodes.at(Event->Get()->Record.GetNodeId()));
+        }
     }
 
 private:

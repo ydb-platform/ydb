@@ -39,6 +39,12 @@ public:
     static void Set(INodeBrokerHooks* hooks);
 };
 
+enum class ENodeState : ui32 {
+    Active = 0,
+    Expired = 1,
+    Removed = 2,
+};
+
 class TNodeBroker : public TActor<TNodeBroker>
                   , public TTabletExecutedFlat {
 public:
@@ -86,7 +92,10 @@ private:
         ParamKeyCurrentEpochVersion,
         ParamKeyCurrentEpochStart,
         ParamKeyCurrentEpochEnd,
+        ParamKeyLegacyEpochId,
+        ParamKeyLegacyEpochVersion,
         ParamKeyNextEpochEnd,
+        ParamKeyMainNodesTable,
     };
 
     struct TNodeInfo : public TEvInterconnect::TNodeInfo {
@@ -101,10 +110,42 @@ private:
             : TEvInterconnect::TNodeInfo(nodeId, address, host, resolveHost,
                                          port, location)
             , Lease(0)
+            , State(ENodeState::Active)
+            , LastUpdateVersion(0)
+        {
+        }
+
+        TNodeInfo(ui32 nodeId, ENodeState state, const NKikimrNodeBroker::TNodeInfoSchema& schema)
+            : TEvInterconnect::TNodeInfo(nodeId, schema.GetAddress(), schema.GetHost(),
+                                         schema.GetResolveHost(), schema.GetPort(),
+                                         TNodeLocation(schema.GetLocation()))
+            , Lease(schema.GetLease())
+            , State(state)
         {
         }
 
         TNodeInfo(const TNodeInfo &other) = default;
+
+        bool EqualClientCached(const TNodeInfo &other) const
+        {
+            return Host == other.Host
+                && Port == other.Port
+                && ResolveHost == other.ResolveHost
+                && Address == other.Address
+                && Location == other.Location
+                && Lease == other.Lease
+                && Expire == other.Expire;
+        }
+
+        bool EqualExceptVersion(const TNodeInfo &other) const
+        {
+            return EqualClientCached(other)
+                && NodeId == other.NodeId
+                && AuthorizedByCertificate == other.AuthorizedByCertificate
+                && SlotIndex == other.SlotIndex
+                && ServicedSubDomain == other.ServicedSubDomain
+                && State == other.State;
+        }
 
         bool IsFixed() const
         {
@@ -128,12 +169,32 @@ private:
             return ExpirationString(Expire);
         }
 
+        NKikimrNodeBroker::TNodeInfoSchema SerializeToSchema() const {
+            NKikimrNodeBroker::TNodeInfoSchema serialized;
+            serialized.SetHost(Host);
+            serialized.SetPort(Port);
+            serialized.SetResolveHost(ResolveHost);
+            serialized.SetAddress(Address);
+            serialized.SetLease(Lease);
+            serialized.SetExpire(Expire.GetValue());
+            Location.Serialize(serialized.MutableLocation(), false);
+            serialized.MutableServicedSubDomain()->CopyFrom(ServicedSubDomain);
+            if (SlotIndex.has_value()) {
+                serialized.SetSlotIndex(*SlotIndex);
+            }
+            serialized.SetAuthorizedByCertificate(AuthorizedByCertificate);
+            return serialized;
+        }
+
         // Lease is incremented each time node extends its lifetime.
         ui32 Lease;
         TInstant Expire;
         bool AuthorizedByCertificate = false;
         std::optional<ui32> SlotIndex;
         TSubDomainKey ServicedSubDomain;
+
+        ENodeState State;
+        ui64 LastUpdateVersion;
     };
 
     // State changes to apply while moving to the next epoch.
@@ -298,10 +359,14 @@ private:
         void LoadConfigFromProto(const NKikimrNodeBroker::TConfig &config);
         void ReleaseSlotIndex(TNodeInfo &node);
         void ClearState();
+        void UpdateLocation(TNodeInfo &node, const TNodeLocation& location);
+
+        TNodeInfo* FindActiveOrExpiredNode(ui32 nodeId);
 
         // All registered dynamic nodes.
         THashMap<ui32, TNodeInfo> Nodes;
         THashMap<ui32, TNodeInfo> ExpiredNodes;
+        THashMap<ui32, TNodeInfo> RemovedNodes;
         // Maps <Host/Addr:Port> to NodeID.
         THashMap<std::tuple<TString, TString, ui16>, ui32> Hosts;
         // Bitmap with free Node IDs (with no lower 5 bits).
@@ -310,6 +375,7 @@ private:
         std::unordered_map<TSubDomainKey, TSlotIndexesPool, THash<TSubDomainKey>> SlotIndexesPools;
         // Epoch info.
         TEpochInfo Epoch;
+        TEpochInfo LegacyEpochStart;
         // Current config.
         NKikimrNodeBroker::TConfig Config;
         TDuration EpochDuration = TDuration::Hours(1);
@@ -329,6 +395,8 @@ private:
         // Local database manipulations.
         void DbAddNode(const TNodeInfo &node,
                 TTransactionContext &txc);
+        void DbRemoveNode(ui32 nodeId,
+                TTransactionContext &txc);
         void DbApplyStateDiff(const TStateDiff &diff,
                     TTransactionContext &txc);
         void DbFixNodeId(const TNodeInfo &node,
@@ -342,6 +410,8 @@ private:
         void DbUpdateConfigSubscription(ui64 subscriptionId,
                                 TTransactionContext &txc);
         void DbUpdateEpoch(const TEpochInfo &epoch,
+                    TTransactionContext &txc);
+        void DbUpdateLegacyEpoch(const TEpochInfo &epoch,
                     TTransactionContext &txc);
         void DbUpdateEpochVersion(ui64 version,
                         TTransactionContext &txc);

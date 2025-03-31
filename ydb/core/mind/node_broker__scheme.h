@@ -2,7 +2,10 @@
 
 #include "defs.h"
 
+#include "node_broker_impl.h"
+
 #include <ydb/core/base/subdomain.h>
+#include <ydb/core/protos/node_broker.pb.h>
 #include <ydb/core/scheme/scheme_types_defs.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
@@ -59,7 +62,23 @@ struct Schema : NIceDb::Schema {
         using TColumns = TableColumns<Key, Value>;
     };
 
-    using TTables = SchemaTables<Nodes, Config, Params>;
+    enum class EMainNodesTable : ui64 {
+        Nodes = 0,
+        NodesV2
+    };
+
+    struct NodesV2 : Table<4> {
+        struct NodeId : Column<1, NScheme::NTypeIds::Uint32> {};
+        struct NodeInfo : Column<2, NScheme::NTypeIds::String> { using Type = NKikimrNodeBroker::TNodeInfoSchema; };
+        struct State : Column<3, NScheme::NTypeIds::Uint64> { using Type = ENodeState; };
+        struct LastUpdateVersion : Column<4, NScheme::NTypeIds::Uint64> {};
+        struct SchemaVersion : Column<5, NScheme::NTypeIds::Uint64> {};
+
+        using TKey = TableKey<NodeId>;
+        using TColumns = TableColumns<NodeId, NodeInfo, State, LastUpdateVersion, SchemaVersion>;
+    };
+
+    using TTables = SchemaTables<Nodes, Config, Params, NodesV2>;
     using TSettings = SchemaSettings<ExecutorLogBatching<true>,
                                      ExecutorLogFlushPeriod<TDuration::MicroSeconds(512).GetValue()>>;
 };

@@ -163,7 +163,6 @@ class KikimrConfigGenerator(object):
             separate_node_configs=False,
             default_clusteradmin=None,
             enable_resource_pools=None,
-            memory_controller_config=None,
             grouped_memory_limiter_config=None,
             query_service_config=None,
     ):
@@ -367,8 +366,6 @@ class KikimrConfigGenerator(object):
         if column_shard_config:
             self.yaml_config["column_shard_config"] = column_shard_config
 
-        if memory_controller_config:
-            self.yaml_config["memory_controller_config"] = memory_controller_config
         if query_service_config:
             self.yaml_config["query_service_config"] = query_service_config
 

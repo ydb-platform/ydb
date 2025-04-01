@@ -448,6 +448,11 @@ void PrepareInputQueryForMap(NYT::TNode& spec, T& specWithPaths, const TString& 
     }
 }
 
+struct TSrcTable {
+    TString Name;
+    TString Cluster;
+};
+
 } // unnamed
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1071,13 +1076,14 @@ public:
 
             auto cluster = publish.DataSink().Cluster().StringValue();
 
-            TVector<TString> src;
+            TVector<TSrcTable> src;
             ui64 chunksCount = 0;
             ui64 dataSize = 0;
             std::unordered_set<TString> columnGroups;
             for (auto out: publish.Input()) {
-                auto outTable = GetOutTable(out).Cast<TYtOutTable>();
-                src.emplace_back(outTable.Name().Value());
+                auto outTableWithCluster = GetOutTableWithCluster(out);
+                auto outTable = outTableWithCluster.first.Cast<TYtOutTable>();
+                src.emplace_back(outTable.Name().StringValue(), outTableWithCluster.second);
                 if (auto columnGroupSetting = NYql::GetSetting(outTable.Settings().Ref(), EYtSettingType::ColumnGroups)) {
                     columnGroups.emplace(columnGroupSetting->Tail().Content());
                 } else {
@@ -1087,7 +1093,7 @@ public:
                 chunksCount += stat.ChunkCount;
                 dataSize += stat.DataSize;
                 if (src.size() <= 10) {
-                    YQL_CLOG(INFO, ProviderYt) << "Input: " << cluster << '.' << src.back();
+                    YQL_CLOG(INFO, ProviderYt) << "Input: " << src.back().Cluster << '.' << src.back().Name;
                 }
             }
             if (src.size() > 10) {
@@ -1108,7 +1114,7 @@ public:
             }
             if (Services_.Config->GetLocalChainTest()) {
                 if (!src.empty()) {
-                    const auto& path = NYql::TransformPath(GetTablesTmpFolder(*options.Config()), src.front(), true, session->UserName_);
+                    const auto& path = NYql::TransformPath(GetTablesTmpFolder(*options.Config()), src.front().Name, true, session->UserName_);
                     const auto it = TestTables.find(path);
                     YQL_ENSURE(TestTables.cend() != it);
                     YQL_ENSURE(TestTables.emplace(dst, it->second).second);
@@ -1124,9 +1130,9 @@ public:
             const ui32 dstEpoch = TEpochInfo::Parse(publish.Publish().Epoch().Ref()).GetOrElse(0);
             auto execCtx = MakeExecCtx(std::move(options), session, cluster, node.Get(), &ctx);
 
-            return session->Queue_->Async([execCtx, src = std::move(src), dst, dstEpoch, isAnonymous, mode, initial, srcColumnGroups, combineChunks, strOpts = std::move(strOpts)] () {
+            return session->Queue_->Async([execCtx, src = std::move(src), dst, dstEpoch, isAnonymous, mode, initial, srcColumnGroups, combineChunks, strOpts = std::move(strOpts)] () mutable {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
-                return ExecPublish(execCtx, src, dst, dstEpoch, isAnonymous, mode, initial, srcColumnGroups, combineChunks, strOpts);
+                return ExecPublish(execCtx, std::move(src), dst, dstEpoch, isAnonymous, mode, initial, srcColumnGroups, combineChunks, strOpts);
             })
             .Apply([nodePos] (const TFuture<void>& f) {
                 try {
@@ -2122,7 +2128,7 @@ private:
                                 existingIdxs.emplace_back(idx, id);
                             }
                             locks.emplace_back(tablePath, id, idx);
-                            YQL_CLOG(INFO, ProviderYt) << "Snapshot " << tablePath.Quote() << " -> " << id << ", tx=" << snapshotTxIdStr;
+                            YQL_CLOG(INFO, ProviderYt) << "Snapshot " << grp.second.ExecContext->Cluster_ << "." << tablePath.Quote() << " -> " << id << ", tx=" << snapshotTxIdStr;
                         } else {
                             YQL_ENSURE(loadMeta);
                             metaRes->DoesExist = false;
@@ -2402,7 +2408,7 @@ private:
 
     static TFuture<void> ExecPublish(
         const TExecContext<TPublishOptions>::TPtr& execCtx,
-        const TVector<TString>& src,
+        TVector<TSrcTable>&& src,
         const TString& dst,
         const ui32 dstEpoch,
         const bool isAnonymous,
@@ -2416,9 +2422,8 @@ private:
         auto cluster = execCtx->Cluster_;
         auto entry = execCtx->GetEntry();
 
-        TVector<TString> srcPaths;
         for (auto& p: src) {
-            srcPaths.push_back(NYql::TransformPath(tmpFolder, p, true, execCtx->Session_->UserName_));
+            p.Name = NYql::TransformPath(tmpFolder, p.Name, true, execCtx->Session_->UserName_);
         }
 
         auto dstPath = NYql::TransformPath(tmpFolder, dst, isAnonymous, execCtx->Session_->UserName_);
@@ -2487,7 +2492,7 @@ private:
 
         bool forceMerge = combineChunks;
 
-        NYT::MergeNodes(yqlAttrs, GetUserAttributes(entry->Tx, srcPaths.back(), true));
+        NYT::MergeNodes(yqlAttrs, GetUserAttributes(execCtx->GetEntryForCluster(src.back().Cluster)->Tx, src.back().Name, true));
         NYT::MergeNodes(yqlAttrs, YqlOpOptionsToAttrs(execCtx->Session_->OperationOptions_));
         if (EYtWriteMode::RenewKeepMeta == mode) {
             auto dstAttrs = entry->Tx->Get(dstPath + "/@", TGetOptions()
@@ -2614,13 +2619,14 @@ private:
         }
 
         TFuture<void> res;
-        if (EYtWriteMode::Flush == mode || EYtWriteMode::Append == mode || srcPaths.size() > 1 || forceMerge) {
+        forceMerge = forceMerge || AnyOf(src, [&](const auto& entry) { return entry.Cluster != execCtx->Cluster_; });
+        if (EYtWriteMode::Flush == mode || EYtWriteMode::Append == mode || src.size() > 1 || forceMerge) {
             TFuture<bool> cacheCheck = MakeFuture<bool>(false);
             if (EYtWriteMode::Flush != mode && isAnonymous) {
                 execCtx->SetCacheItem({dstPath}, {NYT::TNode::CreateMap()}, tmpFolder);
                 cacheCheck = execCtx->LookupQueryCacheAsync();
             }
-            res = cacheCheck.Apply([mode, srcPaths, execCtx, rowSpec, forceTransform,
+            res = cacheCheck.Apply([mode, src, execCtx, rowSpec, forceTransform,
                                     appendToSorted, initial, entry, dstPath, dstEpoch, yqlAttrs, combineChunks,
                                     dstCompressionCodec, dstErasureCodec, dstReplicationFactor, dstMedia, dstPrimaryMedium,
                                     nativeYtTypeCompatibility, publishTx, cluster,
@@ -2642,18 +2648,26 @@ private:
 
                 TMergeOperationSpec mergeSpec;
                 if (appendToSorted) {
+                    TRichYPath input;
                     if (initial) {
-                        auto p = entry->Snapshots.FindPtr(std::make_pair(dstPath, dstEpoch));
-                        YQL_ENSURE(p, "Table " << dstPath << " has no snapshot");
-                        mergeSpec.AddInput(TRichYPath(std::get<0>(*p)).TransactionId(std::get<1>(*p)).OriginalPath(NYT::AddPathPrefix(dstPath, NYT::TConfig::Get()->Prefix)).Columns(columns));
+                        with_lock (entry->Lock_) {
+                            auto p = entry->Snapshots.FindPtr(std::make_pair(dstPath, dstEpoch));
+                            YQL_ENSURE(p, "Table " << dstPath << " has no snapshot");
+                            input = TRichYPath(std::get<0>(*p)).TransactionId(std::get<1>(*p)).OriginalPath(NYT::AddPathPrefix(dstPath, NYT::TConfig::Get()->Prefix)).Columns(columns);
+                        }
                     } else {
-                        mergeSpec.AddInput(TRichYPath(dstPath).Columns(columns));
+                      input = TRichYPath(dstPath).Columns(columns);
                     }
+                    mergeSpec.AddInput(input);
                 }
-                for (auto& s: srcPaths) {
-                    auto path = TRichYPath(s).Columns(columns);
-                    if (EYtWriteMode::Flush == mode) {
-                        path.TransactionId(entry->Tx->GetId());
+                for (auto& s: src) {
+                    auto path = TRichYPath(s.Name).Columns(columns);
+                    TString pathCluster = s.Cluster;
+                    if (pathCluster != execCtx->Cluster_ || EYtWriteMode::Flush == mode) {
+                        path.TransactionId(execCtx->GetEntryForCluster(pathCluster)->Tx->GetId());
+                        if (pathCluster != execCtx->Cluster_) {
+                            path.Cluster(execCtx->Clusters_->GetYtName(pathCluster));
+                        }
                     }
                     mergeSpec.AddInput(path);
                 }
@@ -2734,7 +2748,7 @@ private:
             });
         }
         else {
-            publishTx->Copy(srcPaths.front(), dstPath, TCopyOptions().Force(true));
+            publishTx->Copy(src.front().Name, dstPath, TCopyOptions().Force(true));
             res = MakeFuture();
         }
 

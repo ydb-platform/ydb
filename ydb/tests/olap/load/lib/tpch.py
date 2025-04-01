@@ -88,6 +88,20 @@ class TestTpch10000(TpchSuiteBase):
     }
 
     scale: int = 10000
-    iterations: int = 2
+    iterations: int = 1
     check_canonical: bool = CheckCanonicalPolicy.WARNING
-    timeout = max(TpchSuiteBase.timeout, 7200.)
+    timeout = max(TpchSuiteBase.timeout, 14400.)
+
+
+class TestTpch30000(TpchSuiteBase):
+    scale: int = 30000
+    iterations: int = 1
+    check_canonical: bool = CheckCanonicalPolicy.WARNING
+    timeout = max(TpchSuiteBase.timeout, 14400.)
+
+
+class TestTpch100000(TpchSuiteBase):
+    scale: int = 100000
+    iterations: int = 1
+    check_canonical: bool = CheckCanonicalPolicy.WARNING
+    timeout = max(TpchSuiteBase.timeout, 14400.)

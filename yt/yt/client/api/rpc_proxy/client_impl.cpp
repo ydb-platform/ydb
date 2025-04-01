@@ -1741,6 +1741,8 @@ TFuture<NApi::TMultiTablePartitions> TClient::PartitionTables(
     req->set_enable_key_guarantee(options.EnableKeyGuarantee);
     req->set_enable_cookies(options.EnableCookies);
 
+    req->set_use_new_slicing_implementation_in_ordered_pool(options.UseNewSlicingImplementationInOrderedPool);
+
     ToProto(req->mutable_transactional_options(), options);
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspPartitionTablesPtr& rsp) {
@@ -2272,6 +2274,20 @@ TFuture<NQueryTrackerClient::TQueryId> TClient::StartQuery(
         protoFile->set_name(file->Name);
         protoFile->set_content(file->Content);
         protoFile->set_type(static_cast<NProto::EContentType>(file->Type));
+    }
+
+    for (const auto& secret : options.Secrets) {
+        auto* protoSecret = req->add_secrets();
+        protoSecret->set_id(secret->Id);
+        if (!secret->Category.empty()) {
+            protoSecret->set_category(secret->Category);
+        }
+        if (!secret->Subcategory.empty()) {
+            protoSecret->set_subcategory(secret->Subcategory);
+        }
+        if (!secret->YPath.empty()) {
+            protoSecret->set_ypath(secret->YPath);
+        }
     }
 
     return req->Invoke().Apply(BIND([] (const TApiServiceProxy::TRspStartQueryPtr& rsp) {

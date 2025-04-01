@@ -38,26 +38,6 @@ THashMap<TString, TString> AlgNames = {
     {"chacha20poly1305", "ChaCha20-Poly1305"},
 };
 
-TString NormalizeAlgName(const TString& name) {
-    TString result;
-    result.reserve(name.size());
-    for (char c : name) {
-        if (IsAsciiAlpha(c)) {
-            result.push_back(AsciiToLower(c));
-        } else if (c == '-' || c == '_') {
-            // do nothing, allow user to write something like "AES128-GCM" or "AES_128-GCM"
-        } else {
-            result.push_back(c);
-        }
-    }
-    const auto alg = AlgNames.find(result);
-    if (alg == AlgNames.end()) {
-        return {};
-    } else {
-        return alg->second; // normalized name
-    }
-}
-
 const EVP_CIPHER* GetCipherByName(const TString& cipherName) {
     const EVP_CIPHER* cipher = EVP_get_cipherbyname(cipherName.c_str());
     if (!cipher) {
@@ -120,6 +100,26 @@ uint16_t ToHostByteOrder(uint16_t n) {
 
 } // anonymous
 
+TString NormalizeEncryptionAlgorithmName(const TString& name) {
+    TString result;
+    result.reserve(name.size());
+    for (char c : name) {
+        if (IsAsciiAlpha(c)) {
+            result.push_back(AsciiToLower(c));
+        } else if (c == '-' || c == '_') {
+            // do nothing, allow user to write something like "AES128-GCM" or "AES_128-GCM"
+        } else {
+            result.push_back(c);
+        }
+    }
+    const auto alg = AlgNames.find(result);
+    if (alg == AlgNames.end()) {
+        return {};
+    } else {
+        return alg->second; // normalized name
+    }
+}
+
 TEncryptionIV TEncryptionIV::Generate() {
     TEncryptionIV iv;
     iv.IV.resize(SIZE);
@@ -180,6 +180,11 @@ TEncryptionIV TEncryptionIV::FromBinaryString(const TString& s) {
     return iv;
 }
 
+TEncryptionIV TEncryptionIV::FromHexString(const TString& s) {
+    TString binary = HexDecode(s);
+    return FromBinaryString(binary);
+}
+
 TString TEncryptionKey::GetBinaryString() const {
     if (*this) {
         return TString(reinterpret_cast<const char*>(Key.data()), Key.size());
@@ -192,7 +197,7 @@ class TEncryptedFileSerializer::TImpl {
 public:
     TImpl(TString algorithm, TEncryptionKey key, TEncryptionIV iv)
         : Algorithm(std::move(algorithm))
-        , NormalizedAlgName(NormalizeAlgName(Algorithm))
+        , NormalizedAlgName(NormalizeEncryptionAlgorithmName(Algorithm))
         , Key(std::move(key))
         , IV(std::move(iv))
     {
@@ -586,7 +591,7 @@ public:
             ThrowFileIsCorrupted();
         }
         IV = std::move(iv);
-        NormalizedAlgName = NormalizeAlgName(header.GetEncryptionAlgorithm());
+        NormalizedAlgName = NormalizeEncryptionAlgorithmName(header.GetEncryptionAlgorithm());
         if (!NormalizedAlgName) {
             ThrowFileIsCorrupted();
         }

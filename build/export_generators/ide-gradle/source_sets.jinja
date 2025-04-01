@@ -14,7 +14,7 @@ sourceSets {
 {%-             set srcdir_glob = split(source_set, ':') -%}
 {%-             set out = srcdir_glob[0] -%}
 {%-             if out != 'src/main/java' %}
-        java.srcDir("{{ out }}")
+        java.srcDir({{ PatchRoots(out) }})
 {%-             endif -%}
 {%-         endfor -%}
 {%-     endif %}
@@ -45,7 +45,7 @@ sourceSets {
 {%-         set srcdir_glob = split(source_set, ':') -%}
 {%-         set out = srcdir_glob[0] -%}
 {%-         if out != 'src/test/java' %}
-        java.srcDir("{{ srcdir_glob[0] }}")
+        java.srcDir({{ PatchRoots(srcdir_glob[0]) }})
 {%-         endif -%}
 {%-     endfor -%}
 {%- endif %}

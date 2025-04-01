@@ -79,7 +79,10 @@
         {
             "Name": "TYtOutTable",
             "Base": "TYtTableBase",
-            "Match": {"Type": "Callable", "Name": "YtOutTable"}
+            "Match": {"Type": "Callable", "Name": "YtOutTable"},
+            "Children": [
+                {"Index": 5, "Name": "Cluster", "Type": "TCoAtom", "Optional": true}
+            ]
         },
         {
             "Name": "TYtOutSection",

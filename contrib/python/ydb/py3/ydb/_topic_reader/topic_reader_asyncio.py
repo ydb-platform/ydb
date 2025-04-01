@@ -5,7 +5,7 @@ import concurrent.futures
 import gzip
 import typing
 from asyncio import Task
-from collections import OrderedDict
+from collections import defaultdict, OrderedDict
 from typing import Optional, Set, Dict, Union, Callable
 
 import ydb
@@ -19,16 +19,23 @@ from . import topic_reader
 from .._grpc.grpcwrapper.common_utils import (
     IGrpcWrapperAsyncIO,
     SupportedDriverType,
+    to_thread,
     GrpcWrapperAsyncIO,
 )
 from .._grpc.grpcwrapper.ydb_topic import (
     StreamReadMessage,
     UpdateTokenRequest,
     UpdateTokenResponse,
+    UpdateOffsetsInTransactionRequest,
     Codec,
 )
 from .._errors import check_retriable_error
 import logging
+
+from ..query.base import TxEvent
+
+if typing.TYPE_CHECKING:
+    from ..query.transaction import BaseQueryTxContext
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +84,7 @@ class PublicAsyncIOReader:
     ):
         self._loop = asyncio.get_running_loop()
         self._closed = False
-        self._reconnector = ReaderReconnector(driver, settings)
+        self._reconnector = ReaderReconnector(driver, settings, self._loop)
         self._parent = _parent
 
     async def __aenter__(self):
@@ -88,8 +95,7 @@ class PublicAsyncIOReader:
 
     def __del__(self):
         if not self._closed:
-            task = self._loop.create_task(self.close(flush=False))
-            topic_common.wrap_set_name_for_asyncio_task(task, task_name="close reader")
+            logger.warning("Topic reader was not closed properly. Consider using method close().")
 
     async def wait_message(self):
         """
@@ -109,6 +115,23 @@ class PublicAsyncIOReader:
         """
         await self._reconnector.wait_message()
         return self._reconnector.receive_batch_nowait(
+            max_messages=max_messages,
+        )
+
+    async def receive_batch_with_tx(
+        self,
+        tx: "BaseQueryTxContext",
+        max_messages: typing.Union[int, None] = None,
+    ) -> typing.Union[datatypes.PublicBatch, None]:
+        """
+        Get one messages batch with tx from reader.
+        All messages in a batch from same partition.
+
+        use asyncio.wait_for for wait with timeout.
+        """
+        await self._reconnector.wait_message()
+        return self._reconnector.receive_batch_with_tx_nowait(
+            tx=tx,
             max_messages=max_messages,
         )
 
@@ -165,17 +188,26 @@ class ReaderReconnector:
     _state_changed: asyncio.Event
     _stream_reader: Optional["ReaderStream"]
     _first_error: asyncio.Future[YdbError]
+    _tx_to_batches_map: Dict[str, typing.List[datatypes.PublicBatch]]
 
-    def __init__(self, driver: Driver, settings: topic_reader.PublicReaderSettings):
+    def __init__(
+        self,
+        driver: Driver,
+        settings: topic_reader.PublicReaderSettings,
+        loop: Optional[asyncio.AbstractEventLoop] = None,
+    ):
         self._id = self._static_reader_reconnector_counter.inc_and_get()
         self._settings = settings
         self._driver = driver
+        self._loop = loop if loop is not None else asyncio.get_running_loop()
         self._background_tasks = set()
 
         self._state_changed = asyncio.Event()
         self._stream_reader = None
         self._background_tasks.add(asyncio.create_task(self._connection_loop()))
         self._first_error = asyncio.get_running_loop().create_future()
+
+        self._tx_to_batches_map = dict()
 
     async def _connection_loop(self):
         attempt = 0
@@ -190,6 +222,7 @@ class ReaderReconnector:
                 if not retry_info.is_retriable:
                     self._set_first_error(err)
                     return
+
                 await asyncio.sleep(retry_info.sleep_timeout_seconds)
 
                 attempt += 1
@@ -222,8 +255,86 @@ class ReaderReconnector:
             max_messages=max_messages,
         )
 
+    def receive_batch_with_tx_nowait(self, tx: "BaseQueryTxContext", max_messages: Optional[int] = None):
+        batch = self._stream_reader.receive_batch_nowait(
+            max_messages=max_messages,
+        )
+
+        self._init_tx(tx)
+
+        self._tx_to_batches_map[tx.tx_id].append(batch)
+
+        tx._add_callback(TxEvent.AFTER_COMMIT, batch._update_partition_offsets, self._loop)
+
+        return batch
+
     def receive_message_nowait(self):
         return self._stream_reader.receive_message_nowait()
+
+    def _init_tx(self, tx: "BaseQueryTxContext"):
+        if tx.tx_id not in self._tx_to_batches_map:  # Init tx callbacks
+            self._tx_to_batches_map[tx.tx_id] = []
+            tx._add_callback(TxEvent.BEFORE_COMMIT, self._commit_batches_with_tx, self._loop)
+            tx._add_callback(TxEvent.AFTER_COMMIT, self._handle_after_tx_commit, self._loop)
+            tx._add_callback(TxEvent.AFTER_ROLLBACK, self._handle_after_tx_rollback, self._loop)
+
+    async def _commit_batches_with_tx(self, tx: "BaseQueryTxContext"):
+        grouped_batches = defaultdict(lambda: defaultdict(list))
+        for batch in self._tx_to_batches_map[tx.tx_id]:
+            grouped_batches[batch._partition_session.topic_path][batch._partition_session.partition_id].append(batch)
+
+        request = UpdateOffsetsInTransactionRequest(tx=tx._tx_identity(), consumer=self._settings.consumer, topics=[])
+
+        for topic_path in grouped_batches:
+            topic_offsets = UpdateOffsetsInTransactionRequest.TopicOffsets(path=topic_path, partitions=[])
+            for partition_id in grouped_batches[topic_path]:
+                partition_offsets = UpdateOffsetsInTransactionRequest.TopicOffsets.PartitionOffsets(
+                    partition_id=partition_id,
+                    partition_offsets=[
+                        batch._commit_get_offsets_range() for batch in grouped_batches[topic_path][partition_id]
+                    ],
+                )
+                topic_offsets.partitions.append(partition_offsets)
+            request.topics.append(topic_offsets)
+
+        try:
+            return await self._do_commit_batches_with_tx_call(request)
+        except BaseException:
+            exc = issues.ClientInternalError("Failed to update offsets in tx.")
+            tx._set_external_error(exc)
+            self._stream_reader._set_first_error(exc)
+        finally:
+            del self._tx_to_batches_map[tx.tx_id]
+
+    async def _do_commit_batches_with_tx_call(self, request: UpdateOffsetsInTransactionRequest):
+        args = [
+            request.to_proto(),
+            _apis.TopicService.Stub,
+            _apis.TopicService.UpdateOffsetsInTransaction,
+            topic_common.wrap_operation,
+        ]
+
+        if asyncio.iscoroutinefunction(self._driver.__call__):
+            res = await self._driver(*args)
+        else:
+            res = await to_thread(self._driver, *args, executor=None)
+
+        return res
+
+    async def _handle_after_tx_rollback(self, tx: "BaseQueryTxContext", exc: Optional[BaseException]) -> None:
+        if tx.tx_id in self._tx_to_batches_map:
+            del self._tx_to_batches_map[tx.tx_id]
+        exc = issues.ClientInternalError("Reconnect due to transaction rollback")
+        self._stream_reader._set_first_error(exc)
+
+    async def _handle_after_tx_commit(self, tx: "BaseQueryTxContext", exc: Optional[BaseException]) -> None:
+        if tx.tx_id in self._tx_to_batches_map:
+            del self._tx_to_batches_map[tx.tx_id]
+
+        if exc is not None:
+            self._stream_reader._set_first_error(
+                issues.ClientInternalError("Reconnect due to transaction commit failed")
+            )
 
     def commit(self, batch: datatypes.ICommittable) -> datatypes.PartitionSession.CommitAckWaiter:
         return self._stream_reader.commit(batch)

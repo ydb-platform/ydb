@@ -40,6 +40,8 @@ struct TKikimrData {
         DataSourceNames.insert(TKiReadTableScheme::CallableName());
         DataSourceNames.insert(TKiReadTableList::CallableName());
 
+        DataSinkNames.insert(TKiAlterDatabase::CallableName());
+
         DataSinkNames.insert(TKiWriteTable::CallableName());
         DataSinkNames.insert(TKiUpdateTable::CallableName());
         DataSinkNames.insert(TKiDeleteTable::CallableName());
@@ -113,6 +115,7 @@ struct TKikimrData {
         DataOps = ModifyOps | ReadOps;
 
         SchemeOps =
+            TYdbOperation::AlterDatabase |
             TYdbOperation::CreateTable |
             TYdbOperation::DropTable |
             TYdbOperation::AlterTable |
@@ -481,6 +484,9 @@ bool TKikimrKey::Extract(const TExprNode& key) {
         KeyType = Type::BackupCollection;
         Target = key.Child(0)->Child(1)->Child(0)->Content();
         ExplicitPrefix = key.Child(0)->Child(2)->Child(0)->Content();
+    } else if (tagName == "databasePath") {
+        KeyType = Type::Database;
+        Target = key.Child(0)->Child(1)->Child(0)->Content();
     } else {
         Ctx.AddError(TIssue(Ctx.GetPosition(key.Child(0)->Pos()), TString("Unexpected tag for kikimr key: ") + tagName));
         return false;

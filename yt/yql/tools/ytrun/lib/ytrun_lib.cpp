@@ -12,7 +12,7 @@
 #include <yt/yql/providers/yt/fmr/coordinator/impl/yql_yt_coordinator_impl.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_job_impl.h>
 #include <yt/yql/providers/yt/fmr/job_factory/impl/yql_yt_job_factory_impl.h>
-#include <yt/yql/providers/yt/fmr/table_data_service/local/table_data_service.h>
+#include <yt/yql/providers/yt/fmr/table_data_service/local/yql_yt_table_data_service_local.h>
 #include <yt/yql/providers/yt/fmr/yt_service/impl/yql_yt_yt_service_impl.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/core/peephole_opt/yql_opt_peephole_physical.h>
@@ -105,10 +105,10 @@ TYtRunTool::TYtRunTool(TString name)
                         << ", current stage: " << progress.Stage.first << Endl;
                 });
             });
-        opts.AddLongOption("threads", "gateway threads")
+        opts.AddLongOption("yt-threads", "YT gateway threads")
             .Optional()
             .RequiredArgument("COUNT")
-            .StoreResult(&NumThreads_);
+            .StoreResult(&NumYtThreads_);
         opts.AddLongOption("keep-temp", "keep temporary tables")
             .Optional()
             .NoArgument()
@@ -134,7 +134,7 @@ TYtRunTool::TYtRunTool(TString name)
         }
 
         auto ytConfig = GetRunOptions().GatewaysConfig->MutableYt();
-        ytConfig->SetGatewayThreads(NumThreads_);
+        ytConfig->SetGatewayThreads(NumYtThreads_);
         if (MrJobBin_.empty()) {
             ytConfig->ClearMrJobBin();
         } else {
@@ -154,9 +154,13 @@ TYtRunTool::TYtRunTool(TString name)
         FillClusterMapping(*ytConfig, TString{YtProviderName});
 
         DefYtServer_ = NYql::TConfigClusters::GetDefaultYtServer(*ytConfig);
+
+        if (GetRunOptions().GatewayTypes.contains(FastMapReduceGatewayName)) {
+            GetRunOptions().GatewayTypes.emplace(YtProviderName);
+        }
     });
 
-    GetRunOptions().SetSupportedGateways({TString{YtProviderName}});
+    GetRunOptions().SetSupportedGateways({TString{YtProviderName}, TString{FastMapReduceGatewayName}});
     GetRunOptions().GatewayTypes.emplace(YtProviderName);
 
     AddFsDownloadFactory([this]() -> NFS::IDownloaderPtr {

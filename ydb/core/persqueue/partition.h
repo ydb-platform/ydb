@@ -665,6 +665,8 @@ private:
     THashSet<TString> TxAffectedConsumers;
     THashSet<TString> SetOffsetAffectedConsumers;
     THashMap<TString, TSourceIdPostPersistInfo> TxSourceIdForPostPersist;
+    THashMap<TString, ui64> TxInflightMaxSeqNoPerSourceId;
+
 
     ui32 MaxBlobSize;
     const ui32 TotalLevels = 4;

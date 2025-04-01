@@ -340,8 +340,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Write(TExprBase node, T
     }
 
     auto cluster = TString{write.DataSink().Cluster().Value()};
-    auto srcCluster = GetClusterName(write.Content());
-    if (cluster != srcCluster) {
+    const auto selectionMode = State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
+    const auto srcCluster = DeriveClusterFromInput(write.Content(), selectionMode);
+    if (selectionMode == ERuntimeClusterSelectionMode::Disable && cluster != srcCluster) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
             << "Result from cluster " << TString{srcCluster}.Quote()
             << " cannot be written to a different destination cluster " << cluster.Quote()));
@@ -758,7 +759,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Fill(TExprBase node, TE
     {
         auto path = write.Table().Name().StringValue();
         auto commitEpoch = TEpochInfo::Parse(write.Table().CommitEpoch().Ref()).GetOrElse(0);
-        auto dstRowSpec = State_->TablesData->GetTable(cluster, path, commitEpoch).RowSpec;
+        auto dstRowSpec = State_->TablesData->GetTable(write.Table().Cluster().StringValue(), path, commitEpoch).RowSpec;
         outTable.RowSpec->SetColumnOrder(dstRowSpec->GetColumnOrder());
     }
     auto content = write.Content();

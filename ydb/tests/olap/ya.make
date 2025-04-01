@@ -32,6 +32,7 @@ RECURSE(
     high_load
     lib
     load
+    oom
     s3_import
     scenario
     ttl_tiering

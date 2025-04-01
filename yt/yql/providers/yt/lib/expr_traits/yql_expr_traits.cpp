@@ -372,6 +372,7 @@ namespace NYql {
             TStringBuf("Last"),
             TStringBuf("ToDict"),
             TStringBuf("SqueezeToDict"),
+            TStringBuf("BlockStorage"),
             TStringBuf("Iterator"), //  Why?
             TStringBuf("Collect"),
             TStringBuf("Length"),

@@ -160,9 +160,6 @@ class GrpcWrapperAsyncIO(IGrpcWrapperAsyncIO):
         self._stream_call = None
         self._wait_executor = None
 
-    def __del__(self):
-        self._clean_executor(wait=False)
-
     async def start(self, driver: SupportedDriverType, stub, method):
         if asyncio.iscoroutinefunction(driver.__call__):
             await self._start_asyncio_driver(driver, stub, method)

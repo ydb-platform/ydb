@@ -10,6 +10,8 @@
 #include <yt/yql/providers/yt/lib/expr_traits/yql_expr_traits.h>
 #include <yt/yql/providers/yt/lib/hash/yql_hash_builder.h>
 #include <yt/yql/providers/yt/provider/yql_yt_helpers.h>
+#include <yt/yql/providers/yt/provider/phy_opt/yql_yt_phy_opt_helper.h>
+
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/transform/yql_exec.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
@@ -316,10 +318,24 @@ private:
             );
     }
 
+    bool AssignRuntimeCluster(const TYtOpBase& input, TExprNode::TPtr& output, TExprContext& ctx) {
+        if (input.DataSink().Cluster().StringValue() == YtUnspecifiedCluster) {
+            TString cluster = GetRuntimeCluster(input.Ref(), State_);
+            YQL_CLOG(DEBUG, ProviderYt) << "Assigning runtime cluster " << cluster << " for node " << input.Ref().Content();
+            output = ctx.ChangeChild(input.Ref(), TYtOpBase::idx_DataSink, NPrivate::MakeDataSink(input.DataSink().Pos(), cluster, ctx).Ptr());
+            return true;
+        }
+        return false;
+    }
+
     template <bool MarkFinished>
-    TStatusCallbackPair HandleOutputOp(const TExprNode::TPtr& input, TExprContext& ctx) {
+    TStatusCallbackPair HandleOutputOp(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         if (input->HasResult() && input->GetResult().Type() == TExprNode::World) {
             return SyncOk();
+        }
+
+        if (AssignRuntimeCluster(TYtOpBase(input), output, ctx)) {
+            return SyncRepeatWithRestart();
         }
 
         TString operationHash;
@@ -363,15 +379,19 @@ private:
         return SyncStatus(TStatus(TStatus::Repeat, true));
     }
 
-    TStatusCallbackPair HandleReduce(const TExprNode::TPtr& input, TExprContext& ctx) {
+    TStatusCallbackPair HandleReduce(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
         TYtReduce reduce(input);
 
         if (!NYql::HasSetting(reduce.Settings().Ref(), EYtSettingType::FirstAsPrimary)) {
-            return HandleOutputOp<true>(input, ctx);
+            return HandleOutputOp<true>(input, output, ctx);
         }
 
         if (input->HasResult() && input->GetResult().Type() == TExprNode::World) {
             return SyncOk();
+        }
+
+        if (AssignRuntimeCluster(TYtOpBase(input), output, ctx)) {
+            return SyncRepeatWithRestart();
         }
 
         TString operationHash;

@@ -40,6 +40,21 @@ class FunctionalTestBase:
         cls.cluster.register_and_start_slots(db, count=YdbCluster.get_dyn_nodes_count())
         cls.cluster.wait_tenant_up(db)
 
+    def setup_method(self, method):
+        for node in self.cluster.nodes.values():
+            node.start()
+        for slot in self.cluster.slots.values():
+            slot.start()
+        self.cluster.wait_tenant_up(f'/{YdbCluster.ydb_database}')
+
+    def teardown_method(self, method):
+        for node in self.cluster.nodes.values():
+            if not node.is_alive():
+                node.stop()
+        for slot in self.cluster.slots.values():
+            if not slot.is_alive():
+                slot.stop()
+
     @classmethod
     def run_cli(cls, argv: list[str]) -> yatest.common.process._Execution:
         return yatest.common.execute(YdbCliHelper.get_cli_command() + argv)

@@ -338,22 +338,23 @@ namespace Tests {
         TServer& operator =(TServer&& server) = default;
         virtual ~TServer();
 
-        void EnableGRpc(const NYdbGrpc::TServerOptions& options, ui32 grpcServiceNodeId = 0, std::optional<TString> tenant = std::nullopt);
-        void EnableGRpc(ui16 port, ui32 grpcServiceNodeId = 0, std::optional<TString> tenant = std::nullopt);
+        void EnableGRpc(const NYdbGrpc::TServerOptions& options, ui32 grpcServiceNodeId = 0, const std::optional<TString>& tenant = std::nullopt);
+        void EnableGRpc(ui16 port, ui32 grpcServiceNodeId = 0, const std::optional<TString>& tenant = std::nullopt);
         void SetupRootStoragePools(const TActorId sender) const;
 
         void SetupDefaultProfiles();
 
         TIntrusivePtr<::NMonitoring::TDynamicCounters> GetGRpcServerRootCounters() const {
-            return RootGrpc.GRpcServerRootCounters;
+            return RootGRpc.GRpcServerRootCounters;
         }
 
         void ShutdownGRpc() {
-            RootGrpc.Shutdown();
-            for (auto& [_, tenantGrpc] : TenantsGrpc) {
-                tenantGrpc.Shutdown();
+            RootGRpc.Shutdown();
+            for (auto& [_, tenantGRpc] : TenantsGRpc) {
+                tenantGRpc.Shutdown();
             }
         }
+
         void StartDummyTablets();
         TVector<ui64> StartPQTablets(ui32 pqTabletsN, bool wait = true);
         TTestActorRuntime* GetRuntime() const;
@@ -386,7 +387,7 @@ namespace Tests {
         TAutoPtr<NMsgBusProxy::IMessageBusServer> BusServer;
         NFq::IYqSharedResources::TPtr YqSharedResources;
 
-        struct TGrpcInfo {
+        struct TGRpcInfo {
             std::unique_ptr<NYdbGrpc::TGRpcServer> GRpcServer;
             TIntrusivePtr<NMonitoring::TDynamicCounters> GRpcServerRootCounters;
 
@@ -397,8 +398,9 @@ namespace Tests {
                 }
             }
         };
-        TGrpcInfo RootGrpc;
-        std::unordered_map<TString, TGrpcInfo> TenantsGrpc;
+
+        TGRpcInfo RootGRpc;
+        std::unordered_map<TString, TGRpcInfo> TenantsGRpc;
     };
 
     class TClient {

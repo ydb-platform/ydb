@@ -11,8 +11,6 @@
 namespace NKikimr::NViewer {
 
 using namespace NActors;
-using namespace NMonitoring;
-using namespace NNodeWhiteboard;
 
 class TJsonQuery : public TViewerPipeClient {
     using TThis = TJsonQuery;
@@ -29,6 +27,7 @@ class TJsonQuery : public TViewerPipeClient {
     int LimitRows = 10000;
     int TotalRows = 0;
     bool CollectDiagnostics = true;
+    bool Long = false;
     TDuration StatsPeriod;
     TDuration KeepAlive = TDuration::MilliSeconds(10000);
     TInstant LastSendTime;
@@ -44,6 +43,7 @@ class TJsonQuery : public TViewerPipeClient {
     ESchemaType Schema = ESchemaType::Classic;
     TRequestResponse<NKqp::TEvKqp::TEvCreateSessionResponse> CreateSessionResponse;
     TRequestResponse<NKqp::TEvKqp::TEvQueryResponse> QueryResponse;
+    TRequestResponse<NKqp::TEvKqp::TEvScriptResponse> ScriptResponse;
     TString SessionId;
     ui64 OutputChunkMaxSize = 0;
     bool Streaming = false;
@@ -82,6 +82,9 @@ public:
         }
         if (params.Has("action")) {
             Action = params.Get("action");
+        }
+        if (params.Has("long")) {
+            Long = FromStringWithDefault<bool>(params.Get("long"), Long);
         }
         if (params.Has("schema")) {
             Schema = StringToSchemaType(params.Get("schema"));
@@ -209,6 +212,7 @@ public:
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqp::TEvCreateSessionResponse, HandleReply);
             hFunc(NKqp::TEvKqp::TEvQueryResponse, HandleReply);
+            hFunc(NKqp::TEvKqp::TEvScriptResponse, HandleReply);
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleReply);
             hFunc(NKqp::TEvKqp::TEvPingSessionResponse, HandleReply);
             hFunc(NKqp::TEvKqpExecuter::TEvExecuterProgress, HandleReply);
@@ -257,10 +261,14 @@ public:
                 event->Record.SetUserSID(userToken.GetUserSID());
             }
         }
-        CreateSessionResponse = MakeRequest<NKqp::TEvKqp::TEvCreateSessionResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
         if (Streaming) {
             HttpResponse = HttpEvent->Get()->Request->CreateResponseString(Viewer->GetChunkedHTTPOK(GetRequest(), ContentType + ";boundary=boundary"));
             Send(HttpEvent->Sender, new NHttp::TEvHttpProxy::TEvHttpOutgoingResponse(HttpResponse));
+        }
+        if (Long) {
+            MakeScriptRequest();
+        } else {
+            CreateSessionResponse = MakeRequest<NKqp::TEvKqp::TEvCreateSessionResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
         }
     }
 
@@ -287,34 +295,7 @@ public:
         Send(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.release());
     }
 
-    void HandleReply(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev) {
-        if (ev->Get()->Record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
-            CreateSessionResponse.Set(std::move(ev));
-        } else {
-            CreateSessionResponse.Error("FailedToCreateSession");
-            NYdb::NIssue::TIssue issue;
-            issue.SetMessage("Failed to create session");
-            issue.SetCode(ev->Get()->Record.GetYdbStatus(), NYdb::NIssue::ESeverity::Error);
-            NJson::TJsonValue json;
-            TString message;
-            MakeJsonErrorReply(json, message, NYdb::TStatus(NYdb::EStatus(ev->Get()->Record.GetYdbStatus()), NYdb::NIssue::TIssues{issue}));
-            return ReplyWithJsonAndPassAway(json, message);
-        }
-
-        SessionId = CreateSessionResponse->Record.GetResponse().GetSessionId();
-        PingSession();
-
-        if (Streaming) {
-            NJson::TJsonValue json;
-            json["version"] = Viewer->GetCapabilityVersion("/viewer/query");
-            NJson::TJsonValue& jsonMeta = json["meta"];
-            jsonMeta["event"] = "SessionCreated";
-            jsonMeta["session_id"] = SessionId;
-            jsonMeta["query_id"] = QueryId;
-            jsonMeta["node_id"] = SelfId().NodeId();
-            StreamJsonResponse(json);
-        }
-
+    void MakeQueryRequest() {
         auto event = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         NKikimrKqp::TQueryRequest& request = *event->Record.MutableRequest();
         request.SetQuery(Query);
@@ -335,7 +316,11 @@ public:
             request.SetKeepSession(false);
         } else if (Action.empty() || Action == "execute-query" || Action == "execute") {
             request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
-            request.SetType(ConcurrentResults ? NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY : NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
+            if (Long) {
+                request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT);
+            } else {
+                request.SetType(ConcurrentResults ? NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY : NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
+            }
             request.SetKeepSession(false);
             SetTransactionMode(request);
         } else if (Action == "explain-query") {
@@ -392,7 +377,123 @@ public:
         }
         ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
         QueryResponse = MakeRequest<NKqp::TEvKqp::TEvQueryResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
+    }
 
+    void MakeScriptRequest() {
+        auto event = MakeHolder<NKqp::TEvKqp::TEvScriptRequest>();
+        NKikimrKqp::TQueryRequest& request = *event->Record.MutableRequest();
+        request.SetQuery(Query);
+        if (SessionId) {
+            request.SetSessionId(SessionId);
+        }
+        if (Database) {
+            request.SetDatabase(Database);
+        }
+        if (TString userToken = GetRequest().GetUserTokenObject()) {
+            event->Record.SetUserToken(userToken);
+        }
+        if (ResourcePool) {
+            request.SetPoolId(ResourcePool);
+        }
+        request.SetClientAddress(GetRequest().GetRemoteAddr());
+        if (Action == "execute-script") {
+            request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+            request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT);
+            request.SetKeepSession(false);
+        } else if (Action.empty() || Action == "execute-query" || Action == "execute") {
+            request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+            if (Long) {
+                request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_SCRIPT);
+            } else {
+                request.SetType(ConcurrentResults ? NKikimrKqp::QUERY_TYPE_SQL_GENERIC_CONCURRENT_QUERY : NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
+            }
+            request.SetKeepSession(false);
+            SetTransactionMode(request);
+        } else if (Action == "explain-query") {
+            request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
+            request.SetType(NKikimrKqp::QUERY_TYPE_SQL_GENERIC_QUERY);
+            request.SetKeepSession(false);
+        } else if (Action == "execute-scan") {
+            request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+            request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCAN);
+            request.SetKeepSession(false);
+        } else if (Action == "execute-data") {
+            request.SetAction(NKikimrKqp::QUERY_ACTION_EXECUTE);
+            request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+            request.SetKeepSession(false);
+            SetTransactionMode(request);
+            if (!request.txcontrol().has_begin_tx()) {
+                request.mutable_txcontrol()->mutable_begin_tx()->mutable_serializable_read_write();
+                request.mutable_txcontrol()->set_commit_tx(true);
+            }
+        } else if (Action == "explain" || Action == "explain-ast" || Action == "explain-data") {
+            request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
+            request.SetType(NKikimrKqp::QUERY_TYPE_SQL_DML);
+        } else if (Action == "explain-scan") {
+            request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
+            request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCAN);
+        } else if (Action == "explain-script") {
+            request.SetAction(NKikimrKqp::QUERY_ACTION_EXPLAIN);
+            request.SetType(NKikimrKqp::QUERY_TYPE_SQL_SCRIPT);
+        }
+        if (Stats == "none") {
+            request.SetStatsMode(NYql::NDqProto::DQ_STATS_MODE_NONE);
+            request.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_NONE);
+        } else if (Stats == "basic") {
+            request.SetStatsMode(NYql::NDqProto::DQ_STATS_MODE_BASIC);
+            request.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC);
+        } else if (Stats == "profile") {
+            request.SetStatsMode(NYql::NDqProto::DQ_STATS_MODE_PROFILE);
+            request.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_PROFILE);
+        } else if (Stats == "full") {
+            request.SetStatsMode(NYql::NDqProto::DQ_STATS_MODE_FULL);
+            request.SetCollectStats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL);
+        }
+        if (Syntax == "yql_v1") {
+            request.SetSyntax(Ydb::Query::Syntax::SYNTAX_YQL_V1);
+        } else if (Syntax == "pg") {
+            request.SetSyntax(Ydb::Query::Syntax::SYNTAX_PG);
+        }
+        if (OutputChunkMaxSize) {
+            request.SetOutputChunkMaxSize(OutputChunkMaxSize);
+        }
+        request.SetCollectDiagnostics(CollectDiagnostics);
+        /* if (StatsPeriod) {
+            event->SetProgressStatsPeriod(StatsPeriod);
+        } */
+        ActorIdToProto(SelfId(), event->Record.MutableRequestActorId());
+        ScriptResponse = MakeRequest<NKqp::TEvKqp::TEvScriptResponse>(NKqp::MakeKqpProxyID(SelfId().NodeId()), event.Release());
+    }
+
+    void HandleReply(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev) {
+        if (ev->Get()->Record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
+            CreateSessionResponse.Set(std::move(ev));
+        } else {
+            CreateSessionResponse.Error("FailedToCreateSession");
+            NYdb::NIssue::TIssue issue;
+            issue.SetMessage("Failed to create session");
+            issue.SetCode(ev->Get()->Record.GetYdbStatus(), NYdb::NIssue::ESeverity::Error);
+            NJson::TJsonValue json;
+            TString message;
+            MakeJsonErrorReply(json, message, NYdb::TStatus(NYdb::EStatus(ev->Get()->Record.GetYdbStatus()), NYdb::NIssue::TIssues{issue}));
+            return ReplyWithJsonAndPassAway(json, message);
+        }
+
+        SessionId = CreateSessionResponse->Record.GetResponse().GetSessionId();
+        PingSession();
+
+        if (Streaming) {
+            NJson::TJsonValue json;
+            json["version"] = Viewer->GetCapabilityVersion("/viewer/query");
+            NJson::TJsonValue& jsonMeta = json["meta"];
+            jsonMeta["event"] = "SessionCreated";
+            jsonMeta["session_id"] = SessionId;
+            jsonMeta["query_id"] = QueryId;
+            jsonMeta["node_id"] = SelfId().NodeId();
+            StreamJsonResponse(json);
+        } else {
+            MakeQueryRequest();
+        }
     }
 
 private:
@@ -592,6 +693,28 @@ private:
             NYql::TIssues issues;
             NYql::IssuesFromMessage(ev->Get()->Record.GetResponse().GetQueryIssues(), issues);
             MakeErrorReply(jsonResponse, NYdb::TStatus(NYdb::EStatus(ev->Get()->Record.GetYdbStatus()), NYdb::NAdapters::ToSdkIssues(std::move(issues))));
+        }
+        ReplyWithJsonAndPassAway(jsonResponse);
+    }
+
+    void HandleReply(NKqp::TEvKqp::TEvScriptResponse::TPtr& ev) {
+        NJson::TJsonValue jsonResponse;
+        if (Streaming) {
+            NJson::TJsonValue& jsonMeta = jsonResponse["meta"];
+            jsonMeta["event"] = "ScriptResponse";
+        } else {
+            jsonResponse["version"] = Viewer->GetCapabilityVersion("/viewer/query");
+        }
+        if (ev->Get()->Status == Ydb::StatusIds::SUCCESS) {
+            ScriptResponse.Set(std::move(ev));
+            jsonResponse["status"] = Ydb::StatusIds_StatusCode_Name(ScriptResponse->Status);
+            jsonResponse["operation_id"] = ScriptResponse->OperationId;
+            jsonResponse["execution_id"] = ScriptResponse->ExecutionId;
+            jsonResponse["exec_status"] = Ydb::Query::ExecStatus_Name(ScriptResponse->ExecStatus);
+            jsonResponse["exec_mode"] = Ydb::Query::ExecMode_Name(ScriptResponse->ExecMode);
+        } else {
+            ScriptResponse.Error("QueryError");
+            MakeErrorReply(jsonResponse, NYdb::TStatus(NYdb::EStatus(ev->Get()->Status), NYdb::NAdapters::ToSdkIssues(std::move(ev->Get()->Issues))));
         }
         ReplyWithJsonAndPassAway(jsonResponse);
     }

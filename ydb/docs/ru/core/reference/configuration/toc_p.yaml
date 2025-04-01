@@ -2,7 +2,7 @@ items:
 - name: auth_config
   href: auth_config.md
 - name: client_certificate_authorization
-  href: node-authentication.md
+  href: client_certificate_authorization.md
 - name: security_config
   href: security_config.md
 - name: tls

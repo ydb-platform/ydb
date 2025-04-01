@@ -210,6 +210,22 @@ bool TPartitionWorkZone::PositionInHead(ui64 offset, ui32 partNo) const
     return Head.Offset < offset || ((Head.Offset == offset) && (Head.PartNo < partNo));
 }
 
+bool TPartitionWorkZone::IsEmpty() const
+{
+    return DataKeysBody.empty() && HeadKeys.empty();
+}
+
+const TDataKey* TPartitionWorkZone::GetLastKey() const
+{
+    const TDataKey* lastKey = nullptr;
+    if (!HeadKeys.empty()) {
+        lastKey = &HeadKeys.back();
+    } else if (!DataKeysBody.empty()) {
+        lastKey = &DataKeysBody.back();
+    }
+    return lastKey;
+}
+
 void TPartitionWorkZone::NewPartitionedBlob(const TPartitionId& partitionId,
                                             const ui64 offset,
                                             const TString& sourceId,

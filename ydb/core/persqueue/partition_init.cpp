@@ -667,8 +667,8 @@ TInitDataStep::TInitDataStep(TInitializer* initializer)
 void TInitDataStep::Execute(const TActorContext &ctx) {
     TVector<TString> keys;
     //form head request
-    for (auto& p : Partition()->WorkZone.HeadKeys) {
-        keys.push_back({p.Key.Data(), p.Key.Size()});
+    for (const auto& p : Partition()->WorkZone.HeadKeys) {
+        keys.emplace_back(p.Key.Data(), p.Key.Size());
     }
     Y_ABORT_UNLESS(keys.size() < Partition()->TotalMaxCount);
     if (keys.empty()) {
@@ -769,17 +769,12 @@ TInitEndWriteTimestampStep::TInitEndWriteTimestampStep(TInitializer* initializer
 
 void TInitEndWriteTimestampStep::Execute(const TActorContext &ctx) {
     if (Partition()->EndWriteTimestamp != TInstant::Zero() ||
-        (Partition()->WorkZone.HeadKeys.empty() && Partition()->WorkZone.DataKeysBody.empty())) {
+        Partition()->WorkZone.IsEmpty()) {
         PQ_LOG_I("Initializing EndWriteTimestamp skipped because already initialized.");
         return Done(ctx);
     }
 
-    TDataKey* lastKey = nullptr;
-    if (!Partition()->WorkZone.HeadKeys.empty()) {
-        lastKey = &Partition()->WorkZone.HeadKeys.back();
-    } else if (!Partition()->WorkZone.DataKeysBody.empty()) {
-        lastKey = &Partition()->WorkZone.DataKeysBody.back();
-    }
+    const TDataKey* lastKey = Partition()->WorkZone.GetLastKey();
 
     if (lastKey) {
         Partition()->EndWriteTimestamp = lastKey->Timestamp;

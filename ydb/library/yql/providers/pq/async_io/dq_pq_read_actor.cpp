@@ -272,8 +272,19 @@ public:
     }
 
     TString GetSessionId() const override {
-        // FIXME
-        return /*ReadSession ? TString{ReadSession->GetSessionId()} : */TString{"empty"};
+        if (!Clusters.empty()) {
+            TStringBuilder str;
+            for (const auto& clusterState : Clusters) {
+                if (auto readSession = clusterState.ReadSession)
+                    str << readSession->GetSessionId();
+                else
+                    str << TString{"empty"};
+                str << ',';
+            }
+            str.pop_back();
+            return str;
+        }
+        return TString{"empty"};
     }
 
     TString GetSessionId(ui32 index) const {
@@ -490,27 +501,26 @@ private:
             if (Clusters.empty()) {
                 StartClusterDiscovery();
             }
-            for (auto& clusterState: Clusters) {
-            // FIXME reindent
-            if (clusterState.PartitionCount == 0) {
-                continue;
-            }
-            auto events = GetReadSession(clusterState).GetEvents(false, std::nullopt, static_cast<size_t>(freeSpace));
-            if (!events.empty()) {
-                recheckBatch = true;
-            }
-
-            ui32 batchItemsEstimatedCount = 0;
-            for (auto& event : events) {
-                if (const auto* val = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&event)) {
-                    batchItemsEstimatedCount += val->GetMessages().size();
+            for (auto& clusterState : Clusters) {
+                if (clusterState.PartitionCount == 0) {
+                    continue;
                 }
-            }
+                auto events = GetReadSession(clusterState).GetEvents(false, std::nullopt, static_cast<size_t>(freeSpace));
+                if (!events.empty()) {
+                    recheckBatch = true;
+                }
 
-            TTopicEventProcessor topicEventProcessor {*this, batchItemsEstimatedCount, LogPrefix, TString(clusterState.Info.Name), clusterState.Index };
-            for (auto& event : events) {
-                std::visit(topicEventProcessor, event);
-            }
+                ui32 batchItemsEstimatedCount = 0;
+                for (auto& event : events) {
+                    if (const auto* val = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&event)) {
+                        batchItemsEstimatedCount += val->GetMessages().size();
+                    }
+                }
+
+                TTopicEventProcessor topicEventProcessor {*this, batchItemsEstimatedCount, LogPrefix, TString(clusterState.Info.Name), clusterState.Index };
+                for (auto& event : events) {
+                    std::visit(topicEventProcessor, event);
+                }
             }
         }
 

@@ -1662,7 +1662,7 @@ bool TPartition::UpdateCounters(const TActorContext& ctx, bool force) {
         PartitionCountersLabeled->GetCounters()[METRIC_MIN_SID_LIFETIME].Set(lifetimeNow.MilliSeconds());
     }
 
-    const ui64 headGapSize = WorkZone.DataKeysBody.empty() ? 0 : (WorkZone.Head.Offset - (WorkZone.DataKeysBody.back().Key.GetOffset() + WorkZone.DataKeysBody.back().Key.GetCount()));
+    const ui64 headGapSize = WorkZone.GetHeadGapSize();
     const ui64 gapSize = GapSize + headGapSize;
     if (gapSize != PartitionCountersLabeled->GetCounters()[METRIC_GAPS_SIZE].Get()) {
         haveChanges = true;

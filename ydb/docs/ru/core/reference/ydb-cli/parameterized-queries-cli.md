@@ -1,8 +1,7 @@
 
 {% note warning %}
 
-Данная страница устарела.
-Актуальная версия: [Выполнение параметризованных запросов](parameterized-query-execution.md).
+Данная страница устарела. Актуальная версия: [{#T}](parameterized-query-execution.md).
 
 {% endnote %}
 

@@ -1,8 +1,7 @@
 
 {% note warning %}
 
-This page is outdated.
-Please refer to [Running parametrized queries](parameterized-query-execution.md) for up-to-date information.
+This page is outdated. Please refer to [{#T}](parameterized-query-execution.md) for up-to-date information.
 
 {% endnote %}
 

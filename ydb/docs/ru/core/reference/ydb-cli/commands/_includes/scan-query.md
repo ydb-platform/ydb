@@ -1,3 +1,4 @@
+# Выполнение скан запросов
 
 {% note warning %}
 
@@ -5,8 +6,6 @@
 Рекомендуемый инструмент для выполнения запросов в {{ ydb-short-name }} CLI -- это команда [{{ ydb-cli }} sql](../../sql.md).
 
 {% endnote %}
-
-# Выполнение скан запросов
 
 Запуск запроса через [Scan Queries](../../../../concepts/scan_query.md) посредством {{ ydb-short-name }} CLI осуществляется добавлением флага `-t scan` в команду `{{ ydb-cli }} table query execute`.
 

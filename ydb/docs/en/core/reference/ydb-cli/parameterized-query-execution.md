@@ -1,12 +1,20 @@
-# Running parametrized queries
+# Running parameterized queries
 
 ## Overview
 
-{{ ydb-short-name }} CLI can execute [parameterized queries](https://en.wikipedia.org/wiki/Prepared_statement). To use parameters you need to declare them using [the YQL `DECLARE` command](../../yql/reference/syntax/declare.md) in your query text.
+{{ ydb-short-name }} CLI can execute parameterized queries. To use parameters, you need to declare them using [the YQL `DECLARE` command](../../yql/reference/syntax/declare.md) in your query text.
 
 The preferred way to run parameterized queries in {{ ydb-short-name }} CLI is to use the [`ydb sql`](sql.md) command.
 
-Parameter values can be set on the command line, uploaded from [JSON](https://en.wikipedia.org/wiki/JSON) files, and read from `stdin` in binary or [JSON](https://en.wikipedia.org/wiki/JSON) format. While reading from `stdin` or a file, you can stream multiple parameter values triggering multiple query executions with batching options.
+Parameter values can be set via the command line arguments, uploaded from [JSON](https://en.wikipedia.org/wiki/JSON) files, and read from `stdin` in binary or JSON format. Binary data can be encoded as  While reading from `stdin` or a file, you can stream multiple parameter values, triggering multiple query executions with batching options.
+
+## Why Use Parameterized Queries?
+
+Using parameterized queries offers several key advantages:
+
+* **Enhanced Performance:** Parameterized queries significantly boost performance when executing multiple similar queries that differ only in input parameters. This is achieved through the use of [prepared statements](https://en.wikipedia.org/wiki/Prepared_statement). The query is compiled once and then cached on the server. Subsequent requests with the same query text bypass the compilation phase, allowing for immediate execution.
+
+* **Protection Against SQL Injection:** Another critical benefit of using parameterized queries is the protection they offer against [SQL injection](https://en.wikipedia.org/wiki/SQL_injection) attacks. This security feature ensures that the input parameters are appropriately handled, mitigating the risk of malicious code execution.
 
 ## Executing a single query {#one-request}
 

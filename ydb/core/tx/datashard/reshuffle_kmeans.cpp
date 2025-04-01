@@ -59,7 +59,7 @@ protected:
     ui32 RetryCount = 0;
 
     TActorId Uploader;
-    TIndexBuildScanSettings ScanSettings;
+    const TIndexBuildScanSettings ScanSettings;
 
     TTags UploadScan;
 
@@ -91,6 +91,7 @@ public:
         , BuildId{request.GetId()}
         , Clusters{request.GetClusters().begin(), request.GetClusters().end()}
         , TargetTable{request.GetPostingName()}
+        , ScanSettings(request.GetScanSettings())
         , ResponseActorId{responseActorId}
         , Response{std::move(response)}
     {

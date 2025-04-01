@@ -139,7 +139,7 @@ protected:
     ui32 RetryCount = 0;
 
     TActorId Uploader;
-    TIndexBuildScanSettings ScanSettings;
+    const TIndexBuildScanSettings ScanSettings;
 
     NTable::TTag KMeansScan;
     TTags UploadScan;
@@ -172,6 +172,7 @@ public:
         , Rng{request.GetSeed()}
         , TargetTable{request.GetLevelName()}
         , NextTable{request.GetPostingName()}
+        , ScanSettings(request.GetScanSettings())
         , Result{std::move(result)}
     {
         const auto& embedding = request.GetEmbeddingColumn();

@@ -87,7 +87,7 @@ protected:
     ui32 RetryCount = 0;
 
     TActorId Uploader;
-    TIndexBuildScanSettings ScanSettings;
+    const TIndexBuildScanSettings ScanSettings;
 
     NTable::TTag EmbeddingTag;
     TTags ScanTags;
@@ -132,6 +132,7 @@ public:
         , LevelTable{request.GetLevelName()}
         , PostingTable{request.GetPostingName()}
         , PrefixTable{request.GetPrefixName()}
+        , ScanSettings(request.GetScanSettings())
         , ResponseActorId{responseActorId}
         , Response{std::move(response)}
         , PrefixColumns{request.GetPrefixColumns()}

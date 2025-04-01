@@ -1493,8 +1493,6 @@ message TEvSampleKRequest {
 
     optional uint64 SeqNoGeneration = 11;
     optional uint64 SeqNoRound = 12;
-
-    optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 13;
 }
 
 message TEvSampleKResponse {

@@ -2,10 +2,12 @@ PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 ENV(MOTO_SERVER_PATH="contrib/python/moto/bin/moto_server")
 ENV(YDB_ADDITIONAL_LOG_CONFIGS="TX_TIERING:DEBUG")
+ENV(YDB_CLI_BINARY="ydb/apps/ydb/ydb")
 
+FORK_SUBTESTS()
+SPLIT_FACTOR(19)
 
-SIZE(LARGE)
-TAG(ya:fat)
+SIZE(MEDIUM)
 
 TEST_SRCS(
     test_S3.py
@@ -13,6 +15,7 @@ TEST_SRCS(
 )
 
 PEERDIR(
+    ydb/tests/datashard/lib
     ydb/tests/stress/oltp_workload/workload
     ydb/tests/sql/lib
     contrib/python/moto

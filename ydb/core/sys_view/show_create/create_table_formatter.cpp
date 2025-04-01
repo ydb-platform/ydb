@@ -1087,16 +1087,17 @@ void TCreateTableFormatter::Format(const NKikimrColumnShardColumnDefaults::TColu
         Stream << TString(str.AsStringRef());
     } else if (scalar.HasTimestamp()) {
         ui64 value = scalar.GetTimestamp().GetValue();
-        switch (scalar.GetTimestamp().GetUnit()) {
-            case 0:
+        arrow::TimeUnit::type unit = arrow::TimeUnit::type(scalar.GetTimestamp().GetUnit());
+        switch (unit) {
+            case arrow::TimeUnit::SECOND:
                 value *= 1000000;
                 break;
-            case 1:
+            case arrow::TimeUnit::MILLI:
                 value *= 1000;
                 break;
-            case 2:
+            case arrow::TimeUnit::MICRO:
                 break;
-            case 3:
+            case arrow::TimeUnit::NANO:
                 value /= 1000;
                 break;
         }

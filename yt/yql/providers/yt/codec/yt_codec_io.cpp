@@ -651,7 +651,7 @@ struct TMkqlReaderImpl::TDecoder {
         KeySwitch_ = false;
     }
 
-    void Reset(bool hasRangeIndices, ui32 tableIndex, bool ignoreStreamTableIndex) {
+    virtual void Reset(bool hasRangeIndices, ui32 tableIndex, bool ignoreStreamTableIndex) {
         HasRangeIndices_ = hasRangeIndices;
         TableIndex_ = tableIndex;
         AtStart_ = true;
@@ -1463,7 +1463,7 @@ public:
         , Pool_(pool)
     {
         InputStream_ = std::make_unique<TInputBufArrowInputStream>(buf, pool);
-        ResetColumnConverters();
+        HandleTableSwitch();
 
         HandlesSysColumns_ = true;
     }
@@ -1482,14 +1482,19 @@ public:
             YQL_ENSURE(!Chunks_.empty());
         }
 
+        bool isWideBlock = (Specs_.InputBlockRepresentation_ == TMkqlIOSpecs::EBlockRepresentation::WideBlock);
+
         auto& decoder = *Specs_.Inputs[TableIndex_];
-        Row_ = SpecsCache_.NewRow(TableIndex_, items, true);
+        Row_ = SpecsCache_.NewRow(TableIndex_, items, isWideBlock);
 
         auto& [chunkRowIndex, chunkLen, chunk] = Chunks_.front();
         for (size_t i = 0; i < decoder.StructSize; i++) {
+            if (i == decoder.FillBlockStructSize) {
+                continue;
+            }
             items[i] = SpecsCache_.GetHolderFactory().CreateArrowBlock(std::move(chunk[i]));
         }
-        items[decoder.StructSize] = SpecsCache_.GetHolderFactory().CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(chunkLen)));
+        items[BlockSizeStructIndex_] = SpecsCache_.GetHolderFactory().CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(chunkLen)));
         RowIndex_ = chunkRowIndex;
 
         Chunks_.pop_front();
@@ -1505,17 +1510,17 @@ public:
             }
             StreamReader_ = ARROW_RESULT(streamReaderResult);
 
-            auto oldTableIndex = TableIndex_;
             if (!IgnoreStreamTableIndex) {
+                auto oldTableIndex = TableIndex_;
                 auto tableIdKey = StreamReader_->schema()->metadata()->Get("TableId");
                 if (tableIdKey.ok()) {
                     TableIndex_ = std::stoi(tableIdKey.ValueOrDie());
                     YQL_ENSURE(TableIndex_ < Specs_.Inputs.size());
                 }
-            }
 
-            if (TableIndex_ != oldTableIndex) {
-                ResetColumnConverters();
+                if (TableIndex_ != oldTableIndex) {
+                    HandleTableSwitch();
+                }
             }
         }
 
@@ -1523,6 +1528,8 @@ public:
         ARROW_OK(StreamReader_->ReadNext(&batch));
         if (!batch) {
             if (InputStream_->EOSReached()) {
+                // Prepare for possible table switch
+                StreamReader_.reset();
                 return false;
             }
 
@@ -1565,6 +1572,9 @@ public:
                     }
                 } else if (decoder.FillSysColumnIndex == inputFields[i].StructIndex) {
                     convertedColumn = ARROW_RESULT(arrow::MakeArrayFromScalar(arrow::UInt32Scalar(TableIndex_), batch->num_rows()));
+                } else if (decoder.FillBlockStructSize == inputFields[i].StructIndex) {
+                    // Actual value will be specified later
+                    convertedColumn = arrow::Datum(static_cast<uint64_t>(0));
                 } else if (inputFields[i].StructIndex == Max<ui32>()) {
                     // Input field won't appear in the result
                     continue;
@@ -1593,14 +1603,22 @@ public:
         return true;
     }
 
-    void ResetColumnConverters() {
-        auto& fields = Specs_.Inputs[TableIndex_]->FieldsVec;
+    void HandleTableSwitch() {
+        auto& decoder = Specs_.Inputs[TableIndex_];
+
         ColumnConverters_.clear();
-        ColumnConverters_.reserve(fields.size());
-        for (auto& field: fields) {
+        ColumnConverters_.reserve(decoder->FieldsVec.size());
+        for (auto& field: decoder->FieldsVec) {
             YQL_ENSURE(!field.Type->IsPg());
             ColumnConverters_.emplace_back(MakeYtColumnConverter(field.Type, nullptr, *Pool_, Specs_.Inputs[TableIndex_]->NativeYtTypeFlags));
         }
+
+        BlockSizeStructIndex_ = GetBlockSizeStructIndex(Specs_, TableIndex_);
+    }
+
+    void Reset(bool hasRangeIndices, ui32 tableIndex, bool ignoreStreamTableIndex) override {
+        TDecoder::Reset(hasRangeIndices, tableIndex, ignoreStreamTableIndex);
+        HandleTableSwitch();
     }
 
 private:
@@ -1609,6 +1627,8 @@ private:
     std::vector<std::unique_ptr<IYtColumnConverter>> ColumnConverters_;
 
     TDeque<std::tuple<ui64, ui64, std::vector<arrow::Datum>>> Chunks_;
+
+    size_t BlockSizeStructIndex_ = 0;
 
     const TMkqlIOSpecs& Specs_;
     arrow::MemoryPool* Pool_;
@@ -2515,6 +2535,27 @@ void DecodeToYson(TMkqlIOCache& specsCache, size_t tableIndex, const NUdf::TUnbo
         items[i] = NCommon::WriteYsonValue(value.GetElement(decoder.FieldsVec[i].StructIndex), decoder.FieldsVec[i].Type, nullptr, NYT::NYson::EYsonFormat::Binary);
     }
     WriteRowItems(specsCache, tableIndex, items, {}, ysonOut);
+}
+
+ui32 GetBlockSizeStructIndex(const TMkqlIOSpecs& specs, size_t tableIndex) {
+    auto& decoder = specs.Inputs[tableIndex];
+
+    ui32 blockSizeStructIndex = 0;
+    switch (specs.InputBlockRepresentation_) {
+    case TMkqlIOSpecs::EBlockRepresentation::WideBlock:
+        blockSizeStructIndex = decoder->StructSize;
+        break;
+
+    case TMkqlIOSpecs::EBlockRepresentation::BlockStruct:
+        YQL_ENSURE(decoder->FillBlockStructSize.Defined());
+        blockSizeStructIndex = *decoder->FillBlockStructSize;
+        break;
+
+    default:
+        YQL_ENSURE(false, "unknown block representation");
+    }
+
+    return blockSizeStructIndex;
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////

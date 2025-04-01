@@ -12983,6 +12983,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["NarrowMultiMap"] = &NarrowMultiMapWrapper;
 
         Functions["WideFromBlocks"] = &WideFromBlocksWrapper;
+        Functions["ListFromBlocks"] = &ListFromBlocksWrapper;
         Functions["WideSkipBlocks"] = &WideSkipTakeBlocksWrapper;
         Functions["WideTakeBlocks"] = &WideSkipTakeBlocksWrapper;
         Functions["BlockCompress"] = &BlockCompressWrapper;
@@ -13018,6 +13019,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
 
         ExtFunctions["AsScalar"] = &AsScalarWrapper;
         ExtFunctions["WideToBlocks"] = &WideToBlocksWrapper;
+        ExtFunctions["ListToBlocks"] = &ListToBlocksWrapper;
         ExtFunctions["BlockCombineAll"] = &BlockCombineAllWrapper;
         ExtFunctions["BlockCombineHashed"] = &BlockCombineHashedWrapper;
         ExtFunctions["BlockMergeFinalizeHashed"] = &BlockMergeFinalizeHashedWrapper;

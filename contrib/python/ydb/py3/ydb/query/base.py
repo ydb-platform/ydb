@@ -1,6 +1,8 @@
 import abc
+import asyncio
 import enum
 import functools
+from collections import defaultdict
 
 import typing
 from typing import (
@@ -16,6 +18,10 @@ from .. import convert
 from .. import issues
 from .. import _utilities
 from .. import _apis
+
+from ydb._topic_common.common import CallFromSyncToAsync, _get_shared_event_loop
+from ydb._grpc.grpcwrapper.common_utils import to_thread
+
 
 if typing.TYPE_CHECKING:
     from .transaction import BaseQueryTxContext
@@ -196,3 +202,64 @@ def wrap_execute_query_response(
         return convert.ResultSet.from_message(response_pb.result_set, settings)
 
     return None
+
+
+class TxEvent(enum.Enum):
+    BEFORE_COMMIT = "BEFORE_COMMIT"
+    AFTER_COMMIT = "AFTER_COMMIT"
+    BEFORE_ROLLBACK = "BEFORE_ROLLBACK"
+    AFTER_ROLLBACK = "AFTER_ROLLBACK"
+
+
+class CallbackHandlerMode(enum.Enum):
+    SYNC = "SYNC"
+    ASYNC = "ASYNC"
+
+
+def _get_sync_callback(method: typing.Callable, loop: Optional[asyncio.AbstractEventLoop]):
+    if asyncio.iscoroutinefunction(method):
+        if loop is None:
+            loop = _get_shared_event_loop()
+
+        def async_to_sync_callback(*args, **kwargs):
+            caller = CallFromSyncToAsync(loop)
+            return caller.safe_call_with_result(method(*args, **kwargs), 10)
+
+        return async_to_sync_callback
+    return method
+
+
+def _get_async_callback(method: typing.Callable):
+    if asyncio.iscoroutinefunction(method):
+        return method
+
+    async def sync_to_async_callback(*args, **kwargs):
+        return await to_thread(method, *args, **kwargs, executor=None)
+
+    return sync_to_async_callback
+
+
+class CallbackHandler:
+    def _init_callback_handler(self, mode: CallbackHandlerMode) -> None:
+        self._callbacks = defaultdict(list)
+        self._callback_mode = mode
+
+    def _execute_callbacks_sync(self, event_name: str, *args, **kwargs) -> None:
+        for callback in self._callbacks[event_name]:
+            callback(self, *args, **kwargs)
+
+    async def _execute_callbacks_async(self, event_name: str, *args, **kwargs) -> None:
+        tasks = [asyncio.create_task(callback(self, *args, **kwargs)) for callback in self._callbacks[event_name]]
+        if not tasks:
+            return
+        await asyncio.gather(*tasks)
+
+    def _prepare_callback(
+        self, callback: typing.Callable, loop: Optional[asyncio.AbstractEventLoop]
+    ) -> typing.Callable:
+        if self._callback_mode == CallbackHandlerMode.SYNC:
+            return _get_sync_callback(callback, loop)
+        return _get_async_callback(callback)
+
+    def _add_callback(self, event_name: str, callback: typing.Callable, loop: Optional[asyncio.AbstractEventLoop]):
+        self._callbacks[event_name].append(self._prepare_callback(callback, loop))

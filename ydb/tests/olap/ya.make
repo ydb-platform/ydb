@@ -14,7 +14,6 @@ PY3TEST()
     ELSE()
         SIZE(MEDIUM)
     ENDIF()
-    REQUIREMENTS(ram:25)
 
     DEPENDS(
         ydb/apps/ydb

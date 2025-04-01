@@ -1,16 +1,11 @@
-import argparse
 import os
-import ydb
 import time
-import boto3
 import logging
-import time
 
 import yatest.common
 
 from ydb.tests.olap.common.s3_client import S3Mock, S3Client
 from ydb.tests.olap.common.ydb_client import YdbClient
-from ydb.tests.olap.common.column_table_helper import ColumnTableHelper
 from ydb.tests.olap.lib.utils import get_external_param
 
 from ydb.tests.library.harness.util import LogLevels
@@ -20,6 +15,7 @@ from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 
 logger = logging.getLogger(__name__)
 
+
 def wait_for(condition_func, timeout_seconds):
     t0 = time.time()
     while time.time() - t0 < timeout_seconds:
@@ -27,6 +23,7 @@ def wait_for(condition_func, timeout_seconds):
             return True
         time.sleep(1)
     return False
+
 
 def test_delete_s3_ttl():
     endpoint = get_external_param("endpoint", None)
@@ -78,7 +75,6 @@ def test_delete_s3_ttl():
         s3_mock = S3Mock(yatest.common.binary_path(os.environ["MOTO_SERVER_PATH"]))
         s3_mock.start()
 
-        s3_pid = s3_mock.s3_pid
         s3_endpoint = s3_mock.endpoint
         s3_client = S3Client(endpoint=s3_endpoint)
     else:
@@ -95,7 +91,6 @@ def test_delete_s3_ttl():
     s3_client.create_bucket("cold")
     s3_client.create_bucket("frozen")
 
-
     ''' Implements https://github.com/ydb-platform/ydb/issues/13467 '''
     test_name = "delete_tiering"
     test_dir = f"{ydb_client.database}/{path_prefix}/{test_name}"
@@ -104,7 +99,7 @@ def test_delete_s3_ttl():
     access_key_id_secret_name = f"{secret_prefix}_key_id"
     access_key_secret_secret_name = f"{secret_prefix}_key_secret"
     cold_eds_path = f"{test_dir}/cold"
-    frozen_eds_path =  f"{test_dir}/frozen"
+    frozen_eds_path = f"{test_dir}/frozen"
     days_to_cool = 1000
     days_to_froze = 3000
 
@@ -121,15 +116,14 @@ def test_delete_s3_ttl():
         f"DROP OBJECT {access_key_id_secret_name} (TYPE SECRET)",
         f"DROP OBJECT {access_key_secret_secret_name} (TYPE SECRET)"
     ]
-    
+
     for s in delete_resource_statements:
         try:
             print(s)
             ydb_client.query(s)
             print("OK")
-        except:
+        except Exception:
             print("FAIL")
-
 
     ydb_client.query(f"""
         CREATE TABLE `{table_path}` (
@@ -139,14 +133,10 @@ def test_delete_s3_ttl():
             PRIMARY KEY(ts),
         )
         WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT=2)
-        """
-    )
-
-#    table = ColumnTableHelper(ydb_client, table_path)
-#    table.set_fast_compaction()
+        """)
 
     ydb_client.query(f"CREATE OBJECT {access_key_id_secret_name} (TYPE SECRET) WITH value='{s3_client.key_id}'")
-    ydb_client.query(f"CREATE OBJECT {access_key_secret_secret_name} (TYPE SECRET) WITH value='{s3_client.key_secret}'") 
+    ydb_client.query(f"CREATE OBJECT {access_key_secret_secret_name} (TYPE SECRET) WITH value='{s3_client.key_secret}'")
 
     ydb_client.query(f"""
         CREATE EXTERNAL DATA SOURCE `{cold_eds_path}` WITH (
@@ -158,7 +148,6 @@ def test_delete_s3_ttl():
             AWS_REGION="{s3_client.region}"
         )
     """)
-
 
     ydb_client.query(f"""
         CREATE EXTERNAL DATA SOURCE `{frozen_eds_path}` WITH (
@@ -180,7 +169,6 @@ def test_delete_s3_ttl():
     def get_portion_count() -> int:
         return ydb_client.query(f"select count(*) as Rows from `{table_path}/.sys/primary_index_portion_stats`")[0].rows[0]["Rows"]
 
-
     cur_rows = 0
     while cur_rows < row_count:
         ydb_client.query("""
@@ -189,13 +177,13 @@ def test_delete_s3_ttl():
             $to_us = CAST(Timestamp('2030-01-01T00:00:00.000000Z') as Uint64);
             $dt = $to_us - $from_us;
             $k = ((1ul << 64) - 1) / CAST($dt - 1 as Double);
-            $rows= ListMap(ListFromRange(0, $row_count), ($i)->{ 
+            $rows= ListMap(ListFromRange(0, $row_count), ($i)->{
                 $us = CAST(RandomNumber($i) / $k as Uint64) + $from_us;
                 $ts = Unwrap(CAST($us as Timestamp));
                 return <|
                     ts: $ts,
                     s: 'some date:' || CAST($ts as String),
-                    val: $us 
+                    val: $us
                 |>;
             });
             upsert into `%s`
@@ -205,8 +193,8 @@ def test_delete_s3_ttl():
         print(f"{cur_rows} rows inserted in total, portions: {get_portion_count()}")
 
     def get_rows_by_tier() -> dict[str, int]:
-         results = ydb_client.query(f"select TierName, sum(Rows) as Rows from `{table_path}/.sys/primary_index_portion_stats` GROUP BY TierName")
-         return {row["TierName"]: row["Rows"] for result_set in results for row in result_set.rows}
+        results = ydb_client.query(f"select TierName, sum(Rows) as Rows from `{table_path}/.sys/primary_index_portion_stats` GROUP BY TierName")
+        return {row["TierName"]: row["Rows"] for result_set in results for row in result_set.rows}
 
     print(f"After inserting: {get_rows_by_tier()}, portions: {get_portion_count()}")
     print(f"Rows older than {days_to_cool} days: {get_row_count_by_date(days_to_cool)}")
@@ -220,8 +208,7 @@ def test_delete_s3_ttl():
         return row_count <= rows_by_tier["__DEFAULT"]
 
     if not wait_for(lambda: portions_actualized_in_sys(), 60):
-        raise Exception(f".sys reports incorrect data portions")
-
+        raise Exception(".sys reports incorrect data portions")
 
     t0 = time.time()
     stmt = f"""

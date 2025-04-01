@@ -351,6 +351,25 @@ private:
     std::vector<TString> OptValues;
 };
 
+class TCommandOptsParseResult: public NLastGetopt::TOptsParseResult {
+public:
+    TCommandOptsParseResult(const NLastGetopt::TOpts* options, int argc, const char* argv[])
+        : ThrowOnParseError(options->HasLongOption("throw-on-parse-error")) {
+        Init(options, argc, argv);
+    }
+
+    virtual ~TCommandOptsParseResult() = default;
+
+    void HandleError() const override {
+        if (ThrowOnParseError) {
+            throw;
+        }
+        NLastGetopt::TOptsParseResult::HandleError();
+    }
+private:
+    bool ThrowOnParseError;
+};
+
 class TOptionsParseResult {
     friend class TClientCommandOptions;
 
@@ -392,7 +411,7 @@ public:
 
 private:
     const TClientCommandOptions* ClientOptions = nullptr;
-    NLastGetopt::TOptsParseResult ParseFromCommandLineResult; // First parsing stage
+    TCommandOptsParseResult ParseFromCommandLineResult; // First parsing stage
     std::vector<TOptionParseResult> Opts;
     std::vector<size_t> AuthMethodOpts; // indexes
     TString ChosenAuthMethod;

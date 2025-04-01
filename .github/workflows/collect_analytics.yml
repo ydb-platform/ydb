@@ -1,7 +1,7 @@
 name: Collect-analytics-run
 on:
   schedule:
-    - cron: "0 1-23/2 * * *" #каждые 2 часа в 0 минут, начиная с 1:30 и заканчивая 23:30.
+    - cron: "0 1-23/2 * * *" #каждые 2 часа в 0 минут, начиная с 1:00 и заканчивая 23:00.
   workflow_dispatch:
     inputs:
       commit_sha:

@@ -5,5 +5,5 @@ items:
   href: client_certificate_authorization.md
 - name: security_config
   href: security_config.md
-- name: tls
+- name: Настройка TLS
   href: tls.md

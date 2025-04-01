@@ -1,4 +1,4 @@
-# Секция `security_config`
+# Секция конфигурации `security_config`
 
 В разделе `security_config` файла конфигурации {{ ydb-short-name }} задаются режимы [аутентификации](../../security/authentication.md), первичная конфигурация локальных [пользователей](../../concepts/glossary.md#access-user) и [групп](../../concepts/glossary.md#access-group) и их [права](../../concepts/glossary.md#access-right).
 
@@ -93,7 +93,7 @@ security_config:
 || Параметр | Описание ||
 || `default_users` | Какие [пользователи](../../concepts/glossary.md#access-user) должны быть созданы на кластере при первом запуске.
 
-Список пар логин-пароль. Первый пользователь становится суперпользователем.
+Список пар логин-пароль. Первый пользователь становится [суперпользователем](../../security/builtin-security.md#superuser).
 
 {% note info %}
 

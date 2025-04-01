@@ -92,7 +92,7 @@ See [{#T}](../../security/builtin-security.md) and the related [`domains_config`
 || Parameter | Description ||
 || `default_users` | The list of [users](../../concepts/glossary.md#access-user) to be created when the {{ ydb-short-name }} cluster starts for the first time.
 
-The list consists of login-password pairs. The first user in the list is a superuser.
+The list consists of login-password pairs. The first user in the list is a [superuser](../../security/builtin-security.md#superuser).
 
 {% note warning %}
 

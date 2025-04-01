@@ -8,7 +8,7 @@ SPLIT_FACTOR(36)
 SIZE(MEDIUM)
 
 TEST_SRCS(
-    test_TTL.py
+    test_ttl.py
 
 )
 

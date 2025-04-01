@@ -200,6 +200,34 @@ private:
             node.PrimitiveType = EPrimitiveType::Timestamp;
         } else if (content == "interval") {
             node.PrimitiveType = EPrimitiveType::Interval;
+        } else if (content == "date32") {
+            node.PrimitiveType = EPrimitiveType::Date32;
+        } else if (content == "datetime64") {
+            node.PrimitiveType = EPrimitiveType::Datetime64;
+        } else if (content == "timestamp64") {
+            node.PrimitiveType = EPrimitiveType::Timestamp64;
+        } else if (content == "interval64") {
+            node.PrimitiveType = EPrimitiveType::Interval64;
+        } else if (content == "tzdate") {
+            node.PrimitiveType = EPrimitiveType::TzDate;
+        } else if (content == "tzdatetime") {
+            node.PrimitiveType = EPrimitiveType::TzDatetime;
+        } else if (content == "tztimestamp") {
+            node.PrimitiveType = EPrimitiveType::TzTimestamp;
+        } else if (content == "uuid") {
+            node.PrimitiveType = EPrimitiveType::Uuid;
+        } else if (content == "jsondocument") {
+            node.PrimitiveType = EPrimitiveType::JsonDocument;
+        } else if (content == "dynumber") {
+            node.PrimitiveType = EPrimitiveType::DyNumber;
+        } else if (content == "emptylist") {
+            node.TypeKind = TTypeParser::ETypeKind::EmptyList;
+        } else if (content == "emptydict") {
+            node.TypeKind = TTypeParser::ETypeKind::EmptyDict;
+        } else if (content == "void") {
+            node.TypeKind = TTypeParser::ETypeKind::Void;
+        } else if (content == "null") {
+            node.TypeKind = TTypeParser::ETypeKind::Null;
         } else {
             return std::nullopt;
         }

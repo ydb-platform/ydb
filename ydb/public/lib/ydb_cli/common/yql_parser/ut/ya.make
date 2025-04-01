@@ -4,4 +4,8 @@ SRCS(
     yql_parser_ut.cpp
 )
 
+DATA(
+    arcadia/yql/essentials/data/language/types.json
+)
+
 END()

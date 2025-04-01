@@ -19,7 +19,7 @@ This section contains commands for working with the {{ ydb-short-name }} cluster
 {{ ydb-cli }} admin cluster config resolve -f dynconfig.yaml --label tenant=/Root/test --label canary=true
 # Generate the final configuration for dynconfig.yaml for labels from node 1003
 {{ ydb-cli }} admin cluster config resolve -f dynconfig.yaml --node-id 1003
-# Generate dynamic configuration file, based on static configuration on cluster
+# Generate a dynamic configuration file, based on a static configuration on the cluster
 {{ ydb-cli }} admin cluster config genereate
 # Initialize directory with configuration, using path to configuration file
 {{ ydb-cli }} admin node config init --config-dir <path_to_directory> --from-config <path_to_configuration_file>

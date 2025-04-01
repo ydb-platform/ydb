@@ -42,6 +42,69 @@ void TPartitionWorkZone::CheckHeadConsistency(const TVector<ui32>& compactLevelB
     }
 }
 
+ui64 TPartitionWorkZone::GetBodySizeBefore(TInstant expirationTimestamp) const
+{
+    ui64 size = 0;
+    for (size_t i = 1; i < DataKeysBody.size() && DataKeysBody[i].Timestamp < expirationTimestamp; ++i) {
+        size += DataKeysBody[i].Size;
+    }
+    return size;
+}
+
+TVector<TRequestedBlob> TPartitionWorkZone::GetBlobsFromBody(const ui64 startOffset,
+                                                             const ui16 partNo,
+                                                             const ui32 maxCount,
+                                                             const ui32 maxSize,
+                                                             ui32& count,
+                                                             ui32& size,
+                                                             ui64 lastOffset,
+                                                             TBlobKeyTokens* blobKeyTokens) const
+{
+    TVector<TRequestedBlob> blobs;
+    if (!DataKeysBody.empty() && PositionInBody(startOffset, partNo)) { //will read smth from body
+        auto it = std::upper_bound(DataKeysBody.begin(), DataKeysBody.end(), std::make_pair(startOffset, partNo),
+            [](const std::pair<ui64, ui16>& offsetAndPartNo, const TDataKey& p) { return offsetAndPartNo.first < p.Key.GetOffset() || offsetAndPartNo.first == p.Key.GetOffset() && offsetAndPartNo.second < p.Key.GetPartNo();});
+        if (it == DataKeysBody.begin()) //could be true if data is deleted or gaps are created
+            return blobs;
+        Y_ABORT_UNLESS(it != DataKeysBody.begin()); //always greater, startoffset can't be less that StartOffset
+        Y_ABORT_UNLESS(it == DataKeysBody.end() || it->Key.GetOffset() > startOffset || it->Key.GetOffset() == startOffset && it->Key.GetPartNo() > partNo);
+        --it;
+        Y_ABORT_UNLESS(it->Key.GetOffset() < startOffset || (it->Key.GetOffset() == startOffset && it->Key.GetPartNo() <= partNo));
+        ui32 cnt = 0;
+        ui32 sz = 0;
+        if (startOffset > it->Key.GetOffset() + it->Key.GetCount()) { //there is a gap
+            ++it;
+            if (it != DataKeysBody.end()) {
+                cnt = it->Key.GetCount();
+                sz = it->Size;
+            }
+        } else {
+            Y_ABORT_UNLESS(it->Key.GetCount() >= (startOffset - it->Key.GetOffset()));
+            cnt = it->Key.GetCount() - (startOffset - it->Key.GetOffset()); //don't count all elements from first blob
+            sz = (cnt == it->Key.GetCount() ? it->Size : 0); //not readed client blobs can be of ~8Mb, so don't count this size at all
+        }
+        while (it != DataKeysBody.end()
+               && (size < maxSize && count < maxCount || count == 0) //count== 0 grants that blob with offset from ReadFromTimestamp will be readed
+               && (lastOffset == 0 || it->Key.GetOffset() <= lastOffset)
+        ) {
+            size += sz;
+            count += cnt;
+            TRequestedBlob reqBlob(it->Key.GetOffset(), it->Key.GetPartNo(), it->Key.GetCount(),
+                                   it->Key.GetInternalPartsCount(), it->Size, TString(), it->Key);
+            blobs.push_back(reqBlob);
+
+            blobKeyTokens->Append(it->BlobKeyToken);
+
+            ++it;
+            if (it == DataKeysBody.end())
+                break;
+            sz = it->Size;
+            cnt = it->Key.GetCount();
+        }
+    }
+    return blobs;
+}
+
 bool TPartitionWorkZone::PositionInBody(ui64 offset, ui32 partNo) const
 {
     return offset < Head.Offset || ((Head.Offset == offset) && (partNo < Head.PartNo));

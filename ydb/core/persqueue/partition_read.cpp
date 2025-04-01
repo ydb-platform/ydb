@@ -610,52 +610,14 @@ TVector<TRequestedBlob> TPartition::GetReadRequestFromBody(
         TBlobKeyTokens* blobKeyTokens
 ) {
     Y_ABORT_UNLESS(rcount && rsize);
-    ui32& count = *rcount;
-    ui32& size = *rsize;
-    count = size = 0;
-    TVector<TRequestedBlob> blobs;
-    if (!WorkZone.DataKeysBody.empty() && WorkZone.PositionInBody(startOffset, partNo)) { //will read smth from body
-        auto it = std::upper_bound(WorkZone.DataKeysBody.begin(), WorkZone.DataKeysBody.end(), std::make_pair(startOffset, partNo),
-            [](const std::pair<ui64, ui16>& offsetAndPartNo, const TDataKey& p) { return offsetAndPartNo.first < p.Key.GetOffset() || offsetAndPartNo.first == p.Key.GetOffset() && offsetAndPartNo.second < p.Key.GetPartNo();});
-        if (it == WorkZone.DataKeysBody.begin()) //could be true if data is deleted or gaps are created
-            return blobs;
-        Y_ABORT_UNLESS(it != WorkZone.DataKeysBody.begin()); //always greater, startoffset can't be less that StartOffset
-        Y_ABORT_UNLESS(it == WorkZone.DataKeysBody.end() || it->Key.GetOffset() > startOffset || it->Key.GetOffset() == startOffset && it->Key.GetPartNo() > partNo);
-        --it;
-        Y_ABORT_UNLESS(it->Key.GetOffset() < startOffset || (it->Key.GetOffset() == startOffset && it->Key.GetPartNo() <= partNo));
-        ui32 cnt = 0;
-        ui32 sz = 0;
-        if (startOffset > it->Key.GetOffset() + it->Key.GetCount()) { //there is a gap
-            ++it;
-            if (it != WorkZone.DataKeysBody.end()) {
-                cnt = it->Key.GetCount();
-                sz = it->Size;
-            }
-        } else {
-            Y_ABORT_UNLESS(it->Key.GetCount() >= (startOffset - it->Key.GetOffset()));
-            cnt = it->Key.GetCount() - (startOffset - it->Key.GetOffset()); //don't count all elements from first blob
-            sz = (cnt == it->Key.GetCount() ? it->Size : 0); //not readed client blobs can be of ~8Mb, so don't count this size at all
-        }
-        while (it != WorkZone.DataKeysBody.end()
-               && (size < maxSize && count < maxCount || count == 0) //count== 0 grants that blob with offset from ReadFromTimestamp will be readed
-               && (lastOffset == 0 || it->Key.GetOffset() <= lastOffset)
-        ) {
-            size += sz;
-            count += cnt;
-            TRequestedBlob reqBlob(it->Key.GetOffset(), it->Key.GetPartNo(), it->Key.GetCount(),
-                                   it->Key.GetInternalPartsCount(), it->Size, TString(), it->Key);
-            blobs.push_back(reqBlob);
-
-            blobKeyTokens->Append(it->BlobKeyToken);
-
-            ++it;
-            if (it == WorkZone.DataKeysBody.end())
-                break;
-            sz = it->Size;
-            cnt = it->Key.GetCount();
-        }
-    }
-    return blobs;
+    return WorkZone.GetBlobsFromBody(startOffset,
+                                     partNo,
+                                     maxCount,
+                                     maxSize,
+                                     *rcount,
+                                     *rsize,
+                                     lastOffset,
+                                     blobKeyTokens);
 }
 
 TVector<TClientBlob> TPartition::GetReadRequestFromHead(

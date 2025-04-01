@@ -16,6 +16,16 @@ struct TPartitionWorkZone {
                               const ui32 totalMaxCount) const;
 
     ui64 GetSize() const { return BodySize + Head.PackedSize; }
+    ui64 GetBodySizeBefore(TInstant timestamp) const;
+
+    TVector<TRequestedBlob> GetBlobsFromBody(const ui64 startOffset,
+                                             const ui16 partNo,
+                                             const ui32 maxCount,
+                                             const ui32 maxSize,
+                                             ui32& count,
+                                             ui32& size,
+                                             ui64 lastOffset,
+                                             TBlobKeyTokens* blobKeyTokens) const;
 
     bool PositionInBody(ui64 offset, ui32 partNo) const;
     bool PositionInHead(ui64 offset, ui32 partNo) const;

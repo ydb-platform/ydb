@@ -9,7 +9,6 @@ SRCS(
     main.cpp
     spilling_mem.cpp
     utils.cpp
-    histogram.cpp
 )
 
 PEERDIR(

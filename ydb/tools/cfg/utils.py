@@ -243,25 +243,26 @@ def need_generate_bs_config(template_bs_config):
 
 
 def determine_yaml_parsing(yaml_template_file):
-    with open(yaml_template_file, 'r') as file:
-        content = file.read()
-    return 'selector_config' in content
+    ruamel_yaml = YAML()
+    with open(yaml_template_file, "r") as yaml_template:
+        data = ruamel_yaml.load(yaml_template)
+        return data.get("use_alternative_yaml_parser", False)
 
 
 def load_yaml(yaml_template_file):
-    global old_yaml_handler
-    old_yaml_handler = determine_yaml_parsing(yaml_template_file)
+    global use_alternative_yaml_handler
+    use_alternative_yaml_handler = determine_yaml_parsing(yaml_template_file)
 
-    if old_yaml_handler:
-        with open(yaml_template_file, "r") as yaml_template:
-            return pyyaml.safe_load(yaml_template)
-    else:
+    if use_alternative_yaml_handler:
         ruamel_yaml = YAML()
 
         with open(yaml_template_file, "r") as yaml_template:
             data = ruamel_yaml.load(yaml_template)
 
         return data
+    else:
+        with open(yaml_template_file, "r") as yaml_template:
+            return pyyaml.safe_load(yaml_template)
 
 
 def sort_dict_recursively(obj):
@@ -274,9 +275,7 @@ def sort_dict_recursively(obj):
 
 
 def dump_yaml(data):
-    if old_yaml_handler:
-        return pyyaml.safe_dump(data, sort_keys=True, default_flow_style=False, indent=2)
-    else:
+    if use_alternative_yaml_handler:
         yaml = YAML()
 
         yaml.default_flow_style = False
@@ -288,3 +287,5 @@ def dump_yaml(data):
         stream = StringIO()
         yaml.dump(sorted_data, stream)
         return stream.getvalue()
+    else:
+        return pyyaml.safe_dump(data, sort_keys=True, default_flow_style=False, indent=2)

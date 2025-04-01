@@ -171,6 +171,7 @@ void TYqlUserJob::DoImpl(const TFile& inHandle, const TVector<TFile>& outHandles
     }
     if (UseBlockInput) {
         MkqlIOSpecs->SetUseBlockInput();
+        MkqlIOSpecs->SetInputBlockRepresentation(TMkqlIOSpecs::EBlockRepresentation::WideBlock);
     }
     if (UseBlockOutput) {
         MkqlIOSpecs->SetUseBlockOutput();

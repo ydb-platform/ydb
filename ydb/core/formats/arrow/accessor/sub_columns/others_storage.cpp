@@ -253,7 +253,7 @@ std::shared_ptr<IChunkedArray> TOthersData::GetPathAccessor(const std::string_vi
         filter.Add(it.GetKeyIndex() == *idx);
     }
     auto recordsFiltered = Records;
-    AFL_VERIFY(filter.Apply(recordsFiltered));
+    filter.Apply(recordsFiltered);
     auto table = recordsFiltered->BuildTableVerified(std::set<std::string>({ "record_idx", "value" }));
 
     TSparsedArray::TBuilder builder(nullptr, arrow::utf8());

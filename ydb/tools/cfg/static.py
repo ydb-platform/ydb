@@ -8,7 +8,6 @@ import logging
 import subprocess
 import tempfile
 
-import yaml
 from ydb.core.fq.libs.config.protos.fq_config_pb2 import TConfig as TFederatedQueryConfig
 from ydb.core.protos import blobstorage_pdisk_config_pb2 as pdisk_config_pb
 from google.protobuf import json_format
@@ -398,7 +397,9 @@ class StaticConfigGenerator(object):
         all_configs["kikimr.cfg"] = self.kikimr_cfg
         all_configs["dynamic_server.cfg"] = self.dynamic_server_common_args
         normalized_config = self.get_normalized_config()
+
         all_configs["config.yaml"] = self.get_yaml_format_config(normalized_config)
+
         all_configs["dynconfig.yaml"] = self.get_yaml_format_dynconfig(normalized_config)
         return all_configs
 
@@ -614,7 +615,7 @@ class StaticConfigGenerator(object):
         return normalized_config
 
     def get_yaml_format_config(self, normalized_config):
-        return yaml.safe_dump(normalized_config, sort_keys=True, default_flow_style=False, indent=2)
+        return utils.dump_yaml(normalized_config)
 
     def get_yaml_format_dynconfig(self, normalized_config):
         cluster_uuid = normalized_config.get('nameservice_config', {}).get('cluster_uuid', '')
@@ -647,11 +648,18 @@ class StaticConfigGenerator(object):
                     }
                 }
             })
+
+            # copy all selector_config elements without validation (for now) to dynconfig
+            for elem in self.__cluster_details.selector_config:
+                dynconfig['selector_config'].append(elem)
+
         # emulate dumping ordered dict to yaml
         lines = []
         for key in ['metadata', 'config', 'allowed_labels', 'selector_config']:
             lines.append(key + ':')
-            substr = yaml.safe_dump(dynconfig[key], sort_keys=True, default_flow_style=False, indent=2)
+
+            substr = utils.dump_yaml(dynconfig[key])
+
             for line in substr.split('\n'):
                 lines.append('  ' + line)
         return '\n'.join(lines)

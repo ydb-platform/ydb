@@ -178,12 +178,6 @@ public:
     EScan PageFault() final
     {
         LOG_T("PageFault " << Debug());
-
-        if (!ReadBuf.IsEmpty() && WriteBuf.IsEmpty()) {
-            ReadBuf.FlushTo(WriteBuf);
-            Upload(false);
-        }
-
         return EScan::Feed;
     }
 

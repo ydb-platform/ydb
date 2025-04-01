@@ -16,8 +16,8 @@ Except when you import data from a public bucket, to connect, log in with an acc
 
 You need two parameters to authenticate with S3:
 
-- ID of the access key (access_key_id).
-- Secret access key (secret_access_key).
+- Access key ID (`--access-key`).
+- Secret access key (`--secret-key`).
 
 The YDB CLI takes values of these parameters from the following sources (listed in descending priority):
 
@@ -51,7 +51,7 @@ Below is an example of getting access keys for the [{{ yandex-cloud }} Object St
 
 1. [Install and set up]{% if lang == "ru" %}(https://cloud.yandex.ru/docs/cli/quickstart){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/docs/cli/quickstart){% endif %} the {{ yandex-cloud }} CLI.
 
-2. Use the following command to get the ID of your cloud folder (you'll need to add it to the below commands):
+2. Use the following command to get the ID of your cloud folder (`folder-id`) (you'll need to add it to the commands below):
 
    ```bash
    yc config list
@@ -69,7 +69,15 @@ Below is an example of getting access keys for the [{{ yandex-cloud }} Object St
    yc iam service-account create --name s3account
    ```
 
-   You can indicate any account name except `s3account`, or use your existing account name (be sure to replace it when copying the commands below).
+   You can indicate any account name instead of `s3account`, or use your existing account name (be sure to replace it when copying the commands below).
+
+   Account id will be printed on creation.
+
+   To get the id of an existing account, use this command:
+
+   ```bash
+   yc iam service-account get --name <account-name>
+   ```
 
 4. [Grant roles to your service account]{% if lang == "ru" %}(https://cloud.yandex.ru/docs/iam/operations/sa/assign-role-for-sa){% endif %}{% if lang == "en" %}(https://cloud.yandex.com/docs/iam/operations/sa/assign-role-for-sa){% endif %} according to your intended S3 access level by running the command:
 
@@ -114,7 +122,7 @@ Below is an example of getting access keys for the [{{ yandex-cloud }} Object St
 
    In this result:
 
-   - `access_key.key_id` is the access key ID
-   - `secret` is the secret access key
+   - `access_key.key_id` is the access key ID (`--access-key`).
+   - `secret` is the secret access key (`--secret-key`).
 
 {% include [s3_conn_procure_overlay.md](s3_conn_procure_overlay.md) %}

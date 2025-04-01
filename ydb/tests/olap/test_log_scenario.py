@@ -44,7 +44,7 @@ class YdbWorkloadLog:
             "--threads",
             str(threads),
             "--rows",
-            str(rows), 
+            str(rows),
             "--timestamp_deviation",
             "180"
         ]
@@ -112,9 +112,9 @@ class TestLogScenario(object):
             self.ydb_client.query(f"SELECT * FROM `{self.table_name}` WHERE timestamp < CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours})")
             # TODO: this queries somehow make db fallen. Investigate
             # self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` WHERE timestamp < CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours})")
-            # self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` WHERE " + 
-                                #   f"(timestamp >= CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours + 1})) AND " + 
-                                #   f"(timestamp <= CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours}))")
+            # self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` WHERE " +
+            #   f"(timestamp >= CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours + 1})) AND " +
+            #   f"(timestamp <= CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours}))")
 
     def check_insert(self, duration: int):
         prev_count: int = self.get_row_count()
@@ -135,7 +135,7 @@ class TestLogScenario(object):
         # ydb_workload.insert(seconds=60, threads=10, rows=1000, wait=True)
         ydb_workload.bulk_upsert(seconds=60, threads=10, rows=1000, wait=True)
         logging.info(f"Count rows after insert {self.get_row_count()} before wait")
-        
+
         assert self.get_row_count() != 0
 
         threads: list[TestThread] = []

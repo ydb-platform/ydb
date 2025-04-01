@@ -348,7 +348,10 @@ def create_mute_issues(all_tests, file_path):
 
     print("\n\n")
     print("\n".join(results))
-    if os.environ['GITHUB_OUTPUT']:
+    if 'GITHUB_OUTPUT' in os.environ:
+        if 'GITHUB_WORKSPACE' not in os.environ:
+            raise EnvironmentError("GITHUB_WORKSPACE environment variable is not set.")
+        
         file_path = os.path.join(os.environ['GITHUB_WORKSPACE'], "created_issues.txt")
         print(f"Writing results to {file_path}")
         with open(file_path, 'w') as f:

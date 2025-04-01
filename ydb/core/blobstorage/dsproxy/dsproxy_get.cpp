@@ -131,14 +131,12 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
             }
             DiskCounters[orderNumber].Sent++;
 
-            if (LWPROBE_ENABLED(DSProxyVGetSent) || Orbit.HasShuttles()) {
-                LWTRACK(
-                    DSProxyVGetSent, Orbit,
-                    vDiskId.ToStringWOGeneration(),
-                    orderNumber,
-                    vGets.size()
-                );
-            }
+            LWTRACK(
+                DSProxyVGetSent, Orbit,
+                vDiskId.ToStringWOGeneration(),
+                orderNumber,
+                vGets.size()
+            );
         }
         for (size_t i = 0; i < vPuts.size(); ++i) {
             if (RootCauseTrack.IsOn) {
@@ -153,17 +151,15 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
             }
             DiskCounters[orderNumber].Sent++;
 
-            if (LWPROBE_ENABLED(DSProxyVPutSent) || Orbit.HasShuttles()) {
-                LWTRACK(
-                    DSProxyVPutSent, Orbit,
-                    vPuts[i]->Type(),
-                    vDiskId.ToStringWOGeneration(),
-                    Info->GetFailDomainOrderNumber(vDiskId),
-                    1,
-                    vPuts[i]->GetBufferBytes(),
-                    true
-                );
-            }
+            LWTRACK(
+                DSProxyVPutSent, Orbit,
+                vPuts[i]->Type(),
+                vDiskId.ToStringWOGeneration(),
+                Info->GetFailDomainOrderNumber(vDiskId),
+                1,
+                vPuts[i]->GetBufferBytes(),
+                true
+            );
         }
         for (auto& ev : vGets) {
             const ui64 cookie = ev->Record.GetCookie();

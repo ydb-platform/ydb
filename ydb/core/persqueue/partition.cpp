@@ -322,10 +322,6 @@ TInstant TPartition::GetEndWriteTimestamp() const {
     return EndWriteTimestamp;
 }
 
-THead& TPartition::GetHead() {
-    return WorkZone.Head;
-}
-
 void TPartition::HandleWakeup(const TActorContext& ctx) {
     const auto now = ctx.Now();
 

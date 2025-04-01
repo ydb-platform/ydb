@@ -931,7 +931,7 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
                 << " blobs, size " << size << " count " << count << " last offset " << lastOffset << ", current partition end offset: " << EndOffset);
 
     if (blobs.empty() || blobs.back().Key == WorkZone.DataKeysBody.back().Key) { // read from head only when all blobs from body processed
-        ui64 insideHeadOffset{0};
+        ui64 insideHeadOffset = 0;
         info.Cached = GetReadRequestFromHead(
                 info.Offset, info.PartNo, info.Count, info.Size, info.ReadTimestampMs, &count,
                 &size, &insideHeadOffset, info.LastOffset

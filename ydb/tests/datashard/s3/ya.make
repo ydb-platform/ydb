@@ -10,7 +10,7 @@ SPLIT_FACTOR(19)
 SIZE(MEDIUM)
 
 TEST_SRCS(
-    test_S3.py
+    test_s3.py
 
 )
 

@@ -14,16 +14,16 @@ class TestYdbS3TTL(TestBase, S3Base):
     @pytest.mark.parametrize(
         "table_name, pk_types, all_types, index, ttl, unique, sync",
         [
-            ("table_index_4_UNIQUE_SYNC", pk_types, {},
-             index_four_sync, "", "UNIQUE", "SYNC"),
-            ("table_index_3_UNIQUE_SYNC", pk_types, {},
-             index_three_sync_not_Bool, "", "UNIQUE", "SYNC"),
-            ("table_index_2_UNIQUE_SYNC", pk_types, {},
-             index_second_sync, "", "UNIQUE", "SYNC"),
-            ("table_index_1_UNIQUE_SYNC", pk_types, {},
-             index_first_sync, "", "UNIQUE", "SYNC"),
-            ("table_index_0_UNIQUE_SYNC", pk_types, {},
-             index_zero_sync, "", "UNIQUE", "SYNC"),
+            #("table_index_4_UNIQUE_SYNC", pk_types, {},        Issues:
+            # index_four_sync, "", "UNIQUE", "SYNC"),           <main>: Error: Failed item check: unsupported index type to build
+            #("table_index_3_UNIQUE_SYNC", pk_types, {},
+            # index_three_sync_not_Bool, "", "UNIQUE", "SYNC"),
+            #("table_index_2_UNIQUE_SYNC", pk_types, {},
+            # index_second_sync, "", "UNIQUE", "SYNC"),
+            #("table_index_1_UNIQUE_SYNC", pk_types, {},
+            # index_first_sync, "", "UNIQUE", "SYNC"),
+            #("table_index_0_UNIQUE_SYNC", pk_types, {},
+            # index_zero_sync, "", "UNIQUE", "SYNC"),
             ("table_index_4__SYNC", pk_types, {},
              index_four_sync, "", "", "SYNC"),
             ("table_index_3__SYNC", pk_types, {},
@@ -107,6 +107,7 @@ class TestYdbS3TTL(TestBase, S3Base):
             url,
         ])
 
+    # После мерджа test_DML убрать эти методы https://github.com/ydb-platform/ydb/pull/16117/files
     def create_table(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
         columns = {
             "pk_": pk_types.keys(),

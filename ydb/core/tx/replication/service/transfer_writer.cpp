@@ -306,7 +306,7 @@ public:
     }
 
     virtual NKqp::IDataBatcherPtr CreateDataBatcher() = 0;
-    virtual std::pair<bool, TString> Flush() = 0;
+    virtual bool Flush() = 0;
 
     virtual TString Handle(TEvents::TEvCompleted::TPtr& ev) = 0;
 
@@ -337,7 +337,7 @@ public:
         return NKqp::CreateColumnDataBatcher(Scheme.ColumnsMetadata, Scheme.WriteIndex);
     }
 
-    std::pair<bool, TString> Flush() override {
+    bool Flush() override {
         auto doWrite = [&]() {
             Issues = std::make_shared<NYql::TIssues>();
 
@@ -347,11 +347,11 @@ public:
 
         if (Data) {
             doWrite();
-            return {true, {}};
+            return true;
         }
 
         if (!Batcher || !Batcher->GetMemory()) {
-            return {false, {}};
+            return false;
         }
 
         NKqp::IDataBatchPtr batch = Batcher->Build();
@@ -361,7 +361,7 @@ public:
         Y_VERIFY(Data);
 
         doWrite();
-        return {true, {}};
+        return true;
     }
 
     TString Handle(TEvents::TEvCompleted::TPtr& ev) override {
@@ -396,7 +396,7 @@ public:
         return NKqp::CreateRowDataBatcher(ColumnsMetadata, WriteIndex);
     }
 
-    std::pair<bool, TString> Flush() override {
+    bool Flush() override {
         Y_ABORT("Unsupported");
     }
 
@@ -668,14 +668,12 @@ private:
             }
         }
 
-        if (!ProcessingError && (TableState->BatchSize() >= BatchSizeBytes || *LastWriteTime < TInstant::Now() - FlushInterval)) {
-            auto [result, error] = TableState->Flush();
-            if (result) {
-                LastWriteTime.reset();
-                return Become(&TThis::StateWrite);
-            } else if (error) {
-                return LogCritAndLeave(error);
-            }
+        if (!ProcessingError 
+            && (TableState->BatchSize() >= BatchSizeBytes || *LastWriteTime < TInstant::Now() - FlushInterval)
+            && TableState->Flush()) {
+
+            LastWriteTime.reset();
+            return Become(&TThis::StateWrite);
         }
         
         if (ProcessingError) {
@@ -687,18 +685,13 @@ private:
     }
 
     void TryFlush() {
-        if (LastWriteTime && LastWriteTime < TInstant::Now() - FlushInterval) {
-            auto [result, error] = TableState->Flush();
+        if (LastWriteTime && LastWriteTime < TInstant::Now() - FlushInterval && TableState->Flush()) {
+            LastWriteTime.reset();
             WakeupScheduled = false;
-            if (result) {
-                LastWriteTime.reset();
-                return Become(&TThis::StateWrite);
-            } else if (error) {
-                return LogCritAndLeave(error);
-            }
+            return Become(&TThis::StateWrite);
+        } else {
+            Schedule(FlushInterval, new TEvents::TEvWakeup(ui32(ETag::FlushTimeout)));
         }
-
-        Schedule(FlushInterval, new TEvents::TEvWakeup(ui32(ETag::FlushTimeout)));
     }
 
 private:

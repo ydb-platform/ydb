@@ -30,15 +30,34 @@ struct Partition {
     i32 out;
 };
 
-//void multifit(const Histogram<FreqBucket>& hist, ui32 binCount);
+struct Bin {
+    std::vector<const FreqBucket*> buckets;
+    ui64 sum;
+};
+
+using BinArray = std::vector<Bin>;
+
+BinArray multifit(const Histogram<FreqBucket>& hist, ui32 partitionsNum);
 
 template<class TBucket>
-std::ostream& operator<<(std::ostream& out, const Histogram<TBucket>& hist) {
+inline std::ostream& operator<<(std::ostream& out, const Histogram<TBucket>& hist) {
     out << "{ ";
     size_t sz = hist.buckets.size();
     for (size_t i = 0; i < sz; i++) {
         const TBucket& b = hist.buckets[i];
         out << "[" << b.left << " (" << b.count << ") " << b.right << "]";
+        if (i != sz - 1) out << ", ";
+    }
+    out << "}";
+    return out;
+}
+
+inline std::ostream& operator<<(std::ostream& out, const BinArray& arr) {
+    out << "{ ";
+    size_t sz = arr.size();
+    for (size_t i = 0; i < sz; i++) {
+        const Bin& b = arr[i];
+        out << "[" << b.sum << "]";
         if (i != sz - 1) out << ", ";
     }
     out << "}";

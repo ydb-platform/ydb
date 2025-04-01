@@ -1,6 +1,7 @@
 #include "histogram.h"
 
-
+#include <algorithm>
+#include <cassert>
 #include <queue>
 #include <unordered_map>
 
@@ -93,14 +94,67 @@ Histogram<FreqBucket> multiMerge(const std::vector<Histogram<Bucket>>& sources) 
 }
 
 
-// static ui64 countL(const std::vector<FreqBucket>& buckets) {
-//     double sum = 0;
-//     double max = hist.buckets[0].count;
+static BinArray ffd(const std::vector<const FreqBucket*> &sortedBuckets, ui64 bin_size) {
+    BinArray result;
+    result.push_back(Bin {});
 
-// }
+    std::cerr << "run ffd with size " << bin_size << "\n";
+    
+    for (const FreqBucket* bucket : sortedBuckets) {
+        ui64 value = static_cast<ui64>(bucket->count);
+        if (value > bin_size) {
+            std::cerr << "bin size " << bin_size << " smaller than value " << value << "\n";
+            assert(value <= bin_size);
+        }
+        size_t i = 0;
+        for ( ; i < result.size(); i++) {
+            if (result[i].sum + value <= bin_size) {
+                result[i].buckets.push_back(bucket);
+                result[i].sum += value;
+                break;
+            }
+        }
+        // didn't find bin, create new
+        if (i == result.size()) {
+            result.push_back(Bin { std::vector {bucket}, value });
+        }
+    }
 
-// void multifit(const Histogram<FreqBucket>& hist, ui32 binCount) {
+    return result;
+}
 
+BinArray multifit(const Histogram<FreqBucket>& hist, ui32 partitionsNum) {
+    ui64 sum = 0;
+    ui64 max = static_cast<ui64>(hist.buckets[0].count);
 
-// }
+    std::vector<const FreqBucket*> sorted;
+    sorted.reserve(hist.buckets.size());
+    for (const auto& bucket : hist.buckets) {
+        sorted.push_back(&bucket);
+        sum += static_cast<ui64>(bucket.count);
+        if (static_cast<ui64>(bucket.count) > max) {
+            max = static_cast<ui64>(bucket.count);
+        }
+    }
+
+    std::sort(sorted.begin(), sorted.end(), [](const FreqBucket* left, const FreqBucket* right) {return left->count > right->count;});
+
+    ui64 lower_size = std::max(sum / partitionsNum, max);
+    ui64 upper_size = std::max(2 * sum / partitionsNum, max);
+
+    std::cerr << "lower " << lower_size << " upper " << upper_size << "\n";
+
+    for (int i = 0; i < 10; i++) {
+        ui64 bin_size = (lower_size + upper_size) / 2;
+        auto first_fit = ffd(sorted, bin_size);
+        auto ffd_bin_count = first_fit.size();
+        if (ffd_bin_count <= partitionsNum) {
+            upper_size = bin_size;
+        } else {
+            lower_size = bin_size;
+        }
+    }
+    
+    return ffd(sorted, upper_size);
+}
 

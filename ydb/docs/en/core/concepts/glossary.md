@@ -298,6 +298,18 @@ An **[access right](../security/authorization.md#right)** is an entity that repr
 
 An **access control list** or **ACL** is a list of all [rights](#access-right) granted to [access subjects](#access-subject) (users and groups) for a specific [access object](#access-object).
 
+### Access level {#access-level}
+
+An **[access level](../security/authorization.md#level)** determines additional privileges of an [access subject](#access-subject) for [scheme objects](#scheme-object) as well as privileges that are not related to [scheme objects](#scheme-object).
+
+An access level is granted by adding an access subject to an [access level list](#access-level-list).
+
+### Access level list {#access-level-list}
+
+An **access level list** is a list of [SIDs](#access-sid) that grants a certain [access level](#access-level) to the associated [access subjects](#access-subject).
+
+{{ ydb-short-name }} provides several [access level lists](../reference/configuration/index.md#security-access-levels) that collectively determine [access levels](#access-level) in the system.
+
 ### Owner {#access-owner}
 
 An **[owner](../security/authorization.md#owner)** is an [access subject](#access-subject) ([user](#access-user) or [group](#access-group)) having full rights over a specific [access object](#access-object).

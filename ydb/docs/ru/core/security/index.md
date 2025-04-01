@@ -6,13 +6,13 @@
 
 - **[Аутентификация](./authentication.md) и [авторизация](./authorization.md)**. Система управления доступом в {{ ydb-short-name }} предоставляет механизм защиты данных в кластере {{ ydb-short-name }}. Только аутентифицированные [субъекты доступа](../concepts/glossary.md#access-subject) (пользователи и группы) могут работать с данными, а доступ к данным может ограничиваться.
 
-    При доступе к базе данных {{ ydb-short-name }} [пользователи](../concepts/glossary.md#access-user) проходят [аутентификацию](./authentication.md) — процесс проверки, подтверждающий личность пользователя при доступе к базе данных. На основе аутентификационных данных пользователь затем проходит [авторизацию](./authorization.md) — процесс предоставления определённых [прав доступа](../concepts/glossary.md#access-right) и [уровней доступа](../concepts/glossary.md#access-level) к объектам базы данных {{ ydb-short-name }}.
+    При доступе к базе данных {{ ydb-short-name }} [пользователи](../concepts/glossary.md#access-user) проходят [аутентификацию](./authentication.md) — процесс проверки, подтверждающий личность пользователя при доступе к базе данных. На основе аутентификационных данных пользователь затем проходит [авторизацию](./authorization.md) — процесс проверки наличия определённых [прав доступа](../concepts/glossary.md#access-right) и [уровней доступа](../concepts/glossary.md#access-level) для выполнения операции пользователя.
 
     {{ ydb-short-name }} позволяет работать как с внутренними [пользователями](./authorization.md#user), так и с пользователями из различных внешниз каталогов и систем. После прохождения [аутентификации](./authentication.md) пользователи идентифицируются в кластере {{ ydb-short-name }} с помощью [SID](./authorization.md#sid).
 
     [Права доступа](./authorization.md#right) в {{ ydb-short-name }} привязываются к [объекту доступа](../concepts/glossary.md#access-object) с помощью [списков прав](../concepts/glossary.md#access-control-list). Формат списков прав описан в статье [{#T}](./short-access-control-notation.md).
 
-    Для управления дополнительными возможностями [субъекта доступа](../concepts/glossary.md#access-subject) в контекстах, не связанных с [объектами схемы](../concepts/glossary.md#scheme-object), используются [списки разрешений](../concepts/glossary.md#access-level).
+    Для управления дополнительными возможностями [субъекта доступа](../concepts/glossary.md#access-subject) в контекстах, не связанных с [объектами схемы](../concepts/glossary.md#scheme-object), используются [списки уровня доступа](../concepts/glossary.md#access-level-list).
 
     По умолчанию при первом запуске кластера {{ ydb-short-name }} выполняется [встроенная настройка безопасности](./builtin-security.md), которая добавляет в систему [суперпользователя](./builtin-security.md#superuser), а также реализует набор [ролей](./builtin-security.md#role) безопасности для удобного управления пользователями.
 

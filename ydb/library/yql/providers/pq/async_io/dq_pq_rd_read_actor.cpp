@@ -523,9 +523,9 @@ void TDqPqRdReadActor::InitChild() {
 void TDqPqRdReadActor::ProcessGlobalState() {
     switch (State) {
     case EState::START_CLUSTER_DISCOVERY:
-        StartClusterDiscovery();
         State = EState::WAIT_CLUSTER_DISCOVERY;
-        [[fallthrough]];
+        StartClusterDiscovery();
+        break;
 
     case EState::WAIT_CLUSTER_DISCOVERY:
         for (auto& clusterState : Clusters) {

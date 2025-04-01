@@ -1158,7 +1158,9 @@ class StaticConfigGenerator(object):
         if not domain.SSId:
             domain.SSId.append(domain.DomainId)
 
-        self._configure_default_state_storage(domains_config, domain.DomainId)
+        if not domains_config.StateStorage:
+            self._configure_default_state_storage(domains_config, domain.DomainId)
+
         self.__proto_configs["domains.txt"] = domains_config
 
     def __generate_domains_from_old_domains_key(self):

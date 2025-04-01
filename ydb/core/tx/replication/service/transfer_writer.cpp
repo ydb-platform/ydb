@@ -668,12 +668,11 @@ private:
             }
         }
 
-        if (!ProcessingError 
-            && (TableState->BatchSize() >= BatchSizeBytes || *LastWriteTime < TInstant::Now() - FlushInterval)
-            && TableState->Flush()) {
-
-            LastWriteTime.reset();
-            return Become(&TThis::StateWrite);
+        if (!ProcessingError && (TableState->BatchSize() >= BatchSizeBytes || *LastWriteTime < TInstant::Now() - FlushInterval)) {
+            if (TableState->Flush()) {
+                LastWriteTime.reset();
+                return Become(&TThis::StateWrite);
+            } 
         }
         
         if (ProcessingError) {
@@ -688,7 +687,7 @@ private:
         if (LastWriteTime && LastWriteTime < TInstant::Now() - FlushInterval && TableState->Flush()) {
             LastWriteTime.reset();
             WakeupScheduled = false;
-            return Become(&TThis::StateWrite);
+            Become(&TThis::StateWrite);
         } else {
             Schedule(FlushInterval, new TEvents::TEvWakeup(ui32(ETag::FlushTimeout)));
         }

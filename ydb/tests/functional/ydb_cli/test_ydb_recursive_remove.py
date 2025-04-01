@@ -4,7 +4,11 @@ import pytest
 
 import yatest
 
-CLUSTER_CONFIG = dict(extra_feature_flags=["enable_external_data_sources"])
+CLUSTER_CONFIG = dict(
+    extra_feature_flags=["enable_external_data_sources"],
+    query_service_config=dict(
+        available_external_data_sources=["ObjectStorage"]
+    ))
 
 
 def bin_from_env(var):

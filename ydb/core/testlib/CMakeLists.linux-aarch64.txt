@@ -130,6 +130,7 @@ target_sources(ydb-core-testlib PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/testlib/common_helper.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/testlib/cs_helper.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/testlib/fake_coordinator.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/testlib/storage_helpers.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/testlib/tablet_flat_dummy.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/testlib/tablet_helpers.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/testlib/tenant_runtime.cpp

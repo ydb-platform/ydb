@@ -220,6 +220,7 @@ private:
             ast = CanonizeAstLogicalId(ast);
         }
         Options.AstOutput->Write(ast);
+        Options.AstOutput->Flush();
     }
 
     void PrintQueryPlan(TString plan) const {
@@ -242,6 +243,7 @@ private:
         }
 
         Options.PlanOutput->Write(plan);
+        Options.PlanOutput->Flush();
     }
 
 private:

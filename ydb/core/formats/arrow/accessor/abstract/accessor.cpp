@@ -62,10 +62,10 @@ IChunkedArray::TFullDataAddress IChunkedArray::GetChunk(const std::optional<TAdd
         return TFullDataAddress(localAddress.GetArray(), std::move(addressChain));
     } else {
         auto chunkedArrayAddress = GetArray(chunkCurrent, position, nullptr);
-        if (chunkCurrent) {
-            AFL_VERIFY(chunkCurrent->GetSize() == 1 + chunkedArrayAddress.GetAddress().GetSize())("current", chunkCurrent->GetSize())(
-                                                      "chunked", chunkedArrayAddress.GetAddress().GetSize());
-        }
+//        if (chunkCurrent) {
+//            AFL_VERIFY(chunkCurrent->GetSize() == chunkedArrayAddress.GetAddress().GetSize())("current", chunkCurrent->GetSize())(
+//                                                      "chunked", chunkedArrayAddress.GetAddress().GetSize());
+//        }
         auto localAddress = chunkedArrayAddress.GetArray()->GetLocalData(address, chunkedArrayAddress.GetAddress().GetLocalIndex(position));
         auto fullAddress = std::move(chunkedArrayAddress.MutableAddress());
         fullAddress.Add(localAddress.GetAddress());
@@ -112,7 +112,7 @@ std::shared_ptr<IChunkedArray> IChunkedArray::DoApplyFilter(const TColumnFilter&
     auto schema = std::make_shared<arrow::Schema>(fields);
     auto table = arrow::Table::Make(schema, { arr }, GetRecordsCount());
     AFL_VERIFY(table->num_columns() == 1);
-    AFL_VERIFY(filter.Apply(table));
+    filter.Apply(table);
     if (table->column(0)->num_chunks() == 1) {
         return std::make_shared<TTrivialArray>(table->column(0)->chunk(0));
     } else {

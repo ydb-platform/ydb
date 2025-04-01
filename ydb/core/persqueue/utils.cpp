@@ -116,6 +116,13 @@ void Migrate(NKikimrPQ::TPQTabletConfig& config) {
             config.AddAllPartitions()->CopyFrom(partition);
         }
     }
+
+    if (!config.GetMigrations().GetLifetime()) {
+        if (config.GetPartitionConfig().HasStorageLimitBytes()) {
+            config.MutablePartitionConfig()->SetLifetimeSeconds(TDuration::Days(3650).Seconds());
+        }
+    }
+    config.MutableMigrations()->SetLifetime(true);
 }
 
 bool HasConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName) {

@@ -42,7 +42,7 @@ public:
     TVector<size_t> Results;
 
     TTestDeferredQueue(TRopeArena& arena)
-        : TDeferredItemQueueBase<TTestDeferredQueue>(arena, ::GType, true)
+        : TDeferredItemQueueBase<TTestDeferredQueue>("", arena, ::GType, true)
     {}
 };
 

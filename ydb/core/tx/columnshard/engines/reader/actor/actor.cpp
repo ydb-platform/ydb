@@ -7,8 +7,8 @@
 #include <yql/essentials/core/issue/yql_issue.h>
 
 namespace NKikimr::NOlap::NReader {
-constexpr TDuration SCAN_HARD_TIMEOUT = TDuration::Minutes(10);
-constexpr TDuration SCAN_HARD_TIMEOUT_GAP = TDuration::Seconds(5);
+constexpr TDuration SCAN_HARD_TIMEOUT = TDuration::Minutes(60);
+constexpr TDuration COMPUTE_HARD_TIMEOUT = TDuration::Minutes(10);
 
 void TColumnShardScan::PassAway() {
     Send(ResourceSubscribeActorId, new TEvents::TEvPoisonPill);
@@ -34,7 +34,7 @@ TColumnShardScan::TColumnShardScan(const TActorId& columnShardActorId, const TAc
     , DataFormat(dataFormat)
     , TabletId(tabletId)
     , ReadMetadataRange(readMetadataRange)
-    , Timeout(timeout ? timeout + SCAN_HARD_TIMEOUT_GAP : SCAN_HARD_TIMEOUT)
+    , Timeout(timeout ? timeout : COMPUTE_HARD_TIMEOUT)
     , ScanCountersPool(scanCountersPool, TValidator::CheckNotNull(ReadMetadataRange)->GetProgram().GetGraphOptional())
     , Stats(NTracing::TTraceClient::GetLocalClient("SHARD", ::ToString(TabletId) /*, "SCAN_TXID:" + ::ToString(TxId)*/))
     , ComputeShardingPolicy(computeShardingPolicy) {
@@ -65,7 +65,7 @@ void TColumnShardScan::Bootstrap(const TActorContext& ctx) {
         ScheduleWakeup(TMonotonic::Now() + Timeout / 5);
 
         // propagate self actor id // TODO: FlagSubscribeOnSession ?
-        Send(ScanComputeActorId, new NKqp::TEvKqpCompute::TEvScanInitActor(ScanId, ctx.SelfID, ScanGen, TabletId),
+        Send(ScanComputeActorId, new NKqp::TEvKqpCompute::TEvScanInitActor(ScanId, ctx.SelfID, ScanGen, TabletId, true),
             IEventHandle::FlagTrackDelivery);
 
         Become(&TColumnShardScan::StateScan);
@@ -93,6 +93,7 @@ void TColumnShardScan::HandleScan(NColumnShard::TEvPrivate::TEvTaskProcessedResu
 
 void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev) {
     auto g = Stats->MakeGuard("ack");
+
     AFL_VERIFY(!AckReceivedInstant);
     AckReceivedInstant = TMonotonic::Now();
 
@@ -109,6 +110,12 @@ void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanDataAck::TPtr& ev)
         }
     }
     ContinueProcessing();
+}
+
+void TColumnShardScan::HandleScan(NKqp::TEvKqpCompute::TEvScanPing::TPtr&) {
+    if (!AckReceivedInstant) {
+        LastResultInstant = TMonotonic::Now();
+    }
 }
 
 void TColumnShardScan::HandleScan(NActors::TEvents::TEvPoison::TPtr& /*ev*/) noexcept {
@@ -165,10 +172,10 @@ void TColumnShardScan::HandleScan(TEvents::TEvWakeup::TPtr& /*ev*/) {
                 << " txId: " << TxId << " scanId: " << ScanId << " gen: " << ScanGen << " tablet: " << TabletId);
 
     CheckHanging(true);
-    if (!!AckReceivedInstant && TMonotonic::Now() >= GetDeadline() + Timeout * 0.5) {
+    if (!!AckReceivedInstant && TMonotonic::Now() >= GetScanDeadline()) {
         SendScanError("ColumnShard scanner timeout: HAS_ACK=1");
         Finish(NColumnShard::TScanCounters::EStatusFinish::Deadline);
-    } else if (!AckReceivedInstant && TMonotonic::Now() >= GetDeadline()) {
+    } else if (!AckReceivedInstant && TMonotonic::Now() >= GetComputeDeadline()) {
         SendScanError("ColumnShard scanner timeout: HAS_ACK=0");
         Finish(NColumnShard::TScanCounters::EStatusFinish::Deadline);
     } else {
@@ -353,8 +360,6 @@ bool TColumnShardScan::SendResult(bool pageFault, bool lastBatch) {
     if (ScanIterator) {
         Result->AvailablePacks = ScanIterator->GetAvailableResultsCount();
     }
-    TDuration totalElapsedTime = TDuration::Seconds(GetElapsedTicksAsSeconds());
-    LastReportedElapsedTime = totalElapsedTime;
 
     PageFaults = 0;
 
@@ -425,11 +430,14 @@ void TColumnShardScan::ScheduleWakeup(const TMonotonic deadline) {
     }
 }
 
-TMonotonic TColumnShardScan::GetDeadline() const {
-    AFL_VERIFY(StartInstant);
-    if (LastResultInstant) {
-        return *LastResultInstant + Timeout;
-    }
-    return *StartInstant + Timeout;
+TMonotonic TColumnShardScan::GetScanDeadline() const {
+    AFL_VERIFY(!!AckReceivedInstant);
+    return *AckReceivedInstant + SCAN_HARD_TIMEOUT;
 }
+
+TMonotonic TColumnShardScan::GetComputeDeadline() const {
+    AFL_VERIFY(!AckReceivedInstant);
+    return (LastResultInstant ? *LastResultInstant : *StartInstant) + Timeout;
+}
+
 }   // namespace NKikimr::NOlap::NReader

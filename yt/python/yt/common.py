@@ -375,6 +375,10 @@ class YtError(Exception):
         """Probably lock conflict in Sequoia tables."""
         return self.contains_code(6002)
 
+    def is_backup_checkpoint_rejected(self):
+        """Backup checkpoint rejected."""
+        return self.contains_code(1733)
+
 
 class YtResponseError(YtError):
     """Represents an error in YT response."""

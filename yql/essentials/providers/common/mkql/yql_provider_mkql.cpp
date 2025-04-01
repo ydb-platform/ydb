@@ -448,7 +448,9 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"FromFlow", &TProgramBuilder::FromFlow},
 
         {"WideToBlocks", &TProgramBuilder::WideToBlocks},
+        {"ListToBlocks", &TProgramBuilder::ListToBlocks},
         {"WideFromBlocks", &TProgramBuilder::WideFromBlocks},
+        {"ListFromBlocks", &TProgramBuilder::ListFromBlocks},
         {"AsScalar", &TProgramBuilder::AsScalar},
 
         {"Just", &TProgramBuilder::NewOptional},

@@ -164,6 +164,8 @@ class KikimrConfigGenerator(object):
             default_clusteradmin=None,
             enable_resource_pools=None,
             memory_controller_config=None,
+            grouped_memory_limiter_config=None,
+            query_service_config=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -258,6 +260,16 @@ class KikimrConfigGenerator(object):
         if os.getenv('PGWIRE_LISTENING_PORT', ''):
             self.yaml_config["local_pg_wire_config"] = {}
             self.yaml_config["local_pg_wire_config"]["listening_port"] = os.getenv('PGWIRE_LISTENING_PORT')
+
+        # dirty hack for internal ydbd flavour
+        if "cert" in self.get_binary_path(0):
+            # Hardcoded feature flags. Should be hardcoded in binary itself
+            self.yaml_config["feature_flags"]["enable_strict_acl_check"] = True
+            self.yaml_config["feature_flags"]["enable_strict_user_management"] = True
+            self.yaml_config["feature_flags"]["enable_database_admin"] = True
+            self.yaml_config["feature_flags"]["database_yaml_config_allowed"] = True
+            self.yaml_config["feature_flags"]["enable_resource_pools"] = False
+            self.yaml_config["feature_flags"]["check_database_access_permission"] = True
 
         self.yaml_config["feature_flags"]["enable_public_api_external_blobs"] = enable_public_api_external_blobs
 
@@ -357,6 +369,11 @@ class KikimrConfigGenerator(object):
 
         if memory_controller_config:
             self.yaml_config["memory_controller_config"] = memory_controller_config
+        if query_service_config:
+            self.yaml_config["query_service_config"] = query_service_config
+
+        if grouped_memory_limiter_config:
+            self.yaml_config["grouped_memory_limiter_config"] = grouped_memory_limiter_config
 
         self.__build()
 

@@ -18,7 +18,7 @@ TWriteFlowCounters::TWriteFlowCounters()
         for (auto&& to : GetEnumAllValues<EWriteStage>()) {
             auto subTo = sub.CreateSubGroup("stage_to", ::ToString(to));
             CountByStageMoving.back().emplace_back(subTo.GetDeriviative("Transfers/Count"));
-            CountByStageDuration.back().emplace_back(subTo.GetDeriviative("Transfers/Count"));
+            CountByStageDuration.back().emplace_back(subTo.GetDeriviative("Transfers/Duration/Ms"));
         }
     }
 }

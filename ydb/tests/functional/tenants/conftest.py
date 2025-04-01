@@ -7,7 +7,9 @@ from ydb.tests.library.clients.kikimr_http_client import HiveClient
 # but somehow it does not
 #
 # for ydb_{cluster, database, ...} fixture family
-pytest_plugins = ['ydb.tests.library.fixtures', 'ydb.tests.library.flavours']
+COMMON_FIXTURES = 'ydb.tests.library.fixtures'
+FLAVOURS_FIXTURE = 'ydb.tests.library.flavours'
+pytest_plugins = [COMMON_FIXTURES, FLAVOURS_FIXTURE]
 
 
 @pytest.fixture(scope='module')

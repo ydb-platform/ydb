@@ -13,6 +13,8 @@
 #include <util/generic/vector.h>
 #include <util/generic/scope.h>
 
+#include <optional>
+
 namespace NTi::NIo {
     namespace {
         class TYsonDeserializer: private TNonCopyable {
@@ -61,7 +63,8 @@ namespace NTi::NIo {
                 const TType *Key, *Value;
             };
             struct TDecimalData {
-                ui8 Precision, Scale;
+                std::optional<ui8> Precision;
+                std::optional<ui8> Scale;
             };
             using TTypeData = std::variant<
                 std::monostate,
@@ -162,11 +165,19 @@ namespace NTi::NIo {
                             }
                         } else if (mapKey == "precision") {
                             if (std::holds_alternative<std::monostate>(data)) {
-                                data = TDecimalData{ReadSmallInt(R"("precision")"), 0};
+                                const auto precision = ReadSmallInt(R"("precision")");
+                                if (0 == precision) {
+                                    ythrow TDeserializationException() << R"(invalid zero "precision")";
+                                }
+                                data = TDecimalData{precision, std::nullopt};
                             } else if (std::holds_alternative<TDecimalData>(data)) {
                                 auto& decimalData = std::get<TDecimalData>(data);
-                                if (decimalData.Precision == 0) {
-                                    decimalData.Precision = ReadSmallInt(R"("precision")");
+                                if (!decimalData.Precision.has_value()) {
+                                    const auto precision = ReadSmallInt(R"("precision")");
+                                    if (0 == precision) {
+                                        ythrow TDeserializationException() << R"(invalid zero "precision")";
+                                    }
+                                    decimalData.Precision = precision;
                                 } else {
                                     ythrow TDeserializationException() << R"(duplicate key "precision")";
                                 }
@@ -175,10 +186,10 @@ namespace NTi::NIo {
                             }
                         } else if (mapKey == "scale") {
                             if (std::holds_alternative<std::monostate>(data)) {
-                                data = TDecimalData{0, ReadSmallInt(R"("scale")")};
+                                data = TDecimalData{std::nullopt, ReadSmallInt(R"("scale")")};
                             } else if (std::holds_alternative<TDecimalData>(data)) {
                                 auto& decimalData = std::get<TDecimalData>(data);
-                                if (decimalData.Scale == 0) {
+                                if (!decimalData.Scale.has_value()) {
                                     decimalData.Scale = ReadSmallInt(R"("scale")");
                                 } else {
                                     ythrow TDeserializationException() << R"(duplicate key "scale")";
@@ -272,15 +283,15 @@ namespace NTi::NIo {
 
                         auto& decimalData = std::get<TDecimalData>(data);
 
-                        if (decimalData.Precision == 0) {
+                        if (!decimalData.Precision.has_value()) {
                             ythrow TDeserializationException() << R"(missing required key "precision" for type Decimal)";
                         }
 
-                        if (decimalData.Scale == 0) {
+                        if (!decimalData.Scale.has_value()) {
                             ythrow TDeserializationException() << R"(missing required key "scale" for type Decimal)";
                         }
 
-                        return Factory_->DecimalRaw(decimalData.Precision, decimalData.Scale);
+                        return Factory_->DecimalRaw(decimalData.Precision.value(), decimalData.Scale.value());
                     }
                     case ETypeName::Json:
                         type = TJsonType::InstanceRaw();
@@ -420,8 +431,8 @@ namespace NTi::NIo {
 
                 auto result = event.AsScalar().AsInt64();
 
-                if (result <= 0) {
-                    ythrow TDeserializationException() << what << " must be greater than zero";
+                if (result < 0) {
+                    ythrow TDeserializationException() << what << " must be greater or equal to zero";
                 }
 
                 if (result > Max<ui8>()) {

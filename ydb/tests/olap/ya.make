@@ -24,11 +24,8 @@ PY3TEST()
     PEERDIR(
         ydb/tests/library
         ydb/tests/library/test_meta
-        ydb/tests/olap/lib
-        ydb/tests/olap/scenario/helpers
         ydb/tests/olap/common
-        ydb/tests/olap/helpers
-        library/recipes/common
+        ydb/tests/olap/lib
     )
 END()
 
@@ -43,7 +40,4 @@ RECURSE(
     s3_import
     scenario
     ttl_tiering
-    column_family
-    common
-    helpers
 )

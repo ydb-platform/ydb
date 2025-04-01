@@ -10,7 +10,7 @@ from ydb.tests.olap.lib.utils import get_external_param
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.olap.common.thread_helper import TestThread
-from ydb.tests.olap.helpers.ydb_client import YdbClient
+from ydb.tests.olap.common.ydb_client import YdbClient
 
 from enum import Enum
 
@@ -110,7 +110,6 @@ class TestLogScenario(object):
             hours: int = random.randint(1, 10)
             self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` ")
             self.ydb_client.query(f"SELECT * FROM `{self.table_name}` WHERE timestamp < CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours})")
-            # TODO: this queries somehow make db fallen. Investigate
             self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` WHERE timestamp < CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours})")
             self.ydb_client.query(f"SELECT COUNT(*) FROM `{self.table_name}` WHERE " +
                                   f"(timestamp >= CurrentUtcTimestamp() - DateTime::IntervalFromHours({hours + 1})) AND " +

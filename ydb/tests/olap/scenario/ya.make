@@ -25,6 +25,7 @@ PY3TEST()
         contrib/python/allure-python-commons
         contrib/python/boto3
         contrib/python/moto
+        contrib/python/requests
         library/python/testing/yatest_common
         library/recipes/common
         ydb/public/sdk/python
@@ -32,7 +33,6 @@ PY3TEST()
         ydb/tests/library
         ydb/tests/olap/common
         ydb/tests/olap/lib
-        ydb/tests/olap/helpers
         ydb/tests/olap/scenario/helpers
     )
 

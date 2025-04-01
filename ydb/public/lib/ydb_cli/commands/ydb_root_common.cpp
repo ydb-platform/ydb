@@ -439,12 +439,13 @@ void TClientCommandRootCommon::ExtractParams(TConfig& config) {
         }
     }
 
+    config.EnableSsl = EnableSsl;
+
     ParseCaCerts(config);
     ParseClientCert(config);
     ParseStaticCredentials(config);
 
     config.Address = Address;
-    config.EnableSsl = EnableSsl;
     config.Database = Database;
     config.ChosenAuthMethod = ParseResult->GetChosenAuthMethod();
 }

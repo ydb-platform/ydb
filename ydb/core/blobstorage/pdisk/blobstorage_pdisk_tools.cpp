@@ -151,7 +151,7 @@ bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TMainKey &mainKey, T
 
     THolder<NPDisk::TBufferPool> bufferPool(NPDisk::CreateBufferPool(512 << 10, 2, useSdpkNvmeDriver, {}));
     NPDisk::TBuffer::TPtr formatRaw(bufferPool->Pop());
-    Y_ABORT_UNLESS(formatRaw->Size() >= formatSectorsSize);
+    Y_VERIFY(formatRaw->Size() >= formatSectorsSize);
 
     blockDevice->PreadSync(formatRaw->Data(), formatSectorsSize, 0,
             NPDisk::TReqId(NPDisk::TReqId::ReadFormatInfo, 0), {});
@@ -203,7 +203,7 @@ bool ReadPDiskFormatInfo(const TString &path, const NPDisk::TMainKey &mainKey, T
             const ui32 sysLogRawParts = (sysLogSize + bufferSize - 1) / bufferSize;
             for (ui32 i = 0; i < sysLogRawParts; i++) {
                 const ui32 sysLogPartSize = Min(bufferSize, sysLogSize - i * bufferSize);
-                Y_ABORT_UNLESS(buffer->Size() >= sysLogPartSize);
+                Y_VERIFY(buffer->Size() >= sysLogPartSize);
                 blockDevice->PreadSync(buffer->Data(), sysLogPartSize, sysLogOffset + i * bufferSize,
                         NPDisk::TReqId(NPDisk::TReqId::ReadSysLogData, 0), {});
                 memcpy(sysLogRaw.Get() + i * bufferSize, buffer->Data(), sysLogPartSize);

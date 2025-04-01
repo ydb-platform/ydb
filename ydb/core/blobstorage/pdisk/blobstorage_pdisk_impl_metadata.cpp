@@ -101,7 +101,7 @@ namespace NKikimr::NPDisk {
             }
 
             void IssueQuery(TActorSystem *actorSystem) {
-                Y_ABORT_UNLESS(!WriteQueue.empty());
+                Y_VERIFY_S(!WriteQueue.empty(), PDisk->PCtx->PDiskLogPrefix);
                 auto& [key, buffer] = WriteQueue.front();
                 const ui64 writeOffset = PDisk->Format.Offset(key.ChunkIdx, key.OffsetInSectors);
                 STLOGX(*actorSystem, PRI_DEBUG, BS_PDISK, BPD01, "TCompletionWriteMetadata::IssueQuery",
@@ -115,7 +115,7 @@ namespace NKikimr::NPDisk {
             void Exec(TActorSystem *actorSystem) override {
                 STLOGX(*actorSystem, PRI_DEBUG, BS_PDISK, BPD01,  "TCompletionWriteMetadata::Exec",
                     (Result, Result));
-                Y_ABORT_UNLESS(!WriteQueue.empty());
+                Y_VERIFY_S(!WriteQueue.empty(), PDisk->PCtx->PDiskLogPrefix);
                 WriteQueue.pop_front();
                 if (Result != EIoResult::Ok) {
                     PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TWriteMetadataResult>(false, Sender));
@@ -221,7 +221,7 @@ namespace NKikimr::NPDisk {
                     : FormatIndex * FormatSectorSize;
 
                 if (FormatIndex != -1) {
-                    Y_ABORT_UNLESS(static_cast<ui32>(FormatIndex) < ReplicationFactor);
+                    Y_VERIFY_S(static_cast<ui32>(FormatIndex) < ReplicationFactor, PDisk->PCtx->PDiskLogPrefix);
                     Payload = TRcBuf::UninitializedPageAligned(FormatSectorSize);
                     TPDisk::MakeMetadataFormatSector(reinterpret_cast<ui8*>(Payload.GetDataMut()), MainKey, Format);
                 }
@@ -270,7 +270,7 @@ namespace NKikimr::NPDisk {
     } // anonymous
 
     void TPDisk::InitFormattedMetadata() {
-        Y_ABORT_UNLESS(std::holds_alternative<std::monostate>(Meta.State));
+        Y_VERIFY_S(std::holds_alternative<std::monostate>(Meta.State), PCtx->PDiskLogPrefix);
         auto& formatted = Meta.State.emplace<NMeta::TFormatted>();
 
         std::vector<TChunkIdx> metadataChunks;
@@ -316,17 +316,17 @@ namespace NKikimr::NPDisk {
     }
 
     void TPDisk::ReadFormattedMetadataIfNeeded() {
-        Y_ABORT_UNLESS(std::holds_alternative<NMeta::TScanInProgress>(Meta.StoredMetadata));
+        Y_VERIFY_S(std::holds_alternative<NMeta::TScanInProgress>(Meta.StoredMetadata), PCtx->PDiskLogPrefix);
         auto& formatted = GetFormattedMeta();
 
-        Y_ABORT_UNLESS(formatted.NumReadsInFlight < formatted.MaxReadsInFlight);
+        Y_VERIFY_S(formatted.NumReadsInFlight < formatted.MaxReadsInFlight, PCtx->PDiskLogPrefix);
 
         while (!formatted.ReadPending.empty()) {
             // find the slot we have to read
             const NMeta::TSlotKey& key = formatted.ReadPending.front();
             const auto it = formatted.Slots.find(key);
-            Y_ABORT_UNLESS(it != formatted.Slots.end());
-            Y_ABORT_UNLESS(it->second == NMeta::ESlotState::READ_PENDING);
+            Y_VERIFY_S(it != formatted.Slots.end(), PCtx->PDiskLogPrefix);
+            Y_VERIFY_S(it->second == NMeta::ESlotState::READ_PENDING, PCtx->PDiskLogPrefix);
 
             // make completion object and the request that will be pushed back to PDisk thread when the request is complete
             const size_t bytesToRead = Format.RoundUpToSectorSize(sizeof(TMetadataHeader));
@@ -378,9 +378,9 @@ namespace NKikimr::NPDisk {
             },
             [&](NMeta::TFormatted& formatted) {
                 const auto it = formatted.Slots.find(request.Key);
-                Y_ABORT_UNLESS(it != formatted.Slots.end());
-                Y_ABORT_UNLESS(it->second == NMeta::ESlotState::READ_IN_PROGRESS);
-                Y_ABORT_UNLESS(formatted.NumReadsInFlight);
+                Y_VERIFY_S(it != formatted.Slots.end(), PCtx->PDiskLogPrefix);
+                Y_VERIFY_S(it->second == NMeta::ESlotState::READ_IN_PROGRESS, PCtx->PDiskLogPrefix);
+                Y_VERIFY_S(formatted.NumReadsInFlight, PCtx->PDiskLogPrefix);
                 --formatted.NumReadsInFlight;
 
                 P_LOG(PRI_DEBUG, BPD01, "ProcessInitialReadMetadataResult (formatted)",
@@ -404,9 +404,9 @@ namespace NKikimr::NPDisk {
     void TPDisk::FinishReadingFormattedMetadata() {
         auto& formatted = GetFormattedMeta();
 
-        Y_ABORT_UNLESS(formatted.ReadPending.empty());
+        Y_VERIFY_S(formatted.ReadPending.empty(), PCtx->PDiskLogPrefix);
         for (auto& [_, state] : formatted.Slots) {
-            Y_ABORT_UNLESS(state == NMeta::ESlotState::FREE || state == NMeta::ESlotState::PROCESSED);
+            Y_VERIFY_S(state == NMeta::ESlotState::FREE || state == NMeta::ESlotState::PROCESSED, PCtx->PDiskLogPrefix);
         }
 
         std::sort(formatted.Parts.begin(), formatted.Parts.end());
@@ -416,7 +416,7 @@ namespace NKikimr::NPDisk {
         auto markSlots = [&](auto begin, auto end, NMeta::ESlotState newState) {
             for (auto it = begin; it != end; ++it) {
                 const NMeta::ESlotState prev = std::exchange(formatted.Slots[it->Key], newState);
-                Y_ABORT_UNLESS(prev == NMeta::ESlotState::PROCESSED);
+                Y_VERIFY_S(prev == NMeta::ESlotState::PROCESSED, PCtx->PDiskLogPrefix);
             }
         };
 
@@ -434,7 +434,7 @@ namespace NKikimr::NPDisk {
             ui32 expectedRecordIndex = totalParts - 1;
             bool success = std::distance(it, endIt) == totalParts;
             for (auto temp = it; temp != endIt; ++temp) {
-                Y_ABORT_UNLESS(temp->Header.SequenceNumber == sequenceNumber);
+                Y_VERIFY_S(temp->Header.SequenceNumber == sequenceNumber, PCtx->PDiskLogPrefix);
                 if (success && temp->Header.TotalRecords == totalParts && temp->Header.RecordIndex == expectedRecordIndex) {
                     --expectedRecordIndex;
                     buffer.Insert(buffer.Begin(), std::move(temp->Payload));
@@ -454,14 +454,14 @@ namespace NKikimr::NPDisk {
         formatted.Parts.clear();
 
         // start processing any pending metadata requests
-        Y_ABORT_UNLESS(!Meta.WriteInFlight);
+        Y_VERIFY_S(!Meta.WriteInFlight, PCtx->PDiskLogPrefix);
         ProcessMetadataRequestQueue();
     }
 
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     void TPDisk::ProcessPushUnformattedMetadataSector(TPushUnformattedMetadataSector& request) {
-        Y_ABORT_UNLESS(std::holds_alternative<std::monostate>(Meta.State));
+        Y_VERIFY_S(std::holds_alternative<std::monostate>(Meta.State), PCtx->PDiskLogPrefix);
         auto& unformatted = Meta.State.emplace<NMeta::TUnformatted>();
         unformatted.Format = request.Format;
         if (unformatted.Format) {
@@ -480,7 +480,7 @@ namespace NKikimr::NPDisk {
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     void TPDisk::ProcessMetadataRequestQueue() {
-        Y_ABORT_UNLESS(!std::holds_alternative<NMeta::TScanInProgress>(Meta.StoredMetadata));
+        Y_VERIFY_S(!std::holds_alternative<NMeta::TScanInProgress>(Meta.StoredMetadata), PCtx->PDiskLogPrefix);
         while (!Meta.Requests.empty() && !Meta.WriteInFlight) {
             const size_t sizeBefore = Meta.Requests.size();
             switch (auto& front = Meta.Requests.front(); front->GetType()) {
@@ -495,7 +495,7 @@ namespace NKikimr::NPDisk {
                 default:
                     Y_ABORT();
             }
-            Y_ABORT_UNLESS(Meta.Requests.size() < sizeBefore || Meta.WriteInFlight);
+            Y_VERIFY_S(Meta.Requests.size() < sizeBefore || Meta.WriteInFlight, PCtx->PDiskLogPrefix);
         }
     }
 
@@ -513,8 +513,8 @@ namespace NKikimr::NPDisk {
 
     void TPDisk::HandleNextReadMetadata() {
         auto& front = Meta.Requests.front();
-        Y_ABORT_UNLESS(front->GetType() == ERequestType::RequestReadMetadata);
-        Y_ABORT_UNLESS(!Meta.WriteInFlight);
+        Y_VERIFY_S(front->GetType() == ERequestType::RequestReadMetadata, PCtx->PDiskLogPrefix);
+        Y_VERIFY_S(!Meta.WriteInFlight, PCtx->PDiskLogPrefix);
         auto guid = std::visit<std::optional<ui64>>(TOverloaded{
             [](std::monostate&) -> std::nullopt_t { Y_ABORT("incorrect case"); },
             [&](NMeta::TFormatted&) { return Format.Guid; },
@@ -547,11 +547,11 @@ namespace NKikimr::NPDisk {
     }
 
     void TPDisk::HandleNextWriteMetadata() {
-        Y_ABORT_UNLESS(!Meta.Requests.empty());
+        Y_VERIFY_S(!Meta.Requests.empty(), PCtx->PDiskLogPrefix);
         const auto& front = Meta.Requests.front();
-        Y_ABORT_UNLESS(front->GetType() == ERequestType::RequestWriteMetadata);
+        Y_VERIFY_S(front->GetType() == ERequestType::RequestWriteMetadata, PCtx->PDiskLogPrefix);
         auto& write = static_cast<TWriteMetadata&>(*front);
-        Y_ABORT_UNLESS(!Meta.WriteInFlight);
+        Y_VERIFY_S(!Meta.WriteInFlight, PCtx->PDiskLogPrefix);
 
         P_LOG(PRI_DEBUG, BPD01, "HandleNextWriteMetadata",
             (Metadata.size, write.Metadata.size()));
@@ -599,8 +599,8 @@ namespace NKikimr::NPDisk {
                     completion->CostNs += DriveModel.TimeForSizeNs(payload.size(), key.ChunkIdx, TDriveModel::OP_TYPE_WRITE);
 
                     const auto it = formatted.Slots.find(key);
-                    Y_ABORT_UNLESS(it != formatted.Slots.end());
-                    Y_ABORT_UNLESS(it->second == NMeta::ESlotState::FREE);
+                    Y_VERIFY_S(it != formatted.Slots.end(), PCtx->PDiskLogPrefix);
+                    Y_VERIFY_S(it->second == NMeta::ESlotState::FREE, PCtx->PDiskLogPrefix);
                     it->second = NMeta::ESlotState::BEING_WRITTEN;
                 }
 
@@ -664,18 +664,18 @@ namespace NKikimr::NPDisk {
     }
 
     void TPDisk::ProcessWriteMetadataResult(TWriteMetadataResult& request) {
-        Y_ABORT_UNLESS(Meta.WriteInFlight);
+        Y_VERIFY_S(Meta.WriteInFlight, PCtx->PDiskLogPrefix);
         Meta.WriteInFlight = false;
 
-        Y_ABORT_UNLESS(!Meta.Requests.empty());
+        Y_VERIFY_S(!Meta.Requests.empty(), PCtx->PDiskLogPrefix);
         auto& front = Meta.Requests.front();
-        Y_ABORT_UNLESS(front->GetType() == ERequestType::RequestWriteMetadata);
+        Y_VERIFY_S(front->GetType() == ERequestType::RequestWriteMetadata, PCtx->PDiskLogPrefix);
         auto& write = static_cast<TWriteMetadata&>(*front);
 
         std::optional<ui64> guid;
 
         std::visit(TOverloaded{
-            [](std::monostate&) { Y_ABORT_UNLESS("incorrect case"); },
+            [](std::monostate&) { Y_ABORT("incorrect case"); },
             [&](NMeta::TFormatted& formatted) {
                 for (auto& [_, state] : formatted.Slots) {
                     if (request.Success) {
@@ -718,10 +718,10 @@ namespace NKikimr::NPDisk {
     }
 
     TRcBuf TPDisk::CreateMetadataPayload(TRcBuf& metadata, size_t offset, size_t payloadSize, ui32 sectorSize,
-        bool encryption, const TKey& key, ui64 sequenceNumber, ui32 recordIndex, ui32 totalRecords, const ui64 *magic) {
-        Y_ABORT_UNLESS(offset + payloadSize <= metadata.size());
+            bool encryption, const TKey& key, ui64 sequenceNumber, ui32 recordIndex, ui32 totalRecords, const ui64 *magic) {
+        Y_VERIFY_S(offset + payloadSize <= metadata.size(), PCtx->PDiskLogPrefix);
 
-        Y_DEBUG_ABORT_UNLESS(IsPowerOf2(sectorSize));
+        Y_VERIFY_DEBUG_S(IsPowerOf2(sectorSize), PCtx->PDiskLogPrefix);
         const size_t dataSize = sizeof(TMetadataHeader) + payloadSize;
         const size_t bytesToWrite = (dataSize + sectorSize - 1) & ~size_t(sectorSize - 1);
 
@@ -730,9 +730,9 @@ namespace NKikimr::NPDisk {
 
         auto buffer = TRcBuf::UninitializedPageAligned(bytesToWrite);
 
-        Y_ABORT_UNLESS(recordIndex <= Max<ui16>());
-        Y_ABORT_UNLESS(totalRecords <= Max<ui16>());
-        Y_ABORT_UNLESS(payloadSize <= Max<ui32>());
+        Y_VERIFY_S(recordIndex <= Max<ui16>(), PCtx->PDiskLogPrefix);
+        Y_VERIFY_S(totalRecords <= Max<ui16>(), PCtx->PDiskLogPrefix);
+        Y_VERIFY_S(payloadSize <= Max<ui32>(), PCtx->PDiskLogPrefix);
 
         auto *header = reinterpret_cast<TMetadataHeader*>(buffer.GetDataMut());
         void *data = header + 1;
@@ -798,9 +798,11 @@ namespace NKikimr::NPDisk {
         return true;
     }
 
-    std::optional<TMetadataFormatSector> TPDisk::CheckMetadataFormatSector(const ui8 *data, size_t len, const TMainKey& mainKey) {
+    std::optional<TMetadataFormatSector> TPDisk::CheckMetadataFormatSector(const ui8 *data, size_t len,
+            const TMainKey& mainKey, const TString& logPrefix) {
         if (len != FormatSectorSize * ReplicationFactor) {
-            Y_DEBUG_ABORT("unexpected metadata format sector size");
+            Y_UNUSED(logPrefix);
+            Y_DEBUG_ABORT_S(logPrefix << "unexpected metadata format sector size");
             return {}; // definitely not correct
         }
 
@@ -859,7 +861,7 @@ namespace NKikimr::NPDisk {
     }
 
     NMeta::TFormatted& TPDisk::GetFormattedMeta() {
-        Y_ABORT_UNLESS(std::holds_alternative<NMeta::TFormatted>(Meta.State));
+        Y_VERIFY_S(std::holds_alternative<NMeta::TFormatted>(Meta.State), PCtx->PDiskLogPrefix);
         return std::get<NMeta::TFormatted>(Meta.State);
     }
 

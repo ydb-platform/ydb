@@ -207,7 +207,7 @@ void FillDeviceWithPattern(TTestContext *tc, ui64 chunkSize, ui64 pattern) {
     const ui32 formatSectorsSize = NPDisk::FormatSectorSize * NPDisk::ReplicationFactor;
     NPDisk::TAlignedData data(formatSectorsSize);
 
-    Y_ABORT_UNLESS(data.Size() % sizeof(ui64) == 0);
+    Y_VERIFY(data.Size() % sizeof(ui64) == 0);
     Fill((ui64*)data.Get(), (ui64*)(data.Get() + data.Size()), pattern);
 
     {

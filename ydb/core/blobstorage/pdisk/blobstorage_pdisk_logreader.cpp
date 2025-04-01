@@ -24,7 +24,7 @@ void TPDisk::ProcessChunkOwnerMap(TMap<ui32, TChunkState> &chunkOwnerMap) {
         }
 
         TStringStream str;
-        str << "PDiskId# " << PCtx->PDiskId << " ProcessChunkOwnerMap; ";
+        str << PCtx->PDiskLogPrefix << "ProcessChunkOwnerMap; ";
         for (auto& [owner, chunks] : ownerToChunks) {
             std::sort(chunks.begin(), chunks.end());
             str << " Owner# " << owner << " [";
@@ -51,14 +51,15 @@ void TPDisk::ProcessChunkOwnerMap(TMap<ui32, TChunkState> &chunkOwnerMap) {
             // OwnerMap states that the chunk is used by some user
 
             // Make sure the chunk is not really a part of syslog/format
-            Y_VERIFY_S(chunkIdx > Format.SystemChunkCount, "PDiskId# " << PCtx->PDiskId << " chunkIdx# " << chunkIdx
+            Y_VERIFY_S(chunkIdx > Format.SystemChunkCount, PCtx->PDiskLogPrefix
+                    << "chunkIdx# " << chunkIdx
                     << " SystemChunkCount# " << Format.SystemChunkCount);
 
             // Make sure the chunk is not really a part of the log
             for (const auto& logChunk : LogChunks) {
                 if (logChunk.ChunkIdx == chunkIdx) {
                     TStringStream out;
-                    out << "PDiskId# " << PCtx->PDiskId << " chunkIdx# " << chunkIdx;
+                    out << PCtx->PDiskLogPrefix << "chunkIdx# " << chunkIdx;
                     out << " is a part of the log and is owned by user, ownerIdx# " << ownerId;
                     out << " LogChunks# {";
                     for (const auto& chunk : LogChunks) {
@@ -177,7 +178,7 @@ void TPDisk::ProcessReadLogRecord(TLogRecordHeader &header, TString &data, NPDis
                 if (ownerData.VDiskId != TVDiskID::InvalidId) {
                     if (!ownerData.IsNextLsnOk(header.OwnerLsn)) {
                         TStringStream str;
-                        str << "Lsn reversal! PDiskId# " << PCtx->PDiskId
+                        str << PCtx->PDiskLogPrefix << "Lsn reversal!"
                             << " ownerId# " << (ui32)owner
                             << " LogStartPosition# " << ownerData.LogStartPosition
                             << " LastSeenLsn# " << ownerData.LastSeenLsn
@@ -346,10 +347,10 @@ TLogReader::TLogReader(bool isInitial,TPDisk *pDisk, TActorSystem * const actorS
     , CurrentChunkToRead(ChunksToRead.end())
     , ParseCommits(false) // Actual only if IsInitial
 {
-    Y_DEBUG_ABORT_UNLESS(PCtx);
-    Y_DEBUG_ABORT_UNLESS(PCtx->ActorSystem == actorSystem);
-    Y_ABORT_UNLESS(PDisk->PDiskThread.Id() == TThread::CurrentThreadId(), "Constructor of TLogReader must be called"
-            " from PDiskThread");
+    Y_VERIFY_DEBUG(PCtx);
+    Y_VERIFY_DEBUG_S(PCtx->ActorSystem == actorSystem, PCtx->PDiskLogPrefix);
+    Y_VERIFY_S(PDisk->PDiskThread.Id() == TThread::CurrentThreadId(),
+            PCtx->PDiskLogPrefix << "Constructor of TLogReader must be called from PDiskThread");
     Cypher.SetKey(PDisk->Format.LogKey);
     AtomicIncrement(PDisk->InFlightLogRead);
 
@@ -516,7 +517,7 @@ void TLogReader::Exec(ui64 offsetRead, TVector<ui64> &badOffsets, TActorSystem *
         {
             ui64 sizeToProcess = (ui64)format.SectorSize;
             TSectorData *data = Sector->DataByIdx(idxRead);
-            Y_ABORT_UNLESS(data->IsAvailable(sizeToProcess));
+            Y_VERIFY_S(data->IsAvailable(sizeToProcess), PCtx->PDiskLogPrefix);
             bool isEndOfLog = ProcessSectorSet(data);
             data->SetOffset(data->Offset + sizeToProcess);
             if (isEndOfLog) {
@@ -544,7 +545,7 @@ void TLogReader::Exec(ui64 offsetRead, TVector<ui64> &badOffsets, TActorSystem *
             break;
         }
         default:
-            Y_ABORT();
+            Y_ABORT("unexpected case");
             break;
         }
     }// while (true)
@@ -565,8 +566,8 @@ void TLogReader::NotifyError(ui64 offsetRead, TString& errorReason) {
 
 TString TLogReader::SelfInfo() {
     TStringStream ss;
-    ss << "PDiskId# " << PCtx->PDiskId
-        << " LogReader"
+    ss << PCtx->PDiskLogPrefix
+        << "LogReader"
         << " IsInitial# " << IsInitial;
     if (!IsInitial) {
         ss << " Owner# " << ui32(Owner)
@@ -581,9 +582,7 @@ TString TLogReader::SelfInfo() {
 bool TLogReader::PrepareToRead() {
     TDiskFormat &format = PDisk->Format;
     if (Position == TLogPosition::Invalid()) {
-        if (IsInitial) {
-            Y_ABORT();
-        }
+        Y_VERIFY_S(!IsInitial, PCtx->PDiskLogPrefix);
         ReplyOk();
         return true;
     }
@@ -597,7 +596,7 @@ bool TLogReader::PrepareToRead() {
             }
             if (OwnerLogStartPosition != TLogPosition{0, 0}) {
                 ui32 startChunkIdx = OwnerLogStartPosition.ChunkIdx;
-                Y_ABORT_UNLESS(startChunkIdx == ChunksToRead[0].ChunkIdx);
+                Y_VERIFY_S(startChunkIdx == ChunksToRead[0].ChunkIdx, PCtx->PDiskLogPrefix);
                 Position = OwnerLogStartPosition;
             } else {
                 Position = PDisk->LogPosition(ChunksToRead[0].ChunkIdx, 0, 0);
@@ -691,7 +690,7 @@ void TLogReader::ProcessLogPageTerminator(ui8 *data, ui32 sectorPayloadSize) {
     // The rest of the sector contains no data.
     auto *firstPageHeader = reinterpret_cast<TFirstLogPageHeader*>(data);
     ui32 sizeLeft = sectorPayloadSize - OffsetInSector;
-    Y_ABORT_UNLESS(firstPageHeader->Size + sizeof(TFirstLogPageHeader) == sizeLeft);
+    Y_VERIFY_S(firstPageHeader->Size + sizeof(TFirstLogPageHeader) == sizeLeft, PCtx->PDiskLogPrefix);
     OffsetInSector += sizeLeft;
     SetLastGoodToWritePosition = true;
 }
@@ -735,7 +734,7 @@ void TLogReader::ProcessLogPageNonceJump2(ui8 *data, const ui64 previousNonce, c
         } else if (previousNonce < nonceJumpLogPageHeader2->PreviousNonce &&
                 previousDataNonce < nonceJumpLogPageHeader2->PreviousNonce) {
             TStringStream str;
-            str << "PDiskId# " << PCtx->PDiskId
+            str << PCtx->PDiskLogPrefix
                 << "previousNonce# " << previousNonce
                 << " and previousDataNonce# " << previousDataNonce
                 << " != header->PreviousNonce# " << nonceJumpLogPageHeader2->PreviousNonce
@@ -776,13 +775,13 @@ void TLogReader::ProcessLogPageNonceJump1(ui8 *data, const ui64 previousNonce) {
             ReplyOk();
             return;
         }
-        Y_ABORT_UNLESS(previousNonce == nonceJumpLogPageHeader1->PreviousNonce,
-                "previousNonce# %" PRIu64 " != header->PreviousNonce# %" PRIu64
-                " OffsetInSector# %" PRIu64 " sizeof(TNonceJumpLogPageHeader1)# %" PRIu64
-                " chunkIdx# %" PRIu64 " sectorIdx# %" PRIu64, // " header->Flags# %" PRIu64,
-                (ui64)previousNonce, (ui64)nonceJumpLogPageHeader1->PreviousNonce,
-                (ui64)OffsetInSector, (ui64)sizeof(TNonceJumpLogPageHeader1),
-                (ui64)ChunkIdx, (ui64)SectorIdx); //, (ui64)pageHeader->Flags);
+        Y_VERIFY_S(previousNonce == nonceJumpLogPageHeader1->PreviousNonce, PCtx->PDiskLogPrefix
+                << "previousNonce# " << (ui64)previousNonce
+                << " != header->PreviousNonce# " << (ui64)nonceJumpLogPageHeader1->PreviousNonce
+                << " OffsetInSector# " << (ui64)OffsetInSector
+                << " sizeof(TNonceJumpLogPageHeader1)# " << (ui64)sizeof(TNonceJumpLogPageHeader1)
+                << " chunkIdx# " << (ui64)ChunkIdx
+                << " sectorIdx# " << (ui64)SectorIdx);
     }
 
     if (!IsInitial && ChunkIdx == LogEndChunkIdx && SectorIdx >= LogEndSectorIdx) {
@@ -887,12 +886,12 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
         ui32 maxOffsetInSector = format.SectorPayloadSize() - ui32(sizeof(TFirstLogPageHeader));
         while (OffsetInSector <= maxOffsetInSector) {
             TLogPageHeader *pageHeader = (TLogPageHeader*)(data + OffsetInSector);
-            Y_ABORT_UNLESS(pageHeader->Version == PDISK_DATA_VERSION, "PDiskId# %" PRIu32
-                " incompatible log page header version: %" PRIu32
-                " (expected: %" PRIu32 ") at chunk %" PRIu32 " SectorSet: %" PRIu32 " Sector: %" PRIu32
-                " Offset in sector: %" PRIu32 " A: %" PRIu32 " B: %" PRIu32, PCtx->PDiskId,
-                (ui32)pageHeader->Version, (ui32)PDISK_DATA_VERSION, (ui32)ChunkIdx, (ui32)SectorIdx,
-                (ui32)0, (ui32)OffsetInSector, (ui32)pageHeader->A, (ui32)pageHeader->B);
+            Y_VERIFY_S(pageHeader->Version == PDISK_DATA_VERSION, PCtx->PDiskLogPrefix
+                << "incompatible log page header version: " << (ui32)pageHeader->Version
+                << " (expected: " << (ui32)PDISK_DATA_VERSION << ") at chunk " << (ui32)ChunkIdx
+                << " SectorIdx: " << (ui32)SectorIdx << " Sector: 0"
+                << " Offset in sector: " << (ui32)OffsetInSector
+                << " A: %" << (ui32)pageHeader->A << " B: %" << (ui32)pageHeader->B);
 
             if (pageHeader->Flags & LogPageTerminator) {
                 ProcessLogPageTerminator(data + OffsetInSector, format.SectorPayloadSize());
@@ -1025,7 +1024,7 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
                     LastRecordHeaderNonce = sectorFooter->Nonce;
                     IsLastRecordHeaderValid = true;
                     LastRecordData = TString::Uninitialized(firstPageHeader->DataSize);
-                    Y_ABORT_UNLESS(firstPageHeader->Size <= LastRecordData.size());
+                    Y_VERIFY_S(firstPageHeader->Size <= LastRecordData.size(), PCtx->PDiskLogPrefix);
                     memcpy((void*)LastRecordData.data(), data + OffsetInSector, firstPageHeader->Size);
                     LastRecordDataWritePosition = firstPageHeader->Size;
                 } else {
@@ -1126,7 +1125,8 @@ void TLogReader::ReplyOk() {
                     ownerData.LogRecordsInitiallyRead &&
                     !ownerData.LogRecordsConsequentlyRead) {
                 TStringStream str;
-                str << "LogRecordsConsequentlyRead# " << ownerData.LogRecordsConsequentlyRead
+                str << PCtx->PDiskLogPrefix
+                    << "LogRecordsConsequentlyRead# " << ownerData.LogRecordsConsequentlyRead
                     << " LogRecordsInitiallyRead# " << ownerData.LogRecordsInitiallyRead;
                 Y_FAIL_S(str.Str());
             }
@@ -1163,7 +1163,7 @@ void TLogReader::ReplyError() {
 }
 
 void TLogReader::Reply() {
-    Y_ABORT_UNLESS(!IsReplied.load());
+    Y_VERIFY_S(!IsReplied.load(), PCtx->PDiskLogPrefix);
     if (IsInitial) {
         PDisk->ProcessChunkOwnerMap(*ChunkOwnerMap.Get());
         ChunkOwnerMap.Destroy();

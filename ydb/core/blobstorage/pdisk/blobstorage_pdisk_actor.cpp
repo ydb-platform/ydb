@@ -229,7 +229,7 @@ public:
                 ->GetSubgroup("pdisk", Sprintf("%09" PRIu32, (ui32)cfg->PDiskId))
                 ->GetSubgroup("media", to_lower(cfg->PDiskCategory.TypeStrShort())))
     {
-        Y_ABORT_UNLESS(MainKey.IsInitialized);
+        Y_VERIFY(MainKey.IsInitialized);
     }
 
     ~TPDiskActor() {
@@ -276,14 +276,14 @@ public:
 
         if (!MainKey) {
             TStringStream str;
-            str << "PDiskId# " << PCtx->PDiskId
-                << " MainKey is invalid, ErrorReason# " << MainKey.ErrorReason;
+            str << PCtx->PDiskLogPrefix
+                << "MainKey is invalid, ErrorReason# " << MainKey.ErrorReason;
             InitError(str.Str());
             P_LOG(PRI_CRIT, BPD01, str.Str());
         } else if (!isOk) {
             TStringStream str;
-            str << "PDiskId# " << PCtx->PDiskId
-                << " bootstrapped to the StateError, reason# " << PDisk->ErrorStr
+            str << PCtx->PDiskLogPrefix
+                << "bootstrapped to the StateError, reason# " << PDisk->ErrorStr
                 << " Can not be initialized";
             InitError(str.Str());
             str << " Config: " << Cfg->ToString();
@@ -363,7 +363,7 @@ public:
         } else {
             PDisk.Reset(new TPDisk(PCtx, Cfg, PDiskCounters));
             PDisk->Initialize();
-            Y_ABORT_UNLESS(PDisk->PDiskThread.Running());
+            Y_VERIFY_S(PDisk->PDiskThread.Running(), PCtx->PDiskLogPrefix);
 
             *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialFormatReadError;
             *PDisk->Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
@@ -372,8 +372,8 @@ public:
             PDisk->ErrorStr = ToString("Can not be formated! Reason# ") + ev->Get()->ErrorStr;
 
             TStringStream str;
-            str << "PDiskId# " << PCtx->PDiskId
-                << " Can not be formated! Reason# " << ev->Get()->ErrorStr
+            str << PCtx->PDiskLogPrefix
+                << "Can not be formated! Reason# " << ev->Get()->ErrorStr
                 << " Switching to StateError. Config: " << Cfg->ToString();
             P_LOG(PRI_CRIT, BPD01, str.Str());
             InitError(str.Str());
@@ -383,7 +383,7 @@ public:
     void CheckMagicSector(ui8 *magicData, ui32 magicDataSize) {
         bool isFormatMagicValid = PDisk->IsFormatMagicValid(magicData, magicDataSize, MainKey);
         if (isFormatMagicValid) {
-            auto format = PDisk->CheckMetadataFormatSector(magicData, magicDataSize, MainKey);
+            auto format = PDisk->CheckMetadataFormatSector(magicData, magicDataSize, MainKey, PCtx->PDiskLogPrefix);
             PDisk->InputRequest(PDisk->ReqCreator.CreateFromArgs<TPushUnformattedMetadataSector>(format,
                 !Cfg->MetadataOnly));
             if (Cfg->MetadataOnly) {
@@ -403,8 +403,8 @@ public:
                 PDisk->ErrorStr = "Format is incomplete. Magic sector is present and new format was written";
             }
             TStringStream str;
-            str << "PDiskId# " << PCtx->PDiskId
-                << " Can not be initialized! " << PDisk->ErrorStr;
+            str << PCtx->PDiskLogPrefix
+                << "Can not be initialized! " << PDisk->ErrorStr;
             for (ui32 i = 0; i < Cfg->HashedMainKey.size(); ++i) {
                 str << " Hash(NewMainKey[" << i << "])# " << Cfg->HashedMainKey[i];
             }
@@ -526,7 +526,7 @@ public:
         } else {
             PDisk.Reset(new TPDisk(PCtx, Cfg, PDiskCounters));
             PDisk->Initialize();
-            Y_ABORT_UNLESS(PDisk->PDiskThread.Running());
+            Y_VERIFY_S(PDisk->PDiskThread.Running(), PCtx->PDiskLogPrefix);
 
             *PDisk->Mon.PDiskState = NKikimrBlobStorage::TPDiskState::InitialFormatReadError;
             *PDisk->Mon.PDiskBriefState = TPDiskMon::TPDisk::Error;
@@ -535,8 +535,8 @@ public:
             PDisk->ErrorStr = ToString("Format chunks cannot be reencrypted! Reason# ") + ev->Get()->ErrorReason;
 
             TStringStream str;
-            str << "PDiskId# " << PCtx->PDiskId
-                << " Format chunks cannot be reencrypted! Reason# " << ev->Get()->ErrorReason
+            str << PCtx->PDiskLogPrefix
+                << "Format chunks cannot be reencrypted! Reason# " << ev->Get()->ErrorReason
                 << " Switching to StateError. Config: " << Cfg->ToString();
             P_LOG(PRI_CRIT, BPD01, str.Str());
             InitError(str.Str());
@@ -570,7 +570,7 @@ public:
                     *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorInitialFormatReadDueToGuid;
                     PDisk->ErrorStr = TStringBuilder() << "Can't start due to a guid error " << info;
                     TStringStream str;
-                    str << "PDiskId# " << PCtx->PDiskId << PDisk->ErrorStr;
+                    str << PCtx->PDiskLogPrefix << PDisk->ErrorStr;
                     P_LOG(PRI_ERROR, BSP01, str.Str());
                     InitError(str.Str());
                 } else if (!PDisk->CheckFormatComplete()) {
@@ -579,7 +579,7 @@ public:
                     *PDisk->Mon.PDiskDetailedState = TPDiskMon::TPDisk::ErrorInitialFormatReadIncompleteFormat;
                     PDisk->ErrorStr = "Can't start due to incomplete format!";
                     TStringStream str;
-                    str << "PDiskId# " << PCtx->PDiskId << " " << PDisk->ErrorStr << " "
+                    str << PCtx->PDiskLogPrefix << PDisk->ErrorStr << " "
                         << "Please, do not turn off your server or remove your storage device while formatting. "
                         << "We are sure you did this or something even more creative, like killing the formatter.";
                     P_LOG(PRI_ERROR, BSP01, str.Str());
@@ -607,8 +607,8 @@ public:
             InitSuccess();
         } else {
             TStringStream str;
-            str << "PDiskId# " << PCtx->PDiskId <<
-                " Can't start due to a log processing error! ErrorStr# \"" << evLogInitResult.ErrorStr << "\"";
+            str << PCtx->PDiskLogPrefix
+                << " Can't start due to a log processing error! ErrorStr# \"" << evLogInitResult.ErrorStr << "\"";
             P_LOG(PRI_ERROR, BSP01, str.Str());
             InitError(str.Str());
         }
@@ -676,7 +676,7 @@ public:
         const NPDisk::TEvSlay &evSlay = *ev->Get();
         PDisk->Mon.YardSlay.CountRequest();
         TStringStream str;
-        str << "PDiskId# " << PCtx->PDiskId << " is still initializing, please wait";
+        str << PCtx->PDiskLogPrefix << "is still initializing, please wait";
         Send(ev->Sender, new NPDisk::TEvSlayResult(NKikimrProto::NOTREADY, 0,
                     evSlay.VDiskId, evSlay.SlayOwnerRound, evSlay.PDiskId, evSlay.VSlotId, str.Str()));
         PDisk->Mon.YardSlay.CountResponse();
@@ -720,8 +720,8 @@ public:
     void ErrorHandle(NPDisk::TEvLog::TPtr &ev) {
         const NPDisk::TEvLog &evLog = *ev->Get();
         TStringStream str;
-        str << "PDiskId# " << PCtx->PDiskId;
-        str << " TEvLog error because PDisk State# ";
+        str << PCtx->PDiskLogPrefix;
+        str << "TEvLog error because PDisk State# ";
         if (CurrentStateFunc() == &TPDiskActor::StateInit) {
             str << "Init, wait for PDisk to initialize. Did you ckeck EvYardInit result? Marker# BSY08";
         } else if (CurrentStateFunc() == &TPDiskActor::StateError) {
@@ -744,8 +744,8 @@ public:
     void ErrorHandle(NPDisk::TEvMultiLog::TPtr &ev) {
         const NPDisk::TEvMultiLog &evMultiLog = *ev->Get();
         TStringStream str;
-        str << "PDiskId# " << PCtx->PDiskId;
-        str << " TEvBatchedLogs error because PDisk State# ";
+        str << PCtx->PDiskLogPrefix;
+        str << "TEvBatchedLogs error because PDisk State# ";
         if (CurrentStateFunc() == &TPDiskActor::StateInit) {
             str << "Init, wait for PDisk to initialize. Did you ckeck EvYardInit result? Marker# BSY10";
         } else if (CurrentStateFunc() == &TPDiskActor::StateError) {
@@ -766,8 +766,8 @@ public:
     void ErrorHandle(NPDisk::TEvReadLog::TPtr &ev) {
         const NPDisk::TEvReadLog &evReadLog = *ev->Get();
         TStringStream str;
-        str << "PDiskId# " << PCtx->PDiskId;
-        str << " TEvReadLog error because PDisk State# ";
+        str << PCtx->PDiskLogPrefix;
+        str << "TEvReadLog error because PDisk State# ";
         if (CurrentStateFunc() == &TPDiskActor::StateInit) {
             str << "Init, wait for PDisk to initialize. Did you ckeck EvYardInit result? Marker# BSY05";
         } else if (CurrentStateFunc() == &TPDiskActor::StateError) {
@@ -814,7 +814,7 @@ public:
         const NPDisk::TEvSlay &evSlay = *ev->Get();
         PDisk->Mon.YardSlay.CountRequest();
         TStringStream str;
-        str << "PDiskId# " << PCtx->PDiskId << " is in error state.";
+        str << PCtx->PDiskLogPrefix << "is in error state.";
         Send(ev->Sender, new NPDisk::TEvSlayResult(NKikimrProto::CORRUPTED, 0,
                     evSlay.VDiskId, evSlay.SlayOwnerRound, evSlay.PDiskId, evSlay.VSlotId, str.Str()));
         PDisk->Mon.YardSlay.CountResponse();
@@ -834,7 +834,7 @@ public:
 
     void ErrorHandle(NPDisk::TEvYardControl::TPtr &ev) {
         const NPDisk::TEvYardControl &evControl = *ev->Get();
-        Y_ABORT_UNLESS(PDisk);
+        Y_VERIFY_S(PDisk, PCtx->PDiskLogPrefix);
 
         PDisk->Mon.YardControl.CountRequest();
 
@@ -842,7 +842,7 @@ public:
         case TEvYardControl::PDiskStart:
         {
             auto *mainKey = static_cast<const NPDisk::TMainKey*>(evControl.Cookie);
-            Y_ABORT_UNLESS(mainKey);
+            Y_VERIFY_S(mainKey, PCtx->PDiskLogPrefix);
             MainKey = *mainKey;
             StartPDiskThread();
             ControledStartResult = MakeHolder<IEventHandle>(ev->Sender, SelfId(),
@@ -991,7 +991,7 @@ public:
             OnPDiskStop(ev->Sender, evControl.Cookie);
             break;
         case TEvYardControl::GetPDiskPointer:
-            Y_ABORT_UNLESS(!evControl.Cookie);
+            Y_VERIFY_S(!evControl.Cookie, PCtx->PDiskLogPrefix);
             Send(ev->Sender, new NPDisk::TEvYardControlResult(NKikimrProto::OK, PDisk.Get(), {}));
             break;
         case TEvYardControl::PDiskStart:

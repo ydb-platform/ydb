@@ -317,7 +317,7 @@ public:
     }
 
     virtual ~TLogWrite() {
-        Y_DEBUG_ABORT_UNLESS(Replied);
+        Y_VERIFY_DEBUG(Replied);
         if (OnDestroy) {
             OnDestroy();
         }
@@ -333,8 +333,8 @@ public:
     }
 
     void AddToBatch(TLogWrite *req) {
-        Y_ABORT_UNLESS(BatchTail->NextInBatch == nullptr);
-        Y_ABORT_UNLESS(req->NextInBatch == nullptr);
+        Y_VERIFY(BatchTail->NextInBatch == nullptr);
+        Y_VERIFY(req->NextInBatch == nullptr);
         BatchTail->NextInBatch = req;
         BatchTail = req;
     }
@@ -414,11 +414,11 @@ public:
     }
 
     virtual ~TChunkRead() {
-        Y_ABORT_UNLESS(DoubleFreeCanary == ReferenceCanary, "DoubleFreeCanary in TChunkRead is dead");
+        Y_VERIFY(DoubleFreeCanary == ReferenceCanary, "DoubleFreeCanary in TChunkRead is dead");
         // Set DoubleFreeCanary to 0 and make sure compiler will not eliminate that action
         SecureWipeBuffer((ui8*)&DoubleFreeCanary, sizeof(DoubleFreeCanary));
-        Y_ABORT_UNLESS(!SelfPointer);
-        Y_ABORT_UNLESS(IsReplied, "Unreplied read request, chunkIdx# %" PRIu32 " Offset# %" PRIu32 " Size# %" PRIu32
+        Y_VERIFY(!SelfPointer);
+        Y_VERIFY(IsReplied, "Unreplied read request, chunkIdx# %" PRIu32 " Offset# %" PRIu32 " Size# %" PRIu32
             " CurrentSector# %" PRIu32 " RemainingSize# %" PRIu32,
             (ui32)ChunkIdx, (ui32)Offset, (ui32)Size, (ui32)CurrentSector, (ui32)RemainingSize);
     }
@@ -468,7 +468,7 @@ public:
     TChunkReadPiece(TIntrusivePtr<TChunkRead> &read, ui64 pieceCurrentSector, ui64 pieceSizeLimit, bool isTheLastPiece, NWilson::TSpan span);
 
     virtual ~TChunkReadPiece() {
-        Y_ABORT_UNLESS(!SelfPointer);
+        Y_VERIFY(!SelfPointer);
     }
 
     void OnSuccessfulDestroy(TActorSystem* actorSystem);

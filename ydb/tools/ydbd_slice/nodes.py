@@ -171,7 +171,8 @@ class Nodes(object):
         self._logger.info(f"download from '{url}' to '{remote_path}'")
         tmp_path = url.split(":")[-1]
         script = (
-            f'sky get -wu -d {tmp_path} {url} && '
+            f'mkdir -p {tmp_path} && cd {tmp_path} &&'
+            f'ya download --original-name {url} && cd - &&'
             f'for FILE in `find {tmp_path} -name *.tgz -or -name *.tar`; do tar -C {tmp_path} -xf $FILE && rm $FILE; done && '
             f'sudo mv {tmp_path}/* {remote_path} && rm -rf {tmp_path}'
         )

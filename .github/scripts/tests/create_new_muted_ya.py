@@ -349,8 +349,8 @@ def create_mute_issues(all_tests, file_path):
     print("\n\n")
     print("\n".join(results))
     if os.environ['GITHUB_OUTPUT']:
-        
-        file_path = os.path.join(os.getcwd(), "created_issues.txt")
+        file_path = os.path.join(os.environ['GITHUB_WORKSPACE'], "created_issues.txt")
+        print(f"Writing results to {file_path}")
         with open(file_path, 'w') as f:
             f.write("```\n")
             f.write("\n".join(results))
@@ -358,6 +358,7 @@ def create_mute_issues(all_tests, file_path):
             
         with open(os.environ['GITHUB_OUTPUT'], 'a') as gh_out:
             gh_out.write(f"created_issues_file={file_path}")
+        print(f"Result saved to env variable GITHUB_OUTPUT by key created_issues_file")
 
 
 def mute_worker(args):

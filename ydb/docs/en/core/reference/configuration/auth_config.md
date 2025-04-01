@@ -1,25 +1,25 @@
-# `auth_config` section
+# `auth_config` configuration section
 
 {{ ydb-short-name }} supports various user authentication methods. The configuration for authentication providers is specified in the `auth_config` section.
 
 ## Configuring internal {{ ydb-short-name }} user authentication {#internal-auth-config}
 
-For more information about authentication of [internal {{ ydb-short-name }} users](../../concepts/glossary.md#access-user), see [{#T}](../../security/authentication.md#static-credentials). To configure authentication by user name and password, define the following parameters in the `auth_config` section:
+For more information about the authentication of [internal {{ ydb-short-name }} users](../../concepts/glossary.md#access-user), see [{#T}](../../security/authentication.md#static-credentials). To configure authentication by username and password, define the following parameters in the `auth_config` section:
 
 #|
 || Parameter | Description ||
 || use_login_provider
-| Indicates whether to allow authentication of internal users with an auth-token that is received after entering a user name and password.
+| Indicates whether to allow the authentication of internal users with an [authentication token](../../concepts/glossary.md#auth-token) that is obtained after entering a username and password.
 
 Default value: `true`
     ||
 || enable_login_authentication
-| Indicates whether to allow adding internal users to {{ ydb-short-name }} databases and generating auth-tokens after an internal user enters a user name and password.
+| Indicates whether to allow adding internal users to {{ ydb-short-name }} databases and generating authentication tokens after an internal user enters a username and password.
 
 Default value: `true`
     ||
 || domain_login_only
-| Determines the databases, to which internal users are added.
+| Determines the databases to which internal users are added.
 
 Valid values:
 
@@ -29,7 +29,7 @@ Valid values:
 Default value: `true`
     ||
 || login_token_expire_time
-| Specifies the expiration time of the authentication token that is created when an internal user logs in to {{ ydb-short-name }}.
+| Specifies the expiration time of the authentication token created when an internal user logs in to {{ ydb-short-name }}.
 
 Default value: `12h`
     ||
@@ -37,7 +37,7 @@ Default value: `12h`
 
 ### Configuring user lockout
 
-You can configure {{ ydb-short-name }} to lock a user account out after the specified number of failed attempts to enter a correct password. To configure user lockout, define the `account_lockout` section inside the `auth_config` section.
+You can configure {{ ydb-short-name }} to lock a user account out after a specified number of failed attempts to enter the correct password. To configure user lockout, define the `account_lockout` section inside the `auth_config` section.
 
 Example of the `account_lockout` section:
 
@@ -53,14 +53,14 @@ auth_config:
 #|
 || Parameter | Description ||
 || attempt_threshold
-| Specifies the number of failed attempts to enter a correct password for a user account, after which the user account is blocked for a period of time specified in the `attempt_reset_duration` parameter.
+| Specifies the number of failed attempts to enter the correct password for a user account, after which the account is blocked for a period specified by the `attempt_reset_duration` parameter.
 
-If `attempt_threshold = 0`, the number of attempts to enter a correct password is not limited.
+If `attempt_threshold = 0`, the number of attempts to enter the correct password is unlimited.
 
 Default value: `4`
     ||
 || attempt_reset_duration
-| Specifies the period of time that a locked-out account remains locked before automatically becoming unlocked. This period starts after the last failed attempt. If this parameter is set to the equivalent of `0s`, user accounts will be locked for an indefinite period of time.
+| Specifies the period that a locked-out account remains locked before automatically becoming unlocked. This period starts after the last failed attempt. If this parameter is set to the equivalent of `0s`, user accounts will be locked indefinitely.
 
 Default value: `1h`
     ||
@@ -68,7 +68,7 @@ Default value: `1h`
 
 ### Configuring password complexity requirements {#password-complexity}
 
-{{ ydb-short-name }} allows internal users authenticate by login and password. For more information, see [authentication by login and password](../../security/authentication.md#static-credentials). To enhance security in {{ ydb-short-name }}, configure complexity requirements for the passwords of [internal users](../../concepts/glossary.md#access-user) in the `password_complexity` subsection inside the `auth_config` section.
+{{ ydb-short-name }} allows internal users to authenticate using a login and password. For more information, see [authentication by login and password](../../security/authentication.md#static-credentials). To enhance security in {{ ydb-short-name }}, configure complexity requirements for the passwords of [internal users](../../concepts/glossary.md#access-user) in the `password_complexity` subsection inside the `auth_config` section.
 
 Example of the `password_complexity` section:
 

@@ -20,7 +20,7 @@ Another essential characteristic of {{ ydb-short-name }} databases is that they 
 
 #### Root database {#root-database}
 
-A **root database** is a system database created for {{ ydb-short-name }} tasks in the root of the cluster scheme. This database contains such service data as users, access levels and access rights, tenant databases, etc.
+A **root database** is a system database created for {{ ydb-short-name }}'s internal purposes at the root of the cluster scheme. This database contains service data such as users, access levels and access rights, tenant databases, and more.
 
 ### Node {#node}
 

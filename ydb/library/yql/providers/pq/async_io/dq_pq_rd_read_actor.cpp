@@ -205,7 +205,7 @@ class TDqPqRdReadActor : public NActors::TActor<TDqPqRdReadActor>, public NYql::
     };
 
 private:
-    TDqPqRdReadActor *Parent;
+    TDqPqRdReadActor* Parent;
     TString Cluster;
     const TString Token;
     TMaybe<NActors::TActorId> CoordinatorActorId;
@@ -311,7 +311,7 @@ public:
         const ::NMonitoring::TDynamicCounterPtr& counters,
         i64 bufferSize,
         const IPqGateway::TPtr& pqGateway,
-        TDqPqRdReadActor *parent = nullptr,
+        TDqPqRdReadActor* parent = nullptr,
         const TString& cluster = {});
 
     void Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev);

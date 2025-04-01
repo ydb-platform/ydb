@@ -140,6 +140,25 @@ class TYdbSetup::TImpl {
     using EVerbose = TYdbSetupSettings::EVerbose;
     using EHealthCheck = TYdbSetupSettings::EHealthCheck;
 
+    class TPortGenerator {
+    public:
+        TPortGenerator(TPortManager& portManager, ui32 firstPort)
+            : PortManager_(portManager)
+            , Port_(firstPort)
+        {}
+
+        ui32 GetPort() {
+            if (!Port_) {
+                return PortManager_.GetPort();
+            }
+            return Port_++;
+        }
+
+    private:
+        TPortManager& PortManager_;
+        ui32 Port_;
+    };
+
 private:
     TAutoPtr<TLogBackend> CreateLogBackend() const {
         if (Settings_.LogOutputFile) {
@@ -264,7 +283,7 @@ private:
 
         if (Settings_.MonitoringEnabled) {
             serverSettings.InitKikimrRunConfig();
-            serverSettings.SetMonitoringPortOffset(Settings_.MonitoringPortOffset, true);
+            serverSettings.SetMonitoringPortOffset(Settings_.FirstMonitoringPort, true);
             serverSettings.SetNeedStatsCollectors(true);
         }
 
@@ -338,7 +357,7 @@ private:
         storage->set_count(1);
     }
 
-    void CreateTenants(ui32 grpcPortOffset) {
+    void CreateTenants(TPortGenerator& grpcPortGen) {
         std::set<TString> sharedTenants;
         std::map<TString, TStorageMeta::TTenant> serverlessTenants;
         for (const auto& [tenantPath, tenantInfo] : Settings_.Tenants) {
@@ -348,13 +367,13 @@ private:
             switch (tenantInfo.GetType()) {
                 case TStorageMeta::TTenant::DEDICATED:
                     AddTenantStoragePool(request.mutable_resources()->add_storage_units(), tenantPath);
-                    CreateTenant(std::move(request), tenantPath, "dedicated", tenantInfo, ++grpcPortOffset);
+                    CreateTenant(std::move(request), tenantPath, "dedicated", tenantInfo, grpcPortGen.GetPort());
                     break;
 
                 case TStorageMeta::TTenant::SHARED:
                     sharedTenants.emplace(tenantPath);
                     AddTenantStoragePool(request.mutable_shared_resources()->add_storage_units(), tenantPath);
-                    CreateTenant(std::move(request), tenantPath, "shared", tenantInfo, ++grpcPortOffset);
+                    CreateTenant(std::move(request), tenantPath, "shared", tenantInfo, grpcPortGen.GetPort());
                     break;
 
                 case TStorageMeta::TTenant::SERVERLESS:
@@ -386,8 +405,10 @@ private:
         }
     }
 
-    void InitializeServer(ui32 grpcPort) {
-        NKikimr::Tests::TServerSettings serverSettings = GetServerSettings(grpcPort);
+    void InitializeServer() {
+        TPortGenerator grpcPortGen(PortManager_, Settings_.FirstGrpcPort);
+        const ui32 domainGrpcPort = grpcPortGen.GetPort();
+        NKikimr::Tests::TServerSettings serverSettings = GetServerSettings(domainGrpcPort);
 
         Server_ = MakeIntrusive<NKikimr::Tests::TServer>(serverSettings);
 
@@ -397,14 +418,14 @@ private:
         Server_->GetRuntime()->SetDispatchTimeout(TDuration::Max());
 
         if (Settings_.GrpcEnabled) {
-            Server_->EnableGRpc(grpcPort);
+            Server_->EnableGRpc(domainGrpcPort);
         }
 
         Client_ = MakeHolder<NKikimr::Tests::TClient>(serverSettings);
         Client_->InitRootScheme();
 
         Tenants_ = MakeHolder<NKikimr::Tests::TTenants>(Server_);
-        CreateTenants(grpcPort);
+        CreateTenants(grpcPortGen);
     }
 
     void InitializeYqlLogger() {
@@ -456,10 +477,8 @@ public:
         : Settings_(settings)
         , CoutColors_(NColorizer::AutoColors(Cout))
     {
-        const ui32 grpcPort = Settings_.GrpcPort ? Settings_.GrpcPort : PortManager_.GetPort();
-
         InitializeYqlLogger();
-        InitializeServer(grpcPort);
+        InitializeServer();
         WaitResourcesPublishing();
 
         if (Settings_.MonitoringEnabled && Settings_.VerboseLevel >= EVerbose::Info) {

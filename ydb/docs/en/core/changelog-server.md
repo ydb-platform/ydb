@@ -33,10 +33,10 @@ Release date:
 * [Fixed](https://github.com/ydb-platform/ydb/pull/15160) an issue where a transaction could hang if a user performed a control plane operation on a topic (for example, adding partitions or a consumer) while the PQ tablet is moving to another node.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/15233) an issue where the counter value for UserInfo was leaking. As a result, the reading session would eventually return a "too big in flight" error.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/15467) a proxy crash due to duplicate topics in a request.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/15933) a rare bug where a user could write to topic with no account quota being applied or consumed.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/15933) a rare bug where a user could write to a topic without any account quota being applied or consumed.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/15941) a rare issue where the scheme shard incorrectly indicated that the topic did not exist when it was actually present.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/16288) an issue where topic deletion returned "OK" while the topic tablet persisted in a functional state.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/16418) a rare issue that prevented restoration of a backup for a large indexed table.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/16418) a rare issue that prevented the restoration of a backup for a large indexed table.
 
 ## Version 24.3 {#24-3}
 

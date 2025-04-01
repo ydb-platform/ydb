@@ -46,6 +46,9 @@ class TllTieringTestBase(object):
                 "TX_COLUMNSHARD_ACTUALIZATION": LogLevels.TRACE,
                 "TX_COLUMNSHARD_BLOBS_TIER": LogLevels.DEBUG,
             },
+            query_service_config=dict(
+                available_external_data_sources=["ObjectStorage"]
+            )
         )
         cls.cluster = KiKiMR(config)
         cls.cluster.start()

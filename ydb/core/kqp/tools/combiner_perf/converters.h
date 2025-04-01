@@ -1,3 +1,5 @@
+#pragma once
+
 #include <yql/essentials/minikql/comp_nodes/ut/mkql_computation_node_ut.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>

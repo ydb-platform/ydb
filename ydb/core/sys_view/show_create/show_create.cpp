@@ -20,11 +20,14 @@ namespace {
 
 using namespace NActors;
 
-NKikimrSchemeOp::EPathType FromString(const TString& pathType) {
-    if (pathType == "Table") {
-        return NKikimrSchemeOp::EPathTypeTable;
+TString ToString(NKikimrSchemeOp::EPathType pathType) {
+    switch (pathType) {
+        case NKikimrSchemeOp::EPathTypeTable:
+        case NKikimrSchemeOp::EPathTypeColumnTable:
+            return "Table";
+        default:
+            return "";
     }
-    return NKikimrSchemeOp::EPathTypeInvalid;
 }
 
 bool RewriteTemporaryTablePath(const TString& database, TString& tablePath, TString& error) {
@@ -158,10 +161,10 @@ private:
         switch (status) {
             case NKikimrScheme::StatusSuccess: {
                 const auto& pathDescription = record.GetPathDescription();
-                if (pathDescription.GetSelf().GetPathType() != FromString(PathType)) {
+                if (auto pathType = ToString(pathDescription.GetSelf().GetPathType()); pathType != PathType) {
                     return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
                         << "Expected path type: " << PathType
-                        << ", actual path type: " << pathDescription.GetSelf().GetPathType()
+                        << ", actual path type: " << pathType
                     );
                 }
 

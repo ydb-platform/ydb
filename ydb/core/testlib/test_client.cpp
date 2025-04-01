@@ -1407,10 +1407,10 @@ namespace Tests {
 
             IActor* discoveryCache = CreateDiscoveryCache(NGRpcService::KafkaEndpointId);
             TActorId discoveryCacheId = Runtime->Register(discoveryCache, nodeIdx, userPoolId);
-	        Runtime->RegisterService(NKafka::MakeKafkaDiscoveryCacheID(), discoveryCacheId, nodeIdx);
+            Runtime->RegisterService(NKafka::MakeKafkaDiscoveryCacheID(), discoveryCacheId, nodeIdx);
             
             TActorId kafkaTxnCoordinatorActorId = Runtime->Register(NKafka::CreateKafkaTransactionsCoordinator(), nodeIdx, userPoolId);
-	        Runtime->RegisterService(NKafka::MakeKafkaTransactionsServiceID(), kafkaTxnCoordinatorActorId, nodeIdx);
+            Runtime->RegisterService(NKafka::MakeKafkaTransactionsServiceID(), kafkaTxnCoordinatorActorId, nodeIdx);
 
             NKafka::TListenerSettings settings;
             settings.Port = Settings->AppConfig->GetKafkaProxyConfig().GetListeningPort();

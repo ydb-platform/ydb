@@ -1,6 +1,8 @@
 name: Update Muted tests
 
 on:
+  schedule:
+    - cron: "0 */2 * * *"  # At the beginning of every 2nd hour
   workflow_dispatch:
 
 env:
@@ -164,7 +166,7 @@ jobs:
               issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: bodyText
+              body: completeBody
             });
       
             github.rest.issues.addLabels({

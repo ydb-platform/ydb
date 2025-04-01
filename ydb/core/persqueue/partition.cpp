@@ -273,11 +273,8 @@ ui64 TPartition::MeteringDataSize(TInstant now) const {
         return UserDataSize();
     } else {
         // We only add the amount of data that is blocked by an important consumer.
-        ui64 size = 0;
         auto expirationTimestamp = now - TDuration::Seconds(Config.GetPartitionConfig().GetLifetimeSeconds()) - WAKE_TIMEOUT;
-        for (size_t i = 1; i < WorkZone.DataKeysBody.size() && WorkZone.DataKeysBody[i].Timestamp < expirationTimestamp; ++i) {
-            size += WorkZone.DataKeysBody[i].Size;
-        }
+        ui64 size = WorkZone.GetBodySizeBefore(expirationTimestamp);
         return size;
     }
 }

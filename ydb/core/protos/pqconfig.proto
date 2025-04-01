@@ -421,7 +421,7 @@ message TPQTabletConfig {
         optional uint32 MinPartitionCount = 1 [default = 1];
         // The maximum number of partitions that will be supported by the strategy. The strategy will not create partitions if the specified
         // amount is reached, even if the load exceeds the current capabilities of the topic.
-        optional uint32 MaxPartitionCount = 2 [default = 1];
+        optional uint32 MaxPartitionCount = 2 [default = 1];;
         optional uint32 ScaleThresholdSeconds = 3 [default = 300];
         optional uint32 ScaleUpPartitionWriteSpeedThresholdPercent = 4 [default = 80];
         optional uint32 ScaleDownPartitionWriteSpeedThresholdPercent = 5 [default = 20];
@@ -433,11 +433,6 @@ message TPQTabletConfig {
     repeated TPartition AllPartitions = 36; // filled by schemeshard
 
     optional TOffloadConfig OffloadConfig = 38;
-
-    message TMigrations {
-        optional bool Lifetime = 1 [default = false];
-    }
-    optional TMigrations Migrations = 39;
 }
 
 message THeartbeat {

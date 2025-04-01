@@ -37,7 +37,7 @@ std::shared_ptr<TSubColumnsArray> TDataBuilder::Finish() {
     TSettings::TColumnsDistributor distributor = Settings.BuildDistributor(sumSize, CurrentRecordIndex);
     for (auto rIt = elementsBySize.rbegin(); rIt != elementsBySize.rend(); ++rIt) {
         for (auto&& i : rIt->second) {
-            switch (distributor.TakeAndDetect(rIt->first, i->GetRecordIndexes().size())) { 
+            switch (distributor.TakeAndDetect(rIt->first, i->GetRecordIndexes().size())) {
                 case TSettings::TColumnsDistributor::EColumnType::Separated:
                     columnElements.emplace_back(i);
                     break;
@@ -97,7 +97,7 @@ TOthersData TDataBuilder::MergeOthers(const std::vector<TColumnElements*>& other
     auto othersBuilder = TOthersData::MakeMergedBuilder();
     while (heap.size()) {
         std::pop_heap(heap.begin(), heap.end());
-        othersBuilder->Add(heap.back().GetRecordIndex(), heap.back().GetKeyIndex(), heap.back().GetValue());
+        othersBuilder->AddImpl(heap.back().GetRecordIndex(), heap.back().GetKeyIndex(), heap.back().GetValuePointer());
         if (!heap.back().Next()) {
             heap.pop_back();
         } else {
@@ -105,6 +105,41 @@ TOthersData TDataBuilder::MergeOthers(const std::vector<TColumnElements*>& other
         }
     }
     return othersBuilder->Finish(TOthersData::TFinishContext(BuildStats(otherKeys, Settings, recordsCount)));
+}
+
+std::string BuildString(const TStringBuf currentPrefix, const TStringBuf key) {
+    if (key.find(".") != std::string::npos) {
+        if (currentPrefix.size()) {
+            return Sprintf("%.*s.\"%.*s\"", currentPrefix.size(), currentPrefix.data(), key.size(), key.data());
+        } else {
+            return Sprintf("\"%.*s\"", key.size(), key.data());
+        }
+    } else {
+        if (currentPrefix.size()) {
+            return Sprintf("%.*s.%.*s", currentPrefix.size(), currentPrefix.data(), key.size(), key.data());
+        } else {
+            return std::string(key.data(), key.size());
+        }
+    }
+}
+
+TStringBuf TDataBuilder::AddKeyOwn(const TStringBuf currentPrefix, std::string&& key) {
+    auto it = StorageHash.find(TStorageAddress(currentPrefix, TStringBuf(key.data(), key.size())));
+    if (it == StorageHash.end()) {
+        Storage.emplace_back(std::move(key));
+        TStringBuf sbKey(Storage.back().data(), Storage.back().size());
+        it = StorageHash.emplace(TStorageAddress(currentPrefix, sbKey), BuildString(currentPrefix, sbKey)).first;
+    }
+    return TStringBuf(it->second.data(), it->second.size());
+}
+
+TStringBuf TDataBuilder::AddKey(const TStringBuf currentPrefix, const TStringBuf key) {
+    TStorageAddress keyAddress(currentPrefix, key);
+    auto it = StorageHash.find(keyAddress);
+    if (it == StorageHash.end()) {
+        it = StorageHash.emplace(keyAddress, BuildString(currentPrefix, key)).first;
+    }
+    return TStringBuf(it->second.data(), it->second.size());
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

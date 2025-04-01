@@ -56,6 +56,28 @@
                                         "PlanNodeId": 7,
                                         "Plans": [
                                             {
+                                                "Node Type": "TablePointLookup",
+                                                "Operators": [
+                                                    {
+                                                        "Inputs": [],
+                                                        "Name": "TablePointLookup",
+                                                        "Path": "/Root/postgres_jointest/join0.test_plan/int4_tbl",
+                                                        "ReadColumns": [
+                                                            "f1"
+                                                        ],
+                                                        "ReadRange": [
+                                                            "f1 (0)"
+                                                        ],
+                                                        "Scan": "Parallel",
+                                                        "Table": "postgres_jointest/join0.test_plan/int4_tbl"
+                                                    }
+                                                ],
+                                                "PlanNodeId": 6,
+                                                "Tables": [
+                                                    "postgres_jointest/join0.test_plan/int4_tbl"
+                                                ]
+                                            },
+                                            {
                                                 "Node Type": "Broadcast",
                                                 "PlanNodeId": 5,
                                                 "PlanNodeType": "Connection",
@@ -105,28 +127,6 @@
                                                             }
                                                         ]
                                                     }
-                                                ]
-                                            },
-                                            {
-                                                "Node Type": "TablePointLookup",
-                                                "Operators": [
-                                                    {
-                                                        "Inputs": [],
-                                                        "Name": "TablePointLookup",
-                                                        "Path": "/Root/postgres_jointest/join0.test_plan/int4_tbl",
-                                                        "ReadColumns": [
-                                                            "f1"
-                                                        ],
-                                                        "ReadRange": [
-                                                            "f1 (0)"
-                                                        ],
-                                                        "Scan": "Parallel",
-                                                        "Table": "postgres_jointest/join0.test_plan/int4_tbl"
-                                                    }
-                                                ],
-                                                "PlanNodeId": 6,
-                                                "Tables": [
-                                                    "postgres_jointest/join0.test_plan/int4_tbl"
                                                 ]
                                             }
                                         ]

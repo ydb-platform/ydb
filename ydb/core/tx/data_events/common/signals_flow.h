@@ -13,7 +13,8 @@ enum class EWriteStage {
     BuildSlicesPack,
     Result,
     Finished,
-    Aborted
+    Aborted,
+    Replied
 };
 
 class TWriteFlowCounters: public NColumnShard::TCommonCountersOwner {

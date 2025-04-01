@@ -24,14 +24,14 @@ TString DyNumberToString(TStringBuf data) {
     TStringBuilder err;
 
     bool success = DyNumberToStream(data, out, err);
-    Y_ABORT_UNLESS(success);
+    Y_ENSURE(success);
 
     return result;
 }
 
 TString PgToString(TStringBuf data, const NScheme::TTypeInfo& typeInfo) {
     const NPg::TConvertResult& pgResult = NPg::PgNativeTextFromNativeBinary(data, typeInfo.GetPgTypeDesc());
-    Y_ABORT_UNLESS(pgResult.Error.Empty());
+    Y_ENSURE(pgResult.Error.Empty());
     return pgResult.Str;
 }
 

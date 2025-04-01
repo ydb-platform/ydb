@@ -27,6 +27,7 @@ const std::unordered_map<EApiKey, TString> EApiKeyNames = {
     {EApiKey::ADD_OFFSETS_TO_TXN, "ADD_OFFSETS_TO_TXN"},
     {EApiKey::END_TXN, "END_TXN"},
     {EApiKey::TXN_OFFSET_COMMIT, "TXN_OFFSET_COMMIT"},
+    {EApiKey::DESCRIBE_CONFIGS, "DESCRIBE_CONFIGS"},
     {EApiKey::ALTER_CONFIGS, "ALTER_CONFIGS"},
     {EApiKey::SASL_AUTHENTICATE, "SASL_AUTHENTICATE"},
     {EApiKey::CREATE_PARTITIONS, "CREATE_PARTITIONS"},
@@ -73,6 +74,8 @@ std::unique_ptr<TApiMessage> CreateRequest(i16 apiKey) {
             return std::make_unique<TEndTxnRequestData>();
         case TXN_OFFSET_COMMIT:
             return std::make_unique<TTxnOffsetCommitRequestData>();
+        case DESCRIBE_CONFIGS:
+            return std::make_unique<TDescribeConfigsRequestData>();
         case ALTER_CONFIGS:
             return std::make_unique<TAlterConfigsRequestData>();
         case SASL_AUTHENTICATE:
@@ -124,6 +127,8 @@ std::unique_ptr<TApiMessage> CreateResponse(i16 apiKey) {
             return std::make_unique<TEndTxnResponseData>();
         case TXN_OFFSET_COMMIT:
             return std::make_unique<TTxnOffsetCommitResponseData>();
+        case DESCRIBE_CONFIGS:
+            return std::make_unique<TDescribeConfigsResponseData>();
         case ALTER_CONFIGS:
             return std::make_unique<TAlterConfigsResponseData>();
         case SASL_AUTHENTICATE:
@@ -243,6 +248,12 @@ TKafkaVersion RequestHeaderVersion(i16 apiKey, TKafkaVersion _version) {
             }
         case TXN_OFFSET_COMMIT:
             if (_version >= 3) {
+                return 2;
+            } else {
+                return 1;
+            }
+        case DESCRIBE_CONFIGS:
+            if (_version >= 4) {
                 return 2;
             } else {
                 return 1;
@@ -377,6 +388,12 @@ TKafkaVersion ResponseHeaderVersion(i16 apiKey, TKafkaVersion _version) {
             }
         case TXN_OFFSET_COMMIT:
             if (_version >= 3) {
+                return 1;
+            } else {
+                return 0;
+            }
+        case DESCRIBE_CONFIGS:
+            if (_version >= 4) {
                 return 1;
             } else {
                 return 0;
@@ -4595,19 +4612,12 @@ i32 TSyncGroupResponseData::Size(TKafkaVersion _version) const {
     NPrivate::Size<ErrorCodeMeta>(_collector, _version, ErrorCode);
     NPrivate::Size<ProtocolTypeMeta>(_collector, _version, ProtocolType);
     NPrivate::Size<ProtocolNameMeta>(_collector, _version, ProtocolName);
-    NPrivate::TSizeCollector _assignmentCollector;
-    NPrivate::Size<AssignmentMeta>(_assignmentCollector, _version, Assignment);
     NPrivate::Size<AssignmentMeta>(_collector, _version, Assignment);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
-    auto useVarintSize = _version > 3;
-    if (useVarintSize) {
-        return _collector.Size + NPrivate::SizeOfUnsignedVarint(_assignmentCollector.Size + 1);
-    } else {
-        return _collector.Size + sizeof(TKafkaInt32);
-    }
+    return _collector.Size;
 }
 
 
@@ -6575,6 +6585,409 @@ i32 TTxnOffsetCommitResponseData::TTxnOffsetCommitResponseTopic::TTxnOffsetCommi
     NPrivate::TSizeCollector _collector;
     NPrivate::Size<PartitionIndexMeta>(_collector, _version, PartitionIndex);
     NPrivate::Size<ErrorCodeMeta>(_collector, _version, ErrorCode);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TDescribeConfigsRequestData
+//
+const TDescribeConfigsRequestData::IncludeSynonymsMeta::Type TDescribeConfigsRequestData::IncludeSynonymsMeta::Default = false;
+const TDescribeConfigsRequestData::IncludeDocumentationMeta::Type TDescribeConfigsRequestData::IncludeDocumentationMeta::Default = false;
+
+TDescribeConfigsRequestData::TDescribeConfigsRequestData() 
+        : IncludeSynonyms(IncludeSynonymsMeta::Default)
+        , IncludeDocumentation(IncludeDocumentationMeta::Default)
+{}
+
+void TDescribeConfigsRequestData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TDescribeConfigsRequestData";
+    }
+    NPrivate::Read<ResourcesMeta>(_readable, _version, Resources);
+    NPrivate::Read<IncludeSynonymsMeta>(_readable, _version, IncludeSynonyms);
+    NPrivate::Read<IncludeDocumentationMeta>(_readable, _version, IncludeDocumentation);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TDescribeConfigsRequestData::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TDescribeConfigsRequestData";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<ResourcesMeta>(_collector, _writable, _version, Resources);
+    NPrivate::Write<IncludeSynonymsMeta>(_collector, _writable, _version, IncludeSynonyms);
+    NPrivate::Write<IncludeDocumentationMeta>(_collector, _writable, _version, IncludeDocumentation);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+        
+    }
+}
+
+i32 TDescribeConfigsRequestData::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<ResourcesMeta>(_collector, _version, Resources);
+    NPrivate::Size<IncludeSynonymsMeta>(_collector, _version, IncludeSynonyms);
+    NPrivate::Size<IncludeDocumentationMeta>(_collector, _version, IncludeDocumentation);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TDescribeConfigsRequestData::TDescribeConfigsResource
+//
+const TDescribeConfigsRequestData::TDescribeConfigsResource::ResourceTypeMeta::Type TDescribeConfigsRequestData::TDescribeConfigsResource::ResourceTypeMeta::Default = 0;
+const TDescribeConfigsRequestData::TDescribeConfigsResource::ResourceNameMeta::Type TDescribeConfigsRequestData::TDescribeConfigsResource::ResourceNameMeta::Default = {""};
+
+TDescribeConfigsRequestData::TDescribeConfigsResource::TDescribeConfigsResource() 
+        : ResourceType(ResourceTypeMeta::Default)
+        , ResourceName(ResourceNameMeta::Default)
+{}
+
+void TDescribeConfigsRequestData::TDescribeConfigsResource::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TDescribeConfigsRequestData::TDescribeConfigsResource";
+    }
+    NPrivate::Read<ResourceTypeMeta>(_readable, _version, ResourceType);
+    NPrivate::Read<ResourceNameMeta>(_readable, _version, ResourceName);
+    NPrivate::Read<ConfigurationKeysMeta>(_readable, _version, ConfigurationKeys);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TDescribeConfigsRequestData::TDescribeConfigsResource::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TDescribeConfigsRequestData::TDescribeConfigsResource";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<ResourceTypeMeta>(_collector, _writable, _version, ResourceType);
+    NPrivate::Write<ResourceNameMeta>(_collector, _writable, _version, ResourceName);
+    NPrivate::Write<ConfigurationKeysMeta>(_collector, _writable, _version, ConfigurationKeys);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+        
+    }
+}
+
+i32 TDescribeConfigsRequestData::TDescribeConfigsResource::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<ResourceTypeMeta>(_collector, _version, ResourceType);
+    NPrivate::Size<ResourceNameMeta>(_collector, _version, ResourceName);
+    NPrivate::Size<ConfigurationKeysMeta>(_collector, _version, ConfigurationKeys);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TDescribeConfigsResponseData
+//
+const TDescribeConfigsResponseData::ThrottleTimeMsMeta::Type TDescribeConfigsResponseData::ThrottleTimeMsMeta::Default = 0;
+
+TDescribeConfigsResponseData::TDescribeConfigsResponseData() 
+        : ThrottleTimeMs(ThrottleTimeMsMeta::Default)
+{}
+
+void TDescribeConfigsResponseData::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TDescribeConfigsResponseData";
+    }
+    NPrivate::Read<ThrottleTimeMsMeta>(_readable, _version, ThrottleTimeMs);
+    NPrivate::Read<ResultsMeta>(_readable, _version, Results);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TDescribeConfigsResponseData::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TDescribeConfigsResponseData";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<ThrottleTimeMsMeta>(_collector, _writable, _version, ThrottleTimeMs);
+    NPrivate::Write<ResultsMeta>(_collector, _writable, _version, Results);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+        
+    }
+}
+
+i32 TDescribeConfigsResponseData::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<ThrottleTimeMsMeta>(_collector, _version, ThrottleTimeMs);
+    NPrivate::Size<ResultsMeta>(_collector, _version, Results);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TDescribeConfigsResponseData::TDescribeConfigsResult
+//
+const TDescribeConfigsResponseData::TDescribeConfigsResult::ErrorCodeMeta::Type TDescribeConfigsResponseData::TDescribeConfigsResult::ErrorCodeMeta::Default = 0;
+const TDescribeConfigsResponseData::TDescribeConfigsResult::ErrorMessageMeta::Type TDescribeConfigsResponseData::TDescribeConfigsResult::ErrorMessageMeta::Default = {""};
+const TDescribeConfigsResponseData::TDescribeConfigsResult::ResourceTypeMeta::Type TDescribeConfigsResponseData::TDescribeConfigsResult::ResourceTypeMeta::Default = 0;
+const TDescribeConfigsResponseData::TDescribeConfigsResult::ResourceNameMeta::Type TDescribeConfigsResponseData::TDescribeConfigsResult::ResourceNameMeta::Default = {""};
+
+TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResult() 
+        : ErrorCode(ErrorCodeMeta::Default)
+        , ErrorMessage(ErrorMessageMeta::Default)
+        , ResourceType(ResourceTypeMeta::Default)
+        , ResourceName(ResourceNameMeta::Default)
+{}
+
+void TDescribeConfigsResponseData::TDescribeConfigsResult::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TDescribeConfigsResponseData::TDescribeConfigsResult";
+    }
+    NPrivate::Read<ErrorCodeMeta>(_readable, _version, ErrorCode);
+    NPrivate::Read<ErrorMessageMeta>(_readable, _version, ErrorMessage);
+    NPrivate::Read<ResourceTypeMeta>(_readable, _version, ResourceType);
+    NPrivate::Read<ResourceNameMeta>(_readable, _version, ResourceName);
+    NPrivate::Read<ConfigsMeta>(_readable, _version, Configs);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TDescribeConfigsResponseData::TDescribeConfigsResult::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TDescribeConfigsResponseData::TDescribeConfigsResult";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<ErrorCodeMeta>(_collector, _writable, _version, ErrorCode);
+    NPrivate::Write<ErrorMessageMeta>(_collector, _writable, _version, ErrorMessage);
+    NPrivate::Write<ResourceTypeMeta>(_collector, _writable, _version, ResourceType);
+    NPrivate::Write<ResourceNameMeta>(_collector, _writable, _version, ResourceName);
+    NPrivate::Write<ConfigsMeta>(_collector, _writable, _version, Configs);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+        
+    }
+}
+
+i32 TDescribeConfigsResponseData::TDescribeConfigsResult::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<ErrorCodeMeta>(_collector, _version, ErrorCode);
+    NPrivate::Size<ErrorMessageMeta>(_collector, _version, ErrorMessage);
+    NPrivate::Size<ResourceTypeMeta>(_collector, _version, ResourceType);
+    NPrivate::Size<ResourceNameMeta>(_collector, _version, ResourceName);
+    NPrivate::Size<ConfigsMeta>(_collector, _version, Configs);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult
+//
+const TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::NameMeta::Type TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::NameMeta::Default = {""};
+const TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::ValueMeta::Type TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::ValueMeta::Default = {""};
+const TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::ReadOnlyMeta::Type TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::ReadOnlyMeta::Default = false;
+const TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::IsDefaultMeta::Type TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::IsDefaultMeta::Default = false;
+const TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::ConfigSourceMeta::Type TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::ConfigSourceMeta::Default = -1;
+const TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::IsSensitiveMeta::Type TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::IsSensitiveMeta::Default = false;
+const TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::ConfigTypeMeta::Type TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::ConfigTypeMeta::Default = 0;
+const TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::DocumentationMeta::Type TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::DocumentationMeta::Default = {""};
+
+TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::TDescribeConfigsResourceResult() 
+        : Name(NameMeta::Default)
+        , Value(ValueMeta::Default)
+        , ReadOnly(ReadOnlyMeta::Default)
+        , IsDefault(IsDefaultMeta::Default)
+        , ConfigSource(ConfigSourceMeta::Default)
+        , IsSensitive(IsSensitiveMeta::Default)
+        , ConfigType(ConfigTypeMeta::Default)
+        , Documentation(DocumentationMeta::Default)
+{}
+
+void TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult";
+    }
+    NPrivate::Read<NameMeta>(_readable, _version, Name);
+    NPrivate::Read<ValueMeta>(_readable, _version, Value);
+    NPrivate::Read<ReadOnlyMeta>(_readable, _version, ReadOnly);
+    NPrivate::Read<IsDefaultMeta>(_readable, _version, IsDefault);
+    NPrivate::Read<ConfigSourceMeta>(_readable, _version, ConfigSource);
+    NPrivate::Read<IsSensitiveMeta>(_readable, _version, IsSensitive);
+    NPrivate::Read<SynonymsMeta>(_readable, _version, Synonyms);
+    NPrivate::Read<ConfigTypeMeta>(_readable, _version, ConfigType);
+    NPrivate::Read<DocumentationMeta>(_readable, _version, Documentation);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<NameMeta>(_collector, _writable, _version, Name);
+    NPrivate::Write<ValueMeta>(_collector, _writable, _version, Value);
+    NPrivate::Write<ReadOnlyMeta>(_collector, _writable, _version, ReadOnly);
+    NPrivate::Write<IsDefaultMeta>(_collector, _writable, _version, IsDefault);
+    NPrivate::Write<ConfigSourceMeta>(_collector, _writable, _version, ConfigSource);
+    NPrivate::Write<IsSensitiveMeta>(_collector, _writable, _version, IsSensitive);
+    NPrivate::Write<SynonymsMeta>(_collector, _writable, _version, Synonyms);
+    NPrivate::Write<ConfigTypeMeta>(_collector, _writable, _version, ConfigType);
+    NPrivate::Write<DocumentationMeta>(_collector, _writable, _version, Documentation);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+        
+    }
+}
+
+i32 TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<NameMeta>(_collector, _version, Name);
+    NPrivate::Size<ValueMeta>(_collector, _version, Value);
+    NPrivate::Size<ReadOnlyMeta>(_collector, _version, ReadOnly);
+    NPrivate::Size<IsDefaultMeta>(_collector, _version, IsDefault);
+    NPrivate::Size<ConfigSourceMeta>(_collector, _version, ConfigSource);
+    NPrivate::Size<IsSensitiveMeta>(_collector, _version, IsSensitive);
+    NPrivate::Size<SynonymsMeta>(_collector, _version, Synonyms);
+    NPrivate::Size<ConfigTypeMeta>(_collector, _version, ConfigType);
+    NPrivate::Size<DocumentationMeta>(_collector, _version, Documentation);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
+    }
+    return _collector.Size;
+}
+
+
+//
+// TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::TDescribeConfigsSynonym
+//
+const TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::TDescribeConfigsSynonym::NameMeta::Type TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::TDescribeConfigsSynonym::NameMeta::Default = {""};
+const TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::TDescribeConfigsSynonym::ValueMeta::Type TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::TDescribeConfigsSynonym::ValueMeta::Default = {""};
+const TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::TDescribeConfigsSynonym::SourceMeta::Type TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::TDescribeConfigsSynonym::SourceMeta::Default = 0;
+
+TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::TDescribeConfigsSynonym::TDescribeConfigsSynonym() 
+        : Name(NameMeta::Default)
+        , Value(ValueMeta::Default)
+        , Source(SourceMeta::Default)
+{}
+
+void TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::TDescribeConfigsSynonym::Read(TKafkaReadable& _readable, TKafkaVersion _version) {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't read version " << _version << " of TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::TDescribeConfigsSynonym";
+    }
+    NPrivate::Read<NameMeta>(_readable, _version, Name);
+    NPrivate::Read<ValueMeta>(_readable, _version, Value);
+    NPrivate::Read<SourceMeta>(_readable, _version, Source);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        ui32 _numTaggedFields = _readable.readUnsignedVarint<ui32>();
+        for (ui32 _i = 0; _i < _numTaggedFields; ++_i) {
+            ui32 _tag = _readable.readUnsignedVarint<ui32>();
+            ui32 _size = _readable.readUnsignedVarint<ui32>();
+            switch (_tag) {
+                default:
+                    _readable.skip(_size); // skip unknown tag
+                    break;
+            }
+        }
+    }
+}
+
+void TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::TDescribeConfigsSynonym::Write(TKafkaWritable& _writable, TKafkaVersion _version) const {
+    if (!NPrivate::VersionCheck<MessageMeta::PresentVersions.Min, MessageMeta::PresentVersions.Max>(_version)) {
+        ythrow yexception() << "Can't write version " << _version << " of TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::TDescribeConfigsSynonym";
+    }
+    NPrivate::TWriteCollector _collector;
+    NPrivate::Write<NameMeta>(_collector, _writable, _version, Name);
+    NPrivate::Write<ValueMeta>(_collector, _writable, _version, Value);
+    NPrivate::Write<SourceMeta>(_collector, _writable, _version, Source);
+    
+    if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
+        _writable.writeUnsignedVarint(_collector.NumTaggedFields);
+        
+    }
+}
+
+i32 TDescribeConfigsResponseData::TDescribeConfigsResult::TDescribeConfigsResourceResult::TDescribeConfigsSynonym::Size(TKafkaVersion _version) const {
+    NPrivate::TSizeCollector _collector;
+    NPrivate::Size<NameMeta>(_collector, _version, Name);
+    NPrivate::Size<ValueMeta>(_collector, _version, Value);
+    NPrivate::Size<SourceMeta>(_collector, _version, Source);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);

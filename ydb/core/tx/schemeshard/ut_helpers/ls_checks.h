@@ -23,7 +23,24 @@ struct TPathVersion {
     TPathId PathId = TPathId();
     ui64 Version = Max<ui64>();
 };
-using TApplyIf = TVector<TPathVersion>;
+
+struct TApplyIfUnit : TPathVersion {
+    std::vector<NKikimrSchemeOp::EPathType> PathTypes;
+
+    TApplyIfUnit() {}
+
+    TApplyIfUnit(const TPathVersion& pathVersion) {
+        PathId = pathVersion.PathId;
+        Version = pathVersion.Version;
+    }
+
+    TApplyIfUnit(TPathVersion&& pathVersion) {
+        PathId = std::move(pathVersion.PathId);
+        Version = std::move(pathVersion.Version);
+    }
+};
+
+using TApplyIf = TVector<TApplyIfUnit>;
 
 using TUserAttrs = TVector<std::pair<TString, TString>>;
 

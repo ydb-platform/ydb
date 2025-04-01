@@ -275,7 +275,12 @@ public:
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvCommit>();
             event->ExecuterActorId = SelfId();
             event->TxId = TxId;
-            Send<ESendingType::Tail>(BufferActorId, event.release(), IEventHandle::FlagTrackDelivery);
+            Send<ESendingType::Tail>(
+                BufferActorId,
+                event.release(),
+                IEventHandle::FlagTrackDelivery,
+                0,
+                ExecuterSpan.GetTraceId());
             return;
         } else if (Request.LocksOp == ELocksOp::Rollback) {
             Become(&TKqpDataExecuter::FinalizeState);
@@ -283,7 +288,12 @@ public:
 
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvRollback>();
             event->ExecuterActorId = SelfId();
-            Send<ESendingType::Tail>(BufferActorId, event.release(), IEventHandle::FlagTrackDelivery);
+            Send<ESendingType::Tail>(
+                BufferActorId,
+                event.release(),
+                IEventHandle::FlagTrackDelivery,
+                0,
+                ExecuterSpan.GetTraceId());
             MakeResponseAndPassAway();
             return;
         } else if (Request.UseImmediateEffects) {
@@ -292,7 +302,12 @@ public:
 
             auto event = std::make_unique<NKikimr::NKqp::TEvKqpBuffer::TEvFlush>();
             event->ExecuterActorId = SelfId();
-            Send<ESendingType::Tail>(BufferActorId, event.release(), IEventHandle::FlagTrackDelivery);
+            Send<ESendingType::Tail>(
+                BufferActorId,
+                event.release(),
+                IEventHandle::FlagTrackDelivery,
+                0,
+                ExecuterSpan.GetTraceId());
             return;
         } else {
             Become(&TKqpDataExecuter::FinalizeState);
@@ -2003,9 +2018,12 @@ private:
         for (ui32 txIdx = 0; txIdx < Request.Transactions.size(); ++txIdx) {
             auto& tx = Request.Transactions[txIdx];
             auto scheduledTaskCount = ScheduleByCost(tx, ResourcesSnapshot);
+            AFL_ENSURE(tx.Body->StagesSize() < (static_cast<ui64>(1) << PriorityTxShift));
             for (ui32 stageIdx = 0; stageIdx < tx.Body->StagesSize(); ++stageIdx) {
                 auto& stage = tx.Body->GetStages(stageIdx);
-                auto& stageInfo = TasksGraph.GetStageInfo(TStageId(txIdx, stageIdx));
+                const auto stageId = TStageId(txIdx, stageIdx);
+                auto& stageInfo = TasksGraph.GetStageInfo(stageId);
+                AFL_ENSURE(stageInfo.Id == stageId);
 
                 if (stageInfo.Meta.ShardKind == NSchemeCache::TSchemeCacheRequest::KindAsyncIndexTable) {
                     TMaybe<TString> error;

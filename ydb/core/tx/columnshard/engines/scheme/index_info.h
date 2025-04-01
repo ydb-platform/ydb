@@ -174,6 +174,11 @@ public:
         return ColumnFeatures[colIndex]->GetIsNullable();
     }
 
+    const TColumnFeatures& GetColumnFeaturesVerifiedByIndex(const ui32 colIndex) const {
+        AFL_VERIFY(colIndex < ColumnFeatures.size());
+        return *ColumnFeatures[colIndex];
+    }
+
     bool IsNullableVerified(const ui32 colId) const {
         return GetColumnFeaturesVerified(colId).GetIsNullable();
     }

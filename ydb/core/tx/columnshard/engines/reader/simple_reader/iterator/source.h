@@ -6,8 +6,8 @@
 #include <ydb/core/formats/arrow/reader/position.h>
 #include <ydb/core/tx/columnshard/blob.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/action.h>
-#include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/common/path_id.h>
+#include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
 #include <ydb/core/tx/columnshard/engines/predicate/range.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/iterator/columns_set.h>
@@ -47,8 +47,8 @@ public:
 
 class TReplaceKeyAdapter {
 private:
-    const bool Reverse = false;
-    const NArrow::TReplaceKey Value;
+    bool Reverse = false;
+    NArrow::TReplaceKey Value;
 
 public:
     TReplaceKeyAdapter(const NArrow::TReplaceKey& rk, const bool reverse)
@@ -72,23 +72,44 @@ public:
     }
 
     bool operator<(const TReplaceKeyAdapter& item) const {
-        AFL_VERIFY(Reverse == item.Reverse);
-        const std::partial_ordering result = Value.CompareNotNull(item.Value);
-        if (result == std::partial_ordering::equivalent) {
-            return false;
-        } else if (result == std::partial_ordering::less) {
-            return !Reverse;
-        } else if (result == std::partial_ordering::greater) {
-            return Reverse;
-        } else {
-            AFL_VERIFY(false);
-            return false;
-        }
+        return Compare(item) == std::partial_ordering::less;
     }
 
     TString DebugString() const {
         return TStringBuilder() << "point:{" << Value.DebugString() << "};reverse:" << Reverse << ";";
     }
+};
+
+class TCompareKeyForScanSequence {
+private:
+    TReplaceKeyAdapter Key;
+    YDB_READONLY(ui32, SourceId, 0);
+
+public:
+    const TReplaceKeyAdapter GetKey() const {
+        return Key;
+    }
+
+    explicit TCompareKeyForScanSequence(const TReplaceKeyAdapter& key, const ui32 sourceId)
+        : Key(key)
+        , SourceId(sourceId) {
+    }
+
+    static TCompareKeyForScanSequence FromStart(const std::shared_ptr<IDataSource>& src);
+    static TCompareKeyForScanSequence FromFinish(const std::shared_ptr<IDataSource>& src);
+
+    static TCompareKeyForScanSequence BorderStart(const TReplaceKeyAdapter& key) {
+        return TCompareKeyForScanSequence(key, 0);
+    }
+
+    bool operator<(const TCompareKeyForScanSequence& item) const {
+        const std::partial_ordering compareResult = Key.Compare(item.Key);
+        if (compareResult == std::partial_ordering::equivalent) {
+            return SourceId < item.SourceId;
+        } else {
+            return compareResult == std::partial_ordering::less;
+        }
+    };
 };
 
 class IDataSource: public NCommon::IDataSource {
@@ -157,7 +178,7 @@ public:
     }
 
     virtual void ClearResult() {
-        StageData.reset();
+        ClearStageData();
         StageResult.reset();
         ResourceGuards.clear();
         SourceGroupGuard = nullptr;
@@ -174,6 +195,7 @@ public:
 
     void ContinueCursor(const std::shared_ptr<IDataSource>& sourcePtr);
 
+    template <bool Reverse>
     class TCompareStartForScanSequence {
     public:
         bool operator()(const std::shared_ptr<IDataSource>& l, const std::shared_ptr<IDataSource>& r) const {
@@ -181,40 +203,7 @@ public:
             if (compareResult == std::partial_ordering::equivalent) {
                 return l->GetSourceId() < r->GetSourceId();
             } else {
-                return compareResult == std::partial_ordering::less;
-            }
-        };
-    };
-
-    class TCompareKeyForScanSequence {
-    private:
-        const TReplaceKeyAdapter Key;
-        const ui32 SourceId;
-
-    public:
-        TCompareKeyForScanSequence(const TReplaceKeyAdapter& key, const ui32 sourceId)
-            : Key(key)
-            , SourceId(sourceId) {
-        }
-
-        static TCompareKeyForScanSequence FromStart(const std::shared_ptr<IDataSource>& src) {
-            return TCompareKeyForScanSequence(src->GetStart(), src->GetSourceId());
-        }
-
-        static TCompareKeyForScanSequence FromFinish(const std::shared_ptr<IDataSource>& src) {
-            return TCompareKeyForScanSequence(src->GetFinish(), src->GetSourceId());
-        }
-
-        static TCompareKeyForScanSequence BorderStart(const std::shared_ptr<IDataSource>& src) {
-            return TCompareKeyForScanSequence(src->GetStart(), 0);
-        }
-
-        bool operator<(const TCompareKeyForScanSequence& item) const {
-            const std::partial_ordering compareResult = Key.Compare(item.Key);
-            if (compareResult == std::partial_ordering::equivalent) {
-                return SourceId < item.SourceId;
-            } else {
-                return compareResult == std::partial_ordering::less;
+                return Reverse ? compareResult == std::partial_ordering::greater : compareResult == std::partial_ordering::less;
             }
         };
     };
@@ -264,12 +253,11 @@ public:
         : TBase(sourceId, sourceIdx, context, recordSnapshotMin, recordSnapshotMax, recordsCount, shardingVersion, hasDeletions)
         , Start(context->GetReadMetadata()->IsDescSorted() ? finish : start, context->GetReadMetadata()->IsDescSorted())
         , Finish(context->GetReadMetadata()->IsDescSorted() ? start : finish, context->GetReadMetadata()->IsDescSorted()) {
-        StageData = std::make_unique<TFetchedData>(true, recordsCount);
         UsageClass = GetContext()->GetReadMetadata()->GetPKRangesFilter().GetUsageClass(start, finish);
         AFL_VERIFY(UsageClass != TPKRangeFilter::EUsageClass::NoUsage);
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "portions_for_merge")("start", Start.DebugString())(
             "finish", Finish.DebugString());
-        Y_ABORT_UNLESS(Start.Compare(Finish) != std::partial_ordering::greater);
+        AFL_VERIFY_DEBUG(Start.Compare(Finish) != std::partial_ordering::greater);
     }
 
     virtual ~IDataSource() = default;
@@ -286,7 +274,7 @@ private:
 
     virtual void InitUsedRawBytes() override {
         AFL_VERIFY(!UsedRawBytes);
-        UsedRawBytes = StageData->GetPortionAccessor().GetColumnRawBytes(GetContext()->GetAllUsageColumns()->GetColumnIds(), false);
+        UsedRawBytes = GetStageData().GetPortionAccessor().GetColumnRawBytes(GetContext()->GetAllUsageColumns()->GetColumnIds(), false);
     }
 
     virtual bool DoStartFetchingColumns(
@@ -435,6 +423,58 @@ public:
     }
 
     TPortionDataSource(const ui32 sourceIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TSpecialReadContext>& context);
+};
+
+class TSourceConstructor: public ICursorEntity {
+private:
+    TCompareKeyForScanSequence Start;
+    YDB_READONLY(ui32, SourceId, 0);
+    YDB_READONLY(ui32, PortionIdx, 0);
+    ui32 RecordsCount = 0;
+    bool IsStartedByCursorFlag = false;
+
+    virtual ui64 DoGetEntityId() const override {
+        return SourceId;
+    }
+    virtual ui64 DoGetEntityRecordsCount() const override {
+        return RecordsCount;
+    }
+
+public:
+    void SetIsStartedByCursor() {
+        IsStartedByCursorFlag = true;
+    }
+    bool GetIsStartedByCursor() const {
+        return IsStartedByCursorFlag;
+    }
+
+    const TCompareKeyForScanSequence& GetStart() const {
+        return Start;
+    }
+
+    TSourceConstructor(const ui32 portionIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TReadContext>& context)
+        : Start(TReplaceKeyAdapter(context->GetReadMetadata()->IsDescSorted() ? portion->IndexKeyEnd() : portion->IndexKeyStart(),
+                    context->GetReadMetadata()->IsDescSorted()),
+              portion->GetPortionId())
+        , SourceId(portion->GetPortionId())
+        , PortionIdx(portionIdx)
+        , RecordsCount(portion->GetRecordsCount()) {
+    }
+
+    bool operator<(const TSourceConstructor& item) const {
+        return item.Start < Start;
+    }
+
+    std::shared_ptr<TPortionDataSource> Construct(const std::shared_ptr<TSpecialReadContext>& context) const {
+        const auto& portions = context->GetReadMetadata()->SelectInfo->Portions;
+        AFL_VERIFY(PortionIdx < portions.size());
+        auto result = std::make_shared<TPortionDataSource>(PortionIdx, portions[PortionIdx], context);
+        if (IsStartedByCursorFlag) {
+            result->SetIsStartedByCursor();
+        }
+        FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, result->AddEvent("s"));
+        return result;
+    }
 };
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

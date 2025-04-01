@@ -106,7 +106,7 @@ public:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
     {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
-        LOG_D("Prepare " << Debug());
+        LOG_I("Prepare " << Debug());
 
         Driver = driver;
         return {EScan::Feed, {}};
@@ -136,8 +136,6 @@ public:
 
     TAutoPtr<IDestructable> Finish(EAbort abort) final
     {
-        LOG_D("Finish " << Debug());
-
         if (Uploader) {
             Send(Uploader, new TEvents::TEvPoison);
             Uploader = {};
@@ -156,6 +154,8 @@ public:
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
         }
         NYql::IssuesToMessage(UploadStatus.Issues, record.MutableIssues());
+
+        LOG_N("Finish" << Debug() << " " << Response->Record.ShortDebugString());
         Send(ResponseActorId, Response.Release());
 
         Driver = nullptr;
@@ -178,12 +178,6 @@ public:
     EScan PageFault() final
     {
         LOG_T("PageFault " << Debug());
-
-        if (!ReadBuf.IsEmpty() && WriteBuf.IsEmpty()) {
-            ReadBuf.FlushTo(WriteBuf);
-            Upload(false);
-        }
-
         return EScan::Feed;
     }
 
@@ -201,7 +195,7 @@ protected:
 
     void HandleWakeup()
     {
-        LOG_T("Retry upload " << Debug());
+        LOG_I("Retry upload " << Debug());
 
         if (!WriteBuf.IsEmpty()) {
             Upload(true);
@@ -214,10 +208,10 @@ protected:
                                               << " ev->Sender: " << ev->Sender.ToString());
 
         if (Uploader) {
-            Y_VERIFY_S(Uploader == ev->Sender, "Mismatch Uploader: " << Uploader.ToString() << " ev->Sender: "
+            Y_ENSURE(Uploader == ev->Sender, "Mismatch Uploader: " << Uploader.ToString() << " ev->Sender: "
                                                                      << ev->Sender.ToString() << Debug());
         } else {
-            Y_ABORT_UNLESS(Driver == nullptr);
+            Y_ENSURE(Driver == nullptr);
             return;
         }
 
@@ -239,7 +233,7 @@ protected:
         if (RetryCount < Limits.MaxUploadRowsRetryCount && UploadStatus.IsRetriable()) {
             LOG_N("Got retriable error, " << Debug() << UploadStatus.ToString());
 
-            Schedule(Limits.GetTimeoutBackouff(RetryCount), new TEvents::TEvWakeup);
+            Schedule(Limits.GetTimeoutBackoff(RetryCount), new TEvents::TEvWakeup);
             return;
         }
 
@@ -285,14 +279,17 @@ public:
         : TReshuffleKMeansScanBase{table, std::move(lead), request, responseActorId, std::move(response)}
     {
         this->Dimensions = request.GetSettings().vector_dimension();
-        LOG_D("Create " << Debug());
+        LOG_I("Create " << Debug());
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row_) final
     {
         LOG_T("Feed " << Debug());
+        
         ++ReadRows;
-        ReadBytes += CountBytes(key, row);
+        ReadBytes += CountBytes(key, row_);
+        auto row = *row_;
+        
         switch (UploadState) {
             case EState::UPLOAD_MAIN_TO_BUILD:
                 return FeedUploadMain2Build(key, row);
@@ -308,40 +305,40 @@ public:
     }
 
 private:
-    EScan FeedUploadMain2Build(TArrayRef<const TCell> key, const TRow& row)
+    EScan FeedUploadMain2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos > K) {
+        if (pos >= K) {
             return EScan::Feed;
         }
         AddRowMain2Build(ReadBuf, Child + pos, key, row);
         return FeedUpload();
     }
 
-    EScan FeedUploadMain2Posting(TArrayRef<const TCell> key, const TRow& row)
+    EScan FeedUploadMain2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos > K) {
+        if (pos >= K) {
             return EScan::Feed;
         }
         AddRowMain2Posting(ReadBuf, Child + pos, key, row, DataPos);
         return FeedUpload();
     }
 
-    EScan FeedUploadBuild2Build(TArrayRef<const TCell> key, const TRow& row)
+    EScan FeedUploadBuild2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos > K) {
+        if (pos >= K) {
             return EScan::Feed;
         }
         AddRowBuild2Build(ReadBuf, Child + pos, key, row);
         return FeedUpload();
     }
 
-    EScan FeedUploadBuild2Posting(TArrayRef<const TCell> key, const TRow& row)
+    EScan FeedUploadBuild2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos > K) {
+        if (pos >= K) {
             return EScan::Feed;
         }
         AddRowBuild2Posting(ReadBuf, Child + pos, key, row, DataPos);
@@ -385,6 +382,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
         rowVersion = GetMvccTxVersion(EMvccTxMode::ReadOnly);
     }
 
+    LOG_N("Starting TReshuffleKMeansScan " << record.ShortDebugString()
+        << " row version " << rowVersion);
+
     // Note: it's very unlikely that we have volatile txs before this snapshot
     if (VolatileTxManager.HasVolatileTxsAtSnapshot(rowVersion)) {
         VolatileTxManager.AttachWaitingSnapshotEvent(rowVersion, std::unique_ptr<IEventHandle>(ev.Release()));
@@ -420,7 +420,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvReshuffleKMeansRequest::TPtr& ev, c
         badRequest(TStringBuilder() << "Unknown table id: " << pathId.LocalPathId);
         return;
     }
-    Y_ABORT_UNLESS(*userTableIt);
+    Y_ENSURE(*userTableIt);
     const auto& userTable = **userTableIt;
 
     if (const auto* recCard = ScanManager.Get(id)) {

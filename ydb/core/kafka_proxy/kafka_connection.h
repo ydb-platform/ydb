@@ -13,6 +13,7 @@ NActors::IActor* CreateKafkaConnection(const TActorId& listenerActorId,
                                        TIntrusivePtr<TSocketDescriptor> socket,
                                        TNetworkConfig::TSocketAddressType address,
                                        const NKikimrConfig::TKafkaProxyConfig& config,
-                                       const TActorId& discoveryCacheActorId);
+                                       const TActorId& discoveryCacheActorId,
+                                       const TActorId& transactionsCoordinatorActorId);
 
 } // namespace NKafka

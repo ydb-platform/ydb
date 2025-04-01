@@ -289,7 +289,7 @@ namespace NPQ {
                     Y_ABORT_UNLESS((strKey.size() >= TKey::KeySize()) && (strKey.size() - TKey::KeySize() <= 1),
                                    "Unexpected key size: %" PRIu64 " (%s)",
                                    strKey.size(), strKey.data());
-                    TKey key(strKey);
+                    auto key = TKey::FromString(strKey);
 
                     const TString& value = cmd.GetValue();
                     kvReq.Partition = key.GetPartition();

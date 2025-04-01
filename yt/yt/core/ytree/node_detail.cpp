@@ -115,7 +115,7 @@ void TNodeBase::RemoveSelf(
     context->SetRequestInfo("Recursive: %v, Force: %v", request->recursive(), request->force());
 
     ValidatePermission(
-        EPermissionCheckScope::This | EPermissionCheckScope::Descendants,
+        EPermissionCheckScope::Subtree,
         EPermission::Remove);
     ValidatePermission(
         EPermissionCheckScope::Parent,

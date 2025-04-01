@@ -25,7 +25,7 @@
   [Примеры на GitHub](https://github.com/ydb-platform/ydb-python-sdk/tree/main/examples/topic)
 
 - C#
-  
+
   [Примеры на GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples/src/Topic)
 
 
@@ -117,7 +117,7 @@
       loggerFactory: loggerFactory
   );
   ```
-  
+
   В этом примере используется анонимная аутентификация. Подробнее про [соединение с базой данных](../../concepts/connect.md) и [аутентификацию](../../security/authentication.md).
 
   Фрагмент кода приложения для создания различных клиентов к топикам:
@@ -129,7 +129,7 @@
   {
       ProducerId = "ProducerId_Example"
   }.Build();
-  
+
   await using var reader = new ReaderBuilder<string>(driver)
   {
       ConsumerName = "Consumer_Example",
@@ -209,7 +209,7 @@
                           .build())
                   .build());
   ```
-  
+
 - C#
 
   Пример создания топика со списком поддерживаемых кодеков и минимальным количеством партиций:
@@ -385,7 +385,7 @@
   ```java
   topicClient.dropTopic(topicPath);
   ```
-  
+
 - C#
 
   ```c#
@@ -503,7 +503,7 @@
               return null;
           });
   ```
-  
+
 - C#
 
   ```c#
@@ -770,7 +770,7 @@
             }
         });
   ```
-  
+
 - С#
 
   Асинхронная запись сообщения в топик. В случае переполнения внутреннего буфера будет ожидать, когда буфер освободится для повторной отправки.
@@ -784,7 +784,7 @@
   ```c#
   var writeCts = new CancellationTokenSource();
   writeCts.CancelAfter(TimeSpan.FromSeconds(3));
-  
+
   await writer.WriteAsync("Hello, Example YDB Topics!", writeCts.Token);
   ```
 
@@ -1000,6 +1000,54 @@
 
     return writer.Write(ctx, topicwriter.Message{Data: strings.NewReader("asd")})
   })
+  ```
+
+- Python
+
+  Для записи в топик в транзакции необходимо создать транзакционного писателя через вызов `topic_client.tx_writer`. После этого можно отправлять сообщения, как обычно. Закрывать транзакционного писателя не требуется — это происходит автоматически при завершении транзакции.
+
+  В примере ниже нет явного вызова `tx.commit()` — он происходит неявно при успешном завершении лямбды `callee`.
+
+  [Пример на GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_example.py)
+
+  ```python
+  with ydb.QuerySessionPool(driver) as session_pool:
+
+      def callee(tx: ydb.QueryTxContext):
+          tx_writer: ydb.TopicTxWriter = driver.topic_client.tx_writer(tx, topic)
+
+          for i in range(message_count):
+              result_stream = tx.execute(query=f"select {i} as res;")
+              for result_set in result_stream:
+                  message = str(result_set.rows[0]["res"])
+                  tx_writer.write(ydb.TopicWriterMessage(message))
+                  print(f"Message {message} was written with tx.")
+
+      session_pool.retry_tx_sync(callee)
+  ```
+
+- Python (asyncio)
+
+  Для записи в топик в транзакции необходимо создать транзакционного писателя через вызов `topic_client.tx_writer`. После этого можно отправлять сообщения, как обычно. Закрывать транзакционного писателя не требуется — это происходит автоматически при завершении транзакции.
+
+  В примере ниже нет явного вызова `tx.commit()` — он происходит неявно при успешном завершении лямбды `callee`.
+
+  [Пример на GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_async_example.py)
+
+  ```python
+  async with ydb.aio.QuerySessionPool(driver) as session_pool:
+
+      async def callee(tx: ydb.aio.QueryTxContext):
+          tx_writer: ydb.TopicTxWriterAsyncIO = driver.topic_client.tx_writer(tx, topic)
+
+          for i in range(message_count):
+              async with await tx.execute(query=f"select {i} as res;") as result_stream:
+                  async for result_set in result_stream:
+                      message = str(result_set.rows[0]["res"])
+                      await tx_writer.write(ydb.TopicWriterMessage(message))
+                      print(f"Message {result_set.rows[0]['res']} was written with tx.")
+
+      await session_pool.retry_tx_async(callee)
   ```
 
 - Java (sync)
@@ -1281,7 +1329,7 @@
   {
       ConsumerName = "Consumer_Example",
       SubscribeSettings = { new SubscribeSettings(topicName) }
-  }.Build(); 
+  }.Build();
   ```
 
 {% endlist %}
@@ -1343,7 +1391,7 @@
                   .build())
           .build();
   ```
-  
+
 - C#
 
   ```c#
@@ -1530,7 +1578,7 @@
       }
   }
   ```
-  
+
 - C#
 
   ```c#
@@ -1542,7 +1590,7 @@
 
           foreach (var message in batchMessages.Batch)
           {
-              logger.LogInformation("Received message: [{MessageData}]", message.Data);    
+              logger.LogInformation("Received message: [{MessageData}]", message.Data);
           }
       }
   }
@@ -1620,7 +1668,7 @@
              }
          });
   ```
-  
+
 - C#
 
   ```c#
@@ -1726,7 +1774,7 @@
              });
   }
   ```
-  
+
 - С#
 
   ```c#
@@ -1738,7 +1786,7 @@
 
           foreach (var message in batchMessages.Batch)
           {
-              logger.LogInformation("Received message: [{MessageData}]", message.Data);    
+              logger.LogInformation("Received message: [{MessageData}]", message.Data);
           }
 
           try
@@ -1963,6 +2011,42 @@
       handleError(err)
     }
   }
+  ```
+
+- Python
+
+  Для чтения сообщений в рамках транзакции следует использовать метод `reader.receive_batch_with_tx`. Он прочитает пакет сообщений и добавит их коммит в транзакцию, при этом отдельно коммитить эти сообщения не требуется. Читателя сообщений можно использовать повторно в разных транзакциях. При этом важно, чтобы порядок коммита транзакций соответствовал порядку получения сообщений от читателя, так как коммиты сообщений в топике должны выполняться строго по порядку - в противном случае транзакция получит ошибку на попытке сделать коммит. Проще всего это сделать, если использовать читателя в цикле.
+
+  [Пример на GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_example.py)
+
+  ```python
+  with driver.topic_client.reader(topic, consumer) as reader:
+      with ydb.QuerySessionPool(driver) as session_pool:
+          for _ in range(message_count):
+
+              def callee(tx: ydb.QueryTxContext):
+                  batch = reader.receive_batch_with_tx(tx, max_messages=1)
+                  print(f"Message {batch.messages[0].data.decode()} was read with tx.")
+
+              session_pool.retry_tx_sync(callee)
+  ```
+
+- Python (asyncio)
+
+  Для чтения сообщений в рамках транзакции следует использовать метод `reader.receive_batch_with_tx`. Он прочитает пакет сообщений и добавит их коммит в транзакцию, при этом отдельно коммитить эти сообщения не требуется. Читателя сообщений можно использовать повторно в разных транзакциях. При этом важно, чтобы порядок коммита транзакций соответствовал порядку получения сообщений от читателя, так как коммиты сообщений в топике должны выполняться строго по порядку - в противном случае транзакция получит ошибку на попытке сделать коммит. Проще всего это сделать, если использовать читателя в цикле.
+
+  [Пример на GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_async_example.py)
+
+  ```python
+  async with driver.topic_client.reader(topic, consumer) as reader:
+      async with ydb.aio.QuerySessionPool(driver) as session_pool:
+          for _ in range(message_count):
+
+              async def callee(tx: ydb.aio.QueryTxContext):
+                  batch = await reader.receive_batch_with_tx(tx, max_messages=1)
+                  print(f"Message {batch.messages[0].data.decode()} was read with tx.")
+
+              await session_pool.retry_tx_async(callee)
   ```
 
 - Java (sync)

@@ -1002,6 +1002,32 @@ bool ValidateColumnGroups(const TExprNode& setting, const TStructExprType& rowTy
     return true;
 }
 
+bool ExpandDefaultColumnGroup(const TStringBuf colGroupSpec, const TStructExprType& rowType, TString& expandedSpec) {
+    auto columnGroups = NYT::NodeFromYsonString(colGroupSpec);
+    TString defGroup;
+    THashSet<TString> usedColumns;
+    if (!AnyOf(columnGroups.AsMap(), [](const auto& grp) { return grp.second.IsEntity(); })) {
+        return false;
+    }
+    for (const auto& grp: columnGroups.AsMap()) {
+        if (!grp.second.IsEntity()) {
+            std::for_each(grp.second.AsList().cbegin(), grp.second.AsList().cend(), [&usedColumns](const auto& col) { usedColumns.insert(col.AsString()); });
+        } else {
+            defGroup = grp.first;
+        }
+    }
+    YQL_ENSURE(defGroup);
+    auto otherColumns = NYT::TNode::CreateList();
+    for (auto item: rowType.GetItems()) {
+        if (!usedColumns.contains(item->GetName())) {
+            otherColumns.Add(item->GetName());
+        }
+    }
+    columnGroups[defGroup] = std::move(otherColumns);
+    expandedSpec = NYT::NodeToCanonicalYsonString(columnGroups);
+    return true;
+}
+
 TString NormalizeColumnGroupSpec(const TStringBuf spec) {
     try {
         auto columnGroups = NYT::NodeFromYsonString(spec);

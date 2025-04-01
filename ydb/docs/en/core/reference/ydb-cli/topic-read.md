@@ -21,12 +21,15 @@ Three command modes are supported:
 
 ### Required parameters
 
-| Name | Description |
----|---
-| `<topic-path>` | Topic path |
-| `-c VAL`, `--consumer VAL` | Topic consumer name.<br/>Message consumption starts from the current offset for this consumer (if the `--timestamp` parameter is not specified).<br/>The current offset is shifted as messages are consumed and output (if `--commit=false` is not set). |
+`<topic-path>`: Topic path
 
 ### Basic optional parameters
+
+`-c VAL`, `--consumer VAL`: Topic consumer name.
+
+- If not set, then you need to specify partitions through --partition-ids to read without consumer
+- Message consumption starts from the current offset for this consumer (if the `--timestamp` parameter is not specified).
+If consumer name is not specified, message consumption will start from the first message in partition.
 
 `--format STR`: Output format.
 
@@ -63,10 +66,11 @@ Three command modes are supported:
 
 `--file VAL` (`-f VAL`): Write the messages read to the specified file. If not set, messages are output to `stdout`.
 
-`--commit BOOL`: Commit message reads.
+`--commit BOOL`: Commit message reads. Default value - `false`.
 
-1. If `true` (by default), a consumer's current offset is shifted as topic messages are consumed.
-2. Possible values: `true` or `false`.
+- Possible values: `true` or `false`.
+- If `true`, a consumer's current offset is shifted as topic messages are consumed.
+- If the value is set to `false`, messages will be read, but the reading progress won't be saved, and upon restart, the messages will be read again. This functionality is useful for debugging: allowing messages to be read without affecting the production system (without offset commit).
 
 ### Other optional parameters
 

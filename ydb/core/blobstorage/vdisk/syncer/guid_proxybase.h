@@ -92,7 +92,7 @@ namespace NKikimr {
                 return;
             }
 
-            Y_ABORT_UNLESS(record.GetStatus() == NKikimrProto::OK);
+            Y_VERIFY_S(record.GetStatus() == NKikimrProto::OK, VCtx->VDiskLogPrefix);
             HandleReply(ctx, record);
             Die(ctx);
         }

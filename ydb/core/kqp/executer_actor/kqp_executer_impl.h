@@ -70,6 +70,7 @@ using EExecType = TEvKqpExecuter::TEvTxResponse::EExecutionType;
 
 const ui64 MaxTaskSize = 48_MB;
 constexpr ui64 PotentialUnsigned64OverflowLimit = (std::numeric_limits<ui64>::max() >> 1);
+constexpr ui64 PriorityTxShift = 32;
 
 std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const TStageInfo& stageInfo, const TTask& task);
 
@@ -964,6 +965,8 @@ protected:
                 settings.SetLockMode(*TasksGraph.GetMeta().LockMode);
             }
 
+            settings.SetPriority((task.StageId.TxId << PriorityTxShift) + settings.GetPriority());
+
             output.SinkSettings.ConstructInPlace();
             output.SinkSettings->PackFrom(settings);
         } else {
@@ -1649,11 +1652,12 @@ protected:
         auto& stage = stageInfo.Meta.GetStage(stageInfo.Id);
 
         auto& columnShardHashV1Params = stageInfo.Meta.ColumnShardHashV1Params;
-        if (enableShuffleElimination && stageInfo.Meta.ColumnTableInfoPtr) {
+        if (enableShuffleElimination && stage.GetIsShuffleEliminated() && stageInfo.Meta.ColumnTableInfoPtr) {
             const auto& tableDesc = stageInfo.Meta.ColumnTableInfoPtr->Description;
             columnShardHashV1Params.SourceShardCount = tableDesc.GetColumnShardCount();
             columnShardHashV1Params.SourceTableKeyColumnTypes = std::make_shared<TVector<NScheme::TTypeInfo>>();
             for (const auto& column: tableDesc.GetSharding().GetHashSharding().GetColumns()) {
+                Y_ENSURE(stageInfo.Meta.TableConstInfo->Columns.contains(column), TStringBuilder{} << "Table doesn't have column: " << column);
                 auto columnType = stageInfo.Meta.TableConstInfo->Columns.at(column).Type;
                 columnShardHashV1Params.SourceTableKeyColumnTypes->push_back(columnType);
             }

@@ -18,8 +18,8 @@ namespace NKafka {
                 return;
             } 
 
-            currentProducerState.ProducerId = request->ProducerId;
-            currentProducerState.ProducerEpoch = request->ProducerEpoch;
+            currentProducerState.Id = request->ProducerId;
+            currentProducerState.Epoch = request->ProducerEpoch;
         } else {
             ProducersByTransactionalId[request->TransactionalId] = TProducerState(request->ProducerId, request->ProducerEpoch);
         }
@@ -28,26 +28,40 @@ namespace NKafka {
     };
 
     void TKafkaTransactionsCoordinator::Handle(TEvKafka::TEvAddPartitionsToTxnRequest::TPtr& ev, const TActorContext& ctx){
-        HandleTransacationalRequest<TAddPartitionsToTxnResponseData>(ev, ctx);
+        HandleTransactionalRequest<TAddPartitionsToTxnResponseData>(ev, ctx);
     };
 
     void TKafkaTransactionsCoordinator::Handle(TEvKafka::TEvAddOffsetsToTxnRequest::TPtr& ev, const TActorContext& ctx){
-        HandleTransacationalRequest<TAddOffsetsToTxnResponseData>(ev, ctx);
+        HandleTransactionalRequest<TAddOffsetsToTxnResponseData>(ev, ctx);
     };
 
     void TKafkaTransactionsCoordinator::Handle(TEvKafka::TEvTxnOffsetCommitRequest::TPtr& ev, const TActorContext& ctx) {
-        HandleTransacationalRequest<TTxnOffsetCommitResponseData>(ev, ctx);
+        HandleTransactionalRequest<TTxnOffsetCommitResponseData>(ev, ctx);
     };
 
     void TKafkaTransactionsCoordinator::Handle(TEvKafka::TEvEndTxnRequest::TPtr& ev, const TActorContext& ctx) {
-        HandleTransacationalRequest<TEndTxnResponseData>(ev, ctx);
+        HandleTransactionalRequest<TEndTxnResponseData>(ev, ctx);
+    };
+
+    void TKafkaTransactionsCoordinator::Handle(TEvents::TEvPoison::TPtr&, const TActorContext& ctx) {
+        KAFKA_LOG_D("Got poison pill, killing all transaction actors");
+        for (auto& [transactionalId, txnActorId]: TxnActorByTransactionalId) {
+            ctx.Send(txnActorId, new TEvents::TEvPoison());
+            KAFKA_LOG_D(TStringBuilder() << "Sent poison pill to transaction actor for transactionalId " << transactionalId);
+        }
+        PassAway();
+    };
+
+    void TKafkaTransactionsCoordinator::PassAway() {
+        KAFKA_LOG_D("Killing myself");
+        TBase::PassAway();
     };
 
     // Validates producer's id and epoch
     // If valid: proxies requests to the relevant TKafkaTransactionActor
     // If outdated or not initialized: returns PRODUCER_FENCED error
     template<class ErrorResponseType, class EventType>
-    void TKafkaTransactionsCoordinator::HandleTransacationalRequest(TAutoPtr<TEventHandle<EventType>>& evHandle, const TActorContext& ctx) {
+    void TKafkaTransactionsCoordinator::HandleTransactionalRequest(TAutoPtr<TEventHandle<EventType>>& evHandle, const TActorContext& ctx) {
         auto ev = evHandle->Get();
         KAFKA_LOG_D(TStringBuilder() << "Receieved message for transactionalId " << ev->Request->TransactionalId->c_str() << " and ApiKey " << ev->Request->ApiKey());
         
@@ -67,7 +81,7 @@ namespace NKafka {
 
     template<class ErrorResponseType, class RequestType>
     void TKafkaTransactionsCoordinator::SendProducerFencedResponse(TMessagePtr<RequestType> kafkaRequest, const TString& error, const TTransactionalRequest& txnRequestDetails) {
-        KAFKA_LOG_ERROR(error);
+        KAFKA_LOG_W(error);
         auto response = BuildProducerFencedResponse<ErrorResponseType>(kafkaRequest);
         Send(txnRequestDetails.ConnectionId, new TEvKafka::TEvResponse(txnRequestDetails.CorrelationId, response, EKafkaErrors::PRODUCER_FENCED));
     };
@@ -114,7 +128,7 @@ namespace NKafka {
             }
             topicsResponse.push_back(topicInResponse);
         }
-        response->Results = topicsResponse;
+        response->Results = std::move(topicsResponse);
         return response;
     };
 
@@ -180,9 +194,9 @@ namespace NKafka {
     };
 
     bool TKafkaTransactionsCoordinator::NewProducerStateIsOutdated(const TProducerState& currentProducerState, const TProducerState& newProducerState) {
-        bool producerIdAlreadyGreater = currentProducerState.ProducerId > newProducerState.ProducerId;
-        bool producerIdsAreEqual = currentProducerState.ProducerId == newProducerState.ProducerId;
-        bool epochAlreadyGreater = currentProducerState.ProducerEpoch > newProducerState.ProducerEpoch;
+        bool producerIdAlreadyGreater = currentProducerState.Id > newProducerState.Id;
+        bool producerIdsAreEqual = currentProducerState.Id == newProducerState.Id;
+        bool epochAlreadyGreater = currentProducerState.Epoch > newProducerState.Epoch;
         return producerIdAlreadyGreater || (producerIdsAreEqual && epochAlreadyGreater);
     };
 
@@ -198,14 +212,8 @@ namespace NKafka {
 
     TString TKafkaTransactionsCoordinator::GetProducerIsOutdatedError(const TString& transactionalId, const TProducerState& currentProducerState, const TProducerState& newProducerState) {
         return TStringBuilder() << "Producer with transactional id " << transactionalId <<
-                    "is outdated. Current producer id is " << currentProducerState.ProducerId << 
-                    " and producer epoch is " << currentProducerState.ProducerEpoch << ". Requested producer id is " << newProducerState.ProducerId << 
-                    " and producer epoch is " << newProducerState.ProducerEpoch << ".";
-    }
-
-    NActors::IActor* CreateKafkaTransactionsCoordinator() {
-        return new TKafkaTransactionsCoordinator();
+                    "is outdated. Current producer id is " << currentProducerState.Id << 
+                    " and producer epoch is " << currentProducerState.Epoch << ". Requested producer id is " << newProducerState.Id << 
+                    " and producer epoch is " << newProducerState.Epoch << ".";
     };
-
-
 } // namespace NKafka

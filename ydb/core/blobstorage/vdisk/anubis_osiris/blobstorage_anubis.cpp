@@ -88,7 +88,7 @@ namespace NKikimr {
         }
 
         void CommunicateWithPeers(const TActorContext &ctx) {
-            Y_ABORT_UNLESS(MessagesSentToPeers == 0);
+            Y_VERIFY_S(MessagesSentToPeers == 0, HullCtx->VCtx->VDiskLogPrefix);
             for (const auto &x : HullCtx->VCtx->Top->GetVDisks()) {
                 if (HullCtx->VCtx->ShortSelfVDisk != x.VDiskIdShort) {
                     // not self
@@ -99,7 +99,7 @@ namespace NKikimr {
                     if (!checkIds.empty()) {
                         // send a check message to proxy if have something to check
                         auto it = QueueActorMapPtr->find(x.VDiskIdShort);
-                        Y_ABORT_UNLESS(it != QueueActorMapPtr->end());
+                        Y_VERIFY_S(it != QueueActorMapPtr->end(), HullCtx->VCtx->VDiskLogPrefix);
                         ctx.Send(it->second, new TEvAnubisVGet(std::move(checkIds)));
                         ++MessagesSentToPeers;
                     }
@@ -107,7 +107,7 @@ namespace NKikimr {
             }
 
             // must send several messages or what we are checking?
-            Y_ABORT_UNLESS(MessagesSentToPeers != 0);
+            Y_VERIFY_S(MessagesSentToPeers != 0, HullCtx->VCtx->VDiskLogPrefix);
         }
 
         ////////////////////////////////////////////////////////////////////////
@@ -121,7 +121,7 @@ namespace NKikimr {
                       )
 
         void Handle(TEvAnubisVGetResult::TPtr &ev, const TActorContext &ctx) {
-            Y_ABORT_UNLESS(MessagesSentToPeers > 0);
+            Y_VERIFY_S(MessagesSentToPeers > 0, HullCtx->VCtx->VDiskLogPrefix);
             --MessagesSentToPeers;
 
             // mark ids with NODATA
@@ -156,7 +156,7 @@ namespace NKikimr {
                       )
 
         void RemoveBlobs(const TActorContext &ctx, TVector<TLogoBlobID> &&forRemoval) {
-            Y_ABORT_UNLESS(!forRemoval.empty());
+            Y_VERIFY_S(!forRemoval.empty(), HullCtx->VCtx->VDiskLogPrefix);
 
             Become(&TThis::WaitWriteCompletion);
             BlobsToRemove = TBlobsToRemove(std::move(forRemoval));
@@ -167,7 +167,7 @@ namespace NKikimr {
             // send up to MaxInFly
             while (BlobsToRemove.Valid() && InFly < MaxInFly) {
                 const TLogoBlobID &id = BlobsToRemove.Get();
-                Y_ABORT_UNLESS(id.PartId() == 0);
+                Y_VERIFY_S(id.PartId() == 0, HullCtx->VCtx->VDiskLogPrefix);
                 LOG_ERROR(ctx, BS_SYNCER,
                           VDISKP(HullCtx->VCtx->VDiskLogPrefix,
                                 "TAnubisQuantumActor: DELETE: id# %s", id.ToString().data()));
@@ -228,7 +228,7 @@ namespace NKikimr {
         // Handle TEvHttpInfo
         ////////////////////////////////////////////////////////////////////////
         void Handle(NMon::TEvHttpInfo::TPtr &ev, const TActorContext &ctx) {
-            Y_ABORT_UNLESS(ev->Get()->SubRequestId == TDbMon::SyncerInfoId);
+            Y_VERIFY_S(ev->Get()->SubRequestId == TDbMon::SyncerInfoId, HullCtx->VCtx->VDiskLogPrefix);
             TStringStream str;
             HTML(str) {
                 str << "Pos: " << Pos << "<br>";

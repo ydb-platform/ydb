@@ -27,9 +27,15 @@ void TAllocState::TListEntry::Unlink() noexcept {
 
 TAllocState::TAllocState(const TSourceLocation& location, const NKikimr::TAlignedPagePoolCounters &counters, bool supportsSizedAllocators)
     : TAlignedPagePool(location, counters)
+#ifndef NDEBUG
+    , DefaultMemInfo(MakeIntrusive<TMemoryUsageInfo>("default"))
+#endif
     , SupportsSizedAllocators(supportsSizedAllocators)
     , CurrentPAllocList(&GlobalPAllocList)
 {
+#ifndef NDEBUG
+    ActiveMemInfo.emplace(DefaultMemInfo.Get(), DefaultMemInfo);
+#endif
     GetRoot()->InitLinks();
     OffloadedBlocksRoot.InitLinks();
     GlobalPAllocList.InitLinks();

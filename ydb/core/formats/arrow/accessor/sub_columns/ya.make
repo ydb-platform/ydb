@@ -18,6 +18,7 @@ SRCS(
     header.cpp
     partial.cpp
     data_extractor.cpp
+    json_extractors.cpp
     accessor.cpp
     direct_builder.cpp
     settings.cpp

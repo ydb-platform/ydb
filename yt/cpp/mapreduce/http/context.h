@@ -22,7 +22,8 @@ struct TClientContext
     bool UseTLS = false;
     TConfigPtr Config = TConfig::Get();
     TMaybe<TString> ProxyAddress;
-    TMaybe<TString> ProxyRole;
+    TMaybe<TString> RpcProxyRole;
+    TMaybe<TString> ProxyUnixDomainSocket;
 };
 
 bool operator==(const TClientContext& lhs, const TClientContext& rhs);

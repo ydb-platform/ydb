@@ -294,7 +294,7 @@ class TReader {
     absl::flat_hash_set<ui64> VolatileReadDependencies;
     bool VolatileWaitForCommit = false;
 
-    const bool UseNewPrecharge;
+    const bool UsePrechargeForExtBlobs;
 
     enum class EReadStatus {
         Done,
@@ -317,7 +317,7 @@ public:
         , FirstUnprocessedQuery(State.FirstUnprocessedQuery)
         , LastProcessedKey(State.LastProcessedKey)
         , LastProcessedKeyErased(State.LastProcessedKeyErased)
-        , UseNewPrecharge(Self->GetUseNewPrecharge())
+        , UsePrechargeForExtBlobs(Self->GetUsePrechargeForExtBlobs())
     {
         GetTimeFast(&StartTime);
         EndTime = StartTime;
@@ -470,7 +470,9 @@ public:
         TTransactionContext& txc,
         ui32 queryIndex)
     {
-        if (UseNewPrecharge) {
+        if (UsePrechargeForExtBlobs) {
+            // This is slower for a general case, but faster for the case when we know 
+            // that we have external blobs.
             ui64 rowsLeft = GetRowsLeft();
             ui64 prechargedRowsSize = 0;
             ui64 prechargedCount = 0;
@@ -487,19 +489,18 @@ public:
                 if (!(queryIndex < State.Request->Keys.size())) {
                     break;
                 }
-                if (!PrechargeKey(txc, State.Request->Keys[queryIndex])) {
+                
+                const auto key = ToRawTypeValue(State.Request->Keys[queryIndex].GetCells(), TableInfo, true);
+
+                NTable::TRowState rowState;
+                rowState.Init(State.Columns.size());
+                NTable::TSelectStats stats;
+                txc.DB.Select(TableInfo.LocalTid, key, State.Columns, rowState, stats, 0, State.ReadVersion);
+
+                if (txc.Env.MissingReferencesSize()) {
                     ready = false;
-                } else {
-                    const auto key = ToRawTypeValue(State.Request->Keys[queryIndex].GetCells(), TableInfo, true);
-
-                    NTable::TRowState rowState;
-                    rowState.Init(State.Columns.size());
-                    NTable::TSelectStats stats;
-                    txc.DB.Select(TableInfo.LocalTid, key, State.Columns, rowState, stats, 0, State.ReadVersion, GetReadTxMap(), GetReadTxObserver());
-
-                    if (txc.Env.MissingReferencesSize()) {
-                        prechargedRowsSize += EstimateSize(*rowState);
-                    }
+                    
+                    prechargedRowsSize += EstimateSize(*rowState);
                 }
 
                 prechargedCount++;
@@ -1131,7 +1132,7 @@ private:
     };
 
     void AddReadConflict(ui64 txId) {
-        Y_ABORT_UNLESS(State.LockId);
+        Y_ENSURE(State.LockId);
         // We have skipped uncommitted changes in txId, which would affect
         // the read result when it commits. Add a conflict edge that breaks
         // our lock when txId is committed.
@@ -1186,7 +1187,7 @@ const NHPTimer::STime TReader::MaxCyclesPerIteration =
 } // namespace
 
 void TReadIteratorState::ForwardScanEvent(std::unique_ptr<IEventHandle>&& ev, ui64 tabletId) {
-    Y_ABORT_UNLESS(State == EState::Scan);
+    Y_ENSURE(State == EState::Scan);
     if (ScanActorId) {
         LOG_TRACE_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, tabletId
             << " forwarding " << ev->GetTypeName() << " to scan actor " << ScanActorId);
@@ -1240,8 +1241,8 @@ private:
     }
 
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) final {
-        Y_ABORT_UNLESS(driver);
-        Y_ABORT_UNLESS(scheme);
+        Y_ENSURE(driver);
+        Y_ENSURE(scheme);
 
         Driver = driver;
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
@@ -1368,7 +1369,7 @@ private:
             continuationToken.SetFirstUnprocessedQuery(RangeIndex);
             continuationToken.SetLastProcessedKey(TSerializedCellVec::Serialize(key));
             bool res = continuationToken.SerializeToString(record.MutableContinuationToken());
-            Y_ABORT_UNLESS(res);
+            Y_ENSURE(res);
         }
 
         ui64 blockRows = std::exchange(BlockRows, 0);
@@ -1390,7 +1391,7 @@ private:
                         break;
                     }
                     default: {
-                        Y_ABORT("Unexpected format");
+                        Y_ENSURE(false, "Unexpected format");
                     }
                 }
             }
@@ -1527,8 +1528,8 @@ public:
 
     void BuildExecutionPlan(bool loaded) override
     {
-        Y_ABORT_UNLESS(GetExecutionPlan().empty());
-        Y_ABORT_UNLESS(!loaded);
+        Y_ENSURE(GetExecutionPlan().empty());
+        Y_ENSURE(!loaded);
 
         TVector<EExecutionUnitKind> plan;
         plan.push_back(EExecutionUnitKind::CheckRead);
@@ -1556,7 +1557,7 @@ public:
             return EExecutionStatus::DelayComplete;
         }
 
-        Y_ABORT_UNLESS(state.State == TReadIteratorState::EState::Executing);
+        Y_ENSURE(state.State == TReadIteratorState::EState::Executing);
 
         auto* request = state.Request;
 
@@ -1848,7 +1849,7 @@ public:
             for (ui64 txId : Reader->GetVolatileReadDependencies()) {
                 AddVolatileDependency(txId);
                 bool ok = Self->GetVolatileTxManager().AttachBlockedOperation(txId, GetTxId());
-                Y_ABORT_UNLESS(ok, "Unexpected failure to attach a blocked operation");
+                Y_ENSURE(ok, "Unexpected failure to attach a blocked operation");
             }
             Reader.reset();
             Result = MakeEvReadResult(ctx.SelfID.NodeId());
@@ -1915,7 +1916,7 @@ public:
             return;
         }
         auto& state = *it->second;
-        Y_ABORT_UNLESS(state.State == TReadIteratorState::EState::Init);
+        Y_ENSURE(state.State == TReadIteratorState::EState::Init);
 
         Result = MakeEvReadResult(ctx.SelfID.NodeId());
 
@@ -1948,16 +1949,16 @@ public:
         // Note: some checks already performed in TTxReadViaPipeline::Execute
         if (state.PathId.OwnerId != Self->TabletID()) {
             // owner is schemeshard, read user table
-            Y_ABORT_UNLESS(state.PathId.OwnerId == Self->GetPathOwnerId());
+            Y_ENSURE(state.PathId.OwnerId == Self->GetPathOwnerId());
 
             const auto tableId = state.PathId.LocalPathId;
             auto it = Self->TableInfos.find(tableId);
-            Y_ABORT_UNLESS(it != Self->TableInfos.end());
+            Y_ENSURE(it != Self->TableInfos.end());
 
             auto& userTableInfo = it->second;
             TableInfo = TShortTableInfo(userTableInfo);
 
-            Y_ABORT_UNLESS(!userTableInfo->IsBackup);
+            Y_ENSURE(!userTableInfo->IsBackup);
 
             state.SchemaVersion = userTableInfo->GetTableSchemaVersion();
             if (record.GetTableId().HasSchemaVersion()) {
@@ -2430,280 +2431,270 @@ public:
             return true;
         }
 
-        try {
-            // If tablet is in follower mode then we should sync scheme
-            // before we build and check operation.
-            if (Self->IsFollower()) {
-                NKikimrTxDataShard::TError::EKind status = NKikimrTxDataShard::TError::OK;
-                TString errMessage;
+        // If tablet is in follower mode then we should sync scheme
+        // before we build and check operation.
+        if (Self->IsFollower()) {
+            NKikimrTxDataShard::TError::EKind status = NKikimrTxDataShard::TError::OK;
+            TString errMessage;
 
-                if (!Self->SyncSchemeOnFollower(txc, ctx, status, errMessage)) {
-                    return false;
+            if (!Self->SyncSchemeOnFollower(txc, ctx, status, errMessage)) {
+                return false;
+            }
+
+            if (status != NKikimrTxDataShard::TError::OK) {
+                Y_DEBUG_ABORT_UNLESS(!Op);
+                if (Y_UNLIKELY(readIt == Self->ReadIteratorsByLocalReadId.end())) {
+                    // iterator already aborted
+                    return true;
                 }
+                auto& state = *readIt->second;
+                state.EnqueuedLocalTxId = 0;
+                ReplyError(
+                    Ydb::StatusIds::INTERNAL_ERROR,
+                    TStringBuilder() << "Failed to sync follower: " << errMessage
+                        << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")",
+                    ctx.SelfID.NodeId(),
+                    state);
+                return true;
+            }
+        }
 
-                if (status != NKikimrTxDataShard::TError::OK) {
-                    Y_DEBUG_ABORT_UNLESS(!Op);
-                    if (Y_UNLIKELY(readIt == Self->ReadIteratorsByLocalReadId.end())) {
-                        // iterator already aborted
-                        return true;
-                    }
-                    auto& state = *readIt->second;
-                    state.EnqueuedLocalTxId = 0;
+        if (!Op) {
+            // We must perform some initialization in transaction (e.g. after a follower sync), but before the operation is built
+            Y_ENSURE(readIt != Self->ReadIteratorsByLocalReadId.end());
+            auto& state = *readIt->second;
+            auto* request = state.Request;
+            const auto& record = request->Record;
+
+            Y_ENSURE(state.State == TReadIteratorState::EState::Init);
+            state.EnqueuedLocalTxId = 0;
+
+            bool setUsingSnapshotFlag = false;
+
+            // We assume that owner is schemeshard and it's a user table
+            if (state.PathId.OwnerId != Self->TabletID()) {
+                if (state.PathId.OwnerId != Self->GetPathOwnerId()) {
                     ReplyError(
-                        Ydb::StatusIds::INTERNAL_ERROR,
-                        TStringBuilder() << "Failed to sync follower: " << errMessage
+                        Ydb::StatusIds::BAD_REQUEST,
+                        TStringBuilder() << "Requesting ownerId: " << state.PathId.OwnerId
+                            << ", tableId: " << state.PathId.LocalPathId
+                            << ", from shard with owner: " << Self->GetPathOwnerId()
                             << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")",
                         ctx.SelfID.NodeId(),
                         state);
                     return true;
                 }
-            }
 
-            if (!Op) {
-                // We must perform some initialization in transaction (e.g. after a follower sync), but before the operation is built
-                Y_ABORT_UNLESS(readIt != Self->ReadIteratorsByLocalReadId.end());
-                auto& state = *readIt->second;
-                auto* request = state.Request;
-                const auto& record = request->Record;
+                const auto tableId = state.PathId.LocalPathId;
+                auto it = Self->TableInfos.find(tableId);
+                if (it == Self->TableInfos.end()) {
+                    ReplyError(
+                        Ydb::StatusIds::NOT_FOUND,
+                        TStringBuilder() << "Unknown table id: " << tableId
+                            << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")",
+                        ctx.SelfID.NodeId(),
+                        state);
+                    return true;
+                }
 
-                Y_ABORT_UNLESS(state.State == TReadIteratorState::EState::Init);
-                state.EnqueuedLocalTxId = 0;
+                auto& userTableInfo = it->second;
+                if (userTableInfo->IsBackup) {
+                    ReplyError(
+                        Ydb::StatusIds::BAD_REQUEST,
+                        TStringBuilder() << "Can't read from a backup table"
+                            << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")",
+                        ctx.SelfID.NodeId(),
+                        state);
+                    return true;
+                }
 
-                bool setUsingSnapshotFlag = false;
-
-                // We assume that owner is schemeshard and it's a user table
-                if (state.PathId.OwnerId != Self->TabletID()) {
-                    if (state.PathId.OwnerId != Self->GetPathOwnerId()) {
-                        ReplyError(
-                            Ydb::StatusIds::BAD_REQUEST,
-                            TStringBuilder() << "Requesting ownerId: " << state.PathId.OwnerId
-                                << ", tableId: " << state.PathId.LocalPathId
-                                << ", from shard with owner: " << Self->GetPathOwnerId()
-                                << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")",
-                            ctx.SelfID.NodeId(),
-                            state);
-                        return true;
-                    }
-
-                    const auto tableId = state.PathId.LocalPathId;
-                    auto it = Self->TableInfos.find(tableId);
-                    if (it == Self->TableInfos.end()) {
-                        ReplyError(
-                            Ydb::StatusIds::NOT_FOUND,
-                            TStringBuilder() << "Unknown table id: " << tableId
-                                << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")",
-                            ctx.SelfID.NodeId(),
-                            state);
-                        return true;
-                    }
-
-                    auto& userTableInfo = it->second;
-                    if (userTableInfo->IsBackup) {
-                        ReplyError(
-                            Ydb::StatusIds::BAD_REQUEST,
-                            TStringBuilder() << "Can't read from a backup table"
-                                << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")",
-                            ctx.SelfID.NodeId(),
-                            state);
-                        return true;
-                    }
-
-                    if (state.IsHeadRead) {
-                        // We want to try and choose a more specific non-repeatable snapshot
-                        if (Self->IsFollower()) {
-                            auto [followerEdge, followerRepeatable] = Self->GetSnapshotManager().GetFollowerReadEdge();
-                            // Note: during transition follower edge may be unitialized or lag behind
-                            // We assume we can use it when it's not before low watermark
-                            auto maxRepeatable = !followerEdge || followerRepeatable ? followerEdge : followerEdge.Prev();
-                            if (maxRepeatable >= Self->GetSnapshotManager().GetLowWatermark()) {
-                                state.ReadVersion = followerEdge;
-                                state.IsHeadRead = !followerRepeatable;
-                            }
-                        } else {
-                            state.ReadVersion = Self->GetMvccTxVersion(EMvccTxMode::ReadOnly);
-                        }
-                        if (!state.ReadVersion.IsMax()) {
-                            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
-                                Self->TabletID() << " changed HEAD read to "
-                                << (state.IsHeadRead ? "non-repeatable" : "repeatable")
-                                << " " << state.ReadVersion);
+                if (state.IsHeadRead) {
+                    // We want to try and choose a more specific non-repeatable snapshot
+                    if (Self->IsFollower()) {
+                        auto [followerEdge, followerRepeatable] = Self->GetSnapshotManager().GetFollowerReadEdge();
+                        // Note: during transition follower edge may be unitialized or lag behind
+                        // We assume we can use it when it's not before low watermark
+                        auto maxRepeatable = !followerEdge || followerRepeatable ? followerEdge : followerEdge.Prev();
+                        if (maxRepeatable >= Self->GetSnapshotManager().GetLowWatermark()) {
+                            state.ReadVersion = followerEdge;
+                            state.IsHeadRead = !followerRepeatable;
                         }
                     } else {
-                        bool snapshotFound = false;
+                        state.ReadVersion = Self->GetMvccTxVersion(EMvccTxMode::ReadOnly);
+                    }
+                    if (!state.ReadVersion.IsMax()) {
+                        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD,
+                            Self->TabletID() << " changed HEAD read to "
+                            << (state.IsHeadRead ? "non-repeatable" : "repeatable")
+                            << " " << state.ReadVersion);
+                    }
+                } else {
+                    bool snapshotFound = false;
 
-                        const ui64 ownerId = state.PathId.OwnerId;
-                        TSnapshotKey snapshotKey(
-                            ownerId,
-                            tableId,
-                            state.ReadVersion.Step,
-                            state.ReadVersion.TxId);
+                    const ui64 ownerId = state.PathId.OwnerId;
+                    TSnapshotKey snapshotKey(
+                        ownerId,
+                        tableId,
+                        state.ReadVersion.Step,
+                        state.ReadVersion.TxId);
 
-                        if (Self->GetSnapshotManager().FindAvailable(snapshotKey)) {
-                            // TODO: do we need to acquire?
-                            setUsingSnapshotFlag = true;
-                            snapshotFound = true;
+                    if (Self->GetSnapshotManager().FindAvailable(snapshotKey)) {
+                        // TODO: do we need to acquire?
+                        setUsingSnapshotFlag = true;
+                        snapshotFound = true;
+                    }
+
+                    if (!snapshotFound) {
+                        bool snapshotUnavailable = false;
+
+                        if (state.ReadVersion < Self->GetSnapshotManager().GetLowWatermark() || state.ReadVersion.Step == Max<ui64>()) {
+                            snapshotUnavailable = true;
                         }
 
-                        if (!snapshotFound) {
-                            bool snapshotUnavailable = false;
-
-                            if (state.ReadVersion < Self->GetSnapshotManager().GetLowWatermark() || state.ReadVersion.Step == Max<ui64>()) {
+                        if (Self->IsFollower()) {
+                            auto [followerEdge, followerRepeatable] = Self->GetSnapshotManager().GetFollowerReadEdge();
+                            auto maxRepeatable = !followerEdge || followerRepeatable ? followerEdge : followerEdge.Prev();
+                            if (state.ReadVersion > maxRepeatable) {
                                 snapshotUnavailable = true;
                             }
-
-                            if (Self->IsFollower()) {
-                                auto [followerEdge, followerRepeatable] = Self->GetSnapshotManager().GetFollowerReadEdge();
-                                auto maxRepeatable = !followerEdge || followerRepeatable ? followerEdge : followerEdge.Prev();
-                                if (state.ReadVersion > maxRepeatable) {
-                                    snapshotUnavailable = true;
-                                }
-                            } else {
-                                TRowVersion unreadableEdge = Self->Pipeline.GetUnreadableEdge();
-                                if (state.ReadVersion >= unreadableEdge) {
-                                    LWTRACK(ReadWaitSnapshot, request->Orbit, state.ReadVersion.Step, state.ReadVersion.TxId);
-                                    Self->Pipeline.AddWaitingReadIterator(state.ReadVersion, std::move(state.Ev), ctx);
-                                    Self->DeleteReadIterator(readIt);
-                                    return true;
-                                }
-                            }
-
-                            if (snapshotUnavailable) {
-                                ReplyError(
-                                    Ydb::StatusIds::PRECONDITION_FAILED,
-                                    TStringBuilder() << "Table id " << tableId << " has no snapshot at "
-                                        << state.ReadVersion << " shard " << Self->TabletID()
-                                        << " with lowWatermark " << Self->GetSnapshotManager().GetLowWatermark()
-                                        << (Self->IsFollower() ? " RO replica" : "")
-                                        << " (node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")",
-                                    ctx.SelfID.NodeId(),
-                                    state);
+                        } else {
+                            TRowVersion unreadableEdge = Self->Pipeline.GetUnreadableEdge();
+                            if (state.ReadVersion >= unreadableEdge) {
+                                LWTRACK(ReadWaitSnapshot, request->Orbit, state.ReadVersion.Step, state.ReadVersion.TxId);
+                                Self->Pipeline.AddWaitingReadIterator(state.ReadVersion, std::move(state.Ev), ctx);
+                                Self->DeleteReadIterator(readIt);
                                 return true;
                             }
                         }
-                    }
-                } else {
-                    // Handle system table reads
-                    if (Self->IsFollower()) {
-                        ReplyError(
-                            Ydb::StatusIds::UNSUPPORTED,
-                            TStringBuilder() << "Followers don't support system table reads"
-                                << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")",
-                            ctx.SelfID.NodeId(),
-                            state);
-                        return true;
-                    }
-                    if (!state.IsHeadRead) {
-                        ReplyError(
-                            Ydb::StatusIds::BAD_REQUEST,
-                            TStringBuilder() << "Cannot read system table using snapshot " << state.ReadVersion
-                                << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")",
-                            ctx.SelfID.NodeId(),
-                            state);
-                        return true;
-                    }
-                    if (record.GetTableId().GetTableId() >= TDataShard::Schema::MinLocalTid) {
-                        ReplyError(
-                            Ydb::StatusIds::BAD_REQUEST,
-                            TStringBuilder() << "Cannot read from user tables using system tables"
-                                << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")",
-                            ctx.SelfID.NodeId(),
-                            state);
-                        return true;
-                    }
-                    if (record.GetResultFormat() != NKikimrDataEvents::FORMAT_CELLVEC) {
-                        ReplyError(
-                            Ydb::StatusIds::UNSUPPORTED,
-                            TStringBuilder() << "Unsupported result format "
-                                << (int)record.GetResultFormat() << " when reading from system tables"
-                                << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")",
-                            ctx.SelfID.NodeId(),
-                            state);
-                        return true;
-                    }
-                    if (record.GetTableId().HasSchemaVersion()) {
-                        ReplyError(
-                            Ydb::StatusIds::BAD_REQUEST,
-                            TStringBuilder() << "Cannot request system table at shard " << record.GetTableId().GetOwnerId()
-                                << ", localTid: " << record.GetTableId().GetTableId()
-                                << ", with schema: " << record.GetTableId().GetSchemaVersion()
-                                << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")",
-                            ctx.SelfID.NodeId(),
-                            state);
-                        return true;
-                    }
 
-                    // We don't want this read to interact with other operations
-                    setUsingSnapshotFlag = true;
+                        if (snapshotUnavailable) {
+                            ReplyError(
+                                Ydb::StatusIds::PRECONDITION_FAILED,
+                                TStringBuilder() << "Table id " << tableId << " has no snapshot at "
+                                    << state.ReadVersion << " shard " << Self->TabletID()
+                                    << " with lowWatermark " << Self->GetSnapshotManager().GetLowWatermark()
+                                    << (Self->IsFollower() ? " RO replica" : "")
+                                    << " (node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")",
+                                ctx.SelfID.NodeId(),
+                                state);
+                            return true;
+                        }
+                    }
                 }
-
-                Op = new TReadOperation(Self, ctx.Now(), LocalReadId);
-
-                Op->BuildExecutionPlan(false);
-                Self->Pipeline.GetExecutionUnit(Op->GetCurrentUnit()).AddOperation(Op);
-
-                if (!state.ReadVersion.IsMax()) {
-                    Op->SetMvccSnapshot(
-                        TRowVersion(state.ReadVersion.Step, state.ReadVersion.TxId),
-                        /* repeatable = */ state.IsHeadRead ? false : true);
-                }
-                if (setUsingSnapshotFlag) {
-                    Op->SetUsingSnapshotFlag();
-                }
-
-                Op->IncrementInProgress();
-            }
-
-            Y_ABORT_UNLESS(Op && Op->IsInProgress() && !Op->GetExecutionPlan().empty());
-
-            auto status = Self->Pipeline.RunExecutionPlan(Op, CompleteList, txc, ctx);
-
-            LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "TTxReadViaPipeline(" << GetTxType()
-                << ") Execute with status# " << status << " at tablet# " << Self->TabletID());
-
-            switch (status) {
-                case EExecutionStatus::Restart:
-                    return false;
-
-                case EExecutionStatus::Reschedule:
-                    // Reschedule transaction as soon as possible
-                    if (!Op->IsExecutionPlanFinished()) {
-                        Op->IncrementInProgress();
-                        Self->ExecuteProgressTx(Op, ctx);
-                    }
-                    Op->DecrementInProgress();
-                    break;
-
-                case EExecutionStatus::Executed:
-                case EExecutionStatus::Continue:
-                    Op->DecrementInProgress();
-                    break;
-
-                case EExecutionStatus::WaitComplete:
-                    WaitComplete = true;
-                    break;
-
-                default:
-                    Y_FAIL_S("unexpected execution status " << status << " for operation "
-                            << *Op << " " << Op->GetKind() << " at " << Self->TabletID());
-            }
-
-            if (WaitComplete || !CompleteList.empty()) {
-                // Keep operation active until we run the complete list
             } else {
-                // Release operation as it's no longer needed
-                Op = nullptr;
+                // Handle system table reads
+                if (Self->IsFollower()) {
+                    ReplyError(
+                        Ydb::StatusIds::UNSUPPORTED,
+                        TStringBuilder() << "Followers don't support system table reads"
+                            << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")",
+                        ctx.SelfID.NodeId(),
+                        state);
+                    return true;
+                }
+                if (!state.IsHeadRead) {
+                    ReplyError(
+                        Ydb::StatusIds::BAD_REQUEST,
+                        TStringBuilder() << "Cannot read system table using snapshot " << state.ReadVersion
+                            << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")",
+                        ctx.SelfID.NodeId(),
+                        state);
+                    return true;
+                }
+                if (record.GetTableId().GetTableId() >= TDataShard::Schema::MinLocalTid) {
+                    ReplyError(
+                        Ydb::StatusIds::BAD_REQUEST,
+                        TStringBuilder() << "Cannot read from user tables using system tables"
+                            << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")",
+                        ctx.SelfID.NodeId(),
+                        state);
+                    return true;
+                }
+                if (record.GetResultFormat() != NKikimrDataEvents::FORMAT_CELLVEC) {
+                    ReplyError(
+                        Ydb::StatusIds::UNSUPPORTED,
+                        TStringBuilder() << "Unsupported result format "
+                            << (int)record.GetResultFormat() << " when reading from system tables"
+                            << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")",
+                        ctx.SelfID.NodeId(),
+                        state);
+                    return true;
+                }
+                if (record.GetTableId().HasSchemaVersion()) {
+                    ReplyError(
+                        Ydb::StatusIds::BAD_REQUEST,
+                        TStringBuilder() << "Cannot request system table at shard " << record.GetTableId().GetOwnerId()
+                            << ", localTid: " << record.GetTableId().GetTableId()
+                            << ", with schema: " << record.GetTableId().GetSchemaVersion()
+                            << " (shard# " << Self->TabletID() << " node# " << ctx.SelfID.NodeId() << " state# " << DatashardStateName(Self->State) << ")",
+                        ctx.SelfID.NodeId(),
+                        state);
+                    return true;
+                }
+
+                // We don't want this read to interact with other operations
+                setUsingSnapshotFlag = true;
             }
 
-            return true;
-        } catch (const TSchemeErrorTabletException&) {
-            Y_ABORT();
-        } catch (const TMemoryLimitExceededException&) {
-            Y_ABORT("there must be no leaked exceptions: TMemoryLimitExceededException");
-        } catch (const std::exception &e) {
-            Y_ABORT("there must be no leaked exceptions: %s", e.what());
-        } catch (...) {
-            Y_ABORT("there must be no leaked exceptions");
+            Op = new TReadOperation(Self, ctx.Now(), LocalReadId);
+
+            Op->BuildExecutionPlan(false);
+            Self->Pipeline.GetExecutionUnit(Op->GetCurrentUnit()).AddOperation(Op);
+
+            if (!state.ReadVersion.IsMax()) {
+                Op->SetMvccSnapshot(
+                    TRowVersion(state.ReadVersion.Step, state.ReadVersion.TxId),
+                    /* repeatable = */ state.IsHeadRead ? false : true);
+            }
+            if (setUsingSnapshotFlag) {
+                Op->SetUsingSnapshotFlag();
+            }
+
+            Op->IncrementInProgress();
         }
+
+        Y_ENSURE(Op && Op->IsInProgress() && !Op->GetExecutionPlan().empty());
+
+        auto status = Self->Pipeline.RunExecutionPlan(Op, CompleteList, txc, ctx);
+
+        LOG_TRACE_S(ctx, NKikimrServices::TX_DATASHARD, "TTxReadViaPipeline(" << GetTxType()
+            << ") Execute with status# " << status << " at tablet# " << Self->TabletID());
+
+        switch (status) {
+            case EExecutionStatus::Restart:
+                return false;
+
+            case EExecutionStatus::Reschedule:
+                // Reschedule transaction as soon as possible
+                if (!Op->IsExecutionPlanFinished()) {
+                    Op->IncrementInProgress();
+                    Self->ExecuteProgressTx(Op, ctx);
+                }
+                Op->DecrementInProgress();
+                break;
+
+            case EExecutionStatus::Executed:
+            case EExecutionStatus::Continue:
+                Op->DecrementInProgress();
+                break;
+
+            case EExecutionStatus::WaitComplete:
+                WaitComplete = true;
+                break;
+
+            default:
+                Y_ENSURE(false, "unexpected execution status " << status << " for operation "
+                        << *Op << " " << Op->GetKind() << " at " << Self->TabletID());
+        }
+
+        if (WaitComplete || !CompleteList.empty()) {
+            // Keep operation active until we run the complete list
+        } else {
+            // Release operation as it's no longer needed
+            Op = nullptr;
+        }
+
+        return true;
     }
 
     void ReplyError(Ydb::StatusIds::StatusCode code, const TString& message, ui32 nodeId, TReadIteratorState& state) {
@@ -2719,7 +2710,7 @@ public:
             << ": at tablet# " << Self->TabletID());
 
         if (Reply) {
-            Y_ABORT_UNLESS(!Op);
+            Y_ENSURE(!Op);
             auto it = Self->ReadIteratorsByLocalReadId.find(LocalReadId);
             if (it != Self->ReadIteratorsByLocalReadId.end()) {
                 auto& state = *it->second;
@@ -2733,7 +2724,7 @@ public:
         if (!Op)
             return;
 
-        Y_ABORT_UNLESS(!Op->GetExecutionPlan().empty());
+        Y_ENSURE(!Op->GetExecutionPlan().empty());
         if (!CompleteList.empty()) {
             Self->Pipeline.RunCompleteList(Op, CompleteList, ctx);
         }
@@ -2963,7 +2954,7 @@ public:
 
     void ApplyLocks(const TActorContext& ctx) {
         auto it = Self->ReadIteratorsByLocalReadId.find(LocalReadId);
-        Y_ABORT_UNLESS(it != Self->ReadIteratorsByLocalReadId.end());
+        Y_ENSURE(it != Self->ReadIteratorsByLocalReadId.end());
         auto& state = *it->second;
 
         if (!Result) {
@@ -2984,7 +2975,7 @@ public:
             if (!isBroken && (Reader->HadInvisibleRowSkips() || Reader->HadInconsistentResult())) {
                 sysLocks.BreakLock(state.Lock->GetLockId());
                 sysLocks.ApplyLocks();
-                Y_ABORT_UNLESS(state.Lock->IsBroken());
+                Y_ENSURE(state.Lock->IsBroken());
                 isBroken = true;
             }
 
@@ -3010,14 +3001,14 @@ public:
             } else {
                 // Lock valid, apply conflict changes
                 auto [locks, _] = sysLocks.ApplyLocks();
-                Y_ABORT_UNLESS(locks.empty(), "ApplyLocks acquired unexpected locks");
+                Y_ENSURE(locks.empty(), "ApplyLocks acquired unexpected locks");
             }
         }
     }
 
     void SendResult(const TActorContext& ctx) {
         auto it = Self->ReadIteratorsByLocalReadId.find(LocalReadId);
-        Y_ABORT_UNLESS(it != Self->ReadIteratorsByLocalReadId.end());
+        Y_ENSURE(it != Self->ReadIteratorsByLocalReadId.end());
         auto& state = *it->second;
 
         state.ReadContinuePending = false;
@@ -3262,7 +3253,7 @@ void TDataShard::Handle(TEvDataShard::TEvRead::TPtr& ev, const TActorContext& ct
             readId, localReadId, TPathId(record.GetTableId().GetOwnerId(), record.GetTableId().GetTableId()),
             sessionId, readVersion, isHeadRead,
             AppData()->MonotonicTimeProvider->Now()));
-    Y_ABORT_UNLESS(pr.second);
+    Y_ENSURE(pr.second);
 
     auto& state = pr.first->second;
     state.Ev = std::move(ev);
@@ -3393,7 +3384,7 @@ void TDataShard::Handle(TEvDataShard::TEvReadCancel::TPtr& ev, const TActorConte
 
     TReadIteratorId readId(ev->Sender, record.GetReadId());
     if (Pipeline.CancelWaitingReadIterator(readId)) {
-        Y_ABORT_UNLESS(!ReadIterators.contains(readId));
+        Y_ENSURE(!ReadIterators.contains(readId));
         return;
     }
 
@@ -3517,7 +3508,7 @@ void TDataShard::DeleteReadIterator(TReadIteratorsMap::iterator it) {
 
 void TDataShard::DeleteReadIterator(TReadIteratorsLocalMap::iterator localIt) {
     auto readIt = ReadIterators.find(localIt->second->ReadId);
-    Y_ABORT_UNLESS(readIt != ReadIterators.end());
+    Y_ENSURE(readIt != ReadIterators.end());
     DeleteReadIterator(readIt);
 }
 

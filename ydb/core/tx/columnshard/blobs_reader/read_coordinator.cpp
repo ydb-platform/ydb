@@ -18,7 +18,7 @@ void TReadCoordinatorActor::Handle(NBlobCache::TEvBlobCache::TEvReadBlobRangeRes
     auto tasks = BlobTasks.Extract(event.DataSourceId, event.BlobRange);
     for (auto&& i : tasks) {
         if (event.Status != NKikimrProto::EReplyStatus::OK) {
-            i->AddError(event.DataSourceId, event.BlobRange, IBlobsReadingAction::TErrorStatus::Fail(event.Status, "cannot get blob"));
+            i->AddError(event.DataSourceId, event.BlobRange, IBlobsReadingAction::TErrorStatus::Fail(event.Status, "cannot get blob, detailed error: " + event.DetailedError));
         } else {
             i->AddData(event.DataSourceId, event.BlobRange, event.Data);
         }

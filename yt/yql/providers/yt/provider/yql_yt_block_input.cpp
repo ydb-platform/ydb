@@ -68,46 +68,19 @@ private:
         return EnsureWideFlowType(mapLambda.Cast().Args().Arg(0).Ref(), ctx);
     }
 
-    TMaybeNode<TExprBase> TryTransformTableContent(TExprBase node, TExprContext& ctx, const TGetParents& getParents) const {
+    TMaybeNode<TExprBase> TryTransformTableContent(TExprBase node, TExprContext& ctx) const {
         auto tableContent = node.Cast<TYtTableContent>();
         if (!NYql::HasSetting(tableContent.Settings().Ref(), EYtSettingType::BlockInputReady)) {
             return tableContent;
         }
 
-        const TParentsMap* parentsMap = getParents();
-        if (auto it = parentsMap->find(tableContent.Raw()); it != parentsMap->end() && it->second.size() > 1) {
-            return tableContent;
-        }
-
         YQL_CLOG(INFO, ProviderYt) << "Rewrite YtTableContent with block input";
 
-        auto inputStructType = GetSeqItemType(tableContent.Ref().GetTypeAnn())->Cast<TStructExprType>();
-        auto asStructBuilder = Build<TCoAsStruct>(ctx, tableContent.Pos());
-        TExprNode::TListType narrowMapArgs;
-        for (auto& item : inputStructType->GetItems()) {
-            auto arg = ctx.NewArgument(tableContent.Pos(), item->GetName());
-            asStructBuilder.Add<TCoNameValueTuple>()
-                .Name().Build(item->GetName())
-                .Value(arg)
-                .Build();
-            narrowMapArgs.push_back(std::move(arg));
-        }
-
         auto settings = RemoveSetting(tableContent.Settings().Ref(), EYtSettingType::BlockInputReady, ctx);
-        return Build<TCoForwardList>(ctx, tableContent.Pos())
-            .Stream<TCoNarrowMap>()
-                .Input<TCoToFlow>()
-                    .Input<TCoWideFromBlocks>()
-                        .Input<TYtBlockTableContent>()
-                            .Input(tableContent.Input())
-                            .Settings(settings)
-                        .Build()
-                    .Build()
-                .Build()
-                .Lambda()
-                    .Args(narrowMapArgs)
-                    .Body(asStructBuilder.Done())
-                .Build()
+        return Build<TCoListFromBlocks>(ctx, tableContent.Pos())
+            .Input<TYtBlockTableContent>()
+                .Input(tableContent.Input())
+                .Settings(settings)
             .Build()
             .Done();
     }

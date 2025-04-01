@@ -305,6 +305,13 @@ void TMkqlIOSpecs::InitDecoder(NCommon::TCodecContext& codecCtx,
         }
     }
 
+    if (InputBlockRepresentation_ == EBlockRepresentation::BlockStruct) {
+        if (auto pos = rowType->FindMemberIndex(BlockLengthColumnName)) {
+            virtualColumns.insert(*pos);
+            decoder.FillBlockStructSize = pos;
+        }
+    }
+
     THashSet<ui32> usedPos;
     for (ui32 index = 0; index < rowType->GetMembersCount(); ++index) {
         auto name = rowType->GetMemberNameStr(index);
@@ -444,6 +451,7 @@ void TMkqlIOSpecs::InitInput(NCommon::TCodecContext& codecCtx,
             TSpecInfo localSpecInfo;
             TSpecInfo* specInfo = &localSpecInfo;
             TString decoderRefName = TStringBuilder() << "_internal" << inputIndex;
+            bool newSpec = false;
             if (inputSpecs[inputIndex].IsString()) {
                 auto refName = inputSpecs[inputIndex].AsString();
                 decoderRefName = refName;
@@ -453,9 +461,14 @@ void TMkqlIOSpecs::InitInput(NCommon::TCodecContext& codecCtx,
                     Y_ENSURE(inAttrs.HasKey(YqlIOSpecRegistry) && inAttrs[YqlIOSpecRegistry].HasKey(refName), "Bad input registry reference: " << refName);
                     specInfo = &specInfoRegistry[refName];
                     LoadSpecInfo(true, inAttrs[YqlIOSpecRegistry][refName], codecCtx, *specInfo);
+                    newSpec = true;
                 }
             } else {
                 LoadSpecInfo(true, inputSpecs[inputIndex], codecCtx, localSpecInfo);
+                newSpec = true;
+            }
+            if (InputBlockRepresentation_ == EBlockRepresentation::BlockStruct && newSpec) {
+                specInfo->Type = codecCtx.Builder.NewStructType(specInfo->Type, BlockLengthColumnName, TDataType::Create(NUdf::TDataType<ui64>::Id, codecCtx.Env));
             }
 
             TStructType* inStruct = AS_TYPE(TStructType, specInfo->Type);

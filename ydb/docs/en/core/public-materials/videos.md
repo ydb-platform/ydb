@@ -9,8 +9,11 @@ Video recordings from conferences and webinars. The materials are divided by cat
 
 - 2025
 
-  {% include [FOSDEM](./_includes/conferences/2025/fosdem.md) %}
+  {% include [FOSSASIA](./_includes/conferences/2025/fossasia.md) %}
 
+  {% include [PGConfIndia](./_includes/conferences/2025/pgconfIndia.md) %}
+
+  {% include [FOSDEM](./_includes/conferences/2025/fosdem.md) %}
 
 - 2024
 
@@ -34,7 +37,7 @@ Video recordings from conferences and webinars. The materials are divided by cat
 
   {% include [HighLoad](./_includes/conferences/2023/HighLoad.md) %}
 
-  {% include [Fossasia](./_includes/conferences/2023/Fossasia.md) %}
+  {% include [FOSSASIA](./_includes/conferences/2023/Fossasia.md) %}
 
   {% include [webinars](./_includes/webinars/2023/webinars.md) %}
 

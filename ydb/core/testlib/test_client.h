@@ -109,7 +109,6 @@ namespace Tests {
         using TControls = NKikimrConfig::TImmediateControlsConfig;
         using TLoggerInitializer = std::function<void (TTestActorRuntime&)>;
         using TStoragePoolKinds = TDomainsInfo::TDomain::TStoragePoolKinds;
-        using TProxyDSPtr = TIntrusivePtr<NFake::TProxyDS>;
 
         ui16 Port;
         ui16 GrpcPort = 0;
@@ -171,7 +170,7 @@ namespace Tests {
         TString ServerCertFilePath;
         bool Verbose = true;
         bool UseSectorMap = false;
-        TVector<TProxyDSPtr> ProxyDSMocks;
+        TVector<TIntrusivePtr<NFake::TProxyDS>> ProxyDSMocks;
 
         std::function<IActor*(const TTicketParserSettings&)> CreateTicketParser = NKikimr::CreateTicketParser;
         std::shared_ptr<TGrpcServiceFactory> GrpcServiceFactory;
@@ -263,7 +262,7 @@ namespace Tests {
             return *this;
         }
 
-        TServerSettings& SetProxyDSMocks(const TVector<TProxyDSPtr>& proxyDSMocks) {
+        TServerSettings& SetProxyDSMocks(const TVector<TIntrusivePtr<NFake::TProxyDS>>& proxyDSMocks) {
             ProxyDSMocks = proxyDSMocks;
             return *this;
         }

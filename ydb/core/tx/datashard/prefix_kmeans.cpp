@@ -225,18 +225,12 @@ public:
             << " K: " << K << " Clusters: " << Clusters.size()
             << " State: " << State << " Round: " << Round << " / " << MaxRounds
             << " LevelBuf size: " << LevelBuf.Size() << " PostingBuf size: " << PostingBuf.Size() << " PrefixBuf size: " << PrefixBuf.Size()
-            << " UploadTable: " << UploadTable << " UploadBuf size: " << UploadBuf.Size();
+            << " UploadTable: " << UploadTable << " UploadBuf size: " << UploadBuf.Size() << " RetryCount: " << RetryCount;
     }
 
     EScan PageFault() final
     {
         LOG_T("PageFault " << Debug());
-
-        UploadInProgress()
-            || TryUpload(LevelBuf, LevelTable, LevelTypes, false)
-            || TryUpload(PostingBuf, PostingTable, PostingTypes, false)
-            || TryUpload(PrefixBuf, PrefixTable, PrefixTypes, false);
-
         return EScan::Feed;
     }
 
@@ -328,6 +322,8 @@ protected:
 
     void UploadImpl()
     {
+        LOG_D("Uploading " << Debug());
+
         Y_ASSERT(!UploadBuf.IsEmpty());
         Y_ASSERT(!Uploader);
         auto actor = NTxProxy::CreateUploadRowsInternal(

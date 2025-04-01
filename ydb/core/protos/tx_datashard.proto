@@ -2328,8 +2328,10 @@ message TEvForceDataCleanup {
 // Intermediate requests and corresponding TEvForceDataCleanupResult's may be skipped.
 message TEvForceDataCleanupResult {
     enum EStatus {
-        OK = 0;
-        FAILED = 1;
+        UNKNOWN = 0;
+        OK = 1;
+        WRONG_SHARD_STATE = 2;
+        BORROWED = 3;
     };
     optional uint64 DataCleanupGeneration = 1; // from corresponding request (or greater)
     optional uint64 TabletId = 2;

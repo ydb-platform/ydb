@@ -4949,6 +4949,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
         HFuncTraced(TEvImport::TEvForgetImportRequest, Handle);
         HFuncTraced(TEvImport::TEvListImportsRequest, Handle);
         HFuncTraced(TEvPrivate::TEvImportSchemeReady, Handle);
+        HFuncTraced(TEvPrivate::TEvImportSchemaMappingReady, Handle);
         HFuncTraced(TEvPrivate::TEvImportSchemeQueryResult, Handle);
         // } // NImport
 
@@ -7149,32 +7150,27 @@ void TSchemeShard::SetPartitioning(TPathId pathId, TTableInfo::TPtr tableInfo, T
         newPartitioningSet.reserve(newPartitioning.size());
         const auto& oldPartitioning = tableInfo->GetPartitions();
 
+        std::vector<TShardIdx> dataErasureShards;
         for (const auto& p: newPartitioning) {
             if (!oldPartitioning.empty())
                 newPartitioningSet.insert(p.ShardIdx);
 
             const auto& partitionStats = tableInfo->GetStats().PartitionStats;
             auto it = partitionStats.find(p.ShardIdx);
-            std::vector<TShardIdx> dataErasureShards;
             if (it != partitionStats.end()) {
                 EnqueueBackgroundCompaction(p.ShardIdx, it->second);
                 UpdateShardMetrics(p.ShardIdx, it->second);
                 dataErasureShards.push_back(p.ShardIdx);
             }
-            if (DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
-                Execute(CreateTxAddEntryToDataErasure(dataErasureShards), this->ActorContext());
-            }
+        }
+        if (DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
+            Execute(CreateTxAddEntryToDataErasure(dataErasureShards), this->ActorContext());
         }
 
-        std::vector<TShardIdx> cancelDataErasureShards;
         for (const auto& p: oldPartitioning) {
             if (!newPartitioningSet.contains(p.ShardIdx)) {
                 // note that queues might not contain the shard
                 OnShardRemoved(p.ShardIdx);
-                cancelDataErasureShards.push_back(p.ShardIdx);
-            }
-            if (DataErasureManager->GetStatus() == EDataErasureStatus::IN_PROGRESS) {
-                Execute(CreateTxCancelDataErasureShards(cancelDataErasureShards), this->ActorContext());
             }
         }
     }

@@ -6,6 +6,7 @@ PY3TEST()
     TEST_SRCS(
         test_quota_exhaustion.py
         test_log_scenario.py
+        zip_bomb.py
     )
 
     IF (SANITIZER_TYPE OR WITH_VALGRIND)

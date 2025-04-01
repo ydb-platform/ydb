@@ -25,6 +25,8 @@ __all__ = [
     "TopicWriteResult",
     "TopicWriter",
     "TopicWriterAsyncIO",
+    "TopicTxWriter",
+    "TopicTxWriterAsyncIO",
     "TopicWriterInitInfo",
     "TopicWriterMessage",
     "TopicWriterSettings",
@@ -33,6 +35,7 @@ __all__ = [
 import concurrent.futures
 import datetime
 from dataclasses import dataclass
+import logging
 from typing import List, Union, Mapping, Optional, Dict, Callable
 
 from . import aio, Credentials, _apis, issues
@@ -65,8 +68,10 @@ from ._topic_writer.topic_writer import (  # noqa: F401
     PublicWriteResult as TopicWriteResult,
 )
 
+from ydb._topic_writer.topic_writer_asyncio import TxWriterAsyncIO as TopicTxWriterAsyncIO
 from ydb._topic_writer.topic_writer_asyncio import WriterAsyncIO as TopicWriterAsyncIO
 from ._topic_writer.topic_writer_sync import WriterSync as TopicWriter
+from ._topic_writer.topic_writer_sync import TxWriterSync as TopicTxWriter
 
 from ._topic_common.common import (
     wrap_operation as _wrap_operation,
@@ -88,6 +93,8 @@ from ._grpc.grpcwrapper.ydb_topic_public_types import (  # noqa: F401
     PublicAlterAutoPartitioningSettings as TopicAlterAutoPartitioningSettings,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class TopicClientAsyncIO:
     _closed: bool
@@ -108,7 +115,8 @@ class TopicClientAsyncIO:
         )
 
     def __del__(self):
-        self.close()
+        if not self._closed:
+            logger.warning("Topic client was not closed properly. Consider using method close().")
 
     async def create_topic(
         self,
@@ -276,6 +284,35 @@ class TopicClientAsyncIO:
 
         return TopicWriterAsyncIO(self._driver, settings, _client=self)
 
+    def tx_writer(
+        self,
+        tx,
+        topic,
+        *,
+        producer_id: Optional[str] = None,  # default - random
+        session_metadata: Mapping[str, str] = None,
+        partition_id: Union[int, None] = None,
+        auto_seqno: bool = True,
+        auto_created_at: bool = True,
+        codec: Optional[TopicCodec] = None,  # default mean auto-select
+        # encoders: map[codec_code] func(encoded_bytes)->decoded_bytes
+        # the func will be called from multiply threads in parallel.
+        encoders: Optional[Mapping[_ydb_topic_public_types.PublicCodec, Callable[[bytes], bytes]]] = None,
+        # custom encoder executor for call builtin and custom decoders. If None - use shared executor pool.
+        # If max_worker in the executor is 1 - then encoders will be called from the thread without parallel.
+        encoder_executor: Optional[concurrent.futures.Executor] = None,
+    ) -> TopicTxWriterAsyncIO:
+        args = locals().copy()
+        del args["self"]
+        del args["tx"]
+
+        settings = TopicWriterSettings(**args)
+
+        if not settings.encoder_executor:
+            settings.encoder_executor = self._executor
+
+        return TopicTxWriterAsyncIO(tx=tx, driver=self._driver, settings=settings, _client=self)
+
     def close(self):
         if self._closed:
             return
@@ -287,7 +324,7 @@ class TopicClientAsyncIO:
         if not self._closed:
             return
 
-        raise RuntimeError("Topic client closed")
+        raise issues.Error("Topic client closed")
 
 
 class TopicClient:
@@ -310,7 +347,8 @@ class TopicClient:
         )
 
     def __del__(self):
-        self.close()
+        if not self._closed:
+            logger.warning("Topic client was not closed properly. Consider using method close().")
 
     def create_topic(
         self,
@@ -487,6 +525,36 @@ class TopicClient:
 
         return TopicWriter(self._driver, settings, _parent=self)
 
+    def tx_writer(
+        self,
+        tx,
+        topic,
+        *,
+        producer_id: Optional[str] = None,  # default - random
+        session_metadata: Mapping[str, str] = None,
+        partition_id: Union[int, None] = None,
+        auto_seqno: bool = True,
+        auto_created_at: bool = True,
+        codec: Optional[TopicCodec] = None,  # default mean auto-select
+        # encoders: map[codec_code] func(encoded_bytes)->decoded_bytes
+        # the func will be called from multiply threads in parallel.
+        encoders: Optional[Mapping[_ydb_topic_public_types.PublicCodec, Callable[[bytes], bytes]]] = None,
+        # custom encoder executor for call builtin and custom decoders. If None - use shared executor pool.
+        # If max_worker in the executor is 1 - then encoders will be called from the thread without parallel.
+        encoder_executor: Optional[concurrent.futures.Executor] = None,  # default shared client executor pool
+    ) -> TopicWriter:
+        args = locals().copy()
+        del args["self"]
+        del args["tx"]
+        self._check_closed()
+
+        settings = TopicWriterSettings(**args)
+
+        if not settings.encoder_executor:
+            settings.encoder_executor = self._executor
+
+        return TopicTxWriter(tx, self._driver, settings, _parent=self)
+
     def close(self):
         if self._closed:
             return
@@ -498,7 +566,7 @@ class TopicClient:
         if not self._closed:
             return
 
-        raise RuntimeError("Topic client closed")
+        raise issues.Error("Topic client closed")
 
 
 @dataclass

@@ -148,7 +148,6 @@ jobs:
 
         
       - name: Comment PR
-        continue-on-error: true
         uses: actions/github-script@v7
         
         with:

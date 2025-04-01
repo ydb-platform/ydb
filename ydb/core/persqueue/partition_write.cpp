@@ -411,21 +411,11 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
                               GapOffsets,
                               GapSize);
 
-    //append Head with newHead
-    while (!WorkZone.NewHead.GetBatches().empty()) {
-        WorkZone.Head.AddBatch(WorkZone.NewHead.ExtractFirstBatch());
-    }
-    WorkZone.Head.PackedSize += WorkZone.NewHead.PackedSize;
+    WorkZone.SyncHead(StartOffset, EndOffset);
 
-    if (WorkZone.Head.PackedSize > 0 && WorkZone.DataKeysBody.empty()) {
-        StartOffset = WorkZone.Head.Offset + (WorkZone.Head.PartNo > 0 ? 1 : 0);
-    }
-
-    EndOffset = WorkZone.Head.GetNextOffset();
     EndWriteTimestamp = PendingWriteTimestamp;
 
-    WorkZone.NewHead.Clear();
-    WorkZone.NewHead.Offset = EndOffset;
+    WorkZone.ResetNewHead(EndOffset);
 
     CheckHeadConsistency();
 

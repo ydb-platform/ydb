@@ -39,6 +39,9 @@ struct TPartitionWorkZone {
                           ui64& startOffset,
                           std::deque<std::pair<ui64, ui64>>& gapOffsets,
                           ui64& gapSize);
+    void SyncHead(ui64& startOffset, ui64& endOffset);
+
+    void ResetNewHead(ui64 endOffset);
 
     THead Head;
     THead NewHead;

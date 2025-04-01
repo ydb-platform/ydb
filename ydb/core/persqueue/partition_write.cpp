@@ -1479,7 +1479,7 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
 
     //Need to clear all compacted blobs
     const TKey& k = WorkZone.CompactedKeys.empty() ? key : WorkZone.CompactedKeys.front().first;
-    ClearOldHead(k.GetOffset(), k.GetPartNo(), request);
+    ClearOldHead(k.GetOffset(), k.GetPartNo());
 
     if (!key.HasSuffix()) {
         if (!WorkZone.DataKeysBody.empty() && WorkZone.CompactedKeys.empty()) {

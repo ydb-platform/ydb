@@ -17,12 +17,25 @@ using namespace NYdb::NQuery;
 using namespace NYdb::NTopic;
 using namespace NYdb::NReplication;
 
+namespace NUnitTest::NPrivate {
+    template<>
+    inline bool CompareEqual<TUuidValue>(const TUuidValue& x, const TUuidValue& y) {
+        return x.ToString() == y.ToString();
+    }
+}
+
+template<>
+inline void Out<NYdb::Dev::TUuidValue>(IOutputStream& os, const NYdb::Dev::TUuidValue& value) {
+    os << value.ToString();
+}
+
 namespace NReplicationTest {
 
 struct IChecker {
     virtual void Assert(const TString& msg, const ::Ydb::Value& value) = 0;
     virtual ~IChecker() = default;
 };
+
 
 template<typename T>
 struct Checker : public IChecker {
@@ -67,6 +80,11 @@ inline TString Checker<TString>::Get(const ::Ydb::Value& value) {
 template<>
 inline TInstant Checker<TInstant>::Get(const ::Ydb::Value& value) {
     return TInstant::Days(value.uint32_value());
+}
+
+template<>
+inline TUuidValue Checker<TUuidValue>::Get(const ::Ydb::Value& value) {
+    return TUuidValue(value);
 }
 
 template<typename T>
@@ -347,7 +365,7 @@ struct MainTestCase {
         ExecuteDDL(ddl);
     }
 
-    void DropReplicatopn() {
+    void DropReplication() {
         ExecuteDDL(Sprintf("DROP ASYNC REPLICATION `%s`;", ReplicationName.data()));
     }
 

@@ -4,6 +4,44 @@ using namespace NReplicationTest;
 
 Y_UNIT_TEST_SUITE(Replication)
 {
+    Y_UNIT_TEST(Types)
+    {
+        MainTestCase testCase;
+        testCase.CreateSourceTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint32,
+                    Key2 Uuid,
+                    v01 Uuid,
+                    v02 Uuid NOT NULL,
+                    v03 Double,
+                    PRIMARY KEY (Key, Key2)
+                );
+        )");
+
+        testCase.ExecuteSourceTableQuery(R"(
+            UPSERT INTO `%s` (Key,Key2,v01,v02,v03) VALUES
+            (
+                1,
+                CAST("00078af5-0000-0000-6c0b-040000000000" as Uuid),
+                CAST("00078af5-0000-0000-6c0b-040000000001" as Uuid),
+                UNWRAP(CAST("00078af5-0000-0000-6c0b-040000000002" as Uuid)),
+                CAST("311111111113.222222223" as Double)
+            );
+        )");
+
+        testCase.CreateReplication();
+
+        testCase.CheckResult({{
+            _C("Key2", TUuidValue("00078af5-0000-0000-6c0b-040000000000")),
+            _C("v01", TUuidValue("00078af5-0000-0000-6c0b-040000000001")),
+            _C("v02", TUuidValue("00078af5-0000-0000-6c0b-040000000002")),
+            _C("v03", 311111111113.222222223)
+        }});
+
+        testCase.DropReplication();
+        testCase.DropSourceTable();
+    }
+
     Y_UNIT_TEST(PauseAndResumeReplication)
     {
         MainTestCase testCase;
@@ -59,7 +97,8 @@ Y_UNIT_TEST_SUITE(Replication)
         testCase.ResumeReplication();
         testCase.CheckReplicationState(TReplicationDescription::EState::Running);
 
-        testCase.DropReplicatopn();
+        testCase.DropReplication();
+        testCase.DropSourceTable();
     }
 }
 

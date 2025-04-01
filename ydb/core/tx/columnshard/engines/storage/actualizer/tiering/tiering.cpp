@@ -155,9 +155,10 @@ void TTieringActualizer::DoRemovePortion(const ui64 portionId) {
 void TTieringActualizer::DoExtractTasks(
     TTieringProcessContext& tasksContext, const TExternalTasksContext& externalContext, TInternalTasksContext& /*internalContext*/) {
     THashSet<ui64> portionIds;
+    THashSet<ui64> rejectedPortions;
     for (auto&& [address, addressPortions] : PortionIdByWaitDuration) {
         if (addressPortions.GetPortions().size() && tasksContext.GetActualInstant() < addressPortions.GetPortions().begin()->first) {
-            Counters.SkipEvictionForLimit->Add(1);
+            Counters.SkipEvictionForTooEarly->Add(1);
             continue;
         }
         if (!tasksContext.IsRWAddressAvailable(address)) {
@@ -172,7 +173,11 @@ void TTieringActualizer::DoExtractTasks(
             for (auto&& p : portions) {
                 const auto& portion = externalContext.GetPortionVerified(p);
                 auto info = BuildActualizationInfo(*portion, tasksContext.GetActualInstant());
-                AFL_VERIFY(info);
+                if (!info) {
+                    Counters.SkipEvictionForNoLongerNeeded->Add(1);
+                    rejectedPortions.insert(p);
+                    continue;
+                }
                 auto portionScheme = portion->GetSchema(VersionedIndex);
                 TPortionEvictionFeatures features(
                     portionScheme, info->GetTargetScheme(), portion->GetTierNameDef(IStoragesManager::DefaultStorageId));
@@ -217,6 +222,9 @@ void TTieringActualizer::DoExtractTasks(
         Counters.QueueSizeToEvict->SetValue(waitQueueEvict);
     }
     for (auto&& i : portionIds) {
+        RemovePortion(i);
+    }
+    for (auto&& i : rejectedPortions) {
         RemovePortion(i);
     }
 }

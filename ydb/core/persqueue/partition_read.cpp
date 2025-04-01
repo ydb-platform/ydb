@@ -624,72 +624,16 @@ TVector<TClientBlob> TPartition::GetReadRequestFromHead(
         const ui64 startOffset, const ui16 partNo, const ui32 maxCount, const ui32 maxSize, const ui64 readTimestampMs, ui32* rcount,
         ui32* rsize, ui64* insideHeadOffset, ui64 lastOffset
 ) {
-    ui32& count = *rcount;
-    ui32& size = *rsize;
-    TVector<TClientBlob> res;
-    std::optional<ui64> firstAddedBlobOffset{};
-    ui32 pos = 0;
-    if (WorkZone.PositionInHead(startOffset, partNo)) {
-        pos = WorkZone.Head.FindPos(startOffset, partNo);
-        Y_ABORT_UNLESS(pos != Max<ui32>());
-    }
-    ui32 lastBlobSize = 0;
-    for (; pos < WorkZone.Head.GetBatches().size(); ++pos) {
-
-        TVector<TClientBlob> blobs;
-        WorkZone.Head.GetBatch(pos).UnpackTo(&blobs);
-        ui32 i = 0;
-        ui64 offset = WorkZone.Head.GetBatch(pos).GetOffset();
-        ui16 pno = WorkZone.Head.GetBatch(pos).GetPartNo();
-        for (; i < blobs.size(); ++i) {
-
-            ui64 curOffset = offset;
-
-            Y_ABORT_UNLESS(pno == blobs[i].GetPartNo());
-            bool skip = offset < startOffset || offset == startOffset &&
-                blobs[i].GetPartNo() < partNo;
-            if (lastOffset != 0 && lastOffset < offset) {
-                break;
-            }
-            if (blobs[i].IsLastPart()) {
-                ++offset;
-                pno = 0;
-            } else {
-                ++pno;
-            }
-
-            if (skip) continue;
-
-            if (blobs[i].IsLastPart()) {
-                bool messageSkippingBehaviour = AppData()->PQConfig.GetTopicsAreFirstClassCitizen() &&
-                        readTimestampMs > blobs[i].WriteTimestamp.MilliSeconds();
-                ++count;
-                if (messageSkippingBehaviour) { //do not count in limits; message will be skippend in proxy
-                    --count;
-                    size -= lastBlobSize;
-                }
-                lastBlobSize = 0;
-
-                if (count > maxCount) {// blob is counted already
-                    break;
-                }
-                if (size > maxSize) {
-                    break;
-                }
-            }
-            size += blobs[i].GetBlobSize();
-            lastBlobSize += blobs[i].GetBlobSize();
-            res.push_back(blobs[i]);
-
-            if (!firstAddedBlobOffset)
-                firstAddedBlobOffset = curOffset;
-
-        }
-        if (i < blobs.size()) // already got limit
-            break;
-    }
-    *insideHeadOffset = firstAddedBlobOffset.value_or(*insideHeadOffset);
-    return res;
+    Y_ABORT_UNLESS(rcount && rsize);
+    return WorkZone.GetBlobsFromHead(startOffset,
+                                     partNo,
+                                     maxCount,
+                                     maxSize,
+                                     readTimestampMs,
+                                     *rcount,
+                                     *rsize,
+                                     *insideHeadOffset,
+                                     lastOffset);
 }
 
 void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {

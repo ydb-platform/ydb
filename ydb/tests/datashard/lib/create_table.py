@@ -67,8 +67,8 @@ index_first_sync = {
 index_second_sync = {
     "DyNumber": "CAST('{}E1' AS DyNumber)",
     "String": "'String {}'",
-    "Utf8": "'Uft8 {}'",
-    # "Uuid": "CAST('3{:03}5678-e89b-12d3-a456-556642440000' AS UUID)",
+    "Utf8": "'Utf8 {}'",
+    # "Uuid": "CAST('3{:03}5678-e89b-12d3-a456-556642440000' AS UUID)", https://github.com/ydb-platform/ydb/issues/16623
     "Date": "CAST('2{:03}-01-01' AS Date)",
     "Datetime": "CAST('2{:03}-10-02T11:00:00Z' AS Datetime)",
 }
@@ -118,8 +118,8 @@ index_first = {
 index_second = {
     "DyNumber": "CAST('{}E1' AS DyNumber)",
     "String": "'String {}'",
-    "Utf8": "'Uft8 {}'",
-    # "Uuid": "CAST('3{:03}5678-e89b-12d3-a456-556642440000' AS UUID)",
+    "Utf8": "'Utf8 {}'",
+    # "Uuid": "CAST('3{:03}5678-e89b-12d3-a456-556642440000' AS UUID)", https://github.com/ydb-platform/ydb/issues/16623
     "Date": "CAST('2{:03}-01-01' AS Date)",
     "Datetime": "CAST('2{:03}-10-02T11:00:00Z' AS Datetime)",
     "Timestamp": "CAST(16962{:03}00000000 AS Timestamp)",
@@ -146,8 +146,8 @@ pk_types = {
     "DyNumber": "CAST('{}E1' AS DyNumber)",
 
     "String": "'String {}'",
-    "Utf8": "'Uft8 {}'",
-    # "Uuid": "CAST('3{:03}5678-e89b-12d3-a456-556642440000' AS UUID)",
+    "Utf8": "'Utf8 {}'",
+    # "Uuid": "CAST('3{:03}5678-e89b-12d3-a456-556642440000' AS UUID)", https://github.com/ydb-platform/ydb/issues/16623
 
     "Date": "CAST('2{:03}-01-01' AS Date)",
     "Datetime": "CAST('2{:03}-10-02T11:00:00Z' AS Datetime)",
@@ -190,11 +190,11 @@ def create_table(table_name: str, columns: dict[str, dict[str]], pk_colums: dict
 
 def create_ttl(ttl: str, inteval: dict[str, str], time: str, table_name: str) -> str:
     sql_ttl = f" ALTER TABLE {table_name} SET ( TTL = "
-    lenght_inteval = len(inteval)
+    lenght_interval = len(inteval)
     count = 1
     for pt in inteval.keys():
         sql_ttl += f"""Interval("{pt}") {inteval[pt] if inteval[pt] == "" or inteval[pt] == "DELETE" else f"TO EXTERNAL DATA SOURCE {inteval[pt]}"}
-                {", " if count != lenght_inteval else " "}"""
+                {", " if count != lenght_interval else " "}"""
         count += 1
     sql_ttl += f""" ON {ttl} {f"AS {time}" if time != "" else ""} ); """
 >>>>>>> alfa

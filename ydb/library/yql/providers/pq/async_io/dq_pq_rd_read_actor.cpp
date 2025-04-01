@@ -1221,7 +1221,7 @@ void TDqPqRdReadActor::StartClusterDiscovery() {
                 try {
                     auto federatedClusters = future.GetValue();
                     actorSystem->Send(selfId, new TEvPrivate::TEvReceivedClusters(std::move(federatedClusters)));
-                } catch (std::exception &ex) {
+                } catch (std::exception& ex) {
                     actorSystem->Send(selfId, new TEvPrivate::TEvReceivedClusters(ex));
                 }
             });

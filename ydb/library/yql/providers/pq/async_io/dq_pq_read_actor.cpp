@@ -307,7 +307,7 @@ private:
     }
 
     void Handle(TEvPrivate::TEvReconnectSession::TPtr&) {
-        for (auto& clusterState: Clusters) {
+        for (auto& clusterState : Clusters) {
             SRC_LOG_D("SessionId: " << GetSessionId(clusterState.Index) << ", Reconnect epoch: " << Metrics.ReconnectRate->Val());
             if (clusterState.ReadSession) {
                 clusterState.ReadSession->Close(TDuration::Zero());
@@ -325,7 +325,7 @@ private:
         std::queue<TReadyBatch> empty;
         ReadyBuffer.swap(empty);
 
-        for (auto& clusterState: Clusters) {
+        for (auto& clusterState : Clusters) {
             if (clusterState.ReadSession) {
                 clusterState.ReadSession->Close(TDuration::Zero());
                 clusterState.ReadSession.reset();
@@ -389,7 +389,7 @@ private:
                 try {
                     auto federatedClusters = future.GetValue();
                     actorSystem->Send(selfId, new TEvPrivate::TEvReceivedClusters(std::move(federatedClusters)));
-                } catch (std::exception &ex) {
+                } catch (std::exception& ex) {
                     actorSystem->Send(selfId, new TEvPrivate::TEvReceivedClusters(ex));
                 }
             });
@@ -591,7 +591,7 @@ private:
     }
 
     void SubscribeOnNextEvent() {
-        for (auto& clusterState: Clusters) {
+        for (auto& clusterState : Clusters) {
             SubscribeOnNextEvent(clusterState);
         }
     }

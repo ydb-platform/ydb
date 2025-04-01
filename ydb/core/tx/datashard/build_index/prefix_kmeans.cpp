@@ -207,12 +207,6 @@ public:
     EScan PageFault() final
     {
         LOG_T("PageFault " << Debug());
-
-        UploadInProgress()
-            || TryUpload(LevelBuf, LevelTable, LevelTypes, false)
-            || TryUpload(PostingBuf, PostingTable, PostingTypes, false)
-            || TryUpload(PrefixBuf, PrefixTable, PrefixTypes, false);
-
         return EScan::Feed;
     }
 

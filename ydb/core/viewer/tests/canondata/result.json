@@ -142,7 +142,10 @@
                 "type": "DATABASE"
             }
         },
-        "2-post": {},
+        "2-post": {
+            "ready": true,
+            "status": "SUCCESS"
+        },
         "3-get": {
             "children": [
                 {
@@ -236,7 +239,10 @@
                 "type": "DATABASE"
             }
         },
-        "4-delete": {},
+        "4-delete": {
+            "ready": true,
+            "status": "SUCCESS"
+        },
         "5-get": {
             "children": [
                 {

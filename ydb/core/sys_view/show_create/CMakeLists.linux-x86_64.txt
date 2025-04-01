@@ -26,6 +26,7 @@ target_link_libraries(core-sys_view-show_create PUBLIC
   ydb-core-base
   core-kqp-runtime
   ydb-core-protos
+  scheme-defaults-protos
   core-sys_view-common
   core-tx-schemeshard
   core-tx-tx_proxy

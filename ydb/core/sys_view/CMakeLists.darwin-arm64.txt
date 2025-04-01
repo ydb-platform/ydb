@@ -56,6 +56,7 @@ target_link_libraries(ydb-core-sys_view PUBLIC
   core-sys_view-tablets
   core-tx-schemeshard
   core-tx-tx_proxy
+  ydb-core-wrappers
 )
 
 target_sources(ydb-core-sys_view PRIVATE

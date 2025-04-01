@@ -387,6 +387,14 @@ public:
 
 }   // namespace
 
+TCompareKeyForScanSequence TCompareKeyForScanSequence::FromStart(const std::shared_ptr<IDataSource>& src) {
+    return TCompareKeyForScanSequence(src->GetStart(), src->GetSourceId());
+}
+
+TCompareKeyForScanSequence TCompareKeyForScanSequence::FromFinish(const std::shared_ptr<IDataSource>& src) {
+    return TCompareKeyForScanSequence(src->GetFinish(), src->GetSourceId());
+}
+
 bool TPortionDataSource::DoStartFetchingAccessor(const std::shared_ptr<IDataSource>& sourcePtr, const TFetchingScriptCursor& step) {
     AFL_VERIFY(!GetStageData().HasPortionAccessor());
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", step.GetName())("fetching_info", step.DebugString());

@@ -482,7 +482,6 @@ public:
     ui64 ImportantClientsMinOffset() const;
 
     TInstant GetEndWriteTimestamp() const; // For tests only
-    THead& GetHead(); // For tests only
 
     //Bootstrap sends kvRead
     //Become StateInit

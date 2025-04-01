@@ -41,7 +41,7 @@ jobs:
       - name: Update test monitor (how long tests in state) for ${{ env.BASE_BRANCH }}
         run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }}
 
-      - name: Update branch with branch ${{ env.BASE_BRANCH }}
+      - name: Update branch ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }} with branch ${{ env.BASE_BRANCH }}
         run: |
           git config user.name YDBot
           git config user.email ydbot@ydb.tech
@@ -61,11 +61,11 @@ jobs:
           # Attempt to rebase BRANCH_FOR_PR onto BASE_BRANCH
           if ! git rebase origin/${{ env.BASE_BRANCH }} -X theirs; then
             echo "Rebase failed, resetting branch to match ${{ env.BASE_BRANCH }}..."
-      
+
             # Abort the rebase process
             git rebase --abort
       
-            # Reset the branch to BASE_BRANCH
+            # Reset the ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }} to origin/${{ env.BASE_BRANCH }}
             git reset --hard origin/${{ env.BASE_BRANCH }}
             
           fi

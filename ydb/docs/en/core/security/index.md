@@ -8,11 +8,11 @@ This section of {{ ydb-short-name }} documentation covers security-related aspec
 
     When a [user](../concepts/glossary.md#access-user) connects to a {{ ydb-short-name }} database, {{ ydb-short-name }} first identifies the user's account. This process is called [authentication](./authentication.md). Based on the authentication data, a user then goes through [authorization](./authorization.md) — a process that verifies whether a user has sufficient [access rights](../concepts/glossary.md#access-right) and [access levels](../concepts/glossary.md#access-level) to perform user operations.
 
-    {{ ydb-short-name }} supports both internal [users](./authorization.md#user) and external users from third-party directory services. After passing [authentication](./authentication.md), a {{ ydb-short-name }} cluster identifies users by [SIDs](./authorization.md#sid). A SID is a string that contains a username and auth domain.
+    {{ ydb-short-name }} supports both internal [users](./authorization.md#user) and external users from third-party directory services. After passing [authentication](./authentication.md), a user gets a [SID](./authorization.md#sid) that the {{ ydb-short-name }} cluster uses for user identification and access control.
 
     [Access rights](./authorization.md#right) in {{ ydb-short-name }} are tied to [access objects](../concepts/glossary.md#access-object) using [access control lists (ACL)](../concepts/glossary.md#access-control-list). The ACL format is described in [{#T}](./short-access-control-notation.md).
 
-    {{ ydb-short-name }} uses [access level lists](../concepts/glossary.md#access-level-list) to manage [access subject](../concepts/glossary.md#access-subject) privileges that are not related to [scheme objects](../concepts/glossary.md#scheme-object).
+    {{ ydb-short-name }} uses [access levels](../concepts/glossary.md#access-level) to manage [access subject](../concepts/glossary.md#access-subject) privileges that are not related to [scheme objects](../concepts/glossary.md#scheme-object). Access levels are granted to users in [access level lists](../concepts/glossary.md#access-level-list)
 
     [Built-in security](./builtin-security.md) is configured automatically by default when the {{ ydb-short-name }} cluster is started for the first time. This process adds a [superuser](./builtin-security.md#superuser) and a set of [roles](./builtin-security.md#role) for convenient user access management.
 

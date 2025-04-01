@@ -7,7 +7,6 @@
 
 #include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
 
-#include <yql/essentials/ast/yql_ast_escaping.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
 
 #include <util/generic/yexception.h>
@@ -18,18 +17,6 @@ namespace NSysView {
 using namespace NKikimrSchemeOp;
 using namespace Ydb::Table;
 using namespace NYdb;
-
-void TCreateTableFormatter::EscapeName(const TString& str) {
-    NYql::EscapeArbitraryAtom(str, '`', &Stream);
-}
-
-void TCreateTableFormatter::EscapeString(const TString& str) {
-    NYql::EscapeArbitraryAtom(str, '\'', &Stream);
-}
-
-void TCreateTableFormatter::EscapeBinary(const TString& str) {
-    NYql::EscapeBinaryAtom(str, '\'', &Stream);
-}
 
 void TCreateTableFormatter::FormatValue(NYdb::TValueParser& parser, bool isPartition, TString del) {
     TGuard<NMiniKQL::TScopedAlloc> guard(Alloc);
@@ -72,7 +59,7 @@ void TCreateTableFormatter::FormatValue(NYdb::TValueParser& parser, bool isParti
             auto precision = decimal.DecimalType_.Precision;
             auto scale = decimal.DecimalType_.Scale;
             Stream << "CAST(";
-            EscapeString(decimal.ToString());
+            EscapeString(decimal.ToString(), Stream);
             Stream << " AS Decimal(" << ui32(precision) << "," << ui32(scale) << ")";
             Stream << ")";
             return;
@@ -152,24 +139,24 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
             break;
         }
         case NYdb::EPrimitiveType::Utf8: {
-            EscapeString(TString(parser.GetUtf8()));
+            EscapeString(TString(parser.GetUtf8()), Stream);
             break;
         }
         case NYdb::EPrimitiveType::Date: {
             Stream << "DATE(";
-            EscapeString(parser.GetDate().FormatGmTime("%Y-%m-%d"));
+            EscapeString(parser.GetDate().FormatGmTime("%Y-%m-%d"), Stream);
             Stream << ")";
             break;
         }
         case NYdb::EPrimitiveType::Datetime: {
             Stream << "DATETIME(";
-            EscapeString(parser.GetDatetime().ToStringUpToSeconds());
+            EscapeString(parser.GetDatetime().ToStringUpToSeconds(), Stream);
             Stream << ")";
             break;
         }
         case NYdb::EPrimitiveType::Timestamp: {
             Stream << "TIMESTAMP(";
-            EscapeString(parser.GetTimestamp().ToString());
+            EscapeString(parser.GetTimestamp().ToString(), Stream);
             Stream << ")";
             break;
         }
@@ -177,7 +164,7 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
             Stream << "INTERVAL(";
             const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Interval, NUdf::TUnboxedValuePod(static_cast<i64>(parser.GetInterval())));
             Y_ENSURE(str.HasValue());
-            EscapeString(TString(str.AsStringRef()));
+            EscapeString(TString(str.AsStringRef()), Stream);
             Stream << ")";
             break;
         }
@@ -185,7 +172,7 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
             Stream << "DATE32(";
             const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Date32, NUdf::TUnboxedValuePod(parser.GetDate32()));
             Y_ENSURE(str.HasValue());
-            EscapeString(TString(str.AsStringRef()));
+            EscapeString(TString(str.AsStringRef()), Stream);
             Stream << ")";
             break;
         }
@@ -193,7 +180,7 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
             Stream << "DATETIME64(";
             const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Datetime64, NUdf::TUnboxedValuePod(static_cast<i64>(parser.GetDatetime64())));
             Y_ENSURE(str.HasValue());
-            EscapeString(TString(str.AsStringRef()));
+            EscapeString(TString(str.AsStringRef()), Stream);
             Stream << ")";
             break;
         }
@@ -201,7 +188,7 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
             Stream << "TIMESTAMP64(";
             const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Timestamp64, NUdf::TUnboxedValuePod(static_cast<i64>(parser.GetTimestamp64())));
             Y_ENSURE(str.HasValue());
-            EscapeString(TString(str.AsStringRef()));
+            EscapeString(TString(str.AsStringRef()), Stream);
             Stream << ")";
             break;
         }
@@ -209,28 +196,28 @@ void TCreateTableFormatter::FormatPrimitive(NYdb::TValueParser& parser) {
             Stream << "INTERVAL64(";
             const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Interval64, NUdf::TUnboxedValuePod(static_cast<i64>(parser.GetInterval64())));
             Y_ENSURE(str.HasValue());
-            EscapeString(TString(str.AsStringRef()));
+            EscapeString(TString(str.AsStringRef()), Stream);
             Stream << ")";
             break;
         }
         case NYdb::EPrimitiveType::String:
-            EscapeString(TString(parser.GetString()));
+            EscapeString(TString(parser.GetString()), Stream);
             break;
         case NYdb::EPrimitiveType::Yson:
-            EscapeString(TString(parser.GetYson()));
+            EscapeString(TString(parser.GetYson()), Stream);
             break;
         case NYdb::EPrimitiveType::Json:
-            EscapeString(TString(parser.GetJson()));
+            EscapeString(TString(parser.GetJson()), Stream);
             break;
         case NYdb::EPrimitiveType::DyNumber: {
             Stream << "DyNumber(";
-            EscapeString(TString(parser.GetDyNumber()));
+            EscapeString(TString(parser.GetDyNumber()), Stream);
             Stream << ")";
             break;
         }
         case NYdb::EPrimitiveType::Uuid: {
             Stream << "UUID(";
-            EscapeString(TString(parser.GetUuid().ToString()));
+            EscapeString(TString(parser.GetUuid().ToString()), Stream);
             Stream << ")";
             break;
         }
@@ -258,7 +245,7 @@ private:
     TStringStream& Stream;
 };
 
-TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tablePath,
+TFormatResult TCreateTableFormatter::Format(const TString& tablePath,
         const TTableDescription& tableDesc, bool temporary) {
     Stream.Clear();
 
@@ -270,14 +257,14 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tabl
     } else {
         Stream << "CREATE TABLE ";
     }
-    EscapeName(tablePath);
+    EscapeName(tablePath, Stream);
     Stream << " (\n";
 
     NKikimrMiniKQL::TType mkqlKeyType;
     try {
         FillColumnDescription(createRequest, mkqlKeyType, tableDesc);
     } catch (const yexception& e) {
-        return TResult(Ydb::StatusIds::UNSUPPORTED, e.what());
+        return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());
     }
 
     Y_ENSURE(!tableDesc.GetColumns().empty());
@@ -298,16 +285,16 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tabl
             Format(*it->second);
         }
     } catch (const TFormatFail& ex) {
-        return TResult(ex.Status, ex.Error);
+        return TFormatResult(ex.Status, ex.Error);
     } catch (const yexception& e) {
-        return TResult(Ydb::StatusIds::UNSUPPORTED, e.what());
+        return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());
     }
 
     try {
         FillTableBoundary(createRequest, tableDesc, mkqlKeyType);
         FillIndexDescription(createRequest, tableDesc);
     } catch (const yexception& e) {
-        return TResult(Ydb::StatusIds::UNSUPPORTED, e.what());;
+        return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());;
     }
 
     if (!createRequest.indexes().empty()) {
@@ -319,9 +306,9 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tabl
                 Format(createRequest.indexes(i));
             }
         } catch (const TFormatFail& ex) {
-            return TResult(ex.Status, ex.Error);
+            return TFormatResult(ex.Status, ex.Error);
         } catch (const yexception& e) {
-            return TResult(Ydb::StatusIds::UNSUPPORTED, e.what());
+            return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());
         }
     }
     Stream << ",\n";
@@ -340,9 +327,9 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tabl
                     isFamilyPrinted = Format(partitionConfig.GetColumnFamilies(i));
                 }
             } catch (const TFormatFail& ex) {
-                return TResult(ex.Status, ex.Error);
+                return TFormatResult(ex.Status, ex.Error);
             } catch (const yexception& e) {
-                return TResult(Ydb::StatusIds::UNSUPPORTED, e.what());
+                return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());
             }
         }
     }
@@ -352,10 +339,10 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tabl
         Stream << ",\n";
     }
     Stream << "\tPRIMARY KEY (";
-    EscapeName(columns[tableDesc.GetKeyColumnIds(0)]->GetName());
+    EscapeName(columns[tableDesc.GetKeyColumnIds(0)]->GetName(), Stream);
     for (int i = 1; i < tableDesc.GetKeyColumnIds().size(); i++) {
         Stream << ", ";
-        EscapeName(columns[tableDesc.GetKeyColumnIds(i)]->GetName());
+        EscapeName(columns[tableDesc.GetKeyColumnIds(i)]->GetName(), Stream);
     }
     Stream << ")\n";
     Stream << ")";
@@ -374,9 +361,9 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tabl
         try {
             printed |= Format(createRequest.partition_at_keys(), del, !printed);
         } catch (const TFormatFail& ex) {
-            return TResult(ex.Status, ex.Error);
+            return TFormatResult(ex.Status, ex.Error);
         } catch (const yexception& e) {
-            return TResult(Ydb::StatusIds::UNSUPPORTED, e.what());
+            return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());
         }
     }
 
@@ -408,9 +395,9 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tabl
         try {
             printed |= Format(createRequest.ttl_settings(), del, !printed);
         } catch (const TFormatFail& ex) {
-            return TResult(ex.Status, ex.Error);
+            return TFormatResult(ex.Status, ex.Error);
         } catch (const yexception& e) {
-            return TResult(Ydb::StatusIds::UNSUPPORTED, e.what());
+            return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());
         }
     }
 
@@ -422,17 +409,17 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tabl
     TString formattedStatement;
     NYql::TIssues issues;
     if (!NYdb::NDump::Format(statement, formattedStatement, issues)) {
-        return TResult(Ydb::StatusIds::INTERNAL_ERROR, issues.ToString());
+        return TFormatResult(Ydb::StatusIds::INTERNAL_ERROR, issues.ToString());
     }
 
-    auto result = TResult(std::move(formattedStatement));
+    auto result = TFormatResult(std::move(formattedStatement));
 
     return result;
 }
 
 void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDescription& columnDesc) {
     Stream << "\t";
-    EscapeName(columnDesc.GetName());
+    EscapeName(columnDesc.GetName(), Stream);
     Stream << " ";
 
     auto type = columnDesc.GetType();
@@ -460,7 +447,7 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDescription& co
 
     if (columnDesc.HasFamilyName()) {
         Stream << " FAMILY ";
-        EscapeName(columnDesc.GetFamilyName());
+        EscapeName(columnDesc.GetFamilyName(), Stream);
     }
     if (columnDesc.GetNotNull()) {
         Stream << " NOT NULL";
@@ -473,7 +460,7 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnDescription& co
 
 void TCreateTableFormatter::Format(const TableIndex& index) {
     Stream << "\tINDEX ";
-    EscapeName(index.name());
+    EscapeName(index.name(), Stream);
     std::optional<KMeansTreeSettings> kMeansTreeSettings;
     switch (index.type_case()) {
         case TableIndex::kGlobalIndex: {
@@ -499,20 +486,20 @@ void TCreateTableFormatter::Format(const TableIndex& index) {
 
     Y_ENSURE(!index.index_columns().empty());
     Stream << "(";
-    EscapeName(index.index_columns(0));
+    EscapeName(index.index_columns(0), Stream);
     for (int i = 1; i < index.index_columns().size(); i++) {
         Stream << ", ";
-        EscapeName(index.index_columns(i));
+        EscapeName(index.index_columns(i), Stream);
     }
     Stream << ")";
 
     if (!index.data_columns().empty()) {
         Stream << " COVER ";
         Stream << "(";
-        EscapeName(index.data_columns(0));
+        EscapeName(index.data_columns(0), Stream);
         for (int i = 1; i < index.data_columns().size(); i++) {
             Stream << ", ";
-            EscapeName(index.data_columns(i));
+            EscapeName(index.data_columns(i), Stream);
         }
         Stream << ")";
     }
@@ -635,7 +622,7 @@ bool TCreateTableFormatter::Format(const TFamilyDescription& familyDesc) {
     Y_ENSURE(familyName);
 
     Stream << "\tFAMILY ";
-    EscapeName(familyName);
+    EscapeName(familyName, Stream);
     Stream << " (";
 
     TString del = "";
@@ -754,11 +741,11 @@ void TCreateTableFormatter::Format(ui64 expireAfterSeconds, std::optional<TStrin
     Stream << "INTERVAL(";
     const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Interval, NUdf::TUnboxedValuePod(expireAfterSeconds * 1000000));
     Y_ENSURE(str.HasValue());
-    EscapeString(TString(str.AsStringRef()));
+    EscapeString(TString(str.AsStringRef()), Stream);
     Stream << ") ";
     if (storage) {
         Stream << "TO EXTERNAL DATA SOURCE ";
-        EscapeName(*storage);
+        EscapeName(*storage, Stream);
     } else {
         Stream << "DELETE";
     }
@@ -885,7 +872,7 @@ bool TCreateTableFormatter::Format(const Ydb::Table::TtlSettings& ttlSettings, T
     return true;
 }
 
-TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tablePath, const TColumnTableDescription& tableDesc, bool temporary) {
+TFormatResult TCreateTableFormatter::Format(const TString& tablePath, const TColumnTableDescription& tableDesc, bool temporary) {
     Stream.Clear();
 
     TStringStreamWrapper wrapper(Stream);
@@ -896,7 +883,7 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tabl
     } else {
         Stream << "CREATE TABLE ";
     }
-    EscapeName(tablePath);
+    EscapeName(tablePath, Stream);
     Stream << " (\n";
 
     const auto& schema = tableDesc.GetSchema();
@@ -915,14 +902,14 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tabl
             Format(*it->second);
         }
     } catch (const TFormatFail& ex) {
-        return TResult(ex.Status, ex.Error);
+        return TFormatResult(ex.Status, ex.Error);
     } catch (const yexception& e) {
-        return TResult(Ydb::StatusIds::UNSUPPORTED, e.what());
+        return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());
     }
     Stream << ",\n";
 
     if (!schema.GetIndexes().empty()) {
-        return TResult(Ydb::StatusIds::UNSUPPORTED, "Indexes are not supported yet for column tables.");
+        return TFormatResult(Ydb::StatusIds::UNSUPPORTED, "Indexes are not supported yet for column tables.");
     }
 
     bool isFamilyPrinted = false;
@@ -936,9 +923,9 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tabl
                 isFamilyPrinted = Format(schema.GetColumnFamilies(i));
             }
         } catch (const TFormatFail& ex) {
-            return TResult(ex.Status, ex.Error);
+            return TFormatResult(ex.Status, ex.Error);
         } catch (const yexception& e) {
-            return TResult(Ydb::StatusIds::UNSUPPORTED, e.what());
+            return TFormatResult(Ydb::StatusIds::UNSUPPORTED, e.what());
         }
     }
 
@@ -947,10 +934,10 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tabl
         Stream << ",\n";
     }
     Stream << "\tPRIMARY KEY (";
-    EscapeName(schema.GetKeyColumnNames(0));
+    EscapeName(schema.GetKeyColumnNames(0), Stream);
     for (int i = 1; i < schema.GetKeyColumnNames().size(); i++) {
         Stream << ", ";
-        EscapeName(schema.GetKeyColumnNames(i));
+        EscapeName(schema.GetKeyColumnNames(i), Stream);
     }
     Stream << ")\n";
     Stream << ") ";
@@ -958,16 +945,16 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tabl
     if (schema.HasOptions()) {
         const auto& options = schema.GetOptions();
         if (options.GetSchemeNeedActualization()) {
-            return TResult(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: SCHEME_NEED_ACTUALIZATION");
+            return TFormatResult(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: SCHEME_NEED_ACTUALIZATION");
         }
         if (options.HasScanReaderPolicyName() && !options.GetScanReaderPolicyName().empty()) {
-            return TResult(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: SCAN_READER_POLICY_NAME");
+            return TFormatResult(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: SCAN_READER_POLICY_NAME");
         }
         if (options.HasCompactionPlannerConstructor()) {
-            return TResult(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: COMPACTION_PLANNER");
+            return TFormatResult(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: COMPACTION_PLANNER");
         }
         if (options.HasMetadataManagerConstructor()) {
-            return TResult(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: METADATA_MEMORY_MANAGER");
+            return TFormatResult(Ydb::StatusIds::UNSUPPORTED, "Unsupported setting: METADATA_MEMORY_MANAGER");
         }
     }
 
@@ -993,22 +980,22 @@ TCreateTableFormatter::TResult TCreateTableFormatter::Format(const TString& tabl
     TString formattedStatement;
     NYql::TIssues issues;
     if (!NYdb::NDump::Format(statement, formattedStatement, issues)) {
-        return TResult(Ydb::StatusIds::INTERNAL_ERROR, issues.ToString());
+        return TFormatResult(Ydb::StatusIds::INTERNAL_ERROR, issues.ToString());
     }
 
-    auto result = TResult(std::move(formattedStatement));
+    auto result = TFormatResult(std::move(formattedStatement));
 
     return result;
 }
 
 void TCreateTableFormatter::Format(const TOlapColumnDescription& olapColumnDesc) {
     Stream << "\t";
-    EscapeName(olapColumnDesc.GetName());
+    EscapeName(olapColumnDesc.GetName(), Stream);
     Stream << " " << olapColumnDesc.GetType();
 
     if (olapColumnDesc.HasColumnFamilyName()) {
         Stream << " FAMILY ";
-        EscapeName(olapColumnDesc.GetColumnFamilyName());
+        EscapeName(olapColumnDesc.GetColumnFamilyName(), Stream);
     }
     if (olapColumnDesc.GetNotNull()) {
         Stream << " NOT NULL";
@@ -1104,10 +1091,10 @@ void TCreateTableFormatter::Format(const NKikimrColumnShardColumnDefaults::TColu
         Stream << "TIMESTAMP(";
         const NUdf::TUnboxedValue str = NMiniKQL::ValueToString(NUdf::EDataSlot::Timestamp, NUdf::TUnboxedValuePod(value));
         Y_ENSURE(str.HasValue());
-        EscapeString(TString(str.AsStringRef()));
+        EscapeString(TString(str.AsStringRef()), Stream);
         Stream << ")";
     } else if (scalar.HasString()) {
-        EscapeString(TString(scalar.GetString()));
+        EscapeString(TString(scalar.GetString()), Stream);
     } else {
         ythrow TFormatFail(Ydb::StatusIds::UNSUPPORTED, "Unsupported type for default value");
     }
@@ -1119,10 +1106,10 @@ void TCreateTableFormatter::Format(const NKikimrSchemeOp::TColumnTableSharding& 
             const auto& hashSharding = sharding.GetHashSharding();
             Y_ENSURE(!hashSharding.GetColumns().empty());
             Stream << "PARTITION BY HASH(";
-            EscapeName(hashSharding.GetColumns(0));
+            EscapeName(hashSharding.GetColumns(0), Stream);
             for (int i = 1; i < hashSharding.GetColumns().size(); i++) {
                 Stream << ", ";
-                EscapeName(hashSharding.GetColumns(i));
+                EscapeName(hashSharding.GetColumns(i), Stream);
             }
             Stream << ")\n";
             break;

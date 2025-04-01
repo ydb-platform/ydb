@@ -73,6 +73,7 @@ public:
         )
         , Issues(CreateDefaultTimeProvider())
     {
+        YQL_CLOG(DEBUG, ProviderDq) << "Creating TTaskControllerImpl: PingPeriod " << PingPeriod << ", AggrPeriod " << AggrPeriod;
         if (Settings) {
             if (Settings->_AllResultsBytesLimit.Get()) {
                 YQL_CLOG(DEBUG, ProviderDq) << "_AllResultsBytesLimit = " << *Settings->_AllResultsBytesLimit.Get();

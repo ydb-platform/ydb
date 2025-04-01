@@ -622,10 +622,10 @@ namespace Tests {
         }
     }
 
-    void TServer::EnableGRpc(const NYdbGrpc::TServerOptions& options, ui32 grpcServiceNodeId, std::optional<TString> tenant) {
-        auto* grpcInfo = &RootGrpc;
+    void TServer::EnableGRpc(const NYdbGrpc::TServerOptions& options, ui32 grpcServiceNodeId, const std::optional<TString>& tenant) {
+        auto* grpcInfo = &RootGRpc;
         if (tenant) {
-            grpcInfo = &TenantsGrpc[*tenant];
+            grpcInfo = &TenantsGRpc[*tenant];
         }
 
         grpcInfo->GRpcServerRootCounters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
@@ -743,7 +743,7 @@ namespace Tests {
         grpcServer->Start();
     }
 
-    void TServer::EnableGRpc(ui16 port, ui32 grpcServiceNodeId, std::optional<TString> tenant) {
+    void TServer::EnableGRpc(ui16 port, ui32 grpcServiceNodeId, const std::optional<TString>& tenant) {
         EnableGRpc(NYdbGrpc::TServerOptions()
             .SetHost("localhost")
             .SetPort(port)
@@ -1642,13 +1642,13 @@ namespace Tests {
     }
 
     const NYdbGrpc::TGRpcServer& TServer::GetGRpcServer() const {
-        Y_ABORT_UNLESS(RootGrpc.GRpcServer);
-        return *RootGrpc.GRpcServer;
+        Y_ABORT_UNLESS(RootGRpc.GRpcServer);
+        return *RootGRpc.GRpcServer;
     }
 
     const NYdbGrpc::TGRpcServer& TServer::GetTenantGRpcServer(const TString& tenant) const {
-        const auto it = TenantsGrpc.find(tenant);
-        Y_ABORT_UNLESS(it != TenantsGrpc.end());
+        const auto it = TenantsGRpc.find(tenant);
+        Y_ABORT_UNLESS(it != TenantsGRpc.end());
         Y_ABORT_UNLESS(it->second.GRpcServer);
         return *it->second.GRpcServer;
     }

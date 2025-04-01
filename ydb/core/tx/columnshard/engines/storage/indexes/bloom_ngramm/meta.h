@@ -13,6 +13,7 @@ public:
 private:
     using TBase = TSkipBitmapIndex;
     std::shared_ptr<arrow::Schema> ResultSchema;
+    bool CaseSensitive = true;
     ui32 NGrammSize = 3;
     ui32 FilterSizeBytes = 512;
     ui32 RecordsCount = 10000;
@@ -36,8 +37,10 @@ private:
             case EOperation::Equals:
             case EOperation::StartsWith:
             case EOperation::EndsWith:
-            case EOperation::Contains:
+            case EOperation::ContainsCaseSensitive:
                 return true;
+            case EOperation::ContainsCaseUnsensitive:
+                return !CaseSensitive;
         }
 
         return false;
@@ -49,12 +52,6 @@ protected:
         if (!bMeta) {
             return TConclusionStatus::Fail(
                 "cannot read meta as appropriate class: " + GetClassName() + ". Meta said that class name is " + newMeta.GetClassName());
-        }
-        if (HashesCount != bMeta->HashesCount) {
-            return TConclusionStatus::Fail("cannot modify hashes count");
-        }
-        if (NGrammSize != bMeta->NGrammSize) {
-            return TConclusionStatus::Fail("cannot modify ngramm size");
         }
         return TBase::CheckSameColumnsForModification(newMeta);
     }
@@ -79,6 +76,9 @@ protected:
         }
         if (!MutableDataExtractor().DeserializeFromProto(bFilter.GetDataExtractor())) {
             return false;
+        }
+        if (bFilter.HasCaseSensitive()) {
+            CaseSensitive = bFilter.GetCaseSensitive();
         }
         HashesCount = bFilter.GetHashesCount();
         if (!TConstants::CheckHashesCount(HashesCount)) {
@@ -111,6 +111,7 @@ protected:
         filterProto->SetFilterSizeBytes(FilterSizeBytes);
         filterProto->SetHashesCount(HashesCount);
         filterProto->SetColumnId(GetColumnId());
+        filterProto->SetCaseSensitive(CaseSensitive);
         *filterProto->MutableDataExtractor() = GetDataExtractor().SerializeToProto();
     }
 

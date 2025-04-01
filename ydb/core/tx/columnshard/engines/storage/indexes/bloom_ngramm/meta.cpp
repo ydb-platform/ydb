@@ -16,6 +16,7 @@ namespace NKikimr::NOlap::NIndexes::NBloomNGramm {
 class TNGrammBuilder {
 private:
     const ui32 HashesCount;
+    const bool CaseSensitive;
 
     template <ui32 CharsRemained>
     class THashesBuilder {
@@ -135,8 +136,9 @@ private:
     };
 
 public:
-    TNGrammBuilder(const ui32 hashesCount)
-        : HashesCount(hashesCount) {
+    TNGrammBuilder(const ui32 hashesCount, const bool caseSensitive)
+        : HashesCount(hashesCount)
+        , CaseSensitive(caseSensitive) {
     }
 
     template <class TAction>
@@ -161,7 +163,16 @@ public:
                 }
                 if constexpr (arrow::has_string_view<T>()) {
                     auto value = typedArray.GetView(row);
-                    BuildNGramms(value.data(), value.size(), {}, nGrammSize, fillData);
+                    if (CaseSensitive) {
+                        BuildNGramms(value.data(), value.size(), {}, nGrammSize, fillData);
+                    } else {
+                        std::string lowerStr;
+                        lowerStr.reserve(value.size());
+                        for (auto&& c : value) {
+                            lowerStr.append(std::tolower(c));
+                        }
+                        BuildNGramms(lowerStr.data(), lowerStr.size(), {}, nGrammSize, fillData);
+                    }
                 } else {
                     AFL_VERIFY(false);
                 }
@@ -171,8 +182,14 @@ public:
     }
 
     template <class TFiller>
-    void FillNGrammHashes(const ui32 nGrammSize, const NRequest::TLikePart::EOperation op, const TString& userReq, TFiller& fillData) {
-        BuildNGramms(userReq.data(), userReq.size(), op, nGrammSize, fillData);
+    void FillNGrammHashes(
+        const ui32 nGrammSize, const NRequest::TLikePart::EOperation op, const TString& userReq, TFiller& fillData) {
+        if (CaseSensitive) {
+            BuildNGramms(userReq.data(), userReq.size(), op, nGrammSize, fillData);
+        } else {
+            const TString lowerString = to_lower(userReq);
+            BuildNGramms(lowerString.data(), lowerString.size(), op, nGrammSize, fillData);
+        }
     }
 };
 
@@ -259,7 +276,7 @@ public:
 
 TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const {
     AFL_VERIFY(reader.GetColumnsCount() == 1)("count", reader.GetColumnsCount());
-    TNGrammBuilder builder(HashesCount);
+    TNGrammBuilder builder(HashesCount, CaseSensitive);
 
     ui32 size = FilterSizeBytes * 8;
     if ((size & (size - 1)) == 0) {
@@ -322,7 +339,7 @@ bool TIndexMeta::DoCheckValueImpl(
             result = false;
         }
     };
-    TNGrammBuilder builder(HashesCount);
+    TNGrammBuilder builder(HashesCount, CaseSensitive);
 
     NRequest::TLikePart::EOperation opLike;
     switch (op) {

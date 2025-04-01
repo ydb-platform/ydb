@@ -840,6 +840,20 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         }
     }
 
+    Y_UNIT_TEST(ShuffleEliminationTpcdsMapJoinBug) {
+        auto [plan, resultSets] = ExecuteJoinOrderTestGenericQueryWithStats(
+            "queries/shuffle_elimination_tpcds_map_join_bug.sql", "stats/tpcds1000s.json", false, true, true
+        );
+
+        auto joinFinder = TFindJoinWithLabels(plan);
+        {
+            auto join = joinFinder.Find({"partsupp", "lineitem"});
+            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (Grace)");
+            UNIT_ASSERT(!join.LhsShuffled);
+            UNIT_ASSERT(join.RhsShuffled);
+        }
+    }
+
     Y_UNIT_TEST(TPCH12_100) {
         auto [plan, _] = ExecuteJoinOrderTestGenericQueryWithStats("queries/tpch12.sql", "stats/tpch100s.json", false, true, true);
     }

@@ -147,11 +147,11 @@ def create_table(table_name: str, columns: dict[str, dict[str]], pk_colums: dict
 
 def create_ttl(ttl: str, inteval: dict[str, str], time: str, table_name: str) -> str:
     sql_ttl = f" ALTER TABLE {table_name} SET ( TTL = "
-    lenght_inteval = len(inteval)
+    lenght_interval = len(inteval)
     count = 1
     for pt in inteval.keys():
         sql_ttl += f"""Interval("{pt}") {inteval[pt] if inteval[pt] == "" or inteval[pt] == "DELETE" else f"TO EXTERNAL DATA SOURCE {inteval[pt]}"}
-                {", " if count != lenght_inteval else " "}"""
+                {", " if count != lenght_interval else " "}"""
         count += 1
     sql_ttl += f""" ON {ttl} {f"AS {time}" if time != "" else ""} ); """
     return sql_ttl

@@ -7,7 +7,7 @@
 Для загрузки датасетов вам потребуется:
 
 1. Установленный [{{ ydb-short-name }} CLI](../../reference/ydb-cli/)
-2. [Опционально] Настроенный [профиль подключения](../../reference/ydb-cli/profile/create.md) к {{ ydb-short-name }}
+2. [Опционально] Настроенный [профиль подключения](../../reference/ydb-cli/profile/create.md) к {{ ydb-short-name }}, чтобы не указывать параметры подключения при каждом вызове
 
 ## Общая информация о загрузке данных
 
@@ -39,7 +39,7 @@ ydb import file csv --header --null-value "" --path <путь_к_таблице>
 
 1. Скачайте и разархивируйте файл `2019-Nov.csv` с Kaggle
 
-2. Датасет включает в себя полностью идентичные строки. Поскольку YDB требует указания уникальных значений первичного ключа, добавим в файл новую колонку под названием row_id, где значение ключа будет совпадать с номером строки. Это позволит предотвратить удаление повторяющихся данных. Эту операцию можно осуществить с помощью команды awk:
+2. Датасет включает в себя полностью идентичные строки. Поскольку YDB требует указания уникальных значений первичного ключа, добавим в файл новую колонку под названием `row_id`, где значение ключа будет совпадать с номером строки. Это позволит предотвратить удаление повторяющихся данных. Эту операцию можно осуществить с помощью команды awk:
 
 ```bash
 awk 'NR==1 {print "row_id," $0; next} {print NR-1 "," $0}' 2019-Nov.csv > temp.csv && mv temp.csv 2019-Nov.csv
@@ -73,6 +73,7 @@ awk 'NR==1 {print "row_id," $0; next} {print NR-1 "," $0}' 2019-Nov.csv > temp.c
   ```
 </details>
 
+
 <details>
   <summary>Выполнив команду YDB CLI</summary>
 
@@ -97,6 +98,7 @@ awk 'NR==1 {print "row_id," $0; next} {print NR-1 "," $0}' 2019-Nov.csv > temp.c
   );'
   ```
 </details>
+
 
 4. Выполните команду импорта:
 
@@ -144,6 +146,7 @@ ydb import file csv --header --null-value "" --path ecommerce_table 2019-Nov.csv
   ```
 </details>
 
+
 <details>
   <summary>Выполнив команду YDB CLI</summary>
 
@@ -169,6 +172,7 @@ ydb import file csv --header --null-value "" --path ecommerce_table 2019-Nov.csv
   ```
 </details>
 
+
 3. Выполните команду импорта:
 
 ```bash
@@ -187,7 +191,7 @@ ydb import file csv --header --null-value "" --path vgsales vgsales.csv
 
 1. Скачайте и разархивируйте файл `metadata.csv` с Kaggle
 
-2. Датасет включает в себя полностью идентичные строки. Поскольку YDB требует указания уникальных значений первичного ключа, добавим в файл новую колонку под названием row_id, где значение ключа будет совпадать с номером строки. Это позволит предотвратить удаление повторяющихся данных. Эту операцию можно осуществить с помощью команды awk:
+2. Датасет включает в себя полностью идентичные строки. Поскольку YDB требует указания уникальных значений первичного ключа, добавим в файл новую колонку под названием `row_id`, где значение ключа будет совпадать с номером строки. Это позволит предотвратить удаление повторяющихся данных. Эту операцию можно осуществить с помощью команды awk:
 
 ```bash
 awk 'NR==1 {print "row_id," $0; next} {print NR-1 "," $0}' metadata.csv > temp.csv && mv temp.csv metadata.csv
@@ -230,6 +234,7 @@ awk 'NR==1 {print "row_id," $0; next} {print NR-1 "," $0}' metadata.csv > temp.c
   ```
 </details>
 
+
 <details>
   <summary>Выполнив команду YDB CLI</summary>
 
@@ -263,6 +268,7 @@ awk 'NR==1 {print "row_id," $0; next} {print NR-1 "," $0}' metadata.csv > temp.c
   );'
   ```
 </details>
+
 
 4. Выполните команду импорта:
 
@@ -311,6 +317,7 @@ ydb import file csv --header --null-value "" --path covid_research metadata.csv
   ```
 </details>
 
+
 <details>
   <summary>Выполнив команду YDB CLI</summary>
 
@@ -337,7 +344,8 @@ ydb import file csv --header --null-value "" --path covid_research metadata.csv
   ```
 </details>
 
-3. Выполните команду импорта
+
+3. Выполните команду импорта:
 
 ```bash
 ydb import file csv --header --null-value "" --path netflix netflix_titles.csv
@@ -355,13 +363,13 @@ ydb import file csv --header --null-value "" --path netflix netflix_titles.csv
 
 1. Скачайте и разархивируйте файл `accessories.csv` с Kaggle
 
-2. Удалите BOM-байты из начала файла. Например, выполнив команду:
+2. Этот файл включает в себя маску BOM (Byte Order Mark). Однако команда импорта не поддерживает файлы с маской BOM. Чтобы устранить проблему, удалите BOM-байты из начала файла, выполнив следующую команду:
 
 ```bash
 sed -i '1s/^\xEF\xBB\xBF//' accessories.csv
 ```
 
-3. Уберите пробелы из имён колонок. Например, выполнив команду:
+3. Имена колонок в файле содержат пробелы, что не совместимо с YDB, поскольку YDB не поддерживает пробелы в именах колонок. Необходимо заменить пробелы в именах колонок, например, на символы подчеркивания. Вы можете сделать это, выполнив следующую команду:
 
 ```bash
 sed -i '1s/ /_/g' accessories.csv
@@ -406,6 +414,7 @@ sed -i '1s/ /_/g' accessories.csv
   ```
 </details>
 
+
 <details>
   <summary>Выполнив команду YDB CLI</summary>
 
@@ -442,7 +451,8 @@ sed -i '1s/ /_/g' accessories.csv
   ```
 </details>
 
-5. Выполните команду импорта
+
+5. Выполните команду импорта:
 
 ```bash
 ydb import file csv --header --path accessories accessories.csv

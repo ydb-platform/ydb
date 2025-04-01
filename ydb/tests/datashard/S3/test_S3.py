@@ -50,10 +50,8 @@ class TestYdbS3TTL(TestBase, S3Base):
     def test_S3_t(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
         s3_client = self.s3_session_client()
 
-        bucket_name = self.bucket_name()
         s3_client.create_bucket(Bucket=self.bucket_name())
         print(self.bucket_name())
-        self.create_external_datasource_and_secrets(bucket_name)
         self.create_table(table_name, pk_types, all_types,
                           index, ttl, unique, sync)
         self.insert(table_name, all_types, pk_types, index, ttl)

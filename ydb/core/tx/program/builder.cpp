@@ -17,8 +17,13 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(
-    const TColumnInfo& name, const NKikimrSSA::TProgram::TAssignment::TFunction& func, std::vector<TColumnChainInfo>& arguments) const {
+TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(const TColumnInfo& name,
+    const NKikimrSSA::TProgram::TAssignment::TFunction& func, std::shared_ptr<NArrow::NSSA::IKernelLogic>& kernelLogic,
+    std::vector<TColumnChainInfo>& arguments) const {
+    if (func.GetKernelName()) {
+        kernelLogic.reset(IKernelLogic::TFactory::Construct(func.GetKernelName()));
+    }
+
     using TId = NKikimrSSA::TProgram::TAssignment;
 
     arguments.clear();
@@ -59,6 +64,7 @@ TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(
 
     switch (func.GetId()) {
         case TId::FUNC_CMP_EQUAL:
+            kernelLogic = std::make_shared<TLogicEquals>();
             return std::make_shared<TSimpleFunction>(EOperation::Equal);
         case TId::FUNC_CMP_NOT_EQUAL:
             return std::make_shared<TSimpleFunction>(EOperation::NotEqual);
@@ -76,6 +82,7 @@ TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(
             return std::make_shared<TSimpleFunction>(EOperation::BinaryLength);
         case TId::FUNC_STR_MATCH: {
             if (auto opts = mkLikeOptions(false)) {
+                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::Contains, true);
                 return std::make_shared<TSimpleFunction>(EOperation::MatchSubstring, opts);
             }
             break;
@@ -88,30 +95,35 @@ TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(
         }
         case TId::FUNC_STR_STARTS_WITH: {
             if (auto opts = mkLikeOptions(false)) {
+                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::StartsWith, true);
                 return std::make_shared<TSimpleFunction>(EOperation::StartsWith, opts);
             }
             break;
         }
         case TId::FUNC_STR_ENDS_WITH: {
             if (auto opts = mkLikeOptions(false)) {
+                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::EndsWith, true);
                 return std::make_shared<TSimpleFunction>(EOperation::EndsWith, opts);
             }
             break;
         }
         case TId::FUNC_STR_MATCH_IGNORE_CASE: {
             if (auto opts = mkLikeOptions(true)) {
+                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::Contains, false);
                 return std::make_shared<TSimpleFunction>(EOperation::MatchSubstring, opts);
             }
             break;
         }
         case TId::FUNC_STR_STARTS_WITH_IGNORE_CASE: {
             if (auto opts = mkLikeOptions(true)) {
+                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::StartsWith, false);
                 return std::make_shared<TSimpleFunction>(EOperation::StartsWith, opts);
             }
             break;
         }
         case TId::FUNC_STR_ENDS_WITH_IGNORE_CASE: {
             if (auto opts = mkLikeOptions(true)) {
+                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::EndsWith, false);
                 return std::make_shared<TSimpleFunction>(EOperation::EndsWith, opts);
             }
             break;
@@ -276,18 +288,14 @@ TConclusionStatus TProgramBuilder::ReadAssign(
     switch (assign.GetExpressionCase()) {
         case TId::kFunction: {
             std::shared_ptr<IKernelLogic> kernelLogic;
-            if (assign.GetFunction().GetKernelName()) {
-                kernelLogic.reset(IKernelLogic::TFactory::Construct(assign.GetFunction().GetKernelName()));
-            }
-
             std::vector<TColumnChainInfo> arguments;
-            auto function = MakeFunction(columnName, assign.GetFunction(), arguments);
+            auto function = MakeFunction(columnName, assign.GetFunction(), kernelLogic, arguments);
             if (function.IsFail()) {
                 return function;
             }
 
-            if (assign.GetFunction().HasYqlOperationId() && assign.GetFunction().GetYqlOperationId() ==
-                (ui32)NYql::TKernelRequestBuilder::EBinaryOp::And) {
+            if (assign.GetFunction().HasYqlOperationId() &&
+                assign.GetFunction().GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::And) {
                 auto processor =
                     std::make_shared<TStreamLogicProcessor>(std::move(arguments), columnName.GetColumnId(), NKernels::EOperation::And);
                 Builder.Add(processor);

@@ -168,8 +168,8 @@ public:
                     } else {
                         std::string lowerStr;
                         lowerStr.reserve(value.size());
-                        for (auto&& c : value) {
-                            lowerStr.append(std::tolower(c));
+                        for (auto c : value) {
+                            lowerStr.append(1, std::tolower(c));
                         }
                         BuildNGramms(lowerStr.data(), lowerStr.size(), {}, nGrammSize, fillData);
                     }
@@ -328,8 +328,8 @@ TString TIndexMeta::DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 rec
     return GetBitsStorageConstructor()->Build(inserter.ExtractBits())->SerializeToString();
 }
 
-bool TIndexMeta::DoCheckValueImpl(
-    const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value, const EOperation op) const {
+bool TIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
+    const NArrow::NSSA::TIndexCheckOperation& op) const {
     AFL_VERIFY(!category);
     AFL_VERIFY(value->type->id() == arrow::utf8()->id() || value->type->id() == arrow::binary()->id())("id", value->type->ToString());
     bool result = true;
@@ -340,9 +340,10 @@ bool TIndexMeta::DoCheckValueImpl(
         }
     };
     TNGrammBuilder builder(HashesCount, CaseSensitive);
+    AFL_VERIFY(!CaseSensitive || op.GetCaseSensitive());
 
     NRequest::TLikePart::EOperation opLike;
-    switch (op) {
+    switch (op.GetOperation()) {
         case TSkipIndex::EOperation::Equals:
             opLike = NRequest::TLikePart::EOperation::Equals;
             break;

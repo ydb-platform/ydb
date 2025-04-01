@@ -166,10 +166,11 @@ TConclusion<std::shared_ptr<IIndexHeader>> TIndexMeta::DoBuildHeader(const TChun
     return std::make_shared<TCompositeBloomHeader>(std::move(proto), IIndexHeader::ReadHeaderSize(data.GetDataVerified(), true).DetachResult());
 }
 
-bool TIndexMeta::DoCheckValueImpl(
-    const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value, const EOperation op) const {
+bool TIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
+    const NArrow::NSSA::TIndexCheckOperation& op) const {
     AFL_VERIFY(!!category);
-    AFL_VERIFY(op == EOperation::Equals)("op", op);
+    AFL_VERIFY(op.GetOperation() == EOperation::Equals)("op", op.DebugString());
+    AFL_VERIFY(op.GetCaseSensitive());
     const ui32 bitsCount = data.GetBitsCount();
     if (!bitsCount) {
         return false;

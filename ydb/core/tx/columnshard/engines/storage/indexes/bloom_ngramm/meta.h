@@ -29,18 +29,16 @@ private:
         AFL_VERIFY(TConstants::CheckRecordsCount(RecordsCount));
     }
 
-    virtual bool DoIsAppropriateFor(const TString& subColumnName, const EOperation op) const override {
+    virtual bool DoIsAppropriateFor(const TString& subColumnName, const NArrow::NSSA::TIndexCheckOperation& op) const override {
         if (!!subColumnName) {
             return false;
         }
-        switch (op) {
+        switch (op.GetOperation()) {
             case EOperation::Equals:
             case EOperation::StartsWith:
             case EOperation::EndsWith:
-            case EOperation::ContainsCaseSensitive:
-                return true;
-            case EOperation::ContainsCaseUnsensitive:
-                return !CaseSensitive;
+            case EOperation::Contains:
+                return !CaseSensitive || op.GetCaseSensitive();
         }
 
         return false;
@@ -116,14 +114,15 @@ protected:
     }
 
     virtual bool DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> category, const std::shared_ptr<arrow::Scalar>& value,
-        const EOperation op) const override;
+        const NArrow::NSSA::TIndexCheckOperation& op) const override;
 
 public:
     TIndexMeta() = default;
     TIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const ui32 columnId,
         const TReadDataExtractorContainer& dataExtractor, const ui32 hashesCount, const ui32 filterSizeBytes, const ui32 nGrammSize,
-        const ui32 recordsCount, const std::shared_ptr<IBitsStorageConstructor>& bitsStorageConstructor)
+        const ui32 recordsCount, const std::shared_ptr<IBitsStorageConstructor>& bitsStorageConstructor, const bool caseSensitive)
         : TBase(indexId, indexName, columnId, storageId, dataExtractor, bitsStorageConstructor)
+        , CaseSensitive(caseSensitive)
         , NGrammSize(nGrammSize)
         , FilterSizeBytes(filterSizeBytes)
         , RecordsCount(recordsCount)

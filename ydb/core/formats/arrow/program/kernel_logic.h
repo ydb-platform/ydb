@@ -13,15 +13,14 @@ private:
     virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output,
         const std::shared_ptr<TAccessorsCollection>& resources) const = 0;
 
+    virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const = 0;
+
 public:
     virtual ~IKernelLogic() = default;
 
     using TFactory = NObjectFactory::TObjectFactory<IKernelLogic, TString>;
 
     virtual TString GetClassName() const = 0;
-
-    virtual std::optional<TFetchingInfo> BuildFetchTask(const ui32 columnId, const NAccessor::IChunkedArray::EType arrType,
-        const std::vector<TColumnChainInfo>& input, const std::shared_ptr<TAccessorsCollection>& resources) const = 0;
 
     TConclusion<bool> Execute(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output,
         const std::shared_ptr<TAccessorsCollection>& resources) const {
@@ -32,12 +31,68 @@ public:
     }
 
     virtual bool IsBoolInResult() const = 0;
+    std::optional<TIndexCheckOperation> GetIndexCheckerOperation() const {
+        return DoGetIndexCheckerOperation();
+    }
+};
+
+class TLogicMatchString: public IKernelLogic {
+private:
+    virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& /*input*/, const std::vector<TColumnChainInfo>& /*output*/,
+        const std::shared_ptr<TAccessorsCollection>& /*resources*/) const override {
+        return false;
+    }
+    virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const override {
+        return TIndexCheckOperation(Operation, CaseSensitive);
+    }
+
+    const TIndexCheckOperation::EOperation Operation;
+    const bool CaseSensitive;
+
+public:
+    TLogicMatchString(const TIndexCheckOperation::EOperation operation, const bool caseSensitive)
+        : Operation(operation)
+        , CaseSensitive(caseSensitive) {
+    }
+
+    virtual TString GetClassName() const override {
+        return "MATCH_STRING::" + ::ToString(Operation) + "::" + ::ToString(CaseSensitive);
+    }
+
+    virtual bool IsBoolInResult() const override {
+        return true;
+    }
+};
+
+class TLogicEquals: public IKernelLogic {
+private:
+    virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& /*input*/, const std::vector<TColumnChainInfo>& /*output*/,
+        const std::shared_ptr<TAccessorsCollection>& /*resources*/) const override {
+        return false;
+    }
+    virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const override {
+        return TIndexCheckOperation(TIndexCheckOperation::EOperation::Equals, true);
+    }
+
+public:
+    TLogicEquals() = default;
+
+    virtual TString GetClassName() const override {
+        return "EQUALS";
+    }
+
+    virtual bool IsBoolInResult() const override {
+        return true;
+    }
 };
 
 class TGetJsonPath: public IKernelLogic {
 public:
     static TString GetClassNameStatic() {
         return "JsonValue";
+    }
+    virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const override {
+        return std::nullopt;
     }
 
 private:
@@ -90,9 +145,6 @@ private:
     }
 
     static const inline TFactory::TRegistrator<TGetJsonPath> Registrator = TFactory::TRegistrator<TGetJsonPath>(GetClassNameStatic());
-
-    virtual std::optional<TFetchingInfo> BuildFetchTask(const ui32 columnId, const NAccessor::IChunkedArray::EType arrType,
-        const std::vector<TColumnChainInfo>& input, const std::shared_ptr<TAccessorsCollection>& resources) const override;
 
     virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output,
         const std::shared_ptr<TAccessorsCollection>& resources) const override;

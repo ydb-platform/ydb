@@ -10,38 +10,6 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-class TIndexCheckOperation {
-public:
-    enum class EIndexCheckOperation : ui32 {
-        Equals,
-        StartsWith,
-        EndsWith,
-        Contains
-    };
-
-private:
-    const EIndexCheckOperation Operation;
-    YDB_READONLY(bool, CaseSensitive, true);
-
-public:
-    const EIndexCheckOperation GetOperation() const {
-        return Operation;
-    }
-
-    TIndexCheckOperation(const EIndexCheckOperation op, const bool caseSensitive)
-        : Operation(op)
-        , CaseSensitive(caseSensitive) {
-    }
-
-    explicit operator size_t() const {
-        return (size_t)Operation;
-    }
-
-    bool operator==(const TIndexCheckOperation& op) const {
-        return Operation == op.Operation && CaseSensitive == op.CaseSensitive;
-    }
-};
-
 class TProcessorContext;
 
 class IFetchLogic {
@@ -221,7 +189,7 @@ public:
             for (auto&& i : OperationsBySubColumn.GetData()) {
                 auto& subColumnJson = result.InsertValue(i.first, NJson::JSON_ARRAY);
                 for (auto&& op : i.second) {
-                    subColumnJson.AppendValue(::ToString(op));
+                    subColumnJson.AppendValue(op.DebugString());
                 }
             }
             return result;
@@ -256,7 +224,7 @@ public:
     private:
         YDB_READONLY(ui32, ColumnId, 0);
         YDB_READONLY_DEF(TString, SubColumnName);
-        TIndexCheckOperation, Operation;
+        TIndexCheckOperation Operation;
 
     public:
         TCheckIndexContext(const ui32 columnId, const TString& subColumnName, const TIndexCheckOperation& operation)

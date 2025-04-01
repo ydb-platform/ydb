@@ -10,6 +10,7 @@
 #include <util/generic/algorithm.h>
 #include <util/generic/string.h>
 #include <util/string/subst.h>
+#include <util/string/ascii.h>
 
 namespace NSQLTranslationV1 {
 
@@ -23,15 +24,15 @@ namespace NSQLTranslationV1 {
         TRegexLexer(
             bool ansi,
             NSQLReflect::TLexerGrammar grammar,
-            const THashMap<TString, TString>& RegexByOtherNameMap)
+            const TVector<std::tuple<TString, TString>>& RegexByOtherName)
             : Grammar_(std::move(grammar))
             , Ansi_(ansi)
         {
-            for (auto& [token, regex] : RegexByOtherNameMap) {
+            for (const auto& [token, regex] : RegexByOtherName) {
                 if (token == CommentTokenName) {
                     CommentRegex_.Reset(new RE2(regex));
                 } else {
-                    OtherRegexes_.emplace(std::move(token), std::move(regex));
+                    OtherRegexes_.emplace_back(token, new RE2(regex));
                 }
             }
         }
@@ -71,26 +72,26 @@ namespace NSQLTranslationV1 {
 
             size_t keywordCount = MatchKeyword(prefix, matches);
             MatchPunctuation(prefix, matches);
-            size_t otherCount = MatchRegex(prefix, matches);
+            MatchRegex(prefix, matches);
             MatchComment(prefix, matches);
 
-            auto max = MaxElementBy(matches, [](const TParsedToken& m) {
-                return m.Content.length();
-            });
-
-            if (max == std::end(matches)) {
+            if (matches.empty()) {
                 return {};
             }
+
+            auto maxLength = MaxElementBy(matches, [](const TParsedToken& m) {
+                                 return m.Content.length();
+                             })->Content.length();
+
+            auto max = FindIf(matches, [&](const TParsedToken& m) {
+                return m.Content.length() == maxLength;
+            });
 
             auto isMatched = [&](const TStringBuf name) {
                 return std::end(matches) != FindIf(matches, [&](const auto& m) {
                            return m.Name == name;
                        });
             };
-
-            Y_ENSURE(
-                otherCount <= 1 ||
-                (otherCount == 2 && isMatched("DIGITS") && isMatched("INTEGER_VALUE")));
 
             size_t conflicts = CountIf(matches, [&](const TParsedToken& m) {
                 return m.Content.length() == max->Content.length();
@@ -108,7 +109,7 @@ namespace NSQLTranslationV1 {
         bool MatchKeyword(const TStringBuf prefix, TParsedTokenList& matches) {
             size_t count = 0;
             for (const auto& keyword : Grammar_.KeywordNames) {
-                if (prefix.substr(0, keyword.length()) == keyword) {
+                if (AsciiEqualsIgnoreCase(prefix.substr(0, keyword.length()), keyword)) {
                     matches.emplace_back(keyword, keyword);
                     count += 1;
                 }
@@ -131,7 +132,7 @@ namespace NSQLTranslationV1 {
         size_t MatchRegex(const TStringBuf prefix, TParsedTokenList& matches) {
             size_t count = 0;
             for (const auto& [token, regex] : OtherRegexes_) {
-                if (const TStringBuf match = TryMatchRegex(prefix, regex); !match.empty()) {
+                if (const TStringBuf match = TryMatchRegex(prefix, *regex); !match.empty()) {
                     matches.emplace_back(token, TString(match));
                     count += 1;
                 }
@@ -216,7 +217,7 @@ namespace NSQLTranslationV1 {
         }
 
         NSQLReflect::TLexerGrammar Grammar_;
-        THashMap<TString, RE2> OtherRegexes_;
+        TVector<std::tuple<TString, THolder<RE2>>> OtherRegexes_;
         THolder<RE2> CommentRegex_;
         bool Ansi_;
     };
@@ -228,19 +229,19 @@ namespace NSQLTranslationV1 {
             explicit TFactory(bool ansi)
                 : Ansi_(ansi)
                 , Grammar_(NSQLReflect::LoadLexerGrammar())
-                , RegexByOtherNameMap_(MakeRegexByOtherNameMap(Grammar_, Ansi_))
+                , RegexByOtherName_(MakeRegexByOtherName(Grammar_, Ansi_))
             {
             }
 
             NSQLTranslation::ILexer::TPtr MakeLexer() const override {
                 return NSQLTranslation::ILexer::TPtr(
-                    new TRegexLexer(Ansi_, Grammar_, RegexByOtherNameMap_));
+                    new TRegexLexer(Ansi_, Grammar_, RegexByOtherName_));
             }
 
         private:
             bool Ansi_;
             NSQLReflect::TLexerGrammar Grammar_;
-            THashMap<TString, TString> RegexByOtherNameMap_;
+            TVector<std::tuple<TString, TString>> RegexByOtherName_;
         };
 
     } // namespace

@@ -31,6 +31,12 @@ public:
 
     Y_DECLARE_FLAGS(TSystemFields, ESystemField);
 
+    enum class EBlockRepresentation {
+        None,
+        WideBlock,
+        BlockStruct,
+    };
+
     struct TSpecInfo {
         NKikimr::NMiniKQL::TType* Type = nullptr;
         bool StrictSchema = true;
@@ -65,6 +71,7 @@ public:
         TMaybe<ui32> FillSysColumnIndex;
         TMaybe<ui32> FillSysColumnNum;
         TMaybe<ui32> FillSysColumnKeySwitch;
+        TMaybe<ui32> FillBlockStructSize;
     };
 
     struct TEncoderSpec {
@@ -137,6 +144,10 @@ public:
         IsTableContent_ = true;
     }
 
+    void SetInputBlockRepresentation(EBlockRepresentation type) {
+        InputBlockRepresentation_ = type;
+    }
+
     void SetTableOffsets(const TVector<ui64>& offsets);
 
     void Clear();
@@ -155,6 +166,8 @@ public:
     bool IsTableContent_ = false;
     TString OptLLVM_;
     TSystemFields SystemFields_;
+
+    EBlockRepresentation InputBlockRepresentation_ = EBlockRepresentation::None;
 
     NKikimr::NMiniKQL::IStatsRegistry* JobStats_ = nullptr;
     THashMap<TString, TDecoderSpec> Decoders;

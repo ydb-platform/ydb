@@ -232,23 +232,13 @@ TRuntimeNode BuildTableContentCall(TStringBuf callName,
         samplingTupleItems.push_back(ctx.ProgramBuilder.NewDataLiteral(isSystemSampling));
     }
 
-    TType* outType = nullptr;
     if (useBlocks) {
-        auto structType = AS_TYPE(TStructType, outItemType);
-
-        std::vector<TType*> outputItems;
-        outputItems.reserve(structType->GetMembersCount());
-        for (size_t i = 0; i < structType->GetMembersCount(); i++) {
-            outputItems.push_back(ctx.ProgramBuilder.NewBlockType(structType->GetMemberType(i), TBlockType::EShape::Many));
-        }
-        outputItems.push_back(ctx.ProgramBuilder.NewBlockType(ctx.ProgramBuilder.NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar));
-        outType = ctx.ProgramBuilder.NewStreamType(ctx.ProgramBuilder.NewMultiType(outputItems));
-
-    } else {
-        outType = ctx.ProgramBuilder.NewListType(outItemType);
+        outItemType = ctx.ProgramBuilder.BuildBlockStructType(AS_TYPE(TStructType, outItemType));
     }
 
-    TCallableBuilder call(ctx.ProgramBuilder.GetTypeEnvironment(), callName, outType);
+    auto outListType = ctx.ProgramBuilder.NewListType(outItemType);
+
+    TCallableBuilder call(ctx.ProgramBuilder.GetTypeEnvironment(), callName, outListType);
 
     call.Add(ctx.ProgramBuilder.NewList(listTypeGroup, groups));
     call.Add(ctx.ProgramBuilder.NewTuple(samplingTupleItems));
@@ -257,10 +247,6 @@ TRuntimeNode BuildTableContentCall(TStringBuf callName,
         call.Add(ctx.ProgramBuilder.NewTuple({ctx.ProgramBuilder.NewDataLiteral(*itemsCount)}));
     } else {
         call.Add(ctx.ProgramBuilder.NewEmptyTuple());
-    }
-
-    if (useBlocks) {
-        call.Add(TRuntimeNode(outItemType, true));
     }
 
     auto res = TRuntimeNode(call.Build(), false);
@@ -505,8 +491,8 @@ void RegisterYtMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
         [](const TExprNode& node, NCommon::TMkqlBuildContext& ctx) {
             TYtBlockTableContent tableContent(&node);
             if (node.GetConstraint<TEmptyConstraintNode>()) {
-                const auto streamType = ctx.BuildType(node, *node.GetTypeAnn());
-                return ctx.ProgramBuilder.EmptyIterator(streamType);
+                const auto itemType = ctx.BuildType(node, GetSeqItemType(*node.GetTypeAnn()));
+                return ctx.ProgramBuilder.NewEmptyList(itemType);
             }
 
             auto origItemStructType = (

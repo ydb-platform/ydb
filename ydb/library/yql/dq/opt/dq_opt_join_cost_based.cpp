@@ -328,10 +328,12 @@ private:
     using TNodeSet192 = std::bitset<192>;
 
     template <typename TNodeSet, typename TDpHypImpl>
-    auto GetDPHypImpl(auto hypergraph) {
+    auto GetDPHypImpl(TJoinHypergraph<TNodeSet>& hypergraph) {
         if constexpr (std::is_same_v<TDpHypImpl, TDPHypSolverClassic<TNodeSet>>) {
             return TDPHypSolverClassic<TNodeSet>(hypergraph, this->Pctx);
         } else if constexpr (std::is_same_v<TDpHypImpl, TDPHypSolverShuffleElimination<TNodeSet>>) {
+            TOrderingStatesAssigner<TNodeSet> assigner(hypergraph);
+            assigner.Assign(*OrderingsFSM);
             return TDPHypSolverShuffleElimination<TNodeSet>(hypergraph, this->Pctx, *OrderingsFSM);
         } else {
             static_assert(false, "No such DPHyp implementation");

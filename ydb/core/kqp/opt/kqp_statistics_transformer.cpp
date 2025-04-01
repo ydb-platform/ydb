@@ -114,11 +114,14 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
 void InferStatisticsForKqpTable(
     const TExprNode::TPtr& input,
     TTypeAnnotationContext* typeCtx,
-    TKqpOptimizeContext& kqpCtx,
-    THashMap<std::shared_ptr<TOptimizerStatistics>, TString>& tablePathByStats
+    TKqpOptimizeContext& kqpCtx
 ) {
-
     auto inputNode = TExprBase(input);
+    auto tableStats = typeCtx->GetStats(inputNode.Raw());
+    if (tableStats) {
+        return;
+    }
+
     auto readTable = inputNode.Cast<TKqpTable>();
     auto path = readTable.Path();
 
@@ -176,7 +179,17 @@ void InferStatisticsForKqpTable(
     }
 
     stats->SortColumns = sortedPrefixPtr;
-    tablePathByStats[stats] = path;
+
+    if (!tableData.Metadata->PartitionedByColumns.empty()) {
+        TVector<TJoinColumn> shuffledByColumns;
+        for (const auto& columnName: tableData.Metadata->PartitionedByColumns) {
+            shuffledByColumns.emplace_back(path.StringValue(), columnName);
+        }
+
+        stats->ShuffledByColumns = TIntrusivePtr<TOptimizerStatistics::TShuffledByColumns>(
+            new TOptimizerStatistics::TShuffledByColumns(std::move(shuffledByColumns))
+        );
+    }
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for table: " << path.Value() << ": " << stats->ToString();
 
@@ -820,56 +833,54 @@ void AppendTxStats(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx
 class TInterestingOrderingsFSMBuilder {
 public:
     TInterestingOrderingsFSMBuilder(
-        TKqpOptimizeContext& kqpCtx,
-        TTypeAnnotationContext& typeCtx,
-        THashMap<std::shared_ptr<TOptimizerStatistics>, TString> tablePathByStats
+        TTypeAnnotationContext& typeCtx
     )
-        : InterstingOrderingsCollector(kqpCtx,typeCtx, std::move(tablePathByStats))
+        : InterstingOrderingsCollector(typeCtx)
     {}
 
 public:
     TOrderingsStateMachine Build(
         const TExprNode::TPtr& node
     ) {
+        YQL_CLOG(TRACE, CoreDq) << "Building Orderings FSM";
+
         VisitExpr(node, [this](const TExprNode::TPtr& node){
             return this->InterstingOrderingsCollector.Collect(node);
         });
 
         auto& fdStorage = InterstingOrderingsCollector.FDStorage;
         auto fsm = TOrderingsStateMachine(std::move(fdStorage));
+
+        LogReport(fsm);
+
         return fsm;
+    }
+
+private:
+    void LogReport(TOrderingsStateMachine& fsm) {
+        YQL_CLOG(TRACE, CoreDq) << "FDStorage: \n" << fsm.FDStorage.ToString();
     }
 
 private:
     class InterestingOrderingsCollector {
     public:
         InterestingOrderingsCollector(
-            TKqpOptimizeContext& kqpCtx,
-            TTypeAnnotationContext& typeCtx,
-            THashMap<std::shared_ptr<TOptimizerStatistics>, TString> tablePathByStats
+            TTypeAnnotationContext& typeCtx
         )
-            : KqpCtx(kqpCtx)
-            , TypeCtx(typeCtx)
-            , TablePathByStats(std::move(tablePathByStats))
+            : TypeCtx(typeCtx)
         {}
 
         bool Collect(const TExprNode::TPtr& node) {
-            bool matched = true;
-
             if (TCoEquiJoin::Match(node.Get())) {
                 CollectEquiJoin(TExprBase(node).Cast<TCoEquiJoin>());
-            } else {
-                matched = false;
             }
 
-            return matched;
+            return true;
         }
 
     public:
         TFDStorage FDStorage;
-        TKqpOptimizeContext& KqpCtx;
         TTypeAnnotationContext& TypeCtx;
-        THashMap<std::shared_ptr<TOptimizerStatistics>, TString> TablePathByStats;
 
     private:
         void CollectEquiJoin(const TCoEquiJoin& equiJoin) {
@@ -878,7 +889,7 @@ private:
                 auto joinArg = input.List();
 
                 auto stats = TypeCtx.GetStats(joinArg.Raw());
-                if (!stats || !TablePathByStats.contains(stats)) {
+                if (!stats || !stats->ShuffledByColumns) {
                     continue;
                 }
 
@@ -887,16 +898,11 @@ private:
                     continue;
                 }
                 TStringBuf label = scope.Cast<TCoAtom>();
-                TString tablePath = TablePathByStats[stats];
-                KqpCtx.AliasByTablePath[tablePath] = label;
-                const auto& tableDesc = KqpCtx.Tables->ExistingTable(KqpCtx.Cluster, tablePath);
 
-                TVector<TJoinColumn> shuffledBy;
-                shuffledBy.reserve(tableDesc.Metadata->PartitionedByColumns.size());
-                for (const auto& column: tableDesc.Metadata->PartitionedByColumns) {
-                    shuffledBy.emplace_back(label, column);
+                for (auto& column: stats->ShuffledByColumns->Data) {
+                    column.RelName = label;
                 }
-                FDStorage.AddInterestingOrdering(shuffledBy, TOrdering::EShuffle);
+                FDStorage.AddInterestingOrdering(stats->ShuffledByColumns->Data, TOrdering::EShuffle);
             }
 
             auto joinTuple = equiJoin.Arg(equiJoin.ArgCount() - 2).Cast<TCoEquiJoinTuple>();
@@ -955,7 +961,7 @@ IGraphTransformer::TStatus TKqpStatisticsTransformer::DoTransform(TExprNode::TPt
     if (!TypeCtx->OrderingsFSM.IsBuilt()) {
         TDqStatisticsTransformerBase::DoTransform(input, output, ctx);
         /* ^ we have to propogate KqpTable statistics to EquiJoin for working with its partitioning */
-        auto fsmBuilder = TInterestingOrderingsFSMBuilder(KqpCtx, *TypeCtx, TablePathByStats);
+        auto fsmBuilder = TInterestingOrderingsFSMBuilder(*TypeCtx);
         TypeCtx->OrderingsFSM = fsmBuilder.Build(input);
     }
 
@@ -980,7 +986,7 @@ bool TKqpStatisticsTransformer::BeforeLambdasSpecific(const TExprNode::TPtr& inp
         InferStatisticsForLookupTable(input, TypeCtx);
     }
     else if(TKqpTable::Match(input.Get())) {
-        InferStatisticsForKqpTable(input, TypeCtx, KqpCtx, TablePathByStats);
+        InferStatisticsForKqpTable(input, TypeCtx, KqpCtx);
     }
     else if (TKqpReadRangesSourceSettings::Match(input.Get())) {
         InferStatisticsForRowsSourceSettings(input, TypeCtx, KqpCtx);

@@ -32,7 +32,6 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     int EquiJoinsCount{};
     std::shared_ptr<NJson::TJsonValue> OverrideStatistics{};
     std::shared_ptr<NYql::TOptimizerHints> Hints{};
-    THashMap<TString, TString> AliasByTablePath;
 
     std::shared_ptr<NJson::TJsonValue> GetOverrideStatistics() {
         if (Config->OptOverrideStatistics.Get()) {

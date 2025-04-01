@@ -4,6 +4,7 @@
 
 #include <library/cpp/disjoint_sets/disjoint_sets.h>
 #include <util/generic/hash.h>
+#include <util/string/join.h>
 
 #include <sstream>
 #include <bit>
@@ -31,6 +32,10 @@ struct TOrdering {
 
     bool operator==(const TOrdering& other) const {
         return std::tie(this->Type, this->Items) == std::tie(other.Type, other.Items);
+    }
+
+    std::string ToString() const {
+        return "{" + JoinSeq(", ", Items) + "}";
     }
 
     std::vector<std::size_t> Items;
@@ -68,6 +73,21 @@ struct TFunctionalDependency {
         return true;
     }
 
+    std::string ToString() const {
+        std::ostringstream ss;
+        ss << "{" + JoinSeq(", ", AntecedentItems) + "}";
+
+        if (Type == EEquivalence) {
+            ss << " = ";
+        } else {
+            ss << " -> ";
+        }
+        ss << ConsequentItem;
+
+        return ss.str();
+    }
+
+
     std::vector<std::size_t> AntecedentItems;
     std::size_t ConsequentItem;
 
@@ -85,8 +105,8 @@ public:
         const TJoinColumn& consequentColumn,
         TFunctionalDependency::EType type
     ) {
-        auto convertedAntecedent = ConvertColumnIntoIndexes({antecedentColumn});
-        auto convertedConsequent = ConvertColumnIntoIndexes({consequentColumn}).at(0);
+        auto convertedAntecedent = ConvertColumnIntoIndexes({antecedentColumn}, false);
+        auto convertedConsequent = ConvertColumnIntoIndexes({consequentColumn}, false).at(0);
 
         for (std::size_t i = 0; i < FDs.size(); ++i) {
             auto& fd = FDs[i];
@@ -109,8 +129,8 @@ public:
         bool alwaysActive
     ) {
         auto fd = TFunctionalDependency{
-            .AntecedentItems = {GetIdxByColumn(antecedentColumn)},
-            .ConsequentItem = GetIdxByColumn(consequentColumn),
+            .AntecedentItems = {GetIdxByColumn(antecedentColumn, true)},
+            .ConsequentItem = GetIdxByColumn(consequentColumn, true),
             .Type = type,
             .AlwaysActive = alwaysActive
         };
@@ -123,7 +143,7 @@ public:
         const std::vector<TJoinColumn>& interestingOrdering,
         TOrdering::EType type
     ) {
-        const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, type);
+        const auto& [_, orderingIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, type, false);
         return orderingIdx;
     }
 
@@ -131,9 +151,9 @@ public:
         const std::vector<TJoinColumn>& interestingOrdering,
         TOrdering::EType type
     ) {
-        auto [items, foundIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, type);
+        auto [items, foundIdx] = ConvertColumnsAndFindExistingOrdering(interestingOrdering, type, true);
 
-        if (foundIdx != 0) {
+        if (foundIdx >= 0) {
             return static_cast<std::size_t>(foundIdx);
         }
 
@@ -154,14 +174,28 @@ public:
     }
 
     std::string ToString() {
+        auto toVectorString = [](auto seq) {
+            TVector<TString> strVector;
+            strVector.reserve(seq.size());
+            for (const auto& item: seq) {
+                strVector.push_back(item.ToString());
+            }
+            return strVector;
+        };
+
         std::stringstream ss;
 
+        ss << "Columns mapping: ";
         for (const auto& [column, idx]: IdxByColumn) {
-            ss << idx << " " << column << '\n';
+            ss << "{" << idx << ": " << column << "}, ";
         }
+        ss << "\n";
+        ss << "FDs: " << JoinSeq(", ", toVectorString(FDs)) << "\n";
+        ss << "Interesting Orderings: " << JoinSeq(", ", toVectorString(InterestingOrderings)) << "\n";
 
         return ss.str();
     }
+
 
 public:
     std::vector<TFunctionalDependency> FDs;
@@ -174,9 +208,10 @@ private:
      */
     std::pair<std::vector<std::size_t>, std::int64_t> ConvertColumnsAndFindExistingOrdering(
         const std::vector<TJoinColumn>& interestingOrdering,
-        TOrdering::EType type
+        TOrdering::EType type,
+        bool createIfNotExists
     ) {
-        std::vector<std::size_t> items = ConvertColumnIntoIndexes(interestingOrdering);
+        std::vector<std::size_t> items = ConvertColumnIntoIndexes(interestingOrdering, createIfNotExists);
         for (std::size_t i = 0; i < InterestingOrderings.size(); ++i) {
             if (items == InterestingOrderings[i].Items && type == InterestingOrderings[i].Type) {
                 return {items, static_cast<std::int64_t>(i)};
@@ -186,22 +221,25 @@ private:
         return {items, -1};
     }
 
-    std::vector<std::size_t> ConvertColumnIntoIndexes(const std::vector<TJoinColumn>& ordering) {
+    std::vector<std::size_t> ConvertColumnIntoIndexes(const std::vector<TJoinColumn>& ordering, bool createIfNotExists) {
         std::vector<std::size_t> items;
         items.reserve(ordering.size());
 
         for (const auto& column: ordering) {
-            items.push_back(GetIdxByColumn(column));
+            items.push_back(GetIdxByColumn(column, createIfNotExists));
         }
 
         return items;
     }
 
-    std::size_t GetIdxByColumn(const TJoinColumn& column) {
+    std::size_t GetIdxByColumn(const TJoinColumn& column, bool createIfNotExists) {
         const std::string fullPath = column.RelName + "." + column.AttributeName;
         if (IdxByColumn.contains(fullPath)) {
             return IdxByColumn[fullPath];
         }
+
+        Y_ENSURE(!column.RelName.empty() && !column.AttributeName.empty());
+        Y_ENSURE(createIfNotExists, "There's no such column: " + fullPath);
 
         ColumnByIdx.push_back(column);
         IdxByColumn[fullPath] = IdCounter++;
@@ -272,8 +310,8 @@ public:
             }
         }
 
-        void SetOrdering(std::size_t orderingIdx) {
-            Y_ASSERT(orderingIdx < DFSM->InitStateByOrderingIdx.size());
+        void SetOrdering(std::int64_t orderingIdx) {
+            Y_ASSERT(0 <= orderingIdx && orderingIdx < static_cast<std::int64_t>(DFSM->InitStateByOrderingIdx.size()));
 
             auto state = DFSM->InitStateByOrderingIdx[orderingIdx];
             State = state.StateIdx;

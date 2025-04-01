@@ -32,7 +32,7 @@ class TKqpStatisticsTransformer : public NYql::NDq::TDqStatisticsTransformerBase
     TKqpOptimizeContext& KqpCtx;
     TVector<TVector<std::shared_ptr<TOptimizerStatistics>>> TxStats;
 
-    THashMap<std::shared_ptr<TOptimizerStatistics>, TString> TablePathByStats;
+    THashMap<std::shared_ptr<TOptimizerStatistics>, TString, std::hash<std::shared_ptr<TOptimizerStatistics>>> TablePathByStats;
 
     public:
         TKqpStatisticsTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx,

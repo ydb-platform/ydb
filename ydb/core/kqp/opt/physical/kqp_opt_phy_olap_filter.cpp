@@ -882,4 +882,32 @@ TExprBase KqpPushOlapFilter(TExprBase node, TExprContext& ctx, const TKqpOptimiz
 #endif
 }
 
+TExprBase KqpAddColumnForEmptyColumnsOlapRead(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    if (!node.Maybe<TKqpReadOlapTableRanges>()) {
+        return node;
+    }
+
+    auto readOlap = node.Cast<TKqpReadOlapTableRanges>();
+    if (readOlap.Columns().Size()!=0) {
+        return node;
+    }
+
+    const auto& tableData = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, readOlap.Table().Path().Value());
+    auto keyColumns = tableData.Metadata->KeyColumnNames;
+
+    TVector<TExprNode::TPtr> newColumns;
+    newColumns.push_back(ctx.NewAtom(node.Pos(), keyColumns[0]));
+
+    return Build<TKqpReadOlapTableRanges>(ctx, node.Pos())
+        .Table(readOlap.Table())
+        .Ranges(readOlap.Ranges())
+        .Columns()
+            .Add(newColumns)
+            .Build()
+        .Settings(readOlap.Settings())
+        .ExplainPrompt(readOlap.ExplainPrompt())
+        .Process(readOlap.Process())
+        .Done();
+}
+
 } // namespace NKikimr::NKqp::NOpt

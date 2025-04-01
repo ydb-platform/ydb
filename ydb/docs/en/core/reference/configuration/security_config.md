@@ -1,4 +1,4 @@
-# `security_config` section
+# `security_config` configuration section
 
 The `security_config` section defines [authentication](../../security/authentication.md) modes, the initial configuration of local [users](../../concepts/glossary.md#access-user) and [groups](../../concepts/glossary.md#access-group), and their [access rights](../../concepts/glossary.md#access-right).
 
@@ -94,7 +94,7 @@ See [{#T}](../../security/builtin-security.md) and the related [`domains_config`
 
 The list consists of login-password pairs. The first user in the list is a superuser.
 
-{% note info %}
+{% note warning %}
 
 Passwords are specified in plain text, so it is unsafe to use them for an extended period. You must change these passwords in {{ ydb-short-name }} after the first start. For example, use the [`ALTER USER`](../../yql/reference/syntax/alter-user.md) statement.
 
@@ -134,7 +134,7 @@ default_groups:
 
 The order of groups in this list matters: groups are created in the order in which they appear in the `default_groups` parameter. Group members must exist before the group is created. Nonexistent users will not be added to the group.
 
-Failures to add users to groups are logged but do not affect {{ ydb-short-name }} cluster startup.
+Failures to add users to groups are logged but do not affect the {{ ydb-short-name }} cluster startup.
 
     ||
 || `default_access` | The list of [access rights](../../concepts/glossary.md#access-right) to be granted on the cluster scheme root.

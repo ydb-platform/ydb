@@ -89,29 +89,29 @@ auth_config:
 #|
 || Parameter | Description ||
 || min_length
-| Specifies the minimum password length
+| Specifies the minimum password length.
 
-Default value: 0 (no requirements)
+Default value: `0` (no requirements)
     ||
 || min_lower_case_count
-| Specifies the minimum number of lower case letters that a password must contain.
+| Specifies the minimum number of lowercase letters that a password must contain.
 
-Default value: 0 (no requirements)
+Default value: `0` (no requirements)
     ||
 || min_upper_case_count
-| Specifies the minimum number of upper case letters that a password must contain.
+| Specifies the minimum number of uppercase letters that a password must contain.
 
-Default value: 0 (no requirements)
+Default value: `0` (no requirements)
     ||
 || min_numbers_count
 | Specifies the minimum number of digits that a password must contain.
 
-Default value: 0 (no requirements)
+Default value: `0` (no requirements)
     ||
 || min_special_chars_count
 | Specifies the minimum number of special characters from the `special_chars` list that a password must contain.
 
-Default value: 0 (no requirements)
+Default value: `0` (no requirements)
     ||
 || special_chars
 | Specifies a list of special characters that are allowed in a password.
@@ -121,7 +121,7 @@ Valid values: `!@#$%^&*()_+{}\|<>?=`
 Default value: empty (any of the `!@#$%^&*()_+{}\|<>?=` characters are allowed)
     ||
 || can_contain_username
-| Indicates whether passwords can include a user name.
+| Indicates whether passwords can include a username.
 
 Default value: `false`
     ||

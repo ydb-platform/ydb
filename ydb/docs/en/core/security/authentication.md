@@ -52,19 +52,19 @@ To learn how to manage roles and users, see [{#T}](../security/authorization.md)
 
 ### Password complexity {#password-complexity}
 
-{{ ydb-short-name }} can impose various requirements on password complexity. If a password specified in the `CREATE USER` or `ALTER USER` command does not meet complexity requirements, the command will end with an error. By default, {{ ydb-short-name }} has no password complexity requirements. A password of any length is accepted, including an empty string. A password can contain any number of digits and letters in upper or lower case, as well as special characters from the `!@#$%^&*()_+{}|<>?=` list. To set requirements for password complexity, define parameters in the `password_complexity` section in the [configuration](../reference/configuration/auth_config.md#password-complexity).
+{{ ydb-short-name }} can impose various requirements on password complexity. If a password specified in the `CREATE USER` or `ALTER USER` command does not meet complexity requirements, the command will result in an error. By default, {{ ydb-short-name }} has no password complexity requirements. A password of any length is accepted, including an empty string. A password can contain any number of digits and uppercase or lowercase letters, as well as special characters from the `!@#$%^&*()_+{}|<>?=` list. To set requirements for password complexity, define parameters in the `password_complexity` section in the [configuration](../reference/configuration/auth_config.md#password-complexity).
 
 ### Password brute-force protection
 
-{{ ydb-short-name }} provides password brute-force protection. A user is locked out after exceeding a number of failed attempts to enter a password. After a certain period of time a user will be unlocked and able to log into {{ ydb-short-name }} again.
+{{ ydb-short-name }} provides password brute-force protection. A user is locked out after exceeding a specified number of failed attempts to enter a password. After a certain period, the user will be unlocked and able to log in again.
 
-By default a user has 4 attempts to enter a password. If a user fails to enter a correct password in four attempts, the user will be locked out for an hour. You can change these lockout settings in the `auth_config` section of the [configuration](../reference/configuration/auth_config.md#account-lockout).
+By default, a user has four attempts to enter a password. If a user fails to enter the correct password in four attempts, the user will be locked out for an hour. You can change these lockout settings in the `auth_config` section of the [configuration](../reference/configuration/auth_config.md#account-lockout).
 
 If necessary, a {{ ydb-short-name }} cluster or database administrator can [unlock](../yql/reference/syntax/alter-user.md) a user before the lockout period expires.
 
 ### Manual user lockout
 
-{{ ydb-short-name }} provides another method for disabling authentication for a user - manual user lockout by a YDB cluster or database administrator. An administrator can unlock user accounts that were previously locked manually or automatically after exceeding the number of failed attempts to enter a correct password. For more information about manual user lockout, see the [`ALTER USER`](../yql/reference/syntax/alter-user.md) command description.
+{{ ydb-short-name }} provides another method for disabling authentication for a user, manual user lockout by a {{ ydb-short-name } cluster or database administrator. An administrator can unlock user accounts that were previously locked manually or automatically after exceeding the number of failed attempts to enter the correct password. For more information about manual user lockout, see the [`ALTER USER`](../yql/reference/syntax/alter-user.md) command description.
 
 ## LDAP directory integration {#ldap-auth-provider}
 

@@ -50,7 +50,7 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
             UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: WriteActor"), LogEnabled ? 1 : 0);
         } else {
             // check executer logs
-            UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), LogEnabled ? 2 : 0);
+            UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), LogEnabled ? 1 : 0);
         }
         // check session actor logs
         UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY DEBUG: Component: SessionActor"), LogEnabled ? 2 : 0);
@@ -107,7 +107,7 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
                 UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: WriteActor"), 1);
             } else {
                 // check executer logs
-                UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), 2);
+                UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), 1);
             }
             // check session actor logs
             UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY DEBUG: Component: SessionActor"), 2);
@@ -120,10 +120,10 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
             UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: WriteActor"), 3);
             if (useOltpSink) {
                 // check executer logs
-                UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), 1);
+                UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), 0);
             } else {
                 // check executer logs
-                UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), 11);
+                UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), 4);
             }
             // check session actor logs
             UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY DEBUG: Component: SessionActor"), 2);
@@ -195,7 +195,7 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
         UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: DataShard"), 0);
     }
 
-    Y_UNIT_TEST_TWIN(BrokenReadLock, UseSink) {
+    Y_UNIT_TEST_QUAD(UpsertViaLegacyScripting, UseSink, Streaming) {
         TStringStream ss;
         {
             NKikimrConfig::TAppConfig AppConfig;
@@ -217,13 +217,24 @@ Y_UNIT_TEST_SUITE(KqpDataIntegrityTrails) {
                     (201u, "Value201");
             )";
 
-            auto result = client.StreamExecuteYqlScript(query).GetValueSync();        
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-            CollectStreamResult(result);
+            if (Streaming) {
+                auto result = client.StreamExecuteYqlScript(query).GetValueSync();        
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+                CollectStreamResult(result);
+            } else {
+                auto result = client.ExecuteYqlScript(query).GetValueSync();        
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            }
         }
             
         // check executer logs
-        UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), 1);
+        if (UseSink) {
+            // check write actor logs
+            UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: WriteActor"), 1);
+        } else {
+            // check executer logs
+            UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY INFO: Component: Executer"), 1);
+        }
         // check session actor logs (should contain double logs because this query was executed via worker actor)
         UNIT_ASSERT_VALUES_EQUAL(CountSubstr(ss.Str(), "DATA_INTEGRITY DEBUG: Component: SessionActor"), 4);
         // check grpc logs

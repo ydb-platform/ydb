@@ -97,7 +97,7 @@ class TestTTL(TestBase):
              **pk_types, **non_pk_types}, index_second, "Date", "UNIQUE", "SYNC"),
         ]
     )
-    def test_TTL(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
+    def test_ttl(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
         self.ttl_time_sec(1)
         columns = {
             "pk_": pk_types.keys(),

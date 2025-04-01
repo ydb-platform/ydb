@@ -164,4 +164,25 @@ void TPartitionWorkZone::SyncDataKeysBody(TInstant now,
     } // head cleared, all data moved to body
 }
 
+void TPartitionWorkZone::SyncHead(ui64& startOffset, ui64& endOffset)
+{
+    //append Head with newHead
+    while (!NewHead.GetBatches().empty()) {
+        Head.AddBatch(NewHead.ExtractFirstBatch());
+    }
+    Head.PackedSize += NewHead.PackedSize;
+
+    if (Head.PackedSize > 0 && DataKeysBody.empty()) {
+        startOffset = Head.Offset + (Head.PartNo > 0 ? 1 : 0);
+    }
+
+    endOffset = Head.GetNextOffset();
+}
+
+void TPartitionWorkZone::ResetNewHead(ui64 endOffset)
+{
+    NewHead.Clear();
+    NewHead.Offset = endOffset;
+}
+
 }

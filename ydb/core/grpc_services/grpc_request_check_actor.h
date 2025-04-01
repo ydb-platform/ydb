@@ -40,17 +40,32 @@ bool TGRpcRequestProxyHandleMethods::ValidateAndReplyOnError(TCtx* ctx) {
 }
 
 inline const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>& GetEntriesForAuthAndCheckRequest(TEvRequestAuthAndCheck::TPtr& ev) {
-    if (ev->Get()->YdbToken && ev->Get()->YdbToken->StartsWith("Bearer")) {
-        if (AppData()->AuthConfig.GetUseAccessService()
-            && (AppData()->DomainsConfig.GetSecurityConfig().ViewerAllowedSIDsSize() > 0 || AppData()->DomainsConfig.GetSecurityConfig().MonitoringAllowedSIDsSize() > 0)) {
-            static TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> entries = {
-                {NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"ydb.developerApi.get", "ydb.developerApi.update"}), {{"gizmo_id", "gizmo"}}}
-            };
-            return entries;
-        }
+    const bool isBearerToken = ev->Get()->YdbToken && ev->Get()->YdbToken->StartsWith("Bearer");
+    const bool useAccessService = AppData()->AuthConfig.GetUseAccessService();
+    const bool hasClusterAccessResourceId = AppData()->AuthConfig.HasClusterAccessResourceId();
+    const bool needClusterAccessResourceCheck = AppData()->DomainsConfig.GetSecurityConfig().ViewerAllowedSIDsSize() > 0 ||
+                                AppData()->DomainsConfig.GetSecurityConfig().MonitoringAllowedSIDsSize() > 0;
+
+    if (!isBearerToken || !useAccessService || !hasClusterAccessResourceId || !needClusterAccessResourceCheck) {
+        return {};
     }
-    static TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> emptyEntries = {};
-    return emptyEntries;
+
+    const TString accessServiceType = AppData()->AuthConfig.GetAccessServiceType();
+    const TString clusterAccessResourceId = AppData()->AuthConfig.GetClusterAccessResourceId();
+
+    static TVector<TString> permissions;
+    if (accessServiceType == "Yandex_v2") {
+        permissions = {"ydb.developerApi.get", "ydb.developerApi.update"};
+    } else if (accessServiceType == "Nebius_v1") {
+        permissions = {"ydb.clusters.get", "ydb.clusters.monitor", "ydb.clusters.manage"};
+    } else {
+        return {};
+    }
+
+    static TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> entries = {
+        {NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions(permissions), {{"gizmo_id", clusterAccessResourceId}}}
+    };
+    return entries;
 }
 
 template <typename TEvent>

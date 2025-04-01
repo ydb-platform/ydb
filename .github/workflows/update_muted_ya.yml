@@ -32,16 +32,16 @@ jobs:
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
     
-      - name: Collect test history data with window 1 days relwithdebinfo for  ${{ env.BASE_BRANCH }}
-        run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=1 --branch ${{ env.BASE_BRANCH }}
+      - name: Collect test history data with window 1 days relwithdebinfo for ${{ env.BASE_BRANCH }}
+        run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=1 --branch=${{ env.BASE_BRANCH }}
       
-      - name: Update muted and not muted tests in DB for  ${{ env.BASE_BRANCH }}
-        run: python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch ${{ env.BASE_BRANCH }}
+      - name: Update muted and not muted tests in DB for ${{ env.BASE_BRANCH }}
+        run: python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch=${{ env.BASE_BRANCH }}
       
-      - name: Update test monitor (how long tests in state) for  ${{ env.BASE_BRANCH }}
-        run: python3 .github/scripts/analytics/tests_monitor.py --branch  ${{ env.BASE_BRANCH }}
+      - name: Update test monitor (how long tests in state) for ${{ env.BASE_BRANCH }}
+        run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }}
 
-      - name: Update branch with base branch
+      - name: Update branch with branch ${{ env.BASE_BRANCH }}
         run: |
           git config user.name YDBot
           git config user.email ydbot@ydb.tech
@@ -60,7 +60,7 @@ jobs:
       
           # Attempt to rebase BRANCH_FOR_PR onto BASE_BRANCH
           if ! git rebase origin/${{ env.BASE_BRANCH }} -X theirs; then
-            echo "Rebase failed, resetting branch to match BASE_BRANCH..."
+            echo "Rebase failed, resetting branch to match ${{ env.BASE_BRANCH }}..."
       
             # Abort the rebase process
             git rebase --abort
@@ -71,7 +71,7 @@ jobs:
           fi
           git push origin ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }} --force
         
-      - name: Run the script
+      - name: Run script create_new_muted_ya.py
         run: |
           .github/scripts/tests/create_new_muted_ya.py update_muted_ya
 

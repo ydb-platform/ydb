@@ -171,6 +171,17 @@ class Nodes(object):
         self._logger.info(f"download from '{url}' to '{remote_path}'")
         tmp_path = url.split(":")[-1]
         script = (
+            f'sky get -wu -d {tmp_path} {url} &&'
+            f'for FILE in `find {tmp_path} -name *.tgz -or -name *.tar`; do tar -C {tmp_path} -xf $FILE && rm $FILE; done && '
+            f'sudo mv {tmp_path}/* {remote_path} && rm -rf {tmp_path}'
+        )
+        running_jobs = self.execute_async_ret(script)
+        self._check_async_execution(running_jobs, retry_attemps=2)
+
+    def _download_ya(self, url, remote_path):
+        self._logger.info(f"download from '{url}' to '{remote_path}'")
+        tmp_path = url.split(":")[-1]
+        script = (
             f'mkdir -p {tmp_path} && cd {tmp_path} &&'
             f'ya download --original-name {url} && cd - &&'
             f'for FILE in `find {tmp_path} -name *.tgz -or -name *.tar`; do tar -C {tmp_path} -xf $FILE && rm $FILE; done && '
@@ -214,8 +225,10 @@ class Nodes(object):
             remote_path += '.zstd'
 
         self.execute_async("sudo mkdir -p {}".format(os.path.dirname(remote_path)))
-        if local_path.startswith('rbtorrent:') or local_path.startswith('sbr:'):
+        if local_path.startswith('rbtorrent:'):
             self._download_sky(local_path, remote_path)
+        elif local_path.startswith('sbr:'):
+            self._download_ya(local_path, remote_path)
         elif local_path.startswith('http:') or local_path.startswith('https:'):
             self._download_http(local_path, remote_path)
         else:

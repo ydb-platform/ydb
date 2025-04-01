@@ -149,7 +149,7 @@ namespace NKafka {
             }
             topicsResponse.push_back(topicInResponse);
         }
-        response->Topics = topicsResponse;
+        response->Topics = std::move(topicsResponse);;
         return response;
     };
 

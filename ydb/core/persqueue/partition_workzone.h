@@ -36,6 +36,8 @@ struct TPartitionWorkZone {
                                           ui64& insideHeadOffset,
                                           ui64 lastOffset) const;
 
+    ui64 GetHeadGapSize() const;
+
     bool PositionInBody(ui64 offset, ui32 partNo) const;
     bool PositionInHead(ui64 offset, ui32 partNo) const;
 
@@ -76,5 +78,11 @@ struct TPartitionWorkZone {
     TVector<TKeyLevel> DataKeysHead;
     std::deque<TDataKey> HeadKeys;
 };
+
+inline
+ui64 TPartitionWorkZone::GetHeadGapSize() const
+{
+    return DataKeysBody.empty() ? 0 : (Head.Offset - (DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount()));
+}
 
 }

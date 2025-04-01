@@ -714,7 +714,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
     }
     result.SetLastInitDurationSeconds(InitDuration.Seconds());
     result.SetCreationTimestamp(CreationTime.Seconds());
-    ui64 headGapSize = WorkZone.DataKeysBody.empty() ? 0 : (WorkZone.Head.Offset - (WorkZone.DataKeysBody.back().Key.GetOffset() + WorkZone.DataKeysBody.back().Key.GetCount()));
+    ui64 headGapSize = WorkZone.GetHeadGapSize();
     ui32 gapsCount = GapOffsets.size() + (headGapSize ? 1 : 0);
     result.SetGapCount(gapsCount);
     result.SetGapSize(headGapSize + GapSize);

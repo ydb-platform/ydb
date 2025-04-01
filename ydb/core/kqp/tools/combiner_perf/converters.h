@@ -11,7 +11,7 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 template<bool Embedded>
-void NativeToUnboxed(const uint64_t value, NUdf::TUnboxedValue& result)
+void NativeToUnboxed(const ui64 value, NUdf::TUnboxedValue& result)
 {
     result = NUdf::TUnboxedValuePod(value);
 }

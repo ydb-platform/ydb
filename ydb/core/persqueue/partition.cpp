@@ -2536,6 +2536,10 @@ void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
                 Y_ABORT_UNLESS(userInfo.Offset == (i64)operation.GetCommitOffsetsBegin());
             }
 
+            if ((i64)operation.GetCommitOffsetsEnd() < userInfo.Offset && !operation.GetReadSessionId().empty()) {
+                continue; // this is stale request, answer ok for it
+            }
+
             if (operation.GetCommitOffsetsEnd() <= StartOffset) {
                 userInfo.AnyCommits = false;
                 userInfo.Offset = StartOffset;
@@ -2546,6 +2550,7 @@ void TPartition::CommitTransaction(TSimpleSharedPtr<TTransaction>& t)
                 userInfo.AnyCommits = true;
                 userInfo.Offset = operation.GetCommitOffsetsEnd();
             }
+
             if (operation.GetKillReadSession()) {
                 userInfo.Session = "";
                 userInfo.PartitionSessionId = 0;

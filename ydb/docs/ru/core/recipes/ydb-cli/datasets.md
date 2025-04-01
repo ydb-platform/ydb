@@ -39,7 +39,13 @@ ydb import file csv --header --null-value "" --path <путь_к_таблице>
 
 1. Скачайте и разархивируйте файл `2019-Nov.csv` с Kaggle
 
-2. Создайте таблицу в {{ ydb-short-name }} одним из следующих способов:
+2. Датасет включает в себя полностью идентичные строки. Поскольку YDB требует указания уникальных значений первичного ключа, добавим в файл новую колонку под названием row_id, где значение ключа будет совпадать с номером строки. Это позволит предотвратить удаление повторяющихся данных. Эту операцию можно осуществить с помощью команды awk:
+
+```bash
+awk 'NR==1 {print "row_id," $0; next} {print NR-1 "," $0}' 2019-Nov.csv > temp.csv && mv temp.csv 2019-Nov.csv
+```
+
+3. Создайте таблицу в {{ ydb-short-name }} одним из следующих способов:
 
 <details>
   <summary>Выполнив запрос в WEB-интерфейсе</summary>
@@ -48,6 +54,7 @@ ydb import file csv --header --null-value "" --path <путь_к_таблице>
 
   ```sql
   CREATE TABLE `ecommerce_table` (
+      `row_id` Uint64 NOT NULL,
       `event_time` Text NOT NULL,
       `event_type` Text NOT NULL,
       `product_id` Uint64 NOT NULL,
@@ -57,7 +64,11 @@ ydb import file csv --header --null-value "" --path <путь_к_таблице>
       `price` Double NOT NULL,
       `user_id` Uint64 NOT NULL,
       `user_session` Text NOT NULL,
-      PRIMARY KEY (`event_time`, `product_id`, `user_id`)
+      PRIMARY KEY (`row_id`)
+  )
+  WITH (
+      STORE = COLUMN,
+      UNIFORM_PARTITIONS = 50
   );
   ```
 </details>
@@ -68,6 +79,7 @@ ydb import file csv --header --null-value "" --path <путь_к_таблице>
   ```bash
   ydb sql -s \
   'CREATE TABLE `ecommerce_table` (
+      `row_id` Uint64 NOT NULL,
       `event_time` Text NOT NULL,
       `event_type` Text NOT NULL,
       `product_id` Uint64 NOT NULL,
@@ -77,7 +89,7 @@ ydb import file csv --header --null-value "" --path <путь_к_таблице>
       `price` Double NOT NULL,
       `user_id` Uint64 NOT NULL,
       `user_session` Text NOT NULL,
-      PRIMARY KEY (`event_time`, `product_id`, `user_id`)
+      PRIMARY KEY (`row_id`)
   )
   WITH (
       STORE = COLUMN,
@@ -86,7 +98,7 @@ ydb import file csv --header --null-value "" --path <путь_к_таблице>
   ```
 </details>
 
-3. Выполните команду импорта
+4. Выполните команду импорта:
 
 ```bash
 ydb import file csv --header --null-value "" --path ecommerce_table 2019-Nov.csv
@@ -157,7 +169,7 @@ ydb import file csv --header --null-value "" --path ecommerce_table 2019-Nov.csv
   ```
 </details>
 
-3. Выполните команду импорта
+3. Выполните команду импорта:
 
 ```bash
 ydb import file csv --header --null-value "" --path vgsales vgsales.csv
@@ -175,7 +187,13 @@ ydb import file csv --header --null-value "" --path vgsales vgsales.csv
 
 1. Скачайте и разархивируйте файл `metadata.csv` с Kaggle
 
-2. Создайте таблицу в {{ ydb-short-name }} одним из следующих способов:
+2. Датасет включает в себя полностью идентичные строки. Поскольку YDB требует указания уникальных значений первичного ключа, добавим в файл новую колонку под названием row_id, где значение ключа будет совпадать с номером строки. Это позволит предотвратить удаление повторяющихся данных. Эту операцию можно осуществить с помощью команды awk:
+
+```bash
+awk 'NR==1 {print "row_id," $0; next} {print NR-1 "," $0}' metadata.csv > temp.csv && mv temp.csv metadata.csv
+```
+
+3. Создайте таблицу в {{ ydb-short-name }} одним из следующих способов:
 
 <details>
   <summary>Выполнив запрос в WEB-интерфейсе</summary>
@@ -184,6 +202,7 @@ ydb import file csv --header --null-value "" --path vgsales vgsales.csv
 
   ```sql
   CREATE TABLE `covid_research` (
+      `row_id` Uint64 NOT NULL,
       `cord_uid` Text NOT NULL,
       `sha` Text NOT NULL,
       `source_x` Text NOT NULL,
@@ -203,7 +222,7 @@ ydb import file csv --header --null-value "" --path vgsales vgsales.csv
       `pmc_json_files` Text NOT NULL,
       `url` Text NOT NULL,
       `s2_id` Uint64,
-      PRIMARY KEY (`cord_uid`)
+      PRIMARY KEY (`row_id`)
   )
   WITH (
       STORE = COLUMN
@@ -217,6 +236,7 @@ ydb import file csv --header --null-value "" --path vgsales vgsales.csv
   ```bash
   ydb sql -s \
   'CREATE TABLE `covid_research` (
+      `row_id` Uint64 NOT NULL,
       `cord_uid` Text NOT NULL,
       `sha` Text NOT NULL,
       `source_x` Text NOT NULL,
@@ -236,7 +256,7 @@ ydb import file csv --header --null-value "" --path vgsales vgsales.csv
       `pmc_json_files` Text NOT NULL,
       `url` Text NOT NULL,
       `s2_id` Uint64,
-      PRIMARY KEY (`cord_uid`)
+      PRIMARY KEY (`row_id`)
   )
   WITH (
       STORE = COLUMN
@@ -244,7 +264,7 @@ ydb import file csv --header --null-value "" --path vgsales vgsales.csv
   ```
 </details>
 
-3. Выполните команду импорта
+4. Выполните команду импорта:
 
 ```bash
 ydb import file csv --header --null-value "" --path covid_research metadata.csv

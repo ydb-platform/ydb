@@ -80,6 +80,38 @@ public:
     }
 };
 
+class TCompareKeyForScanSequence {
+private:
+    TReplaceKeyAdapter Key;
+    YDB_READONLY(ui32, SourceId, 0);
+
+public:
+    const TReplaceKeyAdapter GetKey() const {
+        return Key;
+    }
+
+    explicit TCompareKeyForScanSequence(const TReplaceKeyAdapter& key, const ui32 sourceId)
+        : Key(key)
+        , SourceId(sourceId) {
+    }
+
+    static TCompareKeyForScanSequence FromStart(const std::shared_ptr<IDataSource>& src);
+    static TCompareKeyForScanSequence FromFinish(const std::shared_ptr<IDataSource>& src);
+
+    static TCompareKeyForScanSequence BorderStart(const TReplaceKeyAdapter& key) {
+        return TCompareKeyForScanSequence(key, 0);
+    }
+
+    bool operator<(const TCompareKeyForScanSequence& item) const {
+        const std::partial_ordering compareResult = Key.Compare(item.Key);
+        if (compareResult == std::partial_ordering::equivalent) {
+            return SourceId < item.SourceId;
+        } else {
+            return compareResult == std::partial_ordering::less;
+        }
+    };
+};
+
 class IDataSource: public NCommon::IDataSource {
 private:
     using TBase = NCommon::IDataSource;
@@ -172,39 +204,6 @@ public:
                 return l->GetSourceId() < r->GetSourceId();
             } else {
                 return Reverse ? compareResult == std::partial_ordering::greater : compareResult == std::partial_ordering::less;
-            }
-        };
-    };
-
-    class TCompareKeyForScanSequence {
-    private:
-        const TReplaceKeyAdapter Key;
-        const ui32 SourceId;
-
-    public:
-        TCompareKeyForScanSequence(const TReplaceKeyAdapter& key, const ui32 sourceId)
-            : Key(key)
-            , SourceId(sourceId) {
-        }
-
-        static TCompareKeyForScanSequence FromStart(const std::shared_ptr<IDataSource>& src) {
-            return TCompareKeyForScanSequence(src->GetStart(), src->GetSourceId());
-        }
-
-        static TCompareKeyForScanSequence FromFinish(const std::shared_ptr<IDataSource>& src) {
-            return TCompareKeyForScanSequence(src->GetFinish(), src->GetSourceId());
-        }
-
-        static TCompareKeyForScanSequence BorderStart(const TReplaceKeyAdapter& key) {
-            return TCompareKeyForScanSequence(key, 0);
-        }
-
-        bool operator<(const TCompareKeyForScanSequence& item) const {
-            const std::partial_ordering compareResult = Key.Compare(item.Key);
-            if (compareResult == std::partial_ordering::equivalent) {
-                return SourceId < item.SourceId;
-            } else {
-                return compareResult == std::partial_ordering::less;
             }
         };
     };
@@ -428,7 +427,7 @@ public:
 
 class TSourceConstructor: public ICursorEntity {
 private:
-    TReplaceKeyAdapter Start;
+    TCompareKeyForScanSequence Start;
     YDB_READONLY(ui32, SourceId, 0);
     YDB_READONLY(ui32, PortionIdx, 0);
     ui32 RecordsCount = 0;
@@ -449,13 +448,14 @@ public:
         return IsStartedByCursorFlag;
     }
 
-    const TReplaceKeyAdapter& GetStart() const {
+    const TCompareKeyForScanSequence& GetStart() const {
         return Start;
     }
 
     TSourceConstructor(const ui32 portionIdx, const std::shared_ptr<TPortionInfo>& portion, const std::shared_ptr<TReadContext>& context)
-        : Start(context->GetReadMetadata()->IsDescSorted() ? portion->IndexKeyEnd() : portion->IndexKeyStart(),
-              context->GetReadMetadata()->IsDescSorted())
+        : Start(TReplaceKeyAdapter(context->GetReadMetadata()->IsDescSorted() ? portion->IndexKeyEnd() : portion->IndexKeyStart(),
+                    context->GetReadMetadata()->IsDescSorted()),
+              portion->GetPortionId())
         , SourceId(portion->GetPortionId())
         , PortionIdx(portionIdx)
         , RecordsCount(portion->GetRecordsCount()) {
@@ -468,7 +468,12 @@ public:
     std::shared_ptr<TPortionDataSource> Construct(const std::shared_ptr<TSpecialReadContext>& context) const {
         const auto& portions = context->GetReadMetadata()->SelectInfo->Portions;
         AFL_VERIFY(PortionIdx < portions.size());
-        return std::make_shared<TPortionDataSource>(PortionIdx, portions[PortionIdx], context);
+        auto result = std::make_shared<TPortionDataSource>(PortionIdx, portions[PortionIdx], context);
+        if (IsStartedByCursorFlag) {
+            result->SetIsStartedByCursor();
+        }
+        FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, result->AddEvent("s"));
+        return result;
     }
 };
 

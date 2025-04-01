@@ -7,7 +7,7 @@ SPLIT_FACTOR(18)
 SIZE(MEDIUM)
 
 TEST_SRCS(
-    test_DML.py
+    test_dml.py
 
 )
 

@@ -24,7 +24,7 @@ index_first_sync = {
 index_second_sync = {
     "DyNumber": "CAST('{}E1' AS DyNumber)",
     "String": "'String {}'",
-    "Utf8": "'Uft8 {}'",
+    "Utf8": "'Utf8 {}'",
     "Uuid": "CAST('3{:03}5678-e89b-12d3-a456-556642440000' AS UUID)",
     "Date": "CAST('2{:03}-01-01' AS Date)",
     "Datetime": "CAST('2{:03}-10-02T11:00:00Z' AS Datetime)",
@@ -75,7 +75,7 @@ index_first = {
 index_second = {
     "DyNumber": "CAST('{}E1' AS DyNumber)",
     "String": "'String {}'",
-    "Utf8": "'Uft8 {}'",
+    "Utf8": "'Utf8 {}'",
     "Uuid": "CAST('3{:03}5678-e89b-12d3-a456-556642440000' AS UUID)",
     "Date": "CAST('2{:03}-01-01' AS Date)",
     "Datetime": "CAST('2{:03}-10-02T11:00:00Z' AS Datetime)",
@@ -103,7 +103,7 @@ pk_types = {
     "DyNumber": "CAST('{}E1' AS DyNumber)",
 
     "String": "'String {}'",
-    "Utf8": "'Uft8 {}'",
+    "Utf8": "'Utf8 {}'",
     "Uuid": "CAST('3{:03}5678-e89b-12d3-a456-556642440000' AS UUID)",
 
     "Date": "CAST('2{:03}-01-01' AS Date)",

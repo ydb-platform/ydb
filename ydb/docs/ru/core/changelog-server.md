@@ -19,7 +19,7 @@
 
 #### Производительность
 
-* Включен по умолчанию [автоматический выбор индекса](./dev/secondary-indexes.md#avtomaticheskoe-ispolzovanie-indeksov-pri-vyborke) при выполнении запроса.
+* Включен по умолчанию [автоматический выбор вторичного индекса](./dev/secondary-indexes.md#avtomaticheskoe-ispolzovanie-indeksov-pri-vyborke) при выполнении запроса.
 
 #### Исправления ошибок
 

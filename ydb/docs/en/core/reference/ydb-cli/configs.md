@@ -21,7 +21,7 @@ This section contains commands for working with the {{ ydb-short-name }} cluster
 {{ ydb-cli }} admin cluster config resolve -f dynconfig.yaml --node-id 1003
 # Generate a dynamic configuration file, based on a static configuration on the cluster
 {{ ydb-cli }} admin cluster config genereate
-# Initialize directory with configuration, using path to configuration file
+# Initialize a directory with the configuration, using the path to the configuration file
 {{ ydb-cli }} admin node config init --config-dir <path_to_directory> --from-config <path_to_configuration_file>
 # Initialize directory with configuration, using configuration from the cluster
 {{ ydb-cli }} admin node config init --config-dir <path_to_directory> --seed-node <cluster_node_endpoint>

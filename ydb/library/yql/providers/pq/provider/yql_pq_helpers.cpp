@@ -21,20 +21,25 @@ TCoNameValueTupleList BuildTopicPropsList(const TPqState::TTopicMeta& meta, TPos
 
     ui32 maxPartitionsCount = 0;
     if (meta.FederatedTopic) {
-        TVector<TDqPqFederatedCluster> clusters;
-        for (const auto& federatedTopic: *meta.FederatedTopic) {
-            clusters.push_back(Build<TDqPqFederatedCluster>(ctx, pos)
-                .Name().Build(federatedTopic.Info.Name)
-                .Endpoint().Build(federatedTopic.Info.Endpoint)
-                .Database().Build(federatedTopic.Info.Path)
-                .PartitionsCount().Build(ToString(federatedTopic.PartitionsCount))
-                .Done());
-            maxPartitionsCount = std::max(maxPartitionsCount, federatedTopic.PartitionsCount);
+        if (meta.FederatedTopic->size() == 1 && (*meta.FederatedTopic)[0].Info.Name.empty()) {
+            // non-federated fallback, omit FederatedClusters
+            maxPartitionsCount = (*meta.FederatedTopic)[0].PartitionsCount;
+        } else {
+            TVector<TDqPqFederatedCluster> clusters;
+            for (const auto& federatedTopic: *meta.FederatedTopic) {
+                clusters.push_back(Build<TDqPqFederatedCluster>(ctx, pos)
+                    .Name().Build(federatedTopic.Info.Name)
+                    .Endpoint().Build(federatedTopic.Info.Endpoint)
+                    .Database().Build(federatedTopic.Info.Path)
+                    .PartitionsCount().Build(ToString(federatedTopic.PartitionsCount))
+                    .Done());
+                maxPartitionsCount = std::max(maxPartitionsCount, federatedTopic.PartitionsCount);
+            }
+            props.push_back(
+                    Build<TCoNameValueTuple>(ctx, pos)
+                    .Name().Build(FederatedClustersProp)
+                    .Value<TDqPqFederatedClusterList>().Add(clusters).Build().Done());
         }
-        props.push_back(
-                Build<TCoNameValueTuple>(ctx, pos)
-                .Name().Build(FederatedClustersProp)
-                .Value<TDqPqFederatedClusterList>().Add(clusters).Build().Done());
     }
     Add(props, PartitionsCountProp, ToString(maxPartitionsCount), pos, ctx);
 

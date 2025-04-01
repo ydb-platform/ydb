@@ -188,7 +188,7 @@ public:
         : YqlToken_(yqlToken)
     {}
 
-    std::string GetAuthInfo() const override {
+    TString GetAuthInfo() const override {
         return YqlToken_;
     }
 
@@ -197,7 +197,7 @@ public:
     }
 
 private:
-    std::string YqlToken_;
+    TString YqlToken_;
 };
 
 class TStaticCredentialsProviderFactory : public NYdb::ICredentialsProviderFactory {

@@ -956,8 +956,8 @@ TInstant TPartition::GetWriteTimeEstimate(ui64 offset) const {
              TabletID, StartOffset, WorkZone.Head.Offset, offset, container.size(),
              container.front().Key.ToString().data());
     Y_ABORT_UNLESS(it == container.end() ||
-             it->Key.GetOffset() > offset ||
-             it->Key.GetOffset() == offset && it->Key.GetPartNo() > 0);
+                   offset < it->Key.GetOffset() ||
+                   it->Key.GetOffset() == offset && it->Key.GetPartNo() > 0);
     --it;
     if (it != container.begin())
         --it;
@@ -1230,9 +1230,9 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvGetWriteInfoReque
     ui32 rcount = 0, rsize = 0;
     ui64 insideHeadOffset = 0;
 
-    response->BlobsFromHead = std::move(GetReadRequestFromHead(0, 0, std::numeric_limits<ui32>::max(),
-                                                               std::numeric_limits<ui32>::max(), 0, &rcount, &rsize,
-                                                               &insideHeadOffset, 0));
+    response->BlobsFromHead = GetReadRequestFromHead(0, 0, std::numeric_limits<ui32>::max(),
+                                                     std::numeric_limits<ui32>::max(), 0, &rcount, &rsize,
+                                                     &insideHeadOffset, 0);
     response->BytesWrittenGrpc = BytesWrittenGrpc.Value();
     response->BytesWrittenUncompressed = BytesWrittenUncompressed.Value();
     response->BytesWrittenTotal = BytesWrittenTotal.Value();
@@ -1521,21 +1521,7 @@ void TPartition::CheckHeadConsistency() const
 }
 
 ui64 TPartition::GetSizeLag(i64 offset) {
-    ui64 sizeLag = 0;
-    if (!WorkZone.DataKeysBody.empty() && WorkZone.PositionInBody(offset, 0)) { // there will be something in body
-        auto it = std::upper_bound(WorkZone.DataKeysBody.begin(), WorkZone.DataKeysBody.end(), std::make_pair(offset, 0),
-                [](const std::pair<ui64, ui16>& offsetAndPartNo, const TDataKey& p) { return offsetAndPartNo.first < p.Key.GetOffset() || offsetAndPartNo.first == p.Key.GetOffset() && offsetAndPartNo.second < p.Key.GetPartNo();});
-        if (it != WorkZone.DataKeysBody.begin())
-            --it; //point to blob with this offset
-        Y_ABORT_UNLESS(it != WorkZone.DataKeysBody.end());
-        sizeLag = it->Size + WorkZone.DataKeysBody.back().CumulativeSize - it->CumulativeSize;
-        Y_ABORT_UNLESS(WorkZone.BodySize == WorkZone.DataKeysBody.back().CumulativeSize + WorkZone.DataKeysBody.back().Size - WorkZone.DataKeysBody.front().CumulativeSize);
-    }
-    for (const auto& b : WorkZone.HeadKeys) {
-        if ((i64)b.Key.GetOffset() >= offset)
-            sizeLag += b.Size;
-    }
-    return sizeLag;
+    return WorkZone.GetSizeLag(offset);
 }
 
 

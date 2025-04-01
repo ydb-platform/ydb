@@ -37,6 +37,7 @@ struct TPartitionWorkZone {
                                           ui64 lastOffset) const;
 
     ui64 GetHeadGapSize() const;
+    ui64 GetSizeLag(i64 offset) const;
 
     bool PositionInBody(ui64 offset, ui32 partNo) const;
     bool PositionInHead(ui64 offset, ui32 partNo) const;

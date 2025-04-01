@@ -181,6 +181,25 @@ TVector<TClientBlob> TPartitionWorkZone::GetBlobsFromHead(const ui64 startOffset
     return res;
 }
 
+ui64 TPartitionWorkZone::GetSizeLag(i64 offset) const
+{
+    ui64 sizeLag = 0;
+    if (!DataKeysBody.empty() && PositionInBody(offset, 0)) { // there will be something in body
+        auto it = std::upper_bound(DataKeysBody.begin(), DataKeysBody.end(), std::make_pair(offset, 0),
+                [](const std::pair<ui64, ui16>& offsetAndPartNo, const TDataKey& p) { return offsetAndPartNo.first < p.Key.GetOffset() || offsetAndPartNo.first == p.Key.GetOffset() && offsetAndPartNo.second < p.Key.GetPartNo();});
+        if (it != DataKeysBody.begin())
+            --it; //point to blob with this offset
+        Y_ABORT_UNLESS(it != DataKeysBody.end());
+        sizeLag = it->Size + DataKeysBody.back().CumulativeSize - it->CumulativeSize;
+        Y_ABORT_UNLESS(BodySize == DataKeysBody.back().CumulativeSize + DataKeysBody.back().Size - DataKeysBody.front().CumulativeSize);
+    }
+    for (const auto& b : HeadKeys) {
+        if ((i64)b.Key.GetOffset() >= offset)
+            sizeLag += b.Size;
+    }
+    return sizeLag;
+}
+
 bool TPartitionWorkZone::PositionInBody(ui64 offset, ui32 partNo) const
 {
     return offset < Head.Offset || ((Head.Offset == offset) && (partNo < Head.PartNo));

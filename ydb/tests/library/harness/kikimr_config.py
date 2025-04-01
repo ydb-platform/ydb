@@ -163,6 +163,7 @@ class KikimrConfigGenerator(object):
             separate_node_configs=False,
             default_clusteradmin=None,
             enable_resource_pools=None,
+            memory_controller_config=None,
     ):
         if extra_feature_flags is None:
             extra_feature_flags = []
@@ -353,6 +354,9 @@ class KikimrConfigGenerator(object):
 
         if column_shard_config:
             self.yaml_config["column_shard_config"] = column_shard_config
+
+        if memory_controller_config:
+            self.yaml_config["memory_controller_config"] = memory_controller_config
 
         self.__build()
 

@@ -1,4 +1,4 @@
 RECURSE(
     lib
-    S3
+    s3
 )

@@ -5,7 +5,7 @@ from ydb.tests.sql.lib.test_base import TestBase
 from ydb.tests.sql.lib.test_s3 import S3Base
 from ydb.tests.stress.oltp_workload.workload import cleanup_type_name
 from ydb.tests.datashard.lib.create_table import create_table, create_ttl, pk_types, non_pk_types, index_first, index_second, ttl_types, \
-    index_first_sync, index_second_sync, index_three_sync, index_three_sync_not_Bool, index_four_sync, index_zero_sync
+    index_first_sync, index_second_sync, index_three_sync, index_four_sync, index_zero_sync
 import os
 import time
 
@@ -14,15 +14,15 @@ class TestYdbS3TTL(TestBase, S3Base):
     @pytest.mark.parametrize(
         "table_name, pk_types, all_types, index, ttl, unique, sync",
         [
-            #("table_index_4_UNIQUE_SYNC", pk_types, {},        Issues:
+            # ("table_index_4_UNIQUE_SYNC", pk_types, {},        Issues:
             # index_four_sync, "", "UNIQUE", "SYNC"),           <main>: Error: Failed item check: unsupported index type to build
-            #("table_index_3_UNIQUE_SYNC", pk_types, {},
+            # ("table_index_3_UNIQUE_SYNC", pk_types, {},
             # index_three_sync_not_Bool, "", "UNIQUE", "SYNC"),
-            #("table_index_2_UNIQUE_SYNC", pk_types, {},
+            # ("table_index_2_UNIQUE_SYNC", pk_types, {},
             # index_second_sync, "", "UNIQUE", "SYNC"),
-            #("table_index_1_UNIQUE_SYNC", pk_types, {},
+            # ("table_index_1_UNIQUE_SYNC", pk_types, {},
             # index_first_sync, "", "UNIQUE", "SYNC"),
-            #("table_index_0_UNIQUE_SYNC", pk_types, {},
+            # ("table_index_0_UNIQUE_SYNC", pk_types, {},
             # index_zero_sync, "", "UNIQUE", "SYNC"),
             ("table_index_4__SYNC", pk_types, {},
              index_four_sync, "", "", "SYNC"),

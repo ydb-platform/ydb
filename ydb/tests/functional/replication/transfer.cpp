@@ -878,6 +878,46 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTable();
     }
 
+    Y_UNIT_TEST(TransferSourceDropped)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )");
+
+        testCase.CreateTopic(1);
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )");
+
+        testCase.Write({"Message-1"});
+
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }});
+
+        testCase.DropTopic();
+
+        testCase.CheckTransferStateError("Discovery for all topics failed. The last error was: no path 'local/Topic_");
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+    }
+
     Y_UNIT_TEST(CreateTransferSourceIsNotTopic)
     {
         MainTestCase testCase;

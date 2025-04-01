@@ -235,7 +235,7 @@ protected:
         if (RetryCount < ScanSettings.GetMaxBatchRetries() && UploadStatus.IsRetriable()) {
             LOG_N("Got retriable error, " << Debug() << " " << UploadStatus.ToString());
 
-            Schedule(GetTimeoutExponentialBackoff(RetryCount, ScanSettings), new TEvents::TEvWakeup);
+            Schedule(GetRetryWakeupTimeoutBackoff(RetryCount), new TEvents::TEvWakeup);
             return;
         }
 

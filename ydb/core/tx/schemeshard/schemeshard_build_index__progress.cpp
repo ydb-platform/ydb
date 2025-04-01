@@ -210,7 +210,7 @@ private:
         if (UploadStatus.IsRetriable() && RetryCount < ScanSettings.GetMaxBatchRetries()) {
             LOG_N("Got retriable error, " << Debug() << " RetryCount: " << RetryCount);
 
-            this->Schedule(NDataShard::GetTimeoutExponentialBackoff(RetryCount, ScanSettings), new TEvents::TEvWakeup());
+            this->Schedule(NDataShard::GetRetryWakeupTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
             return;
         }
         TAutoPtr<TEvIndexBuilder::TEvUploadSampleKResponse> response = new TEvIndexBuilder::TEvUploadSampleKResponse;

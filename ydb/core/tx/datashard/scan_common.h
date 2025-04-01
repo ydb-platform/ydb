@@ -91,8 +91,10 @@ TColumnsTypes GetAllTypes(const TUserTable& tableInfo);
 // if IScan will provide for us "how much data did we read"?
 ui64 CountBytes(TArrayRef<const TCell> key, const NTable::TRowState& row);
 
-inline TDuration GetTimeoutExponentialBackoff(ui32 attempt, const TIndexBuildScanSettings& scanSettings) {
-    return TDuration::Seconds(1u << Max(attempt, scanSettings.GetMaxTimeoutBackoffExponent()));
+inline TDuration GetRetryWakeupTimeoutBackoff(ui32 attempt) {
+    const ui32 maxBackoffExponent = 3;
+
+    return TDuration::Seconds(1u << Min(attempt, maxBackoffExponent));
 }
 
 inline bool HasReachedLimits(const TBufferData& buffer, const TIndexBuildScanSettings& scanSettings) {

@@ -129,7 +129,7 @@ protected:
     TSerializedCellVec LastUploadedKey;
 
     TActorId Uploader;
-    ui64 RetryCount = 0;
+    ui32 RetryCount = 0;
 
     TUploadMonStats Stats = TUploadMonStats("tablets", "build_index_upload");
     TUploadStatus UploadStatus;
@@ -366,7 +366,7 @@ private:
         if (RetryCount < ScanSettings.GetMaxBatchRetries() && UploadStatus.IsRetriable()) {
             LOG_N("Got retriable error, " << Debug());
 
-            ctx.Schedule(GetTimeoutExponentialBackoff(RetryCount, ScanSettings), new TEvents::TEvWakeup());
+            ctx.Schedule(GetRetryWakeupTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
             return;
         }
 

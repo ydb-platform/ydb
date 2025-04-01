@@ -25,7 +25,6 @@ message TIndexBuildScanSettings {
     optional uint32 MaxBatchRows = 1 [ default = 50000 ];
     optional uint64 MaxBatchBytes = 2 [ default = 8388608 ];
     optional uint32 MaxBatchRetries = 3 [ default = 50 ];
-    optional uint32 MaxTimeoutBackoffExponent = 4 [ default = 3 ];
 }
 
 message TIndexBuildSettings {

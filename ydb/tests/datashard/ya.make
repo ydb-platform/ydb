@@ -1,4 +1,4 @@
 RECURSE(
     lib
-    DML
+    dml
 )

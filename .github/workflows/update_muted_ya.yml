@@ -25,12 +25,21 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ydb[yc] PyGithub
+          pip install ydb[yc] PyGithub codeowners pandas
 
       - name: Setup ydb access
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+    
+      - name: Collect test history data with window 1 days relwithdebinfo for  ${{ env.BASE_BRANCH }}
+        run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=1 --branch ${{ env.BASE_BRANCH }}
+      
+      - name: Update muted and not muted tests in DB for  ${{ env.BASE_BRANCH }}
+        run: python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch ${{ env.BASE_BRANCH }}
+      
+      - name: Update test monitor (how long tests in state) for  ${{ env.BASE_BRANCH }}
+        run: python3 .github/scripts/analytics/tests_monitor.py --branch  ${{ env.BASE_BRANCH }}
 
       - name: Update branch with base branch
         run: |

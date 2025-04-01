@@ -244,6 +244,7 @@ public:
     TRuntimeNode ListToBlocks(TRuntimeNode list);
     TRuntimeNode FromBlocks(TRuntimeNode flow);
     TRuntimeNode WideFromBlocks(TRuntimeNode flow);
+    TRuntimeNode ListFromBlocks(TRuntimeNode list);
     TRuntimeNode WideSkipBlocks(TRuntimeNode flow, TRuntimeNode count);
     TRuntimeNode WideTakeBlocks(TRuntimeNode flow, TRuntimeNode count);
     TRuntimeNode WideTopBlocks(TRuntimeNode flow, TRuntimeNode count, const std::vector<std::pair<ui32, TRuntimeNode>>& keys);
@@ -862,7 +863,6 @@ private:
     TType* ChooseCommonType(TType* type1, TType* type2);
     TType* BuildArithmeticCommonType(TType* type1, TType* type2);
     TType* BuildWideBlockType(const TArrayRef<TType* const>& wideComponents);
-    TType* BuildBlockStructType(const TStructType* structType);
 
     bool IsNull(TRuntimeNode arg);
 protected:

@@ -697,6 +697,7 @@ static inline bool containerptr_roaring64_bitmap_remove(roaring64_bitmap_t *r,
         container_free(container2, typecode2);
         bool erased = art_erase(&r->art, high48, (art_val_t *)leaf);
         assert(erased);
+        remove_container(r, *leaf);
         return true;
     }
     return false;
@@ -2417,6 +2418,9 @@ static container_t *container_frozen_view(uint8_t typecode, uint32_t elem_count,
 roaring64_bitmap_t *roaring64_bitmap_frozen_view(const char *buf,
                                                  size_t maxbytes) {
     if (buf == NULL) {
+        return NULL;
+    }
+    if ((uintptr_t)buf % CROARING_BITSET_ALIGNMENT != 0) {
         return NULL;
     }
 

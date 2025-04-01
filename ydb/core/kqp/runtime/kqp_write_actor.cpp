@@ -498,12 +498,14 @@ public:
 
         YQL_ENSURE(IsOlap && (SchemeEntry->Kind == NSchemeCache::TSchemeCacheNavigate::KindColumnTable));
 
-        ResolveShards();
+        Prepare();
     }
 
     void ResolveShards() {
         YQL_ENSURE(!KeyColumnTypes.empty());
         CA_LOG_D("Resolve shards for TableId=" << TableId);
+
+        AFL_ENSURE(InconsistentTx); // Only for CTAS
 
         const TVector<TCell> minKey(KeyColumnTypes.size());
         const TTableRange range(minKey, true, {}, false, false);
@@ -511,7 +513,7 @@ public:
         auto keyRange = MakeHolder<TKeyDesc>(
             TableId,
             range,
-            TKeyDesc::ERowOperation::Update,
+            TKeyDesc::ERowOperation::Update, // Only for CTAS
             KeyColumnTypes,
             TVector<TKeyDesc::TColumnOp>{});
 
@@ -2919,7 +2921,7 @@ public:
             Settings.GetTable().GetOwnerId(),
             Settings.GetTable().GetTableId(),
             Settings.GetTable().GetVersion())
-        , ForwardWriteActorSpan(TWilsonKqp::ForwardWriteActor, NWilson::TTraceId(args.TraceId), "TKqpForwardWriteActor")
+        , ForwardWriteActorSpan(TWilsonKqp::ForwardWriteActor, NWilson::TTraceId(args.TraceId), "ForwardWriteActor")
     {
         EgressStats.Level = args.StatsLevel;
 

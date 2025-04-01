@@ -199,13 +199,24 @@ public:
                             return TStatus::Error;
                         }
                     }
-                    if (auto pSchema = tableDesc.Meta->Attrs.FindPtr(SCHEMA_ATTR_NAME)) {
-                        const auto colGroupSpec = GetColumnGroupSpecFromSchema(NYT::NodeFromYsonString(*pSchema));
-                        if (colGroupSpec) {
-                            YQL_CLOG(TRACE, ProviderYt) << "Loaded column group from schema for " << tableName << " (epoch=" << LoadCtx->Epoch << "): " << colGroupSpec;
-                            if (LoadCtx->Epoch == 0) {
-                                tableDesc.ColumnGroupSpec = colGroupSpec;
-                                tableDesc.ColumnGroupSpecAlts.insert(colGroupSpec);
+                    if (State_->Configuration->UseColumnGroupsFromInputTables.Get().GetOrElse(DEFAULT_USE_COLUMN_GROUPS_FROM_INPUT_TABLE)) {
+                        if (auto pSchema = tableDesc.Meta->Attrs.FindPtr(SCHEMA_ATTR_NAME)) {
+                            TString colGroupSpec;
+                            try {
+                                colGroupSpec = GetColumnGroupSpecFromSchema(NYT::NodeFromYsonString(*pSchema));
+                            } catch (...) {
+                                YQL_CLOG(ERROR, ProviderYt) << "Error parsing column groups for " << tableName << ", schema: " << *pSchema;
+                                auto issue = TIssue(TStringBuilder() << "Error parsing column groups from schema: " << CurrentExceptionMessage());
+                                issue.SetCode(UNEXPECTED_ERROR, ESeverity::TSeverityIds_ESeverityId_S_FATAL);
+                                ctx.AddError(issue);
+                                return TStatus::Error;
+                            }
+                            if (colGroupSpec) {
+                                YQL_CLOG(TRACE, ProviderYt) << "Loaded column group from schema for " << tableName << " (epoch=" << LoadCtx->Epoch << "): " << colGroupSpec;
+                                if (LoadCtx->Epoch == 0) {
+                                    tableDesc.ColumnGroupSpec = colGroupSpec;
+                                    tableDesc.ColumnGroupSpecAlts.insert(colGroupSpec);
+                                }
                             }
                         }
                     }

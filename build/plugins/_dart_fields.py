@@ -697,7 +697,6 @@ class LintName:
     def value(cls, unit, flat_args, spec_args):
         lint_name = spec_args['NAME'][0]
         if lint_name in ('flake8', 'py2_flake8') and (unit.get('DISABLE_FLAKE8') or 'no') == 'yes':
-            unit.message(['INFO', 'Flake8 linting is disabled by `DISABLE_FLAKE8`'])
             raise DartValueError()
         return {cls.KEY: lint_name}
 

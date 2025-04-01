@@ -34,6 +34,21 @@ struct TQueryFile
 
 DEFINE_REFCOUNTED_TYPE(TQueryFile)
 
+struct TQuerySecret
+    : public NYTree::TYsonStruct
+{
+    TString Id;
+    TString Category;
+    TString Subcategory;
+    TString YPath;
+
+    REGISTER_YSON_STRUCT(TQuerySecret);
+
+    static void Register(TRegistrar registrar);
+};
+
+DEFINE_REFCOUNTED_TYPE(TQuerySecret)
+
 struct TStartQueryOptions
     : public TTimeoutOptions
     , public TQueryTrackerOptions
@@ -44,6 +59,7 @@ struct TStartQueryOptions
     std::vector<TQueryFilePtr> Files;
     std::optional<TString> AccessControlObject; // COMPAT(mpereskokova)
     std::optional<std::vector<TString>> AccessControlObjects;
+    std::vector<TQuerySecretPtr> Secrets;
 };
 
 struct TAbortQueryOptions
@@ -111,6 +127,7 @@ struct TQuery
     std::optional<TError> Error;
     NYson::TYsonString Annotations;
     NYTree::IAttributeDictionaryPtr OtherAttributes;
+    std::optional<NYson::TYsonString> Secrets;
 };
 
 void Serialize(const TQuery& query, NYson::IYsonConsumer* consumer);

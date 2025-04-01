@@ -33,6 +33,10 @@ private:
         const std::shared_ptr<NArrow::NAccessor::IChunkedArray>& originalArray, const TChunkConstructionData& externalInfo) const = 0;
 
 public:
+    virtual bool HasInternalConversion() const {
+        return false;
+    }
+
     IConstructor(const IChunkedArray::EType type)
         : Type(type) {
     }

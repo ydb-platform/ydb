@@ -883,8 +883,8 @@ auto TPartitionedBlob::CreateFormedBlob(ui32 size, bool useRename) -> std::optio
 
     Y_ABORT_UNLESS(NewHead.GetNextOffset() >= (GlueHead ? Head.Offset : NewHead.Offset));
 
-    TKey tmpKey(TKeyPrefix::TypeTmpData, Partition, StartOffset, StartPartNo, count, InternalPartsCount, false);
-    TKey dataKey(TKeyPrefix::TypeData, Partition, StartOffset, StartPartNo, count, InternalPartsCount, false);
+    auto tmpKey = TKey::ForBody(TKeyPrefix::TypeTmpData, Partition, StartOffset, StartPartNo, count, InternalPartsCount);
+    auto dataKey = TKey::ForBody(TKeyPrefix::TypeData, Partition, StartOffset, StartPartNo, count, InternalPartsCount);
 
     StartOffset = Offset;
     StartPartNo = NextPartNo;
@@ -955,13 +955,7 @@ auto TPartitionedBlob::Add(const TKey& oldKey, ui32 size) -> std::optional<TForm
         NewHead.Offset = StartOffset;
     }
 
-    TKey newKey(TKeyPrefix::TypeData,
-                Partition,
-                StartOffset,
-                oldKey.GetPartNo(),
-                oldKey.GetCount(),
-                oldKey.GetInternalPartsCount(),
-                oldKey.IsHead());
+    auto newKey = TKey::FromKey(oldKey, TKeyPrefix::TypeData, Partition, StartOffset);
 
     FormedBlobs.emplace_back(oldKey, newKey, size);
 

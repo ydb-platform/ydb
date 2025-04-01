@@ -62,6 +62,10 @@ struct TRunnerOptions {
     std::unordered_set<ui64> TraceOptIds;
 
     IOutputStream* ResultOutput = nullptr;
+    IOutputStream* AstOutput = nullptr;
+    IOutputStream* PlanOutput = nullptr;
+
+    bool CanonicalOutput = false;
     NKikimrRun::EResultOutputFormat ResultOutputFormat = NKikimrRun::EResultOutputFormat::RowsJson;
 
     TDuration PingPeriod;
@@ -70,6 +74,7 @@ struct TRunnerOptions {
 
 struct TRequestOptions {
     TString Query;
+    FederatedQuery::ExecuteMode Action;
     ui64 QueryId;
 };
 

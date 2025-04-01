@@ -45,6 +45,22 @@ namespace NKikimr::NStorage {
         NewYaml = request.HasYAML() ? std::make_optional(request.GetYAML()) : std::nullopt;
         NewStorageYaml = request.HasStorageYAML() ? std::make_optional(request.GetStorageYAML()) : std::nullopt;
 
+        // check if we are really changing something?
+        if (NewYaml == Self->MainConfigYaml) {
+            NewYaml.reset();
+        }
+        if (NewStorageYaml == Self->StorageConfigYaml) {
+            NewStorageYaml.reset();
+        }
+        if (!NewYaml && !NewStorageYaml) {
+            if (request.HasSwitchDedicatedStorageSection()) {
+                return FinishWithError(TResult::ERROR, "switching dedicated storage section mode without providing any new config");
+            } else {
+                // finish this request prematurely: no configs are actually changed
+                return Finish(Sender, SelfId(), PrepareResult(TResult::OK, std::nullopt).release(), 0, Cookie);
+            }
+        }
+
         // start deriving a config from current one
         TString state;
         NKikimrBlobStorage::TStorageConfig config(*Self->StorageConfig);
@@ -64,6 +80,10 @@ namespace NKikimr::NStorage {
                     throw yexception() << "missing or invalid kind provided";
                 }
                 version = metadata["version"].GetUIntegerRobust();
+                if (metadata.Has("cluster") && metadata["cluster"] != AppData()->ClusterName) {
+                    throw yexception() << "cluster name mismatch: provided# " << metadata["cluster"]
+                        << " expected# " << AppData()->ClusterName;
+                }
 
                 state = TStringBuilder() << "validating " << expectedKind << " config section";
                 if (!json.Has("config") || !json["config"].IsMap()) {

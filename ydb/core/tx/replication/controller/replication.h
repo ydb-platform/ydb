@@ -27,6 +27,7 @@ public:
         Ready,
         Done,
         Removing,
+        Paused,
         Error = 255
     };
 
@@ -42,6 +43,7 @@ public:
         Alter,
         Done,
         Removing,
+        Paused,
         Error = 255
     };
 

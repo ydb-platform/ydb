@@ -11,7 +11,7 @@
 namespace NKikimr {
 namespace NPQ {
 
-// {char type; ui32 partiton; (char mark)}
+// {char type; ui32 partition; (char mark)}
 class TKeyPrefix : public TBuffer
 {
 public:
@@ -54,7 +54,7 @@ public:
     {}
 
     TString ToString() const {
-        return TString(Data(), Size());
+        return {Data(), Size()};
     }
 
     bool Marked(EMark mark) {
@@ -134,7 +134,7 @@ private:
 
 std::pair<TKeyPrefix, TKeyPrefix> MakeKeyPrefixRange(TKeyPrefix::EType type, const TPartitionId& partition);
 
-// {char type; ui32 partiton; ui64 offset; ui16 partNo; ui32 count, ui16 internalPartsCount}
+// {char type; ui32 partition; ui64 offset; ui16 partNo; ui32 count, ui16 internalPartsCount}
 // offset, partNo - index of first rec
 // count - diff of last record offset and first record offset in blob
 // internalPartsCount - number of internal parts
@@ -144,105 +144,90 @@ std::pair<TKeyPrefix, TKeyPrefix> MakeKeyPrefixRange(TKeyPrefix::EType type, con
 class TKey : public TKeyPrefix
 {
 public:
-    TKey(EType type, const TPartitionId& partition, const ui64 offset, const ui16 partNo, const ui32 count, const ui16 internalPartsCount, const bool isHead = false)
-        : TKeyPrefix(type, partition)
-        , Offset(offset)
-        , Count(count)
-        , PartNo(partNo)
-        , InternalPartsCount(internalPartsCount)
-    {
-        Resize(KeySize());
-        *(PtrOffset() - 1) = *(PtrCount() - 1) = *(PtrPartNo() - 1) = *(PtrInternalPartsCount() - 1) = '_';
-        SetOffset(offset);
-        SetPartNo(partNo);
-        SetCount(count);
-        SetInternalPartsCount(InternalPartsCount);
-        SetHead(isHead);
-    }
+    static TKey ForBody(EType type,
+                        const TPartitionId& partition,
+                        const ui64 offset,
+                        const ui16 partNo,
+                        const ui32 count,
+                        const ui16 internalPartsCount);
+    static TKey ForHead(EType type,
+                        const TPartitionId& partition,
+                        const ui64 offset,
+                        const ui16 partNo,
+                        const ui32 count,
+                        const ui16 internalPartsCount);
+    static TKey ForFastWrite(EType type,
+                             const TPartitionId& partition,
+                             const ui64 offset,
+                             const ui16 partNo,
+                             const ui32 count,
+                             const ui16 internalPartsCount);
 
-    TKey(const TKey& key)
-        : TKey(key.GetType(), key.GetPartition(), key.Offset, key.PartNo, key.Count, key.InternalPartsCount, key.IsHead())
-    {
-    }
+    static TKey FromString(const TString& s) { return {s}; }
+    static TKey FromString(const TString& s, const TPartitionId& partition);
 
-    TKey(const TString& data)
-    {
-        Assign(data.data(), data.size());
-        Y_ABORT_UNLESS(data.size() == KeySize() + IsHead());
-        Y_ABORT_UNLESS(*(PtrOffset() - 1) == '_');
-        Y_ABORT_UNLESS(*(PtrCount() - 1) == '_');
-        Y_ABORT_UNLESS(*(PtrPartNo() - 1) == '_');
-        Y_ABORT_UNLESS(*(PtrInternalPartsCount() - 1) == '_');
-
-        ParsePartition();
-        ParseOffset();
-        ParseCount();
-        ParsePartNo();
-        ParseInternalPartsCount();
-    }
+    static TKey FromKey(const TKey& k,
+                        EType type,
+                        const TPartitionId& partitionId,
+                        ui64 offset);
 
     TKey()
-        : TKey(TypeNone, TPartitionId(0), 0, 0, 0, 0)
+        : TKey(TypeNone, TPartitionId(0), 0, 0, 0, 0, false)
     {}
+
+    TKey(const TKey& key)
+        : TKey(key.GetType(), key.GetPartition(), key.Offset, key.PartNo, key.Count, key.InternalPartsCount, key.GetSuffix())
+    {
+    }
 
     virtual ~TKey()
     {}
 
-    TString ToString() const {
-        return TString(Data(), Size());
-    }
-
-    void SetHead(const bool isHead) {
-        Resize(KeySize() + isHead);
-        if (isHead)
-            Data()[KeySize()] = '|';
-    }
-
     void SetOffset(const ui64 offset) {
-        Y_ABORT_UNLESS(Size() == KeySize() + IsHead());
+        Y_ABORT_UNLESS(Size() == KeySize() + HasSuffix());
         Offset = offset;
         memcpy(PtrOffset(), Sprintf("%.20" PRIu64, offset).data(), 20);
     }
 
     ui64 GetOffset() const {
-        Y_ABORT_UNLESS(Size() == KeySize() + IsHead());
+        Y_ABORT_UNLESS(Size() == KeySize() + HasSuffix());
         return Offset;
     }
 
     void SetCount(const ui32 count) {
-        Y_ABORT_UNLESS(Size() == KeySize() + IsHead());
+        Y_ABORT_UNLESS(Size() == KeySize() + HasSuffix());
         Count = count;
         memcpy(PtrCount(), Sprintf("%.10" PRIu32, count).data(), 10);
     }
 
     ui32 GetCount() const {
-        Y_ABORT_UNLESS(Size() == KeySize() + IsHead());
+        Y_ABORT_UNLESS(Size() == KeySize() + HasSuffix());
         return Count;
     }
 
     void SetPartNo(const ui16 partNo) {
-        Y_ABORT_UNLESS(Size() == KeySize() + IsHead());
+        Y_ABORT_UNLESS(Size() == KeySize() + HasSuffix());
         PartNo = partNo;
         memcpy(PtrPartNo(), Sprintf("%.5" PRIu16, partNo).data(), 5);
     }
 
     ui16 GetPartNo() const {
-        Y_ABORT_UNLESS(Size() == KeySize() + IsHead());
+        Y_ABORT_UNLESS(Size() == KeySize() + HasSuffix());
         return PartNo;
     }
 
     void SetInternalPartsCount(const ui16 internalPartsCount) {
-        Y_ABORT_UNLESS(Size() == KeySize() + IsHead());
+        Y_ABORT_UNLESS(Size() == KeySize() + HasSuffix());
         InternalPartsCount = internalPartsCount;
         memcpy(PtrInternalPartsCount(), Sprintf("%.5" PRIu16, internalPartsCount).data(), 5);
     }
 
     ui16 GetInternalPartsCount() const {
-        Y_ABORT_UNLESS(Size() == KeySize() + IsHead());
+        Y_ABORT_UNLESS(Size() == KeySize() + HasSuffix());
         return InternalPartsCount;
     }
 
-    bool IsHead() const {
+    bool HasSuffix() const {
         return Size() == KeySize() + 1;
     }
 
@@ -257,6 +242,38 @@ public:
     }
 
 private:
+    TKey(EType type, const TPartitionId& partition, const ui64 offset, const ui16 partNo, const ui32 count, const ui16 internalPartsCount, const TMaybe<char> suffix)
+        : TKeyPrefix(type, partition)
+        , Offset(offset)
+        , Count(count)
+        , PartNo(partNo)
+        , InternalPartsCount(internalPartsCount)
+    {
+        Resize(KeySize());
+        *(PtrOffset() - 1) = *(PtrCount() - 1) = *(PtrPartNo() - 1) = *(PtrInternalPartsCount() - 1) = '_';
+        SetOffset(offset);
+        SetPartNo(partNo);
+        SetCount(count);
+        SetInternalPartsCount(InternalPartsCount);
+        SetSuffix(suffix);
+    }
+
+    TKey(const TString& data)
+    {
+        Assign(data.data(), data.size());
+        Y_ABORT_UNLESS(data.size() == KeySize() + HasSuffix());
+        Y_ABORT_UNLESS(*(PtrOffset() - 1) == '_');
+        Y_ABORT_UNLESS(*(PtrCount() - 1) == '_');
+        Y_ABORT_UNLESS(*(PtrPartNo() - 1) == '_');
+        Y_ABORT_UNLESS(*(PtrInternalPartsCount() - 1) == '_');
+
+        ParsePartition();
+        ParseOffset();
+        ParseCount();
+        ParsePartNo();
+        ParseInternalPartsCount();
+    }
+
     char* PtrOffset() { return Data() + UnmarkedSize() + 1; }
     char* PtrPartNo() { return PtrOffset() + 20 + 1; }
     char* PtrCount() { return PtrPartNo() + 5 + 1; }
@@ -287,13 +304,27 @@ private:
         InternalPartsCount = FromString<ui16>(TStringBuf{PtrInternalPartsCount(), 5});
     }
 
+    TMaybe<char> GetSuffix() const
+    {
+        if (HasSuffix()) {
+            return Data()[KeySize()];
+        }
+        return Nothing();
+    }
+
+    void SetSuffix(TMaybe<char> suffix)
+    {
+        Resize(KeySize() + suffix.Defined());
+        if (suffix.Defined()) {
+            Data()[KeySize()] = *suffix;
+        }
+    }
+
     ui64 Offset;
     ui32 Count;
     ui16 PartNo;
     ui16 InternalPartsCount;
 };
-
-TKey MakeKeyFromString(const TString& s, const TPartitionId& partition);
 
 inline
 TString GetTxKey(ui64 txId)

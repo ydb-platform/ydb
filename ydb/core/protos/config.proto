@@ -1230,7 +1230,7 @@ message TImmediateControlsConfig {
             DefaultValue: 0 }];
 
         optional uint64 ReadIteratorKeysExtBlobsPrecharge = 21 [(ControlOptions) = {
-          Description: "Enable new precharge for DataShard read iterator",
+          Description: "Enable external blobs precharge for DataShard read iterator keys requests",
           MinValue: 0,
           MaxValue: 1,
           DefaultValue: 0 }];

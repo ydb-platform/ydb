@@ -115,7 +115,7 @@ EExecutionStatus TCheckWriteUnit::Execute(TOperation::TPtr op,
         if (!Pipeline.AssignPlanInterval(op)) {
             TString err = TStringBuilder() << "Can't propose tx " << op->GetTxId() << " at blocked shard " << DataShard.TabletID();
 
-            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_INTERNAL_ERROR, err);
+            writeOp->SetError(NKikimrDataEvents::TEvWriteResult::STATUS_OVERLOADED, err);
             op->Abort(EExecutionUnitKind::FinishProposeWrite);
 
             LOG_NOTICE_S(ctx, NKikimrServices::TX_DATASHARD, err);

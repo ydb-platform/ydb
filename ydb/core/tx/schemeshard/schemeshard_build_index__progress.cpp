@@ -21,9 +21,6 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
-// TODO(mbkkt) get table rows count (but even better to have unique prefixes count)
-static constexpr ui64 TableSize = 1'000;
-
 static constexpr const char* Name(TIndexBuildInfo::EState state) noexcept {
     switch (state) {
     case TIndexBuildInfo::EState::Invalid:
@@ -681,7 +678,8 @@ private:
         ev->Record.SetNeedsRounds(3); // TODO(mbkkt) should be configurable
 
         const auto shardIndex = buildInfo.Shards.at(shardIdx).Index;
-        ev->Record.SetChild(buildInfo.KMeans.ChildBegin + (1 + TableSize) * shardIndex);
+        // about 2 * TableSize see comment in PrefixIndexDone
+        ev->Record.SetChild(buildInfo.KMeans.ChildBegin + (2 * buildInfo.KMeans.TableSize) * shardIndex);
 
         ev->Record.SetPostingName(path.Dive(buildInfo.KMeans.WriteTo()).PathString());
         path.Rise().Dive(NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
@@ -931,7 +929,11 @@ private:
         db.Table<Schema::KMeansTreeProgress>().Key(buildInfo.Id).Update(
             NIceDb::TUpdate<Schema::KMeansTreeProgress::Level>(buildInfo.KMeans.Level),
             NIceDb::TUpdate<Schema::KMeansTreeProgress::State>(buildInfo.KMeans.State),
-            NIceDb::TUpdate<Schema::KMeansTreeProgress::Parent>(buildInfo.KMeans.Parent)
+            NIceDb::TUpdate<Schema::KMeansTreeProgress::Parent>(buildInfo.KMeans.Parent),
+            NIceDb::TUpdate<Schema::KMeansTreeProgress::ParentBegin>(buildInfo.KMeans.ParentBegin),
+            NIceDb::TUpdate<Schema::KMeansTreeProgress::Child>(buildInfo.KMeans.Child),
+            NIceDb::TUpdate<Schema::KMeansTreeProgress::ChildBegin>(buildInfo.KMeans.ChildBegin),
+            NIceDb::TUpdate<Schema::KMeansTreeProgress::TableSize>(buildInfo.KMeans.TableSize)
         );
     }
 
@@ -944,7 +946,9 @@ private:
             const ui64 doneShards = buildInfo.DoneShards.size();
 
             ClearDoneShards(txc, buildInfo);
-            Y_ABORT_UNLESS(buildInfo.KMeans.PrefixTableDone(TableSize, doneShards));
+            // it's approximate but upper bound, so it's ok
+            buildInfo.KMeans.TableSize = std::max<ui64>(1, buildInfo.Processed.GetUploadRows());
+            buildInfo.KMeans.PrefixIndexDone(doneShards);
             PersistKMeansState(txc, buildInfo);
             NIceDb::TNiceDb db{txc.DB};
             Self->PersistBuildIndexUploadReset(db, buildInfo);
@@ -1316,14 +1320,14 @@ public:
         auto tableColumns = NTableIndex::ExtractInfo(table); // skip dropped columns
         TSerializedTableRange shardRange = InfiniteRange(tableColumns.Keys.size());
         static constexpr std::string_view LogPrefix = "";
-        LOG_D("infinite range " << buildInfo.KMeans.RangeToDebugStr(shardRange));
+        LOG_D("infinite range " << buildInfo.KMeans.RangeToDebugStr(shardRange, buildInfo.IsBuildPrefixedVectorIndex() ? 2 : 1));
 
         buildInfo.Cluster2Shards.clear();
         for (const auto& x: table->GetPartitions()) {
             Y_ABORT_UNLESS(Self->ShardInfos.contains(x.ShardIdx));
             TSerializedCellVec bound{x.EndOfRange};
             shardRange.To = bound;
-            LOG_D("shard " << x.ShardIdx << " range " << buildInfo.KMeans.RangeToDebugStr(shardRange));
+            LOG_D("shard " << x.ShardIdx << " range " << buildInfo.KMeans.RangeToDebugStr(shardRange, buildInfo.IsBuildPrefixedVectorIndex() ? 2 : 1));
             buildInfo.AddParent(shardRange, x.ShardIdx);
             auto [it, emplaced] = buildInfo.Shards.emplace(x.ShardIdx, TIndexBuildInfo::TShardStatus{std::move(shardRange), "", buildInfo.Shards.size()});
             Y_ASSERT(emplaced);

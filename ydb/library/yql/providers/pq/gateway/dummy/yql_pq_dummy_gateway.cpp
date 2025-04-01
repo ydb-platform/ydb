@@ -62,6 +62,23 @@ NPq::NConfigurationManager::TAsyncDescribePathResult TDummyPqGateway::DescribePa
     }
 }
 
+IPqGateway::TAsyncDescribeFederatedTopicResult TDummyPqGateway::DescribeFederatedTopic(const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) {
+    Y_UNUSED(database);
+    Y_UNUSED(token);
+    with_lock (Mutex) {
+        Y_ENSURE(IsIn(OpenedSessions, sessionId), "Session " << sessionId << " is not opened in pq gateway");
+        const auto key = std::make_pair(cluster, path);
+        if (const auto* topic = Topics.FindPtr(key)) {
+            IPqGateway::TDescribeFederatedTopicResult result;
+            auto& cluster = result.emplace_back();
+            cluster.PartitionsCount = topic->PartitionsCount;
+            return NThreading::MakeFuture<TDescribeFederatedTopicResult>(result);
+        }
+        return NThreading::MakeErrorFuture<IPqGateway::TDescribeFederatedTopicResult>(
+            std::make_exception_ptr(yexception() << "Topic " << path << " is not found on cluster " << cluster));
+    }
+}
+
 NThreading::TFuture<IPqGateway::TListStreams> TDummyPqGateway::ListStreams(const TString& sessionId, const TString& cluster, const TString& database, const TString& token, ui32 limit, const TString& exclusiveStartStreamName) {
     Y_UNUSED(sessionId, cluster, database, token, limit, exclusiveStartStreamName);
     return NThreading::MakeFuture<IPqGateway::TListStreams>();

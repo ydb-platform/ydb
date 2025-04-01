@@ -120,6 +120,7 @@ struct TEvPrivate {
 
 } // namespace
 class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq::NInternal::TDqPqReadActorBase  {
+    static constexpr bool StaticDiscovery = true;
     struct TMetrics {
         TMetrics(const TTxId& txId, ui64 taskId, const ::NMonitoring::TDynamicCounterPtr& counters)
             : TxId(std::visit([](auto arg) { return ToString(arg); }, txId))
@@ -353,7 +354,28 @@ private:
     }
 
     void StartClusterDiscovery() {
-        if (!Clusters.empty()) {
+        Y_ENSURE (Clusters.empty());
+        if (StaticDiscovery) {
+            if (SourceParams.FederatedClustersSize()) {
+                for (auto& federatedCluster : SourceParams.GetFederatedClusters()) {
+                    auto& cluster = Clusters.emplace_back();
+                    cluster.Index = 0;
+                    cluster.Info.Name = federatedCluster.GetName();
+                    cluster.Info.Endpoint = federatedCluster.GetEndpoint();
+                    cluster.Info.Path = federatedCluster.GetDatabase();
+                    cluster.PartitionCount = ReadParams.GetPartitioningParams().GetTopicPartitionsCount();
+                    if (cluster.PartitionCount == 0) {
+                        cluster.PartitionCount = ReadParams.GetPartitioningParams().GetTopicPartitionsCount();
+                        SRC_LOG_W("PartitionCount for offline server assumed to be " << cluster.PartitionCount);
+                    }
+                }
+            } else {
+                auto& cluster = Clusters.emplace_back();
+                cluster.Info.Endpoint = SourceParams.GetEndpoint();
+                cluster.Info.Path = SourceParams.GetDatabase();
+                cluster.PartitionCount = ReadParams.GetPartitioningParams().GetTopicPartitionsCount();
+            }
+            Send(SelfId(), new TEvPrivate::TEvSourceDataReady());
             return;
         }
         if (AsyncInit.Initialized()) {

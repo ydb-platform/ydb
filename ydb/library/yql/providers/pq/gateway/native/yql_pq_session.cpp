@@ -59,12 +59,12 @@ const NPq::NConfigurationManager::IClient::TPtr& TPqSession::GetConfigManagerCli
     return client;
 }
 
-NYdb::NFederatedTopic::TFederatedTopicClient& TPqSession::GetYdbPqClient(const TString& cluster, const TString& database, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
-    const auto clientIt = ClusterYdbPqClients.find(cluster);
-    if (clientIt != ClusterYdbPqClients.end()) {
+NYdb::NFederatedTopic::TFederatedTopicClient& TPqSession::GetYdbFederatedPqClient(const TString& cluster, const TString& database, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
+    const auto clientIt = ClusterYdbFederatedPqClients.find(cluster);
+    if (clientIt != ClusterYdbFederatedPqClients.end()) {
         return clientIt->second;
     }
-    return ClusterYdbPqClients.emplace(cluster, NYdb::NFederatedTopic::TFederatedTopicClient(YdbDriver, GetYdbFederatedPqClientOptions(database, cfg, credentialsProviderFactory))).first->second;
+    return ClusterYdbFederatedPqClients.emplace(cluster, NYdb::NFederatedTopic::TFederatedTopicClient(YdbDriver, GetYdbFederatedPqClientOptions(database, cfg, credentialsProviderFactory))).first->second;
 }
 
 NYdb::NDataStreams::V1::TDataStreamsClient& TPqSession::GetDsClient(const TString& cluster, const TString& database, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
@@ -73,6 +73,88 @@ NYdb::NDataStreams::V1::TDataStreamsClient& TPqSession::GetDsClient(const TStrin
         return clientIt->second;
     }
     return ClusterDsClients.emplace(cluster, NYdb::NDataStreams::V1::TDataStreamsClient(YdbDriver, GetDsClientOptions(database, cfg, credentialsProviderFactory))).first->second;
+}
+
+IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopic(const TString& cluster, const TString& database, const TString& path, const TString& token) {
+    const auto* config = ClusterConfigs->FindPtr(cluster);
+    if (!config) {
+        ythrow yexception() << "Pq cluster `" << cluster << "` does not exist";
+    }
+
+    YQL_ENSURE(config->GetEndpoint(), "Can't describe topic `" << cluster << "`.`" << path << "`: no endpoint");
+
+    std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, token, config->GetAddBearerToToken());
+    with_lock (Mutex) {
+        return GetYdbFederatedPqClient(cluster, database, *config, credentialsProviderFactory)
+            .GetAllClusterInfo()
+            .Apply([
+                ydbDriver = YdbDriver, credentialsProviderFactory,
+                cluster, database, path,
+                topicSettings = GetYdbPqClientOptions(database, *config, credentialsProviderFactory)
+            ](const auto& futureClusterInfo) mutable {
+                auto allClustersInfo = futureClusterInfo.GetValue();
+                std::vector<NYdb::NTopic::TAsyncDescribeTopicResult> futures;
+                IPqGateway::TDescribeFederatedTopicResult results;
+                results.reserve(allClustersInfo.size());
+                futures.reserve(allClustersInfo.size());
+                Y_ENSURE(!allClustersInfo.empty());
+                std::vector<std::string> paths;
+                paths.reserve(allClustersInfo.size());
+                for (auto& clusterInfo: allClustersInfo) {
+                    if (!clusterInfo.IsAvailableForRead()) {
+                        futures.emplace_back(NThreading::MakeErrorFuture<NYdb::NTopic::TDescribeTopicResult>(std::make_exception_ptr(NThreading::TFutureException())));
+                    } else {
+                        auto& clusterTopicPath = paths.emplace_back(path);
+                        clusterInfo.AdjustTopicPath(clusterTopicPath);
+                        clusterInfo.AdjustTopicClientSettings(topicSettings);
+                        futures.emplace_back(NYdb::NTopic::TTopicClient(ydbDriver, topicSettings).DescribeTopic(clusterTopicPath));
+                    }
+                    results.emplace_back(std::move(clusterInfo));
+                }
+                // XXX This produces circular dependency until the future is fired
+                // futures references allFutureDescribe
+                // lambda references futures[]
+                // allFutureDescribe contains lambda
+                auto allFutureDescribes = NThreading::WaitAll(futures);
+                return allFutureDescribes.Apply([futures = std::move(futures), paths = std::move(paths), results = std::move(results), cluster, database, path](const auto& ) mutable {
+                    TStringBuilder ex;
+                    auto addErrorHeader = [&]() {
+                        if (ex.empty()) {
+                            ex << "Failed to describe topic `" << cluster << "`.`" << path << "` in the database `" << database << "`: ";
+                        } else {
+                            ex << "; ";
+                        }
+                    };
+                    bool gotAnyTopic = false;
+                    for (size_t i = 0; i != results.size(); ++i) {
+                        auto& futureDescribe = futures[i];
+                        auto addErrorCluster = [&]() {
+                            addErrorHeader();
+                            ex << "#" << i << " (name '" << results[i].Info.Name << "' endpoint '" << results[i].Info.Endpoint << "' path `" << paths[i] << "`): ";
+                        };
+                        try {
+                            auto describeTopicResult = futureDescribe.ExtractValue();
+                            if (!describeTopicResult.IsSuccess()) {
+                                addErrorCluster();
+                                ex << describeTopicResult.GetIssues().ToString();
+                                continue;
+                            }
+                            results[i].PartitionsCount = describeTopicResult.GetTopicDescription().GetTotalPartitionsCount();
+                            gotAnyTopic = true;
+                        } catch (...) {
+                            addErrorCluster();
+                            ex << "Got exception: " << FormatCurrentException();
+                        }
+                    }
+                    if (!gotAnyTopic) {
+                        addErrorHeader();
+                        ex << "No working cluster found\n";
+                        throw yexception() << ex;
+                    }
+                    return results;
+              });
+         });
+     }
 }
 
 NPq::NConfigurationManager::TAsyncDescribePathResult TPqSession::DescribePath(const TString& cluster, const TString& database, const TString& path, const TString& token) {
@@ -98,7 +180,7 @@ NPq::NConfigurationManager::TAsyncDescribePathResult TPqSession::DescribePath(co
             return client->DescribePath(path);
         }
 
-        return GetYdbPqClient(cluster, database, *config, credentialsProviderFactory)
+        return GetYdbFederatedPqClient(cluster, database, *config, credentialsProviderFactory)
             .GetAllClusterInfo()
             .Apply([
                 ydbDriver = YdbDriver, credentialsProviderFactory,

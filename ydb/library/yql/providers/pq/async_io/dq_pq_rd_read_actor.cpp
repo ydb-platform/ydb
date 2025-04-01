@@ -151,6 +151,7 @@ struct TEvPrivate {
 };
 
 class TDqPqRdReadActor : public NActors::TActor<TDqPqRdReadActor>, public NYql::NDq::NInternal::TDqPqReadActorBase {
+    static constexpr bool StaticDiscovery = true;
 
     const ui64 PrintStatePeriodSec = 300;
     const ui64 ProcessStatePeriodSec = 1;
@@ -391,6 +392,7 @@ public:
     void UpdateSessions();
     void UpdateQueuedSize();
     void StartClusterDiscovery();
+    void StartCluster(ui32 clusterIndex);
     NYdb::NFederatedTopic::TFederatedTopicClientSettings GetFederatedTopicClientSettings() const;
     IFederatedTopicClient& GetFederatedTopicClient();
     NYdb::NTopic::TTopicClientSettings GetTopicClientSettings() const;
@@ -1186,6 +1188,30 @@ void TDqPqRdReadActor::UpdateQueuedSize() {
 }
 
 void TDqPqRdReadActor::StartClusterDiscovery() {
+    if (StaticDiscovery) {
+        if (SourceParams.FederatedClustersSize()) {
+            for (auto& federatedCluster : SourceParams.GetFederatedClusters()) {
+                auto& cluster = Clusters.emplace_back();
+                cluster.Info.Name = federatedCluster.GetName();
+                cluster.Info.Endpoint = federatedCluster.GetEndpoint();
+                cluster.Info.Path = federatedCluster.GetDatabase();
+                cluster.PartitionCount = ReadParams.GetPartitioningParams().GetTopicPartitionsCount();
+                if (cluster.PartitionCount == 0) {
+                    cluster.PartitionCount = ReadParams.GetPartitioningParams().GetTopicPartitionsCount();
+                    SRC_LOG_W("PartitionCount for offline server assumed to be " << cluster.PartitionCount);
+                }
+            }
+        } else { // old AST fallback
+            auto& cluster = Clusters.emplace_back();
+            cluster.Info.Endpoint = SourceParams.GetEndpoint();
+            cluster.Info.Path = SourceParams.GetDatabase();
+            cluster.PartitionCount = ReadParams.GetPartitioningParams().GetTopicPartitionsCount();
+        }
+        for (ui32 clusterIndex = 0; clusterIndex < Clusters.size(); ++clusterIndex) {
+            StartCluster(clusterIndex);
+        }
+        return;
+    }
     GetFederatedTopicClient()
         .GetAllTopicClusters()
         .Subscribe([
@@ -1273,6 +1299,10 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvDescribeTopicResult::TPtr& ev) {
     Y_ENSURE(Clusters[clusterIndex].PartitionCount == 0); // TODO Handle refresh
     Y_ENSURE(partitionCount >= Clusters[clusterIndex].PartitionCount);
     Clusters[clusterIndex].PartitionCount = partitionCount;
+    StartCluster(clusterIndex);
+}
+
+void TDqPqRdReadActor::StartCluster(ui32 clusterIndex) {
     if (Clusters.size() == 1 && Clusters[clusterIndex].Info.Name.empty()) {
         SRC_LOG_D("Switch to single-cluster mode");
         FederatedTopicClient.Reset();

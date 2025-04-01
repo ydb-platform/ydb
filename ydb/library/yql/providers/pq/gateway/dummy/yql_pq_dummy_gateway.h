@@ -45,6 +45,13 @@ public:
         const TString& path,
         const TString& token) override;
 
+    IPqGateway::TAsyncDescribeFederatedTopicResult DescribeFederatedTopic(
+        const TString& sessionId,
+        const TString& cluster,
+        const TString& database,
+        const TString& path,
+        const TString& token) override;
+
     NThreading::TFuture<TListStreams> ListStreams(
         const TString& sessionId,
         const TString& cluster,

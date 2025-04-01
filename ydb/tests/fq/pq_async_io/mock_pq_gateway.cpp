@@ -158,6 +158,18 @@ public:
              return NThreading::TFuture<TListStreams>{};
         }
 
+    IPqGateway::TAsyncDescribeFederatedTopicResult DescribeFederatedTopic(
+        const TString& /*sessionId*/,
+        const TString& /*cluster*/,
+        const TString& /*database*/,
+        const TString& /*path*/,
+        const TString& /*token*/) override {
+            TDescribeFederatedTopicResult result;
+            auto& cluster = result.emplace_back();
+            cluster.PartitionsCount = 1;
+            return NThreading::MakeFuture(result);
+        }
+
     void UpdateClusterConfigs(
         const TString& /*clusterName*/,
         const TString& /*endpoint*/,

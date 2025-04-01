@@ -51,21 +51,21 @@ TExprNode::TListType GetKeys(const TExprNode& settings) {
 }
 
 std::string_view GetCompression(const TExprNode& settings) {
-    if (auto children = FindSetting(settings, "compression"); !children.empty()) {
+    if (const auto children = FindSetting(settings, "compression"); !children.empty()) {
         return children.back()->Content();
     }
     return {};
 }
 
 bool GetMultipart(const TExprNode& settings) {
-    if (auto children = FindSetting(settings, "multipart"); !children.empty()) {
+    if (const auto children = FindSetting(settings, "multipart"); !children.empty()) {
         return FromString(children.back()->Content());
     }
     return false;
 }
 
 bool GetBlockOutput(const TExprNode& settings) {
-    if (auto children = FindSetting(settings, "block_output"); !children.empty()) {
+    if (const auto children = FindSetting(settings, "block_output"); !children.empty()) {
         return FromString(children.back()->Content());
     }
     return false;
@@ -613,11 +613,11 @@ public:
                 TExprContext ctx;
                 arrowSettings.SetRowType(NCommon::WriteTypeToYson(ctx.MakeType<TStructExprType>(fullRowType), NYT::NYson::EYsonFormat::Text));
 
-                if (auto maxFileSize = State_->Configuration->MaxOutputObjectSize.Get()) {
+                if (const auto maxFileSize = State_->Configuration->MaxOutputObjectSize.Get()) {
                     arrowSettings.SetMaxFileSize(*maxFileSize);
                 }
 
-                if (auto maxBlockSize = State_->Configuration->BlockSizeMemoryLimit.Get()) {
+                if (const auto maxBlockSize = State_->Configuration->BlockSizeMemoryLimit.Get()) {
                     arrowSettings.SetMaxBlockSize(*maxBlockSize);
                 }
             }

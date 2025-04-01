@@ -478,6 +478,74 @@ Y_UNIT_TEST_SUITE(Transfer)
         });
     }
 
+    Y_UNIT_TEST(NullToKeyColumn)
+    {
+        MainTestCase testCase;
+
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )");
+        testCase.CreateTopic();
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:NULL,
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )");
+
+        testCase.Write({"Message-1"});
+
+        testCase.CheckTransferStateError("Failed convert 'Key': required not null");
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+        testCase.DropTopic();
+    }
+
+    Y_UNIT_TEST(NullToColumn)
+    {
+        MainTestCase testCase;
+
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8 NOT NULL,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )");
+        testCase.CreateTopic();
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:$x._offset,
+                            Message:NULL
+                        |>
+                    ];
+                };
+            )");
+
+        testCase.Write({"Message-1"});
+
+        testCase.CheckTransferStateError("Failed convert 'Message': required not null");
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+        testCase.DropTopic();
+    }
+
     Y_UNIT_TEST(DropTransfer)
     {
         MainTestCase testCase;

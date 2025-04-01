@@ -239,10 +239,11 @@ TScheme BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav) {
     result.TableColumns.resize(keyColumns);
 
     for (const auto& [_, column] : entry.Columns) {
+        auto notNull = entry.NotNullColumns.contains(column.Name);
         if (column.KeyOrder >= 0) {
-            result.TableColumns[column.KeyOrder] = {column.Name, column.Id, column.PType, column.KeyOrder >= 0, !column.IsNotNullColumn};
+            result.TableColumns[column.KeyOrder] = {column.Name, column.Id, column.PType, column.KeyOrder >= 0, !notNull};
         } else {
-            result.TableColumns.emplace_back(column.Name, column.Id, column.PType, column.KeyOrder >= 0, !column.IsNotNullColumn);
+            result.TableColumns.emplace_back(column.Name, column.Id, column.PType, column.KeyOrder >= 0, !notNull);
         }
     }
 
@@ -260,6 +261,7 @@ TScheme BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav) {
         c.SetName(column.Name);
         c.SetId(column.Id);
         c.SetTypeId(column.PType.GetTypeId());
+        c.SetNotNull(entry.NotNullColumns.contains(column.Name));
 
         if (NScheme::NTypeIds::IsParametrizedType(column.PType.GetTypeId())) {
             NScheme::ProtoFromTypeInfo(column.PType, "", *c.MutableTypeInfo());
@@ -295,7 +297,7 @@ public:
     }
 
     virtual NKqp::IDataBatcherPtr CreateDataBatcher() = 0;
-    virtual bool Flush() = 0;
+    virtual std::pair<bool, TString> Flush() = 0;
 
     virtual TString Handle(TEvents::TEvCompleted::TPtr& ev) = 0;
 
@@ -326,7 +328,7 @@ public:
         return NKqp::CreateColumnDataBatcher(Scheme.ColumnsMetadata, Scheme.WriteIndex);
     }
 
-    bool Flush() override {
+    std::pair<bool, TString> Flush() override {
         auto doWrite = [&]() {
             Issues = std::make_shared<NYql::TIssues>();
 
@@ -336,11 +338,11 @@ public:
 
         if (Data) {
             doWrite();
-            return true;
+            return {true, {}};
         }
 
         if (!Batcher || !Batcher->GetMemory()) {
-            return false;
+            return {false, {}};
         }
 
         NKqp::IDataBatchPtr batch = Batcher->Build();
@@ -349,8 +351,30 @@ public:
         Data = reinterpret_pointer_cast<arrow::RecordBatch>(data);
         Y_VERIFY(Data);
 
+        if (const auto error = Validate()) {
+            return {false, error};
+        }
+
         doWrite();
-        return true;
+        return {true, {}};
+    }
+
+    TString Validate() {
+        for (const auto& column : Scheme.ColumnsMetadata) {
+            if (column.GetNotNull()) {
+                const auto values = Data->GetColumnByName(column.GetName());
+                if (!values) {
+                    continue;
+                }
+
+                for (ssize_t i = 0; i < values->length(); ++i) {
+                    if (values->IsNull(i)) {
+                        return TStringBuilder() << "Failed convert '" << column.GetName() << "': required not null";
+                    }
+                }
+            }
+        }
+        return {};
     }
 
     TString Handle(TEvents::TEvCompleted::TPtr& ev) override {
@@ -385,7 +409,7 @@ public:
         return NKqp::CreateRowDataBatcher(ColumnsMetadata, WriteIndex);
     }
 
-    bool Flush() override {
+    std::pair<bool, TString> Flush() override {
         Y_ABORT("Unsupported");
     }
 
@@ -657,11 +681,14 @@ private:
             }
         }
 
-        if (TableState->BatchSize() >= BatchSizeBytes || *LastWriteTime < TInstant::Now() - FlushInterval) {
-            if (TableState->Flush()) {
+        if (!ProcessingError && (TableState->BatchSize() >= BatchSizeBytes || *LastWriteTime < TInstant::Now() - FlushInterval)) {
+            auto [result, error] = TableState->Flush();
+            if (result) {
                 LastWriteTime.reset();
                 return Become(&TThis::StateWrite);
-            } 
+            } else if (error) {
+                return LogCritAndLeave(error);
+            }
         }
         
         if (ProcessingError) {
@@ -673,13 +700,18 @@ private:
     }
 
     void TryFlush() {
-        if (LastWriteTime && LastWriteTime < TInstant::Now() - FlushInterval && TableState->Flush()) {
-            LastWriteTime.reset();
+        if (LastWriteTime && LastWriteTime < TInstant::Now() - FlushInterval) {
+            auto [result, error] = TableState->Flush();
             WakeupScheduled = false;
-            Become(&TThis::StateWrite);
-        } else {
-            Schedule(FlushInterval, new TEvents::TEvWakeup(ui32(ETag::FlushTimeout)));
+            if (result) {
+                LastWriteTime.reset();
+                return Become(&TThis::StateWrite);
+            } else if (error) {
+                return LogCritAndLeave(error);
+            }
         }
+
+        Schedule(FlushInterval, new TEvents::TEvWakeup(ui32(ETag::FlushTimeout)));
     }
 
 private:

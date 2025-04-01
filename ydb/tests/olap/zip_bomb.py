@@ -18,7 +18,6 @@ class TestZipBomb(object):
             column_shard_config={},
             additional_log_configs={'MEMORY_CONTROLLER': LogLevels.INFO, "TX_COLUMNSHARD": LogLevels.DEBUG},
             extra_feature_flags={'enable_write_portions_on_insert': True},
-            memory_controller_config={'hard_limit_bytes': 12 * 1024 * 1024 * 1024},
             static_pdisk_size=10 * 1024 * 1024,
             dynamic_pdisk_size=5 * 1024 * 1024
         ))

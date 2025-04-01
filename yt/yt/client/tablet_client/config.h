@@ -104,6 +104,9 @@ public:
     std::optional<int> MaxSyncReplicaCount;
     std::optional<int> MinSyncReplicaCount;
 
+    std::optional<int> MaxSyncQueueReplicaCount;
+    std::optional<int> MinSyncQueueReplicaCount;
+
     TDuration SyncReplicaLagThreshold;
 
     // TODO(akozhikhov): We probably do not need these in this per-table config.
@@ -113,7 +116,7 @@ public:
     bool EnablePreloadStateCheck;
     TDuration IncompletePreloadGracePeriod;
 
-    std::tuple<int, int> GetEffectiveMinMaxReplicaCount(int replicaCount) const;
+    std::tuple<int, int> GetEffectiveMinMaxReplicaCount(ETableReplicaContentType contentType, int replicaCount) const;
 
     REGISTER_YSON_STRUCT(TReplicatedTableOptions);
 

@@ -1268,6 +1268,15 @@ message TRestoreTask {
     }
 
     optional bool ValidateChecksums = 7; // currently available for s3
+
+    message TEncryptionSettings {
+        optional bytes IV = 1;
+        oneof Key {
+            Ydb.Export.EncryptionSettings.SymmetricKey SymmetricKey = 2;
+        }
+    }
+
+    optional TEncryptionSettings EncryptionSettings = 8;
 }
 
 message TPersQueueGroupAllocate {

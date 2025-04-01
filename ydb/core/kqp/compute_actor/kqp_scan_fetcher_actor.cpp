@@ -111,7 +111,7 @@ void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanInitActor::TPtr& 
     }
     auto& msg = ev->Get()->Record;
     auto scanActorId = ActorIdFromProto(msg.GetScanActorId());
-    InFlightShards.RegisterScannerActor(msg.GetTabletId(), msg.GetGeneration(), scanActorId);
+    InFlightShards.RegisterScannerActor(msg.GetTabletId(), msg.GetGeneration(), scanActorId, msg.GetAllowPings());
 }
 
 void TKqpScanFetcherActor::HandleExecute(TEvKqpCompute::TEvScanData::TPtr& ev) {

@@ -1,0 +1,56 @@
+name: Create issues for muted tests
+
+on:
+  pull_request_review:
+    types:
+      - submitted
+  workflow_dispatch:
+    inputs:
+        pr_number: 
+            description: 'The pull request number'
+            required: true
+            type: number
+
+env:
+  GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
+  MUTED_YA_FILE_PATH: .github/scripts/tests/muted_ya.txt
+
+jobs:
+  create-issues-for-muted-tests:
+    runs-on: ubuntu-latest
+    if: |
+        github.event.review.state == 'approved' && 
+        contains(github.event.pull_request.labels.*.name, 'mute-unmute') || 
+        github.event_name == 'workflow_dispatch'
+
+    steps:
+      - name: Set environment variables for branches
+        run: |
+          echo "BRANCH_FOR_PR=${{ github.event.pull_request.head.ref || github.head_ref }}" >> $GITHUB_ENV
+          echo "BASE_BRANCH=${{ github.event.pull_request.base.ref || github.base_ref }}" >> $GITHUB_ENV
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+            ref: ${{ github.event.pull_request.head.ref || github.head_ref }}
+
+      - name: Install dependencies
+        run: |
+            python -m pip install --upgrade pip
+            pip install ydb[yc] PyGithub
+
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+            ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+
+      - name: Create issues for muted tests
+        id: create_issues
+        run: |
+            .github/scripts/tests/create_new_muted_ya.py create_issues --file_path=${{ github.workspace }}/${{ env.MUTED_YA_FILE_PATH }} 
+ 
+      - name: Add issues to PR
+        env:
+            GITHUB_TOKEN: ${{ env.GH_TOKEN }}
+        run: |
+            python .github/scripts/create_or_update_pr.py append_pr_body --pr_number=${{ github.event.pull_request.number || github.event.inputs.pr_number  }} --body=issues_info.txt

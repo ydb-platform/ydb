@@ -639,13 +639,7 @@ void RegisterYtFileMkqlCompilers(NCommon::TMkqlCallableCompilerBase& compiler) {
                     output.Ref(), itemsCount, ctx, true);
             }
 
-            return ctx.ProgramBuilder.WideToBlocks(ctx.ProgramBuilder.FromFlow(ctx.ProgramBuilder.ExpandMap(ctx.ProgramBuilder.ToFlow(values), [&](TRuntimeNode item) -> TRuntimeNode::TList {
-                TRuntimeNode::TList result;
-                for (auto& origItem : origItemStructType->GetItems()) {
-                    result.push_back(ctx.ProgramBuilder.Member(item, origItem->GetName()));
-                }
-                return result;
-            })));
+            return ctx.ProgramBuilder.ListToBlocks(values);
         });
 
     compiler.AddCallable({TYtSort::CallableName(), TYtCopy::CallableName(), TYtMerge::CallableName()},

@@ -42,6 +42,9 @@ struct TPartitionWorkZone {
     bool PositionInBody(ui64 offset, ui32 partNo) const;
     bool PositionInHead(ui64 offset, ui32 partNo) const;
 
+    bool IsEmpty() const;
+    const TDataKey* GetLastKey() const;
+
     void NewPartitionedBlob(const TPartitionId& partition,
                             const ui64 offset,
                             const TString& sourceId,

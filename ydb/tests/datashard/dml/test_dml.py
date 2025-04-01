@@ -78,10 +78,10 @@ class TestDML(TestBase):
         if ttl != "":
             number_of_columns += 1
         for count in range(1, number_of_columns + 1):
-            self.create_insetr(table_name, count, all_types,
+            self.create_insert(table_name, count, all_types,
                                pk_types, index, ttl)
 
-    def create_insetr(self, table_name: str, value: int, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
+    def create_insert(self, table_name: str, value: int, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
         insert_sql = f"""
             INSERT INTO {table_name}(
                 {", ".join(["pk_" + cleanup_type_name(type_name) for type_name in pk_types.keys()])}{", " if len(all_types) != 0 else ""}

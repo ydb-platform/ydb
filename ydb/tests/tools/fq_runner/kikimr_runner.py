@@ -518,6 +518,7 @@ class YqTenant(BaseTenant):
             if len(self.config_generator.dc_mapping) > 0:
                 fq_config['nodes_manager']['use_data_center'] = True
             fq_config['enable_task_counters'] = True
+            fq_config['task_controller'] = {}
             fq_config['task_controller']['ping_period'] = "5s"      # task_lease_ttl / 4
             fq_config['task_controller']['aggr_period'] = "1s"
         else:

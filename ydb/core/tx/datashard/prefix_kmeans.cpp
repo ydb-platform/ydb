@@ -87,7 +87,7 @@ protected:
     ui32 RetryCount = 0;
 
     TActorId Uploader;
-    TUploadLimits Limits;
+    TIndexBuildScanSettings ScanSettings;
 
     NTable::TTag EmbeddingTag;
     TTags ScanTags;
@@ -286,10 +286,10 @@ protected:
             return;
         }
 
-        if (RetryCount < Limits.MaxUploadRowsRetryCount && UploadStatus.IsRetriable()) {
+        if (RetryCount < ScanSettings.GetMaxBatchRetries() && UploadStatus.IsRetriable()) {
             LOG_N("Got retriable error, " << Debug() << " " << UploadStatus.ToString());
 
-            ctx.Schedule(Limits.GetTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
+            ctx.Schedule(GetTimeoutExponentialBackoff(RetryCount, ScanSettings), new TEvents::TEvWakeup());
             return;
         }
 
@@ -305,7 +305,7 @@ protected:
 
     bool ShouldWaitUpload()
     {
-        if (!LevelBuf.IsReachLimits(Limits) && !PostingBuf.IsReachLimits(Limits) && !PrefixBuf.IsReachLimits(Limits)) {
+        if (!HasReachedLimits(LevelBuf, ScanSettings) && !HasReachedLimits(PostingBuf, ScanSettings) && !HasReachedLimits(PrefixBuf, ScanSettings)) {
             return false;
         }
 
@@ -317,7 +317,7 @@ protected:
             || TryUpload(PostingBuf, PostingTable, PostingTypes, true)
             || TryUpload(PrefixBuf, PrefixTable, PrefixTypes, true);
 
-        return !LevelBuf.IsReachLimits(Limits) && !PostingBuf.IsReachLimits(Limits) && !PrefixBuf.IsReachLimits(Limits);
+        return !HasReachedLimits(LevelBuf, ScanSettings) && !HasReachedLimits(PostingBuf, ScanSettings) && !HasReachedLimits(PrefixBuf, ScanSettings);
     }
 
     void UploadImpl()
@@ -359,7 +359,7 @@ protected:
             return true;
         }
 
-        if (!buffer.IsEmpty() && (!byLimit || buffer.IsReachLimits(Limits))) {
+        if (!buffer.IsEmpty() && (!byLimit || HasReachedLimits(buffer, ScanSettings))) {
             buffer.FlushTo(UploadBuf);
             InitUpload(table, types);
             return true;
@@ -471,7 +471,7 @@ public:
 
         if (IsFirstPrefixFeed && IsPrefixRowsValid) {
             PrefixRows.AddRow(TSerializedCellVec{key}, TSerializedCellVec::Serialize(*row));
-            if (PrefixRows.IsReachLimits(Limits)) {
+            if (HasReachedLimits(PrefixRows, ScanSettings)) {
                 PrefixRows.Clear();
                 IsPrefixRowsValid = false;
             }

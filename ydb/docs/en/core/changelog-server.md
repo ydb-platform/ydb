@@ -16,7 +16,7 @@ Release date:
   * [volatile distributed transactions](./contributor/datashard-distributed-txs.md#volatile-transactions)
  
 
-* Added the ability to [read and write to a topic](./reference/kafka-api/examples.md#primery-rabot-s-kafka-api) using the Kafka API without authentication.
+* Added the ability to [read and write to a topic](./reference/kafka-api/examples.md#kafka-api-usage-examples) using the Kafka API without authentication.
 
 #### Performance
 

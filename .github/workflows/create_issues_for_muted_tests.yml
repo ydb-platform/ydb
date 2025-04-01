@@ -13,7 +13,7 @@ on:
 
 env:
   GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
-  MUTED_YA_FILE_PATH: .github/scripts/tests/muted_ya.txt
+  MUTED_YA_FILE_PATH: .github/config/muted_ya.txt
 
 jobs:
   create-issues-for-muted-tests:
@@ -46,11 +46,13 @@ jobs:
 
       - name: Create issues for muted tests
         id: create_issues
+        env:
+          GITHUB_TOKEN: ${{ env.GH_TOKEN }}
         run: |
             .github/scripts/tests/create_new_muted_ya.py create_issues --file_path=${{ github.workspace }}/${{ env.MUTED_YA_FILE_PATH }} 
  
       - name: Add issues to PR
         env:
-            GITHUB_TOKEN: ${{ env.GH_TOKEN }}
+          GITHUB_TOKEN: ${{ env.GH_TOKEN }}
         run: |
             python .github/scripts/create_or_update_pr.py append_pr_body --pr_number=${{ github.event.pull_request.number || github.event.inputs.pr_number  }} --body=issues_info.txt

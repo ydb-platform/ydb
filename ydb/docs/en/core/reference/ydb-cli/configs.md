@@ -23,7 +23,7 @@ This section contains commands for working with the {{ ydb-short-name }} cluster
 {{ ydb-cli }} admin cluster config genereate
 # Initialize a directory with the configuration, using the path to the configuration file
 {{ ydb-cli }} admin node config init --config-dir <path_to_directory> --from-config <path_to_configuration_file>
-# Initialize directory with configuration, using configuration from the cluster
+# Initialize a directory with the configuration, using the configuration from the cluster
 {{ ydb-cli }} admin node config init --config-dir <path_to_directory> --seed-node <cluster_node_endpoint>
 # Fetch all temporary configurations of the cluster
 {{ ydb-cli }} admin volatile-config fetch --all --output-directory <dir>

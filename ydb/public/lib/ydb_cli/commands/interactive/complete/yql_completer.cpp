@@ -1,6 +1,9 @@
 #include "yql_completer.h"
 
 #include <yql/essentials/sql/v1/complete/sql_complete.h>
+#include <yql/essentials/sql/v1/complete/name/static/name_service.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_pure_ansi/lexer.h>
 
 namespace NYdb::NConsoleClient {
 
@@ -38,8 +41,19 @@ namespace NYdb::NConsoleClient {
     };
 
     IYQLCompleter::TPtr MakeYQLCompleter() {
-        return IYQLCompleter::TPtr(
-            new TYQLCompleter(NSQLComplete::MakeSqlCompletionEngine()));
+        NSQLTranslationV1::TLexers lexers;
+        lexers.Antlr4Pure = NSQLTranslationV1::MakeAntlr4PureLexerFactory();
+        lexers.Antlr4PureAnsi = NSQLTranslationV1::MakeAntlr4PureAnsiLexerFactory();
+
+        auto names = NSQLComplete::MakeDefaultNameSet();
+        NSQLComplete::INameService::TPtr service = MakeStaticNameService(std::move(names));
+
+        return IYQLCompleter::TPtr(new TYQLCompleter(
+            NSQLComplete::MakeSqlCompletionEngine([lexers = std::move(lexers)](bool ansi) {
+                return NSQLTranslationV1::MakeLexer(
+                    lexers, ansi, /* antlr4 = */ true, 
+                    NSQLTranslationV1::ELexerFlavor::Pure);
+            }, std::move(service))));
     }
 
 } // namespace NYdb::NConsoleClient

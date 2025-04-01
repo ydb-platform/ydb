@@ -491,7 +491,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     STORE = COLUMN
                 );
             )");
-        testCase.CreateTopic();
+        testCase.CreateTopic(1);
         testCase.CreateTransfer(R"(
                 $l = ($x) -> {
                     return [
@@ -505,7 +505,7 @@ Y_UNIT_TEST_SUITE(Transfer)
 
         testCase.Write({"Message-1"});
 
-        testCase.CheckTransferStateError("Failed convert 'Key': required not null");
+        testCase.CheckTransferStateError("Error transform message partition 0 offset 0: The value of the 'Key' column must be non-NULL");
 
         testCase.DropTransfer();
         testCase.DropTable();
@@ -525,7 +525,7 @@ Y_UNIT_TEST_SUITE(Transfer)
                     STORE = COLUMN
                 );
             )");
-        testCase.CreateTopic();
+        testCase.CreateTopic(1);
         testCase.CreateTransfer(R"(
                 $l = ($x) -> {
                     return [
@@ -539,7 +539,7 @@ Y_UNIT_TEST_SUITE(Transfer)
 
         testCase.Write({"Message-1"});
 
-        testCase.CheckTransferStateError("Failed convert 'Message': required not null");
+        testCase.CheckTransferStateError("Error transform message partition 0 offset 0: The value of the 'Message' column must be non-NULL");
 
         testCase.DropTransfer();
         testCase.DropTable();

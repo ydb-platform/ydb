@@ -72,7 +72,6 @@ int main(int argc, const char* argv[]) {
     TFileInput fi(inputFileName);
     TFileOutput fo(outputFileName);
 
-    ./ya ide vscode --cpp campus/hashing-sorting/arun campus/hashing-sorting/agen campus/hashing-sorting/adump campus/hist_shuffle -P=/home/vafilonov/vscode-projects/campus
     if (algo == "mem-lp") {
         aggr_memory_lp_ht(fi, fo, rows, keyCount, cardinality);
     } else if (algo == "mem-rh") {

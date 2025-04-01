@@ -124,7 +124,10 @@ public:
         AddHandler(1, &TCoTake::Match, HNDL(PropagatePrecomuteTake<true>));
         AddHandler(1, &TCoFlatMap::Match, HNDL(PropagatePrecomuteFlatmap<true>));
         AddHandler(1, &TKqpWriteConstraint::Match, HNDL(BuildWriteConstraint<true>));
+        AddHandler(1, &TKqpWriteConstraint::Match, HNDL(BuildWriteConstraint<true>));
+        AddHandler(1, &TKqpReadOlapTableRanges::Match, HNDL(AddColumnForEmptyColumnsOlapRead));
 
+        
         AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpReadTable));
         AddHandler(2, &TDqStage::Match, HNDL(RewriteKqpLookupTable));
         AddHandler(2, &TKqlUpsertRows::Match, HNDL(RewriteReturningUpsert));
@@ -522,6 +525,13 @@ protected:
     {
         TExprBase output = KqpBuildWriteConstraint(node, ctx, optCtx, *getParents(), IsGlobal);
         DumpAppliedRule("BuildWriteConstraint", node.Ptr(), output.Ptr(), ctx);
+        return output;
+    }
+
+    TMaybeNode<TExprBase> AddColumnForEmptyColumnsOlapRead(TExprBase node, TExprContext& ctx)
+    {
+        TExprBase output = KqpAddColumnForEmptyColumnsOlapRead(node, ctx, KqpCtx);
+        DumpAppliedRule("AddColumnForEmptyColumnsOlapRead", node.Ptr(), output.Ptr(), ctx);
         return output;
     }
 

@@ -398,11 +398,11 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
 
     Y_ABORT_UNLESS(EndOffset == WorkZone.Head.GetNextOffset());
 
+    // a) !CompactedKeys.empty() && NewHead.PackedSize == 0
+    // b) !CompactedKeys.empty() && NewHead.PackedSize != 0
+    // c)  CompactedKeys.empty() && NewHead.PackedSize != 0
     if (!WorkZone.CompactedKeys.empty() || WorkZone.Head.PackedSize == 0) { //has compactedkeys or head is already empty
-        WorkZone.Head.PackedSize = 0;
-        WorkZone.Head.Offset = WorkZone.NewHead.Offset;
-        WorkZone.Head.PartNo = WorkZone.NewHead.PartNo; //no partNo at this point
-        WorkZone.Head.ClearBatches();
+        WorkZone.SyncHeadFromNewHead();
     }
 
     WorkZone.SyncDataKeysBody(ctx.Now(),

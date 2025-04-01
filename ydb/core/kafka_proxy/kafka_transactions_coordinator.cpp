@@ -49,6 +49,12 @@ namespace NKafka {
             ctx.Send(txnActorId, new TEvents::TEvPoison());
             KAFKA_LOG_D(TStringBuilder() << "Sent poison pill to transaction actor for transactionalId " << transactionalId);
         }
+        PassAway();
+    };
+
+    void TKafkaTransactionsCoordinator::PassAway() {
+        KAFKA_LOG_D("Killing myself");
+        TBase::PassAway();
     };
 
     // Validates producer's id and epoch

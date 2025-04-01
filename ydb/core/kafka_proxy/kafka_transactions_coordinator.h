@@ -37,6 +37,8 @@ namespace NKafka {
             TStringBuilder LogPrefix() const {
                 return TStringBuilder() << "KafkaTransactionsCoordinator ";
             }
+
+            void PassAway() override;
         private:
             STFUNC(StateWork) {
                 switch (ev->GetTypeRewrite()) {

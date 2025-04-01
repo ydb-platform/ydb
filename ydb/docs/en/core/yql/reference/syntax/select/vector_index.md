@@ -46,6 +46,6 @@ SELECT ...
   SELECT series_id, title, info, release_date, views, uploaded_user_id, Knn::InnerProductSimilarity(embedding, $target) as similarity
       FROM series VIEW views_index2
       WHERE release_date = "2025-03-31"
-      ORDER BY similarity DESC
+      ORDER BY Knn::InnerProductSimilarity(embedding, $TargetEmbedding) DESC
       LIMIT 10
   ```

@@ -159,7 +159,7 @@ A **secondary index** is an additional data structure used to locate rows in a t
 
 #### Vector Index {#vector-index}
 
-A **vector index** is an additional data structure used to speed up the approximate vector search, typically when the data is large enough that the [index-less approach](todo mbkkt ref) does not work satisfactorily. Unlike the primary index, vector indexes are managed independently of the underlying table data. Thus, a table can have multiple vector indexes for different scenarios. The capabilities of {{ ydb-short-name }} regarding vector indexes are described in a separate article [{#T}](vector_indexes.md).
+A **vector index** is an additional data structure used to speed up the approximate vector search, typically when the data is large enough that the [index-less approach](../yql/reference/udf/list/knn.md) does not work satisfactorily. Unlike the primary index, vector indexes are managed independently of the underlying table data. Thus, a table can have multiple vector indexes for different scenarios. The capabilities of {{ ydb-short-name }} regarding vector indexes are described in a separate article [{#T}](vector_indexes.md).
 
 #### Column family {#column-family}
 

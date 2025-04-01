@@ -1,10 +1,12 @@
-# ИНДЕКС
+# ВЕКТОРНЫЙ ИНДЕКС
 
 {% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
 
 {% note warning %}
 
 Создание пустой таблицы с векторным индексом в настоящее время не имеет практического смысла, так как модификация данных в таблицах с векторными индексами пока не поддерживается.
+
+Следует использовать `ALTER TABLE ... ADD INDEX`  для добавления векторного индекса в существующую таблицу.  
 
 {% endnote %}
 
@@ -27,13 +29,12 @@ CREATE TABLE table_name (
 * **покрывающие_колонки** - дополнительные колонки таблицы, сохраняемые в индексе для возможности их извлечения без обращения к основной таблице
 * **параметры_индекса** - список параметров в формате ключ-значение:
   * общие параметры для всех векторных индексов:
-    * `dimension` - размерность вектора эмбеддинга
-    * `type` - тип значений вектора (`float`, `uint8`, `int8`, `bit`)
-    * `distance` - функция расстояния (`cosine`, `manhattan`, `euclidean`)
-    * `similarity` - функция схожести (`inner_product`, `cosine`)
+    * `dimension` - размерность вектора эмбеддинга (<= 16384);
+    * `type` - тип значений вектора (`float`, `uint8`, `int8`, `bit`);
+    * `distance` - функция расстояния (`cosine`, `manhattan`, `euclidean`) или `similarity` - функция схожести (`inner_product`, `cosine`).
   * специфичные параметры для `vector_kmeans_tree`:
-    * `clusters` - параметр k для алгоритма k-means на каждом уровне
-    * `levels` - количество уровней в дереве
+    * `clusters` - количество центроидов для алгоритма k-means (значения > 1000 могут ухудшить производительность);
+    * `levels` - количество уровней в дереве.
 
 
 {% note warning %}
@@ -53,12 +54,14 @@ CREATE TABLE table_name (
 
 ```yql
 CREATE TABLE user_articles (
-    atricle_id Uint64,
+    article_id Uint64,
     user String,
     title String,
     text String,
     embedding String,
-    INDEX emb_cosine_idx GLOBAL SYNC USING vector_kmeans_tree ON (user, embedding) COVER (title, text) WITH (dimension=512, type="float", distance="cosine", clusters=128, levels=2),
+    INDEX emb_cosine_idx GLOBAL SYNC USING vector_kmeans_tree 
+    ON (user, embedding) COVER (title, text) 
+    WITH (dimension=512, type="float", distance="cosine", clusters=128, levels=2),
     PRIMARY KEY (article_id)
 )
 ```

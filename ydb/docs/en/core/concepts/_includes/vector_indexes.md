@@ -7,9 +7,26 @@
 Vector indexes in {{ ydb-short-name }}:
 
 * Solve nearest neighbor search problems using similarity or distance functions
-* Currently don't support modifying rows in tables with vector indexes (planned for future releases)
 * Support multiple distance/similarity functions: "inner_product", "cosine" similarity and "cosine", "euclidean", "manhattan" distance
 * Currently implement a single index type: `vector_kmeans_tree`
+
+### vector_kmeans_tree structure {#kmeans-structure}
+
+The `vector_kmeans_tree` index implements a hierarchical clustering structure. Its organization includes:
+
+1. Hierarchical clustering:
+  - The index builds multiple levels of k-means clusters
+  - At each level, vectors are partitioned into specified number of clusters in power of level
+  - First level clusters the entire dataset
+  - Subsequent levels recursively cluster each parent cluster's contents
+
+2. Search process:
+  - During queries, the index examines only the most promising clusters
+  - This "pruning" avoids exhaustive search through all vectors
+
+3. Parameters:
+  - `levels`: Controls search depth (typically 1-3)
+  - `clusters`: Determines search breadth at each level (typically 64-512)
 
 ## Vector index types {#types}
 
@@ -66,14 +83,12 @@ ALTER TABLE my_table
 Vector indexes can be created:
 
 * When creating a table with the YQL CREATE TABLE statement
-* Added to an existing table with the YQL ALTER TABLE statement
+* 
 
-Required parameters for vector_kmeans_tree:
-* distance or similarity: The function to use (e.g., "cosine")
-* type: Data type of vector elements ("float", "int8", "uint8")
-* dimension: Dimensionality of vectors (<= 16384)
-* levels: Number of tree levels
-* clusters: Number of clusters per level (values > 1000 may impact performance)
+* When creating a table with the YQL [CREATE TABLE](../../yql/reference/syntax/create_table/vector_index.md) statement
+* Added to an existing table with the YQL [ALTER TABLE](../../yql/reference/syntax/alter_table/indexes.md) statement
+
+More about vector index parameters you can read in [CREATE TABLE](../../yql/reference/syntax/create_table/vector_index.md)
 
 ## Using vector indexes {#usage}
 
@@ -99,6 +114,6 @@ Vector indexes are particularly useful for:
 
 ## Limitations {#limitations}
 
-Vector indexes currently don't support modifying rows in indexed tables
-
-Bit vector type currently not supported
+Currently not supported:
+* modifying rows in indexed tables;
+* bit vector type.

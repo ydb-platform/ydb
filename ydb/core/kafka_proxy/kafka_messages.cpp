@@ -4612,19 +4612,12 @@ i32 TSyncGroupResponseData::Size(TKafkaVersion _version) const {
     NPrivate::Size<ErrorCodeMeta>(_collector, _version, ErrorCode);
     NPrivate::Size<ProtocolTypeMeta>(_collector, _version, ProtocolType);
     NPrivate::Size<ProtocolNameMeta>(_collector, _version, ProtocolName);
-    NPrivate::TSizeCollector _assignmentCollector;
-    NPrivate::Size<AssignmentMeta>(_assignmentCollector, _version, Assignment);
     NPrivate::Size<AssignmentMeta>(_collector, _version, Assignment);
     
     if (NPrivate::VersionCheck<MessageMeta::FlexibleVersions.Min, MessageMeta::FlexibleVersions.Max>(_version)) {
         _collector.Size += NPrivate::SizeOfUnsignedVarint(_collector.NumTaggedFields);
     }
-    auto useVarintSize = _version > 3;
-    if (useVarintSize) {
-        return _collector.Size + NPrivate::SizeOfUnsignedVarint(_assignmentCollector.Size + 1);
-    } else {
-        return _collector.Size + sizeof(TKafkaInt32);
-    }
+    return _collector.Size;
 }
 
 

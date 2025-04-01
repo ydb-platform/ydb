@@ -780,7 +780,7 @@ class TRealBlockDevice : public IBlockDevice {
                             LWPROBE(PDiskDeviceTrimDuration, Device.GetPDiskId(), duration, op->GetOffset());
                         }
                         completion->SetResult(EIoResult::Ok);
-                        completion->Exec(PCtx->ActorSystem);
+                        completion->Exec(Device.PCtx->ActorSystem);
                         Device.IoContext->DestroyAsyncIoOperation(op);
                     }
                 } else {

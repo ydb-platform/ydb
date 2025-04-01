@@ -436,7 +436,7 @@ void TPDisk::CheckLogCanary(ui8* sectorData, ui32 chunkIdx, ui64 sectorIdx) cons
                 sectorData + Format.SectorSize - CanarySize - sizeof(TDataSectorFooter));
         if (readCanary != Canary) {
             TStringStream ss;
-            ss << PCtx->PDiskLogPrefix << " Failed log canary at chunkIdx# " << chunkIdx
+            ss << PCtx->PDiskLogPrefix << "Failed log canary at chunkIdx# " << chunkIdx
                 << " sectorIdx# " << sectorIdx << " sectorOffset# " << Format.Offset(chunkIdx, sectorIdx)
                 << " read canary# " << readCanary << " expected canary# " << Canary;
             P_LOG(PRI_ERROR, BPD01, ss.Str());
@@ -493,7 +493,7 @@ bool TPDisk::ReleaseUnusedLogChunks(TCompletionEventSender *completion) {
                 (OwnerId, ui32(state.OwnerId)),
                 (NewOwnerId, ui32(OwnerUnallocated)));
         Y_VERIFY_S(state.OwnerId == OwnerSystem, PCtx->PDiskLogPrefix
-                << " Unexpected ownerId# " << ui32(state.OwnerId));
+                << "Unexpected ownerId# " << ui32(state.OwnerId));
         state.CommitState = TChunkState::FREE;
         state.OwnerId = OwnerUnallocated;
         Mon.LogChunks->Dec();
@@ -1061,7 +1061,7 @@ TVector<TChunkIdx> TPDisk::LockChunksForOwner(TOwner owner, const ui32 count, TS
         Y_VERIFY_S(state.OwnerId == OwnerUnallocated
                 || state.OwnerId == OwnerUnallocatedTrimmed
                 || state.CommitState == TChunkState::FREE,
-            PCtx->PDiskLogPrefix << " chunkIdx# " << chunkIdx << " desired ownerId# " << owner
+            PCtx->PDiskLogPrefix << "chunkIdx# " << chunkIdx << " desired ownerId# " << owner
             << " state# " << state.ToString());
         P_LOG(PRI_INFO, BPD01, "locked chunk for owner",
                 (ChunkIdx, chunkIdx),
@@ -1304,7 +1304,7 @@ TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const 
         Y_VERIFY_S(state.OwnerId == OwnerUnallocated
                 || state.OwnerId == OwnerUnallocatedTrimmed
                 || state.CommitState == TChunkState::FREE,
-            PCtx->PDiskLogPrefix << " chunkIdx# " << chunkIdx << " desired ownerId# " << req->Owner
+            PCtx->PDiskLogPrefix << "chunkIdx# " << chunkIdx << " desired ownerId# " << req->Owner
             << " state# " << state.ToString());
         state.Nonce = chunkNonce;
         state.CurrentNonce = chunkNonce;
@@ -1415,7 +1415,7 @@ void TPDisk::ChunkForget(TChunkForget &evChunkForget) {
                         break;
                     default:
                         Y_FAIL_S(PCtx->PDiskLogPrefix
-                                << " ChunkForget with in flight, ownerId# " << (ui32)evChunkForget.Owner
+                                << "ChunkForget with in flight, ownerId# " << (ui32)evChunkForget.Owner
                                 << " chunkIdx# " << chunkIdx << " unexpected commitState# " << state.CommitState);
                 }
             } else {
@@ -1430,7 +1430,7 @@ void TPDisk::ChunkForget(TChunkForget &evChunkForget) {
                         break;
                     case TChunkState::DATA_DECOMMITTED:
                         Y_VERIFY_S(state.CommitsInProgress == 0, PCtx->PDiskLogPrefix
-                                << " chunkIdx# " << chunkIdx << " state# " << state.ToString());
+                                << "chunkIdx# " << chunkIdx << " state# " << state.ToString());
                         P_LOG(PRI_INFO, BPD01, "chunk was forgotten",
                                 (ChunkIdx, chunkIdx),
                                 (OldOwner, (ui32)state.OwnerId),
@@ -1443,7 +1443,7 @@ void TPDisk::ChunkForget(TChunkForget &evChunkForget) {
                         break;
                     default:
                         Y_FAIL_S(PCtx->PDiskLogPrefix
-                                << " ChunkForget, ownerId# " << (ui32)evChunkForget.Owner
+                                << "ChunkForget, ownerId# " << (ui32)evChunkForget.Owner
                                 << " chunkIdx# " << chunkIdx << " unexpected commitState# " << state.CommitState);
                 }
             }
@@ -2050,7 +2050,7 @@ void TPDisk::ForceDeleteChunk(TChunkIdx chunkIdx) {
         // Chunk will be freed in TPDisk::DeleteChunk()
         break;
     default:
-        Y_FAIL_S(PCtx->PDiskLogPrefix << " ForceDeleteChunk, ownerId# " << owner
+        Y_FAIL_S(PCtx->PDiskLogPrefix << "ForceDeleteChunk, ownerId# " << owner
                 << " chunkIdx# " << chunkIdx << " unexpected commitState# " << state.CommitState);
         break;
     }
@@ -2363,7 +2363,7 @@ void TPDisk::TrimAllUntrimmedChunks() {
     while (ui32 idx = Keeper.PopUntrimmedFreeChunk()) {
         BlockDevice->TrimSync(Format.ChunkSize, idx * Format.ChunkSize);
         Y_VERIFY_S(ChunkState[idx].OwnerId == OwnerUnallocated || ChunkState[idx].OwnerId == OwnerUnallocatedTrimmed,
-                PCtx->PDiskLogPrefix << " Unexpected ownerId# " << ui32(ChunkState[idx].OwnerId));
+                PCtx->PDiskLogPrefix << "Unexpected ownerId# " << ui32(ChunkState[idx].OwnerId));
         ChunkState[idx].OwnerId = OwnerUnallocatedTrimmed;
         Keeper.PushTrimmedFreeChunk(idx);
     }
@@ -2485,20 +2485,20 @@ void TPDisk::TryTrimChunk(bool prevDone, ui64 trimmedSize, const NWilson::TSpan&
         if (ChunkBeingTrimmed) {
             Y_VERIFY_S(ChunkState[ChunkBeingTrimmed].OwnerId == OwnerUnallocated
                     || ChunkState[ChunkBeingTrimmed].OwnerId == OwnerUnallocatedTrimmed, PCtx->PDiskLogPrefix
-                    << " Unexpected ownerId# " << ui32(ChunkState[ChunkBeingTrimmed].OwnerId));
+                    << "Unexpected ownerId# " << ui32(ChunkState[ChunkBeingTrimmed].OwnerId));
         }
         TrimOffset = 0;
     } else if (TrimOffset >= Format.ChunkSize) { // Previous chunk entirely trimmed
         Y_VERIFY_S(ChunkState[ChunkBeingTrimmed].OwnerId == OwnerUnallocated
                 || ChunkState[ChunkBeingTrimmed].OwnerId == OwnerUnallocatedTrimmed, PCtx->PDiskLogPrefix
-                << " Unexpected ownerId# " << ui32(ChunkState[ChunkBeingTrimmed].OwnerId));
+                << "Unexpected ownerId# " << ui32(ChunkState[ChunkBeingTrimmed].OwnerId));
         ChunkState[ChunkBeingTrimmed].OwnerId = OwnerUnallocatedTrimmed;
         Keeper.PushTrimmedFreeChunk(ChunkBeingTrimmed);
         ChunkBeingTrimmed = Keeper.PopUntrimmedFreeChunk();
         if (ChunkBeingTrimmed) {
             Y_VERIFY_S(ChunkState[ChunkBeingTrimmed].OwnerId == OwnerUnallocated
                     || ChunkState[ChunkBeingTrimmed].OwnerId == OwnerUnallocatedTrimmed, PCtx->PDiskLogPrefix
-                    << " Unexpected ownerId# " << ui32(ChunkState[ChunkBeingTrimmed].OwnerId));
+                    << "Unexpected ownerId# " << ui32(ChunkState[ChunkBeingTrimmed].OwnerId));
         }
         TrimOffset = 0;
     }
@@ -3313,7 +3313,7 @@ void TPDisk::AddJobToScheduler(TRequestBase *request, NSchLab::EJobKind jobKind)
         if (!cbs) {
             TStringStream str;
             str << PCtx->PDiskLogPrefix
-                << " ReqId# " <<  request->ReqId
+                << "ReqId# " <<  request->ReqId
                 << " Cost# " << request->Cost
                 << " JobKind# " << (ui64)request->JobKind
                 << " ownerId# " << request->Owner

@@ -925,7 +925,7 @@ bool TPDisk::AllocateLogChunks(ui32 chunksNeeded, ui32 chunksContainingPayload, 
         Y_VERIFY_S(chunkIdx, PCtx->PDiskLogPrefix << "errorReason# " << errorReason);
         Y_VERIFY_S(ChunkState[chunkIdx].OwnerId == OwnerUnallocated ||
                 ChunkState[chunkIdx].OwnerId == OwnerUnallocatedTrimmed, PCtx->PDiskLogPrefix <<
-                " Unexpected ownerId# " << ui32(ChunkState[chunkIdx].OwnerId));
+                "Unexpected ownerId# " << ui32(ChunkState[chunkIdx].OwnerId));
         ChunkState[chunkIdx].CommitState = TChunkState::LOG_RESERVED;
         if (TPDisk::IS_SHRED_ENABLED && !ChunkState[chunkIdx].IsDirty) {
             ChunkState[chunkIdx].IsDirty = true;
@@ -974,7 +974,7 @@ void TPDisk::LogWrite(TLogWrite &evLog, TVector<ui32> &logChunksToCommit) {
     if (!PreallocateLogChunks(headedRecordSize, evLog.Owner, evLog.Lsn, evLog.OwnerGroupType, isAllowedForSpaceRed)) {
         // TODO: make sure that commit records that delete chunks are applied atomically even if this error occurs.
         TStringStream str;
-        str << PCtx->PDiskLogPrefix << " Can't preallocate log chunks!"
+        str << PCtx->PDiskLogPrefix << "Can't preallocate log chunks!"
             << " Marker# BPD70";
         P_LOG(PRI_ERROR, BPD70, str.Str());
         evLog.Result.Reset(new NPDisk::TEvLogResult(NKikimrProto::OUT_OF_SPACE,

@@ -230,7 +230,7 @@ struct TPDiskConfig : public TThrRefBase {
 
         UseSpdkNvmeDriver = Path.StartsWith("PCIe:");
         Y_VERIFY_S(!UseSpdkNvmeDriver || deviceType == NPDisk::DEVICE_TYPE_NVME,
-                "PDISK " << PDiskId << " SPDK NVMe driver can be used only with NVMe devices!");
+                "PDiskId# " << PDiskId << " SPDK NVMe driver can be used only with NVMe devices!");
     }
 
     TString GetDevicePath() {

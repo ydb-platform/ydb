@@ -567,7 +567,7 @@ void TLogReader::NotifyError(ui64 offsetRead, TString& errorReason) {
 TString TLogReader::SelfInfo() {
     TStringStream ss;
     ss << PCtx->PDiskLogPrefix
-        << " LogReader"
+        << "LogReader"
         << " IsInitial# " << IsInitial;
     if (!IsInitial) {
         ss << " Owner# " << ui32(Owner)
@@ -887,7 +887,7 @@ bool TLogReader::ProcessSectorSet(TSectorData *sector) {
         while (OffsetInSector <= maxOffsetInSector) {
             TLogPageHeader *pageHeader = (TLogPageHeader*)(data + OffsetInSector);
             Y_VERIFY_S(pageHeader->Version == PDISK_DATA_VERSION, PCtx->PDiskLogPrefix
-                << " incompatible log page header version: " << (ui32)pageHeader->Version
+                << "incompatible log page header version: " << (ui32)pageHeader->Version
                 << " (expected: " << (ui32)PDISK_DATA_VERSION << ") at chunk " << (ui32)ChunkIdx
                 << " SectorIdx: " << (ui32)SectorIdx << " Sector: 0"
                 << " Offset in sector: " << (ui32)OffsetInSector

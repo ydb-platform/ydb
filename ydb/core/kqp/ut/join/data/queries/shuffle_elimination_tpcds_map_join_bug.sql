@@ -14,3 +14,4 @@ select
   left semi join `/Root/test/ds/store_sales` ss on c.c_customer_sk = ss.ss_customer_sk
  where
   ca_state in ('KY','GA','NM')
+

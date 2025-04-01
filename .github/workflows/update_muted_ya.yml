@@ -65,7 +65,7 @@ jobs:
             # Abort the rebase process
             git rebase --abort
       
-            # Reset the ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }} to origin/${{ env.BASE_BRANCH }}
+            echo "Reset branch ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }} to origin/${{ env.BASE_BRANCH }}"
             git reset --hard origin/${{ env.BASE_BRANCH }}
             
           fi
@@ -91,6 +91,7 @@ jobs:
           fi
 
       - name: Collect PR description
+        if: env.changes == 'true'
         id: pr_description
         run: |
           PR_BODY=''
@@ -138,17 +139,16 @@ jobs:
           git commit -m "Update muted YA file"
 
       - name: Push changes
+        if: env.changes == 'true'
         uses: ad-m/github-push-action@v0.8.0
         with:
           github_token: ${{ secrets.YDBOT_TOKEN }}
           branch: ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}
           force: true
 
-      - name: Install PyGithub
-        run: |
-          pip install PyGithub
 
       - name: Create or update PR
+        if: env.changes == 'true'
         id: create_or_update_pr
         env:
           GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
@@ -158,7 +158,7 @@ jobs:
         
       - name: Comment PR
         uses: actions/github-script@v7
-        
+        if: env.changes == 'true'
         with:
           github-token: ${{ secrets.YDBOT_TOKEN }}
           script: |
@@ -184,6 +184,7 @@ jobs:
             });
 
       - name: Add reviewers
+        if: env.changes == 'true'
         uses: octokit/request-action@v2.x
         with:
           route: POST /repos/{owner}/{repo}/pulls/{pull_number}/requested_reviewers

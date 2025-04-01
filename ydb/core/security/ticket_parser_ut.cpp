@@ -1673,6 +1673,18 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
             UNIT_ASSERT_C(result->Error.empty(), result->Error);
             UNIT_ASSERT_C(result->Token->IsExist("monitoring.view@as"), result->Token->ShortDebugString());
             UNIT_ASSERT_C(result->Token->IsExist("monitoring.view-gizmo@as"), result->Token->ShortDebugString());
+        } else {
+            // Authorization successful for cluster resource
+            accessServiceMock.AllowedResourceIds.clear();
+            accessServiceMock.AllowedResourceIds.emplace("cluster");
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
+                                            userToken,
+                                            {{"cluster_id", "cluster"}, },
+                                            {"monitoring.view"})), 0);
+            result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+            UNIT_ASSERT_C(result->Error.empty(), result->Error);
+            UNIT_ASSERT_C(result->Token->IsExist("monitoring.view@as"), result->Token->ShortDebugString());
+            UNIT_ASSERT_C(result->Token->IsExist("monitoring.view-cluster@as"), result->Token->ShortDebugString());
         }
     }
 

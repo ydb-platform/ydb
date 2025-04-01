@@ -479,6 +479,12 @@ private:
         if (const auto folderId = record.GetAttributeValue(permission, "folder_id"); folderId) {
             AddNebiusContainerId(pathsContainer, folderId);
         }
+
+        // Use attribute "cluster_id" as container id that contains cluster access resource
+        // IAM can link roles for cluster access resource
+        if (const auto clusterId = record.GetAttributeValue(permission, "cluster_id"); clusterId) {
+            AddNebiusContainerId(pathsContainer, clusterId);
+        }
     }
 
     template <typename TTokenRecord>
@@ -1699,6 +1705,9 @@ protected:
         }
         if (const TString gizmoId = record.GetAttributeValue(permission, "gizmo_id"); gizmoId) {
             sids.emplace_back(permission + '-' + gizmoId + '@' + AccessServiceDomain);
+        }
+        if (const TString clusterId = record.GetAttributeValue(permission, "cluster_id"); clusterId) {
+            sids.emplace_back(permission + '-' + clusterId + '@' + AccessServiceDomain);
         }
     }
 

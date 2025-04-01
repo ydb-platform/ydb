@@ -43,10 +43,20 @@ inline const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>& GetEntriesFor
     if (ev->Get()->YdbToken && ev->Get()->YdbToken->StartsWith("Bearer")) {
         if (AppData()->AuthConfig.GetUseAccessService()
             && (AppData()->DomainsConfig.GetSecurityConfig().ViewerAllowedSIDsSize() > 0 || AppData()->DomainsConfig.GetSecurityConfig().MonitoringAllowedSIDsSize() > 0)) {
-            static TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> entries = {
-                {NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"ydb.developerApi.get", "ydb.developerApi.update"}), {{"gizmo_id", "gizmo"}}}
-            };
-            return entries;
+            if (AppData()->AuthConfig.GetAccessServiceType() == "Yandex_v2") {
+                static TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> entries = {
+                    {NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"ydb.developerApi.get", "ydb.developerApi.update"}), {{"gizmo_id", "gizmo"}}}
+
+                };
+                return entries;
+            }
+            else if (AppData()->AuthConfig.GetAccessServiceType() == "Nebius_v1" && AppData()->AuthConfig.HasClusterAccessResourceId()) {
+                static TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> entries = {
+                    {NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions({"ydb.clusters.get", "ydb.clusters.monitor", "ydb.clusters.manage"}), {{"cluster_id", AppData()->AuthConfig.GetClusterAccessResourceId()}}}
+
+                };
+                return entries;
+            }
         }
     }
     static TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> emptyEntries = {};

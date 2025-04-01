@@ -2,11 +2,11 @@
 
 {% include [deprecated](_includes/deprecated.md) %}
 
-Если нужно вывести из эксплуатации хост кластера {{ ydb-short-name }}, на котором располагается часть [статической группы](../../../../reference/configuration/index.md#blob_storage_config), необходимо переместить её на другой хост.
+Если нужно вывести из эксплуатации хост кластера {{ ydb-short-name }}, на котором располагается часть [статической группы](../../../reference/configuration/index.md#blob_storage_config), необходимо переместить её на другой хост.
 
 {% include [warning-configuration-error](_includes/warning-configuration-error.md) %}
 
-В качестве примера рассмотрим кластер {{ ydb-short-name }}, в котором на хосте с `node_id:1` сконфигурирован и запущен [статический узел](../../../../reference/configuration/index.md#hosts). Этот узел обслуживает часть статической группы.
+В качестве примера рассмотрим кластер {{ ydb-short-name }}, в котором на хосте с `node_id:1` сконфигурирован и запущен [статический узел](../../../reference/configuration/index.md#hosts). Этот узел обслуживает часть статической группы.
 
 Фрагмент конфигурации статической группы:
 
@@ -66,7 +66,7 @@ blob_storage_config:
     Измените путь `path` и категорию `pdisk_category` диска, если на хосте с `node_id: 10` они отличаются.
 
 1. Обновите конфигурационные файлы `config.yaml` для всех узлов кластера, в том числе и динамических.
-1. С помощью процедуры [rolling-restart](../../../../maintenance/manual/node_restarting.md) перезапустите все статические узлы кластера.
-1. Перейдите на страницу мониторинга Embedded UI и убедитесь, что VDisk статической группы появился на целевом физическом диске и реплицируется. Подробнее см. [{#T}](../../../../reference/embedded-ui/ydb-monitoring.md#static-group).
-1. С помощью процедуры [rolling-restart](../../../../maintenance/manual/node_restarting.md) перезапустите все динамические узлы кластера.
+1. С помощью процедуры [rolling-restart](../../../maintenance/manual/node_restarting.md) перезапустите все статические узлы кластера.
+1. Перейдите на страницу мониторинга Embedded UI и убедитесь, что VDisk статической группы появился на целевом физическом диске и реплицируется. Подробнее см. [{#T}](../../../reference/embedded-ui/ydb-monitoring.md#static-group).
+1. С помощью процедуры [rolling-restart](../../../maintenance/manual/node_restarting.md) перезапустите все динамические узлы кластера.
 

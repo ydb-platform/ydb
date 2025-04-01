@@ -1,0 +1,13 @@
+items:
+- name: Обзор конфигурации
+  href: config-overview.md
+- name: Обновление конфигурации
+  href: update-config.md
+- name: DSL конфигурации кластера
+  href: ../dynamic-config-selectors.md
+- name: Расширение кластера
+  href: ../../../maintenance/manual/cluster_expansion.md
+- name: Замена FQDN узла
+  href: ../../../maintenance/manual/replacing_nodes.md
+- name: Аутентификация и авторизация узлов баз данных
+  href: ../node-authorization.md

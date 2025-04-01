@@ -419,7 +419,7 @@ domains_config:
 
 {% note info %}
 
-Не требуется для работы кластера с [автоматической конфигурацией](../../devops/configuration-management/index.md) State Storage и статической группы.
+Не требуется для работы кластера с [автоматической конфигурацией](../../devops/configuration-management/configuration-v2/config-overview.md) State Storage и статической группы.
 
 {% endnote %}
 
@@ -445,7 +445,7 @@ domains_config:
 
 {% note info %}
 
-Не требуется для работы кластера с [автоматической конфигурацией](../../devops/configuration-management/index.md) State Storage и статической группы.
+Не требуется для работы кластера с [автоматической конфигурацией](../../devops/configuration-management/configuration-v2/config-overview.md) State Storage и статической группы.
 
 {% endnote %}
 
@@ -482,7 +482,7 @@ domains_config:
 
 {% note info %}
 
-Не требуется для работы кластера с [автоматической конфигурацией](../../devops/configuration-management/index.md) State Storage и статической группы.
+Не требуется для работы кластера с [автоматической конфигурацией](../../devops/configuration-management/configuration-v2/config-overview.md) State Storage и статической группы.
 
 {% endnote %}
 

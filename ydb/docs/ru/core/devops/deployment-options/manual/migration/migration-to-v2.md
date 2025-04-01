@@ -1,16 +1,16 @@
 # Миграция на конфигурацию v2
 
-Данный документ содержит инструкцию по миграции с [конфигурации v1](../before-v25.1/configuration-management/config-overview.md) на [конфигурацию v2](../../../configuration-management/index.md).
+Данный документ содержит инструкцию по миграции с [конфигурации v1](../../../configuration-management/configuration-v2/config-overview.md) на [конфигурацию v2](../../../configuration-management/configuration-v2/config-overview.md).
 
 В конфигурации v1 существовало два различных механизма применения конфигурационных файлов:
 
-- [статическая конфигурация](../before-v25.1/configuration-management/config-overview.md#static-config) управляла [узлами хранения](../../../../concepts/glossary.md#storage-node) кластера {{ ydb-short-name }} и требовала ручного размещения файлов на каждом узле кластера;
-- [динамическая конфигурация](../before-v25.1/configuration-management/config-overview.md#dynamic-config) управляла [узлами базы данных](../../../../concepts/glossary.md#database-node) кластера {{ ydb-short-name }} и загружалась на кластер централизованно, с помощью команд {{ ydb-short-name }} CLI.
+- [статическая конфигурация](../../../configuration-management/configuration-v2/config-overview.md#static-config) управляла [узлами хранения](../../../../concepts/glossary.md#storage-node) кластера {{ ydb-short-name }} и требовала ручного размещения файлов на каждом узле кластера;
+- [динамическая конфигурация](../../../configuration-management/configuration-v2/config-overview.md#dynamic-config) управляла [узлами базы данных](../../../../concepts/glossary.md#database-node) кластера {{ ydb-short-name }} и загружалась на кластер централизованно, с помощью команд {{ ydb-short-name }} CLI.
 
 Конфигурация v2 унифицирует этот процесс: единый конфигурационный файл загружается в систему через команды {{ ydb-short-name }} CLI, автоматически доставляясь на все узлы кластера.
 
 Компоненты [State Storage](../../../../concepts/glossary.md#state-storage) и [статической группы](../../../../concepts/glossary.md#static-group) кластера {{ ydb-short-name }} являются ключевыми для корректной работы кластера. При работе с конфигурацией v1 данные компоненты настраиваились вручную, через задание секций `domains_config` и `blob_storage_config` в конфигурационном файле.
-В конфигурации v2 появляется возможность [автоматической конфигурации](../../../configuration-management/index.md) этих компонентов, без указания объемных секций в конфигурационном файле, снижая риск ошибок при настройке кластера.
+В конфигурации v2 появляется возможность [автоматической конфигурации](../../../configuration-management/configuration-v2/config-overview.md) этих компонентов, без указания объемных секций в конфигурационном файле, снижая риск ошибок при настройке кластера.
 
 
 Миграция на конфигурацию v2 происходит в 2 этапа: переход на единый конфигурационный файл, а затем включение автоматического управления конфигурацией [статической группы](../../../../concepts/glossary.md#state-storage) и [State Storage](../../../../concepts/glossary.md#static-group).
@@ -20,7 +20,7 @@
 Миграция на конфигурацию v2 может быть осуществлена в случае выполнения следующих условий:
 
 1. Кластер {{ydb-short-name}} [обновлен](../update-executable.md) до версии 25.1 и выше.
-1. Кластер {{ydb-short-name}} сконфигурирован с файлом [конфигурации v1](../before-v25.1/configuration-management/config-overview.md#static-config) `config.yaml`, расположенным на файловой системе узлов и подключенным через аргумент `ydbd --yaml-config`.
+1. Кластер {{ydb-short-name}} сконфигурирован с файлом [конфигурации v1](../../../configuration-management/configuration-v2/config-overview.md#static-config) `config.yaml`, расположенным на файловой системе узлов и подключенным через аргумент `ydbd --yaml-config`.
 1. В конфигурационном файле кластера заданы разделы `domains_config` и `blob_storage_config` для настройки State Storage и статической группы соответственно. Эти компоненты тесно связаны, поэтому не поддерживается смешанный режим, когда один из них управляется вручную, а другой - через автоматическую конфигурацию v2.
 
 ## Переход на единый конфигурационный файл {#migration-to-cli}
@@ -47,7 +47,7 @@ http://<node.ydb.tech>:8765/actors/configs_dispatcher
 
 Для того чтобы перевести кластер {{ ydb-short-name }} на управление конфигурацией через CLI, необходимо проделать следующие шаги:
 
-1. Проверить наличие файла [динамической конфигурации](../before-v25.1/configuration-management/config-overview.md#dynamic-config) на кластере. Для этого необходимо выполнить команду:
+1. Проверить наличие файла [динамической конфигурации](../../../configuration-management/configuration-v2/config-overview.md#dynamic-config) на кластере. Для этого необходимо выполнить команду:
 
     ```bash
     ydb -e grpc://<node.ydb.tech>:2135 admin cluster config fetch > config.yaml

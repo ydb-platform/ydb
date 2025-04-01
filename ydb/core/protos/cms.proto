@@ -355,6 +355,7 @@ message TWalleCreateTaskRequest {
   optional string Action = 4;
   repeated string Hosts = 5;
   optional bool   DryRun = 6;
+  repeated string Devices = 7;
 }
 
 message TWalleCreateTaskResponse {

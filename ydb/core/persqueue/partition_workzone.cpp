@@ -105,6 +105,82 @@ TVector<TRequestedBlob> TPartitionWorkZone::GetBlobsFromBody(const ui64 startOff
     return blobs;
 }
 
+TVector<TClientBlob> TPartitionWorkZone::GetBlobsFromHead(const ui64 startOffset,
+                                                          const ui16 partNo,
+                                                          const ui32 maxCount,
+                                                          const ui32 maxSize,
+                                                          const ui64 readTimestampMs,
+                                                          ui32& count,
+                                                          ui32& size,
+                                                          ui64& insideHeadOffset,
+                                                          ui64 lastOffset) const
+{
+    TVector<TClientBlob> res;
+    std::optional<ui64> firstAddedBlobOffset{};
+    ui32 pos = 0;
+    if (PositionInHead(startOffset, partNo)) {
+        pos = Head.FindPos(startOffset, partNo);
+        Y_ABORT_UNLESS(pos != Max<ui32>());
+    }
+    ui32 lastBlobSize = 0;
+    for (; pos < Head.GetBatches().size(); ++pos) {
+
+        TVector<TClientBlob> blobs;
+        Head.GetBatch(pos).UnpackTo(&blobs);
+        ui32 i = 0;
+        ui64 offset = Head.GetBatch(pos).GetOffset();
+        ui16 pno = Head.GetBatch(pos).GetPartNo();
+        for (; i < blobs.size(); ++i) {
+
+            ui64 curOffset = offset;
+
+            Y_ABORT_UNLESS(pno == blobs[i].GetPartNo());
+            bool skip = offset < startOffset || offset == startOffset &&
+                blobs[i].GetPartNo() < partNo;
+            if (lastOffset != 0 && lastOffset < offset) {
+                break;
+            }
+            if (blobs[i].IsLastPart()) {
+                ++offset;
+                pno = 0;
+            } else {
+                ++pno;
+            }
+
+            if (skip) continue;
+
+            if (blobs[i].IsLastPart()) {
+                bool messageSkippingBehaviour = AppData()->PQConfig.GetTopicsAreFirstClassCitizen() &&
+                        readTimestampMs > blobs[i].WriteTimestamp.MilliSeconds();
+                ++count;
+                if (messageSkippingBehaviour) { //do not count in limits; message will be skippend in proxy
+                    --count;
+                    size -= lastBlobSize;
+                }
+                lastBlobSize = 0;
+
+                if (count > maxCount) {// blob is counted already
+                    break;
+                }
+                if (size > maxSize) {
+                    break;
+                }
+            }
+            size += blobs[i].GetBlobSize();
+            lastBlobSize += blobs[i].GetBlobSize();
+            res.push_back(blobs[i]);
+
+            if (!firstAddedBlobOffset)
+                firstAddedBlobOffset = curOffset;
+
+        }
+        if (i < blobs.size()) // already got limit
+            break;
+    }
+    insideHeadOffset = firstAddedBlobOffset.value_or(insideHeadOffset);
+    return res;
+}
+
 bool TPartitionWorkZone::PositionInBody(ui64 offset, ui32 partNo) const
 {
     return offset < Head.Offset || ((Head.Offset == offset) && (partNo < Head.PartNo));

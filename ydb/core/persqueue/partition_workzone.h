@@ -26,6 +26,15 @@ struct TPartitionWorkZone {
                                              ui32& size,
                                              ui64 lastOffset,
                                              TBlobKeyTokens* blobKeyTokens) const;
+    TVector<TClientBlob> GetBlobsFromHead(const ui64 startOffset,
+                                          const ui16 partNo,
+                                          const ui32 maxCount,
+                                          const ui32 maxSize,
+                                          const ui64 readTimestampMs,
+                                          ui32& rcount,
+                                          ui32& rsize,
+                                          ui64& insideHeadOffset,
+                                          ui64 lastOffset) const;
 
     bool PositionInBody(ui64 offset, ui32 partNo) const;
     bool PositionInHead(ui64 offset, ui32 partNo) const;

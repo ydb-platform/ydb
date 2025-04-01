@@ -491,6 +491,7 @@ void InferStatisticsForFlatMap(const TExprNode::TPtr& input, TTypeAnnotationCont
 
         outputStats.SortColumns = inputStats->SortColumns;
         outputStats.ShuffledByColumns = inputStats->ShuffledByColumns;
+        outputStats.LogicalOrderings = inputStats->LogicalOrderings;
         outputStats.Labels = inputStats->Labels;
         outputStats.Selectivity *= (inputStats->Selectivity * selectivity);
 

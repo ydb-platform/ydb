@@ -74,6 +74,8 @@ std::ostream& NYql::operator<<(std::ostream& os, const TOptimizerStatistics& s) 
         }
         os << "[" << tmp << "]";
     }
+    os << ", LogicalOrderings state: " << s.LogicalOrderings.GetState() << ", ";
+
     os << ", Sel: " << s.Selectivity;
     os << ", Storage: " << ConvertToStatisticsTypeString(s.StorageType);
     if (s.SortColumns) {

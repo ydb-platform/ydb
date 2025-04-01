@@ -343,6 +343,10 @@ public:
             return HasState() && logicalOrderings.HasState() && IsSubset(DFSM->Nodes[State].NFSMNodesBitset, logicalOrderings.DFSM->Nodes[logicalOrderings.State].NFSMNodesBitset);
         }
 
+        std::int64_t GetState() const {
+            return State;
+        }
+
     private:
         inline bool IsSubset(const std::bitset<EMaxNFSMStates>& lhs, const std::bitset<EMaxNFSMStates>& rhs) {
             return (lhs & rhs) == lhs;

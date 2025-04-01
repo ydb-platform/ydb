@@ -102,6 +102,7 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
         inputStats->StorageType);
     stats->SortColumns = sortedPrefixPtr;
     stats->ShuffledByColumns = inputStats->ShuffledByColumns;
+    stats->LogicalOrderings = inputStats->LogicalOrderings;
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for read table" << stats->ToString();
 
@@ -119,6 +120,12 @@ void InferStatisticsForKqpTable(
     auto inputNode = TExprBase(input);
     auto tableStats = typeCtx->GetStats(inputNode.Raw());
     if (tableStats) {
+        auto& orderingsFSM = typeCtx->OrderingsFSM;
+        if (orderingsFSM.IsBuilt() && tableStats->ShuffledByColumns) {
+            std::int64_t orderingIdx = orderingsFSM.FDStorage.FindInterestingOrderingIdx(tableStats->ShuffledByColumns->Data, TOrdering::EShuffle);
+            tableStats->LogicalOrderings = orderingsFSM.CreateState(orderingIdx);
+        }
+
         return;
     }
 
@@ -325,6 +332,7 @@ void InferStatisticsForRowsSourceSettings(const TExprNode::TPtr& input, TTypeAnn
         inputStats->StorageType);
     outputStats->SortColumns = std::move(sortedPrefixPtr);
     outputStats->ShuffledByColumns = inputStats->ShuffledByColumns;
+    outputStats->LogicalOrderings = inputStats->LogicalOrderings;
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for source settings: " << outputStats->ToString();
 
@@ -392,6 +400,7 @@ void InferStatisticsForReadTableIndexRanges(const TExprNode::TPtr& input, TTypeA
         inputStats->StorageType);
     stats->SortColumns = sortedPrefixPtr;
     stats->ShuffledByColumns = inputStats->ShuffledByColumns;
+    stats->LogicalOrderings = inputStats->LogicalOrderings;
 
     typeCtx->SetStats(input.Get(), stats);
 
@@ -829,7 +838,6 @@ void AppendTxStats(const TExprNode::TPtr& input, TTypeAnnotationContext* typeCtx
     txStats.push_back(vec);
 }
 
-
 class TInterestingOrderingsFSMBuilder {
 public:
     TInterestingOrderingsFSMBuilder(
@@ -847,6 +855,10 @@ public:
         VisitExpr(node, [this](const TExprNode::TPtr& node){
             return this->InterstingOrderingsCollector.Collect(node);
         });
+
+        for (const auto& [tablePath, shuffledBy]: this->InterstingOrderingsCollector.NotAliasedTables) {
+            InterstingOrderingsCollector.FDStorage.AddInterestingOrdering(shuffledBy->Data, TOrdering::EShuffle);
+        }
 
         auto& fdStorage = InterstingOrderingsCollector.FDStorage;
         auto fsm = TOrderingsStateMachine(std::move(fdStorage));
@@ -873,6 +885,8 @@ private:
         bool Collect(const TExprNode::TPtr& node) {
             if (TCoEquiJoin::Match(node.Get())) {
                 CollectEquiJoin(TExprBase(node).Cast<TCoEquiJoin>());
+            } else if (TKqpTable::Match(node.Get())) {
+                CollectKqpTable(TExprBase(node).Cast<TKqpTable>());
             }
 
             return true;
@@ -881,6 +895,7 @@ private:
     public:
         TFDStorage FDStorage;
         TTypeAnnotationContext& TypeCtx;
+        THashMap<TString, TIntrusivePtr<TOptimizerStatistics::TShuffledByColumns>> NotAliasedTables;
 
     private:
         void CollectEquiJoin(const TCoEquiJoin& equiJoin) {
@@ -899,6 +914,8 @@ private:
                 }
                 TStringBuf label = scope.Cast<TCoAtom>();
 
+                auto tablePath = stats->ShuffledByColumns->Data.front().RelName;
+                NotAliasedTables.erase(tablePath);
                 for (auto& column: stats->ShuffledByColumns->Data) {
                     column.RelName = label;
                 }
@@ -939,6 +956,17 @@ private:
 
             FDStorage.AddInterestingOrdering(leftKeys, TOrdering::EShuffle);
             FDStorage.AddInterestingOrdering(rightKeys, TOrdering::EShuffle);
+        }
+
+    private:
+        void CollectKqpTable(const TKqpTable& kqpTable) {
+            auto stats = TypeCtx.GetStats(TExprBase(kqpTable).Raw());
+            if (!stats) {
+                return;
+            }
+
+            TString tablePath = kqpTable.Path().StringValue();
+            NotAliasedTables[tablePath] = stats->ShuffledByColumns;
         }
     };
 

@@ -159,6 +159,8 @@ public:
         Nodes_.push_back({});
         Nodes_.back().RelationOptimizerNode = relationNode;
 
+        relationNode->LogicalOrderings = relationNode->Stats.LogicalOrderings;
+
         return nodeId;
     }
 

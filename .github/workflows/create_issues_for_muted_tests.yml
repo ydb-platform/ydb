@@ -13,7 +13,7 @@ on:
 
 env:
   GH_TOKEN: ${{ secrets.YDBOT_TOKEN }}
-  MUTED_YA_FILE_PATH: .github/scripts/tests/muted_ya.txt
+  MUTED_YA_FILE_PATH: .github/config/muted_ya.txt
 
 jobs:
   create-issues-for-muted-tests:

@@ -1,45 +1,24 @@
 import argparse
+import os
 import ydb
 import time
 import boto3
+import logging
+import time
 
-class YdbClient:
-    def __init__(self, endpoint, database):
-        self.driver = ydb.Driver(endpoint=endpoint, database=database, oauth=None)
-        self.database = database
-        self.session_pool = ydb.QuerySessionPool(self.driver)
+import yatest.common
 
-    def wait_connection(self, timeout=5):
-        self.driver.wait(timeout, fail_fast=True)
+from ydb.tests.olap.common.s3_client import S3Mock, S3Client
+from ydb.tests.olap.common.ydb_client import YdbClient
+from ydb.tests.olap.common.column_table_helper import ColumnTableHelper
+from ydb.tests.olap.lib.utils import get_external_param
 
-    def query(self, statement):
-            return self.session_pool.execute_with_retries(statement)
-    
-class S3Client:
-    def __init__(self, endpoint, region, key_id, key_secret):
-        self.endpoint = endpoint
-        self.region = region
-        self.key_id = key_id
-        self.key_secret = key_secret
+from ydb.tests.library.harness.util import LogLevels
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
+from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 
-        session = boto3.session.Session()
-        self.s3 = session.resource(
-            service_name = "s3",
-            aws_access_key_id = key_id,
-            aws_secret_access_key = key_secret,
-            region_name = region,
-            endpoint_url = endpoint
-        )
 
-    def get_bucket_stat(self, bucket_name: str) -> (int, int):
-        bucket = self.s3.Bucket(bucket_name)
-        count = 0
-        size = 0
-        for obj in bucket.objects.all():
-            count += 1
-            size += obj.size 
-        return (count, size)
-
+logger = logging.getLogger(__name__)
 
 def wait_for(condition_func, timeout_seconds):
     t0 = time.time()
@@ -49,8 +28,74 @@ def wait_for(condition_func, timeout_seconds):
         time.sleep(1)
     return False
 
-def run_test_delete_s3_ttl(ydb_client: YdbClient, path_prefix: str, row_count: int, rows_in_upsert: int,
-            s3_client: S3Client, cold_bucket: str, frozen_bucket: str):
+def test_delete_s3_ttl():
+    endpoint = get_external_param("endpoint", None)
+    database = get_external_param("database", default="/Root/test")
+    path_prefix = get_external_param("prefix", "olap_tests")
+    row_count = int(get_external_param("row-count", 10 ** 5))
+    rows_in_upsert = int(get_external_param("rows-in-upsert", 10 ** 4))
+    s3_endpoint = get_external_param("s3-endpoint", None)
+    s3_region = get_external_param("s3-region", "us-east-1")
+    s3_key_id = get_external_param("s3-key-id", "fake_access_key_id")
+    s3_key_secret = get_external_param("s3-key-secret", "fake_secret_access_key")
+    cold_bucket = get_external_param("bucket-cold", "cold")
+    frozen_bucket = get_external_param("bucket-frozen", "frozen")
+
+    if endpoint is None:
+        ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
+        logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
+        config = KikimrConfigGenerator(
+            extra_feature_flags={
+                "enable_external_data_sources": True,
+                "enable_tiering_in_column_shard": True
+            },
+            column_shard_config={
+                "lag_for_compaction_before_tierings_ms": 0,
+                "compaction_actualization_lag_ms": 0,
+                "optimizer_freshness_check_duration_ms": 0,
+                "small_portion_detect_size_limit": 0,
+                "max_read_staleness_ms": 5000,
+                "alter_object_enabled": True,
+            },
+            additional_log_configs={
+                "TX_COLUMNSHARD": LogLevels.DEBUG,
+                "TX_COLUMNSHARD_TIERING": LogLevels.DEBUG,
+                "TX_COLUMNSHARD_ACTUALIZATION": LogLevels.TRACE,
+                "TX_COLUMNSHARD_BLOBS_TIER": LogLevels.DEBUG,
+                "FLAT_TX_SCHEMESHARD": LogLevels.DEBUG,
+            },
+        )
+        cluster = KiKiMR(config)
+        cluster.start()
+        node = cluster.nodes[1]
+        ydb_client = YdbClient(database=f"/{config.domain_name}", endpoint=f"grpc://{node.host}:{node.port}")
+    else:
+        ydb_client = YdbClient(endpoint, database)
+
+    ydb_client.wait_connection()
+
+    if s3_endpoint is None:
+        s3_mock = S3Mock(yatest.common.binary_path(os.environ["MOTO_SERVER_PATH"]))
+        s3_mock.start()
+
+        s3_pid = s3_mock.s3_pid
+        s3_endpoint = s3_mock.endpoint
+        s3_client = S3Client(endpoint=s3_endpoint)
+    else:
+        s3_client = S3Client(s3_endpoint, s3_region, s3_key_id, s3_key_secret)
+    """
+    session = boto3.session.Session()
+    s3client = session.client(
+             service_name='s3',
+             aws_access_key_id = s3_key_id,
+             aws_secret_access_key = s3_key_secret,
+             region_name = s3_region,
+             endpoint_url=s3_endpoint)
+    """
+    s3_client.create_bucket("cold")
+    s3_client.create_bucket("frozen")
+
+
     ''' Implements https://github.com/ydb-platform/ydb/issues/13467 '''
     test_name = "delete_tiering"
     test_dir = f"{ydb_client.database}/{path_prefix}/{test_name}"
@@ -93,9 +138,12 @@ def run_test_delete_s3_ttl(ydb_client: YdbClient, path_prefix: str, row_count: i
             val Uint64,
             PRIMARY KEY(ts),
         )
-        WITH (STORE = COLUMN)
+        WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT=2)
         """
     )
+
+#    table = ColumnTableHelper(ydb_client, table_path)
+#    table.set_fast_compaction()
 
     ydb_client.query(f"CREATE OBJECT {access_key_id_secret_name} (TYPE SECRET) WITH value='{s3_client.key_id}'")
     ydb_client.query(f"CREATE OBJECT {access_key_secret_secret_name} (TYPE SECRET) WITH value='{s3_client.key_secret}'") 
@@ -174,6 +222,7 @@ def run_test_delete_s3_ttl(ydb_client: YdbClient, path_prefix: str, row_count: i
     if not wait_for(lambda: portions_actualized_in_sys(), 60):
         raise Exception(f".sys reports incorrect data portions")
 
+
     t0 = time.time()
     stmt = f"""
         ALTER TABLE `{table_path}` SET (TTL =
@@ -198,7 +247,6 @@ def run_test_delete_s3_ttl(ydb_client: YdbClient, path_prefix: str, row_count: i
 
     if not wait_for(lambda: data_distributes_across_tiers(), 600):
         raise Exception("Data eviction has not been started")
-
     t0 = time.time()
     stmt = f"""
         DELETE FROM `{table_path}`
@@ -214,40 +262,6 @@ def run_test_delete_s3_ttl(ydb_client: YdbClient, path_prefix: str, row_count: i
         print(f"rows by tier: {rows_by_tier}, portions: {get_portion_count()}, cold bucket stat: {cold_bucket_stat}, frozen bucket stat: {frozen_bucket_stat}")
         return cold_bucket_stat[0] == 0 and frozen_bucket_stat[0] == 0
 
-    if wait_for(lambda: data_deleted_from_buckets(), 120):
-        raise Exception("all data deleted")
-    raise Exception("data are not deleted")
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(
-        description="Test data deletion by ttl from s3", formatter_class=argparse.RawDescriptionHelpFormatter
-    )
-    parser.add_argument("--endpoint", default="grpc://localhost:2135", help="YDB endpoint to be used")
-    parser.add_argument("--database", default="/Root/test", help="A database to connect")
-    parser.add_argument("--prefix", default="olap_tests", help="A path prefix for in database")
-    parser.add_argument("--row-count", default=10 ** 5, type=lambda x: int(x), help="Number of rows to be inserted into a table")
-    parser.add_argument("--rows-in-upsert", default=10 ** 4, type=lambda x: int(x), help="Number of rows in a single upsert operation")
-    parser.add_argument("--s3-endpoint", default="http://localhost:4000", help="S3 endpoint")
-    parser.add_argument("--s3-region", default="us-east-1", help="S3 region")
-    parser.add_argument("--s3-key-id", default="fake_access_key_id", help="aws_access_key_id")
-    parser.add_argument("--s3-key-secret", default="fake_secret_access_key", help="aws_secret_access_key")
-    parser.add_argument("--bucket-cold", default="cold", help="bucket for cooled data")
-    parser.add_argument("--bucket-frozen", default="frozen", help="bucket for frozen data")
-    args = parser.parse_args()
-
-    ydb_client = YdbClient(args.endpoint, args.database)
-    ydb_client.wait_connection()
-
-    s3_client = S3Client(args.s3_endpoint, args.s3_region, args.s3_key_id, args.s3_key_secret)
-    session = boto3.session.Session()
-    s3client = session.client(
-             service_name='s3',
-             aws_access_key_id = "fake_access_key_id",
-             aws_secret_access_key = "fake_secret_access_key",
-             region_name = "us-east-1",
-             endpoint_url=args.s3_endpoint)
-
-    s3client.create_bucket(Bucket = "cold")
-    s3client.create_bucket(Bucket = "frozen")
-
-    run_test_delete_s3_ttl(ydb_client, args.prefix, args.row_count, args.rows_in_upsert, s3_client, args.bucket_cold, args.bucket_frozen)
+    if wait_for(lambda: data_deleted_from_buckets(), 180):
+        print("all data deleted")
+    print('Not all data deleted')

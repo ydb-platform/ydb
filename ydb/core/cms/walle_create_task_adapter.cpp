@@ -65,6 +65,7 @@ private:
         resp->Record.MutableStatus()->SetReason(err);
         resp->Record.SetTaskId(rec.GetTaskId());
         resp->Record.MutableHosts()->CopyFrom(rec.GetHosts());
+        resp->Record.MutableDevices()->CopyFrom(rec.GetDevices());
         ReplyAndDie(resp.Release(), ctx);
     }
 
@@ -81,6 +82,7 @@ private:
         Response->Record.MutableStatus()->CopyFrom(rec.GetStatus());
         Response->Record.SetTaskId(RequestEvent->Get()->Record.GetTaskId());
         Response->Record.MutableHosts()->CopyFrom(RequestEvent->Get()->Record.GetHosts());
+        Response->Record.MutableDevices()->CopyFrom(RequestEvent->Get()->Record.GetDevices());
 
         // In case of success or scheduled request we have to store
         // task information.
@@ -181,6 +183,7 @@ private:
             TAutoPtr<TEvCms::TEvWalleCreateTaskResponse> resp = new TEvCms::TEvWalleCreateTaskResponse;
             resp->Record.SetTaskId(task.GetTaskId());
             resp->Record.MutableHosts()->CopyFrom(task.GetHosts());
+            resp->Record.MutableDevices()->CopyFrom(task.GetDevices());
             resp->Record.MutableStatus()->SetCode(TStatus::OK);
             ReplyAndDie(resp.Release(), ctx);
             return;

@@ -615,17 +615,6 @@ class LintConfigs:
             # specified by config type, autoincludes scheme
             return {cls.KEY: serialize_list([config])}
 
-        if project_to_config_map := spec_args.get('PROJECT_TO_CONFIG_MAP'):
-            # ruff, TODO delete once custom configs migrated to autoincludes scheme
-            project_to_config_map = project_to_config_map[0]
-            assert_file_exists(unit, project_to_config_map)
-            resolved_configs.append(project_to_config_map)
-            cfgs = get_linter_configs(unit, project_to_config_map).values()
-            for c in cfgs:
-                assert_file_exists(unit, c)
-                resolved_configs.append(c)
-            return {cls.KEY: serialize_list(resolved_configs)}
-
         # default config
         linter_name = spec_args['NAME'][0]
         default_configs_path = spec_args['CONFIGS'][0]

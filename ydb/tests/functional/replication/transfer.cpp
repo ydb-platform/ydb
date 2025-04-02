@@ -478,6 +478,74 @@ Y_UNIT_TEST_SUITE(Transfer)
         });
     }
 
+    Y_UNIT_TEST(NullToKeyColumn)
+    {
+        MainTestCase testCase;
+
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )");
+        testCase.CreateTopic(1);
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:NULL,
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )");
+
+        testCase.Write({"Message-1"});
+
+        testCase.CheckTransferStateError("Error transform message partition 0 offset 0: The value of the 'Key' column must be non-NULL");
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+        testCase.DropTopic();
+    }
+
+    Y_UNIT_TEST(NullToColumn)
+    {
+        MainTestCase testCase;
+
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8 NOT NULL,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )");
+        testCase.CreateTopic(1);
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:$x._offset,
+                            Message:NULL
+                        |>
+                    ];
+                };
+            )");
+
+        testCase.Write({"Message-1"});
+
+        testCase.CheckTransferStateError("Error transform message partition 0 offset 0: The value of the 'Message' column must be non-NULL");
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+        testCase.DropTopic();
+    }
+
     Y_UNIT_TEST(DropTransfer)
     {
         MainTestCase testCase;
@@ -873,6 +941,46 @@ Y_UNIT_TEST_SUITE(Transfer)
             )");
 
         testCase.CheckTransferStateError("Discovery error: local/Topic_");
+
+        testCase.DropTransfer();
+        testCase.DropTable();
+    }
+
+    Y_UNIT_TEST(TransferSourceDropped)
+    {
+        MainTestCase testCase;
+        testCase.CreateTable(R"(
+                CREATE TABLE `%s` (
+                    Key Uint64 NOT NULL,
+                    Message Utf8,
+                    PRIMARY KEY (Key)
+                )  WITH (
+                    STORE = COLUMN
+                );
+            )");
+
+        testCase.CreateTopic(1);
+
+        testCase.CreateTransfer(R"(
+                $l = ($x) -> {
+                    return [
+                        <|
+                            Key:CAST($x._offset AS Uint64),
+                            Message:CAST($x._data AS Utf8)
+                        |>
+                    ];
+                };
+            )");
+
+        testCase.Write({"Message-1"});
+
+        testCase.CheckResult({{
+            _C("Message", TString("Message-1"))
+        }});
+
+        testCase.DropTopic();
+
+        testCase.CheckTransferStateError("Discovery for all topics failed. The last error was: no path 'local/Topic_");
 
         testCase.DropTransfer();
         testCase.DropTable();

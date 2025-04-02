@@ -432,15 +432,18 @@ void TPartitionWorkZone::ResetNewHead(ui64 endOffset)
     NewHead.Offset = endOffset;
 }
 
+bool TPartitionWorkZone::IsLastBatchPacked() const
+{
+    return NewHead.GetBatches().empty() || NewHead.GetLastBatch().Packed;
+}
+
 void TPartitionWorkZone::PackLastBatch()
 {
-    if (!NewHead.GetBatches().empty() && !NewHead.GetLastBatch().Packed) {
-        NewHead.MutableLastBatch().Pack();
-        NewHead.PackedSize += NewHead.GetLastBatch().GetPackedSize(); //add real packed size for this blob
+    NewHead.MutableLastBatch().Pack();
+    NewHead.PackedSize += NewHead.GetLastBatch().GetPackedSize(); //add real packed size for this blob
 
-        NewHead.PackedSize -= GetMaxHeaderSize(); //instead of upper bound
-        NewHead.PackedSize -= NewHead.GetLastBatch().GetUnpackedSize();
-    }
+    NewHead.PackedSize -= GetMaxHeaderSize(); //instead of upper bound
+    NewHead.PackedSize -= NewHead.GetLastBatch().GetUnpackedSize();
 }
 
 }

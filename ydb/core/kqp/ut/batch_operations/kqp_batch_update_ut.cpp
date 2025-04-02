@@ -22,7 +22,7 @@ NKikimrConfig::TAppConfig GetAppConfig(size_t maxBatchSize = 10000) {
     return app;
 }
 
-void TestSimple(size_t maxBatchSize) {
+void TestSimpleOnePartition(size_t maxBatchSize) {
     TKikimrRunner kikimr(GetAppConfig(maxBatchSize));
     auto db = kikimr.GetQueryClient();
     auto session = db.GetSession().GetValueSync().GetSession();
@@ -261,9 +261,9 @@ void TestLarge(size_t maxBatchSize, size_t rowsPerShard) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
-    Y_UNIT_TEST(Simple) {
+    Y_UNIT_TEST(SimpleOnePartition) {
         for (size_t size = 1; size <= 1000; size *= 10) {
-            TestSimple(size);
+            TestSimpleOnePartition(size);
         }
     }
 

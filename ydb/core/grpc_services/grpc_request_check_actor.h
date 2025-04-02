@@ -42,29 +42,34 @@ bool TGRpcRequestProxyHandleMethods::ValidateAndReplyOnError(TCtx* ctx) {
 inline const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>& GetEntriesForAuthAndCheckRequest(TEvRequestAuthAndCheck::TPtr& ev) {
     const bool isBearerToken = ev->Get()->YdbToken && ev->Get()->YdbToken->StartsWith("Bearer");
     const bool useAccessService = AppData()->AuthConfig.GetUseAccessService();
-    const bool hasClusterAccessResourceId = AppData()->AuthConfig.HasClusterAccessResourceId();
+    const bool emptyClusterAccessResourceId = AppData()->AuthConfig.GetClusterAccessResourceId().empty();
     const bool needClusterAccessResourceCheck = AppData()->DomainsConfig.GetSecurityConfig().ViewerAllowedSIDsSize() > 0 ||
                                 AppData()->DomainsConfig.GetSecurityConfig().MonitoringAllowedSIDsSize() > 0;
 
-    if (!isBearerToken || !useAccessService || !hasClusterAccessResourceId || !needClusterAccessResourceCheck) {
-        return {};
+    if (!isBearerToken || !useAccessService || emptyClusterAccessResourceId || !needClusterAccessResourceCheck) {
+        static const TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> emptyEntries = {};
+        return emptyEntries;
     }
 
-    const TString accessServiceType = AppData()->AuthConfig.GetAccessServiceType();
-    const TString clusterAccessResourceId = AppData()->AuthConfig.GetClusterAccessResourceId();
-
-    static TVector<TString> permissions;
-    if (accessServiceType == "Yandex_v2") {
-        permissions = {"ydb.developerApi.get", "ydb.developerApi.update"};
-    } else if (accessServiceType == "Nebius_v1") {
-        permissions = {"ydb.clusters.get", "ydb.clusters.monitor", "ydb.clusters.manage"};
-    } else {
-        return {};
-    }
-
-    static TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> entries = {
-        {NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions(permissions), {{"gizmo_id", clusterAccessResourceId}}}
+    auto makeEntries = []() -> TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> {
+        const TString& accessServiceType = AppData()->AuthConfig.GetAccessServiceType();
+        TVector<TString> permissions;
+        if (accessServiceType == "Yandex_v2") {
+            permissions = {"ydb.developerApi.get", "ydb.developerApi.update"};
+        } else if (accessServiceType == "Nebius_v1") {
+            permissions = {"ydb.clusters.get", "ydb.clusters.monitor", "ydb.clusters.manage"};
+        } else {
+            static const TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> emptyEntries = {};
+            return emptyEntries;
+        }
+        const TString& clusterAccessResourceId = AppData()->AuthConfig.GetClusterAccessResourceId();
+        TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> entries = {
+            {NKikimr::TEvTicketParser::TEvAuthorizeTicket::ToPermissions(permissions), {{"gizmo_id", clusterAccessResourceId}}}
+        };
+        return entries;
     };
+
+    static TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> entries = makeEntries();
     return entries;
 }
 

@@ -21,19 +21,20 @@ TCoNameValueTupleList BuildTopicPropsList(const TPqState::TTopicMeta& meta, TPos
 
     ui32 maxPartitionsCount = 0;
     if (meta.FederatedTopic) {
-        if (meta.FederatedTopic->size() == 1 && (*meta.FederatedTopic)[0].Info.Name.empty()) {
+        const auto& federatedTopics = *meta.FederatedTopic;
+        if (federatedTopics.size() == 1 && federatedTopics[0].Info.Name.empty()) {
             // non-federated fallback, omit FederatedClusters
-            maxPartitionsCount = (*meta.FederatedTopic)[0].PartitionsCount;
+            maxPartitionsCount = federatedTopics[0].PartitionsCount;
         } else {
-            TVector<TDqPqFederatedCluster> clusters;
-            for (const auto& federatedTopic: *meta.FederatedTopic) {
+            TVector<TDqPqFederatedCluster> clusters(Reserve(federatedTopics.size()));
+            for (const auto& topic: federatedTopics) {
                 clusters.push_back(Build<TDqPqFederatedCluster>(ctx, pos)
-                    .Name().Build(federatedTopic.Info.Name)
-                    .Endpoint().Build(federatedTopic.Info.Endpoint)
-                    .Database().Build(federatedTopic.Info.Path)
-                    .PartitionsCount().Build(ToString(federatedTopic.PartitionsCount))
+                    .Name().Build(topic.Info.Name)
+                    .Endpoint().Build(topic.Info.Endpoint)
+                    .Database().Build(topic.Info.Path)
+                    .PartitionsCount().Build(ToString(topic.PartitionsCount))
                     .Done());
-                maxPartitionsCount = std::max(maxPartitionsCount, federatedTopic.PartitionsCount);
+                maxPartitionsCount = std::max(maxPartitionsCount, topic.PartitionsCount);
             }
             props.push_back(
                     Build<TCoNameValueTuple>(ctx, pos)

@@ -51,7 +51,7 @@ NJson::TJsonValue TCalculationProcessor::DoDebugJson() const {
 
 ui64 TCalculationProcessor::DoGetWeight() const {
     if (KernelLogic) {
-        return (ui64)Kernel->GetWeight();
+        return (ui64)KernelLogic->GetWeight();
     }
     if (!YqlOperationId) {
         return (ui64)ECalculationHardness::Unknown;

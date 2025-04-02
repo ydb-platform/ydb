@@ -13,7 +13,7 @@ enum class ECalculationHardness {
     NotSpecified = 3,
     Equals = 5,
     StringMatching = 10,
-    UnknownCalculation = 20
+    Unknown = 20
 };
 
 class IKernelLogic {

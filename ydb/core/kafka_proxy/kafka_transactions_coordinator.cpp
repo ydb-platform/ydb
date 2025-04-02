@@ -6,11 +6,11 @@ namespace NKafka {
     // 1. validates that producer is not a zombie (in case of parallel init_producer_requests)
     // 2. saves transactional_id+producer_id+producer_epoch for validation of future transactional requests
     void TKafkaTransactionsCoordinator::Handle(TEvKafka::TEvSaveTxnProducerRequest::TPtr& ev, const TActorContext& ctx){
-        auto request = ev->Get();
+        TEvKafka::TEvSaveTxnProducerRequest* request = ev->Get();
 
         if (ProducersByTransactionalId.contains(request->TransactionalId)) {
-            auto& currentProducerState = ProducersByTransactionalId[request->TransactionalId];
-            auto newProducerState = TProducerState(request->ProducerId, request->ProducerEpoch);
+            TProducerState& currentProducerState = ProducersByTransactionalId[request->TransactionalId];
+            TProducerState newProducerState = TProducerState(request->ProducerId, request->ProducerEpoch);
 
             if (NewProducerStateIsOutdated(currentProducerState, newProducerState)) {
                 TString message = GetProducerIsOutdatedError(request->TransactionalId, currentProducerState, newProducerState);
@@ -62,7 +62,7 @@ namespace NKafka {
     // If outdated or not initialized: returns PRODUCER_FENCED error
     template<class ErrorResponseType, class EventType>
     void TKafkaTransactionsCoordinator::HandleTransactionalRequest(TAutoPtr<TEventHandle<EventType>>& evHandle, const TActorContext& ctx) {
-        auto ev = evHandle->Get();
+        EventType* ev = evHandle->Get();
         KAFKA_LOG_D(TStringBuilder() << "Receieved message for transactionalId " << ev->Request->TransactionalId->c_str() << " and ApiKey " << ev->Request->ApiKey());
         
         // create helper struct to simplify methods interaction
@@ -82,13 +82,13 @@ namespace NKafka {
     template<class ErrorResponseType, class RequestType>
     void TKafkaTransactionsCoordinator::SendProducerFencedResponse(TMessagePtr<RequestType> kafkaRequest, const TString& error, const TTransactionalRequest& txnRequestDetails) {
         KAFKA_LOG_W(error);
-        auto response = BuildProducerFencedResponse<ErrorResponseType>(kafkaRequest);
+        std::shared_ptr<ErrorResponseType> response = BuildProducerFencedResponse<ErrorResponseType>(kafkaRequest);
         Send(txnRequestDetails.ConnectionId, new TEvKafka::TEvResponse(txnRequestDetails.CorrelationId, response, EKafkaErrors::PRODUCER_FENCED));
     };
 
     template<class EventType> 
     void TKafkaTransactionsCoordinator::ForwardToTransactionActor(TAutoPtr<TEventHandle<EventType>>& evHandle, const TActorContext& ctx) {
-        auto ev = evHandle->Get();
+        EventType* ev = evHandle->Get();
         
         TActorId txnActorId;
         if (TxnActorByTransactionalId.contains(ev->Request->TransactionalId->c_str())) {
@@ -116,11 +116,11 @@ namespace NKafka {
         auto response = std::make_shared<TAddPartitionsToTxnResponseData>();
         std::vector<TAddPartitionsToTxnResponseData::TAddPartitionsToTxnTopicResult> topicsResponse;
         topicsResponse.reserve(request->Topics.size());
-        for (auto requestTopic : request->Topics) {
+        for (const auto& requestTopic : request->Topics) {
             TAddPartitionsToTxnResponseData::TAddPartitionsToTxnTopicResult topicInResponse;
             topicInResponse.Name = requestTopic.Name;
             topicInResponse.Results.reserve(requestTopic.Partitions.size());
-            for (auto requestPartition : requestTopic.Partitions) {
+            for (const auto& requestPartition : requestTopic.Partitions) {
                 TAddPartitionsToTxnResponseData::TAddPartitionsToTxnTopicResult::TAddPartitionsToTxnPartitionResult partitionInResponse;
                 partitionInResponse.PartitionIndex = requestPartition;
                 partitionInResponse.ErrorCode = EKafkaErrors::PRODUCER_FENCED;
@@ -137,11 +137,11 @@ namespace NKafka {
         auto response = std::make_shared<TTxnOffsetCommitResponseData>();
         std::vector<TTxnOffsetCommitResponseData::TTxnOffsetCommitResponseTopic> topicsResponse;
         topicsResponse.reserve(request->Topics.size());
-        for (auto requestTopic : request->Topics) {
+        for (const auto& requestTopic : request->Topics) {
             TTxnOffsetCommitResponseData::TTxnOffsetCommitResponseTopic topicInResponse;
             topicInResponse.Name = requestTopic.Name;
             topicInResponse.Partitions.reserve(requestTopic.Partitions.size());
-            for (auto requestPartition : requestTopic.Partitions) {
+            for (const auto& requestPartition : requestTopic.Partitions) {
                 TTxnOffsetCommitResponseData::TTxnOffsetCommitResponseTopic::TTxnOffsetCommitResponsePartition partitionInResponse;
                 partitionInResponse.PartitionIndex = requestPartition.PartitionIndex;
                 partitionInResponse.ErrorCode = EKafkaErrors::PRODUCER_FENCED;
@@ -150,46 +150,6 @@ namespace NKafka {
             topicsResponse.push_back(topicInResponse);
         }
         response->Topics = std::move(topicsResponse);;
-        return response;
-    };
-
-    std::shared_ptr<TAddPartitionsToTxnResponseData> TKafkaTransactionsCoordinator::BuildProducerFencedResponseForAddPartitions(TMessagePtr<TAddPartitionsToTxnRequestData> request) {
-        auto response = std::make_shared<TAddPartitionsToTxnResponseData>();
-        std::vector<TAddPartitionsToTxnResponseData::TAddPartitionsToTxnTopicResult> topicsResponse;
-        topicsResponse.reserve(request->Topics.size());
-        for (auto requestTopic : request->Topics) {
-            TAddPartitionsToTxnResponseData::TAddPartitionsToTxnTopicResult topicInResponse;
-            topicInResponse.Name = requestTopic.Name;
-            topicInResponse.Results.reserve(requestTopic.Partitions.size());
-            for (auto requestPartition : requestTopic.Partitions) {
-                TAddPartitionsToTxnResponseData::TAddPartitionsToTxnTopicResult::TAddPartitionsToTxnPartitionResult partitionInResponse;
-                partitionInResponse.PartitionIndex = requestPartition;
-                partitionInResponse.ErrorCode = EKafkaErrors::PRODUCER_FENCED;
-                topicInResponse.Results.push_back(partitionInResponse);
-            }
-            topicsResponse.push_back(topicInResponse);
-        }
-        response->Results = topicsResponse;
-        return response;
-    };
-
-    std::shared_ptr<TTxnOffsetCommitResponseData> TKafkaTransactionsCoordinator::BuildProducerFencedResponseForTxnOffsetCommit(const TTxnOffsetCommitRequestData* const request) {
-        auto response = std::make_shared<TTxnOffsetCommitResponseData>();
-        std::vector<TTxnOffsetCommitResponseData::TTxnOffsetCommitResponseTopic> topicsResponse;
-        topicsResponse.reserve(request->Topics.size());
-        for (auto requestTopic : request->Topics) {
-            TTxnOffsetCommitResponseData::TTxnOffsetCommitResponseTopic topicInResponse;
-            topicInResponse.Name = requestTopic.Name;
-            topicInResponse.Partitions.reserve(requestTopic.Partitions.size());
-            for (auto requestPartition : requestTopic.Partitions) {
-                TTxnOffsetCommitResponseData::TTxnOffsetCommitResponseTopic::TTxnOffsetCommitResponsePartition partitionInResponse;
-                partitionInResponse.PartitionIndex = requestPartition.PartitionIndex;
-                partitionInResponse.ErrorCode = EKafkaErrors::PRODUCER_FENCED;
-                topicInResponse.Partitions.push_back(partitionInResponse);
-            }
-            topicsResponse.push_back(topicInResponse);
-        }
-        response->Topics = topicsResponse;
         return response;
     };
 

@@ -71,8 +71,6 @@ namespace NKafka {
 
             template<class ResponseType, class RequestType>
             std::shared_ptr<ResponseType> BuildProducerFencedResponse(TMessagePtr<RequestType> request);
-            std::shared_ptr<TAddPartitionsToTxnResponseData> BuildProducerFencedResponseForAddPartitions(TMessagePtr<TAddPartitionsToTxnRequestData> ev);
-            std::shared_ptr<TTxnOffsetCommitResponseData> BuildProducerFencedResponseForTxnOffsetCommit(const TTxnOffsetCommitRequestData* const ev);
 
             bool NewProducerStateIsOutdated(const TProducerState& currentProducerState, const TProducerState& newProducerState);
             TMaybe<TString> GetTxnRequestError(const TTransactionalRequest& request);

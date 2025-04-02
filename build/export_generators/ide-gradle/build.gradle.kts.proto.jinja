@@ -6,6 +6,7 @@
 {%-     elif output and arg[0] != '/' -%}
 {#- Relative outputs in buildDir -#}
 "$buildDir/{{ arg }}"
+{%-     else -%}
 {#- Replace (export_root) === (BUILD_ROOT in ymake) to baseBuildDir in Gradle - root of all build folders for modules -#}
 "{{ arg|replace(export_root, "$baseBuildDir")|replace(arcadia_root, "$project_root") }}"
 {%-     endif -%}

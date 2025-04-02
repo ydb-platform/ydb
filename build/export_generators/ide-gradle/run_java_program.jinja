@@ -64,13 +64,21 @@ val runJav{{ loop.index }} = task<JavaExec>("runJavaProgram{{ loop.index }}") {
 
 {%-        if run.out_dir|length -%}
 {%-            for out_dir in run.out_dir|unique %}
+{%-                if proto_template %}
+    outputs.files({{ PatchGeneratedProto(out_dir) }})
+{%-                else %}
     outputs.dir({{ PatchRoots(out_dir, false, true) }})
+{%-                endif -%}
 {%-            endfor -%}
 {%-        endif -%}
 
 {%-        if run.out|length -%}
 {%-            for out in run.out|unique %}
+{%-                if proto_template %}
+    outputs.files({{ PatchGeneratedProto(out) }})
+{%-                else %}
     outputs.files({{ PatchRoots(out, false, true) }})
+{%-                endif -%}
 {%-            endfor -%}
 {%-        endif -%}
 
@@ -83,7 +91,6 @@ val runJav{{ loop.index }} = task<JavaExec>("runJavaProgram{{ loop.index }}") {
 
 {%- if proto_template %}
 
-tasks.getByName("prepareMainProtos").dependsOn(runJav{{ loop.index }})
 tasks.getByName("extractMainLibrariesProtos").dependsOn(runJav{{ loop.index }})
 {%- endif %}
 

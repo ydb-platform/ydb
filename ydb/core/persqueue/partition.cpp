@@ -436,7 +436,7 @@ bool TPartition::CleanUpBlobs(TEvKeyValue::TEvRequest *request, const TActorCont
             break;
         }
 
-        auto& firstKey = DataKeysBody.front();
+        auto& firstKey = WorkZone.DataKeysBody.front();
 
         auto expiredByLifetime = hasLifetime && now >= firstKey.Timestamp + lifetimeLimit;
         auto expiredByStorageLimit =
@@ -2373,7 +2373,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
              ", t.WriteInfo->BlobsFromHead.size=" << t.WriteInfo->BlobsFromHead.size());
     PQ_LOG_D("Head=" << WorkZone.Head << ", NewHead=" << WorkZone.NewHead);
 
-    auto oldHeadOffset = NewHead.Offset;
+    auto oldHeadOffset = WorkZone.NewHead.Offset;
 
     if (!t.WriteInfo->BodyKeys.empty()) {
         bool needCompactHead =

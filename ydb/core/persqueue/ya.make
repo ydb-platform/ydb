@@ -1,9 +1,5 @@
 LIBRARY()
 
-CFLAGS(
-    -ferror-limit=1000
-)
-
 SRCS(
     actor_persqueue_client_iface.h
     blob.cpp

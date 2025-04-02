@@ -160,6 +160,10 @@ struct MainTestCase {
     {
     }
 
+    ~MainTestCase() {
+        Driver.Stop(true);
+    }
+
     void ExecuteDDL(const TString& ddl, bool checkResult = true) {
         Cerr << "DDL: " << ddl << Endl << Flush;
         auto res = Session.ExecuteQuery(ddl, TTxControl::NoTx()).GetValueSync();
@@ -555,8 +559,6 @@ struct MainTestCase {
     TQueryClient TableClient;
     TSession Session;
     TTopicClient TopicClient;
-
-    std::vector<std::string> ColumnNames;
 };
 
 

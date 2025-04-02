@@ -98,7 +98,7 @@ class TestAsyncReplication(TestBase):
                 try:
                     rows = self.query_async(sql_select)
                     break
-                except Exception as e:
+                except Exception:
                     time.sleep(1)
 
             for _ in range(10):

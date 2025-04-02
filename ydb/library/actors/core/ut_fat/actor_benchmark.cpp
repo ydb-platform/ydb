@@ -117,7 +117,7 @@ Y_UNIT_TEST_SUITE(HeavyActorBenchmark) {
             busyThreads.emplace_back(new TActorBenchmark::TBusyThread());
             busyThreads.back()->LoadType = TActorBenchmark::ELoadType::RandomWrite;
             busyThreads.back()->Buffer.resize(1024*1024);
-            TCpuMask coreMask(cores[i]22);
+            TCpuMask coreMask(cores[i]);
             busyThreads.back()->Affinity = std::make_unique<TAffinity>(coreMask);
             busyThreads.back()->Start();
         }

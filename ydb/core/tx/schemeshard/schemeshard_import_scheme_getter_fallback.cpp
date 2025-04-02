@@ -25,11 +25,32 @@ private:
     const TActorId ReplyTo;
     TImportInfo::TPtr ImportInfo;
     const ui32 ItemIdx;
-
 }; // TSchemeGetterFallback
 
-IActor* CreateSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx) {
-    return new TSchemeGetterFallback(replyTo, importInfo, itemIdx);
+class TSchemaMappingGetterFallback: public TActorBootstrapped<TSchemaMappingGetterFallback> {
+public:
+    explicit TSchemaMappingGetterFallback(const TActorId& replyTo, TImportInfo::TPtr importInfo)
+        : ReplyTo(replyTo)
+        , ImportInfo(importInfo)
+    {
+    }
+
+    void Bootstrap() {
+        Send(ReplyTo, new TEvPrivate::TEvImportSchemaMappingReady(ImportInfo->Id, false, "Imports from S3 are disabled"));
+        PassAway();
+    }
+
+private:
+    const TActorId ReplyTo;
+    TImportInfo::TPtr ImportInfo;
+}; // TSchemeGetterFallback
+
+IActor* CreateSchemeGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo, ui32 itemIdx, TMaybe<NBackup::TEncryptionIV>) {
+    return new TSchemeGetterFallback(replyTo, std::move(importInfo), itemIdx);
+}
+
+IActor* CreateSchemaMappingGetter(const TActorId& replyTo, TImportInfo::TPtr importInfo) {
+    return new TSchemaMappingGetterFallback(replyTo, std::move(importInfo));
 }
 
 } // NSchemeShard

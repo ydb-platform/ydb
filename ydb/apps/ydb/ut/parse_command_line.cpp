@@ -284,6 +284,18 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         );
     }
 
+    Y_UNIT_TEST_F(NoDiscoveryCommandLine, TCliTestFixture) {
+        RunCli(
+            {
+                "-v",
+                "-e", GetEndpoint(),
+                "-d", GetDatabase(),
+                "--no-discovery",
+                "scheme", "ls",
+            }
+        );
+    }
+
     Y_UNIT_TEST_F(EndpointAndDatabaseFromActiveProfile, TCliTestFixture) {
         TString profile = fmt::format(R"yaml(
         profiles:
@@ -525,17 +537,16 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
             {"YDB_PASSWORD", "pwd"},
         });
 
-        // TODO: make these options mutually exclusive
-        // ExpectFail();
-        // RunCli({
-        //     "-v",
-        //     "-e", GetEndpoint(),
-        //     "-d", GetDatabase(),
-        //     "--user", "test-user",
-        //     "--no-password",
-        //     "--password-file", passwordFile,
-        //     "scheme", "ls",
-        // });
+        ExpectFail();
+        RunCli({
+            "-v",
+            "-e", GetEndpoint(),
+            "-d", GetDatabase(),
+            "--user", "test-user",
+            "--no-password",
+            "--password-file", passwordFile,
+            "scheme", "ls",
+        });
 
         TString profile = fmt::format(R"yaml(
         profiles:
@@ -636,18 +647,16 @@ Y_UNIT_TEST_SUITE(ParseOptionsTest) {
         {},
         profile);
 
-        // TODO: validate that there is no ambiguity in setting passwords
-        // ExpectFail();
-        // RunCli({
-        //     "-v",
-        //     "-p", "test_profile_with_both_passwords",
-        //     "scheme", "ls",
-        // },
-        // {},
-        // profile);
+        ExpectFail();
+        RunCli({
+            "-v",
+            "-p", "test_profile_with_both_passwords",
+            "scheme", "ls",
+        },
+        {},
+        profile);
 
-        // TODO: Fix this case
-        //ExpectUserAndPassword("user_no_password", "", "no-password-token");
+        ExpectUserAndPassword("user_no_password", "", "no-password-token");
         RunCli({
             "-v",
             "-p", "test_profile_without_password",

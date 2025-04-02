@@ -169,7 +169,7 @@ void TKafkaSaslAuthActor::SendApiKeyRequest() {
     }
     Send(NKikimr::MakeTicketParserID(), new NKikimr::TEvTicketParser::TEvAuthorizeTicket({
         .Database = DatabasePath,
-        .Ticket = "ApiKey " + ClientAuthData.Password,
+        .Ticket = ticket,
         .PeerName = TStringBuilder() << Address,
         .Entries = entries
     }));

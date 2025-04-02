@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/runtime/kqp_write_table.h>
 #include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
 #include <ydb/core/persqueue/purecalc/purecalc.h> // should be after topic_message
+#include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/tx/scheme_cache/helpers.h>
 #include <ydb/core/tx/tx_proxy/upload_rows_common_impl.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -58,8 +59,8 @@ struct TOutputType {
 
 class TMessageOutputSpec : public NYql::NPureCalc::TOutputSpecBase {
 public:
-    explicit TMessageOutputSpec(const TVector<TSchemaColumn>& tableColumns, const NYT::TNode& schema)
-        : TableColumns(tableColumns)
+    explicit TMessageOutputSpec(const TScheme& tableScheme, const NYT::TNode& schema)
+        : TableScheme(tableScheme)
         , Schema(schema)
     {}
 
@@ -68,12 +69,12 @@ public:
         return Schema;
     }
 
-    const TVector<TSchemaColumn> GetTableColumns() const {
-        return TableColumns;
+    const TVector<NKikimrKqp::TKqpColumnMetadataProto>& GetTableColumns() const {
+        return TableScheme.ColumnsMetadata;
     }
 
 private:
-    const TVector<TSchemaColumn> TableColumns;
+    const TScheme TableScheme;
     const NYT::TNode Schema;
 };
 
@@ -104,6 +105,15 @@ public:
             }
 
             Out.Value = value.GetElement(0);
+
+            const auto& columns = OutputSpec.GetTableColumns();
+            for (size_t i = 0; i < columns.size(); ++i) {
+                const auto& column = columns[i];
+                if (column.GetNotNull() && !Out.Value.GetElement(i)) {
+                    throw yexception() << "The value of the '" << column.GetName() << "' column must be non-NULL";
+                }
+            }
+
             Out.Data.PushRow(&Out.Value, 1);
 
             return &Out;
@@ -190,11 +200,11 @@ public:
 
 public:
     TProgramHolder(
-        const TVector<TSchemaColumn>& tableColumns,
+        const TScheme& tableScheme,
         const TString& sql
     )
         : TopicColumns()
-        , TableColumns(tableColumns)
+        , TableScheme(tableScheme)
         , Sql(sql)
     {}
 
@@ -204,7 +214,7 @@ public:
         // allocated on another allocator and should be released
         Program = programFactory->MakePullListProgram(
             NYdb::NTopic::NPurecalc::TMessageInputSpec(),
-            TMessageOutputSpec(TableColumns, MakeOutputSchema(TableColumns)),
+            TMessageOutputSpec(TableScheme, MakeOutputSchema(TableScheme.TableColumns)),
             Sql,
             NYql::NPureCalc::ETranslationMode::SQL
         );
@@ -216,7 +226,7 @@ public:
 
 private:
     const TVector<TSchemaColumn> TopicColumns;
-    const TVector<TSchemaColumn> TableColumns;
+    const TScheme TableScheme;
     const TString Sql;
 
     THolder<NYql::NPureCalc::TPullListProgram<NYdb::NTopic::NPurecalc::TMessageInputSpec, TMessageOutputSpec>> Program;
@@ -238,10 +248,11 @@ TScheme BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav) {
     result.TableColumns.resize(keyColumns);
 
     for (const auto& [_, column] : entry.Columns) {
+        auto notNull = entry.NotNullColumns.contains(column.Name);
         if (column.KeyOrder >= 0) {
-            result.TableColumns[column.KeyOrder] = {column.Name, column.Id, column.PType, column.KeyOrder >= 0, !column.IsNotNullColumn};
+            result.TableColumns[column.KeyOrder] = {column.Name, column.Id, column.PType, column.KeyOrder >= 0, !notNull};
         } else {
-            result.TableColumns.emplace_back(column.Name, column.Id, column.PType, column.KeyOrder >= 0, !column.IsNotNullColumn);
+            result.TableColumns.emplace_back(column.Name, column.Id, column.PType, column.KeyOrder >= 0, !notNull);
         }
     }
 
@@ -259,6 +270,7 @@ TScheme BuildScheme(const TAutoPtr<NSchemeCache::TSchemeCacheNavigate>& nav) {
         c.SetName(column.Name);
         c.SetId(column.Id);
         c.SetTypeId(column.PType.GetTypeId());
+        c.SetNotNull(entry.NotNullColumns.contains(column.Name));
 
         if (NScheme::NTypeIds::IsParametrizedType(column.PType.GetTypeId())) {
             NScheme::ProtoFromTypeInfo(column.PType, "", *c.MutableTypeInfo());
@@ -298,8 +310,8 @@ public:
 
     virtual TString Handle(TEvents::TEvCompleted::TPtr& ev) = 0;
 
-    const TVector<TSchemaColumn>& GetTableColumns() const {
-        return Scheme.TableColumns;
+    const TScheme& GetScheme() const {
+        return Scheme;
     }
 
 protected:
@@ -408,8 +420,6 @@ class TTransferWriter
     : public TActorBootstrapped<TTransferWriter>
     , private NSchemeCache::TSchemeCacheHelpers
 {
-    static constexpr i64 ExpectedBatchSize = 8_MB;
-    static constexpr TDuration FlushInterval = TDuration::Seconds(5);
     static constexpr TDuration MinRetryDelay = TDuration::Seconds(1);
     static constexpr TDuration MaxRetryDelay = TDuration::Minutes(10);
 
@@ -499,12 +509,14 @@ private:
             return;
         }
 
+        // TODO support row tables
+        if (entry.Status == TNavigate::EStatus::PathNotTable || entry.Kind != TNavigate::KindColumnTable) {
+            return LogCritAndLeave("Only column tables are supported as transfer targets");
+        }
+
         if (!CheckEntrySucceeded(entry)) {
             return;
         }
-
-        // TODO support row tables
-        CheckEntryKind(entry, TNavigate::KindColumnTable);
 
         if (entry.Kind == TNavigate::KindColumnTable) {
             TableState = std::make_unique<TColumnTableState>(SelfId(), result);
@@ -520,7 +532,7 @@ private:
         LOG_D("CompileTransferLambda: worker# " << Worker);
 
         NFq::TPurecalcCompileSettings settings = {};
-        auto programHolder = MakeIntrusive<TProgramHolder>(TableState->GetTableColumns(), GenerateSql());
+        auto programHolder = MakeIntrusive<TProgramHolder>(TableState->GetScheme(), GenerateSql());
         auto result = std::make_unique<NFq::TEvRowDispatcher::TEvPurecalcCompileRequest>(std::move(programHolder), settings);
 
         Send(CompileServiceId, result.release(), 0, ++InFlightCompilationId);
@@ -651,12 +663,12 @@ private:
                 }
             } catch (const yexception& e) {
                 ProcessingErrorStatus = TEvWorker::TEvGone::EStatus::SCHEME_ERROR;
-                ProcessingError = TStringBuilder() << "Error transform message: " << e.what();
+                ProcessingError = TStringBuilder() << "Error transform message partition " << partitionId << " offset " << message.GetOffset() << ": " << e.what();
                 break;
             }
         }
 
-        if (TableState->BatchSize() >= ExpectedBatchSize || *LastWriteTime < TInstant::Now() - FlushInterval) {
+        if (!ProcessingError && (TableState->BatchSize() >= BatchSizeBytes || *LastWriteTime < TInstant::Now() - FlushInterval)) {
             if (TableState->Flush()) {
                 LastWriteTime.reset();
                 return Become(&TThis::StateWrite);
@@ -790,16 +802,21 @@ public:
     explicit TTransferWriter(
             const TString& transformLambda,
             const TPathId& tablePathId,
-            const TActorId& compileServiceId)
+            const TActorId& compileServiceId,
+            const NKikimrReplication::TBatchingSettings& batchingSettings)
         : TransformLambda(transformLambda)
         , TablePathId(tablePathId)
         , CompileServiceId(compileServiceId)
+        , FlushInterval(TDuration::MilliSeconds(std::max<ui64>(batchingSettings.GetFlushIntervalMilliSeconds(), 1000)))
+        , BatchSizeBytes(std::min<ui64>(batchingSettings.GetBatchSizeBytes(), 1_GB))
     {}
 
 private:
     const TString TransformLambda;
     const TPathId TablePathId;
     const TActorId CompileServiceId;
+    const TDuration FlushInterval;
+    const i64 BatchSizeBytes;
     TActorId Worker;
 
     ITableKindState::TPtr TableState;
@@ -825,9 +842,9 @@ private:
 }; // TTransferWriter
 
 IActor* CreateTransferWriter(const TString& transformLambda, const TPathId& tablePathId,
-        const TActorId& compileServiceId)
+        const TActorId& compileServiceId, const NKikimrReplication::TBatchingSettings& batchingSettings)
 {
-    return new TTransferWriter(transformLambda, tablePathId, compileServiceId);
+    return new TTransferWriter(transformLambda, tablePathId, compileServiceId, batchingSettings);
 }
 
 }

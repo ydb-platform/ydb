@@ -245,7 +245,9 @@ public:
         Functions["WideTopSortBlocks"] = &TCallableConstraintTransformer::WideTopWrap<true>;
         Functions["WideSortBlocks"] = &TCallableConstraintTransformer::WideTopWrap<true>;
         Functions["WideToBlocks"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
+        Functions["ListToBlocks"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["WideFromBlocks"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
+        Functions["ListFromBlocks"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["ReplicateScalars"] = &TCallableConstraintTransformer::CopyAllFrom<0>;
         Functions["BlockMergeFinalizeHashed"] = &TCallableConstraintTransformer::AggregateWrap<true>;
         Functions["BlockMergeManyFinalizeHashed"] = &TCallableConstraintTransformer::AggregateWrap<true>;

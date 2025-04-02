@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/columnshard/data_accessor/abstract/collector.h>
 #include <ydb/core/tx/columnshard/data_accessor/request.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 #include <library/cpp/cache/cache.h>
 
@@ -23,7 +24,7 @@ private:
     virtual void DoModifyPortions(const std::vector<TPortionDataAccessor>& add, const std::vector<ui64>& remove) override;
 
 public:
-    TCollector(const ui64 pathId, const ui64 maxSize, const NActors::TActorId& actorId)
+    TCollector(const TInternalPathId pathId, const ui64 maxSize, const NActors::TActorId& actorId)
         : TBase(pathId)
         , TabletActorId(actorId)
         , AccessorsCache(maxSize) {

@@ -39,7 +39,8 @@ class TWorkerRegistar: public TActorBootstrapped<TWorkerRegistar> {
 
             auto ev = MakeRunWorkerEv(
                 ReplicationId, TargetId, Config, partition.GetPartitionId(),
-                ConnectionParams, ConsistencySettings, SrcStreamPath, SrcStreamConsumerName, DstPathId);
+                ConnectionParams, ConsistencySettings, SrcStreamPath, SrcStreamConsumerName, DstPathId,
+                BatchingSettings);
             Send(Parent, std::move(ev));
         }
 
@@ -66,7 +67,8 @@ public:
             const TString& srcStreamPath,
             const TString& srcStreamConsumerName,
             const TPathId& dstPathId,
-            const TReplication::ITarget::IConfig::TPtr& config)
+            const TReplication::ITarget::IConfig::TPtr& config,
+            const NKikimrReplication::TBatchingSettings& batchingSettings)
         : Parent(parent)
         , YdbProxy(proxy)
         , ConnectionParams(connectionParams)
@@ -78,6 +80,7 @@ public:
         , DstPathId(dstPathId)
         , LogPrefix("TableWorkerRegistar", ReplicationId, TargetId)
         , Config(config)
+        , BatchingSettings(batchingSettings)
     {
     }
 
@@ -106,6 +109,7 @@ private:
     const TPathId DstPathId;
     const TActorLogPrefix LogPrefix;
     const TReplication::ITarget::IConfig::TPtr Config;
+    const NKikimrReplication::TBatchingSettings BatchingSettings;
 
 }; // TWorkerRegistar
 
@@ -152,9 +156,11 @@ void TTargetWithStream::Shutdown(const TActorContext& ctx) {
 IActor* TTargetWithStream::CreateWorkerRegistar(const TActorContext& ctx) const {
     auto replication = GetReplication();
     const auto& config = replication->GetConfig();
+
     return new TWorkerRegistar(ctx.SelfID, replication->GetYdbProxy(),
         config.GetSrcConnectionParams(), config.GetConsistencySettings(),
-        replication->GetId(), GetId(), GetStreamPath(), GetStreamConsumerName(), GetDstPathId(), GetConfig());
+        replication->GetId(), GetId(), GetStreamPath(), GetStreamConsumerName(), GetDstPathId(), GetConfig(),
+        config.GetTransferSpecific().GetBatching());
 }
 
 }

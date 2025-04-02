@@ -158,7 +158,7 @@ namespace NKikimr {
         }
 
         void Finish(const TActorContext &ctx) {
-            Y_ABORT_UNLESS(RestToReadIndex == 0 && RestToReadOutbound == 0);
+            Y_VERIFY_S(RestToReadIndex == 0 && RestToReadOutbound == 0, VCtx->VDiskLogPrefix);
 
             // add data chunks to ChunksBuilder
             typedef typename TLevelSegment::TMemIterator TMemIterator;
@@ -177,7 +177,7 @@ namespace NKikimr {
                 if (first) {
                     first = false;
                 } else {
-                    Y_ABORT_UNLESS(prevKey < key && !prevKey.IsSameAs(key));
+                    Y_VERIFY_S(prevKey < key && !prevKey.IsSameAs(key), VCtx->VDiskLogPrefix);
                 }
                 prevKey = key;
 
@@ -190,14 +190,14 @@ namespace NKikimr {
         }
 
         void AppendIndexData(const char *data, size_t size) {
-            Y_DEBUG_ABORT_UNLESS(data && size && RestToReadIndex >= size);
+            Y_VERIFY_DEBUG_S(data && size && RestToReadIndex >= size, VCtx->VDiskLogPrefix);
 
             RestToReadIndex -= size;
             memcpy(reinterpret_cast<char *>(LevelSegment->LoadedIndex.data()) + RestToReadIndex, data, size);
         }
 
         void AppendData(const char *data, size_t size) {
-            Y_DEBUG_ABORT_UNLESS(data && size);
+            Y_VERIFY_DEBUG_S(data && size, VCtx->VDiskLogPrefix);
 
             if (RestToReadOutbound) {
                 if (RestToReadOutbound >= size) {
@@ -233,7 +233,7 @@ namespace NKikimr {
                 size_t partSize = data.Size() - sizeof(TIdxDiskPlaceHolder);
                 memcpy(&placeHolder, data.DataPtr<const TIdxDiskPlaceHolder>(partSize), sizeof(TIdxDiskPlaceHolder));
 
-                Y_ABORT_UNLESS(placeHolder.MagicNumber == TIdxDiskPlaceHolder::Signature);
+                Y_VERIFY_S(placeHolder.MagicNumber == TIdxDiskPlaceHolder::Signature, VCtx->VDiskLogPrefix);
                 RestToReadIndex = placeHolder.Info.IdxTotalSize;
                 RestToReadOutbound = placeHolder.Info.OutboundItems * sizeof(TDiskPart);
                 LevelSegment->LoadedIndex.resize(placeHolder.Info.Items);

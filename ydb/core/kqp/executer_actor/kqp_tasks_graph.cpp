@@ -545,7 +545,8 @@ void BuildKqpStageChannels(TKqpTasksGraph& tasksGraph, TStageInfo& stageInfo,
             columnShardHashV1Params.SourceTableKeyColumnTypes->reserve(columnShardHashV1.KeyColumnTypesSize());
             for (const auto& keyColumnType: columnShardHashV1.GetKeyColumnTypes()) {
                 auto typeId = static_cast<NScheme::TTypeId>(keyColumnType);
-                auto typeInfo = NScheme::TTypeInfo{typeId};
+                auto typeInfo =
+                    typeId == NScheme::NTypeIds::Decimal? NScheme::TTypeInfo(NKikimr::NScheme::TDecimalType::Default()): NScheme::TTypeInfo(typeId);
                 columnShardHashV1Params.SourceTableKeyColumnTypes->push_back(typeInfo);
             }
             break;

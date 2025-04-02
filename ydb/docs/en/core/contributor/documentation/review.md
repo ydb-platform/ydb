@@ -1,6 +1,6 @@
 # Review process for {{ ydb-short-name }} documentation
 
-Building on the high-level overview in [{#T}](index.md), this article dives deeper into what happens during the pull request review stage.
+Building on the high-level overview in [{#T}](index.md), this article dives deeper into what happens during the documentation pull request review stage.
 
 ## Roles
 
@@ -18,7 +18,14 @@ Building on the high-level overview in [{#T}](index.md), this article dives deep
    3. The suggested change builds successfully, and automation has posted a comment with a preview link (instead of errors). The preview shows the changed content as expected.
 
 3. *(optional)* **Author** shares a link to the pull request in a [community](https://t.me/ydb_en) or documentation-related chat for extra visibility.
-4. A **primary reviewer** picks the pull request from the [inbound list](https://github.com/ydb-platform/ydb/pulls?q=is%3Aopen+is%3Apr+label%3Adocumentation+draft%3Afalse+no%3Aassignee), clicks the "assign yourself" button in the right sidebar, and then provides the initial set of feedback and suggestions.
+4. A **primary reviewer** gets automatically assigned or picks the pull request from the [inbound list](https://github.com/ydb-platform/ydb/pulls?q=is%3Aopen+is%3Apr+label%3Adocumentation+draft%3Afalse+no%3Aassignee) via the "assign yourself" button, and then provides the initial set of feedback and suggestions.
+
+   {% cut "Temporarily excluding yourself from automatic assignment if you're a primary reviewer" %}
+
+   ![Excluding yourself from primary reviewers](./_assets/excluding-primary-reviewer.jpeg)
+
+   {% endcut %}
+
 5. The **author** and **primary reviewer** iterate until the suggested change passes the [checklist](#checklist). The **primary reviewer** provides feedback via comments on the pull request, while the **author** addresses them. The expected turnaround time for each review iteration is two business days, up to a few weeks in case of force majeure.
 6. Once the **primary reviewer** confirms that the pull request meets the checklist requirements, they:
 
@@ -48,7 +55,7 @@ Building on the high-level overview in [{#T}](index.md), this article dives deep
 - [ ] Each article follows a single [genre](genres.md) and aligns with its place in the documentation structure.
 - [ ] Each new article includes links to all relevant existing documentation pages, either inline or in a "See also" section.
 - [ ] Relevant existing articles are updated with links to new articles.
-- [ ] All new articles are listed in table of contents and their folder's `index.md`.
+- [ ] All new articles are listed in YAML files with table of contents and their folder's `index.md`.
 - [ ] All renamed or moved articles are reflected in [redirects.yaml](https://github.com/ydb-platform/ydb/blob/main/ydb/docs/redirects.yaml).
 - [ ] The article's voice, tone, and style match the rest of the documentation or, at a minimum, remain consistent within the article.
 

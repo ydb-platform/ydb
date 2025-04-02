@@ -314,7 +314,7 @@ private:
         TMaybe<TString> CteRefName;
         TMap<TString, NJson::TJsonValue> NodeInfo;
         TVector<TOperator> Operators;
-        THashSet<ui32> Plans;
+        TSet<ui32> Plans;
         const NKqpProto::TKqpPhyStage* StageProto;
         TMap<TString, TString> OptEstimates;
     };
@@ -839,15 +839,17 @@ private:
             op.Properties["Table"] = tableData.RelativePath ? *tableData.RelativePath : tablePath;
             op.Properties["Path"] = tablePath;
 
-            const auto& tupleType = stage.Ref().GetTypeAnn()->Cast<TTupleExprType>();
-            YQL_ENSURE(tupleType);
-            YQL_ENSURE(tupleType->GetSize() == 1);
-            const auto& listType = tupleType->GetItems()[0]->Cast<TListExprType>();
-            YQL_ENSURE(listType);
-            const auto& structType = listType->GetItemType()->Cast<TStructExprType>();
-            YQL_ENSURE(structType);
-            for (const auto& item : structType->GetItems()) {
-                writeInfo.Columns.push_back(TString(item->GetName()));
+            if (writeInfo.Type != EPlanTableWriteType::MultiErase) {
+                const auto& tupleType = stage.Ref().GetTypeAnn()->Cast<TTupleExprType>();
+                YQL_ENSURE(tupleType);
+                YQL_ENSURE(tupleType->GetSize() == 1);
+                const auto& listType = tupleType->GetItems()[0]->Cast<TListExprType>();
+                YQL_ENSURE(listType);
+                const auto& structType = listType->GetItemType()->Cast<TStructExprType>();
+                YQL_ENSURE(structType);
+                for (const auto& item : structType->GetItems()) {
+                    writeInfo.Columns.push_back(TString(item->GetName()));
+                }
             }
 
             SerializerCtx.Tables[tablePath].Writes.push_back(writeInfo);

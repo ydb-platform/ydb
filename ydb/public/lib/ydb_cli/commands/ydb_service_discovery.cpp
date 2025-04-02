@@ -58,7 +58,7 @@ TCommandWhoAmI::TCommandWhoAmI()
 
 void TCommandWhoAmI::Config(TConfig& config) {
     TYdbSimpleCommand::Config(config);
-    config.Opts->AddLongOption('g', "groups", "With groups").NoArgument().SetFlag(&WithGroups);
+    config.Opts->AddLongOption('g', "groups", "With groups").StoreTrue(&WithGroups);
     config.SetFreeArgsNum(0);
 }
 

@@ -3,10 +3,11 @@
 #include "test_part.h"
 #include "test_writer.h"
 
-#include <ydb/core/tablet_flat/util_basics.h>
 #include <ydb/core/tablet_flat/flat_row_versions.h>
 #include <ydb/core/tablet_flat/flat_table_subset.h>
 #include <ydb/core/tablet_flat/flat_scan_feed.h>
+#include <ydb/core/tablet_flat/util_basics.h>
+#include <ydb/core/tablet_flat/util_fmt_abort.h>
 #include <ydb/core/tablet_flat/test/libs/rows/layout.h>
 
 namespace NKikimr {
@@ -29,7 +30,7 @@ namespace NTest {
             }
 
             TPartView LoadPart(const TIntrusiveConstPtr<TColdPart>&) override {
-                Y_ABORT("not supported in test scans");
+                Y_TABLET_ERROR("not supported in test scans");
             }
 
             IPages * const Env = nullptr;
@@ -69,7 +70,7 @@ namespace NTest {
 
             for (auto &one: eggs) {
                 for (const auto &part : one->Parts) {
-                    Y_ABORT_UNLESS(part->Slices, "Missing part slices");
+                    Y_ENSURE(part->Slices, "Missing part slices");
                     partView.push_back({ part, nullptr, part->Slices });
                 }
             }
@@ -104,11 +105,11 @@ namespace NTest {
                 } else if (ready == EReady::Gone) {
                     auto eggs = blocks.Flush(subset.Scheme, Writer->Finish());
 
-                    Y_ABORT_UNLESS(eggs.Written->Rows <= conf.MaxRows);
+                    Y_ENSURE(eggs.Written->Rows <= conf.MaxRows);
 
                     return eggs;
                 } else if (ready != EReady::Page) {
-                     Y_ABORT("Subset scanner give unexpected cycle result");
+                     Y_TABLET_ERROR("Subset scanner give unexpected cycle result");
                 } else if (Failed++ > Retries) {
 
                     /* Early termination without any complete result, event
@@ -124,7 +125,7 @@ namespace NTest {
                         until there is some progress.
                      */
 
-                    Y_ABORT("Mocked compaction failied to make any progress");
+                    Y_TABLET_ERROR("Mocked compaction failied to make any progress");
                 }
             }
         }
@@ -132,12 +133,12 @@ namespace NTest {
     private:
         virtual TInitialState Prepare(IDriver*, TIntrusiveConstPtr<TScheme>) override
         {
-            Y_ABORT("IScan::Prepare(...) isn't used in test env compaction");
+            Y_TABLET_ERROR("IScan::Prepare(...) isn't used in test env compaction");
         }
 
         EScan Seek(TLead &lead, ui64 seq) override
         {
-            Y_ABORT_UNLESS(seq < 2, "Test IScan impl Got too many Seek() calls");
+            Y_ENSURE(seq < 2, "Test IScan impl Got too many Seek() calls");
 
             lead.To(Tags, { }, ESeek::Lower);
 
@@ -188,7 +189,7 @@ namespace NTest {
 
         TAutoPtr<IDestructable> Finish(EAbort) override
         {
-            Y_ABORT("IScan::Finish(...) shouldn't be called in test env");
+            Y_TABLET_ERROR("IScan::Finish(...) shouldn't be called in test env");
         }
 
         void Describe(IOutputStream &out) const override

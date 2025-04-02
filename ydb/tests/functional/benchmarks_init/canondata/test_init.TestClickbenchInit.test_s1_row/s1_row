@@ -110,6 +110,8 @@ CREATE TABLE `/Root/db/Root/db/clickbench/s1` (
     PRIMARY KEY (CounterID, EventDate, UserID, EventTime, WatchID)
 )
 WITH (
+    STORE = ROW,
+    AUTO_PARTITIONING_PARTITION_SIZE_MB = 2000, 
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 128
 );
 

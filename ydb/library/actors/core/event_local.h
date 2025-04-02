@@ -22,7 +22,7 @@ namespace NActors {
         }
 
         static IEventBase* Load(TEventSerializedData*) {
-            Y_ABORT("Loading of local event %s type %" PRIu32, TypeName<TEv>().data(), TEventType);
+            Y_ENSURE(false, "Loading of local event " << TypeName<TEv>() << " type " << TEventType);
         }
     };
 

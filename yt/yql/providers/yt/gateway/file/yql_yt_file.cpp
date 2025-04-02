@@ -846,7 +846,7 @@ public:
             }
 
             for (auto out: publish.Input()) {
-                inputs.push_back(BuildTableContentCall("YtTableInputNoCtx", srcType, cluster, out.Ref(), Nothing(), ctx, false));
+                inputs.push_back(BuildTableContentCall("YtTableInputNoCtx", srcType, out.Ref(), Nothing(), ctx, false));
             }
 
             auto data = pgmBuilder.Extend(inputs);

@@ -38,7 +38,7 @@ TWorkloadCommandImport::TUploadParams::TUploadParams()
 
 void TWorkloadCommandImport::TUploadCommand::Config(TConfig& config) {
     TWorkloadCommandBase::Config(config);
-    Initializer->ConfigureOpts(*config.Opts);
+    Initializer->ConfigureOpts(config.Opts->GetOpts());
 }
 
 TWorkloadCommandImport::TUploadCommand::TUploadCommand(NYdbWorkload::TWorkloadParams& workloadParams, const TUploadParams& uploadParams, NYdbWorkload::TWorkloadDataInitializer::TPtr initializer)

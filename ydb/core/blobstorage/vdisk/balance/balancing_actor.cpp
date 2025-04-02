@@ -222,7 +222,7 @@ namespace NBalancing {
         }
 
         void ScheduleJobQuant() {
-            Y_DEBUG_ABORT_UNLESS(!AquiredReplToken);
+            Y_VERIFY_DEBUG_S(!AquiredReplToken, Ctx->VCtx->VDiskLogPrefix);
             AquiredReplToken = true;
             Ctx->MonGroup.ReplTokenAquired()++;
 
@@ -253,7 +253,7 @@ namespace NBalancing {
             }
 
             if (BatchManager.IsBatchCompleted()) {
-                Y_DEBUG_ABORT_UNLESS(AquiredReplToken);
+                Y_VERIFY_DEBUG_S(AquiredReplToken, Ctx->VCtx->VDiskLogPrefix);
                 AquiredReplToken = false;
                 Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);
 
@@ -273,7 +273,7 @@ namespace NBalancing {
                         }
                     }
                 } else {
-                    Y_DEBUG_ABORT_S("Part not found in TryDeletePartsFullData");
+                    Y_DEBUG_ABORT_S(Ctx->VCtx->VDiskLogPrefix << "Part not found in TryDeletePartsFullData");
                 }
             }
         }

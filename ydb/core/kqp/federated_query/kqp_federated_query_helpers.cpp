@@ -107,7 +107,7 @@ namespace NKikimr::NKqp {
         // Initialize Connector client
         if (queryServiceConfig.HasGeneric()) {
             GenericGatewaysConfig = queryServiceConfig.GetGeneric();
-            ConnectorClient = NYql::NConnector::MakeClientGRPC(GenericGatewaysConfig.GetConnector());
+            ConnectorClient = NYql::NConnector::MakeClientGRPC(GenericGatewaysConfig);
 
             if (queryServiceConfig.HasMdbTransformHost()) {
                 MdbEndpointGenerator = NFq::MakeMdbEndpointGeneratorGeneric(queryServiceConfig.GetMdbTransformHost());

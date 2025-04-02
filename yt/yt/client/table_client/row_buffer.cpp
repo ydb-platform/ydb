@@ -12,12 +12,15 @@ TRowBuffer::TRowBuffer(
     TRefCountedTypeCookie tagCookie,
     IMemoryChunkProviderPtr chunkProvider,
     size_t startChunkSize,
-    IMemoryUsageTrackerPtr tracker)
+    IMemoryUsageTrackerPtr tracker,
+    bool allowMemoryOvercommit)
     : MemoryTracker_(std::move(tracker))
+    , AllowMemoryOvercommit_(allowMemoryOvercommit)
     , Pool_(
         tagCookie,
         std::move(chunkProvider),
         startChunkSize)
+    , MemoryGuard_(TMemoryUsageTrackerGuard::Build(MemoryTracker_))
 { }
 
 TChunkedMemoryPool* TRowBuffer::GetPool()
@@ -28,7 +31,7 @@ TChunkedMemoryPool* TRowBuffer::GetPool()
 TMutableUnversionedRow TRowBuffer::AllocateUnversioned(int valueCount)
 {
     auto result = TMutableUnversionedRow::Allocate(&Pool_, valueCount);
-    ValidateNoOverflow();
+    UpdateMemoryUsage();
     return result;
 }
 
@@ -44,7 +47,7 @@ TMutableVersionedRow TRowBuffer::AllocateVersioned(
         valueCount,
         writeTimestampCount,
         deleteTimestampCount);
-    ValidateNoOverflow();
+    UpdateMemoryUsage();
     return result;
 }
 
@@ -56,7 +59,7 @@ void TRowBuffer::CaptureValue(TUnversionedValue* value)
         value->Data.String = dst;
     }
 
-    ValidateNoOverflow();
+    UpdateMemoryUsage();
 }
 
 TVersionedValue TRowBuffer::CaptureValue(const TVersionedValue& value)
@@ -107,7 +110,7 @@ TMutableUnversionedRow TRowBuffer::CaptureRow(TUnversionedValueRange values, boo
         }
     }
 
-    ValidateNoOverflow();
+    UpdateMemoryUsage();
 
     return capturedRow;
 }
@@ -175,7 +178,7 @@ TMutableUnversionedRow TRowBuffer::CaptureAndPermuteRow(
         capturedRow[valueCount++] = *addend;
     }
 
-    ValidateNoOverflow();
+    UpdateMemoryUsage();
 
     return capturedRow;
 }
@@ -201,7 +204,7 @@ TMutableVersionedRow TRowBuffer::CaptureRow(TVersionedRow row, bool captureValue
         CaptureValues(capturedRow);
     }
 
-    ValidateNoOverflow();
+    UpdateMemoryUsage();
 
     return capturedRow;
 }
@@ -310,7 +313,7 @@ TMutableVersionedRow TRowBuffer::CaptureAndPermuteRow(
         }
     }
 
-    ValidateNoOverflow();
+    UpdateMemoryUsage();
 
     return capturedRow;
 }
@@ -318,7 +321,7 @@ TMutableVersionedRow TRowBuffer::CaptureAndPermuteRow(
 void TRowBuffer::Absorb(TRowBuffer&& other)
 {
     Pool_.Absorb(std::move(other.Pool_));
-    ValidateNoOverflow();
+    UpdateMemoryUsage();
 }
 
 i64 TRowBuffer::GetSize() const
@@ -333,17 +336,17 @@ i64 TRowBuffer::GetCapacity() const
 
 void TRowBuffer::Clear()
 {
-    MemoryGuard_.reset();
+    MemoryGuard_.Release();
     Pool_.Clear();
 }
 
 void TRowBuffer::Purge()
 {
-    MemoryGuard_.reset();
+    MemoryGuard_.Release();
     Pool_.Purge();
 }
 
-void TRowBuffer::ValidateNoOverflow()
+void TRowBuffer::UpdateMemoryUsage()
 {
     if (!MemoryTracker_) {
         return;
@@ -351,11 +354,10 @@ void TRowBuffer::ValidateNoOverflow()
 
     auto capacity = Pool_.GetCapacity();
 
-    if (!MemoryGuard_) {
-        MemoryGuard_ = TMemoryUsageTrackerGuard::TryAcquire(MemoryTracker_, capacity)
-            .ValueOrThrow();
+    if (AllowMemoryOvercommit_) {
+        MemoryGuard_.SetSize(capacity);
     } else {
-        MemoryGuard_->TrySetSize(capacity)
+        MemoryGuard_.TrySetSize(capacity)
             .ThrowOnError();
     }
 }

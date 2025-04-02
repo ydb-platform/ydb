@@ -5,8 +5,11 @@ val runJav{{ loop.index }} = task<JavaExec>("runJavaProgram{{ loop.index }}") {
     group = "build"
     description = "Code generation by run java program"
 
-{%-        if run.cwd %}
+{#- Ignore default CWD to export_root -#}
+{%-        if run.cwd and run.cwd != export_root %}
     workingDir = file({{ PatchRoots(run.cwd) }})
+{%-        else %}
+    workingDir = file("$buildDir")
 {%-        endif -%}
 
 {%-        set classpaths = run.classpath|reject('eq', '@.cplst') -%}
@@ -25,10 +28,16 @@ val runJav{{ loop.index }} = task<JavaExec>("runJavaProgram{{ loop.index }}") {
     args = listOf(
 {%-            for arg in run.args -%}
 {%-                if not loop.first %}
-{%-                    if proto_template and (run.out_dir|select("eq", arg)|length or run.out|select("eq", arg)|length) %}
+{%-                    if run.out_dir|select("eq", arg)|length or run.out|select("eq", arg)|length -%}
+{%-                        if proto_template %}
         {{ PatchGeneratedProto(arg) }},
+{%-                        else %}
+        {{ PatchRoots(arg, false, true) }},
+{%-                        endif %}
+{%-                    elif run.tool|select("in", arg)|length or run.in|select("eq", arg)|length or run.in_dir|select("eq", arg)|length %}
+        {{ PatchRoots(arg, true) }},
 {%-                    else %}
-        {{ PatchRoots(arg, run.tool|select("in", arg)|length) }},
+        {{ PatchRoots(arg) }},
 {%-                    endif -%}
 {%-                endif -%}
 {%-            endfor %}
@@ -55,13 +64,13 @@ val runJav{{ loop.index }} = task<JavaExec>("runJavaProgram{{ loop.index }}") {
 
 {%-        if run.out_dir|length -%}
 {%-            for out_dir in run.out_dir|unique %}
-    outputs.dir({{ PatchRoots(out_dir) }})
+    outputs.dir({{ PatchRoots(out_dir, false, true) }})
 {%-            endfor -%}
 {%-        endif -%}
 
 {%-        if run.out|length -%}
 {%-            for out in run.out|unique %}
-    outputs.files({{ PatchRoots(out) }})
+    outputs.files({{ PatchRoots(out, false, true) }})
 {%-            endfor -%}
 {%-        endif -%}
 
@@ -76,12 +85,12 @@ val runJav{{ loop.index }} = task<JavaExec>("runJavaProgram{{ loop.index }}") {
 
 tasks.getByName("prepareMainProtos").dependsOn(runJav{{ loop.index }})
 tasks.getByName("extractMainLibrariesProtos").dependsOn(runJav{{ loop.index }})
-{% else %}
-
-tasks.getByName("sourcesJar").dependsOn(runJav{{ loop.index }})
-{% endif -%}
+{%- endif %}
 
 tasks.compileJava.configure {
+    dependsOn(runJav{{ loop.index }})
+}
+tasks.compileTestJava.configure {
     dependsOn(runJav{{ loop.index }})
 }
 {%-        if with_kotlin %}
@@ -89,6 +98,14 @@ tasks.compileJava.configure {
 tasks.compileKotlin.configure {
     dependsOn(runJav{{ loop.index }})
 }
-{%-        endif %}
-{%     endfor -%}
-{% endif -%}
+
+tasks.compileTestKotlin.configure {
+    dependsOn(runJav{{ loop.index }})
+}
+{%-        endif -%}
+{%-    endfor -%}
+{%-    if not proto_template %}
+
+tasks.getByName("sourcesJar").dependsOn(tasks.compileJava)
+{%-     endif -%}
+{%- endif -%}

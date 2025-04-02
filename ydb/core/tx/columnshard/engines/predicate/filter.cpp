@@ -8,7 +8,11 @@
 namespace NKikimr::NOlap {
 
 NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const {
-    auto result = NArrow::TColumnFilter::BuildAllowFilter();
+    if (SortedRanges.empty()) {
+        return NArrow::TColumnFilter::BuildAllowFilter();
+    }
+
+    auto result = NArrow::TColumnFilter::BuildDenyFilter();
     for (const auto& range : SortedRanges) {
         result = result.Or(range.BuildFilter(data));
     }

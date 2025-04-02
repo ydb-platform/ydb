@@ -124,15 +124,19 @@ public:
             result.Add(true, data->GetRecordsCount());
             return result;
         }
+        if (!data->GetRecordsCount()) {
+            return NArrow::TColumnFilter::BuildAllowFilter();
+        }
         auto sortingFields = data->GetSchema()->GetFieldNames();
-        auto position = NArrow::NMerger::TSortableBatchPosition(data, 0, sortingFields, {}, false);
+        auto position = NArrow::NMerger::TRWSortableBatchPosition(data, 0, sortingFields, {}, false);
         auto border = NArrow::NMerger::TSortableBatchPosition(Object->Batch, 0, sortingFields, {}, false);
         const bool needUppedBound = CompareType == NArrow::ECompareType::LESS_OR_EQUAL || CompareType == NArrow::ECompareType::GREATER;
-        auto findBound = position.FindPosition(Object->Batch, border, needUppedBound, std::nullopt);
+        auto findBound = position.FindPosition(position, 0, data->GetRecordsCount() - 1, border, needUppedBound);
 
         ui64 boundIndex = findBound->GetPosition();
         if (findBound->IsEqual() && needUppedBound) {
             ++boundIndex;
+            AFL_VERIFY((i64)boundIndex == data->GetRecordsCount())("bound", boundIndex)("data", data->GetRecordsCount());
         }
 
         auto filter = NArrow::TColumnFilter::BuildAllowFilter();

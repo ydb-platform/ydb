@@ -64,6 +64,7 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
     } else if (comparision == std::partial_ordering::greater) {
         return TFoundPosition::Greater(posFinish);
     } else {
+        AFL_VERIFY(!greater);
         return TFoundPosition::Equal(posFinish);
     }
 }

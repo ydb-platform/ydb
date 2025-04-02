@@ -109,6 +109,16 @@ struct TEvKqpExecuter {
         NYql::TIssues Issues;
         TDuration CpuTime;
     };
+
+    struct TEvTxDelayedExecution : public TEventLocal<TEvTxDelayedExecution,
+        TKqpExecuterEvents::EvDelayedExecution>
+    {
+        TEvTxDelayedExecution(size_t partitionIdx)
+            : PartitionIdx(partitionIdx)
+        {}
+
+        size_t PartitionIdx;
+    };
 };
 
 struct TKqpFederatedQuerySetup;

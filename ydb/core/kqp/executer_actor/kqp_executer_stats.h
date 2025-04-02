@@ -16,6 +16,14 @@ NYql::NDqProto::EDqStatsMode GetDqStatsModeShard(Ydb::Table::QueryStatsCollectio
 bool CollectFullStats(Ydb::Table::QueryStatsCollection::Mode statsMode);
 bool CollectProfileStats(Ydb::Table::QueryStatsCollection::Mode statsMode);
 
+struct TMaxStats {
+    std::vector<ui64> Values;
+    ui64 MaxValue = 0;
+
+    void Resize(ui32 count);
+    void Set(ui32 index, ui64 value);
+};
+
 struct TTimeSeriesStats {
     std::vector<ui64> Values;
     ui32 HistorySampleCount = 0;
@@ -200,6 +208,8 @@ struct TStageExecutionStats {
     std::vector<ui64> DurationUs;
     TTimeSeriesStats WaitInputTimeUs;
     TTimeSeriesStats WaitOutputTimeUs;
+    TMaxStats CurrentWaitInputTimeUs;
+    TMaxStats CurrentWaitOutputTimeUs;
 
     TTimeSeriesStats SpillingComputeBytes;
     TTimeSeriesStats SpillingChannelBytes;

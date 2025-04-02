@@ -776,14 +776,24 @@ public:
         if (Y_LIKELY(CollectBasic())) {
             switch (runStatus) {
                 case ERunStatus::Finished:
+                    // finished => waiting for nothing
+                    Stats->CurrentWaitInputTime = TDuration::Zero();
+                    Stats->CurrentWaitOutputTime = TDuration::Zero();
                     Stats->FinishTs = TInstant::Now();
                     break;
                 case ERunStatus::PendingInput:
-                    if (!InputConsumed) {
+                    // output is checked first => not waiting for output
+                    Stats->CurrentWaitOutputTime = TDuration::Zero();
+                    if (Y_LIKELY(InputConsumed)) {
+                        // did smth => waiting for nothing
+                        Stats->CurrentWaitInputTime = TDuration::Zero();
+                    } else {
                         StartWaitingInput();
                     }
                     break;
                 case ERunStatus::PendingOutput:
+                    // waiting for output => not waiting for input
+                    Stats->CurrentWaitInputTime = TDuration::Zero();
                     StartWaitingOutput();
                     break;
             }
@@ -1054,6 +1064,7 @@ private:
             } else {
                 Stats->WaitStartTime += delta;
             }
+            Stats->CurrentWaitInputTime += delta;
         }
         StartWaitInputTime = now;
     }
@@ -1063,6 +1074,7 @@ private:
         if (Y_LIKELY(StartWaitOutputTime)) {
             auto delta = now - *StartWaitOutputTime;
             Stats->WaitOutputTime += delta;
+            Stats->CurrentWaitOutputTime += delta;
         }
         StartWaitOutputTime = now;
     }
@@ -1076,11 +1088,14 @@ private:
             } else {
                 Stats->WaitStartTime += delta;
             }
+            Stats->CurrentWaitInputTime += delta;
             StartWaitInputTime.reset();
+            TDuration::Zero();
         }
         if (StartWaitOutputTime) {
             auto delta = now - *StartWaitOutputTime;
             Stats->WaitOutputTime += delta;
+            Stats->CurrentWaitOutputTime += delta;
             StartWaitOutputTime.reset();
         }
     }

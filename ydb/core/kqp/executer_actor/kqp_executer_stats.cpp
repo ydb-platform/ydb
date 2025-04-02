@@ -12,6 +12,19 @@ ui64 NonZeroMin(ui64 a, ui64 b) {
     return (b == 0) ? a : ((a == 0 || a > b) ? b : a);
 }
 
+ui64 ExportMaxStats(std::vector<ui64>& data);
+
+void TMaxStats::Resize(ui32 count) {
+    Values.resize(count);
+}
+
+void TMaxStats::Set(ui32 index, ui64 value) {
+    Y_ASSERT(index < Values.size());
+    auto isMonotonic = value >= Values[index];
+    Values[index] = value;
+    MaxValue = isMonotonic ? (value > MaxValue ? value : MaxValue) : ExportMaxStats(Values);
+}
+
 void TTimeSeriesStats::ExportAggStats(NYql::NDqProto::TDqStatsAggr& stats) {
     NKikimr::NKqp::ExportAggStats(Values, stats);
 }
@@ -272,6 +285,8 @@ void TStageExecutionStats::Resize(ui32 taskCount) {
 
     WaitInputTimeUs.Resize(taskCount);
     WaitOutputTimeUs.Resize(taskCount);
+    CurrentWaitInputTimeUs.Resize(taskCount);
+    CurrentWaitOutputTimeUs.Resize(taskCount);
 
     SpillingComputeBytes.Resize(taskCount);
     SpillingChannelBytes.Resize(taskCount);
@@ -456,6 +471,8 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
     SetNonZero(DurationUs, index, durationUs);
     WaitInputTimeUs.SetNonZero(index, taskStats.GetWaitInputTimeUs());
     WaitOutputTimeUs.SetNonZero(index, taskStats.GetWaitOutputTimeUs());
+    CurrentWaitInputTimeUs.Set(index, taskStats.GetCurrentWaitInputTimeUs());
+    CurrentWaitOutputTimeUs.Set(index, taskStats.GetCurrentWaitOutputTimeUs());
 
     SpillingComputeBytes.SetNonZero(index, taskStats.GetSpillingComputeWriteBytes());
     SpillingChannelBytes.SetNonZero(index, taskStats.GetSpillingChannelWriteBytes());
@@ -1169,6 +1186,25 @@ void TQueryExecutionStats::UpdateTaskStats(ui64 taskId, const NYql::NDqProto::TD
 }
 
 // SIMD-friendly aggregations are below. Compiler is able to vectorize sum/count, but needs help with min/max
+
+ui64 ExportMaxStats(std::vector<ui64>& data) {
+
+    Y_DEBUG_ABORT_UNLESS((data.size() & 3) == 0);
+
+    ui64 max4[4] = {0, 0, 0, 0};
+
+    for (auto it = data.begin(); it < data.end(); it += 4) {
+        max4[0] = max4[0] > it[0] ? max4[0] : it[0];
+        max4[1] = max4[1] > it[1] ? max4[1] : it[1];
+        max4[2] = max4[2] > it[2] ? max4[2] : it[2];
+        max4[3] = max4[3] > it[3] ? max4[3] : it[3];
+    }
+
+    ui64 max01 = max4[0] > max4[1] ? max4[0] : max4[1];
+    ui64 max23 = max4[2] > max4[3] ? max4[2] : max4[3];
+
+    return max01 > max23 ? max01 : max23;
+}
 
 void ExportAggStats(std::vector<ui64>& data, NYql::NDqProto::TDqStatsMinMax& stats) {
 

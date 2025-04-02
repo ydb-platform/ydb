@@ -181,6 +181,7 @@ void NKikimr::TSystemThreadsMonitor::UpdateSystemThread(pid_t pid, pid_t tid) {
     }
 #else
     Y_UNUSED(tid);
+    Y_UNUSED(pid);
 #endif
 }
 

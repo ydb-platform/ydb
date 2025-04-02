@@ -78,30 +78,39 @@ bool DispatchBlendingCoalesce(const arrow::Datum& left, const arrow::Datum& righ
     auto typeId = typeData.GetTypeId();
 
     switch (NYql::NUdf::GetDataSlot(typeId)) {
-        case NYql::NUdf::EDataSlot::Int8:
-            DispatchCoalesceImpl<i8>(left, right, out, /*outIsOptional=*/rightIsOptional, pool);
-            return true;
         case NYql::NUdf::EDataSlot::Bool:
+        case NYql::NUdf::EDataSlot::Int8:
         case NYql::NUdf::EDataSlot::Uint8:
             DispatchCoalesceImpl<ui8>(left, right, out, /*outIsOptional=*/rightIsOptional, pool);
             return true;
         case NYql::NUdf::EDataSlot::Int16:
-            DispatchCoalesceImpl<i16>(left, right, out, /*outIsOptional=*/rightIsOptional, pool);
-            return true;
         case NYql::NUdf::EDataSlot::Uint16:
+        case NYql::NUdf::EDataSlot::Date:
             DispatchCoalesceImpl<ui16>(left, right, out, /*outIsOptional=*/rightIsOptional, pool);
             return true;
         case NYql::NUdf::EDataSlot::Int32:
-            DispatchCoalesceImpl<i32>(left, right, out, /*outIsOptional=*/rightIsOptional, pool);
-            return true;
         case NYql::NUdf::EDataSlot::Uint32:
+        case NYql::NUdf::EDataSlot::Date32:
+        case NYql::NUdf::EDataSlot::Datetime:
             DispatchCoalesceImpl<ui32>(left, right, out, /*outIsOptional=*/rightIsOptional, pool);
             return true;
         case NYql::NUdf::EDataSlot::Int64:
         case NYql::NUdf::EDataSlot::Uint64:
+        case NYql::NUdf::EDataSlot::Datetime64:
+        case NYql::NUdf::EDataSlot::Timestamp64:
+        case NYql::NUdf::EDataSlot::Interval64:
+        case NYql::NUdf::EDataSlot::Interval:
+        case NYql::NUdf::EDataSlot::Timestamp:
+            DispatchCoalesceImpl<ui64>(left, right, out, /*outIsOptional=*/rightIsOptional, pool);
+            return true;
         case NYql::NUdf::EDataSlot::Double:
+            static_assert(sizeof(NUdf::TDataType<double>::TLayout) == sizeof(NUdf::TDataType<ui64>::TLayout));
+            DispatchCoalesceImpl<ui64>(left, right, out, /*outIsOptional=*/rightIsOptional, pool);
+            return true;
         case NYql::NUdf::EDataSlot::Float:
-        // TODO(YQL-19645): Support other numeric types.
+            static_assert(sizeof(NUdf::TDataType<float>::TLayout) == sizeof(NUdf::TDataType<ui32>::TLayout));
+            DispatchCoalesceImpl<ui32>(left, right, out, /*outIsOptional=*/rightIsOptional, pool);
+            return true;
         default:
             // Fallback to general builder/reader pipeline.
             return false;

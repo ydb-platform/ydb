@@ -1,7 +1,10 @@
 #pragma once
 #include "predicate.h"
 
+#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
 #include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/formats/arrow/reader/position.h>
 
 #include <ydb/library/accessor/accessor.h>
 #include <ydb/library/conclusion/result.h>
@@ -115,11 +118,38 @@ public:
     static TConclusion<TPredicateContainer> BuildPredicateTo(
         std::shared_ptr<NOlap::TPredicate> object, const std::shared_ptr<arrow::Schema>& pkSchema);
 
-    NKikimr::NArrow::TColumnFilter BuildFilter(const arrow::Datum& data) const {
+    NArrow::TColumnFilter BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const {
         if (!Object) {
-            return NArrow::TColumnFilter::BuildAllowFilter();
+            auto result = NArrow::TColumnFilter::BuildAllowFilter();
+            result.Add(true, data->GetRecordsCount());
+            return result;
         }
-        return NArrow::TColumnFilter::MakePredicateFilter(data, Object->Batch, CompareType);
+        auto sortingFields = data->GetSchema()->GetFieldNames();
+        auto position = NArrow::NMerger::TSortableBatchPosition(data, 0, sortingFields, {}, false);
+        auto border = NArrow::NMerger::TSortableBatchPosition(Object->Batch, 0, sortingFields, {}, false);
+        const bool needUppedBound = CompareType == NArrow::ECompareType::LESS_OR_EQUAL || CompareType == NArrow::ECompareType::GREATER;
+        auto findBound = position.FindPosition(Object->Batch, border, needUppedBound, std::nullopt);
+
+        ui64 boundIndex = findBound->GetPosition();
+        if (findBound->IsEqual() && needUppedBound) {
+            ++boundIndex;
+            AFL_VERIFY(boundIndex == data->GetRecordsCount())("bound", boundIndex);
+        }
+
+        auto filter = NArrow::TColumnFilter::BuildAllowFilter();
+        switch (CompareType) {
+            case NArrow::ECompareType::LESS:
+            case NArrow::ECompareType::LESS_OR_EQUAL:
+                filter.Add(true, boundIndex);
+                filter.Add(false, data->GetRecordsCount() - boundIndex);
+                break;
+            case NArrow::ECompareType::GREATER:
+            case NArrow::ECompareType::GREATER_OR_EQUAL:
+                filter.Add(false, boundIndex);
+                filter.Add(true, data->GetRecordsCount() - boundIndex);
+                break;
+        }
+        return filter;
     }
 };
 

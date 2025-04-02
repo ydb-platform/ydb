@@ -28,7 +28,7 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
         auto cmp = position.Compare(forFound);
         if (cmp == std::partial_ordering::greater) {
             return TFoundPosition::Greater(posStart);
-        } else if (cmp == std::partial_ordering::equivalent) {
+        } else if (!greater && cmp == std::partial_ordering::equivalent) {
             return TFoundPosition::Equal(posStart);
         }
     }
@@ -37,7 +37,7 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
         auto cmp = position.Compare(forFound);
         if (cmp == std::partial_ordering::less) {
             return TFoundPosition::Less(posFinish);
-        } else if (cmp == std::partial_ordering::equivalent) {
+        } else if (greater && cmp == std::partial_ordering::equivalent) {
             return TFoundPosition::Equal(posFinish);
         }
     }
@@ -49,16 +49,22 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
         } else if (comparision == std::partial_ordering::greater) {
             posFinish = position.Position;
         } else {
-            return TFoundPosition::Equal(position.Position);
+            if (greater) {
+                posStart = position.Position;
+            } else {
+                posFinish = position.Position;
+            }
         }
     }
     AFL_VERIFY(posFinish != posStart);
-    if (greater) {
-        AFL_VERIFY(guard.InitSortingPosition(posFinish));
+    AFL_VERIFY(guard.InitSortingPosition(posFinish));
+    const auto comparision = position.Compare(forFound);
+    if (comparision == std::partial_ordering::less) {
+        Y_ABORT("unreachable");
+    } else if (comparision == std::partial_ordering::greater) {
         return TFoundPosition::Greater(posFinish);
     } else {
-        AFL_VERIFY(guard.InitSortingPosition(posStart));
-        return TFoundPosition::Less(posStart);
+        return TFoundPosition::Equal(posFinish);
     }
 }
 

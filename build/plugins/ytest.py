@@ -1083,7 +1083,6 @@ def on_add_py_linter_check(fields, unit, *args):
         "FILE_PROCESSING_TIME": 1,
         "EXTRA_PARAMS": unlimited,
         "FLAKE_MIGRATIONS_CONFIG": 1,
-        "CUSTOM_CONFIG": 1,
         "CONFIG_TYPE": 1,
     }
     _, spec_args = _common.sort_by_keywords(keywords, args)

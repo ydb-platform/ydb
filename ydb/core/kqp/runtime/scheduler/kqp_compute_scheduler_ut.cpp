@@ -12,7 +12,7 @@ Y_UNIT_TEST_SUITE(TComputeScheduler) {
             auto now = start + t;
             for (size_t i = 0; i < handles.size(); ++i) {
                 auto& handle = handles[i];
-                if (!handle->GroupDelay(now)) {
+                if (!handle->Delay(now)) {
                     handle->TrackTime(batch, now);
                     results[i] += batch;
                 }
@@ -25,8 +25,8 @@ Y_UNIT_TEST_SUITE(TComputeScheduler) {
 
     Y_UNIT_TEST(TTotalLimits) {
         TComputeScheduler scheduler;
-        scheduler.UpdateGroupShare("first", 0.4, TMonotonic::Zero(), std::nullopt);
-        scheduler.UpdateGroupShare("second", 0.4, TMonotonic::Zero(), std::nullopt);
+        scheduler.UpdatePoolShare("first", 0.4, TMonotonic::Zero(), std::nullopt);
+        scheduler.UpdatePoolShare("second", 0.4, TMonotonic::Zero(), std::nullopt);
         scheduler.SetMaxDeviation(TDuration::MilliSeconds(10));
         scheduler.SetCapacity(2);
         TVector<THolder<TSchedulerEntity>> handles;
@@ -73,8 +73,8 @@ Y_UNIT_TEST_SUITE(TComputeScheduler) {
 
     Y_UNIT_TEST(ResourceWeight) {
         TComputeScheduler scheduler;
-        scheduler.UpdateGroupShare("first", 1, TMonotonic::Zero(), 1);
-        scheduler.UpdateGroupShare("second", 1, TMonotonic::Zero(), 3);
+        scheduler.UpdatePoolShare("first", 1, TMonotonic::Zero(), 1);
+        scheduler.UpdatePoolShare("second", 1, TMonotonic::Zero(), 3);
         scheduler.SetMaxDeviation(TDuration::MilliSeconds(1));
         scheduler.SetCapacity(1);
         TVector<THolder<TSchedulerEntity>> handles;
@@ -99,7 +99,7 @@ Y_UNIT_TEST_SUITE(TComputeScheduler) {
         scheduler.Unregister(handles[1], TMonotonic::Zero() + TDuration::Seconds(2));
         handles.pop_back();
 
-        scheduler.UpdateGroupShare("third", 0.5, TMonotonic::Zero() + TDuration::Seconds(2), 2);
+        scheduler.UpdatePoolShare("third", 0.5, TMonotonic::Zero() + TDuration::Seconds(2), 2);
         handles.push_back(scheduler.Enroll("third", 1, TMonotonic::Zero() + TDuration::Seconds(2)));
         times = RunSimulation(scheduler,
             handles,

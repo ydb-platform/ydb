@@ -215,7 +215,7 @@ private:
             }
 
             if (share > 0) {
-                Scheduler->UpdateGroupShare(schedulerGroup, share, schedulerNow, resourceWeight);
+                Scheduler->UpdatePoolShare(schedulerGroup, share, schedulerNow, resourceWeight);
                 Send(SchedulerActorId, new NScheduler::TEvSchedulerNewPool(msg.GetDatabase(), schedulerGroup));
             } else {
                 schedulerGroup = "";
@@ -239,14 +239,14 @@ private:
                 .Now = schedulerNow,
                 .SchedulerActorId = SchedulerActorId,
                 .Scheduler = Scheduler.get(),
-                .Group = schedulerGroup,
+                .Pool = schedulerGroup,
                 .Weight = 1,
                 .NoThrottle = schedulerGroup.empty(),
                 .Counters = Counters
             };
 
             if (!schedulingTaskOptions.NoThrottle) {
-                schedulingTaskOptions.Handle = SchedulerOptions.Scheduler->Enroll(schedulingTaskOptions.Group, schedulingTaskOptions.Weight, schedulingTaskOptions.Now);
+                schedulingTaskOptions.Handle = SchedulerOptions.Scheduler->Enroll(schedulingTaskOptions.Pool, schedulingTaskOptions.Weight, schedulingTaskOptions.Now);
             }
 
             NComputeActor::IKqpNodeComputeActorFactory::TCreateArgs createArgs{

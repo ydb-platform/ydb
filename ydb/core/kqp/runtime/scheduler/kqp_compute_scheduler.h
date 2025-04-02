@@ -14,10 +14,10 @@ namespace NKikimr::NKqp::NScheduler {
 class TPool;
 
 struct TSchedulerEntity {
-    explicit TSchedulerEntity(TPool* group);
+    explicit TSchedulerEntity(TPool* pool);
     ~TSchedulerEntity();
 
-    TPool* const Group;
+    TPool* const Pool;
     i64 Weight;
     double Vruntime = 0;
     double Vstart;
@@ -40,8 +40,8 @@ struct TSchedulerEntity {
     void TrackTime(TDuration time, TMonotonic);
     void UpdateBatchTime(TDuration time);
 
-    TMaybe<TDuration> GroupDelay(TMonotonic now, TPool* group);
-    TMaybe<TDuration> GroupDelay(TMonotonic now);
+    TMaybe<TDuration> Delay(TMonotonic now, TPool* pool);
+    TMaybe<TDuration> Delay(TMonotonic now);
 
     void MarkThrottled();
     void MarkResumed(); // TODO: for temporary resume - for whatever reason
@@ -55,21 +55,21 @@ public:
 
     void SetCapacity(ui64 cores);
 
-    void UpdateGroupShare(TString name, double share, TMonotonic now, std::optional<double> resourceWeight);
+    void UpdatePoolShare(TString poolName, double share, TMonotonic now, std::optional<double> resourceWeight);
     void UpdatePerQueryShare(TString name, double share, TMonotonic now);
 
     void SetMaxDeviation(TDuration);
     void SetForgetInterval(TDuration);
-    ::NMonitoring::TDynamicCounters::TCounterPtr GetGroupUsageCounter(TString group) const;
+    ::NMonitoring::TDynamicCounters::TCounterPtr GetPoolUsageCounter(TString poolName) const;
 
-    THolder<TSchedulerEntity> Enroll(TString group, i64 weight, TMonotonic now);
+    THolder<TSchedulerEntity> Enroll(TString poolName, i64 weight, TMonotonic now);
 
     void AdvanceTime(TMonotonic now);
 
-    void Unregister(THolder<TSchedulerEntity>& self, TMonotonic now);
+    void Unregister(THolder<TSchedulerEntity>& entity, TMonotonic now);
 
-    bool Disabled(TString group);
-    void Disable(TString group, TMonotonic now);
+    bool Disabled(TString poolName);
+    void Disable(TString poolName, TMonotonic now);
 
 private:
     struct TImpl;
@@ -81,7 +81,7 @@ struct TComputeActorOptions {
     NActors::TActorId SchedulerActorId;
     THolder<TSchedulerEntity> Handle;
     TComputeScheduler* Scheduler;
-    TString Group = "";
+    TString Pool = "";
     double Weight = 1;
     bool NoThrottle = true;
     TIntrusivePtr<TKqpCounters> Counters = nullptr;
@@ -131,13 +131,13 @@ public:
         , SchedulerActorId(options.SchedulerActorId)
         , NoThrottle(options.NoThrottle)
         , Counters(options.Counters)
-        , Group(options.Group)
+        , Pool(options.Pool)
         , Weight(options.Weight)
     {
         if (!NoThrottle) {
             Y_ABORT_UNLESS(Counters);
             Y_ABORT_UNLESS(SelfHandle);
-            GroupUsage = options.Scheduler->GetGroupUsageCounter(options.Group);
+            PoolUsage = options.Scheduler->GetPoolUsageCounter(options.Pool);
         } else {
             Y_ABORT_UNLESS(!SelfHandle);
         }
@@ -228,7 +228,7 @@ protected:
             TrackedWork += passed;
             SelfHandle->UpdateBatchTime(passed);
             SelfHandle->TrackTime(passed, now);
-            GroupUsage->Add(passed.MicroSeconds());
+            PoolUsage->Add(passed.MicroSeconds());
             Counters->ComputeActorExecutions->Collect(passed.MicroSeconds());
         }
         if (delay) {
@@ -264,13 +264,13 @@ protected:
             toAccount -= minTime;
         }
 
-        GroupUsage->Add(toAccount.MicroSeconds());
+        PoolUsage->Add(toAccount.MicroSeconds());
         SelfHandle->TrackTime(toAccount, now);
         OldActivationStats = newStats;
     }
 
     TMaybe<TDuration> CalcDelay(NMonotonic::TMonotonic now) {
-        auto result = SelfHandle->GroupDelay(now);
+        auto result = SelfHandle->Delay(now);
         Counters->ComputeActorDelays->Collect(result.GetOrElse(TDuration::Zero()).MicroSeconds());
         if (NoThrottle || !result.Defined()) {
             return {};
@@ -289,7 +289,7 @@ protected:
             if (ExecutionTimer) {
                 TDuration passed = TDuration::MicroSeconds(ExecutionTimer->Passed() * SecToUsec);
                 SelfHandle->TrackTime(passed, now);
-                GroupUsage->Add(passed.MicroSeconds());
+                PoolUsage->Add(passed.MicroSeconds());
             }
         }
         if (SelfHandle) {
@@ -311,9 +311,9 @@ private:
     std::optional<ui64> OldActivationStats;
 
     TIntrusivePtr<TKqpCounters> Counters;
-    ::NMonitoring::TDynamicCounters::TCounterPtr GroupUsage;
+    ::NMonitoring::TDynamicCounters::TCounterPtr PoolUsage;
 
-    TString Group;
+    TString Pool;
     double Weight;
 };
 

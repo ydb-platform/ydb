@@ -134,6 +134,7 @@ private:
             AFL_VERIFY(false);
         }
     };
+    TBuffer LowerStringBuffer;
 
 public:
     TNGrammBuilder(const ui32 hashesCount, const bool caseSensitive)
@@ -144,8 +145,18 @@ public:
     template <class TAction>
     void BuildNGramms(
         const char* data, const ui32 dataSize, const std::optional<NRequest::TLikePart::EOperation> op, const ui32 nGrammSize, TAction& pred) {
-        THashesSelector<TConstants::MaxHashesCount, TConstants::MaxNGrammSize>::BuildHashes(
-            (const ui8*)data, dataSize, HashesCount, nGrammSize, op, pred);
+        if (CaseSensitive) {
+            THashesSelector<TConstants::MaxHashesCount, TConstants::MaxNGrammSize>::BuildHashes(
+                (const ui8*)data, dataSize, HashesCount, nGrammSize, op, pred);
+        } else {
+            LowerStringBuffer.Clear();
+            LowerStringBuffer.Reserve(dataSize);
+            for (ui32 i = 0; i < dataSize; ++i) {
+                LowerStringBuffer.Append(std::tolower(data[i]));
+            }
+            THashesSelector<TConstants::MaxHashesCount, TConstants::MaxNGrammSize>::BuildHashes(
+                (const ui8*)LowerStringBuffer.Data(), dataSize, HashesCount, nGrammSize, op, pred);
+        }
     }
 
     template <class TFiller>
@@ -163,16 +174,7 @@ public:
                 }
                 if constexpr (arrow::has_string_view<T>()) {
                     auto value = typedArray.GetView(row);
-                    if (CaseSensitive) {
-                        BuildNGramms(value.data(), value.size(), {}, nGrammSize, fillData);
-                    } else {
-                        std::string lowerStr;
-                        lowerStr.reserve(value.size());
-                        for (auto c : value) {
-                            lowerStr.append(1, std::tolower(c));
-                        }
-                        BuildNGramms(lowerStr.data(), lowerStr.size(), {}, nGrammSize, fillData);
-                    }
+                    BuildNGramms(value.data(), value.size(), {}, nGrammSize, fillData);
                 } else {
                     AFL_VERIFY(false);
                 }

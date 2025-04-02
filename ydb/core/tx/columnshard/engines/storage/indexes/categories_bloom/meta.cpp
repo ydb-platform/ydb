@@ -186,8 +186,8 @@ bool TIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::optional<
 
 std::optional<ui64> TIndexMeta::DoCalcCategory(const TString& subColumnName) const {
     ui64 result;
-    const NRequest::TOriginalDataAddress addr(Max<ui32>(), subColumnName);
-    AFL_VERIFY(GetDataExtractor()->CheckForIndex(addr, result));
+    const NRequest::TOriginalDataAddress addr(GetColumnId(), subColumnName);
+    AFL_VERIFY(GetDataExtractor()->CheckForIndex(addr, &result));
     return result;
 }
 

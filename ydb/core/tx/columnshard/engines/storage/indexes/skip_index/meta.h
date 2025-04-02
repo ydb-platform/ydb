@@ -16,7 +16,7 @@ public:
     using EOperation = NArrow::NSSA::TIndexCheckOperation::EOperation;
 
 private:
-    virtual bool DoIsAppropriateFor(const TString& subColumnName, const NArrow::NSSA::TIndexCheckOperation& op) const = 0;
+    virtual bool DoIsAppropriateFor(const NArrow::NSSA::TIndexCheckOperation& op) const = 0;
     virtual bool DoCheckValue(const TString& data, const std::optional<ui64> cat, const std::shared_ptr<arrow::Scalar>& value,
         const NArrow::NSSA::TIndexCheckOperation& op) const = 0;
 
@@ -34,7 +34,10 @@ public:
         if (GetColumnId() != addr.GetColumnId()) {
             return false;
         }
-        return DoIsAppropriateFor(addr.GetSubColumnName(), op);
+        if (!GetDataExtractor()->CheckForIndex(addr, nullptr)) {
+            return false;
+        }
+        return DoIsAppropriateFor(op);
     }
     using TBase::TBase;
 };

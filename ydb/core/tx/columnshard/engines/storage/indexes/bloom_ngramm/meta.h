@@ -29,10 +29,7 @@ private:
         AFL_VERIFY(TConstants::CheckRecordsCount(RecordsCount));
     }
 
-    virtual bool DoIsAppropriateFor(const TString& subColumnName, const NArrow::NSSA::TIndexCheckOperation& op) const override {
-        if (!!subColumnName) {
-            return false;
-        }
+    virtual bool DoIsAppropriateFor(const NArrow::NSSA::TIndexCheckOperation& op) const override {
         switch (op.GetOperation()) {
             case EOperation::Equals:
             case EOperation::StartsWith:

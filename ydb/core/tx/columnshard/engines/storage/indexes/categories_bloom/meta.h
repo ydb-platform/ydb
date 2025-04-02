@@ -25,10 +25,7 @@ private:
 
     virtual TConclusion<std::shared_ptr<IIndexHeader>> DoBuildHeader(const TChunkOriginalData& data) const override;
 
-    virtual bool DoIsAppropriateFor(const TString& subColumnName, const NArrow::NSSA::TIndexCheckOperation& op) const override {
-        if (!subColumnName) {
-            return false;
-        }
+    virtual bool DoIsAppropriateFor(const NArrow::NSSA::TIndexCheckOperation& op) const override {
         if (!op.GetCaseSensitive()) {
             return false;
         }

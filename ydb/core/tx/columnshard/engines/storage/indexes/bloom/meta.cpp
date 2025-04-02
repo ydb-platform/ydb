@@ -88,8 +88,8 @@ bool TBloomIndexMeta::DoCheckValueImpl(const IBitsStorage& data, const std::opti
 
 std::optional<ui64> TBloomIndexMeta::DoCalcCategory(const TString& subColumnName) const {
     ui64 result;
-    const NRequest::TOriginalDataAddress addr(Max<ui32>(), subColumnName);
-    AFL_VERIFY(GetDataExtractor()->CheckForIndex(addr, result));
+    const NRequest::TOriginalDataAddress addr(GetColumnId(), subColumnName);
+    AFL_VERIFY(GetDataExtractor()->CheckForIndex(addr, &result));
     if (subColumnName) {
         return result;
     } else {

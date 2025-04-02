@@ -20,7 +20,7 @@ private:
 
     virtual std::optional<ui64> DoCalcCategory(const TString& subColumnName) const override;
 
-    virtual bool DoIsAppropriateFor(const TString& /*subColumnName*/, const NArrow::NSSA::TIndexCheckOperation& op) const override {
+    virtual bool DoIsAppropriateFor(const NArrow::NSSA::TIndexCheckOperation& op) const override {
         return op.GetOperation() == EOperation::Equals && op.GetCaseSensitive();
     }
 

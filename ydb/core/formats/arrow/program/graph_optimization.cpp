@@ -10,7 +10,9 @@
 #include <ydb/library/arrow_kernels/operations.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
 
+#include <library/cpp/string_utils/quote/quote.h>
 #include <util/string/builder.h>
+#include <util/string/escape.h>
 #include <yql/essentials/core/arrow_kernels/request/request.h>
 
 namespace NKikimr::NArrow::NSSA::NGraph::NOptimization {
@@ -199,9 +201,10 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
         if (!i.second->Is(EProcessorType::FetchOriginalData)) {
             continue;
         }
-        if (i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetDataAddresses().size() + 
-            i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetIndexContext().size() + 
-            i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetHeaderContext().size() > 1) {
+        if (i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetDataAddresses().size() +
+                i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetIndexContext().size() +
+                i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetHeaderContext().size() >
+            1) {
             continue;
         }
         if (i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetDataAddresses().size()) {
@@ -220,8 +223,7 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
         for (auto&& i : dataAddresses) {
             columnIds.emplace(i->GetProcessorAs<TOriginalColumnDataProcessor>()->GetOutputColumnIdOnce());
         }
-        auto proc =
-            std::make_shared<TOriginalColumnDataProcessor>(std::vector<ui32>(columnIds.begin(), columnIds.end()));
+        auto proc = std::make_shared<TOriginalColumnDataProcessor>(std::vector<ui32>(columnIds.begin(), columnIds.end()));
         for (auto&& i : dataAddresses) {
             for (auto&& addr : i->GetProcessorAs<TOriginalColumnDataProcessor>()->GetDataAddresses()) {
                 proc->Add(addr.second);
@@ -230,7 +232,7 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
         auto nodeFetch = AddNode(proc);
         FetchersMerged.emplace(nodeFetch->GetIdentifier());
         for (auto&& i : dataAddresses) {
-            for (auto&& to: i->GetOutputEdges()) {
+            for (auto&& to : i->GetOutputEdges()) {
                 AddEdge(nodeFetch.get(), to.second, to.first.GetResourceId());
             }
             RemoveNode(i->GetIdentifier());
@@ -245,8 +247,7 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
         for (auto&& i : headers) {
             columnIds.emplace(i->GetProcessorAs<TOriginalColumnDataProcessor>()->GetOutputColumnIdOnce());
         }
-        auto proc =
-            std::make_shared<TOriginalColumnDataProcessor>(std::vector<ui32>(columnIds.begin(), columnIds.end()));
+        auto proc = std::make_shared<TOriginalColumnDataProcessor>(std::vector<ui32>(columnIds.begin(), columnIds.end()));
         for (auto&& i : indexes) {
             for (auto&& addr : i->GetProcessorAs<TOriginalColumnDataProcessor>()->GetIndexContext()) {
                 proc->Add(addr.second);
@@ -658,16 +659,16 @@ TConclusionStatus TGraph::Collapse() {
                 }
             }
 
-//            {
-//                auto conclusion = OptimizeConditionsForHeadersCheck(n.get());
-//                if (conclusion.IsFail()) {
-//                    return conclusion;
-//                }
-//                if (*conclusion) {
-//                    hasChanges = true;
-//                    break;
-//                }
-//            }
+            //            {
+            //                auto conclusion = OptimizeConditionsForHeadersCheck(n.get());
+            //                if (conclusion.IsFail()) {
+            //                    return conclusion;
+            //                }
+            //                if (*conclusion) {
+            //                    hasChanges = true;
+            //                    break;
+            //                }
+            //            }
 
             {
                 auto conclusion = OptimizeConditionsForStream(n.get());

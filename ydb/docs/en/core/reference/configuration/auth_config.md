@@ -24,7 +24,7 @@ Default value: `true`
 Valid values:
 
 - `true` – internal users are added only to the [root database](../../concepts/glossary.md#root-database).
-- `false` – internal users are added to the root and to tenant databases.
+- `false` – internal users are added to the root and to [tenant databases](../../concepts/glossary.md#tenant-database).
 
 Default value: `true`
     ||

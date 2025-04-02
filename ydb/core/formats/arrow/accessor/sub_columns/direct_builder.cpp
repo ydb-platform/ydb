@@ -5,6 +5,13 @@
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
 
+#include <contrib/libs/simdjson/include/simdjson/dom/array-inl.h>
+#include <contrib/libs/simdjson/include/simdjson/dom/document-inl.h>
+#include <contrib/libs/simdjson/include/simdjson/dom/element-inl.h>
+#include <contrib/libs/simdjson/include/simdjson/dom/object-inl.h>
+#include <contrib/libs/simdjson/include/simdjson/dom/parser-inl.h>
+#include <contrib/libs/simdjson/include/simdjson/ondemand.h>
+
 namespace NKikimr::NArrow::NAccessor::NSubColumns {
 
 void TColumnElements::BuildSparsedAccessor(const ui32 recordsCount) {
@@ -140,6 +147,11 @@ TStringBuf TDataBuilder::AddKey(const TStringBuf currentPrefix, const TStringBuf
         it = StorageHash.emplace(keyAddress, BuildString(currentPrefix, key)).first;
     }
     return TStringBuf(it->second.data(), it->second.size());
+}
+
+TDataBuilder::TDataBuilder(const std::shared_ptr<arrow::DataType>& type, const TSettings& settings)
+    : Type(type)
+    , Settings(settings) {
 }
 
 }   // namespace NKikimr::NArrow::NAccessor::NSubColumns

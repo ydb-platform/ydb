@@ -11,14 +11,13 @@
 
 namespace NKikimr::NKqp::NScheduler {
 
-struct TSchedulerEntity {
-    struct TGroupMutableStats;
-    struct TGroupRecord;
+class TPool;
 
-    explicit TSchedulerEntity(TGroupRecord* group);
+struct TSchedulerEntity {
+    explicit TSchedulerEntity(TPool* group);
     ~TSchedulerEntity();
 
-    TGroupRecord* const Group;
+    TPool* const Group;
     i64 Weight;
     double Vruntime = 0;
     double Vstart;
@@ -41,7 +40,7 @@ struct TSchedulerEntity {
     void TrackTime(TDuration time, TMonotonic);
     void UpdateBatchTime(TDuration time);
 
-    TMaybe<TDuration> GroupDelay(TMonotonic now, TGroupRecord* group);
+    TMaybe<TDuration> GroupDelay(TMonotonic now, TPool* group);
     TMaybe<TDuration> GroupDelay(TMonotonic now);
 
     void MarkThrottled();
@@ -51,17 +50,13 @@ struct TSchedulerEntity {
 
 class TComputeScheduler {
 public:
-    TComputeScheduler();
+    explicit TComputeScheduler(TIntrusivePtr<TKqpCounters> counters);
     ~TComputeScheduler();
-
-    void ReportCounters(TIntrusivePtr<TKqpCounters>);
 
     void SetCapacity(ui64 cores);
 
     void UpdateGroupShare(TString name, double share, TMonotonic now, std::optional<double> resourceWeight);
     void UpdatePerQueryShare(TString name, double share, TMonotonic now);
-
-    void AddToGroup(TMonotonic now, TSchedulerEntity::TGroupRecord* group, THolder<TSchedulerEntity>&);
 
     void SetMaxDeviation(TDuration);
     void SetForgetInterval(TDuration);

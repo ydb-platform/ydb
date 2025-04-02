@@ -7,6 +7,7 @@ PEERDIR(
 )
 
 SRCS(
+    kqp_compute_pool.cpp
     kqp_compute_scheduler.cpp
 )
 

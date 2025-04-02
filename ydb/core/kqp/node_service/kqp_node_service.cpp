@@ -113,7 +113,7 @@ public:
         Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
         Become(&TKqpNodeService::WorkState);
 
-        Scheduler = std::make_shared<NScheduler::TComputeScheduler>();
+        Scheduler = std::make_shared<NScheduler::TComputeScheduler>(SchedulerOptions.Counters);
         SchedulerOptions.Scheduler = Scheduler;
         SchedulerActorId = RegisterWithSameMailbox(CreateSchedulerActor(SchedulerOptions));
     }

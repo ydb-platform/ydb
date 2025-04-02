@@ -91,12 +91,6 @@ ydb/tests/functional/compatibility test_stress.py.TestStress.test_tpch1[last_sta
 ydb/tests/functional/compatibility test_stress.py.TestStress.test_tpch1[mixed-row]
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/rename [test_rename.py */*] chunk chunk
-ydb/tests/functional/replication Replication.PauseAndResumeReplication
-ydb/tests/functional/replication Transfer.CreateTransferSourceIsNotTopic
-ydb/tests/functional/replication Transfer.CreateTransferTargetIsNotTable
-ydb/tests/functional/replication Transfer.CustomFlushInterval
-ydb/tests/functional/replication Transfer.DescribeError_OnLambdaCompilation
-ydb/tests/functional/replication Transfer.PauseAndResumeTransfer
 ydb/tests/functional/serializable sole chunk chunk
 ydb/tests/functional/serializable test.py.test_local
 ydb/tests/functional/serverless test_serverless.py.test_database_with_disk_quotas[enable_alter_database_create_hive_first--false]
@@ -122,10 +116,6 @@ ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[67]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[86]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[9]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[7]
-ydb/tests/functional/transfer Transfer.CreateTransferSourceIsNotTopic
-ydb/tests/functional/transfer Transfer.CreateTransferTargetNotExists
-ydb/tests/functional/transfer Transfer.CustomFlushInterval
-ydb/tests/functional/transfer Transfer.DescribeError_OnLambdaCompilation
 ydb/tests/olap sole chunk chunk
 ydb/tests/olap test_quota_exhaustion.py.TestYdbWorkload.test_delete
 ydb/tests/olap/column_family/compression alter_compression.py.TestAlterCompression.test_all_supported_compression

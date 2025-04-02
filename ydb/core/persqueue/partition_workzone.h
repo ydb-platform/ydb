@@ -45,6 +45,12 @@ struct TPartitionWorkZone {
     bool IsEmpty() const;
     const TDataKey* GetLastKey() const;
 
+    bool IsNothingWritten() const;
+
+    TString SerializeForKey(const TKey& key, ui32 size,
+                            ui64 endOffset,
+                            TInstant& writeTimestamp) const;
+
     void NewPartitionedBlob(const TPartitionId& partition,
                             const ui64 offset,
                             const TString& sourceId,
@@ -69,6 +75,8 @@ struct TPartitionWorkZone {
 
     void ResetNewHead(ui64 endOffset);
 
+    void PackLastBatch();
+
     THead Head;
     THead NewHead;
     TPartitionedBlob PartitionedBlob;
@@ -87,6 +95,12 @@ inline
 ui64 TPartitionWorkZone::GetHeadGapSize() const
 {
     return DataKeysBody.empty() ? 0 : (Head.Offset - (DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount()));
+}
+
+inline
+bool TPartitionWorkZone::IsNothingWritten() const
+{
+    return CompactedKeys.empty() && (NewHead.PackedSize == 0);
 }
 
 }

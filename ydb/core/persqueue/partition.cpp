@@ -2026,7 +2026,7 @@ void TPartition::ProcessCommitQueue() {
     if (!PersistRequest) {
         PersistRequest = MakeHolder<TEvKeyValue::TEvRequest>();
     }
-    auto visitor = [this, request=PersistRequest.Get()](auto& event) {
+    auto visitor = [this, request = PersistRequest.Get()](auto& event) {
         return this->ExecUserActionOrTransaction(event, request);
     };
     while (!UserActionAndTxPendingCommit.empty()) {
@@ -2081,7 +2081,7 @@ void TPartition::RunPersist() {
 
     if (HaveWriteMsg) {
         if (!DiskIsFull) {
-            EndAppendHeadWithNewWrites(PersistRequest.Get(), ctx);
+            EndAppendHeadWithNewWrites(ctx);
             EndProcessWrites(PersistRequest.Get(), ctx);
         }
         EndHandleRequests(PersistRequest.Get(), ctx);

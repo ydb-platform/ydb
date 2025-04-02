@@ -167,7 +167,7 @@ private:
     void ReplyWrite(const TActorContext& ctx, ui64 dst, const TString& sourceId, ui64 seqNo, ui16 partNo, ui16 totalParts, ui64 offset, TInstant writeTimestamp, bool already, ui64 maxSeqNo, TDuration partitionQuotedTime, TDuration topicQuotedTime, TDuration queueTime, TDuration writeTime, NWilson::TSpan& span);
     void SendReadingFinished(const TString& consumer);
 
-    void AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, bool headCleared, const TActorContext& ctx);
+    void AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
     void AnswerCurrentWrites(const TActorContext& ctx);
     void AnswerCurrentReplies(const TActorContext& ctx);
     void CancelOneWriteOnWrite(const TActorContext& ctx,
@@ -769,7 +769,7 @@ private:
     void BeginProcessWrites(const TActorContext& ctx);
     void EndProcessWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
     void BeginAppendHeadWithNewWrites(const TActorContext& ctx);
-    void EndAppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
+    void EndAppendHeadWithNewWrites(const TActorContext& ctx);
 
     //
     // user actions and transactions

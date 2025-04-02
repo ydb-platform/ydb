@@ -14,12 +14,13 @@
 namespace NKikimr::NKqp::NScheduler {
 
 struct TSchedulerEntity {
-    TSchedulerEntity();
-
     struct TGroupMutableStats;
     struct TGroupRecord;
 
-    TGroupRecord* Group;
+    explicit TSchedulerEntity(TGroupRecord* group);
+    ~TSchedulerEntity();
+
+    TGroupRecord* const Group;
     i64 Weight;
     double Vruntime = 0;
     double Vstart;
@@ -46,7 +47,8 @@ struct TSchedulerEntity {
     TMaybe<TDuration> GroupDelay(TMonotonic now);
 
     void MarkThrottled();
-    void MarkResumed();
+    void MarkResumed(); // TODO: for temporary resume - for whatever reason
+    void MarkResumed(TMonotonic now);
 };
 
 class TComputeScheduler {
@@ -61,8 +63,7 @@ public:
     void UpdateGroupShare(TString name, double share, TMonotonic now, std::optional<double> resourceWeight);
     void UpdatePerQueryShare(TString name, double share, TMonotonic now);
 
-    ui64 MakePerQueryGroup(TMonotonic now, double share, TString baseGroup);
-    void AddToGroup(TMonotonic now, ui64, THolder<TSchedulerEntity>&);
+    void AddToGroup(TMonotonic now, TSchedulerEntity::TGroupRecord* group, THolder<TSchedulerEntity>&);
 
     void SetMaxDeviation(TDuration);
     void SetForgetInterval(TDuration);
@@ -193,13 +194,16 @@ protected:
 
 private:
     void ReportThrottledTime(TMonotonic now) {
-        if (Counters && Throttled) {
+        if (!Throttled) {
+            return;
+        }
+
+        if (Counters) {
             Counters->SchedulerThrottled->Add((now - *Throttled).MicroSeconds());
         }
-        if (Throttled) {
-            SelfHandle->MarkResumed();
-            Throttled.Clear();
-        }
+
+        SelfHandle->MarkResumed(now);
+        Throttled.Clear();
     }
 
 protected:
@@ -287,7 +291,7 @@ protected:
         if (SelfHandle) {
             auto now = Now();
             if (Throttled) {
-                SelfHandle->MarkResumed();
+                SelfHandle->MarkResumed(now);
             }
             if (ExecutionTimer) {
                 TDuration passed = TDuration::MicroSeconds(ExecutionTimer->Passed() * SecToUsec);

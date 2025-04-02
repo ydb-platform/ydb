@@ -206,7 +206,7 @@ private:
 
         if (SchedulerOptions.Scheduler->Disabled(schedulerGroup)) {
             auto share = msg.GetPoolMaxCpuShare();
-            if (share <= 0 && (msg.HasQueryCpuShare() || msg.HasResourceWeight())) {
+            if (share <= 0 && msg.HasResourceWeight()) {
                 share = 1.0;
             }
             std::optional<double> resourceWeight;
@@ -220,11 +220,6 @@ private:
             } else {
                 schedulerGroup = "";
             }
-        }
-
-        std::optional<ui64> querySchedulerGroup;
-        if (msg.HasQueryCpuShare() && schedulerGroup) {
-            querySchedulerGroup = Scheduler->MakePerQueryGroup(schedulerNow, msg.GetQueryCpuShare(), schedulerGroup);
         }
 
         // start compute actors
@@ -252,9 +247,6 @@ private:
 
             if (!schedulingTaskOptions.NoThrottle) {
                 schedulingTaskOptions.Handle = SchedulerOptions.Scheduler->Enroll(schedulingTaskOptions.Group, schedulingTaskOptions.Weight, schedulingTaskOptions.Now);
-                if (querySchedulerGroup) {
-                    Scheduler->AddToGroup(schedulerNow, *querySchedulerGroup, schedulingTaskOptions.Handle);
-                }
             }
 
             NComputeActor::IKqpNodeComputeActorFactory::TCreateArgs createArgs{

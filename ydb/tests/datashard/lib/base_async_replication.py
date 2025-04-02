@@ -1,13 +1,11 @@
 import ydb
 import os
 import yatest.common
-import random
 import logging
 import hashlib
 
 
-from datetime import date
-from typing import Callable, Any, List, Self, Optional
+from typing import Any, List, Optional
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.common.types import Erasure

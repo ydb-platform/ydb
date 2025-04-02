@@ -2,7 +2,7 @@ import pytest
 import time
 from ydb.tests.datashard.lib.base_async_replication import TestBase
 from ydb.tests.datashard.lib.create_table import create_table, create_ttl, cleanup_type_name, pk_types, non_pk_types, index_first, index_second, ttl_types, \
-    index_first_sync, index_second_sync, index_three_sync, index_four_sync, index_zero_sync
+    index_first_sync, index_second_sync, index_three_sync, index_four_sync, index_zero_sync, index_three_sync_not_Bool
 
 
 class TestAsyncReplication(TestBase):
@@ -56,7 +56,7 @@ class TestAsyncReplication(TestBase):
             table_name, all_types, pk_types, index, ttl)
         self.query(f"delete from {table_name}")
         rows = self.query_async(f"select count(*) as count from {table_name}")
-        for i in range(1000):
+        for i in range(10):
             rows = self.query_async(
                 f"select count(*) as count from {table_name}")
             if len(rows) == 1 and rows[0].count == 0:
@@ -70,6 +70,10 @@ class TestAsyncReplication(TestBase):
             table_name, all_types, pk_types, index, ttl)
 
     def select_async_after_insert(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
+        err = """"Type annotation" issue_code: 1030 severity: 1 issues { position { row: 2 column: 17 } message: "At function: KiReadTable!" end_position { row: 2 column: 17 }"""
+        err += """severity: 1 issues { position { row: 2 column: 17 } message:"""
+        err += f""" "Cannot find table \'db.[/Root/{table_name}]\' because it does not exist or you do not have access permissions."""
+        err += """ Please check correctness of table path and user permissions." end_position { row: 2 column: 17 } issue_code: 2003 severity: 1 } } (server_code: 400070)"""
         number_of_columns = len(pk_types) + len(all_types) + len(index)
 
         if ttl != "":
@@ -90,13 +94,14 @@ class TestAsyncReplication(TestBase):
                 sql_select += f"ttl_{ttl}={ttl_types[ttl].format(count)}"
             else:
                 sql_select += f"""pk_Int64={pk_types["Int64"].format(count)}"""
-            for _ in range(1000):
+            for _ in range(10):
                 try:
                     rows = self.query_async(sql_select)
                     break
-                except:
+                except Exception as e:
                     time.sleep(1)
-            for _ in range(1000):
+
+            for _ in range(10):
                 rows = self.query_async(sql_select)
                 if len(rows) == 1 and rows[0].count == 1:
                     break

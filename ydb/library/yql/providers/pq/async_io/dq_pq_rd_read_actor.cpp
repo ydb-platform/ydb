@@ -614,14 +614,14 @@ void TDqPqRdReadActor::SendStartSession(TSession& sessionInfo) {
     std::map<ui32, ui64> partitionOffsets;
     for (auto partitionId : sessionInfo.Partitions) {
         partitions.insert(partitionId);
-        auto nextOffset = NextOffsetFromRD.find(partitionId);
+        auto itNextOffset = NextOffsetFromRD.find(partitionId);
         str << "(" << partitionId << " / ";
-        if (nextOffset == NextOffsetFromRD.end()) {
+        if (itNextOffset == NextOffsetFromRD.end()) {
             str << "<empty>),";
             continue;
         }
-        partitionOffsets[partitionId] = nextOffset->second;
-        str << nextOffset << "),";
+        partitionOffsets[partitionId] = itNextOffset->second;
+        str << itNextOffset->second << "),";
     }
     SRC_LOG_I(str);
 

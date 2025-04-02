@@ -420,7 +420,7 @@ void TLogWorkloadParams::ConfigureOpts(NLastGetopt::TOpts& opts, const ECommandT
                 .DefaultValue(RowsCnt).StoreResult(&RowsCnt);
             opts.AddLongOption("timestamp_deviation", "Standard deviation. For each timestamp, a random variable with a specified standard deviation in minutes is added.")
                 .DefaultValue(TimestampStandardDeviationMinutes).StoreResult(&TimestampStandardDeviationMinutes);
-            opts.AddLongOption("timestamp_subtract", "Value to subtract from timestamp. For each timestamp, this value is subtracted")
+            opts.AddLongOption("timestamp_subtract", "Value in seconds to subtract from timestamp. For each timestamp, this value in seconds is subtracted")
                 .DefaultValue(0).StoreResult(&TimestampSubtract);
             opts.AddLongOption("null-percent", "Percent of nulls in generated data")
                 .DefaultValue(NullPercent).StoreResult(&NullPercent);

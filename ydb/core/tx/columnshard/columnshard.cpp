@@ -4,6 +4,7 @@
 #include "blobs_reader/actor.h"
 #include "counters/aggregation/table_stats.h"
 #include "data_accessor/actor.h"
+#include "data_accessor/node_actor.h"
 #include "data_accessor/manager.h"
 #include "engines/column_engine_logs.h"
 #include "engines/writer/buffer/actor.h"
@@ -124,7 +125,13 @@ void TColumnShard::OnActivateExecutor(const TActorContext& ctx) {
     ResourceSubscribeActor = ctx.Register(new NOlap::NResourceBroker::NSubscribe::TActor(TabletID(), SelfId()));
     BufferizationInsertionWriteActorId = ctx.Register(new NColumnShard::NWriting::TActor(TabletID(), SelfId()));
     BufferizationPortionsWriteActorId = ctx.Register(new NOlap::NWritingPortions::TActor(TabletID(), SelfId()));
-    DataAccessorsControlActorId = ctx.Register(new NOlap::NDataAccessorControl::TActor(TabletID(), SelfId()));
+    // Change actor here
+    if (AppData(ctx)->FeatureFlags.GetEnableSharedMetadataCache()){
+        DataAccessorsControlActorId = NOlap::NDataAccessorControl::TNodeActor::MakeActorId(ctx.SelfID.NodeId());
+    } else {
+        DataAccessorsControlActorId = ctx.Register(new NOlap::NDataAccessorControl::TActor(TabletID(), SelfId()));
+    }
+
     DataAccessorsManager = std::make_shared<NOlap::NDataAccessorControl::TActorAccessorsManager>(DataAccessorsControlActorId, SelfId()),
 
     PrioritizationClientId = NPrioritiesQueue::TCompServiceOperator::RegisterClient();

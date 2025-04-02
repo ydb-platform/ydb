@@ -53,14 +53,14 @@ bool TGranuleIndexesReader::DoPrecharge(NTabletFlatExecutor::TTransactionContext
     return db.Table<NColumnShard::Schema::IndexIndexes>().Prefix(Self->GetPathId().GetRawValue()).Select().IsReady();
 }
 
-bool TGranuleFinishAccessorsLoading::DoExecute(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) {
+bool TGranuleFinishAccessorsLoading::DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) {
     THashMap<ui64, TPortionDataAccessors> constructors = Context->ExtractConstructors();
     AFL_VERIFY(Self->GetPortions().size() == constructors.size());
     for (auto&& i : Self->GetPortions()) {
         auto it = constructors.find(i.first);
         AFL_VERIFY(it != constructors.end());
         auto accessor = TPortionAccessorConstructor::BuildForLoading(i.second, std::move(it->second.MutableRecords()), std::move(it->second.MutableIndexes()));
-        Self->GetDataAccessorsManager()->AddPortion(accessor);
+        Self->GetDataAccessorsManager()->AddPortion((NOlap::TTabletId)txc.Tablet, accessor);
     }
     return true;
 }

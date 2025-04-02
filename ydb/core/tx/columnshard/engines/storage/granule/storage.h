@@ -97,6 +97,7 @@ public:
 class TGranulesStorage {
 private:
     const NColumnShard::TEngineLogsCounters Counters;
+    const TTabletId TabletId;
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     std::shared_ptr<IStoragesManager> StoragesManager;
     THashMap<TInternalPathId, std::shared_ptr<TGranuleMeta>> Tables;   // pathId into Granule that equal to Table
@@ -121,17 +122,18 @@ public:
 
     TGranulesStorage(const NColumnShard::TEngineLogsCounters counters,
         const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
-        const std::shared_ptr<IStoragesManager>& storagesManager)
+        const std::shared_ptr<IStoragesManager>& storagesManager,
+        const TTabletId tabletId)
         : Counters(counters)
+        , TabletId(tabletId)
         , DataAccessorsManager(dataAccessorsManager)
-        , StoragesManager(storagesManager)
-        , Stats(std::make_shared<TGranulesStat>(Counters)) {
+        , StoragesManager(storagesManager), Stats(std::make_shared<TGranulesStat>(Counters)) {
         AFL_VERIFY(DataAccessorsManager);
         AFL_VERIFY(StoragesManager);
     }
 
     void FetchDataAccessors(const std::shared_ptr<TDataAccessorsRequest>& request) const {
-        DataAccessorsManager->AskData(request);
+        DataAccessorsManager->AskData(TabletId, request);
     }
 
     const std::shared_ptr<TGranulesStat>& GetStats() const {
@@ -153,7 +155,7 @@ public:
         if (!it->second->IsErasable()) {
             return false;
         }
-        DataAccessorsManager->UnregisterController(pathId);
+        DataAccessorsManager->UnregisterController(TabletId, pathId);
         Tables.erase(it);
         return true;
     }
@@ -213,6 +215,8 @@ public:
     const NColumnShard::TEngineLogsCounters& GetCounters() const {
         return Counters;
     }
+
+    TTabletId GetTabletId() const { return TabletId;}
 
     std::shared_ptr<TGranuleMeta> GetGranuleForCompaction(const std::shared_ptr<NDataLocks::TManager>& locksManager) const;
     std::optional<NStorageOptimizer::TOptimizationPriority> GetCompactionPriority(const std::shared_ptr<NDataLocks::TManager>& locksManager,

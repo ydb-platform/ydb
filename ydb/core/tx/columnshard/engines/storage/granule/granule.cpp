@@ -27,7 +27,7 @@ void TGranuleMeta::AppendPortion(const std::shared_ptr<TPortionInfo>& info) {
 
 void TGranuleMeta::AppendPortion(const TPortionDataAccessor& info) {
     AppendPortion(info.MutablePortionInfoPtr());
-    DataAccessorsManager->AddPortion(info);
+    DataAccessorsManager->AddPortion(TabletId, info);
 }
 
 bool TGranuleMeta::ErasePortion(const ui64 portion) {
@@ -38,7 +38,7 @@ bool TGranuleMeta::ErasePortion(const ui64 portion) {
     } else {
         AFL_TRACE(NKikimrServices::TX_COLUMNSHARD)("event", "portion_erased")("portion_info", it->second->DebugString())("pathId", PathId);
     }
-    DataAccessorsManager->RemovePortion(it->second);
+    DataAccessorsManager->RemovePortion(TabletId, it->second);
     OnBeforeChangePortion(it->second);
     Portions.erase(it);
     OnAfterChangePortion(nullptr, nullptr);
@@ -132,6 +132,7 @@ const NKikimr::NOlap::TGranuleAdditiveSummary& TGranuleMeta::GetAdditiveSummary(
 TGranuleMeta::TGranuleMeta(const TInternalPathId pathId, const TGranulesStorage& owner, const NColumnShard::TGranuleDataCounters& counters,
     const TVersionedIndex& versionedIndex)
     : PathId(pathId)
+    , TabletId(owner.GetTabletId())
     , DataAccessorsManager(owner.GetDataAccessorsManager())
     , Counters(counters)
     , PortionInfoGuard(owner.GetCounters().BuildPortionBlobsGuard())
@@ -172,7 +173,7 @@ void TGranuleMeta::BuildActualizationTasks(NActualizer::TTieringProcessContext& 
 void TGranuleMeta::ResetAccessorsManager(const std::shared_ptr<NDataAccessorControl::IManagerConstructor>& constructor,
     const NDataAccessorControl::TManagerConstructionContext& context) {
     MetadataMemoryManager = constructor->Build(context).DetachResult();
-    DataAccessorsManager->RegisterController(MetadataMemoryManager->BuildCollector(PathId), context.IsUpdate());
+    DataAccessorsManager->RegisterController(MetadataMemoryManager->BuildCollector(TabletId, PathId), TabletId, context.IsUpdate());
 }
 
 void TGranuleMeta::ResetOptimizer(const std::shared_ptr<NStorageOptimizer::IOptimizerPlannerConstructor>& constructor,
@@ -262,7 +263,7 @@ bool TGranuleMeta::TestingLoad(IDbWrapper& db, const TVersionedIndex& versionedI
     }
     for (auto&& [portionId, constructor] : constructors) {
         auto accessor = constructor.Build(false);
-        DataAccessorsManager->AddPortion(accessor);
+        DataAccessorsManager->AddPortion(TabletId, accessor);
         UpsertPortionOnLoad(accessor.MutablePortionInfoPtr());
     }
     return true;
@@ -287,7 +288,7 @@ void TGranuleMeta::InsertPortionOnComplete(const TPortionDataAccessor& portion, 
     auto writtenPortion = std::static_pointer_cast<TWrittenPortionInfo>(portionImpl);
     AFL_VERIFY(InsertedPortions.emplace(writtenPortion->GetInsertWriteId(), writtenPortion).second);
     AFL_VERIFY(InsertedAccessors.emplace(writtenPortion->GetInsertWriteId(), portion).second);
-    DataAccessorsManager->AddPortion(portion);
+    DataAccessorsManager->AddPortion(TabletId, portion);
 }
 
 void TGranuleMeta::CommitPortionOnExecute(

@@ -30,7 +30,7 @@ namespace NKikimr::NOlap {
 TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<TSchemaObjectsCache>& schemaCache,
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
     const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const ui64 presetId, const TSchemaInitializationData& schema, const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters)
-    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, dataAccessorsManager, storagesManager))
+    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, dataAccessorsManager, storagesManager, (TTabletId)tabletId))
     , DataAccessorsManager(dataAccessorsManager)
     , StoragesManager(storagesManager)
     , SchemaObjectsCache(schemaCache)
@@ -46,7 +46,7 @@ TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::share
 TColumnEngineForLogs::TColumnEngineForLogs(const ui64 tabletId, const std::shared_ptr<TSchemaObjectsCache>& schemaCache,
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager>& dataAccessorsManager,
     const std::shared_ptr<IStoragesManager>& storagesManager, const TSnapshot& snapshot, const ui64 presetId, TIndexInfo&& schema, const std::shared_ptr<NColumnShard::TPortionIndexStats>& counters)
-    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, dataAccessorsManager, storagesManager))
+    : GranulesStorage(std::make_shared<TGranulesStorage>(SignalCounters, dataAccessorsManager, storagesManager, (TTabletId)tabletId))
     , DataAccessorsManager(dataAccessorsManager)
     , StoragesManager(storagesManager)
     , SchemaObjectsCache(schemaCache)

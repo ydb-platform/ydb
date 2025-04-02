@@ -78,6 +78,7 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
+#include <ydb/core/tx/columnshard/data_accessor/node_actor.h>
 #include <ydb/core/tx/coordinator/coordinator.h>
 #include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/core/tx/long_tx_service/public/events.h>
@@ -1182,6 +1183,16 @@ namespace Tests {
             const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::Revolving, 0);
             Runtime->RegisterService(NConveyor::TInsertServiceOperator::MakeServiceId(Runtime->GetNodeId(nodeIdx)), aid, nodeIdx);
         }
+        {
+            if (Settings->FeatureFlags.GetEnableSharedMetadataCache()) {
+                auto* actor = NKikimr::NOlap::NDataAccessorControl::TNodeActor::CreateActor();
+
+                const auto aid = Runtime->Register(actor, nodeIdx, appData.UserPoolId, TMailboxType::HTSwap, 0);
+                const auto serviceId = NKikimr::NOlap::NDataAccessorControl::TNodeActor::MakeActorId(Runtime->GetNodeId(nodeIdx));
+                Runtime->RegisterService(serviceId, aid, nodeIdx);
+            }
+        }
+
         Runtime->Register(CreateLabelsMaintainer({}), nodeIdx, appData.SystemPoolId, TMailboxType::Revolving, 0);
 
         auto sysViewService = NSysView::CreateSysViewServiceForTests();

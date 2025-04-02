@@ -7,7 +7,7 @@ void TCollector::DoAskData(
     const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<IAccessorCallback>& callback, const TString& consumer) {
     if (portions.size()) {
         NActors::TActivationContext::Send(
-            TabletActorId, std::make_unique<NDataAccessorControl::TEvAskTabletDataAccessors>(portions, callback, consumer));
+            TabletActorId, std::make_unique<NDataAccessorControl::TEvAskTabletDataAccessors>(portions, callback, consumer, GetTabletId()));
     }
 }
 

@@ -5,7 +5,7 @@
 namespace NKikimr::NOlap::NDataAccessorControl {
 class IAccessorCallback {
 public:
-    virtual void OnAccessorsFetched(std::vector<TPortionDataAccessor>&& accessors) = 0;
+    virtual void OnAccessorsFetched(TTabletId TabletId, std::vector<TPortionDataAccessor>&& accessors) = 0;
     virtual ~IAccessorCallback() = default;
 };
 
@@ -14,7 +14,7 @@ private:
     const NActors::TActorId ActorId;
 
 public:
-    virtual void OnAccessorsFetched(std::vector<TPortionDataAccessor>&& accessors) override;
+    virtual void OnAccessorsFetched(TTabletId tabletId, std::vector<TPortionDataAccessor>&& accessors) override;
     TActorAccessorsCallback(const NActors::TActorId& actorId)
         : ActorId(actorId) {
     }
@@ -37,6 +37,7 @@ public:
 class IGranuleDataAccessor {
 private:
     const TInternalPathId PathId;
+    const TTabletId TabletId;
 
     virtual void DoAskData(
         const std::vector<TPortionInfo::TConstPtr>& portions, const std::shared_ptr<IAccessorCallback>& callback, const TString& consumer) = 0;
@@ -49,9 +50,13 @@ public:
     TInternalPathId GetPathId() const {
         return PathId;
     }
+    TTabletId GetTabletId() const {
+        return TabletId;
+    }
 
-    IGranuleDataAccessor(const TInternalPathId pathId)
-        : PathId(pathId) {
+    IGranuleDataAccessor(const TTabletId tabletId, const TInternalPathId pathId)
+        : PathId(pathId)
+        , TabletId(tabletId) {
     }
 
     void AskData(

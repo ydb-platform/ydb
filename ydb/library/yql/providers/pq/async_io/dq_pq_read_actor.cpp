@@ -103,17 +103,17 @@ struct TEvPrivate {
         std::optional<std::string> ExceptionMessage;
     };
     struct TEvDescribeTopicResult : public NActors::TEventLocal<TEvDescribeTopicResult, EvDescribeTopicResult> {
-        TEvDescribeTopicResult(ui32 clusterIndex, ui32 partitionCount)
+        TEvDescribeTopicResult(ui32 clusterIndex, ui32 partitionsCount)
             : ClusterIndex(clusterIndex)
-            , PartitionCount(partitionCount)
+            , PartitionsCount(partitionsCount)
         {}
         TEvDescribeTopicResult(ui32 clusterIndex, const NYdb::TStatus& status)
             : ClusterIndex(clusterIndex)
-            , PartitionCount(0)
+            , PartitionsCount(0)
             , Status(status)
         {}
         ui32 ClusterIndex;
-        ui32 PartitionCount;
+        ui32 PartitionsCount;
         TMaybe<NYdb::TStatus> Status;
     };
 };
@@ -156,7 +156,7 @@ class TDqPqReadActor : public NActors::TActor<TDqPqReadActor>, public NYql::NDq:
         NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo Info;
         ITopicClient::TPtr TopicClient;
         std::shared_ptr<NYdb::NTopic::IReadSession> ReadSession;
-        ui32 PartitionCount;
+        ui32 PartitionsCount;
         NThreading::TFuture<void> EventFuture;
         bool SubscribedOnEvent = false;
         TMaybe<TInstant> WaitEventStartedAt;
@@ -375,17 +375,17 @@ private:
                     cluster.Info.Name = federatedCluster.GetName();
                     cluster.Info.Endpoint = federatedCluster.GetEndpoint();
                     cluster.Info.Path = federatedCluster.GetDatabase();
-                    cluster.PartitionCount = ReadParams.GetPartitioningParams().GetTopicPartitionsCount();
-                    if (cluster.PartitionCount == 0) {
-                        cluster.PartitionCount = ReadParams.GetPartitioningParams().GetTopicPartitionsCount();
-                        SRC_LOG_W("PartitionCount for offline server assumed to be " << cluster.PartitionCount);
+                    cluster.PartitionsCount = ReadParams.GetPartitioningParams().GetTopicPartitionsCount();
+                    if (cluster.PartitionsCount == 0) {
+                        cluster.PartitionsCount = ReadParams.GetPartitioningParams().GetTopicPartitionsCount();
+                        SRC_LOG_W("PartitionsCount for offline server assumed to be " << cluster.PartitionsCount);
                     }
                 }
             } else {
                 auto& cluster = Clusters.emplace_back();
                 cluster.Info.Endpoint = SourceParams.GetEndpoint();
                 cluster.Info.Path = SourceParams.GetDatabase();
-                cluster.PartitionCount = ReadParams.GetPartitioningParams().GetTopicPartitionsCount();
+                cluster.PartitionsCount = ReadParams.GetPartitioningParams().GetTopicPartitionsCount();
             }
             Send(SelfId(), new TEvPrivate::TEvSourceDataReady());
             return;
@@ -443,8 +443,8 @@ private:
                             actorSystem->Send(selfId, new TEvPrivate::TEvDescribeTopicResult(index, describeTopic));
                             return;
                         }
-                        auto partitionCount = describeTopic.GetTopicDescription().GetTotalPartitionsCount();
-                        actorSystem->Send(selfId, new TEvPrivate::TEvDescribeTopicResult(index, partitionCount));
+                        auto partitionsCount = describeTopic.GetTopicDescription().GetTotalPartitionsCount();
+                        actorSystem->Send(selfId, new TEvPrivate::TEvDescribeTopicResult(index, partitionsCount));
                     } catch (const std::exception& ex) {
                         actorSystem->Send(selfId, new TEvPrivate::TEvDescribeTopicResult(index,
                                     NYdb::TStatus(NYdb::EStatus::INTERNAL_ERROR,
@@ -458,7 +458,7 @@ private:
 
     void Handle(TEvPrivate::TEvDescribeTopicResult::TPtr& ev) {
         auto clusterIndex = ev->Get()->ClusterIndex;
-        auto partitionCount = ev->Get()->PartitionCount;
+        auto partitionsCount = ev->Get()->PartitionsCount;
         if (auto status = ev->Get()->Status) {
             TStringBuilder message;
             message << "Failed to describe topic \"" << SourceParams.GetTopicPath() << "\"";
@@ -474,8 +474,8 @@ private:
             Send(ComputeActorId, new TEvAsyncInputError(InputIndex, TIssues({issue}), NYql::NDqProto::StatusIds::BAD_REQUEST));
             return;
         }
-        SRC_LOG_D("Got partition info for cluster " << clusterIndex << " = " << partitionCount);
-        Clusters[clusterIndex].PartitionCount = partitionCount;
+        SRC_LOG_D("Got partition info for cluster " << clusterIndex << " = " << partitionsCount);
+        Clusters[clusterIndex].PartitionsCount = partitionsCount;
         Send(SelfId(), new TEvPrivate::TEvSourceDataReady());
     }
 
@@ -503,7 +503,7 @@ private:
                 StartClusterDiscovery();
             }
             for (auto& clusterState : Clusters) {
-                if (clusterState.PartitionCount == 0) {
+                if (clusterState.PartitionsCount == 0) {
                     continue;
                 }
                 auto events = GetReadSession(clusterState).GetEvents(false, std::nullopt, static_cast<size_t>(freeSpace));
@@ -553,7 +553,7 @@ private:
         std::vector<ui64> res;
 
         ui64 currentPartition = ReadParams.GetPartitioningParams().GetEachTopicPartitionGroupId();
-        while (currentPartition < clusterState.PartitionCount) {
+        while (currentPartition < clusterState.PartitionsCount) {
             res.emplace_back(currentPartition); // 0-based in topic API
             currentPartition += ReadParams.GetPartitioningParams().GetDqPartitionsCount();
         }

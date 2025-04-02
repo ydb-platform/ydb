@@ -1,4 +1,5 @@
-from ydb.tests.stress.oltp_workload.workload import cleanup_type_name
+def cleanup_type_name(type_name):
+    return type_name.replace('(', '').replace(')', '').replace(',', '')
 
 ttl_types = {
     "DyNumber": "CAST('3742656{:03}' AS DyNumber)",
@@ -121,6 +122,13 @@ non_pk_types = {
     "Json": "CAST('{{\"another_key\":{}}}' AS Json)",
     "JsonDocument": "CAST('{{\"another_doc_key\":{}}}' AS JsonDocument)",
     "Yson": "CAST('[{}]' AS Yson)"
+}
+
+null_types = {
+    "Int64": "CAST({} AS Int64)",
+    "Decimal(22,9)": "CAST('{}.123' AS Decimal(22,9))",
+    "Decimal(35,10)": "CAST('{}.123456' AS Decimal(35,10))",
+    "String": "'{}'",
 }
 
 

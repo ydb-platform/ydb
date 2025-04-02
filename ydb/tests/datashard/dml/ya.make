@@ -4,7 +4,12 @@ ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 FORK_SUBTESTS()
 SPLIT_FACTOR(18)
 
-SIZE(MEDIUM)
+IF (SANITIZER_TYPE)
+    SIZE(LARGE)
+    INCLUDE(${ARCADIA_ROOT}/ydb/tests/large.inc)
+ELSE()
+    SIZE(MEDIUM)
+ENDIF()
 
 TEST_SRCS(
     test_dml.py
@@ -13,7 +18,6 @@ TEST_SRCS(
 
 PEERDIR(
     ydb/tests/datashard/lib
-    ydb/tests/stress/oltp_workload/workload
     ydb/tests/sql/lib
 )
 

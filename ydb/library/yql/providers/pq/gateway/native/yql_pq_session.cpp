@@ -67,6 +67,14 @@ NYdb::NFederatedTopic::TFederatedTopicClient& TPqSession::GetYdbFederatedPqClien
     return ClusterYdbFederatedPqClients.emplace(cluster, NYdb::NFederatedTopic::TFederatedTopicClient(YdbDriver, GetYdbFederatedPqClientOptions(database, cfg, credentialsProviderFactory))).first->second;
 }
 
+NYdb::NTopic::TTopicClient& TPqSession::GetYdbPqClient(const TString& cluster, const TString& database, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
+    const auto clientIt = ClusterYdbPqClients.find(cluster);
+    if (clientIt != ClusterYdbPqClients.end()) {
+        return clientIt->second;
+    }
+    return ClusterYdbPqClients.emplace(cluster, NYdb::NTopic::TTopicClient(YdbDriver, GetYdbPqClientOptions(database, cfg, credentialsProviderFactory))).first->second;
+}
+
 NYdb::NDataStreams::V1::TDataStreamsClient& TPqSession::GetDsClient(const TString& cluster, const TString& database, const NYql::TPqClusterConfig& cfg, std::shared_ptr<NYdb::ICredentialsProviderFactory> credentialsProviderFactory) {
     const auto clientIt = ClusterDsClients.find(cluster);
     if (clientIt != ClusterDsClients.end()) {

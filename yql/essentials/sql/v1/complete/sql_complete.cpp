@@ -102,6 +102,7 @@ namespace NSQLComplete {
                         return {ECandidateKind::TypeName, std::move(name.Indentifier)};
                     }
                     if constexpr (std::is_base_of_v<TFunctionName, T>) {
+                        name.Indentifier += "(";
                         return {ECandidateKind::FunctionName, std::move(name.Indentifier)};
                     }
                 }, std::move(name)));

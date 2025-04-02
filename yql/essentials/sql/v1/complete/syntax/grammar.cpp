@@ -6,10 +6,11 @@ namespace NSQLComplete {
 
     class TSqlGrammar: public ISqlGrammar {
     public:
-        TSqlGrammar()
+        TSqlGrammar(const NSQLReflect::TLexerGrammar& grammar)
             : Vocabulary(GetVocabularyP())
             , AllTokens(ComputeAllTokens())
-            , KeywordTokens(ComputeKeywordTokens())
+            , KeywordTokens(ComputeKeywordTokens(grammar))
+            , PunctuationTokens(ComputePunctuationTokens(grammar))
         {
         }
 
@@ -23,6 +24,10 @@ namespace NSQLComplete {
 
         const std::unordered_set<TTokenId>& GetKeywordTokens() const override {
             return KeywordTokens;
+        }
+
+        const std::unordered_set<TTokenId>& GetPunctuationTokens() const override {
+            return PunctuationTokens;
         }
 
     private:
@@ -42,26 +47,39 @@ namespace NSQLComplete {
             return allTokens;
         }
 
-        std::unordered_set<TTokenId> ComputeKeywordTokens() {
+        std::unordered_set<TTokenId> ComputeKeywordTokens(
+            const NSQLReflect::TLexerGrammar& grammar) {
             const auto& vocabulary = GetVocabulary();
-            const auto keywords = NSQLReflect::LoadLexerGrammar().KeywordNames;
 
             auto keywordTokens = GetAllTokens();
             std::erase_if(keywordTokens, [&](TTokenId token) {
-                return !keywords.contains(vocabulary.getSymbolicName(token));
+                return !grammar.KeywordNames.contains(vocabulary.getSymbolicName(token));
             });
             keywordTokens.erase(TOKEN_EOF);
 
             return keywordTokens;
         }
 
+        std::unordered_set<TTokenId> ComputePunctuationTokens(
+            const NSQLReflect::TLexerGrammar& grammar) {
+            const auto& vocabulary = GetVocabulary();
+
+            auto punctuationTokens = GetAllTokens();
+            std::erase_if(punctuationTokens, [&](TTokenId token) {
+                return !grammar.PunctuationNames.contains(vocabulary.getSymbolicName(token));
+            });
+
+            return punctuationTokens;
+        }
+
         const antlr4::dfa::Vocabulary* Vocabulary;
         const std::unordered_set<TTokenId> AllTokens;
         const std::unordered_set<TTokenId> KeywordTokens;
+        const std::unordered_set<TTokenId> PunctuationTokens;
     };
 
     const ISqlGrammar& GetSqlGrammar() {
-        const static TSqlGrammar DefaultSqlGrammar{};
+        const static TSqlGrammar DefaultSqlGrammar(NSQLReflect::LoadLexerGrammar());
         return DefaultSqlGrammar;
     }
 

@@ -26,7 +26,8 @@ TString ToString(NKikimrSchemeOp::EPathType pathType) {
         case NKikimrSchemeOp::EPathTypeColumnTable:
             return "Table";
         default:
-            return "Unknown";
+            Y_ENSURE(false, "No user-friendly name for a path type: " << pathType);
+            return "";
     }
 }
 
@@ -163,8 +164,7 @@ private:
                 const auto& pathDescription = record.GetPathDescription();
                 if (auto pathType = ToString(pathDescription.GetSelf().GetPathType()); pathType != PathType) {
                     return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
-                        << "Expected path type: " << PathType
-                        << ", actual path type: " << pathType
+                        << "Path type mismatch, expected: " << PathType << ", found: " << pathType
                     );
                 }
 

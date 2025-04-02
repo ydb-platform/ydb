@@ -840,27 +840,6 @@ void TPartition::HandleOnWrite(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TAct
     EmplacePendingRequest(std::move(msg), NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId(ev->TraceId), "Topic.Partition.SplitMessageGroup"), ctx);
 }
 
-std::pair<TKey, ui32> TPartition::Compact(const TKey& key, const ui32 size, bool headCleared) {
-    std::pair<TKey, ui32> res({key, size});
-    ui32 x = headCleared ? 0 : WorkZone.Head.PackedSize;
-    Y_ABORT_UNLESS(std::accumulate(WorkZone.DataKeysHead.begin(), WorkZone.DataKeysHead.end(), 0u, [](ui32 sum, const TKeyLevel& level){return sum + level.Sum();}) == WorkZone.NewHead.PackedSize + x);
-    for (auto it = WorkZone.DataKeysHead.rbegin(); it != WorkZone.DataKeysHead.rend(); ++it) {
-        auto jt = it; ++jt;
-        if (it->NeedCompaction()) {
-            res = it->Compact();
-            if (jt != WorkZone.DataKeysHead.rend()) {
-                jt->AddKey(res.first, res.second);
-            }
-        } else {
-            Y_ABORT_UNLESS(jt == WorkZone.DataKeysHead.rend() || !jt->NeedCompaction()); //compact must start from last level, not internal
-        }
-        Y_ABORT_UNLESS(!it->NeedCompaction());
-    }
-    Y_ABORT_UNLESS(res.second >= size);
-    Y_ABORT_UNLESS(res.first.GetOffset() < key.GetOffset() || res.first.GetOffset() == key.GetOffset() && res.first.GetPartNo() <= key.GetPartNo());
-    return res;
-}
-
 void TPartition::StartProcessChangeOwnerRequests(const TActorContext& ctx)
 {
     ctx.Send(ctx.SelfID, new TEvPQ::TEvProcessChangeOwnerRequests());
@@ -1075,6 +1054,7 @@ void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFor
     if (!formedBlobs.empty()) {
         parameters.HeadCleared = true;
 
+        // WorkZone.ResetNewHead ???
         WorkZone.NewHead.Clear();
         WorkZone.NewHead.Offset = WorkZone.PartitionedBlob.GetOffset();
         WorkZone.NewHead.PartNo = WorkZone.PartitionedBlob.GetHeadPartNo();
@@ -1381,7 +1361,7 @@ std::pair<TKey, ui32> TPartition::GetNewWriteKeyImpl(bool headCleared, bool need
         } //otherwise KV blob is not from head (!key.HasSuffix()) and contains only new data from NewHead
         res = std::make_pair(key, headSize + WorkZone.NewHead.PackedSize);
     } else {
-        res = Compact(key, WorkZone.NewHead.PackedSize, headCleared);
+        res = WorkZone.Compact(key, headCleared);
         Y_ABORT_UNLESS(res.first.HasSuffix());//may compact some KV blobs from head, but new KV blob is from head too
         Y_ABORT_UNLESS(res.second >= WorkZone.NewHead.PackedSize); //at least new data must be writed
     }

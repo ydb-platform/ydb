@@ -80,6 +80,8 @@ struct TPartitionWorkZone {
 
     void PackLastBatch();
 
+    std::pair<TKey, ui32> Compact(const TKey& key, bool headCleared);
+
     THead Head;
     THead NewHead;
     TPartitionedBlob PartitionedBlob;

@@ -446,4 +446,27 @@ void TPartitionWorkZone::PackLastBatch()
     NewHead.PackedSize -= NewHead.GetLastBatch().GetUnpackedSize();
 }
 
+std::pair<TKey, ui32> TPartitionWorkZone::Compact(const TKey& key, bool headCleared)
+{
+    const ui32 size = NewHead.PackedSize;
+    std::pair<TKey, ui32> res(key, size);
+    ui32 x = headCleared ? 0 : Head.PackedSize;
+    Y_ABORT_UNLESS(std::accumulate(DataKeysHead.begin(), DataKeysHead.end(), 0u, [](ui32 sum, const TKeyLevel& level){return sum + level.Sum();}) == NewHead.PackedSize + x);
+    for (auto it = DataKeysHead.rbegin(); it != DataKeysHead.rend(); ++it) {
+        auto jt = it; ++jt;
+        if (it->NeedCompaction()) {
+            res = it->Compact();
+            if (jt != DataKeysHead.rend()) {
+                jt->AddKey(res.first, res.second);
+            }
+        } else {
+            Y_ABORT_UNLESS(jt == DataKeysHead.rend() || !jt->NeedCompaction()); //compact must start from last level, not internal
+        }
+        Y_ABORT_UNLESS(!it->NeedCompaction());
+    }
+    Y_ABORT_UNLESS(res.second >= size);
+    Y_ABORT_UNLESS(res.first.GetOffset() < key.GetOffset() || res.first.GetOffset() == key.GetOffset() && res.first.GetPartNo() <= key.GetPartNo());
+    return res;
+}
+
 }

@@ -288,7 +288,6 @@ private:
     bool WaitingForSubDomainQuota(const TActorContext& ctx, const ui64 withSize = 0) const;
     size_t GetQuotaRequestSize(const TEvKeyValue::TEvRequest& request);
     std::pair<TInstant, TInstant> GetTime(const TUserInfo& userInfo, ui64 offset) const;
-    std::pair<TKey, ui32> Compact(const TKey& key, const ui32 size, bool headCleared);
     ui32 NextChannel(bool isHead, ui32 blobSize);
     ui64 GetSizeLag(i64 offset);
     std::pair<TKey, ui32> GetNewWriteKey(bool headCleared);

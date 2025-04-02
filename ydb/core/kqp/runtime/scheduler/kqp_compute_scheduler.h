@@ -1,15 +1,13 @@
 #pragma once
 
-#include <util/datetime/base.h>
-#include <util/system/hp_timer.h>
-
+#include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/yql/dq/actors/compute/dq_sync_compute_actor_base.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_log.h>
 
-#include <ydb/core/kqp/common/simple/kqp_event_ids.h>
+#include <util/datetime/base.h>
+#include <util/system/hp_timer.h>
 
 namespace NKikimr::NKqp::NScheduler {
 

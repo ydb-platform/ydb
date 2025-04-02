@@ -3,7 +3,7 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
-#include <ydb/core/kqp/runtime/kqp_compute_scheduler.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io_factory.h>

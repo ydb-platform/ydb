@@ -556,7 +556,6 @@ struct TSchedulerEntity::TGroupRecord {
         OldLimit = group->GetCounter("OldLimit", true);
         Weight = group->GetCounter("Weight", false);
         SchedulerClock = group->GetCounter("Clock", false);
-
         SchedulerLimitUs = group->GetCounter("AbsoluteLimit", true);
 
         // TODO: since counters don't support float-point values, then use CPU * 1'000'000 to account the microseconds precision

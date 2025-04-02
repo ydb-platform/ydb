@@ -1324,24 +1324,23 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                           curWrites,
                           request,
                           ctx);
+
         ui32 countOfLastParts = 0;
         for (auto& x : WorkZone.PartitionedBlob.GetClientBlobs()) {
             if (WorkZone.NewHead.GetBatches().empty() || WorkZone.NewHead.GetLastBatch().Packed) {
                 WorkZone.NewHead.AddBatch(TBatch(curOffset, x.GetPartNo()));
                 WorkZone.NewHead.PackedSize += GetMaxHeaderSize(); //upper bound for packed size
             }
+
             if (x.IsLastPart()) {
                 ++countOfLastParts;
             }
+
             Y_ABORT_UNLESS(!WorkZone.NewHead.GetLastBatch().Packed);
             WorkZone.NewHead.AddBlob(x);
             WorkZone.NewHead.PackedSize += x.GetBlobSize();
             if (WorkZone.NewHead.GetLastBatch().GetUnpackedSize() >= BATCH_UNPACK_SIZE_BORDER) {
-                WorkZone.NewHead.MutableLastBatch().Pack();
-                WorkZone.NewHead.PackedSize += WorkZone.NewHead.GetLastBatch().GetPackedSize(); //add real packed size for this blob
-
-                WorkZone.NewHead.PackedSize -= GetMaxHeaderSize(); //instead of upper bound
-                WorkZone.NewHead.PackedSize -= WorkZone.NewHead.GetLastBatch().GetUnpackedSize();
+                WorkZone.PackLastBatch();
             }
         }
 
@@ -1707,7 +1706,9 @@ void TPartition::EndAppendHeadWithNewWrites(const TActorContext& ctx)
 
     UpdateWriteBufferIsFullState(ctx.Now());
 
-    WorkZone.PackLastBatch();
+    if (!WorkZone.IsLastBatchPacked()) {
+        WorkZone.PackLastBatch();
+    }
 
     Y_ABORT_UNLESS((Parameters->HeadCleared ? 0 : WorkZone.Head.PackedSize) + WorkZone.NewHead.PackedSize <= MaxBlobSize); //otherwise last PartitionedBlob.Add must compact all except last cl
     WorkZone.MaxWriteResponsesSize = Max<ui32>(WorkZone.MaxWriteResponsesSize, Responses.size());

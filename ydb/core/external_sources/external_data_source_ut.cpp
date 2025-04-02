@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(ExternalDataSourceTest) {
 
     Y_UNIT_TEST(ValidateAuth) {
         auto source = CreateTestSource();
-        const auto authMethods = source->GetAuthMethods();
+        const auto authMethods = source->GetAuthMethods("");
         UNIT_ASSERT_VALUES_EQUAL(authMethods.size(), 2);
         UNIT_ASSERT_VALUES_EQUAL(authMethods[0], "auth1");
         UNIT_ASSERT_VALUES_EQUAL(authMethods[1], "auth2");

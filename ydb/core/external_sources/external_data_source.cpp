@@ -28,7 +28,7 @@ struct TExternalDataSource : public IExternalSource {
         return false;
     }
 
-    virtual TVector<TString> GetAuthMethods() const override {
+    virtual TVector<TString> GetAuthMethods(const TString&) const override {
         return AuthMethods;
     }
 

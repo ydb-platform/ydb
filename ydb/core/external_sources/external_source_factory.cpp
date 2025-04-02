@@ -1,13 +1,14 @@
 #include "external_source_factory.h"
 #include "object_storage.h"
 #include "external_data_source.h"
+#include "iceberg_fields.h"
+#include "external_source_builder.h"
 
 #include <util/generic/map.h>
 #include <util/string/cast.h>
 
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <ydb/library/yql/providers/common/db_id_async_resolver/db_async_resolver.h>
-
 
 namespace NKikimr::NExternalSource {
 
@@ -91,6 +92,47 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         {
             ToString(NYql::EDatabaseType::Solomon),
             CreateExternalDataSource(TString{NYql::SolomonProviderName}, {"NONE", "TOKEN"}, {"use_ssl", "grpc_port"}, hostnamePatternsRegEx)
+        },
+        {
+            ToString(NYql::EDatabaseType::Iceberg),
+            TExternalSourceBuilder(TString{NYql::GenericProviderName})
+                // Basic, Token and SA Auth are available only if warehouse type is set to s3
+                .Auth(
+                    {"BASIC", "TOKEN", "SERVICE_ACCOUNT"},
+                    HasSettingCondition(Iceberg::Warehouse::Fields::TYPE, Iceberg::Warehouse::S3)
+                )
+                // DataBase is a required field
+                .Property(Iceberg::Warehouse::Fields::DB, RequiredValidator())
+                // Tls is an optional field
+                .Property(Iceberg::Warehouse::Fields::TLS)
+                // Warehouse type is a required field and can be equal only to "s3"
+                .Property(
+                    Iceberg::Warehouse::Fields::TYPE,
+                    IsInListValidator({Iceberg::Warehouse::S3}, true)
+                )
+                // If a warehouse type is equal to "s3", fields "s3_endpoint", "s3_region" and "s3_uri" are required
+                .Properties(
+                    {
+                        Iceberg::Warehouse::Fields::S3_ENDPOINT,
+                        Iceberg::Warehouse::Fields::S3_REGION,
+                        Iceberg::Warehouse::Fields::S3_URI
+                    },
+                    RequiredValidator(),
+                    HasSettingCondition(Iceberg::Warehouse::Fields::TYPE, Iceberg::Warehouse::S3)
+                )
+                // Catalog type is a required field and can be equal only to "hive" or "hadoop"
+                .Property(
+                    Iceberg::Catalog::Fields::TYPE,
+                    IsInListValidator({Iceberg::Catalog::HIVE, Iceberg::Catalog::HADOOP}, true)
+                )
+                // If catalog type is equal to "hive" field "hive_uri" is required
+                .Property(
+                    Iceberg::Catalog::Fields::HIVE_URI,
+                    RequiredValidator(),
+                    HasSettingCondition(Iceberg::Catalog::Fields::TYPE, Iceberg::Catalog::HIVE)
+                )
+                .HostnamePattern(hostnamePatternsRegEx)
+                .Build()
         }
     },
     availableExternalDataSources); 

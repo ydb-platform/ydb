@@ -20,6 +20,7 @@
 #include <ydb/library/yql/providers/generic/connector/libcpp/error.h>
 #include <ydb/library/yql/providers/generic/expr_nodes/yql_generic_expr_nodes.h>
 #include <yql/essentials/utils/log/log.h>
+#include <ydb/core/external_sources/iceberg_fields.h>
 
 namespace NYql {
     using namespace NNodes;
@@ -455,6 +456,65 @@ namespace NYql {
             }
         }
 
+        inline TString GetFieldValue(const ::google::protobuf::Map<TProtoStringType, 
+                                     TProtoStringType>& cfg, TString field, TString err) {
+            auto it = cfg.find(field);
+
+            if (cfg.end() == it) {
+                throw yexception() << err;
+            }
+
+            return it->second;
+        }
+
+        ///
+        /// Fill options into DatSourceOptions specific for an iceberg data type
+        ///
+        void SetIcebergOptions(NYql::TIcebergDataSourceOptions& options, const TGenericClusterConfig& clusterConfig) {
+            const auto cfg = clusterConfig.GetDataSourceOptions();
+
+            auto wType = GetFieldValue(
+                cfg, Iceberg::Warehouse::Fields::TYPE, "Warehouse type is a required field");
+
+            auto warehouse = options.mutable_warehouse();
+
+            // set warehouse options
+            if (Iceberg::Warehouse::S3 == wType) {
+                auto endpoint = GetFieldValue(
+                    cfg, Iceberg::Warehouse::Fields::S3_ENDPOINT, "S3 endpoint is a required field");
+
+                auto region = GetFieldValue(
+                    cfg, Iceberg::Warehouse::Fields::S3_REGION, "S3 region is a required field");
+
+                auto uri = GetFieldValue(
+                    cfg, Iceberg::Warehouse::Fields::S3_URI, "S3 uri is a required field");
+
+                warehouse->mutable_s3()->set_endpoint(endpoint);
+                warehouse->mutable_s3()->set_region(region);
+                warehouse->mutable_s3()->set_uri(uri);
+            } else {
+                throw yexception() << "Unexpected warehouse type: " << wType;
+            }
+
+            auto cType = GetFieldValue(
+                cfg, Iceberg::Catalog::Fields::TYPE, "Catalog type is a required field");
+
+            auto catalog = options.mutable_catalog();
+
+            // set catalog options
+            if (Iceberg::Catalog::HADOOP == cType) {
+                // hadoop nothing yet
+                catalog->mutable_hadoop();
+            } else if (Iceberg::Catalog::HIVE == cType) {
+                auto hiveUri = GetFieldValue(
+                    cfg, Iceberg::Catalog::Fields::HIVE_URI, "Hive uri is a required field");
+
+                catalog->mutable_hive()->set_uri(hiveUri);
+            } else {
+                throw yexception() << "Unexpected catalog type: " << cType;
+            }
+        }
+
         void FillDataSourceOptions(NConnector::NApi::TDescribeTableRequest& request,
                                    const TGenericClusterConfig& clusterConfig) {
             const auto dataSourceKind = clusterConfig.GetKind();
@@ -482,6 +542,10 @@ namespace NYql {
                 case NYql::EGenericDataSourceKind::LOGGING: {
                     auto* options = request.mutable_data_source_instance()->mutable_logging_options();
                     SetLoggingFolderId(*options, clusterConfig);
+                } break;
+                case NYql::EGenericDataSourceKind::ICEBERG: {
+                    auto* options = request.mutable_data_source_instance()->mutable_iceberg_options();
+                    SetIcebergOptions(*options, clusterConfig);
                 } break;
                 default:
                     throw yexception() << "Unexpected data source kind: '"

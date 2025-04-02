@@ -1,8 +1,10 @@
 PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
-
-SIZE(MEDIUM)
+FORK_SUBTESTS()
+SPLIT_FACTOR(20)
+SIZE(LARGE)
+TAG(ya:fat)
 
 TEST_SRCS(
     test_async_replication.py

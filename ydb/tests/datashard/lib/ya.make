@@ -6,6 +6,7 @@ PY_SRCS(
     create_table.py
     types_of_variables.py
     base_async_replication.py
+    create_table.py
 )
 
 PEERDIR(

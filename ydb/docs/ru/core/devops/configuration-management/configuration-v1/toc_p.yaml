@@ -9,6 +9,8 @@ items:
   href: dynamic-config-volatile-config.md
 - name: DSL конфигурации кластера
   href: ../dynamic-config-selectors.md
+- name: Параметры конфигурации
+  href: config-settings.md
 - name: Изменение конфигураций через CMS
   href: cms.md
 - name: Изменение конфигурации актор-системы

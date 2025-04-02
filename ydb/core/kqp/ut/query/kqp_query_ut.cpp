@@ -954,8 +954,12 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         }
     }
 
-    Y_UNIT_TEST(QueryStats) {
-        TKikimrRunner kikimr;
+    Y_UNIT_TEST_TWIN(QueryStats, UseSink) {
+        TKikimrSettings serverSettings;
+        NKikimrConfig::TAppConfig app;
+        app.MutableTableServiceConfig()->SetEnableOltpSink(UseSink);
+        serverSettings.SetAppConfig(app);
+        TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
@@ -993,32 +997,51 @@ Y_UNIT_TEST_SUITE(KqpQuery) {
         UNIT_ASSERT(compile.cpu_time_us() > 0);
         totalCpuTimeUs += compile.cpu_time_us();
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
+        if (UseSink) {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 1);
 
-        auto& phase0 = stats.query_phases(0);
-        UNIT_ASSERT(phase0.duration_us() > 0);
-        UNIT_ASSERT(phase0.cpu_time_us() > 0);
-        totalCpuTimeUs += phase0.cpu_time_us();
+            auto& phase0 = stats.query_phases(0);
+            UNIT_ASSERT(phase0.duration_us() > 0);
+            UNIT_ASSERT(phase0.cpu_time_us() > 0);
+            totalCpuTimeUs += phase0.cpu_time_us();
+            UNIT_ASSERT_VALUES_EQUAL(phase0.table_access().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(phase0.table_access(0).name(), "/Root/EightShard");
+            UNIT_ASSERT(!phase0.table_access(0).has_reads());
+            UNIT_ASSERT_VALUES_EQUAL(phase0.table_access(0).updates().rows(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(phase0.table_access(1).reads().rows(), 3);
+            UNIT_ASSERT(phase0.table_access(0).updates().bytes() > 0);
+            UNIT_ASSERT(phase0.table_access(1).reads().bytes() > 0);
+            UNIT_ASSERT(!phase0.table_access(0).has_deletes());
 
-        UNIT_ASSERT_VALUES_EQUAL(phase0.table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(phase0.table_access(0).name(), "/Root/TwoShard");
-        UNIT_ASSERT_VALUES_EQUAL(phase0.table_access(0).reads().rows(), 3);
-        UNIT_ASSERT(phase0.table_access(0).reads().bytes() > 0);
-        UNIT_ASSERT(!phase0.table_access(0).has_updates());
-        UNIT_ASSERT(!phase0.table_access(0).has_deletes());
+            UNIT_ASSERT_VALUES_EQUAL(stats.total_cpu_time_us(), totalCpuTimeUs);
+        } else {
+            UNIT_ASSERT_VALUES_EQUAL(stats.query_phases().size(), 2);
 
-        auto& phase1 = stats.query_phases(1);
-        UNIT_ASSERT(phase1.duration_us() > 0);
-        UNIT_ASSERT(phase1.cpu_time_us() > 0);
-        totalCpuTimeUs += phase1.cpu_time_us();
-        UNIT_ASSERT_VALUES_EQUAL(phase1.table_access().size(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(phase1.table_access(0).name(), "/Root/EightShard");
-        UNIT_ASSERT(!phase1.table_access(0).has_reads());
-        UNIT_ASSERT_VALUES_EQUAL(phase1.table_access(0).updates().rows(), 3);
-        UNIT_ASSERT(phase1.table_access(0).updates().bytes() > 0);
-        UNIT_ASSERT(!phase1.table_access(0).has_deletes());
+            auto& phase0 = stats.query_phases(0);
+            UNIT_ASSERT(phase0.duration_us() > 0);
+            UNIT_ASSERT(phase0.cpu_time_us() > 0);
+            totalCpuTimeUs += phase0.cpu_time_us();
 
-        UNIT_ASSERT_VALUES_EQUAL(stats.total_cpu_time_us(), totalCpuTimeUs);
+            UNIT_ASSERT_VALUES_EQUAL(phase0.table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(phase0.table_access(0).name(), "/Root/TwoShard");
+            UNIT_ASSERT_VALUES_EQUAL(phase0.table_access(0).reads().rows(), 3);
+            UNIT_ASSERT(phase0.table_access(0).reads().bytes() > 0);
+            UNIT_ASSERT(!phase0.table_access(0).has_updates());
+            UNIT_ASSERT(!phase0.table_access(0).has_deletes());
+
+            auto& phase1 = stats.query_phases(1);
+            UNIT_ASSERT(phase1.duration_us() > 0);
+            UNIT_ASSERT(phase1.cpu_time_us() > 0);
+            totalCpuTimeUs += phase1.cpu_time_us();
+            UNIT_ASSERT_VALUES_EQUAL(phase1.table_access().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(phase1.table_access(0).name(), "/Root/EightShard");
+            UNIT_ASSERT(!phase1.table_access(0).has_reads());
+            UNIT_ASSERT_VALUES_EQUAL(phase1.table_access(0).updates().rows(), 3);
+            UNIT_ASSERT(phase1.table_access(0).updates().bytes() > 0);
+            UNIT_ASSERT(!phase1.table_access(0).has_deletes());
+
+            UNIT_ASSERT_VALUES_EQUAL(stats.total_cpu_time_us(), totalCpuTimeUs);
+        }
     }
 
     Y_UNIT_TEST(RowsLimit) {

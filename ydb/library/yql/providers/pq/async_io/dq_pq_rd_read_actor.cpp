@@ -231,10 +231,13 @@ private:
     using TPartitionKeyHash = ::NPq::TPartitionKeyHash;
     THashMap<ui64, ui64> NextOffsetFromRD;
     struct TClusterState {
-        ui32 Index;
+        TClusterState(NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo&& info, ui32 partitionsCount)
+            : Info(std::move(info))
+            , PartitionsCount(partitionsCount)
+        {}
         NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo Info;
         ITopicClient::TPtr TopicClient;
-        ui32 PartitionsCount = 0;
+        ui32 PartitionsCount;
         TDqPqRdReadActor* Child = nullptr;
         NActors::TActorId ChildId;
     };
@@ -1192,21 +1195,27 @@ void TDqPqRdReadActor::StartClusterDiscovery() {
     if (StaticDiscovery) {
         if (SourceParams.FederatedClustersSize()) {
             for (auto& federatedCluster : SourceParams.GetFederatedClusters()) {
-                auto& cluster = Clusters.emplace_back();
-                cluster.Info.Name = federatedCluster.GetName();
-                cluster.Info.Endpoint = federatedCluster.GetEndpoint();
-                cluster.Info.Path = federatedCluster.GetDatabase();
-                cluster.PartitionsCount = ReadParams.GetPartitioningParams().GetTopicPartitionsCount();
+                auto& cluster = Clusters.emplace_back(
+                        NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo {
+                            .Name = federatedCluster.GetName(),
+                            .Endpoint = federatedCluster.GetEndpoint(),
+                            .Path = federatedCluster.GetDatabase(),
+                        },
+                        federatedCluster.GetPartitionsCount()
+                    );
                 if (cluster.PartitionsCount == 0) {
                     cluster.PartitionsCount = ReadParams.GetPartitioningParams().GetTopicPartitionsCount();
                     SRC_LOG_W("PartitionsCount for offline server assumed to be " << cluster.PartitionsCount);
                 }
             }
         } else { // old AST fallback
-            auto& cluster = Clusters.emplace_back();
-            cluster.Info.Endpoint = SourceParams.GetEndpoint();
-            cluster.Info.Path = SourceParams.GetDatabase();
-            cluster.PartitionsCount = ReadParams.GetPartitioningParams().GetTopicPartitionsCount();
+            Clusters.emplace_back(
+                NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo {
+                    .Endpoint = SourceParams.GetEndpoint(),
+                    .Path = SourceParams.GetDatabase(),
+                },
+                ReadParams.GetPartitioningParams().GetTopicPartitionsCount()
+            );
         }
         for (ui32 clusterIndex = 0; clusterIndex < Clusters.size(); ++clusterIndex) {
             StartCluster(clusterIndex);
@@ -1248,7 +1257,7 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvReceivedClusters::TPtr& ev) {
     Clusters.reserve(federatedClusters.size());
     ui32 index = 0;
     for (auto& cluster : federatedClusters) {
-        auto& clusterState = Clusters.emplace_back(index, std::move(cluster));
+        auto& clusterState = Clusters.emplace_back(std::move(cluster), 0);
         SRC_LOG_D(index << " Name " << clusterState.Info.Name << " Endpoint " << clusterState.Info.Endpoint << " Path " << clusterState.Info.Path << " Status " << (int)clusterState.Info.Status);
         std::string clusterTopicPath = SourceParams.GetTopicPath();
         clusterState.Info.AdjustTopicPath(clusterTopicPath);

@@ -7,6 +7,8 @@ TBatchOperationSettings SetBatchOperationSettings(const NKikimrConfig::TTableSer
 
     res.MaxBatchSize = settings.GetMaxBatchSize();
     res.MinBatchSize = settings.GetMinBatchSize();
+    res.MaxRetryDelay = settings.GetMaxRetryDelay();
+    res.MinRetryDelay = settings.GetMinRetryDelay();
 
     return res;
 }

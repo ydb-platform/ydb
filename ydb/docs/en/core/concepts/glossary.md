@@ -25,13 +25,13 @@ Another essential characteristic of {{ ydb-short-name }} databases is that they 
 
 #### Tenant database {#tenant-database}
 
-A **Tenant database** is a logical container with an independent namespace for user-defined objects within the database.
+A **tenant database** is a logical container with an independent namespace for user-defined objects within the database.
 
 Tenant databases are completely isolated from each other — they are processed by separate [database nodes](#database-node), they have separate [storage groups](#storage-group), and they can have separate [users](#access-user) with different [access rights](#access-right) and [access levels](#access-level).
 
 #### Root database {#root-database}
 
-A **Root database** is a system database created for {{ ydb-short-name }}'s internal purposes at the [root of the cluster scheme](#scheme-root). This database contains service data such as [users](#access-user), [access levels](#access-level) and [access rights](#access-right), [tenant databases](#tenant-database), and more.
+A **root database** is a system database created for {{ ydb-short-name }}'s internal purposes at the [root of the cluster scheme](#scheme-root). This database contains service data such as [users](#access-user), [access levels](#access-level) and [access rights](#access-right), [tenant databases](#tenant-database), and more.
 
 ### Node {#node}
 
@@ -276,19 +276,19 @@ An **authentication token** or **auth token** is a token that {{ ydb-short-name 
 
 ### Cluster scheme {#scheme}
 
-{{ ydb-short-name }} cluster scheme is a hierarchical namespace of a {{ ydb-short-name }} cluster. The only root element of this namespace is a [cluster scheme root](#scheme-root). A root of the cluster scheme can be a [directory](#folder) or a [root database](#root-database). Children elements of the cluster scheme root can be [databases](#database) or other [scheme objects](#scheme-object). Scheme objects can use nested directories to form a hierarchy.
+A **{{ ydb-short-name }} cluster scheme** is a hierarchical namespace of a {{ ydb-short-name }} cluster. The only root element of this namespace is a [cluster scheme root](#scheme-root). A root of the cluster scheme can be a [directory](#folder) or a [root database](#root-database). Children elements of the cluster scheme root can be [databases](#database) or other [scheme objects](#scheme-object). Scheme objects can use nested directories to form a hierarchy.
 
 ### Database scheme {#scheme-database}
 
-A database scheme is a subset of the hierarchical namespace of a {{ ydb-short-name }} cluster that belongs to a database.
+A **database scheme** is a subset of the hierarchical namespace of a {{ ydb-short-name }} cluster that belongs to a database.
 
 ### Database root {#scheme-database-root}
 
-A database root is a path to a database in a {{ ydb-short-name }} cluster scheme. This path acts as a root for database scheme objects.
+A **database root** is a path to a database in a {{ ydb-short-name }} cluster scheme. This path acts as a root for database scheme objects.
 
 ### Scheme root {#scheme-root}
 
-A scheme root is a root element of a [{{ ydb-short-name }} cluster scheme](datamodel/index.md#cluster-scheme). Children elements of the cluster scheme root can be [databases](#database) or other [scheme objects](#scheme-object).
+A **scheme root** is a root element of a [{{ ydb-short-name }} cluster scheme](datamodel/index.md#cluster-scheme). Children elements of the cluster scheme root can be [databases](#database) or other [scheme objects](#scheme-object).
 
 ### Scheme object {#scheme-object}
 

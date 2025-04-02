@@ -133,7 +133,6 @@ public:
         ui64 boundIndex = findBound->GetPosition();
         if (findBound->IsEqual() && needUppedBound) {
             ++boundIndex;
-            AFL_VERIFY(boundIndex == data->GetRecordsCount())("bound", boundIndex);
         }
 
         auto filter = NArrow::TColumnFilter::BuildAllowFilter();

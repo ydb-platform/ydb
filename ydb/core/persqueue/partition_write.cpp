@@ -392,7 +392,7 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
 
     WorkZone.SyncNewHeadKey();
 
-    if (WorkZone.CompactedKeys.empty() && WorkZone.NewHead.PackedSize == 0) { //Nothing writed at all
+    if (WorkZone.IsNothingWritten()) { //Nothing writed at all
         return;
     }
 
@@ -1370,8 +1370,9 @@ std::pair<TKey, ui32> TPartition::GetNewWriteKeyImpl(bool headCleared, bool need
         key = TKey::ForHead(TKeyPrefix::TypeData, Partition, WorkZone.NewHead.Offset, WorkZone.NewHead.PartNo, WorkZone.NewHead.GetCount(), WorkZone.NewHead.GetInternalPartsCount());
     }
 
-    if (WorkZone.NewHead.PackedSize > 0)
+    if (WorkZone.NewHead.PackedSize > 0) {
         WorkZone.DataKeysHead[TotalLevels - 1].AddKey(key, WorkZone.NewHead.PackedSize);
+    }
     Y_ABORT_UNLESS(headSize + WorkZone.NewHead.PackedSize <= 3 * MaxSizeCheck);
 
     std::pair<TKey, ui32> res;
@@ -1397,9 +1398,10 @@ std::pair<TKey, ui32> TPartition::GetNewWriteKeyImpl(bool headCleared, bool need
 std::pair<TKey, ui32> TPartition::GetNewWriteKey(bool headCleared) {
     bool needCompaction = false;
     ui32 headSize = headCleared ? 0 : WorkZone.Head.PackedSize;
-    if (headSize + WorkZone.NewHead.PackedSize > 0 && headSize + WorkZone.NewHead.PackedSize
-                                                        >= Min<ui32>(MaxBlobSize, Config.GetPartitionConfig().GetLowWatermark()))
+    if (headSize + WorkZone.NewHead.PackedSize > 0 &&
+        headSize + WorkZone.NewHead.PackedSize >= Min<ui32>(MaxBlobSize, Config.GetPartitionConfig().GetLowWatermark())) {
         needCompaction = true;
+    }
 
     if (WorkZone.PartitionedBlob.IsInited()) { //has active partitioned blob - compaction is forbiden, head and newHead will be compacted when this partitioned blob is finished
         needCompaction = false;
@@ -1410,58 +1412,12 @@ std::pair<TKey, ui32> TPartition::GetNewWriteKey(bool headCleared) {
     return GetNewWriteKeyImpl(headCleared, needCompaction, headSize);
 }
 
-void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, bool headCleared, const TActorContext& ctx) {
+void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, const TActorContext& ctx) {
     PQ_LOG_T("TPartition::AddNewWriteBlob.");
 
     const auto& key = res.first;
 
-    TString valueD;
-    valueD.reserve(res.second);
-    ui32 pp = WorkZone.Head.FindPos(key.GetOffset(), key.GetPartNo());
-    if (pp < Max<ui32>() && key.GetOffset() < EndOffset) { //this batch trully contains this offset
-        Y_ABORT_UNLESS(pp < WorkZone.Head.GetBatches().size());
-        Y_ABORT_UNLESS(WorkZone.Head.GetBatch(pp).GetOffset() == key.GetOffset());
-        Y_ABORT_UNLESS(WorkZone.Head.GetBatch(pp).GetPartNo() == key.GetPartNo());
-        for (; pp < WorkZone.Head.GetBatches().size(); ++pp) { //TODO - merge small batches here
-            Y_ABORT_UNLESS(WorkZone.Head.GetBatch(pp).Packed);
-            auto& batch = WorkZone.Head.GetBatch(pp);
-            batch.SerializeTo(valueD);
-            PendingWriteTimestamp = std::max(PendingWriteTimestamp, batch.GetEndWriteTimestamp());
-        }
-    }
-    for (auto& b : WorkZone.NewHead.GetBatches()) {
-        Y_ABORT_UNLESS(b.Packed);
-        b.SerializeTo(valueD);
-        PendingWriteTimestamp = std::max(PendingWriteTimestamp, b.GetEndWriteTimestamp());
-    }
-
-    Y_ABORT_UNLESS(res.second >= valueD.size());
-
-    if (res.second > valueD.size() && res.first.HasSuffix()) { //change to real size if real packed size is smaller
-
-        Y_ABORT("Can't be here right now, only after merging of small batches");
-
-        for (auto it = WorkZone.DataKeysHead.rbegin(); it != WorkZone.DataKeysHead.rend(); ++it) {
-            if (it->KeysCount() > 0 ) {
-                auto res2 = it->PopBack();
-                Y_ABORT_UNLESS(res2 == res);
-                res2.second = valueD.size();
-
-                WorkZone.DataKeysHead[TotalLevels - 1].AddKey(res2.first, res2.second);
-
-                res2 = Compact(res2.first, res2.second, headCleared);
-
-                Y_ABORT_UNLESS(res2.first == res.first);
-                Y_ABORT_UNLESS(res2.second == valueD.size());
-                res = res2;
-                break;
-            }
-        }
-    }
-
-    Y_ABORT_UNLESS(res.second == valueD.size() || res.first.HasSuffix());
-
-    TClientBlob::CheckBlob(key, valueD);
+    TString valueD = WorkZone.SerializeForKey(key, res.second, EndOffset, PendingWriteTimestamp);
 
     auto write = request->Record.AddCmdWrite();
     write->SetKey(key.Data(), key.Size());
@@ -1479,7 +1435,7 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
 
     //Need to clear all compacted blobs
     const TKey& k = WorkZone.CompactedKeys.empty() ? key : WorkZone.CompactedKeys.front().first;
-    ClearOldHead(k.GetOffset(), k.GetPartNo());
+    ClearOldHead(k.GetOffset(), k.GetPartNo()); // schedule to delete the keys from the head
 
     if (!key.HasSuffix()) {
         if (!WorkZone.DataKeysBody.empty() && WorkZone.CompactedKeys.empty()) {
@@ -1487,6 +1443,7 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
                 "LAST KEY %s, HeadOffset %lu, NEWKEY %s", WorkZone.DataKeysBody.back().Key.ToString().c_str(), WorkZone.Head.Offset, key.ToString().c_str());
         }
         WorkZone.CompactedKeys.push_back(res);
+        // WorkZone.ResetNewHead ???
         WorkZone.NewHead.Clear();
         WorkZone.NewHead.Offset = res.first.GetOffset() + res.first.GetCount();
         WorkZone.NewHead.PartNo = 0;
@@ -1690,7 +1647,7 @@ void TPartition::EndProcessWrites(TEvKeyValue::TEvRequest* request, const TActor
             << WorkZone.NewHead.GetNextOffset() << " " << key.ToString()
             << " size " << res.second << " WTime " << ctx.Now().MilliSeconds()
     );
-    AddNewWriteBlob(res, request, HeadCleared, ctx);
+    AddNewWriteBlob(res, request, ctx);
 
     HaveData = true;
 }
@@ -1708,6 +1665,7 @@ void TPartition::BeginAppendHeadWithNewWrites(const TActorContext& ctx)
     UpdateWriteBufferIsFullState(ctx.Now());
     CurrentTimestamp = ctx.Now();
 
+    // WorkZone.ResetNewHead ???
     WorkZone.NewHead.Offset = EndOffset;
     WorkZone.NewHead.PartNo = 0;
     WorkZone.NewHead.PackedSize = 0;
@@ -1718,7 +1676,7 @@ void TPartition::BeginAppendHeadWithNewWrites(const TActorContext& ctx)
     Parameters->HeadCleared = (WorkZone.Head.PackedSize == 0);
 }
 
-void TPartition::EndAppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx)
+void TPartition::EndAppendHeadWithNewWrites(const TActorContext& ctx)
 {
     if (const auto heartbeat = SourceIdBatch->CanEmitHeartbeat()) {
         if (heartbeat->Version > LastEmittedHeartbeat) {
@@ -1745,7 +1703,7 @@ void TPartition::EndAppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, co
             }, std::nullopt};
 
             WriteInflightSize += heartbeat->Data.size();
-            ExecRequest(hbMsg, *Parameters, request);
+            ExecRequest(hbMsg, *Parameters, PersistRequest.Get());
 
             LastEmittedHeartbeat = heartbeat->Version;
         }
@@ -1754,13 +1712,7 @@ void TPartition::EndAppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, co
 
     UpdateWriteBufferIsFullState(ctx.Now());
 
-    if (!WorkZone.NewHead.GetBatches().empty() && !WorkZone.NewHead.GetLastBatch().Packed) {
-        WorkZone.NewHead.MutableLastBatch().Pack();
-        WorkZone.NewHead.PackedSize += WorkZone.NewHead.GetLastBatch().GetPackedSize(); //add real packed size for this blob
-
-        WorkZone.NewHead.PackedSize -= GetMaxHeaderSize(); //instead of upper bound
-        WorkZone.NewHead.PackedSize -= WorkZone.NewHead.GetLastBatch().GetUnpackedSize();
-    }
+    WorkZone.PackLastBatch();
 
     Y_ABORT_UNLESS((Parameters->HeadCleared ? 0 : WorkZone.Head.PackedSize) + WorkZone.NewHead.PackedSize <= MaxBlobSize); //otherwise last PartitionedBlob.Add must compact all except last cl
     WorkZone.MaxWriteResponsesSize = Max<ui32>(WorkZone.MaxWriteResponsesSize, Responses.size());

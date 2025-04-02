@@ -226,6 +226,63 @@ const TDataKey* TPartitionWorkZone::GetLastKey() const
     return lastKey;
 }
 
+TString TPartitionWorkZone::SerializeForKey(const TKey& key, ui32 size,
+                                            ui64 endOffset,
+                                            TInstant& writeTimestamp) const
+{
+    TString valueD;
+    valueD.reserve(size);
+
+    ui32 pp = Head.FindPos(key.GetOffset(), key.GetPartNo());
+    if (pp < Max<ui32>() && key.GetOffset() < endOffset) { //this batch trully contains this offset
+        Y_ABORT_UNLESS(pp < Head.GetBatches().size());
+        Y_ABORT_UNLESS(Head.GetBatch(pp).GetOffset() == key.GetOffset());
+        Y_ABORT_UNLESS(Head.GetBatch(pp).GetPartNo() == key.GetPartNo());
+
+        for (; pp < Head.GetBatches().size(); ++pp) { //TODO - merge small batches here
+            Y_ABORT_UNLESS(Head.GetBatch(pp).Packed);
+            const auto& b = Head.GetBatch(pp);
+            b.SerializeTo(valueD);
+            writeTimestamp = std::max(writeTimestamp, b.GetEndWriteTimestamp());
+        }
+    }
+
+    for (const auto& b : NewHead.GetBatches()) {
+        Y_ABORT_UNLESS(b.Packed);
+        b.SerializeTo(valueD);
+        writeTimestamp = std::max(writeTimestamp, b.GetEndWriteTimestamp());
+    }
+
+    Y_ABORT_UNLESS(size >= valueD.size());
+
+    if (size > valueD.size() && key.HasSuffix()) { //change to real size if real packed size is smaller
+        Y_ABORT("Can't be here right now, only after merging of small batches");
+
+        //for (auto it = DataKeysHead.rbegin(); it != DataKeysHead.rend(); ++it) {
+        //    if (it->KeysCount() > 0 ) {
+        //        auto res2 = it->PopBack();
+        //        Y_ABORT_UNLESS(res2 == res);
+        //        res2.second = valueD.size();
+
+        //        DataKeysHead[TotalLevels - 1].AddKey(res2.first, res2.second);
+
+        //        res2 = Compact(res2.first, res2.second, headCleared);
+
+        //        Y_ABORT_UNLESS(res2.first == key);
+        //        Y_ABORT_UNLESS(res2.second == valueD.size());
+        //        res = res2;
+        //        break;
+        //    }
+        //}
+    }
+
+    Y_ABORT_UNLESS(size == valueD.size() || key.HasSuffix());
+
+    TClientBlob::CheckBlob(key, valueD);
+
+    return valueD;
+}
+
 void TPartitionWorkZone::NewPartitionedBlob(const TPartitionId& partitionId,
                                             const ui64 offset,
                                             const TString& sourceId,
@@ -365,6 +422,17 @@ void TPartitionWorkZone::ResetNewHead(ui64 endOffset)
 {
     NewHead.Clear();
     NewHead.Offset = endOffset;
+}
+
+void TPartitionWorkZone::PackLastBatch()
+{
+    if (!NewHead.GetBatches().empty() && !NewHead.GetLastBatch().Packed) {
+        NewHead.MutableLastBatch().Pack();
+        NewHead.PackedSize += NewHead.GetLastBatch().GetPackedSize(); //add real packed size for this blob
+
+        NewHead.PackedSize -= GetMaxHeaderSize(); //instead of upper bound
+        NewHead.PackedSize -= NewHead.GetLastBatch().GetUnpackedSize();
+    }
 }
 
 }

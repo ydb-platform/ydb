@@ -2916,7 +2916,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 SHOW CREATE TABLE test_view;
             )", TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Expected path type: Table");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Path type mismatch, expected: Table");
         }
     }
 
@@ -2962,7 +2962,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 SHOW CREATE VIEW KeyValue;
             )", TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Expected path type: View");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Path type mismatch, expected: View");
         }
     }
 

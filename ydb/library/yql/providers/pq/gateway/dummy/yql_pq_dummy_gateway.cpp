@@ -16,8 +16,8 @@ struct TDummyFederatedTopicClient : public IFederatedTopicClient {
         std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo> dbInfo;
         dbInfo.emplace_back(
                 "",
-                FederatedClientSettings_.DiscoveryEndpoint_ ? *FederatedClientSettings_.DiscoveryEndpoint_ : "",
-                FederatedClientSettings_.Database_ ? *FederatedClientSettings_.Database_ : "",
+                FederatedClientSettings_.DiscoveryEndpoint_.value_or(""),
+                FederatedClientSettings_.Database_.value_or(""),
                 NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo::EStatus::AVAILABLE);
         return NThreading::MakeFuture(std::move(dbInfo));
     }

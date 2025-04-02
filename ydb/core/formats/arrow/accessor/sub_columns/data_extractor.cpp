@@ -31,15 +31,7 @@ TConclusionStatus TJsonScanExtractor::DoAddDataToBuilders(const std::shared_ptr<
     }
     simdjson::ondemand::parser simdParser;
     std::vector<simdjson::padded_string> paddedStrings;
-    ui32 sumBuf = 0;
-    ui32 paddedBorder = 0;
-    for (i32 i = arr->length() - 1; i >= 1; --i) {
-        sumBuf += arr->GetView(i).size();
-        if (sumBuf > simdjson::SIMDJSON_PADDING) {
-            paddedBorder = i;
-            break;
-        }
-    }
+    paddedStrings.reserve(sourceArray->length());
     for (ui32 i = 0; i < arr->length(); ++i) {
         const auto view = arr->GetView(i);
         if (view.size() && !arr->IsNull(i)) {
@@ -70,13 +62,8 @@ TConclusionStatus TJsonScanExtractor::DoAddDataToBuilders(const std::shared_ptr<
                 }
             } else {
                 std::deque<std::unique_ptr<IJsonObjectExtractor>> iterators;
-                simdjson::simdjson_result<simdjson::ondemand::document> doc;
-                if (i < paddedBorder) {
-                    doc = simdParser.iterate(simdjson::padded_string_view(sbJson.data(), sbJson.size()));
-                } else {
-                    paddedStrings.emplace_back(simdjson::padded_string(sbJson.data(), sbJson.size()));
-                    doc = simdParser.iterate(paddedStrings.back());
-                }
+                paddedStrings.emplace_back(simdjson::padded_string(sbJson.data(), sbJson.size()));
+                simdjson::simdjson_result<simdjson::ondemand::document> doc = simdParser.iterate(paddedStrings.back());
                 auto conclusion = TSIMDExtractor(doc, FirstLevelOnly).Fill(dataBuilder, iterators);
                 if (conclusion.IsFail()) {
                     return conclusion;

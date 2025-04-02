@@ -26,7 +26,7 @@ TString ToString(NKikimrSchemeOp::EPathType pathType) {
         case NKikimrSchemeOp::EPathTypeColumnTable:
             return "Table";
         default:
-            return "";
+            return "Unknown";
     }
 }
 

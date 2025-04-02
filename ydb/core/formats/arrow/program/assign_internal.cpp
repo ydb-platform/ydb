@@ -51,19 +51,12 @@ NJson::TJsonValue TCalculationProcessor::DoDebugJson() const {
 
 ui64 TCalculationProcessor::DoGetWeight() const {
     if (KernelLogic) {
-        return 0;
+        return (ui64)KernelLogic->GetWeight();
     }
     if (!YqlOperationId) {
-        return 10;
-    } else if ((NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId == NYql::TKernelRequestBuilder::EBinaryOp::StartsWith ||
-               (NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId == NYql::TKernelRequestBuilder::EBinaryOp::EndsWith) {
-        return 7;
-    } else if ((NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId == NYql::TKernelRequestBuilder::EBinaryOp::StringContains) {
-        return 10;
-    } else if ((NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId == NYql::TKernelRequestBuilder::EBinaryOp::Equals) {
-        return 5;
+        return (ui64)ECalculationHardness::Unknown;
     }
-    return 0;
+    return (ui64)ECalculationHardness::NotSpecified;
 }
 
 TString TCalculationProcessor::DoGetSignalCategoryName() const {

@@ -10,7 +10,9 @@
 #include <ydb/library/arrow_kernels/operations.h>
 #include <ydb/library/formats/arrow/switch/switch_type.h>
 
+#include <library/cpp/string_utils/quote/quote.h>
 #include <util/string/builder.h>
+#include <util/string/escape.h>
 #include <yql/essentials/core/arrow_kernels/request/request.h>
 
 namespace NKikimr::NArrow::NSSA::NGraph::NOptimization {
@@ -199,9 +201,10 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
         if (!i.second->Is(EProcessorType::FetchOriginalData)) {
             continue;
         }
-        if (i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetDataAddresses().size() + 
-            i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetIndexContext().size() + 
-            i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetHeaderContext().size() > 1) {
+        if (i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetDataAddresses().size() +
+                i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetIndexContext().size() +
+                i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetHeaderContext().size() >
+            1) {
             continue;
         }
         if (i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetDataAddresses().size()) {
@@ -220,8 +223,7 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
         for (auto&& i : dataAddresses) {
             columnIds.emplace(i->GetProcessorAs<TOriginalColumnDataProcessor>()->GetOutputColumnIdOnce());
         }
-        auto proc =
-            std::make_shared<TOriginalColumnDataProcessor>(std::vector<ui32>(columnIds.begin(), columnIds.end()));
+        auto proc = std::make_shared<TOriginalColumnDataProcessor>(std::vector<ui32>(columnIds.begin(), columnIds.end()));
         for (auto&& i : dataAddresses) {
             for (auto&& addr : i->GetProcessorAs<TOriginalColumnDataProcessor>()->GetDataAddresses()) {
                 proc->Add(addr.second);
@@ -230,7 +232,7 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
         auto nodeFetch = AddNode(proc);
         FetchersMerged.emplace(nodeFetch->GetIdentifier());
         for (auto&& i : dataAddresses) {
-            for (auto&& to: i->GetOutputEdges()) {
+            for (auto&& to : i->GetOutputEdges()) {
                 AddEdge(nodeFetch.get(), to.second, to.first.GetResourceId());
             }
             RemoveNode(i->GetIdentifier());
@@ -245,8 +247,7 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
         for (auto&& i : headers) {
             columnIds.emplace(i->GetProcessorAs<TOriginalColumnDataProcessor>()->GetOutputColumnIdOnce());
         }
-        auto proc =
-            std::make_shared<TOriginalColumnDataProcessor>(std::vector<ui32>(columnIds.begin(), columnIds.end()));
+        auto proc = std::make_shared<TOriginalColumnDataProcessor>(std::vector<ui32>(columnIds.begin(), columnIds.end()));
         for (auto&& i : indexes) {
             for (auto&& addr : i->GetProcessorAs<TOriginalColumnDataProcessor>()->GetIndexContext()) {
                 proc->Add(addr.second);
@@ -361,11 +362,11 @@ TConclusion<bool> TGraph::OptimizeConditionsForIndexes(TGraphNode* condNode) {
     if (condNode->GetProcessor()->GetProcessorType() != EProcessorType::Calculation) {
         return false;
     }
-    if (condNode->GetProcessor()->GetInput().size() != 2) {
+    auto calc = condNode->GetProcessorAs<TCalculationProcessor>();
+    if (!calc->GetKernelLogic()) {
         return false;
     }
-    auto calc = condNode->GetProcessorAs<TCalculationProcessor>();
-    if (!calc->GetYqlOperationId()) {
+    if (condNode->GetProcessor()->GetInput().size() != 2) {
         return false;
     }
     if (condNode->GetOutputEdges().size() != 1) {
@@ -376,17 +377,7 @@ TConclusion<bool> TGraph::OptimizeConditionsForIndexes(TGraphNode* condNode) {
     if (constNode->GetProcessor()->GetProcessorType() != EProcessorType::Const) {
         return false;
     }
-    if (!!calc->GetKernelLogic()) {
-        if (!calc->GetKernelLogic()->IsBoolInResult()) {
-            return false;
-        }
-    }
-    if (calc->GetYqlOperationId()) {
-        if (!IsBoolResultYqlOperator((NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId())) {
-            return false;
-        }
-    }
-    if (!calc->GetYqlOperationId() && !calc->GetKernelLogic()) {
+    if (!calc->GetKernelLogic()->IsBoolInResult()) {
         return false;
     }
     std::optional<TResourceAddress> dataAddr = GetOriginalAddress(dataNode);
@@ -395,63 +386,44 @@ TConclusion<bool> TGraph::OptimizeConditionsForIndexes(TGraphNode* condNode) {
     }
     auto* dest = condNode->GetOutputEdges().begin()->second;
     const ui32 destResourceId = condNode->GetOutputEdges().begin()->first.GetResourceId();
-    if ((NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId() == NYql::TKernelRequestBuilder::EBinaryOp::Equals ||
-        (NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId() == NYql::TKernelRequestBuilder::EBinaryOp::StartsWith ||
-        (NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId() == NYql::TKernelRequestBuilder::EBinaryOp::EndsWith ||
-        (NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId() == NYql::TKernelRequestBuilder::EBinaryOp::StringContains) {
-        if (!IndexesConstructed.emplace(condNode->GetIdentifier()).second) {
-            return false;
-        }
-        RemoveEdge(condNode, dest, destResourceId);
-
-        const EIndexCheckOperation indexOperation = [&]() {
-            if ((NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId() == NYql::TKernelRequestBuilder::EBinaryOp::Equals) {
-                return EIndexCheckOperation::Equals;
-            }
-            if ((NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId() == NYql::TKernelRequestBuilder::EBinaryOp::StartsWith) {
-                return EIndexCheckOperation::StartsWith;
-            }
-            if ((NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId() == NYql::TKernelRequestBuilder::EBinaryOp::EndsWith) {
-                return EIndexCheckOperation::EndsWith;
-            }
-            if ((NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId() == NYql::TKernelRequestBuilder::EBinaryOp::StringContains) {
-                return EIndexCheckOperation::Contains;
-            }
-            return EIndexCheckOperation::Contains;
-            AFL_VERIFY(false);
-        }();
-
-        const ui32 resourceIdxFetch = BuildNextResourceId();
-        IDataSource::TFetchIndexContext indexContext(dataAddr->GetColumnId(),
-            IDataSource::TFetchIndexContext::TOperationsBySubColumn().Add(dataAddr->GetSubColumnName(), indexOperation));
-        auto indexFetchProc = std::make_shared<TOriginalColumnDataProcessor>(resourceIdxFetch, indexContext);
-        auto indexFetchNode = AddNode(indexFetchProc);
-        RegisterProducer(resourceIdxFetch, indexFetchNode.get());
-
-        const ui32 resourceIdIndexToAnd = BuildNextResourceId();
-        IDataSource::TCheckIndexContext checkIndexContext(dataAddr->GetColumnId(), dataAddr->GetSubColumnName(), indexOperation);
-        auto indexCheckProc = std::make_shared<TIndexCheckerProcessor>(
-            resourceIdxFetch, constNode->GetProcessor()->GetOutputColumnIdOnce(), checkIndexContext, resourceIdIndexToAnd);
-        auto indexProcNode = AddNode(indexCheckProc);
-        RegisterProducer(resourceIdIndexToAnd, indexProcNode.get());
-        AddEdge(indexFetchNode.get(), indexProcNode.get(), resourceIdxFetch);
-        AddEdge(constNode, indexProcNode.get(), constNode->GetProcessor()->GetOutputColumnIdOnce());
-
-        const ui32 resourceIdEqToAnd = BuildNextResourceId();
-        RegisterProducer(resourceIdEqToAnd, condNode);
-        calc->SetOutputResourceIdOnce(resourceIdEqToAnd);
-
-        auto andProcessor = std::make_shared<TStreamLogicProcessor>(TColumnChainInfo::BuildVector({ resourceIdEqToAnd, resourceIdIndexToAnd }),
-            TColumnChainInfo(destResourceId), NKernels::EOperation::And);
-        auto andNode = AddNode(andProcessor);
-        AddEdge(andNode.get(), dest, destResourceId);
-
-        AddEdge(indexProcNode.get(), andNode.get(), resourceIdIndexToAnd);
-        AddEdge(condNode, andNode.get(), resourceIdEqToAnd);
-        ResetProducer(destResourceId, andNode.get());
-        return true;
+    auto indexChecker = calc->GetKernelLogic()->GetIndexCheckerOperation();
+    if (!indexChecker) {
+        return false;
     }
-    return false;
+    if (!IndexesConstructed.emplace(condNode->GetIdentifier()).second) {
+        return false;
+    }
+    RemoveEdge(condNode, dest, destResourceId);
+
+    const ui32 resourceIdxFetch = BuildNextResourceId();
+    IDataSource::TFetchIndexContext indexContext(
+        dataAddr->GetColumnId(), IDataSource::TFetchIndexContext::TOperationsBySubColumn().Add(dataAddr->GetSubColumnName(), *indexChecker));
+    auto indexFetchProc = std::make_shared<TOriginalColumnDataProcessor>(resourceIdxFetch, indexContext);
+    auto indexFetchNode = AddNode(indexFetchProc);
+    RegisterProducer(resourceIdxFetch, indexFetchNode.get());
+
+    const ui32 resourceIdIndexToAnd = BuildNextResourceId();
+    IDataSource::TCheckIndexContext checkIndexContext(dataAddr->GetColumnId(), dataAddr->GetSubColumnName(), *indexChecker);
+    auto indexCheckProc = std::make_shared<TIndexCheckerProcessor>(
+        resourceIdxFetch, constNode->GetProcessor()->GetOutputColumnIdOnce(), checkIndexContext, resourceIdIndexToAnd);
+    auto indexProcNode = AddNode(indexCheckProc);
+    RegisterProducer(resourceIdIndexToAnd, indexProcNode.get());
+    AddEdge(indexFetchNode.get(), indexProcNode.get(), resourceIdxFetch);
+    AddEdge(constNode, indexProcNode.get(), constNode->GetProcessor()->GetOutputColumnIdOnce());
+
+    const ui32 resourceIdEqToAnd = BuildNextResourceId();
+    RegisterProducer(resourceIdEqToAnd, condNode);
+    calc->SetOutputResourceIdOnce(resourceIdEqToAnd);
+
+    auto andProcessor = std::make_shared<TStreamLogicProcessor>(
+        TColumnChainInfo::BuildVector({ resourceIdEqToAnd, resourceIdIndexToAnd }), TColumnChainInfo(destResourceId), NKernels::EOperation::And);
+    auto andNode = AddNode(andProcessor);
+    AddEdge(andNode.get(), dest, destResourceId);
+
+    AddEdge(indexProcNode.get(), andNode.get(), resourceIdIndexToAnd);
+    AddEdge(condNode, andNode.get(), resourceIdEqToAnd);
+    ResetProducer(destResourceId, andNode.get());
+    return true;
 }
 
 bool TGraph::IsBoolResultYqlOperator(const NYql::TKernelRequestBuilder::EBinaryOp op) const {
@@ -687,16 +659,16 @@ TConclusionStatus TGraph::Collapse() {
                 }
             }
 
-//            {
-//                auto conclusion = OptimizeConditionsForHeadersCheck(n.get());
-//                if (conclusion.IsFail()) {
-//                    return conclusion;
-//                }
-//                if (*conclusion) {
-//                    hasChanges = true;
-//                    break;
-//                }
-//            }
+            //            {
+            //                auto conclusion = OptimizeConditionsForHeadersCheck(n.get());
+            //                if (conclusion.IsFail()) {
+            //                    return conclusion;
+            //                }
+            //                if (*conclusion) {
+            //                    hasChanges = true;
+            //                    break;
+            //                }
+            //            }
 
             {
                 auto conclusion = OptimizeConditionsForStream(n.get());

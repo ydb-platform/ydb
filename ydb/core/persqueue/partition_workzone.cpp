@@ -283,6 +283,14 @@ TString TPartitionWorkZone::SerializeForKey(const TKey& key, ui32 size,
     return valueD;
 }
 
+TKey TPartitionWorkZone::KeyFor(TKeyPrefix::EType type, const TPartitionId& partitionId, bool needCompaction) const
+{
+    if (needCompaction) {
+        return TKey::ForBody(type, partitionId, NewHead.Offset, NewHead.PartNo, NewHead.GetCount(), NewHead.GetInternalPartsCount());
+    }
+    return TKey::ForHead(type, partitionId, NewHead.Offset, NewHead.PartNo, NewHead.GetCount(), NewHead.GetInternalPartsCount());
+}
+
 void TPartitionWorkZone::NewPartitionedBlob(const TPartitionId& partitionId,
                                             const ui64 offset,
                                             const TString& sourceId,

@@ -50,7 +50,7 @@ struct TSchedulerEntity {
 
 class TComputeScheduler {
 public:
-    explicit TComputeScheduler(TIntrusivePtr<TKqpCounters> counters);
+    explicit TComputeScheduler(TIntrusivePtr<TKqpCounters> counters = {});
     ~TComputeScheduler();
 
     void SetCapacity(ui64 cores);
@@ -147,7 +147,6 @@ public:
 
     TMonotonic Now() {
         return TMonotonic::Now();
-        //return TlsActivationContext->Monotonic();
     }
 
     void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr& ev) {
@@ -162,7 +161,7 @@ public:
 
     STFUNC(BaseStateFuncBody) {
         AccountActorSystemStats(TlsActivationContext->Monotonic());
-        // we assume that exception handling is done in parents/descendents
+        // we assume that exception handling is done in parents/descendants
         switch (ev->GetTypeRewrite()) {
             hFunc(NActors::TEvents::TEvWakeup, TSchedulableComputeActorBase<TDerived>::HandleWakeup);
             default:

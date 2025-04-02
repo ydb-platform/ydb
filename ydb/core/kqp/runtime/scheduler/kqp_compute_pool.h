@@ -45,6 +45,7 @@ namespace NKikimr::NKqp::NScheduler {
             };
 
             const TString Name;
+            const bool HasCounters;
 
             std::atomic<ui64> EntitiesCount = 0;
             std::atomic<i64> TrackedMicroSeconds = 0;

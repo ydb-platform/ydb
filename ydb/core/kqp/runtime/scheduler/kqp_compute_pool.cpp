@@ -18,9 +18,12 @@ double TPool::TMutableStats::Limit(TMonotonic now) const {
 
 TPool::TPool(const TString& name, THolder<IObservableValue<double>> share, TIntrusivePtr<TKqpCounters> counters)
     : Name(name)
+    , HasCounters(!!counters)
     , Share(std::move(share))
 {
-    InitCounters(counters);
+    if (counters) {
+        InitCounters(counters);
+    }
 }
 
 void TPool::AddEntity(THolder<TSchedulerEntity>& entity) {
@@ -66,25 +69,29 @@ void TPool::AdvanceTime(TMonotonic now, TDuration smoothPeriod, TDuration forget
             tracked - FromDuration(forgetInterval) * current->Capacity,
             Min<ssize_t>(current->Limit(now) - current->MaxLimitDeviation, tracked));
 
-    SchedulerLimitUs->Set(current->Limit(now));
-    SchedulerClock->Add(now.MicroSeconds() - current->LastNowRecalc.MicroSeconds());
-    Vtime->Add(delta.MicroSeconds());
-    EntitiesWeight->Set(next->EntitiesWeight);
-    OldLimit->Add(FromDuration(now - current->LastNowRecalc) * current->Capacity);
-    Weight->Set(current->Capacity);
+    if (HasCounters) {
+        SchedulerLimitUs->Set(current->Limit(now));
+        SchedulerClock->Add(now.MicroSeconds() - current->LastNowRecalc.MicroSeconds());
+        Vtime->Add(delta.MicroSeconds());
+        EntitiesWeight->Set(next->EntitiesWeight);
+        OldLimit->Add(FromDuration(now - current->LastNowRecalc) * current->Capacity);
+        Weight->Set(current->Capacity);
 
-    // TODO: set limit once - somewhere else.
-    // auto* shareValue = WeightsUpdater.FindValue<TParameter<double>>({Name, TImpl::TotalShare});
-    // Limit->Set(shareValue->GetValue() * SumCores.GetValue() * 1'000'000);
-    Usage->Set(TrackedMicroSeconds.load());
-    Demand->Set(EntitiesCount.load() * 1'000'000);
-    Throttle->Set(ThrottledMicroSeconds.load());
+        // TODO: set limit once - somewhere else.
+        // auto* shareValue = WeightsUpdater.FindValue<TParameter<double>>({Name, TImpl::TotalShare});
+        // Limit->Set(shareValue->GetValue() * SumCores.GetValue() * 1'000'000);
+        Usage->Set(TrackedMicroSeconds.load());
+        Demand->Set(EntitiesCount.load() * 1'000'000);
+        Throttle->Set(ThrottledMicroSeconds.load());
+    }
 
     MutableStats.Publish();
 }
 
 void TPool::UpdateGuarantee(ui64 value) {
-    Guarantee->Set(value);
+    if (HasCounters) {
+        Guarantee->Set(value);
+    }
 }
 
 const TString& TPool::GetName() const {
@@ -97,6 +104,7 @@ bool TPool::IsActive() const {
 
 void TPool::InitCounters(const TIntrusivePtr<TKqpCounters>& counters) {
     auto group = counters->GetKqpCounters()->GetSubgroup("NodeScheduler/Group", Name);
+
     Vtime = group->GetCounter("VTime", true);
     EntitiesWeight = group->GetCounter("Entities", false);
     OldLimit = group->GetCounter("OldLimit", true);

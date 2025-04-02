@@ -450,9 +450,8 @@ void TSchedulerEntity::MarkResumed(TMonotonic now) {
 }
 
 struct TComputeScheduler::TImpl {
-    THashMap<TString, size_t> PoolId;
-    std::vector<std::unique_ptr<TPool>> Pools;
-    std::vector<double> ResourceWeights;
+    THashMap<TString, std::unique_ptr<TPool>> Pools;
+    THashMap<TString, double> ResourceWeights;
     double ResourceWeightSum = 0.0;
 
     TResourcesWeightCalculator ResourceWeightsCalculator;
@@ -480,48 +479,29 @@ struct TComputeScheduler::TImpl {
 
     void CreatePool(const TString& name, THolder<IObservableValue<double>> share, NMonotonic::TMonotonic now, double resourceWeight = 0.0) {
         auto pool = std::make_unique<TPool>(name, std::move(share), Counters);
-        PoolId[name] = Pools.size();
         pool->AdvanceTime(now, SmoothPeriod, ForgetInterval);
-        Pools.push_back(std::move(pool));
-        ResourceWeights.push_back(resourceWeight);
+
+        Pools.emplace(name, std::move(pool));
+        ResourceWeights.emplace(name, resourceWeight);
         ResourceWeightSum += resourceWeight;
     }
 
     void CollectPools() {
-        std::vector<i64> remap;
-        std::vector<std::unique_ptr<TPool>> pools;
-        std::vector<double> weights;
+        THashMap<TString, std::unique_ptr<TPool>> pools;
+        THashMap<TString, double> weights;
         double weightsSum = 0;
 
-        for (size_t i = 0; i < Pools.size(); ++i) {
-            if (Pools.at(i)->IsActive()) {
-                remap.push_back(pools.size());
-                pools.emplace_back(Pools[i].release());
-                weights.emplace_back(ResourceWeights[i]);
-                weightsSum += ResourceWeights[i];
-            } else {
-                // to delete
-                remap.push_back(-1);
+        for (auto& [name, pool] : Pools) {
+            if (pool->IsActive()) {
+                pools.emplace(name, std::move(pool));
+                weights.emplace(name, ResourceWeights.at(name));
+                weightsSum += ResourceWeights.at(name);
             }
         }
 
         Pools.swap(pools);
         ResourceWeights.swap(weights);
         ResourceWeightSum = weightsSum;
-
-        {
-            std::vector<TString> toerase;
-            for (auto& [k, v] : PoolId) {
-                if (remap[v] >= 0) {
-                    v = remap[v];
-                } else {
-                    toerase.push_back(k);
-                }
-            }
-            for (auto& k: toerase) {
-                PoolId.erase(k);
-            }
-        }
 
         WeightsUpdater.CollectValues();
     }
@@ -535,8 +515,7 @@ TComputeScheduler::TComputeScheduler(TIntrusivePtr<TKqpCounters> counters) {
 TComputeScheduler::~TComputeScheduler() = default;
 
 THolder<TSchedulerEntity> TComputeScheduler::Enroll(TString poolName, i64 weight, TMonotonic now) {
-    Y_ENSURE(Impl->PoolId.contains(poolName), "unknown scheduler pool");
-    auto* pool = Impl->Pools.at(Impl->PoolId.at(poolName)).get();
+    auto* pool = Impl->Pools.at(poolName).get();
 
     auto result = MakeHolder<TSchedulerEntity>(pool);
     result->Weight = weight;
@@ -554,8 +533,8 @@ THolder<TSchedulerEntity> TComputeScheduler::Enroll(TString poolName, i64 weight
 
 void TComputeScheduler::AdvanceTime(TMonotonic now) {
     Impl->WeightsUpdater.UpdateAll();
-    for (size_t i = 0; i < Impl->Pools.size(); ++i) {
-        Impl->Pools[i]->AdvanceTime(now, Impl->SmoothPeriod, Impl->ForgetInterval);
+    for (auto& [_, pool] : Impl->Pools) {
+        pool->AdvanceTime(now, Impl->SmoothPeriod, Impl->ForgetInterval);
     }
     Impl->CollectPools();
     if (Impl->Counters) {
@@ -582,16 +561,15 @@ void TComputeScheduler::SetForgetInterval(TDuration period) {
 }
 
 bool TComputeScheduler::Disabled(TString pool) {
-    auto* ptr = Impl->PoolId.FindPtr(pool);
-    return !ptr || Impl->Pools.at(*ptr)->IsDisabled();
+    auto poolIt = Impl->Pools.find(pool);
+    return poolIt == Impl->Pools.end() || poolIt->second->IsDisabled();
 }
 
 
 void TComputeScheduler::Disable(TString pool, TMonotonic now) {
-    // if ptr == 0 it's already disabled
-    if (auto* ptr = Impl->PoolId.FindPtr(pool)) {
-        Impl->Pools.at(*ptr)->Disable();
-        Impl->Pools.at(*ptr)->AdvanceTime(now, Impl->SmoothPeriod, Impl->ForgetInterval);
+    if (auto poolIt = Impl->Pools.find(pool); poolIt != Impl->Pools.end()) {
+        poolIt->second->Disable();
+        poolIt->second->AdvanceTime(now, Impl->SmoothPeriod, Impl->ForgetInterval);
     }
 }
 
@@ -629,15 +607,13 @@ private:
 };
 
 void TComputeScheduler::UpdatePoolShare(TString poolName, double share, TMonotonic now, std::optional<double> resourceWeight) {
-    auto ptr = Impl->PoolId.FindPtr(poolName);
-
     auto* shareValue = Impl->WeightsUpdater.FindOrAddParameter<double>({poolName, TImpl::TotalShare}, share);
     shareValue->SetValue(share);
 
     TParameter<bool>* weightEnabled = Impl->WeightsUpdater.FindOrAddParameter<bool>({poolName, TImpl::ResourceWeightEnabled}, resourceWeight.has_value());
     weightEnabled->SetValue(resourceWeight.has_value());
 
-    if (!ptr) {
+    if (auto poolIt = Impl->Pools.find(poolName); poolIt == Impl->Pools.end()) {
         TParameter<double>* resourceWeightValue = Impl->WeightsUpdater.FindOrAddParameter<double>({poolName, TImpl::ResourceWeight}, resourceWeight.value_or(0));
         TParameter<i64>* taskscount = Impl->WeightsUpdater.FindOrAddParameter<i64>({poolName, TImpl::TasksCount}, 0);
 
@@ -656,17 +632,16 @@ void TComputeScheduler::UpdatePoolShare(TString poolName, double share, TMonoton
         Impl->WeightsUpdater.AddValue({poolName, TImpl::CompositeShare}, std::move(compositeWeight));
         Impl->CreatePool(poolName, std::move(cap), now, resourceWeight.value_or(0));
 
-        for (uint i = 0; i < Impl->ResourceWeights.size(); ++i) {
-            if (Impl->ResourceWeights.at(i) > 0 && Impl->ResourceWeightSum > 0) {
-                Impl->Pools.at(i)->UpdateGuarantee(Impl->ResourceWeights.at(i) / Impl->ResourceWeightSum * Impl->SumCores.GetValue() * 1'000'000);
+        for (const auto& [name, weight] : Impl->ResourceWeights) {
+            if (weight > 0 && Impl->ResourceWeightSum > 0) {
+                Impl->Pools.at(name)->UpdateGuarantee(weight / Impl->ResourceWeightSum * Impl->SumCores.GetValue() * 1'000'000);
             } else {
-                Impl->Pools.at(i)->UpdateGuarantee(0);
+                Impl->Pools.at(name)->UpdateGuarantee(0);
             }
         }
     } else {
-        auto& pool = Impl->Pools.at(*ptr);
-        pool->Enable();
-        pool->AdvanceTime(now, Impl->SmoothPeriod, Impl->ForgetInterval);
+        poolIt->second->Enable();
+        poolIt->second->AdvanceTime(now, Impl->SmoothPeriod, Impl->ForgetInterval);
     }
 }
 
@@ -679,11 +654,15 @@ void TComputeScheduler::SetCapacity(ui64 cores) {
     Impl->SumCores.SetValue(cores);
 }
 
-::NMonitoring::TDynamicCounters::TCounterPtr TComputeScheduler::GetPoolUsageCounter(TString poolName) const {
-    return Impl->Counters
-        ->GetKqpCounters()
-        ->GetSubgroup("NodeScheduler/Pool", poolName)
-        ->GetCounter("Usage", true);
+NMonitoring::TDynamicCounters::TCounterPtr TComputeScheduler::GetPoolUsageCounter(TString poolName) const {
+    if (Impl->Counters) {
+        return Impl->Counters
+            ->GetKqpCounters()
+            ->GetSubgroup("NodeScheduler/Pool", poolName)
+            ->GetCounter("Usage", true);
+    }
+
+    return {};
 }
 
 

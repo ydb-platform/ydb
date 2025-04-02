@@ -12,7 +12,7 @@ val runProg{{ loop.index }} = task<Exec>("runProgram{{ loop.index }}") {
     workingDir = file("$buildDir")
 {%-        endif %}
 
-    commandLine(
+    commandLine("bash", "-c", listOf(
 {%-        for arg in custom_run.command -%}
 {%-            if custom_run.depends|select("eq", arg)|length -%}
 {{ PatchRoots(arg, true) }}
@@ -25,7 +25,7 @@ val runProg{{ loop.index }} = task<Exec>("runProgram{{ loop.index }}") {
 {{ PatchRoots(arg) }}
 {%-            endif -%}
 {%-            if not loop.last %}, {% endif -%}
-{%-        endfor -%})
+{%-        endfor -%}).joinToString(" "))
 
 {%-        if custom_run.depends|length -%}
 {%-            for depend in custom_run.depends|unique %}

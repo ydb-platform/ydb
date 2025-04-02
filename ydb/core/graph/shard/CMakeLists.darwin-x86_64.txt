@@ -21,6 +21,7 @@ add_library(core-graph-shard)
 target_link_libraries(core-graph-shard PUBLIC
   contrib-libs-cxxsupp
   yutil
+  library-cpp-json
   library-actors-core
   ydb-core-base
   core-cms-console

@@ -475,20 +475,9 @@ document.addEventListener("DOMContentLoaded", ready);
                 }
                 DIV_CLASS("panel-body") {
                     KEYVALUE_TABLE({
-
-                        ui64 total = 0;
-                        ui64 trashInFlight = 0;
-                        ui64 trashPending = 0;
-                        Data->EnumerateRefCount([&](TLogoBlobID id, ui32 /*refCount*/) {
-                            total += id.BlobSize();
-                        });
-                        Data->EnumerateTrash([&](ui32 /*groupId*/, TLogoBlobID id, bool inFlight) {
-                            (inFlight ? trashInFlight : trashPending) += id.BlobSize();
-                        });
-
-                        KEYVALUE_UP("Data, bytes", "data", FormatByteSize(total));
-                        KEYVALUE_UP("Trash in flight, bytes", "trash_in_flight", FormatByteSize(trashInFlight));
-                        KEYVALUE_UP("Trash pending, bytes", "trash_pending", FormatByteSize(trashPending));
+                        KEYVALUE_UP("Data, bytes", "data", FormatByteSize(Data->GetTotalStoredDataSize()));
+                        KEYVALUE_UP("Trash in flight, bytes", "trash_in_flight", FormatByteSize(Data->GetInFlightTrashSize()));
+                        KEYVALUE_UP("Trash pending, bytes", "trash_pending", FormatByteSize(Data->GetTotalStoredTrashSize()));
 
                         std::vector<ui32> groups;
                         for (const auto& [groupId, _] : Groups) {
@@ -498,7 +487,7 @@ document.addEventListener("DOMContentLoaded", ready);
                         for (const ui32 groupId : groups) {
                             TGroupInfo& group = Groups[groupId];
                             KEYVALUE_UP(TStringBuilder() << "Data in GroupId# " << groupId << ", bytes",
-                                'g' << groupId, FormatByteSize(group.AllocatedBytes));
+                                TStringBuilder() << 'g' << groupId, FormatByteSize(group.AllocatedBytes));
                         }
                     })
                 }
@@ -564,24 +553,14 @@ document.addEventListener("DOMContentLoaded", ready);
             }
         };
 
-        ui64 total = 0;
-        ui64 trashInFlight = 0;
-        ui64 trashPending = 0;
-        Data->EnumerateRefCount([&](TLogoBlobID id, ui32 /*refCount*/) {
-            total += id.BlobSize();
-        });
-        Data->EnumerateTrash([&](ui32 /*groupId*/, TLogoBlobID id, bool inFlight) {
-            (inFlight ? trashInFlight : trashPending) += id.BlobSize();
-        });
-
         NJson::TJsonMap data{
-            {"data", formatSize(total)},
-            {"trash_in_flight", formatSize(trashInFlight)},
-            {"trash_pending", formatSize(trashPending)},
+            {"data", formatSize(Data->GetTotalStoredDataSize())},
+            {"trash_in_flight", formatSize(Data->GetInFlightTrashSize())},
+            {"trash_pending", formatSize(Data->GetTotalStoredTrashSize())},
         };
 
         for (const auto& [groupId, group] : Groups) {
-            data[TStringBuilder() << "g" << groupId] = formatSize(group.AllocatedBytes);
+            data[TStringBuilder() << 'g' << groupId] = formatSize(group.AllocatedBytes);
         }
 
         if (Configured && Config.GetIsDecommittingGroup()) {

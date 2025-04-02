@@ -8,11 +8,45 @@ namespace NKikimr::NBlobDepot {
     using TData = TBlobDepot::TData;
 
     void TData::StartLoad() {
-        Self->Execute(std::make_unique<TCoroTx>(Self, TTokens{{Self->Token}}, [&] {
+        Self->Execute(std::make_unique<TCoroTx>(Self, TTokens{{Self->Token}}, [&](TCoroTx::TContextBase& tx) {
             bool progress = false;
 
+            ui64 lastTimestamp = GetCycleCountFast();
+            auto passed = [&] {
+                const ui64 timestamp = GetCycleCountFast();
+                return timestamp - std::exchange(lastTimestamp, timestamp);
+            };
+
+            auto account = [&](ui64& cycles) {
+                const ui64 n = passed();
+                cycles += n;
+                LoadTotalCycles += n;
+            };
+
+            auto smartRestart = [&] {
+                if (std::exchange(progress, false)) {
+                    // we have already processed something, so start the next transaction to prevent keeping already
+                    // processed data in memory
+                    account(LoadProcessingCycles);
+                    tx.FinishTx();
+                    account(LoadFinishTxCycles);
+                    tx.RunSuccessorTx();
+                    account(LoadRunSuccessorTxCycles);
+                    ++LoadRunSuccessorTx;
+                } else {
+                    // we haven't read anything at all, so we restart the transaction with the request to read some
+                    // data
+                    account(LoadProcessingCycles);
+                    tx.RestartTx();
+                    account(LoadRestartTxCycles);
+                    ++LoadRestartTx;
+                }
+            };
+
             TString trash;
-            bool trashLoaded = false;
+            while (!LoadTrash(*tx, trash, progress)) {
+                smartRestart();
+            }
 
             TScanRange r{
                 .Begin = TKey::Min(),
@@ -21,17 +55,14 @@ namespace NKikimr::NBlobDepot {
                 .PrechargeBytes = 1'000'000,
             };
 
-            while (!(trashLoaded = LoadTrash(*TCoroTx::GetTxc(), trash, progress)) ||
-                    !ScanRange(r, TCoroTx::GetTxc(), &progress, [](const TKey&, const TValue&) { return true; })) {
-                if (std::exchange(progress, false)) {
-                    TCoroTx::FinishTx();
-                    TCoroTx::RunSuccessorTx();
-                } else {
-                    TCoroTx::RestartTx();
-                }
+            progress = false;
+            while (!ScanRange(r, tx.GetTxc(), &progress, [](const TKey&, const TValue&) { return true; })) {
+                smartRestart();
             }
 
-            TCoroTx::FinishTx();
+            account(LoadProcessingCycles);
+            tx.FinishTx();
+            account(LoadFinishTxCycles);
             Self->Data->OnLoadComplete();
         }));
     }

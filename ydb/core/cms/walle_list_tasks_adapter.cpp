@@ -35,13 +35,21 @@ public:
             info.SetTaskId(task.TaskId);
             if (State->ScheduledRequests.contains(task.RequestId)) {
                 auto &req = State->ScheduledRequests.find(task.RequestId)->second;
-                for (auto &action : req.Request.GetActions())
+                for (auto &action : req.Request.GetActions()) {
                     *info.AddHosts() = action.GetHost();
+                    for (auto &device : action.GetDevices())
+                        *info.AddDevices() = device;
+                }
                 info.SetStatus("in-process");
             } else {
                 for (auto &id : task.Permissions) {
-                    if (State->Permissions.contains(id))
-                        *info.AddHosts() = State->Permissions.find(id)->second.Action.GetHost();
+                    if (State->Permissions.contains(id)) {
+                        const auto &action = State->Permissions.find(id)->second.Action;
+                        *info.AddHosts() = action.GetHost();
+
+                        for (auto &device : action.GetDevices())
+                            *info.AddDevices() = device;
+                    }
                 }
                 info.SetStatus("ok");
             }

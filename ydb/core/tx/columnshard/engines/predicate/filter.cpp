@@ -8,13 +8,9 @@
 namespace NKikimr::NOlap {
 
 NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const {
-    if (SortedRanges.empty()) {
-        return NArrow::TColumnFilter::BuildAllowFilter();
-    }
-
-    auto result = SortedRanges.front().BuildFilter(data);
-    for (ui32 i = 1; i < SortedRanges.size(); ++i) {
-        result = result.Or(SortedRanges[i].BuildFilter(data));
+    auto result = NArrow::TColumnFilter::BuildAllowFilter();
+    for (const auto& range : SortedRanges) {
+        result = result.Or(range.BuildFilter(data));
     }
     return result;
 }

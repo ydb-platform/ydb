@@ -109,16 +109,19 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
                 std::vector<std::string> paths;
                 paths.reserve(allClustersInfo.size());
                 for (auto& clusterInfo: allClustersInfo) {
+                    auto& clusterTopicPath = paths.emplace_back(path);
+                    clusterInfo.AdjustTopicPath(clusterTopicPath);
                     if (!clusterInfo.IsAvailableForRead()) {
                         futures.emplace_back(NThreading::MakeErrorFuture<NYdb::NTopic::TDescribeTopicResult>(std::make_exception_ptr(NThreading::TFutureException() << "Cluster " << clusterInfo.Name << " is unavailable for read")));
                     } else {
-                        auto& clusterTopicPath = paths.emplace_back(path);
-                        clusterInfo.AdjustTopicPath(clusterTopicPath);
                         clusterInfo.AdjustTopicClientSettings(topicSettings);
                         futures.emplace_back(NYdb::NTopic::TTopicClient(ydbDriver, topicSettings).DescribeTopic(clusterTopicPath));
                     }
                     results.emplace_back(std::move(clusterInfo));
                 }
+                Y_ENSURE(results.size() == allClustersInfo.size());
+                Y_ENSURE(paths.size() == allClustersInfo.size());
+                Y_ENSURE(futures.size() == allClustersInfo.size());
                 // XXX This produces circular dependency until the future is fired
                 // futures references allFutureDescribe
                 // lambda references futures[]

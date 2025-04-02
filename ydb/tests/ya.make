@@ -1,4 +1,5 @@
 RECURSE(
+    datashard
     example
     fq
     functional

@@ -1,4 +1,5 @@
 #include "create_table_formatter.h"
+#include "create_view_formatter.h"
 #include "show_create.h"
 
 #include <ydb/core/base/tablet_pipe.h>
@@ -25,8 +26,11 @@ TString ToString(NKikimrSchemeOp::EPathType pathType) {
         case NKikimrSchemeOp::EPathTypeTable:
         case NKikimrSchemeOp::EPathTypeColumnTable:
             return "Table";
+        case NKikimrSchemeOp::EPathTypeView:
+            return "View";
         default:
-            return "Unknown";
+            Y_ENSURE(false, "No user-friendly name for a path type: " << pathType);
+            return "";
     }
 }
 
@@ -124,9 +128,10 @@ private:
         Path = cellsFrom[0].AsBuf();
         PathType = cellsFrom[1].AsBuf();
 
-        if (PathType != "Table") {
-            ReplyErrorAndDie(Ydb::StatusIds::SCHEME_ERROR, TStringBuilder() << "Invalid path type: " << PathType);
-            return;
+        if (!IsIn({"Table", "View"}, PathType)) {
+            return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
+                << "Unsupported path type: " << PathType
+            );
         }
 
         std::unique_ptr<TEvTxUserProxy::TEvNavigate> navigateRequest(new TEvTxUserProxy::TEvNavigate());
@@ -136,8 +141,10 @@ private:
         }
         NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
         record->SetPath(Path);
-        record->MutableOptions()->SetReturnBoundaries(true);
-        record->MutableOptions()->SetShowPrivateTable(false);
+        if (PathType == "Table") {
+            record->MutableOptions()->SetReturnBoundaries(true);
+            record->MutableOptions()->SetShowPrivateTable(false);
+        }
 
         Send(MakeTxProxyID(), navigateRequest.release());
     }
@@ -163,8 +170,7 @@ private:
                 const auto& pathDescription = record.GetPathDescription();
                 if (auto pathType = ToString(pathDescription.GetSelf().GetPathType()); pathType != PathType) {
                     return ReplyErrorAndDie(Ydb::StatusIds::BAD_REQUEST, TStringBuilder()
-                        << "Expected path type: " << PathType
-                        << ", actual path type: " << pathType
+                        << "Path type mismatch, expected: " << PathType << ", found: " << pathType
                     );
                 }
 
@@ -223,6 +229,19 @@ private:
                         } else {
                             ReplyErrorAndDie(formatterResult.GetStatus(), formatterResult.GetError());
                             return;
+                        }
+                        break;
+                    }
+                    case NKikimrSchemeOp::EPathTypeView: {
+                        const auto& description = pathDescription.GetViewDescription();
+                        path = pathPair.second;
+
+                        TCreateViewFormatter formatter;
+                        auto formatterResult = formatter.Format(*path, description);
+                        if (formatterResult.IsSuccess()) {
+                            statement = formatterResult.ExtractOut();
+                        } else {
+                            return ReplyErrorAndDie(formatterResult.GetStatus(), formatterResult.GetError());
                         }
                         break;
                     }

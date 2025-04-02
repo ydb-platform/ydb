@@ -10,7 +10,7 @@ class TestAsyncReplication(TestBase):
             "CREATE OBJECT TOKEN_SECRET_NAME (TYPE SECRET) WITH value='my_secret'")
         self.query_async(
             "CREATE OBJECT TOKEN_SECRET_NAME (TYPE SECRET) WITH value='my_secret'")
-        self.query_async(f"""
+        cmd = self.query_async(f"""
                         CREATE ASYNC REPLICATION `replication` 
                         FOR `{self.get_database()}/a` AS `{self.get_database()}/a`
                         WITH (
@@ -18,6 +18,7 @@ class TestAsyncReplication(TestBase):
                         TOKEN_SECRET_NAME='my_secret'
                             )
                          """)
-        time.sleep(10)
+        print(cmd)
+        time.sleep(1)
         rows = self.query_async("select count(*) as count from a")
         assert len(rows) == 1 and rows[0].count == 1, "cscdscs"

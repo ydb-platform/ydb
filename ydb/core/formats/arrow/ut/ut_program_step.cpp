@@ -553,7 +553,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         {
             auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({10001}), TColumnChainInfo(1001), std::make_shared<TSimpleFunction>(EOperation::MatchSubstring)).DetachResult();
             proc->SetKernelLogic(std::make_shared<NKikimr::NArrow::NSSA::TLogicMatchString>(
-                NKikimr::NArrow::NSSA::TIndexCheckOperation::EOperation::Contains, true));
+                NKikimr::NArrow::NSSA::TIndexCheckOperation::EOperation::Contains, true, false));
             builder.Add(proc);
         }
         {
@@ -564,7 +564,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         {
             auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({2}), TColumnChainInfo(1002), std::make_shared<TSimpleFunction>(EOperation::StartsWith)).DetachResult();
             proc->SetKernelLogic(std::make_shared<NKikimr::NArrow::NSSA::TLogicMatchString>(
-                NKikimr::NArrow::NSSA::TIndexCheckOperation::EOperation::StartsWith, true));
+                NKikimr::NArrow::NSSA::TIndexCheckOperation::EOperation::StartsWith, true, false));
             builder.Add(proc);
         }
         {
@@ -574,7 +574,7 @@ Y_UNIT_TEST_SUITE(ProgramStep) {
         }
         {
             auto proc = TCalculationProcessor::Build(TColumnChainInfo::BuildVector({1, 3}), TColumnChainInfo(1003), std::make_shared<TSimpleFunction>(EOperation::Equal)).DetachResult();
-            proc->SetKernelLogic(std::make_shared<NKikimr::NArrow::NSSA::TLogicEquals>());
+            proc->SetKernelLogic(std::make_shared<NKikimr::NArrow::NSSA::TLogicEquals>(false));
             builder.Add(proc);
         }
         {

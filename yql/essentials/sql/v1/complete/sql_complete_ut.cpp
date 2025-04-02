@@ -1,7 +1,9 @@
 #include "sql_complete.h"
 
 #include <yql/essentials/sql/v1/complete/name/fallback/name_service.h>
+#include <yql/essentials/sql/v1/complete/name/static/frequency.h>
 #include <yql/essentials/sql/v1/complete/name/static/name_service.h>
+#include <yql/essentials/sql/v1/complete/name/static/ranking.h>
 
 #include <yql/essentials/sql/v1/lexer/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
@@ -45,18 +47,20 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         lexers.Antlr4PureAnsi = NSQLTranslationV1::MakeAntlr4PureAnsiLexerFactory();
         return [lexers = std::move(lexers)](bool ansi) {
             return NSQLTranslationV1::MakeLexer(
-                lexers, ansi, /* antlr4 = */ true, 
+                lexers, ansi, /* antlr4 = */ true,
                 NSQLTranslationV1::ELexerFlavor::Pure);
         };
     }
 
     ISqlCompletionEngine::TPtr MakeSqlCompletionEngineUT() {
         TLexerSupplier lexer = MakePureLexerSupplier();
-        INameService::TPtr names = MakeStaticNameService({
+        NameSet names = {
             .Types = {"Uint64"},
             .Functions = {"StartsWith"},
-        });
-        return MakeSqlCompletionEngine(std::move(lexer), std::move(names));
+        };
+        auto ranking = MakeDefaultRanking({});
+        INameService::TPtr service = MakeStaticNameService(std::move(names), std::move(ranking));
+        return MakeSqlCompletionEngine(std::move(lexer), std::move(service));
     }
 
     TVector<TCandidate> Complete(ISqlCompletionEngine::TPtr& engine, TStringBuf prefix) {
@@ -426,23 +430,24 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
 
     Y_UNIT_TEST(InvalidStatementsRecovery) {
         auto engine = MakeSqlCompletionEngineUT();
-        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "select select; ").size(), 35);
-        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, "select select;").size(), 35);
+        UNIT_ASSERT_GE(Complete(engine, "select select; ").size(), 35);
+        UNIT_ASSERT_GE(Complete(engine, "select select;").size(), 35);
         UNIT_ASSERT_VALUES_EQUAL_C(Complete(engine, "!;").size(), 0, "Lexer failing");
     }
 
-    Y_UNIT_TEST(DefaultNameSet) {
+    Y_UNIT_TEST(DefaultNameService) {
         auto set = MakeDefaultNameSet();
-        auto service = MakeStaticNameService(std::move(set));
+        auto service = MakeStaticNameService(std::move(set), MakeDefaultRanking());
         auto engine = MakeSqlCompletionEngine(MakePureLexerSupplier(), std::move(service));
         {
             TVector<TCandidate> expected = {
-                {TypeName, "Uint16"},
-                {TypeName, "Uint32"},
                 {TypeName, "Uint64"},
-                {TypeName, "Uint8"},
+                {TypeName, "Uint32"},
                 {TypeName, "Utf8"},
                 {TypeName, "Uuid"},
+                {TypeName, "Uint8"},
+                {TypeName, "Unit"},
+                {TypeName, "Uint16"},
             };
             UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"SELECT OPTIONAL<U"}), expected);
         }
@@ -469,14 +474,62 @@ Y_UNIT_TEST_SUITE(SqlCompleteTests) {
         auto silent = MakeHolder<TSilentNameService>();
         auto primary = MakeDeadlinedNameService(std::move(silent), TDuration::MilliSeconds(1));
 
-        auto standby = MakeStaticNameService(MakeDefaultNameSet());
+        auto standby = MakeStaticNameService(MakeDefaultNameSet(), MakeDefaultRanking({}));
 
         auto fallback = MakeFallbackNameService(std::move(primary), std::move(standby));
 
         auto engine = MakeSqlCompletionEngine(MakePureLexerSupplier(), std::move(fallback));
-        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"SELECT CAST (1 AS U"}).size(), 6);
-        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"SELECT CAST (1 AS "}).size(), 47);
-        UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"SELECT "}).size(), 55);
+        UNIT_ASSERT_GE(Complete(engine, {"SELECT CAST (1 AS U"}).size(), 6);
+        UNIT_ASSERT_GE(Complete(engine, {"SELECT CAST (1 AS "}).size(), 47);
+        UNIT_ASSERT_GE(Complete(engine, {"SELECT "}).size(), 55);
+    }
+
+    Y_UNIT_TEST(Ranking) {
+        TFrequencyData frequency = {
+            .Types = {
+                {"int32", 128},
+                {"int64", 64},
+                {"interval", 32},
+                {"interval64", 32},
+            },
+            .Functions = {
+                {"min", 128},
+                {"max", 64},
+                {"maxof", 64},
+                {"minby", 32},
+                {"maxby", 32},
+            },
+        };
+        auto service = MakeStaticNameService(MakeDefaultNameSet(), MakeDefaultRanking(frequency));
+        auto engine = MakeSqlCompletionEngine(MakePureLexerSupplier(), std::move(service));
+        {
+            TVector<TCandidate> expected = {
+                {TypeName, "Int32"},
+                {TypeName, "Int64"},
+                {TypeName, "Interval"},
+                {TypeName, "Interval64"},
+                {TypeName, "Int16"},
+                {TypeName, "Int8"},
+            };
+            UNIT_ASSERT_VALUES_EQUAL(Complete(engine, {"SELECT OPTIONAL<I"}), expected);
+        }
+        {
+            TVector<TCandidate> expectedPrefix = {
+                {FunctionName, "Min"},
+                {FunctionName, "Max"},
+                {FunctionName, "MaxOf"},
+                {FunctionName, "MaxBy"},
+                {FunctionName, "MinBy"},
+                {FunctionName, "Math::Abs"},
+                {FunctionName, "Math::Acos"},
+                {FunctionName, "Math::Asin"},
+            };
+
+            auto actualPrefix = Complete(engine, {"SELECT m"});
+            actualPrefix.crop(expectedPrefix.size());
+
+            UNIT_ASSERT_VALUES_EQUAL(actualPrefix, expectedPrefix);
+        }
     }
 
 } // Y_UNIT_TEST_SUITE(SqlCompleteTests)

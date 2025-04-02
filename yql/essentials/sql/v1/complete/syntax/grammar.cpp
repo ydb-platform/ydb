@@ -1,6 +1,6 @@
 #include "grammar.h"
 
-#include <yql/essentials/sql/v1/format/sql_format.h>
+#include <yql/essentials/sql/v1/reflect/sql_reflect.h>
 
 namespace NSQLComplete {
 
@@ -44,7 +44,7 @@ namespace NSQLComplete {
 
         std::unordered_set<TTokenId> ComputeKeywordTokens() {
             const auto& vocabulary = GetVocabulary();
-            const auto keywords = NSQLFormat::GetKeywords();
+            const auto keywords = NSQLReflect::LoadLexerGrammar().KeywordNames;
 
             auto keywordTokens = GetAllTokens();
             std::erase_if(keywordTokens, [&](TTokenId token) {

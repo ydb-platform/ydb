@@ -127,11 +127,11 @@ namespace NSQLComplete {
         lexers.Antlr4Pure = NSQLTranslationV1::MakeAntlr4PureLexerFactory();
         lexers.Antlr4PureAnsi = NSQLTranslationV1::MakeAntlr4PureAnsiLexerFactory();
 
-        INameService::TPtr names = MakeStaticNameService(MakeDefaultNameSet());
+        INameService::TPtr names = MakeStaticNameService(MakeDefaultNameSet(), MakeDefaultRanking());
 
         return MakeSqlCompletionEngine([lexers = std::move(lexers)](bool ansi) {
             return NSQLTranslationV1::MakeLexer(
-                lexers, ansi, /* antlr4 = */ true, 
+                lexers, ansi, /* antlr4 = */ true,
                 NSQLTranslationV1::ELexerFlavor::Pure);
         }, std::move(names));
     }

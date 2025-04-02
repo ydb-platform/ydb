@@ -180,72 +180,14 @@ NPq::NConfigurationManager::TAsyncDescribePathResult TPqSession::DescribePath(co
             return client->DescribePath(path);
         }
 
-        return GetYdbFederatedPqClient(cluster, database, *config, credentialsProviderFactory)
-            .GetAllClusterInfo()
-            .Apply([
-                ydbDriver = YdbDriver, credentialsProviderFactory,
-                cluster, database, path,
-                topicSettings = GetYdbPqClientOptions(database, *config, credentialsProviderFactory)
-        ](const auto& futureClusterInfo) mutable {
-            auto allClustersInfo = futureClusterInfo.GetValue();
-            std::vector<NYdb::NTopic::TAsyncDescribeTopicResult> results;
-            results.reserve(allClustersInfo.size());
-            Y_ENSURE(!allClustersInfo.empty());
-            std::vector<std::string> paths;
-            paths.reserve(allClustersInfo.size());
-            for (auto& clusterInfo: allClustersInfo) {
-                if (!clusterInfo.IsAvailableForRead()) {
-                    results.emplace_back(NThreading::MakeErrorFuture<NYdb::NTopic::TDescribeTopicResult>(std::make_exception_ptr(NThreading::TFutureException())));
-                    continue;
-                }
-                auto& clusterTopicPath = paths.emplace_back(path);
-                clusterInfo.AdjustTopicPath(clusterTopicPath);
-                clusterInfo.AdjustTopicClientSettings(topicSettings);
-                results.emplace_back(NYdb::NTopic::TTopicClient(ydbDriver, topicSettings).DescribeTopic(clusterTopicPath));
+        return GetYdbPqClient(cluster, database, *config, credentialsProviderFactory).DescribeTopic(path).Apply([cluster, path, database](const NYdb::NTopic::TAsyncDescribeTopicResult& describeTopicResultFuture) {
+            const NYdb::NTopic::TDescribeTopicResult& describeTopicResult = describeTopicResultFuture.GetValue();
+            if (!describeTopicResult.IsSuccess()) {
+                throw yexception() << "Failed to describe topic `" << cluster << "`.`" << path << "` in the database `" << database << "`: " << describeTopicResult.GetIssues().ToString();
             }
-            // XXX This produces circular dependency until the future is fired
-            // results references allFutureDescribe
-            // lambda references results
-            // allFutureDescribe contains lambda
-            auto allFutureDescribes = NThreading::WaitAll(results);
-            return allFutureDescribes.Apply([results = std::move(results), paths = std::move(paths), allClustersInfo = std::move(allClustersInfo), cluster, database, path](const auto& ) mutable {
-                uint32_t partitions = 0;
-                TStringBuilder ex;
-                auto addErrorHeader = [&]() {
-                    if (ex.empty()) {
-                        ex << "Failed to describe topic `" << cluster << "`.`" << path << "`in the database `" << database << "`: ";
-                    } else {
-                        ex << "; ";
-                    }
-                };
-                for (size_t i = 0; i != results.size(); ++i) {
-                    auto& futureDescribe = results[i];
-                    auto addErrorCluster = [&]() {
-                        addErrorHeader();
-                        ex << "#" << i << " (name '" << allClustersInfo[i].Name << "' endpoint '" << allClustersInfo[i].Endpoint << "' path `" << paths[i] << "`): ";
-                    };
-                    try {
-                        auto describeTopicResult = futureDescribe.ExtractValue();
-                        if (!describeTopicResult.IsSuccess()) {
-                            addErrorCluster();
-                            ex << describeTopicResult.GetIssues().ToString();
-                            continue;
-                        }
-                        partitions = std::max(partitions, describeTopicResult.GetTopicDescription().GetTotalPartitionsCount());
-                    } catch (...) {
-                        addErrorCluster();
-                        ex << "Got exception: " << FormatCurrentException();
-                    }
-                }
-                if (!partitions) {
-                    addErrorHeader();
-                    ex << "No parititions found\n";
-                    throw yexception() << ex;
-                }
-                NPq::NConfigurationManager::TTopicDescription desc(path);
-                desc.PartitionsCount = partitions;
-                return NPq::NConfigurationManager::TDescribePathResult::Make<NPq::NConfigurationManager::TTopicDescription>(std::move(desc));
-            });
+            NPq::NConfigurationManager::TTopicDescription desc(path);
+            desc.PartitionsCount = describeTopicResult.GetTopicDescription().GetTotalPartitionsCount();
+            return NPq::NConfigurationManager::TDescribePathResult::Make<NPq::NConfigurationManager::TTopicDescription>(std::move(desc));
         });
     }
 }

@@ -118,42 +118,7 @@ public:
     static TConclusion<TPredicateContainer> BuildPredicateTo(
         std::shared_ptr<NOlap::TPredicate> object, const std::shared_ptr<arrow::Schema>& pkSchema);
 
-    NArrow::TColumnFilter BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const {
-        if (!Object) {
-            auto result = NArrow::TColumnFilter::BuildAllowFilter();
-            result.Add(true, data->GetRecordsCount());
-            return result;
-        }
-        if (!data->GetRecordsCount()) {
-            return NArrow::TColumnFilter::BuildAllowFilter();
-        }
-        auto sortingFields = data->GetSchema()->GetFieldNames();
-        auto position = NArrow::NMerger::TRWSortableBatchPosition(data, 0, sortingFields, {}, false);
-        auto border = NArrow::NMerger::TSortableBatchPosition(Object->Batch, 0, sortingFields, {}, false);
-        const bool needUppedBound = CompareType == NArrow::ECompareType::LESS_OR_EQUAL || CompareType == NArrow::ECompareType::GREATER;
-        auto findBound = position.FindPosition(position, 0, data->GetRecordsCount() - 1, border, needUppedBound);
-
-        ui64 boundIndex = findBound->GetPosition();
-        if (findBound->IsEqual() && needUppedBound) {
-            ++boundIndex;
-            AFL_VERIFY((i64)boundIndex == data->GetRecordsCount())("bound", boundIndex)("data", data->GetRecordsCount());
-        }
-
-        auto filter = NArrow::TColumnFilter::BuildAllowFilter();
-        switch (CompareType) {
-            case NArrow::ECompareType::LESS:
-            case NArrow::ECompareType::LESS_OR_EQUAL:
-                filter.Add(true, boundIndex);
-                filter.Add(false, data->GetRecordsCount() - boundIndex);
-                break;
-            case NArrow::ECompareType::GREATER:
-            case NArrow::ECompareType::GREATER_OR_EQUAL:
-                filter.Add(false, boundIndex);
-                filter.Add(true, data->GetRecordsCount() - boundIndex);
-                break;
-        }
-        return filter;
-    }
+    NArrow::TColumnFilter BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const;
 };
 
 }   // namespace NKikimr::NOlap

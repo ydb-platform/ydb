@@ -27,7 +27,7 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
         AFL_VERIFY(guard.InitSortingPosition(posStart));
         auto cmp = position.Compare(forFound);
         if (cmp == std::partial_ordering::greater) {
-            return TFoundPosition::Greater(posStart);
+            return std::nullopt;
         } else if (!greater && cmp == std::partial_ordering::equivalent) {
             return TFoundPosition::Equal(posStart);
         }
@@ -36,9 +36,9 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
         AFL_VERIFY(guard.InitSortingPosition(posFinish));
         auto cmp = position.Compare(forFound);
         if (cmp == std::partial_ordering::less) {
-            return TFoundPosition::Less(posFinish);
+            return std::nullopt;
         } else if (greater && cmp == std::partial_ordering::equivalent) {
-            return TFoundPosition::Equal(posFinish);
+            return std::nullopt;
         }
     }
     while (posFinish > posStart + 1) {

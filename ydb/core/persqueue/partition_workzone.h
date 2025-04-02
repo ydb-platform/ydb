@@ -15,7 +15,7 @@ struct TPartitionWorkZone {
                               const ui32 totalLevels,
                               const ui32 totalMaxCount) const;
 
-    ui64 GetSize() const { return BodySize + Head.PackedSize; }
+    ui64 GetSize() const;
     ui64 GetBodySizeBefore(TInstant timestamp) const;
 
     TVector<TRequestedBlob> GetBlobsFromBody(const ui64 startOffset,
@@ -46,6 +46,7 @@ struct TPartitionWorkZone {
     const TDataKey* GetLastKey() const;
 
     bool IsNothingWritten() const;
+    bool IsLastBatchPacked() const;
 
     TString SerializeForKey(const TKey& key, ui32 size,
                             ui64 endOffset,
@@ -92,6 +93,12 @@ struct TPartitionWorkZone {
     TVector<TKeyLevel> DataKeysHead;
     std::deque<TDataKey> HeadKeys;
 };
+
+inline
+ui64 TPartitionWorkZone::GetSize() const
+{
+    return BodySize + Head.PackedSize;
+}
 
 inline
 ui64 TPartitionWorkZone::GetHeadGapSize() const

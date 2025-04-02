@@ -10,23 +10,27 @@
                 "PlanNodeType": "Query",
                 "Plans": [
                     {
-                        "Node Type": "Sink",
+                        "Node Type": "Effect",
                         "PlanNodeId": 2,
                         "Plans": [
                             {
-                                "Node Type": "ConstantExpr-Sink",
+                                "CTE Name": "precompute_0_0",
+                                "Node Type": "Upsert-ConstantExpr",
                                 "Operators": [
                                     {
-                                        "Inputs": [],
-                                        "Iterator": "[{idx: 1,text: \"to do or not to do\"}]",
-                                        "Name": "Iterator"
+                                        "Inputs": [
+                                            {
+                                                "InternalOperatorId": 1
+                                            }
+                                        ],
+                                        "Name": "Upsert",
+                                        "Path": "/local/base_simple_ct_script_script/Questions",
+                                        "Table": "base_simple_ct_script_script/Questions"
                                     },
                                     {
                                         "Inputs": [],
-                                        "Name": "Upsert",
-                                        "Path": "/local/base_simple_ct_script_script/Questions",
-                                        "SinkType": "KqpTableSink",
-                                        "Table": "base_simple_ct_script_script/Questions"
+                                        "Iterator": "precompute_0_0",
+                                        "Name": "Iterator"
                                     }
                                 ],
                                 "PlanNodeId": 1,

@@ -154,6 +154,15 @@ void PrintPlan(const TString& plan) {
     std::replace(joinOrder.begin(), joinOrder.end(), ']', ')');
     std::replace(joinOrder.begin(), joinOrder.end(), ',', ' ');
     joinOrder.erase(std::remove(joinOrder.begin(), joinOrder.end(), '\"'), joinOrder.end());
+    joinOrder.erase(std::remove(joinOrder.begin(), joinOrder.end(), '\\'), joinOrder.end());
+
+
+    size_t pos;
+    std::string tpcdsTablePrefix = "test/ds/";
+    while ((pos = joinOrder.find(tpcdsTablePrefix)) != std::string::npos) {
+        joinOrder.erase(pos, tpcdsTablePrefix.length());
+    }
+
     Cout << "JoinOrder" << joinOrder << Endl;
 }
 
@@ -941,6 +950,28 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
             auto join = joinFinder.Find({"partsupp", "lineitem"});
             UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (Grace)");
             UNIT_ASSERT(!join.LhsShuffled);
+            UNIT_ASSERT(join.RhsShuffled);
+        }
+    }
+
+    Y_UNIT_TEST(ShuffleEliminationTpcdsMapJoinBug) {
+        auto [plan, resultSets] = ExecuteJoinOrderTestGenericQueryWithStats(
+            "queries/shuffle_elimination_tpcds_map_join_bug.sql", "stats/tpcds1000s.json", false, true, true
+        );
+
+        auto joinFinder = TFindJoinWithLabels(plan);
+        {
+            auto join = joinFinder.Find({"test/ds/customer", "test/ds/customer_address"});
+            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (MapJoin)");
+        }
+        {
+            auto join = joinFinder.Find({"test/ds/customer_demographics", "test/ds/customer", "test/ds/customer_address"});
+            UNIT_ASSERT_EQUAL(join.Join, "InnerJoin (MapJoin)");
+        }
+        {
+            auto join = joinFinder.Find({"test/ds/customer_demographics", "test/ds/customer", "test/ds/customer_address", "test/ds/store_sales"});
+            UNIT_ASSERT_EQUAL(join.Join, "LeftSemiJoin (Grace)");
+            UNIT_ASSERT(join.LhsShuffled);
             UNIT_ASSERT(join.RhsShuffled);
         }
     }

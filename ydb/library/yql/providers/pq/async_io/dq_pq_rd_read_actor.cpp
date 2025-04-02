@@ -270,7 +270,7 @@ private:
         TActorId RowDispatcherActorId;
         ui64 Generation = std::numeric_limits<ui64>::max();
         THashSet<ui32> HasPendingData;
-        std::set<ui32> Partitions;
+        THashSet<ui32> Partitions;
 
         bool IsWaitingStartSessionAck = false;
         ui64 QueuedBytes = 0;
@@ -607,23 +607,24 @@ void TDqPqRdReadActor::SendStartSession(TSession& sessionInfo) {
     auto str = TStringBuilder() << "Send TEvStartSession to " << sessionInfo.RowDispatcherActorId 
         << ", connection id " << sessionInfo.Generation << " partitions offsets ";
 
+    std::set<ui32> partitions;
     std::map<ui32, ui64> partitionOffsets;
-    for (auto& [partitionId, offset]: NextOffsetFromRD) {
-        if (!sessionInfo.Partitions.contains(partitionId)) {
+    for (auto partitionId : sessionInfo.Partitions) {
+        partitions.insert(partitionId);
+        auto nextOffset = NextOffsetFromRD.find(partitionId);
+        str << "(" << partitionId << " / ";
+        if (nextOffset == NextOffsetFromRD.end()) {
+            str << "<empty>),";
             continue;
         }
-        str << "(" << partitionId << " / " << offset << ")";
-        partitionOffsets.emplace(partitionId, offset);
-    }
-    str << " partitions ";
-    for (auto partitionId : sessionInfo.Partitions) {
-        str << " " << partitionId;
+        partitionOffsets[partitionId] = nextOffset->second;
+        str << nextOffset << "),";
     }
     SRC_LOG_I(str);
 
     auto event = new NFq::TEvRowDispatcher::TEvStartSession(
         SourceParams,
-        sessionInfo.Partitions,
+        partitions,
         Token,
         partitionOffsets,
         StartingMessageTimestamp.MilliSeconds(),

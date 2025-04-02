@@ -125,7 +125,7 @@ When deploying {{ ydb-short-name }} with a Kubernetes operator, the entire `host
 
 ## domains_config: Cluster domain {#domains-config}
 
-This section contains the configuration of the {{ ydb-short-name }} cluster root domain, including the [Blob Storage](#domains-blob) (binary object storage), [State Storage](#domains-state), and [authentication](#auth) configurations.
+This section contains the configuration of the {{ ydb-short-name }} cluster root domain, including the [Blob Storage](#domains-blob) (binary object storage) and [State Storage](#domains-state) configurations.
 
 ### Syntax
 

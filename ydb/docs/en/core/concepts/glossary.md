@@ -20,11 +20,18 @@ Another essential characteristic of {{ ydb-short-name }} databases is that they 
 
 {{ ydb-short-name }} has the following database types:
 
-- **Tenant database** — a logical container with an independent namespace for user-defined objects within the database.
+- [tenant databases](#tenant-database)
+- [root databases](#root-database)
 
-    Tenant databases are completely isolated from each other — they are processed by separate [database nodes](#database-node), they have separate [storage groups](#storage-group), and they can have separate [users](#access-user) with different [access rights](#access-right) and [access levels](#access-level).
+#### Tenant database {#tenant-database}
 
-- **Root database** — a system database created for {{ ydb-short-name }}'s internal purposes at the [root of the cluster scheme](#scheme-root). This database contains service data such as [users](#access-user), [access levels](#access-level) and [access rights](#access-right), [tenant databases](#database), and more.
+A **Tenant database** is a logical container with an independent namespace for user-defined objects within the database.
+
+Tenant databases are completely isolated from each other — they are processed by separate [database nodes](#database-node), they have separate [storage groups](#storage-group), and they can have separate [users](#access-user) with different [access rights](#access-right) and [access levels](#access-level).
+
+#### Root database {#root-database}
+
+A **Root database** is a system database created for {{ ydb-short-name }}'s internal purposes at the [root of the cluster scheme](#scheme-root). This database contains service data such as [users](#access-user), [access levels](#access-level) and [access rights](#access-right), [tenant databases](#tenant-database), and more.
 
 ### Node {#node}
 
@@ -269,7 +276,7 @@ An **authentication token** or **auth token** is a token that {{ ydb-short-name 
 
 ### Cluster scheme {#scheme}
 
-{{ ydb-short-name }} cluster scheme is a hierarchical namespace of a {{ ydb-short-name }} cluster. The only root element of this namespace is a [cluster scheme root](#scheme-root). A root of the cluster scheme can be a [directory](#folder) or a [root database](#database). Children elements of the cluster scheme root can be [databases](#database) or other [scheme objects](#scheme-object). Scheme objects can use nested directories to form a hierarchy.
+{{ ydb-short-name }} cluster scheme is a hierarchical namespace of a {{ ydb-short-name }} cluster. The only root element of this namespace is a [cluster scheme root](#scheme-root). A root of the cluster scheme can be a [directory](#folder) or a [root database](#root-database). Children elements of the cluster scheme root can be [databases](#database) or other [scheme objects](#scheme-object). Scheme objects can use nested directories to form a hierarchy.
 
 ### Database scheme {#scheme-database}
 

@@ -61,6 +61,9 @@ def test_delete_s3_ttl():
                 "TX_COLUMNSHARD_BLOBS_TIER": LogLevels.DEBUG,
                 "FLAT_TX_SCHEMESHARD": LogLevels.DEBUG,
             },
+            query_service_config=dict(
+                available_external_data_sources=["ObjectStorage"]
+            )
         )
         cluster = KiKiMR(config)
         cluster.start()
@@ -251,4 +254,8 @@ def test_delete_s3_ttl():
 
     if wait_for(lambda: data_deleted_from_buckets(), 180):
         print("all data deleted")
+        return
+    # No ydbd has a bug which results in not deletion all data from tiers
+    # After fixing next line should be replaced by
+    # raise Exception('Not all data deleted')
     print('Not all data deleted')

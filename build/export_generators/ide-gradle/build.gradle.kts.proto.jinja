@@ -12,8 +12,12 @@
 {%-     endif -%}
 {%- endmacro -%}
 
-{%- macro PatchGeneratedProto(arg) -%}
-"{{ arg|replace(export_root, "$mainExtractedIncludeProtosDir")|replace(arcadia_root, "$mainExtractedIncludeProtosDir") }}"
+{%- macro PatchGeneratedProto(arg, relative = false) -%}
+{%-     if relative -%}
+"{{ arg|replace(export_root + "/", "")|replace(arcadia_root + "/", "") }}"
+{%-     else -%}
+"{{ arg|replace(export_root, "$baseBuildDir")|replace(arcadia_root, "$baseBuildDir") }}"
+{%-     endif -%}
 {%- endmacro -%}
 
 {%- include "[generator]/proto_vars.jinja" -%}

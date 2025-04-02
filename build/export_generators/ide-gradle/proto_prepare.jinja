@@ -12,17 +12,34 @@ val prepareMainProtos = tasks.register<Copy>("prepareMainProtos") {
 {%- endif %}
 
 {%  if extractIncludeTask -%}
+
 val extractMainLibrariesProtos = tasks.register<Copy>("extractMainLibrariesProtos") {
+{%- if libraries|length -%}
     from("$project_root") {
 {#- list of all library directories -#}
 {%-     for library in libraries -%}
 {%-         set path_and_jar = rsplit(library.jar, '/', 2) %}
         include("{{ path_and_jar[0] }}/**/*.proto")
-{%-     endfor -%}
-{%-     if libraries|length == 0 %}
-        include("dummy_path/*.proto")
-{%-     endif %}
+{%-     endfor %}
     }
+{%  endif -%}
+{%- if target.runs|length or target.custom_runs|length %}
+    from("$baseBuildDir") {
+{%-     for run in target.runs -%}
+{%-         for out in run.out %}
+        include({{ PatchGeneratedProto(out, true) }})
+{%-         endfor -%}
+{%-         for out_dir in run.out_dir %}
+        include({{ PatchGeneratedProto(out_dir, true) }} + "/**/*.proto")
+{%-         endfor -%}
+{%-     endfor -%}
+{%-     for custom_run in target.custom_runs -%}
+{%-         for out in custom_run.outputs %}
+        include({{ PatchGeneratedProto(out, true) }})
+{%-         endfor -%}
+{%-     endfor %}
+    }
+{%  endif -%}
     into(mainExtractedIncludeProtosDir)
 }
 

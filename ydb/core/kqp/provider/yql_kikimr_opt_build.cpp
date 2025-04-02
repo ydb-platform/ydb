@@ -880,6 +880,9 @@ TString GetShowCreateType(const TExprNode& settings) {
     if (HasSetting(settings, "showCreateTable")) {
         return "showCreateTable";
     }
+    if (HasSetting(settings, "showCreateView")) {
+        return "showCreateView";
+    }
     return "";
 }
 
@@ -967,7 +970,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
             auto readTable = maybeReadTable.Cast();
             for (auto setting : readTable.Settings()) {
                 auto name = setting.Name().Value();
-                if (name == "showCreateTable") {
+                if (name == "showCreateTable" || name == "showCreateView") {
                     showCreateReadReplacements[input.Get()] = nullptr;
                 }
             }
@@ -1043,7 +1046,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
                             auto name = tuple.Cast().Name().Value();
                             if (name == "sysViewRewritten") {
                                 isSysViewRewritten = true;
-                            } else if (name == "showCreateTable") {
+                            } else if (name == "showCreateTable" || name == "showCreateView") {
                                 isShowCreate = true;
                             }
                         }
@@ -1070,6 +1073,9 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
                     }
                     if (name == "showCreateTable") {
                         pathType = "Table";
+                    }
+                    if (name == "showCreateView") {
+                        pathType = "View";
                     }
                 }
             }

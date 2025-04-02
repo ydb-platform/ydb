@@ -523,6 +523,9 @@ struct TOperationSpecBase
     /// If operation doesn't finish in time it will be aborted.
     FLUENT_FIELD_OPTION(TDuration, TimeLimit);
 
+    /// @brief Alias for searching for an operation in the future.
+    FLUENT_FIELD_OPTION(TString, Alias);
+
     /// @brief Title to be shown in web interface.
     FLUENT_FIELD_OPTION(TString, Title);
 

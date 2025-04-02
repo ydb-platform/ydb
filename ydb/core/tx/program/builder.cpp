@@ -34,13 +34,13 @@ TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(const 
     if (func.GetFunctionType() == NKikimrSSA::TProgram::EFunctionType::TProgram_EFunctionType_YQL_KERNEL) {
         if (func.HasYqlOperationId() && !kernelLogic) {
             if (func.GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::Equals) {
-                kernelLogic = std::make_shared<TLogicEquals>();
+                kernelLogic = std::make_shared<TLogicEquals>(false);
             } else if (func.GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::StringContains) {
-                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::Contains, true);
+                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::Contains, true, false);
             } else if (func.GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::StartsWith) {
-                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::StartsWith, true);
+                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::StartsWith, true, false);
             } else if (func.GetYqlOperationId() == (ui32)NYql::TKernelRequestBuilder::EBinaryOp::EndsWith) {
-                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::EndsWith, true);
+                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::EndsWith, true, false);
             }
         }
         auto kernelFunction = KernelsRegistry.GetFunction(func.GetKernelIdx());
@@ -75,7 +75,7 @@ TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(const 
 
     switch (func.GetId()) {
         case TId::FUNC_CMP_EQUAL:
-            kernelLogic = std::make_shared<TLogicEquals>();
+            kernelLogic = std::make_shared<TLogicEquals>(true);
             return std::make_shared<TSimpleFunction>(EOperation::Equal);
         case TId::FUNC_CMP_NOT_EQUAL:
             return std::make_shared<TSimpleFunction>(EOperation::NotEqual);
@@ -93,7 +93,7 @@ TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(const 
             return std::make_shared<TSimpleFunction>(EOperation::BinaryLength);
         case TId::FUNC_STR_MATCH: {
             if (auto opts = mkLikeOptions(false)) {
-                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::Contains, true);
+                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::Contains, true, true);
                 return std::make_shared<TSimpleFunction>(EOperation::MatchSubstring, opts);
             }
             break;
@@ -106,35 +106,35 @@ TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(const 
         }
         case TId::FUNC_STR_STARTS_WITH: {
             if (auto opts = mkLikeOptions(false)) {
-                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::StartsWith, true);
+                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::StartsWith, true, true);
                 return std::make_shared<TSimpleFunction>(EOperation::StartsWith, opts);
             }
             break;
         }
         case TId::FUNC_STR_ENDS_WITH: {
             if (auto opts = mkLikeOptions(false)) {
-                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::EndsWith, true);
+                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::EndsWith, true, true);
                 return std::make_shared<TSimpleFunction>(EOperation::EndsWith, opts);
             }
             break;
         }
         case TId::FUNC_STR_MATCH_IGNORE_CASE: {
             if (auto opts = mkLikeOptions(true)) {
-                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::Contains, false);
+                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::Contains, false, true);
                 return std::make_shared<TSimpleFunction>(EOperation::MatchSubstring, opts);
             }
             break;
         }
         case TId::FUNC_STR_STARTS_WITH_IGNORE_CASE: {
             if (auto opts = mkLikeOptions(true)) {
-                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::StartsWith, false);
+                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::StartsWith, false, true);
                 return std::make_shared<TSimpleFunction>(EOperation::StartsWith, opts);
             }
             break;
         }
         case TId::FUNC_STR_ENDS_WITH_IGNORE_CASE: {
             if (auto opts = mkLikeOptions(true)) {
-                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::EndsWith, false);
+                kernelLogic = std::make_shared<TLogicMatchString>(TIndexCheckOperation::EOperation::EndsWith, false, true);
                 return std::make_shared<TSimpleFunction>(EOperation::EndsWith, opts);
             }
             break;

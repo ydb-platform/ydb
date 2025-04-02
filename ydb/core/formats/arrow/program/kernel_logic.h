@@ -8,6 +8,14 @@
 
 namespace NKikimr::NArrow::NSSA {
 
+enum class ECalculationHardness {
+    JustAccessorUsage = 1,
+    NotSpecified = 3,
+    Equals = 5,
+    StringMatching = 10,
+    UnknownCalculation = 20
+};
+
 class IKernelLogic {
 private:
     virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output,
@@ -17,6 +25,8 @@ private:
 
 public:
     virtual ~IKernelLogic() = default;
+
+    virtual ECalculationHardness GetWeight() const = 0;
 
     using TFactory = NObjectFactory::TObjectFactory<IKernelLogic, TString>;
 
@@ -45,14 +55,20 @@ private:
     virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const override {
         return TIndexCheckOperation(Operation, CaseSensitive);
     }
+    virtual ECalculationHardness GetWeight() const override {
+        return ECalculationHardness::StringMatching;
+    }
 
     const TIndexCheckOperation::EOperation Operation;
     const bool CaseSensitive;
+    const bool IsSimpleFunction;
 
 public:
-    TLogicMatchString(const TIndexCheckOperation::EOperation operation, const bool caseSensitive)
+    TLogicMatchString(const TIndexCheckOperation::EOperation operation, const bool caseSensitive, const bool isSimpleFunction)
         : Operation(operation)
-        , CaseSensitive(caseSensitive) {
+        , CaseSensitive(caseSensitive)
+        , IsSimpleFunction(isSimpleFunction)
+    {
     }
 
     virtual TString GetClassName() const override {
@@ -60,7 +76,7 @@ public:
     }
 
     virtual bool IsBoolInResult() const override {
-        return true;
+        return !IsSimpleFunction;
     }
 };
 
@@ -73,16 +89,24 @@ private:
     virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const override {
         return TIndexCheckOperation(TIndexCheckOperation::EOperation::Equals, true);
     }
+    const bool IsSimpleFunction;
+
+    virtual ECalculationHardness GetWeight() const override {
+        return ECalculationHardness::Equals;
+    }
 
 public:
-    TLogicEquals() = default;
+    TLogicEquals(const bool isSimpleFunction)
+        : IsSimpleFunction(isSimpleFunction)
+    {
+    }
 
     virtual TString GetClassName() const override {
         return "EQUALS";
     }
 
     virtual bool IsBoolInResult() const override {
-        return true;
+        return !IsSimpleFunction;
     }
 };
 
@@ -93,6 +117,10 @@ public:
     }
     virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const override {
         return std::nullopt;
+    }
+
+    virtual ECalculationHardness GetWeight() const override {
+        return ECalculationHardness::JustAccessorUsage;
     }
 
 private:

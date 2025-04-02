@@ -362,7 +362,7 @@ struct TEvPQ {
 
         TEvSetClientInfo(const ui64 cookie, const TString& clientId, const ui64 offset, const TString& sessionId, const ui64 partitionSessionId,
                             const ui32 generation, const ui32 step, const TActorId& pipeClient,
-                            ESetClientInfoType type = ESCI_OFFSET, ui64 readRuleGeneration = 0, bool strict = false, bool killReadSession = false)
+                            ESetClientInfoType type = ESCI_OFFSET, ui64 readRuleGeneration = 0, bool strict = false)
         : Cookie(cookie)
         , ClientId(clientId)
         , Offset(offset)
@@ -373,7 +373,6 @@ struct TEvPQ {
         , Type(type)
         , ReadRuleGeneration(readRuleGeneration)
         , Strict(strict)
-        , KillReadSession(killReadSession)
         , PipeClient(pipeClient)
         {
         }
@@ -388,7 +387,6 @@ struct TEvPQ {
         ESetClientInfoType Type;
         ui64 ReadRuleGeneration;
         bool Strict;
-        bool KillReadSession;
         TActorId PipeClient;
     };
 

@@ -69,7 +69,6 @@ message TPersQueuePartitionRequest {
 
         optional bool MirrorerRequest = 10 [default = false];
         optional bool Strict = 11 [default = false];
-        optional bool KillReadSession = 12 [default = false];
     }
 
     message TCmdGetClientOffset {

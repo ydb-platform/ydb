@@ -1,6 +1,7 @@
 def cleanup_type_name(type_name):
     return type_name.replace('(', '').replace(')', '').replace(',', '')
 
+
 ttl_types = {
     "DyNumber": "CAST('3742656{:03}' AS DyNumber)",
     "Uint32": "CAST(3742656{:03} AS Uint32)",

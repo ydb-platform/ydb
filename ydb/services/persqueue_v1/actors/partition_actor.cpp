@@ -969,10 +969,6 @@ void TPartitionActor::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev, const 
 
     TabletGeneration = msg->Generation;
     NodeId = msg->ServerId.NodeId();
-
-    if (InitDone) {
-        ctx.Send(ParentId, new TEvPQProxy::TEvUpdateSession(Partition, NodeId, TabletGeneration));
-    }
 }
 
 void TPartitionActor::Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const TActorContext& ctx) {

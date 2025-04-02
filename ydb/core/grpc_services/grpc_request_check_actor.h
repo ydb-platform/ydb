@@ -42,11 +42,11 @@ bool TGRpcRequestProxyHandleMethods::ValidateAndReplyOnError(TCtx* ctx) {
 inline const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>& GetEntriesForAuthAndCheckRequest(TEvRequestAuthAndCheck::TPtr& ev) {
     const bool isBearerToken = ev->Get()->YdbToken && ev->Get()->YdbToken->StartsWith("Bearer");
     const bool useAccessService = AppData()->AuthConfig.GetUseAccessService();
-    const bool emptyClusterAccessResourceId = AppData()->AuthConfig.GetClusterAccessResourceId().empty();
+    const bool hasClusterAccessResourceId = !AppData()->AuthConfig.GetClusterAccessResourceId().empty();
     const bool needClusterAccessResourceCheck = AppData()->DomainsConfig.GetSecurityConfig().ViewerAllowedSIDsSize() > 0 ||
                                 AppData()->DomainsConfig.GetSecurityConfig().MonitoringAllowedSIDsSize() > 0;
 
-    if (!isBearerToken || !useAccessService || emptyClusterAccessResourceId || !needClusterAccessResourceCheck) {
+    if (!isBearerToken || !useAccessService || !hasClusterAccessResourceId || !needClusterAccessResourceCheck) {
         static const TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> emptyEntries = {};
         return emptyEntries;
     }
@@ -59,8 +59,7 @@ inline const TVector<TEvTicketParser::TEvAuthorizeTicket::TEntry>& GetEntriesFor
         } else if (accessServiceType == "Nebius_v1") {
             permissions = {"ydb.clusters.get", "ydb.clusters.monitor", "ydb.clusters.manage"};
         } else {
-            static const TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> emptyEntries = {};
-            return emptyEntries;
+            return {};
         }
         const TString& clusterAccessResourceId = AppData()->AuthConfig.GetClusterAccessResourceId();
         TVector<NKikimr::TEvTicketParser::TEvAuthorizeTicket::TEntry> entries = {

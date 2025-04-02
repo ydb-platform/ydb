@@ -80,6 +80,10 @@ private:
         auto &hosts = map["hosts"].GetArray();
         for (auto &host : hosts)
             *request->Record.AddHosts() = host.GetString();
+        
+        auto &devices = map["devices"].GetArray();
+        for (auto &device : devices)
+            *request->Record.AddDevices() = device.GetString();
 
         const auto &params = http.GetParams();
         if (params.contains("dry_run"))
@@ -109,9 +113,15 @@ private:
         NJson::TJsonValue hosts(NJson::JSON_ARRAY);
         for (auto &host : resp.GetHosts())
             hosts.AppendValue(host);
+
+        NJson::TJsonValue devices(NJson::JSON_ARRAY);
+        for (auto &device : resp.GetDevices())
+            devices.AppendValue(device);
+
         NJson::TJsonValue map;
         map.InsertValue("id", resp.GetTaskId());
         map.InsertValue("hosts", hosts);
+        map.InsertValue("devices", devices);
         map.InsertValue("status", status);
         map.InsertValue("message", resp.GetStatus().GetReason());
 
@@ -147,12 +157,19 @@ private:
     void Reply(const TWalleListTasksResponse &resp, const TActorContext &ctx) {
         NJson::TJsonValue tasks(NJson::JSON_ARRAY);
         for (auto &task : resp.GetTasks()) {
+
             NJson::TJsonValue hosts(NJson::JSON_ARRAY);
             for (auto &host : task.GetHosts())
                 hosts.AppendValue(host);
+
+            NJson::TJsonValue devices(NJson::JSON_ARRAY);
+            for (auto &device : task.GetDevices())
+                devices.AppendValue(device);
+
             NJson::TJsonValue map;
             map.InsertValue("id", task.GetTaskId());
             map.InsertValue("hosts", hosts);
+            map.InsertValue("devices", devices);
             map.InsertValue("status", task.GetStatus());
 
             tasks.AppendValue(map);
@@ -199,9 +216,15 @@ private:
         NJson::TJsonValue hosts(NJson::JSON_ARRAY);
         for (auto &host : resp.GetTask().GetHosts())
             hosts.AppendValue(host);
+
+        NJson::TJsonValue devices(NJson::JSON_ARRAY);
+        for (auto &device : resp.GetTask().GetDevices())
+            devices.AppendValue(device);
+
         NJson::TJsonValue map;
         map.InsertValue("id", resp.GetTask().GetTaskId());
         map.InsertValue("hosts", hosts);
+        map.InsertValue("devices", devices);
         map.InsertValue("status", status);
         map.InsertValue("message", resp.GetStatus().GetReason());
 

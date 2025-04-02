@@ -650,12 +650,13 @@ void TDqPqRdReadActor::PassAway() { // Is called from Compute Actor
     for (auto& [rowDispatcherActorId, sessionInfo] : Sessions) {
         StopSession(sessionInfo);
     }
-    for (auto& clusterState : std::exchange(Clusters, {})) {
+    for (auto& clusterState : Clusters) {
         if (clusterState.Child == this) {
             continue;
         }
         Send(clusterState.ChildId, new NActors::TEvents::TEvPoison);
     }
+    Clusters.clear();
     FederatedTopicClient.Reset();
     TActor<TDqPqRdReadActor>::PassAway();
 

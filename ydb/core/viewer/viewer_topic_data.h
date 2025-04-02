@@ -95,10 +95,14 @@ public:
                 description: partition to read from
                 required: true
                 type: integer
+              - name: read_timestamp
+                in: query
+                description: min message timestamp to read from
+                required: false
               - name: offset
                 in: query
                 description: start offset to read from
-                required: true
+                required: false
                 type: integer
               - name: limit
                 in: query

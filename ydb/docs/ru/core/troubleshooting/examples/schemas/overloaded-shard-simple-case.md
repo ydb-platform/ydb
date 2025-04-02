@@ -227,31 +227,31 @@
 ```mermaid
 flowchart
 
-subgraph client[Client VM]
+subgraph client[Клиент]
     cli(YDB CLI)
 end
 
 client-->cluster
 
-subgraph cluster["YDB Cluster"]
+subgraph cluster["Кластер YDB"]
     direction TB
-    subgraph S1["Server 1"]
-        node1(YDB database node 1)
-        node2(YDB database node 2)
-        node3(YDB database node 3)
-        node4(YDB storage node 1)
+    subgraph S1["Сервер 1"]
+        node1(Узел базы данных YDB 1)
+        node2(Узел базы данных YDB 2)
+        node3(Узел базы данных YDB 3)
+        node4(Узел хранения YDB 1)
     end
-    subgraph S2["Server 2"]
-        node5(YDB database node 1)
-        node6(YDB database node 2)
-        node7(YDB database node 3)
-        node8(YDB storage node 1)
+    subgraph S2["Сервер 2"]
+        node5(Узел базы данных YDB 1)
+        node6(Узел базы данных YDB 2)
+        node7(Узел базы данных YDB 3)
+        node8(Узел хранения YDB 1)
     end
-    subgraph S3["Server 3"]
-        node9(YDB database node 1)
-        node10(YDB database node 2)
-        node11(YDB database node 3)
-        node12(YDB storage node 1)
+    subgraph S3["Сервер 3"]
+        node9(Узел базы данных YDB 1)
+        node10(Узел базы данных YDB 2)
+        node11(Узел базы данных YDB 3)
+        node12(Узел хранения YDB 1)
     end
 end
 

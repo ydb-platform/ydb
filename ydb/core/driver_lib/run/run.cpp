@@ -1522,7 +1522,7 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
     if (serviceMask.EnableBlobCache) {
         sil->AddServiceInitializer(new TBlobCacheInitializer(runConfig));
-    }
+    }    
     if (serviceMask.EnableLogger) {
         sil->AddServiceInitializer(new TLoggerInitializer(runConfig, LogSettings, LogBackend));
     }
@@ -1620,6 +1620,8 @@ TIntrusivePtr<TServiceInitializersList> TKikimrRunner::CreateServiceInitializers
     }
 
     sil->AddServiceInitializer(new TMemProfMonitorInitializer(runConfig, ProcessMemoryInfoProvider));
+
+    sil->AddServiceInitializer(new TSharedMetadaCacheInitializer(runConfig));
 
 #if defined(ENABLE_MEMORY_TRACKING)
     if (serviceMask.EnableMemoryTracker) {

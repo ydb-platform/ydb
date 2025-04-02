@@ -62,7 +62,7 @@ TConclusionStatus TJsonScanExtractor::DoAddDataToBuilders(const std::shared_ptr<
                 }
             } else {
                 std::deque<std::unique_ptr<IJsonObjectExtractor>> iterators;
-                paddedStrings.emplace_back(simdjson::padded_string(sbJson.data(), sbJson.size()));
+                paddedStrings.emplace_back(sbJson.data(), sbJson.size());
                 simdjson::simdjson_result<simdjson::ondemand::document> doc = simdParser.iterate(paddedStrings.back());
                 auto conclusion = TSIMDExtractor(doc, FirstLevelOnly).Fill(dataBuilder, iterators);
                 if (conclusion.IsFail()) {

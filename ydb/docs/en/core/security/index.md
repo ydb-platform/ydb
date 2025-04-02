@@ -12,7 +12,7 @@ This section of {{ ydb-short-name }} documentation covers security-related aspec
 
     [Access rights](./authorization.md#right) in {{ ydb-short-name }} are tied to [access objects](../concepts/glossary.md#access-object) using [access control lists (ACL)](../concepts/glossary.md#access-control-list). The ACL format is described in [{#T}](./short-access-control-notation.md).
 
-    {{ ydb-short-name }} uses [access levels](../concepts/glossary.md#access-level) to manage [access subject](../concepts/glossary.md#access-subject) privileges that are not related to [scheme objects](../concepts/glossary.md#scheme-object). Access levels are granted to users in [access level lists](../concepts/glossary.md#access-level-list)
+    {{ ydb-short-name }} uses [access levels](../concepts/glossary.md#access-level) to manage [access subject](../concepts/glossary.md#access-subject) privileges that are not related to [scheme objects](../concepts/glossary.md#scheme-object). Access levels are granted to users in [access level lists](../concepts/glossary.md#access-level-list).
 
     [Built-in security](./builtin-security.md) is configured automatically by default when the {{ ydb-short-name }} cluster is started for the first time. This process adds a [superuser](./builtin-security.md#superuser) and a set of [roles](./builtin-security.md#role) for convenient user access management.
 

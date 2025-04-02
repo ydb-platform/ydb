@@ -156,7 +156,7 @@ public:
         } else {
             Response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
         }
-        LOG_N("Finish" << Debug() << " " << Response->Record.ShortDebugString());
+        LOG_N("Finish " << Debug() << " " << Response->Record.ShortDebugString());
         Send(ResponseActorId, Response.Release());
         Driver = nullptr;
         PassAway();
@@ -172,8 +172,8 @@ public:
     }
 
     TString Debug() const {
-        return TStringBuilder() << " TSampleKScan Id: " << BuildId
-            << " K: " << K << " Clusters: " << MaxRows.size() << " ";
+        return TStringBuilder() << "TSampleKScan Id: " << BuildId
+            << " K: " << K << " Clusters: " << MaxRows.size();
     }
 
 private:

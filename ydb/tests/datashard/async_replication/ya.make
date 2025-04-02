@@ -3,8 +3,7 @@ ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
 
 FORK_SUBTESTS()
 SPLIT_FACTOR(20)
-SIZE(LARGE)
-TAG(ya:fat)
+SIZE(MEDIUM)
 
 TEST_SRCS(
     test_async_replication.py

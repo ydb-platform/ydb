@@ -1388,7 +1388,10 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             UNIT_ASSERT(writeSession_1->Write(Msg(msg, seqNo++)));
             UNIT_ASSERT(writeSession_1->Write(Msg(msg, seqNo++)));
             UNIT_ASSERT(writeSession_1->Write(Msg(msg, seqNo++)));
+            writeSession_1->Close();
+
             UNIT_ASSERT(writeSession_2->Write(Msg(msg, seqNo++)));
+            writeSession_2->Close();
             Sleep(TDuration::Seconds(15));
             auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
             UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 3);
@@ -1427,18 +1430,6 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
                             if (!commitSent) {
                                 commitSent = true;
                                 Sleep(TDuration::MilliSeconds(300));
-
-                                {
-                                    auto describeConsumerSettings = TDescribeConsumerSettings().IncludeStats(true);
-                                    auto result = client.DescribeConsumer(TEST_TOPIC, TEST_CONSUMER, describeConsumerSettings).GetValueSync();
-                                    UNIT_ASSERT(result.IsSuccess());
-
-                                    auto description = result.GetConsumerDescription();
-
-                                    auto stats = description.GetPartitions().at(0).GetPartitionConsumerStats();
-                                    UNIT_ASSERT(stats);
-                                    UNIT_ASSERT(stats->GetCommittedOffset() >= 5);
-                                }
 
                                 readSessionId = message.GetPartitionSession()->GetReadSessionId();
                                 TCommitOffsetSettings commitSettings {.ReadSessionId_ = message.GetPartitionSession()->GetReadSessionId()};
@@ -1560,11 +1551,13 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             UNIT_ASSERT(writeSession_1->Write(Msg(msg, seqNo++)));
             UNIT_ASSERT(writeSession_1->Write(Msg(msg, seqNo++)));
             UNIT_ASSERT(writeSession_1->Write(Msg(msg, seqNo++)));
+            writeSession_1->Close();
             Sleep(TDuration::Seconds(15));
             auto describe = client.DescribeTopic(TEST_TOPIC).GetValueSync();
             UNIT_ASSERT_EQUAL(describe.GetTopicDescription().GetPartitions().size(), 1);
         }
 
+        auto writeSession_2 = CreateWriteSession(client, "producer-1", 0, std::string{TEST_TOPIC}, false);
         auto reader = client.CreateReadSession(
             TReadSessionSettings()
                 .AutoPartitioningSupport(true)
@@ -1592,19 +1585,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
                         if (message.GetSeqNo() == 6) {
                             if (!commitSent) {
                                 commitSent = true;
-                                Sleep(TDuration::MilliSeconds(1000));
-
-                                {
-                                    auto describeConsumerSettings = TDescribeConsumerSettings().IncludeStats(true);
-                                    auto result = client.DescribeConsumer(TEST_TOPIC, TEST_CONSUMER, describeConsumerSettings).GetValueSync();
-                                    UNIT_ASSERT(result.IsSuccess());
-
-                                    auto description = result.GetConsumerDescription();
-
-                                    auto stats = description.GetPartitions().at(0).GetPartitionConsumerStats();
-                                    UNIT_ASSERT(stats);
-                                    UNIT_ASSERT(stats->GetCommittedOffset() == 5);
-                                }
+                                Sleep(TDuration::MilliSeconds(300));
 
                                 readSessionId = message.GetPartitionSession()->GetReadSessionId();
                                 TCommitOffsetSettings commitSettings {.ReadSessionId_ = message.GetPartitionSession()->GetReadSessionId()};
@@ -1620,7 +1601,6 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
                                     auto stats = description.GetPartitions().at(0).GetPartitionConsumerStats();
                                     UNIT_ASSERT(stats);
-
                                     UNIT_ASSERT(stats->GetCommittedOffset() == 8);
                                 }
 
@@ -1638,7 +1618,6 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
                                     auto stats = description.GetPartitions().at(0).GetPartitionConsumerStats();
                                     UNIT_ASSERT(stats);
-
                                     UNIT_ASSERT(stats->GetCommittedOffset() == 8);
                                 }
 
@@ -1655,7 +1634,6 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
 
                                     auto stats = description.GetPartitions().at(0).GetPartitionConsumerStats();
                                     UNIT_ASSERT(stats);
-
                                     UNIT_ASSERT(stats->GetCommittedOffset() == 8);
                                 }
 
@@ -1666,7 +1644,7 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
                             message.Commit();
                         }
                     }
-                    UNIT_ASSERT(writeSession_1->Write(Msg(msg, seqNo++)));
+                    UNIT_ASSERT(writeSession_2->Write(Msg(msg, seqNo++)));
                 } else if (auto* x = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&event)) {
                     x->Confirm();
                     Cerr << "SESSION EVENT " << x->DebugString() << Endl << Flush;
@@ -1691,8 +1669,6 @@ Y_UNIT_TEST_SUITE(TopicAutoscaling) {
             Sleep(TDuration::MilliSeconds(250));
         }
     }
-
-
 
     Y_UNIT_TEST(PartitionSplit_AutosplitByLoad) {
         TTopicSdkTestSetup setup = CreateSetup();

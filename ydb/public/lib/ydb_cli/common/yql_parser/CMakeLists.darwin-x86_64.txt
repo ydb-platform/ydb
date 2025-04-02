@@ -12,36 +12,25 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
-add_library(core-sys_view-show_create)
+add_subdirectory(ut)
+
+add_library(ydb_cli-common-yql_parser)
 
 
-target_compile_options(core-sys_view-show_create PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(core-sys_view-show_create PUBLIC
+target_link_libraries(ydb_cli-common-yql_parser PUBLIC
   contrib-libs-cxxsupp
   yutil
-  ydb-core-base
-  core-kqp-runtime
-  ydb-core-protos
-  scheme-defaults-protos
-  core-sys_view-common
-  core-tx-schemeshard
-  core-tx-tx_proxy
-  ydb-core-ydb_convert
-  library-actors-core
-  api-protos
-  public-lib-json_value
-  ydb_cli-dump-util
+  src-client-value
   src-client-types
-  yql-essentials-ast
+  essentials-parser-lexer_common
+  essentials-parser-proto_ast
+  essentials-sql-settings
+  sql-v1-lexer
+  v1-lexer-antlr4
+  v1-lexer-antlr4_ansi
 )
 
-target_sources(core-sys_view-show_create PRIVATE
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/show_create/create_table_formatter.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/show_create/create_view_formatter.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/show_create/formatters_common.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/sys_view/show_create/show_create.cpp
+target_sources(ydb_cli-common-yql_parser PRIVATE
+  ${PROJECT_SOURCE_DIR}/ydb/public/lib/ydb_cli/common/yql_parser/yql_parser.cpp
 )
 

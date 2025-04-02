@@ -19,6 +19,7 @@ get_built_tool_path(
   enum_parser
 )
 
+add_subdirectory(yql_parser)
 add_subdirectory(ut)
 
 add_library(common)
@@ -49,6 +50,7 @@ target_link_libraries(common PUBLIC
   client-types-credentials
   types-credentials-oauth2_token_exchange
   ydb-library-arrow_parquet
+  ydb_cli-common-yql_parser
   tools-enum_parser-enum_serialization_runtime
 )
 

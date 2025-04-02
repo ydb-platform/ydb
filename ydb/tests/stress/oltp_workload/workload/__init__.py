@@ -4,7 +4,7 @@ import time
 import threading
 
 from ydb.tests.stress.common.common import WorkloadBase
-from ydb.tests.datashard.lib.create_table import cleanup_type_name, create_table, pk_types, non_pk_types, null_types
+from ydb.tests.datashard.lib.create_table import cleanup_type_name, pk_types, non_pk_types, null_types
 
 ydb.interceptor.monkey_patch_event_handler()
 
@@ -24,17 +24,20 @@ class WorkloadInsertDeleteAllTypes(WorkloadBase):
 
     def _loop(self):
         table_path = self.get_table_path(self.table_name)
-        columns = {
-            "pk_": pk_types.keys(),
-            "null_pk_": null_types.keys(),
-            "col_": non_pk_types.keys(),
-            "null_col_": null_types.keys(),
-        }
-        pk_columns = {
-            "pk_": pk_types.keys(),
-            "null_pk_": null_types.keys(),
-        }
-        create_sql = create_table(table_path, columns, pk_columns, {}, "", "")
+
+        create_sql = f"""
+            CREATE TABLE `{table_path}` (
+                pk Uint64,
+                {", ".join(["pk_" + cleanup_type_name(type_name) + " " + type_name for type_name in pk_types.keys()])},
+                {", ".join(["null_pk_" + cleanup_type_name(type_name) + " " + type_name for type_name in null_types.keys()])},
+                {", ".join(["col_" + cleanup_type_name(type_name) + " " + type_name for type_name in non_pk_types.keys()])},
+                {", ".join(["null_col_" + cleanup_type_name(type_name) + " " + type_name for type_name in null_types.keys()])},
+                PRIMARY KEY(
+                {", ".join(["pk_" + cleanup_type_name(type_name) for type_name in pk_types.keys()])},
+                {", ".join(["null_pk_" + cleanup_type_name(type_name) for type_name in null_types.keys()])}
+                )
+            )
+        """
 
         self.client.query(create_sql, True,)
         inflight = 10

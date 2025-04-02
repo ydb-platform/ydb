@@ -133,7 +133,7 @@ null_types = {
 
 
 def create_table(table_name: str, columns: dict[str, dict[str]], pk_colums: dict[str, dict[str]], index_colums: dict[str, dict[str]], unique: str, sync: str) -> str:
-    sql_create = f"CREATE TABLE {table_name} ("
+    sql_create = f"CREATE TABLE `{table_name}` ("
     for prefix in columns.keys():
         for type_name in columns[prefix]:
             if prefix != "ttl_" or type_name != "":

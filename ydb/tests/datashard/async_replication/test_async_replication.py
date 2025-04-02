@@ -2,7 +2,7 @@ import pytest
 import time
 from ydb.tests.datashard.lib.base_async_replication import TestBase
 from ydb.tests.datashard.lib.create_table import create_table, create_ttl, cleanup_type_name, pk_types, non_pk_types, index_first, index_second, ttl_types, \
-    index_first_sync, index_second_sync, index_three_sync, index_four_sync, index_zero_sync, index_three_sync_not_Bool
+    index_first_sync, index_second_sync, index_three_sync, index_four_sync, index_zero_sync
 
 
 class TestAsyncReplication(TestBase):

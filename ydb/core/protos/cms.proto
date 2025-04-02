@@ -355,12 +355,14 @@ message TWalleCreateTaskRequest {
   optional string Action = 4;
   repeated string Hosts = 5;
   optional bool   DryRun = 6;
+  repeated string Devices = 7;
 }
 
 message TWalleCreateTaskResponse {
   optional TStatus Status = 1;
   optional string  TaskId = 2;
   repeated string  Hosts = 3;
+  repeated string  Devices = 4;
 }
 
 message TWalleListTasksRequest {
@@ -370,6 +372,7 @@ message TWalleTaskInfo {
   optional string TaskId = 1;
   repeated string Hosts = 2;
   optional string Status = 3;
+  repeated string Devices = 4;
 }
 
 message TWalleListTasksResponse {

@@ -24,6 +24,7 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/basics/appdata.h>
+#include <ydb/core/testlib/mock_transfer_writer_factory.h>
 #include <ydb/core/protos/kesus.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
 #include <ydb/core/protos/console_tenant.pb.h>
@@ -157,6 +158,8 @@ namespace Tests {
         std::shared_ptr<NKikimr::NMsgBusProxy::IPersQueueGetReadSessionsInfoWorkerFactory> PersQueueGetReadSessionsInfoWorkerFactory;
         std::shared_ptr<NKikimr::NHttpProxy::IAuthFactory> DataStreamsAuthFactory;
         std::shared_ptr<NKikimr::NPQ::TPersQueueMirrorReaderFactory> PersQueueMirrorReaderFactory = std::make_shared<NKikimr::NPQ::TPersQueueMirrorReaderFactory>();
+        std::shared_ptr<NKikimr::NReplication::NService::ITransferWriterFactory> TransferWriterFactory = std::make_shared<MockTransferWriterFactory>();
+
         bool EnableMetering = false;
         TString MeteringFilePath;
         TString AwsRegion;

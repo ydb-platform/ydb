@@ -537,6 +537,7 @@ namespace Tests {
             appData.GraphConfig.MergeFrom(Settings->AppConfig->GetGraphConfig());
             appData.SqsConfig.MergeFrom(Settings->AppConfig->GetSqsConfig());
             appData.SharedCacheConfig.MergeFrom(Settings->AppConfig->GetSharedCacheConfig());
+            appData.TransferWriterFactory = Settings->TransferWriterFactory.get();
 
             appData.DynamicNameserviceConfig = new TDynamicNameserviceConfig;
             auto dnConfig = appData.DynamicNameserviceConfig;

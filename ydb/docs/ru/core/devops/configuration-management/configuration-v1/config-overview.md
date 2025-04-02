@@ -1,4 +1,4 @@
-# Обзор конфигурации
+# Обзор конфигурации v1
 
 {% include [deprecated](_includes/deprecated.md) %}
 

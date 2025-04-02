@@ -25,6 +25,7 @@ namespace NKafka {
             STFUNC(StateWork) {
                 switch (ev->GetTypeRewrite()) {
                     // will be eimplemented in a future PR
+                    // ToDo: add poison pill handler
                 }
             }
     };

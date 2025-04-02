@@ -2,7 +2,9 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/raw_socket/sock_config.h>
 #include <ydb/core/util/address_classifier.h>
+#include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
 #include <ydb/core/kafka_proxy/actors/kafka_balancer_actor.h>
+#include <ydb/core/kafka_proxy/actors/kafka_metadata_actor.h>
 
 
 #include "actors/actors.h"
@@ -49,7 +51,7 @@ public:
     TEvPollerReady* InactivityEvent = nullptr;
 
     const TActorId ListenerActorId;
-    const TActorId KafkaTxnCoordinatorActorId;
+    const TActorId KafkaTxnCoordinatorActorId = NKafka::MakeKafkaTransactionsServiceID();
 
     TIntrusivePtr<TSocketDescriptor> Socket;
     TSocketAddressType Address;
@@ -86,11 +88,8 @@ public:
     TKafkaConnection(const TActorId& listenerActorId,
                      TIntrusivePtr<TSocketDescriptor> socket,
                      TNetworkConfig::TSocketAddressType address,
-                     const NKikimrConfig::TKafkaProxyConfig& config,
-                     const TActorId& discoveryCacheActorId,
-                     const TActorId& transactionsCoordinatorActorId)
+                     const NKikimrConfig::TKafkaProxyConfig& config)
         : ListenerActorId(listenerActorId)
-        , KafkaTxnCoordinatorActorId(transactionsCoordinatorActorId)
         , Socket(std::move(socket))
         , Address(address)
         , Buffer(Socket.Get(), config.GetPacketSize())
@@ -101,7 +100,6 @@ public:
     {
         SetNonBlock();
         IsSslRequired = Socket->IsSslSupported();
-        Context->DiscoveryCacheActor = discoveryCacheActorId;
     }
 
     void Bootstrap() {
@@ -295,7 +293,7 @@ protected:
     }
 
     void HandleMessage(TRequestHeaderData* header, const TMessagePtr<TMetadataRequestData>& message) {
-        Register(CreateKafkaMetadataActor(Context, header->CorrelationId, message, Context->DiscoveryCacheActor));
+        Register(CreateKafkaMetadataActor(Context, header->CorrelationId, message, NKafka::MakeKafkaDiscoveryCacheID()));
     }
 
     void HandleMessage(const TRequestHeaderData* header, const TMessagePtr<TSaslAuthenticateRequestData>& message) {
@@ -808,10 +806,8 @@ protected:
 NActors::IActor* CreateKafkaConnection(const TActorId& listenerActorId,
                                        TIntrusivePtr<TSocketDescriptor> socket,
                                        TNetworkConfig::TSocketAddressType address,
-                                       const NKikimrConfig::TKafkaProxyConfig& config,
-                                       const TActorId& discoveryCacheActorId,
-                                       const TActorId& transactionsCoordinatorActorId) {
-    return new TKafkaConnection(listenerActorId, std::move(socket), std::move(address), config, discoveryCacheActorId, transactionsCoordinatorActorId);
+                                       const NKikimrConfig::TKafkaProxyConfig& config) {
+    return new TKafkaConnection(listenerActorId, std::move(socket), std::move(address), config);
 }
 
 } // namespace NKafka

@@ -285,6 +285,25 @@ namespace {
             UNIT_ASSERT_VALUES_EQUAL(message.Topics[1].Partitions[0].PartitionIndex, 0);
             UNIT_ASSERT_EQUAL(message.Topics[1].Partitions[0].ErrorCode, NKafka::EKafkaErrors::PRODUCER_FENCED);
         }
+
+        Y_UNIT_TEST(AfterSecondInitializationOldTxnRequestsShouldBeFenced) {
+            ui64 correlationId = 123;
+            TString txnId = "my-tx-id";
+            i64 producerId = 1;
+            i16 producerEpoch = 0;
+            // first app initializes
+            SaveTxnProducer(txnId, producerId, producerEpoch);
+            // other app initializes with same transactional id
+            SaveTxnProducer(txnId, producerId, producerEpoch + 1);
+
+            // first app sends txn request
+            SendEndTxnRequest(correlationId, txnId, producerId, producerEpoch);
+            // will respond to edge, cause we provieded edge actorId as a connectionId in SendAddPartitionsToTxnRequest
+            auto firstResponse = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvResponse>();
+            
+            UNIT_ASSERT(firstResponse != nullptr);
+            UNIT_ASSERT_EQUAL(firstResponse->ErrorCode, NKafka::EKafkaErrors::PRODUCER_FENCED);
+        }
     }
 
 } // namespace

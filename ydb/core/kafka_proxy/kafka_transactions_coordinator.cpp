@@ -9,7 +9,7 @@ namespace NKafka {
         auto request = ev->Get();
 
         if (ProducersByTransactionalId.contains(request->TransactionalId)) {
-            auto currentProducerState = ProducersByTransactionalId[request->TransactionalId];
+            auto& currentProducerState = ProducersByTransactionalId[request->TransactionalId];
             auto newProducerState = TProducerState(request->ProducerId, request->ProducerEpoch);
 
             if (NewProducerStateIsOutdated(currentProducerState, newProducerState)) {

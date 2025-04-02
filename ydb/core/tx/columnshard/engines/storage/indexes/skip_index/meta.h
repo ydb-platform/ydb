@@ -13,15 +13,16 @@ private:
     using TBase = TIndexByColumns;
 
 public:
-    using EOperation = NArrow::NSSA::EIndexCheckOperation;
+    using EOperation = NArrow::NSSA::TIndexCheckOperation::EOperation;
 
 private:
-    virtual bool DoIsAppropriateFor(const TString& subColumnName, const EOperation op) const = 0;
-    virtual bool DoCheckValue(
-        const TString& data, const std::optional<ui64> cat, const std::shared_ptr<arrow::Scalar>& value, const EOperation op) const = 0;
+    virtual bool DoIsAppropriateFor(const NArrow::NSSA::TIndexCheckOperation& op) const = 0;
+    virtual bool DoCheckValue(const TString& data, const std::optional<ui64> cat, const std::shared_ptr<arrow::Scalar>& value,
+        const NArrow::NSSA::TIndexCheckOperation& op) const = 0;
 
 public:
-    bool CheckValue(const TString& data, const std::optional<ui64> cat, const std::shared_ptr<arrow::Scalar>& value, const EOperation op) const {
+    bool CheckValue(const TString& data, const std::optional<ui64> cat, const std::shared_ptr<arrow::Scalar>& value,
+        const NArrow::NSSA::TIndexCheckOperation& op) const {
         return DoCheckValue(data, cat, value, op);
     }
 
@@ -29,11 +30,14 @@ public:
         return true;
     }
 
-    bool IsAppropriateFor(const NRequest::TOriginalDataAddress& addr, const EOperation op) const {
+    bool IsAppropriateFor(const NRequest::TOriginalDataAddress& addr, const NArrow::NSSA::TIndexCheckOperation& op) const {
         if (GetColumnId() != addr.GetColumnId()) {
             return false;
         }
-        return DoIsAppropriateFor(addr.GetSubColumnName(), op);
+        if (!GetDataExtractor()->CheckForIndex(addr, nullptr)) {
+            return false;
+        }
+        return DoIsAppropriateFor(op);
     }
     using TBase::TBase;
 };
@@ -42,11 +46,11 @@ class TSkipBitmapIndex: public TSkipIndex {
 private:
     std::shared_ptr<IBitsStorageConstructor> BitsStorageConstructor;
     using TBase = TSkipIndex;
-    virtual bool DoCheckValueImpl(
-        const IBitsStorage& data, const std::optional<ui64> cat, const std::shared_ptr<arrow::Scalar>& value, const EOperation op) const = 0;
+    virtual bool DoCheckValueImpl(const IBitsStorage& data, const std::optional<ui64> cat, const std::shared_ptr<arrow::Scalar>& value,
+        const NArrow::NSSA::TIndexCheckOperation& op) const = 0;
 
     virtual bool DoCheckValue(const TString& data, const std::optional<ui64> cat, const std::shared_ptr<arrow::Scalar>& value,
-        const EOperation op) const override final {
+        const NArrow::NSSA::TIndexCheckOperation& op) const override final {
         if (data.empty()) {
             return false;
         }

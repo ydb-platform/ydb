@@ -1363,12 +1363,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
 
 std::pair<TKey, ui32> TPartition::GetNewWriteKeyImpl(bool headCleared, bool needCompaction, ui32 headSize)
 {
-    TKey key;
-    if (needCompaction) {
-        key = TKey::ForBody(TKeyPrefix::TypeData, Partition, WorkZone.NewHead.Offset, WorkZone.NewHead.PartNo, WorkZone.NewHead.GetCount(), WorkZone.NewHead.GetInternalPartsCount());
-    } else {
-        key = TKey::ForHead(TKeyPrefix::TypeData, Partition, WorkZone.NewHead.Offset, WorkZone.NewHead.PartNo, WorkZone.NewHead.GetCount(), WorkZone.NewHead.GetInternalPartsCount());
-    }
+    TKey key = WorkZone.KeyFor(TKeyPrefix::TypeData, Partition, needCompaction);
 
     if (WorkZone.NewHead.PackedSize > 0) {
         WorkZone.DataKeysHead[TotalLevels - 1].AddKey(key, WorkZone.NewHead.PackedSize);

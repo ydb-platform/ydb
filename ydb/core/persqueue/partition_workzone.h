@@ -51,6 +51,8 @@ struct TPartitionWorkZone {
                             ui64 endOffset,
                             TInstant& writeTimestamp) const;
 
+    TKey KeyFor(TKeyPrefix::EType type, const TPartitionId& partitionId, bool needCompaction) const;
+
     void NewPartitionedBlob(const TPartitionId& partition,
                             const ui64 offset,
                             const TString& sourceId,

@@ -609,6 +609,8 @@ class LintConfigs:
             custom_config = custom_config[0]
             assert_file_exists(unit, custom_config)
             resolved_configs.append(custom_config)
+            message = "Usage of STYLE_PYTHON with custom config passed as an argument is deprecated and will soon be removed. Use linters.make.inc instead."
+            unit.message(['WARN', message])
             return {cls.KEY: serialize_list(resolved_configs)}
 
         if config := cls._from_config_type(unit, spec_args):

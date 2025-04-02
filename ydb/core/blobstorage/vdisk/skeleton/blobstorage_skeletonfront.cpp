@@ -752,7 +752,8 @@ namespace NKikimr {
                 const auto &bi = Config->BaseInfo;
                 TString path = Sprintf("vdisk%09" PRIu32 "_%09" PRIu32, bi.PDiskId, bi.VDiskSlotId);
                 TString name = Sprintf("%s VDisk%09" PRIu32 "_%09" PRIu32 " (%" PRIu32 ")",
-                                      VCtx->VDiskLogPrefix.data(), bi.PDiskId, bi.VDiskSlotId, GInfo->GroupID.GetRawId());
+                        GenerateVDiskMonitoringName(SelfVDiskId, bi.DonorMode).data(),
+                        bi.PDiskId, bi.VDiskSlotId, GInfo->GroupID.GetRawId());
                 mon->RegisterActorPage(vdisksMonPage, path, name, false, TActivationContext::ActorSystem(), ctx.SelfID);
             }
         }
@@ -760,7 +761,7 @@ namespace NKikimr {
         void Bootstrap(const TActorContext &ctx) {
             const auto& baseInfo = Config->BaseInfo;
             VCtx = MakeIntrusive<TVDiskContext>(ctx.SelfID, GInfo->PickTopology(), VDiskCounters, SelfVDiskId,
-                        TActivationContext::ActorSystem(), baseInfo.DeviceType, baseInfo.DonorMode,
+                        TActivationContext::ActorSystem(), baseInfo.DeviceType, baseInfo.PDiskId, baseInfo.DonorMode,
                         baseInfo.ReplPDiskReadQuoter, baseInfo.ReplPDiskWriteQuoter, baseInfo.ReplNodeRequestQuoter,
                         baseInfo.ReplNodeResponseQuoter);
 

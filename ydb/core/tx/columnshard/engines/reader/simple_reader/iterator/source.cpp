@@ -138,7 +138,7 @@ bool TPortionDataSource::DoStartFetchingColumns(
 }
 
 std::shared_ptr<NIndexes::TSkipIndex> TPortionDataSource::SelectOptimalIndex(
-    const std::vector<std::shared_ptr<NIndexes::TSkipIndex>>& indexes, const NArrow::NSSA::EIndexCheckOperation /*op*/) const {
+    const std::vector<std::shared_ptr<NIndexes::TSkipIndex>>& indexes, const NArrow::NSSA::TIndexCheckOperation& /*op*/) const {
     if (indexes.size() == 0) {
         return nullptr;
     }

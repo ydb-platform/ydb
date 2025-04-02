@@ -93,16 +93,16 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
                 topicSettings = GetYdbPqClientOptions(database, *config, credentialsProviderFactory)
             ](const auto& futureClusterInfo) mutable {
                 auto allClustersInfo = futureClusterInfo.GetValue();
+                Y_ENSURE(!allClustersInfo.empty());
                 std::vector<NYdb::NTopic::TAsyncDescribeTopicResult> futures;
                 IPqGateway::TDescribeFederatedTopicResult results;
                 results.reserve(allClustersInfo.size());
                 futures.reserve(allClustersInfo.size());
-                Y_ENSURE(!allClustersInfo.empty());
                 std::vector<std::string> paths;
                 paths.reserve(allClustersInfo.size());
                 for (auto& clusterInfo: allClustersInfo) {
                     if (!clusterInfo.IsAvailableForRead()) {
-                        futures.emplace_back(NThreading::MakeErrorFuture<NYdb::NTopic::TDescribeTopicResult>(std::make_exception_ptr(NThreading::TFutureException())));
+                        futures.emplace_back(NThreading::MakeErrorFuture<NYdb::NTopic::TDescribeTopicResult>(std::make_exception_ptr(NThreading::TFutureException() << "Cluster " << clusterInfo.Name << " is unavailable for read")));
                     } else {
                         auto& clusterTopicPath = paths.emplace_back(path);
                         clusterInfo.AdjustTopicPath(clusterTopicPath);

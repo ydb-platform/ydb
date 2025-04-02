@@ -272,19 +272,20 @@ public:
     }
 
     TString GetSessionId() const override {
-        if (!Clusters.empty()) {
-            TStringBuilder str;
-            for (const auto& clusterState : Clusters) {
-                if (auto readSession = clusterState.ReadSession)
-                    str << readSession->GetSessionId();
-                else
-                    str << TString{"empty"};
-                str << ',';
-            }
-            str.pop_back();
-            return str;
+        if (Clusters.empty()) {
+            return TString{"empty"};
         }
-        return TString{"empty"};
+        TStringBuilder str;
+        for (const auto& clusterState : Clusters) {
+            if (auto readSession = clusterState.ReadSession) {
+                str << readSession->GetSessionId();
+            } else {
+                str << TString{"empty"};
+            }
+            str << ',';
+        }
+        str.pop_back();
+        return str;
     }
 
     TString GetSessionId(ui32 index) const {
@@ -400,7 +401,7 @@ private:
                 try {
                     auto federatedClusters = future.GetValue();
                     actorSystem->Send(selfId, new TEvPrivate::TEvReceivedClusters(std::move(federatedClusters)));
-                } catch (std::exception& ex) {
+                } catch (const std::exception& ex) {
                     actorSystem->Send(selfId, new TEvPrivate::TEvReceivedClusters(ex));
                 }
             });
@@ -444,7 +445,7 @@ private:
                         }
                         auto partitionCount = describeTopic.GetTopicDescription().GetTotalPartitionsCount();
                         actorSystem->Send(selfId, new TEvPrivate::TEvDescribeTopicResult(index, partitionCount));
-                    } catch (std::exception& ex) {
+                    } catch (const std::exception& ex) {
                         actorSystem->Send(selfId, new TEvPrivate::TEvDescribeTopicResult(index,
                                     NYdb::TStatus(NYdb::EStatus::INTERNAL_ERROR,
                                         NYdb::NIssue::TIssues({NYdb::NIssue::TIssue(ex.what())}))));
@@ -644,12 +645,12 @@ private:
         usedSpace = readyBatch.UsedSpace;
         Metrics.DataRate->Add(readyBatch.UsedSpace);
 
-        for (const auto& [PartitionSession, clusterRanges] : readyBatch.OffsetRanges) {
+        for (const auto& [partitionSession, clusterRanges] : readyBatch.OffsetRanges) {
             const auto& [cluster, ranges] = clusterRanges;
             for (const auto& [start, end] : ranges) {
-                CurrentDeferredCommit.Add(PartitionSession, start, end);
+                CurrentDeferredCommit.Add(partitionSession, start, end);
             }
-            PartitionToOffset[MakePartitionKey(TString(cluster), PartitionSession)] = ranges.back().second;
+            PartitionToOffset[MakePartitionKey(TString(cluster), partitionSession)] = ranges.back().second;
         }
 
         ReadyBuffer.pop();

@@ -1001,7 +1001,6 @@ void TDqPqRdReadActor::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) 
     activeBatch.UsedSpace = bytes;
     ReadyBufferSizeBytes += bytes;
     activeBatch.NextOffset = ev->Get()->Record.GetNextMessageOffset();
-    // partirtion.IsWaitingMessageBatch = false;
     Parent->NotifyCA();
 }
 
@@ -1074,7 +1073,7 @@ TString TDqPqRdReadActor::GetInternalState() {
             str << " " << partitionId << "=" << offset;
         }
         str << " has pending data";
-        for (const auto& partitionId : sessionInfo.HasPendingData) {
+        for (const auto partitionId : sessionInfo.HasPendingData) {
             str << " " << partitionId;
         }
         str << "\n";
@@ -1093,7 +1092,7 @@ void TDqPqRdReadActor::TrySendGetNextBatch(TSession& sessionInfo) {
     if (Parent->ReadyBufferSizeBytes > MaxBufferSize) {
         return;
     }
-    for (auto& partitionId : sessionInfo.HasPendingData) {
+    for (auto partitionId : sessionInfo.HasPendingData) {
         Parent->Metrics.InFlyGetNextBatch->Inc();
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvGetNextBatch>();
         event->Record.SetPartitionId(partitionId);
@@ -1223,7 +1222,7 @@ void TDqPqRdReadActor::StartClusterDiscovery() {
                 try {
                     auto federatedClusters = future.GetValue();
                     actorSystem->Send(selfId, new TEvPrivate::TEvReceivedClusters(std::move(federatedClusters)));
-                } catch (std::exception& ex) {
+                } catch (const std::exception& ex) {
                     actorSystem->Send(selfId, new TEvPrivate::TEvReceivedClusters(ex));
                 }
             });
@@ -1245,7 +1244,7 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvReceivedClusters::TPtr& ev) {
         Send(ComputeActorId, new TEvAsyncInputError(InputIndex, TIssues({issue}), NYql::NDqProto::StatusIds::BAD_REQUEST));
         return;
     }
-    Y_ENSURE(federatedClusters.size() > 0);
+    Y_ENSURE(!federatedClusters.empty());
     Clusters.reserve(federatedClusters.size());
     ui32 index = 0;
     for (auto& cluster : federatedClusters) {
@@ -1268,7 +1267,7 @@ void TDqPqRdReadActor::Handle(TEvPrivate::TEvReceivedClusters::TPtr& ev) {
                     }
                     auto partitionCount = describeTopic.GetTopicDescription().GetTotalPartitionsCount();
                     actorSystem->Send(selfId, new TEvPrivate::TEvDescribeTopicResult(index, partitionCount));
-                } catch (std::exception& ex) {
+                } catch (const std::exception& ex) {
                     actorSystem->Send(selfId, new TEvPrivate::TEvDescribeTopicResult(index,
                                 NYdb::TStatus(NYdb::EStatus::INTERNAL_ERROR,
                                     NYdb::NIssue::TIssues({NYdb::NIssue::TIssue(ex.what())}))));

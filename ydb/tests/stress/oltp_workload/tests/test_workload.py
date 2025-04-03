@@ -8,7 +8,6 @@ from ydb.tests.stress.common.common import YdbClient
 class TestYdbWorkload(object):
     @classmethod
     def setup_class(cls):
-        print(123)
         config = KikimrConfigGenerator(
             extra_feature_flags={
                 "enable_parameterized_decimal": True,

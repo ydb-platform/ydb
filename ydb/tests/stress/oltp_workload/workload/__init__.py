@@ -4,7 +4,7 @@ import time
 import threading
 
 from ydb.tests.stress.common.common import WorkloadBase
-from ydb.tests.datashard.lib.create_table import cleanup_type_name, pk_types, non_pk_types, null_types
+from ydb.tests.datashard.lib.types_of_variables import cleanup_type_name, pk_types, non_pk_types, null_types
 
 ydb.interceptor.monkey_patch_event_handler()
 
@@ -84,8 +84,7 @@ class WorkloadInsertDeleteAllTypes(WorkloadBase):
                 )[0].rows[0]
                 expected = {"cnt": inflight, "sum": sum}
                 if actual != expected:
-                    raise Exception(
-                        f"Incorrect result: expected:{expected}, actual:{actual}")
+                    raise Exception(f"Incorrect result: expected:{expected}, actual:{actual}")
             i += 1
             with self.lock:
                 self.inserted += 1
@@ -112,8 +111,7 @@ class WorkloadRunner:
     def _cleanup(self):
         print(f"Cleaning up {self.tables_prefix}...")
         deleted = self.client.remove_recursively(self.tables_prefix)
-        print(
-            f"Cleaning up {self.tables_prefix}... done, {deleted} tables deleted")
+        print(f"Cleaning up {self.tables_prefix}... done, {deleted} tables deleted")
 
     def run(self):
         stop = threading.Event()

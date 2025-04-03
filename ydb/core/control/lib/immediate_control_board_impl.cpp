@@ -2,51 +2,60 @@
 
 #include "immediate_control_board_html_renderer.h"
 
+#include <library/cpp/iterator/enumerate.h>
+
 #include <util/generic/string.h>
 
 namespace NKikimr {
+
 // TControlBoard
 
-bool TControlBoard::RegisterLocalControl(TControlWrapper control, TString name) {
-    TIntrusivePtr<TControl> ptr;
-    bool result = Board.Swap(name, control.Control, ptr);
-    return !result;
+size_t TControlBoard::GetIndex(EStaticControlType type) const {
+    auto idx = static_cast<size_t>(type);
+    Y_ENSURE(idx < GetEnumItemsCount<EStaticControlType>());
+    return idx;
 }
 
-bool TControlBoard::RegisterSharedControl(TControlWrapper& control, TString name) {
-    TIntrusivePtr<TControl> ptr;
-    if (Board.Get(name, ptr)) {
-        control.Control = ptr;
-        return false;
-    }
-    ptr = Board.InsertIfAbsent(name, control.Control);
-    if (control.Control == ptr) {
+bool TControlBoard::RegisterLocalControl(TControlWrapper control, EStaticControlType type) {
+    auto& ourControl = StaticControls[GetIndex(type)];
+    auto prevValue = ourControl.AtomicLoad();
+    if (!prevValue) {
+        ourControl.AtomicStore(control.Control);
         return true;
-    } else {
-        control.Control = ptr;
+    }
+
+    ourControl.AtomicStore(control.Control);
+    return false;
+}
+
+bool TControlBoard::RegisterSharedControl(TControlWrapper& control, EStaticControlType type) {
+    auto& ourControl = StaticControls[GetIndex(type)];
+    auto valueBefore = ourControl.AtomicLoad();
+    if (valueBefore) {
+        control.Control = valueBefore;
         return false;
     }
+    ourControl.AtomicStore(control.Control);
+
+    return true;
 }
 
-void TControlBoard::RestoreDefaults() {
-    for (auto& bucket : Board.Buckets) {
-        TReadGuard guard(bucket.GetLock());
-        for (auto& control : bucket.GetMap()) {
-            control.second->RestoreDefault();
-        }
-    }
-}
-
-void TControlBoard::RestoreDefault(TString name) {
-    TIntrusivePtr<TControl> control;
-    if (Board.Get(name, control)) {
+void TControlBoard::RestoreDefault(EStaticControlType type) {
+    if (auto control = StaticControls[GetIndex(type)].AtomicLoad()) {
         control->RestoreDefault();
     }
 }
 
-bool TControlBoard::SetValue(TString name, TAtomic value, TAtomic &outPrevValue) {
-    TIntrusivePtr<TControl> control;
-    if (Board.Get(name, control)) {
+void TControlBoard::RestoreDefaults() {
+    for (auto& controlPtr: StaticControls) {
+        if (auto control = controlPtr.AtomicLoad()) {
+            control->RestoreDefault();
+        }
+    }
+}
+
+bool TControlBoard::SetValue(EStaticControlType type, TAtomic value, TAtomic &outPrevValue) {
+    if (auto control = StaticControls[GetIndex(type)].AtomicLoad()) {
         outPrevValue = control->SetFromHtmlRequest(value);
         return control->IsDefault();
     }
@@ -54,21 +63,29 @@ bool TControlBoard::SetValue(TString name, TAtomic value, TAtomic &outPrevValue)
 }
 
 // Only for tests
-void TControlBoard::GetValue(TString name, TAtomic &outValue, bool &outIsControlExists) const {
-    TIntrusivePtr<TControl> control;
-    outIsControlExists = Board.Get(name, control);
-    if (outIsControlExists) {
+void TControlBoard::GetValue(EStaticControlType type, TAtomic &outValue, bool &outIsControlExists) const {
+    outIsControlExists = false;
+    if (auto control = StaticControls[GetIndex(type)].AtomicLoad()) {
+        outIsControlExists = true;
         outValue = control->Get();
     }
 }
 
 void TControlBoard::RenderAsHtml(TControlBoardTableHtmlRenderer& renderer) const {
-    for (const auto& bucket : Board.Buckets) {
-        TReadGuard guard(bucket.GetLock());
-        for (const auto &item : bucket.GetMap()) {
-            renderer.AddTableItem(item.first, item.second);
+    for (const auto& [idx, controlPtr]: Enumerate(StaticControls)) {
+        if (auto control = controlPtr.AtomicLoad()) {
+            auto name = ToString(static_cast<EStaticControlType>(idx));
+            renderer.AddTableItem(name, control);
         }
     }
 }
 
+TMaybe<EStaticControlType> TControlBoard::GetStaticControlId(const TStringBuf name) const {
+    EStaticControlType res;
+    if (TryFromString<EStaticControlType>(name, res)) {
+        return res;
+    }
+    return Nothing();
 }
+
+} // NKikimr

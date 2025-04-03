@@ -23,15 +23,17 @@ namespace {
 
 /*
     TKqpPartitionedExecuter only executes BATCH UPDATE/DELETE queries
-    with idempotent set of updates (except primary key) and without RETURNING.
+    with idempotent set of updates (except primary key), without RETURNING
+    and without any joins or subqueries.
+
     Examples: ydb/core/kqp/ut/batch_operations
 */
 
 class TKqpPartitionedExecuter : public TActorBootstrapped<TKqpPartitionedExecuter> {
     enum class EExecuterStatus {
-        STARTED,    // DataExecuter has been started
+        STARTED,    // Execution has been started
         DELAYED,    // Waiting TEvTxDelayedExecution
-        FINISHED    // DataExecuter finished or aborted execution
+        FINISHED    // Execution finished or aborted
     };
 
     struct TBatchPartitionInfo {
@@ -47,12 +49,6 @@ class TKqpPartitionedExecuter : public TActorBootstrapped<TKqpPartitionedExecute
         ui64 RetryDelayMs;
 
         using TPtr = std::shared_ptr<TBatchPartitionInfo>;
-    };
-
-    struct TKeyColumnInfo {
-        ui32 Id;
-        NScheme::TTypeInfo Type;
-        size_t ParamIndex;
     };
 
 public:
@@ -153,11 +149,10 @@ public:
         PE_LOG_D("Got TEvTxProxySchemeCache::TEvResolveKeySetResult from ActorId = " << ev->Sender);
 
         if (request->ErrorCount > 0) {
-            RuntimeError(
+            return RuntimeError(
                 Ydb::StatusIds::INTERNAL_ERROR,
                 NYql::TIssues({NYql::TIssue(TStringBuilder() << CurrentStateFuncName()
                     << ", failed to get table")}));
-            return;
         }
 
         YQL_ENSURE(request->ResultSet.size() == 1);
@@ -224,7 +219,7 @@ public:
         auto& [_, partInfo] = *it;
         AbortBuffer(partInfo->BufferId);
 
-        ExecuterToPartition[partInfo->ExecuterId]->Response = EExecuterStatus::FINISHED;
+        partInfo->Response = EExecuterStatus::FINISHED;
 
         switch (response->GetStatus()) {
             case Ydb::StatusIds::SUCCESS:
@@ -321,7 +316,7 @@ public:
         if (CheckExecutersAreFinished()) {
             PE_LOG_I("All executers have been finished, abort PartitionedExecuterActor");
             RuntimeError(
-                Ydb::StatusIds::ABORTED,
+                ReturnStatus,
                 NYql::TIssues({NYql::TIssue("some executer retuned an error status")}));
         }
     }
@@ -500,10 +495,9 @@ private:
 
         if (CheckExecutersAreFinished()) {
             PE_LOG_I("All executers have been finished, abort PartitionedExecuterActor");
-            RuntimeError(
-                Ydb::StatusIds::ABORTED,
+            return RuntimeError(
+                ReturnStatus,
                 NYql::TIssues({NYql::TIssue("Aborted.")}));
-            return;
         }
 
         SendAbortToExecuters();
@@ -540,8 +534,7 @@ private:
                 /* IsInclusive */ false,
                 /* IsPoint */ false
             );
-            RetryPartExecution(partInfo);
-            return;
+            return RetryPartExecution(partInfo);
         }
 
         if (!CheckExecutersAreFinished()) {
@@ -549,7 +542,7 @@ private:
         }
 
         auto& response = *ResponseEv->Record.MutableResponse();
-        response.SetStatus(Ydb::StatusIds::SUCCESS);
+        response.SetStatus(ReturnStatus);
 
         PE_LOG_I("All executers have been finished. Send SUCCESS to SessionActor");
 
@@ -570,7 +563,7 @@ private:
             if (CheckExecutersAreFinished()) {
                 PE_LOG_I("All executers have been finished, abort PartitionedExecuterActor");
                 RuntimeError(
-                    Ydb::StatusIds::ABORTED,
+                    ReturnStatus,
                     NYql::TIssues({NYql::TIssue("some executer retuned an error status")}));
             }
         }
@@ -604,11 +597,10 @@ private:
             auto* response = ev->Record.MutableResponse();
 
             if (response->GetStatus() != Ydb::StatusIds::SUCCESS) {
-                RuntimeError(
+                return RuntimeError(
                     Ydb::StatusIds::BAD_REQUEST,
                     NYql::TIssues({NYql::TIssue(TStringBuilder() << CurrentStateFuncName()
                         << ", got error from KqpLiteralExecuter.")}));
-                return;
             }
 
             if (!ev->GetTxResults().empty()) {
@@ -679,6 +671,14 @@ private:
     }
 
     void FillRequestRange(TQueryData::TPtr queryData, const TMaybe<TKeyDesc::TPartitionRangeInfo>& range, bool isBegin) {
+        /*
+            isBegin = true
+
+            IsInclusiveLeft AND ((BeginPrefixSize = 0) OR (BeginPrefixSize = 1) AND (Begin1 <= K1) OR (...))
+            OR
+            NOT IsInclusiveLeft AND ((BeginPrefixSize = 0) OR (BeginPrefixSize = 1) AND (Begin1 < K1) OR (...))
+        */
+
         auto isInclusive = (isBegin) ? NBatchParams::IsInclusiveLeft : NBatchParams::IsInclusiveRight;
         auto rangeName = ((isBegin) ? NBatchParams::Begin : NBatchParams::End);
         auto prefixRangeName = ((isBegin) ? NBatchParams::BeginPrefixSize : NBatchParams::EndPrefixSize);
@@ -758,6 +758,8 @@ private:
             [](auto it) { return it->Response == EExecuterStatus::FINISHED; });
     }
 
+    // SchemeCache and ReadActor may have the different order of key columns,
+    // so we need to reorder partition ranges for compare.
     void TryReorderKeysByIds(const TVector<ui32>& keyIds) {
         if (keyIds.empty()) {
             return;
@@ -894,8 +896,8 @@ private:
         PE_LOG_E(Ydb::StatusIds_StatusCode_Name(code) << ": " << issues.ToOneLineString());
 
         if (this->CurrentStateFunc() != &TKqpPartitionedExecuter::AbortState) {
-            Abort();
-            return;
+            ReturnStatus = code;
+            return Abort();
         }
 
         ReplyErrorAndDie(code, issues);
@@ -927,8 +929,16 @@ private:
 
 private:
     std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
-
+    Ydb::StatusIds::StatusCode ReturnStatus = Ydb::StatusIds::SUCCESS;
     TBatchOperationSettings BatchOperationSettings;
+
+    struct TKeyColumnInfo {
+        ui32 Id;
+        NScheme::TTypeInfo Type;
+        size_t ParamIndex;
+    };
+
+    // We have to save column ids and types for compare rows to start retry execution
     TVector<TKeyColumnInfo> KeyColumnInfo;
 
     TVector<TBatchPartitionInfo::TPtr> Partitions;

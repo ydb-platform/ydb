@@ -750,7 +750,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
         TCell from, to;
         const auto range = CreateRangeFrom(userTable, parent, from, to);
         if (range.IsEmptyRange(userTable.KeyColumnTypes)) {
-            LOG_D("TEvLocalKMeansRequst " << request.GetId() << " parent " << parent << " is empty");
+            LOG_D("TEvLocalKMeansRequest " << request.GetId() << " parent " << parent << " is empty");
             continue;
         }
 

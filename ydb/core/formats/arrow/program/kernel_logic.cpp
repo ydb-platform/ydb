@@ -68,4 +68,20 @@ NAccessor::TCompositeChunkedArray::TBuilder TExistsJsonPath::MakeCompositeBuilde
     return NAccessor::TCompositeChunkedArray::TBuilder(arrow::uint8());
 }
 
+TString TSimpleKernelLogic::SignalDescription() const {
+    if (YqlOperationId) {
+        return ::ToString((NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId);
+    } else {
+        return "UNKNOWN";
+    }
+}
+
+bool TSimpleKernelLogic::IsBoolInResult() const {
+    if (YqlOperationId) {
+        return IsBoolResultYqlOperator((NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId);
+    } else {
+        return false;
+    }
+}
+
 }   // namespace NKikimr::NArrow::NSSA

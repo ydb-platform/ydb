@@ -22,10 +22,20 @@ private:
         const std::shared_ptr<TAccessorsCollection>& resources) const = 0;
 
     virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const = 0;
+    YDB_ACCESSOR_DEF(std::optional<ui32>, YqlOperationId);
 
 public:
+    IKernelLogic() = default;
+
+    IKernelLogic(const ui32 yqlOperationId)
+        : YqlOperationId(yqlOperationId) {
+    }
+
     virtual ~IKernelLogic() = default;
 
+    virtual TString SignalDescription() const {
+        return GetClassName();
+    }
     virtual ECalculationHardness GetWeight() const = 0;
 
     using TFactory = NObjectFactory::TObjectFactory<IKernelLogic, TString>;
@@ -46,8 +56,47 @@ public:
     }
 };
 
+class TSimpleKernelLogic: public IKernelLogic {
+private:
+    using TBase = IKernelLogic;
+    YDB_READONLY_DEF(std::optional<ui32>, YqlOperationId);
+
+    virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& /*input*/, const std::vector<TColumnChainInfo>& /*output*/,
+        const std::shared_ptr<TAccessorsCollection>& /*resources*/) const override {
+        return false;
+    }
+
+    virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const {
+        return std::nullopt;
+    }
+
+public:
+    virtual ~IKernelLogic() = default;
+    TSimpleKernelLogic() = default;
+    TSimpleKernelLogic(const ui32 yqlOperationId)
+        : TBase(yqlOperationId)
+        , YqlOperationId(yqlOperationId) {
+    }
+
+    virtual TString SignalDescription() const override;
+
+    virtual ECalculationHardness GetWeight() const override {
+        if (!YqlOperationId) {
+            return (ui64)ECalculationHardness::Unknown;
+        }
+        return (ui64)ECalculationHardness::NotSpecified;
+    }
+
+    virtual TString GetClassName() const override {
+        return "SIMPLE";
+    }
+
+    virtual bool IsBoolInResult() const override;
+};
+
 class TLogicMatchString: public IKernelLogic {
 private:
+    using TBase = IKernelLogic;
     virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& /*input*/, const std::vector<TColumnChainInfo>& /*output*/,
         const std::shared_ptr<TAccessorsCollection>& /*resources*/) const override {
         return false;
@@ -65,14 +114,18 @@ private:
 
 public:
     TLogicMatchString(const TIndexCheckOperation::EOperation operation, const bool caseSensitive, const bool isSimpleFunction)
-        : Operation(operation)
+        : TBase(std::nullopt)
+        , Operation(operation)
         , CaseSensitive(caseSensitive)
-        , IsSimpleFunction(isSimpleFunction)
-    {
+        , IsSimpleFunction(isSimpleFunction) {
+    }
+
+    virtual TString SignalDescription() const override {
+        return "MATCH_STRING::" + ::ToString(Operation) + "::" + ::ToString(CaseSensitive);
     }
 
     virtual TString GetClassName() const override {
-        return "MATCH_STRING::" + ::ToString(Operation) + "::" + ::ToString(CaseSensitive);
+        return "MATCH_STRING";
     }
 
     virtual bool IsBoolInResult() const override {
@@ -82,6 +135,7 @@ public:
 
 class TLogicEquals: public IKernelLogic {
 private:
+    using TBase = IKernelLogic;
     virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& /*input*/, const std::vector<TColumnChainInfo>& /*output*/,
         const std::shared_ptr<TAccessorsCollection>& /*resources*/) const override {
         return false;
@@ -97,8 +151,8 @@ private:
 
 public:
     TLogicEquals(const bool isSimpleFunction)
-        : IsSimpleFunction(isSimpleFunction)
-    {
+        : TBase(std::nullopt)
+        , IsSimpleFunction(isSimpleFunction) {
     }
 
     virtual TString GetClassName() const override {

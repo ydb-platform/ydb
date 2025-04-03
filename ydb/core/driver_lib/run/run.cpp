@@ -1093,7 +1093,9 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
     AppData->IoContextFactory = ModuleFactories ? ModuleFactories->IoContextFactory.get() : nullptr;
     AppData->SchemeOperationFactory = ModuleFactories ? ModuleFactories->SchemeOperationFactory.get() : nullptr;
     AppData->ConfigSwissKnife = ModuleFactories ? ModuleFactories->ConfigSwissKnife.get() : nullptr;
-    AppData->TransferWriterFactory = ModuleFactories ? ModuleFactories->TransferWriterFactory.get() : nullptr;
+    if (ModuleFactories) {
+        AppData->TransferWriterFactory = ModuleFactories->TransferWriterFactory;
+    }
 
     AppData->SqsAuthFactory = ModuleFactories
         ? ModuleFactories->SqsAuthFactory.get()

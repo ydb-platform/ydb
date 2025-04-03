@@ -480,7 +480,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             writerFn = WriterFn(writerSettings, consistencySettings);
         } else if (cmd.HasTransferWriter()) {
             const auto& writerSettings = cmd.GetTransferWriter();
-            const auto* transferWriterFactory = AppData()->TransferWriterFactory;
+            const auto* transferWriterFactory = AppData()->TransferWriterFactory.get();
             if (!transferWriterFactory) {
                 LOG_C("Run transfer but TransferWriterFactory does not exists.");
                 return;

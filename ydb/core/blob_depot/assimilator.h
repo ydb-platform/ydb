@@ -29,9 +29,13 @@ namespace NKikimr::NBlobDepot {
 
         static constexpr ui32 MaxSizeToQuery = 16'000'000;
 
+        struct TGetBatch {
+            ui32 PutsPending = 0;
+            std::vector<TData::TAssimilatedBlobInfo> AssimilatedBlobs;
+        };
         static constexpr ui32 MaxGetsUnprocessed = 5;
         ui64 NextGetId = 1;
-        std::unordered_map<ui64, ui32> GetIdToUnprocessedPuts;
+        THashMap<ui64, TGetBatch> Gets;
 
         std::deque<TLogoBlobID> ScanQ;
         ui32 TotalSize = 0;

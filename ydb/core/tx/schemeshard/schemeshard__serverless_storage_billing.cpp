@@ -167,6 +167,15 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
              }},
         };
 
+        for (const auto& [k, v] : dbRootEl->UserAttrs->Attrs) {
+            auto label = TStringBuf(k);
+            if (!label.SkipPrefix("label_")) {
+                continue;
+            }
+
+            json["labels"][label] = v;
+        }
+
         TStringBuilder billRecord;
         NJson::WriteJson(&billRecord.Out, &json, /*formatOutput=*/false, /*sortkeys=*/false);
         billRecord << Endl;

@@ -1,5 +1,7 @@
 # Перемещение State Storage
 
+# !WORK IN PROGRESS
+
 Если нужно вывести из эксплуатации хост кластера {{ ydb-short-name }}, на котором располагается часть [State Storage](../../../devops/configuration-management/configuration-v1/config-settings.md#domains-state), необходимо переместить её на другой хост.
 
 {% include [warning-configuration-error](_includes/warning-configuration-error.md) %}

@@ -82,13 +82,10 @@ ALTER TABLE my_table
 
 Vector indexes can be created:
 
-* When creating a table with the YQL CREATE TABLE statement
-* 
+* When creating a table with the YQL [`CREATE TABLE` statement](../../yql/reference/syntax/create_table/vector_index.md)
+* Added to an existing table with the YQL [`ALTER TABLE` statement](../../yql/reference/syntax/alter_table/indexes.md)
 
-* When creating a table with the YQL [CREATE TABLE](../../yql/reference/syntax/create_table/vector_index.md) statement
-* Added to an existing table with the YQL [ALTER TABLE](../../yql/reference/syntax/alter_table/indexes.md) statement
-
-For more information about vector index parameters, see [CREATE TABLE](../../yql/reference/syntax/create_table/vector_index.md).
+For more information about vector index parameters, see [`CREATE TABLE` statement](../../yql/reference/syntax/create_table/vector_index.md).
 
 ## Using vector indexes {#usage}
 
@@ -106,11 +103,11 @@ LIMIT 10;
 
 Vector indexes are particularly useful for:
 
-* Recommendation systems (finding similar items/users)
-* Semantic search (matching text embeddings)
-* Image similarity search
-* Anomaly detection (finding outliers)
-* Classification systems (finding nearest labeled examples)
+* recommendation systems (finding similar items/users);
+* semantic search (matching text embeddings);
+* image similarity search;
+* anomaly detection (finding outliers);
+* classification systems (finding nearest labeled examples).
 
 ## Limitations {#limitations}
 

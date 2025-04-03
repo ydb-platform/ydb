@@ -185,7 +185,7 @@ class Nodes(object):
         tmp_path = f'tmp_{random.randint(0, 100500)}'
         full_script = (
             f'mkdir -p {tmp_path} && cd {tmp_path} && '
-            f'{user_script} && cd - && '
+            f'( {user_script} ) && cd - && '
             f'for FILE in `find {tmp_path} -name *.tgz -or -name *.tar`; do tar -C {tmp_path} -xf $FILE && rm $FILE; done && '
             f'sudo mv {tmp_path}/* {remote_path} && rm -rf {tmp_path}'
         )

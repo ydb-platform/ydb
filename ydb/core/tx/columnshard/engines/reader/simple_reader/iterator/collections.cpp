@@ -1,5 +1,7 @@
 #include "collections.h"
 
+#include <ydb/core/tx/columnshard/engines/predicate/filter.h>
+
 namespace NKikimr::NOlap::NReader::NSimple {
 
 std::shared_ptr<IDataSource> TScanWithLimitCollection::DoExtractNext() {
@@ -62,9 +64,23 @@ ui32 TScanWithLimitCollection::GetInFlightIntervalsCount(const TCompareKeyForSca
     return inFlightCountLocal;
 }
 
-TScanWithLimitCollection::TScanWithLimitCollection(const std::shared_ptr<TSpecialReadContext>& context, std::deque<TSourceConstructor>&& sources)
+TScanWithLimitCollection::TScanWithLimitCollection(
+    const std::shared_ptr<TSpecialReadContext>& context, std::deque<TSourceConstructor>&& sources, const std::shared_ptr<IScanCursor>& cursor)
     : TBase(context)
     , Limit((ui64)Context->GetCommonContext()->GetReadMetadata()->GetLimitRobust()) {
+    if (cursor && cursor->IsInitialized()) {
+        for (auto&& i : sources) {
+            bool usage = false;
+            if (!context->GetCommonContext()->GetScanCursor()->CheckEntityIsBorder(i, usage)) {
+                continue;
+            }
+            if (usage) {
+                i.SetIsStartedByCursor();
+            }
+            break;
+        }
+    }
+
     HeapSources = std::move(sources);
     std::make_heap(HeapSources.begin(), HeapSources.end());
 }
@@ -74,6 +90,11 @@ ISourcesCollection::ISourcesCollection(const std::shared_ptr<TSpecialReadContext
     if (HasAppData() && AppDataVerified().ColumnShardConfig.HasMaxInFlightIntervalsOnRequest()) {
         MaxInFlight = AppDataVerified().ColumnShardConfig.GetMaxInFlightIntervalsOnRequest();
     }
+}
+
+std::shared_ptr<NKikimr::NOlap::IScanCursor> TNotSortedFullScanCollection::DoBuildCursor(
+    const std::shared_ptr<IDataSource>& source, const ui32 readyRecords) const {
+    return std::make_shared<TNotSortedSimpleScanCursor>(source->GetSourceId(), readyRecords);
 }
 
 }   // namespace NKikimr::NOlap::NReader::NSimple

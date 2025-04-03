@@ -13,7 +13,7 @@ std::unique_ptr<TEvColumnShard::TEvInternalScan> TModificationRestoreTask::DoBui
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "restore_start")("count", IncomingData.HasContainer() ? IncomingData->num_rows() : 0)(
         "task_id", WriteData.GetWriteMeta().GetId());
     auto pkData = NArrow::TColumnOperator().VerifyIfAbsent().Extract(IncomingData.GetContainer(), Context.GetActualSchema()->GetPKColumnNames());
-    request->RangesFilter = TPKRangesFilter::BuildFromRecordBatchLines(pkData, false);
+    request->RangesFilter = TPKRangesFilter::BuildFromRecordBatchLines(pkData);
     for (auto&& i : Context.GetActualSchema()->GetIndexInfo().GetColumnIds(false)) {
         request->AddColumn(i);
     }

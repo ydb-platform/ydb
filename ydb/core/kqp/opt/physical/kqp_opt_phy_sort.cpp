@@ -72,17 +72,19 @@ TExprBase KqpRemoveRedundantSortByPk(TExprBase node, TExprContext& ctx, const TK
             return node;
         }
 
-        if (settings.Reverse) {
+        if (settings.GetSorting() == ERequestSorting::DESC) {
             return node;
         }
 
-        settings.SetReverse();
-        settings.SetSorted();
+        settings.SetSorting(ERequestSorting::DESC);
 
         input = BuildReadNode(input.Pos(), ctx, input, settings);
     } else if (direction == ESortDirection::Forward) {
+        if (settings.GetSorting() == ERequestSorting::ASC) {
+            return node;
+        }
+        settings.SetSorting(ERequestSorting::ASC);
         if (UseSource(kqpCtx, tableDesc)) {
-            settings.SetSorted();
             input = BuildReadNode(input.Pos(), ctx, input, settings);
         }
     }

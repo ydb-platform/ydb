@@ -858,7 +858,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
         node = FindPlanNodeByKv(plan, "Node Type", "TopSort-TableFullScan");
         UNIT_ASSERT(node.IsDefined());
         reverse = FindPlanNodeByKv(node, "Reverse", "false");
-        UNIT_ASSERT(!reverse.IsDefined());
+        UNIT_ASSERT(reverse.IsDefined());
         pushedLimit = FindPlanNodeByKv(node, "ReadLimit", "4");
         UNIT_ASSERT(pushedLimit.IsDefined());
         limit = FindPlanNodeByKv(node, "Limit", "4");

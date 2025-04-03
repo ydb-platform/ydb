@@ -1,6 +1,6 @@
-# Working with Microsoft SQL Server databases
+# Working with Microsoft SQL Server Databases
 
-This section provides basic information about working with an external [Microsoft SQL Server](https://learn.microsoft.com/en-us/sql/?view=sql-server-ver16) databases.
+This section provides basic information about working with external [Microsoft SQL Server](https://learn.microsoft.com/en-us/sql/?view=sql-server-ver16) databases.
 
 To work with an external Microsoft SQL Server database, you need to follow these steps:
 
@@ -27,7 +27,7 @@ To work with an external Microsoft SQL Server database, you need to follow these
 3. {% include [!](_includes/connector_deployment.md) %}
 4. [Execute a query](#query) to the database.
 
-## Query syntax {#query}
+## Query Syntax {#query}
 
 The following SQL query format is used to work with Microsoft SQL Server:
 
@@ -58,9 +58,9 @@ When working with Microsoft SQL Server clusters, there are a number of limitatio
     |`Float`|
     |`Double`|
 
-## Supported data types
+## Supported Data Types
 
-In the Microsoft SQL Server database, the optionality of column values (whether the column can contain `NULL` values or not) is not a part of the data type system. The `NOT NULL` constraint for any column of any table is stored within the `IS_NULLABLE` column the [INFORMATION_SCHEMA.COLUMNS](https://learn.microsoft.com/en-us/sql/relational-databases/system-information-schema-views/columns-transact-sql?view=sql-server-ver16) system table, i.e., at the table metadata level. Therefore, all basic Microsoft SQL Server types can contain `NULL` values by default, and in the {{ ydb-full-name }} type system, they should be mapped to [optional](../../yql/reference/types/optional.md).
+In the Microsoft SQL Server database, the optionality of column values (whether the column can contain `NULL` values or not) is not a part of the data type system. The `NOT NULL` constraint for any column of any table is stored within the `IS_NULLABLE` column in the [INFORMATION_SCHEMA.COLUMNS](https://learn.microsoft.com/en-us/sql/relational-databases/system-information-schema-views/columns-transact-sql?view=sql-server-ver16) system table, i.e., at the table metadata level. Therefore, all basic Microsoft SQL Server types can contain `NULL` values by default, and in the {{ ydb-full-name }} type system, they should be mapped to [optional](../../yql/reference/types/optional.md).
 
 Below is a correspondence table between Microsoft SQL Server types and {{ ydb-short-name }} types. All other data types, except those listed, are not supported.
 

@@ -405,6 +405,14 @@ namespace NKikimr::NBlobDepot {
 #endif
         };
 
+        struct TAssimilatedBlobInfo {
+            NKikimrProto::EReplyStatus Status;
+            TBlobSeqId BlobSeqId;
+            TKey Key;
+            bool Keep = false;
+            bool DoNotKeep = false;
+        };
+
     private:
         struct TRecordWithTrash {};
 
@@ -745,8 +753,8 @@ namespace NKikimr::NBlobDepot {
         IActor *CreateResolveDecommitActor(TEvBlobDepot::TEvResolve::TPtr ev);
 
         class TTxCommitAssimilatedBlob;
-        void ExecuteTxCommitAssimilatedBlob(NKikimrProto::EReplyStatus status, TBlobSeqId blobSeqId, TData::TKey key,
-            ui32 notifyEventType, TActorId parentId, ui64 cookie, bool keep = false, bool doNotKeep = false);
+        void ExecuteTxCommitAssimilatedBlob(std::vector<TAssimilatedBlobInfo>&& blobs, ui32 notifyEventType,
+            TActorId parentId, ui64 cookie);
 
         class TTxResolve;
         void ExecuteTxResolve(TEvBlobDepot::TEvResolve::TPtr ev, THashSet<TLogoBlobID>&& resolutionErrors = {});

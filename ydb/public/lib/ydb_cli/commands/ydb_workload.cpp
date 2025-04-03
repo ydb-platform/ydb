@@ -268,7 +268,7 @@ void TWorkloadCommand::WorkerFn(int taskId, NYdbWorkload::IWorkloadQueryGenerato
 
 int TWorkloadCommand::RunWorkload(NYdbWorkload::IWorkloadQueryGenerator& workloadGen, const int type) {
     if (!Quiet) {
-        std::cout << "Window\tTxs/Sec\tRetries\tErrors\tp50(ms)\tp95(ms)\tp99(ms)\tpMax(ms)";
+        std::cout << "Window\tTxs\tTxs/Sec\tRetries\tErrors\tp50(ms)\tp95(ms)\tp99(ms)\tpMax(ms)";
         if (PrintTimestamp) {
             std::cout << "\tTimestamp";
         }
@@ -320,7 +320,7 @@ void TWorkloadCommand::PrintWindowStats(int windowIt) {
         WindowHist.Reset();
     }
     if (!Quiet) {
-        std::cout << windowIt << "\t" << std::setw(7) << stats.OpsCount / WindowSec << "\t" << retries << "\t"
+        std::cout << windowIt << "\t" << std::setw(7) << stats.OpsCount << "\t" << stats.OpsCount / WindowSec << "\t" << retries << "\t"
             << errors << "\t" << stats.Percentile50 << "\t" << stats.Percentile95 << "\t"
             << stats.Percentile99 << "\t" << stats.Percentile100;
         if (PrintTimestamp) {

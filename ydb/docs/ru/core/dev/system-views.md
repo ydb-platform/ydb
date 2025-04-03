@@ -342,7 +342,7 @@ WHERE Name = "default";
 Пример выдачи:
 
 \# | Name | ConcurrentQueryLimit | QueueSize | DatabaseLoadCpuThreshold | ResourceWeight | TotalCpuLimitPercentPerNode | QueryCpuLimitPercentPerNode |  QueryMemoryLimitPercentPerNode
-------- | -------- | ------- | -------- | ------- | -------- | ------- | -------- | ---
+--- | --- | --- | --- | --- | --- | --- | --- | ---
 1 | default | -1 | -1 | -1 | -1 | -1 | -1 | -1
 
 {% endif %}
@@ -379,7 +379,7 @@ WHERE Name = "olap";
 Пример выдачи:
 
 \# | Name | Rank | MemberName | ResourcePool
-------- | -------- | ------- | -------- | ---
+--- | --- | --- | --- | ---
 1 | olap | 1000 | olap_group@builtin | olap
 
 {% endif %}

@@ -172,21 +172,21 @@ getSimpleTdefsByNumber(int nTable)
 tdef *
 getTdefsByNumber(int nTable)
 {
-   if (is_set("UPDATE") && is_set("VALIDATE"))
+   if (is_set("UPDATE") && is_set("VALIDATE")
+      && nTable >= S_BRAND && (s_tdefs[nTable - S_BRAND].flags & FL_PASSTHRU))
    {
-      checkTdefsSize(nTable);
-      if (s_tdefs[nTable].flags & FL_PASSTHRU)
+      checkTdefsSize(nTable - S_BRAND);
+      int wtdefsIndex = -1;
+      switch(nTable)
       {
-         switch(nTable + S_BRAND)
-         {
-         case S_CATALOG_PAGE: nTable = CATALOG_PAGE; break;
-         case S_CUSTOMER_ADDRESS: nTable = CUSTOMER_ADDRESS; break;
-         case S_PROMOTION: nTable = PROMOTION; break;
-         }
+      case S_CATALOG_PAGE: wtdefsIndex = CATALOG_PAGE; break;
+      case S_CUSTOMER_ADDRESS: wtdefsIndex = CUSTOMER_ADDRESS; break;
+      case S_PROMOTION: wtdefsIndex = PROMOTION; break;
+      }
+      // Use w_tdefs only if we decreased the index
+      if (wtdefsIndex != -1) {
          return(&w_tdefs[nTable]);
       }
-      else
-         return(&s_tdefs[nTable]);
    }
 
    return(getSimpleTdefsByNumber(nTable));

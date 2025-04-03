@@ -6,6 +6,8 @@ included: true
 resources:
   style:
     - _assets/tags.css   
+plugins:
+  checkbox
 
 docs-viewer:
   project-name: ydb

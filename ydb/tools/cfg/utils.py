@@ -241,7 +241,9 @@ def need_generate_bs_config(template_bs_config):
 
     return template_bs_config.get("service_set", {}).get("groups") is None
 
+
 use_alternative_yaml_handler = False
+
 
 def determine_yaml_parsing(yaml_template_file):
     ruamel_yaml = YAML()

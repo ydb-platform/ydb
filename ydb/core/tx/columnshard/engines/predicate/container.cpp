@@ -188,7 +188,7 @@ NArrow::TColumnFilter TPredicateContainer::BuildFilter(const std::shared_ptr<NAr
     if (!data->GetRecordsCount()) {
         return NArrow::TColumnFilter::BuildAllowFilter();
     }
-    auto sortingFields = data->GetSchema()->GetFieldNames();
+    auto sortingFields = Object->Batch->schema()->field_names();
     auto position = NArrow::NMerger::TRWSortableBatchPosition(data, 0, sortingFields, {}, false);
     const auto border = NArrow::NMerger::TSortableBatchPosition(Object->Batch, 0, sortingFields, {}, false);
     const bool needUppedBound = CompareType == NArrow::ECompareType::LESS_OR_EQUAL || CompareType == NArrow::ECompareType::GREATER;

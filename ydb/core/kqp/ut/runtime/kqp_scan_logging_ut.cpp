@@ -64,9 +64,8 @@ void RunTestForQuery(const std::string& query, const std::string& expectedLog) {
             break;
         }
     }
-    // TODO: Uncomment after: https://github.com/ydb-platform/ydb/issues/15597
     Y_UNUSED(hasExpectedLog);
-    // UNIT_ASSERT(hasExpectedLog);
+    UNIT_ASSERT(hasExpectedLog);
 }
 
 } // anonymous namespace

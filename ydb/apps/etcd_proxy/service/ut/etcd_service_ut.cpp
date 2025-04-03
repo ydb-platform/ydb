@@ -1029,9 +1029,9 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
             Put("key0", "value3", etcd);
             Put("key1", "value4", etcd);
             Delete("key2", etcd);
-            const auto compact = Put("key3", "value5", etcd);
+            const auto revForCompact = Put("key3", "value5", etcd);
             Delete("key1", etcd);
-            const auto request = Put("key3", "value6", etcd);
+            const auto revForRequest = Put("key3", "value6", etcd);
             Delete("key0", etcd);
             Delete("key3", etcd);
 
@@ -1049,7 +1049,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
             {
                 grpc::ClientContext compactCtx;
                 etcdserverpb::CompactionRequest compactionRequest;
-                compactionRequest.set_revision(compact);
+                compactionRequest.set_revision(revForCompact);
                 etcdserverpb::CompactionResponse compactionResponse;
                 UNIT_ASSERT(etcd->Compact(&compactCtx, compactionRequest, &compactionResponse).ok());
             }
@@ -1059,7 +1059,7 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
                 etcdserverpb::RangeRequest rangeRequest;
                 rangeRequest.set_key("key");
                 rangeRequest.set_range_end("kez");
-                rangeRequest.set_revision(request);
+                rangeRequest.set_revision(revForRequest);
                 rangeRequest.set_sort_target(etcdserverpb::RangeRequest_SortTarget_VALUE);
                 rangeRequest.set_sort_order(etcdserverpb::RangeRequest_SortOrder_ASCEND);
                 etcdserverpb::RangeResponse rangeResponse;

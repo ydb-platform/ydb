@@ -12,3 +12,4 @@ And other todo's:
 - Implement retries on "Transaction lock invslideted" error.
 - Implement compaction with control of a requested revision.
 - Implement the watches for ranges. (Now the watches work only with a single key or a prefix.)
+- Add unit tests for watches.

@@ -1,6 +1,13 @@
 # Vector indexes
 
-{{ ydb-short-name }} supports specialized _vector indexes_ to efficiently find the top k rows with vector values closest to a query vector. Unlike secondary indexes that optimize equality or range queries, vector indexes enable similarity search based on distance or similarity functions.
+{{ ydb-short-name }} supports [vector indexes](https://en.wikipedia.org/wiki/Vector_database) to efficiently find the top k rows with vector values closest to a query vector. Unlike secondary indexes that optimize equality or range queries, vector indexes enable similarity search based on distance or similarity functions.
+Vector indexes are particularly useful for:
+
+* recommendation systems (finding similar items/users)
+* semantic search (matching text embeddings)
+* image similarity search
+* anomaly detection (finding outliers)
+* classification systems (finding nearest labeled examples)
 
 ## Vector index characteristics {#characteristics}
 
@@ -15,24 +22,27 @@ Vector indexes in {{ ydb-short-name }}:
 The `vector_kmeans_tree` index implements a hierarchical clustering structure. Its organization includes:
 
 1. Hierarchical clustering:
-  - The index builds multiple levels of k-means clusters
-  - At each level, vectors are partitioned into specified number of clusters in power of level
-  - First level clusters the entire dataset
-  - Subsequent levels recursively cluster each parent cluster's contents
+
+    - The index builds multiple levels of k-means clusters
+    - At each level, vectors are partitioned into specified number of clusters in power of level
+    - First level clusters the entire dataset
+    - Subsequent levels recursively cluster each parent cluster's contents
 
 2. Search process:
-  - During queries, the index examines only the most promising clusters
-  - This search space pruning avoids exhaustive search through all vectors
+
+    - During queries, the index examines only the most promising clusters
+    - This search space pruning avoids exhaustive search through all vectors
 
 3. Parameters:
-  - `levels`: The number of tree levels (typically 1-3). Controls search depth
-  - `clusters`: The number of clusters on each level (typically 64-512). Determines search breadth at each level 
+
+    - `levels`: The number of tree levels (typically 1-3). Controls search depth
+    - `clusters`: The number of clusters on each level (typically 64-512). Determines search breadth at each level 
 
 ## Vector index types {#types}
 
 ### Basic vector index {#basic}
 
-The simplest form that indexes vectors without additional filtering capabilities. Example creation:
+The simplest form that indexes vectors without additional filtering capabilities. For example:
 
 ```yql
 ALTER TABLE my_table
@@ -99,18 +109,9 @@ ORDER BY Knn::CosineSimilarity(embedding, ...) DESC
 LIMIT 10;
 ```
 
-## Typical use cases {#usecases}
-
-Vector indexes are particularly useful for:
-
-* recommendation systems (finding similar items/users);
-* semantic search (matching text embeddings);
-* image similarity search;
-* anomaly detection (finding outliers);
-* classification systems (finding nearest labeled examples).
 
 ## Limitations {#limitations}
 
 Currently not supported:
-* modifying rows in indexed tables;
-* bit vector type.
+* modifying rows in indexed tables
+* bit vector type

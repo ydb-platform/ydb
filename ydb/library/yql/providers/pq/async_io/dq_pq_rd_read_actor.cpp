@@ -205,17 +205,26 @@ class TDqPqRdReadActor : public NActors::TActor<TDqPqRdReadActor>, public NYql::
     };
 
 private:
+    // There can be 2 kinds of actors:
+    // 1) Main (that CA interacts with)
+    // 2) Child (per-federated-cluster, interacts with row dispatcher)
+    // For single-cluster/non-federated topics main actor plays both roles.
+    // PartitionToOffset maintained only on main actor, row dispatcher state maintained only on children
+    // As main and child actors resides on same mailbox, their handlers are never concurrently executed
+    // and can modify other side state
     TDqPqRdReadActor* Parent;
     TString Cluster;
     const TString Token;
     TMaybe<NActors::TActorId> CoordinatorActorId;
     NActors::TActorId LocalRowDispatcherActorId;
+    // Set on Children
     std::queue<TReadyBatch> ReadyBuffer;
     // Set on Parent
     EState State = EState::INIT;
     bool Inited = false;
     ui64 CoordinatorRequestCookie = 0;
     TRowDispatcherReadActorMetrics Metrics;
+    // Set on Parent
     bool ProcessStateScheduled = false;
     bool InFlyAsyncInputData = false;
     // Set on Parent
@@ -226,10 +235,12 @@ private:
     const TType* InputDataType = nullptr;  // Multi type (comes from Row Dispatcher)
     std::unique_ptr<NKikimr::NMiniKQL::TValuePackerTransport<true>> DataUnpacker;
     ui64 CpuMicrosec = 0;
+    // Set on both Parent (cumulative) and Childern (separate)
 
     using TPartitionKey = ::NPq::TPartitionKey;
     using TPartitionKeyHash = ::NPq::TPartitionKeyHash;
     THashMap<ui64, ui64> NextOffsetFromRD;
+    // Set on Children
     struct TClusterState {
         TClusterState(NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo&& info, ui32 partitionsCount)
             : Info(std::move(info))
@@ -242,6 +253,7 @@ private:
         NActors::TActorId ChildId;
     };
     std::vector<TClusterState> Clusters;
+    // Set on Parent
     struct TSession {
         enum class ESessionStatus {
             INIT,
@@ -283,6 +295,7 @@ private:
     IPqGateway::TPtr PqGateway;
     TMap<NActors::TActorId, TSession> Sessions;
     THashMap<ui64, NActors::TActorId> ReadActorByEventQueueId;
+    // Set on Children
     const THolderFactory& HolderFactory;
     const TTypeEnvironment& TypeEnv;
     NYdb::TDriver Driver;
@@ -290,11 +303,13 @@ private:
     IFederatedTopicClient::TPtr FederatedTopicClient;
     const i64 MaxBufferSize;
     i64 ReadyBufferSizeBytes = 0;
+    // Set on Parent
     ui64 NextGeneration = 0;
     ui64 NextEventQueueId = 0;
 
     TMap<NActors::TActorId, TSet<ui32>> LastUsedPartitionDistribution;
     TMap<NActors::TActorId, TSet<ui32>> LastReceivedPartitionDistribution;
+    // Set on Children
 
 public:
     TDqPqRdReadActor(

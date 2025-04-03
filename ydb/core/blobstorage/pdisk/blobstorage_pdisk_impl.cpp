@@ -847,7 +847,11 @@ bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pi
                 && size % Format.SectorSize == 0) {
             //
             newSize = size;
+            *Mon.WriteBufferUncompactedTimes += 1;
+            *Mon.WriteBufferUncompactedBytes += size;
         } else {
+            *Mon.WriteBufferCompactedTimes += 1;
+            *Mon.WriteBufferCompactedBytes += size;
             newSize = comp->CompactBuffer(chunkOffset % Format.SectorSize);
             TStringStream str;
             str << "[";

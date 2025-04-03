@@ -95,13 +95,7 @@ private:
 
 public:
     TZeroLevelPortions(const ui32 levelIdx, const std::shared_ptr<IPortionsLevel>& nextLevel, const TLevelCounters& levelCounters,
-        const TDuration durationToDrop, const ui64 expectedBlobsSize, const ui64 portionsCountAvailable)
-        : TBase(levelIdx, nextLevel)
-        , LevelCounters(levelCounters)
-        , DurationToDrop(durationToDrop)
-        , ExpectedBlobsSize(expectedBlobsSize)
-        , PortionsCountAvailable(portionsCountAvailable) {
-    }
+        const TDuration durationToDrop, const ui64 expectedBlobsSize, const ui64 portionsCountAvailable);
 };
 
 }   // namespace NKikimr::NOlap::NStorageOptimizer::NLCBuckets

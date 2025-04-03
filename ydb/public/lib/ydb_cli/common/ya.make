@@ -47,6 +47,7 @@ PEERDIR(
     ydb/public/lib/json_value
     ydb/public/sdk/cpp/src/library/operation_id
     ydb/public/lib/yson_value
+    ydb/public/sdk/cpp/src/client/coordination
     ydb/public/sdk/cpp/src/client/draft
     ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/result
@@ -57,12 +58,17 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/types/credentials
     ydb/public/sdk/cpp/src/client/types/credentials/oauth2_token_exchange
     ydb/library/arrow_parquet
+    ydb/public/lib/ydb_cli/common/yql_parser
 )
 
 GENERATE_ENUM_SERIALIZATION(formats.h)
 GENERATE_ENUM_SERIALIZATION(parameters.h)
 
 END()
+
+RECURSE(
+    yql_parser
+)
 
 RECURSE_FOR_TESTS(
     ut

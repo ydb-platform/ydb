@@ -906,6 +906,43 @@ IGraphTransformer::TStatus WideToBlocksWrapper(const TExprNode::TPtr& input, TEx
     return IGraphTransformer::TStatus::Ok;
 }
 
+IGraphTransformer::TStatus ListToBlocksWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 1U, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    if (!EnsureListType(input->Head(), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    const auto listItemType = input->Head().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+    if (!EnsureStructType(input->Head().Pos(), *listItemType, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    const auto structType = listItemType->Cast<TStructExprType>();
+
+    TVector<const TItemExprType*> outputStructItems;
+    for (auto item : structType->GetItems()) {
+        auto itemType = item->GetItemType();
+        if (itemType->IsBlockOrScalar()) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Input type should not be a block or scalar"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureSupportedAsBlockType(input->Pos(), *itemType, ctx.Expr, ctx.Types)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        outputStructItems.push_back(ctx.Expr.MakeType<TItemExprType>(item->GetName(), ctx.Expr.MakeType<TBlockExprType>(itemType)));
+    }
+    outputStructItems.push_back(ctx.Expr.MakeType<TItemExprType>(BlockLengthColumnName, ctx.Expr.MakeType<TScalarExprType>(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Uint64))));
+
+    auto outputStructType = ctx.Expr.MakeType<TStructExprType>(outputStructItems);
+    input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(outputStructType));
+    return IGraphTransformer::TStatus::Ok;
+}
+
 IGraphTransformer::TStatus WideFromBlocksWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureArgsCount(*input, 1U, ctx.Expr)) {
@@ -921,6 +958,22 @@ IGraphTransformer::TStatus WideFromBlocksWrapper(const TExprNode::TPtr& input, T
     retMultiType.pop_back();
     auto outputItemType = ctx.Expr.MakeType<TMultiExprType>(retMultiType);
     input->SetTypeAnn(ctx.Expr.MakeType<TStreamExprType>(outputItemType));
+    return IGraphTransformer::TStatus::Ok;
+}
+
+IGraphTransformer::TStatus ListFromBlocksWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 1U, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    TVector<const TItemExprType*> outputStructItems;
+    if (!EnsureBlockListType(input->Head(), outputStructItems, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto outputStructType = ctx.Expr.MakeType<TStructExprType>(outputStructItems);
+    input->SetTypeAnn(ctx.Expr.MakeType<TListExprType>(outputStructType));
     return IGraphTransformer::TStatus::Ok;
 }
 

@@ -391,6 +391,10 @@ struct Schema : NIceDb::Schema {
 
         struct ByKeyFilterSize : Column<34, NScheme::NTypeIds::Uint64> {};
 
+        struct LocksAcquired : Column<35, NScheme::NTypeIds::Uint64> {};
+        struct LocksWholeShard : Column<36, NScheme::NTypeIds::Uint64> {};
+        struct LocksBroken : Column<37, NScheme::NTypeIds::Uint64> {};
+
         using TKey = TableKey<TableOwnerId, TableLocalId, PartitionId>;
         using TColumns = TableColumns<
             TableOwnerId,
@@ -426,7 +430,10 @@ struct Schema : NIceDb::Schema {
             FullCompactionTs,
             MemDataSize,
             StoragePoolsStats,
-            ByKeyFilterSize
+            ByKeyFilterSize,
+            LocksAcquired,
+            LocksWholeShard,
+            LocksBroken
         >;
     };
 
@@ -1589,6 +1596,8 @@ struct Schema : NIceDb::Schema {
         struct NextIndexIdx : Column<9, NScheme::NTypeIds::Uint32> {};
         struct NextChangefeedIdx : Column<16, NScheme::NTypeIds::Uint32> {};
         struct Issue : Column<10, NScheme::NTypeIds::Utf8> {};
+        struct SrcPrefix : Column<17, NScheme::NTypeIds::Utf8> {};
+        struct EncryptionIV : Column<18, NScheme::NTypeIds::String> {};
 
         using TKey = TableKey<ImportId, Index>;
         using TColumns = TableColumns<
@@ -1607,7 +1616,9 @@ struct Schema : NIceDb::Schema {
             WaitTxId,
             NextIndexIdx,
             NextChangefeedIdx,
-            Issue
+            Issue,
+            SrcPrefix,
+            EncryptionIV
         >;
     };
 
@@ -1922,13 +1933,24 @@ struct Schema : NIceDb::Schema {
         struct Level : Column<2, NScheme::NTypeIds::Uint32> {};
         struct State : Column<3, NScheme::NTypeIds::Uint32> {};
         struct Parent : Column<4, ClusterIdTypeId> {};
+        struct ParentBegin : Column<5, ClusterIdTypeId> {};
+        struct Child : Column<6, ClusterIdTypeId> {};
+        struct ChildBegin : Column<7, ClusterIdTypeId> {};
+        struct TableSize : Column<8, NScheme::NTypeIds::Uint64> {};
+        // TableSize required for prefixed kmeans tree
+        // But can be filled and used for other kmeans tree for "auto" settings choice
+        // Also for "auto" settings will needs to save K
 
         using TKey = TableKey<Id>;
         using TColumns = TableColumns<
             Id,
             Level,
             State,
-            Parent
+            Parent,
+            ParentBegin,
+            Child,
+            ChildBegin,
+            TableSize
         >;
     };
 

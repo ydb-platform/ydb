@@ -2395,6 +2395,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 stats.FullCompactionTs = rowSet.GetValueOrDefault<Schema::TablePartitionStats::FullCompactionTs>();
                 stats.MemDataSize = rowSet.GetValueOrDefault<Schema::TablePartitionStats::MemDataSize>();
 
+                stats.LocksAcquired = rowSet.GetValueOrDefault<Schema::TablePartitionStats::LocksAcquired>();
+                stats.LocksWholeShard = rowSet.GetValueOrDefault<Schema::TablePartitionStats::LocksWholeShard>();
+                stats.LocksBroken = rowSet.GetValueOrDefault<Schema::TablePartitionStats::LocksBroken>();
+
                 tableInfo->UpdateShardStats(shardIdx, stats);
 
                 // note that we don't update shard metrics here, because we will always update
@@ -4427,6 +4431,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
 
                     switch (importInfo->State) {
+                    case TImportInfo::EState::DownloadExportMetadata:
                     case TImportInfo::EState::Waiting:
                     case TImportInfo::EState::Cancellation:
                         ImportsToResume.push_back(importInfo->Id);
@@ -4503,6 +4508,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     item.NextIndexIdx = rowset.GetValueOrDefault<Schema::ImportItems::NextIndexIdx>(0);
                     item.NextChangefeedIdx = rowset.GetValueOrDefault<Schema::ImportItems::NextChangefeedIdx>(0);
                     item.Issue = rowset.GetValueOrDefault<Schema::ImportItems::Issue>(TString());
+                    item.SrcPrefix = rowset.GetValueOrDefault<Schema::ImportItems::SrcPrefix>(TString());
+                    if (rowset.HaveValue<Schema::ImportItems::EncryptionIV>()) {
+                        item.ExportItemIV = NBackup::TEncryptionIV::FromBinaryString(rowset.GetValue<Schema::ImportItems::EncryptionIV>());
+                    }
 
                     if (item.WaitTxId != InvalidTxId) {
                         Self->TxIdToImport[item.WaitTxId] = {importId, itemIdx};
@@ -4562,8 +4571,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     auto& buildInfo = *buildInfoPtr->Get();
                     buildInfo.KMeans.Set(
                         rowset.GetValue<Schema::KMeansTreeProgress::Level>(),
+                        rowset.GetValue<Schema::KMeansTreeProgress::ParentBegin>(),
                         rowset.GetValue<Schema::KMeansTreeProgress::Parent>(),
-                        rowset.GetValue<Schema::KMeansTreeProgress::State>()
+                        rowset.GetValue<Schema::KMeansTreeProgress::ChildBegin>(),
+                        rowset.GetValue<Schema::KMeansTreeProgress::Child>(),
+                        rowset.GetValue<Schema::KMeansTreeProgress::State>(),
+                        rowset.GetValue<Schema::KMeansTreeProgress::TableSize>()
                     );
                     buildInfo.Sample.Rows.reserve(buildInfo.KMeans.K * 2);
 

@@ -1,9 +1,9 @@
 items:
 - name: Процесс ревью
-  path: review.md
+  href: review.md
 - name: Руководство по стилю
-  path: style-guide.md
+  href: style-guide.md
 - name: Структура
-  path: structure.md
+  href: structure.md
 - name: Жанры
-  path: genres.md
+  href: genres.md

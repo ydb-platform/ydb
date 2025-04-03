@@ -363,9 +363,9 @@ NKikimr::NArrow::TColumnFilter TColumnFilter::MakePredicateFilter(
 }
 
 template <class TData>
-bool ApplyImpl(const TColumnFilter& filter, std::shared_ptr<TData>& batch, const TColumnFilter::TApplyContext& context) {
+void ApplyImpl(const TColumnFilter& filter, std::shared_ptr<TData>& batch, const TColumnFilter::TApplyContext& context) {
     if (!batch || !batch->num_rows()) {
-        return false;
+        return;
     }
     if (!filter.IsEmpty()) {
         if (context.HasSlice()) {
@@ -380,10 +380,10 @@ bool ApplyImpl(const TColumnFilter& filter, std::shared_ptr<TData>& batch, const
     }
     if (filter.IsTotalDenyFilter()) {
         batch = NAdapter::TDataBuilderPolicy<TData>::GetEmptySame(batch);
-        return true;
+        return;
     }
     if (filter.IsTotalAllowFilter()) {
-        return true;
+        return;
     }
     if (context.GetTrySlices() && filter.GetFilter().size() * 10 < filter.GetRecordsCountVerified() &&
         filter.GetRecordsCountVerified() < filter.GetFilteredCountVerified() * 50) {
@@ -394,18 +394,17 @@ bool ApplyImpl(const TColumnFilter& filter, std::shared_ptr<TData>& batch, const
     } else {
         batch = NAdapter::TDataBuilderPolicy<TData>::ApplyArrowFilter(batch, filter);
     }
-    return batch->num_rows();
 }
 
-bool TColumnFilter::Apply(std::shared_ptr<TGeneralContainer>& batch, const TApplyContext& context) const {
+void TColumnFilter::Apply(std::shared_ptr<TGeneralContainer>& batch, const TApplyContext& context) const {
     return ApplyImpl(*this, batch, context);
 }
 
-bool TColumnFilter::Apply(std::shared_ptr<arrow::Table>& batch, const TApplyContext& context) const {
+void TColumnFilter::Apply(std::shared_ptr<arrow::Table>& batch, const TApplyContext& context) const {
     return ApplyImpl(*this, batch, context);
 }
 
-bool TColumnFilter::Apply(std::shared_ptr<arrow::RecordBatch>& batch, const TApplyContext& context) const {
+void TColumnFilter::Apply(std::shared_ptr<arrow::RecordBatch>& batch, const TApplyContext& context) const {
     return ApplyImpl(*this, batch, context);
 }
 

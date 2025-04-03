@@ -632,6 +632,38 @@ public:
         return Gateway->LoadTableMetadata(cluster, table, settings);
     }
 
+    TFuture<TGenericResult> AlterDatabase(const TString& cluster, const TAlterDatabaseSettings& settings) override {
+        CHECK_PREPARED_DDL(AlterDatabase);
+
+        if (IsPrepare()) {
+            auto alterDatabasePromise = NewPromise<TGenericResult>();
+
+            const auto& [dirname, basename] = NSchemeHelpers::SplitPathByDirAndBaseNames(settings.DatabasePath);
+
+            NKikimrSchemeOp::TModifyScheme schemeTx;
+            schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpModifyACL);
+            schemeTx.SetWorkingDir(dirname);
+            schemeTx.MutableModifyACL()->SetNewOwner(settings.Owner.value());
+            schemeTx.MutableModifyACL()->SetName(basename);
+
+            auto condition = schemeTx.AddApplyIf();
+            condition->AddPathTypes(NKikimrSchemeOp::EPathType::EPathTypeSubDomain);
+            condition->AddPathTypes(NKikimrSchemeOp::EPathType::EPathTypeExtSubDomain);
+
+            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+            auto& phyTx = *phyQuery.AddTransactions();
+            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+
+            phyTx.MutableSchemeOperation()->MutableModifyPermissions()->Swap(&schemeTx);
+            TGenericResult result;
+            result.SetSuccess();
+            alterDatabasePromise.SetValue(result);
+            return alterDatabasePromise.GetFuture();
+        } else {
+            return Gateway->AlterDatabase(cluster, settings);
+        }
+    }
+
     TFuture<TGenericResult> CreateTable(TKikimrTableMetadataPtr metadata, bool createDir, bool existingOk, bool replaceIfExists) override {
         Y_UNUSED(replaceIfExists);
         CHECK_PREPARED_DDL(CreateTable);
@@ -2481,6 +2513,12 @@ public:
                 auto& state = *op.MutableState();
                 state.MutableDone()->SetFailoverMode(
                     static_cast<NKikimrReplication::TReplicationState::TDone::EFailoverMode>(done->FailoverMode));
+            } else if (const auto& paused = settings.Settings.StatePaused) {
+                auto& state = *op.MutableState();
+                state.MutablePaused();
+            } else if (const auto& standBy = settings.Settings.StateStandBy) {
+                auto& state = *op.MutableState();
+                state.MutableStandBy();
             }
 
             if (settings.Settings.ConnectionString || settings.Settings.Endpoint || settings.Settings.Database ||
@@ -2686,6 +2724,12 @@ public:
                 auto& state = *op.MutableState();
                 state.MutableDone()->SetFailoverMode(
                     static_cast<NKikimrReplication::TReplicationState::TDone::EFailoverMode>(done->FailoverMode));
+            } else if (const auto& paused = settings.Settings.StatePaused) {
+                auto& state = *op.MutableState();
+                state.MutablePaused();
+            } else if (const auto& standBy = settings.Settings.StateStandBy) {
+                auto& state = *op.MutableState();
+                state.MutableStandBy();
             }
 
             if (settings.Settings.ConnectionString || settings.Settings.Endpoint || settings.Settings.Database ||

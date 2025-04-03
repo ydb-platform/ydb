@@ -15,7 +15,7 @@ struct TSharedStuff {
     using TPtr = std::shared_ptr<TSharedStuff>;
 
     std::unique_ptr<NYdb::NQuery::TQueryClient> Client;
-    std::atomic_int64_t Revision = 0LL, Lease = 0LL;
+    std::atomic<i64> Revision = 0LL, Lease = 0LL;
     NActors::TActorId Watchtower;
 };
 

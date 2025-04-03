@@ -187,18 +187,32 @@ namespace NSchemeShardUT_Private {
     }
 
     void SetApplyIf(NKikimrSchemeOp::TModifyScheme& transaction, const TApplyIf& applyIf) {
-        for (auto& pathVersion: applyIf) {
+        for (const auto& applyIfUnit: applyIf) {
             auto condition = transaction.AddApplyIf();
-            condition->SetPathId(pathVersion.PathId.LocalPathId);
-            condition->SetPathVersion(pathVersion.Version);
+
+            if (applyIfUnit.PathId != TPathId()) {
+                condition->SetPathId(applyIfUnit.PathId.LocalPathId);
+                condition->SetPathVersion(applyIfUnit.Version);
+            }
+
+            for (auto pathType : applyIfUnit.PathTypes) {
+                condition->AddPathTypes(pathType);
+            }
         }
     }
 
-    TEvSchemeShard::TEvModifySchemeTransaction* CreateModifyACLRequest(ui64 txId, ui64 schemeshard, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner) {
+    TEvSchemeShard::TEvModifySchemeTransaction* CreateModifyACLRequest(
+        ui64 txId, ui64 schemeshard,
+        TString parentPath, TString name, 
+        const TString& diffAcl, const TString& newOwner, const TApplyIf& applyIf
+    )
+    {
         auto evTx = new TEvSchemeShard::TEvModifySchemeTransaction(txId, schemeshard);
         auto transaction = evTx->Record.AddTransaction();
         transaction->SetWorkingDir(parentPath);
         transaction->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpModifyACL);
+
+        SetApplyIf(*transaction, applyIf);
 
         auto op = transaction->MutableModifyACL();
         op->SetName(name);
@@ -212,25 +226,47 @@ namespace NSchemeShardUT_Private {
         return evTx;
     }
 
-    void AsyncModifyACL(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner) {
-        AsyncSend(runtime, schemeShardId, CreateModifyACLRequest(txId, schemeShardId, parentPath, name, diffAcl, newOwner));
+    void AsyncModifyACL(
+        TTestActorRuntime& runtime,
+        ui64 schemeShardId, ui64 txId,
+        TString parentPath, TString name,
+        const TString& diffAcl, const TString& newOwner, const TApplyIf& applyIf
+    )
+    {
+        AsyncSend(runtime, schemeShardId, CreateModifyACLRequest(txId, schemeShardId, parentPath, name, diffAcl, newOwner, applyIf));
     }
 
-    void AsyncModifyACL(TTestActorRuntime& runtime, ui64 txId, TString parentPath, TString name, const TString& diffAcl, const TString& newOwner) {
-        return AsyncModifyACL(runtime, TTestTxConfig::SchemeShard, txId, parentPath, name, diffAcl, newOwner);
+    void AsyncModifyACL(
+        TTestActorRuntime& runtime,
+        ui64 txId, TString parentPath, TString name,
+        const TString& diffAcl, const TString& newOwner, const TApplyIf& applyIf
+    )
+    {
+        return AsyncModifyACL(runtime, TTestTxConfig::SchemeShard, txId, parentPath, name, diffAcl, newOwner, applyIf);
     }
 
-    void TestModifyACL(TTestActorRuntime& runtime, ui64 schemeShardId, ui64 txId, TString parentPath, TString name,
-                       const TString& diffAcl, const TString& newOwner,
-                       TEvSchemeShard::EStatus expectedResult) {
-        AsyncModifyACL(runtime, schemeShardId, txId, parentPath, name, diffAcl, newOwner);
+    void TestModifyACL(
+        TTestActorRuntime& runtime,
+        ui64 schemeShardId, ui64 txId,
+        TString parentPath, TString name,
+        const TString& diffAcl, const TString& newOwner,
+        TEvSchemeShard::EStatus expectedResult,
+        const TApplyIf& applyIf
+    )
+    {
+        AsyncModifyACL(runtime, schemeShardId, txId, parentPath, name, diffAcl, newOwner, applyIf);
         TestModificationResult(runtime, txId, expectedResult);
     }
 
-    void TestModifyACL(TTestActorRuntime& runtime, ui64 txId, TString parentPath, TString name,
-                       const TString& diffAcl, const TString& newOwner,
-                       TEvSchemeShard::EStatus expectedResult) {
-        TestModifyACL(runtime, TTestTxConfig::SchemeShard, txId, parentPath, name, diffAcl, newOwner, expectedResult);
+    void TestModifyACL(
+        TTestActorRuntime& runtime,
+        ui64 txId, TString parentPath, TString name,
+        const TString& diffAcl, const TString& newOwner,
+        TEvSchemeShard::EStatus expectedResult,
+        const TApplyIf& applyIf
+    )
+    {
+        TestModifyACL(runtime, TTestTxConfig::SchemeShard, txId, parentPath, name, diffAcl, newOwner, expectedResult, applyIf);
     }
 
 
@@ -1367,6 +1403,15 @@ namespace NSchemeShardUT_Private {
         return result.GetValue().GetStruct(0).GetOptional().GetOptional().GetStruct(0).GetOptional().GetUint64();
     }
 
+    TVector<ui64> GetTableShards(TTestActorRuntime& runtime, ui64 schemeShard,  const TString& path) {
+        TVector<ui64> shards;
+        const auto tableDescription = DescribePath(runtime, schemeShard, path, true);
+        for (const auto& part : tableDescription.GetPathDescription().GetTablePartitions()) {
+            shards.emplace_back(part.GetDatashardId());
+        }
+        return shards;
+    }
+
     NLs::TCheckFunc ShardsIsReady(TTestActorRuntime& runtime) {
         return [&] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
             TVector<ui64> datashards;
@@ -1696,7 +1741,7 @@ namespace NSchemeShardUT_Private {
     TEvIndexBuilder::TEvCreateRequest* CreateBuildIndexRequest(ui64 id, const TString& dbName, const TString& src, const TBuildIndexConfig& cfg) {
         NKikimrIndexBuilder::TIndexBuildSettings settings;
         settings.set_source_path(src);
-        settings.set_max_batch_rows(2);
+        settings.MutableScanSettings()->SetMaxBatchRows(1);
         settings.set_max_shards_in_flight(2);
 
         Ydb::Table::TableIndex& index = *settings.mutable_index();
@@ -1750,7 +1795,7 @@ namespace NSchemeShardUT_Private {
     std::unique_ptr<TEvIndexBuilder::TEvCreateRequest> CreateBuildColumnRequest(ui64 id, const TString& dbName, const TString& src, const TString& columnName, const Ydb::TypedValue& literal) {
         NKikimrIndexBuilder::TIndexBuildSettings settings;
         settings.set_source_path(src);
-        settings.set_max_batch_rows(2);
+        settings.MutableScanSettings()->SetMaxBatchRows(1);
         settings.set_max_shards_in_flight(2);
 
         auto* col = settings.mutable_column_build_operation()->add_column();
@@ -2405,11 +2450,12 @@ namespace NSchemeShardUT_Private {
     }
 
     NKikimrTxDataShard::TEvCompactTableResult CompactTable(
-        TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId, bool compactBorrowed)
+        TTestActorRuntime& runtime, ui64 shardId, const TTableId& tableId, bool compactBorrowed, bool compactSinglePartedShards)
     {
         auto sender = runtime.AllocateEdgeActor();
         auto request = MakeHolder<TEvDataShard::TEvCompactTable>(tableId.PathId);
         request->Record.SetCompactBorrowed(compactBorrowed);
+        request->Record.SetCompactSinglePartedShards(compactSinglePartedShards);
         runtime.SendToPipe(shardId, sender, request.Release(), 0, GetPipeConfigWithRetries());
 
         auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvCompactTableResult>(sender);
@@ -2511,8 +2557,18 @@ namespace NSchemeShardUT_Private {
         UNIT_ASSERT_C(evResponse->Get()->Record.GetStatus() == NKikimrTxDataShard::TError::OK, "Status: " << evResponse->Get()->Record.GetStatus() << " Issues: " << evResponse->Get()->Record.GetErrorDescription());
     }
 
-    void WriteRow(TTestActorRuntime& runtime, const ui64 txId, const TString& tablePath, int partitionIdx, const ui32 key, const TString& value, bool successIsExpected) {
-        auto tableDesc = DescribePath(runtime, tablePath, true, true);
+    void WriteOp(
+        TTestActorRuntime& runtime,
+        ui64 schemeshardId,
+        const ui64 txId,
+        const TString& tablePath,
+        int partitionIdx,
+        NKikimrDataEvents::TEvWrite_TOperation::EOperationType operationType,
+        const std::vector<ui32>& columnIds,
+        TSerializedCellMatrix&& data,
+        bool successIsExpected)
+    {
+        auto tableDesc = DescribePath(runtime, schemeshardId, tablePath, true, true);
         const auto& pathDesc = tableDesc.GetPathDescription();
         TTableId tableId(pathDesc.GetSelf().GetSchemeshardId(), pathDesc.GetSelf().GetPathId(), pathDesc.GetTable().GetTableSchemaVersion());
 
@@ -2522,15 +2578,9 @@ namespace NSchemeShardUT_Private {
 
         const auto& sender = runtime.AllocateEdgeActor();
 
-        std::vector<ui32> columnIds{1, 2};
-
-        TVector<TCell> cells{TCell((const char*)&key, sizeof(ui32)), TCell(value.c_str(), value.size())};
-
-        TSerializedCellMatrix matrix(cells, 1, 2);
-
         auto evWrite = std::make_unique<NKikimr::NEvents::TDataEvents::TEvWrite>(txId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
-        ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(matrix.ReleaseBuffer()));
-        evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, tableId, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
+        ui64 payloadIndex = NKikimr::NEvWrite::TPayloadWriter<NKikimr::NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(data.ReleaseBuffer()));
+        evWrite->AddOperation(operationType, tableId, columnIds, payloadIndex, NKikimrDataEvents::FORMAT_CELLVEC);
 
         ForwardToTablet(runtime, datashardTabletId, sender, evWrite.release());
 
@@ -2538,6 +2588,32 @@ namespace NSchemeShardUT_Private {
         auto status = ev->Get()->Record.GetStatus();
 
         UNIT_ASSERT_C(successIsExpected == (status == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED), "Status: " << ev->Get()->Record.GetStatus() << " Issues: " << ev->Get()->Record.GetIssues());
+    }
+
+    void WriteRow(TTestActorRuntime& runtime, ui64 schemeshardId, const ui64 txId, const TString& tablePath, int partitionIdx, const ui32 key, const TString& value, bool successIsExpected) {
+        std::vector<ui32> columnIds{1, 2};
+
+        TVector<TCell> cells{TCell((const char*)&key, sizeof(ui32)), TCell(value.c_str(), value.size())};
+        TSerializedCellMatrix matrix(cells, 1, 2);
+
+        WriteOp(runtime, schemeshardId, txId, tablePath, partitionIdx, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT, columnIds, std::move(matrix), successIsExpected);
+    }
+
+    void WriteRow(TTestActorRuntime& runtime, const ui64 txId, const TString& tablePath, int partitionIdx, const ui32 key, const TString& value, bool successIsExpected) {
+        WriteRow(runtime, TTestTxConfig::SchemeShard, txId, tablePath, partitionIdx, key, value, successIsExpected);
+    }
+
+    void DeleteRow(TTestActorRuntime& runtime, ui64 schemeshardId, const ui64 txId, const TString& tablePath, int partitionIdx, const ui32 key, bool successIsExpected) {
+        std::vector<ui32> columnIds{1};
+
+        TVector<TCell> cells{TCell((const char*)&key, sizeof(ui32))};
+        TSerializedCellMatrix matrix(cells, 1, 1);
+
+        WriteOp(runtime, schemeshardId, txId, tablePath, partitionIdx, NKikimrDataEvents::TEvWrite::TOperation::OPERATION_DELETE, columnIds, std::move(matrix), successIsExpected);
+    }
+
+    void DeleteRow(TTestActorRuntime& runtime, const ui64 txId, const TString& tablePath, int partitionIdx, const ui32 key, bool successIsExpected) {
+        DeleteRow(runtime, TTestTxConfig::SchemeShard, txId, tablePath, partitionIdx, key, successIsExpected);
     }
 
     void SendNextValRequest(TTestActorRuntime& runtime, const TActorId& sender, const TString& path) {

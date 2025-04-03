@@ -23,7 +23,8 @@ namespace NKikimr {
             bool AllDone() const { return !(CompactLogoBlobs || CompactBlocks || CompactBarriers); }
         };
 
-        TVDiskCompactionState(TActorId logoBlobsActorId, TActorId blocksActorId, TActorId barriersActorId);
+        TVDiskCompactionState(const TString& logPrefix,
+            TActorId logoBlobsActorId, TActorId blocksActorId, TActorId barriersActorId);
         // setup input compaction request
         void Setup(const TActorContext &ctx, std::optional<ui64> lsn, TCompactionReq cState);
         // when hull db reports compaction finish we change state by calling this function
@@ -42,6 +43,7 @@ namespace NKikimr {
         void RenderHtml(IOutputStream &str, TDbMon::ESubRequestID subId) const;
 
     private:
+        const TString VDiskLogPrefix;
         // Actor ids for Hull Dbs
         TActorId LogoBlobsActorId;
         TActorId BlocksActorId;

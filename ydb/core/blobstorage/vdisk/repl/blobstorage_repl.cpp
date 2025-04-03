@@ -202,7 +202,8 @@ namespace NKikimr {
         }
 
         void Transition(EState current, EState next) {
-            Y_ABORT_UNLESS(State == current, "State# %s Expected# %s", StateToStr(State), StateToStr(current));
+            Y_VERIFY_S(State == current, ReplCtx->VCtx->VDiskLogPrefix
+                << "State# " << StateToStr(State) << " Expected# " << StateToStr(current));
             State = next;
         }
 
@@ -279,7 +280,7 @@ namespace NKikimr {
             ReplCtx->MonGroup.ReplWorkUnitsDone() = 0;
             ReplCtx->MonGroup.ReplItemsRemaining() = 0;
             ReplCtx->MonGroup.ReplItemsDone() = 0;
-            Y_ABORT_UNLESS(NextMinHugeBlobInBytes);
+            Y_VERIFY_S(NextMinHugeBlobInBytes, ReplCtx->VCtx->VDiskLogPrefix);
             ReplCtx->MinHugeBlobInBytes = NextMinHugeBlobInBytes;
             UnrecoveredNonphantomBlobs = false;
 
@@ -294,13 +295,13 @@ namespace NKikimr {
         }
 
         void Handle(TEvReplStarted::TPtr& ev) {
-            Y_ABORT_UNLESS(ReplJobActorId == ev->Sender);
+            Y_VERIFY_S(ReplJobActorId == ev->Sender, ReplCtx->VCtx->VDiskLogPrefix);
 
             switch (State) {
                 case Plan:
                     // this is a first quantum of replication, so we have to register it in the broker
                     State = AwaitToken;
-                    Y_DEBUG_ABORT_UNLESS(!RequestedReplicationToken);
+                    Y_VERIFY_S(!RequestedReplicationToken, ReplCtx->VCtx->VDiskLogPrefix);
                     if (RequestedReplicationToken) {
                         STLOG(PRI_CRIT, BS_REPL, BSVR38, ReplCtx->VCtx->VDiskLogPrefix << "excessive replication token requested");
                         break;
@@ -322,7 +323,7 @@ namespace NKikimr {
         }
 
         void HandleReplToken() {
-            Y_ABORT_UNLESS(RequestedReplicationToken);
+            Y_VERIFY_S(RequestedReplicationToken, ReplCtx->VCtx->VDiskLogPrefix);
             RequestedReplicationToken = false;
             HoldingReplicationToken = true;
 
@@ -365,11 +366,12 @@ namespace NKikimr {
         }
 
         void Handle(TEvReplFinished::TPtr &ev) {
-            Y_ABORT_UNLESS(ev->Sender == ReplJobActorId);
+            Y_VERIFY_S(ev->Sender == ReplJobActorId, ReplCtx->VCtx->VDiskLogPrefix);
             ReplJobActorId = {};
 
             // replication can be finished only from the following states
-            Y_ABORT_UNLESS(State == Plan || State == Replication, "State# %s", StateToStr(State));
+            Y_VERIFY_S(State == Plan || State == Replication, ReplCtx->VCtx->VDiskLogPrefix
+                << "State# " << StateToStr(State));
 
             TEvReplFinished *msg = ev->Get();
             TEvReplFinished::TInfoPtr info = msg->Info;
@@ -388,7 +390,7 @@ namespace NKikimr {
             CanDropDonor = CanDropDonor && info->DropDonor;
 
             if (info->DonorNotReady) {
-                Y_ABORT_UNLESS(!DonorQueue.empty() && DonorQueue.front());
+                Y_VERIFY_S(!DonorQueue.empty() && DonorQueue.front(), ReplCtx->VCtx->VDiskLogPrefix);
                 auto& donor = DonorQueue.front();
 
                 if (donor->FirstNotReady == TInstant::Zero()) {
@@ -440,7 +442,7 @@ namespace NKikimr {
                 }
                 if (!finished) {
                     if (CanDropDonor) {
-                        Y_ABORT_UNLESS(!DonorQueue.empty() && DonorQueue.front());
+                        Y_VERIFY_S(!DonorQueue.empty() && DonorQueue.front(), ReplCtx->VCtx->VDiskLogPrefix);
                         DropDonor(*DonorQueue.front());
                         DonorQueue.pop_front();
                     } else {
@@ -503,7 +505,7 @@ namespace NKikimr {
 
         void RunRepl(const TLogoBlobID& from) {
             LastReplQuantumStart = TAppData::TimeProvider->Now();
-            Y_ABORT_UNLESS(!ReplJobActorId);
+            Y_VERIFY_S(!ReplJobActorId, ReplCtx->VCtx->VDiskLogPrefix);
 
             // Iterate through the donor queue, moving "NotReady" donors to the end  
             // until a ready donor or an empty optional (indicating the use of the group's other disks instead of a donor) is found.
@@ -656,7 +658,7 @@ namespace NKikimr {
 
         void Handle(TEvents::TEvGone::TPtr ev) {
             const size_t num = DonorQueryActors.erase(ev->Sender);
-            Y_ABORT_UNLESS(num);
+            Y_VERIFY_S(num, ReplCtx->VCtx->VDiskLogPrefix);
         }
 
         void Ignore()

@@ -220,7 +220,11 @@ std::vector<arrow::ValueDescr> ToValueDescr(const TVector<TType*>& types) {
     std::vector<arrow::ValueDescr> res;
     res.reserve(types.size());
     for (const auto& type : types) {
-        res.emplace_back(ToValueDescr(type));
+        if (type) {
+            res.emplace_back(ToValueDescr(type));
+        } else {
+            res.emplace_back();
+        }
     }
 
     return res;

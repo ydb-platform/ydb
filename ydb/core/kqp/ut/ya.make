@@ -16,7 +16,7 @@ RECURSE_FOR_TESTS(
     scan
     scheme
     service
-    spilling
+    runtime
     sysview
     tx
     view

@@ -10,13 +10,6 @@
 
 namespace NKikimr::NArrow::NSSA {
 
-enum class EIndexCheckOperation {
-    Equals,
-    StartsWith,
-    EndsWith,
-    Contains
-};
-
 class TProcessorContext;
 
 class IFetchLogic {
@@ -153,15 +146,15 @@ public:
 
     class TFetchIndexContext {
     public:
-        using EOperation = EIndexCheckOperation;
+        using TOperation = TIndexCheckOperation;
 
         class TOperationsBySubColumn {
         private:
             std::optional<bool> FullColumnOperations;
-            THashMap<TString, THashSet<EOperation>> Data;
+            THashMap<TString, THashSet<TOperation>> Data;
 
         public:
-            const THashMap<TString, THashSet<EOperation>>& GetData() const {
+            const THashMap<TString, THashSet<TOperation>>& GetData() const {
                 return Data;
             }
 
@@ -170,7 +163,7 @@ public:
                 return !*FullColumnOperations;
             }
 
-            TOperationsBySubColumn& Add(const TString& subColumn, const EOperation operation, const bool strict = true) {
+            TOperationsBySubColumn& Add(const TString& subColumn, const TOperation operation, const bool strict = true) {
                 if (FullColumnOperations) {
                     AFL_VERIFY(*FullColumnOperations == !subColumn);
                 } else {
@@ -196,7 +189,7 @@ public:
             for (auto&& i : OperationsBySubColumn.GetData()) {
                 auto& subColumnJson = result.InsertValue(i.first, NJson::JSON_ARRAY);
                 for (auto&& op : i.second) {
-                    subColumnJson.AppendValue(::ToString(op));
+                    subColumnJson.AppendValue(op.DebugString());
                 }
             }
             return result;
@@ -231,13 +224,17 @@ public:
     private:
         YDB_READONLY(ui32, ColumnId, 0);
         YDB_READONLY_DEF(TString, SubColumnName);
-        YDB_READONLY(EIndexCheckOperation, Operation, EIndexCheckOperation::Equals);
+        TIndexCheckOperation Operation;
 
     public:
-        TCheckIndexContext(const ui32 columnId, const TString& subColumnName, const EIndexCheckOperation operation)
+        TCheckIndexContext(const ui32 columnId, const TString& subColumnName, const TIndexCheckOperation& operation)
             : ColumnId(columnId)
             , SubColumnName(subColumnName)
             , Operation(operation) {
+        }
+
+        const TIndexCheckOperation& GetOperation() const {
+            return Operation;
         }
 
         bool operator==(const TCheckIndexContext& item) const {

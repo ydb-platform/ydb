@@ -253,6 +253,14 @@ void Deserialize(std::deque<T, A>& value, INodePtr node);
 template <class T, size_t N>
 void Deserialize(TCompactVector<T, N>& value, INodePtr node);
 
+// RepeatedPtrField
+template <class T>
+void Deserialize(google::protobuf::RepeatedPtrField<T>& items, INodePtr node);
+
+// RepeatedField
+template <class T>
+void Deserialize(google::protobuf::RepeatedField<T>& items, INodePtr node);
+
 // TErrorOr
 template <class T>
 void Deserialize(TErrorOr<T>& error, INodePtr node);

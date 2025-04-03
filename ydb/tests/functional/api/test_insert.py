@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 import logging
 
-from hamcrest import assert_that, raises, equal_to
+from hamcrest import assert_that, raises, equal_to, any_of
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.oss.ydb_sdk_import import ydb
@@ -189,9 +189,15 @@ class TestInsertOperations(object):
                 if first_query_kind in row_adding_operations and second_query_kind == 'insert':
                     assert_that(
                         callee,
-                        raises(
-                            ydb.PreconditionFailed,
-                            "Duplicate keys have been found."
+                        any_of(
+                            raises(
+                                ydb.PreconditionFailed,
+                                "Conflict with existing key."
+                            ),
+                            raises(
+                                ydb.PreconditionFailed,
+                                "Duplicate keys have been found."
+                            )
                         )
                     )
 

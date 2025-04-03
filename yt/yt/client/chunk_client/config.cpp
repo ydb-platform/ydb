@@ -229,7 +229,7 @@ void TErasureReaderConfig::Register(TRegistrar registrar)
     registrar.Parameter("slow_reader_expiration_timeout", &TThis::SlowReaderExpirationTimeout)
         .Default(TDuration::Minutes(2));
     registrar.Parameter("replication_reader_timeout", &TThis::ReplicationReaderTimeout)
-        .Default(TDuration::Seconds(60));
+        .Default(TDuration::Seconds(300));
     registrar.Parameter("replication_reader_failure_timeout", &TThis::ReplicationReaderFailureTimeout)
         .Default(TDuration::Minutes(10));
 }

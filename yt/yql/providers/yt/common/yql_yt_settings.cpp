@@ -548,6 +548,7 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
             }
         });
     REGISTER_SETTING(*this, _AllowRemoteClusterInput);
+    REGISTER_SETTING(*this, UseColumnGroupsFromInputTables);
 }
 
 EReleaseTempDataMode GetReleaseTempDataMode(const TYtSettings& settings) {

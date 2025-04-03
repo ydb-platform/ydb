@@ -350,7 +350,7 @@ private:
         if (postEnumerationShuffleElimination) {
             EliminateShuffles(hypergraph, bestJoinOrder, orderingsFSM);
         }
-        auto resTree = ConvertFromInternal(bestJoinOrder, fdStorage);
+        auto resTree = ConvertFromInternal(bestJoinOrder, fdStorage, EnableShuffleElimination);
         AddMissingConditions(hypergraph, resTree);
         return resTree;
     }

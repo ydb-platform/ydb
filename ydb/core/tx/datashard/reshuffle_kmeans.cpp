@@ -59,7 +59,7 @@ protected:
     ui32 RetryCount = 0;
 
     TActorId Uploader;
-    TUploadLimits Limits;
+    const TIndexBuildScanSettings ScanSettings;
 
     TTags UploadScan;
 
@@ -91,6 +91,7 @@ public:
         , BuildId{request.GetId()}
         , Clusters{request.GetClusters().begin(), request.GetClusters().end()}
         , TargetTable{request.GetPostingName()}
+        , ScanSettings(request.GetScanSettings())
         , ResponseActorId{responseActorId}
         , Response{std::move(response)}
     {
@@ -106,7 +107,7 @@ public:
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
     {
         TActivationContext::AsActorContext().RegisterWithSameMailbox(this);
-        LOG_D("Prepare " << Debug());
+        LOG_I("Prepare " << Debug());
 
         Driver = driver;
         return {EScan::Feed, {}};
@@ -136,8 +137,6 @@ public:
 
     TAutoPtr<IDestructable> Finish(EAbort abort) final
     {
-        LOG_D("Finish " << Debug());
-
         if (Uploader) {
             Send(Uploader, new TEvents::TEvPoison);
             Uploader = {};
@@ -156,6 +155,8 @@ public:
             record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
         }
         NYql::IssuesToMessage(UploadStatus.Issues, record.MutableIssues());
+
+        LOG_N("Finish " << Debug() << " " << Response->Record.ShortDebugString());
         Send(ResponseActorId, Response.Release());
 
         Driver = nullptr;
@@ -170,20 +171,14 @@ public:
 
     TString Debug() const
     {
-        return TStringBuilder() << " TReshuffleKMeansScan Id: " << BuildId << " Parent: " << Parent << " Child: " << Child
+        return TStringBuilder() << "TReshuffleKMeansScan Id: " << BuildId << " Parent: " << Parent << " Child: " << Child
             << " Target: " << TargetTable << " K: " << K << " Clusters: " << Clusters.size()
-            << " ReadBuf size: " << ReadBuf.Size() << " WriteBuf size: " << WriteBuf.Size() << " ";
+            << " ReadBuf size: " << ReadBuf.Size() << " WriteBuf size: " << WriteBuf.Size();
     }
 
     EScan PageFault() final
     {
         LOG_T("PageFault " << Debug());
-
-        if (!ReadBuf.IsEmpty() && WriteBuf.IsEmpty()) {
-            ReadBuf.FlushTo(WriteBuf);
-            Upload(false);
-        }
-
         return EScan::Feed;
     }
 
@@ -201,7 +196,7 @@ protected:
 
     void HandleWakeup()
     {
-        LOG_T("Retry upload " << Debug());
+        LOG_I("Retry upload " << Debug());
 
         if (!WriteBuf.IsEmpty()) {
             Upload(true);
@@ -214,8 +209,9 @@ protected:
                                               << " ev->Sender: " << ev->Sender.ToString());
 
         if (Uploader) {
-            Y_ENSURE(Uploader == ev->Sender, "Mismatch Uploader: " << Uploader.ToString() << " ev->Sender: "
-                                                                     << ev->Sender.ToString() << Debug());
+            Y_ENSURE(Uploader == ev->Sender, "Mismatch"
+                << " Uploader: " << Uploader.ToString()
+                << " Sender: " << ev->Sender.ToString());
         } else {
             Y_ENSURE(Driver == nullptr);
             return;
@@ -227,7 +223,7 @@ protected:
             UploadRows += WriteBuf.GetRows();
             UploadBytes += WriteBuf.GetBytes();
             WriteBuf.Clear();
-            if (!ReadBuf.IsEmpty() && ReadBuf.IsReachLimits(Limits)) {
+            if (HasReachedLimits(ReadBuf, ScanSettings)) {
                 ReadBuf.FlushTo(WriteBuf);
                 Upload(false);
             }
@@ -236,21 +232,21 @@ protected:
             return;
         }
 
-        if (RetryCount < Limits.MaxUploadRowsRetryCount && UploadStatus.IsRetriable()) {
-            LOG_N("Got retriable error, " << Debug() << UploadStatus.ToString());
+        if (RetryCount < ScanSettings.GetMaxBatchRetries() && UploadStatus.IsRetriable()) {
+            LOG_N("Got retriable error, " << Debug() << " " << UploadStatus.ToString());
 
-            Schedule(Limits.GetTimeoutBackoff(RetryCount), new TEvents::TEvWakeup);
+            Schedule(GetRetryWakeupTimeoutBackoff(RetryCount), new TEvents::TEvWakeup);
             return;
         }
 
-        LOG_N("Got error, abort scan, " << Debug() << UploadStatus.ToString());
+        LOG_N("Got error, abort scan, " << Debug() << " " << UploadStatus.ToString());
 
         Driver->Touch(EScan::Final);
     }
 
     EScan FeedUpload()
     {
-        if (!ReadBuf.IsReachLimits(Limits)) {
+        if (!HasReachedLimits(ReadBuf, ScanSettings)) {
             return EScan::Feed;
         }
         if (!WriteBuf.IsEmpty()) {
@@ -285,14 +281,17 @@ public:
         : TReshuffleKMeansScanBase{table, std::move(lead), request, responseActorId, std::move(response)}
     {
         this->Dimensions = request.GetSettings().vector_dimension();
-        LOG_D("Create " << Debug());
+        LOG_I("Create " << Debug());
     }
 
-    EScan Feed(TArrayRef<const TCell> key, const TRow& row) final
+    EScan Feed(TArrayRef<const TCell> key, const TRow& row_) final
     {
         LOG_T("Feed " << Debug());
+        
         ++ReadRows;
-        ReadBytes += CountBytes(key, row);
+        ReadBytes += CountBytes(key, row_);
+        auto row = *row_;
+        
         switch (UploadState) {
             case EState::UPLOAD_MAIN_TO_BUILD:
                 return FeedUploadMain2Build(key, row);
@@ -308,40 +307,40 @@ public:
     }
 
 private:
-    EScan FeedUploadMain2Build(TArrayRef<const TCell> key, const TRow& row)
+    EScan FeedUploadMain2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos > K) {
+        if (pos >= K) {
             return EScan::Feed;
         }
         AddRowMain2Build(ReadBuf, Child + pos, key, row);
         return FeedUpload();
     }
 
-    EScan FeedUploadMain2Posting(TArrayRef<const TCell> key, const TRow& row)
+    EScan FeedUploadMain2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos > K) {
+        if (pos >= K) {
             return EScan::Feed;
         }
         AddRowMain2Posting(ReadBuf, Child + pos, key, row, DataPos);
         return FeedUpload();
     }
 
-    EScan FeedUploadBuild2Build(TArrayRef<const TCell> key, const TRow& row)
+    EScan FeedUploadBuild2Build(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos > K) {
+        if (pos >= K) {
             return EScan::Feed;
         }
         AddRowBuild2Build(ReadBuf, Child + pos, key, row);
         return FeedUpload();
     }
 
-    EScan FeedUploadBuild2Posting(TArrayRef<const TCell> key, const TRow& row)
+    EScan FeedUploadBuild2Posting(TArrayRef<const TCell> key, TArrayRef<const TCell> row)
     {
         const ui32 pos = FeedEmbedding(*this, Clusters, row, EmbeddingPos);
-        if (pos > K) {
+        if (pos >= K) {
             return EScan::Feed;
         }
         AddRowBuild2Posting(ReadBuf, Child + pos, key, row, DataPos);

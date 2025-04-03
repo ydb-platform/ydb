@@ -3,7 +3,7 @@
 #include "schemeshard_export.h"
 #include "schemeshard_export_flow_proposals.h"
 #include "schemeshard_export_helpers.h"
-#include "schemeshard_export_scheme_uploader.h"
+#include "schemeshard_export_uploaders.h"
 #include "schemeshard_audit_log.h"
 #include "schemeshard_impl.h"
 
@@ -209,12 +209,25 @@ private:
         return true;
     }
 
+    TString GetCommonSourcePath(const Ydb::Export::ExportToS3Settings& settings) {
+        return settings.source_path();
+    }
+
+    TString GetCommonSourcePath(const Ydb::Export::ExportToYtSettings&) {
+        return {};
+    }
+
     template <typename TSettings>
     bool FillItems(TExportInfo::TPtr exportInfo, const TSettings& settings, TString& explain) {
+        TString commonSourcePath = GetCommonSourcePath(settings);
+        if (commonSourcePath && commonSourcePath.back() != '/') {
+            commonSourcePath.push_back('/');
+        }
         exportInfo->Items.reserve(settings.items().size());
         for (ui32 itemIdx : xrange(settings.items().size())) {
             const auto& item = settings.items(itemIdx);
-            const TPath path = TPath::Resolve(item.source_path(), Self);
+            const TString srcPath = commonSourcePath + item.source_path();
+            const TPath path = TPath::Resolve(srcPath, Self);
             {
                 TPath::TChecker checks = path.Check();
                 checks
@@ -230,7 +243,7 @@ private:
                 }
             }
 
-            exportInfo->Items.emplace_back(item.source_path(), path.Base()->PathId, path->PathType);
+            exportInfo->Items.emplace_back(srcPath, path.Base()->PathId, path->PathType);
             exportInfo->PendingItems.push_back(itemIdx);
         }
 

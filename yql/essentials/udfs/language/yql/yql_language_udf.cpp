@@ -43,6 +43,8 @@ public:
             VisitUnaryCasualSubexpr(dynamic_cast<const TRule_unary_casual_subexpr&>(msg));
         } else if (descr == TRule_in_unary_casual_subexpr::GetDescriptor()) {
             VisitUnaryCasualSubexpr(dynamic_cast<const TRule_in_unary_casual_subexpr&>(msg));
+        } else if (descr == TRule_type_name_simple::GetDescriptor()) {
+            VisitSimpleType(dynamic_cast<const TRule_type_name_simple&>(msg));
         }
 
         TStringBuf fullName = descr->full_name();
@@ -124,6 +126,13 @@ private:
         }
 
         const auto& suffix = msg.GetRule_unary_subexpr_suffix2();
+        const bool suffixIsEmpty = suffix.GetBlock1().empty() && !suffix.HasBlock2();
+        if (suffixIsEmpty) {
+            if (auto simpleType = LookupSimpleType(func, true, false); simpleType) {
+                Freqs[std::make_pair("TYPE", func)] += 1;
+            }
+        }
+
         for (auto& _b : suffix.GetBlock1()) {
             const auto& b = _b.GetBlock1();
             switch (b.Alt_case()) {
@@ -144,6 +153,10 @@ private:
                     Y_ABORT("You should change implementation according to grammar changes");
             }
         }
+    }
+
+    void VisitSimpleType(const TRule_type_name_simple& msg) {
+        Freqs[std::make_pair("TYPE", Id(msg.GetRule_an_id_pure1(), Translation))] += 1;
     }
 
     bool ParseUdf(const TRule_atom_expr& msg, TString& module, TString& func) {

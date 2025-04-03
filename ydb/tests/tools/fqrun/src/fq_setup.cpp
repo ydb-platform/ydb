@@ -73,7 +73,7 @@ private:
 
         if (Settings.MonitoringEnabled) {
             serverSettings.InitKikimrRunConfig();
-            serverSettings.SetMonitoringPortOffset(Settings.MonitoringPortOffset, true);
+            serverSettings.SetMonitoringPortOffset(Settings.FirstMonitoringPort, true);
             serverSettings.SetNeedStatsCollectors(true);
         }
 
@@ -192,7 +192,7 @@ public:
     explicit TImpl(const TFqSetupSettings& settings)
         : Settings(settings)
     {
-        const ui32 grpcPort = Settings.GrpcPort ? Settings.GrpcPort : PortManager.GetPort();
+        const ui32 grpcPort = Settings.FirstGrpcPort ? Settings.FirstGrpcPort : PortManager.GetPort();
         InitializeYqlLogger();
         InitializeServer(grpcPort);
         InitializeFqProxy(grpcPort);
@@ -293,7 +293,7 @@ private:
 
     static FederatedQuery::CreateQueryRequest GetStreamRequest(const TRequestOptions& query) {
         FederatedQuery::CreateQueryRequest request;
-        request.set_execute_mode(FederatedQuery::ExecuteMode::RUN);
+        request.set_execute_mode(query.Action);
 
         auto& content = *request.mutable_content();
         content.set_type(FederatedQuery::QueryContent::STREAMING);
@@ -359,6 +359,9 @@ TRequestResult TFqSetup::DescribeQuery(const TString& queryId, TExecutionMeta& m
     for (const auto& resultMeta : result.result_set_meta()) {
         meta.ResultSetSizes.emplace_back(resultMeta.rows_count());
     }
+
+    meta.Ast = result.ast().data();
+    meta.Plan = result.plan().json();
 
     return GetStatus(response->Get()->Issues);
 }

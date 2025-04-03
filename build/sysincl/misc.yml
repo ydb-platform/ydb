@@ -463,6 +463,10 @@
   includes:
     - filter.h: contrib/libs/svt-av1/Source/Lib/Codec/filter.h
 
+- source_filter: "^contrib/libs/tinycbor"
+  includes:
+    - memory.h: contrib/libs/tinycbor/src/memory.h
+
 - source_filter: "^contrib/restricted/ffmpeg"
   includes:
     - thread.h: contrib/restricted/ffmpeg/libavcodec/thread.h

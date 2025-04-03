@@ -239,7 +239,7 @@ public:
     }
 
     virtual bool NeedAccessorsFetching() const override {
-        return !StageData || !StageData->HasPortionAccessor();
+        return !HasStageData() || !GetStageData().HasPortionAccessor();
     }
 
     virtual bool DoAddTxConflict() override {

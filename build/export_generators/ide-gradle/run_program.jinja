@@ -71,9 +71,5 @@ tasks.compileTestKotlin.configure {
     dependsOn(runProg{{ loop.index }})
 }
 {%         endif -%}
-{%-    endfor -%}
-{%-    if not proto_template %}
-
-tasks.getByName("sourcesJar").dependsOn(tasks.compileJava)
-{%-     endif -%}
+{%-     endfor -%}
 {%- endif -%}

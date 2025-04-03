@@ -1,6 +1,9 @@
 #include "yql_completer.h"
 
 #include <yql/essentials/sql/v1/complete/sql_complete.h>
+#include <yql/essentials/sql/v1/complete/name/static/name_service.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_pure_ansi/lexer.h>
 
 namespace NYdb::NConsoleClient {
 
@@ -38,8 +41,8 @@ namespace NYdb::NConsoleClient {
     };
 
     IYQLCompleter::TPtr MakeYQLCompleter() {
-        return IYQLCompleter::TPtr(
-            new TYQLCompleter(NSQLComplete::MakeSqlCompletionEngine()));
+        return IYQLCompleter::TPtr(new TYQLCompleter(
+            NSQLComplete::MakeSqlCompletionEngine()));
     }
 
 } // namespace NYdb::NConsoleClient

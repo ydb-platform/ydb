@@ -1,6 +1,8 @@
 name: Update Muted tests
 
 on:
+  schedule:
+    - cron: "0 */2 * * *"  # At the beginning of every 2nd hour
   workflow_dispatch:
 
 env:
@@ -23,14 +25,23 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install ydb[yc] PyGithub
+          pip install ydb[yc] PyGithub codeowners pandas
 
       - name: Setup ydb access
         uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+    
+      - name: Collect test history data with window 1 days relwithdebinfo for ${{ env.BASE_BRANCH }}
+        run: python3 .github/scripts/analytics/flaky_tests_history.py --days-window=1 --branch=${{ env.BASE_BRANCH }}
+      
+      - name: Update muted and not muted tests in DB for ${{ env.BASE_BRANCH }}
+        run: python3 .github/scripts/tests/get_muted_tests.py upload_muted_tests --branch=${{ env.BASE_BRANCH }}
+      
+      - name: Update test monitor (how long tests in state) for ${{ env.BASE_BRANCH }}
+        run: python3 .github/scripts/analytics/tests_monitor.py --branch=${{ env.BASE_BRANCH }}
 
-      - name: Update branch with base branch
+      - name: Update branch ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }} with branch ${{ env.BASE_BRANCH }}
         run: |
           git config user.name YDBot
           git config user.email ydbot@ydb.tech
@@ -49,18 +60,18 @@ jobs:
       
           # Attempt to rebase BRANCH_FOR_PR onto BASE_BRANCH
           if ! git rebase origin/${{ env.BASE_BRANCH }} -X theirs; then
-            echo "Rebase failed, resetting branch to match BASE_BRANCH..."
-      
+            echo "Rebase failed, resetting branch to match ${{ env.BASE_BRANCH }}..."
+
             # Abort the rebase process
             git rebase --abort
       
-            # Reset the branch to BASE_BRANCH
+            echo "Reset branch ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }} to origin/${{ env.BASE_BRANCH }}"
             git reset --hard origin/${{ env.BASE_BRANCH }}
             
           fi
           git push origin ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }} --force
         
-      - name: Run the script
+      - name: Run script create_new_muted_ya.py
         run: |
           .github/scripts/tests/create_new_muted_ya.py update_muted_ya
 
@@ -80,6 +91,7 @@ jobs:
           fi
 
       - name: Collect PR description
+        if: env.changes == 'true'
         id: pr_description
         run: |
           PR_BODY=''
@@ -127,17 +139,16 @@ jobs:
           git commit -m "Update muted YA file"
 
       - name: Push changes
+        if: env.changes == 'true'
         uses: ad-m/github-push-action@v0.8.0
         with:
           github_token: ${{ secrets.YDBOT_TOKEN }}
           branch: ${{ env.BRANCH_FOR_PR }}_${{ env.BASE_BRANCH }}
           force: true
 
-      - name: Install PyGithub
-        run: |
-          pip install PyGithub
 
       - name: Create or update PR
+        if: env.changes == 'true'
         id: create_or_update_pr
         env:
           GITHUB_TOKEN: ${{ secrets.YDBOT_TOKEN }}
@@ -146,9 +157,8 @@ jobs:
 
         
       - name: Comment PR
-        continue-on-error: true
         uses: actions/github-script@v7
-        
+        if: env.changes == 'true'
         with:
           github-token: ${{ secrets.YDBOT_TOKEN }}
           script: |
@@ -164,7 +174,7 @@ jobs:
               issue_number: ${{ steps.create_or_update_pr.outputs.pr_number }},
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: bodyText
+              body: completeBody
             });
       
             github.rest.issues.addLabels({
@@ -174,6 +184,7 @@ jobs:
             });
 
       - name: Add reviewers
+        if: env.changes == 'true'
         uses: octokit/request-action@v2.x
         with:
           route: POST /repos/{owner}/{repo}/pulls/{pull_number}/requested_reviewers

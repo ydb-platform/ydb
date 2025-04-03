@@ -49,7 +49,7 @@ public:
         Size = 0;
         lock.unlock();
 
-        LOG_N("FinishTLocalKMeansScan " << Response->Record.ShortDebugString());
+        LOG_N("Finish TLocalKMeansScan " << Response->Record.ShortDebugString());
         ctx.Send(ResponseActorId, std::move(Response));
     }
 
@@ -86,7 +86,7 @@ static constexpr double MinVectorsNeedsReassigned = 0.01;
 
 class TLocalKMeansScanBase: public TActor<TLocalKMeansScanBase>, public NTable::IScan {
 protected:
-    using EState = NKikimrTxDataShard::TEvLocalKMeansRequest;
+    using EState = NKikimrTxDataShard::EKMeansState;
 
     NTableIndex::TClusterId Parent = 0;
     NTableIndex::TClusterId Child = 0;
@@ -96,8 +96,8 @@ protected:
 
     ui32 K = 0;
 
-    EState::EState State;
-    EState::EState UploadState;
+    EState State;
+    EState UploadState;
 
     IDriver* Driver = nullptr;
 
@@ -139,7 +139,7 @@ protected:
     ui32 RetryCount = 0;
 
     TActorId Uploader;
-    TUploadLimits Limits;
+    const TIndexBuildScanSettings ScanSettings;
 
     NTable::TTag KMeansScan;
     TTags UploadScan;
@@ -163,15 +163,16 @@ public:
         : TActor{&TThis::StateWork}
         , Parent{parent}
         , Child{child}
-        , MaxRounds{request.GetNeedsRounds() - request.GetDoneRounds()}
+        , MaxRounds{request.GetNeedsRounds()}
         , K{request.GetK()}
-        , State{request.GetState()}
+        , State{EState::SAMPLE}
         , UploadState{request.GetUpload()}
         , Lead{std::move(lead)}
         , BuildId{buildId}
         , Rng{request.GetSeed()}
         , TargetTable{request.GetLevelName()}
         , NextTable{request.GetPostingName()}
+        , ScanSettings(request.GetScanSettings())
         , Result{std::move(result)}
     {
         const auto& embedding = request.GetEmbeddingColumn();
@@ -238,21 +239,15 @@ public:
 
     TString Debug() const
     {
-        return TStringBuilder() << " TLocalKMeansScan Id: " << BuildId << " Parent: " << Parent << " Child: " << Child
+        return TStringBuilder() << "TLocalKMeansScan Id: " << BuildId << " Parent: " << Parent << " Child: " << Child
             << " Target: " << TargetTable << " K: " << K << " Clusters: " << Clusters.size()
             << " State: " << State << " Round: " << Round << " / " << MaxRounds
-            << " ReadBuf size: " << ReadBuf.Size() << " WriteBuf size: " << WriteBuf.Size() << " ";
+            << " ReadBuf size: " << ReadBuf.Size() << " WriteBuf size: " << WriteBuf.Size();
     }
 
     EScan PageFault() final
     {
         LOG_T("PageFault " << Debug());
-
-        if (!ReadBuf.IsEmpty() && WriteBuf.IsEmpty()) {
-            ReadBuf.FlushTo(WriteBuf);
-            Upload(false);
-        }
-
         return EScan::Feed;
     }
 
@@ -296,7 +291,7 @@ protected:
             UploadRows += WriteBuf.GetRows();
             UploadBytes += WriteBuf.GetBytes();
             WriteBuf.Clear();
-            if (!ReadBuf.IsEmpty() && ReadBuf.IsReachLimits(Limits)) {
+            if (HasReachedLimits(ReadBuf, ScanSettings)) {
                 ReadBuf.FlushTo(WriteBuf);
                 Upload(false);
             }
@@ -305,10 +300,10 @@ protected:
             return;
         }
 
-        if (RetryCount < Limits.MaxUploadRowsRetryCount && UploadStatus.IsRetriable()) {
+        if (RetryCount < ScanSettings.GetMaxBatchRetries() && UploadStatus.IsRetriable()) {
             LOG_N("Got retriable error, " << Debug() << UploadStatus.ToString());
 
-            ctx.Schedule(Limits.GetTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
+            ctx.Schedule(GetRetryWakeupTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
             return;
         }
 
@@ -319,7 +314,7 @@ protected:
 
     EScan FeedUpload()
     {
-        if (!ReadBuf.IsReachLimits(Limits)) {
+        if (!HasReachedLimits(ReadBuf, ScanSettings)) {
             return EScan::Feed;
         }
         if (!WriteBuf.IsEmpty()) {
@@ -655,11 +650,9 @@ void TDataShard::Handle(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TAc
 void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx)
 {
     auto& request = ev->Get()->Record;
-    const bool needsSnapshot = request.HasSnapshotStep() || request.HasSnapshotTxId();
-    TRowVersion rowVersion(request.GetSnapshotStep(), request.GetSnapshotTxId());
-    if (!needsSnapshot) {
-        rowVersion = GetMvccTxVersion(EMvccTxMode::ReadOnly);
-    }
+    auto rowVersion = request.HasSnapshotStep() || request.HasSnapshotTxId()
+        ? TRowVersion(request.GetSnapshotStep(), request.GetSnapshotTxId())
+        : GetMvccTxVersion(EMvccTxMode::ReadOnly);
 
     LOG_N("Starting TLocalKMeansScan " << request.ShortDebugString()
         << " row version " << rowVersion);
@@ -724,12 +717,14 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
 
     localTid = userTable.LocalTid;
 
-    const TSnapshotKey snapshotKey(pathId, rowVersion.Step, rowVersion.TxId);
-    if (needsSnapshot && !SnapshotManager.FindAvailable(snapshotKey)) {
-        badRequest(TStringBuilder() << "no snapshot has been found" << " , path id is " << pathId.OwnerId << ":"
-                                    << pathId.LocalPathId << " , snapshot step is " << snapshotKey.Step
-                                    << " , snapshot tx is " << snapshotKey.TxId);
-        return;
+    if (request.HasSnapshotStep() || request.HasSnapshotTxId()) {
+        const TSnapshotKey snapshotKey(pathId, rowVersion.Step, rowVersion.TxId);
+        if (!SnapshotManager.FindAvailable(snapshotKey)) {
+            badRequest(TStringBuilder() << "no snapshot has been found" << " , path id is " << pathId.OwnerId << ":"
+                                        << pathId.LocalPathId << " , snapshot step is " << snapshotKey.Step
+                                        << " , snapshot tx is " << snapshotKey.TxId);
+            return;
+        }
     }
 
     if (!IsStateActive()) {

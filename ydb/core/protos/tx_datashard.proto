@@ -1436,17 +1436,18 @@ message TEvBuildIndexCreateRequest {
     optional uint64 SnapshotTxId = 8;
     optional uint64 SnapshotStep = 9;
 
-    optional uint32 MaxBatchRows = 10;
-    optional uint64 MaxBatchBytes = 11;
+    reserved 10; // MaxBatchRows
+    reserved 11; // MaxBatchBytes
 
     optional uint64 SeqNoGeneration = 12;       // monotonically increasing sequence, first part
     optional uint64 SeqNoRound = 13;            // monotonically increasing sequence, second part
-
-    optional uint64 MaxRetries = 14;
+    reserved 14; // MaxRetries
 
     repeated string DataColumns = 15;
 
     optional NKikimrIndexBuilder.TColumnBuildSettings ColumnBuildSettings = 16;
+    
+    optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 17;
 }
 
 message TEvBuildIndexProgressResponse {
@@ -1513,6 +1514,17 @@ message TEvSampleKResponse {
     repeated bytes Rows = 11;
 }
 
+enum EKMeansState {
+    UNSPECIFIED = 0;
+    SAMPLE = 1;
+    KMEANS = 2;
+    UPLOAD_MAIN_TO_BUILD = 3;
+    UPLOAD_MAIN_TO_POSTING = 4;
+    UPLOAD_BUILD_TO_BUILD = 5;
+    UPLOAD_BUILD_TO_POSTING = 6;
+    DONE = 7;
+};
+
 message TEvLocalKMeansRequest {
     optional uint64 Id = 1;
 
@@ -1528,23 +1540,10 @@ message TEvLocalKMeansRequest {
     optional Ydb.Table.VectorIndexSettings Settings = 8;
 
     optional uint64 Seed = 9;
-    optional uint32 K = 10;
 
-    enum EState {
-        UNSPECIFIED = 0;
-        SAMPLE = 1;
-        KMEANS = 2;
-        UPLOAD_MAIN_TO_BUILD = 3;
-        UPLOAD_MAIN_TO_POSTING = 4;
-        UPLOAD_BUILD_TO_BUILD = 5;
-        UPLOAD_BUILD_TO_POSTING = 6;
-        DONE = 7;
-    };
-    optional EState Upload = 11;
-    // State != DONE
-    optional EState State = 12;
-    // State != KMEANS || DoneRounds < NeedsRounds
-    optional uint32 DoneRounds = 13;
+    optional EKMeansState Upload = 11;
+    
+    optional uint32 K = 10;
     optional uint32 NeedsRounds = 14;
 
     // id of parent cluster
@@ -1558,6 +1557,8 @@ message TEvLocalKMeansRequest {
 
     optional string EmbeddingColumn = 19;
     repeated string DataColumns = 20;
+
+    optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 22;
 }
 
 message TEvLocalKMeansResponse {
@@ -1576,10 +1577,6 @@ message TEvLocalKMeansResponse {
     optional uint64 UploadBytes = 9;
     optional uint64 ReadRows = 10;
     optional uint64 ReadBytes = 11;
-
-    // TODO(mbkkt) implement slow-path (reliable-path)
-    // optional TEvLocalKMeansRequest.EState State
-    // optional uint32 DoneRounds
 }
 
 message TEvReshuffleKMeansRequest {
@@ -1596,7 +1593,7 @@ message TEvReshuffleKMeansRequest {
 
     optional Ydb.Table.VectorIndexSettings Settings = 8;
 
-    optional TEvLocalKMeansRequest.EState Upload = 9;
+    optional EKMeansState Upload = 9;
 
     // id of parent cluster
     optional uint64 Parent = 10;
@@ -1609,6 +1606,8 @@ message TEvReshuffleKMeansRequest {
 
     optional string EmbeddingColumn = 14;
     repeated string DataColumns = 15;
+
+    optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 16;
 }
 
 message TEvReshuffleKMeansResponse {
@@ -1645,7 +1644,7 @@ message TEvPrefixKMeansRequest {
 
     optional uint64 Seed = 7;
 
-    optional TEvLocalKMeansRequest.EState Upload = 8;
+    optional EKMeansState Upload = 8;
 
     optional uint32 K = 9;
     optional uint32 NeedsRounds = 10;
@@ -1660,6 +1659,8 @@ message TEvPrefixKMeansRequest {
     optional string EmbeddingColumn = 15;
     repeated string DataColumns = 16;
     optional uint32 PrefixColumns = 17;
+
+    optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 18;
 }
 
 message TEvPrefixKMeansResponse {
@@ -2328,8 +2329,10 @@ message TEvForceDataCleanup {
 // Intermediate requests and corresponding TEvForceDataCleanupResult's may be skipped.
 message TEvForceDataCleanupResult {
     enum EStatus {
-        OK = 0;
-        FAILED = 1;
+        UNKNOWN = 0;
+        OK = 1;
+        WRONG_SHARD_STATE = 2;
+        BORROWED = 3;
     };
     optional uint64 DataCleanupGeneration = 1; // from corresponding request (or greater)
     optional uint64 TabletId = 2;

@@ -431,6 +431,7 @@ message TRequestedBloomNGrammFilter {
     optional uint32 RecordsCount = 5;
     optional TIndexDataExtractor DataExtractor = 6;
     optional TSkipIndexBitSetStorage BitsStorage = 7;
+    optional bool CaseSensitive = 8 [default = true];
 }
 
 message TRequestedMaxIndex {
@@ -472,6 +473,7 @@ message TBloomNGrammFilter {
     optional uint32 RecordsCount = 5;
     optional TIndexDataExtractor DataExtractor = 6;
     optional TSkipIndexBitSetStorage BitsStorage = 7;
+    optional bool CaseSensitive = 8 [default = true];
 }
 
 message TMaxIndex {

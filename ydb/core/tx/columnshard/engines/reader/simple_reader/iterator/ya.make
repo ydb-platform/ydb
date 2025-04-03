@@ -8,6 +8,7 @@ SRCS(
     context.cpp
     fetching.cpp
     iterator.cpp
+    collections.cpp
 )
 
 PEERDIR(

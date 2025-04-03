@@ -426,34 +426,6 @@ TConclusion<bool> TGraph::OptimizeConditionsForIndexes(TGraphNode* condNode) {
     return true;
 }
 
-bool TGraph::IsBoolResultYqlOperator(const NYql::TKernelRequestBuilder::EBinaryOp op) const {
-    switch (op) {
-        case NYql::TKernelRequestBuilder::EBinaryOp::And:
-        case NYql::TKernelRequestBuilder::EBinaryOp::Or:
-        case NYql::TKernelRequestBuilder::EBinaryOp::Xor:
-            return true;
-        case NYql::TKernelRequestBuilder::EBinaryOp::Add:
-        case NYql::TKernelRequestBuilder::EBinaryOp::Sub:
-        case NYql::TKernelRequestBuilder::EBinaryOp::Mul:
-        case NYql::TKernelRequestBuilder::EBinaryOp::Div:
-        case NYql::TKernelRequestBuilder::EBinaryOp::Mod:
-        case NYql::TKernelRequestBuilder::EBinaryOp::Coalesce:
-            return false;
-
-        case NYql::TKernelRequestBuilder::EBinaryOp::StartsWith:
-        case NYql::TKernelRequestBuilder::EBinaryOp::EndsWith:
-        case NYql::TKernelRequestBuilder::EBinaryOp::StringContains:
-
-        case NYql::TKernelRequestBuilder::EBinaryOp::Equals:
-        case NYql::TKernelRequestBuilder::EBinaryOp::NotEquals:
-        case NYql::TKernelRequestBuilder::EBinaryOp::Less:
-        case NYql::TKernelRequestBuilder::EBinaryOp::LessOrEqual:
-        case NYql::TKernelRequestBuilder::EBinaryOp::Greater:
-        case NYql::TKernelRequestBuilder::EBinaryOp::GreaterOrEqual:
-            return true;
-    }
-}
-
 TConclusion<bool> TGraph::OptimizeConditionsForHeadersCheck(TGraphNode* condNode) {
     if (condNode->GetProcessor()->GetProcessorType() != EProcessorType::Calculation) {
         return false;

@@ -23,9 +23,9 @@ TConclusion<std::shared_ptr<IStepFunction>> TProgramBuilder::MakeFunction(const 
     if (func.GetKernelName()) {
         kernelLogic.reset(IKernelLogic::TFactory::Construct(func.GetKernelName()));
     } else if (func.HasYqlOperationId()) {
-        kernelLogic.reset(std::make_shared<TSimpleKernelLogic>(func.GetYqlOperationId()));
+        kernelLogic = std::make_shared<TSimpleKernelLogic>(func.GetYqlOperationId());
     } else {
-        kernelLogic.reset(std::make_shared<TSimpleKernelLogic>());
+        kernelLogic = std::make_shared<TSimpleKernelLogic>();
     }
 
     using TId = NKikimrSSA::TProgram::TAssignment;
@@ -322,9 +322,6 @@ TConclusionStatus TProgramBuilder::ReadAssign(
                 if (processor.IsFail()) {
                     return processor;
                 }
-                if (assign.GetFunction().HasYqlOperationId()) {
-                    processor.GetResult()->SetYqlOperationId(assign.GetFunction().GetYqlOperationId());
-                }
                 Builder.Add(processor.DetachResult());
             }
             break;
@@ -420,7 +417,7 @@ TConclusionStatus TProgramBuilder::ReadGroupBy(const NKikimrSSA::TProgram::TGrou
             }
             auto aggrType = GetAggregationType(agg.GetFunction());
             auto argColumnIds = extractColumnIds(agg.GetFunction().GetArguments());
-            auto status = TCalculationProcessor::Build(std::move(argColumnIds), columnName.GetColumnId(), func.DetachResult(), nullptr);
+            auto status = TCalculationProcessor::Build(std::move(argColumnIds), columnName.GetColumnId(), func.DetachResult(), std::make_shared<TSimpleKernelLogic>());
             if (status.IsFail()) {
                 return status;
             }

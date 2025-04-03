@@ -66,12 +66,11 @@ private:
         return false;
     }
 
-    virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const {
+    virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const override {
         return std::nullopt;
     }
 
 public:
-    virtual ~IKernelLogic() = default;
     TSimpleKernelLogic() = default;
     TSimpleKernelLogic(const ui32 yqlOperationId)
         : TBase(yqlOperationId)
@@ -82,9 +81,9 @@ public:
 
     virtual ECalculationHardness GetWeight() const override {
         if (!YqlOperationId) {
-            return (ui64)ECalculationHardness::Unknown;
+            return ECalculationHardness::Unknown;
         }
-        return (ui64)ECalculationHardness::NotSpecified;
+        return ECalculationHardness::NotSpecified;
     }
 
     virtual TString GetClassName() const override {
@@ -114,8 +113,7 @@ private:
 
 public:
     TLogicMatchString(const TIndexCheckOperation::EOperation operation, const bool caseSensitive, const bool isSimpleFunction)
-        : TBase(std::nullopt)
-        , Operation(operation)
+        : Operation(operation)
         , CaseSensitive(caseSensitive)
         , IsSimpleFunction(isSimpleFunction) {
     }
@@ -151,8 +149,7 @@ private:
 
 public:
     TLogicEquals(const bool isSimpleFunction)
-        : TBase(std::nullopt)
-        , IsSimpleFunction(isSimpleFunction) {
+        : IsSimpleFunction(isSimpleFunction) {
     }
 
     virtual TString GetClassName() const override {

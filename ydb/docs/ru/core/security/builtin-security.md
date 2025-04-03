@@ -1,8 +1,8 @@
 # Встроенная настройка безопасности
 
-Встроенная настройка безопасности выполняется автоматически при первом запуске кластера {{ ydb-short-name }}, если секция настроек безопасности в конфигурации кластера ([секция `security_config`](../reference/configuration/index.md#security)) не содержит явных настроек `default_users`, `default_groups`, `default_access`.
+Встроенная настройка безопасности выполняется автоматически при первом запуске кластера {{ ydb-short-name }}, если секция настроек безопасности в конфигурации кластера ([секция `security_config`](../devops/configuration-management/configuration-v1/config-settings.md#security)) не содержит явных настроек `default_users`, `default_groups`, `default_access`.
 
-Применение встроенной конфигурации безопасности выключается по [флагу `security_config.disable_builtin_security`](../reference/configuration/index.md#domains-config).
+Применение встроенной конфигурации безопасности выключается по [флагу `security_config.disable_builtin_security`](../devops/configuration-management/configuration-v1/config-settings.md#domains-config).
 
 Встроенная настройка безопасности добавляет в систему суперпользователя, а также реализует набор ролей безопасности для удобного управления пользователями.
 

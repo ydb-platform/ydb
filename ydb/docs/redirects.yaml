@@ -83,6 +83,8 @@ common:
     to: /devops/manual/initial-deployment.md
   - from: /deploy/configuration/config.md
     to: /reference/configuration/index.md
+  - from: /reference/configuration/index.md
+    to: /devops/configuration-management/configuration-v1/index.md
   - from: /deploy/manual/connector.md
     to: /devops/manual/federated-queries/connector-deployment.md
   - from: /deploy/manual/deploy-ydb-federated-query.md
@@ -417,9 +419,9 @@ ru:
 
   # Redirect for deprecated instructions
   - from: /devops/manual/state-storage-move.md
-    to: /devops/deployment-options/manual/before-v25.1/state-storage-move.md
+    to: /devops/configuration-management/configuration-v1/state-storage-move.md
   - from: /devops/manual/static-group-move.md
-    to: /devops/deployment-options/manual/before-v25.1/static-group-move.md
+    to: /devops/configuration-management/configuration-v1/static-group-move.md
 
   # Redirect for system-requirements
   - from: /devops/system-requirements.md

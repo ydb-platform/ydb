@@ -12,6 +12,7 @@
 #include "user_info.h"
 #include "utils.h"
 #include "read_quoter.h"
+#include "partition_workzone.h"
 
 #include <ydb/core/keyvalue/keyvalue_events.h>
 #include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
@@ -166,14 +167,14 @@ private:
     void ReplyWrite(const TActorContext& ctx, ui64 dst, const TString& sourceId, ui64 seqNo, ui16 partNo, ui16 totalParts, ui64 offset, TInstant writeTimestamp, bool already, ui64 maxSeqNo, TDuration partitionQuotedTime, TDuration topicQuotedTime, TDuration queueTime, TDuration writeTime, NWilson::TSpan& span);
     void SendReadingFinished(const TString& consumer);
 
-    void AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, bool headCleared, const TActorContext& ctx);
+    void AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
     void AnswerCurrentWrites(const TActorContext& ctx);
     void AnswerCurrentReplies(const TActorContext& ctx);
     void CancelOneWriteOnWrite(const TActorContext& ctx,
                                const TString& errorStr,
                                const TWriteMsg& p,
                                NPersQueue::NErrorCode::EErrorCode errorCode);
-    void ClearOldHead(const ui64 offset, const ui16 partNo, TEvKeyValue::TEvRequest* request);
+    void ClearOldHead(const ui64 offset, const ui16 partNo);
     void CreateMirrorerActor();
     void DoRead(TEvPQ::TEvRead::TPtr&& ev, TDuration waitQuotaTime, const TActorContext& ctx);
     void FillReadFromTimestamps(const TActorContext& ctx);
@@ -288,7 +289,6 @@ private:
     bool WaitingForSubDomainQuota(const TActorContext& ctx, const ui64 withSize = 0) const;
     size_t GetQuotaRequestSize(const TEvKeyValue::TEvRequest& request);
     std::pair<TInstant, TInstant> GetTime(const TUserInfo& userInfo, ui64 offset) const;
-    std::pair<TKey, ui32> Compact(const TKey& key, const ui32 size, bool headCleared);
     ui32 NextChannel(bool isHead, ui32 blobSize);
     ui64 GetSizeLag(i64 offset);
     std::pair<TKey, ui32> GetNewWriteKey(bool headCleared);
@@ -465,7 +465,7 @@ public:
     void Bootstrap(const TActorContext& ctx);
 
     ui64 Size() const {
-        return BodySize + Head.PackedSize;
+        return WorkZone.GetSize();
     }
 
     // The size of the data realy was persisted in the storage by the partition
@@ -481,7 +481,6 @@ public:
     ui64 ImportantClientsMinOffset() const;
 
     TInstant GetEndWriteTimestamp() const; // For tests only
-    THead& GetHead(); // For tests only
 
     //Bootstrap sends kvRead
     //Become StateInit
@@ -694,20 +693,9 @@ private:
     std::deque<TString> DeletedKeys;
     std::deque<TBlobKeyTokenPtr> DefferedKeysForDeletion;
 
-    THead Head;
-    THead NewHead;
-    TPartitionedBlob PartitionedBlob;
-    std::deque<std::pair<TKey, ui32>> CompactedKeys; //key and blob size
-    TDataKey NewHeadKey;
+    TPartitionWorkZone WorkZone;
 
-    ui64 BodySize;
-    ui32 MaxWriteResponsesSize;
-
-    std::deque<TDataKey> DataKeysBody;
-    TVector<TKeyLevel> DataKeysHead;
-    std::deque<TDataKey> HeadKeys;
-
-    std::deque<std::pair<ui64,ui64>> GapOffsets;
+    std::deque<std::pair<ui64, ui64>> GapOffsets;
     ui64 GapSize;
 
     TString CloudId;
@@ -774,7 +762,7 @@ private:
     void BeginProcessWrites(const TActorContext& ctx);
     void EndProcessWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
     void BeginAppendHeadWithNewWrites(const TActorContext& ctx);
-    void EndAppendHeadWithNewWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
+    void EndAppendHeadWithNewWrites(const TActorContext& ctx);
 
     //
     // user actions and transactions

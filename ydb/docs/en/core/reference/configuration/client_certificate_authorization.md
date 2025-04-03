@@ -1,18 +1,16 @@
-# Database node authentication
+# `client_certificate_authorization` configuration section
 
 Database node authentication within the {{ ydb-short-name }} cluster ensures that service connections between cluster nodes are assigned the correct security identifiers, or [SIDs](../../concepts/glossary.md#access-sid). The process of database node authentication applies to connections that use the gRPC protocol and provide functions for registering nodes in the cluster, as well as for accessing configuration information. SIDs assigned to connections are considered when checking the authorization rules that apply to the corresponding gRPC service calls.
 
 Node authentication settings are configured within the [static configuration](./index.md) of the cluster.
 
-## client_certificate_authorization – node authentication settings
-
-This section specifies the authentication settings for database node connections by defining the requirements for the content of the "Subject" and "Subject Alternative Name" fields in node certificates, as well as the list of [SID](../../concepts/glossary.md#access-sid) values assigned to the connections.
+The `client_certificate_authorization` section specifies the authentication settings for database node connections by defining the requirements for the content of the "Subject" and "Subject Alternative Name" fields in node certificates, as well as the list of [SID](../../concepts/glossary.md#access-sid) values assigned to the connections.
 
 The "Subject" field of the node certificate may contain multiple components (such as `O` – organization, `OU` – organizational unit, `C` – country, `CN` – common name), and checks can be configured against one or more of these components.
 
 The "Subject Alternative Name" field of the node certificate is a list of the node's network names or IP addresses. Checks can be configured to match the names specified in the certificate against the expected values.
 
-### Syntax
+## Syntax
 
 ```yaml
 client_certificate_authorization:
@@ -42,7 +40,7 @@ Key  | Description
 `subject_dns` | Allowed values for the "Subject Alternative Name" field, specified as either full values (using the `values` sub-key) or suffixes (using the `suffixes` sub-key). The check is successful if the actual value matches any full name or any suffix specified.
 `subject_terms` | Requirements for the "Subject" field value. Contains the component name (in the `short_name` sub-key) and a list of full values (using the `values` sub-key) or suffixes (using the `suffixes` sub-key). The check is successful if the actual value of each component matches either an allowed full value or an allowed suffix.
 
-### Examples
+## Examples
 
 The following configuration fragment enables node authentication and requires the "Subject" field to include the component `O=YDB`. Upon successful authentication, the connection is assigned the `registerNode@cert` SID.
 

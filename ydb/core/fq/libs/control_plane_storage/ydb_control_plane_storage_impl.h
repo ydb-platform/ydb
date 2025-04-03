@@ -798,7 +798,7 @@ class TYdbControlPlaneStorageActor : public NActors::TActorBootstrapped<TYdbCont
     NKikimr::TYdbCredentialsProviderFactory CredProviderFactory;
 
     // Query Quota
-    THashMap<TString, ui32> QueryQuotas;
+    THashMap<TString, THashMap<FederatedQuery::QueryContent::QueryType, ui32>> QueryQuotas;
     THashMap<TString, TEvQuotaService::TQuotaUsageRequest::TPtr> QueryQuotaRequests;
     TInstant QuotasUpdatedAt = TInstant::Zero();
     bool QuotasUpdating = false;

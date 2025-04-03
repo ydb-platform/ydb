@@ -2,8 +2,14 @@
 
 #include <util/generic/string.h>
 #include <ydb/library/aclib/aclib.h>
-#include <ydb/library/login/login.h>
-#include <ydb/library/login/protos/login.pb.h>
+
+
+namespace NLoginProto {
+class TSecurityState;
+}
+namespace NLogin {
+class TLoginProvider;
+}
 
 namespace NKikimr {
 

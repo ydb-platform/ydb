@@ -2,6 +2,11 @@ import logging
 import inspect
 import pytest
 import time
+import sys
+import subprocess
+import copy
+from threading import Thread
+
 from multiprocessing import Process
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import TestContext, ScenarioTestHelper
@@ -82,25 +87,28 @@ class BaseTestSet:
         cls._ydb_instance.stop()
 
     def test_multi(self, ctx: TestContext):
-        num_threads = int(get_external_param("num_threads", "20"))
-        processes = []
-        exit_codes = []
+        num_threads = int(get_external_param("num_threads", "2"))
+        threads = []
+        exit_codes = [None] * num_threads
         for p in range(num_threads):
-            processes.append(Process(target=self.test_suffix, args=(ctx, str(p))))
-        for p in processes:
-            p.start()
-        for p in processes:
-            p.join()
-            exit_codes.append(p.exitcode)
+            threads.append(Thread(target=self.test_suffix, args=(copy.deepcopy(ctx), str(p), exit_codes, p)))
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
         assert exit_codes == [0] * num_threads, exit_codes
 
     def test(self, ctx: TestContext):
-        self.test_suffix(ctx, get_external_param("table_suffix", ""))
+        exit_codes = [None]
+        self.test_suffix(ctx, get_external_param("table_suffix", ""), exit_codes, 0)
 
-    def test_suffix(self, ctx: TestContext, table_suffix: str):
-        test_path = ctx.test + get_external_param("table_suffix", "")
-        ScenarioTestHelper(None).remove_path(test_path, ctx.suite)
+    def test_suffix(self, ctx: TestContext, table_suffix: str, exit_codes, num: int):
         start_time = time.time()
+        ctx.test += table_suffix
+        test_path = ctx.test
+        print('test_suffix, num {}, table path {} start_time {}'.format(num, test_path, start_time), file=sys.stderr)
+        ScenarioTestHelper(None).remove_path(test_path, ctx.suite)
+        print('Path removed', file=sys.stderr)
         try:
             ctx.executable(self, ctx)
             ResultsProcessor.upload_results(
@@ -112,9 +120,11 @@ class BaseTestSet:
                 is_successful=True,
             )
         except pytest.skip.Exception:
+            print('Caught skip exception, num {}'.format(num), file=sys.stderr)
             allure_test_description(ctx.suite, ctx.test, start_time=start_time, end_time=time.time())
             raise
-        except BaseException:
+        except BaseException as e:
+            print('Caught base exception, num {} message {}'.format(num, str(e)), file=sys.stderr)
             ResultsProcessor.upload_results(
                 kind='Scenario',
                 suite=ctx.suite,
@@ -126,11 +136,21 @@ class BaseTestSet:
             allure_test_description(ctx.suite, ctx.test, start_time=start_time, end_time=time.time())
             raise
         allure_test_description(ctx.suite, ctx.test, start_time=start_time, end_time=time.time())
-        ScenarioTestHelper(None).remove_path(test_path, ctx.suite)
+        ScenarioTestHelper(None).remove_path(ctx.test, ctx.suite)
+        exit_codes[num] = 0
 
     @classmethod
     def _get_cluster_config(cls):
-        return KikimrConfigGenerator(extra_feature_flags=["enable_column_store"])
+        return KikimrConfigGenerator(
+            extra_feature_flags={
+                "enable_column_store": True,
+                "enable_external_data_sources": True,
+                "enable_tiering_in_column_shard": True,
+            },
+            query_service_config=dict(
+                available_external_data_sources=["ObjectStorage"]
+            )
+        )
 
 
 def pytest_generate_tests(metafunc):

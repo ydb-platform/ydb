@@ -113,6 +113,9 @@ class TieringTestBase(BaseTestSet):
                 'TX_TIERING_BLOBS_TIER': LogLevels.TRACE,
                 'TX_COLUMNSHARD_ACTUALIZATION': LogLevels.TRACE,
             },
+            query_service_config=dict(
+                available_external_data_sources=["ObjectStorage"]
+            ),
         )
 
     def _setup_tiering_test(self, ctx):

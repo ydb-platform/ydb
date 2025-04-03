@@ -225,7 +225,7 @@ NNodes::TCoNameValueTupleList TKqpReadTableSettings::BuildNode(TExprContext& ctx
                 .Done());
     }
 
-    if (GetSorting() == ERequestSorting::DESC) {
+    if (IsReverse()) {
         settings.emplace_back(
             Build<TCoNameValueTuple>(ctx, pos)
                 .Name()
@@ -241,7 +241,7 @@ NNodes::TCoNameValueTupleList TKqpReadTableSettings::BuildNode(TExprContext& ctx
                 .Done());
     }
 
-    if (GetSorting() != ERequestSorting::NONE) {
+    if (IsSorted()) {
         settings.emplace_back(
             Build<TCoNameValueTuple>(ctx, pos)
                 .Name()

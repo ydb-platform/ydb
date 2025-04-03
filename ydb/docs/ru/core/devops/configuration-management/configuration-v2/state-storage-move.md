@@ -16,9 +16,8 @@
     Допутсим, получена следующая конфигурациея State Storage:
     
     ```yaml
-    ...
-    domains_config:
-      ...
+    ... 
+     ...
       state_storage:
       - ring:
           node: [1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -35,7 +34,6 @@
     Чтобы переместить State Storage с хоста `node_id:1` на `node_id:10`, в конфигурационном файле `config.yaml` измените список хостов `node`, заменив идентификатор удаляемого хоста на идентификатор добавляемого:
     
         ```yaml
-        domains_config:
         ...
           state_storage:
           - ring:

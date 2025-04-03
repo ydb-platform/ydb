@@ -599,12 +599,12 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ReplaceStatWriteTable(T
     const ERuntimeClusterSelectionMode selectionMode =
         State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
 
+    TString cluster;
     if (!IsYtProviderInput(input, false)) {
         if (!EnsurePersistable(input.Ref(), ctx)) {
             return {};
         }
 
-        TString cluster;
         TSyncMap syncList;
         if (!IsYtCompleteIsolatedLambda(input.Ref(), syncList, cluster, false, selectionMode)) {
             return node;
@@ -660,10 +660,11 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ReplaceStatWriteTable(T
 
         auto section = read.Input().Item(0);
         auto scheme = section.Ptr()->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+        cluster = DeriveClusterFromInput(input, selectionMode);
 
         auto path = CopyOrTrivialMap(section.Pos(),
             GetWorld(input, {}, ctx),
-            GetDataSink(input, ctx),
+            MakeDataSink(section.Pos(), cluster, ctx),
             *scheme,
             Build<TYtSection>(ctx, section.Pos())
                 .InitFrom(section)
@@ -693,7 +694,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ReplaceStatWriteTable(T
 
     return Build<TYtStatOut>(ctx, write.Pos())
         .World(GetWorld(input, {}, ctx))
-        .DataSink(GetDataSink(input, ctx))
+        .DataSink(MakeDataSink(write.Pos(), cluster, ctx))
         .Input(newInput.Cast())
         .Table(table)
         .ReplaceMask(write.ReplaceMask())

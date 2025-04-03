@@ -120,7 +120,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::FlatMap(TExprBase node,
 
     auto ytMap = Build<TYtMap>(ctx, node.Pos())
         .World(ApplySyncListToWorld(GetWorld(input, {}, ctx).Ptr(), syncList, ctx))
-        .DataSink(GetDataSink(input, ctx))
+        .DataSink(MakeDataSink(node.Pos(), cluster, ctx))
         .Input(ConvertInputTable(input, ctx))
         .Output()
             .Add(outTables)
@@ -197,7 +197,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::LMap(TExprBase node, TE
 
     auto map = Build<TYtMap>(ctx, lmap.Pos())
         .World(ApplySyncListToWorld(NPrivate::GetWorld(lmap.Input(), {}, ctx).Ptr(), syncList, ctx))
-        .DataSink(NPrivate::GetDataSink(lmap.Input(), ctx))
+        .DataSink(MakeDataSink(lmap.Pos(), cluster, ctx))
         .Input(NPrivate::ConvertInputTable(lmap.Input(), ctx))
         .Output()
             .Add(outTables)

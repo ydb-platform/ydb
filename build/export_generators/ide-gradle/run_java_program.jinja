@@ -91,7 +91,7 @@ val runJav{{ loop.index }} = task<JavaExec>("runJavaProgram{{ loop.index }}") {
 
 {%- if proto_template %}
 
-tasks.getByName("extractMainLibrariesProtos").dependsOn(runJav{{ loop.index }})
+tasks.getByName("prepareMainProtos").dependsOn(runJav{{ loop.index }})
 {%- endif %}
 
 tasks.compileJava.configure {

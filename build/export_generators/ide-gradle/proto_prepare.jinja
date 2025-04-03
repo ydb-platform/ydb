@@ -1,17 +1,36 @@
-{#- empty string #}
-{%- if target.proto_files|length %}
+{%- if prepareProtosTask %}
+
 val prepareMainProtos = tasks.register<Copy>("prepareMainProtos") {
+{%-     if target.proto_files|length %}
     from("$project_root") {
 {#- list of all current project proto files -#}
-{%-     for proto in target.proto_files %}
+{%-         for proto in target.proto_files %}
         include("{{ proto }}")
-{%-     endfor %}
+{%-         endfor %}
     }
+{%      endif -%}
+{%-     if target.runs|length or target.custom_runs|length %}
+    from("$baseBuildDir") {
+{%-         for run in target.runs -%}
+{%-             for out in run.out %}
+        include({{ PatchGeneratedProto(out, true) }})
+{%-             endfor -%}
+{%-             for out_dir in run.out_dir %}
+        include({{ PatchGeneratedProto(out_dir, true) }} + "/**/*.proto")
+{%-             endfor -%}
+{%-         endfor -%}
+{%-         for custom_run in target.custom_runs -%}
+{%-             for out in custom_run.outputs %}
+        include({{ PatchGeneratedProto(out, true) }})
+{%-             endfor -%}
+{%-         endfor %}
+    }
+{%      endif -%}
     into(mainProtosDir)
 }
-{%- endif %}
+{%- endif -%}
 
-{%  if extractIncludeTask -%}
+{%- if extractLibrariesProtosTask -%}
 
 val extractMainLibrariesProtos = tasks.register<Copy>("extractMainLibrariesProtos") {
 {%- if libraries|length -%}
@@ -23,32 +42,15 @@ val extractMainLibrariesProtos = tasks.register<Copy>("extractMainLibrariesProto
 {%-     endfor %}
     }
 {%  endif -%}
-{%- if target.runs|length or target.custom_runs|length %}
-    from("$baseBuildDir") {
-{%-     for run in target.runs -%}
-{%-         for out in run.out %}
-        include({{ PatchGeneratedProto(out, true) }})
-{%-         endfor -%}
-{%-         for out_dir in run.out_dir %}
-        include({{ PatchGeneratedProto(out_dir, true) }} + "/**/*.proto")
-{%-         endfor -%}
-{%-     endfor -%}
-{%-     for custom_run in target.custom_runs -%}
-{%-         for out in custom_run.outputs %}
-        include({{ PatchGeneratedProto(out, true) }})
-{%-         endfor -%}
-{%-     endfor %}
-    }
-{%  endif -%}
     into(mainExtractedIncludeProtosDir)
 }
+{%- endif %}
 
-{% endif -%}
 afterEvaluate {
-{%- if target.proto_files|length %}
+{%- if prepareProtosTask %}
     tasks.getByName("extractProto").dependsOn(prepareMainProtos)
 {%- endif %}
-{%- if extractIncludeTask %}
+{%- if extractLibrariesProtosTask %}
     tasks.getByName("extractProto").dependsOn(extractMainLibrariesProtos)
 {%- endif %}
 }

@@ -11005,7 +11005,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         // disable publications
         {
             TAtomic unused;
-            runtime.GetAppData().StaticControlBoard->SetValue(EStaticControlType::SchemeShardDisablePublicationsOfDropping, true, unused);
+            runtime.GetAppData().Icb->SetValue(EStaticControlType::SchemeShardDisablePublicationsOfDropping, true, unused);
         }
 
         createFn(runtime, txId);
@@ -11043,7 +11043,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
         // enable publications
         {
             TAtomic unused;
-            runtime.GetAppData().StaticControlBoard->SetValue(EStaticControlType::SchemeShardDisablePublicationsOfDropping, false, unused);
+            runtime.GetAppData().Icb->SetValue(EStaticControlType::SchemeShardDisablePublicationsOfDropping, false, unused);
         }
 
         createFn(runtime, txId);

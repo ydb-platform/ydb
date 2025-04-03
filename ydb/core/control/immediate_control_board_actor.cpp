@@ -36,7 +36,7 @@ class TImmediateControlActor : public TActorBootstrapped<TImmediateControlActor>
     };
 
     TIntrusivePtr<TControlBoard> Icb;
-    TIntrusivePtr<TStaticControlBoard> StaticControlBoard;
+    TIntrusivePtr<TDynamicControlBoard> DynamicControlBoard;
     TVector<TLogRecord> HistoryLog;
 
     ::NMonitoring::TDynamicCounters::TCounterPtr HasChanged;
@@ -49,10 +49,10 @@ public:
 
     TImmediateControlActor(
                             TIntrusivePtr<TControlBoard> board,
-                            TIntrusivePtr<TStaticControlBoard> staticControlBoard,
+                            TIntrusivePtr<TDynamicControlBoard> dynamicControlBoard,
                             const TIntrusivePtr<::NMonitoring::TDynamicCounters>& counters)
         : Icb(board)
-        , StaticControlBoard(staticControlBoard)
+        , DynamicControlBoard(dynamicControlBoard)
     {
         TIntrusivePtr<::NMonitoring::TDynamicCounters> IcbGroup = GetServiceCounters(counters, "utils");
         HasChanged = IcbGroup->GetCounter("Icb/HasChangedContol");
@@ -74,7 +74,7 @@ private:
     void HandlePostParams(const TCgiParameters &cgi) {
         if (cgi.Has("restoreDefaults")) {
             Icb->RestoreDefaults();
-            StaticControlBoard->RestoreDefaults();
+            DynamicControlBoard->RestoreDefaults();
             HistoryLog.emplace_back(TInstant::Now(), "RestoreDefaults", 0, 0);
             *HasChanged = 0;
             *ChangedCount = 0;
@@ -83,10 +83,10 @@ private:
             TAtomicBase newValue = strtoull(paramValue.data(), nullptr, 10);
             TAtomicBase prevValue = newValue;
             bool isDefault = false;
-            if (auto controlId = StaticControlBoard->GetStaticControlId(paramName)) {
-                isDefault = StaticControlBoard->SetValue(*controlId, newValue, prevValue);
+            if (auto controlId = Icb->GetStaticControlId(paramName)) {
+                isDefault = Icb->SetValue(*controlId, newValue, prevValue);
             } else {
-                isDefault = Icb->SetValue(paramName, newValue, prevValue);
+                isDefault = DynamicControlBoard->SetValue(paramName, newValue, prevValue);
             }
             if (prevValue != newValue) {
                 HistoryLog.emplace_back(TInstant::Now(), paramName, prevValue, newValue);
@@ -109,7 +109,7 @@ private:
 
         TControlBoardTableHtmlRenderer renderer;
         Icb->RenderAsHtml(renderer);
-        StaticControlBoard->RenderAsHtml(renderer);
+        DynamicControlBoard->RenderAsHtml(renderer);
 
         str << renderer.GetHtml();
         HTML(str) {
@@ -147,9 +147,9 @@ private:
 
 NActors::IActor* CreateImmediateControlActor(
                     TIntrusivePtr<TControlBoard> board,
-                     TIntrusivePtr<TStaticControlBoard> staticControlBoard,
+                    TIntrusivePtr<TDynamicControlBoard> dynamicControlBoard,
                      const TIntrusivePtr<::NMonitoring::TDynamicCounters> &counters) {
-    return new NKikimr::TImmediateControlActor(board, staticControlBoard, counters);
+    return new NKikimr::TImmediateControlActor(board, dynamicControlBoard, counters);
 }
 
 };

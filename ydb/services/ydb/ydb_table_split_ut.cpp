@@ -150,10 +150,10 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
 
         // Set low CPU usage threshold for robustness
         TAtomic unused;
-        server.Server_->GetRuntime()->GetAppData().StaticControlBoard->SetValue(EStaticControlType::SchemeShardFastSplitCpuPercentageThreshold, 5, unused);
-//        server.Server_->GetRuntime()->GetAppData().StaticControlBoard->SetValue(EStaticControlType::SchemeShardSplitByLoadEnabled, 1, unused);
-        server.Server_->GetRuntime()->GetAppData().StaticControlBoard->SetValue(EStaticControlType::DataShardControlsCpuUsageReportThreshlodPercent, 1, unused);
-        server.Server_->GetRuntime()->GetAppData().StaticControlBoard->SetValue(EStaticControlType::DataShardControlsCpuUsageReportIntervalSeconds, 3, unused);
+        server.Server_->GetRuntime()->GetAppData().Icb->SetValue(EStaticControlType::SchemeShardFastSplitCpuPercentageThreshold, 5, unused);
+//        server.Server_->GetRuntime()->GetAppData().Icb->SetValue(EStaticControlType::SchemeShardSplitByLoadEnabled, 1, unused);
+        server.Server_->GetRuntime()->GetAppData().Icb->SetValue(EStaticControlType::DataShardControlsCpuUsageReportThreshlodPercent, 1, unused);
+        server.Server_->GetRuntime()->GetAppData().Icb->SetValue(EStaticControlType::DataShardControlsCpuUsageReportIntervalSeconds, 3, unused);
 
         TAtomic enough = 0;
         TAtomic finished = 0;
@@ -273,9 +273,9 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
 
         // Set low CPU usage threshold for robustness
         TAtomic unused;
-        server.Server_->GetRuntime()->GetAppData().StaticControlBoard->SetValue(EStaticControlType::SchemeShardFastSplitCpuPercentageThreshold, 5, unused);
-        server.Server_->GetRuntime()->GetAppData().StaticControlBoard->SetValue(EStaticControlType::DataShardControlsCpuUsageReportThreshlodPercent, 1, unused);
-        server.Server_->GetRuntime()->GetAppData().StaticControlBoard->SetValue(EStaticControlType::DataShardControlsCpuUsageReportIntervalSeconds, 3, unused);
+        server.Server_->GetRuntime()->GetAppData().Icb->SetValue(EStaticControlType::SchemeShardFastSplitCpuPercentageThreshold, 5, unused);
+        server.Server_->GetRuntime()->GetAppData().Icb->SetValue(EStaticControlType::DataShardControlsCpuUsageReportThreshlodPercent, 1, unused);
+        server.Server_->GetRuntime()->GetAppData().Icb->SetValue(EStaticControlType::DataShardControlsCpuUsageReportIntervalSeconds, 3, unused);
 
         size_t shardsBefore = oldClient.GetTablePartitions("/Root/Foo").size();
         Cerr << "Table has " << shardsBefore << " shards" << Endl;
@@ -371,14 +371,14 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
 
         // Set min uptime before merge by load to 10h
         TAtomic unused;
-        server.Server_->GetRuntime()->GetAppData().StaticControlBoard->SetValue(EStaticControlType::SchemeShardMergeByLoadMinUptimeSec, 4*3600, unused);
-        server.Server_->GetRuntime()->GetAppData().StaticControlBoard->SetValue(EStaticControlType::SchemeShardMergeByLoadMinLowLoadDurationSec, 10*3600, unused);
+        server.Server_->GetRuntime()->GetAppData().Icb->SetValue(EStaticControlType::SchemeShardMergeByLoadMinUptimeSec, 4*3600, unused);
+        server.Server_->GetRuntime()->GetAppData().Icb->SetValue(EStaticControlType::SchemeShardMergeByLoadMinLowLoadDurationSec, 10*3600, unused);
 
         Cerr << "Triggering split by load" << Endl;
         DoTestSplitByLoad(server, query);
 
         // Set split threshold very high and run some more load on new shards
-        server.Server_->GetRuntime()->GetAppData().StaticControlBoard->SetValue(EStaticControlType::SchemeShardFastSplitCpuPercentageThreshold, 110, unused);
+        server.Server_->GetRuntime()->GetAppData().Icb->SetValue(EStaticControlType::SchemeShardFastSplitCpuPercentageThreshold, 110, unused);
 
         Cerr << "Loading new shards" << Endl;
         {
@@ -392,7 +392,7 @@ Y_UNIT_TEST_SUITE(YdbTableSplit) {
         }
 
         // Set split threshold at 10% so that merge can be trigger after high load goes away
-        server.Server_->GetRuntime()->GetAppData().StaticControlBoard->SetValue(EStaticControlType::SchemeShardFastSplitCpuPercentageThreshold, 10, unused);
+        server.Server_->GetRuntime()->GetAppData().Icb->SetValue(EStaticControlType::SchemeShardFastSplitCpuPercentageThreshold, 10, unused);
 
         // Stop all load an see how many partitions the table has
         NFlatTests::TFlatMsgBusClient oldClient(server.ServerSettings->Port);

@@ -5104,27 +5104,27 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
         ChannelProfiles = appData->ChannelProfiles;
     }
 
-    appData->StaticControlBoard->RegisterSharedControl(AllowConditionalEraseOperations, EStaticControlType::SchemeShardAllowConditionalEraseOperations);
-    appData->StaticControlBoard->RegisterSharedControl(DisablePublicationsOfDropping, EStaticControlType::SchemeShardDisablePublicationsOfDropping);
-    appData->StaticControlBoard->RegisterSharedControl(FillAllocatePQ, EStaticControlType::SchemeShardFillAllocatePQ);
+    appData->Icb->RegisterSharedControl(AllowConditionalEraseOperations, EStaticControlType::SchemeShardAllowConditionalEraseOperations);
+    appData->Icb->RegisterSharedControl(DisablePublicationsOfDropping, EStaticControlType::SchemeShardDisablePublicationsOfDropping);
+    appData->Icb->RegisterSharedControl(FillAllocatePQ, EStaticControlType::SchemeShardFillAllocatePQ);
 
-    appData->StaticControlBoard->RegisterSharedControl(MaxCommitRedoMB, EStaticControlType::TabletControlsMaxCommitRedoMB);
+    appData->Icb->RegisterSharedControl(MaxCommitRedoMB, EStaticControlType::TabletControlsMaxCommitRedoMB);
 
     AllowDataColumnForIndexTable = appData->FeatureFlags.GetEnableDataColumnForIndexTable();
-    appData->StaticControlBoard->RegisterSharedControl(AllowDataColumnForIndexTable, EStaticControlType::SchemeShardAllowDataColumnForIndexTable);
+    appData->Icb->RegisterSharedControl(AllowDataColumnForIndexTable, EStaticControlType::SchemeShardAllowDataColumnForIndexTable);
 
     for (const auto& sid : appData->MeteringConfig.GetSystemBackupSIDs()) {
         SystemBackupSIDs.insert(sid);
     }
 
     AllowServerlessStorageBilling = appData->FeatureFlags.GetAllowServerlessStorageBillingForSchemeShard();
-    appData->StaticControlBoard->RegisterSharedControl(AllowServerlessStorageBilling, EStaticControlType::SchemeShardAllowServerlessStorageBilling);
+    appData->Icb->RegisterSharedControl(AllowServerlessStorageBilling, EStaticControlType::SchemeShardAllowServerlessStorageBilling);
 
     TxAllocatorClient = RegisterWithSameMailbox(CreateTxAllocatorClient(appData));
 
     SysPartitionStatsCollector = Register(NSysView::CreatePartitionStatsCollector().Release());
 
-    SplitSettings.Register(appData->StaticControlBoard);
+    SplitSettings.Register(appData->Icb);
 
     Executor()->RegisterExternalTabletCounters(TabletCountersPtr);
     Execute(CreateTxInitSchema(), ctx);

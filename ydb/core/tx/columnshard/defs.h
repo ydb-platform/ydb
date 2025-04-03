@@ -5,7 +5,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/core/tx/ctor_logger.h>
-#include <ydb/core/control/lib/static_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/tx/columnshard/engines/changes/abstract/settings.h>
 #include <ydb/core/tx/columnshard/engines/defs.h>
 #include <ydb/core/tx/columnshard/engines/writer/put_status.h>
@@ -61,10 +61,10 @@ public:
 
     TLimits();
 
-    void RegisterControls(TStaticControlBoard& scb) {
-        scb.RegisterSharedControl(MinInsertBytes, EStaticControlType::ColumnShardControlsMinBytesToIndex);
-        scb.RegisterSharedControl(MaxInsertBytes, EStaticControlType::ColumnShardControlsMaxBytesToIndex);
-        scb.RegisterSharedControl(InsertTableSize, EStaticControlType::ColumnShardControlsInsertTableCommittedSize);
+    void RegisterControls(TControlBoard& icb) {
+        icb.RegisterSharedControl(MinInsertBytes, EStaticControlType::ColumnShardControlsMinBytesToIndex);
+        icb.RegisterSharedControl(MaxInsertBytes, EStaticControlType::ColumnShardControlsMaxBytesToIndex);
+        icb.RegisterSharedControl(InsertTableSize, EStaticControlType::ColumnShardControlsInsertTableCommittedSize);
     }
 };
 
@@ -88,12 +88,12 @@ struct TCompactionLimits {
         , GranuleIndexedPortionsCountLimit(TBase::WARNING_INSERTED_PORTIONS_COUNT)
     {}
 
-    void RegisterControls(TStaticControlBoard& scb) {
-        scb.RegisterSharedControl(GoodBlobSize, EStaticControlType::ColumnShardControlsIndexGoodBlobSize);
-        scb.RegisterSharedControl(GranuleOverloadSize, EStaticControlType::ColumnShardControlsGranuleOverloadBytes);
-        scb.RegisterSharedControl(InGranuleCompactSeconds, EStaticControlType::ColumnShardControlsCompactionDelaySec);
-        scb.RegisterSharedControl(GranuleIndexedPortionsSizeLimit, EStaticControlType::ColumnShardControlsGranuleIndexedPortionsSizeLimit);
-        scb.RegisterSharedControl(GranuleIndexedPortionsCountLimit, EStaticControlType::ColumnShardControlsGranuleIndexedPortionsCountLimit);
+    void RegisterControls(TControlBoard& icb) {
+        icb.RegisterSharedControl(GoodBlobSize, EStaticControlType::ColumnShardControlsIndexGoodBlobSize);
+        icb.RegisterSharedControl(GranuleOverloadSize, EStaticControlType::ColumnShardControlsGranuleOverloadBytes);
+        icb.RegisterSharedControl(InGranuleCompactSeconds, EStaticControlType::ColumnShardControlsCompactionDelaySec);
+        icb.RegisterSharedControl(GranuleIndexedPortionsSizeLimit, EStaticControlType::ColumnShardControlsGranuleIndexedPortionsSizeLimit);
+        icb.RegisterSharedControl(GranuleIndexedPortionsCountLimit, EStaticControlType::ColumnShardControlsGranuleIndexedPortionsCountLimit);
     }
 
     NOlap::TCompactionLimits Get() const {

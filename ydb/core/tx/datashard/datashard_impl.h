@@ -2804,7 +2804,7 @@ private:
     bool InMemoryVarsRestored = false;
     bool InMemoryVarsFrozen = false;
 
-    bool ControlsInited = false;
+    bool IcbRegistered = false;
 
     TControlWrapper DisableByKeyFilter;
     TControlWrapper MaxTxInFly;

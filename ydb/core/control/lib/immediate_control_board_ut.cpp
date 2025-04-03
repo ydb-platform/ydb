@@ -1,6 +1,6 @@
 #include "immediate_control_board_impl.h"
 #include "immediate_control_board_wrapper.h"
-#include "static_control_board_impl.h"
+#include "dynamic_control_board_impl.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/random/mersenne64.h>
@@ -101,11 +101,11 @@ Y_UNIT_TEST_SUITE(ControlImplementationTests) {
     }
 
     Y_UNIT_TEST(TestRegisterLocalControl) {
-        TestLocalControlRegistrationImpl<TControlBoard, TString>("localControl");
+        TestLocalControlRegistrationImpl<TDynamicControlBoard, TString>("localControl");
     }
 
     Y_UNIT_TEST(TestRegisterLocalControlInStaticControlBoard) {
-        TestLocalControlRegistrationImpl<TStaticControlBoard>(EStaticControlType::DataShardControlsDisableByKeyFilter);
+        TestLocalControlRegistrationImpl<TControlBoard>(EStaticControlType::DataShardControlsDisableByKeyFilter);
     }
 
     template <typename TControlBoard, typename TControlId>
@@ -122,17 +122,17 @@ Y_UNIT_TEST_SUITE(ControlImplementationTests) {
     }
 
     Y_UNIT_TEST(TestRegisterSharedControl) {
-        TestSharedControlRegistrationImpl<TControlBoard, TString>("sharedControl");
+        TestSharedControlRegistrationImpl<TDynamicControlBoard, TString>("sharedControl");
     }
 
     Y_UNIT_TEST(TestRegisterSharedControlInStaticControlBoard) {
-        TestSharedControlRegistrationImpl<TStaticControlBoard>(EStaticControlType::DataShardControlsDisableByKeyFilter);
+        TestSharedControlRegistrationImpl<TControlBoard>(EStaticControlType::DataShardControlsDisableByKeyFilter);
     }
 
     Y_UNIT_TEST(TestParallelRegisterSharedControl) {
         void* (*parallelJob)(void*) = [](void *controlBoard) -> void *{
             for (ui64 i = 0; i < 10000; ++i) {
-                TControlBoard *Icb = reinterpret_cast<TControlBoard *>(controlBoard);
+                TDynamicControlBoard *Icb = reinterpret_cast<TDynamicControlBoard *>(controlBoard);
                 TControlWrapper control1(1, 1, 1);
                 Icb->RegisterSharedControl(control1, "sharedControl");
                 // Useless because running this test with --sanitize=thread cannot reveal
@@ -144,7 +144,7 @@ Y_UNIT_TEST_SUITE(ControlImplementationTests) {
             }
             return nullptr;
         };
-        TIntrusivePtr<TControlBoard> Icb(new TControlBoard);
+        TIntrusivePtr<TDynamicControlBoard> Icb(new TDynamicControlBoard);
         TVector<THolder<TThread>> threads;
         threads.reserve(TEST_THREADS_CNT);
         for (ui64 i = 0; i < TEST_THREADS_CNT; ++i) {

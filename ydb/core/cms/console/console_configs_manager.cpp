@@ -174,15 +174,20 @@ void TConfigsManager::ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opC
             auto resolved = NYamlConfig::ResolveAll(tree);
 
             errors.clear();
+
+            auto* csk = AppData()->ConfigSwissKnife;
+
             for (auto& [_, config] : resolved.Configs) {
                 auto cfg = NYamlConfig::YamlToProto(
                     config.second,
                     true,
                     true,
                     unknownFieldsCollector);
-                NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateConfig(cfg, errors);
-                if (result == NKikimr::NConfig::EValidationResult::Error) {
-                    ythrow yexception() << errors.front();
+                if (csk) {
+                    auto result = csk->ValidateConfig(cfg, errors);
+                    if (result == NYamlConfig::EValidationResult::Error) {
+                        ythrow yexception() << errors.front();
+                    }
                 }
             }
 

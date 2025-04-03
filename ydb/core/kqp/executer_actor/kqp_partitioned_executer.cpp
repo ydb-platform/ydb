@@ -423,11 +423,11 @@ private:
     }
 
     void CreateExecuters() {
+        Become(&TKqpPartitionedExecuter::ExecuteState);
+
         for (size_t i = 0; i < Partitions.size(); ++i) {
             CreateExecuterWithBuffer(i);
         }
-
-        Become(&TKqpPartitionedExecuter::ExecuteState);
     }
 
     void CreateExecuterWithBuffer(size_t partitionIdx) {
@@ -471,6 +471,8 @@ private:
     }
 
     void Abort() {
+        Become(&TKqpPartitionedExecuter::AbortState);
+
         if (CheckExecutersAreFinished()) {
             PE_LOG_I("All executers have been finished, abort PartitionedExecuterActor");
             RuntimeError(
@@ -480,7 +482,6 @@ private:
         }
 
         SendAbortToExecuters();
-        Become(&TKqpPartitionedExecuter::AbortState);
     }
 
     void SendAbortToExecuters() {

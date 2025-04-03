@@ -1,8 +1,11 @@
-{%- macro PatchRoots(arg, depend = false) -%}
+{%- macro PatchRoots(arg, depend = false, output = false) -%}
 {#- Always replace (arcadia_root) === (SOURCE_ROOT in ymake) to $project_root in Gradle -#}
 {%-     if depend -%}
 {#- Replace (export_root) === (BUILD_ROOT in ymake) to $project_root in Gradle, because prebuilt tools in arcadia, not in build_root -#}
 "{{ arg|replace(export_root, "$project_root")|replace(arcadia_root, "$project_root") }}"
+{%-     elif output and arg[0] != '/' -%}
+{#- Relative outputs in buildDir -#}
+"$buildDir/{{ arg }}"
 {%-     else -%}
 {#- Replace (export_root) === (BUILD_ROOT in ymake) to baseBuildDir in Gradle - root of all build folders for modules -#}
 "{{ arg|replace(export_root, "$baseBuildDir")|replace(arcadia_root, "$project_root") }}"

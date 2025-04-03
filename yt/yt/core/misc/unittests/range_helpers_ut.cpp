@@ -50,5 +50,17 @@ TEST(TRangeHelpersTest, RangeToString)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TEST(TRangeHelpersTest, Fold)
+{
+    EXPECT_EQ(0, FoldRange(std::vector<int>{}, std::plus{}));
+    EXPECT_EQ(6, FoldRange(std::vector<int>{1, 2, 3}, std::plus{}));
+    EXPECT_EQ(5, FoldRange(
+        std::vector<std::vector<int>>{{1, 2}, {3, 4, 5}},
+        std::plus{},
+        std::ranges::ssize));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace
 } // namespace NYT

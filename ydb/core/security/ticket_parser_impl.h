@@ -474,6 +474,12 @@ private:
         if (const auto folderId = record.GetAttributeValue(permission, "folder_id"); folderId) {
             AddNebiusContainerId(pathsContainer, folderId);
         }
+
+        // Use attribute "gizmo_id" as container id that contains cluster access resource
+        // IAM can link roles for cluster access resource
+        if (const auto gizmoId = record.GetAttributeValue(permission, "gizmo_id"); gizmoId) {
+            AddNebiusContainerId(pathsContainer, gizmoId);
+        }
     }
 
     template <typename TTokenRecord>

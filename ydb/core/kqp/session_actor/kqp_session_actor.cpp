@@ -1522,12 +1522,22 @@ public:
         physicalRequest.CaFactory_ = CaFactory_;
         physicalRequest.ResourceManager_ = ResourceManager_;
 
+        const auto& queryLimitsProto = Settings.TableService.GetQueryLimits();
+        const auto& bufferLimitsProto = queryLimitsProto.GetBufferLimits();
+        const ui64 writeBufferMemoryLimit = bufferLimitsProto.HasWriteBufferMemoryLimitBytes()
+            ? bufferLimitsProto.GetWriteBufferMemoryLimitBytes()
+            : ui64(Settings.MkqlMaxMemoryLimit);
+        const ui64 writeBufferInitialMemoryLimit = writeBufferMemoryLimit < ui64(Settings.MkqlInitialMemoryLimit)
+            ? writeBufferMemoryLimit
+            : ui64(Settings.MkqlInitialMemoryLimit);
+
         auto executerActor = CreateKqpPartitionedExecuter(std::move(literalRequest), std::move(physicalRequest),
             SelfId(), AppData()->FunctionRegistry, AppData()->TimeProvider, AppData()->RandomProvider,
             Settings.Database, QueryState ? QueryState->UserToken : TIntrusiveConstPtr<NACLib::TUserToken>(), Counters,
             RequestCounters, Settings.TableService, AsyncIoFactory, QueryState ? QueryState->PreparedQuery : nullptr,
             QueryState ? QueryState->UserRequestContext : MakeIntrusive<TUserRequestContext>("", Settings.Database, SessionId),
-            QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup, GUCSettings, txCtx->ShardIdToTableInfo);
+            QueryState ? QueryState->StatementResultIndex : 0, FederatedQuerySetup, GUCSettings, txCtx->ShardIdToTableInfo,
+            writeBufferInitialMemoryLimit, writeBufferMemoryLimit);
 
         ExecuterId = RegisterWithSameMailbox(executerActor);
         LOG_D("Created new KQP partitioned executer: " << ExecuterId);

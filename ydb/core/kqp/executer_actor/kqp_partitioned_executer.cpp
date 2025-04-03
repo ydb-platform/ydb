@@ -21,10 +21,17 @@ namespace NKqp {
 
 namespace {
 
+/*
+    TKqpPartitionedExecuter only executes BATCH UPDATE/DELETE queries
+    with idempotent set of updates (except primary key) and without RETURNING.
+    Examples: ydb/core/kqp/ut/batch_operations
+*/
+
 class TKqpPartitionedExecuter : public TActorBootstrapped<TKqpPartitionedExecuter> {
     enum class EExecuterStatus {
-        STARTED,
-        FINISHED
+        STARTED,    // DataExecuter has been started
+        DELAYED,    // Waiting TEvTxDelayedExecution
+        FINISHED    // DataExecuter finished or aborted execution
     };
 
     struct TBatchPartitionInfo {
@@ -32,7 +39,6 @@ class TKqpPartitionedExecuter : public TActorBootstrapped<TKqpPartitionedExecute
         TMaybe<TKeyDesc::TPartitionRangeInfo> EndRange;
         size_t PartitionIdx;
 
-        TTxAllocatorState::TPtr TxAlloc;
         TActorId ExecuterId;
         TActorId BufferId;
 
@@ -73,7 +79,8 @@ public:
         const TIntrusivePtr<TUserRequestContext>& userRequestContext,
         ui32 statementResultIndex, const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup,
         const TGUCSettings::TPtr& GUCSettings,
-        const TShardIdToTableInfoPtr& shardIdToTableInfo)
+        const TShardIdToTableInfoPtr& shardIdToTableInfo,
+        ui64 writeBufferInitialMemoryLimit, ui64 writeBufferMemoryLimit)
         : LiteralRequest(std::move(literalRequest))
         , PhysicalRequest(std::move(physicalRequest))
         , SessionActorId(sessionActorId)
@@ -92,6 +99,8 @@ public:
         , FederatedQuerySetup(federatedQuerySetup)
         , GUCSettings(GUCSettings)
         , ShardIdToTableInfo(shardIdToTableInfo)
+        , WriteBufferInitialMemoryLimit(writeBufferInitialMemoryLimit)
+        , WriteBufferMemoryLimit(writeBufferMemoryLimit)
     {
         UseLiteral = PreparedQuery->GetTransactions().size() == 2;
         ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(PhysicalRequest.TxAlloc,
@@ -174,9 +183,10 @@ public:
             << ", message: " << issues.ToOneLineString() << ", abort child executers");
 
         auto& [_, partInfo] = *it;
+        AbortBuffer(partInfo->ExecuterId);
+
         partInfo->Response = EExecuterStatus::FINISHED;
 
-        AbortBuffer(partInfo->ExecuterId);
         Abort();
     }
 
@@ -213,6 +223,8 @@ public:
 
         auto& [_, partInfo] = *it;
         AbortBuffer(partInfo->BufferId);
+
+        ExecuterToPartition[partInfo->ExecuterId]->Response = EExecuterStatus::FINISHED;
 
         switch (response->GetStatus()) {
             case Ydb::StatusIds::SUCCESS:
@@ -263,7 +275,6 @@ public:
             case NYql::NDqProto::StatusIds::ABORTED:
             case NYql::NDqProto::StatusIds::UNAVAILABLE:
             case NYql::NDqProto::StatusIds::OVERLOADED:
-                RetryPartExecution(partInfo);
                 break;
             default:
                 RuntimeError(
@@ -277,6 +288,7 @@ public:
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvKqpExecuter::TEvTxResponse, HandleAbort);
+                hFunc(TEvKqpExecuter::TEvTxDelayedExecution, HandleExecute)
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbort);
                 hFunc(TEvKqpBuffer::TEvError, HandleAbort);
             default:
@@ -302,8 +314,9 @@ public:
             << ", status = " << response->GetStatus());
 
         auto& [_, partInfo] = *it;
-        partInfo->Response = EExecuterStatus::FINISHED;
         AbortBuffer(partInfo->BufferId);
+
+        partInfo->Response = EExecuterStatus::FINISHED;
 
         if (CheckExecutersAreFinished()) {
             PE_LOG_I("All executers have been finished, abort PartitionedExecuterActor");
@@ -330,8 +343,9 @@ public:
             << ", message: " << issues.ToOneLineString());
 
         auto& [_, partInfo] = *it;
-        partInfo->Response = EExecuterStatus::FINISHED;
         AbortBuffer(partInfo->ExecuterId);
+
+        partInfo->Response = EExecuterStatus::FINISHED;
     }
 
     void HandleAbort(TEvKqpBuffer::TEvError::TPtr& ev) {
@@ -414,7 +428,6 @@ private:
             }
 
             ptr->PartitionIdx = i;
-            ptr->TxAlloc = std::make_shared<TTxAllocatorState>(FuncRegistry, TimeProvider, RandomProvider);
             ptr->LimitSize = BatchOperationSettings.MaxBatchSize;
             ptr->RetryDelayMs = BatchOperationSettings.StartRetryDelayMs;
 
@@ -432,11 +445,23 @@ private:
 
     void CreateExecuterWithBuffer(size_t partitionIdx) {
         auto& partInfo = Partitions[partitionIdx];
+        auto txAlloc = std::make_shared<TTxAllocatorState>(FuncRegistry, TimeProvider, RandomProvider);;
 
-        IKqpGateway::TExecPhysicalRequest request(partInfo->TxAlloc);
-        FillPhysicalRequest(request, partInfo->TxAlloc, partitionIdx);
+        IKqpGateway::TExecPhysicalRequest request(txAlloc);
+        FillPhysicalRequest(request, txAlloc, partitionIdx);
 
         auto txManager = CreateKqpTransactionManager();
+
+        auto alloc = std::make_shared<NKikimr::NMiniKQL::TScopedAlloc>(
+                __LOCATION__, NKikimr::TAlignedPagePoolCounters(), true, false);
+
+        alloc->SetLimit(WriteBufferInitialMemoryLimit);
+        alloc->Ref().SetIncreaseMemoryLimitCallback([this, alloc=alloc.get()](ui64 currentLimit, ui64 required) {
+            if (required < WriteBufferMemoryLimit) {
+                PE_LOG_D("Increase memory limit from " << currentLimit << " to " << required);
+                alloc->SetLimit(required);
+            }
+        });
 
         TKqpBufferWriterSettings settings {
             .SessionActorId = SelfId(),
@@ -444,7 +469,7 @@ private:
             .TraceId = PhysicalRequest.TraceId.GetTraceId(),
             .Counters = Counters,
             .TxProxyMon = RequestCounters->TxProxyMon,
-            .Alloc = partInfo->TxAlloc->Alloc
+            .Alloc = std::move(alloc)
         };
 
         auto* bufferActor = CreateKqpBufferWriterActor(std::move(settings));
@@ -519,7 +544,6 @@ private:
             return;
         }
 
-        ExecuterToPartition[partInfo->ExecuterId]->Response = EExecuterStatus::FINISHED;
         if (!CheckExecutersAreFinished()) {
             return;
         }
@@ -537,27 +561,39 @@ private:
         PE_LOG_D("Retry query execution for PartitionIdx = " << partInfo->PartitionIdx
             << ", RetryDelayMs = " << partInfo->RetryDelayMs);
 
-        ExecuterToPartition.erase(partInfo->ExecuterId);
-        BufferToPartition.erase(partInfo->BufferId);
-        CreateExecuterWithBuffer(partInfo->PartitionIdx);
+        if (this->CurrentStateFunc() != &TKqpPartitionedExecuter::AbortState) {
+            ExecuterToPartition.erase(partInfo->ExecuterId);
+            BufferToPartition.erase(partInfo->BufferId);
+            CreateExecuterWithBuffer(partInfo->PartitionIdx);
+        } else {
+            partInfo->Response = EExecuterStatus::FINISHED;
+            if (CheckExecutersAreFinished()) {
+                PE_LOG_I("All executers have been finished, abort PartitionedExecuterActor");
+                RuntimeError(
+                    Ydb::StatusIds::ABORTED,
+                    NYql::TIssues({NYql::TIssue("some executer retuned an error status")}));
+            }
+        }
     }
 
     void ScheduleRetryWithNewLimit(TBatchPartitionInfo::TPtr partInfo) {
         auto newLimit = std::max(partInfo->LimitSize / 2, BatchOperationSettings.MinBatchSize);
         partInfo->LimitSize = newLimit;
 
-        auto decJitterDelay = RandomProvider->Uniform(BatchOperationSettings.StartRetryDelayMs, partInfo->RetryDelayMs * 3ul);
-        auto newDelay = std::min(BatchOperationSettings.MaxRetryDelayMs, decJitterDelay);
-        partInfo->RetryDelayMs = newDelay;
+        partInfo->Response = EExecuterStatus::DELAYED;
 
         auto ev = std::make_unique<TEvKqpExecuter::TEvTxDelayedExecution>(partInfo->PartitionIdx);
         Schedule(TDuration::MilliSeconds(partInfo->RetryDelayMs), ev.release());
+
+        // We use the init delay value first and change it for the next attempt
+        auto decJitterDelay = RandomProvider->Uniform(BatchOperationSettings.StartRetryDelayMs, partInfo->RetryDelayMs * 3ul);
+        auto newDelay = std::min(BatchOperationSettings.MaxRetryDelayMs, decJitterDelay);
+        partInfo->RetryDelayMs = newDelay;
     }
 
-    void FillPhysicalRequest(IKqpGateway::TExecPhysicalRequest& physicalRequest, TTxAllocatorState::TPtr , size_t partitionIdx) {
+    void FillPhysicalRequest(IKqpGateway::TExecPhysicalRequest& physicalRequest, TTxAllocatorState::TPtr txAlloc, size_t partitionIdx) {
         FillRequestByInitWithParams(physicalRequest, partitionIdx, /* literal */ false);
 
-        auto txAlloc = Partitions[partitionIdx]->TxAlloc;
         auto queryData = physicalRequest.Transactions.front().Params;
         if (UseLiteral) {
             IKqpGateway::TExecPhysicalRequest literalRequest(txAlloc);
@@ -915,16 +951,17 @@ private:
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     TIntrusivePtr<TKqpCounters> Counters;
     TKqpRequestCounters::TPtr RequestCounters;
-
     NKikimrConfig::TTableServiceConfig TableServiceConfig;
     TIntrusivePtr<TUserRequestContext> UserRequestContext;
     ui32 StatementResultIndex;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
-
     TPreparedQueryHolder::TConstPtr PreparedQuery;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
     const TGUCSettings::TPtr GUCSettings;
     TShardIdToTableInfoPtr ShardIdToTableInfo;
+
+    const ui64 WriteBufferInitialMemoryLimit;
+    const ui64 WriteBufferMemoryLimit;
 };
 
 } // namespace
@@ -937,12 +974,13 @@ NActors::IActor* CreateKqpPartitionedExecuter(
     const NKikimrConfig::TTableServiceConfig& tableServiceConfig, NYql::NDq::IDqAsyncIoFactory::TPtr asyncIoFactory,
     TPreparedQueryHolder::TConstPtr preparedQuery, const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext>& userRequestContext,
     ui32 statementResultIndex, const std::optional<NKikimr::NKqp::TKqpFederatedQuerySetup>& federatedQuerySetup,
-    const TGUCSettings::TPtr& GUCSettings, const NKikimr::NKqp::TShardIdToTableInfoPtr& shardIdToTableInfo)
+    const TGUCSettings::TPtr& GUCSettings, const NKikimr::NKqp::TShardIdToTableInfoPtr& shardIdToTableInfo,
+    ui64 writeBufferInitialMemoryLimit, ui64 writeBufferMemoryLimit)
 {
     return new TKqpPartitionedExecuter(std::move(literalRequest), std::move(physicalRequest), sessionActorId, funcRegistry,
         timeProvider, randomProvider, database, userToken, counters, requestCounters, tableServiceConfig,
         std::move(asyncIoFactory), std::move(preparedQuery), userRequestContext, statementResultIndex, federatedQuerySetup,
-        GUCSettings, shardIdToTableInfo);
+        GUCSettings, shardIdToTableInfo, writeBufferInitialMemoryLimit, writeBufferMemoryLimit);
 }
 
 } // namespace NKqp

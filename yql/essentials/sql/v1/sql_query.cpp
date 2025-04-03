@@ -2585,6 +2585,7 @@ void TSqlQuery::AlterTableDropChangefeed(const TRule_alter_table_drop_changefeed
     params.DropChangefeeds.emplace_back(IdEx(node.GetRule_an_id3(), *this));
 }
 
+/// @see EnumeratePragmas too
 TNodePtr TSqlQuery::PragmaStatement(const TRule_pragma_stmt& stmt, bool& success) {
     success = false;
     const TString& prefix = OptIdPrefixAsStr(stmt.GetRule_opt_id_prefix_or_type2(), *this);
@@ -3943,6 +3944,62 @@ bool TSqlQuery::ParseTableStoreFeatures(std::map<TString, TDeferredAtom> & resul
             Y_ABORT("You should change implementation according to grammar changes");
     }
     return true;
+}
+
+void EnumeratePragmas(std::function<void(std::string_view)> callback) {
+    callback("ClassicDivision");
+    callback("StrictJoinKeyTypes");
+    callback("DisableStrictJoinKeyTypes");
+    callback("CheckedOps");
+    callback("UnicodeLiterals");
+    callback("DisableUnicodeLiterals");
+    callback("WarnUntypedStringLiterals");
+    callback("DisableWarnUntypedStringLiterals");
+    callback("File");
+    callback("FileOption");
+    callback("Folder");
+    callback("Udf");
+    callback("Library");
+    callback("Package");
+    callback("PackageVersion");
+    callback("RefSelect");
+    callback("SampleSelect");
+    callback("AllowDotInAlias");
+    callback("OverrideLibrary");
+    callback("DirectRead");
+    callback("AutoCommit");
+    callback("UseTablePrefixForEach");
+    callback("PathPrefix");
+    callback("GroupByLimit");
+    callback("GroupByCubeLimit");
+    callback("SimpleColumns");
+    callback("DisableSimpleColumns");
+    callback("ResultRowsLimit");
+    callback("ResultSizeLimit");
+    callback("RuntimeLogLevel");
+    callback("Warning");
+    callback("Greetings");
+    callback("WarningMsg");
+    callback("ErrorMsg");
+    callback("AllowUnnamedColumns");
+    callback("WarnUnnamedColumns");
+    callback("DiscoveryMode");
+    callback("EnableSystemColumns");
+    callback("DqEngine");
+    callback("BlockEngine");
+    callback("JsonQueryReturnsJsonDocument");
+    callback("DisableJsonQueryReturnsJsonDocument");
+    callback("PositionalUnionAll");
+    callback("PqReadBy");
+    callback("DataWatermarks");
+    callback("FeatureR010");
+    callback("CostBasedOptimizer");
+    callback("Engine");
+    callback("yson.AutoConvert");
+    callback("yson.Strict");
+    callback("yson.DisableStrict");
+    callback("yson.CastToString");
+    callback("yson.DisableCastToString");
 }
 
 } // namespace NSQLTranslationV1

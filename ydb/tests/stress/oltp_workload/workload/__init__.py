@@ -27,7 +27,8 @@ class WorkloadRunner:
     def _cleanup(self):
         print(f"Cleaning up {self.tables_prefix}...")
         deleted = self.client.remove_recursively(self.tables_prefix)
-        print(f"Cleaning up {self.tables_prefix}... done, {deleted} tables deleted")
+        print(
+            f"Cleaning up {self.tables_prefix}... done, {deleted} tables deleted")
 
     def run(self):
         stop = threading.Event()

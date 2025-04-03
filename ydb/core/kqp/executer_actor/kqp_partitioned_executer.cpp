@@ -38,7 +38,7 @@ class TKqpPartitionedExecuter : public TActorBootstrapped<TKqpPartitionedExecute
 
         EExecuterStatus Response = EExecuterStatus::FINISHED;
         ui64 LimitSize;
-        ui64 RetryDelayMilliseconds;
+        ui64 RetryDelayMs;
 
         using TPtr = std::shared_ptr<TBatchPartitionInfo>;
     };
@@ -216,7 +216,7 @@ public:
 
         switch (response->GetStatus()) {
             case Ydb::StatusIds::SUCCESS:
-                partInfo->RetryDelayMilliseconds = BatchOperationSettings.MinBatchSize;
+                partInfo->RetryDelayMs = BatchOperationSettings.StartRetryDelayMs;
                 partInfo->LimitSize = BatchOperationSettings.MaxBatchSize;
                 OnSuccessResponse(partInfo, ev->Get());
                 break;
@@ -416,7 +416,7 @@ private:
             ptr->PartitionIdx = i;
             ptr->TxAlloc = std::make_shared<TTxAllocatorState>(FuncRegistry, TimeProvider, RandomProvider);
             ptr->LimitSize = BatchOperationSettings.MaxBatchSize;
-            ptr->RetryDelayMilliseconds = BatchOperationSettings.MinRetryDelay;
+            ptr->RetryDelayMs = BatchOperationSettings.StartRetryDelayMs;
 
             Partitions.push_back(std::move(ptr));
         }
@@ -458,7 +458,7 @@ private:
 
         PE_LOG_I("Create new KQP executer by PartitionedExecuterActor: ExecuterId = " << exId
             << ", PartitionIdx = " << partitionIdx << ", LimitSize = " << partInfo->LimitSize
-            << ", RetryDelayMilliseconds = " << partInfo->RetryDelayMilliseconds);
+            << ", RetryDelayMs = " << partInfo->RetryDelayMs);
 
         partInfo->ExecuterId = exId;
         partInfo->BufferId = bufferActorId;
@@ -535,7 +535,7 @@ private:
 
     void RetryPartExecution(TBatchPartitionInfo::TPtr partInfo) {
         PE_LOG_D("Retry query execution for PartitionIdx = " << partInfo->PartitionIdx
-            << ", new delay = " << partInfo->RetryDelayMilliseconds);
+            << ", RetryDelayMs = " << partInfo->RetryDelayMs);
 
         ExecuterToPartition.erase(partInfo->ExecuterId);
         BufferToPartition.erase(partInfo->BufferId);
@@ -546,12 +546,12 @@ private:
         auto newLimit = std::max(partInfo->LimitSize / 2, BatchOperationSettings.MinBatchSize);
         partInfo->LimitSize = newLimit;
 
-        auto decJitterDelay = RandomProvider->Uniform(BatchOperationSettings.MinRetryDelay, partInfo->RetryDelayMilliseconds * 3ul);
-        auto newDelay = std::min(BatchOperationSettings.MaxRetryDelay,decJitterDelay);
-        partInfo->RetryDelayMilliseconds = newDelay;
+        auto decJitterDelay = RandomProvider->Uniform(BatchOperationSettings.StartRetryDelayMs, partInfo->RetryDelayMs * 3ul);
+        auto newDelay = std::min(BatchOperationSettings.MaxRetryDelayMs, decJitterDelay);
+        partInfo->RetryDelayMs = newDelay;
 
         auto ev = std::make_unique<TEvKqpExecuter::TEvTxDelayedExecution>(partInfo->PartitionIdx);
-        Schedule(TDuration::MilliSeconds(partInfo->RetryDelayMilliseconds), ev.release());
+        Schedule(TDuration::MilliSeconds(partInfo->RetryDelayMs), ev.release());
     }
 
     void FillPhysicalRequest(IKqpGateway::TExecPhysicalRequest& physicalRequest, TTxAllocatorState::TPtr , size_t partitionIdx) {

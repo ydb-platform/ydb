@@ -8,8 +8,8 @@ namespace NKikimr::NKqp {
 struct TBatchOperationSettings {
     ui64 MaxBatchSize = 10000;
     ui64 MinBatchSize = 1;
-    ui64 MaxRetryDelay = 1000;
-    ui64 MinRetryDelay = 50;
+    ui64 MaxRetryDelayMs = 30000;
+    ui64 StartRetryDelayMs = 50;
 };
 
 TBatchOperationSettings SetBatchOperationSettings(const NKikimrConfig::TTableServiceConfig::TBatchOperationSettings& settings);

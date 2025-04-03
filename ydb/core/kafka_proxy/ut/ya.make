@@ -12,6 +12,7 @@ SRCS(
     ut_serialization.cpp
     metarequest_ut.cpp
     actors_ut.cpp
+    ut_transaction_coordinator.cpp
 )
 
 PEERDIR(

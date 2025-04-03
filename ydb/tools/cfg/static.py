@@ -8,7 +8,6 @@ import logging
 import subprocess
 import tempfile
 
-import yaml
 from ydb.core.fq.libs.config.protos.fq_config_pb2 import TConfig as TFederatedQueryConfig
 from ydb.core.protos import blobstorage_pdisk_config_pb2 as pdisk_config_pb
 from google.protobuf import json_format
@@ -19,6 +18,8 @@ from ydb.core.protos import (
     bootstrap_pb2,
     cms_pb2,
     config_pb2,
+    blobstorage_config_pb2,
+    blobstorage_base3_pb2,
     feature_flags_pb2,
     key_pb2,
     netclassifier_pb2,
@@ -396,7 +397,9 @@ class StaticConfigGenerator(object):
         all_configs["kikimr.cfg"] = self.kikimr_cfg
         all_configs["dynamic_server.cfg"] = self.dynamic_server_common_args
         normalized_config = self.get_normalized_config()
+
         all_configs["config.yaml"] = self.get_yaml_format_config(normalized_config)
+
         all_configs["dynconfig.yaml"] = self.get_yaml_format_dynconfig(normalized_config)
         return all_configs
 
@@ -612,7 +615,7 @@ class StaticConfigGenerator(object):
         return normalized_config
 
     def get_yaml_format_config(self, normalized_config):
-        return yaml.safe_dump(normalized_config, sort_keys=True, default_flow_style=False, indent=2)
+        return utils.dump_yaml(normalized_config)
 
     def get_yaml_format_dynconfig(self, normalized_config):
         cluster_uuid = normalized_config.get('nameservice_config', {}).get('cluster_uuid', '')
@@ -631,7 +634,7 @@ class StaticConfigGenerator(object):
             'selector_config': [],
         }
 
-        if self.__cluster_details.use_auto_config:
+        if self.__cluster_details.use_auto_config or normalized_config.get('actor_system_config', {}).get('use_auto_config', False):
             dynconfig['selector_config'].append({
                 'description': 'actor system config for dynnodes',
                 'selector': {
@@ -645,11 +648,18 @@ class StaticConfigGenerator(object):
                     }
                 }
             })
+
+            # copy all selector_config elements without validation (for now) to dynconfig
+            for elem in self.__cluster_details.selector_config:
+                dynconfig['selector_config'].append(elem)
+
         # emulate dumping ordered dict to yaml
         lines = []
         for key in ['metadata', 'config', 'allowed_labels', 'selector_config']:
             lines.append(key + ':')
-            substr = yaml.safe_dump(dynconfig[key], sort_keys=True, default_flow_style=False, indent=2)
+
+            substr = utils.dump_yaml(dynconfig[key])
+
             for line in substr.split('\n'):
                 lines.append('  ' + line)
         return '\n'.join(lines)
@@ -1104,8 +1114,61 @@ class StaticConfigGenerator(object):
         else:
             self.__generate_domains_from_proto(domains_config)
 
+    def __generate_default_pool_with_kind(self, pool_kind):
+        pool = config_pb2.TDomainsConfig.TStoragePoolType()
+        pool.Kind = pool_kind
+        pool_config = blobstorage_config_pb2.TDefineStoragePool()
+
+        pool_config.BoxId = 1
+        pool_config.Kind = pool_kind
+        pool_config.VDiskKind = "Default"
+        pdisk_filter = pool_config.PDiskFilter.add()
+        property = pdisk_filter.Property.add()
+        diskTypeToProto = {
+            'ssd': blobstorage_base3_pb2.EPDiskType.SSD,
+            'rot': blobstorage_base3_pb2.EPDiskType.ROT,
+            'ssdencrypted': blobstorage_base3_pb2.EPDiskType.SSD,
+            'rotencrypted': blobstorage_base3_pb2.EPDiskType.ROT,
+        }
+
+        property.Type = diskTypeToProto[pool_kind]
+
+        pool.PoolConfig.CopyFrom(pool_config)
+        return pool
+
     def __generate_domains_from_proto(self, domains_config):
-        self.__configure_security_config(domains_config)
+        domains = domains_config.Domain
+        if len(domains) > 1:
+            raise ValueError('Multiple domains specified: len(domains_config.domain) > 1. This is unsupported')
+
+        domain = domains[0]
+        pool_kinds = []
+        if not domain.StoragePoolTypes:
+            pool_kinds = ['ssd', 'rot', 'ssdencrypted', 'rotencrypted']
+            for pool_kind in pool_kinds:
+                storage_pool_type = domain.StoragePoolTypes.add()
+                default_storage_pool_type = self.__generate_default_pool_with_kind(pool_kind)
+                storage_pool_type.MergeFrom(default_storage_pool_type)
+        else:
+            for pool in domain.StoragePoolTypes:
+                # do a little dance to keep the specified fields prioritized
+                # while filling the remaining defaults (MergeFrom overwrites)
+                defaultPool = self.__generate_default_pool_with_kind(pool.Kind)
+                defaultPool.MergeFrom(pool)
+                pool.CopyFrom(defaultPool)
+
+        if not domain.DomainId:
+            domain.DomainId = 1
+        if not domain.PlanResolution:
+            domain.PlanResolution = base.DEFAULT_PLAN_RESOLUTION
+        if not domain.SchemeRoot:
+            domain.SchemeRoot = self.__tablet_types.FLAT_SCHEMESHARD.tablet_id_for(0)
+        if not domain.SSId:
+            domain.SSId.append(domain.DomainId)
+
+        if not domains_config.StateStorage:
+            self._configure_default_state_storage(domains_config, domain.DomainId)
+
         self.__proto_configs["domains.txt"] = domains_config
 
     def __generate_domains_from_old_domains_key(self):

@@ -11,7 +11,6 @@ import typing
 
 import ydb.aio
 from .._grpc.grpcwrapper.ydb_topic import StreamWriteMessage
-from .._grpc.grpcwrapper.ydb_topic import TransactionIdentity
 from .._grpc.grpcwrapper.common_utils import IToProto
 from .._grpc.grpcwrapper.ydb_topic_public_types import PublicCodec
 from .. import connection
@@ -54,12 +53,8 @@ class PublicWriteResult:
     class Skipped:
         pass
 
-    @dataclass(eq=True)
-    class WrittenInTx:
-        pass
 
-
-PublicWriteResultTypes = Union[PublicWriteResult.Written, PublicWriteResult.Skipped, PublicWriteResult.WrittenInTx]
+PublicWriteResultTypes = Union[PublicWriteResult.Written, PublicWriteResult.Skipped]
 
 
 class WriterSettings(PublicWriterSettings):
@@ -210,7 +205,6 @@ def default_serializer_message_content(data: Any) -> bytes:
 
 def messages_to_proto_requests(
     messages: List[InternalMessage],
-    tx_identity: Optional[TransactionIdentity],
 ) -> List[StreamWriteMessage.FromClient]:
 
     gropus = _slit_messages_for_send(messages)
@@ -221,7 +215,6 @@ def messages_to_proto_requests(
             StreamWriteMessage.WriteRequest(
                 messages=list(map(InternalMessage.to_message_data, group)),
                 codec=group[0].codec,
-                tx_identity=tx_identity,
             )
         )
         res.append(req)
@@ -246,7 +239,6 @@ _message_data_overhead = (
                 ),
             ],
             codec=20000,
-            tx_identity=None,
         )
     )
     .to_proto()

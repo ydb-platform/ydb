@@ -5,7 +5,6 @@ from . import issues
 
 _errors_retriable_fast_backoff_types = [
     issues.Unavailable,
-    issues.ClientInternalError,
 ]
 _errors_retriable_slow_backoff_types = [
     issues.Aborted,

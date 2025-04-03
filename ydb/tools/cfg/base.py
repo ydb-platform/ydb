@@ -311,6 +311,7 @@ class ClusterDetailsProvider(object):
         self.immediate_controls_config = self.__cluster_description.get("immediate_controls_config")
         self.cms_config = self.__cluster_description.get("cms_config")
         self.pdisk_key_config = self.__cluster_description.get("pdisk_key_config", {})
+        self.selector_config = self.__cluster_description.get("selector_config", {})
         if not self.need_txt_files and not self.use_new_style_kikimr_cfg:
             assert "cannot remove txt files without new style kikimr cfg!"
 

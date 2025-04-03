@@ -1,4 +1,5 @@
 #include <ydb/core/tx/datashard/ut_common/datashard_ut_common.h>
+#include <ydb/core/testlib/storage_helpers.h>
 
 namespace NKikimr {
 
@@ -16,31 +17,8 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
     static const TString PresentShortValue3("_Some_value_3_");
     static const TString DeletedLongValue4(size_t(100 * 1024), 't');
 
-    int CountBlobsWithSubstring(ui64 tabletId, const TVector<TServerSettings::TProxyDSPtr>& proxyDSs, const TString& substring) {
-        int res = 0;
-        for (const auto& proxyDS : proxyDSs) {
-            for (const auto& [id, blob] : proxyDS->AllMyBlobs()) {
-                if (id.TabletID() == tabletId && !blob.DoNotKeep && blob.Buffer.ConvertToString().Contains(substring)) {
-                    ++res;
-                }
-            }
-        }
-        return res;
-    }
-
-    bool BlobStorageContains(const TVector<TServerSettings::TProxyDSPtr>& proxyDSs, const TString& value) {
-        for (const auto& proxyDS : proxyDSs) {
-            for (const auto& [id, blob] : proxyDS->AllMyBlobs()) {
-                if (!blob.DoNotKeep && blob.Buffer.ConvertToString().Contains(value)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
     auto SetupWithTable(bool withCompaction) {
-        TVector<TServerSettings::TProxyDSPtr> proxyDSs {
+        TVector<TIntrusivePtr<NFake::TProxyDS>> proxyDSs {
             MakeIntrusive<NFake::TProxyDS>(TGroupId::FromValue(0)),
             MakeIntrusive<NFake::TProxyDS>(TGroupId::FromValue(2181038080)),
         };
@@ -113,7 +91,7 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
         UNIT_ASSERT_VALUES_EQUAL(ev.Record.GetDataCleanupGeneration(), generation);
     }
 
-    void CheckTableData(Tests::TServer::TPtr server, const TVector<TServerSettings::TProxyDSPtr>& proxyDSs, const TString& table) {
+    void CheckTableData(Tests::TServer::TPtr server, const TVector<TIntrusivePtr<NFake::TProxyDS>>& proxyDSs, const TString& table) {
         auto result = ReadShardedTable(server, table);
         UNIT_ASSERT_VALUES_EQUAL(result,
             "key = 2, subkey = " + PresentSubkey2 + ", value = " + PresentLongValue2 + "\n"
@@ -325,6 +303,52 @@ Y_UNIT_TEST_SUITE(DataCleanup) {
 
         cleanupAndCheck(table2Shards.at(0), 24);
         cleanupAndCheck(tableShards.at(0), 24);
+
+        CheckTableData(server, proxyDSs, "/Root/table-1");
+        CheckTableData(server, proxyDSs, "/Root/table-2");
+    }
+
+    Y_UNIT_TEST(BorrowerDataCleanedAfterCopyTable) {
+        auto [server, sender, tableShards, proxyDSs] = SetupWithTable(true);
+        auto& runtime = *server->GetRuntime();
+
+        auto txIdCopy = AsyncCreateCopyTable(server, sender, "/Root", "table-2", "/Root/table-1");
+        WaitTxNotification(server, sender, txIdCopy);
+        auto table2Shards = GetTableShards(server, sender, "/Root/table-2");
+        auto table2Id = ResolveTableId(server, sender, "/Root/table-2");
+
+        ExecSQL(server, sender, "DELETE FROM `/Root/table-1` WHERE key IN (1, 4);");
+        ExecSQL(server, sender, "DELETE FROM `/Root/table-2` WHERE key IN (1, 4);");
+        SimulateSleep(runtime, TDuration::Seconds(2));
+
+        ui64 dataCleanupGeneration = 24;
+        {
+            // cleanup for the first table should be failed due to borrowed parts
+            auto request = MakeHolder<TEvDataShard::TEvForceDataCleanup>(dataCleanupGeneration);
+            runtime.SendToPipe(tableShards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries());
+
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
+            UNIT_ASSERT_EQUAL(ev->Get()->Record.GetStatus(), NKikimrTxDataShard::TEvForceDataCleanupResult::BORROWED);
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetTabletId(), tableShards.at(0));
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.GetDataCleanupGeneration(), dataCleanupGeneration);
+        }
+        {
+            // cleanup for the second table
+            auto request = MakeHolder<TEvDataShard::TEvForceDataCleanup>(dataCleanupGeneration);
+            runtime.SendToPipe(table2Shards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries());
+
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
+            CheckResultEvent(*ev->Get(), table2Shards.at(0), dataCleanupGeneration);
+        }
+        {
+            // next cleanup for the first table should succeed after compaction of the second table
+            ++dataCleanupGeneration;
+            auto request = MakeHolder<TEvDataShard::TEvForceDataCleanup>(dataCleanupGeneration);
+            runtime.SendToPipe(tableShards.at(0), sender, request.Release(), 0, GetPipeConfigWithRetries());
+
+            auto ev = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvForceDataCleanupResult>(sender);
+            CheckResultEvent(*ev->Get(), tableShards.at(0), dataCleanupGeneration);
+        }
 
         CheckTableData(server, proxyDSs, "/Root/table-1");
         CheckTableData(server, proxyDSs, "/Root/table-2");

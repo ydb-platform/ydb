@@ -244,7 +244,7 @@ TDriveEstimator::TDriveEstimator(const TString filename)
     memset(Buffer->Data(), 7, Buffer->Size()); // Initialize the buffer so that Valgrind does not complain
     bool isBlockDevice = false;
     ActorSystem->AppData<TAppData>()->IoContextFactory->DetectFileParameters(filename, DriveSize, isBlockDevice);
-    Y_ABORT_UNLESS(Buffer->Size() * Repeats < DriveSize);
+    Y_VERIFY(Buffer->Size() * Repeats < DriveSize);
     Device->Initialize(std::make_shared<TPDiskCtx>(ActorSystem));
     Y_VERIFY_S(Device->IsGood(), "Cannot Initialize TBlockDevice");
 }

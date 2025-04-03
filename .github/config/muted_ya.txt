@@ -19,6 +19,10 @@ ydb/core/keyvalue/ut_trace TKeyValueTracingTest.WriteSmall
 ydb/core/kqp/ut/cost KqpCost.OlapWriteRow
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestAggregation
 ydb/core/kqp/ut/olap KqpDecimalColumnShard.TestFilterCompare
+ydb/core/kqp/ut/olap KqpOlapIndexes.IndexesInBS
+ydb/core/kqp/ut/olap KqpOlapIndexes.IndexesInLocalMetadata
+ydb/core/kqp/ut/olap KqpOlapJson.SwitchAccessorCompactionVariants
+ydb/core/kqp/ut/olap KqpOlapOptimizer.OptimizationByTime
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesColumnActualization
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictActualization
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewBytesDictStatActualization
@@ -30,6 +34,7 @@ ydb/core/kqp/ut/query KqpLimits.TooBigColumn+useSink
 ydb/core/kqp/ut/query KqpStats.SysViewClientLost
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/scheme KqpScheme.AlterAsyncReplication
+ydb/core/kqp/ut/scheme KqpScheme.AlterDatabaseChangeOwner+EnableAlterDatabase
 ydb/core/kqp/ut/scheme KqpScheme.AlterTransfer
 ydb/core/kqp/ut/scheme KqpScheme.AlterTransfer_QueryService
 ydb/core/kqp/ut/scheme [*/*] chunk chunk
@@ -46,6 +51,7 @@ ydb/core/kqp/ut/tx KqpSnapshotIsolation.TReadOnlyOltpNoSink
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOltp
 ydb/core/kqp/ut/tx KqpSnapshotIsolation.TSimpleOltpNoSink
 ydb/core/kqp/ut/yql KqpScripting.StreamExecuteYqlScriptScanOperationTmeoutBruteForce
+ydb/core/mind/hive/ut TStorageBalanceTest.TestScenario2
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
 ydb/core/statistics/aggregator/ut AnalyzeColumnshard.AnalyzeRebootColumnShard
 ydb/core/tablet_flat/ut DataCleanup.CleanupDataWithFollowers
@@ -79,7 +85,15 @@ ydb/tests/fq/yds test_mem_alloc.py.TestMemAlloc.test_join_alloc[v1]
 ydb/tests/fq/yds test_recovery.py.TestRecovery.test_ic_disconnection
 ydb/tests/fq/yds test_select_limit_db_id.py.TestSelectLimitWithDbId.test_select_same_with_id[v1-mvp_external_ydb_endpoint0]
 ydb/tests/fq/yds test_yds_bindings.py.TestBindings.test_yds_insert[v1]
+ydb/tests/functional/compatibility test_compatibility.py.TestCompatibility.test_simple
 ydb/tests/functional/compatibility test_followers.py.TestFollowersCompatibility.test_followers_compatability
+ydb/tests/functional/compatibility test_stress.py.TestStress.test_kv[last_stable-row]
+ydb/tests/functional/compatibility test_stress.py.TestStress.test_kv[mixed-row]
+ydb/tests/functional/compatibility test_stress.py.TestStress.test_log[last_stable-row]
+ydb/tests/functional/compatibility test_stress.py.TestStress.test_log[mixed-row]
+ydb/tests/functional/compatibility test_stress.py.TestStress.test_tpch1[current-row]
+ydb/tests/functional/compatibility test_stress.py.TestStress.test_tpch1[last_stable-row]
+ydb/tests/functional/compatibility test_stress.py.TestStress.test_tpch1[mixed-row]
 ydb/tests/functional/hive test_drain.py.TestHive.test_drain_on_stop
 ydb/tests/functional/rename [test_rename.py */*] chunk chunk
 ydb/tests/functional/serializable sole chunk chunk
@@ -107,19 +121,18 @@ ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[67]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[86]
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS1.test_tpcds[9]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[7]
-ydb/tests/functional/transfer Transfer.CreateTransferSourceIsNotTopic
-ydb/tests/functional/transfer Transfer.CreateTransferTargetNotExists
-ydb/tests/functional/transfer Transfer.CustomFlushInterval
-ydb/tests/functional/transfer Transfer.DescribeError_OnLambdaCompilation
 ydb/tests/olap sole chunk chunk
 ydb/tests/olap test_quota_exhaustion.py.TestYdbWorkload.test_delete
 ydb/tests/olap/column_family/compression alter_compression.py.TestAlterCompression.test_all_supported_compression
 ydb/tests/olap/column_family/compression sole chunk chunk
+ydb/tests/olap/oom overlapping_portions.py.TestOverlappingPortions.test
 ydb/tests/olap/scenario sole chunk chunk
 ydb/tests/olap/scenario test_alter_compression.py.TestAlterCompression.test[alter_compression]
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
 ydb/tests/olap/scenario test_insert.py.TestInsert.test[read_data_during_bulk_upsert]
+ydb/tests/olap/scenario test_read_update_write_load.py.TestReadUpdateWriteLoad.test[read_update_write_load]
 ydb/tests/olap/ttl_tiering [data_migration_when_alter_ttl.py] chunk chunk
+ydb/tests/olap/ttl_tiering [ttl_delete_s3.py] chunk chunk
 ydb/tests/olap/ttl_tiering data_correctness.py.TestDataCorrectness.test
 ydb/tests/olap/ttl_tiering data_migration_when_alter_ttl.py.TestDataMigrationWhenAlterTtl.test
 ydb/tests/olap/ttl_tiering sole chunk chunk

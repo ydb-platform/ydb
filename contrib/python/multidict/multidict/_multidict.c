@@ -1,6 +1,8 @@
 #include "Python.h"
 #include "structmember.h"
 
+#include "_multilib/pythoncapi_compat.h"
+
 // Include order important
 #include "_multilib/defs.h"
 #include "_multilib/istr.h"
@@ -9,7 +11,7 @@
 #include "_multilib/iter.h"
 #include "_multilib/views.h"
 
-#if PY_MAJOR_VERSION < 3 || PY_MINOR_VERSION < 12
+#if PY_MINOR_VERSION < 12
 #ifndef _PyArg_UnpackKeywords
 #define FASTCALL_OLD
 #endif
@@ -19,13 +21,12 @@
 static PyObject *collections_abc_mapping;
 static PyObject *collections_abc_mut_mapping;
 static PyObject *collections_abc_mut_multi_mapping;
+static PyObject *repr_func;
 
 static PyTypeObject multidict_type;
 static PyTypeObject cimultidict_type;
 static PyTypeObject multidict_proxy_type;
 static PyTypeObject cimultidict_proxy_type;
-
-static PyObject *repr_func;
 
 #define MultiDict_CheckExact(o) (Py_TYPE(o) == &multidict_type)
 #define CIMultiDict_CheckExact(o) (Py_TYPE(o) == &cimultidict_type)
@@ -155,13 +156,17 @@ _multidict_append_items_seq(MultiDictObject *self, PyObject *arg,
             Py_INCREF(value);
         }
         else if (PyList_CheckExact(item)) {
-            if (PyList_GET_SIZE(item) != 2) {
+            if (PyList_Size(item) != 2) {
                 goto invalid_type;
             }
-            key = PyList_GET_ITEM(item, 0);
-            Py_INCREF(key);
-            value = PyList_GET_ITEM(item, 1);
-            Py_INCREF(value);
+            key = PyList_GetItemRef(item, 0);
+            if (key == NULL) {
+                goto invalid_type;
+            }
+            value = PyList_GetItemRef(item, 1);
+            if (value == NULL) {
+                goto invalid_type;
+            }
         }
         else if (PySequence_Check(item)) {
             if (PySequence_Size(item) != 2) {
@@ -339,8 +344,8 @@ _multidict_extend(MultiDictObject *self, PyObject *args, PyObject *kwds,
     if (args && PyObject_Length(args) > 1)  {
         PyErr_Format(
             PyExc_TypeError,
-            "%s takes at most 1 positional argument (%zd given)",
-            name, PyObject_Length(args), NULL
+            "%s takes from 1 to 2 positional arguments but %zd were given",
+            name, PyObject_Length(args) + 1, NULL
         );
         return -1;
     }
@@ -769,21 +774,13 @@ static inline void
 multidict_tp_dealloc(MultiDictObject *self)
 {
     PyObject_GC_UnTrack(self);
-#if PY_MAJOR_VERSION >= 3 && PY_MINOR_VERSION >= 9
     Py_TRASHCAN_BEGIN(self, multidict_tp_dealloc)
-#else
-    Py_TRASHCAN_SAFE_BEGIN(self);
-#endif
     if (self->weaklist != NULL) {
         PyObject_ClearWeakRefs((PyObject *)self);
     };
     pair_list_dealloc(&self->pairs);
     Py_TYPE(self)->tp_free((PyObject *)self);
-#if PY_MAJOR_VERSION >= 3 && PY_MINOR_VERSION >= 9
     Py_TRASHCAN_END // there should be no code after this
-#else
-    Py_TRASHCAN_SAFE_END(self);
-#endif
 }
 
 static inline int
@@ -1230,16 +1227,7 @@ PyDoc_STRVAR(multidict_update_doc,
 "Update the dictionary from *other*, overwriting existing keys.");
 
 
-#if PY_MAJOR_VERSION >= 3 && PY_MINOR_VERSION >= 9
 #define multidict_class_getitem Py_GenericAlias
-#else
-static inline PyObject *
-multidict_class_getitem(PyObject *self, PyObject *arg)
-{
-    Py_INCREF(self);
-    return self;
-}
-#endif
 
 
 PyDoc_STRVAR(sizeof__doc__,
@@ -1941,9 +1929,7 @@ getversion(PyObject *self, PyObject *md)
 static inline void
 module_free(void *m)
 {
-#if PY_MAJOR_VERSION >= 3 && PY_MINOR_VERSION >= 9
     Py_CLEAR(multidict_str_lower);
-#endif
     Py_CLEAR(collections_abc_mapping);
     Py_CLEAR(collections_abc_mut_mapping);
     Py_CLEAR(collections_abc_mut_multi_mapping);
@@ -1972,28 +1958,13 @@ static PyModuleDef multidict_module = {
 PyMODINIT_FUNC
 PyInit__multidict(void)
 {
-#if PY_MAJOR_VERSION >= 3 && PY_MINOR_VERSION >= 9
     multidict_str_lower = PyUnicode_InternFromString("lower");
     if (multidict_str_lower == NULL) {
         goto fail;
     }
-#endif
 
     PyObject *module = NULL,
              *reg_func_call_result = NULL;
-
-#define WITH_MOD(NAME)                      \
-    Py_CLEAR(module);                       \
-    module = PyImport_ImportModule(NAME);   \
-    if (module == NULL) {                   \
-        goto fail;                          \
-    }
-
-#define GET_MOD_ATTR(VAR, NAME)                 \
-    VAR = PyObject_GetAttrString(module, NAME); \
-    if (VAR == NULL) {                          \
-        goto fail;                              \
-    }
 
     if (multidict_views_init() < 0) {
         goto fail;
@@ -2015,17 +1986,30 @@ PyInit__multidict(void)
         goto fail;
     }
 
+#define WITH_MOD(NAME)                      \
+    Py_CLEAR(module);                       \
+    module = PyImport_ImportModule(NAME);   \
+    if (module == NULL) {                   \
+        goto fail;                          \
+    }
+
+#define GET_MOD_ATTR(VAR, NAME)                 \
+    VAR = PyObject_GetAttrString(module, NAME); \
+    if (VAR == NULL) {                          \
+        goto fail;                              \
+    }
+
     WITH_MOD("collections.abc");
     GET_MOD_ATTR(collections_abc_mapping, "Mapping");
 
     WITH_MOD("multidict._abc");
     GET_MOD_ATTR(collections_abc_mut_mapping, "MultiMapping");
-
-    WITH_MOD("multidict._abc");
     GET_MOD_ATTR(collections_abc_mut_multi_mapping, "MutableMultiMapping");
 
     WITH_MOD("multidict._multidict_base");
     GET_MOD_ATTR(repr_func, "_mdrepr");
+
+    Py_CLEAR(module);                       \
 
     /* Register in _abc mappings (CI)MultiDict and (CI)MultiDictProxy */
     reg_func_call_result = PyObject_CallMethod(
@@ -2070,6 +2054,13 @@ PyInit__multidict(void)
 
     /* Instantiate this module */
     module = PyModule_Create(&multidict_module);
+    if (module == NULL) {
+        goto fail;
+    }
+
+#ifdef Py_GIL_DISABLED
+    PyUnstable_Module_SetGIL(module, Py_MOD_GIL_NOT_USED);
+#endif
 
     Py_INCREF(&istr_type);
     if (PyModule_AddObject(
@@ -2109,9 +2100,7 @@ PyInit__multidict(void)
     return module;
 
 fail:
-#if PY_MAJOR_VERSION >= 3 && PY_MINOR_VERSION >= 9
     Py_XDECREF(multidict_str_lower);
-#endif
     Py_XDECREF(collections_abc_mapping);
     Py_XDECREF(collections_abc_mut_mapping);
     Py_XDECREF(collections_abc_mut_multi_mapping);

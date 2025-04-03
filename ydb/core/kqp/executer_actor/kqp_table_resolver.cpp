@@ -28,12 +28,10 @@ public:
 
     TKqpTableResolver(const TActorId& owner, ui64 txId,
         const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-        const TVector<IKqpGateway::TPhysicalTxData>& transactions,
         TKqpTasksGraph& tasksGraph)
         : Owner(owner)
         , TxId(txId)
         , UserToken(userToken)
-        , Transactions(transactions)
         , TasksGraph(tasksGraph)
         , SystemViewRewrittenResolver(NSysView::CreateSystemViewRewrittenResolver()) {}
 
@@ -149,7 +147,6 @@ private:
 
 private:
     void ResolveKeys() {
-        FillKqpTasksGraphStages(TasksGraph, Transactions);
 
         auto requestNavigate = std::make_unique<NSchemeCache::TSchemeCacheNavigate>();
         auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
@@ -268,7 +265,6 @@ private:
     const TActorId Owner;
     const ui64 TxId;
     TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-    const TVector<IKqpGateway::TPhysicalTxData>& Transactions;
     THashMap<TTableId, TVector<TStageId>> TableRequestIds;
     THashMap<TTableId, TString> TablePathsById;
     bool NavigationFinished = false;
@@ -287,9 +283,8 @@ private:
 } // anonymous namespace
 
 NActors::IActor* CreateKqpTableResolver(const TActorId& owner, ui64 txId,
-    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken,
-    const TVector<IKqpGateway::TPhysicalTxData>& transactions, TKqpTasksGraph& tasksGraph) {
-    return new TKqpTableResolver(owner, txId, userToken, transactions, tasksGraph);
+    const TIntrusiveConstPtr<NACLib::TUserToken>& userToken, TKqpTasksGraph& tasksGraph) {
+    return new TKqpTableResolver(owner, txId, userToken, tasksGraph);
 }
 
 } // namespace NKikimr::NKqp

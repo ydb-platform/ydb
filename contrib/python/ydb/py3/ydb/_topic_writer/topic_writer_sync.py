@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import typing
 from concurrent.futures import Future
 from typing import Union, List, Optional
@@ -15,22 +14,12 @@ from .topic_writer import (
     TopicWriterClosedError,
 )
 
-from ..query.base import TxEvent
-
-from .topic_writer_asyncio import (
-    TxWriterAsyncIO,
-    WriterAsyncIO,
-)
+from .topic_writer_asyncio import WriterAsyncIO
 from .._topic_common.common import (
     _get_shared_event_loop,
     TimeoutType,
     CallFromSyncToAsync,
 )
-
-if typing.TYPE_CHECKING:
-    from ..query.transaction import BaseQueryTxContext
-
-logger = logging.getLogger(__name__)
 
 
 class WriterSync:
@@ -74,8 +63,7 @@ class WriterSync:
                 raise
 
     def __del__(self):
-        if not self._closed:
-            logger.warning("Topic writer was not closed properly. Consider using method close().")
+        self.close(flush=False)
 
     def close(self, *, flush: bool = True, timeout: TimeoutType = None):
         if self._closed:
@@ -134,39 +122,3 @@ class WriterSync:
         self._check_closed()
 
         return self._caller.unsafe_call_with_result(self._async_writer.write_with_ack(messages), timeout=timeout)
-
-
-class TxWriterSync(WriterSync):
-    def __init__(
-        self,
-        tx: "BaseQueryTxContext",
-        driver: SupportedDriverType,
-        settings: PublicWriterSettings,
-        *,
-        eventloop: Optional[asyncio.AbstractEventLoop] = None,
-        _parent=None,
-    ):
-
-        self._closed = False
-
-        if eventloop:
-            loop = eventloop
-        else:
-            loop = _get_shared_event_loop()
-
-        self._caller = CallFromSyncToAsync(loop)
-
-        async def create_async_writer():
-            return TxWriterAsyncIO(tx, driver, settings, _is_implicit=True)
-
-        self._async_writer = self._caller.safe_call_with_result(create_async_writer(), None)
-        self._parent = _parent
-
-        tx._add_callback(TxEvent.BEFORE_COMMIT, self._on_before_commit, None)
-        tx._add_callback(TxEvent.BEFORE_ROLLBACK, self._on_before_rollback, None)
-
-    def _on_before_commit(self, tx: "BaseQueryTxContext"):
-        self.close()
-
-    def _on_before_rollback(self, tx: "BaseQueryTxContext"):
-        self.close(flush=False)

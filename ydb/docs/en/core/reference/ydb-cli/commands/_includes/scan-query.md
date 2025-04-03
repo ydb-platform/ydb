@@ -1,11 +1,6 @@
 # Performing scan queries
 
-{% note warning %}
-
-This command is deprecated.
-The preferred way to run queries in {{ ydb-short-name }} CLI is to use the [`{{ ydb-cli }} sql`](../../sql.md) command.
-
-{% endnote %}
+{% include notitle [warning](../../_includes/deprecated_command_warning.md) %}
 
 You can run a query using [Scan Queries](../../../../concepts/scan_query.md) via the {{ ydb-short-name }} CLI by adding the `-t scan` flag to the `{{ ydb-cli }} table query execute` command.
 

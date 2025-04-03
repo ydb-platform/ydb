@@ -2688,6 +2688,7 @@ struct TExportInfo: public TSimpleRefCount<TExportInfo> {
         Done = 240,
         Dropping = 241,
         Dropped = 242,
+        AutoDropping = 243,
         Cancellation = 250,
         Cancelled = 251,
     };

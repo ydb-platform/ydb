@@ -47,5 +47,7 @@ THolder<TEvSchemeShard::TEvCancelTx> CancelPropose(
 TString ExportItemPathName(TSchemeShard* ss, const TExportInfo::TPtr exportInfo, ui32 itemIdx);
 TString ExportItemPathName(const TString& exportPathName, ui32 itemIdx);
 
+void PrepareDropping(TSchemeShard* ss, TExportInfo::TPtr exportInfo, NIceDb::TNiceDb& db, bool isAutoDropping = false); 
+
 } // NSchemeShard
 } // NKikimr

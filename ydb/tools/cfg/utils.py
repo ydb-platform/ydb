@@ -3,11 +3,14 @@
 import os
 import random
 import string
-import yaml
+import yaml as pyyaml
 
 import six
 from google.protobuf import text_format, json_format
 from google.protobuf.pyext._message import FieldDescriptor
+
+from ruamel.yaml import YAML
+from io import StringIO
 
 from library.python import resource
 from ydb.tools.cfg import types
@@ -191,7 +194,7 @@ def wrap_parse_dict(dictionary, proto):
 # template file and dump it again, there will be a lot of meaningless diff
 # in formatting, which is undesirable.
 def backport(template_path, config_yaml, backported_sections):
-    config_data = yaml.safe_load(config_yaml)
+    config_data = pyyaml.safe_load(config_yaml)
 
     with open(template_path, 'r') as file:
         lines = file.readlines()
@@ -202,7 +205,7 @@ def backport(template_path, config_yaml, backported_sections):
         if section is None:
             raise KeyError(f"The key '{section_key}' was not found in config_yaml")
 
-        new_section_yaml = yaml.safe_dump({section_key: section}, default_flow_style=False).splitlines(True)
+        new_section_yaml = pyyaml.safe_dump({section_key: section}, default_flow_style=False).splitlines(True)
         new_section_yaml.append(os.linesep)
 
         start_index = None
@@ -237,3 +240,52 @@ def need_generate_bs_config(template_bs_config):
         return True
 
     return template_bs_config.get("service_set", {}).get("groups") is None
+
+
+def determine_yaml_parsing(yaml_template_file):
+    ruamel_yaml = YAML()
+    with open(yaml_template_file, "r") as yaml_template:
+        data = ruamel_yaml.load(yaml_template)
+        return data.get("use_alternative_yaml_parser", False)
+
+
+def load_yaml(yaml_template_file):
+    global use_alternative_yaml_handler
+    use_alternative_yaml_handler = determine_yaml_parsing(yaml_template_file)
+
+    if use_alternative_yaml_handler:
+        ruamel_yaml = YAML()
+
+        with open(yaml_template_file, "r") as yaml_template:
+            data = ruamel_yaml.load(yaml_template)
+
+        return data
+    else:
+        with open(yaml_template_file, "r") as yaml_template:
+            return pyyaml.safe_load(yaml_template)
+
+
+def sort_dict_recursively(obj):
+    if isinstance(obj, dict):
+        return dict(sorted((k, sort_dict_recursively(v)) for k, v in obj.items()))
+    elif isinstance(obj, list):
+        return [sort_dict_recursively(i) for i in obj]
+    else:
+        return obj
+
+
+def dump_yaml(data):
+    if use_alternative_yaml_handler:
+        yaml = YAML()
+
+        yaml.default_flow_style = False
+        yaml.indent(mapping=2, sequence=4, offset=2)
+        yaml.sort_base_mapping_type_on_output = True
+
+        sorted_data = sort_dict_recursively(data)
+
+        stream = StringIO()
+        yaml.dump(sorted_data, stream)
+        return stream.getvalue()
+    else:
+        return pyyaml.safe_dump(data, sort_keys=True, default_flow_style=False, indent=2)

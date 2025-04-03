@@ -38,7 +38,7 @@ public:
 
     TChunkIdx Pop() {
         if (FreeChunks.empty()) {
-            Y_ABORT_UNLESS(AtomicGet(FreeChunkCount) == 0);
+            Y_VERIFY(AtomicGet(FreeChunkCount) == 0);
             return 0;
         }
         if (OutOfOrderCount > SortFreeChunksPerItems) {
@@ -47,7 +47,7 @@ public:
         }
         TChunkIdx idx = FreeChunks.front();
         FreeChunks.pop_front();
-        Y_ABORT_UNLESS(AtomicGet(FreeChunkCount) > 0);
+        Y_VERIFY(AtomicGet(FreeChunkCount) > 0);
         AtomicDecrement(FreeChunkCount);
         MonFreeChunks->Dec();
         return idx;
@@ -83,4 +83,3 @@ public:
 
 } // NPDisk
 } // NKikimr
-

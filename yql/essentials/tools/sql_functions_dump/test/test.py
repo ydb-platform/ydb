@@ -8,13 +8,13 @@ TOOL_PATH = yatest.common.binary_path('yql/essentials/tools/sql_functions_dump/s
 
 def test_functions_dump():
     with open(os.path.join(DATA_PATH, "sql_functions.json")) as f:
-        types_from_file = json.load(f)
+        func_from_file = json.load(f)
     res = yatest.common.execute(
         [TOOL_PATH],
         check_exit_code=True,
         wait=True
     )
-    types_from_tool = json.loads(res.stdout)
-    assert types_from_tool == types_from_file, 'JSON_DIFFER\n' \
-        'File:\n %(types_from_file)s\n\n' \
-        'Tool:\n %(types_from_tool)s\n' % locals()
+    func_from_tool = json.loads(res.stdout)
+    assert func_from_tool == func_from_file, 'JSON_DIFFER\n' \
+        'File:\n %(func_from_file)s\n\n' \
+        'Tool:\n %(func_from_tool)s\n' % locals()

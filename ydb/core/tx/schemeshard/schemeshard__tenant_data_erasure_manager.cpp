@@ -527,6 +527,14 @@ struct TSchemeShard::TTxCompleteDataErasureShard : public TSchemeShard::TRwTxBas
             "TTxCompleteDataErasureShard Execute at schemestard: " << Self->TabletID());
         const auto& record = Ev->Get()->Record;
 
+        if (record.GetStatus() != NKikimrTxDataShard::TEvForceDataCleanupResult::OK) {
+            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "TTxCompleteDataErasureShard: data erasure failed at DataShard #" << record.GetTabletId()
+                    << " with status: " << NKikimrTxDataShard::TEvForceDataCleanupResult::EStatus_Name(record.GetStatus())
+                    << ", schemestard: " << Self->TabletID());
+            return; // will be retried after timout in the queue in TTenantDataErasureManager::OnTimeout()
+        }
+
         auto& manager = Self->DataErasureManager;
         const ui64 cleanupGeneration = record.GetDataCleanupGeneration();
         if (cleanupGeneration != manager->GetGeneration()) {

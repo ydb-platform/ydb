@@ -21,23 +21,59 @@ namespace {
 #define UNIT_TEST_WITH_INTEGER(TestName)                                          \
     template <typename TTestType>                                                 \
     void TestName##Execute(NUnitTest::TTestContext& ut_context Y_DECLARE_UNUSED); \
-    Y_UNIT_TEST(TestName##i8) {                                                   \
+    Y_UNIT_TEST(TestName##_i8) {                                                  \
         TestName##Execute<i8>(ut_context);                                        \
     }                                                                             \
-    Y_UNIT_TEST(TestName##ui8) {                                                  \
+    Y_UNIT_TEST(TestName##_ui8) {                                                 \
         TestName##Execute<ui8>(ut_context);                                       \
     }                                                                             \
-    Y_UNIT_TEST(TestName##i16) {                                                  \
+    Y_UNIT_TEST(TestName##_i16) {                                                 \
         TestName##Execute<i16>(ut_context);                                       \
     }                                                                             \
-    Y_UNIT_TEST(TestName##ui16) {                                                 \
+    Y_UNIT_TEST(TestName##_ui16) {                                                \
         TestName##Execute<ui16>(ut_context);                                      \
     }                                                                             \
-    Y_UNIT_TEST(TestName##i32) {                                                  \
+    Y_UNIT_TEST(TestName##_i32) {                                                 \
         TestName##Execute<i32>(ut_context);                                       \
     }                                                                             \
-    Y_UNIT_TEST(TestName##ui32) {                                                 \
+    Y_UNIT_TEST(TestName##_ui32) {                                                \
         TestName##Execute<ui32>(ut_context);                                      \
+    }                                                                             \
+    Y_UNIT_TEST(TestName##_i64) {                                                 \
+        TestName##Execute<i64>(ut_context);                                       \
+    }                                                                             \
+    Y_UNIT_TEST(TestName##_ui64) {                                                \
+        TestName##Execute<ui64>(ut_context);                                      \
+    }                                                                             \
+    Y_UNIT_TEST(TestName##_float) {                                               \
+        TestName##Execute<float>(ut_context);                                     \
+    }                                                                             \
+    Y_UNIT_TEST(TestName##_double) {                                              \
+        TestName##Execute<double>(ut_context);                                    \
+    }                                                                             \
+    Y_UNIT_TEST(TestName##_TDate) {                                               \
+        TestName##Execute<NYql::NUdf::TDate>(ut_context);                         \
+    }                                                                             \
+    Y_UNIT_TEST(TestName##_TDatetime) {                                           \
+        TestName##Execute<NYql::NUdf::TDatetime>(ut_context);                     \
+    }                                                                             \
+    Y_UNIT_TEST(TestName##_TTimestamp) {                                          \
+        TestName##Execute<NYql::NUdf::TTimestamp>(ut_context);                    \
+    }                                                                             \
+    Y_UNIT_TEST(TestName##_TInterval) {                                           \
+        TestName##Execute<NYql::NUdf::TInterval>(ut_context);                     \
+    }                                                                             \
+    Y_UNIT_TEST(TestName##_TDate32) {                                             \
+        TestName##Execute<NYql::NUdf::TDate32>(ut_context);                       \
+    }                                                                             \
+    Y_UNIT_TEST(TestName##_TDatetime64) {                                         \
+        TestName##Execute<NYql::NUdf::TDatetime64>(ut_context);                   \
+    }                                                                             \
+    Y_UNIT_TEST(TestName##_TTimestamp64) {                                        \
+        TestName##Execute<NYql::NUdf::TTimestamp64>(ut_context);                  \
+    }                                                                             \
+    Y_UNIT_TEST(TestName##_TInterval64) {                                         \
+        TestName##Execute<NYql::NUdf::TInterval64>(ut_context);                   \
     }                                                                             \
                                                                                   \
     template <typename TTestType>                                                 \
@@ -76,8 +112,17 @@ enum class ERightOperandType {
     OPTIONAL_SCALAR
 };
 
+template <typename T>
+using InputOptionalVector =
+    std::vector<TMaybe<typename NUdf::TDataType<T>::TLayout>>;
+
 template <typename T, ERightOperandType rightType = ERightOperandType::ARRAY>
-void TestBlockCoalesceForVector(std::vector<TMaybe<T>> left, std::vector<TMaybe<T>> right, std::vector<TMaybe<T>> expected, size_t leftOffset, size_t rightOffset) {
+void TestBlockCoalesceForVector(InputOptionalVector<T> left,
+                                InputOptionalVector<T> right,
+                                InputOptionalVector<T> expected,
+                                size_t leftOffset,
+                                size_t rightOffset) {
+    using TLayout = typename NUdf::TDataType<T>::TLayout;
     TSetup<false> setup;
     NYql::TExprContext exprCtx;
     auto* type = setup.PgmBuilder->NewDataType(NUdf::TDataType<T>::Id);
@@ -101,12 +146,12 @@ void TestBlockCoalesceForVector(std::vector<TMaybe<T>> left, std::vector<TMaybe<
 
     arrow::Datum rightOperand;
     if constexpr (rightType == ERightOperandType::SCALAR) {
-        rightOperand = MakeScalarDatum<T>(right[0].GetRef());
+        rightOperand = MakeScalarDatum<TLayout>(right[0].GetRef());
     } else if constexpr (rightType == ERightOperandType::OPTIONAL_SCALAR) {
         if (right[0]) {
-            rightOperand = MakeScalarDatum<T>(right[0].GetRef());
+            rightOperand = MakeScalarDatum<TLayout>(right[0].GetRef());
         } else {
-            rightOperand = MakeScalarDatum<T>(0);
+            rightOperand = MakeScalarDatum<TLayout>(0);
             rightOperand.scalar()->is_valid = false;
         }
     } else {
@@ -133,7 +178,9 @@ void TestBlockCoalesceForVector(std::vector<TMaybe<T>> left, std::vector<TMaybe<
 }
 
 template <typename T, ERightOperandType rightType = ERightOperandType::ARRAY>
-void TestBlockCoalesce(std::vector<TMaybe<T>> left, std::vector<TMaybe<T>> right, std::vector<TMaybe<T>> expected) {
+void TestBlockCoalesce(InputOptionalVector<T> left,
+                       InputOptionalVector<T> right,
+                       InputOptionalVector<T> expected) {
     // First test different offsets.
     for (size_t leftOffset = 0; leftOffset < 10; leftOffset++) {
         for (size_t rightOffset = 0; rightOffset < 10; rightOffset++) {
@@ -247,16 +294,16 @@ Y_UNIT_TEST(CoalesceGraphTest) {
 }
 
 UNIT_TEST_WITH_INTEGER(KernelRightIsNotNullArray) {
-    auto max = std::numeric_limits<TTestType>::max();
-    auto min = std::numeric_limits<TTestType>::min();
+    auto max = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::max();
+    auto min = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::min();
     TestBlockCoalesce<TTestType, ERightOperandType::ARRAY>({Nothing(), 2, 3, Nothing(), 5, 6, 7, max, 9, Nothing(), 11, 12, 13, Nothing(), Nothing(), Nothing(), min, Nothing(), 19, 20},
                                                            {101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120},
                                                            {101, 2, 3, 104, 5, 6, 7, max, 9, 110, 11, 12, 13, 114, 115, 116, min, 118, 19, 20});
 }
 
 UNIT_TEST_WITH_INTEGER(KernelRightIsScalar) {
-    auto max = std::numeric_limits<TTestType>::max();
-    auto min = std::numeric_limits<TTestType>::min();
+    auto max = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::max();
+    auto min = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::min();
 
     TestBlockCoalesce<TTestType, ERightOperandType::SCALAR>({Nothing(), 2, 3, Nothing(), 5, 6, 7, max, 9, Nothing(), 11, 12, 13, Nothing(), Nothing(), Nothing(), min, Nothing(), 19, 20},
                                                             {77},
@@ -264,8 +311,8 @@ UNIT_TEST_WITH_INTEGER(KernelRightIsScalar) {
 }
 
 UNIT_TEST_WITH_INTEGER(KernelRightIsOptionalArray) {
-    auto max = std::numeric_limits<TTestType>::max();
-    auto min = std::numeric_limits<TTestType>::min();
+    auto max = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::max();
+    auto min = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::min();
 
     TestBlockCoalesce<TTestType, ERightOperandType::OPTIONAL_ARRAY>({Nothing(), 2, 3, Nothing(), 5, 6, 7, max, 9, Nothing(), 11, 12, 13, Nothing(), Nothing(), Nothing(), min, Nothing(), 19, 20},
                                                                     {Nothing(), 102, Nothing(), 104, Nothing(), 106, 107, 108, 109, 110, 111, 112, 113, 114, Nothing(), 116, 117, 118, Nothing(), 120},
@@ -273,8 +320,8 @@ UNIT_TEST_WITH_INTEGER(KernelRightIsOptionalArray) {
 }
 
 UNIT_TEST_WITH_INTEGER(KernelRightIsOptionalInvalidScalar) {
-    auto max = std::numeric_limits<TTestType>::max();
-    auto min = std::numeric_limits<TTestType>::min();
+    auto max = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::max();
+    auto min = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::min();
 
     TestBlockCoalesce<TTestType, ERightOperandType::OPTIONAL_SCALAR>({Nothing(), 2, 3, Nothing(), 5, 6, 7, max, 9, Nothing(), 11, 12, 13, Nothing(), Nothing(), Nothing(), min, Nothing(), 19, 20},
                                                                      {Nothing()},
@@ -282,8 +329,8 @@ UNIT_TEST_WITH_INTEGER(KernelRightIsOptionalInvalidScalar) {
 }
 
 UNIT_TEST_WITH_INTEGER(KernelRightIsOptionalValidScalar) {
-    auto max = std::numeric_limits<TTestType>::max();
-    auto min = std::numeric_limits<TTestType>::min();
+    auto max = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::max();
+    auto min = std::numeric_limits<typename NUdf::TDataType<TTestType>::TLayout>::min();
 
     TestBlockCoalesce<TTestType, ERightOperandType::OPTIONAL_SCALAR>({Nothing(), 2, 3, Nothing(), 5, 6, 7, max, 9, Nothing(), 11, 12, 13, Nothing(), Nothing(), Nothing(), min, Nothing(), 19, 20},
                                                                      {77},

@@ -16,28 +16,6 @@ logger = logging.getLogger(__name__)
 
 
 class QueryTxContext(BaseQueryTxContext):
-    def __init__(self, driver, session_state, session, tx_mode):
-        """
-        An object that provides a simple transaction context manager that allows statements execution
-        in a transaction. You don't have to open transaction explicitly, because context manager encapsulates
-        transaction control logic, and opens new transaction if:
-
-        1) By explicit .begin() method;
-        2) On execution of a first statement, which is strictly recommended method, because that avoids useless round trip
-
-        This context manager is not thread-safe, so you should not manipulate on it concurrently.
-
-        :param driver: A driver instance
-        :param session_state: A state of session
-        :param tx_mode: Transaction mode, which is a one from the following choises:
-         1) QuerySerializableReadWrite() which is default mode;
-         2) QueryOnlineReadOnly(allow_inconsistent_reads=False);
-         3) QuerySnapshotReadOnly();
-         4) QueryStaleReadOnly().
-        """
-        super().__init__(driver, session_state, session, tx_mode)
-        self._init_callback_handler(base.CallbackHandlerMode.ASYNC)
-
     async def __aenter__(self) -> "QueryTxContext":
         """
         Enters a context manager and returns a transaction
@@ -52,7 +30,7 @@ class QueryTxContext(BaseQueryTxContext):
         it is not finished explicitly
         """
         await self._ensure_prev_stream_finished()
-        if self._tx_state._state == QueryTxStateEnum.BEGINED and self._external_error is None:
+        if self._tx_state._state == QueryTxStateEnum.BEGINED:
             # It's strictly recommended to close transactions directly
             # by using commit_tx=True flag while executing statement or by
             # .commit() or .rollback() methods, but here we trying to do best
@@ -87,9 +65,7 @@ class QueryTxContext(BaseQueryTxContext):
 
         :return: A committed transaction or exception if commit is failed
         """
-        self._check_external_error_set()
-
-        if self._tx_state._should_skip(QueryTxStateEnum.COMMITTED):
+        if self._tx_state._already_in(QueryTxStateEnum.COMMITTED):
             return
 
         if self._tx_state._state == QueryTxStateEnum.NOT_INITIALIZED:
@@ -98,13 +74,7 @@ class QueryTxContext(BaseQueryTxContext):
 
         await self._ensure_prev_stream_finished()
 
-        try:
-            await self._execute_callbacks_async(base.TxEvent.BEFORE_COMMIT)
-            await self._commit_call(settings)
-            await self._execute_callbacks_async(base.TxEvent.AFTER_COMMIT, exc=None)
-        except BaseException as e:
-            await self._execute_callbacks_async(base.TxEvent.AFTER_COMMIT, exc=e)
-            raise e
+        await self._commit_call(settings)
 
     async def rollback(self, settings: Optional[BaseRequestSettings] = None) -> None:
         """Calls rollback on a transaction if it is open otherwise is no-op. If transaction execution
@@ -114,9 +84,7 @@ class QueryTxContext(BaseQueryTxContext):
 
         :return: A committed transaction or exception if commit is failed
         """
-        self._check_external_error_set()
-
-        if self._tx_state._should_skip(QueryTxStateEnum.ROLLBACKED):
+        if self._tx_state._already_in(QueryTxStateEnum.ROLLBACKED):
             return
 
         if self._tx_state._state == QueryTxStateEnum.NOT_INITIALIZED:
@@ -125,13 +93,7 @@ class QueryTxContext(BaseQueryTxContext):
 
         await self._ensure_prev_stream_finished()
 
-        try:
-            await self._execute_callbacks_async(base.TxEvent.BEFORE_ROLLBACK)
-            await self._rollback_call(settings)
-            await self._execute_callbacks_async(base.TxEvent.AFTER_ROLLBACK, exc=None)
-        except BaseException as e:
-            await self._execute_callbacks_async(base.TxEvent.AFTER_ROLLBACK, exc=e)
-            raise e
+        await self._rollback_call(settings)
 
     async def execute(
         self,

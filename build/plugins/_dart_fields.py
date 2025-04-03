@@ -1131,27 +1131,6 @@ class TestFiles:
 
     # XXX: this is a workaround to support very specific linting settings.
     # Do not use it as a general mechanism!
-    _GRUT_PREFIX = 'grut'
-    _GRUT_INCLUDE_LINTER_TEST_PATHS = (
-        'grut/libs/bigrt/clients',
-        'grut/libs/bigrt/common',
-        'grut/libs/bigrt/data',
-        'grut/libs/bigrt/event_filter',
-        'grut/libs/bigrt/graph',
-        'grut/libs/bigrt/info_keepers',
-        'grut/libs/bigrt/processor',
-        'grut/libs/bigrt/profile',
-        'grut/libs/bigrt/profiles',
-        'grut/libs/bigrt/queue_info_config',
-        'grut/libs/bigrt/resharder/compute_shard_number',
-        'grut/libs/bigrt/server',
-        'grut/libs/bigrt/testlib',
-        'grut/libs/bigrt/transaction',
-        'grut/libs/shooter',
-    )
-
-    # XXX: this is a workaround to support very specific linting settings.
-    # Do not use it as a general mechanism!
     _MAPS_RENDERER_PREFIX = 'maps/renderer'
     _MAPS_RENDERER_INCLUDE_LINTER_TEST_PATHS = (
         'maps/renderer/cartograph',
@@ -1282,12 +1261,6 @@ class TestFiles:
     @classmethod
     def cpp_linter_files(cls, unit, flat_args, spec_args):
         upath = unit.path()[3:]
-        if upath.startswith(cls._GRUT_PREFIX):
-            for path in cls._GRUT_INCLUDE_LINTER_TEST_PATHS:
-                if os.path.commonpath([upath, path]) == path:
-                    break
-            else:
-                raise DartValueError()
 
         if upath.startswith(cls._MAPS_RENDERER_PREFIX):
             for path in cls._MAPS_RENDERER_INCLUDE_LINTER_TEST_PATHS:

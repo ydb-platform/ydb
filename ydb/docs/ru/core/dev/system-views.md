@@ -434,7 +434,7 @@ WHERE Name = "olap";
 
 ### Информация о правах доступа
 
-Представления auth permissions содержат список выданных [прав доступа](../concepts/glossary.md#access-right).
+Представления содержат список выданных [прав доступа](../concepts/glossary.md#access-right).
 
 Включают два представления:
 

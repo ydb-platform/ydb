@@ -188,7 +188,7 @@ class WorkloadVectorIndex(WorkloadBase):
             prev = cur
 
     def _wait_inddex_ready(self, table_path, vector_type,
-                            vector_dimension, distance, similarity):
+                           vector_dimension, distance, similarity):
         for i in range(10):
             time.sleep(7)
 

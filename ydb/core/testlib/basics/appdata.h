@@ -114,6 +114,7 @@ namespace NKikimr {
         NKikimrConfig::TImmediateControlsConfig ImmediateControlsConfig;
         NKikimrResourceBroker::TResourceBrokerConfig ResourceBrokerConfig;
         std::vector<TIntrusivePtr<NKikimr::TControlBoard>> Icb;
+        std::vector<TIntrusivePtr<NKikimr::TDynamicControlBoard>> DynamicControlBoard;
 
     private:
         TAutoPtr<TMine> Mine;

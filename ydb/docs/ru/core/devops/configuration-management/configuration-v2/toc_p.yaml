@@ -9,6 +9,10 @@ items:
   href: config-settings.md
 - name: Расширение кластера
   href: ../../../maintenance/manual/cluster_expansion.md
+- name: Перемещение State Storage
+  href: state-storage-move.md
+- name: Перемещение статической группы
+  href: static-group-move.md
 - name: Замена FQDN узла
   href: ../../../maintenance/manual/replacing_nodes.md
 - name: Аутентификация и авторизация узлов баз данных

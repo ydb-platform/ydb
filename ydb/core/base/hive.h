@@ -51,6 +51,7 @@ namespace NKikimr {
             EvRequestTabletDistribution,
             EvRequestScaleRecommendation,
             EvConfigureScaleRecommender,
+            EvRequestDrainInfo,
 
             // replies
             EvBootTabletReply = EvBootTablet + 512,
@@ -88,6 +89,8 @@ namespace NKikimr {
             EvResponseTabletDistribution,
             EvResponseScaleRecommendation,
             EvConfigureScaleRecommenderReply,
+            EvDrainNodeAck,
+            EvResponseDrainInfo,
 
             EvEnd
         };
@@ -626,6 +629,14 @@ namespace NKikimr {
             }
         };
 
+        struct TEvDrainNodeAck : TEventPB<TEvDrainNodeAck, NKikimrHive::TEvDrainNodeAck, EvDrainNodeAck> {
+            TEvDrainNodeAck() = default;
+
+            TEvDrainNodeAck(ui64 seqNo) {
+                Record.SetSeqNo(seqNo);
+            }
+        };
+
         struct TEvFillNode : TEventPB<TEvFillNode, NKikimrHive::TEvFillNode, EvFillNode> {
             TEvFillNode() = default;
 
@@ -913,6 +924,16 @@ namespace NKikimr {
         
         struct TEvConfigureScaleRecommenderReply : TEventPB<TEvConfigureScaleRecommenderReply,
             NKikimrHive::TEvConfigureScaleRecommenderReply, EvConfigureScaleRecommenderReply> {};
+
+        struct TEvRequestDrainInfo : TEventPB<TEvRequestDrainInfo, NKikimrHive::TEvRequestDrainInfo, EvRequestDrainInfo> {
+            TEvRequestDrainInfo() = default;
+
+            TEvRequestDrainInfo(ui32 nodeId) {
+                Record.SetNodeId(nodeId);
+            }
+        };
+
+        struct TEvResponseDrainInfo : TEventPB<TEvResponseDrainInfo, NKikimrHive::TEvResponseDrainInfo, EvResponseDrainInfo> {};
     };
 
     IActor* CreateDefaultHive(const TActorId &tablet, TTabletStorageInfo *info);

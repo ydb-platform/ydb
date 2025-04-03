@@ -23,11 +23,11 @@ ALTER TABLE my_table
 ```
 
 Key parameters for `vector_kmeans_tree`:
-* distance/similarity: Metric function ("cosine", "euclidean", etc.)
-* type: Data type ("float", "int8", "uint8")
-* dimension: Number of dimensions (<= 16384)
-* levels: Tree depth
-* clusters: Number of clusters per level (values > 1000 may impact performance)
+* `distance`/`similarity`: Metric function ("cosine", "euclidean", etc.)
+* `type`: Data type ("float", "int8", "uint8")
+* `dimension`: Number of dimensions (<= 16384)
+* `levels`: Tree depth
+* `clusters`: Number of clusters per level (values > 1000 may impact performance)
 
 Since building a vector index requires processing existing data, index creation on populated tables may take significant time. This operation runs in the background, allowing continued table access during construction. The index becomes available automatically when ready.
 

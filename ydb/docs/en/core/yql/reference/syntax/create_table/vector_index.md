@@ -40,14 +40,14 @@ Where:
 
 {% note warning %}
 
-`distance` and `similarity` parameters can not be specified together.
+The `distance` and `similarity` parameters can not be specified together.
 
 {% endnote %}
 
 
 {% note warning %}
 
-`type=bit` vector index is not supported yet.
+The `type=bit` vector index is not supported yet.
 
 {% endnote %}
 

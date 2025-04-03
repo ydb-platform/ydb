@@ -92,12 +92,12 @@ protected:
     NTableIndex::TClusterId Child = 0;
 
     ui32 Round = 0;
-    ui32 MaxRounds = 0;
+    const ui32 MaxRounds = 0;
 
     ui32 K = 0;
 
     EState State;
-    EState UploadState;
+    const EState UploadState;
 
     IDriver* Driver = nullptr;
 
@@ -180,8 +180,10 @@ public:
         // scan tags
         UploadScan = MakeUploadTags(table, embedding, data, EmbeddingPos, DataPos, KMeansScan);
         // upload types
-        if (Ydb::Type type; State <= EState::KMEANS) {
+        {
             TargetTypes = std::make_shared<NTxProxy::TUploadTypes>(3);
+
+            Ydb::Type type;
             type.set_type_id(NTableIndex::ClusterIdType);
             (*TargetTypes)[0] = {NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type};
             (*TargetTypes)[1] = {NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, type};
@@ -265,7 +267,7 @@ protected:
 
     void HandleWakeup(const NActors::TActorContext& /*ctx*/)
     {
-        LOG_I("Retry upload " << Debug());
+        LOG_D("Retry upload " << Debug());
 
         if (!WriteBuf.IsEmpty()) {
             Upload(true);
@@ -388,7 +390,7 @@ public:
 
     EScan Seek(TLead& lead, ui64 seq) final
     {
-        LOG_D("Seek " << Debug());
+        LOG_D("Seek " << seq << " " << Debug());
         if (State == UploadState) {
             if (!WriteBuf.IsEmpty()) {
                 return EScan::Sleep;
@@ -471,7 +473,7 @@ private:
             return false;
         }
         if (Clusters.size() < K) {
-            // if this datashard have smaller than K count of valid embeddings for this parent
+            // if this datashard have less than K valid embeddings for this parent
             // lets make single centroid for it
             K = 1;
             Clusters.resize(K);

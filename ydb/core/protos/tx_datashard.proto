@@ -1514,6 +1514,17 @@ message TEvSampleKResponse {
     repeated bytes Rows = 11;
 }
 
+enum EKMeansState {
+    UNSPECIFIED = 0;
+    SAMPLE = 1;
+    KMEANS = 2;
+    UPLOAD_MAIN_TO_BUILD = 3;
+    UPLOAD_MAIN_TO_POSTING = 4;
+    UPLOAD_BUILD_TO_BUILD = 5;
+    UPLOAD_BUILD_TO_POSTING = 6;
+    DONE = 7;
+};
+
 message TEvLocalKMeansRequest {
     optional uint64 Id = 1;
 
@@ -1529,23 +1540,10 @@ message TEvLocalKMeansRequest {
     optional Ydb.Table.VectorIndexSettings Settings = 8;
 
     optional uint64 Seed = 9;
-    optional uint32 K = 10;
 
-    enum EState {
-        UNSPECIFIED = 0;
-        SAMPLE = 1;
-        KMEANS = 2;
-        UPLOAD_MAIN_TO_BUILD = 3;
-        UPLOAD_MAIN_TO_POSTING = 4;
-        UPLOAD_BUILD_TO_BUILD = 5;
-        UPLOAD_BUILD_TO_POSTING = 6;
-        DONE = 7;
-    };
-    optional EState Upload = 11;
-    // State != DONE
-    optional EState State = 12;
-    // State != KMEANS || DoneRounds < NeedsRounds
-    optional uint32 DoneRounds = 13;
+    optional EKMeansState Upload = 11;
+    
+    optional uint32 K = 10;
     optional uint32 NeedsRounds = 14;
 
     // id of parent cluster
@@ -1579,10 +1577,6 @@ message TEvLocalKMeansResponse {
     optional uint64 UploadBytes = 9;
     optional uint64 ReadRows = 10;
     optional uint64 ReadBytes = 11;
-
-    // TODO(mbkkt) implement slow-path (reliable-path)
-    // optional TEvLocalKMeansRequest.EState State
-    // optional uint32 DoneRounds
 }
 
 message TEvReshuffleKMeansRequest {
@@ -1599,7 +1593,7 @@ message TEvReshuffleKMeansRequest {
 
     optional Ydb.Table.VectorIndexSettings Settings = 8;
 
-    optional TEvLocalKMeansRequest.EState Upload = 9;
+    optional EKMeansState Upload = 9;
 
     // id of parent cluster
     optional uint64 Parent = 10;
@@ -1650,7 +1644,7 @@ message TEvPrefixKMeansRequest {
 
     optional uint64 Seed = 7;
 
-    optional TEvLocalKMeansRequest.EState Upload = 8;
+    optional EKMeansState Upload = 8;
 
     optional uint32 K = 9;
     optional uint32 NeedsRounds = 10;

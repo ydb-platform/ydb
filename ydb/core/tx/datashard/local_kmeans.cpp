@@ -86,7 +86,7 @@ static constexpr double MinVectorsNeedsReassigned = 0.01;
 
 class TLocalKMeansScanBase: public TActor<TLocalKMeansScanBase>, public NTable::IScan {
 protected:
-    using EState = NKikimrTxDataShard::TEvLocalKMeansRequest;
+    using EState = NKikimrTxDataShard::EKMeansState;
 
     NTableIndex::TClusterId Parent = 0;
     NTableIndex::TClusterId Child = 0;
@@ -96,8 +96,8 @@ protected:
 
     ui32 K = 0;
 
-    EState::EState State;
-    EState::EState UploadState;
+    EState State;
+    EState UploadState;
 
     IDriver* Driver = nullptr;
 
@@ -163,9 +163,9 @@ public:
         : TActor{&TThis::StateWork}
         , Parent{parent}
         , Child{child}
-        , MaxRounds{request.GetNeedsRounds() - request.GetDoneRounds()}
+        , MaxRounds{request.GetNeedsRounds()}
         , K{request.GetK()}
-        , State{request.GetState()}
+        , State{EState::SAMPLE}
         , UploadState{request.GetUpload()}
         , Lead{std::move(lead)}
         , BuildId{buildId}
@@ -239,10 +239,10 @@ public:
 
     TString Debug() const
     {
-        return TStringBuilder() << " TLocalKMeansScan Id: " << BuildId << " Parent: " << Parent << " Child: " << Child
+        return TStringBuilder() << "TLocalKMeansScan Id: " << BuildId << " Parent: " << Parent << " Child: " << Child
             << " Target: " << TargetTable << " K: " << K << " Clusters: " << Clusters.size()
             << " State: " << State << " Round: " << Round << " / " << MaxRounds
-            << " ReadBuf size: " << ReadBuf.Size() << " WriteBuf size: " << WriteBuf.Size() << " ";
+            << " ReadBuf size: " << ReadBuf.Size() << " WriteBuf size: " << WriteBuf.Size();
     }
 
     EScan PageFault() final
@@ -650,11 +650,9 @@ void TDataShard::Handle(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TAc
 void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const TActorContext& ctx)
 {
     auto& request = ev->Get()->Record;
-    const bool needsSnapshot = request.HasSnapshotStep() || request.HasSnapshotTxId();
-    TRowVersion rowVersion(request.GetSnapshotStep(), request.GetSnapshotTxId());
-    if (!needsSnapshot) {
-        rowVersion = GetMvccTxVersion(EMvccTxMode::ReadOnly);
-    }
+    auto rowVersion = request.HasSnapshotStep() || request.HasSnapshotTxId()
+        ? TRowVersion(request.GetSnapshotStep(), request.GetSnapshotTxId())
+        : GetMvccTxVersion(EMvccTxMode::ReadOnly);
 
     LOG_N("Starting TLocalKMeansScan " << request.ShortDebugString()
         << " row version " << rowVersion);
@@ -719,12 +717,14 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
 
     localTid = userTable.LocalTid;
 
-    const TSnapshotKey snapshotKey(pathId, rowVersion.Step, rowVersion.TxId);
-    if (needsSnapshot && !SnapshotManager.FindAvailable(snapshotKey)) {
-        badRequest(TStringBuilder() << "no snapshot has been found" << " , path id is " << pathId.OwnerId << ":"
-                                    << pathId.LocalPathId << " , snapshot step is " << snapshotKey.Step
-                                    << " , snapshot tx is " << snapshotKey.TxId);
-        return;
+    if (request.HasSnapshotStep() || request.HasSnapshotTxId()) {
+        const TSnapshotKey snapshotKey(pathId, rowVersion.Step, rowVersion.TxId);
+        if (!SnapshotManager.FindAvailable(snapshotKey)) {
+            badRequest(TStringBuilder() << "no snapshot has been found" << " , path id is " << pathId.OwnerId << ":"
+                                        << pathId.LocalPathId << " , snapshot step is " << snapshotKey.Step
+                                        << " , snapshot tx is " << snapshotKey.TxId);
+            return;
+        }
     }
 
     if (!IsStateActive()) {

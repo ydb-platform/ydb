@@ -38,6 +38,26 @@ By default, virtual timestamps are not uploaded to the changefeed. To enable the
 
 {% endnote %}
 
+## Getting virtual timstamps during query execution
+
+As was written above virtual timestamp represents Global coordinator time. There is a possibility to return a virtual timestamp during query execution. It can be used to check whether data read or written in a transaction is present in the CDC async replica.
+
+The YDB API has two fields to get virtual timestamp from transaction.
+
+1. 'snapshot_timestamp' – Represents the moment in time when YDB takes an MVCC or persistent snapshot. It is empty if the request is executed without a snapshot. This is mostly relevant for read-only transactions and is returned with the first part of the stream result. The practical purpose is to implement synchronization between readers in transactions and readers from replicas.
+
+1. 'commit_timestamp' – Represents the moment in time when YDB commits data into persistent storage. This is mostly relevant for read-write and write-only transactions and is returned with the last part of the stream result. The practical purpose is to implement synchronization between transactional writers and readers from replicas.
+
+Returning these timestamps for each query may cause noticeable overhead in case of tiny result. To use them, the 'with_tx_timestamp' flag must be set in the 'TransactionControl' message.
+
+For explicitly created transactions (transactions created via BeginTransactionRequest rpc call), these timestamps are always returned and do not require the flag.
+
+{% note info %}
+
+StreamReadTable and StreamExecuteScanQuery calls also have snapshot_timestamp fields in the response.
+
+{% endnote %}
+
 ## Initial table scan {#initial-scan}
 
 By default, a changefeed only includes records about those table rows that changed after the changefeed was created. Initial table scan enables you to export, to the changefeed, the values of all the rows that existed at the time of changefeed creation.

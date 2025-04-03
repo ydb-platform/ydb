@@ -4,7 +4,6 @@ PY3TEST()
     ENV(YDB_ENABLE_COLUMN_TABLES="true")
 
     TEST_SRCS(
-        test_quota_exhaustion.py
         test_log_scenario.py
         zip_bomb.py
     )
@@ -40,4 +39,5 @@ RECURSE(
     s3_import
     scenario
     ttl_tiering
+    data_quotas
 )

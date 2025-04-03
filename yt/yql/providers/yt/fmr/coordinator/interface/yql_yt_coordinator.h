@@ -25,7 +25,8 @@ struct TStartOperationRequest {
     TString SessionId;
     TMaybe<TString> IdempotencyKey = Nothing();
     ui32 NumRetries = 1; // Not supported yet
-    TClusterConnection ClusterConnection = {};
+    TClusterConnection ClusterConnection = {}; // TODO - change to map
+    TMaybe<NYT::TNode> FmrOperationSpec = Nothing();
 };
 
 struct TStartOperationResponse {

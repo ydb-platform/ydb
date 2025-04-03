@@ -5,6 +5,7 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/yson/node
     library/cpp/threading/future
 )
 

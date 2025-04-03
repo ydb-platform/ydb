@@ -64,7 +64,12 @@ public:
         TString taskId = GenerateId();
 
         auto taskParams = MakeDefaultTaskParamsFromOperation(request.OperationParams);
-        TTask::TPtr createdTask = MakeTask(request.TaskType, taskId, taskParams, request.SessionId, request.ClusterConnection);
+        TMaybe<NYT::TNode> jobSettings = Nothing();
+        auto fmrOperationSpec = request.FmrOperationSpec;
+        if (fmrOperationSpec && fmrOperationSpec->IsMap() && fmrOperationSpec->HasKey("job_settings")) {
+            jobSettings = (*fmrOperationSpec)["job_settings"];
+        }
+        TTask::TPtr createdTask = MakeTask(request.TaskType, taskId, taskParams, request.SessionId, request.ClusterConnection, jobSettings);
 
         Tasks_[taskId] = TCoordinatorTaskInfo{.Task = createdTask, .TaskStatus = ETaskStatus::Accepted, .OperationId = operationId};
 

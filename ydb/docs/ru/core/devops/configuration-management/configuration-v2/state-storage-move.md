@@ -13,36 +13,36 @@
 1. Получить акутальную конфигурацию State Storage
 1. Изменить актуальную конфигурацию желаемым способом и указать ее в явном виде как целевую
 
-  Допутсим, получена следующая конфигурациея State Storage:
-  
-  ```yaml
-  ...
-  domains_config:
+    Допутсим, получена следующая конфигурациея State Storage:
+    
+    ```yaml
     ...
-    state_storage:
-    - ring:
-        node: [1, 2, 3, 4, 5, 6, 7, 8, 9]
-        nto_select: 9
-      ssid: 1
+    domains_config:
+      ...
+      state_storage:
+      - ring:
+          node: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+          nto_select: 9
+        ssid: 1
+      ...
     ...
-  ...
-  ```
-  
-  На хосте с `node_id:1` сконфигурирован и запущен [статический узел](../../../devops/configuration-management/configuration-v1/config-settings.md#hosts) кластера, который обслуживает часть State Storage. Предположим, нам нужно вывести из эксплуатации этот хост.
-  
-  Для замены `node_id:1` мы [добавили](cluster-expansion.md#add-host) в кластер новый хост с `node_id:10` и [развернули](cluster-expansion.md#add-static-node) на нём статический узел.
-  
-  Чтобы переместить State Storage с хоста `node_id:1` на `node_id:10`, в конфигурационном файле `config.yaml` измените список хостов `node`, заменив идентификатор удаляемого хоста на идентификатор добавляемого:
-  
-      ```yaml
-      domains_config:
-      ...
-        state_storage:
-        - ring:
-            node: [10, 2, 3, 4, 5, 6, 7, 8, 9]
-            nto_select: 9
-          ssid: 1
-      ...
+    ```
+    
+    На хосте с `node_id:1` сконфигурирован и запущен [статический узел](../../../devops/configuration-management/configuration-v1/config-settings.md#hosts) кластера, который обслуживает часть State Storage. Предположим, нам нужно вывести из эксплуатации этот хост.
+    
+    Для замены `node_id:1` мы [добавили](cluster-expansion.md#add-host) в кластер новый хост с `node_id:10` и [развернули](cluster-expansion.md#add-static-node) на нём статический узел.
+    
+    Чтобы переместить State Storage с хоста `node_id:1` на `node_id:10`, в конфигурационном файле `config.yaml` измените список хостов `node`, заменив идентификатор удаляемого хоста на идентификатор добавляемого:
+    
+        ```yaml
+        domains_config:
+        ...
+          state_storage:
+          - ring:
+              node: [10, 2, 3, 4, 5, 6, 7, 8, 9]
+              nto_select: 9
+            ssid: 1
+        ...
 1. Применить конфигурацию
 1. Убедиться в примененеии
   Учтите, что наполненприменение новых узлов State Storage после реконфигурации происходит с задержкой не менее 15 секунд.

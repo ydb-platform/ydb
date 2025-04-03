@@ -227,12 +227,12 @@ namespace NSQLTranslationV1 {
         TRewriteRule UnwrapQuotedSpace_;
     };
 
-    THashMap<TString, TString> MakeRegexByOtherNameMap(const NSQLReflect::TLexerGrammar& grammar, bool ansi) {
+    TVector<std::tuple<TString, TString>> MakeRegexByOtherName(const NSQLReflect::TLexerGrammar& grammar, bool ansi) {
         TLexerGrammarToRegexTranslator translator(grammar, ansi);
 
-        THashMap<TString, TString> regexes;
+        TVector<std::tuple<TString, TString>> regexes;
         for (const auto& token : grammar.OtherNames) {
-            regexes.emplace(token, translator.ToRegex(token));
+            regexes.emplace_back(token, translator.ToRegex(token));
         }
         return regexes;
     }

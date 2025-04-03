@@ -134,7 +134,7 @@ namespace NSQLReflect {
         auto [name, block] = ParseLexerRule(std::move(line));
 
         if (!name.StartsWith(FragmentPrefix)) {
-            grammar.OtherNames.emplace(name);
+            grammar.OtherNames.emplace_back(name);
         }
 
         SubstGlobal(name, FragmentPrefix, "");

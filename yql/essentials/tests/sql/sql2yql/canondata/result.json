@@ -7405,6 +7405,13 @@
             "uri": "https://{canondata_backend}/1942173/99e88108149e222741552e7e6cddef041d6a2846/resource.tar.gz#test_sql2yql.test_window-yql-18879_/sql.yql"
         }
     ],
+    "test_sql2yql.test[window-yql-19709]": [
+        {
+            "checksum": "8d68ed158e1fd7d258c5beea512209ea",
+            "size": 2013,
+            "uri": "https://{canondata_backend}/1847551/ee61b63f66a264ad4afe7437ef7f90941caf4456/resource.tar.gz#test_sql2yql.test_window-yql-19709_/sql.yql"
+        }
+    ],
     "test_sql_format.test[action-action_opt_args]": [
         {
             "uri": "file://test_sql_format.test_action-action_opt_args_/formatted.sql"
@@ -11238,6 +11245,11 @@
     "test_sql_format.test[window-yql-18879]": [
         {
             "uri": "file://test_sql_format.test_window-yql-18879_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[window-yql-19709]": [
+        {
+            "uri": "file://test_sql_format.test_window-yql-19709_/formatted.sql"
         }
     ],
     "test_sql_negative.test[action-no_columns_in_do-default.txt]": [

@@ -17,7 +17,7 @@ namespace NSchemeShardUT_Private {
 
 class TTestEnv;
 
-ui64 CreateTestSubdomain(NActors::TTestActorRuntime& runtime, TTestEnv& env, ui64* txId, const TString& name);
+ui64 CreateTestSubdomain(NActors::TTestActorRuntime& runtime, TTestEnv& env, ui64* txId, const TString& name, bool addTable = true);
 
 class TFakeBSController : public NActors::TActor<TFakeBSController>, public NKikimr::NTabletFlatExecutor::TTabletExecutedFlat {
     void DefaultSignalTabletActive(const NActors::TActorContext&) override;

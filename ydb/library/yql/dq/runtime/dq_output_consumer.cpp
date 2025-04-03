@@ -128,6 +128,28 @@ struct TColumnShardHashV1 {
             return;
         }
 
+        if (uv.IsBoxed()) {
+            if (auto list = uv.GetElements()) {
+                UpdateImpl(*list, keyIdx);
+                return;
+            }
+        }
+
+        UpdateImpl(uv, keyIdx);
+    }
+
+    ui64 Finish() {
+        ui64 hash = HashCalcer.Finish();
+        hash = std::min<ui32>(hash / (Max<ui64>() / ShardCount), ShardCount - 1);
+        return TaskIndexByHash[hash];
+    }
+
+    std::size_t ShardCount;
+    TVector<ui64> TaskIndexByHash;
+    TVector<NYql::NProto::TypeIds> KeyColumnTypes;
+private:
+    template <typename TValue>
+    void UpdateImpl(const TValue& uv, size_t keyIdx) {
         switch (KeyColumnTypes[keyIdx]) {
             case NYql::NProto::Bool: {
                 auto value = uv.template Get<bool>();
@@ -202,6 +224,11 @@ struct TColumnShardHashV1 {
                 HashCalcer.Update(reinterpret_cast<const ui8*>(value.Data()), value.Size());
                 break;
             }
+            case NYql::NProto::Decimal: {
+                auto value = uv.GetInt128();
+                HashCalcer.Update(reinterpret_cast<const ui8*>(&value), sizeof(value));
+                break;
+            }
             default: {
                 Y_ENSURE(false, TStringBuilder{} << "HashFunc for HashShuffle isn't supported with such type: " << static_cast<ui64>(KeyColumnTypes[keyIdx]));
                 break;
@@ -209,15 +236,6 @@ struct TColumnShardHashV1 {
         }
     }
 
-    ui64 Finish() {
-        ui64 hash = HashCalcer.Finish();
-        hash = std::min<ui32>(hash / (Max<ui64>() / ShardCount), ShardCount - 1);
-        return TaskIndexByHash[hash];
-    }
-
-    std::size_t ShardCount;
-    TVector<ui64> TaskIndexByHash;
-    TVector<NYql::NProto::TypeIds> KeyColumnTypes;
 private:
     NArrow::NHash::NXX64::TStreamStringHashCalcer HashCalcer;
 };

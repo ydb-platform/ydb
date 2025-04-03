@@ -2,15 +2,16 @@ LIBRARY()
 
 SRCS(
     create_table_formatter.cpp
-    create_table_formatter.h
+    create_view_formatter.cpp
+    formatters_common.cpp
     show_create.cpp
-    show_create.h
 )
 
 PEERDIR(
     ydb/core/base
     ydb/core/kqp/runtime
     ydb/core/protos
+    ydb/core/tx/columnshard/engines/scheme/defaults/protos
     ydb/core/sys_view/common
     ydb/core/tx/schemeshard
     ydb/core/tx/tx_proxy

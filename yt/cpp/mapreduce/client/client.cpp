@@ -1561,13 +1561,17 @@ TClientContext CreateClientContext(
     context.Config = options.Config_ ? options.Config_ : TConfig::Get();
     context.TvmOnly = options.TvmOnly_;
     context.ProxyAddress = options.ProxyAddress_;
-    context.ProxyUnixDomainSocket = options.ProxyUnixDomainSocket_;
+    context.UseProxyUnixDomainSocket = options.UseProxyUnixDomainSocket_;
 
     if (options.UseTLS_) {
         context.UseTLS = *options.UseTLS_;
     }
 
-    SetupClusterContext(context, serverName);
+    if (!options.UseProxyUnixDomainSocket_) {
+        SetupClusterContext(context, serverName);
+    } else {
+        context.ServerName = serverName;
+    }
 
     if (context.Config->HttpProxyRole && context.Config->Hosts == DefaultHosts) {
         context.Config->Hosts = "hosts?role=" + context.Config->HttpProxyRole;

@@ -477,7 +477,6 @@ private:
             }
             writer.CloseMap();
         }
-        writer.Write("exportedObjects", "SchemaMappingV0");
         writer.CloseMap();
         writer.CloseMap();
 

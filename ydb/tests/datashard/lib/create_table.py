@@ -1,5 +1,6 @@
 from ydb.tests.datashard.lib.types_of_variables import cleanup_type_name
 
+
 def create_table(table_name: str, columns: dict[str, dict[str]], pk_colums: dict[str, dict[str]], index_colums: dict[str, dict[str]], unique: str, sync: str) -> str:
     sql_create = f"CREATE TABLE `{table_name}` ("
     for prefix in columns.keys():

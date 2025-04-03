@@ -291,7 +291,6 @@ public:
         const auto* clusterDesc = State_->Configuration->ClusterConfigs.FindPtr(cluster);
         YQL_ENSURE(clusterDesc, "Unknown cluster " << cluster);
         NSo::NProto::TDqSolomonSource source;
-        source.SetEndpoint(clusterDesc->GetCluster());
         source.SetProject(settings.Project().StringValue());
 
         source.SetClusterType(MapClusterType(clusterDesc->GetClusterType()));
@@ -302,7 +301,19 @@ public:
         auto& sourceSettings = *source.MutableSettings();
 
         for (const auto& attr : clusterDesc->settings()) {
-            sourceSettings.insert({ attr.name(), attr.value() });
+            if (attr.name() == "http_endpoint"sv) {
+                source.SetHttpEndpoint(attr.value());
+            }
+            else if (attr.name() == "grpc_endpoint"sv) {
+                source.SetGrpcEndpoint(attr.value());
+            }
+            else {
+                sourceSettings.insert({ attr.name(), attr.value() });
+            }
+        }
+
+        if (source.GetHttpEndpoint().empty() || source.GetGrpcEndpoint().empty()) {
+            throw yexception() << "Specify both http_endpoint and grpc_endpoint for solomon source.";
         }
         
         auto selectors = settings.Selectors().StringValue();

@@ -90,7 +90,7 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         },
         {
             ToString(NYql::EDatabaseType::Solomon),
-            CreateExternalDataSource(TString{NYql::SolomonProviderName}, {"NONE", "TOKEN"}, {"use_ssl", "grpc_port"}, hostnamePatternsRegEx)
+            CreateExternalDataSource(TString{NYql::SolomonProviderName}, {"NONE", "TOKEN"}, {"use_ssl", "http_endpoint", "grpc_endpoint"}, hostnamePatternsRegEx)
         }
     },
     availableExternalDataSources); 

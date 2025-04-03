@@ -141,11 +141,11 @@ public:
     template<typename T>
     TDbRowUpdate& Set(TString tagName, const T& val) {
         const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(GetRoot());
-        Y_ABORT_UNLESS(tableInfo, "Unknown table id %u", GetRoot());
+        Y_ENSURE(tableInfo, "Unknown table id " << GetRoot());
         const ui32* tagId = tableInfo->ColumnNames.FindPtr(tagName);
-        Y_ABORT_UNLESS(tagId, "Unknown column \"%s\" in table %u", tagName.data(), GetRoot());
+        Y_ENSURE(tagId, "Unknown column \"" << tagName << "\" in table " << GetRoot());
         const auto *colInfo = Scheme.GetColumnInfo(GetRoot(), *tagId);
-        Y_ABORT_UNLESS(colInfo, "Column info not found for table id %u, column id %u", GetRoot(), *tagId);
+        Y_ENSURE(colInfo, "Column info not found for table id " << GetRoot() << " column id " << *tagId);
         NScheme::TTypeId type = colInfo->PType.GetTypeId();
         TagOps[*tagId] = FromVal(type, val);
         return *this;
@@ -153,11 +153,11 @@ public:
 
     TDbRowUpdate& Erase(TString tagName) {
         const TScheme::TTableInfo* tableInfo = Scheme.GetTableInfo(GetRoot());
-        Y_ABORT_UNLESS(tableInfo, "Unknown table id %u", GetRoot());
+        Y_ENSURE(tableInfo, "Unknown table id " << GetRoot());
         const ui32* tagId = tableInfo->ColumnNames.FindPtr(tagName);
-        Y_ABORT_UNLESS(tagId, "Unknown column \"%s\" in table %u", tagName.data(), GetRoot());
+        Y_ENSURE(tagId, "Unknown column \"" << tagName << "\" in table " << GetRoot());
         const auto * colInfo = Scheme.GetColumnInfo(GetRoot(), *tagId);
-        Y_ABORT_UNLESS(colInfo, "Column info not found for table id %u, column id %u", GetRoot(), *tagId);
+        Y_ENSURE(colInfo, "Column info not found for table id " << GetRoot() << " column id " << *tagId);
         TagOps[*tagId] = MakeNull(ECellOp::Null);
         return *this;
     }
@@ -217,7 +217,7 @@ public:
 
     void Apply(const TDbRowUpdate& update) {
         TVector<TRawTypeValue> key;
-        Y_ABORT_UNLESS(!update.GetKey().empty());
+        Y_ENSURE(!update.GetKey().empty());
         for (const auto& col : update.GetKey()) {
             key.push_back(col.Get());
         }
@@ -232,7 +232,7 @@ public:
 
     void Apply(const TDbRowErase& erase) {
         TVector<TRawTypeValue> key;
-        Y_ABORT_UNLESS(!erase.GetKey().empty());
+        Y_ENSURE(!erase.GetKey().empty());
         for (const auto& col : erase.GetKey()) {
             key.push_back(col.Get());
         }

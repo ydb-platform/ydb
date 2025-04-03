@@ -78,7 +78,7 @@ namespace NKikimr {
                 return;
             }
 
-            Y_DEBUG_ABORT_UNLESS(SourceVDisk != SelfVDiskId);
+            Y_VERIFY_DEBUG_S(SourceVDisk != SelfVDiskId, HullCtx->VCtx->VDiskLogPrefix);
 
             Run(ctx, clientSyncState);
         }

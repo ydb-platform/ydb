@@ -31,7 +31,7 @@ TColumnsData TColumnsData::ApplyFilter(const TColumnFilter& filter) const {
         return *this;
     }
     auto records = Records;
-    AFL_VERIFY(filter.Apply(records));
+    filter.Apply(records);
     if (records->GetRecordsCount()) {
         TDictStats::TBuilder builder;
         ui32 idx = 0;

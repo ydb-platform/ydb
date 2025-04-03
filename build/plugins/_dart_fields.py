@@ -643,13 +643,6 @@ class LintConfigs:
 
     @classmethod
     def cpp_configs(cls, unit, flat_args, spec_args):
-        custom_config = spec_args.get('CUSTOM_CONFIG')
-        if custom_config:
-            # TODO delete CUSTOM_CONFIG, it's used only by arc
-            config = custom_config[0]
-            assert_file_exists(unit, config)
-            return {cls.KEY: serialize_list([config])}
-
         if config := cls._from_config_type(unit, spec_args):
             # specified by config type, autoincludes scheme
             return {cls.KEY: serialize_list([config])}
@@ -704,7 +697,6 @@ class LintName:
     def value(cls, unit, flat_args, spec_args):
         lint_name = spec_args['NAME'][0]
         if lint_name in ('flake8', 'py2_flake8') and (unit.get('DISABLE_FLAKE8') or 'no') == 'yes':
-            unit.message(['INFO', 'Flake8 linting is disabled by `DISABLE_FLAKE8`'])
             raise DartValueError()
         return {cls.KEY: lint_name}
 
@@ -1139,26 +1131,6 @@ class TestFiles:
 
     # XXX: this is a workaround to support very specific linting settings.
     # Do not use it as a general mechanism!
-    _GRUT_PREFIX = 'grut'
-    _GRUT_INCLUDE_LINTER_TEST_PATHS = (
-        'grut/libs/bigrt/clients',
-        'grut/libs/bigrt/common',
-        'grut/libs/bigrt/data',
-        'grut/libs/bigrt/event_filter',
-        'grut/libs/bigrt/graph',
-        'grut/libs/bigrt/info_keepers',
-        'grut/libs/bigrt/processor',
-        'grut/libs/bigrt/profile',
-        'grut/libs/bigrt/profiles',
-        'grut/libs/bigrt/queue_info_config',
-        'grut/libs/bigrt/resharder/compute_shard_number',
-        'grut/libs/bigrt/server',
-        'grut/libs/bigrt/transaction',
-        'grut/libs/shooter',
-    )
-
-    # XXX: this is a workaround to support very specific linting settings.
-    # Do not use it as a general mechanism!
     _MAPS_RENDERER_PREFIX = 'maps/renderer'
     _MAPS_RENDERER_INCLUDE_LINTER_TEST_PATHS = (
         'maps/renderer/cartograph',
@@ -1289,12 +1261,6 @@ class TestFiles:
     @classmethod
     def cpp_linter_files(cls, unit, flat_args, spec_args):
         upath = unit.path()[3:]
-        if upath.startswith(cls._GRUT_PREFIX):
-            for path in cls._GRUT_INCLUDE_LINTER_TEST_PATHS:
-                if os.path.commonpath([upath, path]) == path:
-                    break
-            else:
-                raise DartValueError()
 
         if upath.startswith(cls._MAPS_RENDERER_PREFIX):
             for path in cls._MAPS_RENDERER_INCLUDE_LINTER_TEST_PATHS:

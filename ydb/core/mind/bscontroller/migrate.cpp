@@ -171,6 +171,14 @@ class TBlobStorageController::TTxMigrate : public TTransactionBase<TBlobStorageC
         }
     };
 
+    class TTxUpdateEnableConfigV2 : public TTxBase {
+    public:
+        bool Execute(TTransactionContext& txc) override {
+            NIceDb::TNiceDb(txc.DB).Table<Schema::State>().Key(true).Update<Schema::State::EnableConfigV2>(true);
+            return true;
+        }
+    };
+
     TDeque<THolder<TTxBase>> Queue;
 
 public:
@@ -231,6 +239,10 @@ public:
         Queue.emplace_back(new TTxDropDriveStatus);
     
         Queue.emplace_back(new TTxUpdateCompatibilityInfo);
+
+        if (!hasInstanceId) {
+            Queue.emplace_back(new TTxUpdateEnableConfigV2);
+        }
 
         return true;
     }

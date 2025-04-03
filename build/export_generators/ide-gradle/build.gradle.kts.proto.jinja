@@ -1,3 +1,18 @@
+{%- macro PatchRoots(arg, depend = false) -%}
+{#- Always replace (arcadia_root) === (SOURCE_ROOT in ymake) to $project_root in Gradle -#}
+{%-     if depend -%}
+{#- Replace (export_root) === (BUILD_ROOT in ymake) to $project_root in Gradle, because prebuilt tools in arcadia, not in build_root -#}
+"{{ arg|replace(export_root, "$project_root")|replace(arcadia_root, "$project_root") }}"
+{%-     else -%}
+{#- Replace (export_root) === (BUILD_ROOT in ymake) to baseBuildDir in Gradle - root of all build folders for modules -#}
+"{{ arg|replace(export_root, "$baseBuildDir")|replace(arcadia_root, "$project_root") }}"
+{%-     endif -%}
+{%- endmacro -%}
+
+{%- macro PatchGeneratedProto(arg) -%}
+"{{ arg|replace(export_root, "$mainExtractedIncludeProtosDir")|replace(arcadia_root, "$mainExtractedIncludeProtosDir") }}"
+{%- endmacro -%}
+
 {%- include "[generator]/proto_vars.jinja" -%}
 {%- include "[generator]/proto_import.jinja" -%}
 {%- include "[generator]/repositories.jinja" -%}
@@ -10,6 +25,8 @@
 {%- include "[generator]/proto_source_sets.jinja" -%}
 {%- include "[generator]/protobuf.jinja" -%}
 {%- include "[generator]/proto_prepare.jinja" -%}
+{%- include "[generator]/run_program.jinja" -%}
+{%- include "[generator]/run_java_program.jinja" -%}
 {%- include "[generator]/javadoc.jinja" -%}
 {%- include "[generator]/proto_dependencies.jinja" -%}
 {%- include "[generator]/debug.jinja" ignore missing -%}

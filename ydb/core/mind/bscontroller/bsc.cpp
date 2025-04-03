@@ -463,7 +463,7 @@ void TBlobStorageController::Handle(TEvBlobStorage::TEvControllerDistconfRequest
 
             // commit it
             Execute(CreateTxCommitConfig(std::move(yamlConfig), std::make_optional(std::move(storageYaml)), std::nullopt,
-                expectedStorageYamlConfigVersion, std::exchange(h, {})));
+                expectedStorageYamlConfigVersion, std::exchange(h, {}), std::nullopt));
             break;
         }
 

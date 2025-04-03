@@ -5,6 +5,8 @@ PY3TEST()
 
     TEST_SRCS(
         test_quota_exhaustion.py
+        test_log_scenario.py
+        zip_bomb.py
     )
 
     IF (SANITIZER_TYPE OR WITH_VALGRIND)
@@ -20,18 +22,22 @@ PY3TEST()
     )
 
     PEERDIR(
-    ydb/tests/library
-    ydb/tests/library/test_meta
+        ydb/tests/library
+        ydb/tests/library/test_meta
+        ydb/tests/olap/common
+        ydb/tests/olap/lib
     )
 END()
 
 RECURSE(
-    lib
-    s3_import
-    scenario
-    docs
-    load
-    ttl_tiering
     column_family
     common
+    docs
+    high_load
+    lib
+    load
+    oom
+    s3_import
+    scenario
+    ttl_tiering
 )

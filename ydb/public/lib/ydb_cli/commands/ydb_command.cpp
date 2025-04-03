@@ -29,6 +29,8 @@ TDriverConfig TYdbCommand::CreateDriverConfig(TConfig& config) {
         driverConfig.UseSecureConnection(config.CaCerts);
     if (config.IsNetworkIntensive)
         driverConfig.SetNetworkThreadsNum(16);
+    if (config.SkipDiscovery)
+        driverConfig.SetDiscoveryMode(EDiscoveryMode::Off);
     driverConfig.UseClientCertificate(config.ClientCert, config.ClientCertPrivateKey);
 
     return driverConfig;
@@ -58,7 +60,7 @@ TYdbSimpleCommand::TYdbSimpleCommand(const TString& name, const std::initializer
 void TYdbSimpleCommand::Config(TConfig& config) {
     TClientCommand::Config(config);
 
-    NLastGetopt::TOpts& opts = *config.Opts;
+    TClientCommandOptions& opts = *config.Opts;
     opts.AddLongOption("timeout", "Client timeout. There is no point waiting for the result after this long.")
         .RequiredArgument("ms").StoreResult(&ClientTimeout);
 }
@@ -70,7 +72,7 @@ TYdbOperationCommand::TYdbOperationCommand(const TString& name, const std::initi
 void TYdbOperationCommand::Config(TConfig& config) {
     TYdbCommand::Config(config);
 
-    NLastGetopt::TOpts& opts = *config.Opts;
+    TClientCommandOptions& opts = *config.Opts;
     opts.AddLongOption("timeout", "Operation timeout. Operation should be executed on server within this timeout. "
             "There could also be a delay up to 200ms to receive timeout error from server.")
         .RequiredArgument("ms").StoreResult(&OperationTimeout);

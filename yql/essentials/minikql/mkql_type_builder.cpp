@@ -2806,6 +2806,47 @@ TType* TTypeBuilder::NewVariantType(TType* underlyingType) const {
     return TVariantType::Create(underlyingType, Env);
 }
 
+TType* TTypeBuilder::ValidateBlockStructType(const TStructType* structType) const {
+    MKQL_ENSURE(structType->GetMembersCount() > 0, "Expected at least one column");
+
+    std::vector<std::pair<std::string_view, TType*>> outStructItems;
+    outStructItems.reserve(structType->GetMembersCount() - 1);
+    bool hasBlockLengthColumn = false;
+    for (size_t i = 0; i < structType->GetMembersCount(); i++) {
+        auto blockType = AS_TYPE(TBlockType, structType->GetMemberType(i));
+        bool isScalar = blockType->GetShape() == TBlockType::EShape::Scalar;
+        auto itemType = blockType->GetItemType();
+        if (structType->GetMemberName(i) == NYql::BlockLengthColumnName) {
+            MKQL_ENSURE(isScalar, "Block length column should be scalar");
+            MKQL_ENSURE(AS_TYPE(TDataType, itemType)->GetSchemeType() == NUdf::TDataType<ui64>::Id, "Expected Uint64");
+
+            hasBlockLengthColumn = true;
+        } else {
+            outStructItems.emplace_back(structType->GetMemberName(i), itemType);
+        }
+    }
+    MKQL_ENSURE(hasBlockLengthColumn, "Block struct must contain block length column");
+    return NewStructType(outStructItems);
+}
+
+TType* TTypeBuilder::BuildBlockStructType(const TStructType* structType) const {
+    std::vector<std::pair<std::string_view, TType*>> blockStructItems;
+    blockStructItems.reserve(structType->GetMembersCount() + 1);
+    for (size_t i = 0; i < structType->GetMembersCount(); i++) {
+        auto itemType = structType->GetMemberType(i);
+        MKQL_ENSURE(!itemType->IsBlock() , "Block types are not allowed here");
+        blockStructItems.emplace_back(
+            structType->GetMemberName(i),
+            NewBlockType(itemType, TBlockType::EShape::Many)
+        );
+    }
+    blockStructItems.emplace_back(
+        NYql::BlockLengthColumnName,
+        NewBlockType(NewDataType(NUdf::TDataType<ui64>::Id), TBlockType::EShape::Scalar)
+    );
+    return NewStructType(blockStructItems);
+}
+
 void RebuildTypeIndex() {
     HugeSingleton<TPgTypeIndex>()->Rebuild();
 }

@@ -718,6 +718,23 @@ message TGRpcConfig {
     repeated string RatelimiterServicesEnabled = 25;
     repeated string RatelimiterServicesDisabled = 26;
 
+    enum YdbGrpcCompressionAlgorithm {
+        YDB_GRPC_COMPRESS_NONE = 0;
+        YDB_GRPC_COMPRESS_DEFLATE = 1;
+        YDB_GRPC_COMPRESS_GZIP = 2;
+    };
+
+    optional YdbGrpcCompressionAlgorithm DefaultCompressionAlgorithm = 30 [default = YDB_GRPC_COMPRESS_NONE];
+
+    enum YdbGrpcCompressionLevel {
+        YDB_GRPC_COMPRESS_LEVEL_NONE = 0;
+        YDB_GRPC_COMPRESS_LEVEL_LOW = 1;
+        YDB_GRPC_COMPRESS_LEVEL_MED = 2;
+        YDB_GRPC_COMPRESS_LEVEL_HIGH = 3;
+    }
+
+    optional YdbGrpcCompressionLevel DefaultCompressionLevel = 31 [default = YDB_GRPC_COMPRESS_LEVEL_NONE];
+
     // server socket options
     optional bool   KeepAliveEnable = 100 [default = true]; // SO_KEEPALIVE
     optional uint32 KeepAliveIdleTimeoutTriggerSec = 101 [default = 90]; // TCP_KEEPIDLE
@@ -1230,7 +1247,7 @@ message TImmediateControlsConfig {
             DefaultValue: 0 }];
 
         optional uint64 ReadIteratorKeysExtBlobsPrecharge = 21 [(ControlOptions) = {
-          Description: "Enable new precharge for DataShard read iterator",
+          Description: "Enable external blobs precharge for DataShard read iterator keys requests",
           MinValue: 0,
           MaxValue: 1,
           DefaultValue: 0 }];

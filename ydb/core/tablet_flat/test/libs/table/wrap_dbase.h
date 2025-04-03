@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/tablet_flat/flat_database.h>
+#include <ydb/core/tablet_flat/util_fmt_abort.h>
 
 namespace NKikimr {
 namespace NTable {
@@ -45,8 +46,9 @@ namespace NTest {
 
         EReady Seek(TRawVals key, ESeek seek)
         {
-            if (seek == ESeek::Upper && !key)
-                Y_ABORT("Cannot cast ESeek::Upper with empty key to ELookup");
+            if (seek == ESeek::Upper && !key) {
+                Y_TABLET_ERROR("Cannot cast ESeek::Upper with empty key to ELookup");
+            }
 
             TKeyRange range;
             range.MinKey = key;

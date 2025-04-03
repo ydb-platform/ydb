@@ -47,37 +47,6 @@ std::shared_ptr<IChunkedArray> TGetJsonPath::ExtractArray(const std::shared_ptr<
     }
 }
 
-std::optional<TFetchingInfo> TGetJsonPath::BuildFetchTask(const ui32 columnId, const NAccessor::IChunkedArray::EType arrType,
-    const std::vector<TColumnChainInfo>& input, const std::shared_ptr<TAccessorsCollection>& resources) const {
-    if (arrType != NAccessor::IChunkedArray::EType::SubColumnsArray) {
-        return TFetchingInfo::BuildFullRestore(false);
-    }
-    AFL_VERIFY(input.size() == 2 && input.front().GetColumnId() == columnId);
-    auto description = BuildDescription(input, resources).DetachResult();
-    const std::vector<TString> subColumns = { TString(description.GetJsonPath().data(), description.GetJsonPath().size()) };
-    if (!description.GetInputAccessor()) {
-        return TFetchingInfo::BuildSubColumnsRestore(subColumns);
-    }
-
-    std::optional<bool> hasSubColumns;
-    return NAccessor::TCompositeChunkedArray::VisitDataOwners<TFetchingInfo>(
-        description.GetInputAccessor(), [&](const std::shared_ptr<NAccessor::IChunkedArray>& arr) {
-            if (arr->GetType() == NAccessor::IChunkedArray::EType::SubColumnsPartialArray) {
-                AFL_VERIFY(!hasSubColumns || *hasSubColumns);
-                hasSubColumns = true;
-                auto scArr = std::static_pointer_cast<NAccessor::TSubColumnsPartialArray>(arr);
-                if (scArr->NeedFetch(description.GetJsonPath())) {
-                    return std::optional<TFetchingInfo>(TFetchingInfo::BuildSubColumnsRestore(subColumns));
-                }
-            } else {
-                AFL_VERIFY(arr->GetType() == NAccessor::IChunkedArray::EType::SubColumnsArray);
-                AFL_VERIFY(!hasSubColumns || !*hasSubColumns);
-                hasSubColumns = false;
-            }
-            return std::optional<TFetchingInfo>();
-        });
-}
-
 NAccessor::TCompositeChunkedArray::TBuilder TGetJsonPath::MakeCompositeBuilder() const {
     return NAccessor::TCompositeChunkedArray::TBuilder(arrow::utf8());
 }

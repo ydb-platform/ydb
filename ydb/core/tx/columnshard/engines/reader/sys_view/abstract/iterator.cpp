@@ -45,7 +45,7 @@ TConclusion<std::shared_ptr<TPartialReadResult>> TStatsIteratorBase::GetBatch() 
 
         {
             NArrow::TColumnFilter filter = ReadMetadata->GetPKRangesFilter().BuildFilter(originalBatch);
-            AFL_VERIFY(filter.Apply(originalBatch));
+            filter.Apply(originalBatch);
         }
 
         // Leave only requested columns

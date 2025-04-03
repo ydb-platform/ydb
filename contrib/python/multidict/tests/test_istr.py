@@ -71,4 +71,4 @@ def test_leak(create_istrs: Callable[[], None]) -> None:
 
     gc.collect()
     cnt2 = len(gc.get_objects())
-    assert abs(cnt - cnt2) < 10  # on PyPy these numbers are not equal
+    assert abs(cnt - cnt2) < 50  # on PyPy these numbers are not equal

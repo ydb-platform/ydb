@@ -57,7 +57,7 @@ namespace NKikimr {
                 // we don't need to commit because we either remove mem pages or
                 // schedule to remove some chunks (but they may be used by snapshots,
                 // so wait until TEvSyncLogFreeChunk message)
-                Y_ABORT_UNLESS(!hasToCommit);
+                Y_VERIFY_S(!hasToCommit, SlCtx->VCtx->VDiskLogPrefix);
                 return false;
             }
 
@@ -91,7 +91,7 @@ namespace NKikimr {
                 generateCommit |= PerformInitialCommit();
 
                 if (generateCommit) {
-                    Y_ABORT_UNLESS(!CommitterId);
+                    Y_VERIFY_S(!CommitterId, SlCtx->VCtx->VDiskLogPrefix);
                     // we must save recovery log records after
                     const ui64 recoveryLogConfirmedLsn = SlCtx->LsnMngr->GetConfirmedLsnForSyncLog();
                     // create and run committer

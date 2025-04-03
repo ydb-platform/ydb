@@ -4,6 +4,7 @@
 #include "flat_part_laid.h"
 #include "flat_page_frames.h"
 #include "flat_stat_part_group_iter_iface.h"
+#include "util_fmt_abort.h"
 
 #include <library/cpp/containers/stack_vector/stack_vec.h>
 #include <util/draft/holder_vector.h>
@@ -90,7 +91,7 @@ public:
     }
 
     EReady Next(TDataStats& stats) {
-        Y_ABORT_UNLESS(IsValid());
+        Y_ENSURE(IsValid());
 
         LastRowId = Groups[0]->GetRowId();
         auto ready = Groups[0]->Next();
@@ -164,7 +165,7 @@ public:
     }
 
     TDbTupleRef GetCurrentKey() const {
-        Y_ABORT_UNLESS(KeyDefaults->BasicTypes().size() == CurrentKey.size());
+        Y_ENSURE(KeyDefaults->BasicTypes().size() == CurrentKey.size());
         return TDbTupleRef(KeyDefaults->BasicTypes().data(), CurrentKey.data(), CurrentKey.size());
     }
 
@@ -239,7 +240,7 @@ private:
                 stats.Add(rel.Size, channel);
                 ++prevPage;
             } else if (!rel.IsHead()) {
-                Y_ABORT("Got unaligned TFrames head record");
+                Y_TABLET_ERROR("Got unaligned TFrames head record");
             } else {
                 break;
             }

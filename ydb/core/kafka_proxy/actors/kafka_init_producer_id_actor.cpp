@@ -121,6 +121,7 @@ namespace NKafka {
 
     void TKafkaInitProducerIdActor::RequestFullRetry(const TActorContext& ctx) {
         CurrentTxAbortRetryNumber++;
+        Kqp->ResetTxId();
         StartTxProducerInitCycle(ctx);
     }
     
@@ -143,6 +144,8 @@ namespace NKafka {
         try {
             switch (LastSentToKqpRequest) {
                 case BEGIN_TRANSACTION:
+                    // save tx id for future requests
+                    Kqp->SetTxId(ev->Get()->Record.GetResponse().GetTxMeta().id());
                     SendSelectRequest(ctx);
                     break;
                 case SELECT:
@@ -152,7 +155,7 @@ namespace NKafka {
                 case UPDATE:
                     OnSuccessfullProducerStateUpdate(ev, ctx);
                     break;
-                case DELETE:
+                case DELETE_REQ:
                     SendInsertRequest(ctx);
                     break;
                 default:
@@ -211,7 +214,7 @@ namespace NKafka {
     void TKafkaInitProducerIdActor::SendDeleteByTransactionalIdRequest(const TActorContext& ctx) {
         Kqp->SendYqlRequest(GetYqlWithTableName(NInitProducerIdSql::DELETE_BY_TRANSACTIONAL_ID), BuildSelectOrDeleteByTransactionalIdParams(), ++KqpReqCookie, ctx, false);
         
-        LastSentToKqpRequest = EInitProducerIdKqpRequests::DELETE;
+        LastSentToKqpRequest = EInitProducerIdKqpRequests::DELETE_REQ;
     }
 
     // params builders
@@ -329,7 +332,7 @@ namespace NKafka {
                 return "INSERT";
             case UPDATE:
                 return "UPDATE";
-            case DELETE:
+            case DELETE_REQ:
                 return "DELETE";
             case NO_REQUEST:
                 return "NO_REQUEST";

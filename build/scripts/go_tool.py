@@ -32,6 +32,11 @@ COMPILE_OPTIMIZATION_FLAGS = ('-N',)
 IGNORED_FLAGS = ['-fprofile-instr-generate', '-fcoverage-mapping']
 
 
+def get_sanitizer_libs(peers):
+    MSAN='{}/{}'.format(std_lib_prefix, 'msan').replace('//', '/')
+    ASAN='{}/{}'.format(std_lib_prefix, 'asan').replace('//', '/')
+    return filter(lambda it: it.startswith(MSAN) or it.startswith(ASAN), peers)
+
 def get_trimpath_args(args):
     return ['-trimpath', args.trimpath] if args.trimpath else []
 
@@ -527,11 +532,13 @@ def do_link_exe(args):
     if args.extldflags is not None:
         extldflags.extend(args.extldflags)
     cgo_peers = []
-    if args.cgo_peers is not None and len(args.cgo_peers) > 0:
+    san_peers = list(get_sanitizer_libs(args.peers))
+    if args.cgo_peers or san_peers:
         is_group = args.targ_os == 'linux'
         if is_group:
             cgo_peers.append('-Wl,--start-group')
         cgo_peers.extend(args.cgo_peers)
+        cgo_peers.extend(san_peers)
         if is_group:
             cgo_peers.append('-Wl,--end-group')
     try:
@@ -862,7 +869,7 @@ if __name__ == '__main__':
     parser.add_argument('++targ-arch', choices=['amd64', 'x86', 'arm64'], required=True)
     parser.add_argument('++peers', nargs='*')
     parser.add_argument('++non-local-peers', nargs='*')
-    parser.add_argument('++cgo-peers', nargs='*')
+    parser.add_argument('++cgo-peers', nargs='*', default=[])
     parser.add_argument('++asmhdr', nargs='?', default=None)
     parser.add_argument('++test-import-path', nargs='?')
     parser.add_argument('++test-miner', nargs='?')

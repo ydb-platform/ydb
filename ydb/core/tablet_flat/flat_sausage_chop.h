@@ -41,7 +41,7 @@ namespace NPageCollection {
                 for (auto num : xrange(logo.size())) {
                     auto &base = logo[logo.size() - 1 == num ? num : 0];
 
-                    Y_ABORT_UNLESS(logo[num].BlobSize() == base.BlobSize());
+                    Y_ENSURE(logo[num].BlobSize() == base.BlobSize());
                 }
 
                 const ui32 bulk = (logo.size() - 1) * logo[0].BlobSize();

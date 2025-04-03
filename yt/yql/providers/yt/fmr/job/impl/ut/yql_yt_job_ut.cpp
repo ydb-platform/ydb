@@ -1,7 +1,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <yt/yql/providers/yt/fmr/job/impl/yql_yt_job_impl.h>
-#include <yt/yql/providers/yt/fmr/table_data_service/local/table_data_service.h>
-#include <yt/yql/providers/yt/fmr/utils/table_data_service_key.h>
+#include <yt/yql/providers/yt/fmr/table_data_service/local/yql_yt_table_data_service_local.h>
+#include <yt/yql/providers/yt/fmr/utils/yql_yt_table_data_service_key.h>
 #include <yt/yql/providers/yt/fmr/yt_service/mock/yql_yt_yt_service_mock.h>
 
 namespace NYql::NFmr {

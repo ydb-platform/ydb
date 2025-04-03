@@ -20,6 +20,25 @@
 #include <library/cpp/deprecated/atomic/atomic.h>
 #include <library/cpp/testing/hook/hook.h>
 
+#define Y_UNIT_TEST_OCTO(BaseName, Flag1, Flag2, Flag3)                                                                                                                \
+    template<bool, bool, bool> void BaseName(NUnitTest::TTestContext&);                                                                                                \
+    struct TTestRegistration##BaseName {                                                                                                                               \
+        TTestRegistration##BaseName() {                                                                                                                                \
+            TCurrentTest::AddTest(#BaseName "-" #Flag1 "-" #Flag2 "-" #Flag3, static_cast<void (*)(NUnitTest::TTestContext&)>(&BaseName<false, false, false>), false); \
+            TCurrentTest::AddTest(#BaseName "+" #Flag1 "-" #Flag2 "-" #Flag3, static_cast<void (*)(NUnitTest::TTestContext&)>(&BaseName<true, false, false>), false);  \
+            TCurrentTest::AddTest(#BaseName "-" #Flag1 "+" #Flag2 "-" #Flag3, static_cast<void (*)(NUnitTest::TTestContext&)>(&BaseName<false, true, false>), false);  \
+            TCurrentTest::AddTest(#BaseName "+" #Flag1 "+" #Flag2 "-" #Flag3, static_cast<void (*)(NUnitTest::TTestContext&)>(&BaseName<true, true, false>), false);   \
+            TCurrentTest::AddTest(#BaseName "-" #Flag1 "-" #Flag2 "+" #Flag3, static_cast<void (*)(NUnitTest::TTestContext&)>(&BaseName<false, false, true>), false);  \
+            TCurrentTest::AddTest(#BaseName "+" #Flag1 "-" #Flag2 "+" #Flag3, static_cast<void (*)(NUnitTest::TTestContext&)>(&BaseName<true, false, true>), false);   \
+            TCurrentTest::AddTest(#BaseName "-" #Flag1 "+" #Flag2 "+" #Flag3, static_cast<void (*)(NUnitTest::TTestContext&)>(&BaseName<false, true, true>), false);   \
+            TCurrentTest::AddTest(#BaseName "+" #Flag1 "+" #Flag2 "+" #Flag3, static_cast<void (*)(NUnitTest::TTestContext&)>(&BaseName<true, true, true>), false);    \
+        }                                                                                                                                                              \
+    };                                                                                                                                                                 \
+    static TTestRegistration##BaseName testRegistration##BaseName;                                                                                                     \
+    template<bool Flag1, bool Flag2, bool Flag3>                                                                                                                       \
+    void BaseName(NUnitTest::TTestContext&)
+
+
 namespace NKikimr {
 
 using namespace NTxUT;
@@ -168,23 +187,20 @@ static constexpr ui32 PORTION_ROWS = 80 * 1000;
 
 // ts[0] = 1600000000; // date -u --date='@1600000000' Sun Sep 13 12:26:40 UTC 2020
 // ts[1] = 1620000000; // date -u --date='@1620000000' Mon May  3 00:00:00 UTC 2021
-void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
-             const std::vector<NArrow::NTest::TTestColumn>& ydbSchema = testYdbSchema)
+void TestTtl(bool reboots, bool internal, bool useFirstPkColumnForTtl, NScheme::TTypeId ttlColumnTypeId)
 {
     auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NOlap::TWaitCompactionController>();
     csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Compaction);
     csControllerGuard->SetOverrideTasksActualizationLag(TDuration::Zero());
     std::vector<ui64> ts = { 1600000000, 1620000000 };
 
-    ui32 ttlIncSeconds = 1;
-    for (auto& c : ydbSchema) {
-        if (c.GetName() == spec.TtlColumn) {
-            if (c.GetType().GetTypeId() == NTypeIds::Date) {
-                ttlIncSeconds = TDuration::Days(1).Seconds();
-            }
-            break;
-        }
-    }
+    auto ydbSchema = TTestSchema::YdbSchema();
+    const auto ttlColumnNameIdx = useFirstPkColumnForTtl ? 0 : 8;
+    const auto ttlColumnName = ydbSchema[ttlColumnNameIdx].GetName();
+    UNIT_ASSERT(ttlColumnName == (useFirstPkColumnForTtl ? "timestamp" : "saved_at")); //to detect default schema changes
+    ydbSchema[ttlColumnNameIdx].SetType(ttlColumnTypeId);
+    const auto ttlIncSeconds = ttlColumnTypeId == NTypeIds::Date ? TDuration::Days(1).Seconds() : 1;
+    TTestSchema::TTableSpecials specs;
 
     TTestBasicRuntime runtime;
     TTester::Setup(runtime);
@@ -214,12 +230,9 @@ void TestTtl(bool reboots, bool internal, TTestSchema::TTableSpecials spec = {},
     } else {
         ttlSec -= ts[0] + ttlIncSeconds;
     }
-    if (spec.HasTiers()) {
-        spec.Tiers[0].EvictAfter = TDuration::Seconds(ttlSec);
-    } else {
-        UNIT_ASSERT(!spec.TtlColumn.empty());
-        spec.EvictAfter = TDuration::Seconds(ttlSec);
-    }
+    TTestSchema::TTableSpecials spec;
+    spec.TtlColumn = ttlColumnName;
+    spec.EvictAfter = TDuration::Seconds(ttlSec);
     SetupSchema(runtime, sender,
                               TTestSchema::CreateInitShardTxBody(tableId, ydbSchema, testYdbPk, spec, "/Root/olapStore"),
                               NOlap::TSnapshot(++planStep, ++txId));
@@ -534,14 +547,6 @@ std::vector<std::pair<ui32, ui64>> TestTiers(bool reboots, const std::vector<TSt
         TAtomic unused;
         runtime.GetAppData().Icb->SetValue("BlobCache.MaxCacheDataSize", 0, unused);
     }
-
-    // Disable GC batching so that deleted blobs get collected without a delay
-    {
-        TAtomic unused;
-        runtime.GetAppData().Icb->SetValue("ColumnShardControls.BlobCountToTriggerGC", 1, unused);
-    }
-
-    //
 
     ui64 writeId = 0;
     ui64 tableId = 1;
@@ -1191,79 +1196,14 @@ Y_UNIT_TEST_SUITE(TColumnShardTestSchema) {
         }
     }
 
-    Y_UNIT_TEST(ExternalTTL) {
-        TestTtl(false, false); // over NTypeIds::Timestamp ttl column
-    }
-
-    Y_UNIT_TEST(ExternalTTL_Types) {
-        auto ydbSchema = testYdbSchema;
-        for (auto typeId : {NTypeIds::Datetime, NTypeIds::Date, NTypeIds::Uint32, NTypeIds::Uint64}) {
-            UNIT_ASSERT_EQUAL(ydbSchema[8].GetName(), "saved_at");
-            ydbSchema[8].SetType(TTypeInfo(typeId));
-
-            TTestSchema::TTableSpecials specs;
-            specs.SetTtlColumn("saved_at");
-
-            TestTtl(false, false, specs, ydbSchema);
+    Y_UNIT_TEST_OCTO(TTL, Reboot, Internal, FirstPkColumn) {
+        for (auto typeId : {NTypeIds::Timestamp, NTypeIds::Datetime, NTypeIds::Date, NTypeIds::Uint32, NTypeIds::Uint64}) {
+            TestTtl(Reboot, Internal, FirstPkColumn, typeId);
         }
     }
 
-    Y_UNIT_TEST(RebootExternalTTL) {
-        NColumnShard::gAllowLogBatchingDefaultValue = false;
-        TestTtl(true, false);
-    }
 
-    Y_UNIT_TEST(InternalTTL) {
-        TestTtl(false, true); // over NTypeIds::Timestamp ttl column
-    }
 
-    Y_UNIT_TEST(InternalTTL_Types) {
-        auto ydbSchema = testYdbSchema;
-        for (auto typeId : {NTypeIds::Datetime, NTypeIds::Date, NTypeIds::Uint32, NTypeIds::Uint64}) {
-            UNIT_ASSERT_EQUAL(ydbSchema[8].GetName(), "saved_at");
-            ydbSchema[8].SetType(TTypeInfo(typeId));
-
-            TTestSchema::TTableSpecials specs;
-            specs.SetTtlColumn("saved_at");
-
-            TestTtl(false, true, specs, ydbSchema);
-        }
-    }
-
-    Y_UNIT_TEST(RebootInternalTTL) {
-        NColumnShard::gAllowLogBatchingDefaultValue = false;
-        TestTtl(true, true);
-    }
-
-    Y_UNIT_TEST(OneTier) {
-        TTestSchema::TTableSpecials specs;
-        specs.SetTtlColumn("timestamp");
-//        specs.Tiers.emplace_back(TTestSchema::TStorageTier("default").SetTtlColumn("timestamp"));
-        TestTtl(false, true, specs);
-    }
-
-    Y_UNIT_TEST(RebootOneTier) {
-        NColumnShard::gAllowLogBatchingDefaultValue = false;
-        TTestSchema::TTableSpecials specs;
-        specs.SetTtlColumn("timestamp");
-//        specs.Tiers.emplace_back(TTestSchema::TStorageTier("default").SetTtlColumn("timestamp"));
-        TestTtl(true, true, specs);
-    }
-
-    Y_UNIT_TEST(OneTierExternalTtl) {
-        TTestSchema::TTableSpecials specs;
-        specs.SetTtlColumn("timestamp");
-//        specs.Tiers.emplace_back(TTestSchema::TStorageTier("default").SetTtlColumn("timestamp"));
-        TestTtl(false, false, specs);
-    }
-
-    Y_UNIT_TEST(RebootOneTierExternalTtl) {
-        NColumnShard::gAllowLogBatchingDefaultValue = false;
-        TTestSchema::TTableSpecials specs;
-        specs.SetTtlColumn("timestamp");
-//        specs.Tiers.emplace_back(TTestSchema::TStorageTier("default").SetTtlColumn("timestamp"));
-        TestTtl(true, false, specs);
-    }
 
     // TODO: EnableOneTierAfterTtl, EnableTtlAfterOneTier
 

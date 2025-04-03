@@ -56,10 +56,22 @@ namespace NActors {
             if (sharedThreadCount) {
                 sht = 1;
             }
-            poolInfos.push_back(TPoolShortInfo{static_cast<i16>(Config.Basic[poolIds[i]].PoolId), sharedThreadCount, true, Config.Basic[poolIds[i]].PoolName});
+            poolInfos.push_back(TPoolShortInfo{
+                .PoolId = static_cast<i16>(Config.Basic[poolIds[i]].PoolId),
+                .SharedThreadCount = sharedThreadCount,
+                .ForeignSlots = 0,
+                .InPriorityOrder = true,
+                .PoolName = Config.Basic[poolIds[i]].PoolName
+            });
         }
         for (ui32 i = 0; i < Config.IO.size(); ++i) {
-            poolInfos.push_back(TPoolShortInfo{static_cast<i16>(Config.IO[i].PoolId), 0, false, Config.IO[i].PoolName});
+            poolInfos.push_back(TPoolShortInfo{
+                .PoolId = static_cast<i16>(Config.IO[i].PoolId),
+                .SharedThreadCount = 0,
+                .ForeignSlots = 0,
+                .InPriorityOrder = false,
+                .PoolName = Config.IO[i].PoolName
+            });
         }
         Shared = std::make_unique<TSharedExecutorPool>(Config.Shared, poolInfos);
 

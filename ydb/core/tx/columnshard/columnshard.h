@@ -13,6 +13,7 @@
 #include <ydb/core/tx/long_tx_service/public/types.h>
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
+#include <ydb/core/tx/columnshard/common/path_id.h>
 
 namespace NKikimr {
 
@@ -97,7 +98,7 @@ namespace TEvColumnShard {
 
     struct TEvInternalScan: public TEventLocal<TEvInternalScan, EvInternalScan> {
     private:
-        YDB_READONLY(ui64, PathId, 0);
+        YDB_READONLY_DEF(NColumnShard::TInternalPathId, PathId);
         YDB_READONLY(NOlap::TSnapshot, Snapshot, NOlap::TSnapshot::Zero());
         YDB_READONLY_DEF(std::optional<ui64>, LockId);
         YDB_ACCESSOR(bool, Reverse, false);
@@ -113,7 +114,7 @@ namespace TEvColumnShard {
             ColumnIds.emplace_back(id);
         }
 
-        TEvInternalScan(const ui64 pathId, const NOlap::TSnapshot& snapshot, const std::optional<ui64> lockId)
+        TEvInternalScan(const NColumnShard::TInternalPathId pathId, const NOlap::TSnapshot& snapshot, const std::optional<ui64> lockId)
             : PathId(pathId)
             , Snapshot(snapshot)
             , LockId(lockId)
@@ -278,7 +279,7 @@ namespace TEvColumnShard {
             Record.SetOrigin(origin);
             Record.SetTxInitiator(0);
             Record.SetWriteId(writeId);
-            Record.SetTableId(writeMeta.GetTableId());
+            Record.SetTableId(writeMeta.GetTableId().GetRawValue());
             Record.SetDedupId(writeMeta.GetDedupId());
             Record.SetStatus(status);
         }

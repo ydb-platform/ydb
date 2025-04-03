@@ -122,6 +122,54 @@ void CreateRootTable(TTestEnv& env, ui64 partitionCount = 1, bool fillTable = fa
     }
 }
 
+void BreakLock(TSession& session, const TString& tableName) {
+    std::optional<TTransaction> tx1;
+
+    {  // tx0: write test data
+        auto result = session.ExecuteDataQuery(TStringBuilder() <<
+            "UPSERT INTO `" << tableName << "` (Key, Value) VALUES (55u, \"Fifty five\")",
+        TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {  // tx0: read all data
+        auto result = session.ExecuteDataQuery(TStringBuilder() <<
+            "SELECT * FROM `" << tableName << "`",
+        TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    while (!tx1) {
+    // tx1: start reading
+        auto result = session.ExecuteDataQuery(TStringBuilder() <<
+            "SELECT * FROM `" << tableName << "` WHERE Key = 55u",
+        TTxControl::BeginTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        TString yson = FormatResultSetYson(result.GetResultSet(0));
+        if (yson == "[]") {
+            continue;
+        }
+            
+        NKqp::CompareYson(R"([
+            [[55u];["Fifty five"]];
+        ])", yson);
+        tx1 = result.GetTransaction();
+        UNIT_ASSERT(tx1);
+    }
+
+    {  // tx2: write + commit
+        auto result = session.ExecuteDataQuery(TStringBuilder() <<
+            "UPSERT INTO `" << tableName << "` (Key, Value) VALUES (55u, \"NewValue1\")",
+        TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {  // tx1: try to commit
+        auto result = tx1->Commit().ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }   
+}
+
 void SetupAuthEnvironment(TTestEnv& env) {
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NLog::PRI_DEBUG);
     env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NLog::PRI_TRACE);
@@ -170,6 +218,47 @@ void CheckEmpty(TScanQueryPartIterator& it) {
     NKqp::CompareYson(expected, NKqp::StreamResultToYson(it));
 }
 
+size_t GetRowCount(TTableClient& client, const TString& tableName, const TString& condition = {}) {
+    TStringBuilder query;
+    query << "SELECT * FROM `" << tableName << "`";
+    if (!condition.empty())
+        query << " WHERE " << condition;
+    auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+    UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+    auto ysonString = NKqp::StreamResultToYson(it);
+    auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node);
+    UNIT_ASSERT(node.IsList());
+    return node.AsList().size();
+}
+
+ui64 GetIntervalEnd(TTableClient& client, const TString& name) {
+    TStringBuilder query;
+    query << "SELECT MAX(IntervalEnd) FROM `" << name << "`";
+    auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+    UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+    auto ysonString = NKqp::StreamResultToYson(it);
+    auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node);
+    UNIT_ASSERT(node.IsList());
+    UNIT_ASSERT(node.AsList().size() == 1);
+    auto row = node.AsList()[0];
+    UNIT_ASSERT(row.IsList());
+    UNIT_ASSERT(row.AsList().size() == 1);
+    auto value = row.AsList()[0];
+    UNIT_ASSERT(value.IsList());
+    UNIT_ASSERT(value.AsList().size() == 1);
+    return value.AsList()[0].AsUint64();
+}
+
+void WaitForStats(TTableClient& client, const TString& tableName, const TString& condition = {}) {
+    size_t rowCount = 0;
+    for (size_t iter = 0; iter < 30; ++iter) {
+        if (rowCount = GetRowCount(client, tableName, condition))
+            break;
+        Sleep(TDuration::Seconds(5));
+    }
+    UNIT_ASSERT_GE(rowCount, 0);   
+}
+
 class TShowCreateTableChecker {
 public:
 
@@ -177,7 +266,10 @@ public:
         : Env(env)
         , QueryClient(NQuery::TQueryClient(Env.GetDriver()))
         , TableClient(TTableClient(Env.GetDriver()))
-    {}
+    {
+        CreateTier("tier1");
+        CreateTier("tier2");
+    }
 
     void CheckShowCreateTable(const std::string& query, const std::string& tableName, TString formatQuery = "", bool temporary = false) {
         auto session = QueryClient.GetSession().GetValueSync().GetSession();
@@ -194,16 +286,16 @@ public:
             UNIT_ASSERT_VALUES_EQUAL_C(UnescapeC(formatQuery), UnescapeC(showCreateTableQuery), UnescapeC(showCreateTableQuery));
         }
 
-        auto tableDescOrig = DescribeTable(tableName, sessionId);
+        auto describeResultOrig = DescribeTable(tableName, sessionId);
 
         DropTable(session, tableName);
 
         CreateTable(session, showCreateTableQuery);
-        auto tableDescNew = DescribeTable(tableName, sessionId);
+        auto describeResultNew = DescribeTable(tableName, sessionId);
 
         DropTable(session, tableName);
 
-        CompareDescriptions(std::move(tableDescOrig), std::move(tableDescNew), showCreateTableQuery);
+        CompareDescriptions(std::move(describeResultOrig), std::move(describeResultNew), showCreateTableQuery);
     }
 
 private:
@@ -213,7 +305,24 @@ private:
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    NKikimrSchemeOp::TTableDescription DescribeTable(const std::string& tableName,
+    void CreateTier(const TString& tierName) {
+        auto session = TableClient.CreateSession().GetValueSync().GetSession();
+        auto result = session.ExecuteSchemeQuery(R"(
+            UPSERT OBJECT `accessKey` (TYPE SECRET) WITH (value = `secretAccessKey`);
+            UPSERT OBJECT `secretKey` (TYPE SECRET) WITH (value = `fakeSecret`);
+            CREATE EXTERNAL DATA SOURCE `)" + tierName + R"(` WITH (
+                SOURCE_TYPE="ObjectStorage",
+                LOCATION="http://fake.fake/olap-)" + tierName + R"(",
+                AUTH_METHOD="AWS",
+                AWS_ACCESS_KEY_ID_SECRET_NAME="accessKey",
+                AWS_SECRET_ACCESS_KEY_SECRET_NAME="secretKey",
+                AWS_REGION="ru-central1"
+        );
+        )").GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    Ydb::Table::CreateTableRequest DescribeTable(const std::string& tableName,
             std::optional<TString> sessionId = std::nullopt) {
 
         auto describeTable = [this](const TString& path) {
@@ -228,7 +337,19 @@ private:
             runtime.Send(new IEventHandle(MakeTxProxyID(), sender, request.Release()));
             auto reply = runtime.GrabEdgeEventRethrow<NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult>(handle);
 
-            return reply->GetRecord().GetPathDescription().GetTable();
+            if (reply->GetRecord().GetPathDescription().HasColumnTableDescription()) {
+                const auto& tableDescription = reply->GetRecord().GetPathDescription().GetColumnTableDescription();
+
+                return *GetCreateTableRequest(tableDescription);
+            }
+
+            if (!reply->GetRecord().GetPathDescription().HasTable()) {
+                UNIT_ASSERT_C(false, "Invalid path type");
+            }
+
+            const auto& tableDescription = reply->GetRecord().GetPathDescription().GetTable();
+
+            return *GetCreateTableRequest(tableDescription);
         };
 
         TString tablePath = TString(tableName);
@@ -294,14 +415,11 @@ private:
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     }
 
-    void CompareDescriptions(NKikimrSchemeOp::TTableDescription origDesc, NKikimrSchemeOp::TTableDescription newDesc, const std::string& showCreateTableQuery) {
-        Ydb::Table::CreateTableRequest requestFirst = *GetCreateTableRequest(origDesc);
-        Ydb::Table::CreateTableRequest requestSecond = *GetCreateTableRequest(newDesc);
-
+    void CompareDescriptions(Ydb::Table::CreateTableRequest describeResultOrig, Ydb::Table::CreateTableRequest describeResultNew, const std::string& showCreateTableQuery) {
         TString first;
-        ::google::protobuf::TextFormat::PrintToString(requestFirst, &first);
+        ::google::protobuf::TextFormat::PrintToString(describeResultOrig, &first);
         TString second;
-        ::google::protobuf::TextFormat::PrintToString(requestSecond, &second);
+        ::google::protobuf::TextFormat::PrintToString(describeResultNew, &second);
 
         UNIT_ASSERT_VALUES_EQUAL_C(first, second, showCreateTableQuery);
     }
@@ -337,6 +455,15 @@ private:
         if (!FillSequenceDescription(scheme, tableDesc, status, error)) {
             return Nothing();
         }
+
+        return scheme;
+    }
+
+    TMaybe<Ydb::Table::CreateTableRequest> GetCreateTableRequest(const NKikimrSchemeOp::TColumnTableDescription& tableDesc) {
+        Ydb::Table::CreateTableRequest scheme;
+
+        FillColumnDescription(scheme, tableDesc);
+        FillColumnFamilies(scheme, tableDesc);
 
         return scheme;
     }
@@ -853,8 +980,109 @@ R"(CREATE TABLE `test_show_create` (
     PRIMARY KEY (`BoolValue`, `Int32Value`, `Uint32Value`, `Int64Value`, `Uint64Value`, `StringValue`, `Utf8Value`)
 )
 WITH (PARTITION_AT_KEYS = ((FALSE), (FALSE, 1, 2), (TRUE, 1, 1, 1, 1, 'str'), (TRUE, 1, 1, 100, 0, 'str', 'utf')));
-)",
-        true);
+)"
+        );
+    }
+
+    Y_UNIT_TEST(ShowCreateTablePartitionByHash) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateTableChecker checker(env);
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64 NOT NULL,
+                Key2 String NOT NULL,
+                Value String,
+                PRIMARY KEY (Key1, Key2)
+            )
+            PARTITION BY HASH(Key1, Key2)
+            WITH (
+                STORE = COLUMN
+            );
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key1` Uint64 NOT NULL,
+    `Key2` String NOT NULL,
+    `Value` String,
+    PRIMARY KEY (`Key1`, `Key2`)
+)
+PARTITION BY HASH (`Key1`, `Key2`)
+WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64
+);
+)"
+        );
+    }
+
+    Y_UNIT_TEST(ShowCreateTableColumn) {
+        TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_COMPILE_SERVICE, NActors::NLog::PRI_DEBUG);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::PRI_TRACE);
+        env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+        TShowCreateTableChecker checker(env);
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key1 Uint64 NOT NULL,
+                Key2 Utf8 NOT NULL,
+                Key3 Int32 NOT NULL,
+                Value1 Utf8 FAMILY Family1,
+                Value2 Int16 FAMILY Family2,
+                Value3 String FAMILY Family2,
+                PRIMARY KEY (Key1, Key2, Key3),
+                FAMILY default (
+                    COMPRESSION = "zstd"
+                ),
+                FAMILY Family1 (
+                    COMPRESSION = "off"
+                ),
+                FAMILY Family2 (
+                    COMPRESSION = "lz4"
+                )
+            )
+            PARTITION BY HASH(`Key1`, `Key2`)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 100,
+                TTL =
+                    Interval("PT10S") TO EXTERNAL DATA SOURCE `/Root/tier1`,
+                    Interval("PT1H") DELETE
+                    ON Key1 AS SECONDS
+            );
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key1` Uint64 NOT NULL,
+    `Key2` Utf8 NOT NULL,
+    `Key3` Int32 NOT NULL,
+    `Value1` Utf8,
+    `Value2` Int16,
+    `Value3` String,
+    FAMILY `default` (COMPRESSION = 'zstd'),
+    FAMILY `Family1` (COMPRESSION = 'off'),
+    FAMILY `Family2` (COMPRESSION = 'lz4'),
+    PRIMARY KEY (`Key1`, `Key2`, `Key3`)
+)
+PARTITION BY HASH (`Key1`, `Key2`)
+WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 100,
+    TTL =
+        INTERVAL('PT10S') TO EXTERNAL DATA SOURCE `/Root/tier1`,
+        INTERVAL('PT1H') DELETE
+    ON Key1 AS SECONDS
+);
+)"
+        );
     }
 
     Y_UNIT_TEST(ShowCreateTablePartitionSettings) {
@@ -999,6 +1227,82 @@ R"(CREATE TABLE `test_show_create` (
     PRIMARY KEY (`Key`)
 )
 WITH (TTL = INTERVAL('PT1H') DELETE ON Key AS SECONDS);
+)"
+        );
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Uint32 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+            PARTITION BY HASH(`Key`)
+            WITH (
+                STORE = COLUMN,
+                TTL = INTERVAL('PT1H') DELETE ON Key AS MILLISECONDS
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Uint32 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+            PARTITION BY HASH(`Key`)
+            WITH (
+                STORE = COLUMN,
+                TTL =
+                    INTERVAL('PT1H') TO EXTERNAL DATA SOURCE `/Root/tier2`,
+                    INTERVAL('PT3H') DELETE
+                ON Key AS NANOSECONDS
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Uint64 NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+            PARTITION BY HASH(`Key`)
+            WITH (
+                STORE = COLUMN,
+                TTL = INTERVAL('PT1H') TO EXTERNAL DATA SOURCE `/Root/tier2` ON Key AS MICROSECONDS
+            );
+        )", "test_show_create");
+
+        checker.CheckShowCreateTable(R"(
+            CREATE TABLE test_show_create (
+                Key Timestamp NOT NULL,
+                Value String,
+                PRIMARY KEY (Key)
+            )
+            PARTITION BY HASH(`Key`)
+            WITH (
+                STORE = COLUMN,
+                TTL =
+                    Interval("PT10S") TO EXTERNAL DATA SOURCE `/Root/tier1`,
+                    Interval("PT1M") TO EXTERNAL DATA SOURCE `/Root/tier2`,
+                    Interval("PT1H") DELETE
+                    ON Key
+            );
+        )", "test_show_create",
+R"(CREATE TABLE `test_show_create` (
+    `Key` Timestamp NOT NULL,
+    `Value` String,
+    PRIMARY KEY (`Key`)
+)
+PARTITION BY HASH (`Key`)
+WITH (
+    STORE = COLUMN,
+    AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 64,
+    TTL =
+        INTERVAL('PT10S') TO EXTERNAL DATA SOURCE `/Root/tier1`,
+        INTERVAL('PT1M') TO EXTERNAL DATA SOURCE `/Root/tier2`,
+        INTERVAL('PT1H') DELETE
+    ON Key
+);
 )"
         );
     }
@@ -1556,6 +1860,36 @@ WITH (
         check.Uint64(1u); // LastTtlRowsErased
     }
 
+    Y_UNIT_TEST(PartitionStatsLocksFields) {
+        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+
+        TTestEnv env;
+        CreateRootTable(env, /* partitionCount */ 1, /* fillTable */ true);
+
+        TTableClient client(env.GetDriver());
+        auto session = client.CreateSession().GetValueSync().GetSession();
+     
+        BreakLock(session, "/Root/Table0");
+
+        WaitForStats(client, "/Root/.sys/partition_stats", "LocksBroken != 0");
+
+        auto it = client.StreamExecuteScanQuery(R"(
+            SELECT
+                LocksAcquired,
+                LocksWholeShard,
+                LocksBroken
+            FROM `/Root/.sys/partition_stats`;
+        )").GetValueSync();
+
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        auto ysonString = NKqp::StreamResultToYson(it);
+        TYsonFieldChecker check(ysonString, 3);
+
+        check.Uint64(1); // LocksAcquired
+        check.Uint64(0); // LocksWholeShard
+        check.Uint64(1); // LocksBroken
+    }    
+
     Y_UNIT_TEST(PartitionStatsFields) {
         NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
 
@@ -1611,13 +1945,16 @@ WITH (
                 TxRejectedByOutOfStorage,
                 TxRejectedByOverload,
                 FollowerId,
+                LocksAcquired,
+                LocksWholeShard,
+                LocksBroken,
                 UpdateTime
             FROM `/Root/.sys/partition_stats`;
         )").GetValueSync();
 
         UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
         auto ysonString = NKqp::StreamResultToYson(it);
-        TYsonFieldChecker check(ysonString, 24);
+        TYsonFieldChecker check(ysonString, 27);
 
         check.Uint64GreaterOrEquals(nowUs); // AccessTime
         check.DoubleGreaterOrEquals(0.0); // CPUCores
@@ -1642,6 +1979,9 @@ WITH (
         check.Uint64(0u); // TxRejectedByOutOfStorage
         check.Uint64(0u); // TxRejectedByOverload
         check.Uint64(0u); // FollowerId
+        check.Uint64(0u); // LocksAcquired
+        check.Uint64(0u); // LocksWholeShard
+        check.Uint64(0u); // LocksBroken
         check.Uint64GreaterOrEquals(nowUs); // UpdateTime
     }
 
@@ -2031,38 +2371,7 @@ WITH (
         }
     }
 
-    size_t GetRowCount(TTableClient& client, const TString& tableName, const TString& condition = {}) {
-        TStringBuilder query;
-        query << "SELECT * FROM `" << tableName << "`";
-        if (!condition.empty())
-            query << " WHERE " << condition;
-        auto it = client.StreamExecuteScanQuery(query).GetValueSync();
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        auto ysonString = NKqp::StreamResultToYson(it);
-        auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node);
-        UNIT_ASSERT(node.IsList());
-        return node.AsList().size();
-    }
-
-    ui64 GetIntervalEnd(TTableClient& client, const TString& name) {
-        TStringBuilder query;
-        query << "SELECT MAX(IntervalEnd) FROM `" << name << "`";
-        auto it = client.StreamExecuteScanQuery(query).GetValueSync();
-        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
-        auto ysonString = NKqp::StreamResultToYson(it);
-        auto node = NYT::NodeFromYsonString(ysonString, ::NYson::EYsonType::Node);
-        UNIT_ASSERT(node.IsList());
-        UNIT_ASSERT(node.AsList().size() == 1);
-        auto row = node.AsList()[0];
-        UNIT_ASSERT(row.IsList());
-        UNIT_ASSERT(row.AsList().size() == 1);
-        auto value = row.AsList()[0];
-        UNIT_ASSERT(value.IsList());
-        UNIT_ASSERT(value.AsList().size() == 1);
-        return value.AsList()[0].AsUint64();
-    }
-
-    Y_UNIT_TEST(TopPartitionsFields) {
+    Y_UNIT_TEST(TopPartitionsByCpuFields) {
         NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
 
         auto nowUs = TInstant::Now().MicroSeconds();
@@ -2114,7 +2423,7 @@ WITH (
         check.Uint64(0); // InFlightTxCount
     }
 
-    Y_UNIT_TEST(TopPartitionsTables) {
+    Y_UNIT_TEST(TopPartitionsByCpuTables) {
         NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
 
         constexpr ui64 partitionCount = 5;
@@ -2144,7 +2453,7 @@ WITH (
         check("/Root/Tenant1/.sys/top_partitions_one_hour");
     }
 
-    Y_UNIT_TEST(TopPartitionsRanges) {
+    Y_UNIT_TEST(TopPartitionsByCpuRanges) {
         NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
 
         constexpr ui64 partitionCount = 5;
@@ -2225,7 +2534,7 @@ WITH (
         }
     }
 
-    Y_UNIT_TEST(TopPartitionsFollowers) {
+    Y_UNIT_TEST(TopPartitionsByCpuFollowers) {
         NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
 
         auto nowUs = TInstant::Now().MicroSeconds();
@@ -2400,6 +2709,58 @@ WITH (
         }
     }
 
+    Y_UNIT_TEST(TopPartitionsByTliFields) {
+        NDataShard::gDbStatsReportInterval = TDuration::Seconds(0);
+
+        TTestEnv env(1, 4, {.EnableSVP = true});
+        CreateTenantsAndTables(env);
+
+        TTableClient client(env.GetDriver());
+        auto session = client.CreateSession().GetValueSync().GetSession();
+     
+        const TString tableName = "/Root/Tenant1/Table1";
+        const TString viewName = "/Root/Tenant1/.sys/top_partitions_by_tli_one_minute";
+
+        BreakLock(session, tableName);
+
+        WaitForStats(client, viewName, "LocksAcquired != 0");
+
+        ui64 intervalEnd = GetIntervalEnd(client, viewName);
+
+        TStringBuilder query;
+        query << R"(
+            SELECT
+                IntervalEnd,
+                Rank,
+                TabletId,
+                Path,
+                LocksAcquired,
+                LocksWholeShard,
+                LocksBroken,
+                NodeId,
+                DataSize,
+                RowCount,
+                IndexSize)"
+            << " FROM `" << viewName << "`"
+            << " WHERE IntervalEnd = CAST(" << intervalEnd << "ul as Timestamp)"
+            << " AND Path=\"" << tableName << "\"";
+        auto it = client.StreamExecuteScanQuery(query).GetValueSync();
+        UNIT_ASSERT_C(it.IsSuccess(), it.GetIssues().ToString());
+        auto ysonString = NKqp::StreamResultToYson(it);
+        TYsonFieldChecker check(ysonString, 11);
+        check.Uint64(intervalEnd); // IntervalEnd
+        check.Uint64(1); // Rank
+        check.Uint64Greater(0); // TabletId
+        check.String(tableName); // Path
+        check.Uint64GreaterOrEquals(1); // LocksAcquired
+        check.Uint64(0); // LocksWholeShard
+        check.Uint64GreaterOrEquals(1); // LocksBroken
+        check.Uint64Greater(0); // NodeId
+        check.Uint64Greater(0); // DataSize
+        check.Uint64(4); // RowCount
+        check.Uint64(0); // IndexSize
+    }
+
     Y_UNIT_TEST(Describe) {
         TTestEnv env;
         CreateRootTable(env);
@@ -2419,7 +2780,7 @@ WITH (
             const auto& columns = table.GetTableColumns();
             const auto& keyColumns = table.GetPrimaryKeyColumns();
 
-            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 27);
+            UNIT_ASSERT_VALUES_EQUAL(columns.size(), 30);
             UNIT_ASSERT_STRINGS_EQUAL(columns[0].Name, "OwnerId");
             UNIT_ASSERT_STRINGS_EQUAL(FormatType(columns[0].Type), "Uint64?");
 
@@ -2580,8 +2941,7 @@ WITH (
             UNIT_ASSERT_VALUES_EQUAL(entry.Type, ESchemeEntryType::Directory);
 
             auto children = result.GetChildren();
-
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 31);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 33);
 
             THashSet<TString> names;
             for (const auto& child : children) {
@@ -2600,7 +2960,7 @@ WITH (
 
             auto children = result.GetChildren();
 
-            UNIT_ASSERT_VALUES_EQUAL(children.size(), 25);
+            UNIT_ASSERT_VALUES_EQUAL(children.size(), 27);
 
             THashSet<TString> names;
             for (const auto& child : children) {

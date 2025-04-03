@@ -8,6 +8,7 @@
 #include <ydb/core/tablet_flat/flat_mem_warm.h>
 #include <ydb/core/tablet_flat/flat_row_nulls.h>
 #include <ydb/core/tablet_flat/flat_table_subset.h>
+#include <ydb/core/tablet_flat/util_fmt_abort.h>
 
 #include <util/generic/xrange.h>
 
@@ -60,7 +61,7 @@ namespace NTest {
 
             void Ver(TRowVersion) override
             {
-                Y_ABORT("unsupported");
+                Y_TABLET_ERROR("unsupported");
             }
 
             TCooker Cooker;
@@ -127,7 +128,7 @@ namespace NTest {
                 if (auto *mem = dynamic_cast<TMem*>(one.Get())) {
                     auto table = mem->Cooker.Unwrap();
 
-                    Y_ABORT_UNLESS(table->GetRowCount(), "Got empty IBand");
+                    Y_ENSURE(table->GetRowCount(), "Got empty IBand");
 
                     subset->Frozen.emplace_back(std::move(table), table->Immediate());
                 } else if (auto *part_ = dynamic_cast<TPart*>(one.Get())) {
@@ -154,7 +155,7 @@ namespace NTest {
                     TOverlay{partView.Screen, partView.Slices}.Validate();
                     subset->Flatten.push_back(partView);
                 } else {
-                    Y_ABORT("Unknown IBand writer type, internal error");
+                    Y_TABLET_ERROR("Unknown IBand writer type, internal error");
                 }
             }
 

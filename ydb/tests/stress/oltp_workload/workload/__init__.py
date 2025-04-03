@@ -24,7 +24,6 @@ class WorkloadInsertDeleteAllTypes(WorkloadBase):
 
     def _loop(self):
         table_path = self.get_table_path(self.table_name)
-
         create_sql = f"""
             CREATE TABLE `{table_path}` (
                 pk Uint64,

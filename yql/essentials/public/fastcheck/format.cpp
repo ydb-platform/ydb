@@ -77,7 +77,7 @@ private:
         auto formatter = NSQLFormat::MakeSqlFormatter(lexers, parsers, settings);
         TString formattedQuery;
         res.Success = formatter->Format(request.Program, formattedQuery, res.Issues);
-        if (res.Success && formattedQuery != NormalizeEOL(request.Program)) {
+        if (res.Success && NormalizeEOL(formattedQuery) != NormalizeEOL(request.Program)) {
             res.Success = false;
             TPosition origPos(0, 1, request.File);
             TTextWalker origWalker(origPos, true);

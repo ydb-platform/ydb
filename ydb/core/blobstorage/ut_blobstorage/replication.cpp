@@ -1,9 +1,15 @@
 #include <ydb/core/blobstorage/ut_blobstorage/lib/env.h>
 #include <ydb/core/blobstorage/ut_blobstorage/lib/common.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/base/hullbase_barrier.h>
+
 #include <util/system/info.h>
+#include <util/stream/null.h>
+
+#include "ut_helpers.h"
 
 #define SINGLE_THREAD 1
+
+#define Ctest Cnull
 
 enum class EState {
     OK,
@@ -348,5 +354,120 @@ Y_UNIT_TEST_SUITE(Replication) {
 
     Y_UNIT_TEST(ReplStuck_mirror3dc) {
         DoTestCase(TBlobStorageGroupType::ErasureMirror3dc, {E::OK, E::FORMAT, E::OK, E::OK, E::OFFLINE, E::OK, E::OK, E::OFFLINE, E::OK}, true);
+    }
+}
+
+struct TTestCtx : public TTestCtxBase {
+public:
+    TTestCtx(TBlobStorageGroupType erasure, ui64 pdiskSize, ui32 groupsCount = 3)
+        : TTestCtxBase(TEnvironmentSetup::TSettings{
+            .NodeCount = erasure.BlobSubgroupSize(),
+            .Erasure = erasure,
+            .PDiskSize = pdiskSize,
+            .TrackSharedQuotaInPDiskMock = true,
+        })
+        , PDiskSize(pdiskSize)
+        , GroupsCount(groupsCount)
+    {}
+
+    void Initialize() override {
+        Env->CreateBoxAndPool(GroupsCount, GroupsCount);
+        Env->Sim(TDuration::Minutes(1));
+
+        BaseConfig = Env->FetchBaseConfig();
+        UNIT_ASSERT_VALUES_EQUAL(BaseConfig.GroupSize(), GroupsCount);
+        for (const auto& group : BaseConfig.GetGroup()) {
+            Groups.push_back(group.GetGroupId());
+        }
+
+        AllocateEdgeActor();
+        for (const ui32 groupId : Groups) {
+            GetGroupStatus(groupId);
+        }
+    }
+
+public:
+    ui64 PDiskSize;
+    ui32 GroupsCount;
+    std::vector<ui32> Groups;
+};
+
+Y_UNIT_TEST_SUITE(ReplicationSpace) {
+    void TestSpace() {
+        TBlobStorageGroupType erasure = TBlobStorageGroupType::ErasureMirror3dc;
+        ui64 diskSize = 3_GB;
+        TTestCtx ctx(erasure, diskSize);
+        ctx.Initialize();
+
+        ui32 chosenNodeId = 0;
+        ui32 chosenPDiskId = 0;
+
+        for (const auto& vslot : ctx.BaseConfig.GetVSlot()) {
+            if (vslot.GetGroupId() == ctx.Groups[0]) {
+                chosenNodeId = vslot.GetVSlotId().GetNodeId();
+                chosenPDiskId = vslot.GetVSlotId().GetPDiskId();
+                break;
+            }
+        }
+
+        UNIT_ASSERT(chosenNodeId != 0);
+
+        // disable self-heal
+        ctx.Env->UpdateSettings(false, true, false);
+
+        ui64 perDiskDataSize = diskSize * 0.6;
+        ui64 dataSize = perDiskDataSize * ctx.NodeCount / 3;
+
+        for (ui32 groupId : ctx.Groups) {
+            ctx.WriteCompressedData(groupId, dataSize, 8_MB);
+            Ctest << "DATA WRITTEN FOR GROUP " << groupId << Endl;
+        }
+
+        Ctest << "REASSIGN DISK" << Endl;
+
+        // find vdisk from another node and move it to the chosen
+        {
+            NKikimrBlobStorage::TConfigRequest request;
+            ui32 groupToMove = 1;
+            for (const auto& vslot : ctx.BaseConfig.GetVSlot()) {
+                if (vslot.GetGroupId() != ctx.Groups[groupToMove]) {
+                    continue;
+                }
+                const ui32 nodeId = vslot.GetVSlotId().GetNodeId();
+                if (nodeId != chosenNodeId) {
+                    NKikimrBlobStorage::TReassignGroupDisk* cmd = request.AddCommand()->MutableReassignGroupDisk();
+                    cmd->SetGroupId(vslot.GetGroupId());
+                    cmd->SetGroupGeneration(vslot.GetGroupGeneration());
+                    cmd->SetFailRealmIdx(vslot.GetFailRealmIdx());
+                    cmd->SetFailDomainIdx(vslot.GetFailDomainIdx());
+                    cmd->SetVDiskIdx(vslot.GetVDiskIdx());
+                    auto* target = cmd->MutableTargetPDiskId();
+                    target->SetNodeId(chosenNodeId);
+                    target->SetPDiskId(chosenPDiskId);
+                    if (++groupToMove == ctx.GroupsCount) {
+                        break;
+                    }
+                }
+            }
+            auto res = ctx.Env->Invoke(request);
+            UNIT_ASSERT_C(res.GetSuccess(), res.GetErrorDescription());
+            UNIT_ASSERT_C(res.GetStatus(0).GetSuccess(), res.GetStatus(0).GetErrorDescription());
+        }
+        Ctest << "DISK REASSIGNED" << Endl;
+
+        ctx.Env->Sim(TDuration::Minutes(3600));
+
+        ctx.Env->Runtime->WrapInActorContext(ctx.Edge, [&] {
+            SendToBSProxy(ctx.Edge, ctx.GroupId, new TEvBlobStorage::TEvStatus(TInstant::Max()));
+        });
+        auto res = ctx.Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvStatusResult>(ctx.Edge,
+                false, TInstant::Max());
+        UNIT_ASSERT(res->Get()->Status == NKikimrProto::OK);
+        Ctest << "FLAGS " << res->Get()->ToString() << Endl;
+        UNIT_ASSERT(!res->Get()->StatusFlags.Check(NKikimrBlobStorage::StatusDiskSpaceRed));
+    }
+
+    Y_UNIT_TEST(Mirror3dc) {
+        TestSpace();
     }
 }

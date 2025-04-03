@@ -56,6 +56,8 @@ struct TEnvironmentSetup {
         const ui32 MaxNumOfSlowDisks = 2;
         const ui32 ReplMaxQuantumBytes = 0;
         const ui32 ReplMaxDonorNotReadyCount = 0;
+        const ui64 PDiskSize = 10_TB;
+        const bool TrackSharedQuotaInPDiskMock = false;
     };
 
     const TSettings Settings;
@@ -73,8 +75,11 @@ struct TEnvironmentSetup {
             const auto key = std::make_pair(nodeId, pdiskId);
             TIntrusivePtr<TPDiskMockState>& state = Env.PDiskMockStates[key];
             if (!state) {
-                state.Reset(new TPDiskMockState(nodeId, pdiskId, cfg->PDiskGuid, ui64(10) << 40, cfg->ChunkSize,
-                        cfg->ReadOnly, Env.Settings.DiskType));
+                TPDiskMockState::ESpaceColorPolicy spaceColorPolicy = Env.Settings.TrackSharedQuotaInPDiskMock
+                        ? TPDiskMockState::ESpaceColorPolicy::SharedQuota
+                        : TPDiskMockState::ESpaceColorPolicy::None;
+                state.Reset(new TPDiskMockState(nodeId, pdiskId, cfg->PDiskGuid, Env.Settings.PDiskSize, cfg->ChunkSize,
+                        cfg->ReadOnly, Env.Settings.DiskType, spaceColorPolicy));
             }
             const TActorId& actorId = ctx.Register(CreatePDiskMockActor(state), TMailboxType::HTSwap, poolId);
             const TActorId& serviceId = MakeBlobStoragePDiskID(nodeId, pdiskId);

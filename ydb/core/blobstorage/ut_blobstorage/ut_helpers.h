@@ -260,4 +260,74 @@ protected:
     ui32 DataSize;
 };
 
+
+struct TTestCtxBase {
+public:
+    TTestCtxBase(TEnvironmentSetup::TSettings settings)
+        : NodeCount(settings.NodeCount)
+        , Erasure(settings.Erasure)
+        , Env(new TEnvironmentSetup(std::move(settings)))
+    {}
+
+    virtual ~TTestCtxBase() = default;
+
+    void CreateOneGroup() {
+        Env->CreateBoxAndPool(1, 1);
+        Env->Sim(TDuration::Minutes(1));
+
+        BaseConfig = Env->FetchBaseConfig();
+        UNIT_ASSERT_VALUES_EQUAL(BaseConfig.GroupSize(), 1);
+        const auto& group = BaseConfig.GetGroup(0);
+        GroupId = group.GetGroupId();
+    }
+
+    void AllocateEdgeActor() {
+        Edge = Env->Runtime->AllocateEdgeActor(NodeCount);
+    }
+
+    TAutoPtr<TEventHandle<TEvBlobStorage::TEvStatusResult>> GetGroupStatus(ui32 groupId) {
+        Env->Runtime->WrapInActorContext(Edge, [&] {
+            SendToBSProxy(Edge, groupId, new TEvBlobStorage::TEvStatus(TInstant::Max()));
+        });
+        return Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvStatusResult>(Edge, false, TInstant::Max());
+    }
+
+    virtual void Initialize() {
+        CreateOneGroup();
+        AllocateEdgeActor();
+        GetGroupStatus(GroupId);
+    }
+
+    std::vector<TLogoBlobID> WriteCompressedData(ui32 groupId, ui64 totalSize, ui64 blobSize, ui64 tabletId = 5000,
+            ui32 channel = 1, ui32 generation = 1, ui32 step = 1) {
+        std::vector<TLogoBlobID> blobs;
+
+        static ui64 cookie = 0;
+
+        for (ui64 size = 0; size < totalSize; size += blobSize) {
+            blobs.emplace_back(tabletId, generation, step, channel, blobSize, ++cookie);
+
+            Env->Runtime->WrapInActorContext(Edge, [&] {
+                TString data(blobSize, '\0');
+                SendToBSProxy(Edge, groupId, new TEvBlobStorage::TEvPut(blobs.back(), data, TInstant::Max()),
+                        NKikimrBlobStorage::TabletLog);
+            });
+
+            auto res = Env->WaitForEdgeActorEvent<TEvBlobStorage::TEvPutResult>(
+                    Edge, false, TInstant::Max());
+            UNIT_ASSERT(res->Get()->Status == NKikimrProto::OK);
+        }
+        return blobs;
+    }
+
+public:
+    ui32 NodeCount;
+    TBlobStorageGroupType Erasure;
+    std::shared_ptr<TEnvironmentSetup> Env;
+
+    NKikimrBlobStorage::TBaseConfig BaseConfig;
+    ui32 GroupId;
+    TActorId Edge;
+};
+
 } // namespace NKikimr

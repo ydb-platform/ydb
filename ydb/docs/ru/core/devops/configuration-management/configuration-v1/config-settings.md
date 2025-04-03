@@ -2,6 +2,8 @@
 
 {% include [deprecated](_includes/deprecated.md) %}
 
+{% include [v2-config-setting](_includes/v2-config-settings.md) %}
+
 Статическая конфигурация кластера задается в YAML-файле, передаваемом в параметре `--yaml-config` при запуске узлов кластера.
 
 В статье приведено описание основных групп конфигурируемых параметров в данном файле.

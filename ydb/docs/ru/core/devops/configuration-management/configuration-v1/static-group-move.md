@@ -2,11 +2,11 @@
 
 {% include [deprecated](_includes/deprecated.md) %}
 
-Если нужно вывести из эксплуатации хост кластера {{ ydb-short-name }}, на котором располагается часть [статической группы](../../../reference/configuration/index.md#blob_storage_config), необходимо переместить её на другой хост.
+Если нужно вывести из эксплуатации хост кластера {{ ydb-short-name }}, на котором располагается часть [статической группы](../../../devops/configuration-management/configuration-v1/config-settings.md#blob_storage_config), необходимо переместить её на другой хост.
 
 {% include [warning-configuration-error](_includes/warning-configuration-error.md) %}
 
-В качестве примера рассмотрим кластер {{ ydb-short-name }}, в котором на хосте с `node_id:1` сконфигурирован и запущен [статический узел](../../../reference/configuration/index.md#hosts). Этот узел обслуживает часть статической группы.
+В качестве примера рассмотрим кластер {{ ydb-short-name }}, в котором на хосте с `node_id:1` сконфигурирован и запущен [статический узел](../../../devops/configuration-management/configuration-v1/config-settings.md#hosts). Этот узел обслуживает часть статической группы.
 
 Фрагмент конфигурации статической группы:
 

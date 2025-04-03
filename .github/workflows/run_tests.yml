@@ -32,13 +32,26 @@ on:
         description: 'Build preset type'
         required: true
         type: string
-        
+      ref:
+        description: 'Branch or commit to use'
+        required: false
+        type: string
+
 jobs:
   run_tests:
     name: Test ${{ github.ref_name }}:${{ inputs.build_preset }}
     timeout-minutes: 1200
     runs-on: ${{ inputs.runner_label }}
     steps:
+      - name: Determine ref to use
+        id: determine-ref
+        run: |
+          if [ -z "${{ inputs.ref }}" ]; then
+            echo "ref=${{ github.ref_name }}" >> $GITHUB_ENV
+          else
+            echo "ref=${{ inputs.ref }}" >> $GITHUB_ENV
+          fi
+
       - name: Set variables based on build_preset
         id: set-vars
         run: |
@@ -62,8 +75,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.ref_name }}
-      
+          ref: ${{ env.ref }}
+
       - name: Setup ssh key for slice 
         uses: webfactory/ssh-agent@v0.9.0
         with:
@@ -74,7 +87,7 @@ jobs:
         with:
           ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
 
-      - name: Run YDB Tests ${{ github.ref_name }}
+      - name: Run YDB Tests ${{ env.ref }}
         timeout-minutes: ${{ fromJson(env.timeout) }}
         uses: ./.github/actions/build_and_test_ya
         with:

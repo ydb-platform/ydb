@@ -43,7 +43,7 @@ namespace NKikimr::NBlobDepot {
         TActorId PipeId;
 
         ui64 NextPutId = 1;
-        THashMap<ui64, std::tuple<TData::TKey, ui64>> PutIdToKey;
+        THashMap<ui64, std::tuple<TData::TKey, ui64>> Puts;
 
         bool ActionInProgress = false;
         bool ResumeScanDataForCopyingInFlight = false;

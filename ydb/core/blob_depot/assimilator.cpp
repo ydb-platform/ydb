@@ -35,26 +35,30 @@ namespace NKikimr::NBlobDepot {
         {}
 
         bool Execute(TTransactionContext& txc, const TActorContext&) override {
-            for (const auto& blob : Blobs) {
-                if (blob.Status == NKikimrProto::OK) {
-                    Y_ABORT_UNLESS(!Self->Data->CanBeCollected(blob.BlobSeqId));
-                    Self->Data->BindToBlob(blob.Key, blob.BlobSeqId, blob.Keep, blob.DoNotKeep, txc, this);
-                } else if (blob.Status == NKikimrProto::NODATA) {
-                    if (const TData::TValue *value = Self->Data->FindKey(blob.Key); value && value->GoingToAssimilate) {
-                        Self->Data->DeleteKey(blob.Key, txc, this);
-                    }
-                }
+            for (auto& blob : Blobs) {
+                std::visit(TOverloaded{
+                    [&](TAssimilatedBlobInfo::TDrop&) {
+                        if (const TData::TValue *value = Self->Data->FindKey(blob.Key); value && value->GoingToAssimilate) {
+                            Self->Data->DeleteKey(blob.Key, txc, this);
+                        }
+                    },
+                    [&](TAssimilatedBlobInfo::TUpdate& update) {
+                        Y_ABORT_UNLESS(!Self->Data->CanBeCollected(update.BlobSeqId));
+                        Self->Data->BindToBlob(blob.Key, update.BlobSeqId, update.Keep, update.DoNotKeep, txc, this);
+                    },
+                }, blob.Action);
             }
             return true;
         }
 
         void Complete(const TActorContext&) override {
             for (const auto& blob : Blobs) {
-                if (blob.BlobSeqId) {
-                    TChannelInfo& channel = Self->Channels[blob.BlobSeqId.Channel];
+                if (auto *update = std::get_if<TAssimilatedBlobInfo::TUpdate>(&blob.Action)) {
+                    const auto& blobSeqId = update->BlobSeqId;
+                    TChannelInfo& channel = Self->Channels[blobSeqId.Channel];
                     const ui32 generation = Self->Executor()->Generation();
                     const TBlobSeqId leastExpectedBlobIdBefore = channel.GetLeastExpectedBlobId(generation);
-                    const size_t numErased = channel.AssimilatedBlobsInFlight.erase(blob.BlobSeqId.ToSequentialNumber());
+                    const size_t numErased = channel.AssimilatedBlobsInFlight.erase(blobSeqId.ToSequentialNumber());
                     Y_ABORT_UNLESS(numErased == 1);
                     if (leastExpectedBlobIdBefore != channel.GetLeastExpectedBlobId(generation)) {
                         Self->Data->OnLeastExpectedBlobIdChange(channel.Index); // allow garbage collection
@@ -432,58 +436,58 @@ namespace NKikimr::NBlobDepot {
     void TAssimilator::Handle(TEvBlobStorage::TEvGetResult::TPtr ev) {
         auto& msg = *ev->Get();
         (msg.Status == NKikimrProto::OK ? Self->AsStats.LatestOkGet : Self->AsStats.LatestErrorGet) = TInstant::Now();
-        Self->JsonHandler.Invalidate();
 
         const auto it = Gets.find(ev->Cookie);
         Y_ABORT_UNLESS(it != Gets.end());
         TGetBatch& get = it->second;
 
-        ui32 getBytes = 0;
         for (ui32 i = 0; i < msg.ResponseSz; ++i) {
             auto& resp = msg.Responses[i];
+
             STLOG(PRI_DEBUG, BLOB_DEPOT, BDT34, "got TEvGetResult", (Id, Self->GetLogId()), (BlobId, resp.Id),
                 (Status, resp.Status), (NumGets, Gets.size()));
-            if (resp.Status == NKikimrProto::OK) {
-                std::vector<ui8> channels(1);
-                if (Self->PickChannels(NKikimrBlobDepot::TChannelKind::Data, channels)) {
-                    TChannelInfo& channel = Self->Channels[channels.front()];
-                    const ui64 value = channel.NextBlobSeqId++;
-                    const auto blobSeqId = TBlobSeqId::FromSequentalNumber(channel.Index, Self->Executor()->Generation(), value);
-                    const TLogoBlobID id = blobSeqId.MakeBlobId(Self->TabletID(), EBlobType::VG_DATA_BLOB, 0, resp.Id.BlobSize());
-                    const ui64 putId = NextPutId++;
-                    SendToBSProxy(SelfId(), channel.GroupId, new TEvBlobStorage::TEvPut(id, TRcBuf(resp.Buffer), TInstant::Max()), putId);
-                    const bool inserted = channel.AssimilatedBlobsInFlight.insert(value).second; // prevent from barrier advancing
-                    Y_ABORT_UNLESS(inserted);
-                    const bool inserted1 = PutIdToKey.try_emplace(putId, TData::TKey(resp.Id), it->first).second;
-                    Y_ABORT_UNLESS(inserted1);
-                    ++get.PutsPending;
-                }
-                getBytes += resp.Id.BlobSize();
-                ++Self->AsStats.BlobsReadOk;
-                Self->JsonHandler.Invalidate();
-            } else if (resp.Status == NKikimrProto::NODATA) {
-                get.AssimilatedBlobs.push_back({
-                    .Status = NKikimrProto::NODATA,
-                    .Key{resp.Id},
-                });
-                ++Self->AsStats.BlobsReadNoData;
-                Self->AsStats.BytesToCopy -= resp.Id.BlobSize();
-                Self->JsonHandler.Invalidate();
-            } else {
-                ++Self->AsStats.BlobsReadError;
-                Self->JsonHandler.Invalidate();
-                continue;
+
+            switch (resp.Status) {
+                case NKikimrProto::OK:
+                    Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_DECOMMIT_GET_BYTES] += resp.Buffer.GetSize();
+                    ++Self->AsStats.BlobsReadOk;
+
+                    if (std::vector<ui8> channels(1); Self->PickChannels(NKikimrBlobDepot::TChannelKind::Data, channels)) {
+                        TChannelInfo& channel = Self->Channels[channels.front()];
+                        const ui64 value = channel.NextBlobSeqId++;
+                        const auto blobSeqId = TBlobSeqId::FromSequentalNumber(channel.Index, Self->Executor()->Generation(), value);
+                        const TLogoBlobID id = blobSeqId.MakeBlobId(Self->TabletID(), EBlobType::VG_DATA_BLOB, 0, resp.Id.BlobSize());
+                        const ui64 putId = NextPutId++;
+                        SendToBSProxy(SelfId(), channel.GroupId, new TEvBlobStorage::TEvPut(id, TRcBuf(resp.Buffer), TInstant::Max()), putId);
+                        const bool inserted = channel.AssimilatedBlobsInFlight.insert(value).second; // prevent from barrier advancing
+                        Y_ABORT_UNLESS(inserted);
+                        const bool inserted1 = Puts.try_emplace(putId, TData::TKey(resp.Id), it->first).second;
+                        Y_ABORT_UNLESS(inserted1);
+                        ++get.PutsPending;
+                    }
+                    break;
+
+                case NKikimrProto::NODATA:
+                    ++Self->AsStats.BlobsReadNoData;
+                    Self->AsStats.BytesToCopy -= resp.Id.BlobSize();
+
+                    get.AssimilatedBlobs.push_back({TData::TKey(resp.Id), TData::TAssimilatedBlobInfo::TDrop{}});
+                    break;
+
+                default:
+                    ++Self->AsStats.BlobsReadError;
+                    continue;
             }
+
             Self->AsStats.LastReadBlobId = resp.Id;
-            Self->JsonHandler.Invalidate();
         }
-        if (getBytes) {
-            Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_DECOMMIT_GET_BYTES] += getBytes;
-        }
+
         if (!get.PutsPending) {
-            Self->Data->ExecuteTxCommitAssimilatedBlob(std::vector(get.AssimilatedBlobs), TEvPrivate::EvTxComplete,
+            Self->Data->ExecuteTxCommitAssimilatedBlob(std::move(get.AssimilatedBlobs), TEvPrivate::EvTxComplete,
                 SelfId(), it->first);
         }
+
+        Self->JsonHandler.Invalidate();
     }
 
     void TAssimilator::HandleTxComplete(TAutoPtr<IEventHandle> ev) {
@@ -509,10 +513,11 @@ namespace NKikimr::NBlobDepot {
         Self->JsonHandler.Invalidate();
 
         // find matching put record
-        const auto it = PutIdToKey.find(ev->Cookie);
-        Y_ABORT_UNLESS(it != PutIdToKey.end());
+        const auto it = Puts.find(ev->Cookie);
+        Y_ABORT_UNLESS(it != Puts.end());
         auto [key, getId] = std::move(it->second);
-        PutIdToKey.erase(it);
+        Puts.erase(it);
+
         STLOG(PRI_DEBUG, BLOB_DEPOT, BDT37, "got TEvPutResult", (Id, Self->GetLogId()), (Msg, msg),
             (NumGets, Gets.size()), (Key, key));
 
@@ -521,14 +526,11 @@ namespace NKikimr::NBlobDepot {
         Y_ABORT_UNLESS(jt != Gets.end());
         TGetBatch& get = jt->second;
         if (msg.Status == NKikimrProto::OK) { // mark blob assimilated only in case of success
-            get.AssimilatedBlobs.push_back({
-                .Status = msg.Status,
-                .BlobSeqId = TBlobSeqId::FromLogoBlobId(msg.Id),
-                .Key = std::move(key),
-            });
+            get.AssimilatedBlobs.push_back({std::move(key), TData::TAssimilatedBlobInfo::TUpdate{
+                TBlobSeqId::FromLogoBlobId(msg.Id)}});
         }
         if (!--get.PutsPending) {
-            Self->Data->ExecuteTxCommitAssimilatedBlob(std::vector(get.AssimilatedBlobs), TEvPrivate::EvTxComplete,
+            Self->Data->ExecuteTxCommitAssimilatedBlob(std::move(get.AssimilatedBlobs), TEvPrivate::EvTxComplete,
                 SelfId(), getId);
         }
     }

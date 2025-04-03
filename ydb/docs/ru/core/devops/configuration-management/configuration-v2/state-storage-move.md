@@ -4,7 +4,7 @@
 
 Если нужно вывести из эксплуатации узел кластера {{ ydb-short-name }}, на котором располагается часть [State Storage](../../../devops/configuration-management/configuration-v1/config-settings.md#domains-state), необходимо переместить её на другой узел.
 
-{% include [warning-configuration-error](_../configuration-v1/includes/warning-configuration-error.md) %}
+{% include [warning-configuration-error](../configuration-v1/_includes/warning-configuration-error.md) %}
 
 При использовании Конфигурации v2 конфигурирование State Storage осуществляется автоматически. Для внесения изменений в конфигурацию необходимо выполнить следующие действия: остановить автоматическое управление конфигурацией State Storage, получить акутальную конфигурацию State Storage, изменить актуальную конфигурацию желаемым способом и указать ее в явном виде как целевую, после чего применить ее, убедиться в примененеии, выполнить вывод узла из эксплуатации, убрать явное указание конфигурации State Storage и включить автоматическое конфигурирование State Storage. 
 

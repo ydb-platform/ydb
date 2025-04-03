@@ -463,7 +463,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
 
         {
             TAtomic unusedPrev;
-            runtime.GetAppData().StaticControlBoard->SetValue(EStaticControlType::ColumnShardControlsGranuleIndexedPortionsCountLimit, 1, unusedPrev);
+            runtime.GetAppData().Icb->SetValue(EStaticControlType::ColumnShardControlsGranuleIndexedPortionsCountLimit, 1, unusedPrev);
         }
         lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batch1);
         lHelper.SendDataViaActorSystem("/Root/olapStore/olapTable", batch2);

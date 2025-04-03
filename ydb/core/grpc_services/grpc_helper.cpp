@@ -32,7 +32,7 @@ NYdbGrpc::IGRpcRequestLimiterPtr TInFlightLimiterRegistry::RegisterRequestType(E
     TGuard<TMutex> g(Lock);
     if (!PerTypeLimiters.count(controlType)) {
         TControlWrapper control(limit, 0, 1000000);
-        StaticControlBoard->RegisterSharedControl(control, controlType);
+        Icb->RegisterSharedControl(control, controlType);
         PerTypeLimiters[controlType] = new TRequestInFlightLimiter(control);
     }
 

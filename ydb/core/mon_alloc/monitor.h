@@ -2,7 +2,7 @@
 
 #include "memory_info.h"
 
-#include <ydb/core/control/lib/static_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 
 #include <ydb/library/actors/core/defs.h>
 #include <ydb/library/actors/core/actor.h>
@@ -32,8 +32,8 @@ namespace NKikimr {
             Y_UNUSED(actorId);
         }
 
-        virtual void RegisterControls(TIntrusivePtr<TStaticControlBoard> staticControlBoard) {
-            Y_UNUSED(staticControlBoard);
+        virtual void RegisterControls(TIntrusivePtr<TControlBoard> icb) {
+            Y_UNUSED(icb);
         }
 
         virtual void Update(TDuration interval) = 0;

@@ -6362,7 +6362,15 @@ bool CanRewriteToBlocksWithInput(const TExprNode& input, const TTypeAnnotationCo
         case NYql::EBlockEngineMode::Disable:
             return false;
         case NYql::EBlockEngineMode::Auto:
-            return input.IsCallable("WideFromBlocks");
+            // The code below matches, whether the input is one of
+            // the following:
+            // * (WideFromBlocks (...))
+            // * (ToFlow (WideFromBlocks (...)))
+            // FIXME: The latter option can be removed when
+            // WideStream overloads are implemented for all nodes,
+            // using this helper.
+            return input.IsCallable("WideFromBlocks") ||
+                   input.IsCallable("ToFlow") && input.Head().IsCallable("WideFromBlocks");
         case NYql::EBlockEngineMode::Force:
             return true;
     }

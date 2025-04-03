@@ -70,10 +70,50 @@ namespace NKikimr::NBlobDepot {
         }
     };
 
+    class TBlobDepot::TData::TTxHardCollectAssimilatedBlobs : public NTabletFlatExecutor::TTransactionBase<TBlobDepot> {
+        const ui64 TabletId;
+        const ui8 Channel;
+        const TGenStep Barrier;
+        const TActorId ParentId;
+
+        ui32 PerGenerationCounter = 0;
+
+    public:
+        TTxType GetTxType() const override { return NKikimrBlobDepot::TXTYPE_HARD_COLLECT_ASSIMILATED_BLOBS; }
+
+        TTxHardCollectAssimilatedBlobs(TBlobDepot *self, ui64 tabletId, ui8 channel, TGenStep barrier, TActorId parentId)
+            : TTransactionBase(self)
+            , TabletId(tabletId)
+            , Channel(channel)
+            , Barrier(barrier)
+            , ParentId(parentId)
+        {}
+
+        bool Execute(TTransactionContext& txc, const TActorContext&) override {
+            NIceDb::TNiceDb db(txc.DB);
+            using T = Schema::Config;
+            PerGenerationCounter = Self->PerGenerationCounter++;
+            db.Table<Schema::Config>().Key(T::Key::Value).Update<T::PerGenerationCounter>(Self->PerGenerationCounter);
+            return true;
+        }
+
+        void Complete(const TActorContext&) override {
+            const bool del = Barrier.Generation() == Max<ui32>() && Barrier.Step() == Max<ui32>();
+            auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(
+                TabletId, Max<ui32>(), del ? Max<ui32>() : PerGenerationCounter, Channel, true, Barrier.Generation(),
+                Barrier.Step(), nullptr, nullptr, TInstant::Max(), false, /*hard=*/ true
+            );
+            ev->Decommission = true;
+            TActivationContext::Send(ParentId, std::move(ev), 0, PerGenerationCounter);
+        }
+    };
+
     void TAssimilator::Bootstrap() {
         if (Token.expired()) {
             return PassAway();
         }
+
+        ExpectedPerGenerationCounter = Self->PerGenerationCounter;
 
         const std::optional<TString>& state = Self->AssimilatorState;
         if (state) {
@@ -113,6 +153,8 @@ namespace NKikimr::NBlobDepot {
             hFunc(TEvBlobStorage::TEvAssimilateResult, Handle);
             hFunc(TEvBlobStorage::TEvGetResult, Handle);
             hFunc(TEvBlobStorage::TEvPutResult, Handle);
+            hFunc(TEvBlobStorage::TEvCollectGarbage, Handle);
+            hFunc(TEvBlobStorage::TEvCollectGarbageResult, Handle);
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             hFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
             hFunc(TEvBlobStorage::TEvControllerGroupDecommittedResponse, Handle);
@@ -315,8 +357,12 @@ namespace NKikimr::NBlobDepot {
         };
 
         Self->Data->ScanRange(range, nullptr, nullptr, [&](const TData::TKey& key, const TData::TValue& value) {
+            const TLogoBlobID& id = key.GetBlobId();
+            const auto blobQueueKey = std::make_tuple(id.TabletID(), id.Channel());
+            auto& queue = LeastBlobQueue[blobQueueKey];
             if (value.GoingToAssimilate) {
-                Self->AsStats.BytesToCopy += key.GetBlobId().BlobSize();
+                queue.emplace_back(TGenStep(id), id.Cookie(), id.BlobSize());
+                Self->AsStats.BytesToCopy += id.BlobSize();
                 invalidate = true;
             }
             LastPlanScannedKey.emplace(key.GetBlobId());
@@ -336,6 +382,14 @@ namespace NKikimr::NBlobDepot {
             ResumeScanDataForPlanningInFlight = true;
             TActivationContext::Send(new IEventHandle(TEvPrivate::EvResumeScanDataForPlanning, 0, SelfId(), {}, nullptr, 0));
             return;
+        }
+
+        for (const auto& [key, value] : LeastBlobQueue) {
+            if (value.empty()) {
+                const auto& [tabletId, channel] = key;
+                Self->Data->ExecuteTxHardCollectAssimilatedBlobs(tabletId, channel, TGenStep(Max<ui32>(), Max<ui32>()),
+                    SelfId());
+            }
         }
 
         ActionInProgress = false;
@@ -421,6 +475,7 @@ namespace NKikimr::NBlobDepot {
                 LastScannedKey.reset();
                 LastPlanScannedKey.reset();
                 EntriesToProcess = PlanningComplete = ActionInProgress = false;
+                LeastBlobQueue.clear();
                 Action();
             }
             break;
@@ -471,6 +526,7 @@ namespace NKikimr::NBlobDepot {
                     ++Self->AsStats.BlobsReadNoData;
                     Self->AsStats.BytesToCopy -= resp.Id.BlobSize();
 
+                    get.BlobIds.push_back(resp.Id);
                     get.AssimilatedBlobs.push_back({TData::TKey(resp.Id), TData::TAssimilatedBlobInfo::TDrop{}});
                     break;
 
@@ -493,6 +549,45 @@ namespace NKikimr::NBlobDepot {
     void TAssimilator::HandleTxComplete(TAutoPtr<IEventHandle> ev) {
         const auto it = Gets.find(ev->Cookie);
         Y_ABORT_UNLESS(it != Gets.end());
+        TGetBatch& get = it->second;
+
+        for (const TLogoBlobID& id : get.BlobIds) {
+            const auto qIt = LeastBlobQueue.find(std::make_tuple(id.TabletID(), id.Channel()));
+            Y_ABORT_UNLESS(qIt != LeastBlobQueue.end());
+            auto& items = qIt->second;
+            Y_ABORT_UNLESS(!items.empty());
+
+            const auto value = std::make_tuple(TGenStep(id), id.Cookie(), id.BlobSize());
+            auto it = items.front() == value ? items.begin() : std::ranges::lower_bound(items, value);
+            Y_ABORT_UNLESS(it != items.end() && *it == value);
+
+            if (it == items.begin()) {
+                const TGenStep beginGenStep = std::get<0>(items.front());
+
+                // remove front item and trim any pending items
+                items.pop_front();
+                while (!items.empty() && !std::get<2>(items.front())) {
+                    items.pop_front();
+                }
+
+                std::optional<TGenStep> barrier;
+                if (items.empty()) {
+                    // we have processed all the data from this tablet/channel pair
+                    barrier.emplace(Max<ui32>(), Max<ui32>());
+                } else if (std::get<0>(items.front()) != beginGenStep) {
+                    // gen/step has been changed
+                    barrier.emplace(std::get<0>(items.front()).Previous());
+                }
+                if (barrier) {
+                    // issue hard barrier cmd
+                    Self->Data->ExecuteTxHardCollectAssimilatedBlobs(id.TabletID(), id.Channel(), *barrier, SelfId());
+                }
+            } else {
+                auto& [genStep, cookie, blobSize] = *it;
+                blobSize = 0; // mark this item as already processed
+            }
+        }
+
         Gets.erase(it);
         ScanDataForCopying();
     }
@@ -526,6 +621,7 @@ namespace NKikimr::NBlobDepot {
         Y_ABORT_UNLESS(jt != Gets.end());
         TGetBatch& get = jt->second;
         if (msg.Status == NKikimrProto::OK) { // mark blob assimilated only in case of success
+            get.BlobIds.push_back(key.GetBlobId());
             get.AssimilatedBlobs.push_back({std::move(key), TData::TAssimilatedBlobInfo::TUpdate{
                 TBlobSeqId::FromLogoBlobId(msg.Id)}});
         }
@@ -533,6 +629,42 @@ namespace NKikimr::NBlobDepot {
             Self->Data->ExecuteTxCommitAssimilatedBlob(std::move(get.AssimilatedBlobs), TEvPrivate::EvTxComplete,
                 SelfId(), getId);
         }
+    }
+
+    void TAssimilator::Handle(TEvBlobStorage::TEvCollectGarbage::TPtr ev) {
+        CollectGarbageQ.emplace(ev->Cookie, ev->Release().Release());
+        ProcessCollectGarbageQ();
+    }
+
+    void TAssimilator::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr ev) {
+        auto& msg = *ev->Get();
+        STLOG(PRI_DEBUG, BLOB_DEPOT, BDT93, "got TEvCollectGarbageResult", (Id, Self->GetLogId()), (Msg, msg));
+        ++(msg.Status == NKikimrProto::OK ? Self->AsStats.CollectGarbageOK : Self->AsStats.CollectGarbageError);
+
+        Y_ABORT_UNLESS(CollectGarbageInFlight);
+        --CollectGarbageInFlight;
+        ProcessCollectGarbageQ();
+    }
+
+    void TAssimilator::ProcessCollectGarbageQ() {
+        const ui32 maxInFlight = CollectGarbageQ.size() >= 1000 ? 4 :
+            CollectGarbageQ.size() >= 100 ? 3 :
+            CollectGarbageQ.size() >= 10 ? 2 : 1;
+        while (!CollectGarbageQ.empty() && CollectGarbageInFlight < maxInFlight) {
+            auto& [counter, ev] = *CollectGarbageQ.begin();
+            if (counter == ExpectedPerGenerationCounter) {
+                SendToBSProxy(SelfId(), Self->Config.GetVirtualGroupId(), ev.release());
+                CollectGarbageQ.erase(CollectGarbageQ.begin());
+                ++CollectGarbageInFlight;
+                ++ExpectedPerGenerationCounter;
+            } else {
+                break;
+            }
+        }
+
+        Self->AsStats.CollectGarbageInFlight = CollectGarbageInFlight;
+        Self->AsStats.CollectGarbageQueue = CollectGarbageQ.size();
+        Self->JsonHandler.Invalidate();
     }
 
     void TAssimilator::OnCopyDone() {
@@ -714,11 +846,19 @@ namespace NKikimr::NBlobDepot {
         json["d.blobs_put_ok"] = ToString(BlobsPutOk);
         json["d.blobs_put_error"] = ToString(BlobsPutError);
         json["d.copy_iteration"] = ToString(CopyIteration);
+        json["d.collect_garbage_in_flight"] = ToString(CollectGarbageInFlight);
+        json["d.collect_garbage_queue"] = ToString(CollectGarbageQueue);
+        json["d.collect_garbage_ok"] = ToString(CollectGarbageOK);
+        json["d.collect_garbage_error"] = ToString(CollectGarbageError);
     }
 
     void TBlobDepot::TData::ExecuteTxCommitAssimilatedBlob(std::vector<TAssimilatedBlobInfo>&& blobs, ui32 notifyEventType,
             TActorId parentId, ui64 cookie) {
         Self->Execute(std::make_unique<TTxCommitAssimilatedBlob>(Self, std::move(blobs), notifyEventType, parentId, cookie));
+    }
+
+    void TBlobDepot::TData::ExecuteTxHardCollectAssimilatedBlobs(ui64 tabletId, ui8 channel, TGenStep barrier, TActorId parentId) {
+        Self->Execute(std::make_unique<TTxHardCollectAssimilatedBlobs>(Self, tabletId, channel, barrier, parentId));
     }
 
     void TBlobDepot::StartGroupAssimilator() {

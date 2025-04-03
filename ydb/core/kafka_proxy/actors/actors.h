@@ -56,8 +56,6 @@ struct TContext {
         return !RequireAuthentication || AuthenticationStep == SUCCESS;
     
     }
-
-    TActorId DiscoveryCacheActor;
 };
 
 template<std::derived_from<TApiMessage> T>

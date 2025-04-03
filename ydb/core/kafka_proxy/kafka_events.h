@@ -30,6 +30,12 @@ struct TEvKafka {
         EvCommitedOffsetsResponse,
         EvCreateTopicsResponse,
         EvReadSessionInfo,
+        EvSaveTxnProducerRequest,
+        EvSaveTxnProducerResponse,
+        EvAddPartitionsToTxnRequest,
+        EvAddOffsetsToTxnRequest,
+        EvTxnOffsetCommitRequest,
+        EvEndTxnRequest,
         EvResponse = EvRequest + 256,
         EvInternalEvents = EvResponse + 256,
         EvEnd
@@ -246,6 +252,91 @@ struct TEvTopicModificationResponse : public NActors::TEventLocal<TEvTopicModifi
     EKafkaErrors Status;
     TString Message;
 };
+
+struct TEvAddPartitionsToTxnRequest : public TEventLocal<TEvAddPartitionsToTxnRequest, EvAddPartitionsToTxnRequest> {
+    TEvAddPartitionsToTxnRequest(const ui64 correlationId, const TMessagePtr<TAddPartitionsToTxnRequestData>& request, const TActorId connectionId)
+    : CorrelationId(correlationId)
+    , Request(request)
+    , ConnectionId(connectionId)
+    {}
+
+    ui64 CorrelationId;
+    const TMessagePtr<TAddPartitionsToTxnRequestData> Request;
+    TActorId ConnectionId;
 };
+
+struct TEvAddOffsetsToTxnRequest : public TEventLocal<TEvAddOffsetsToTxnRequest, EvAddOffsetsToTxnRequest> {
+    TEvAddOffsetsToTxnRequest(const ui64 correlationId, const TMessagePtr<TAddOffsetsToTxnRequestData>& request, const TActorId connectionId)
+    : CorrelationId(correlationId)
+    , Request(request)
+    , ConnectionId(connectionId)
+    {}
+
+    ui64 CorrelationId;
+    const TMessagePtr<TAddOffsetsToTxnRequestData> Request;
+    TActorId ConnectionId;
+};
+
+struct TEvTxnOffsetCommitRequest : public TEventLocal<TEvTxnOffsetCommitRequest, EvTxnOffsetCommitRequest> {
+    TEvTxnOffsetCommitRequest(const ui64 correlationId, const TMessagePtr<TTxnOffsetCommitRequestData>& request, const TActorId connectionId)
+    : CorrelationId(correlationId)
+    , Request(request)
+    , ConnectionId(connectionId)
+    {}
+
+    ui64 CorrelationId;
+    const TMessagePtr<TTxnOffsetCommitRequestData> Request;
+    TActorId ConnectionId;
+};
+
+struct TEvEndTxnRequest : public TEventLocal<TEvEndTxnRequest, EvEndTxnRequest> {
+    TEvEndTxnRequest(const ui64 correlationId, const TMessagePtr<TEndTxnRequestData>& request, const TActorId connectionId)
+    : CorrelationId(correlationId)
+    , Request(request)
+    , ConnectionId(connectionId)
+    {}
+
+    ui64 CorrelationId;
+    const TMessagePtr<TEndTxnRequestData> Request;
+    TActorId ConnectionId;
+};
+
+/* 
+Event sent from TIintProducerActor to TKafkaTransactionRouter to notify that producer id will be obtained by client
+ */
+struct TEvSaveTxnProducerRequest : public NActors::TEventLocal<TEvSaveTxnProducerRequest, EvSaveTxnProducerRequest> {
+    TEvSaveTxnProducerRequest(const TString& transactionalId, const i64 producerId, const i16 producerEpoch) :
+        TransactionalId(std::move(transactionalId)),
+        ProducerId(producerId),
+        ProducerEpoch(producerEpoch)
+    {}
+
+    const TString TransactionalId;
+    const i64 ProducerId;
+    const i16 ProducerEpoch;
+};
+
+/* 
+Event sent from TKafkaTransactionRouter to TIintProducerActor to notify that new transactional id was succesfully saved
+
+OK if this transactional producer was not found or older version was found
+PRODUCER_FENCED if newer version of this transactional producer was found
+ */
+struct TEvSaveTxnProducerResponse : public NActors::TEventLocal<TEvSaveTxnProducerRequest, EvSaveTxnProducerResponse> {
+
+    enum EStatus {
+        OK,
+        PRODUCER_FENCED,
+    };
+
+    TEvSaveTxnProducerResponse(EStatus status, const TString& message) :
+        Status(status),
+        Message(std::move(message))
+    {}
+
+    EStatus Status;
+    TString Message;
+};
+}; // struct TEvKafka
 
 } // namespace NKafka

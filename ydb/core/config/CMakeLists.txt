@@ -15,6 +15,6 @@
 add_subdirectory(protos)
 add_subdirectory(tools)
 add_subdirectory(utils)
-add_subdirectory(init)
 add_subdirectory(validation)
+add_subdirectory(init)
 add_subdirectory(ut)

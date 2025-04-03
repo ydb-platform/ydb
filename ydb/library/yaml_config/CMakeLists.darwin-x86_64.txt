@@ -31,6 +31,7 @@ target_link_libraries(ydb-library-yaml_config PUBLIC
   cpp-protobuf-json
   ydb-core-base
   cms-console-util
+  core-config-validation
   ydb-core-erasure
   ydb-core-protos
   core-protos-out

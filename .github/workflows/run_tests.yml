@@ -9,22 +9,22 @@ on:
         type: string
         default: self-hosted
       test_targets:
-        description: 'Пути запуска'
+        description: 'Paths to tests for run ,example : ydb/ ydb/tests/func/suite'
         required: true
         type: string
         default: ydb/
       test_type:
-        description: 'Тип тестов'
+        description: 'Test type (unittest,py3test,py2test,pytest)'
         required: false
         type: string
         default: unittest,py3test,py2test,pytest
       test_size:
-        description: 'Размер тестов'
+        description: 'Test size (small,medium,large)'
         required: false
         type: string
         default: small,medium,large
       additional_ya_make_args:
-        description: 'Дополнительные аргументы для ya make'
+        description: 'additional args for ya make'
         required: false
         type: string
         default: ''
@@ -36,6 +36,47 @@ on:
         description: 'Branch or commit to use'
         required: false
         type: string
+
+
+  workflow_dispatch:
+    inputs:
+      runner_label:
+        description: 'Label of the runner to be used'
+        required: false
+        default: self-hosted
+      test_targets:
+        description: 'Paths to tests for run ,example : ydb/ ydb/tests/func/suite'
+        required: true
+        default: ydb/
+      test_type:
+        description: 'Test type (unittest,py3test,py2test,pytest)'
+        required: false
+        default: unittest,py3test,py2test,pytest
+      test_size:
+        description: 'Test size (small,medium,large)'
+        required: false
+        type: choice
+        default: small,medium,large
+        options:
+          - small
+          - medium,
+          - large
+          - small,medium
+          - small,medium,large
+      additional_ya_make_args:
+        description: 'additional args for ya make'
+        required: false
+        default: ''
+      build_preset:
+        description: 'Build preset type (relwithdebinfo, release-asan, release-msan, release-tsan)'
+        required: true
+        type: choice
+        options:
+          - relwithdebinfo
+          - release-asan
+          - release-msan
+          - release-tsan
+        default: relwithdebinfo
 
 jobs:
   run_tests:

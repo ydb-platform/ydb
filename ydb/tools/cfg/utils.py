@@ -275,7 +275,7 @@ def sort_dict_recursively(obj):
 
 
 def dump_yaml(data):
-    if use_alternative_yaml_handler:
+    if ('use_alternative_yaml_handler' in locals() or 'use_alternative_yaml_handler' in globals()) and use_alternative_yaml_handler:
         yaml = YAML()
 
         yaml.default_flow_style = False

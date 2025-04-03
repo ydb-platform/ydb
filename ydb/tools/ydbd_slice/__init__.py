@@ -471,7 +471,7 @@ def binaries_args():
         "--kikimr",
         metavar="BIN",
         default=None,
-        help="explicit path to ydbd. Can be url: 'rbtorrent:<torrent>' for rbtorrent, 'sbr:<id>' for sandbox resource or 'http(s)://<url>' for other."
+        help="explicit path to ydbd. Can be url: 'rbtorrent:<torrent>' for rbtorrent, 'sbr:<id>' for sandbox resource or 'http(s)://<url>' for http or 'script:' for custom script."
     )
     args.add_argument(
         "--binary-lz4",

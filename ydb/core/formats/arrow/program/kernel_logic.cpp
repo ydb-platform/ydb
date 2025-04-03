@@ -5,6 +5,8 @@
 #include <ydb/core/formats/arrow/accessor/sub_columns/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/partial.h>
 
+#include <yql/essentials/core/arrow_kernels/request/request.h>
+
 namespace NKikimr::NArrow::NSSA {
 
 TConclusion<bool> TGetJsonPath::DoExecute(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output,
@@ -66,6 +68,46 @@ std::shared_ptr<IChunkedArray> TExistsJsonPath::ExtractArray(
 
 NAccessor::TCompositeChunkedArray::TBuilder TExistsJsonPath::MakeCompositeBuilder() const {
     return NAccessor::TCompositeChunkedArray::TBuilder(arrow::uint8());
+}
+
+TString TSimpleKernelLogic::SignalDescription() const {
+    if (YqlOperationId) {
+        return ::ToString((NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId);
+    } else {
+        return "UNKNOWN";
+    }
+}
+
+bool TSimpleKernelLogic::IsBoolInResult() const {
+    if (YqlOperationId) {
+        switch ((NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId) {
+            case NYql::TKernelRequestBuilder::EBinaryOp::And:
+            case NYql::TKernelRequestBuilder::EBinaryOp::Or:
+            case NYql::TKernelRequestBuilder::EBinaryOp::Xor:
+                return true;
+            case NYql::TKernelRequestBuilder::EBinaryOp::Add:
+            case NYql::TKernelRequestBuilder::EBinaryOp::Sub:
+            case NYql::TKernelRequestBuilder::EBinaryOp::Mul:
+            case NYql::TKernelRequestBuilder::EBinaryOp::Div:
+            case NYql::TKernelRequestBuilder::EBinaryOp::Mod:
+            case NYql::TKernelRequestBuilder::EBinaryOp::Coalesce:
+                return false;
+
+            case NYql::TKernelRequestBuilder::EBinaryOp::StartsWith:
+            case NYql::TKernelRequestBuilder::EBinaryOp::EndsWith:
+            case NYql::TKernelRequestBuilder::EBinaryOp::StringContains:
+
+            case NYql::TKernelRequestBuilder::EBinaryOp::Equals:
+            case NYql::TKernelRequestBuilder::EBinaryOp::NotEquals:
+            case NYql::TKernelRequestBuilder::EBinaryOp::Less:
+            case NYql::TKernelRequestBuilder::EBinaryOp::LessOrEqual:
+            case NYql::TKernelRequestBuilder::EBinaryOp::Greater:
+            case NYql::TKernelRequestBuilder::EBinaryOp::GreaterOrEqual:
+                return true;
+        }
+    } else {
+        return false;
+    }
 }
 
 }   // namespace NKikimr::NArrow::NSSA

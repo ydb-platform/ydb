@@ -444,34 +444,6 @@ TConclusion<bool> TGraph::OptimizeConditionsForIndexes(TGraphNode* condNode) {
     return true;
 }
 
-bool TGraph::IsBoolResultYqlOperator(const NYql::TKernelRequestBuilder::EBinaryOp op) const {
-    switch (op) {
-        case NYql::TKernelRequestBuilder::EBinaryOp::And:
-        case NYql::TKernelRequestBuilder::EBinaryOp::Or:
-        case NYql::TKernelRequestBuilder::EBinaryOp::Xor:
-            return true;
-        case NYql::TKernelRequestBuilder::EBinaryOp::Add:
-        case NYql::TKernelRequestBuilder::EBinaryOp::Sub:
-        case NYql::TKernelRequestBuilder::EBinaryOp::Mul:
-        case NYql::TKernelRequestBuilder::EBinaryOp::Div:
-        case NYql::TKernelRequestBuilder::EBinaryOp::Mod:
-        case NYql::TKernelRequestBuilder::EBinaryOp::Coalesce:
-            return false;
-
-        case NYql::TKernelRequestBuilder::EBinaryOp::StartsWith:
-        case NYql::TKernelRequestBuilder::EBinaryOp::EndsWith:
-        case NYql::TKernelRequestBuilder::EBinaryOp::StringContains:
-
-        case NYql::TKernelRequestBuilder::EBinaryOp::Equals:
-        case NYql::TKernelRequestBuilder::EBinaryOp::NotEquals:
-        case NYql::TKernelRequestBuilder::EBinaryOp::Less:
-        case NYql::TKernelRequestBuilder::EBinaryOp::LessOrEqual:
-        case NYql::TKernelRequestBuilder::EBinaryOp::Greater:
-        case NYql::TKernelRequestBuilder::EBinaryOp::GreaterOrEqual:
-            return true;
-    }
-}
-
 TConclusion<bool> TGraph::OptimizeConditionsForHeadersCheck(TGraphNode* condNode) {
     if (condNode->GetProcessor()->GetProcessorType() != EProcessorType::Calculation) {
         return false;
@@ -485,17 +457,7 @@ TConclusion<bool> TGraph::OptimizeConditionsForHeadersCheck(TGraphNode* condNode
     }
     auto* dest = condNode->GetOutputEdges().begin()->second;
     const ui32 destResourceId = condNode->GetOutputEdges().begin()->first.GetResourceId();
-    if (!!calc->GetKernelLogic()) {
-        if (!calc->GetKernelLogic()->IsBoolInResult()) {
-            return false;
-        }
-    }
-    if (calc->GetYqlOperationId()) {
-        if (!IsBoolResultYqlOperator((NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId())) {
-            return false;
-        }
-    }
-    if (!calc->GetYqlOperationId() && !calc->GetKernelLogic()) {
+    if (!calc->GetKernelLogic() || !calc->GetKernelLogic()->IsBoolInResult()) {
         return false;
     }
     auto* node = GetProducerVerified(condNode->GetProcessor()->GetInput()[0].GetColumnId());
@@ -545,10 +507,11 @@ TConclusion<bool> TGraph::OptimizeFilterWithCoalesce(TGraphNode* cNode) {
         return false;
     }
     const auto calc = cNode->GetProcessorAs<TCalculationProcessor>();
-    if (!calc->GetYqlOperationId()) {
+    if (!calc->GetKernelLogic()->GetYqlOperationId()) {
         return false;
     }
-    if ((NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetYqlOperationId() != NYql::TKernelRequestBuilder::EBinaryOp::Coalesce) {
+    if ((NYql::TKernelRequestBuilder::EBinaryOp)*calc->GetKernelLogic()->GetYqlOperationId() !=
+        NYql::TKernelRequestBuilder::EBinaryOp::Coalesce) {
         return false;
     }
     if (cNode->GetOutputEdges().size() != 1) {
@@ -569,30 +532,14 @@ TConclusion<bool> TGraph::OptimizeFilterWithCoalesce(TGraphNode* cNode) {
 
     auto* nextNode = cNode->GetOutputEdges().begin()->second;
     if (nextNode->GetProcessor()->GetProcessorType() != EProcessorType::Filter) {
-        if (nextNode->GetProcessor()->GetProcessorType() == EProcessorType::Calculation) {
-            const auto outputCalc = nextNode->GetProcessorAs<TCalculationProcessor>();
-            if (!outputCalc->GetYqlOperationId()) {
-                return false;
-            }
-            if ((NYql::TKernelRequestBuilder::EBinaryOp)*outputCalc->GetYqlOperationId() != NYql::TKernelRequestBuilder::EBinaryOp::And) {
-                return false;
-            }
-        } else if (nextNode->GetProcessor()->GetProcessorType() == EProcessorType::StreamLogic) {
-            const auto outputCalc = nextNode->GetProcessorAs<TStreamLogicProcessor>();
-            if (outputCalc->GetOperation() != NKernels::EOperation::And) {
-                return false;
-            }
-        }
-        if (nextNode->GetOutputEdges().size() != 1) {
+        if (nextNode->GetProcessor()->GetProcessorType() != EProcessorType::StreamLogic) {
             return false;
         }
-        if (nextNode->GetOutputEdges().begin()->second->GetProcessor()->GetProcessorType() == EProcessorType::StreamLogic) {
-            const auto outputCalc = nextNode->GetOutputEdges().begin()->second->GetProcessorAs<TStreamLogicProcessor>();
-            if (outputCalc->GetOperation() != NKernels::EOperation::And) {
-                return false;
-            }
-        } else if (nextNode->GetOutputEdges().begin()->second->GetProcessor()->GetProcessorType() == EProcessorType::Filter) {
-        } else {
+        const auto outputCalc = nextNode->GetProcessorAs<TStreamLogicProcessor>();
+        if (outputCalc->GetOperation() != NKernels::EOperation::And) {
+            return false;
+        }
+        if (nextNode->GetOutputEdges().size() != 1) {
             return false;
         }
     }

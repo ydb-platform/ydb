@@ -11,7 +11,6 @@ class TCalculationProcessor: public IResourceProcessor {
 private:
     using TBase = IResourceProcessor;
 
-    YDB_ACCESSOR_DEF(std::optional<ui32>, YqlOperationId);
     YDB_ACCESSOR_DEF(std::shared_ptr<IKernelLogic>, KernelLogic);
 
     std::shared_ptr<IStepFunction> Function;
@@ -27,6 +26,7 @@ private:
         : TBase(std::move(input), std::move(output), EProcessorType::Calculation)
         , KernelLogic(kernelLogic)
         , Function(function) {
+        AFL_VERIFY(KernelLogic);
     }
 
     virtual bool IsAggregation() const override {
@@ -37,7 +37,7 @@ private:
 
 public:
     static TConclusion<std::shared_ptr<TCalculationProcessor>> Build(std::vector<TColumnChainInfo>&& input, const TColumnChainInfo& output, 
-        const std::shared_ptr<IStepFunction>& function, const std::shared_ptr<IKernelLogic>& kernelLogic = nullptr);
+        const std::shared_ptr<IStepFunction>& function, const std::shared_ptr<IKernelLogic>& kernelLogic);
 };
 
 }   // namespace NKikimr::NArrow::NSSA

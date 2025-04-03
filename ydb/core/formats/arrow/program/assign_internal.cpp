@@ -40,33 +40,16 @@ TConclusion<std::shared_ptr<TCalculationProcessor>> TCalculationProcessor::Build
 
 NJson::TJsonValue TCalculationProcessor::DoDebugJson() const {
     NJson::TJsonValue result = NJson::JSON_MAP;
-    if (!!YqlOperationId) {
-        result.InsertValue("yql_op", ::ToString((NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId));
-    }
-    if (!!KernelLogic) {
-        result.InsertValue("kernel", KernelLogic->GetClassName());
-    }
+    result.InsertValue("kernel", KernelLogic->GetClassName());
     return result;
 }
 
 ui64 TCalculationProcessor::DoGetWeight() const {
-    if (KernelLogic) {
-        return (ui64)KernelLogic->GetWeight();
-    }
-    if (!YqlOperationId) {
-        return (ui64)ECalculationHardness::Unknown;
-    }
-    return (ui64)ECalculationHardness::NotSpecified;
+    return (ui64)KernelLogic->GetWeight();
 }
 
 TString TCalculationProcessor::DoGetSignalCategoryName() const {
-    if (KernelLogic) {
-        return ::ToString(GetProcessorType()) + "::" + KernelLogic->GetClassName();
-    } else if (YqlOperationId) {
-        return ::ToString(GetProcessorType()) + "::" + ::ToString((NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId);
-    } else {
-        return ::ToString(GetProcessorType());
-    }
+    return ::ToString(GetProcessorType()) + "::" + KernelLogic->SignalDescription();
 }
 
 }   // namespace NKikimr::NArrow::NSSA

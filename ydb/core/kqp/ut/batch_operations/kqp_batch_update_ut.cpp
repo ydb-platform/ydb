@@ -433,6 +433,23 @@ Y_UNIT_TEST_SUITE(KqpBatchUpdate) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
         }
     }
+
+    Y_UNIT_TEST(Returning) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = Q_(R"(
+                BATCH UPDATE Test
+                    SET Amount = 1000
+                    RETURNING *;
+            )");
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+        }
+    }
 }
 
 } // namespace NKqp

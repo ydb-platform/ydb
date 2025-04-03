@@ -278,7 +278,8 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
 
         {
             auto query = Q_(R"(
-                BATCH DELETE FROM Test WHERE Amount > 100;
+                BATCH DELETE FROM Test
+                    WHERE Amount > 100;
                 SELECT 42;
             )");
 
@@ -287,7 +288,8 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
         }
         {
             auto query = Q_(R"(
-                BATCH DELETE FROM Test WHERE Amount > 100;
+                BATCH DELETE FROM Test
+                    WHERE Amount > 100;
                 SELECT * FROM Test;
             )");
 
@@ -296,7 +298,8 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
         }
         {
             auto query = Q_(R"(
-                BATCH DELETE FROM KeyValue WHERE Key >= 3;
+                BATCH DELETE FROM KeyValue
+                    WHERE Key >= 3;
                 UPSERT INTO KeyValue (Key, Value)
                     VALUES (10, "Value10");
             )");
@@ -309,6 +312,23 @@ Y_UNIT_TEST_SUITE(KqpBatchDelete) {
                 BATCH DELETE FROM KeyValue;
                 UPSERT INTO KeyValue2 (Key, Value)
                     VALUES ("Key10", "Value10");
+            )");
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
+        }
+    }
+
+    Y_UNIT_TEST(Returning) {
+        TKikimrRunner kikimr(GetAppConfig());
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            auto query = Q_(R"(
+                BATCH DELETE FROM KeyValue
+                    WHERE Key >= 3
+                    RETURNING *;
             )");
 
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();

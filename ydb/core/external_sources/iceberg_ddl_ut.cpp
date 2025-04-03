@@ -11,36 +11,50 @@ namespace NKikimr {
 
 namespace {
 
-NExternalSource::IExternalSource::TPtr CreateTestSource(const std::vector<TString> hostnamePatterns = {}) {
-    auto s = ToString(NYql::EDatabaseType::Iceberg);
-    auto f = NExternalSource::CreateExternalSourceFactory(
-        hostnamePatterns,nullptr,50000, nullptr, false, false, {s});
+class TTestFixture : public NUnitTest::TBaseFixture {
+public: 
+    TTestFixture()
+    :  Props(*Proto.MutableProperties()->MutableProperties()) {
+        using namespace NKikimr::NExternalSource::NIceberg;
 
-    return f->GetOrCreate(s);
-}
+        auto s = ToString(NYql::EDatabaseType::Iceberg);
+        auto f = NExternalSource::CreateExternalSourceFactory(
+            {}, nullptr,50000, nullptr, false, false, {s});
+
+        Source = f->GetOrCreate(s);
+
+        Props[WAREHOUSE_TYPE]         = VALUE_S3;
+        Props[WAREHOUSE_DB]           = "db";
+        Props[WAREHOUSE_S3_REGION]    = "region";
+        Props[WAREHOUSE_S3_ENDPOINT]  = "endpoint";
+        Props[WAREHOUSE_S3_URI]       = "uri";
+    }
+
+public:
+    void SetUp(NUnitTest::TTestContext& ctx) override {
+        NUnitTest::TBaseFixture::SetUp(ctx);
+    }
+
+protected:
+    NExternalSource::IExternalSource::TPtr Source;
+    NKikimrSchemeOp::TExternalDataSourceDescription Proto;
+    ::google::protobuf::Map<TProtoStringType, TProtoStringType>& Props;
+};
 
 }
 
 Y_UNIT_TEST_SUITE(IcebergDdlTest) {
 
     // Test ddl for an iceberg table in s3 storage with the hive catalog 
-    Y_UNIT_TEST(HiveCatalogWithS3Test) {
-        auto source = CreateTestSource();
+    Y_UNIT_TEST_F(HiveCatalogWithS3Test, TTestFixture) {
+        using namespace NKikimr::NExternalSource::NIceberg;
 
-        NKikimrSchemeOp::TExternalDataSourceDescription proto;
-        auto props = proto.MutableProperties()->MutableProperties();
-
-        props->emplace(Iceberg::Warehouse::Fields::TYPE, Iceberg::Warehouse::S3);
-        props->emplace(Iceberg::Warehouse::Fields::DB, "db");
-        props->emplace(Iceberg::Warehouse::Fields::S3_REGION, "region");
-        props->emplace(Iceberg::Warehouse::Fields::S3_ENDPOINT, "endpoint");
-        props->emplace(Iceberg::Warehouse::Fields::S3_URI, "uri");
-        props->emplace(Iceberg::Catalog::Fields::TYPE, Iceberg::Catalog::HIVE);
-        props->emplace(Iceberg::Catalog::Fields::HIVE_URI, "hive_uri");
+        Props[CATALOG_TYPE]     = VALUE_HIVE;
+        Props[CATALOG_HIVE_URI] = "hive_uri";
             
-        UNIT_ASSERT_NO_EXCEPTION(source->ValidateExternalDataSource(proto.SerializeAsString()));
+        UNIT_ASSERT_NO_EXCEPTION(Source->ValidateExternalDataSource(Proto.SerializeAsString()));
 
-        auto authMethods = source->GetAuthMethods(proto.SerializeAsString());
+        auto authMethods = Source->GetAuthMethods();
 
         UNIT_ASSERT_VALUES_EQUAL(authMethods.size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(authMethods[0], "BASIC");
@@ -49,28 +63,19 @@ Y_UNIT_TEST_SUITE(IcebergDdlTest) {
     }
 
     // Test ddl for an iceberg table in s3 storage with the hadoop catalog 
-    Y_UNIT_TEST(HadoopCatalogWithS3Test) {
-        auto source = CreateTestSource();
+    Y_UNIT_TEST_F(HadoopCatalogWithS3Test, TTestFixture) {
+        using namespace NKikimr::NExternalSource::NIceberg;
 
-        NKikimrSchemeOp::TExternalDataSourceDescription proto;
-        auto props = proto.MutableProperties()->MutableProperties();
-
-        props->emplace(Iceberg::Warehouse::Fields::TYPE, Iceberg::Warehouse::S3);
-        props->emplace(Iceberg::Warehouse::Fields::DB, "db");
-        props->emplace(Iceberg::Warehouse::Fields::S3_REGION, "region");
-        props->emplace(Iceberg::Warehouse::Fields::S3_ENDPOINT, "endpoint");
-        props->emplace(Iceberg::Warehouse::Fields::S3_URI, "uri");
-        props->emplace(Iceberg::Catalog::Fields::TYPE, Iceberg::Catalog::HADOOP);
+        Props[CATALOG_TYPE] = VALUE_HADOOP;
             
-        UNIT_ASSERT_NO_EXCEPTION(source->ValidateExternalDataSource(proto.SerializeAsString()));
+        UNIT_ASSERT_NO_EXCEPTION(Source->ValidateExternalDataSource(Proto.SerializeAsString()));
 
-        auto authMethods = source->GetAuthMethods(proto.SerializeAsString());
+        auto authMethods = Source->GetAuthMethods();
 
         UNIT_ASSERT_VALUES_EQUAL(authMethods.size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(authMethods[0], "BASIC");
         UNIT_ASSERT_VALUES_EQUAL(authMethods[1], "TOKEN");
         UNIT_ASSERT_VALUES_EQUAL(authMethods[2], "SERVICE_ACCOUNT");
-
     }
  
 }

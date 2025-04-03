@@ -103,10 +103,9 @@ struct IExternalSource : public TThrRefBase {
     virtual TString GetName() const = 0;
 
     /*
-        List of auth methods supported by the source. The list can be set
-        conditionally based on a content
+        List of auth methods supported by the source
     */
-    virtual TVector<TString> GetAuthMethods(const TString& content) const = 0;
+    virtual TVector<TString> GetAuthMethods() const = 0;
 
     /*
         At the input, a string with the name of the content is passed,

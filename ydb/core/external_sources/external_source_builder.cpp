@@ -34,7 +34,17 @@ public:
         return false;
     }
 
-    virtual TVector<TString> GetAuthMethods(const TString& externalDataSourceDescription) const override {
+    virtual TVector<TString> GetAuthMethods() const override {
+        TVector<TString> rez;
+
+        for (auto a: AuthMethodsForCheck_) {
+            rez.push_back(a.Auth);
+        }
+
+        return rez;
+    }
+
+    TVector<TString> GetAuthMethods(const TString& externalDataSourceDescription) const {
         NKikimrSchemeOp::TExternalDataSourceDescription proto;
 
         if (!proto.ParseFromString(externalDataSourceDescription)) {
@@ -142,7 +152,7 @@ TExternalSourceBuilder& TExternalSourceBuilder::Properties(const TSet<TString>& 
     return *this;
 }
 
-TExternalSourceBuilder& TExternalSourceBuilder::HostnamePattern(std::vector<TRegExMatch> pattern) {
+TExternalSourceBuilder& TExternalSourceBuilder::HostnamePattern(const std::vector<TRegExMatch>& pattern) {
     HostnamePatterns_.insert(
         HostnamePatterns_.end(), pattern.begin(), pattern.end());
     return *this;
@@ -153,7 +163,7 @@ IExternalSource::TPtr TExternalSourceBuilder::Build() {
         std::move(Name_), std::move(AuthMethodsForCheck_), std::move(AvailableProperties_), std::move(HostnamePatterns_));
 }
 
-TCondition HasSettingCondition(const TString& p, const TString& v) {
+TCondition GetHasSettingCondition(const TString& p, const TString& v) {
     auto fnc = [p, v](const ::google::protobuf::Map<TProtoStringType, TProtoStringType>& props) -> bool {
         auto itr = props.find(p);
         return props.end() != itr && v == itr->second;
@@ -162,7 +172,7 @@ TCondition HasSettingCondition(const TString& p, const TString& v) {
     return fnc;
 }
 
-TValidator RequiredValidator() {
+TValidator GetRequiredValidator() {
     auto fnc = [](const TString& name, const TString& value){
         if (!value.empty()) {
             return;
@@ -174,7 +184,7 @@ TValidator RequiredValidator() {
     return fnc;
 }
 
-TValidator IsInListValidator(const std::unordered_set<TString>& values, bool required) {
+TValidator GetIsInListValidator(const std::unordered_set<TString>& values, bool required) {
     auto join = [](const TString& a, const TString& b ){
         return a.empty() ? b : a + ',' + b; 
     };

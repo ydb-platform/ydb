@@ -93,14 +93,14 @@ TString GetOrEmpty(const NYql::TCreateObjectSettings& container, const TString& 
 
     auto& featuresExtractor = settings.GetFeaturesExtractor();
 
-    for (const auto& property: properties) {
+    for (const auto& property : properties) {
         if (const auto value = featuresExtractor.Extract(property)) {
             externaDataSourceDesc.MutableProperties()->MutableProperties()->insert({property, *value});
         }
     }
 
     // Iceberg properties for connector
-    for (const auto& property: Iceberg::FieldsToConnector) {
+    for (const auto& property : NKikimr::NExternalSource::NIceberg::FieldsToConnector) {
         if (const auto value = featuresExtractor.Extract(property)) {
             externaDataSourceDesc.MutableProperties()->MutableProperties()->insert({property, *value});
         }

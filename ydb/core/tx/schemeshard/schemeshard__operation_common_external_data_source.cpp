@@ -52,7 +52,6 @@ bool ValidateProperties(const NKikimrSchemeOp::TExternalDataSourceProperties& pr
 
 bool ValidateAuth(const NKikimrSchemeOp::TAuth& auth,
                   const NExternalSource::IExternalSource::TPtr& source,
-                  const TString& data,
                   TString& errStr) {
     if (auth.ByteSizeLong() > MAX_PROTOBUF_SIZE) {
         errStr = Sprintf(
@@ -61,7 +60,7 @@ bool ValidateAuth(const NKikimrSchemeOp::TAuth& auth,
             auth.ByteSizeLong());
         return false;
     }
-    const auto availableAuthMethods = source->GetAuthMethods(data);
+    const auto availableAuthMethods = source->GetAuthMethods();
     switch (auth.identity_case()) {
         case NKikimrSchemeOp::TAuth::IDENTITY_NOT_SET: {
             errStr = "Authorization method isn't specified";
@@ -88,12 +87,11 @@ bool Validate(const NKikimrSchemeOp::TExternalDataSourceDescription& desc,
               TString& errStr) {
     try {
         const auto source = factory->GetOrCreate(desc.GetSourceType());
-        const auto data = desc.SerializeAsString();
-        source->ValidateExternalDataSource(data);
+        source->ValidateExternalDataSource(desc.SerializeAsString());
         return ValidateLocationAndInstallation(desc.GetLocation(),
                                                desc.GetInstallation(),
                                                errStr) &&
-               ValidateAuth(desc.GetAuth(), source, data, errStr) &&
+               ValidateAuth(desc.GetAuth(), source, errStr) &&
                ValidateProperties(desc.GetProperties(), errStr);
     } catch (...) {
         errStr = CurrentExceptionMessage();

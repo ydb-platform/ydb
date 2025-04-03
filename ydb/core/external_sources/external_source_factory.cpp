@@ -40,6 +40,50 @@ private:
 
 }
 
+
+IExternalSource::TPtr BuildIcebergSource(const std::vector<TRegExMatch>& hostnamePatternsRegEx) {
+    using namespace NKikimr::NExternalSource::NIceberg;
+
+    return TExternalSourceBuilder(TString{NYql::GenericProviderName})
+        // Basic, Token and SA Auth are available only if warehouse type is set to s3
+        .Auth(
+            {"BASIC", "TOKEN", "SERVICE_ACCOUNT"},
+            GetHasSettingCondition(WAREHOUSE_TYPE, VALUE_S3)
+        )
+        // DataBase is a required field
+        .Property(WAREHOUSE_DB, GetRequiredValidator())
+        // Tls is an optional field
+        .Property(WAREHOUSE_TLS)
+        // Warehouse type is a required field and can be equal only to "s3"
+        .Property(
+            WAREHOUSE_TYPE,
+            GetIsInListValidator({VALUE_S3}, true)
+        )
+        // If a warehouse type is equal to "s3", fields "s3_endpoint", "s3_region" and "s3_uri" are required
+        .Properties(
+            {
+                WAREHOUSE_S3_ENDPOINT,
+                WAREHOUSE_S3_REGION,
+                WAREHOUSE_S3_URI
+            },
+            GetRequiredValidator(),
+            GetHasSettingCondition(WAREHOUSE_TYPE, VALUE_S3)
+        )
+        // Catalog type is a required field and can be equal only to "hive" or "hadoop"
+        .Property(
+            CATALOG_TYPE,
+            GetIsInListValidator({VALUE_HIVE, VALUE_HADOOP}, true)
+        )
+        // If catalog type is equal to "hive" the field "hive_uri" is required
+        .Property(
+            CATALOG_HIVE_URI,
+            GetRequiredValidator(),
+            GetHasSettingCondition(CATALOG_TYPE,VALUE_HIVE)
+        )
+        .HostnamePattern(hostnamePatternsRegEx)
+        .Build();
+}
+
 IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TString>& hostnamePatterns,
                                                          NActors::TActorSystem* actorSystem,
                                                          size_t pathsLimit,
@@ -95,44 +139,7 @@ IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TStri
         },
         {
             ToString(NYql::EDatabaseType::Iceberg),
-            TExternalSourceBuilder(TString{NYql::GenericProviderName})
-                // Basic, Token and SA Auth are available only if warehouse type is set to s3
-                .Auth(
-                    {"BASIC", "TOKEN", "SERVICE_ACCOUNT"},
-                    HasSettingCondition(Iceberg::Warehouse::Fields::TYPE, Iceberg::Warehouse::S3)
-                )
-                // DataBase is a required field
-                .Property(Iceberg::Warehouse::Fields::DB, RequiredValidator())
-                // Tls is an optional field
-                .Property(Iceberg::Warehouse::Fields::TLS)
-                // Warehouse type is a required field and can be equal only to "s3"
-                .Property(
-                    Iceberg::Warehouse::Fields::TYPE,
-                    IsInListValidator({Iceberg::Warehouse::S3}, true)
-                )
-                // If a warehouse type is equal to "s3", fields "s3_endpoint", "s3_region" and "s3_uri" are required
-                .Properties(
-                    {
-                        Iceberg::Warehouse::Fields::S3_ENDPOINT,
-                        Iceberg::Warehouse::Fields::S3_REGION,
-                        Iceberg::Warehouse::Fields::S3_URI
-                    },
-                    RequiredValidator(),
-                    HasSettingCondition(Iceberg::Warehouse::Fields::TYPE, Iceberg::Warehouse::S3)
-                )
-                // Catalog type is a required field and can be equal only to "hive" or "hadoop"
-                .Property(
-                    Iceberg::Catalog::Fields::TYPE,
-                    IsInListValidator({Iceberg::Catalog::HIVE, Iceberg::Catalog::HADOOP}, true)
-                )
-                // If catalog type is equal to "hive" field "hive_uri" is required
-                .Property(
-                    Iceberg::Catalog::Fields::HIVE_URI,
-                    RequiredValidator(),
-                    HasSettingCondition(Iceberg::Catalog::Fields::TYPE, Iceberg::Catalog::HIVE)
-                )
-                .HostnamePattern(hostnamePatternsRegEx)
-                .Build()
+            BuildIcebergSource(hostnamePatternsRegEx)
         }
     },
     availableExternalDataSources); 

@@ -60,30 +60,30 @@ public:
 
     TExternalSourceBuilder& Properties(const TSet<TString>& properties, TValidator validator, TCondition condition);
 
-    TExternalSourceBuilder& HostnamePattern(std::vector<TRegExMatch> pattern);
+    TExternalSourceBuilder& HostnamePattern(const std::vector<TRegExMatch>& pattern);
 
     ///
     ///  Create external data source
     ///
     IExternalSource::TPtr Build();
 
-    inline TExternalSourceBuilder& Property(const TString name, TValidator validator) {
+    TExternalSourceBuilder& Property(const TString name, TValidator validator) {
         return Property(name, validator, [](const ::google::protobuf::Map<TProtoStringType, TProtoStringType>&){
             return true;
         });
     }
 
-    inline TExternalSourceBuilder& Property(const TString name) {
+    TExternalSourceBuilder& Property(const TString name) {
         return Property(name, [](const TString&, const TString&){});
     }
 
-    inline TExternalSourceBuilder& Properties(const TSet<TString>& properties, TValidator validator) {
+    TExternalSourceBuilder& Properties(const TSet<TString>& properties, TValidator validator) {
         return Properties(properties, validator, [](const ::google::protobuf::Map<TProtoStringType, TProtoStringType>&){
             return true;
         });
     }
 
-    inline TExternalSourceBuilder& Properties(const TSet<TString>& properties) {
+    TExternalSourceBuilder& Properties(const TSet<TString>& properties) {
         return Properties(properties, [](const TString&, const TString&){});
     }
 
@@ -98,12 +98,12 @@ public:
 /// Create a condition that returns "true" if a source's ddl has 
 /// property "p" with value equals to "v"
 ///  
-TCondition HasSettingCondition(const TString& p, const TString& v);
+TCondition GetHasSettingCondition(const TString& p, const TString& v);
 
 /// 
 /// Create a validator which check that source's ddl has a property with non empty value  
 ///  
-TValidator RequiredValidator();
+TValidator GetRequiredValidator();
 
 /// 
 /// Create a validator which check that source's ddl has a property with a value from list   
@@ -111,6 +111,6 @@ TValidator RequiredValidator();
 /// @param values       list of allowed values 
 /// @param required     allow property without value 
 ///
-TValidator IsInListValidator(const std::unordered_set<TString>& values, bool required);
+TValidator GetIsInListValidator(const std::unordered_set<TString>& values, bool required);
 
 }

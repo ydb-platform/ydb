@@ -89,7 +89,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
         return true;
     }
 
-    virtual TVector<TString> GetAuthMethods(const TString&) const override {
+    virtual TVector<TString> GetAuthMethods() const override {
         return {"NONE", "SERVICE_ACCOUNT", "AWS"};
     }
 

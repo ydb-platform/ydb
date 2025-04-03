@@ -3,11 +3,9 @@ import inspect
 import pytest
 import time
 import sys
-import subprocess
 import copy
 from threading import Thread
 
-from multiprocessing import Process
 from ydb.tests.olap.lib.results_processor import ResultsProcessor
 from ydb.tests.olap.scenario.helpers.scenario_tests_helper import TestContext, ScenarioTestHelper
 from ydb.tests.olap.lib.ydb_cluster import YdbCluster
@@ -93,7 +91,7 @@ class BaseTestSet:
         threads = []
         exit_codes = [None] * num_threads
         for p in range(num_threads):
-            threads.append(Thread(target=self.test_suffix, args=(copy.deepcopy(ctx), str(p), exit_codes, p)))
+            threads.append(Thread(target=self._test_suffix, args=(copy.deepcopy(ctx), str(p), exit_codes, p)))
         for t in threads:
             t.start()
         for t in threads:
@@ -102,9 +100,9 @@ class BaseTestSet:
 
     def test(self, ctx: TestContext):
         exit_codes = [None]
-        self.test_suffix(ctx, get_external_param("table_suffix", ""), exit_codes, 0)
+        self._test_suffix(ctx, get_external_param("table_suffix", ""), exit_codes, 0)
 
-    def test_suffix(self, ctx: TestContext, table_suffix: str, exit_codes, num: int):
+    def _test_suffix(self, ctx: TestContext, table_suffix: str, exit_codes, num: int):
         start_time = time.time()
         ctx.test += table_suffix
         test_path = ctx.test

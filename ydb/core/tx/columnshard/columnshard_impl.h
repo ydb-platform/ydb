@@ -147,10 +147,10 @@ struct TSettings {
         , CacheDataAfterCompaction(1, 0, 1) {
     }
 
-    void RegisterControls(TStaticControlBoard& scb) {
-        scb.RegisterSharedControl(BlobWriteGrouppingEnabled, EStaticControlType::ColumnShardControlsBlobWriteGrouppingEnabled);
-        scb.RegisterSharedControl(CacheDataAfterIndexing, EStaticControlType::ColumnShardControlsCacheDataAfterIndexing);
-        scb.RegisterSharedControl(CacheDataAfterCompaction, EStaticControlType::ColumnShardControlsCacheDataAfterCompaction);
+    void RegisterControls(TControlBoard& icb) {
+        icb.RegisterSharedControl(BlobWriteGrouppingEnabled, EStaticControlType::ColumnShardControlsBlobWriteGrouppingEnabled);
+        icb.RegisterSharedControl(CacheDataAfterIndexing, EStaticControlType::ColumnShardControlsCacheDataAfterIndexing);
+        icb.RegisterSharedControl(CacheDataAfterCompaction, EStaticControlType::ColumnShardControlsCacheDataAfterCompaction);
     }
 };
 

@@ -16,13 +16,13 @@
     Допутсим, получена следующая конфигурациея State Storage:
     
     ```yaml
-     ...
+    ...
       state_storage:
       - ring:
           node: [1, 2, 3, 4, 5, 6, 7, 8, 9]
           nto_select: 9
         ssid: 1
-      ...
+    ...
     ```
     
     На хосте с `node_id:1` сконфигурирован и запущен [статический узел](../../../devops/configuration-management/configuration-v1/config-settings.md#hosts) кластера, который обслуживает часть State Storage. Предположим, нам нужно вывести из эксплуатации этот хост.

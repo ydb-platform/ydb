@@ -19,8 +19,8 @@ SRCS(
     immediate_control_board_impl.cpp
     immediate_control_board_impl.h
     immediate_control_board_wrapper.h
-    static_control_board_impl.cpp
-    static_control_board_impl.h
+    dynamic_control_board_impl.cpp
+    dynamic_control_board_impl.h
 )
 
 END()

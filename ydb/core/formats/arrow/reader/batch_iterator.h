@@ -80,7 +80,7 @@ public:
         return !FilterIterator->GetCurrentAcceptance();
     }
 
-    TSortableBatchPosition::TFoundPosition SkipToLower(const TSortableBatchPosition& pos);
+    TSortableBatchPosition::TFoundPosition SkipToBound(const TSortableBatchPosition& pos, const bool upper);
 
     bool Next();
 

@@ -41,9 +41,7 @@ std::optional<TSortableBatchPosition::TFoundPosition> TSortableBatchPosition::Fi
     {
         AFL_VERIFY(guard.InitSortingPosition(posFinish));
         auto cmp = position.Compare(forFound);
-        if (cmp == std::partial_ordering::less) {
-            return std::nullopt;
-        } else if (greater && cmp == std::partial_ordering::equivalent) {
+        if (!cond(cmp)) {
             return std::nullopt;
         }
     }
@@ -96,28 +94,34 @@ NKikimr::NArrow::NMerger::TRWSortableBatchPosition TSortableBatchPosition::Build
     return TRWSortableBatchPosition(batch, position, Sorting->GetFieldNames(), dataColumns, ReverseSort);
 }
 
-TSortableBatchPosition::TFoundPosition TRWSortableBatchPosition::SkipToLower(const TSortableBatchPosition& forFound) {
+TSortableBatchPosition::TFoundPosition TRWSortableBatchPosition::SkipToBound(const TSortableBatchPosition& forFound, const bool upper) {
     const ui32 posStart = Position;
-    ui64 start;
-    ui64 finish;
+    auto pos = [&]() {
+        if (ReverseSort) {
+            auto pos = FindPosition(*this, 0, posStart - 1, forFound, !upper);
+            if (!pos) {
+                AFL_VERIFY(InitPosition(posStart - 1));
+                return TFoundPosition(posStart - 1, Compare(forFound));
+            } else if (pos->GetPosition()) {
+                AFL_VERIFY(InitPosition(pos->GetPosition() - 1));
+                return TFoundPosition(pos->GetPosition() - 1, Compare(forFound));
+            }
+            return *pos;
+        } else {
+            auto pos = FindPosition(*this, posStart, RecordsCount - 1, forFound, upper);
+            if (!pos) {
+                AFL_VERIFY(InitPosition(RecordsCount - 1));
+                return TFoundPosition(RecordsCount - 1, Compare(forFound));
+            }
+            return *pos;
+        }
+    }();
     if (ReverseSort) {
-        start = 0;
-        finish = posStart;
+        AFL_VERIFY(Position <= posStart)("pos", Position)("pos_skip", pos.GetPosition())("reverse", true);
     } else {
-        start = posStart;
-        finish = RecordsCount - 1;
+        AFL_VERIFY(posStart <= Position)("pos", Position)("pos_skip", pos.GetPosition())("reverse", false);
     }
-    auto pos = FindPosition(*this, start, finish, forFound, true);
-    if (!pos) {
-        AFL_VERIFY(InitPosition(finish));
-        pos = TFoundPosition(finish, Compare(forFound));
-    }
-    if (ReverseSort) {
-        AFL_VERIFY(Position <= posStart)("pos", Position)("pos_skip", pos->GetPosition())("reverse", true);
-    } else {
-        AFL_VERIFY(posStart <= Position)("pos", Position)("pos_skip", pos->GetPosition())("reverse", false);
-    }
-    return *pos;
+    return pos;
 }
 
 TSortableScanData::TSortableScanData(

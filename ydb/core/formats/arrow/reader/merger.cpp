@@ -76,7 +76,7 @@ std::shared_ptr<arrow::Table> TMergePartialStream::SingleSourceDrain(const TSort
         return result;
     }
     const ui32 startPos = SortHeap.Current().GetKeyColumns().GetPosition();
-    const TSortableBatchPosition::TFoundPosition pos = SortHeap.MutableCurrent().SkipToLower(readTo);
+    const TSortableBatchPosition::TFoundPosition pos = SortHeap.MutableCurrent().SkipToBound(readTo, !includeFinish);
     bool finished = false;
     const i32 delta = Reverse ? startPos - pos.GetPosition() : pos.GetPosition() - startPos;
     if (delta == 0 && pos.IsGreater()) {
@@ -214,7 +214,7 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> TMergePartialStream::DrainAllPa
     return result;
 }
 
-void TMergePartialStream::SkipToLowerBound(const TSortableBatchPosition& pos, const bool include) {
+void TMergePartialStream::SkipToBound(const TSortableBatchPosition& pos, const bool upper) {
     if (SortHeap.Empty()) {
         return;
     }
@@ -224,13 +224,13 @@ void TMergePartialStream::SkipToLowerBound(const TSortableBatchPosition& pos, co
         if (cmpResult == std::partial_ordering::greater) {
             break;
         }
-        if (cmpResult == std::partial_ordering::equivalent && include) {
+        if (cmpResult == std::partial_ordering::equivalent && !upper) {
             break;
         }
-        const TSortableBatchPosition::TFoundPosition skipPos = SortHeap.MutableCurrent().SkipToLower(pos);
+        const TSortableBatchPosition::TFoundPosition skipPos = SortHeap.MutableCurrent().SkipToBound(pos, upper);
         AFL_DEBUG(NKikimrServices::ARROW_HELPER)("pos", pos.DebugJson().GetStringRobust())("heap", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
         if (skipPos.IsEqual()) {
-            if (!include && !SortHeap.MutableCurrent().Next()) {
+            if (upper && !SortHeap.MutableCurrent().Next()) {
                 SortHeap.RemoveTop();
             } else {
                 SortHeap.UpdateTop();

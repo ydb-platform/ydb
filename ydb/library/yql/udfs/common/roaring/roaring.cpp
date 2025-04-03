@@ -645,10 +645,21 @@ namespace {
                 return nullptr;
             }
 
+            // Get the old allocation information.
+            auto oldAllocatedMemPointer = ((void**)oldPointer)[-1];
+            auto oldSizePointer = ((void**)oldPointer)[-2];
+
+            // Calculate the actual old data size (excluding the header).
+            size_t oldSize = (char*)oldSizePointer - (char*)oldAllocatedMemPointer - 2 * sizeof(void*);
+
+            // Allocate new memory.
             auto reallocatedPointer = RoaringMallocUdf(newSize);
-            auto oldAllocatedMemPointer = (char*)((void**)oldPointer)[-1];
-            auto oldSizePointer = (char*)((void**)oldPointer)[-2];
-            memcpy(reallocatedPointer, oldPointer, oldSizePointer - oldAllocatedMemPointer);
+
+            // Copy the minimum of old size and new size.
+            size_t copySize = oldSize < newSize ? oldSize : newSize;
+            memcpy(reallocatedPointer, oldPointer, copySize);
+
+            // Free the old memory.
             RoaringFreeUdf(oldPointer);
 
             return reallocatedPointer;

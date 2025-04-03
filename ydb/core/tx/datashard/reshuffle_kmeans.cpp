@@ -25,14 +25,14 @@ using namespace NKMeans;
 // This scan needed to run kmeans reshuffle which is part of global kmeans run.
 class TReshuffleKMeansScanBase: public TActor<TReshuffleKMeansScanBase>, public NTable::IScan {
 protected:
-    using EState = NKikimrTxDataShard::TEvLocalKMeansRequest;
+    using EState = NKikimrTxDataShard::EKMeansState;
 
     NTableIndex::TClusterId Parent = 0;
     NTableIndex::TClusterId Child = 0;
 
     ui32 K = 0;
 
-    EState::EState UploadState;
+    EState UploadState;
 
     IDriver* Driver = nullptr;
 

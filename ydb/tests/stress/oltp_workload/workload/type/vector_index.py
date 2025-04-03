@@ -187,7 +187,7 @@ class WorkloadVectorIndex(WorkloadBase):
                                     condition, prev: {prev}, cur: {cur}""")
             prev = cur
 
-    def _wait_inddex_ready_(self, table_path, vector_type,
+    def _wait_inddex_ready(self, table_path, vector_type,
                             vector_dimension, distance, similarity):
         for i in range(10):
             time.sleep(7)
@@ -220,7 +220,7 @@ class WorkloadVectorIndex(WorkloadBase):
             distance=distance,
             similarity=similarity
         )
-        self._wait_inddex_ready_(
+        self._wait_inddex_ready(
             table_path=table_path,
             vector_type=vector_type,
             vector_dimension=vector_dimension,

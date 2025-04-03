@@ -8,7 +8,6 @@ ydb.interceptor.monkey_patch_event_handler()
 
 class YdbClient:
     def __init__(self, endpoint, database, use_query_service=False):
-        self.endpoint = endpoint
         self.driver = ydb.Driver(endpoint=endpoint, database=database, oauth=None)
         self.database = database
         self.use_query_service = use_query_service

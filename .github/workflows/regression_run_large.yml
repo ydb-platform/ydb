@@ -18,6 +18,5 @@ jobs:
     with:
       test_targets: ydb/
       test_size: large
-      build_preset: ${{ matrix.build_preset }}
       ref: ${{  matrix.branch || github.ref_name }}
-
+      build_preset: ${{ matrix.build_preset }}

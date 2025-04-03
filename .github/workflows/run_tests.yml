@@ -39,7 +39,7 @@ on:
 
 jobs:
   run_tests:
-    name: Test ${{ github.ref_name }}:${{ inputs.build_preset }}
+    name: ${{ inputs.ref || github.ref_name }}:${{ inputs.build_preset }}
     timeout-minutes: 1200
     runs-on: ${{ inputs.runner_label }}
     steps:

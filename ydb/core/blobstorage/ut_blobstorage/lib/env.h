@@ -26,12 +26,10 @@ struct TEnvironmentSetup {
     std::set<TActorId> CommencedReplication;
     std::unordered_map<ui32, TString> Cache;
 
-    using TIcbControlKey = std::pair<ui32, TString>;  // { nodeId, name }
-    using TScbControlKey = std::pair<ui32, EStaticControlType>; // { nodeId, type }
+    using TIcbControlKey = std::pair<ui32, EStaticControlType>; // { nodeId, type }
 
     static const std::initializer_list<ui32> DebugLogComponents;
-
-    std::unordered_map<TScbControlKey, TControlWrapper> StaticControls;
+    std::unordered_map<TIcbControlKey, TControlWrapper> IcbControls;
 
     struct TSettings {
         const ui32 NodeCount = 9;
@@ -518,18 +516,19 @@ config:
 
                 TAppData* appData = Runtime->GetNode(nodeId)->AppData.get();
 
-#define ADD_SCB_CONTROL(controlName, defaultVal, minVal, maxVal, currentValue) {        \
+#define ADD_ICB_CONTROL(controlName, defaultVal, minVal, maxVal, currentValue) {        \
                     TControlWrapper control(defaultVal, minVal, maxVal);                \
-                    appData->StaticControlBoard->RegisterSharedControl(control, controlName);          \
+                    appData->Icb->RegisterSharedControl(control, controlName);          \
                     control = currentValue;                                             \
-                    StaticControls.insert({{nodeId, controlName}, std::move(control)});    \
+                    IcbControls.insert({{nodeId, controlName}, std::move(control)});    \
                 }
 
                 if (Settings.BurstThresholdNs) {
-                    ADD_SCB_CONTROL(EStaticControlType::VDiskControlsBurstThresholdNsHDD, 200'000'000, 1, 1'000'000'000'000, Settings.BurstThresholdNs);
-                    ADD_SCB_CONTROL(EStaticControlType::VDiskControlsBurstThresholdNsSSD, 50'000'000,  1, 1'000'000'000'000, Settings.BurstThresholdNs);
-                    ADD_SCB_CONTROL(EStaticControlType::VDiskControlsBurstThresholdNsNVME, 32'000'000,  1, 1'000'000'000'000, Settings.BurstThresholdNs);
+                    ADD_ICB_CONTROL(EStaticControlType::VDiskControlsBurstThresholdNsHDD, 200'000'000, 1, 1'000'000'000'000, Settings.BurstThresholdNs);
+                    ADD_ICB_CONTROL(EStaticControlType::VDiskControlsBurstThresholdNsSSD, 50'000'000,  1, 1'000'000'000'000, Settings.BurstThresholdNs);
+                    ADD_ICB_CONTROL(EStaticControlType::VDiskControlsBurstThresholdNsNVME, 32'000'000,  1, 1'000'000'000'000, Settings.BurstThresholdNs);
                 }
+<<<<<<< HEAD
                 ADD_SCB_CONTROL(EStaticControlType::VDiskControlsDiskTimeAvailableScaleHDD, 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
                 ADD_SCB_CONTROL(EStaticControlType::VDiskControlsDiskTimeAvailableScaleSSD, 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
                 ADD_SCB_CONTROL(EStaticControlType::VDiskControlsDiskTimeAvailableScaleNVME, 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
@@ -558,6 +557,23 @@ config:
 
 #undef ADD_SCB_CONTROL
 >>>>>>> (=) blobcache and dsproxy
+=======
+                ADD_ICB_CONTROL(EStaticControlType::VDiskControlsDiskTimeAvailableScaleHDD, 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
+                ADD_ICB_CONTROL(EStaticControlType::VDiskControlsDiskTimeAvailableScaleSSD, 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
+                ADD_ICB_CONTROL(EStaticControlType::VDiskControlsDiskTimeAvailableScaleNVME, 1'000, 1, 1'000'000, std::round(Settings.DiskTimeAvailableScale * 1'000));
+
+                ADD_ICB_CONTROL(EStaticControlType::DSProxyControlsSlowDiskThreshold, 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
+                ADD_ICB_CONTROL(EStaticControlType::DSProxyControlsSlowDiskThresholdHDD, 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
+                ADD_ICB_CONTROL(EStaticControlType::DSProxyControlsSlowDiskThresholdSSD, 2'000, 1, 1'000'000, std::round(Settings.SlowDiskThreshold * 1'000));
+                ADD_ICB_CONTROL(EStaticControlType::DSProxyControlsPredictedDelayMultiplier, 1'000, 1, 1'000'000, std::round(Settings.VDiskPredictedDelayMultiplier * 1'000));
+                ADD_ICB_CONTROL(EStaticControlType::DSProxyControlsPredictedDelayMultiplierHDD, 1'000, 1, 1'000'000, std::round(Settings.VDiskPredictedDelayMultiplier * 1'000));
+                ADD_ICB_CONTROL(EStaticControlType::DSProxyControlsPredictedDelayMultiplierSSD, 1'000, 1, 1'000'000, std::round(Settings.VDiskPredictedDelayMultiplier * 1'000));
+                ADD_ICB_CONTROL(EStaticControlType::DSProxyControlsMaxNumOfSlowDisks, 2, 1, 2, Settings.MaxNumOfSlowDisks);
+                ADD_ICB_CONTROL(EStaticControlType::DSProxyControlsMaxNumOfSlowDisksHDD, 2, 1, 2, Settings.MaxNumOfSlowDisks);
+                ADD_ICB_CONTROL(EStaticControlType::DSProxyControlsMaxNumOfSlowDisksSSD, 2, 1, 2, Settings.MaxNumOfSlowDisks);
+
+#undef ADD_ICB_CONTROL
+>>>>>>> (=) rename TStaticControlBoard => TControlBoard, TControlBoard=>TDynamicControlBoard
 
 #undef ADD_ICB_CONTROL
 >>>>>>> (=) vdiskcontrols
@@ -1208,15 +1224,15 @@ config:
             "handleclass", handleclass, counter);
     }
 
-    void SetStaticControlBoardControl(ui32 nodeId, EStaticControlType controlType, ui64 value) {
+    void SetIcbControl(ui32 nodeId, EStaticControlType controlType, ui64 value) {
         if (nodeId == 0) {
             for (nodeId = 1; nodeId <= Settings.NodeCount; ++nodeId) {
-                auto it = StaticControls.find({nodeId, controlType});
+                auto it = IcbControls.find({nodeId, controlType});
                 Y_ABORT_UNLESS(it != StaticControls.end());
                 it->second = value;
             }
         } else {
-            auto it = StaticControls.find({nodeId, controlType});
+            auto it = IcbControls.find({nodeId, controlType});
             Y_ABORT_UNLESS(it != StaticControls.end());
             it->second = value;
         }

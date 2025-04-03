@@ -314,46 +314,47 @@ void TDataShard::Die(const TActorContext& ctx) {
 }
 
 void TDataShard::InitControls() {
-    if (!ControlsInited) {
+    if (!IcbRegistered) {
         auto* appData = AppData();
-        auto staticControlBoard = appData->StaticControlBoard;
 
-        staticControlBoard->RegisterSharedControl(DisableByKeyFilter, EStaticControlType::DataShardControlsDisableByKeyFilter);
-        staticControlBoard->RegisterSharedControl(MaxTxInFly, EStaticControlType::DataShardControlsMaxTxInFly);
-        staticControlBoard->RegisterSharedControl(MaxTxLagMilliseconds, EStaticControlType::DataShardControlsMaxTxLagMilliseconds);
-        staticControlBoard->RegisterSharedControl(DataTxProfileLogThresholdMs, EStaticControlType::DataShardControlsDataTxProfileLogThresholdMs);
-        staticControlBoard->RegisterSharedControl(DataTxProfileBufferThresholdMs, EStaticControlType::DataShardControlsDataTxProfileBufferThresholdMs);
-        staticControlBoard->RegisterSharedControl(DataTxProfileBufferSize, EStaticControlType::DataShardControlsDataTxProfileBufferSize);
+        appData->Icb->RegisterSharedControl(DisableByKeyFilter, EStaticControlType::DataShardControlsDisableByKeyFilter);
+        appData->Icb->RegisterSharedControl(MaxTxInFly, EStaticControlType::DataShardControlsMaxTxInFly);
+        appData->Icb->RegisterSharedControl(MaxTxLagMilliseconds, EStaticControlType::DataShardControlsMaxTxLagMilliseconds);
+        appData->Icb->RegisterSharedControl(DataTxProfileLogThresholdMs, EStaticControlType::DataShardControlsDataTxProfileLogThresholdMs);
+        appData->Icb->RegisterSharedControl(DataTxProfileBufferThresholdMs, EStaticControlType::DataShardControlsDataTxProfileBufferThresholdMs);
+        appData->Icb->RegisterSharedControl(DataTxProfileBufferSize, EStaticControlType::DataShardControlsDataTxProfileBufferSize);
 
-        staticControlBoard->RegisterSharedControl(CanCancelROWithReadSets, EStaticControlType::DataShardControlsCanCancelROWithReadSets);
-        staticControlBoard->RegisterSharedControl(PerShardReadSizeLimit, EStaticControlType::TxLimitControlsPerShardReadSizeLimit);
-        staticControlBoard->RegisterSharedControl(CpuUsageReportThresholdPercent, EStaticControlType::DataShardControlsCpuUsageReportThreshlodPercent);
-        staticControlBoard->RegisterSharedControl(CpuUsageReportIntervalSeconds, EStaticControlType::DataShardControlsCpuUsageReportIntervalSeconds);
-        staticControlBoard->RegisterSharedControl(HighDataSizeReportThresholdBytes, EStaticControlType::DataShardControlsHighDataSizeReportThreshlodBytes);
-        staticControlBoard->RegisterSharedControl(HighDataSizeReportIntervalSeconds, EStaticControlType::DataShardControlsHighDataSizeReportIntervalSeconds);
+        appData->Icb->RegisterSharedControl(CanCancelROWithReadSets, EStaticControlType::DataShardControlsCanCancelROWithReadSets);
+        appData->Icb->RegisterSharedControl(PerShardReadSizeLimit, EStaticControlType::TxLimitControlsPerShardReadSizeLimit);
+        appData->Icb->RegisterSharedControl(CpuUsageReportThresholdPercent, EStaticControlType::DataShardControlsCpuUsageReportThreshlodPercent);
+        appData->Icb->RegisterSharedControl(CpuUsageReportIntervalSeconds, EStaticControlType::DataShardControlsCpuUsageReportIntervalSeconds);
+        appData->Icb->RegisterSharedControl(HighDataSizeReportThresholdBytes, EStaticControlType::DataShardControlsHighDataSizeReportThreshlodBytes);
+        appData->Icb->RegisterSharedControl(HighDataSizeReportIntervalSeconds, EStaticControlType::DataShardControlsHighDataSizeReportIntervalSeconds);
 
 
-        staticControlBoard->RegisterSharedControl(BackupReadAheadLo, EStaticControlType::DataShardControlsBackupReadAheadLo);
-        staticControlBoard->RegisterSharedControl(BackupReadAheadHi, EStaticControlType::DataShardControlsBackupReadAheadHi);
+        appData->Icb->RegisterSharedControl(BackupReadAheadLo, EStaticControlType::DataShardControlsBackupReadAheadLo);
+        appData->Icb->RegisterSharedControl(BackupReadAheadHi, EStaticControlType::DataShardControlsBackupReadAheadHi);
 
-        staticControlBoard->RegisterSharedControl(TtlReadAheadLo, EStaticControlType::DataShardControlsTtlReadAheadLo);
-        staticControlBoard->RegisterSharedControl(TtlReadAheadHi, EStaticControlType::DataShardControlsTtlReadAheadHi);
+        appData->Icb->RegisterSharedControl(TtlReadAheadLo, EStaticControlType::DataShardControlsTtlReadAheadLo);
+        appData->Icb->RegisterSharedControl(TtlReadAheadHi, EStaticControlType::DataShardControlsTtlReadAheadHi);
 
-        staticControlBoard->RegisterSharedControl(EnableLockedWrites, EStaticControlType::DataShardControlsEnableLockedWrites);
-        staticControlBoard->RegisterSharedControl(MaxLockedWritesPerKey, EStaticControlType::DataShardControlsMaxLockedWritesPerKey);
+        appData->Icb->RegisterSharedControl(EnableLockedWrites, EStaticControlType::DataShardControlsEnableLockedWrites);
+        appData->Icb->RegisterSharedControl(MaxLockedWritesPerKey, EStaticControlType::DataShardControlsMaxLockedWritesPerKey);
 
-        staticControlBoard->RegisterSharedControl(EnableLeaderLeases, EStaticControlType::DataShardControlsEnableLeaderLeases);
-        staticControlBoard->RegisterSharedControl(MinLeaderLeaseDurationUs, EStaticControlType::DataShardControlsMinLeaderLeaseDurationUs);
+        appData->Icb->RegisterSharedControl(EnableLeaderLeases, EStaticControlType::DataShardControlsEnableLeaderLeases);
+        appData->Icb->RegisterSharedControl(MinLeaderLeaseDurationUs, EStaticControlType::DataShardControlsMinLeaderLeaseDurationUs);
 
-        staticControlBoard->RegisterSharedControl(ChangeRecordDebugPrint, EStaticControlType::DataShardControlsChangeRecordDebugPrint);
+        appData->Icb->RegisterSharedControl(ChangeRecordDebugPrint, EStaticControlType::DataShardControlsChangeRecordDebugPrint);
 
-        staticControlBoard->RegisterSharedControl(IncrementalRestoreReadAheadLo, EStaticControlType::DataShardControlsIncrementalRestoreReadAheadLo);
-        staticControlBoard->RegisterSharedControl(IncrementalRestoreReadAheadHi, EStaticControlType::DataShardControlsIncrementalRestoreReadAheadHi);
+        appData->Icb->RegisterSharedControl(IncrementalRestoreReadAheadLo, EStaticControlType::DataShardControlsIncrementalRestoreReadAheadLo);
+        appData->Icb->RegisterSharedControl(IncrementalRestoreReadAheadHi, EStaticControlType::DataShardControlsIncrementalRestoreReadAheadHi);
 
-        staticControlBoard->RegisterSharedControl(ReadIteratorKeysExtBlobsPrecharge, EStaticControlType::DataShardControlsReadIteratorKeysExtBlobsPrecharge);
+        appData->Icb->RegisterSharedControl(ReadIteratorKeysExtBlobsPrecharge, EStaticControlType::DataShardControlsReadIteratorKeysExtBlobsPrecharge);
 
-        staticControlBoard->RegisterSharedControl(CdcInitialScanReadAheadLo, EStaticControlType::DataShardControlsCdcInitialScanReadAheadLo);
-        staticControlBoard->RegisterSharedControl(CdcInitialScanReadAheadHi, EStaticControlType::DataShardControlsCdcInitialScanReadAheadHi);
+        appData->Icb->RegisterSharedControl(CdcInitialScanReadAheadLo, EStaticControlType::DataShardControlsCdcInitialScanReadAheadLo);
+        appData->Icb->RegisterSharedControl(CdcInitialScanReadAheadHi, EStaticControlType::DataShardControlsCdcInitialScanReadAheadHi);
+
+        IcbRegistered = true;
     }
 }
 

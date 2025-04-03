@@ -10,12 +10,12 @@ namespace NKikimr {
         const ui64 Cookie;
         std::unique_ptr<TEvBlobStorage::TEvVGetResult> Result;
         TActorId ParentId;
-        std::deque<std::pair<TVDiskID, TActorId>> Donors;
+        std::deque<std::pair<TVDiskID, TDonorQueueActors>> Donors;
         TDynBitMap UnresolvedItems;
         TIntrusivePtr<TVDiskContext> VCtx;
 
     public:
-        TDonorQueryActor(TEvBlobStorage::TEvEnrichNotYet& msg, std::deque<std::pair<TVDiskID, TActorId>> donors, const TIntrusivePtr<TVDiskContext>& vCtx)
+        TDonorQueryActor(TEvBlobStorage::TEvEnrichNotYet& msg, std::deque<std::pair<TVDiskID, TDonorQueueActors>> donors, const TIntrusivePtr<TVDiskContext>& vCtx)
             : Query(msg.Query->Release().Release())
             , Sender(msg.Query->Sender)
             , Cookie(msg.Query->Cookie)
@@ -45,7 +45,7 @@ namespace NKikimr {
                 return PassAway();
             }
 
-            auto [vdiskId, actorId] = Donors.back();
+            auto [vdiskId, actors] = Donors.back();
             Donors.pop_back();
 
             // we use AsyncRead priority as we are going to use the replication queue for the VDisk; also this doesn't
@@ -57,7 +57,7 @@ namespace NKikimr {
             const auto flags = record.GetShowInternals()
                 ? TEvBlobStorage::TEvVGet::EFlags::ShowInternals
                 : TEvBlobStorage::TEvVGet::EFlags::None;
-            auto query = fun(vdiskId, TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::AsyncRead, flags, {}, {}, std::nullopt);
+            auto query = fun(vdiskId, TInstant::Max(), NKikimrBlobStorage::EGetHandleClass::FastRead, flags, {}, {}, std::nullopt);
 
             bool action = false;
             Y_FOR_EACH_BIT(i, UnresolvedItems) {
@@ -69,8 +69,8 @@ namespace NKikimr {
 
             if (action) {
                 LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_VDISK_GET, SelfId() << " sending " << query->ToString()
-                    << " to " << actorId);
-                Send(actorId, query.release(), IEventHandle::FlagTrackDelivery);
+                    << " to " << actors.FastReadQueueActorId);
+                Send(actors.FastReadQueueActorId, query.release(), IEventHandle::FlagTrackDelivery);
             } else {
                 PassAway();
             }

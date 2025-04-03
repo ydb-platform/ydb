@@ -57,6 +57,271 @@
             ]
         }
     },
+    "test.test_scheme_directory": {
+        "1-get": {
+            "children": [
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
+                    "name": ".metadata",
+                    "owner": "metadata@system",
+                    "type": "DIRECTORY"
+                },
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
+                    "name": "topic1",
+                    "owner": "root@builtin",
+                    "type": "TOPIC"
+                },
+                {
+                    "created_at": {},
+                    "name": ".sys",
+                    "type": "DIRECTORY"
+                }
+            ],
+            "self": {
+                "created_at": {
+                    "tx_id": "not-zero-number-text"
+                },
+                "effective_permissions": [
+                    {
+                        "permission_names": [
+                            "ydb.database.connect"
+                        ],
+                        "subject": "USERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.list"
+                        ],
+                        "subject": "METADATA-READERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.granular.select_row"
+                        ],
+                        "subject": "DATA-READERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.tables.modify"
+                        ],
+                        "subject": "DATA-WRITERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.granular.create_directory",
+                            "ydb.granular.write_attributes",
+                            "ydb.granular.create_table",
+                            "ydb.granular.remove_schema",
+                            "ydb.granular.create_queue",
+                            "ydb.granular.alter_schema"
+                        ],
+                        "subject": "DDL-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.access.grant"
+                        ],
+                        "subject": "ACCESS-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.manage"
+                        ],
+                        "subject": "DATABASE-ADMINS"
+                    }
+                ],
+                "name": "Root/dedicated_db",
+                "owner": "root@builtin",
+                "type": "DATABASE"
+            }
+        },
+        "2-post": {},
+        "3-get": {
+            "children": [
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
+                    "name": ".metadata",
+                    "owner": "metadata@system",
+                    "type": "DIRECTORY"
+                },
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
+                    "name": "test_dir",
+                    "owner": "root@builtin",
+                    "type": "DIRECTORY"
+                },
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
+                    "name": "topic1",
+                    "owner": "root@builtin",
+                    "type": "TOPIC"
+                },
+                {
+                    "created_at": {},
+                    "name": ".sys",
+                    "type": "DIRECTORY"
+                }
+            ],
+            "self": {
+                "created_at": {
+                    "tx_id": "not-zero-number-text"
+                },
+                "effective_permissions": [
+                    {
+                        "permission_names": [
+                            "ydb.database.connect"
+                        ],
+                        "subject": "USERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.list"
+                        ],
+                        "subject": "METADATA-READERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.granular.select_row"
+                        ],
+                        "subject": "DATA-READERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.tables.modify"
+                        ],
+                        "subject": "DATA-WRITERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.granular.create_directory",
+                            "ydb.granular.write_attributes",
+                            "ydb.granular.create_table",
+                            "ydb.granular.remove_schema",
+                            "ydb.granular.create_queue",
+                            "ydb.granular.alter_schema"
+                        ],
+                        "subject": "DDL-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.access.grant"
+                        ],
+                        "subject": "ACCESS-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.manage"
+                        ],
+                        "subject": "DATABASE-ADMINS"
+                    }
+                ],
+                "name": "Root/dedicated_db",
+                "owner": "root@builtin",
+                "type": "DATABASE"
+            }
+        },
+        "4-delete": {},
+        "5-get": {
+            "children": [
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
+                    "name": ".metadata",
+                    "owner": "metadata@system",
+                    "type": "DIRECTORY"
+                },
+                {
+                    "created_at": {
+                        "plan_step": "not-zero-number-text",
+                        "tx_id": "not-zero-number-text"
+                    },
+                    "name": "topic1",
+                    "owner": "root@builtin",
+                    "type": "TOPIC"
+                },
+                {
+                    "created_at": {},
+                    "name": ".sys",
+                    "type": "DIRECTORY"
+                }
+            ],
+            "self": {
+                "created_at": {
+                    "tx_id": "not-zero-number-text"
+                },
+                "effective_permissions": [
+                    {
+                        "permission_names": [
+                            "ydb.database.connect"
+                        ],
+                        "subject": "USERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.list"
+                        ],
+                        "subject": "METADATA-READERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.granular.select_row"
+                        ],
+                        "subject": "DATA-READERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.tables.modify"
+                        ],
+                        "subject": "DATA-WRITERS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.granular.create_directory",
+                            "ydb.granular.write_attributes",
+                            "ydb.granular.create_table",
+                            "ydb.granular.remove_schema",
+                            "ydb.granular.create_queue",
+                            "ydb.granular.alter_schema"
+                        ],
+                        "subject": "DDL-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.access.grant"
+                        ],
+                        "subject": "ACCESS-ADMINS"
+                    },
+                    {
+                        "permission_names": [
+                            "ydb.generic.manage"
+                        ],
+                        "subject": "DATABASE-ADMINS"
+                    }
+                ],
+                "name": "Root/dedicated_db",
+                "owner": "root@builtin",
+                "type": "DATABASE"
+            }
+        }
+    },
     "test.test_storage_groups": {
         "FieldsAvailable": "111111111111111111111",
         "FieldsRequired": "111111111111111111111",

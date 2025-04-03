@@ -8,20 +8,39 @@
 
 namespace NKikimr::NArrow::NSSA {
 
+enum class ECalculationHardness {
+    JustAccessorUsage = 1,
+    NotSpecified = 3,
+    Equals = 5,
+    StringMatching = 10,
+    Unknown = 20
+};
+
 class IKernelLogic {
 private:
     virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output,
         const std::shared_ptr<TAccessorsCollection>& resources) const = 0;
 
+    virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const = 0;
+    YDB_ACCESSOR_DEF(std::optional<ui32>, YqlOperationId);
+
 public:
+    IKernelLogic() = default;
+
+    IKernelLogic(const ui32 yqlOperationId)
+        : YqlOperationId(yqlOperationId) {
+    }
+
     virtual ~IKernelLogic() = default;
+
+    virtual TString SignalDescription() const {
+        return GetClassName();
+    }
+    virtual ECalculationHardness GetWeight() const = 0;
 
     using TFactory = NObjectFactory::TObjectFactory<IKernelLogic, TString>;
 
     virtual TString GetClassName() const = 0;
-
-    virtual std::optional<TFetchingInfo> BuildFetchTask(const ui32 columnId, const NAccessor::IChunkedArray::EType arrType,
-        const std::vector<TColumnChainInfo>& input, const std::shared_ptr<TAccessorsCollection>& resources) const = 0;
 
     TConclusion<bool> Execute(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output,
         const std::shared_ptr<TAccessorsCollection>& resources) const {
@@ -32,12 +51,127 @@ public:
     }
 
     virtual bool IsBoolInResult() const = 0;
+    std::optional<TIndexCheckOperation> GetIndexCheckerOperation() const {
+        return DoGetIndexCheckerOperation();
+    }
+};
+
+class TSimpleKernelLogic: public IKernelLogic {
+private:
+    using TBase = IKernelLogic;
+    YDB_READONLY_DEF(std::optional<ui32>, YqlOperationId);
+
+    virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& /*input*/, const std::vector<TColumnChainInfo>& /*output*/,
+        const std::shared_ptr<TAccessorsCollection>& /*resources*/) const override {
+        return false;
+    }
+
+    virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const override {
+        return std::nullopt;
+    }
+
+public:
+    TSimpleKernelLogic() = default;
+    TSimpleKernelLogic(const ui32 yqlOperationId)
+        : TBase(yqlOperationId)
+        , YqlOperationId(yqlOperationId) {
+    }
+
+    virtual TString SignalDescription() const override;
+
+    virtual ECalculationHardness GetWeight() const override {
+        if (!YqlOperationId) {
+            return ECalculationHardness::Unknown;
+        }
+        return ECalculationHardness::NotSpecified;
+    }
+
+    virtual TString GetClassName() const override {
+        return "SIMPLE";
+    }
+
+    virtual bool IsBoolInResult() const override;
+};
+
+class TLogicMatchString: public IKernelLogic {
+private:
+    using TBase = IKernelLogic;
+    virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& /*input*/, const std::vector<TColumnChainInfo>& /*output*/,
+        const std::shared_ptr<TAccessorsCollection>& /*resources*/) const override {
+        return false;
+    }
+    virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const override {
+        return TIndexCheckOperation(Operation, CaseSensitive);
+    }
+    virtual ECalculationHardness GetWeight() const override {
+        return ECalculationHardness::StringMatching;
+    }
+
+    const TIndexCheckOperation::EOperation Operation;
+    const bool CaseSensitive;
+    const bool IsSimpleFunction;
+
+public:
+    TLogicMatchString(const TIndexCheckOperation::EOperation operation, const bool caseSensitive, const bool isSimpleFunction)
+        : Operation(operation)
+        , CaseSensitive(caseSensitive)
+        , IsSimpleFunction(isSimpleFunction) {
+    }
+
+    virtual TString SignalDescription() const override {
+        return "MATCH_STRING::" + ::ToString(Operation) + "::" + ::ToString(CaseSensitive);
+    }
+
+    virtual TString GetClassName() const override {
+        return "MATCH_STRING";
+    }
+
+    virtual bool IsBoolInResult() const override {
+        return !IsSimpleFunction;
+    }
+};
+
+class TLogicEquals: public IKernelLogic {
+private:
+    using TBase = IKernelLogic;
+    virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& /*input*/, const std::vector<TColumnChainInfo>& /*output*/,
+        const std::shared_ptr<TAccessorsCollection>& /*resources*/) const override {
+        return false;
+    }
+    virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const override {
+        return TIndexCheckOperation(TIndexCheckOperation::EOperation::Equals, true);
+    }
+    const bool IsSimpleFunction;
+
+    virtual ECalculationHardness GetWeight() const override {
+        return ECalculationHardness::Equals;
+    }
+
+public:
+    TLogicEquals(const bool isSimpleFunction)
+        : IsSimpleFunction(isSimpleFunction) {
+    }
+
+    virtual TString GetClassName() const override {
+        return "EQUALS";
+    }
+
+    virtual bool IsBoolInResult() const override {
+        return !IsSimpleFunction;
+    }
 };
 
 class TGetJsonPath: public IKernelLogic {
 public:
     static TString GetClassNameStatic() {
         return "JsonValue";
+    }
+    virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const override {
+        return std::nullopt;
+    }
+
+    virtual ECalculationHardness GetWeight() const override {
+        return ECalculationHardness::JustAccessorUsage;
     }
 
 private:
@@ -90,9 +224,6 @@ private:
     }
 
     static const inline TFactory::TRegistrator<TGetJsonPath> Registrator = TFactory::TRegistrator<TGetJsonPath>(GetClassNameStatic());
-
-    virtual std::optional<TFetchingInfo> BuildFetchTask(const ui32 columnId, const NAccessor::IChunkedArray::EType arrType,
-        const std::vector<TColumnChainInfo>& input, const std::shared_ptr<TAccessorsCollection>& resources) const override;
 
     virtual TConclusion<bool> DoExecute(const std::vector<TColumnChainInfo>& input, const std::vector<TColumnChainInfo>& output,
         const std::shared_ptr<TAccessorsCollection>& resources) const override;

@@ -8,6 +8,7 @@
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/tx/datashard/upload_stats.h>
+#include <ydb/core/tx/datashard/scan_common.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
 
@@ -85,7 +86,7 @@ protected:
     TString LogPrefix;
     TString TargetTable;
 
-    NDataShard::TUploadRetryLimits Limits;
+    const NKikimrIndexBuilder::TIndexBuildScanSettings ScanSettings;
 
     TActorId ResponseActorId;
     ui64 BuildIndexId = 0;
@@ -104,13 +105,14 @@ protected:
 
 public:
     TUploadSampleK(TString targetTable,
-                   const TIndexBuildInfo::TLimits& limits,
+                   const NKikimrIndexBuilder::TIndexBuildScanSettings& scanSettings,
                    const TActorId& responseActorId,
                    ui64 buildIndexId,
                    TIndexBuildInfo::TSample::TRows init,
                    NTableIndex::TClusterId parent,
                    NTableIndex::TClusterId child)
         : TargetTable(std::move(targetTable))
+        , ScanSettings(scanSettings)
         , ResponseActorId(responseActorId)
         , BuildIndexId(buildIndexId)
         , Init(std::move(init))
@@ -120,7 +122,6 @@ public:
         LogPrefix = TStringBuilder()
             << "TUploadSampleK: BuildIndexId: " << BuildIndexId
             << " ResponseActorId: " << ResponseActorId;
-        Limits.MaxUploadRowsRetryCount = limits.MaxRetries;
         Y_ASSERT(!Init.empty());
         Y_ASSERT(Parent < Child);
         Y_ASSERT(Child != 0);
@@ -206,10 +207,10 @@ private:
         UploadStatus.StatusCode = ev->Get()->Status;
         UploadStatus.Issues = std::move(ev->Get()->Issues);
 
-        if (UploadStatus.IsRetriable() && RetryCount < Limits.MaxUploadRowsRetryCount) {
+        if (UploadStatus.IsRetriable() && RetryCount < ScanSettings.GetMaxBatchRetries()) {
             LOG_N("Got retriable error, " << Debug() << " RetryCount: " << RetryCount);
 
-            this->Schedule(Limits.GetTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
+            this->Schedule(NDataShard::GetRetryWakeupTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
             return;
         }
         TAutoPtr<TEvIndexBuilder::TEvUploadSampleKResponse> response = new TEvIndexBuilder::TEvUploadSampleKResponse;
@@ -742,9 +743,7 @@ private:
 
         ev->Record.SetTargetName(buildInfo.TargetName);
 
-        ev->Record.SetMaxBatchRows(buildInfo.Limits.MaxBatchRows);
-        ev->Record.SetMaxBatchBytes(buildInfo.Limits.MaxBatchBytes);
-        ev->Record.SetMaxRetries(buildInfo.Limits.MaxRetries);
+        ev->Record.MutableScanSettings()->CopyFrom(buildInfo.ScanSettings);
 
         auto shardId = CommonFillRecord(ev->Record, shardIdx, buildInfo);
 
@@ -760,7 +759,7 @@ private:
                         .Dive(NTableIndex::NTableVectorKmeansTreeIndex::LevelTable);
         Y_ASSERT(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
         auto actor = new TUploadSampleK(path.PathString(),
-            buildInfo.Limits, Self->SelfId(), ui64(BuildId),
+            buildInfo.ScanSettings, Self->SelfId(), ui64(BuildId),
             buildInfo.Sample.Rows, buildInfo.KMeans.Parent, buildInfo.KMeans.Child);
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
@@ -777,7 +776,7 @@ private:
 
     template<typename Send>
     bool SendToShards(TIndexBuildInfo& buildInfo, Send&& send) {
-        while (!buildInfo.ToUploadShards.empty() && buildInfo.InProgressShards.size() < buildInfo.Limits.MaxShards) {
+        while (!buildInfo.ToUploadShards.empty() && buildInfo.InProgressShards.size() < buildInfo.MaxInProgressShards) {
             auto shardIdx = buildInfo.ToUploadShards.front();
             buildInfo.ToUploadShards.pop_front();
             buildInfo.InProgressShards.emplace(shardIdx);

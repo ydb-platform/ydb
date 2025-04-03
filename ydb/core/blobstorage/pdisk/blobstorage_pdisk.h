@@ -1710,7 +1710,7 @@ struct TPDiskCtx {
         : ActorSystem(actorSystem)
         , PDiskId(pdiskId)
         , PDiskActor(pdiskActor)
-        , PDiskLogPrefix(Sprintf("PDiskId# %u ", PDiskId))
+        , PDiskLogPrefix(Sprintf("PDiskId# %" PRIu32 " ", PDiskId))
     {}
 };
 

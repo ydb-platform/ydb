@@ -33,6 +33,8 @@ namespace NKikimr::NBlobDepot {
 
         bool Finished = false;
 
+        std::vector<TAssimilatedBlobInfo> AssimilatedBlobs;
+
     public:
         TResolveDecommitActor(TBlobDepot *self, TEvBlobDepot::TEvResolve::TPtr ev)
             : Self(self)
@@ -238,9 +240,7 @@ namespace NKikimr::NBlobDepot {
                         DecommitBlobs.push_back({r.Id, r.Keep, r.DoNotKeep});
                     }
                 } else if (r.Status == NKikimrProto::NODATA) {
-                    Self->Data->ExecuteTxCommitAssimilatedBlob(NKikimrProto::NODATA, TBlobSeqId(), TData::TKey(r.Id),
-                        TEvPrivate::EvTxComplete, SelfId(), 0);
-                    ++TxInFlight;
+                    AssimilatedBlobs.push_back({.Status = NKikimrProto::NODATA, .Key = TData::TKey(r.Id)});
                 } else {
                     // mark this specific key as unresolvable
                     ResolutionErrors.emplace(r.Id);
@@ -303,9 +303,13 @@ namespace NKikimr::NBlobDepot {
             Y_ABORT_UNLESS(PutsInFlight);
             --PutsInFlight;
 
-            Self->Data->ExecuteTxCommitAssimilatedBlob(msg.Status, TBlobSeqId::FromLogoBlobId(msg.Id), std::move(key),
-                TEvPrivate::EvTxComplete, SelfId(), 0, keep, doNotKeep);
-            ++TxInFlight;
+            AssimilatedBlobs.push_back({
+                .Status = msg.Status,
+                .BlobSeqId = TBlobSeqId::FromLogoBlobId(msg.Id),
+                .Key = std::move(key),
+                .Keep = keep,
+                .DoNotKeep = doNotKeep,
+            });
         }
 
         void HandleTxComplete() {
@@ -320,6 +324,13 @@ namespace NKikimr::NBlobDepot {
 
         void CheckIfDone() {
             if (TxInFlight + RangesInFlight + GetsInFlight + GetQ.size() + PutsInFlight != 0) {
+                return;
+            }
+
+            if (!AssimilatedBlobs.empty()) {
+                Self->Data->ExecuteTxCommitAssimilatedBlob(std::exchange(AssimilatedBlobs, {}), TEvPrivate::EvTxComplete,
+                    SelfId(), 0);
+                ++TxInFlight;
                 return;
             }
 

@@ -147,7 +147,6 @@ private:
     std::optional<TResourceAddress> GetOriginalAddress(TGraphNode* condNode) const;
     TConclusion<bool> OptimizeForFetchSubColumns(TGraphNode* condNode);
     TConclusion<bool> OptimizeConditionsForHeadersCheck(TGraphNode* condNode);
-    bool IsBoolResultYqlOperator(const NYql::TKernelRequestBuilder::EBinaryOp op) const;
 
     TConclusion<bool> OptimizeConditionsForStream(TGraphNode* condNode);
     TConclusion<bool> OptimizeConditionsForIndexes(TGraphNode* condNode);

@@ -40,4 +40,5 @@ RECURSE(
     s3_import
     scenario
     ttl_tiering
+    restarts
 )

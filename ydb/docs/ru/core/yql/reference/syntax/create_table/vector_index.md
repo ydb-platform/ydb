@@ -1,4 +1,4 @@
-# ВЕКТОРНЫЙ ИНДЕКС
+# Векторный индекс
 
 {% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
 

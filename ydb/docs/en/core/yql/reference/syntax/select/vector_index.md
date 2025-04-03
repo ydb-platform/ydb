@@ -1,4 +1,4 @@
-# VIEW (INDEX)
+# VIEW (Vector index)
 
 {% if oss == true and backend_name == "YDB" %}
 
@@ -31,7 +31,7 @@ SELECT ...
 
 ## Examples
 
-* Select all the fields from the `series` row-oriented table using the `views_index` vector index created for `embedding` and inner product similarity
+* Select all the fields from the `series` row-oriented table using the `views_index` vector index created for `embedding` and inner product similarity:
 
   ```yql
   SELECT series_id, title, info, release_date, views, uploaded_user_id, Knn::InnerProductSimilarity(embedding, $target) as similarity
@@ -40,7 +40,7 @@ SELECT ...
       LIMIT 10
   ```
 
-* Select all the fields from the `series` row-oriented table using the `views_index2` prefixed vector index created for `embedding` and inner product similarity with prefix column `release_date`
+* Select all the fields from the `series` row-oriented table using the `views_index2` prefixed vector index created for `embedding` and inner product similarity with prefix column `release_date`:
 
   ```yql
   SELECT series_id, title, info, release_date, views, uploaded_user_id, Knn::InnerProductSimilarity(embedding, $target) as similarity

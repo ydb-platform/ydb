@@ -1,4 +1,4 @@
-# VIEW (ИНДЕКС)
+# VIEW (Векторный индекс)
 
 {% if oss == true and backend_name == "YDB" %}
 

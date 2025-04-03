@@ -2,15 +2,15 @@
 
 [Vector indexes](https://en.wikipedia.org/wiki/Vector_database) are specialized data structures that enable efficient similarity search in high-dimensional spaces. Unlike traditional indexes that optimize exact lookups, vector indexes allow finding the most similar items to a query vector based on mathematical distance or similarity measures.
 
-Data in a {{ ydb-short-name }} table is stored and sorted by primary key, enabling efficient point lookups and range scans. Vector indexes provide similar efficiency for nearest neighbor searches in vector spaces, which is particularly valuable for working with embeddings and other high-dimensional data representations.
+Data in a {{ ydb-short-name }} table is stored and sorted by a primary key, enabling efficient point lookups and range scans. Vector indexes provide similar efficiency for nearest neighbor searches in vector spaces, which is particularly valuable for working with embeddings and other high-dimensional data representations.
 
 This article describes practical operations with vector indexes. For conceptual information about vector index types and their characteristics, see [Vector indexes](../concepts/vector_indexes.md) in the Concepts section.
 
 ## Creating vector indexes {#create}
 
-A vector index can be created:
-* When creating a table with the [`CREATE TABLE` YQL command](../yql/reference/syntax/create_table/index.md)
-* Added to an existing table with the [`ALTER TABLE` YQL command](../yql/reference/syntax/alter_table/index.md)
+A vector index can be created with the following YQL commands:
+* [`CREATE TABLE`](../yql/reference/syntax/create_table/index.md)
+* [`ALTER TABLE`](../yql/reference/syntax/alter_table/index.md)
 
 Example of creating a prefixed vector index with covered columns:
 
@@ -22,7 +22,7 @@ ALTER TABLE my_table
   WITH (distance=cosine, type="uint8", dimension=512, levels=2, clusters=128);
 ```
 
-Key parameters for vector_kmeans_tree:
+Key parameters for `vector_kmeans_tree`:
 * distance/similarity: Metric function ("cosine", "euclidean", etc.)
 * type: Data type ("float", "int8", "uint8")
 * dimension: Number of dimensions (<= 16384)

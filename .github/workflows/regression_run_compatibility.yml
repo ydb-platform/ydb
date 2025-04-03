@@ -16,6 +16,5 @@ jobs:
          build_preset: ["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]
     with:
       test_targets: ydb/tests/functional/compatibility/
-      test_size: small,medium,large
       build_preset: ${{ matrix.build_preset }}
 

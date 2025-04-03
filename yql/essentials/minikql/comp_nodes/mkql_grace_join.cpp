@@ -80,12 +80,9 @@ struct TGraceJoinPacker {
     ui64 DataIColumnsNum = TotalIColumnsNum - KeyIColumnsNum;
     std::vector<GraceJoin::TColTypeInterface> ColumnInterfaces;
     bool IsAny; // Flag to support any join attribute
-    const NUdf::TLoggerPtr Logger; // Logger instance
-    const NUdf::TLogComponentId LogComponent; // Id of current component for logging. GracejJoin here
     inline void Pack() ; // Packs new tuple from TupleHolder and TuplePtrs to TupleIntVals, TupleStrSizes, TupleStrings
     inline void UnPack(); // Unpacks packed values from TupleIntVals, TupleStrSizes, TupleStrings into TupleHolder and TuplePtrs
-    TGraceJoinPacker(const std::vector<TType*>& columnTypes, const std::vector<ui32>& keyColumns,
-            const THolderFactory& holderFactory, bool isAny, NUdf::TLoggerPtr logger, NUdf::TLogComponentId logComponent);
+    TGraceJoinPacker(const std::vector<TType*>& columnTypes, const std::vector<ui32>& keyColumns, const THolderFactory& holderFactory, bool isAny);
 };
 
 
@@ -433,13 +430,10 @@ void TGraceJoinPacker::UnPack()  {
 }
 
 
-TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, const std::vector<ui32>& keyColumns,
-        const THolderFactory& holderFactory, bool isAny, NUdf::TLoggerPtr logger = nullptr, NUdf::TLogComponentId logComponent = 0) :
+TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, const std::vector<ui32>& keyColumns, const THolderFactory& holderFactory, bool isAny) :
                                     ColumnTypes(columnTypes)
                                     , HolderFactory(holderFactory)
-                                    , IsAny(isAny)
-                                    , Logger(logger)
-                                    , LogComponent(logComponent) {
+                                    , IsAny(isAny) {
 
     ui64 nColumns = ColumnTypes.size();
     ui64 nKeyColumns = keyColumns.size();
@@ -556,9 +550,8 @@ TGraceJoinPacker::TGraceJoinPacker(const std::vector<TType *> & columnTypes, con
     }
 
     TablePtr = std::make_unique<GraceJoin::TTable>(
-        Logger, LogComponent,
         PackedKeyIntColumnsNum, KeyStrColumnsNum, PackedDataIntColumnsNum,
-        DataStrColumnsNum, KeyIColumnsNum, DataIColumnsNum, NullsBitmapSize, cti_p, IsAny);
+        DataStrColumnsNum, KeyIColumnsNum, DataIColumnsNum, NullsBitmapSize, cti_p, IsAny );
 
 }
 
@@ -576,7 +569,7 @@ public:
         EJoinKind joinKind,  EAnyJoinSettings anyJoinSettings, const std::vector<ui32>& leftKeyColumns, const std::vector<ui32>& rightKeyColumns,
         const std::vector<ui32>& leftRenames, const std::vector<ui32>& rightRenames,
         const std::vector<TType*>& leftColumnsTypes, const std::vector<TType*>& rightColumnsTypes, TComputationContext& ctx,
-        const bool isSelfJoin, bool isSpillingAllowed, NUdf::TLoggerPtr logger, NUdf::TLogComponentId logComponent)
+        const bool isSelfJoin, bool isSpillingAllowed)
     :  TBase(memInfo)
     ,   FlowLeft(flowLeft)
     ,   FlowRight(flowRight)
@@ -585,9 +578,9 @@ public:
     ,   RightKeyColumns(rightKeyColumns)
     ,   LeftRenames(leftRenames)
     ,   RightRenames(rightRenames)
-    ,   LeftPacker(std::make_unique<TGraceJoinPacker>(leftColumnsTypes, leftKeyColumns, ctx.HolderFactory, (anyJoinSettings == EAnyJoinSettings::Left || anyJoinSettings == EAnyJoinSettings::Both || joinKind == EJoinKind::RightSemi || joinKind == EJoinKind::RightOnly), logger, logComponent))
-    ,   RightPacker(std::make_unique<TGraceJoinPacker>(rightColumnsTypes, rightKeyColumns, ctx.HolderFactory, (anyJoinSettings == EAnyJoinSettings::Right || anyJoinSettings == EAnyJoinSettings::Both || joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly), logger, logComponent))
-    ,   JoinedTablePtr(std::make_unique<GraceJoin::TTable>(logger, logComponent))
+    ,   LeftPacker(std::make_unique<TGraceJoinPacker>(leftColumnsTypes, leftKeyColumns, ctx.HolderFactory, (anyJoinSettings == EAnyJoinSettings::Left || anyJoinSettings == EAnyJoinSettings::Both || joinKind == EJoinKind::RightSemi || joinKind == EJoinKind::RightOnly)))
+    ,   RightPacker(std::make_unique<TGraceJoinPacker>(rightColumnsTypes, rightKeyColumns, ctx.HolderFactory, (anyJoinSettings == EAnyJoinSettings::Right || anyJoinSettings == EAnyJoinSettings::Both || joinKind == EJoinKind::LeftSemi || joinKind == EJoinKind::LeftOnly)))
+    ,   JoinedTablePtr(std::make_unique<GraceJoin::TTable>())
     ,   JoinCompleted(std::make_unique<bool>(false))
     ,   PartialJoinCompleted(std::make_unique<bool>(false))
     ,   HaveMoreLeftRows(std::make_unique<bool>(true))
@@ -595,10 +588,8 @@ public:
     ,   IsSelfJoin_(isSelfJoin)
     ,   SelfJoinSameKeys_(isSelfJoin && (leftKeyColumns == rightKeyColumns))
     ,   IsSpillingAllowed(isSpillingAllowed)
-    ,   Logger(logger)
-    ,   LogComponent(logComponent)
     {
-        UDF_LOG(Logger, LogComponent, GRACEJOIN_DEBUG, TStringBuilder() << (const void *)&*JoinedTablePtr << "# AnyJoinSettings=" << (int)anyJoinSettings << " JoinKind=" << (int)joinKind);
+        YQL_LOG(GRACEJOIN_DEBUG) << (const void *)&*JoinedTablePtr << "# AnyJoinSettings=" << (int)anyJoinSettings << " JoinKind=" << (int)joinKind;
         if (IsSelfJoin_) {
             LeftPacker->BatchSize = std::numeric_limits<ui64>::max();
             RightPacker->BatchSize = std::numeric_limits<ui64>::max();
@@ -655,14 +646,12 @@ private:
         LogMemoryUsage();
         switch(mode) {
             case EOperatingMode::InMemory: {
-                UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder()
-                        << (const void *)&*JoinedTablePtr << "# switching Memory mode to InMemory");
+                YQL_LOG(INFO) << (const void *)&*JoinedTablePtr << "# switching Memory mode to InMemory";
                 MKQL_ENSURE(false, "Internal logic error");
                 break;
             }
             case EOperatingMode::Spilling: {
-                UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder()
-                        << (const void *)&*JoinedTablePtr << "# switching Memory mode to Spilling");
+                YQL_LOG(INFO) << (const void *)&*JoinedTablePtr << "# switching Memory mode to Spilling";
                 MKQL_ENSURE(EOperatingMode::InMemory == Mode, "Internal logic error");
                 auto spiller = ctx.SpillerFactory->CreateSpiller();
                 RightPacker->TablePtr->InitializeBucketSpillers(spiller);
@@ -670,8 +659,7 @@ private:
                 break;
             }
             case EOperatingMode::ProcessSpilled: {
-                UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Info, TStringBuilder()
-                        << (const void *)&*JoinedTablePtr << "# switching Memory mode to ProcessSpilled");
+                YQL_LOG(INFO) << (const void *)&*JoinedTablePtr << "# switching Memory mode to ProcessSpilled";
                 SpilledBucketsJoinOrder.reserve(GraceJoin::NumberOfBuckets);
                 for (ui32 i = 0; i < GraceJoin::NumberOfBuckets; ++i) SpilledBucketsJoinOrder.push_back(i);
 
@@ -808,11 +796,6 @@ private:
     }
 
     void LogMemoryUsage() const {
-        const auto memoryUsageLogLevel = NUdf::ELogLevel::Info;
-        if (!Logger->IsActive(LogComponent, memoryUsageLogLevel)) {
-            return;
-        }
-
         const auto used = TlsAllocState->GetUsed();
         const auto limit = TlsAllocState->GetLimit();
         TStringBuilder logmsg;
@@ -822,7 +805,7 @@ private:
         }
         logmsg << (used/1_MB) << "MB/" << (limit/1_MB) << "MB";
 
-        UDF_LOG(Logger, LogComponent, memoryUsageLogLevel, logmsg);
+        YQL_LOG(INFO) << logmsg;
     }
 
     EFetchResult DoCalculateInMemory(TComputationContext& ctx, NUdf::TUnboxedValue*const* output) {
@@ -874,10 +857,11 @@ private:
                 (!*HaveMoreRightRows && (!*HaveMoreLeftRows || LeftPacker->TuplesBatchPacked >= LeftPacker->BatchSize )) ||
                 (!*HaveMoreLeftRows && RightPacker->TuplesBatchPacked >= RightPacker->BatchSize))) {
 
-                UDF_LOG(Logger, LogComponent, GRACEJOIN_TRACE, TStringBuilder()
+                YQL_LOG(GRACEJOIN_TRACE)
                     << (const void *)&*JoinedTablePtr << '#'
                     << " HaveLeft " << *HaveMoreLeftRows << " LeftPacked " << LeftPacker->TuplesBatchPacked << " LeftBatch " << LeftPacker->BatchSize
-                    << " HaveRight " << *HaveMoreRightRows << " RightPacked " << RightPacker->TuplesBatchPacked << " RightBatch " << RightPacker->BatchSize);
+                    << " HaveRight " << *HaveMoreRightRows << " RightPacked " << RightPacker->TuplesBatchPacked << " RightBatch " << RightPacker->BatchSize
+                    ;
 
                 auto& leftTable = *LeftPacker->TablePtr;
                 auto& rightTable = SelfJoinSameKeys_ ? *LeftPacker->TablePtr : *RightPacker->TablePtr;
@@ -1064,9 +1048,6 @@ private:
     NYql::NUdf::TCounter CounterOutputRows_;
     ui32 SpilledBucketsJoinOrderCurrentIndex = 0;
     std::vector<ui32> SpilledBucketsJoinOrder;
-
-    const NUdf::TLoggerPtr Logger;
-    const NUdf::TLogComponentId LogComponent;
 };
 
 class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWrapper> {
@@ -1186,14 +1167,10 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
         }
 
         void MakeSpillingSupportState(TComputationContext& ctx, NUdf::TUnboxedValue& state) const {
-            NYql::NUdf::TLoggerPtr logger = ctx.MakeLogger();
-            NYql::NUdf::TLogComponentId logComponent = logger->RegisterComponent("GraceJoin");
-            UDF_LOG(logger, logComponent, NUdf::ELogLevel::Debug, TStringBuilder() << "State initialized");
-
             state = ctx.HolderFactory.Create<TGraceJoinSpillingSupportState>(
                 FlowLeft, FlowRight, JoinKind, AnyJoinSettings_, LeftKeyColumns, RightKeyColumns,
                 LeftRenames, RightRenames, LeftColumnsTypes, RightColumnsTypes,
-                ctx, IsSelfJoin_, IsSpillingAllowed, logger, logComponent);
+                ctx, IsSelfJoin_, IsSpillingAllowed);
         }
 
         IComputationWideFlowNode *const  FlowLeft;

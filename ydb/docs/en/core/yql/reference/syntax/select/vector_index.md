@@ -10,7 +10,7 @@
 
 {% endif %}
 
-To make a `SELECT` by vector index of row-oriented table statement, use the following:
+To select data from a row-oriented table using a vector index, use the following statements:
 
 ```yql
 SELECT ...

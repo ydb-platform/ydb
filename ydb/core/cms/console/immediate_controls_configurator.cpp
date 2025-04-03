@@ -160,6 +160,10 @@ void TImmediateControlsConfigurator::AddControl(TIntrusivePtr<TControlBoard> boa
     bool res = false;
     if (auto controlId = board->GetStaticControlId(name)) {
         res = board->RegisterSharedControl(Controls[name], *controlId);
+    } else {
+        Y_VERIFY_S(res,
+            "Immediate Control " <<  name << " has no static control type."
+            << " Please add it to EStaticControlType");
     }
 
     Y_VERIFY_S(res || allowExisting,
@@ -225,6 +229,7 @@ void TImmediateControlsConfigurator::ApplyConfig(const ::google::protobuf::Messa
                 AddControl(board, fieldDesc, prefix, true);
             }
             auto controlId = board->GetStaticControlId(name);
+            Y_ENSURE_S(!!controlId);
             if (reflection->HasField(cfg, fieldDesc) && controlId) {
                 TAtomicBase prev;
                 if (fieldType == google::protobuf::FieldDescriptor::TYPE_UINT64)

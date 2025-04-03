@@ -1,4 +1,4 @@
-# Data partitioning in S3 ({{ objstorage-full-name }})
+# Data Partitioning in S3 ({{ objstorage-full-name }})
 
 In S3 ({{ objstorage-full-name }}), it is possible to store very large volumes of data. At the same time, queries to this data may not need to touch all the data but only a part of it. If you describe the rules for marking the storage structure of your data in {{ydb-full-name}}, then data that is not needed for the query can even be skipped from being read from S3 ({{ objstorage-full-name }}). This mechanism significantly speeds up query execution without affecting the result.
 
@@ -66,7 +66,7 @@ The example above shows working with data at the level of [connections](../../da
 
 {% endnote %}
 
-## Syntax { #syntax }
+## Syntax {#syntax}
 
 When working at the connection level, partitioning is set using the `partitioned_by` parameter, where the list of columns is specified in JSON format.
 
@@ -107,7 +107,7 @@ month=03
     year=2021
 ```
 
-## Supported data types
+## Supported Data Types
 
 Partitioning is possible only with the following set of YQL data types:
 
@@ -117,7 +117,7 @@ Partitioning is possible only with the following set of YQL data types:
 
 When using other types for specifying partitioning, an error is returned.
 
-## Supported storage path formats
+## Supported Storage Path Formats
 
 The storage path format, where the name of each directory explicitly specifies the column name, is called the "[Hive-Metastore format](https://en.wikipedia.org/wiki/Apache_Hive)" or simply the "Hive format."
 

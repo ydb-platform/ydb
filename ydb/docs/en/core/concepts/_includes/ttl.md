@@ -1,8 +1,8 @@
-# Time to Live (TTL) and eviction to external storage
+# Time to Live (TTL) and Eviction to External Storage
 
 This section describes how the TTL mechanism works and what its limits are.
 
-## How it works {#how-it-works}
+## How It Works {#how-it-works}
 
 The table's TTL is a sequence of storage tiers. Each tier contains an expression (TTL expression) and an action. When the expression is triggered, that tier is assigned to the row. When a tier is assigned to a row, the specified action is automatically performed: moving the row to external storage or deleting it. External storage is represented by the [external data source](../datamodel/external_data_source.md) object.
 
@@ -46,7 +46,7 @@ The *BRO* has the following properties:
   * `Uint64`.
   * `DyNumber`.
 
-* The value in the TTL column with a numeric type (`Uint32`, `Uint64`, or `DyNumber`) is interpreted as a [Unix time]{% if lang == "en" %}(https://en.wikipedia.org/wiki/Unix_time){% endif %}{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/Unix-время){% endif %} value. The following units are supported (set in the TTL settings):
+* The value in the TTL column with a numeric type (`Uint32`, `Uint64`, or `DyNumber`) is interpreted as a [Unix time](https://en.wikipedia.org/wiki/Unix_time) value. The following units are supported (set in the TTL settings):
 
   * Seconds.
   * Milliseconds.

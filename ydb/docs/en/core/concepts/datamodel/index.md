@@ -1,4 +1,4 @@
-# Data model and schema
+# Data Model and Schema
 
 This section describes the entities that {{ ydb-short-name }} uses within DBs. The {{ ydb-short-name }} core lets you flexibly implement various storage primitives, so new entities may appear in the future.
 
@@ -13,8 +13,8 @@ This section describes the entities that {{ ydb-short-name }} uses within DBs. T
 
 * [Topic](../topic.md)
 * [Secret](secrets.md)
-* [External table](external_table.md)
-* [External data source](external_data_source.md)
+* [External Table](external_table.md)
+* [External Data Source](external_data_source.md)
 
 [Scheme objects](../../concepts/glossary.md#scheme-object) in {{ ydb-short-name }} all follow the same naming rules described in the section below. However, requirements for column names are slightly different.
 

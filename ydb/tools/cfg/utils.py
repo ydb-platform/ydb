@@ -241,6 +241,7 @@ def need_generate_bs_config(template_bs_config):
 
     return template_bs_config.get("service_set", {}).get("groups") is None
 
+use_alternative_yaml_handler = False
 
 def determine_yaml_parsing(yaml_template_file):
     ruamel_yaml = YAML()
@@ -275,6 +276,8 @@ def sort_dict_recursively(obj):
 
 
 def dump_yaml(data):
+    global use_alternative_yaml_handler
+
     if use_alternative_yaml_handler:
         yaml = YAML()
 

@@ -78,6 +78,7 @@ target_sources(ydb-core-base PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/base/event_filter.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/feature_flags_service.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/group_stat.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/base/local_user_token.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/localdb.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/logoblob.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/base/path.cpp
@@ -114,6 +115,7 @@ target_sources(ydb-core-base PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/base/group_stat.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/hive.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/interconnect_channels.h
+  ${PROJECT_SOURCE_DIR}/ydb/core/base/local_user_token.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/localdb.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/location.h
   ${PROJECT_SOURCE_DIR}/ydb/core/base/logoblob.h

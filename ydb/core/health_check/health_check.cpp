@@ -282,8 +282,32 @@ public:
         Ydb::Monitoring::StatusFlag::Status OverallStatus = Ydb::Monitoring::StatusFlag::GREY;
         TList<TIssueRecord> IssueRecords;
         Ydb::Monitoring::Location Location;
-        int Level = 1;
+        int Level;
         TString Type;
+        TSelfCheckResult* Upper = nullptr;
+
+        // first level
+        TSelfCheckResult(const TString& type = "")
+            : Level(1)
+            , Type(type)
+            , Upper(nullptr)
+        {}
+
+        TSelfCheckResult(TSelfCheckResult* upper, const TString& type = "")
+            : Type(type)
+            , Upper(upper)
+        {
+            if (Upper) {
+                Location.CopyFrom(upper->Location);
+                Level = upper->Level + 1;
+            }
+        }
+
+        ~TSelfCheckResult() {
+            if (Upper) {
+                Upper->InheritFrom(*this);
+            }
+        }
 
         static bool IsErrorStatus(Ydb::Monitoring::StatusFlag::Status status) {
             return status != Ydb::Monitoring::StatusFlag::GREEN;
@@ -439,33 +463,6 @@ public:
                 OverallStatus = lower.GetOverallStatus();
             }
             IssueRecords.splice(IssueRecords.end(), std::move(lower.IssueRecords));
-        }
-    };
-
-    struct TSelfCheckContext : TSelfCheckResult {
-        TSelfCheckResult* Upper;
-
-        TSelfCheckContext(TSelfCheckResult* upper)
-            : Upper(upper)
-        {
-            if (Upper) {
-                Location.CopyFrom(upper->Location);
-                Level = upper->Level + 1;
-            }
-        }
-
-        TSelfCheckContext(TSelfCheckResult* upper, const TString& type)
-            : TSelfCheckContext(upper)
-        {
-            Type = type;
-        }
-
-        TSelfCheckContext(const TSelfCheckContext&) = delete;
-
-        ~TSelfCheckContext() {
-            if (Upper) {
-                Upper->InheritFrom(*this);
-            }
         }
     };
 
@@ -1755,7 +1752,7 @@ public:
         return TStringBuilder() << nodeInfo.NodeId << '/' << nodeInfo.Host << ':' << nodeInfo.Port;
     }
 
-    static void Check(TSelfCheckContext& context, const NKikimrWhiteboard::TSystemStateInfo::TPoolStats& poolStats) {
+    static void Check(TSelfCheckResult& context, const NKikimrWhiteboard::TSystemStateInfo::TPoolStats& poolStats) {
         if (poolStats.name() == "System" || poolStats.name() == "IC" || poolStats.name() == "IO") {
             if (poolStats.usage() >= 0.99) {
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Pool usage is over 99%", ETags::OverloadState);
@@ -1773,7 +1770,7 @@ public:
         }
     }
 
-    Ydb::Monitoring::StatusFlag::Status FillSystemTablets(TDatabaseState& databaseState, TSelfCheckContext context) {
+    Ydb::Monitoring::StatusFlag::Status FillSystemTablets(TDatabaseState& databaseState, TSelfCheckResult context) {
         TString databaseId = context.Location.database().name();
         for (auto& [tabletId, tablet] : TabletRequests.TabletStates) {
             if (tablet.Database == databaseId) {
@@ -1811,14 +1808,14 @@ public:
     Ydb::Monitoring::StatusFlag::Status FillTablets(TDatabaseState& databaseState,
                                                     TNodeId nodeId,
                                                     google::protobuf::RepeatedPtrField<Ydb::Monitoring::ComputeTabletStatus>& parent,
-                                                    TSelfCheckContext& context) {
+                                                    TSelfCheckResult& context) {
         Ydb::Monitoring::StatusFlag::Status tabletsStatus = Ydb::Monitoring::StatusFlag::GREEN;
         auto itNodeTabletState = databaseState.MergedNodeTabletState.find(nodeId);
         if (itNodeTabletState != databaseState.MergedNodeTabletState.end()) {
-            TSelfCheckContext tabletsContext(&context);
+            TSelfCheckResult tabletsContext(&context);
             for (const auto& count : itNodeTabletState->second.Count) {
                 if (count.Count > 0) {
-                    TSelfCheckContext tabletContext(&tabletsContext, "TABLET");
+                    TSelfCheckResult tabletContext(&tabletsContext, "TABLET");
                     auto& protoTablet = *tabletContext.Location.mutable_compute()->mutable_tablet();
                     FillNodeInfo(nodeId, tabletContext.Location.mutable_node());
                     protoTablet.set_type(TTabletTypes::EType_Name(count.Type));
@@ -1879,10 +1876,10 @@ public:
         }
     }
 
-    void FillComputeNodeStatus(TDatabaseState& databaseState, TNodeId nodeId, Ydb::Monitoring::ComputeNodeStatus& computeNodeStatus, TSelfCheckContext context) {
+    void FillComputeNodeStatus(TDatabaseState& databaseState, TNodeId nodeId, Ydb::Monitoring::ComputeNodeStatus& computeNodeStatus, TSelfCheckResult context) {
         FillNodeInfo(nodeId, context.Location.mutable_compute()->mutable_node());
 
-        TSelfCheckContext rrContext(&context, "NODE_UPTIME");
+        TSelfCheckResult rrContext(&context, "NODE_UPTIME");
         if (databaseState.NodeRestartsPerPeriod[nodeId] >= HealthCheckConfig.GetThresholds().GetNodeRestartsOrange()) {
             rrContext.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Node is restarting too often", ETags::Uptime);
         } else if (databaseState.NodeRestartsPerPeriod[nodeId] >= HealthCheckConfig.GetThresholds().GetNodeRestartsYellow()) {
@@ -1896,7 +1893,7 @@ public:
             const NKikimrWhiteboard::TSystemStateInfo& nodeSystemState(*itNodeSystemState->second);
 
             for (const auto& poolStat : nodeSystemState.poolstats()) {
-                TSelfCheckContext poolContext(&context, "COMPUTE_POOL");
+                TSelfCheckResult poolContext(&context, "COMPUTE_POOL");
                 poolContext.Location.mutable_compute()->mutable_pool()->set_name(poolStat.name());
                 Check(poolContext, poolStat);
                 Ydb::Monitoring::ThreadPoolStatus& threadPoolStatus = *computeNodeStatus.add_pools();
@@ -1906,7 +1903,7 @@ public:
             }
 
             if (nodeSystemState.loadaverage_size() > 0 && nodeSystemState.numberofcpus() > 0) {
-                TSelfCheckContext laContext(&context, "LOAD_AVERAGE");
+                TSelfCheckResult laContext(&context, "LOAD_AVERAGE");
                 Ydb::Monitoring::LoadAverageStatus& loadAverageStatus = *computeNodeStatus.mutable_load();
                 loadAverageStatus.set_load(nodeSystemState.loadaverage(0));
                 loadAverageStatus.set_cores(nodeSystemState.numberofcpus());
@@ -1932,7 +1929,7 @@ public:
                 }
 
                 if (databaseState.MaxTimeDifferenceNodeId == nodeId) {
-                    TSelfCheckContext tdContext(&context, "NODES_TIME_DIFFERENCE");
+                    TSelfCheckResult tdContext(&context, "NODES_TIME_DIFFERENCE");
                     if (status == Ydb::Monitoring::StatusFlag::GREEN) {
                         tdContext.ReportStatus(status);
                     } else {
@@ -1952,7 +1949,7 @@ public:
         computeNodeStatus.set_overall(context.GetOverallStatus());
     }
 
-    void FillComputeDatabaseStatus(TDatabaseState& databaseState, Ydb::Monitoring::ComputeStatus& computeStatus, TSelfCheckContext context) {
+    void FillComputeDatabaseStatus(TDatabaseState& databaseState, Ydb::Monitoring::ComputeStatus& computeStatus, TSelfCheckResult context) {
         auto itDescribe = DescribeByPath.find(databaseState.Path);
         if (itDescribe != DescribeByPath.end() && itDescribe->second.IsOk()) {
             const auto& domain(itDescribe->second->GetRecord().GetPathDescription().GetDomainDescription());
@@ -1985,7 +1982,7 @@ public:
         }
     }
 
-    void FillCompute(TDatabaseState& databaseState, Ydb::Monitoring::ComputeStatus& computeStatus, TSelfCheckContext context) {
+    void FillCompute(TDatabaseState& databaseState, Ydb::Monitoring::ComputeStatus& computeStatus, TSelfCheckResult context) {
         TVector<TNodeId>* computeNodeIds = &databaseState.ComputeNodeIds;
         if (databaseState.ResourcePathId
             && databaseState.ServerlessComputeResourcesMode != NKikimrSubDomains::EServerlessComputeResourcesModeExclusive)
@@ -2040,7 +2037,7 @@ public:
             if (schemeShardId) {
                 for (const auto& [path, hint] : OverloadedShardHints) {
                     if (hint.SchemeShardId == schemeShardId) {
-                        TSelfCheckContext hintContext(&context, "HINT-OVERLOADED-SHARD");
+                        TSelfCheckResult hintContext(&context, "HINT-OVERLOADED-SHARD");
                         //hintContext.Location.mutable_compute()->mutable_tablet()->set_type(NKikimrTabletBase::TTabletTypes::EType_Name(NKikimrTabletBase::TTabletTypes::DataShard));
                         TStringBuilder tabletId;
                         tabletId << hint.TabletId;
@@ -2128,7 +2125,7 @@ public:
         return TStringBuilder() << pDiskKey.GetNodeId() << "-" << pDiskKey.GetPDiskId();
     }
 
-    void FillPDiskStatus(const TString& pDiskId, Ydb::Monitoring::StoragePDiskStatus& storagePDiskStatus, TSelfCheckContext context) {
+    void FillPDiskStatus(const TString& pDiskId, Ydb::Monitoring::StoragePDiskStatus& storagePDiskStatus, TSelfCheckResult context) {
         context.Location.clear_database(); // PDisks are shared between databases
         context.Location.mutable_storage()->mutable_pool()->clear_name(); // PDisks are shared between pools
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->clear_id(); // PDisks are shared between groups
@@ -2227,7 +2224,7 @@ public:
         }
     }
 
-    void FillVDiskStatus(const NKikimrSysView::TVSlotEntry* vSlot, Ydb::Monitoring::StorageVDiskStatus& storageVDiskStatus, TSelfCheckContext context) {
+    void FillVDiskStatus(const NKikimrSysView::TVSlotEntry* vSlot, Ydb::Monitoring::StorageVDiskStatus& storageVDiskStatus, TSelfCheckResult context) {
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_id()->Clear();
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->clear_id(); // you can see VDisks Group Id in vSlotId field
 
@@ -2346,7 +2343,7 @@ public:
         RequestDone("TEvBSGroupStateResponse");
     }
 
-    void FillPDiskStatusWithWhiteboard(const TString& pDiskId, const NKikimrWhiteboard::TPDiskStateInfo& pDiskInfo, Ydb::Monitoring::StoragePDiskStatus& storagePDiskStatus, TSelfCheckContext context) {
+    void FillPDiskStatusWithWhiteboard(const TString& pDiskId, const NKikimrWhiteboard::TPDiskStateInfo& pDiskInfo, Ydb::Monitoring::StoragePDiskStatus& storagePDiskStatus, TSelfCheckResult context) {
         context.Location.clear_database(); // PDisks are shared between databases
         if (context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_pdisk()->empty()) {
             context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->add_pdisk();
@@ -2409,7 +2406,7 @@ public:
             }
         } else {
             if (UnavailableStorageNodes.count(pDiskInfo.nodeid()) != 0) {
-                TSelfCheckContext nodeContext(&context, "STORAGE_NODE");
+                TSelfCheckResult nodeContext(&context, "STORAGE_NODE");
                 nodeContext.Location.mutable_storage()->clear_pool();
                 nodeContext.Location.mutable_storage()->mutable_node()->set_id(pDiskInfo.nodeid());
                 const TEvInterconnect::TNodeInfo* nodeInfo = nullptr;
@@ -2434,7 +2431,7 @@ public:
         storagePDiskStatus.set_overall(context.GetOverallStatus());
     }
 
-    void FillVDiskStatusWithWhiteboard(const TString& vDiskId, const NKikimrWhiteboard::TVDiskStateInfo& vDiskInfo, Ydb::Monitoring::StorageVDiskStatus& storageVDiskStatus, TSelfCheckContext context) {
+    void FillVDiskStatusWithWhiteboard(const TString& vDiskId, const NKikimrWhiteboard::TVDiskStateInfo& vDiskInfo, Ydb::Monitoring::StorageVDiskStatus& storageVDiskStatus, TSelfCheckResult context) {
         if (context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->mutable_id()->empty()) {
             context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_vdisk()->add_id();
         }
@@ -2555,7 +2552,7 @@ public:
             }
         }
 
-        void ReportStatus(TSelfCheckContext& context) const {
+        void ReportStatus(TSelfCheckResult& context) const {
             context.OverallStatus = Ydb::Monitoring::StatusFlag::GREEN;
             if (!LayoutCorrect) {
                 context.ReportStatus(Ydb::Monitoring::StatusFlag::ORANGE, "Group layout is incorrect", ETags::GroupState);
@@ -2592,7 +2589,7 @@ public:
         }
     };
 
-    void FillGroupStatusWithWhiteboard(TGroupId groupId, const NKikimrWhiteboard::TBSGroupStateInfo& groupInfo, Ydb::Monitoring::StorageGroupStatus& storageGroupStatus, TSelfCheckContext context) {
+    void FillGroupStatusWithWhiteboard(TGroupId groupId, const NKikimrWhiteboard::TBSGroupStateInfo& groupInfo, Ydb::Monitoring::StorageGroupStatus& storageGroupStatus, TSelfCheckResult context) {
         if (context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_id()->empty()) {
             context.Location.mutable_storage()->mutable_pool()->mutable_group()->add_id();
         }
@@ -2639,17 +2636,17 @@ public:
     static const int MERGING_IGNORE_SIZE = 4;
 
     struct TMergeIssuesContext {
-        std::unordered_map<ETags, TList<TSelfCheckContext::TIssueRecord>> recordsMap;
+        std::unordered_map<ETags, TList<TSelfCheckResult::TIssueRecord>> recordsMap;
         std::unordered_set<TString> removeIssuesIds;
 
-        TMergeIssuesContext(TList<TSelfCheckContext::TIssueRecord>& records) {
+        TMergeIssuesContext(TList<TSelfCheckResult::TIssueRecord>& records) {
             for (auto it = records.begin(); it != records.end(); ) {
                 auto move = it++;
                 recordsMap[move->Tag].splice(recordsMap[move->Tag].end(), records, move);
             }
         }
 
-        void RemoveUnlinkIssues(TList<TSelfCheckContext::TIssueRecord>& records) {
+        void RemoveUnlinkIssues(TList<TSelfCheckResult::TIssueRecord>& records) {
             bool isRemovingIssuesIteration = true;
             while (isRemovingIssuesIteration) {
                 isRemovingIssuesIteration = false;
@@ -2695,7 +2692,7 @@ public:
             }
         }
 
-        void RenameMergingIssues(TList<TSelfCheckContext::TIssueRecord>& records) {
+        void RenameMergingIssues(TList<TSelfCheckResult::TIssueRecord>& records) {
             for (auto it = records.begin(); it != records.end(); it++) {
                 if (it->IssueLog.count() > 0) {
                     TString message = it->IssueLog.message();
@@ -2726,7 +2723,7 @@ public:
             }
         }
 
-        void FillRecords(TList<TSelfCheckContext::TIssueRecord>& records) {
+        void FillRecords(TList<TSelfCheckResult::TIssueRecord>& records) {
             for(auto it = recordsMap.begin(); it != recordsMap.end(); ++it) {
                 records.splice(records.end(), it->second);
             }
@@ -2734,12 +2731,12 @@ public:
             RenameMergingIssues(records);
         }
 
-        TList<TSelfCheckContext::TIssueRecord>& GetRecords(ETags tag) {
+        TList<TSelfCheckResult::TIssueRecord>& GetRecords(ETags tag) {
             return recordsMap[tag];
         }
     };
 
-    bool FindRecordsForMerge(TList<TSelfCheckContext::TIssueRecord>& records, TList<TSelfCheckContext::TIssueRecord>& similar, TList<TSelfCheckContext::TIssueRecord>& merged) {
+    bool FindRecordsForMerge(TList<TSelfCheckResult::TIssueRecord>& records, TList<TSelfCheckResult::TIssueRecord>& similar, TList<TSelfCheckResult::TIssueRecord>& merged) {
         while (!records.empty() && similar.empty()) {
             similar.splice(similar.end(), records, records.begin());
             for (auto it = records.begin(); it != records.end(); ) {
@@ -2765,8 +2762,8 @@ public:
         return !similar.empty();
     }
 
-    std::shared_ptr<TList<TSelfCheckContext::TIssueRecord>> FindChildrenRecords(TList<TSelfCheckContext::TIssueRecord>& records, TSelfCheckContext::TIssueRecord& parent) {
-        std::shared_ptr<TList<TSelfCheckContext::TIssueRecord>> children(new TList<TSelfCheckContext::TIssueRecord>);
+    std::shared_ptr<TList<TSelfCheckResult::TIssueRecord>> FindChildrenRecords(TList<TSelfCheckResult::TIssueRecord>& records, TSelfCheckResult::TIssueRecord& parent) {
+        std::shared_ptr<TList<TSelfCheckResult::TIssueRecord>> children(new TList<TSelfCheckResult::TIssueRecord>);
         std::unordered_set<TString> childrenIds;
         for (auto reason: parent.IssueLog.reason()) {
             childrenIds.insert(reason);
@@ -2784,7 +2781,7 @@ public:
         return children;
     }
 
-    void MoveDataInFirstRecord(TMergeIssuesContext& context, TList<TSelfCheckContext::TIssueRecord>& similar) {
+    void MoveDataInFirstRecord(TMergeIssuesContext& context, TList<TSelfCheckResult::TIssueRecord>& similar) {
         auto mainReasons = similar.begin()->IssueLog.mutable_reason();
         std::unordered_set<TString> ids;
         ids.insert(similar.begin()->IssueLog.id());
@@ -2839,10 +2836,10 @@ public:
         similar.begin()->IssueLog.set_listed(ids.size());
     }
 
-    void MergeLevelRecords(TMergeIssuesContext& context, TList<TSelfCheckContext::TIssueRecord>& records) {
-        TList<TSelfCheckContext::TIssueRecord> handled;
+    void MergeLevelRecords(TMergeIssuesContext& context, TList<TSelfCheckResult::TIssueRecord>& records) {
+        TList<TSelfCheckResult::TIssueRecord> handled;
         while (!records.empty()) {
-            TList<TSelfCheckContext::TIssueRecord> similar;
+            TList<TSelfCheckResult::TIssueRecord> similar;
             if (FindRecordsForMerge(records, similar, handled)) {
                 MoveDataInFirstRecord(context, similar);
                 handled.splice(handled.end(), similar, similar.begin());
@@ -2869,29 +2866,29 @@ public:
         }
     }
 
-    int GetIssueCount(TSelfCheckContext::TIssueRecord& record) {
+    int GetIssueCount(TSelfCheckResult::TIssueRecord& record) {
         return record.IssueLog.count() == 0 ? 1 : record.IssueLog.count();
     }
 
-    void SetIssueCount(TSelfCheckContext::TIssueRecord& record, int value) {
+    void SetIssueCount(TSelfCheckResult::TIssueRecord& record, int value) {
         if (record.IssueLog.listed() == 0) {
             record.IssueLog.set_listed(1);
         }
         record.IssueLog.set_count(value);
     }
 
-    int GetIssueListed(TSelfCheckContext::TIssueRecord& record) {
+    int GetIssueListed(TSelfCheckResult::TIssueRecord& record) {
         return record.IssueLog.listed() == 0 ? 1 : record.IssueLog.listed();
     }
 
-    void SetIssueListed(TSelfCheckContext::TIssueRecord& record, int value) {
+    void SetIssueListed(TSelfCheckResult::TIssueRecord& record, int value) {
         if (record.IssueLog.count() == 0) {
             record.IssueLog.set_count(1);
         }
         record.IssueLog.set_listed(value);
     }
 
-    void FillGroupStatus(TGroupId groupId, Ydb::Monitoring::StorageGroupStatus& storageGroupStatus, TSelfCheckContext context) {
+    void FillGroupStatus(TGroupId groupId, Ydb::Monitoring::StorageGroupStatus& storageGroupStatus, TSelfCheckResult context) {
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->mutable_id()->Clear();
         context.Location.mutable_storage()->mutable_pool()->mutable_group()->add_id(ToString(groupId));
         storageGroupStatus.set_id(ToString(groupId));
@@ -2924,7 +2921,7 @@ public:
         storageGroupStatus.set_overall(context.GetOverallStatus());
     }
 
-    void MergeRecords(TList<TSelfCheckContext::TIssueRecord>& records) {
+    void MergeRecords(TList<TSelfCheckResult::TIssueRecord>& records) {
         TMergeIssuesContext mergeContext(records);
         if (Request->Request.merge_records()) {
             MergeLevelRecords(mergeContext, ETags::GroupState);
@@ -2934,7 +2931,7 @@ public:
         mergeContext.FillRecords(records);
     }
 
-    void FillPoolStatus(const TStoragePoolState& pool, Ydb::Monitoring::StoragePoolStatus& storagePoolStatus, TSelfCheckContext context) {
+    void FillPoolStatus(const TStoragePoolState& pool, Ydb::Monitoring::StoragePoolStatus& storagePoolStatus, TSelfCheckResult context) {
         context.Location.mutable_storage()->mutable_pool()->set_name(pool.Name);
         storagePoolStatus.set_id(pool.Name);
         bool haveInfo = HaveAllBSControllerInfo();
@@ -2969,7 +2966,7 @@ public:
         storagePoolStatus.set_overall(context.GetOverallStatus());
     }
 
-    void FillStorage(TDatabaseState& databaseState, Ydb::Monitoring::StorageStatus& storageStatus, TSelfCheckContext context) {
+    void FillStorage(TDatabaseState& databaseState, Ydb::Monitoring::StorageStatus& storageStatus, TSelfCheckResult context) {
         if (HaveAllBSControllerInfo() && databaseState.StoragePools.empty()) {
             context.ReportStatus(Ydb::Monitoring::StatusFlag::RED, "There are no storage pools", ETags::StorageState);
         } else {
@@ -3074,8 +3071,7 @@ public:
 
     void FillDatabaseResult(TOverallStateContext& context, const TString& path, TDatabaseState& state) {
         Ydb::Monitoring::DatabaseStatus& databaseStatus(*context.Result->add_database_status());
-        TSelfCheckResult dbContext;
-        dbContext.Type = "DATABASE";
+        TSelfCheckResult dbContext("DATABASE");
         if (!IsSpecificDatabaseFilter()) {
             dbContext.Location.mutable_database()->set_name(path);
         }

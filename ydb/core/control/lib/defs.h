@@ -67,6 +67,7 @@ namespace NKikimr {
         ColumnShardControlsGranuleIndexedPortionsCountLimit                         /* "ColumnShardControls.GranuleIndexedPortionsCountLimit" */,
         BlobCacheMaxCacheDataSize                                                   /* "BlobCache.MaxCacheDataSize" */,
         BlobCacheMaxInFlightDataSize                                                /* "BlobCache.MaxInFlightDataSize" */,
+        BlobStorageControllerControlsEnableSelfHealWithDegraded                     /* "BlobStorageControllerControls.EnableSelfHealWithDegraded" */,
         CoordinatorControlsEnableLeaderLeases                                       /* "CoordinatorControls.EnableLeaderLeases" */,
         CoordinatorControlsMinLeaderLeaseDurationUs                                 /* "CoordinatorControls.MinLeaderLeaseDurationUs" */,
         CoordinatorControlsVolatilePlanLeaseMs                                      /* "CoordinatorControls.VolatilePlanLeaseMs" */,
@@ -166,6 +167,11 @@ namespace NKikimr {
         GRpcControlsRequestConfigsClickhouseInternalDiscardSnapshotMaxInFlight      /* "GRpcControls.RequestConfigs.ClickhouseInternal_DiscardSnapshot_MaxInFlight" */,
         GRpcControlsRequestConfigsTableServiceStreamExecuteScanQueryMaxInflight     /* "GRpcControls.RequestConfigs.TableService.StreamExecuteScanQuery_MaxInflight" */,
         GRpcControlsRequestConfigsTableServiceStreamReadTableMaxInflight            /* "GRpcControls.RequestConfigs.TableService.StreamReadTable_MaxInflight" */,
-        GRpcControlsRequestConfigsTableServiceReadRowsMaxInflight                   /* "GRpcControls.RequestConfigs.TableService.ReadRows_MaxInflight" */
-        };
+        GRpcControlsRequestConfigsTableServiceReadRowsMaxInflight                   /* "GRpcControls.RequestConfigs.TableService.ReadRows_MaxInflight" */,
+        GRpcControlsRequestConfigsFooBarMaxInFlight                                 /* "GRpcControls.RequestConfigs.FooBar.MaxInFlight" */, //testing only
+        TableServiceControlsEnableMergeDatashardReads                               /* "TableServiceControls.EnableMergeDatashardReads" */,
+        KqpSessionMkqlInitialMemoryLimit                                            /* "KqpSession.MkqlInitialMemoryLimit" */,
+        KqpSessionMkqlMaxMemoryLimit                                                /* "KqpSession.MkqlMaxMemoryLimit" */,
+        TestShardControlsDisableWrites                                              /* "TestShardControls.DisableWrites" */
+    };
 } // NKikimr

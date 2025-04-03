@@ -84,7 +84,7 @@ Y_UNIT_TEST_SUITE(ExternalSourceBuilderTest) {
             .Build();
 
         // ddl with "field1"
-        Props.insert({"field1", "value"});
+        Props["field1"] = "value";
         
         UNIT_ASSERT_EXCEPTION_CONTAINS(
             source->ValidateExternalDataSource(Proto.SerializeAsString()), 
@@ -94,7 +94,7 @@ Y_UNIT_TEST_SUITE(ExternalSourceBuilderTest) {
 
         // ddl with "field"
         Props.clear();
-        Props.insert({"field", "value"});
+        Props["field"] = "value";
         UNIT_ASSERT_NO_EXCEPTION(source->ValidateExternalDataSource(Proto.SerializeAsString()));
     }
 
@@ -108,7 +108,7 @@ Y_UNIT_TEST_SUITE(ExternalSourceBuilderTest) {
         UNIT_ASSERT_NO_EXCEPTION(source->ValidateExternalDataSource(Proto.SerializeAsString()));
 
         // ddl with "field"
-        Props.insert({"field", "value"});
+        Props["field"] = "value";
         UNIT_ASSERT_NO_EXCEPTION(source->ValidateExternalDataSource(Proto.SerializeAsString()));
     }
     
@@ -126,7 +126,7 @@ Y_UNIT_TEST_SUITE(ExternalSourceBuilderTest) {
         );
 
         // ddl with "field"
-        Props.insert({"field", "value"});
+        Props["field"] = "value";
         UNIT_ASSERT_NO_EXCEPTION(source->ValidateExternalDataSource(Proto.SerializeAsString()));
     }
 
@@ -154,7 +154,7 @@ Y_UNIT_TEST_SUITE(ExternalSourceBuilderTest) {
         );
 
         // ddl with "field" equals to value not in allowed list 
-        Props.insert({"field", "value"});
+        Props["field"] = "value";
         UNIT_ASSERT_EXCEPTION_CONTAINS(
             source->ValidateExternalDataSource(Proto.SerializeAsString()), 
             NExternalSource::TExternalSourceException,
@@ -162,20 +162,16 @@ Y_UNIT_TEST_SUITE(ExternalSourceBuilderTest) {
         );
 
         // ddl with "field" equals to "v1"
-        Props.clear();
-        Props.insert({"field", "v1"});
+        Props["field"] = "v1";
         UNIT_ASSERT_NO_EXCEPTION(source->ValidateExternalDataSource(Proto.SerializeAsString()));
 
         // ddl with "field" equals to "v2"
-        Props.clear();
-        Props.insert({"field", "v2"});
+        Props["field"] = "v2";
         UNIT_ASSERT_NO_EXCEPTION(source->ValidateExternalDataSource(Proto.SerializeAsString()));
 
         // ddl with "field" equals to "v3"
-        Props.clear();
-        Props.insert({"field", "v3"});
+        Props["field"] = "v3";
         UNIT_ASSERT_NO_EXCEPTION(source->ValidateExternalDataSource(Proto.SerializeAsString()));
-
     }
 
     // Test validation for required property with condition 
@@ -194,7 +190,7 @@ Y_UNIT_TEST_SUITE(ExternalSourceBuilderTest) {
         UNIT_ASSERT_NO_EXCEPTION(source->ValidateExternalDataSource(Proto.SerializeAsString()));
 
         // ddl with "field1" but without "field"
-        Props.insert({"field1", "v"});
+        Props["field1"] = "v";
 
         UNIT_ASSERT_EXCEPTION_CONTAINS(
             source->ValidateExternalDataSource(Proto.SerializeAsString()), 
@@ -203,7 +199,7 @@ Y_UNIT_TEST_SUITE(ExternalSourceBuilderTest) {
         );
 
         // ddl with "field1" and "field"
-        Props.insert({"field", "q"});
+        Props["field"] = "q";
         UNIT_ASSERT_NO_EXCEPTION(source->ValidateExternalDataSource(Proto.SerializeAsString()));
     }
 }

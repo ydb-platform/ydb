@@ -117,6 +117,7 @@ namespace NKikimr {
         NKikimrConfig::TWorkloadManagerConfig WorkloadManagerConfig;
         NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
         std::vector<TIntrusivePtr<NKikimr::TControlBoard>> Icb;
+        std::vector<TIntrusivePtr<NKikimr::TDynamicControlBoard>> DynamicControlBoard;
 
     private:
         TAutoPtr<TMine> Mine;

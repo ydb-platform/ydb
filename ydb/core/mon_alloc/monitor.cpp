@@ -337,7 +337,7 @@ namespace NKikimr {
                     false, ctx.ActorSystem(), ctx.SelfID);
 
                 AllocMonitor->RegisterPages(mon, ctx.ActorSystem(), ctx.SelfID);
-                AllocMonitor->RegisterControls(AppData(ctx)->StaticControlBoard);
+                AllocMonitor->RegisterControls(AppData(ctx)->Icb);
 
                 Become(&TThis::StateWork);
                 ctx.Schedule(Interval, new TEvents::TEvWakeup());
@@ -408,7 +408,7 @@ namespace NKikimr {
                 if (memoryUsage) {
                     LogMemoryStatsIfNeeded(ctx, memoryUsage.value());
                 }
-                
+
                 ctx.Schedule(Interval, new TEvents::TEvWakeup());
             }
 

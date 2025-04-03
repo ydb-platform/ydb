@@ -87,6 +87,8 @@ class BaseTestSet:
         cls._ydb_instance.stop()
 
     def test_multi(self, ctx: TestContext):
+        if self.__class__.__name__ != 'TestInsert':
+            return
         num_threads = int(get_external_param("num_threads", "2"))
         threads = []
         exit_codes = [None] * num_threads

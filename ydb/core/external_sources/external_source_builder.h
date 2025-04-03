@@ -39,7 +39,7 @@ public:
     /// 
     TExternalSourceBuilder& Auth(const TVector<TString>& authMethods, TCondition condition);
 
-    inline TExternalSourceBuilder& Auth(const TVector<TString>& authMethods) {
+    TExternalSourceBuilder& Auth(const TVector<TString>& authMethods) {
         return Auth(authMethods, [](const ::google::protobuf::Map<TProtoStringType, TProtoStringType>&){
             return true;
         });

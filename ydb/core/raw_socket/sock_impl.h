@@ -130,7 +130,7 @@ public:
         if (possible > 0) {
             Buffer.Append(src, possible);
         }
-        if (0 == Buffer.Avail()) {
+        if (0 == Buffer.Avail() && Socket) {
             flush();
         }
         size_t left = length - possible;
@@ -198,7 +198,7 @@ public:
 private:
     TSocketDescriptor* Socket;
     TBuffer Buffer;
-    size_t BufferSize; 
+    size_t BufferSize;
 
     struct Chunk {
         Chunk(TBuffer&& buffer)

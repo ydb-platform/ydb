@@ -92,4 +92,4 @@ runs:
         bazel_remote_password: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_PASSWORD || '' }}
         put_build_results_to_cache: ${{ inputs.put_build_results_to_cache }}
         test_retry_count: ${{ inputs.test_retry_count }}
-        #custom_branch_name: ${{ inputs.custom_branch_name }}
+        custom_branch_name: ${{ inputs.custom_branch_name }}

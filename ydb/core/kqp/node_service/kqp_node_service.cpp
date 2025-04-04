@@ -274,6 +274,7 @@ private:
                 .MemoryPool = memoryPool,
                 .WithSpilling = msgRtSettings.GetUseSpilling(),
                 .StatsMode = msgRtSettings.GetStatsMode(),
+                .WithProgressStats = msgRtSettings.GetWithProgressStats(),
                 .Deadline = TInstant(),
                 .ShareMailbox = false,
                 .RlPath = rlPath,

@@ -178,17 +178,19 @@ class TestTTL(TestBase):
         print(f"{table_name} select ok")
 
     def create_select(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], value: int, expected_count_rows: int):
-        sql_select = f"""
-                SELECT COUNT(*) as count FROM `{table_name}` WHERE """
-
-        for type_name in pk_types.keys():
-            sql_select += f"pk_{cleanup_type_name(type_name)}={pk_types[type_name].format(value)} and "
+        create_all_type = []
         for type_name in all_types.keys():
             if type_name != "Json" and type_name != "Yson" and type_name != "JsonDocument":
-                sql_select += f"col_{cleanup_type_name(type_name)}={all_types[type_name].format(value)} and "
-        for type_name in index.keys():
-            sql_select += f"col_index_{cleanup_type_name(type_name)}={index[type_name].format(value)} and "
-        sql_select += f"""pk_Int64={pk_types["Int64"].format(value)}"""
+                create_all_type.append(
+                    f"col_{cleanup_type_name(type_name)}={all_types[type_name].format(value)}")
+        sql_select = f"""
+                SELECT COUNT(*) as count FROM `{table_name}` WHERE 
+                {" and ".join([f"pk_{cleanup_type_name(type_name)}={pk_types[type_name].format(value)}" for type_name in pk_types.keys()])}
+                {" and " if len(index) != 0 else ""}
+                {" and ".join([f"col_index_{cleanup_type_name(type_name)}={index[type_name].format(value)}" for type_name in index.keys()])}
+                {" and " if len(create_all_type) != 0 else ""}
+                {" and ".join(create_all_type)}
+                """
         start_time = time.time()
         max_wait_time = 150
         while True:

@@ -10,13 +10,14 @@ on:
         default: 'main, stable-25-1, stable-25-1-1'
         required: false
 
+env:
+  DEFAULT_BRANCHES: 'main, stable-25-1, stable-25-1-1'
+
 jobs:
   main:
     name: Whitelist-run
     uses: ./.github/workflows/run_tests.yml
     secrets: inherit
-    env:
-      DEFAULT_BRANCHES: 'main, stable-25-1, stable-25-1-1'
     strategy:
       fail-fast: false
       matrix:

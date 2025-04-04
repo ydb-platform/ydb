@@ -46,6 +46,7 @@
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/db_async_resolver_impl.h>
 #include <ydb/core/fq/libs/db_id_async_resolver_impl/mdb_endpoint_generator.h>
+#include <ydb/core/blobstorage/base/blobstorage_console_events.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/client/metadata/types_metadata.h>
 #include <ydb/core/client/metadata/functions_metadata.h>
@@ -927,11 +928,40 @@ namespace Tests {
         host.SetHostConfigId(hostConfig.GetHostConfigId());
         bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineBox()->CopyFrom(boxConfig);
 
+        std::unordered_map<TString, ui64> poolsConfigGenerations;
+        if (Settings->FetchPoolsGeneration) {
+            auto bsDescribeRequest = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
+
+            auto& describeCommand = *bsDescribeRequest->Record.MutableRequest()->AddCommand()->MutableReadStoragePool();
+            describeCommand.SetBoxId(Settings->BOX_ID);
+            for (const auto& [_, storagePool] : Settings->StoragePoolTypes) {
+                describeCommand.AddName(storagePool.GetName());
+            }
+
+            Runtime->SendToPipe(MakeBSControllerID(), sender, bsDescribeRequest.Release(), 0, pipeConfig);
+            TAutoPtr<IEventHandle> handleDescResponse;
+            const auto descResponse = Runtime->GrabEdgeEventRethrow<TEvBlobStorage::TEvControllerConfigResponse>(handleDescResponse);
+
+            const auto& response = descResponse->Record.GetResponse();
+            if (!response.GetSuccess()) {
+                Cerr << "\n\n descResponse is #" << descResponse->Record.DebugString() << "\n\n";
+            }
+            UNIT_ASSERT(descResponse->Record.GetResponse().GetSuccess());
+            UNIT_ASSERT_VALUES_EQUAL(response.StatusSize(), 1);
+            const auto& status = response.GetStatus(0);
+
+            poolsConfigGenerations.reserve(status.StoragePoolSize());
+            for (const auto& storagePool : status.GetStoragePool()) {
+                UNIT_ASSERT(poolsConfigGenerations.emplace(storagePool.GetName(), storagePool.GetItemConfigGeneration()).second);
+            }
+        }
+
         for (const auto& [poolKind, storagePool] : Settings->StoragePoolTypes) {
             if (storagePool.GetNumGroups() > 0) {
                 auto* command = bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineStoragePool();
                 command->CopyFrom(storagePool);
-                command->SetItemConfigGeneration(Settings->StorageGeneration);
+                const auto poolGeneratonIt = poolsConfigGenerations.find(storagePool.GetName());
+                command->SetItemConfigGeneration(poolGeneratonIt == poolsConfigGenerations.end() ? Settings->StorageGeneration : poolGeneratonIt->second);
             }
         }
 

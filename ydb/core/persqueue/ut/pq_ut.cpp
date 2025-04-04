@@ -12,6 +12,7 @@
 
 #include <util/system/sanitizers.h>
 #include <util/system/valgrind.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 
 namespace NKikimr::NPQ {
@@ -19,6 +20,39 @@ namespace NKikimr::NPQ {
 const static TString TOPIC_NAME = "rt3.dc1--topic";
 
 Y_UNIT_TEST_SUITE(TPQTest) {
+
+TMaybe<ui64> PQGetStartOffset(TTestContext& tc)
+{
+    TAutoPtr<IEventHandle> handle;
+    TEvPersQueue::TEvOffsetsResponse *result;
+    THolder<TEvPersQueue::TEvOffsets> request;
+
+    for (i32 retriesLeft = 3; retriesLeft > 0; --retriesLeft) {
+        try {
+            tc.Runtime->ResetScheduledCount();
+            request.Reset(new TEvPersQueue::TEvOffsets);
+
+            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+            result = tc.Runtime->GrabEdgeEvent<TEvPersQueue::TEvOffsetsResponse>(handle);
+            UNIT_ASSERT(result);
+
+            if (result->Record.PartResultSize() == 0 ||
+                result->Record.GetPartResult(0).GetErrorCode() == NPersQueue::NErrorCode::INITIALIZING) {
+                tc.Runtime->DispatchEvents();   // Dispatch events so that initialization can make progress
+                retriesLeft = 3;
+                continue;
+            }
+
+            UNIT_ASSERT(result->Record.PartResultSize());
+
+            return result->Record.GetPartResult(0).GetStartOffset();
+        } catch (const NActors::TSchedulingLimitReachedException&) {
+            UNIT_ASSERT(retriesLeft > 0);
+        }
+    }
+
+    return Nothing();
+}
 
 Y_UNIT_TEST(TestCmdReadWithLastOffset) {
     TTestContext tc;
@@ -1097,6 +1131,7 @@ Y_UNIT_TEST(TestAlreadyWritten) {
         return tc.InitialEventsFilter.Prepare();
     }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
+        tc.EnableDetailedPQLog = true;
         tc.Prepare(dispatchName, setup, activeZone);
         activeZone = false;
         tc.Runtime->SetScheduledLimit(200);
@@ -1609,6 +1644,7 @@ Y_UNIT_TEST(TestStorageRetention) {
     }, [&](const TString& dispatchName, std::function<void(TTestActorRuntime&)> setup, bool& activeZone) {
         TFinalizer finalizer(tc);
         activeZone = false;
+        tc.EnableDetailedPQLog = true;
         tc.Prepare(dispatchName, setup, activeZone);
 
         tc.Runtime->SetScheduledLimit(100);
@@ -2239,6 +2275,7 @@ Y_UNIT_TEST(TestWriteTimeStampEstimate) {
 
 Y_UNIT_TEST(TestWriteTimeLag) {
     TTestContext tc;
+    tc.EnableDetailedPQLog = true;
     TFinalizer finalizer(tc);
     tc.Prepare();
 
@@ -2256,14 +2293,21 @@ Y_UNIT_TEST(TestWriteTimeLag) {
     // After restart all caches are empty.
     PQTabletRestart(tc);
 
+    while (true) {
+        auto startOffset = PQGetStartOffset(tc);
+        if (startOffset > 0) {
+            break;
+        }
+    }
+
     PQTabletPrepare({.maxSizeInPartition=1_TB}, {{"aaa", false}, {"important", true}, {"another", true}}, tc);
     PQTabletPrepare({.maxSizeInPartition=1_TB}, {{"aaa", false}, {"another1", true}, {"important", true}}, tc);
     PQTabletPrepare({.maxSizeInPartition=1_TB},
                     {{"aaa", false}, {"another1", true}, {"important", true}, {"another", false}}, tc);
 
-    CmdGetOffset(0, "important", 12, tc, -1, 0);
+    CmdGetOffset(0, "important", 16, tc, -1, 0);
 
-    CmdGetOffset(0, "another1", 12, tc, -1, 0);
+    CmdGetOffset(0, "another1", 16, tc, -1, 0);
     CmdGetOffset(0, "another", 0, tc, -1, 0);
     CmdGetOffset(0, "aaa", 0, tc, -1, 0);
 }

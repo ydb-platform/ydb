@@ -231,6 +231,8 @@ public:
         return Size() == KeySize() + 1;
     }
 
+    bool IsHead() const;
+
     static constexpr ui32 KeySize() {
         return UnmarkedSize() + 1 + 20 + 1 + 5 + 1 + 10 + 1 + 5;
         //p<partition 10 chars>_<offset 20 chars>_<part number 5 chars>_<count 10 chars>_<internalPartsCount count 5 chars>
@@ -325,6 +327,12 @@ private:
     ui16 PartNo;
     ui16 InternalPartsCount;
 };
+
+inline
+bool TKey::IsHead() const
+{
+    return HasSuffix() && (Data()[KeySize()] == '|');
+}
 
 inline
 TString GetTxKey(ui64 txId)

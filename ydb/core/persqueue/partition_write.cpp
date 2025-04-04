@@ -22,11 +22,10 @@
 #include <util/folder/path.h>
 #include <util/string/escape.h>
 #include <util/system/byteorder.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
-static const ui32 BATCH_UNPACK_SIZE_BORDER = 500_KB;
-static const ui32 MAX_INLINE_SIZE = 1000;
 static const TDuration SubDomainQuotaWaitDurationMs = TDuration::Seconds(60);
 
 static constexpr NPersQueue::NErrorCode::EErrorCode InactivePartitionErrorCode = NPersQueue::NErrorCode::WRITE_ERROR_PARTITION_INACTIVE;
@@ -387,6 +386,7 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
 
     BlobEncoder.SyncHeadKeys();
 
+    // возможно, надо перенести DefferedKeysForDeletion в TPartitionBlobEncoder
     // New blocks have been recorded. You can now delete the keys of the repackaged blocks.
     DefferedKeysForDeletion.clear();
 
@@ -411,7 +411,7 @@ void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
                               GapOffsets,
                               GapSize);
 
-    BlobEncoder.SyncHead(BlobEncoder.StartOffset, BlobEncoder.EndOffset);
+    BlobEncoder.SyncHeadFastWrite(BlobEncoder.StartOffset, BlobEncoder.EndOffset);
 
     EndWriteTimestamp = PendingWriteTimestamp;
 
@@ -436,6 +436,7 @@ void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
     OnProcessTxsAndUserActsWriteComplete(ctx);
     HandleWriteResponse(ctx);
     ProcessTxsAndUserActs(ctx);
+    TryRunCompaction();
 
     if (DeletePartitionState == DELETION_IN_PROCESS) {
         DestroyActor(ctx);
@@ -1023,9 +1024,10 @@ void TPartition::AddCmdWrite(const std::optional<TPartitionedBlob::TFormedBlobIn
 }
 
 void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFormedBlobInfo>& formedBlobs,
-                                   ProcessParameters& parameters,
+                                   TProcessParametersBase& parameters,
                                    ui32 curWrites,
                                    TEvKeyValue::TEvRequest* request,
+                                   TPartitionBlobEncoder& zone,
                                    const TActorContext& ctx)
 {
     for (ui32 i = 0; i < formedBlobs.size(); ++i) {
@@ -1035,30 +1037,30 @@ void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFor
             rename->SetOldKey(x.OldKey.ToString());
             rename->SetNewKey(x.NewKey.ToString());
         }
-        if (!BlobEncoder.DataKeysBody.empty() && BlobEncoder.CompactedKeys.empty()) {
-            Y_ABORT_UNLESS(BlobEncoder.DataKeysBody.back().Key.GetOffset() + BlobEncoder.DataKeysBody.back().Key.GetCount() <= x.NewKey.GetOffset(),
+        if (!zone.DataKeysBody.empty() && zone.CompactedKeys.empty()) {
+            Y_ABORT_UNLESS(zone.DataKeysBody.back().Key.GetOffset() + zone.DataKeysBody.back().Key.GetCount() <= x.NewKey.GetOffset(),
                            "PQ: %" PRIu64 ", Partition: %s, "
                            "LAST KEY %s, HeadOffset %lu, NEWKEY %s",
                            TabletID, Partition.ToString().c_str(),
-                           BlobEncoder.DataKeysBody.back().Key.ToString().c_str(),
-                           BlobEncoder.Head.Offset,
+                           zone.DataKeysBody.back().Key.ToString().c_str(),
+                           zone.Head.Offset,
                            x.NewKey.ToString().c_str());
         }
         PQ_LOG_D("writing blob: topic '" << TopicName() << "' partition " << Partition <<
                  " old key " << x.OldKey.ToString() << " new key " << x.NewKey.ToString() <<
                  " size " << x.Size << " WTime " << ctx.Now().MilliSeconds());
 
-        BlobEncoder.CompactedKeys.emplace_back(x.NewKey, x.Size);
+        zone.CompactedKeys.emplace_back(x.NewKey, x.Size);
     }
 
     if (!formedBlobs.empty()) {
         parameters.HeadCleared = true;
 
-        // BlobEncoder.ResetNewHead ???
-        BlobEncoder.NewHead.Clear();
-        BlobEncoder.NewHead.Offset = BlobEncoder.PartitionedBlob.GetOffset();
-        BlobEncoder.NewHead.PartNo = BlobEncoder.PartitionedBlob.GetHeadPartNo();
-        BlobEncoder.NewHead.PackedSize = 0;
+        // zone.ResetNewHead ???
+        zone.NewHead.Clear();
+        zone.NewHead.Offset = zone.PartitionedBlob.GetOffset();
+        zone.NewHead.PartNo = zone.PartitionedBlob.GetHeadPartNo();
+        zone.NewHead.PackedSize = 0;
     }
 }
 
@@ -1303,7 +1305,12 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                           parameters,
                           curWrites,
                           request,
+                          BlobEncoder,
                           ctx);
+
+        // здесь мы собираем вместе всё, что хотим записать на диск. список ключей для готовых блобов будет лежать в
+        // BlobEncoder.CompactedKeys, а оставшиеся небольшие блобы - в BlobEncoder.NewHead. ключ для них появится чуть позже
+        // см. функцию TPartition::EndProcessWrites
 
         ui32 countOfLastParts = 0;
         for (auto& x : BlobEncoder.PartitionedBlob.GetClientBlobs()) {
@@ -1340,9 +1347,33 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     return true;
 }
 
+std::pair<TKey, ui32> TPartition::GetNewFastWriteKeyImpl(bool headCleared, ui32 headSize)
+{
+    TKey key = BlobEncoder.KeyForFastWrite(TKeyPrefix::TypeData, Partition);
+
+    BlobEncoder.DataKeysHead[TotalLevels - 1].AddKey(key, BlobEncoder.NewHead.PackedSize);
+    Y_ABORT_UNLESS(headSize + BlobEncoder.NewHead.PackedSize <= 3 * MaxSizeCheck);
+
+    auto res = BlobEncoder.Compact(key, headCleared);
+    Y_ABORT_UNLESS(res.first.HasSuffix());//may compact some KV blobs from head, but new KV blob is from head too
+    Y_ABORT_UNLESS(res.second >= BlobEncoder.NewHead.PackedSize); //at least new data must be writed
+    Y_ABORT_UNLESS(res.second <= MaxBlobSize);
+
+    return res;
+}
+
+std::pair<TKey, ui32> TPartition::GetNewFastWriteKey(bool headCleared)
+{
+    ui32 headSize = headCleared ? 0 : BlobEncoder.Head.PackedSize;
+
+    Y_ABORT_UNLESS(BlobEncoder.NewHead.PackedSize > 0); // smthing must be here
+
+    return GetNewFastWriteKeyImpl(headCleared, headSize);
+}
+
 std::pair<TKey, ui32> TPartition::GetNewWriteKeyImpl(bool headCleared, bool needCompaction, ui32 headSize)
 {
-    TKey key = BlobEncoder.KeyFor(TKeyPrefix::TypeData, Partition, needCompaction);
+    TKey key = BlobEncoder.KeyForWrite(TKeyPrefix::TypeData, Partition, needCompaction);
 
     if (BlobEncoder.NewHead.PackedSize > 0) {
         BlobEncoder.DataKeysHead[TotalLevels - 1].AddKey(key, BlobEncoder.NewHead.PackedSize);
@@ -1386,8 +1417,9 @@ std::pair<TKey, ui32> TPartition::GetNewWriteKey(bool headCleared) {
     return GetNewWriteKeyImpl(headCleared, needCompaction, headSize);
 }
 
-void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, const TActorContext& ctx) {
-    PQ_LOG_T("TPartition::AddNewWriteBlob.");
+void TPartition::AddNewFastWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, const TActorContext& ctx)
+{
+    PQ_LOG_T("TPartition::AddNewFastWriteBlob");
 
     const auto& key = res.first;
 
@@ -1399,9 +1431,37 @@ void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvReq
 
     bool isInline = key.HasSuffix() && valueD.size() < MAX_INLINE_SIZE;
 
-    if (isInline)
+    if (isInline) {
         write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
-    else {
+    } else {
+        auto channel = GetChannel(NextChannel(key.HasSuffix(), valueD.size()));
+        write->SetStorageChannel(channel);
+        write->SetTactic(AppData(ctx)->PQConfig.GetTactic());
+    }
+
+    Y_ABORT_UNLESS(BlobEncoder.NewHeadKey.Size == 0);
+    BlobEncoder.NewHeadKey = {key, res.second, CurrentTimestamp, 0, MakeBlobKeyToken(key.ToString())};
+
+    WriteCycleSize += write->GetValue().size();
+    UpdateWriteBufferIsFullState(ctx.Now());
+}
+
+void TPartition::AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, const TActorContext& ctx) {
+    PQ_LOG_T("TPartition::AddNewWriteBlob");
+
+    const auto& key = res.first;
+
+    TString valueD = BlobEncoder.SerializeForKey(key, res.second, BlobEncoder.EndOffset, PendingWriteTimestamp);
+
+    auto write = request->Record.AddCmdWrite();
+    write->SetKey(key.Data(), key.Size());
+    write->SetValue(valueD);
+
+    bool isInline = key.HasSuffix() && valueD.size() < MAX_INLINE_SIZE;
+
+    if (isInline) {
+        write->SetStorageChannel(NKikimrClient::TKeyValueRequest::INLINE);
+    } else {
         auto channel = GetChannel(NextChannel(key.HasSuffix(), valueD.size()));
         write->SetStorageChannel(channel);
         write->SetTactic(AppData(ctx)->PQConfig.GetTactic());
@@ -1566,8 +1626,6 @@ void TPartition::BeginHandleRequests(TEvKeyValue::TEvRequest* request, const TAc
 
 void TPartition::EndHandleRequests(TEvKeyValue::TEvRequest* request, const TActorContext& ctx)
 {
-    HaveDrop = CleanUp(request, ctx);
-
     ProcessReserveRequests(ctx);
     if (!HaveData && !HaveDrop && !HaveCheckDisk) { //no data writed/deleted
         return;
@@ -1612,7 +1670,7 @@ void TPartition::EndProcessWrites(TEvKeyValue::TEvRequest* request, const TActor
 
     SourceIdBatch->FillRequest(request);
 
-    std::pair<TKey, ui32> res = GetNewWriteKey(HeadCleared);
+    std::pair<TKey, ui32> res = GetNewFastWriteKey(HeadCleared);
     const auto& key = res.first;
 
     PQ_LOG_D("Add new write blob: topic '" << TopicName() << "' partition " << Partition
@@ -1621,7 +1679,7 @@ void TPartition::EndProcessWrites(TEvKeyValue::TEvRequest* request, const TActor
             << BlobEncoder.NewHead.GetNextOffset() << " " << key.ToString()
             << " size " << res.second << " WTime " << ctx.Now().MilliSeconds()
     );
-    AddNewWriteBlob(res, request, ctx);
+    AddNewFastWriteBlob(res, request, ctx);
 
     HaveData = true;
 }

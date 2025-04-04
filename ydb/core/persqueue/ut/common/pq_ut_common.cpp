@@ -13,6 +13,7 @@
 #include <ydb/public/lib/base/msgbus.h>
 
 #include <library/cpp/testing/unittest/registar.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 
 namespace NKikimr::NPQ {

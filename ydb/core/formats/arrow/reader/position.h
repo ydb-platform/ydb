@@ -314,6 +314,15 @@ public:
         static TFoundPosition Equal(const ui32 pos) {
             return TFoundPosition(pos);
         }
+
+        TFoundPosition(const ui32 pos, const std::partial_ordering cmp)
+            : Position(pos) {
+            if (cmp == std::partial_ordering::less) {
+                GreaterIfNotEqual = false;
+            } else if (cmp == std::partial_ordering::greater) {
+                GreaterIfNotEqual = true;
+            }
+        }
     };
 
     [[nodiscard]] bool IsAvailablePosition(const i64 position) const {

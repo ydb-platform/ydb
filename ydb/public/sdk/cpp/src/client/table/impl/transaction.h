@@ -12,6 +12,10 @@ public:
         return TxId_;
     }
 
+    const std::string& GetSessionId() const {
+        return Session_.GetId();
+    }
+
     bool IsActive() const {
         return !TxId_.empty();
     }
@@ -26,10 +30,10 @@ public:
 
     void AddPrecommitCallback(TPrecommitTransactionCallback cb);
 
-private:
     TSession Session_;
     std::string TxId_;
 
+private:
     bool ChangesAreAccepted = true; // haven't called Commit or Rollback yet
     mutable std::vector<TPrecommitTransactionCallback> PrecommitCallbacks;
 };

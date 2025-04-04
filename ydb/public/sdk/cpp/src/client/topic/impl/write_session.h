@@ -37,10 +37,10 @@ public:
                std::optional<uint64_t> seqNo = std::nullopt, std::optional<TInstant> createTimestamp = std::nullopt) override;
 
     void Write(TContinuationToken&& continuationToken, TWriteMessage&& message,
-               NTable::TTransaction* tx = nullptr) override;
+               TTransactionBase* tx = nullptr) override;
 
     void WriteEncoded(TContinuationToken&& continuationToken, TWriteMessage&& message,
-                      NTable::TTransaction* tx = nullptr) override;
+                      TTransactionBase* tx = nullptr) override;
 
     NThreading::TFuture<void> WaitEvent() override;
 
@@ -70,7 +70,7 @@ public:
                const TDuration& blockTimeout = TDuration::Max()) override;
 
     bool Write(TWriteMessage&& message,
-               NTable::TTransaction* tx = nullptr,
+               TTransactionBase* tx = nullptr,
                const TDuration& blockTimeout = TDuration::Max()) override;
 
     uint64_t GetInitSeqNo() override;

@@ -5,6 +5,7 @@ RECURSE(
     secondary_index
     secondary_index_builtin
     topic_reader
+    topic_writer/transaction
     ttl
     vector_index
 )

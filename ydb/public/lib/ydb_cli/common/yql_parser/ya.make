@@ -3,8 +3,6 @@ LIBRARY()
 PEERDIR(
     ydb/public/sdk/cpp/src/client/value
     ydb/public/sdk/cpp/src/client/types
-    yql/essentials/parser/lexer_common
-    yql/essentials/parser/proto_ast
     yql/essentials/sql/settings
     yql/essentials/sql/v1/lexer
     yql/essentials/sql/v1/lexer/antlr4

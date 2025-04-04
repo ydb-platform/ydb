@@ -1060,15 +1060,6 @@ public:
             }
             const bool initial = NYql::HasSetting(publish.Settings().Ref(), EYtSettingType::Initial);
 
-            std::unordered_map<EYtSettingType, TString> strOpts;
-            for (const auto& setting : publish.Settings().Ref().Children()) {
-                if (setting->ChildrenSize() == 2) {
-                    strOpts.emplace(FromString<EYtSettingType>(setting->Head().Content()), setting->Tail().Content());
-                } else if (setting->ChildrenSize() == 1) {
-                    strOpts.emplace(FromString<EYtSettingType>(setting->Head().Content()), TString());;
-                }
-            }
-
             YQL_CLOG(INFO, ProviderYt) << "Mode: " << mode << ", IsInitial: " << initial;
 
             TSession::TPtr session = GetSession(options.SessionId());
@@ -1079,15 +1070,35 @@ public:
             TVector<TSrcTable> src;
             ui64 chunksCount = 0;
             ui64 dataSize = 0;
-            std::unordered_set<TString> columnGroups;
+            TSet<TString> srcColumnGroupAlts;
+            bool first = true;
+            const TStructExprType* itemType = nullptr;
             for (auto out: publish.Input()) {
                 auto outTableWithCluster = GetOutTableWithCluster(out);
                 auto outTable = outTableWithCluster.first.Cast<TYtOutTable>();
                 src.emplace_back(outTable.Name().StringValue(), outTableWithCluster.second);
-                if (auto columnGroupSetting = NYql::GetSetting(outTable.Settings().Ref(), EYtSettingType::ColumnGroups)) {
-                    columnGroups.emplace(columnGroupSetting->Tail().Content());
-                } else {
-                    columnGroups.emplace();
+                if (first) {
+                    itemType = GetSeqItemType(*outTable.Ref().GetTypeAnn()).Cast<TStructExprType>();
+                    if (auto columnGroupSetting = NYql::GetSetting(outTable.Settings().Ref(), EYtSettingType::ColumnGroups)) {
+                        srcColumnGroupAlts.emplace(columnGroupSetting->Tail().Content());
+                        TString expanded;
+                        if (ExpandDefaultColumnGroup(columnGroupSetting->Tail().Content(), *itemType, expanded)) {
+                            srcColumnGroupAlts.insert(expanded);
+                        }
+                    }
+                    first = false;
+                } else if (!srcColumnGroupAlts.empty()) {
+                    if (auto columnGroupSetting = NYql::GetSetting(outTable.Settings().Ref(), EYtSettingType::ColumnGroups)) {
+                        if (!srcColumnGroupAlts.contains(columnGroupSetting->Tail().Content())) {
+                            TString expanded;
+                            if (!ExpandDefaultColumnGroup(columnGroupSetting->Tail().Content(), *GetSeqItemType(*outTable.Ref().GetTypeAnn()).Cast<TStructExprType>(), expanded)
+                                || !srcColumnGroupAlts.contains(expanded)) {
+                                srcColumnGroupAlts.clear();
+                            }
+                        }
+                    } else {
+                        srcColumnGroupAlts.clear();
+                    }
                 }
                 auto stat = TYtTableStatInfo(outTable.Stat());
                 chunksCount += stat.ChunkCount;
@@ -1099,7 +1110,38 @@ public:
             if (src.size() > 10) {
                 YQL_CLOG(INFO, ProviderYt) << "...total input tables=" << src.size();
             }
-            TString srcColumnGroups = columnGroups.size() == 1 ? *columnGroups.cbegin() : TString();
+
+            bool forceMerge = false;
+            bool forceTransform = false;
+            std::unordered_map<EYtSettingType, TString> strOpts;
+            for (const auto& setting : publish.Settings().Ref().Children()) {
+                const auto settingType = FromString<EYtSettingType>(setting->Head().Content());
+                if (setting->ChildrenSize() == 2) {
+                    TString value = TString{setting->Tail().Content()};
+                    if (EYtSettingType::ColumnGroups == settingType) {
+                        bool groupDiff = false;
+                        if (srcColumnGroupAlts.empty()) {
+                            groupDiff = true;
+                        } else {
+                            if (!srcColumnGroupAlts.contains(value)) {
+                                TString expanded;
+                                YQL_ENSURE(itemType);
+                                if (ExpandDefaultColumnGroup(value, *itemType, expanded)) {
+                                    value = std::move(expanded);
+                                    groupDiff = !srcColumnGroupAlts.contains(value);
+                                }
+                            }
+                        }
+                        if (groupDiff) {
+                            forceMerge = forceTransform = true;
+                            YQL_CLOG(INFO, ProviderYt) << "Column groups diff forces merge";
+                        }
+                    }
+                    strOpts.emplace(settingType, value);
+                } else if (setting->ChildrenSize() == 1) {
+                    strOpts.emplace(settingType, TString());
+                }
+            }
 
             bool combineChunks = false;
             if (auto minChunkSize = options.Config()->MinPublishedAvgChunkSize.Get()) {
@@ -1111,6 +1153,7 @@ public:
             YQL_CLOG(INFO, ProviderYt) << "Output: " << cluster << '.' << dst;
             if (combineChunks) {
                 YQL_CLOG(INFO, ProviderYt) << "Use chunks combining";
+                forceMerge = true;
             }
             if (Services_.Config->GetLocalChainTest()) {
                 if (!src.empty()) {
@@ -1130,9 +1173,9 @@ public:
             const ui32 dstEpoch = TEpochInfo::Parse(publish.Publish().Epoch().Ref()).GetOrElse(0);
             auto execCtx = MakeExecCtx(std::move(options), session, cluster, node.Get(), &ctx);
 
-            return session->Queue_->Async([execCtx, src = std::move(src), dst, dstEpoch, isAnonymous, mode, initial, srcColumnGroups, combineChunks, strOpts = std::move(strOpts)] () mutable {
+            return session->Queue_->Async([execCtx, src = std::move(src), dst, dstEpoch, isAnonymous, mode, initial, combineChunks, forceMerge, forceTransform, strOpts = std::move(strOpts)] () mutable {
                 YQL_LOG_CTX_ROOT_SESSION_SCOPE(execCtx->LogCtx_);
-                return ExecPublish(execCtx, std::move(src), dst, dstEpoch, isAnonymous, mode, initial, srcColumnGroups, combineChunks, strOpts);
+                return ExecPublish(execCtx, std::move(src), dst, dstEpoch, isAnonymous, mode, initial, combineChunks, forceMerge, forceTransform, strOpts);
             })
             .Apply([nodePos] (const TFuture<void>& f) {
                 try {
@@ -2414,8 +2457,9 @@ private:
         const bool isAnonymous,
         EYtWriteMode mode,
         const bool initial,
-        const TString& srcColumnGroups,
         const bool combineChunks,
+        bool forceMerge,
+        bool forceTransform,
         const std::unordered_map<EYtSettingType, TString>& strOpts)
     {
         TString tmpFolder = GetTablesTmpFolder(*execCtx->Options_.Config());
@@ -2489,8 +2533,6 @@ private:
                 )
             );
         }
-
-        bool forceMerge = combineChunks;
 
         NYT::MergeNodes(yqlAttrs, GetUserAttributes(execCtx->GetEntryForCluster(src.back().Cluster)->Tx, src.back().Name, true));
         NYT::MergeNodes(yqlAttrs, YqlOpOptionsToAttrs(execCtx->Session_->OperationOptions_));
@@ -2582,8 +2624,6 @@ private:
             }
         }
 
-        bool forceTransform = false;
-
 #define DEFINE_OPT(name, attr, transform)                                                               \
         auto dst##name = isAnonymous                                                                    \
             ? execCtx->Options_.Config()->Temporary##name.Get(cluster)                                  \
@@ -2612,10 +2652,6 @@ private:
         NYT::TNode columnGroupsSpec;
         if (const auto it = strOpts.find(EYtSettingType::ColumnGroups); it != strOpts.cend() && execCtx->Options_.Config()->OptimizeFor.Get(cluster).GetOrElse(NYT::OF_LOOKUP_ATTR) != NYT::OF_LOOKUP_ATTR) {
             columnGroupsSpec = NYT::NodeFromYsonString(it->second);
-            if (it->second != srcColumnGroups) {
-                forceMerge = forceTransform = true;
-                YQL_CLOG(INFO, ProviderYt) << "Column groups diff forces merge, src=" << srcColumnGroups << ", dst=" << it->second;
-            }
         }
 
         TFuture<void> res;
@@ -2656,7 +2692,7 @@ private:
                             input = TRichYPath(std::get<0>(*p)).TransactionId(std::get<1>(*p)).OriginalPath(NYT::AddPathPrefix(dstPath, NYT::TConfig::Get()->Prefix)).Columns(columns);
                         }
                     } else {
-                      input = TRichYPath(dstPath).Columns(columns);
+                        input = TRichYPath(dstPath).Columns(columns);
                     }
                     mergeSpec.AddInput(input);
                 }

@@ -1,4 +1,5 @@
 #include "yql_yt_request_proto_helpers.h"
+#include <library/cpp/yson/node/node_io.h>
 
 namespace NYql::NFmr {
 
@@ -399,6 +400,9 @@ NProto::TTask TaskToProto(const TTask& task) {
     protoTask.SetNumRetries(task.NumRetries);
     auto clusterConnection = ClusterConnectionToProto(task.ClusterConnection);
     protoTask.MutableClusterConnection()->Swap(&clusterConnection);
+    if (task.JobSettings) {
+        protoTask.SetJobSettings(NYT::NodeToYsonString(*task.JobSettings));
+    }
     return protoTask;
 }
 
@@ -410,6 +414,9 @@ TTask TaskFromProto(const NProto::TTask& protoTask) {
     task.SessionId = protoTask.GetSessionId();
     task.NumRetries = protoTask.GetNumRetries();
     task.ClusterConnection = ClusterConnectionFromProto(protoTask.GetClusterConnection());
+    if (protoTask.HasJobSettings()) {
+        task.JobSettings = NYT::NodeFromYsonString(protoTask.GetJobSettings());
+    }
     return task;
 }
 

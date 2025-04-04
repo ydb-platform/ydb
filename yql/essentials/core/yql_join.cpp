@@ -340,12 +340,16 @@ namespace {
             else if (option.IsAtom("join_algo")) {
                 //do nothing
             }
-            else if (option.IsAtom("shuffle_lhs_by") || option.IsAtom("shuffle_rhs_by")) {
-                //do nothing
-            }
             else if (option.IsAtom("compact")) {
                 if (!EnsureTupleSize(*child, 1, ctx)) {
                     return IGraphTransformer::TStatus::Error;
+                }
+            }
+            else if (IsCachedJoinLinkOption(option.Content())) {
+                if (option.IsAtom("shuffle_lhs_by") || option.IsAtom("shuffle_rhs_by")) {
+                    //do nothing
+                } else {
+                    YQL_ENSURE(false, "Cached join link option '" << option.Content() << "' not handled");
                 }
             }
             else {
@@ -787,40 +791,38 @@ IGraphTransformer::TStatus ValidateEquiJoinOptions(TPositionHandle positionHandl
             options.Flatten = true;
         } else if (optionName == "strict_keys") {
             options.StrictKeys = true;
-        } else if (optionName == "preferred_sort") {
-            THashSet<TStringBuf> sortBySet;
-            TVector<TStringBuf> sortBy;
-            if (!EnsureTupleSize(*child, 2, ctx)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-            if (!EnsureTupleMinSize(*child->Child(1), 1, ctx)) {
-                return IGraphTransformer::TStatus::Error;
-            }
-            for (auto column : child->Child(1)->Children()) {
-                if (!EnsureAtom(*column, ctx)) {
+        } else if (IsCachedJoinOption(optionName)) {
+            if (optionName == "preferred_sort") {
+                THashSet<TStringBuf> sortBySet;
+                TVector<TStringBuf> sortBy;
+                if (!EnsureTupleSize(*child, 2, ctx)) {
                     return IGraphTransformer::TStatus::Error;
                 }
-                if (!sortBySet.insert(column->Content()).second) {
-                    ctx.AddError(TIssue(ctx.GetPosition(column->Pos()), TStringBuilder() <<
-                        "Duplicated preferred_sort column: " << column->Content()));
+                if (!EnsureTupleMinSize(*child->Child(1), 1, ctx)) {
                     return IGraphTransformer::TStatus::Error;
                 }
-                sortBy.push_back(column->Content());
+                for (auto column : child->Child(1)->Children()) {
+                    if (!EnsureAtom(*column, ctx)) {
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    if (!sortBySet.insert(column->Content()).second) {
+                        ctx.AddError(TIssue(ctx.GetPosition(column->Pos()), TStringBuilder() <<
+                            "Duplicated preferred_sort column: " << column->Content()));
+                        return IGraphTransformer::TStatus::Error;
+                    }
+                    sortBy.push_back(column->Content());
+                }
+                if (!options.PreferredSortSets.insert(sortBy).second) {
+                    ctx.AddError(TIssue(ctx.GetPosition(child->Child(1)->Pos()), TStringBuilder() <<
+                        "Duplicated preferred_sort set: " << JoinSeq(", ", sortBy)));
+                }
+            } else if (optionName == "cbo_passed") {
+                // do nothing
+            } else if (optionName == "multiple_joins") {
+                // do nothing
+            } else {
+                YQL_ENSURE(false, "Cached join option '" << optionName << "' not handled");
             }
-            if (!options.PreferredSortSets.insert(sortBy).second) {
-                ctx.AddError(TIssue(ctx.GetPosition(child->Child(1)->Pos()), TStringBuilder() <<
-                    "Duplicated preferred_sort set: " << JoinSeq(", ", sortBy)));
-            }
-        } else if (optionName == "cbo_passed") {
-            // do nothing
-        } else if (optionName == "join_algo") {
-            // do nothing
-        } else if (optionName == "shuffle_lhs_by" || optionName == "shuffle_rhs_by") {
-            // do nothing
-        } else if (optionName == "multiple_joins") {
-            // do nothing
-        } else if (optionName == "compact") {
-            options.Compact = true;
         } else {
             ctx.AddError(TIssue(position, TStringBuilder() <<
                 "Unknown option name: " << optionName));
@@ -2002,6 +2004,16 @@ void GatherJoinInputs(const TExprNode::TPtr& expr, const TExprNode& row,
             break;
         }
     }
+}
+
+bool IsCachedJoinOption(TStringBuf name) {
+    static THashSet<TStringBuf> CachedJoinOptions = {"preferred_sort", "cbo_passed", "multiple_joins"};
+    return CachedJoinOptions.contains(name);
+}
+
+bool IsCachedJoinLinkOption(TStringBuf name) {
+    static THashSet<TStringBuf> CachedJoinLinkOptions = {"shuffle_lhs_by", "shuffle_rhs_by"};
+    return CachedJoinLinkOptions.contains(name);
 }
 
 } // namespace NYql

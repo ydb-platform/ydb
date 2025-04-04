@@ -22,6 +22,7 @@ message TStartOperationRequest {
     optional string IdempotencyKey = 4;
     uint32 NumRetries = 5;
     TClusterConnection ClusterConnection = 6;
+    optional string FmrOperationSpec = 7;
 }
 
 message TStartOperationResponse {

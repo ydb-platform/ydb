@@ -13,8 +13,6 @@
 #include <util/generic/string.h>
 #include <util/generic/vector.h>
 
-#include <unordered_set>
-
 namespace NSQLComplete {
 
     template <class Lexer, class Parser>
@@ -67,8 +65,8 @@ namespace NSQLComplete {
 
         static TC3Candidates Converted(c3::CandidatesCollection candidates) {
             TC3Candidates converted;
-            for (const auto& [token, _] : candidates.tokens) {
-                converted.Tokens.emplace_back(token);
+            for (auto& [token, following] : candidates.tokens) {
+                converted.Tokens.emplace_back(token, std::move(following));
             }
             for (auto& [rule, data] : candidates.rules) {
                 converted.Rules.emplace_back(rule, std::move(data.ruleList));

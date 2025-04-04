@@ -21,6 +21,7 @@ namespace NSQLComplete {
         virtual const antlr4::dfa::Vocabulary& GetVocabulary() const = 0;
         virtual const std::unordered_set<TTokenId>& GetAllTokens() const = 0;
         virtual const std::unordered_set<TTokenId>& GetKeywordTokens() const = 0;
+        virtual const std::unordered_set<TTokenId>& GetPunctuationTokens() const = 0;
         virtual ~ISqlGrammar() = default;
     };
 

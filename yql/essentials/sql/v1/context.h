@@ -471,4 +471,6 @@ namespace NSQLTranslationV1 {
     protected:
         TContext& Ctx;
     };
+
+    void EnumerateSqlFlags(std::function<void(std::string_view)> callback);
 }  // namespace NSQLTranslationV1

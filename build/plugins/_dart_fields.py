@@ -598,33 +598,9 @@ class LintConfigs:
 
     @classmethod
     def python_configs(cls, unit, flat_args, spec_args):
-        resolved_configs = []
-
-        if (custom_config := spec_args.get('CUSTOM_CONFIG')) and '/' in custom_config[0]:
-            # black if custom config is passed.
-            # XXX During migration we want to use the same macro parameter
-            # for path to linter config and config type
-            # thus, we check if '/' is present, if it is then it's a path
-            # TODO delete once custom configs migrated to autoincludes scheme
-            custom_config = custom_config[0]
-            assert_file_exists(unit, custom_config)
-            resolved_configs.append(custom_config)
-            return {cls.KEY: serialize_list(resolved_configs)}
-
         if config := cls._from_config_type(unit, spec_args):
             # specified by config type, autoincludes scheme
             return {cls.KEY: serialize_list([config])}
-
-        if project_to_config_map := spec_args.get('PROJECT_TO_CONFIG_MAP'):
-            # ruff, TODO delete once custom configs migrated to autoincludes scheme
-            project_to_config_map = project_to_config_map[0]
-            assert_file_exists(unit, project_to_config_map)
-            resolved_configs.append(project_to_config_map)
-            cfgs = get_linter_configs(unit, project_to_config_map).values()
-            for c in cfgs:
-                assert_file_exists(unit, c)
-                resolved_configs.append(c)
-            return {cls.KEY: serialize_list(resolved_configs)}
 
         # default config
         linter_name = spec_args['NAME'][0]
@@ -636,10 +612,10 @@ class LintConfigs:
             ymake.report_configure_error(message)
             raise DartValueError()
         assert_file_exists(unit, config)
-        resolved_configs.append(config)
+        configs = [config]
         if linter_name in ('flake8', 'py2_flake8'):
-            resolved_configs.extend(spec_args.get('FLAKE_MIGRATIONS_CONFIG', []))
-        return {cls.KEY: serialize_list(resolved_configs)}
+            configs.extend(spec_args.get('FLAKE_MIGRATIONS_CONFIG', []))
+        return {cls.KEY: serialize_list(configs)}
 
     @classmethod
     def cpp_configs(cls, unit, flat_args, spec_args):

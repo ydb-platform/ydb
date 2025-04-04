@@ -675,7 +675,7 @@ struct TTableReaderOptions
     FLUENT_FIELD_DEFAULT(size_t, SizeLimit, 4 << 20);
 
     ///
-    /// @brief Allows to fine tune format that is used for reading tables.
+    /// @brief Allows fine-tuning of the format used for reading tables.
     ///
     /// Has no effect when used with raw-reader.
     FLUENT_FIELD_OPTION(TFormatHints, FormatHints);
@@ -684,6 +684,20 @@ struct TTableReaderOptions
     /// @brief Allows to tune which attributes are added to rows while reading tables.
     ///
     FLUENT_FIELD_DEFAULT(TControlAttributes, ControlAttributes, TControlAttributes());
+};
+
+/// Options for @ref NYT::IClient::CreatePartitionTableReader
+struct TTablePartitionReaderOptions
+{
+    /// @cond Doxygen_Suppress
+    using TSelf = TTablePartitionReaderOptions;
+    /// @endcond
+
+    ///
+    /// @brief Allows fine-tuning of the format used for reading tables.
+    ///
+    /// Has no effect when used with raw-reader.
+    FLUENT_FIELD_OPTION(TFormatHints, FormatHints);
 };
 
 /// Options for @ref NYT::IClient::CreateTableWriter
@@ -1471,6 +1485,12 @@ struct TGetTablePartitionsOptions
     ///
     /// |True| by default.
     FLUENT_FIELD_DEFAULT(bool, AdjustDataWeightPerPartition, true);
+
+    ///
+    /// @brief Enable partition cookies in response.
+    ///
+    /// Partition cookies allow to efficiently read partitions using @ref NYT::IClientBase::CreateTablePartitionReader method.
+    FLUENT_FIELD_DEFAULT(bool, EnableCookies, false);
 };
 
 ///

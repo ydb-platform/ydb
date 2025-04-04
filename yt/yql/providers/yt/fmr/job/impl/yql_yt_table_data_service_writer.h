@@ -10,7 +10,7 @@
 namespace NYql::NFmr {
 
 struct TFmrTableDataServiceWriterSettings {
-    ui64 ChunkSize = 1024 * 1024; // 1Mb
+    ui64 ChunkSize = 1024 * 1024;
 };
 
 class TFmrTableDataServiceWriter: public NYT::TRawTableWriter {

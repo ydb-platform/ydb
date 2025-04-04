@@ -156,7 +156,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         TYtTableRef output = TYtTableRef("test_cluster", "test_path");
 
         TUploadTaskParams params = TUploadTaskParams(input, output);
-        TTask::TPtr task = MakeTask(ETaskType::Upload, "test_task_id", params, "test_session_id");
+        TTask::TPtr task = MakeTask(ETaskType::Upload, "test_task_id", params, "test_session_id", TClusterConnection());
         auto key = GetTableDataServiceKey(input.TableId, "test_part_id", 0);
         tableDataServicePtr->Put(key, GetBinaryYson(TableContent_1));
         ETaskStatus status = RunJob(task, tableDataServicePtr, ytService, cancelFlag).TaskStatus;
@@ -178,7 +178,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         TYtTableRef output = TYtTableRef("test_cluster", "test_path");
 
         TUploadTaskParams params = TUploadTaskParams(input, output);
-        TTask::TPtr task = MakeTask(ETaskType::Upload, "test_task_id", params, "test_session_id");
+        TTask::TPtr task = MakeTask(ETaskType::Upload, "test_task_id", params, "test_session_id", TClusterConnection());
 
         // No tables in tableDataService
         ETaskStatus status = RunJob(task, tableDataServicePtr, ytService, cancelFlag).TaskStatus;
@@ -205,7 +205,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         auto params = TMergeTaskParams(inputs, output);
         auto tableDataServiceExpectedOutputKey = GetTableDataServiceKey(output.TableId, output.PartId, 0);
 
-        TTask::TPtr task = MakeTask(ETaskType::Upload, "test_task_id", params, "test_session_id");
+        TTask::TPtr task = MakeTask(ETaskType::Merge, "test_task_id", params, "test_session_id", TClusterConnection());
 
         auto key_1 = GetTableDataServiceKey(input_1.TableId, "test_part_id", 0);
         auto key_3 = GetTableDataServiceKey(input_3.TableId, "test_part_id", 0);
@@ -239,7 +239,7 @@ Y_UNIT_TEST_SUITE(TaskRunTests) {
         auto params = TMergeTaskParams(inputs, output);
         auto tableDataServiceExpectedOutputKey = GetTableDataServiceKey(output.TableId, output.PartId, 0);
 
-        TTask::TPtr task = MakeTask(ETaskType::Upload, "test_task_id", params, "test_session_id");
+        TTask::TPtr task = MakeTask(ETaskType::Merge, "test_task_id", params, "test_session_id", TClusterConnection());
 
         auto key_1 = GetTableDataServiceKey(input_1.TableId, "test_part_id", 0);
         auto key_3 = GetTableDataServiceKey(input_3.TableId, "test_part_id", 0);

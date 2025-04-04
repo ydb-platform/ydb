@@ -109,8 +109,9 @@ namespace NSQLTranslationV1 {
         bool MatchKeyword(const TStringBuf prefix, TParsedTokenList& matches) {
             size_t count = 0;
             for (const auto& keyword : Grammar_.KeywordNames) {
-                if (AsciiEqualsIgnoreCase(prefix.substr(0, keyword.length()), keyword)) {
-                    matches.emplace_back(keyword, keyword);
+                const TStringBuf content = prefix.substr(0, keyword.length());
+                if (AsciiEqualsIgnoreCase(content, keyword)) {
+                    matches.emplace_back(keyword, TString(content));
                     count += 1;
                 }
             }

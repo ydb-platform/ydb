@@ -472,7 +472,7 @@ message TPersQueuePartitionResponse {
         optional uint64 CreateTimestampMS = 6; //create Timestamp of record on Offset (next to be readed record); is not set if no such record exists (no lag)
         optional uint64 SizeLag = 7;
         optional uint64 WriteTimestampEstimateMS = 8;
-
+        optional bool ClientHasAnyCommits = 9;
     }
 
     message TCmdGetOwnershipResult {

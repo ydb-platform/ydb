@@ -89,6 +89,7 @@ struct TEvPQProxy {
         EvReadingStarted,
         EvReadingFinished,
         EvAlterTopicResponse,
+        EvParentCommitedToFinish,
         EvEnd
     };
 
@@ -407,17 +408,27 @@ struct TEvPQProxy {
 
 
     struct TEvCommitDone : public NActors::TEventLocal<TEvCommitDone, EvCommitDone> {
-        explicit TEvCommitDone(const ui64 assignId, const ui64 startCookie, const ui64 lastCookie, const ui64 offset)
+        explicit TEvCommitDone(const ui64 assignId, const ui64 startCookie, const ui64 lastCookie, const ui64 offset, const ui64 endOffset)
             : AssignId(assignId)
             , StartCookie(startCookie)
             , LastCookie(lastCookie)
             , Offset(offset)
+            , EndOffset(endOffset)
         { }
 
         ui64 AssignId;
         ui64 StartCookie;
         ui64 LastCookie;
         ui64 Offset;
+        ui64 EndOffset;
+    };
+
+    struct TEvParentCommitedToFinish : public NActors::TEventLocal<TEvParentCommitedToFinish, EvParentCommitedToFinish> {
+        explicit TEvParentCommitedToFinish(ui64 parentPartitionId)
+            : ParentPartitionId(parentPartitionId)
+        { }
+
+        ui64 ParentPartitionId;
     };
 
     struct TEvReleasePartition : public NActors::TEventLocal<TEvReleasePartition, EvReleasePartition> {
@@ -474,11 +485,12 @@ struct TEvPQProxy {
     };
 
     struct TEvPartitionStatus : public NActors::TEventLocal<TEvPartitionStatus, EvPartitionStatus> {
-        TEvPartitionStatus(const TPartitionId& partition, const ui64 offset, const ui64 endOffset, const ui64 writeTimestampEstimateMs, ui64 nodeId, ui64 generation,
+        TEvPartitionStatus(const TPartitionId& partition, const ui64 offset, const ui64 endOffset, const ui64 writeTimestampEstimateMs, ui64 nodeId, ui64 generation, bool clientHasAnyCommits,
                            bool init = true)
             : Partition(partition)
             , Offset(offset)
             , EndOffset(endOffset)
+            , ClientHasAnyCommits(clientHasAnyCommits)
             , WriteTimestampEstimateMs(writeTimestampEstimateMs)
             , NodeId(nodeId)
             , Generation(generation)
@@ -488,6 +500,7 @@ struct TEvPQProxy {
         TPartitionId Partition;
         ui64 Offset;
         ui64 EndOffset;
+        bool ClientHasAnyCommits;
         ui64 WriteTimestampEstimateMs;
         ui64 NodeId;
         ui64 Generation;

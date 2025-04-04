@@ -1,7 +1,10 @@
 #pragma once
 
 #include "events.h"
+#include "distributed_commit_helper.h"
 
+
+#include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/grpc_services/rpc_deferrable.h>
 #include <ydb/core/client/server/msgbus_server_pq_metacache.h>
 
@@ -52,6 +55,9 @@ private:
             HFunc(TEvTabletPipe::TEvClientDestroyed, Handle);
 
             HFunc(TEvPersQueue::TEvResponse, Handle);
+
+            HFunc(NKqp::TEvKqp::TEvCreateSessionResponse, Handle);
+            HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
         default:
             break;
         };
@@ -64,6 +70,11 @@ private:
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev, const NActors::TActorContext& ctx);
 
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
+
+    void Handle(NKqp::TEvKqp::TEvCreateSessionResponse::TPtr& ev, const NActors::TActorContext& ctx);
+    void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx);
+
+    void SendCommit(const TTopicInitInfo& topicInitInfo, const Ydb::Topic::CommitOffsetRequest* commitRequest, const TActorContext& ctx);
 
     void AnswerError(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode, const NActors::TActorContext& ctx);
     void ProcessAnswers(const TActorContext& ctx);
@@ -84,6 +95,8 @@ private:
     TActorId PipeClient;
 
     NPersQueue::TTopicsListController TopicsHandler;
+
+    std::unique_ptr<TDistributedCommitHelper> Kqp;
 };
 
 }

@@ -104,6 +104,7 @@ bool TReadInitAndAuthActor::ProcessTopicSchemeCacheResponse(
     topicsIter->second.MeteringMode = pqDescr.GetPQTabletConfig().GetMeteringMode();
     topicsIter->second.DbPath = pqDescr.GetPQTabletConfig().GetYdbDatabasePath();
     topicsIter->second.IsServerless = entry.DomainInfo->IsServerless();
+    topicsIter->second.PartitionGraph = entry.PQGroupInfo->PartitionGraph;
 
     for (const auto& partitionDescription : pqDescr.GetPartitions()) {
         topicsIter->second.Partitions[partitionDescription.GetPartitionId()] =
@@ -272,7 +273,16 @@ void TReadInitAndAuthActor::FinishInitialization(const TActorContext& ctx) {
     TTopicInitInfoMap res;
     for (auto& [name, holder] : Topics) {
         res.insert(std::make_pair(name, TTopicInitInfo{
-            holder.FullConverter, holder.TabletID, holder.CloudId, holder.DbId, holder.DbPath, holder.IsServerless, holder.FolderId, holder.MeteringMode, holder.Partitions
+            holder.FullConverter,
+            holder.TabletID,
+            holder.CloudId,
+            holder.DbId,
+            holder.DbPath,
+            holder.IsServerless,
+            holder.FolderId,
+            holder.MeteringMode,
+            holder.Partitions,
+            holder.PartitionGraph
         }));
     }
     ctx.Send(ParentId, new TEvPQProxy::TEvAuthResultOk(std::move(res)));

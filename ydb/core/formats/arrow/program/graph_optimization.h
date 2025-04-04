@@ -47,8 +47,13 @@ public:
     TString DebugString() const;
 };
 
+enum class EOptimizerMarkers {
+    FetchMerged
+};
+
 class TGraphNode {
 private:
+    std::set<EOptimizerMarkers> OptimizerMarkers;
     YDB_READONLY(i64, Identifier, 0);
     YDB_READONLY_DEF(std::shared_ptr<IResourceProcessor>, Processor);
     class TAddress {
@@ -81,6 +86,15 @@ private:
     std::map<TAddress, TGraphNode*> OutputEdges;
 
 public:
+
+    bool AddOptimizerMarker(const EOptimizerMarkers marker) {
+        return OptimizerMarkers.emplace(marker).second;
+    }
+
+    bool HasOptimizerMarker(const EOptimizerMarkers marker) {
+        return OptimizerMarkers.contains(marker);
+    }
+
     void AddEdgeTo(TGraphNode* to, const ui32 resourceId);
     void AddEdgeFrom(TGraphNode* from, const ui32 resourceId);
     void RemoveEdgeTo(const ui32 identifier, const ui32 resourceId);

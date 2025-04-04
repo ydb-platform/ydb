@@ -201,10 +201,12 @@ TConclusion<bool> TGraph::OptimizeMergeFetching(TGraphNode* baseNode) {
         if (!i.second->Is(EProcessorType::FetchOriginalData)) {
             continue;
         }
+        if (!i.second->AddOptimizerMarker(EOptimizerMarkers::FetchMerged)) {
+            continue;
+        }
         if (i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetDataAddresses().size() +
                 i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetIndexContext().size() +
-                i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetHeaderContext().size() >
-            1) {
+                i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetHeaderContext().size() > 1) {
             continue;
         }
         if (i.second->GetProcessorAs<TOriginalColumnDataProcessor>()->GetDataAddresses().size()) {

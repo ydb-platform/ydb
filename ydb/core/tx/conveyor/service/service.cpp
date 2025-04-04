@@ -36,9 +36,10 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) 
         ("queue", ProcessesOrdered.size())("workers", Workers.size())("count", ev->GetProcessIds().size())("d", ev->GetInstants().back() - ev->GetInstants().front());
     for (ui32 idx = 0; idx < ev->GetProcessIds().size(); ++idx) {
         AddCPUTime(ev->GetProcessIds()[idx], ev->GetInstants()[idx + 1] - std::max(LastAddProcessInstant, ev->GetInstants()[idx]));
+        Counters.TaskExecuteHistogram->Collect((ev->GetInstants()[idx + 1] - ev->GetInstants()[idx]).MicroSeconds());
     }
     const TDuration dExecution = ev->GetInstants().back() - ev->GetInstants().front();
-    Counters.ExecuteHistogram->Collect(dExecution.MicroSeconds());
+    Counters.PackExecuteHistogram->Collect(dExecution.MicroSeconds());
     Counters.ExecuteDuration->Add(dExecution.MicroSeconds());
 
     const TMonotonic now = TMonotonic::Now();
@@ -48,7 +49,7 @@ void TDistributor::HandleMain(TEvInternal::TEvTaskProcessedResult::TPtr& evExt) 
     const TDuration predictedDurationPerTask = std::max<TDuration>(dExecution / ev->GetProcessIds().size(), TDuration::MicroSeconds(10));
     const double alpha = 0.1;
     const ui32 countTheory = (dBackSend + dForwardSend).GetValue() / (alpha * predictedDurationPerTask.GetValue());
-    const ui32 countPredicted = std::max<ui32>(1, std::min<ui32>(WaitingTasksCount.Val(), countTheory));
+    const ui32 countPredicted = std::max<ui32>(1, std::min<ui32>(WaitingTasksCount.Val() / WorkersCount, countTheory));
     AFL_DEBUG(NKikimrServices::TX_CONVEYOR)("action", "prediction")("alpha", alpha)
         ("send_forward", dForwardSend)("send_back", dBackSend)("count", ev->GetProcessIds().size())("exec", dExecution)("theory_count", countTheory)
         ("real_count", countPredicted);

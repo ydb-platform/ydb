@@ -16,6 +16,7 @@ add_library(arrow-accessor-sub_columns)
 
 
 target_compile_options(arrow-accessor-sub_columns PRIVATE
+  -Wno-assume
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 
@@ -53,6 +54,7 @@ add_global_library_for(arrow-accessor-sub_columns.global
 
 
 target_compile_options(arrow-accessor-sub_columns.global PRIVATE
+  -Wno-assume
   -DUSE_CURRENT_UDF_ABI_VERSION
 )
 

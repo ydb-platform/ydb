@@ -1571,6 +1571,18 @@ private:
             ClearResultFormatSettings();
         }
 
+        TDuration pingPeriod = TDuration::Seconds(3);
+        TDuration aggrPeriod = TDuration::Seconds(1);
+        {
+            const auto& taskControllerConfig = Params.Config.GetTaskController();
+            if (taskControllerConfig.GetPingPeriod()) {
+                Y_ABORT_UNLESS(TDuration::TryParse(taskControllerConfig.GetPingPeriod(), pingPeriod));
+            }
+            if (taskControllerConfig.GetAggrPeriod()) {
+                Y_ABORT_UNLESS(TDuration::TryParse(taskControllerConfig.GetAggrPeriod(), aggrPeriod));
+            }
+        }
+
         if (enableCheckpointCoordinator) {
             ControlId = Register(MakeCheckpointCoordinator(
                 ::NFq::TCoordinatorId(Params.QueryId + "-" + ToString(DqGraphIndex), Params.PreviousQueryRevision),
@@ -1587,8 +1599,8 @@ private:
                 resultId,
                 dqConfiguration,
                 QueryCounters,
-                TDuration::Seconds(3),
-                TDuration::Seconds(1)
+                pingPeriod,
+                aggrPeriod
                 ).Release());
         } else {
             ControlId = Register(NYql::MakeTaskController(
@@ -1597,7 +1609,8 @@ private:
                 resultId,
                 dqConfiguration,
                 QueryCounters,
-                TDuration::Seconds(3)
+                pingPeriod,
+                aggrPeriod
             ).Release());
         }
 

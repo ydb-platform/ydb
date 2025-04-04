@@ -65,7 +65,7 @@ TYdbControlPlaneStorageActor::TPingTaskParams TYdbControlPlaneStorageActor::Cons
         "   WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
         "SELECT `" JOB_ID_COLUMN_NAME "`, `" JOB_COLUMN_NAME "` FROM `" JOBS_TABLE_NAME "`\n"
         "   WHERE `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id AND `" JOB_ID_COLUMN_NAME "` = $last_job_id;\n"
-        "SELECT `" OWNER_COLUMN_NAME "`, `" RETRY_COUNTER_COLUMN_NAME "`, `" RETRY_COUNTER_UPDATE_COLUMN_NAME "`, `" RETRY_RATE_COLUMN_NAME "`\n"
+        "SELECT `" OWNER_COLUMN_NAME "`, `" RETRY_COUNTER_COLUMN_NAME "`, `" RETRY_COUNTER_UPDATE_COLUMN_NAME "`, `" RETRY_RATE_COLUMN_NAME "`, `" ASSIGNED_UNTIL_COLUMN_NAME "`\n"
         "FROM `" PENDING_SMALL_TABLE_NAME "` WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
     );
 
@@ -119,6 +119,8 @@ TYdbControlPlaneStorageActor::TPingTaskParams TYdbControlPlaneStorageActor::Cons
             if (owner != request.owner_id()) {
                 ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "OWNER of QUERY ID = \"" << request.query_id().value() << "\" MISMATCHED: \"" << request.owner_id() << "\" (received) != \"" << owner << "\" (selected)";
             }
+            auto assignedUntil = parser.ColumnParser(ASSIGNED_UNTIL_COLUMN_NAME).GetOptionalTimestamp().value_or(TInstant::Now());
+            Counters.LeaseLeftMs->Collect((assignedUntil - TInstant::Now()).MilliSeconds());
             retryLimiter.Assign(
                 parser.ColumnParser(RETRY_COUNTER_COLUMN_NAME).GetOptionalUint64().value_or(0),
                 parser.ColumnParser(RETRY_COUNTER_UPDATE_COLUMN_NAME).GetOptionalTimestamp().value_or(TInstant::Zero()),
@@ -252,7 +254,7 @@ TYdbControlPlaneStorageActor::TPingTaskParams TYdbControlPlaneStorageActor::Cons
     readQueryBuilder.AddText(
         "SELECT `" INTERNAL_COLUMN_NAME "`\n"
         "FROM `" QUERIES_TABLE_NAME "` WHERE `" QUERY_ID_COLUMN_NAME "` = $query_id AND `" SCOPE_COLUMN_NAME "` = $scope;\n"
-        "SELECT `" OWNER_COLUMN_NAME "`\n"
+        "SELECT `" OWNER_COLUMN_NAME "`, `" ASSIGNED_UNTIL_COLUMN_NAME "`\n"
         "FROM `" PENDING_SMALL_TABLE_NAME "` WHERE `" TENANT_COLUMN_NAME "` = $tenant AND `" SCOPE_COLUMN_NAME "` = $scope AND `" QUERY_ID_COLUMN_NAME "` = $query_id;\n"
     );
 
@@ -285,6 +287,8 @@ TYdbControlPlaneStorageActor::TPingTaskParams TYdbControlPlaneStorageActor::Cons
             if (owner != request.owner_id()) {
                 ythrow NYql::TCodeLineException(TIssuesIds::BAD_REQUEST) << "OWNER of QUERY ID = \"" << request.query_id().value() << "\" MISMATCHED: \"" << request.owner_id() << "\" (received) != \"" << owner << "\" (selected)";
             }
+            auto assignedUntil = parser.ColumnParser(ASSIGNED_UNTIL_COLUMN_NAME).GetOptionalTimestamp().value_or(TInstant::Now());
+            Counters.LeaseLeftMs->Collect((assignedUntil - TInstant::Now()).MilliSeconds());
         }
 
         TInstant ttl = TInstant::Now() + Config->TaskLeaseTtl;
@@ -657,7 +661,9 @@ void TYdbControlPlaneStorageActor::Handle(TEvControlPlaneStorage::TEvPingTaskReq
     std::shared_ptr<Fq::Private::PingTaskResult> response = std::make_shared<Fq::Private::PingTaskResult>();
     std::shared_ptr<TFinalStatus> finalStatus = std::make_shared<TFinalStatus>();
 
-    auto pingTaskParams = DoesPingTaskUpdateQueriesTable(request) ?
+    bool isHard = DoesPingTaskUpdateQueriesTable(request);
+    Counters.Counters->GetCounter(isHard ? "HardPing" : "SoftPing", true)->Inc();
+    auto pingTaskParams = isHard ?
         ConstructHardPingTask(request, response, finalStatus, requestCounters.Common) :
         ConstructSoftPingTask(request, response, requestCounters.Common);
     auto debugInfo = Config->Proto.GetEnableDebugMode() ? std::make_shared<TDebugInfo>() : TDebugInfoPtr{};

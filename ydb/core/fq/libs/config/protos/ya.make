@@ -24,6 +24,7 @@ SRCS(
     resource_manager.proto
     row_dispatcher.proto
     storage.proto
+    task_controller.proto
     test_connection.proto
     token_accessor.proto
 )

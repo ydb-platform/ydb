@@ -31,6 +31,8 @@ namespace NKikimr::NPQ {
 static const ui32 MAX_BLOB_PART_SIZE = 500_KB;
 static const ui32 DEFAULT_BUCKET_COUNTER_MULTIPLIER = 20;
 static const ui32 MAX_USER_ACTS = 1000;
+static const ui32 BATCH_UNPACK_SIZE_BORDER = 500_KB;
+static const ui32 MAX_INLINE_SIZE = 1000;
 
 using TPartitionLabeledCounters = TProtobufTabletLabeledCounters<EPartitionLabeledCounters_descriptor>;
 
@@ -168,6 +170,8 @@ private:
     void SendReadingFinished(const TString& consumer);
 
     void AddNewWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
+    void AddNewFastWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
+    void AddNewCompactionWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
     void AnswerCurrentWrites(const TActorContext& ctx);
     void AnswerCurrentReplies(const TActorContext& ctx);
     void CancelOneWriteOnWrite(const TActorContext& ctx,
@@ -217,6 +221,7 @@ private:
     void Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvents::TEvPoisonPill::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPQ::TEvSubDomainStatus::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPQ::TEvRunCompaction::TPtr& ev);
     void HandleMonitoring(TEvPQ::TEvMonRequest::TPtr& ev, const TActorContext& ctx);
     void HandleOnIdle(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const TActorContext& ctx);
     void HandleOnIdle(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TActorContext& ctx);
@@ -279,6 +284,7 @@ private:
 
     TInstant GetWriteTimeEstimate(ui64 offset) const;
     bool CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
+    bool CleanUpFastWrite(TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
 
     // Removes blobs that are no longer required. Blobs are no longer required if the storage time of all messages
     // stored in this blob has expired and they have been read by all important consumers.
@@ -292,12 +298,24 @@ private:
     ui64 GetSizeLag(i64 offset);
     std::pair<TKey, ui32> GetNewWriteKey(bool headCleared);
     std::pair<TKey, ui32> GetNewWriteKeyImpl(bool headCleared, bool needCompaction, ui32 headSize);
+    std::pair<TKey, ui32> GetNewFastWriteKey(bool headCleared);
+    std::pair<TKey, ui32> GetNewFastWriteKeyImpl(bool headCleared, ui32 headSize);
+    std::pair<TKey, ui32> GetNewCompactionWriteKey(bool headCleared);
+    std::pair<TKey, ui32> GetNewCompactionWriteKeyImpl(bool headCleared, bool needCompaction, ui32 headSize);
     THashMap<TString, TOwnerInfo>::iterator DropOwner(THashMap<TString, TOwnerInfo>::iterator& it,
                                                       const TActorContext& ctx);
     // will return rcount and rsize also
-    TVector<TRequestedBlob> GetReadRequestFromBody(const ui64 startOffset, const ui16 partNo, const ui32 maxCount,
-                                                   const ui32 maxSize, ui32* rcount, ui32* rsize, ui64 lastOffset,
-                                                   TBlobKeyTokens* blobKeyTokens);
+    //TVector<TRequestedBlob> GetReadRequestFromBody(const ui64 startOffset, const ui16 partNo, const ui32 maxCount,
+    //                                               const ui32 maxSize, ui32* rcount, ui32* rsize, ui64 lastOffset,
+    //                                               TBlobKeyTokens* blobKeyTokens);
+    void GetReadRequestFromCompactedBody(const ui64 startOffset, const ui16 partNo, const ui32 maxCount,
+                                         const ui32 maxSize, ui32* rcount, ui32* rsize, ui64 lastOffset,
+                                         TBlobKeyTokens* blobKeyTokens,
+                                         TVector<TRequestedBlob>& blobs);
+    void GetReadRequestFromFastWriteBody(const ui64 startOffset, const ui16 partNo, const ui32 maxCount,
+                                         const ui32 maxSize, ui32* rcount, ui32* rsize, ui64 lastOffset,
+                                         TBlobKeyTokens* blobKeyTokens,
+                                         TVector<TRequestedBlob>& blobs);
     TVector<TClientBlob>    GetReadRequestFromHead(const ui64 startOffset, const ui16 partNo, const ui32 maxCount,
                                                    const ui32 maxSize, const ui64 readTimestampMs, ui32* rcount,
                                                    ui32* rsize, ui64* insideHeadOffset, ui64 lastOffset);
@@ -541,11 +559,11 @@ private:
             HFuncTraced(NReadQuoterEvents::TEvAccountQuotaCountersUpdated, Handle);
             HFuncTraced(NReadQuoterEvents::TEvQuotaCountersUpdated, Handle);
             HFuncTraced(TEvPQ::TEvGetWriteInfoRequest, HandleOnInit);
-
             HFuncTraced(TEvPQ::TEvGetWriteInfoResponse, HandleOnInit);
             HFuncTraced(TEvPQ::TEvGetWriteInfoError, HandleOnInit);
             HFuncTraced(TEvPQ::TEvDeletePartition, HandleOnInit);
             IgnoreFunc(TEvPQ::TEvTxBatchComplete);
+            hFuncTraced(TEvPQ::TEvRunCompaction, Handle);
         default:
             if (!Initializer.Handle(ev)) {
                 ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
@@ -610,6 +628,7 @@ private:
             HFuncTraced(TEvPQ::TEvProcessChangeOwnerRequests, Handle);
             HFuncTraced(TEvPQ::TEvDeletePartition, Handle);
             IgnoreFunc(TEvPQ::TEvTxBatchComplete);
+            hFuncTraced(TEvPQ::TEvRunCompaction, Handle);
         default:
             ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
             break;
@@ -625,16 +644,18 @@ private:
         Blocked,
     };
 
-    struct ProcessParameters {
+    struct TProcessParametersBase {
+        ui64 CurOffset;
+        bool HeadCleared;
+    };
+
+    struct ProcessParameters : TProcessParametersBase {
         ProcessParameters(TPartitionSourceManager::TModificationBatch& sourceIdBatch)
                 : SourceIdBatch(sourceIdBatch) {
             }
 
         TPartitionSourceManager::TModificationBatch& SourceIdBatch;
-
-        ui64 CurOffset;
         bool OldPartsCleared;
-        bool HeadCleared;
         bool FirstCommitWriteOperations = true;
     };
 
@@ -697,6 +718,7 @@ private:
     std::deque<TString> DeletedKeys;
     std::deque<TBlobKeyTokenPtr> DefferedKeysForDeletion;
 
+    TPartitionBlobEncoder CompactionZone;
     TPartitionBlobEncoder BlobEncoder;
 
     std::deque<std::pair<ui64, ui64>> GapOffsets;
@@ -765,6 +787,7 @@ private:
     void EndHandleRequests(TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
     void BeginProcessWrites(const TActorContext& ctx);
     void EndProcessWrites(TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
+    void EndProcessWritesForCompaction(TEvKeyValue::TEvRequest* request, const TActorContext& ctx);
     void BeginAppendHeadWithNewWrites(const TActorContext& ctx);
     void EndAppendHeadWithNewWrites(const TActorContext& ctx);
 
@@ -985,9 +1008,10 @@ private:
                      TEvKeyValue::TEvRequest* request,
                      const TActorContext& ctx);
     void RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFormedBlobInfo>& formedBlobs,
-                           ProcessParameters& parameters,
+                           TProcessParametersBase& parameters,
                            ui32 curWrites,
                            TEvKeyValue::TEvRequest* request,
+                           TPartitionBlobEncoder& zone,
                            const TActorContext& ctx);
     ui32 RenameTmpCmdWrites(TEvKeyValue::TEvRequest* request);
 
@@ -1004,6 +1028,26 @@ private:
                         TUserInfo* userInfo,
                         const TEvPQ::TEvBlobResponse* blobResponse,
                         const TActorContext& ctx);
+
+    enum ERequestCookie : ui64 {
+        ReadBlobsForCompaction = 0,
+        WriteBlobsForCompaction,
+        End
+    };
+
+    void TryRunCompaction();
+    void BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& blobs);
+    void BlobsForCompactionWereWrite();
+    ui64 NextReadCookie();
+    bool ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& parameters, TEvKeyValue::TEvRequest* request);
+
+    bool CompactionInProgress = false;
+    size_t CompactionBlobsCount = 0;
+
+    void DumpZones(const char* file = nullptr, unsigned line = 0) const;
+
+    const TPartitionBlobEncoder& GetPartitionZone(ui64 offset) const;
+    ui64 GetCumulativeSizeLimit() const;
 };
 
 } // namespace NKikimr::NPQ

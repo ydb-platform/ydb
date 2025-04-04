@@ -188,7 +188,7 @@ struct TEvPQ {
         EvGetWriteInfoRequest,
         EvGetWriteInfoResponse,
         EvGetWriteInfoError,
-	    EvTxBatchComplete,
+        EvTxBatchComplete,
         EvReadingPartitionStatusRequest,
         EvProcessChangeOwnerRequests,
         EvWakeupReleasePartition,
@@ -199,6 +199,7 @@ struct TEvPQ {
         EvDeletePartitionDone,
         EvTransactionCompleted,
         EvListAllTopicsResponse,
+        EvRunCompaction,
         EvEnd
     };
 
@@ -1194,6 +1195,17 @@ struct TEvPQ {
         bool HaveMoreTopics = false;
         Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::SUCCESS;
         TString Error;
+    };
+
+    struct TEvRunCompaction : TEventLocal<TEvRunCompaction, EvRunCompaction> {
+        TEvRunCompaction(ui64 maxBlobSize, ui64 cumulativeSize) :
+            MaxBlobSize(maxBlobSize),
+            CumulativeSize(cumulativeSize)
+        {
+        }
+
+        ui64 MaxBlobSize = 0;
+        ui64 CumulativeSize = 0;
     };
 };
 

@@ -23,6 +23,7 @@ target_link_libraries(coordinator-interface-proto_helpers PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
+  cpp-yson-node
   fmr-coordinator-interface
   yt-fmr-proto
   fmr-request_options-proto_helpers

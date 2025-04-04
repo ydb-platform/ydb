@@ -12,6 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+get_built_tool_path(
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
+)
+
 add_library(complete-name-static)
 
 
@@ -20,10 +27,47 @@ target_link_libraries(complete-name-static PUBLIC
   contrib-libs-cxxsupp
   yutil
   v1-complete-name
+  v1-complete-text
+  library-cpp-resource
 )
 
 target_sources(complete-name-static PRIVATE
-  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/static/default_name_set.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/static/frequency.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/static/json_name_set.cpp
   ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/static/name_service.cpp
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/complete/name/static/ranking.cpp
 )
 
+
+add_global_library_for(complete-name-static.global
+  complete-name-static)
+
+
+target_link_libraries(complete-name-static.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  v1-complete-name
+  v1-complete-text
+  library-cpp-resource
+)
+
+target_sources(complete-name-static.global PRIVATE
+  ${PROJECT_BINARY_DIR}/yql/essentials/sql/v1/complete/name/static/53e28e026aeda8d036494d1ab8ca712f.cpp
+)
+
+
+resources(complete-name-static.global
+  ${PROJECT_BINARY_DIR}/yql/essentials/sql/v1/complete/name/static/53e28e026aeda8d036494d1ab8ca712f.cpp
+  INPUTS
+  ${PROJECT_SOURCE_DIR}/yql/essentials/data/language/types.json
+  ${PROJECT_SOURCE_DIR}/yql/essentials/data/language/sql_functions.json
+  ${PROJECT_SOURCE_DIR}/yql/essentials/data/language/udfs_basic.json
+  ${PROJECT_SOURCE_DIR}/yql/essentials/data/language/rules_corr_basic.json
+  KEYS
+  types.json
+  sql_functions.json
+  udfs_basic.json
+  rules_corr_basic.json
+  OPTS
+)

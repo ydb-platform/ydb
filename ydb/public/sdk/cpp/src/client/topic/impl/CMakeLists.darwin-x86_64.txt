@@ -38,6 +38,7 @@ target_sources(client-topic-impl PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/deferred_commit.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/event_handlers.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/offsets_collector.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/proto_accessor.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/read_session_event.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/read_session.cpp
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/impl/topic_impl.cpp

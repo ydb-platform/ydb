@@ -61,6 +61,7 @@ target_sources(cpp-mapreduce-client PRIVATE
   ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/operation_preparer.cpp
   ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/operation_tracker.cpp
   ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/operation.cpp
+  ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/partition_reader.cpp
   ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/prepare_operation.cpp
   ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/py_helpers.cpp
   ${PROJECT_SOURCE_DIR}/yt/cpp/mapreduce/client/retry_heavy_write_request.cpp

@@ -13,37 +13,48 @@
 # changes in this file.
 
 get_built_tool_path(
-  TOOL_enum_parser_bin
-  TOOL_enum_parser_dependency
-  tools/enum_parser/enum_parser
-  enum_parser
+  TOOL_rescompiler_bin
+  TOOL_rescompiler_dependency
+  tools/rescompiler/bin
+  rescompiler
 )
 
-add_subdirectory(proto_helpers)
-
-add_library(yt-fmr-request_options)
+add_library(sql-v1-reflect)
 
 
-target_compile_options(yt-fmr-request_options PRIVATE
-  -DUSE_CURRENT_UDF_ABI_VERSION
-)
-
-target_link_libraries(yt-fmr-request_options PUBLIC
+target_link_libraries(sql-v1-reflect PUBLIC
   contrib-libs-linux-headers
   contrib-libs-cxxsupp
   yutil
-  cpp-yson-node
-  cpp-threading-future
-  tools-enum_parser-enum_serialization_runtime
+  library-cpp-resource
 )
 
-target_sources(yt-fmr-request_options PRIVATE
-  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.cpp
+target_sources(sql-v1-reflect PRIVATE
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/reflect/sql_reflect.cpp
 )
 
 
-generate_enum_serilization(yt-fmr-request_options
-  ${PROJECT_SOURCE_DIR}/yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h
-  INCLUDE_HEADERS
-  yt/yql/providers/yt/fmr/request_options/yql_yt_request_options.h
+add_global_library_for(sql-v1-reflect.global
+  sql-v1-reflect)
+
+
+target_link_libraries(sql-v1-reflect.global PUBLIC
+  contrib-libs-linux-headers
+  contrib-libs-cxxsupp
+  yutil
+  library-cpp-resource
+)
+
+target_sources(sql-v1-reflect.global PRIVATE
+  ${PROJECT_BINARY_DIR}/yql/essentials/sql/v1/reflect/c5c6e8218c03924468ead58ac2b74fd8.cpp
+)
+
+
+resources(sql-v1-reflect.global
+  ${PROJECT_BINARY_DIR}/yql/essentials/sql/v1/reflect/c5c6e8218c03924468ead58ac2b74fd8.cpp
+  INPUTS
+  ${PROJECT_SOURCE_DIR}/yql/essentials/sql/v1/SQLv1Antlr4.g.in
+  KEYS
+  SQLv1Antlr4.g.in
+  OPTS
 )

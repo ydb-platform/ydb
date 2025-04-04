@@ -25,6 +25,7 @@ target_link_libraries(fmr-coordinator-impl PUBLIC
   yutil
   library-cpp-random_provider
   cpp-threading-future
+  cpp-yson-node
   fmr-coordinator-interface
   essentials-utils-log
   yql-essentials-utils

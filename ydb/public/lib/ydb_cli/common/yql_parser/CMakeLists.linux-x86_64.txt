@@ -23,8 +23,6 @@ target_link_libraries(ydb_cli-common-yql_parser PUBLIC
   yutil
   src-client-value
   src-client-types
-  essentials-parser-lexer_common
-  essentials-parser-proto_ast
   essentials-sql-settings
   sql-v1-lexer
   v1-lexer-antlr4

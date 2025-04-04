@@ -37,6 +37,5 @@ target_link_libraries(src-client-topic PUBLIC
 
 target_sources(src-client-topic PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/out.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/public/sdk/cpp/src/client/topic/proto_accessor.cpp
 )
 

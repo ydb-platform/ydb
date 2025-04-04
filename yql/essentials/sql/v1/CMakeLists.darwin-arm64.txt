@@ -23,6 +23,7 @@ add_subdirectory(lexer)
 add_subdirectory(proto_parser)
 add_subdirectory(format)
 add_subdirectory(complete)
+add_subdirectory(reflect)
 
 add_library(essentials-sql-v1)
 

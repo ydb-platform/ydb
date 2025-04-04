@@ -26,9 +26,10 @@ target_link_libraries(v1-complete-syntax PUBLIC
   essentials-core-issue
   antlr_ast-gen-v1_ansi_antlr4
   antlr_ast-gen-v1_antlr4
+  essentials-parser-lexer_common
   essentials-sql-settings
   sql-v1-lexer
-  sql-v1-format
+  sql-v1-reflect
 )
 
 target_sources(v1-complete-syntax PRIVATE

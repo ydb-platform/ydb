@@ -160,23 +160,71 @@ auth_config:
   #...
 ```
 
-| Parameter | Description |
-| --- | --- |
-| `hosts` | Specifies a list of hostnames where the LDAP server is running. |
-| `port` | Specifies the port used to connect to the LDAP server. |
-| `base_dn` | Specifies the root of the subtree in the LDAP directory from which the user entry search begins. |
-| `bind_dn` | Specifies the Distinguished Name (DN) of the service account used to search for the user entry. |
-| `bind_password` | Specifies the password for the service account used to search for the user entry. |
-| `search_filter` | Specifies a filter for searching the user entry in the LDAP directory. The filter string can include the sequence *$username*, which is replaced with the username requested for authentication in the database. |
-| `use_tls` | Configuration settings for the TLS connection between {{ ydb-short-name }} and the LDAP server. |
-| `enable` | Indicates whether a TLS connection [using the `StartTls` request](../../security/authentication.md#starttls) will be attempted. When set to `true`, the `ldaps` connection scheme should be disabled by setting `ldap_authentication.scheme` to `ldap`. |
-| `ca_cert_file` | Specifies the path to the certification authority's certificate file. |
-| `cert_require` | Specifies the certificate requirement level for the LDAP server.<br>Possible values:<ul><li>`NEVER` - {{ ydb-short-name }} does not request a certificate or accepts any presented certificate.</li><li>`ALLOW` - {{ ydb-short-name }} requests a certificate from the LDAP server but will establish the TLS session even if the certificate is not trusted.</li><li>`TRY` - {{ ydb-short-name }} requires a certificate from the LDAP server and terminates the connection if it is not trusted.</li><li>`DEMAND`/`HARD` - These are equivalent to `TRY` and are the default setting, with the value set to `DEMAND`.</li></ul> |
-| `ldap_authentication_domain` | Specifies an identifier appended to the username to distinguish LDAP directory users from those authenticated using other providers. The default value is `ldap`. |
-| `scheme` | Specifies the connection scheme to the LDAP server.<br>Possible values:<ul><li>`ldap` - Connects without encryption, sending passwords in plain text. This is the default value.</li><li>`ldaps` - Connects using TLS encryption from the first request. To use `ldaps`, disable the [`StartTls` request](../../security/authentication.md#starttls) by setting `ldap_authentication.use_tls.enable` to `false`, and provide certificate details in `ldap_authentication.use_tls.ca_cert_file` and set the certificate requirement level in `ldap_authentication.use_tls.cert_require`.</li><li>Any other value defaults to `ldap`.</li></ul> |
-| `requested_group_attribute` | Specifies the attribute used for reverse group membership. The default is `memberOf`. |
-| `extended_settings.enable_nested_groups_search` | Indicates whether to perform a request to retrieve the full hierarchy of groups to which the user's direct groups belong. |
-| `host` | Specifies the hostname of the LDAP server. This parameter is deprecated and should be replaced with the `hosts` parameter. |
+#|
+|| Parameter | Description ||
+|| `hosts`
+| Specifies a list of hostnames where the LDAP server is running.
+    ||
+|| `port`
+| Specifies the port used to connect to the LDAP server.
+    ||
+|| `base_dn`
+| Specifies the root of the subtree in the LDAP directory from which the user entry search begins.
+    ||
+|| `bind_dn`
+| Specifies the Distinguished Name (DN) of the service account used to search for the user entry.
+    ||
+|| `bind_password`
+| Specifies the password for the service account used to search for the user entry.
+    ||
+|| `search_filter`
+| Specifies a filter for searching the user entry in the LDAP directory. The filter string can include the sequence *$username*, which is replaced with the username requested for authentication in the database.
+    ||
+|| `use_tls`
+| Configuration settings for the TLS connection between {{ ydb-short-name }} and the LDAP server.
+    ||
+|| `enable`
+| Indicates whether a TLS connection [using the `StartTls` request](../../security/authentication.md#starttls) will be attempted. When set to `true`, the `ldaps` connection scheme should be disabled by setting `ldap_authentication.scheme` to `ldap`.
+    ||
+|| `ca_cert_file`
+| Specifies the path to the certification authority's certificate file.
+    ||
+|| `cert_require`
+| Specifies the certificate requirement level for the LDAP server.
+
+Possible values:
+
+- `NEVER` - {{ ydb-short-name }} does not request a certificate or accepts any presented certificate.
+- `ALLOW` - {{ ydb-short-name }} requests a certificate from the LDAP server but will establish the TLS session even if the certificate is not trusted.
+- `TRY` - {{ ydb-short-name }} requires a certificate from the LDAP server and terminates the connection if it is not trusted.
+- `DEMAND`/`HARD` - These are equivalent to `TRY` and are the default setting, with the value set to `DEMAND`.
+    ||
+|| `ldap_authentication_domain`
+| Specifies an identifier appended to the username to distinguish LDAP directory users from those authenticated using other providers.
+
+Default value: `ldap`
+    ||
+|| `scheme`
+| Specifies the connection scheme to the LDAP server.
+
+Possible values:
+
+- `ldap` - Connects without encryption, sending passwords in plain text.
+- `ldaps` - Connects using TLS encryption from the first request. To use `ldaps`, disable the [`StartTls` request](../../security/authentication.md#starttls) by setting `ldap_authentication.use_tls.enable` to `false`, and provide certificate details in `ldap_authentication.use_tls.ca_cert_file` and set the certificate requirement level in `ldap_authentication.use_tls.cert_require`.
+- Any other value defaults to `ldap`.
+
+Default value: `ldap`
+    ||
+|| `requested_group_attribute`
+| Specifies the attribute used for reverse group membership. The default is `memberOf`.
+    ||
+|| `extended_settings.enable_nested_groups_search`
+| Indicates whether to perform a request to retrieve the full hierarchy of groups to which the user's direct groups belong.
+    ||
+|| `host`
+| Specifies the hostname of the LDAP server. This parameter is deprecated and should be replaced with the `hosts` parameter.
+    ||
+|#
 
 ## Configuring third-party IAM authentication {#iam-auth-config}
 

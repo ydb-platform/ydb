@@ -91,16 +91,24 @@ ORDER BY TotalLocksBroken DESC
 
 ## Top queries {#top-queries}
 
-The following system views store data for analyzing the user queries:
+The following system views store data for analyzing the user queries.
 
-* `top_queries_by_duration_one_minute`: Data is split into one-minute intervals, contains Top 5 queries with the maximum total execution time for the last 6 hours.
-* `top_queries_by_duration_one_hour`: Data is split into one-hour intervals, contains Top 5 queries with the maximum total execution time for the last 2 weeks.
-* `top_queries_by_read_bytes_one_minute`: Data is split into one-minute intervals, contains Top 5 queries with the maximum number of bytes read from the table for the last 6 hours.
-* `top_queries_by_read_bytes_one_hour`: Data is split into one-hour intervals, contains Top 5 queries with the maximum number of bytes read from the table for the last 2 weeks.
-* `top_queries_by_cpu_time_one_minute`: Data is split into one-minute intervals, contains Top 5 queries with the maximum CPU time used for the last 6 hours.
-* `top_queries_by_cpu_time_one_hour`: Data is split into one-hour intervals, contains Top 5 queries with the maximum CPU time used for the last 2 weeks.
+Maximum total execution time:
 
-Different runs of a query with the same text are deduplicated. The top list contains information about a specific run with the maximum value of the corresponding query metric within a single interval.
+* `top_queries_by_duration_one_minute`: data is split into one-minute intervals, contains the history for the last 6 hours;
+* `top_queries_by_duration_one_hour`: data is split into one-hour intervals, contains the history for the last 2 weeks.
+
+Maximum number of bytes read from the table:
+
+* `top_queries_by_read_bytes_one_minute`: data is split into one-minute intervals, contains the history for the last 6 hours;
+* `top_queries_by_read_bytes_one_hour`: Data is split into one-hour intervals, contains the history for the last 2 weeks.
+
+Maximum CPU time:
+
+* `top_queries_by_cpu_time_one_minute`: Data is split into one-minute intervals, contains the history for the last 6 hours;
+* `top_queries_by_cpu_time_one_hour`: Data is split into one-hour intervals, contains the history for the last 2 weeks.
+
+Different runs of a query with the same text are deduplicated. The query with the maximum value of the corresponding metric is included in the output. There are top 5 unique queries for each time interval.
 
 Fields that provide information about the used CPU time (...`CPUTime`) are expressed in microseconds.
 
@@ -141,7 +149,7 @@ All tables have the same structure:
 
 ### Example queries {#top-queries-examples}
 
-Top queries by execution time. The query is made to the `.sys/top_queries_by_duration_one_minute` view, which contains data for the last 6 hours divided by minute intervals:
+Top queries by execution time. The query is made to the `.sys/top_queries_by_duration_one_minute` view:
 
 ```yql
 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
@@ -159,7 +167,7 @@ FROM `.sys/top_queries_by_duration_one_minute`
 WHERE IntervalEnd IN $last
 ```
 
-Queries that read the most bytes. The query is made to the `.sys/top_queries_by_read_bytes_one_minute` view, which contains data for the last 6 hours divided by minute intervals:
+Queries that read the most bytes. The query is made to the `.sys/top_queries_by_read_bytes_one_minute` view:
 
 ```yql
 SELECT
@@ -279,7 +287,7 @@ All tables have the same structure:
 
 ### Example queries {#top-overload-partitions-examples}
 
-The following query returns partitions with CPU usage of more than 70% in the specified interval, with tablet IDs and sizes as of the time when the percentage was exceeded. The query is made to the `.sys/top_partitions_one_minute` table with data over the last six hours split into one-minute intervals:
+The following query returns partitions with CPU usage of more than 70% in the specified interval, with tablet IDs and sizes as of the time when the percentage was exceeded. The query is made to the `.sys/top_partitions_one_minute` view:
 
 ```yql
 SELECT
@@ -294,8 +302,7 @@ AND IntervalEnd BETWEEN Timestamp("2000-01-01T00:00:00Z") AND Timestamp("2099-12
 ORDER BY IntervalEnd desc, CPUCores desc
 ```
 
-
-The following query returns partitions with CPU usage of over 90% in the specified interval, with tablet IDs and sizes as of the time when the percentage was exceeded. The query is made to the `.sys/top_partitions_one_hour` table with data over the last two weeks split into one-hour intervals:
+The following query returns partitions with CPU usage of over 90% in the specified interval, with tablet IDs and sizes as of the time when the percentage was exceeded. The query is made to the `.sys/top_partitions_one_hour` view:
 
 ```yql
 SELECT
@@ -309,7 +316,6 @@ WHERE CPUCores > 0.9
 AND IntervalEnd BETWEEN Timestamp("2000-01-01T00:00:00Z") AND Timestamp("2099-12-31T00:00:00Z")
 ORDER BY IntervalEnd desc, CPUCores desc
 ```
-
 
 ## History of partitions with broken locks {#top-tli-partitions}
 
@@ -345,7 +351,7 @@ All tables have the same structure:
 
 ### Example queries {#top-tli-partitions-examples}
 
-The following query returns partitions in the specified time interval, with tablet identifiers and the number of broken locks. The query is made to the `.sys/top_partitions_by_tli_one_minute` table with data over the last 6 hours split into one-minute intervals:
+The following query returns partitions in the specified time interval, with tablet identifiers and the number of broken locks. The query is made to the `.sys/top_partitions_by_tli_one_minute` view:
 
 ```yql
 SELECT
@@ -358,9 +364,7 @@ WHERE IntervalEnd BETWEEN Timestamp("2000-01-01T00:00:00Z") AND Timestamp("2099-
 ORDER BY IntervalEnd desc, LocksBroken desc
 ```
 
-## Access control entities {#auth}
-
-The following system views store data for analyzing various [access control entities](../security/authorization.md).
+## Auth users, groups, permissions {#auth}
 
 ### Auth users
 

@@ -28,6 +28,7 @@ target_link_libraries(providers-pq-common PUBLIC
 
 target_sources(providers-pq-common PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/pq/common/pq_meta_fields.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/pq/common/pq_partition_key.cpp
   ${PROJECT_SOURCE_DIR}/ydb/library/yql/providers/pq/common/yql_names.cpp
 )
 

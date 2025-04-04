@@ -27,6 +27,7 @@ target_link_libraries(pq-gateway-native PUBLIC
   yql-essentials-utils
   src-client-datastreams
   src-client-driver
+  src-client-federated_topic
   src-client-topic
 )
 

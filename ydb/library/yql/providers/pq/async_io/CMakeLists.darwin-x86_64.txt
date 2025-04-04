@@ -35,6 +35,7 @@ target_link_libraries(providers-pq-async_io PUBLIC
   essentials-public-types
   essentials-utils-log
   cpp-adapters-issue
+  src-client-federated_topic
   src-client-driver
   src-client-topic
   client-types-credentials

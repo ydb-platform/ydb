@@ -4,6 +4,7 @@
 #include "partition_util.h"
 
 #include <memory>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -489,8 +490,8 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
             }
             FormHeadAndProceed();
 
-            if (GetContext().StartOffset && *GetContext().StartOffset !=  Partition()->BlobEncoder.StartOffset) {
-                PQ_LOG_ERROR("StartOffset from meta and blobs are different: " << *GetContext().StartOffset << " != " << Partition()->BlobEncoder.StartOffset);
+            if (GetContext().StartOffset && *GetContext().StartOffset !=  Partition()->CompactionZone.StartOffset) {
+                PQ_LOG_ERROR("StartOffset from meta and blobs are different: " << *GetContext().StartOffset << " != " << Partition()->CompactionZone.StartOffset);
                 return PoisonPill(ctx);
             }
             if (GetContext().EndOffset && *GetContext().EndOffset !=  Partition()->BlobEncoder.EndOffset) {
@@ -512,65 +513,56 @@ void TInitDataRangeStep::Handle(TEvKeyValue::TEvResponse::TPtr &ev, const TActor
 THashSet<TString> FilterBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range,
                                       const TPartitionId& partitionId)
 {
-    TVector<TKey> source;
+    TVector<TString> keys;
 
     for (ui32 i = 0; i < range.PairSize(); ++i) {
         const auto& pair = range.GetPair(i);
         Y_ABORT_UNLESS(pair.GetStatus() == NKikimrProto::OK); //this is readrange without keys, only OK could be here
-        source.push_back(TKey::FromString(pair.GetKey(), partitionId));
+        PQ_LOG_D("key[" << i << "]: " << pair.GetKey());
+        keys.push_back(pair.GetKey());
     }
 
-    auto isKeyLess = [](const TKey& lhs, const TKey& rhs) {
-        auto makeOffset = [](const TKey& k) {
-            return std::make_tuple(k.GetOffset(), k.GetPartNo());
-        };
+    std::sort(keys.begin(), keys.end());
 
-        auto makeCount = [](const TKey& k) {
-            return k.GetCount() + k.GetInternalPartsCount();
-        };
+    TVector<TString> filtered;
+    TKey lastKey;
 
-        const auto leftOffset = makeOffset(lhs);
-        const auto rightOffset = makeOffset(rhs);
-
-        if (leftOffset < rightOffset) {
-            return true;
-        }
-
-        if (rightOffset < leftOffset) {
-            return false;
-        }
-
-        return makeCount(lhs) > makeCount(rhs);
-    };
-
-    std::sort(source.begin(), source.end(), isKeyLess);
-
-    THashSet<TString> filtered;
-
-    size_t partsCount = 0;
-    ui64 nextOffset = 0;
-
-    for (const auto& k : source) {
-        if (filtered.empty() || k.GetOffset() >= nextOffset) {
-            filtered.insert(k.ToString());
-            partsCount = k.GetCount() + k.GetInternalPartsCount();
-            nextOffset = k.GetOffset() + k.GetCount();
+    for (auto& k : keys) {
+        if (filtered.empty()) {
+            filtered.push_back(std::move(k));
+            lastKey = TKey::FromString(filtered.back(), partitionId);
         } else {
-            //Y_ABORT_UNLESS(partsCount >= k.GetCount() + k.GetInternalPartsCount(),
-            //               "Key: %s, "
-            //               "partsCount: %" PRISZT ", Count: %" PRIu32 ", InternalPartsCount: %" PRIu32
-            //               ", nextOffset: %" PRIu64,
-            //               k.ToString().data(),
-            //               partsCount, k.GetCount(), k.GetInternalPartsCount(),
-            //               nextOffset);
+            auto candidate = TKey::FromString(k, partitionId);
 
-            partsCount -= k.GetCount() + k.GetInternalPartsCount();
+            if (lastKey.GetOffset() == candidate.GetOffset()) {
+                if (lastKey.GetPartNo() == candidate.GetPartNo()) {
+                    // candidate содержит lastKey
+                    Y_ABORT_UNLESS(lastKey.GetCount() < candidate.GetCount());
+                    filtered.back() = std::move(k);
+                    lastKey = candidate;
+                } else {
+                    // candidate после lastKey
+                    Y_ABORT_UNLESS(lastKey.GetPartNo() + lastKey.GetInternalPartsCount() == candidate.GetPartNo());
+                    filtered.push_back(std::move(k));
+                    lastKey = candidate;
+                }
+            } else {
+                // выше мы отсортировали ключи. поэтому здесь
+                Y_ABORT_UNLESS(lastKey.GetOffset() < candidate.GetOffset());
 
-            Y_UNUSED(partsCount);
+                if (const ui64 nextOffset = lastKey.GetOffset() + lastKey.GetCount(); nextOffset > candidate.GetOffset()) {
+                    // lastKey содержит candidate
+                    ;
+                } else {
+                    // candidate после lastKey или пропуск между lastKey и candidate
+                    filtered.push_back(std::move(k));
+                    lastKey = candidate;
+                }
+            }
         }
     }
 
-    return filtered;
+    return {filtered.begin(), filtered.end()};
 }
 
 void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueResponse::TReadRangeResult& range, const TActorContext&) {
@@ -613,7 +605,7 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
         Y_ABORT_UNLESS(k.GetOffset() >= endOffset);
         endOffset = k.GetOffset() + k.GetCount();
         //at this point EndOffset > StartOffset
-        if (!k.HasSuffix()) //head.Size will be filled after read or head blobs
+        if (!k.HasSuffix() || !k.IsHead()) //head.Size will be filled after read or head blobs
             bodySize += pair.GetValueSize();
 
         PQ_LOG_D("Got data offset " << k.GetOffset() << " count " << k.GetCount() << " size " << pair.GetValueSize()
@@ -629,31 +621,120 @@ void TInitDataRangeStep::FillBlobsMetaData(const NKikimrClient::TKeyValueRespons
     Y_ABORT_UNLESS(endOffset >= startOffset);
 }
 
+struct TKeyBoundaries {
+    // [0, Head)         -- body
+    // [Head, fastWrite) -- Head
+    // [FastWrite, inf)  -- FastWrite
+    size_t Head = 0;
+    size_t FastWrite = 0;
+};
+
+TKeyBoundaries SplitBodyHeadAndFastWrite(const std::deque<TDataKey>& keys)
+{
+    TKeyBoundaries b;
+
+    for (; b.Head < keys.size(); ++b.Head) {
+        const auto& e = keys[b.Head];
+        if (e.Key.HasSuffix()) {
+            // Head or FastWrite
+            break;
+        }
+    }
+
+    for (b.FastWrite = b.Head; b.FastWrite < keys.size(); ++b.FastWrite) {
+        const auto& e = keys[b.FastWrite];
+        if (!e.Key.IsHead()) {
+            break;
+        }
+    }
+
+    Y_ABORT_UNLESS(b.Head <= b.FastWrite);
+
+    return b;
+}
 
 void TInitDataRangeStep::FormHeadAndProceed() {
     auto& endOffset = Partition()->BlobEncoder.EndOffset;
     auto& startOffset = Partition()->BlobEncoder.StartOffset;
-    auto& head = Partition()->BlobEncoder.Head;
-    auto& headKeys = Partition()->BlobEncoder.HeadKeys;
+    //auto& head = Partition()->BlobEncoder.Head;
+    //auto& headKeys = Partition()->BlobEncoder.HeadKeys;
     auto& dataKeysBody = Partition()->BlobEncoder.DataKeysBody;
 
-    head.Offset = endOffset;
-    head.PartNo = 0;
+    auto keys = std::move(dataKeysBody);
+    dataKeysBody.clear();
 
-    while (dataKeysBody.size() > 0 && dataKeysBody.back().Key.HasSuffix()) {
-        Y_ABORT_UNLESS(dataKeysBody.back().Key.GetOffset() + dataKeysBody.back().Key.GetCount() == head.Offset); //no gaps in head allowed
-        headKeys.push_front(dataKeysBody.back());
-        head.Offset = dataKeysBody.back().Key.GetOffset();
-        head.PartNo = dataKeysBody.back().Key.GetPartNo();
-        dataKeysBody.pop_back();
-    }
-    for (const auto& p : dataKeysBody) {
-        Y_ABORT_UNLESS(!p.Key.HasSuffix());
+    auto& cz = Partition()->CompactionZone;
+    auto& fwz = Partition()->BlobEncoder;
+
+    cz.BodySize = 0;
+
+    fwz.Head.Offset = endOffset;
+    fwz.Head.PartNo = 0;
+    fwz.BodySize = 0;
+
+    auto kb = SplitBodyHeadAndFastWrite(keys);
+
+    for (size_t k = 0; k < kb.Head; ++k) {
+        cz.BodySize += keys[k].Size;
+        keys[k].CumulativeSize = cz.DataKeysBody.empty() ? 0 : (cz.DataKeysBody.back().CumulativeSize + cz.DataKeysBody.back().Size);
+        cz.DataKeysBody.push_back(std::move(keys[k]));
+
+        cz.Head.Offset = cz.DataKeysBody.back().Key.GetOffset();
+        cz.Head.PartNo = cz.DataKeysBody.back().Key.GetPartNo();
     }
 
-    Y_ABORT_UNLESS(headKeys.empty() || head.Offset == headKeys.front().Key.GetOffset() && head.PartNo == headKeys.front().Key.GetPartNo());
-    Y_ABORT_UNLESS(head.Offset < endOffset || head.Offset == endOffset && headKeys.empty());
-    Y_ABORT_UNLESS(head.Offset >= startOffset || head.Offset == startOffset - 1 && head.PartNo > 0);
+    for (size_t k = kb.Head; k < kb.FastWrite; ++k) {
+        cz.HeadKeys.push_back(std::move(keys[k]));
+
+        cz.Head.Offset = cz.HeadKeys.back().Key.GetOffset();
+        cz.Head.PartNo = cz.HeadKeys.back().Key.GetPartNo();
+    }
+
+    for (size_t k = kb.FastWrite; k < keys.size(); ++k) {
+        fwz.BodySize += keys[k].Size;
+        keys[k].CumulativeSize = fwz.DataKeysBody.empty() ? 0 : (fwz.DataKeysBody.back().CumulativeSize + fwz.DataKeysBody.back().Size);
+        fwz.DataKeysBody.push_back(std::move(keys[k]));
+
+        fwz.Head.Offset = fwz.DataKeysBody.back().Key.GetOffset();
+        fwz.Head.PartNo = fwz.DataKeysBody.back().Key.GetPartNo();
+    }
+
+    if (fwz.DataKeysBody.empty()) {
+        cz.StartOffset = startOffset;
+        cz.EndOffset = endOffset;
+        cz.Head.Offset = cz.EndOffset;
+        cz.Head.PartNo = 0; // ???
+
+        fwz.StartOffset = endOffset;
+        fwz.EndOffset = endOffset;
+        fwz.Head.Offset = endOffset;
+    } else {
+        cz.StartOffset = startOffset;
+        cz.EndOffset = fwz.DataKeysBody.front().Key.GetOffset();
+        cz.Head.Offset = cz.EndOffset;
+        cz.Head.PartNo = fwz.DataKeysBody.front().Key.GetPartNo();
+
+        fwz.StartOffset = cz.EndOffset;
+        fwz.EndOffset = endOffset;
+
+        fwz.Head.Offset = endOffset;
+    }
+
+    //while (dataKeysBody.size() > 0 && dataKeysBody.back().Key.HasSuffix()) {
+    //    DBGTRACE_LOG("key: " << dataKeysBody.back().Key.ToString());
+    //    Y_ABORT_UNLESS(dataKeysBody.back().Key.GetOffset() + dataKeysBody.back().Key.GetCount() == head.Offset); //no gaps in head allowed
+    //    headKeys.push_front(dataKeysBody.back());
+    //    head.Offset = dataKeysBody.back().Key.GetOffset();
+    //    head.PartNo = dataKeysBody.back().Key.GetPartNo();
+    //    dataKeysBody.pop_back();
+    //}
+    //for (const auto& p : dataKeysBody) {
+    //    Y_ABORT_UNLESS(!p.Key.HasSuffix());
+    //}
+
+    Y_ABORT_UNLESS(fwz.HeadKeys.empty() || fwz.Head.Offset == fwz.HeadKeys.front().Key.GetOffset() && fwz.Head.PartNo == fwz.HeadKeys.front().Key.GetPartNo());
+    Y_ABORT_UNLESS(fwz.Head.Offset < endOffset || fwz.Head.Offset == endOffset && fwz.HeadKeys.empty());
+    Y_ABORT_UNLESS(fwz.Head.Offset >= startOffset || fwz.Head.Offset == startOffset - 1 && fwz.Head.PartNo > 0);
 }
 
 
@@ -871,6 +952,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
 
     for (ui32 i = 0; i < TotalLevels; ++i) {
         BlobEncoder.DataKeysHead.emplace_back(CompactLevelBorder[i]);
+        CompactionZone.DataKeysHead.emplace_back(CompactLevelBorder[i]);
     }
 
     if (Config.HasOffloadConfig() && !OffloadActor && !IsSupportive()) {

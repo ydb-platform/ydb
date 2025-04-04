@@ -724,7 +724,7 @@ message TGRpcConfig {
         YDB_GRPC_COMPRESS_GZIP = 2;
     };
 
-    optional YdbGrpcCompressionAlgorithm DefaultCompressionAlgorithm = 30 [default = YDB_GRPC_COMPRESS_GZIP];
+    optional YdbGrpcCompressionAlgorithm DefaultCompressionAlgorithm = 30 [default = YDB_GRPC_COMPRESS_NONE];
 
     enum YdbGrpcCompressionLevel {
         YDB_GRPC_COMPRESS_LEVEL_NONE = 0;
@@ -733,7 +733,7 @@ message TGRpcConfig {
         YDB_GRPC_COMPRESS_LEVEL_HIGH = 3;
     }
 
-    optional YdbGrpcCompressionLevel DefaultCompressionLevel = 31 [default = YDB_GRPC_COMPRESS_LEVEL_MED];
+    optional YdbGrpcCompressionLevel DefaultCompressionLevel = 31 [default = YDB_GRPC_COMPRESS_LEVEL_NONE];
 
     // server socket options
     optional bool   KeepAliveEnable = 100 [default = true]; // SO_KEEPALIVE

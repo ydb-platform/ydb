@@ -38,6 +38,7 @@ constexpr ui32 RecordsInSysLog = 16;
 
 constexpr ui64 FullSizeDiskMinimumSize = 800ull * (1 << 30); // 800GB, all disks smaller are considered "small"
 constexpr ui32 SmallDiskMaximumChunkSize = 32 * (1 << 20); // 32MB
+constexpr bool PlainDataChunk = false;
 
 #define PDISK_FORMAT_VERSION 3
 #define PDISK_DATA_VERSION 2
@@ -49,6 +50,7 @@ constexpr ui32 SmallDiskMaximumChunkSize = 32 * (1 << 20); // 32MB
 // #define PDISK_SYS_LOG_RECORD_VERSION_5 5 // It was used in reverted commits, just avoid this version
 #define PDISK_SYS_LOG_RECORD_VERSION_6 6
 #define PDISK_SYS_LOG_RECORD_VERSION_7 7
+#define PDISK_SYS_LOG_RECORD_VERSION_8 8
 #define PDISK_SYS_LOG_RECORD_INCOMPATIBLE_VERSION_1000 1000
 #define FORMAT_TEXT_SIZE 1024
 
@@ -341,7 +343,7 @@ struct TSysLogRecord {
     TVDiskID OwnerVDisks[256];
 
     TSysLogRecord()
-        : Version(PDISK_SYS_LOG_RECORD_VERSION_7)
+        : Version(PDISK_SYS_LOG_RECORD_VERSION_8)
         , LogHeadChunkIdx(0)
         , Reserved1(0)
         , LogHeadChunkPreviousNonce((ui64)-1)
@@ -565,6 +567,8 @@ enum EFormatFlags {
     FormatFlagEncryptFormat = 1 << 5,  // Always on, flag is useless
     FormatFlagEncryptData = 1 << 6,  // Always on, flag is useless
     FormatFlagFormatInProgress = 1 << 7,  // Not implemented (Must be OFF for a formatted disk)
+
+    FormatFlagPlainDataChunks = 1 << 8,  // Default is off, means "encrypted", for backward compatibility
 };
 
 struct TDiskFormat {
@@ -611,6 +615,7 @@ struct TDiskFormat {
         isFirst = NText::OutFlag(isFirst, flags & FormatFlagEncryptFormat, "EncryptFormat", str);
         isFirst = NText::OutFlag(isFirst, flags & FormatFlagEncryptData, "EncryptData", str);
         isFirst = NText::OutFlag(isFirst, flags & FormatFlagFormatInProgress, "FormatFlagFormatInProgress", str);
+        isFirst = NText::OutFlag(isFirst, flags & FormatFlagPlainDataChunks, "FormatFlagPlainDataChunks", str);
         NText::OutFlag(isFirst, isFirst, "Unknown", str);
         return str.Str();
     }
@@ -678,6 +683,14 @@ struct TDiskFormat {
 
     bool IsFormatInProgress() const {
         return FormatFlags & FormatFlagFormatInProgress;
+    }
+
+    bool IsPlainDataChunks() const {
+        return FormatFlags & FormatFlagPlainDataChunks;
+    }
+
+    size_t GetAppendBlockSize() const {
+        return IsPlainDataChunks() ? SectorSize : SectorPayloadSize();
     }
 
     void SetFormatInProgress(bool isInProgress) {
@@ -834,6 +847,7 @@ struct TDiskFormat {
             FormatFlagErasureEncodeNextChunkReference |
             FormatFlagEncryptFormat |
             FormatFlagEncryptData;
+        FormatFlags |= PlainDataChunk ? FormatFlagPlainDataChunks : 0;
         Hash = 0;
 
         memset(FormatText, 0, sizeof(FormatText));
@@ -853,6 +867,12 @@ struct TDiskFormat {
             FormatFlagErasureEncodeNextChunkReference |
             FormatFlagEncryptFormat |
             FormatFlagEncryptData;
+        if (format.IsPlainDataChunks()) {
+            FormatFlags |= FormatFlagPlainDataChunks;
+        } else {
+            FormatFlags &= !FormatFlagPlainDataChunks;
+        }
+
         Y_VERIFY(format.Version <= Version);
         Y_VERIFY(format.GetUsedSize() <= sizeof(TDiskFormat));
         memcpy(this, &format, format.GetUsedSize());

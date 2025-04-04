@@ -12,6 +12,13 @@
 # Please refer to the build instructions in the repository for more information about manual
 # changes in this file.
 
+get_built_tool_path(
+  TOOL_enum_parser_bin
+  TOOL_enum_parser_dependency
+  tools/enum_parser/enum_parser
+  enum_parser
+)
+
 add_library(engines-reader-common)
 
 
@@ -21,6 +28,7 @@ target_link_libraries(engines-reader-common PUBLIC
   yutil
   core-tx-program
   formats-arrow-reader
+  tools-enum_parser-enum_serialization_runtime
 )
 
 target_sources(engines-reader-common PRIVATE
@@ -31,3 +39,9 @@ target_sources(engines-reader-common PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common/stats.cpp
 )
 
+
+generate_enum_serilization(engines-reader-common
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/columnshard/engines/reader/common/description.h
+  INCLUDE_HEADERS
+  ydb/core/tx/columnshard/engines/reader/common/description.h
+)

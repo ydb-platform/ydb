@@ -6,7 +6,6 @@ SRCS(
     kqp_effects.cpp
     kqp_output_stream.cpp
     kqp_program_builder.cpp
-    kqp_compute_scheduler.cpp
     kqp_read_actor.cpp
     kqp_read_iterator_common.cpp
     kqp_read_table.cpp
@@ -38,6 +37,7 @@ PEERDIR(
     ydb/core/formats
     ydb/core/kqp/common
     ydb/core/kqp/common/buffer
+    ydb/core/kqp/runtime/scheduler
     ydb/core/protos
     ydb/core/scheme
     ydb/core/ydb_convert
@@ -55,5 +55,6 @@ YQL_LAST_ABI_VERSION()
 END()
 
 RECURSE_FOR_TESTS(
+    scheduler/ut
     ut
 )

@@ -1,5 +1,7 @@
 #include "kqp_compute_scheduler.h"
 
+#include "kqp_compute_pool.h"
+
 #include <ydb/core/protos/table_service_config.pb.h>
 
 #include <ydb/core/kqp/common/simple/services.h>
@@ -9,10 +11,6 @@
 #include <ydb/core/cms/console/console.h>
 
 namespace {
-    static constexpr ui64 FromDuration(TDuration d) {
-        return d.MicroSeconds();
-    }
-
     static constexpr TDuration ToDuration(double t) {
         return TDuration::MicroSeconds(t);
     }
@@ -22,73 +20,7 @@ namespace {
     static constexpr double MinCapacity = 1e-9;
 }
 
-namespace NKikimr {
-namespace NKqp {
-
-class IObservable : TNonCopyable, public TIntrusiveListItem<IObservable> {
-public:
-    virtual bool Update() = 0;
-
-    void AddDependency(IObservable* dep) {
-        Depth = Max<size_t>(Depth, dep->Depth + 1);
-        Dependencies.insert(dep);
-        dep->Dependents.insert(this);
-    }
-
-    bool HasDependents() {
-        return !Dependents.empty();
-    }
-
-    virtual ~IObservable() {
-        for (auto& dep : Dependencies) {
-            dep->Dependents.erase(this);
-        }
-        for (auto& dep : Dependents) {
-            dep->Dependencies.erase(this);
-        }
-    }
-
-    size_t GetDepth() {
-        return Depth;
-    }
-
-    template<typename T>
-    void ForAllDependents(T&& f) {
-        for (auto* dep : Dependents) {
-            f(dep);
-        }
-    }
-
-private:
-    size_t Depth = 0;
-
-    TSet<IObservable*> Dependencies;
-    TSet<IObservable*> Dependents;
-};
-
-template<typename T>
-class IObservableValue : public IObservable {
-protected:
-    virtual T DoUpdateValue() = 0;
-
-public:
-    bool Update() override {
-        auto val = DoUpdateValue();
-        if (val != Value) {
-            Value = val;
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    T GetValue() {
-        return Value;
-    }
-
-private:
-    T Value;
-};
+namespace NKikimr::NKqp::NScheduler {
 
 class TShare : public IObservableValue<double> {
 protected:
@@ -168,7 +100,7 @@ public:
 
     template<typename T>
     T* FindValue(TParameterKey key) {
-        if (auto ptr = Params.FindPtr(key)) {
+        if (auto* ptr = Params.FindPtr(key)) {
             return ptr->Get<T>();
         }
         return nullptr;
@@ -242,7 +174,6 @@ public:
         return oldValue;
     }
 
-
     void Add(T val) {
         Value_ += val;
         Updater_->ToUpdate(this);
@@ -297,81 +228,6 @@ T* TObservableUpdater::TValueContainer::Get() {
         return Holder.Get();
     }
 }
-
-template<typename T>
-class TMultiThreadView {
-public:
-    TMultiThreadView(std::atomic<ui64>* usage, T* slot)
-        : Usage(usage)
-        , Slot(slot)
-    {
-        Usage->fetch_add(1);
-    }
-    const T* get() {
-        return Slot;
-    }
-
-    ~TMultiThreadView() {
-        Usage->fetch_sub(1);
-    }
-
-private:
-    std::atomic<ui64>* Usage;
-    T* Slot;
-};
-
-template<typename T>
-class TMultithreadPublisher {
-public:
-    void Publish() {
-        auto oldVal = CurrentT.load();
-        auto newVal = 1 - oldVal;
-        CurrentT.store(newVal);
-        while (true) {
-            if (Usage[oldVal].load() == 0) {
-                Slots[oldVal] = Slots[newVal];
-                return;
-            }
-        }
-    }
-
-    T* Next() {
-        return &Slots[1 - CurrentT.load()];
-    }
-
-    TMultiThreadView<T> Current() {
-        while (true) {
-            auto val = CurrentT.load();
-            TMultiThreadView<T> view(&Usage[val], &Slots[val]);
-            if (CurrentT.load() == val) {
-                return view;
-            }
-        }
-    }
-
-private:
-    std::atomic<ui32> CurrentT = 0;
-    std::atomic<ui64> Usage[2] = {0, 0};
-    T Slots[2];
-};
-
-TSchedulerEntityHandle::TSchedulerEntityHandle(TSchedulerEntity* ptr)
-    : Ptr(ptr)
-{
-}
-
-TSchedulerEntityHandle::TSchedulerEntityHandle(){} 
-
-TSchedulerEntityHandle::TSchedulerEntityHandle(TSchedulerEntityHandle&& other) {
-    Ptr.swap(other.Ptr);
-}
-
-TSchedulerEntityHandle& TSchedulerEntityHandle::operator = (TSchedulerEntityHandle&& other) {
-    Ptr.swap(other.Ptr);
-    return *this;
-}
-
-TSchedulerEntityHandle::~TSchedulerEntityHandle() = default;
 
 struct TResourceWeightIntrusiveListTag {};
 
@@ -477,7 +333,7 @@ public:
 private:
     struct TEnabledFlag : public IObservableValue<bool> {
         TEnabledFlag(TParameter<bool>* enabled, TParameter<i64>* taskscount)
-            : Enabled_(enabled)
+            : Enabled(enabled)
             , Taskscount(taskscount)
         {
             AddDependency(enabled);
@@ -486,10 +342,10 @@ private:
         }
 
         bool DoUpdateValue() override {
-            return Enabled_->GetValue() && Taskscount->GetValue() > 0;
+            return Enabled->GetValue() && Taskscount->GetValue() > 0;
         }
 
-        TParameter<bool>* Enabled_;
+        TParameter<bool>* Enabled;
         TParameter<i64>* Taskscount;
     } EnabledFlag;
 
@@ -519,156 +375,85 @@ private:
     TObservableUpdater* Updater_;
 };
 
+TSchedulerEntity::TSchedulerEntity(TPool* pool)
+    : Pool(pool)
+    , LastExecutionTime(AvgBatch)
+{
+    ++Pool->EntitiesCount;
+}
 
-class TSchedulerEntity {
-public:
-    TSchedulerEntity() {}
-    ~TSchedulerEntity() {}
+TSchedulerEntity::~TSchedulerEntity() {
+    --Pool->EntitiesCount;
+}
 
-    struct TGroupMutableStats {
-        double Capacity = 0;
-        TMonotonic LastNowRecalc;
-        bool Disabled = false;
-        i64 EntitiesWeight = 0;
-        double MaxLimitDeviation = 0;
+void TSchedulerEntity::TrackTime(TDuration time, TMonotonic) {
+    Pool->TrackedMicroSeconds.fetch_add(time.MicroSeconds());
+}
 
-        ssize_t TrackedBefore = 0;
-
-        double Limit(TMonotonic now) const {
-            return FromDuration(now - LastNowRecalc) * Capacity + MaxLimitDeviation + TrackedBefore;
-        }
-    };
-
-    struct TGroupRecord {
-        std::atomic<i64> TrackedMicroSeconds = 0;
-        std::atomic<i64> DelayedSumBatches = 0;
-        std::atomic<i64> DelayedCount = 0;
-
-        THolder<IObservableValue<double>> Share;
-
-        ::NMonitoring::TDynamicCounters::TCounterPtr Vtime;
-        ::NMonitoring::TDynamicCounters::TCounterPtr EntitiesWeight;
-        ::NMonitoring::TDynamicCounters::TCounterPtr Limit;
-        ::NMonitoring::TDynamicCounters::TCounterPtr Weight;
-
-        ::NMonitoring::TDynamicCounters::TCounterPtr SchedulerClock;
-        ::NMonitoring::TDynamicCounters::TCounterPtr SchedulerLimitUs;
-        ::NMonitoring::TDynamicCounters::TCounterPtr SchedulerTrackedUs;
-
-        TString Name;
-
-        void AssignWeight() {
-            MutableStats.Next()->Capacity = Share->GetValue();
-        }
-
-        void InitCounters(const TIntrusivePtr<TKqpCounters>& counters) {
-            if (Vtime || !Name) {
-                return;
-            }
-
-            auto group = counters->GetKqpCounters()->GetSubgroup("NodeScheduler/Group", Name);
-            Vtime = group->GetCounter("VTime", true);
-            EntitiesWeight = group->GetCounter("Entities", false);
-            Limit = group->GetCounter("Limit", true);
-            Weight = group->GetCounter("Weight", false);
-            SchedulerClock = group->GetCounter("Clock", false);
-            SchedulerTrackedUs = group->GetCounter("Tracked", true);
-            SchedulerLimitUs = group->GetCounter("AbsoluteLimit", true);
-        }
-
-        TMultithreadPublisher<TGroupMutableStats> MutableStats;
-    };
-
-    TStackVec<TGroupRecord*, 2, true, std::allocator<TGroupRecord*>> Groups;
-    i64 Weight;
-    double Vruntime = 0;
-    double Vstart;
-
-    double Vcurrent;
-
-    TDuration MaxDelay;
-
-    static constexpr double WakeupDelay = 1.1;
-    static constexpr double BatchCalcDecay = 0;
-    TDuration BatchTime = AvgBatch;
-
-    TDuration OverflowToleranceTimeout = TDuration::Seconds(1);
-
-    static constexpr TDuration ActivationPenalty = TDuration::MicroSeconds(10);
-
-    size_t Wakeups = 0;
-    bool isThrottled = false;
-
-    void TrackTime(TDuration time, TMonotonic) {
-        for (auto group : Groups) {
-            //auto current = group->MutableStats.Current();
-            group->TrackedMicroSeconds.fetch_add(time.MicroSeconds());
-        }
+void TSchedulerEntity::UpdateLastExecutionTime(TDuration time) {
+    Wakeups = 0;
+    if (IsThrottled) {
+        // TODO: how is it possible to have execution time while being throttled?
+        // resume-throttle is for proper update of |DelayedSumBatches|
+        MarkResumed();
+        LastExecutionTime = time;
+        MarkThrottled();
+    } else {
+        LastExecutionTime = time;
     }
+}
 
-    void UpdateBatchTime(TDuration time) {
-        Wakeups = 0;
-        auto newBatch = BatchTime * BatchCalcDecay + time * (1 - BatchCalcDecay);
-        if (isThrottled) {
-            MarkResumed();
-            BatchTime = newBatch;
-            MarkThrottled();
-        } else {
-            BatchTime = newBatch;
+TMaybe<TDuration> TSchedulerEntity::Delay(TMonotonic now, TPool* pool) {
+    auto current = pool->MutableStats.Current();
+    auto limit = current.get()->Limit(now);
+    auto tracked = pool->TrackedMicroSeconds.load();
+    if (limit > tracked) {
+        return {};
+    } else {
+        if (current.get()->Capacity < MinCapacity) {
+            return MaxDelay;
         }
+        return Min(MaxDelay, ToDuration((tracked - limit +
+                    Max<i64>(0, pool->DelayedSumBatches.load()) + LastExecutionTime.MicroSeconds() +
+                    ActivationPenalty.MicroSeconds() * (pool->DelayedCount.load() + 1) +
+                    current.get()->MaxLimitDeviation) / current.get()->Capacity));
     }
+}
 
-    TMaybe<TDuration> GroupDelay(TMonotonic now, TGroupRecord* group) {
-        auto current = group->MutableStats.Current();
-        auto limit = current.get()->Limit(now);
-        auto tracked = group->TrackedMicroSeconds.load();
-        //double Coeff = pow(WakeupDelay, Wakeups);
-        if (limit > tracked) {
-            return {};
-        } else {
-            if (current.get()->Capacity < MinCapacity) {
-                return MaxDelay;
-            }
-            return Min(MaxDelay, ToDuration(/*Coeff * */(tracked - limit +
-                        Max<i64>(0, group->DelayedSumBatches.load()) + BatchTime.MicroSeconds() +
-                        ActivationPenalty.MicroSeconds() * (group->DelayedCount.load() + 1) +
-                        current.get()->MaxLimitDeviation) / current.get()->Capacity));
-        }
+TMaybe<TDuration> TSchedulerEntity::Delay(TMonotonic now) {
+    TMaybe<TDuration> result;
+    auto poolResult = Delay(now, Pool);
+    if (!result) {
+        result = poolResult;
+    } else if (poolResult && *result < *poolResult) {
+        result = poolResult;
     }
+    return result;
+}
 
-    TMaybe<TDuration> GroupDelay(TMonotonic now) {
-        TMaybe<TDuration> result;
-        for (auto group : Groups) {
-            auto groupResult = GroupDelay(now, group);
-            if (!result) {
-                result = groupResult;
-            } else if (groupResult && *result < *groupResult) {
-                result = groupResult;
-            }
-        }
-        return result;
-    }
+void TSchedulerEntity::MarkThrottled() {
+    IsThrottled = true;
+    Pool->DelayedSumBatches.fetch_add(LastExecutionTime.MicroSeconds());
+    Pool->DelayedCount.fetch_add(1);
+}
 
-    void MarkThrottled() {
-        isThrottled = true;
-        for (auto group : Groups) {
-            group->DelayedSumBatches.fetch_add(BatchTime.MicroSeconds());
-            group->DelayedCount.fetch_add(1);
-        }
-    }
+void TSchedulerEntity::MarkResumed() {
+    IsThrottled = false;
+    Pool->DelayedSumBatches.fetch_sub(LastExecutionTime.MicroSeconds());
+    Pool->DelayedCount.fetch_sub(1);
+}
 
-    void MarkResumed() {
-        isThrottled = false;
-        for (auto group : Groups) {
-            group->DelayedSumBatches.fetch_sub(BatchTime.MicroSeconds());
-            group->DelayedCount.fetch_sub(1);
-        }
+void TSchedulerEntity::MarkResumed(TMonotonic now) {
+    MarkResumed();
+    if (auto lastNow = Pool->MutableStats.Current().get()->LastNowRecalc; now > lastNow) {
+        Pool->ThrottledMicroSeconds.fetch_add((now - lastNow).MicroSeconds());
     }
-};
+}
 
 struct TComputeScheduler::TImpl {
-    THashMap<TString, size_t> GroupId;
-    std::vector<std::unique_ptr<TSchedulerEntity::TGroupRecord>> Records;
+    THashMap<TString, std::unique_ptr<TPool>> Pools;
+    THashMap<TString, double> ResourceWeights;
+    double ResourceWeightSum = 0.0;
 
     TResourcesWeightCalculator ResourceWeightsCalculator;
     TObservableUpdater WeightsUpdater;
@@ -689,185 +474,83 @@ struct TComputeScheduler::TImpl {
 
     TIntrusivePtr<TKqpCounters> Counters;
     TDuration SmoothPeriod = TDuration::MilliSeconds(100);
-    TDuration ForgetInteval = TDuration::Seconds(2);
+    TDuration ForgetInterval = TDuration::Seconds(2);
 
     TDuration MaxDelay = TDuration::Seconds(10);
 
-    void CreateGroup(THolder<IObservableValue<double>> share, NMonotonic::TMonotonic now, std::optional<TString> groupName = std::nullopt) {
-        auto group = std::make_unique<TSchedulerEntity::TGroupRecord>();
-        group->Share = std::move(share);
-        if (groupName) {
-            group->Name = *groupName;
-            GroupId[*groupName] = Records.size();
-        }
-        AdvanceTime(now, group.get());
-        Records.push_back(std::move(group));
+    void CreatePool(const TString& name, THolder<IObservableValue<double>> share, NMonotonic::TMonotonic now, double resourceWeight = 0.0) {
+        auto pool = std::make_unique<TPool>(name, std::move(share), Counters);
+        pool->AdvanceTime(now, SmoothPeriod, ForgetInterval);
+
+        Pools.emplace(name, std::move(pool));
+        ResourceWeights.emplace(name, resourceWeight);
+        ResourceWeightSum += resourceWeight;
     }
 
-    void CollectGroups() {
-        std::vector<i64> remap;
-        std::vector<std::unique_ptr<TSchedulerEntity::TGroupRecord>> records;
+    void CollectPools() {
+        THashMap<TString, std::unique_ptr<TPool>> pools;
+        THashMap<TString, double> weights;
+        double weightsSum = 0;
 
-        for (size_t i = 0; i < Records.size(); ++i) {
-            auto record = Records[i]->MutableStats.Current();
-            if (record.get()->EntitiesWeight > 0 || Records[i]->Share->HasDependents()) {
-                remap.push_back(records.size());
-                records.emplace_back(Records[i].release());
-            } else {
-                // to delete
-                remap.push_back(-1);
+        for (auto& [name, pool] : Pools) {
+            if (pool->IsActive()) {
+                pools.emplace(name, std::move(pool));
+                weights.emplace(name, ResourceWeights.at(name));
+                weightsSum += ResourceWeights.at(name);
             }
         }
 
-        Records.swap(records);
-
-        {
-            std::vector<TString> toerase;
-            for (auto& [k, v] : GroupId) {
-                if (remap[v] >= 0) {
-                    v = remap[v];
-                } else {
-                    toerase.push_back(k);
-                }
-            }
-            for (auto& k: toerase) {
-                GroupId.erase(k);
-            }
-        }
+        Pools.swap(pools);
+        ResourceWeights.swap(weights);
+        ResourceWeightSum = weightsSum;
 
         WeightsUpdater.CollectValues();
     }
-
-    void AdvanceTime(TMonotonic now, TSchedulerEntity::TGroupRecord* record);
 };
 
-TComputeScheduler::TComputeScheduler() {
+TComputeScheduler::TComputeScheduler(TIntrusivePtr<TKqpCounters> counters) {
     Impl = std::make_unique<TImpl>();
+    Impl->Counters = counters;
 }
 
 TComputeScheduler::~TComputeScheduler() = default;
 
-void TComputeScheduler::AddToGroup(TMonotonic now, ui64 id, TSchedulerEntityHandle& handle) {
-    auto group = Impl->Records[id].get();
-    (*handle).Groups.push_back(group);
-    group->MutableStats.Next()->EntitiesWeight += (*handle).Weight;
-    auto* tasksCount = Impl->WeightsUpdater.FindOrAddParameter<i64>({group->Name, TImpl::TasksCount}, 0);
-    if ((*handle).Weight > 0) {
+THolder<TSchedulerEntity> TComputeScheduler::Enroll(TString poolName, i64 weight, TMonotonic now) {
+    auto* pool = Impl->Pools.at(poolName).get();
+
+    auto result = MakeHolder<TSchedulerEntity>(pool);
+    result->Weight = weight;
+    result->MaxDelay = Impl->MaxDelay;
+
+    pool->AddEntity(result);
+    auto* tasksCount = Impl->WeightsUpdater.FindOrAddParameter<i64>({poolName, TImpl::TasksCount}, 0);
+    if (result->Weight > 0) {
         tasksCount->Add(1);
     }
-    Impl->AdvanceTime(now, group);
-}
+    pool->AdvanceTime(now, Impl->SmoothPeriod, Impl->ForgetInterval);
 
-TSchedulerEntityHandle TComputeScheduler::Enroll(TString groupName, i64 weight, TMonotonic now) {
-    Y_ENSURE(Impl->GroupId.contains(groupName), "unknown scheduler group");
-    auto id = Impl->GroupId.at(groupName);
-
-    TSchedulerEntityHandle result{new TSchedulerEntity()};
-    (*result).Weight = weight;
-    (*result).MaxDelay = Impl->MaxDelay;
-
-    AddToGroup(now, id, result);
     return result;
-}
-
-void TComputeScheduler::TImpl::AdvanceTime(TMonotonic now, TSchedulerEntity::TGroupRecord* record) {
-    if (Counters) {
-        record->InitCounters(Counters);
-    }
-    record->MutableStats.Next()->Capacity = record->Share->GetValue();
-    auto& v = record->MutableStats;
-    {
-        auto group = v.Current();
-        if (group.get()->LastNowRecalc > now) {
-            return;
-        }
-        double delta = 0;
-
-        auto tracked = record->TrackedMicroSeconds.load();
-        v.Next()->MaxLimitDeviation = SmoothPeriod.MicroSeconds() * v.Next()->Capacity;
-        v.Next()->LastNowRecalc = now;
-        v.Next()->TrackedBefore = 
-            Max<ssize_t>(
-                tracked - FromDuration(ForgetInteval) * group.get()->Capacity, 
-                Min<ssize_t>(group.get()->Limit(now) - group.get()->MaxLimitDeviation, tracked));
-
-        //if (group.get()->EntitiesWeight > 0) {
-        //    delta = FromDuration(now - group.get()->LastNowRecalc) * group.get()->Capacity / group.get()->EntitiesWeight;
-        //}
-
-        if (record->Vtime) {
-            record->SchedulerLimitUs->Set(group.get()->Limit(now));
-            record->SchedulerTrackedUs->Set(record->TrackedMicroSeconds.load());
-            record->SchedulerClock->Add(now.MicroSeconds() - group.get()->LastNowRecalc.MicroSeconds());
-            record->Vtime->Add(delta);
-            record->EntitiesWeight->Set(v.Next()->EntitiesWeight);
-            record->Limit->Add(FromDuration(now - group.get()->LastNowRecalc) * group.get()->Capacity);
-            record->Weight->Set(group.get()->Capacity);
-        }
-    }
-    v.Publish();
 }
 
 void TComputeScheduler::AdvanceTime(TMonotonic now) {
     Impl->WeightsUpdater.UpdateAll();
-    for (size_t i = 0; i < Impl->Records.size(); ++i) {
-        Impl->AdvanceTime(now, Impl->Records[i].get());
+    for (auto& [_, pool] : Impl->Pools) {
+        pool->AdvanceTime(now, Impl->SmoothPeriod, Impl->ForgetInterval);
     }
-    Impl->CollectGroups();
+    Impl->CollectPools();
     if (Impl->Counters) {
-        Impl->Counters->SchedulerGroupsCount->Set(Impl->Records.size());
+        Impl->Counters->SchedulerPoolsCount->Set(Impl->Pools.size());
         Impl->Counters->SchedulerValuesCount->Set(Impl->WeightsUpdater.ValuesCount());
     }
 }
 
-void TComputeScheduler::Deregister(TSchedulerEntityHandle& self, TMonotonic now) {
-    for (auto group : (*self).Groups) {
-        auto* next = group->MutableStats.Next();
-        next->EntitiesWeight -= (*self).Weight;
-        auto* param = Impl->WeightsUpdater.FindValue<TParameter<i64>>({group->Name, TImpl::TasksCount});
-        if (param) {
-            param->Add(-1);
-        }
-        Impl->AdvanceTime(now, group);
+void TComputeScheduler::Unregister(THolder<TSchedulerEntity>& entity, TMonotonic now) {
+    auto* pool = entity->Pool;
+    auto* param = Impl->WeightsUpdater.FindValue<TParameter<i64>>({pool->GetName(), TImpl::TasksCount});
+    if (param) {
+        param->Add(-1);
     }
-}
-
-ui64 TComputeScheduler::MakePerQueryGroup(TMonotonic now, double share, TString baseGroup) {
-    auto baseId = Impl->GroupId.at(baseGroup);
-    auto perQueryShare = Impl->WeightsUpdater.FindOrAddParameter<double>({baseGroup, TImpl::PerQueryShare}, share);
-
-    Impl->CreateGroup(MakeHolder<TShare>(Impl->Records[baseId]->Share.Get(), perQueryShare), now);
-    ui64 res = Impl->Records.size() - 1;
-    Impl->AdvanceTime(now, Impl->Records[res].get());
-    return res;
-}
-
-void TSchedulerEntityHandle::TrackTime(TDuration time, TMonotonic now) {
-    Ptr->TrackTime(time, now);
-}
-
-void TSchedulerEntityHandle::ReportBatchTime(TDuration time) {
-    Ptr->UpdateBatchTime(time);
-}
-
-TMaybe<TDuration> TSchedulerEntityHandle::Delay(TMonotonic now) {
-    return Ptr->GroupDelay(now);
-}
-
-void TSchedulerEntityHandle::MarkResumed() {
-    Ptr->MarkResumed();
-}
-
-void TSchedulerEntityHandle::MarkThrottled() {
-    Ptr->MarkThrottled();
-}
-
-void TSchedulerEntityHandle::Clear() {
-    Ptr.reset();
-}
-
-void TComputeScheduler::ReportCounters(TIntrusivePtr<TKqpCounters> counters) {
-    Impl->Counters = counters;
+    pool->AdvanceTime(now, Impl->SmoothPeriod, Impl->ForgetInterval);
 }
 
 void TComputeScheduler::SetMaxDeviation(TDuration period) {
@@ -875,25 +558,23 @@ void TComputeScheduler::SetMaxDeviation(TDuration period) {
 }
 
 void TComputeScheduler::SetForgetInterval(TDuration period) {
-    Impl->ForgetInteval = period;
+    Impl->ForgetInterval = period;
 }
 
-bool TComputeScheduler::Disabled(TString group) {
-    auto ptr = Impl->GroupId.FindPtr(group);
-    return !ptr || Impl->Records[*ptr]->MutableStats.Current().get()->Disabled;
+bool TComputeScheduler::Disabled(TString pool) {
+    auto poolIt = Impl->Pools.find(pool);
+    return poolIt == Impl->Pools.end() || poolIt->second->IsDisabled();
 }
 
 
-void TComputeScheduler::Disable(TString group, TMonotonic now) {
-    auto ptr = Impl->GroupId.FindPtr(group);
-    // if ptr == 0 it's already disabled
-    if (ptr) {
-        Impl->Records[*ptr]->MutableStats.Next()->Disabled = true;
-        Impl->AdvanceTime(now, Impl->Records[*ptr].get());
+void TComputeScheduler::Disable(TString pool, TMonotonic now) {
+    if (auto poolIt = Impl->Pools.find(pool); poolIt != Impl->Pools.end()) {
+        poolIt->second->Disable();
+        poolIt->second->AdvanceTime(now, Impl->SmoothPeriod, Impl->ForgetInterval);
     }
 }
 
-class TCompositeGroupShare : public IObservableValue<double> {
+class TCompositePoolShare : public IObservableValue<double> {
 protected:
     double DoUpdateValue() override {
         if (ResourceWeightEnabled->GetValue()) {
@@ -908,7 +589,7 @@ protected:
     }
 
 public:
-    TCompositeGroupShare(IObservableValue<double>* totalLimit, TResourcesWeightLimitValue* resourceWeightLimit, IObservableValue<bool>* resourceWeightEnabled)
+    TCompositePoolShare(IObservableValue<double>* totalLimit, TResourcesWeightLimitValue* resourceWeightLimit, IObservableValue<bool>* resourceWeightEnabled)
         : ResourceWeightEnabled(resourceWeightEnabled)
         , TotalLimit(totalLimit)
         , ResourceWeightLimit(resourceWeightLimit)
@@ -926,18 +607,16 @@ private:
     TResourcesWeightLimitValue* ResourceWeightLimit;
 };
 
-void TComputeScheduler::UpdateGroupShare(TString group, double share, TMonotonic now, std::optional<double> resourceWeight) {
-    auto ptr = Impl->GroupId.FindPtr(group);
-
-    auto* shareValue = Impl->WeightsUpdater.FindOrAddParameter<double>({group, TImpl::TotalShare}, share);
+void TComputeScheduler::UpdatePoolShare(TString poolName, double share, TMonotonic now, std::optional<double> resourceWeight) {
+    auto* shareValue = Impl->WeightsUpdater.FindOrAddParameter<double>({poolName, TImpl::TotalShare}, share);
     shareValue->SetValue(share);
 
-    TParameter<bool>* weightEnabled = Impl->WeightsUpdater.FindOrAddParameter<bool>({group, TImpl::ResourceWeightEnabled}, resourceWeight.has_value());
+    TParameter<bool>* weightEnabled = Impl->WeightsUpdater.FindOrAddParameter<bool>({poolName, TImpl::ResourceWeightEnabled}, resourceWeight.has_value());
     weightEnabled->SetValue(resourceWeight.has_value());
 
-    if (!ptr) {
-        TParameter<double>* resourceWeightValue = Impl->WeightsUpdater.FindOrAddParameter<double>({group, TImpl::ResourceWeight}, resourceWeight.value_or(0));
-        TParameter<i64>* taskscount = Impl->WeightsUpdater.FindOrAddParameter<i64>({group, TImpl::TasksCount}, 0);
+    if (auto poolIt = Impl->Pools.find(poolName); poolIt == Impl->Pools.end()) {
+        TParameter<double>* resourceWeightValue = Impl->WeightsUpdater.FindOrAddParameter<double>({poolName, TImpl::ResourceWeight}, resourceWeight.value_or(0));
+        TParameter<i64>* taskscount = Impl->WeightsUpdater.FindOrAddParameter<i64>({poolName, TImpl::TasksCount}, 0);
 
         auto resourceLimitValue = MakeHolder<TResourcesWeightLimitValue>(
             &Impl->SumCores,
@@ -948,20 +627,27 @@ void TComputeScheduler::UpdateGroupShare(TString group, double share, TMonotonic
             &Impl->ResourceWeightsCalculator,
             &Impl->WeightsUpdater);
 
-        auto compositeWeight = MakeHolder<TCompositeGroupShare>(shareValue, resourceLimitValue.Get(), weightEnabled);
+        auto compositeWeight = MakeHolder<TCompositePoolShare>(shareValue, resourceLimitValue.Get(), weightEnabled);
         auto cap = MakeHolder<TShare>(&Impl->SumCores, compositeWeight.Get());
-        Impl->WeightsUpdater.AddValue<IObservable>({group, TImpl::ResourceLimitValue}, THolder(resourceLimitValue.Release()));
-        Impl->WeightsUpdater.AddValue({group, TImpl::CompositeShare}, std::move(compositeWeight));
-        Impl->CreateGroup(std::move(cap), now, group);
+        Impl->WeightsUpdater.AddValue<IObservable>({poolName, TImpl::ResourceLimitValue}, THolder(resourceLimitValue.Release()));
+        Impl->WeightsUpdater.AddValue({poolName, TImpl::CompositeShare}, std::move(compositeWeight));
+        Impl->CreatePool(poolName, std::move(cap), now, resourceWeight.value_or(0));
+
+        for (const auto& [name, weight] : Impl->ResourceWeights) {
+            if (weight > 0 && Impl->ResourceWeightSum > 0) {
+                Impl->Pools.at(name)->UpdateGuarantee(weight / Impl->ResourceWeightSum * Impl->SumCores.GetValue() * 1'000'000);
+            } else {
+                Impl->Pools.at(name)->UpdateGuarantee(0);
+            }
+        }
     } else {
-        auto& record = Impl->Records[*ptr];
-        record->MutableStats.Next()->Disabled = false;
-        Impl->AdvanceTime(now, record.get());
+        poolIt->second->Enable();
+        poolIt->second->AdvanceTime(now, Impl->SmoothPeriod, Impl->ForgetInterval);
     }
 }
 
-void TComputeScheduler::UpdatePerQueryShare(TString group, double share, TMonotonic) {
-    auto ptr = Impl->WeightsUpdater.FindOrAddParameter<double>({group, TImpl::PerQueryShare}, share);
+void TComputeScheduler::UpdatePerQueryShare(TString poolName, double share, TMonotonic) {
+    auto ptr = Impl->WeightsUpdater.FindOrAddParameter<double>({poolName, TImpl::PerQueryShare}, share);
     ptr->SetValue(share);
 }
 
@@ -969,11 +655,15 @@ void TComputeScheduler::SetCapacity(ui64 cores) {
     Impl->SumCores.SetValue(cores);
 }
 
-::NMonitoring::TDynamicCounters::TCounterPtr TComputeScheduler::GetGroupUsageCounter(TString group) const {
-    return Impl->Counters
-        ->GetKqpCounters()
-        ->GetSubgroup("NodeScheduler/Group", group)
-        ->GetCounter("Usage", true);
+NMonitoring::TDynamicCounters::TCounterPtr TComputeScheduler::GetPoolUsageCounter(TString poolName) const {
+    if (Impl->Counters) {
+        return Impl->Counters
+            ->GetKqpCounters()
+            ->GetSubgroup("NodeScheduler/Pool", poolName)
+            ->GetCounter("Usage", true);
+    }
+
+    return {};
 }
 
 
@@ -994,10 +684,9 @@ public:
         : Opts(options)
     {
         if (!Opts.Scheduler) {
-            Opts.Scheduler = std::make_shared<TComputeScheduler>();
+            Opts.Scheduler = std::make_shared<TComputeScheduler>(Opts.Counters);
         }
         Opts.Scheduler->SetForgetInterval(Opts.ForgetOverflowTimeout);
-        Opts.Scheduler->ReportCounters(Opts.Counters);
     }
 
     void Bootstrap() {
@@ -1028,7 +717,7 @@ public:
 
             hFunc(NWorkload::TEvUpdatePoolInfo, Handle);
 
-            hFunc(TEvSchedulerDeregister, Handle);
+            hFunc(TEvSchedulerUnregister, Handle);
             hFunc(TEvSchedulerNewPool, Handle);
             hFunc(TEvPingPool, Handle);
             hFunc(TEvents::TEvWakeup, Handle);
@@ -1042,9 +731,9 @@ public:
         LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::KQP_NODE, "Subscribed for config changes");
     }
 
-    void Handle(TEvSchedulerDeregister::TPtr& ev) {
+    void Handle(TEvSchedulerUnregister::TPtr& ev) {
         if (ev->Get()->SchedulerEntity) {
-            Opts.Scheduler->Deregister(ev->Get()->SchedulerEntity, TlsActivationContext->Monotonic());
+            Opts.Scheduler->Unregister(ev->Get()->SchedulerEntity, TlsActivationContext->Monotonic());
         }
     }
 
@@ -1073,7 +762,7 @@ public:
                 queryShare = 1;
             }
 
-            Opts.Scheduler->UpdateGroupShare(ev->Get()->PoolId, totalShare, TlsActivationContext->Monotonic(), resourceWeight);
+            Opts.Scheduler->UpdatePoolShare(ev->Get()->PoolId, totalShare, TlsActivationContext->Monotonic(), resourceWeight);
             Opts.Scheduler->UpdatePerQueryShare(ev->Get()->PoolId, queryShare, TlsActivationContext->Monotonic());
         } else {
             Opts.Scheduler->Disable(ev->Get()->PoolId, TlsActivationContext->Monotonic());
@@ -1103,5 +792,4 @@ IActor* CreateSchedulerActor(TSchedulerActorOptions opts) {
     return new TSchedulerActor(opts);
 }
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp::NScheduler

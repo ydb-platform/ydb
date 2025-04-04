@@ -1,99 +1,86 @@
 #pragma once
 
-#include <util/datetime/base.h>
-#include <util/system/hp_timer.h>
-
+#include <ydb/core/kqp/common/simple/kqp_event_ids.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
-
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/yql/dq/actors/compute/dq_sync_compute_actor_base.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_log.h>
 
-#include <ydb/core/kqp/common/simple/kqp_event_ids.h>
+#include <util/datetime/base.h>
+#include <util/system/hp_timer.h>
 
-namespace NKikimr {
-namespace NKqp {
+namespace NKikimr::NKqp::NScheduler {
 
-class TSchedulerEntity;
-class TSchedulerEntityHandle {
-private:
-    std::unique_ptr<TSchedulerEntity> Ptr;
+class TPool;
 
-public:
-    TSchedulerEntityHandle(TSchedulerEntity*);
+struct TSchedulerEntity {
+    explicit TSchedulerEntity(TPool* pool);
+    ~TSchedulerEntity();
 
-    TSchedulerEntityHandle();
-    TSchedulerEntityHandle(TSchedulerEntityHandle&&); 
+    TPool* const Pool;
+    i64 Weight;
+    double Vruntime = 0;
+    double Vstart;
 
-    TSchedulerEntityHandle& operator = (TSchedulerEntityHandle&&);
+    double Vcurrent;
 
-    bool Defined() const {
-        return Ptr.get() != nullptr;
-    }
+    TDuration MaxDelay;
 
-    operator bool () const {
-        return Defined();
-    }
+    static constexpr double WakeupDelay = 1.1;
+    TDuration LastExecutionTime;
 
-    TSchedulerEntity& operator*() {
-        return *Ptr;
-    }
+    TDuration OverflowToleranceTimeout = TDuration::Seconds(1);
 
-    void TrackTime(TDuration time, TMonotonic now);
-    void ReportBatchTime(TDuration time);
+    static constexpr TDuration ActivationPenalty = TDuration::MicroSeconds(10);
 
+    size_t Wakeups = 0;
+    bool IsThrottled = false;
+
+    void TrackTime(TDuration time, TMonotonic);
+    void UpdateLastExecutionTime(TDuration time);
+
+    TMaybe<TDuration> Delay(TMonotonic now, TPool* pool);
     TMaybe<TDuration> Delay(TMonotonic now);
 
     void MarkThrottled();
-    void MarkResumed();
-
-    double EstimateWeight(TMonotonic now, TDuration minTime);
-
-    void Clear();
-
-    ~TSchedulerEntityHandle();
+    void MarkResumed(); // TODO: for temporary resume - for whatever reason
+    void MarkResumed(TMonotonic now);
 };
 
 class TComputeScheduler {
 public:
-    TComputeScheduler();
+    explicit TComputeScheduler(TIntrusivePtr<TKqpCounters> counters = {});
     ~TComputeScheduler();
 
-    void ReportCounters(TIntrusivePtr<TKqpCounters>);
-
-    
     void SetCapacity(ui64 cores);
 
-    void UpdateGroupShare(TString name, double share, TMonotonic now, std::optional<double> resourceWeight);
+    void UpdatePoolShare(TString poolName, double share, TMonotonic now, std::optional<double> resourceWeight);
     void UpdatePerQueryShare(TString name, double share, TMonotonic now);
-
-    ui64 MakePerQueryGroup(TMonotonic now, double share, TString baseGroup);
-    void AddToGroup(TMonotonic now, ui64, TSchedulerEntityHandle&);
 
     void SetMaxDeviation(TDuration);
     void SetForgetInterval(TDuration);
-    ::NMonitoring::TDynamicCounters::TCounterPtr GetGroupUsageCounter(TString group) const;
+    ::NMonitoring::TDynamicCounters::TCounterPtr GetPoolUsageCounter(TString poolName) const;
 
-    TSchedulerEntityHandle Enroll(TString group, i64 weight, TMonotonic now);
+    THolder<TSchedulerEntity> Enroll(TString poolName, i64 weight, TMonotonic now);
 
     void AdvanceTime(TMonotonic now);
 
-    void Deregister(TSchedulerEntityHandle& self, TMonotonic now);
+    void Unregister(THolder<TSchedulerEntity>& entity, TMonotonic now);
 
-    bool Disabled(TString group);
-    void Disable(TString group, TMonotonic now);
+    bool Disabled(TString poolName);
+    void Disable(TString poolName, TMonotonic now);
 
 private:
     struct TImpl;
     std::unique_ptr<TImpl> Impl;
 };
 
-struct TComputeActorSchedulingOptions {
+struct TComputeActorOptions {
     TMonotonic Now;
     NActors::TActorId SchedulerActorId;
-    TSchedulerEntityHandle Handle;
+    THolder<TSchedulerEntity> Handle;
     TComputeScheduler* Scheduler;
-    TString Group = "";
+    TString Pool = "";
     double Weight = 1;
     bool NoThrottle = true;
     TIntrusivePtr<TKqpCounters> Counters = nullptr;
@@ -101,16 +88,16 @@ struct TComputeActorSchedulingOptions {
 
 struct TKqpComputeSchedulerEvents {
     enum EKqpComputeSchedulerEvents {
-        EvDeregister = EventSpaceBegin(TKikimrEvents::ES_KQP) + 400,
+        EvUnregister = EventSpaceBegin(TKikimrEvents::ES_KQP) + 400,
         EvNewPool,
         EvPingPool,
     };
 };
 
-struct TEvSchedulerDeregister : public TEventLocal<TEvSchedulerDeregister, TKqpComputeSchedulerEvents::EvDeregister> {
-    TSchedulerEntityHandle SchedulerEntity;
+struct TEvSchedulerUnregister : public TEventLocal<TEvSchedulerUnregister, TKqpComputeSchedulerEvents::EvUnregister> {
+    THolder<TSchedulerEntity> SchedulerEntity;
 
-    TEvSchedulerDeregister(TSchedulerEntityHandle entity)
+    TEvSchedulerUnregister(THolder<TSchedulerEntity> entity)
         : SchedulerEntity(std::move(entity))
     {
     }
@@ -137,19 +124,19 @@ private:
 
 public:
     template<typename... TArgs>
-    TSchedulableComputeActorBase(TComputeActorSchedulingOptions options, TArgs&&... args)
+    TSchedulableComputeActorBase(TComputeActorOptions options, TArgs&&... args)
         : TBase(std::forward<TArgs>(args)...)
         , SelfHandle(std::move(options.Handle))
         , SchedulerActorId(options.SchedulerActorId)
         , NoThrottle(options.NoThrottle)
         , Counters(options.Counters)
-        , Group(options.Group)
+        , Pool(options.Pool)
         , Weight(options.Weight)
     {
         if (!NoThrottle) {
             Y_ABORT_UNLESS(Counters);
             Y_ABORT_UNLESS(SelfHandle);
-            GroupUsage = options.Scheduler->GetGroupUsageCounter(options.Group);
+            PoolUsage = options.Scheduler->GetPoolUsageCounter(options.Pool);
         } else {
             Y_ABORT_UNLESS(!SelfHandle);
         }
@@ -159,7 +146,6 @@ public:
 
     TMonotonic Now() {
         return TMonotonic::Now();
-        //return TlsActivationContext->Monotonic();
     }
 
     void HandleWakeup(NActors::TEvents::TEvWakeup::TPtr& ev) {
@@ -174,7 +160,7 @@ public:
 
     STFUNC(BaseStateFuncBody) {
         AccountActorSystemStats(TlsActivationContext->Monotonic());
-        // we assume that exception handling is done in parents/descendents
+        // we assume that exception handling is done in parents/descendants
         switch (ev->GetTypeRewrite()) {
             hFunc(NActors::TEvents::TEvWakeup, TSchedulableComputeActorBase<TDerived>::HandleWakeup);
             default:
@@ -182,8 +168,9 @@ public:
         }
     }
 
+protected:
     void DoBoostrap() {
-        if (!SelfHandle.Defined()) {
+        if (!SelfHandle) {
             return;
         }
 
@@ -198,18 +185,21 @@ public:
 
 private:
     void ReportThrottledTime(TMonotonic now) {
-        if (Counters && Throttled) {
+        if (!Throttled) {
+            return;
+        }
+
+        if (Counters) {
             Counters->SchedulerThrottled->Add((now - *Throttled).MicroSeconds());
         }
-        if (Throttled) {
-            SelfHandle.MarkResumed();
-            Throttled.Clear();
-        }
+
+        SelfHandle->MarkResumed(now);
+        Throttled.Clear();
     }
 
 protected:
     void DoExecuteImpl() override {
-        if (!SelfHandle.Defined()) {
+        if (!SelfHandle) {
             if (NoThrottle) {
                 return TBase::DoExecuteImpl();
             } else {
@@ -234,9 +224,9 @@ protected:
                 return;
             }
             TrackedWork += passed;
-            SelfHandle.ReportBatchTime(passed);
-            SelfHandle.TrackTime(passed, now);
-            GroupUsage->Add(passed.MicroSeconds());
+            SelfHandle->UpdateLastExecutionTime(passed);
+            SelfHandle->TrackTime(passed, now);
+            PoolUsage->Add(passed.MicroSeconds());
             Counters->ComputeActorExecutions->Collect(passed.MicroSeconds());
         }
         if (delay) {
@@ -247,7 +237,7 @@ protected:
 
         if (!executed) {
             if (!Throttled) {
-                SelfHandle.MarkThrottled();
+                SelfHandle->MarkThrottled();
                 Throttled = now;
             } else {
                 Counters->ThrottledActorsSpuriousActivations->Inc();
@@ -257,7 +247,7 @@ protected:
     }
 
     void AccountActorSystemStats(NMonotonic::TMonotonic now) {
-        if (!SelfHandle.Defined()) {
+        if (!SelfHandle) {
             return;
         }
 
@@ -272,13 +262,13 @@ protected:
             toAccount -= minTime;
         }
 
-        GroupUsage->Add(toAccount.MicroSeconds());
-        SelfHandle.TrackTime(toAccount, now);
+        PoolUsage->Add(toAccount.MicroSeconds());
+        SelfHandle->TrackTime(toAccount, now);
         OldActivationStats = newStats;
     }
 
     TMaybe<TDuration> CalcDelay(NMonotonic::TMonotonic now) {
-        auto result = SelfHandle.Delay(now);
+        auto result = SelfHandle->Delay(now);
         Counters->ComputeActorDelays->Collect(result.GetOrElse(TDuration::Zero()).MicroSeconds());
         if (NoThrottle || !result.Defined()) {
             return {};
@@ -292,16 +282,16 @@ protected:
         if (SelfHandle) {
             auto now = Now();
             if (Throttled) {
-                SelfHandle.MarkResumed();
+                SelfHandle->MarkResumed(now);
             }
             if (ExecutionTimer) {
                 TDuration passed = TDuration::MicroSeconds(ExecutionTimer->Passed() * SecToUsec);
-                SelfHandle.TrackTime(passed, now);
-                GroupUsage->Add(passed.MicroSeconds());
+                SelfHandle->TrackTime(passed, now);
+                PoolUsage->Add(passed.MicroSeconds());
             }
         }
         if (SelfHandle) {
-            auto finishEv = MakeHolder<TEvSchedulerDeregister>(std::move(SelfHandle));
+            auto finishEv = MakeHolder<TEvSchedulerUnregister>(std::move(SelfHandle));
             this->Send(SchedulerActorId, finishEv.Release());
         }
         TBase::PassAway();
@@ -311,7 +301,7 @@ private:
     TMaybe<THPTimer> ExecutionTimer;
     TDuration TrackedWork = TDuration::Zero();
     TMaybe<TMonotonic> Throttled;
-    TSchedulerEntityHandle SelfHandle;
+    THolder<TSchedulerEntity> SelfHandle;
     NActors::TActorId SchedulerActorId;
     bool NoThrottle;
     bool Finished = false;
@@ -319,9 +309,9 @@ private:
     std::optional<ui64> OldActivationStats;
 
     TIntrusivePtr<TKqpCounters> Counters;
-    ::NMonitoring::TDynamicCounters::TCounterPtr GroupUsage;
+    ::NMonitoring::TDynamicCounters::TCounterPtr PoolUsage;
 
-    TString Group;
+    TString Pool;
     double Weight;
 };
 
@@ -335,5 +325,4 @@ struct TSchedulerActorOptions {
 
 IActor* CreateSchedulerActor(TSchedulerActorOptions);
 
-} // namespace NKqp
-} // namespace NKikimR
+} // namespace NKikimr::NKqp::NScheduler

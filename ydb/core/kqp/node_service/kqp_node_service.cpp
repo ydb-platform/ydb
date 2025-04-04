@@ -15,7 +15,7 @@
 #include <ydb/core/kqp/runtime/kqp_read_actor.h>
 #include <ydb/core/kqp/runtime/kqp_read_iterator_common.h>
 #include <ydb/core/kqp/runtime/kqp_write_actor_settings.h>
-#include <ydb/core/kqp/runtime/kqp_compute_scheduler.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
@@ -113,7 +113,7 @@ public:
         Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup());
         Become(&TKqpNodeService::WorkState);
 
-        Scheduler = std::make_shared<TComputeScheduler>();
+        Scheduler = std::make_shared<NScheduler::TComputeScheduler>(SchedulerOptions.Counters);
         SchedulerOptions.Scheduler = Scheduler;
         SchedulerActorId = RegisterWithSameMailbox(CreateSchedulerActor(SchedulerOptions));
     }
@@ -206,7 +206,7 @@ private:
 
         if (SchedulerOptions.Scheduler->Disabled(schedulerGroup)) {
             auto share = msg.GetPoolMaxCpuShare();
-            if (share <= 0 && (msg.HasQueryCpuShare() || msg.HasResourceWeight())) {
+            if (share <= 0 && msg.HasResourceWeight()) {
                 share = 1.0;
             }
             std::optional<double> resourceWeight;
@@ -215,16 +215,11 @@ private:
             }
 
             if (share > 0) {
-                Scheduler->UpdateGroupShare(schedulerGroup, share, schedulerNow, resourceWeight);
-                Send(SchedulerActorId, new TEvSchedulerNewPool(msg.GetDatabase(), schedulerGroup));
+                Scheduler->UpdatePoolShare(schedulerGroup, share, schedulerNow, resourceWeight);
+                Send(SchedulerActorId, new NScheduler::TEvSchedulerNewPool(msg.GetDatabase(), schedulerGroup));
             } else {
                 schedulerGroup = "";
             }
-        }
-
-        std::optional<ui64> querySchedulerGroup;
-        if (msg.HasQueryCpuShare() && schedulerGroup) {
-            querySchedulerGroup = Scheduler->MakePerQueryGroup(schedulerNow, msg.GetQueryCpuShare(), schedulerGroup);
         }
 
         // start compute actors
@@ -240,21 +235,18 @@ private:
 
         const ui32 tasksCount = msg.GetTasks().size();
         for (auto& dqTask: *msg.MutableTasks()) {
-            TComputeActorSchedulingOptions schedulingTaskOptions {
+            NScheduler::TComputeActorOptions schedulingTaskOptions {
                 .Now = schedulerNow,
                 .SchedulerActorId = SchedulerActorId,
                 .Scheduler = Scheduler.get(),
-                .Group = schedulerGroup,
+                .Pool = schedulerGroup,
                 .Weight = 1,
                 .NoThrottle = schedulerGroup.empty(),
                 .Counters = Counters
             };
 
             if (!schedulingTaskOptions.NoThrottle) {
-                schedulingTaskOptions.Handle = SchedulerOptions.Scheduler->Enroll(schedulingTaskOptions.Group, schedulingTaskOptions.Weight, schedulingTaskOptions.Now);
-                if (querySchedulerGroup) {
-                    Scheduler->AddToGroup(schedulerNow, *querySchedulerGroup, schedulingTaskOptions.Handle);
-                }
+                schedulingTaskOptions.Handle = SchedulerOptions.Scheduler->Enroll(schedulingTaskOptions.Pool, schedulingTaskOptions.Weight, schedulingTaskOptions.Now);
             }
 
             NComputeActor::IKqpNodeComputeActorFactory::TCreateArgs createArgs{
@@ -538,8 +530,8 @@ private:
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
     const std::optional<TKqpFederatedQuerySetup> FederatedQuerySetup;
 
-    std::shared_ptr<TComputeScheduler> Scheduler;
-    TSchedulerActorOptions SchedulerOptions;
+    std::shared_ptr<NScheduler::TComputeScheduler> Scheduler;
+    NScheduler::TSchedulerActorOptions SchedulerOptions;
     TActorId SchedulerActorId;
 
     //state sharded by TxId

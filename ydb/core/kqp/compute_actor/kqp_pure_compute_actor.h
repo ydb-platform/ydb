@@ -8,7 +8,7 @@
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/runtime/kqp_compute.h>
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
-#include <ydb/core/kqp/runtime/kqp_compute_scheduler.h>
+#include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler.h>
 #include <ydb/core/sys_view/scan.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
@@ -16,7 +16,7 @@
 namespace NKikimr {
 namespace NKqp {
 
-class TKqpComputeActor : public TSchedulableComputeActorBase<TKqpComputeActor> {
+class TKqpComputeActor : public NScheduler::TSchedulableComputeActorBase<TKqpComputeActor> {
     using TBase = TSchedulableComputeActorBase<TKqpComputeActor>;
 
 public:
@@ -29,7 +29,7 @@ public:
         const TComputeRuntimeSettings& settings, const TComputeMemoryLimits& memoryLimits,
         NWilson::TTraceId traceId, TIntrusivePtr<NActors::TProtoArenaHolder> arena,
         const std::optional<TKqpFederatedQuerySetup>& federatedQuerySetup, const TGUCSettings::TPtr& GUCSettings,
-        TComputeActorSchedulingOptions, NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
+        NScheduler::TComputeActorOptions, NKikimrConfig::TTableServiceConfig::EBlockTrackingMode mode,
         TIntrusiveConstPtr<NACLib::TUserToken> userToken,
         const TString& database);
 

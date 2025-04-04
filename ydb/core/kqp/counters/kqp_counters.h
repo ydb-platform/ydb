@@ -442,7 +442,7 @@ public:
     NMonitoring::THistogramPtr ComputeActorDelays;
     ::NMonitoring::TDynamicCounters::TCounterPtr ThrottledActorsSpuriousActivations;
     NMonitoring::THistogramPtr SchedulerDelays;
-    NMonitoring::TDynamicCounters::TCounterPtr SchedulerGroupsCount;
+    NMonitoring::TDynamicCounters::TCounterPtr SchedulerPoolsCount;
     NMonitoring::TDynamicCounters::TCounterPtr SchedulerValuesCount;
 
     // Sequences counters

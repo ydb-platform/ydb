@@ -1,4 +1,5 @@
 #include "portions.h"
+
 #include <ydb/core/formats/arrow/switch/switch_type.h>
 #include <ydb/core/tx/columnshard/blobs_action/common/const.h>
 #include <ydb/core/tx/columnshard/engines/reader/abstract/read_context.h>
@@ -60,11 +61,11 @@ std::vector<std::pair<TString, NKikimr::NScheme::TTypeInfo>> TReadStatsMetadata:
     return GetColumns(TStatsIterator::StatsSchema, TStatsIterator::StatsSchema.KeyColumns);
 }
 
-std::shared_ptr<NAbstract::TReadStatsMetadata> TConstructor::BuildMetadata(const NColumnShard::TColumnShard* self, const TReadDescription& read) const {
+std::shared_ptr<NAbstract::TReadStatsMetadata> TConstructor::BuildMetadata(
+    const NColumnShard::TColumnShard* self, const TReadDescription& read) const {
     auto* index = self->GetIndexOptional();
-    return std::make_shared<TReadStatsMetadata>(index ? index->CopyVersionedIndexPtr() : nullptr, self->TabletID(),
-        IsReverse ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC,
-        read.GetProgram(), index ? index->GetVersionedIndex().GetLastSchema() : nullptr, read.GetSnapshot());
+    return std::make_shared<TReadStatsMetadata>(index ? index->CopyVersionedIndexPtr() : nullptr, self->TabletID(), Sorting, read.GetProgram(),
+        index ? index->GetVersionedIndex().GetLastSchema() : nullptr, read.GetSnapshot());
 }
 
-}
+}   // namespace NKikimr::NOlap::NReader::NSysView::NPortions

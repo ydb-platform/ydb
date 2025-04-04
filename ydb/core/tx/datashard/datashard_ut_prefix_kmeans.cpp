@@ -61,7 +61,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
             }
             rec.SetSeed(1337);
 
-            rec.SetUpload(NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_POSTING);
+            rec.SetUpload(NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING);
 
             rec.SetNeedsRounds(3);
 
@@ -86,7 +86,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
 
     static std::tuple<TString, TString, TString> DoPrefixKMeans(
         Tests::TServer::TPtr server, TActorId sender, NTableIndex::TClusterId parent, ui64 seed, ui64 k,
-        NKikimrTxDataShard::TEvLocalKMeansRequest::EState upload, VectorIndexSettings::VectorType type,
+        NKikimrTxDataShard::EKMeansState upload, VectorIndexSettings::VectorType type,
         VectorIndexSettings::Metric metric, ui32 maxBatchRows)
     {
         auto id = sId.fetch_add(1, std::memory_order_relaxed);
@@ -363,7 +363,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
         for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
         for (ui32 maxBatchRows : {0, 1, 4, 5, 6, 50000}) {
             auto [prefix, level, posting] = DoPrefixKMeans(server, sender, 40, seed, k,
-                NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_POSTING,
+                NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING,
                 VectorIndexSettings::VECTOR_TYPE_UINT8, distance, maxBatchRows);
             UNIT_ASSERT_VALUES_EQUAL(prefix,
                 "user = user-1, __ydb_id = 40\n"
@@ -397,7 +397,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
         for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
         for (ui32 maxBatchRows : {0, 1, 4, 5, 6, 50000}) {
             auto [prefix, level, posting] = DoPrefixKMeans(server, sender, 40, seed, k,
-                NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_POSTING,
+                NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING,
                 VectorIndexSettings::VECTOR_TYPE_UINT8, distance, maxBatchRows);
             UNIT_ASSERT_VALUES_EQUAL(prefix,
                 "user = user-1, __ydb_id = 40\n"
@@ -430,7 +430,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
         for (auto similarity : {VectorIndexSettings::SIMILARITY_INNER_PRODUCT, VectorIndexSettings::SIMILARITY_COSINE, VectorIndexSettings::DISTANCE_COSINE}) {
         for (ui32 maxBatchRows : {0, 1, 4, 5, 6, 50000}) {
             auto [prefix, level, posting] = DoPrefixKMeans(server, sender, 40, seed, k,
-                NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_POSTING,
+                NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_POSTING,
                 VectorIndexSettings::VECTOR_TYPE_UINT8, similarity, maxBatchRows);
             UNIT_ASSERT_VALUES_EQUAL(prefix,
                 "user = user-1, __ydb_id = 40\n"
@@ -516,7 +516,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
         for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
         for (ui32 maxBatchRows : {0, 1, 4, 5, 6, 50000}) {
             auto [prefix, level, posting] = DoPrefixKMeans(server, sender, 40, seed, k,
-                NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_BUILD,
+                NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD,
                 VectorIndexSettings::VECTOR_TYPE_UINT8, distance, maxBatchRows);
             UNIT_ASSERT_VALUES_EQUAL(prefix,
                 "user = user-1, __ydb_id = 40\n"
@@ -550,7 +550,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
         for (auto distance : {VectorIndexSettings::DISTANCE_MANHATTAN, VectorIndexSettings::DISTANCE_EUCLIDEAN}) {
         for (ui32 maxBatchRows : {0, 1, 4, 5, 6, 50000}) {
             auto [prefix, level, posting] = DoPrefixKMeans(server, sender, 40, seed, k,
-                NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_BUILD,
+                NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD,
                 VectorIndexSettings::VECTOR_TYPE_UINT8, distance, maxBatchRows);
             UNIT_ASSERT_VALUES_EQUAL(prefix,
                 "user = user-1, __ydb_id = 40\n"
@@ -583,7 +583,7 @@ Y_UNIT_TEST_SUITE (TTxDataShardPrefixKMeansScan) {
         for (auto similarity : {VectorIndexSettings::SIMILARITY_INNER_PRODUCT, VectorIndexSettings::SIMILARITY_COSINE, VectorIndexSettings::DISTANCE_COSINE}) {
         for (ui32 maxBatchRows : {0, 1, 4, 5, 6, 50000}) {
             auto [prefix, level, posting] = DoPrefixKMeans(server, sender, 40, seed, k,
-                NKikimrTxDataShard::TEvLocalKMeansRequest::UPLOAD_BUILD_TO_BUILD,
+                NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD,
                 VectorIndexSettings::VECTOR_TYPE_UINT8, similarity, maxBatchRows);
             UNIT_ASSERT_VALUES_EQUAL(prefix,
                 "user = user-1, __ydb_id = 40\n"

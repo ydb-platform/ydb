@@ -33,11 +33,7 @@ public:
 // Holds all metadata that is needed to perform read/scan
 class TReadMetadataBase {
 public:
-    enum class ESorting {
-        NONE = 0 /* "not_sorted" */,
-        ASC /* "ascending" */,
-        DESC /* "descending" */,
-    };
+    using ESorting = ERequestSorting;
 
 private:
     YDB_ACCESSOR_DEF(TString, ScanIdentifier);
@@ -125,7 +121,6 @@ public:
 
     void SetPKRangesFilter(const std::shared_ptr<TPKRangesFilter>& value) {
         AFL_VERIFY(value);
-        Y_ABORT_UNLESS(IsSorted() && value->IsReverse() == IsDescSorted());
         Y_ABORT_UNLESS(!PKRangesFilter);
         PKRangesFilter = value;
         if (ResultIndexSchema) {

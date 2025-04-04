@@ -43,4 +43,14 @@ NKikimr::TConclusion<std::shared_ptr<TReadMetadataBase>> TIndexScannerConstructo
     return static_pointer_cast<TReadMetadataBase>(readMetadata);
 }
 
+std::shared_ptr<NKikimr::NOlap::IScanCursor> TIndexScannerConstructor::DoBuildCursor() const {
+    switch (Sorting) {
+        case ERequestSorting::ASC:
+        case ERequestSorting::DESC:
+            return std::make_shared<TSimpleScanCursor>();
+        case ERequestSorting::NONE:
+            return std::make_shared<TNotSortedSimpleScanCursor>();
+    }
+}
+
 }   // namespace NKikimr::NOlap::NReader::NSimple

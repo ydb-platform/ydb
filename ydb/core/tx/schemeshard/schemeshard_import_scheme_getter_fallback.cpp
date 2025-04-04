@@ -1,4 +1,4 @@
-#include "schemeshard_import_scheme_getter.h"
+#include "schemeshard_import_getters.h"
 #include "schemeshard_private.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>

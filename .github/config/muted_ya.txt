@@ -34,7 +34,6 @@ ydb/core/kqp/ut/query KqpLimits.TooBigColumn+useSink
 ydb/core/kqp/ut/query KqpStats.SysViewClientLost
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/scheme KqpScheme.AlterAsyncReplication
-ydb/core/kqp/ut/scheme KqpScheme.AlterDatabaseChangeOwner+EnableAlterDatabase
 ydb/core/kqp/ut/scheme KqpScheme.AlterTransfer
 ydb/core/kqp/ut/scheme KqpScheme.AlterTransfer_QueryService
 ydb/core/kqp/ut/scheme [*/*] chunk chunk
@@ -133,13 +132,11 @@ ydb/tests/olap/scenario test_insert.py.TestInsert.test[read_data_during_bulk_ups
 ydb/tests/olap/scenario test_read_update_write_load.py.TestReadUpdateWriteLoad.test[read_update_write_load]
 ydb/tests/olap/ttl_tiering [data_migration_when_alter_ttl.py] chunk chunk
 ydb/tests/olap/ttl_tiering [ttl_delete_s3.py] chunk chunk
-ydb/tests/olap/ttl_tiering data_correctness.py.TestDataCorrectness.test
 ydb/tests/olap/ttl_tiering data_migration_when_alter_ttl.py.TestDataMigrationWhenAlterTtl.test
 ydb/tests/olap/ttl_tiering sole chunk chunk
 ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_data_unchanged_after_ttl_change
 ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_delete_s3_tiering
 ydb/tests/olap/ttl_tiering ttl_delete_s3.py.TestDeleteS3Ttl.test_ttl_delete
-ydb/tests/olap/ttl_tiering unstable_connection.py.TestUnstableConnection.test
 ydb/tests/postgres_integrations/go-libpq [docker_wrapper_test.py] chunk chunk
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[Test64BitErrorChecking]
 ydb/tests/postgres_integrations/go-libpq docker_wrapper_test.py.test_pg_generated[TestArrayValueBackend]

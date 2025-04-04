@@ -1,6 +1,7 @@
 #include "kqp_scan_fetcher_actor.h"
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
+#include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/tx/datashard/range_ops.h>
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
@@ -462,7 +463,15 @@ std::unique_ptr<NKikimr::TEvDataShard::TEvKqpScan> TKqpScanFetcherActor::BuildEv
 
     ev->Record.SetGeneration(gen);
 
-    ev->Record.SetReverse(Meta.GetReverse());
+    if (Meta.HasOptionalSorting()) {
+        if (Meta.GetOptionalSorting() == (ui32)ERequestSorting::DESC) {
+            ev->Record.SetReverse(true);
+        } else if (Meta.GetOptionalSorting() == (ui32)ERequestSorting::ASC) {
+            ev->Record.SetReverse(false);
+        }
+    } else {
+        ev->Record.SetReverse(Meta.GetReverse());
+    }
     ev->Record.SetItemsLimit(Meta.GetItemsLimit());
 
     if (Meta.GroupByColumnNamesSize()) {

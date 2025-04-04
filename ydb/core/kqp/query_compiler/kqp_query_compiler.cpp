@@ -359,7 +359,7 @@ void FillReadRange(const TKqpWideReadTable& read, const TKikimrTableMetadata& ta
         }
     }
 
-    readProto.SetReverse(settings.Reverse);
+    readProto.SetReverse(settings.IsReverse());
 }
 
 template <typename TReader, typename TProto>
@@ -395,13 +395,13 @@ void FillReadRanges(const TReader& read, const TKikimrTableMetadata&, TProto& re
     }
 
     if constexpr (std::is_same_v<TProto, NKqpProto::TKqpPhyOpReadOlapRanges>) {
-        readProto.SetSorted(settings.Sorted);
+        readProto.SetSorted(settings.IsSorted());
         if (settings.TabletId) {
             readProto.SetTabletId(*settings.TabletId);
         }
     }
 
-    readProto.SetReverse(settings.Reverse);
+    readProto.SetReverse(settings.IsReverse());
 }
 
 template <typename TEffectCallable, typename TEffectProto>
@@ -1032,8 +1032,8 @@ private:
             }
             auto readSettings = TKqpReadTableSettings::Parse(settings.Settings().Cast());
 
-            readProto.SetReverse(readSettings.Reverse);
-            readProto.SetSorted(readSettings.Sorted);
+            readProto.SetReverse(readSettings.IsReverse());
+            readProto.SetSorted(readSettings.IsSorted());
             YQL_ENSURE(readSettings.SkipNullKeys.empty());
 
             if (readSettings.SequentialInFlight) {

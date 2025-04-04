@@ -38,7 +38,16 @@ void TTxScan::Complete(const TActorContext& ctx) {
     if (snapshot.IsZero()) {
         snapshot = Self->GetLastTxSnapshot();
     }
-    TScannerConstructorContext context(snapshot, request.HasItemsLimit() ? request.GetItemsLimit() : 0, request.GetReverse());
+    const TReadMetadataBase::ESorting sorting =
+        [&]() {
+            if (request.HasReverse()) {
+                return request.GetReverse() ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC;
+            } else {
+                return TReadMetadataBase::ESorting::NONE;
+            }
+    }();
+
+    TScannerConstructorContext context(snapshot, request.HasItemsLimit() ? request.GetItemsLimit() : 0, sorting);
     const auto scanId = request.GetScanId();
     const ui64 txId = request.GetTxId();
     const ui32 scanGen = request.GetGeneration();
@@ -55,7 +64,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
     {
         LOG_S_DEBUG("TTxScan prepare txId: " << txId << " scanId: " << scanId << " at tablet " << Self->TabletID());
 
-        TReadDescription read(snapshot, request.GetReverse());
+        TReadDescription read(snapshot, sorting);
         read.TxId = txId;
         if (request.HasLockTxId()) {
             read.LockId = request.GetLockTxId();
@@ -95,7 +104,7 @@ void TTxScan::Complete(const TActorContext& ctx) {
         if (!scannerConstructor) {
             return SendError("cannot build scanner", AppDataVerified().ColumnShardConfig.GetReaderClassName(), ctx);
         }
-        {
+        if (request.HasScanCursor()) {
             auto cursorConclusion = scannerConstructor->BuildCursorFromProto(request.GetScanCursor());
             if (cursorConclusion.IsFail()) {
                 return SendError("cannot build scanner cursor", cursorConclusion.GetErrorMessage(), ctx);
@@ -110,28 +119,23 @@ void TTxScan::Complete(const TActorContext& ctx) {
         if (!parseResult) {
             return SendError("cannot parse program", parseResult.GetErrorMessage(), ctx);
         }
-
-        if (!request.RangesSize()) {
+        {
+            if (request.RangesSize()) {
+                auto ydbKey = scannerConstructor->GetPrimaryKeyScheme(Self);
+                {
+                    auto filterConclusion = NOlap::TPKRangesFilter::BuildFromProto(request, ydbKey);
+                    if (filterConclusion.IsFail()) {
+                        return SendError("cannot build ranges filter", filterConclusion.GetErrorMessage(), ctx);
+                    }
+                    read.PKRangesFilter = std::make_shared<NOlap::TPKRangesFilter>(filterConclusion.DetachResult());
+                }
+            }
             auto newRange = scannerConstructor->BuildReadMetadata(Self, read);
             if (newRange.IsSuccess()) {
                 readMetadataRange = TValidator::CheckNotNull(newRange.DetachResult());
             } else {
                 return SendError("cannot build metadata withno ranges", newRange.GetErrorMessage(), ctx);
             }
-        } else {
-            auto ydbKey = scannerConstructor->GetPrimaryKeyScheme(Self);
-            {
-                auto filterConclusion = NOlap::TPKRangesFilter::BuildFromProto(request, request.GetReverse(), ydbKey);
-                if (filterConclusion.IsFail()) {
-                    return SendError("cannot build ranges filter", filterConclusion.GetErrorMessage(), ctx);
-                }
-                read.PKRangesFilter = std::make_shared<NOlap::TPKRangesFilter>(filterConclusion.DetachResult());
-            }
-            auto newRange = scannerConstructor->BuildReadMetadata(Self, read);
-            if (!newRange) {
-                return SendError("cannot build metadata", newRange.GetErrorMessage(), ctx);
-            }
-            readMetadataRange = TValidator::CheckNotNull(newRange.DetachResult());
         }
     }
     AFL_VERIFY(readMetadataRange);

@@ -985,7 +985,7 @@
         "error": {
             "issues": [
                 {
-                    "message": "Discovery error: /Root/dedicated_db/TopicNotExists: SCHEME_ERROR ({ <main>: Error: Path not found })",
+                    "message": "Discovery error: /Root/dedicated_db/TableNotExists: SCHEME_ERROR ({ <main>: Error: Path not found })",
                     "severity": 1
                 }
             ]
@@ -1045,9 +1045,9 @@
                     "subject": "DATABASE-ADMINS"
                 }
             ],
-            "name": "TestTransfer",
+            "name": "TestAsyncReplication",
             "owner": "root@builtin",
-            "type": "TRANSFER"
+            "type": "REPLICATION"
         }
     },
     "test.test_viewer_acl": {

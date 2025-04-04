@@ -20,13 +20,15 @@ namespace NKikimr::NBlobDepot {
             struct ConfigProtobuf : Column<2, NScheme::NTypeIds::String> {};
             struct DecommitState : Column<3, NScheme::NTypeIds::Uint32> { using Type = EDecommitState; static constexpr Type Default = EDecommitState::Default; };
             struct AssimilatorState : Column<4, NScheme::NTypeIds::String> {};
+            struct PerGenerationCounter : Column<5, NScheme::NTypeIds::Uint32> {};
 
             using TKey = TableKey<Key>;
             using TColumns = TableColumns<
                 Key,
                 ConfigProtobuf,
                 DecommitState,
-                AssimilatorState
+                AssimilatorState,
+                PerGenerationCounter
             >;
         };
 

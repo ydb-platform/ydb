@@ -143,10 +143,20 @@ namespace NKikimr {
                 ReplyError(NKikimrProto::RACE, "group generation mismatch", ev, ctx, TAppData::TimeProvider->Now());
             } else if (Config->BaseInfo.DonorMode) {
                 ReplyError(NKikimrProto::ERROR, "disk is in donor mode", ev, ctx, TAppData::TimeProvider->Now());
-            } else if (BlockWrites(GInfo->DecommitStatus)) {
-                ReplyError(NKikimrProto::ERROR, "group is being decommitted", ev, ctx, TAppData::TimeProvider->Now());
             } else if (Config->BaseInfo.ReadOnly) {
                 ReplyError(NKikimrProto::ERROR, "disk is in readonly mode", ev, ctx, TAppData::TimeProvider->Now());
+            } else if (BlockWrites(GInfo->DecommitStatus)) {
+                if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvVCollectGarbage>) {
+                    if (const auto& r = ev->Get()->Record; r.GetHard() && r.GetRecordGeneration() == Max<ui32>()) {
+                        return true; // part of an assimilation process
+                    }
+                }
+                if constexpr (std::is_same_v<TEvent, TEvBlobStorage::TEvVPut>) {
+                    if (ev->Get()->RewriteBlob) {
+                        return true; // part of an defragmentation process
+                    }
+                }
+                ReplyError(NKikimrProto::ERROR, "group is being decommitted", ev, ctx, TAppData::TimeProvider->Now());
             } else {
                 return true;
             }

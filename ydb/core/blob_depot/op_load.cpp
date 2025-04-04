@@ -38,6 +38,9 @@ namespace NKikimr::NBlobDepot {
                         if (table.HaveValue<Schema::Config::AssimilatorState>()) {
                             Self->AssimilatorState.emplace(table.GetValue<Schema::Config::AssimilatorState>());
                         }
+                        if (table.HaveValue<Schema::Config::PerGenerationCounter>()) {
+                            Self->PerGenerationCounter = table.GetValue<Schema::Config::PerGenerationCounter>();
+                        }
                     }
                 }
 

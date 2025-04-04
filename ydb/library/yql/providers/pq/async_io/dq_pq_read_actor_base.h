@@ -11,10 +11,9 @@ class TDqPqReadActorBase : public IDqComputeActorAsyncInput {
     
 public:
     using TPartitionKey = ::NPq::TPartitionKey;
-    using TPartitionKeyHash = ::NPq::TPartitionKeyHash;
 
     const ui64 InputIndex;
-    THashMap<TPartitionKey, ui64, TPartitionKeyHash> PartitionToOffset; // {cluster, partition} -> offset of next event.
+    THashMap<TPartitionKey, ui64> PartitionToOffset; // {cluster, partition} -> offset of next event.
     const TTxId TxId;
     NPq::NProto::TDqPqTopicSource SourceParams;
     TDqAsyncStats IngressStats;

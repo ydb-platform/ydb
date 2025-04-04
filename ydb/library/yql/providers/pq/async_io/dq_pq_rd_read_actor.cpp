@@ -238,7 +238,6 @@ private:
     // Set on both Parent (cumulative) and Childern (separate)
 
     using TPartitionKey = ::NPq::TPartitionKey;
-    using TPartitionKeyHash = ::NPq::TPartitionKeyHash;
     THashMap<ui64, ui64> NextOffsetFromRD;
     // Set on Children
     struct TClusterState {

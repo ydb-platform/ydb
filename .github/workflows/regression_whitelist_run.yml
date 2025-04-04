@@ -11,7 +11,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        branch: ${{ github.event_name == 'workflow_dispatch' ? github.ref_name : fromJSON('["main", "stable-25-1", "stable-25-1-1"]') }}
+        # Используем github.ref для launch вручную, или устанавливаем статический набор веток для запуска по расписанию
+        branch: ${{ fromJSON(format('["{0}"]', github.event_name == 'workflow_dispatch' ? github.ref : 'main, stable-25-1, stable-25-1-1').replace(', ', '","')) }}
         build_preset: ["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]
     steps:
       - name: Run tests

@@ -16,6 +16,22 @@ NYql::NDqProto::EDqStatsMode GetDqStatsModeShard(Ydb::Table::QueryStatsCollectio
 bool CollectFullStats(Ydb::Table::QueryStatsCollection::Mode statsMode);
 bool CollectProfileStats(Ydb::Table::QueryStatsCollection::Mode statsMode);
 
+struct TMinStats {
+    std::vector<ui64> Values;
+    ui64 MinValue = 0;
+
+    void Resize(ui32 count);
+    void Set(ui32 index, ui64 value);
+};
+
+struct TMaxStats {
+    std::vector<ui64> Values;
+    ui64 MaxValue = 0;
+
+    void Resize(ui32 count);
+    void Set(ui32 index, ui64 value);
+};
+
 struct TTimeSeriesStats {
     std::vector<ui64> Values;
     ui32 HistorySampleCount = 0;
@@ -200,6 +216,8 @@ struct TStageExecutionStats {
     std::vector<ui64> DurationUs;
     TTimeSeriesStats WaitInputTimeUs;
     TTimeSeriesStats WaitOutputTimeUs;
+    TMinStats CurrentWaitInputTimeUs;
+    TMinStats CurrentWaitOutputTimeUs;
 
     TTimeSeriesStats SpillingComputeBytes;
     TTimeSeriesStats SpillingChannelBytes;
@@ -219,9 +237,11 @@ struct TStageExecutionStats {
     TTimeSeriesStats MaxMemoryUsage;
 
     ui32 HistorySampleCount = 0;
-    ui32 TaskCount = 0;
+    ui32 TaskCount = 0; // rounded to 4 value of Task2Index.size(), which is actual
     std::vector<bool> Finished;
     ui32 FinishedCount = 0;
+    std::vector<TStageExecutionStats*> InputStages;
+    std::vector<TStageExecutionStats*> OutputStages;
 
     void Resize(ui32 taskCount);
     ui32 EstimateMem() {
@@ -235,6 +255,8 @@ struct TStageExecutionStats {
     void ExportHistory(ui64 baseTimeMs, NYql::NDqProto::TDqStageStats& stageStats);
     ui64 UpdateAsyncStats(ui32 index, TAsyncStats& aggrAsyncStats, const NYql::NDqProto::TDqAsyncBufferStats& asyncStats);
     ui64 UpdateStats(const NYql::NDqProto::TDqTaskStats& taskStats, NYql::NDqProto::EComputeState state, ui64 maxMemoryUsage, ui64 durationUs);
+    bool IsDeadlocked(ui64 deadline);
+    bool IsFinished();
 };
 
 struct TExternalPartitionStat {
@@ -274,6 +296,7 @@ public:
     const Ydb::Table::QueryStatsCollection::Mode StatsMode;
     const TKqpTasksGraph* const TasksGraph = nullptr;
     NYql::NDqProto::TDqExecutionStats* const Result;
+    std::optional<ui32> DeadlockedStageId;
 
     // basic stats
     std::unordered_set<ui64> AffectedShards;
@@ -306,6 +329,8 @@ public:
     {
         HistorySampleCount = 32;
     }
+
+    void Prepare();
 
     void AddComputeActorStats(
         ui32 nodeId,

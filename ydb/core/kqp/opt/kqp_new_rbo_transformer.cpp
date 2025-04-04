@@ -138,8 +138,7 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
     auto status = OptimizeExpr(output, output, [this] (const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         if (TKqpOpRoot::Match(node.Get())) {
             auto root = TOpRoot(node);
-            RBO.Optimize(root, ctx);
-            return root.Node;
+            return RBO.Optimize(root, ctx);
         } else {
             return node;
         }}, ctx, settings);
@@ -147,8 +146,6 @@ IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr in
     if (status != IGraphTransformer::TStatus::Ok) {
         return status;
     }
-
-    //output = GeneratePhysicalPlan(output);
 
     return IGraphTransformer::TStatus::Ok;
 }

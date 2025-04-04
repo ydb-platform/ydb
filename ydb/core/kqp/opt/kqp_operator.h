@@ -66,11 +66,15 @@ struct TStageGraph {
     }
 
     void Connect(int from, int to, TString connType) {
-        auto & outputs = StageOutputs[from];
+        auto & outputs = StageOutputs.at(from);
         outputs.push_back(to);
-        auto & inputs = StageOutputs[to];
+        auto & inputs = StageInputs.at(to);
         inputs.push_back(from);
         ConnectionType[std::make_pair(from,to)] = connType;
+    }
+
+    TString GetConnection(int from, int to) {
+        return ConnectionType.at(std::make_pair(from,to));
     }
 };
 
@@ -182,7 +186,7 @@ class TOpRoot : public IUnaryOperator {
     TOpRoot(TExprNode::TPtr node);
     virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
 
-    TPlanProps Props;
+    TPlanProps PlanProps;
 
     struct Iterator
     {

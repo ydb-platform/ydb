@@ -286,7 +286,8 @@ private:
 
         if (Config->EnableNewRBO) {
             YQL_CLOG(INFO, CoreDq) << "Taking the new RBO branch";
-            return MakeIntrusive<TPrepareQueryAsyncResult>(query, *NewRBOTransformer, ctx, *TransformCtx);
+            //return MakeIntrusive<TPrepareQueryAsyncResult>(query, *NewRBOTransformer, ctx, *TransformCtx);
+            return MakeIntrusive<TPrepareQueryAsyncResult>(query, *Transformer, ctx, *TransformCtx);
         }
         else {
             YQL_CLOG(INFO, CoreDq) << "Taking the old RBO branch";

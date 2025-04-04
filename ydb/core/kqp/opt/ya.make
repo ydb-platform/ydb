@@ -18,6 +18,7 @@ SRCS(
     kqp_operator.cpp
     kqp_new_rbo.cpp
     kqp_new_rbo_rules.cpp
+    kqp_convert_to_physical.cpp
 )
 
 PEERDIR(

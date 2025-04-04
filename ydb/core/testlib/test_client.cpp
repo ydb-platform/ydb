@@ -930,7 +930,6 @@ namespace Tests {
         std::unordered_map<TString, ui64> poolsConfigGenerations;
         if (Settings->FetchPoolsGeneration) {
             auto bsDescribeRequest = MakeHolder<TEvBlobStorage::TEvControllerConfigRequest>();
-
             auto& describeCommand = *bsDescribeRequest->Record.MutableRequest()->AddCommand()->MutableReadStoragePool();
             describeCommand.SetBoxId(Settings->BOX_ID);
             for (const auto& [_, storagePool] : Settings->StoragePoolTypes) {

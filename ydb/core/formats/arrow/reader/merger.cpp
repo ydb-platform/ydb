@@ -76,7 +76,7 @@ std::shared_ptr<arrow::Table> TMergePartialStream::SingleSourceDrain(const TSort
         return result;
     }
     const ui32 startPos = SortHeap.Current().GetKeyColumns().GetPosition();
-    const TSortableBatchPosition::TFoundPosition pos = SortHeap.MutableCurrent().SkipToLower(readTo);  // S
+    const TSortableBatchPosition::TFoundPosition pos = SortHeap.MutableCurrent().SkipToLower(readTo);
     bool finished = false;
     const i32 delta = Reverse ? startPos - pos.GetPosition() : pos.GetPosition() - startPos;
     if (delta == 0 && pos.IsGreater()) {
@@ -227,7 +227,7 @@ void TMergePartialStream::SkipToBound(const TSortableBatchPosition& pos, const b
         if (cmpResult == std::partial_ordering::equivalent && lower) {
             break;
         }
-        const TSortableBatchPosition::TFoundPosition skipPos = SortHeap.MutableCurrent().SkipToLower(pos);  // S
+        const TSortableBatchPosition::TFoundPosition skipPos = SortHeap.MutableCurrent().SkipToLower(pos);
         AFL_DEBUG(NKikimrServices::ARROW_HELPER)("pos", pos.DebugJson().GetStringRobust())("heap", SortHeap.Current().GetKeyColumns().DebugJson().GetStringRobust());
         if (skipPos.IsEqual()) {
             if (!lower && !SortHeap.MutableCurrent().Next()) {

@@ -153,6 +153,7 @@ public:
             (*LevelTypes)[2] = {NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn, type};
         }
         PostingTypes = MakeUploadTypes(table, UploadState, embedding, data, PrefixColumns);
+        // prefix types
         {
             auto types = GetAllTypes(table);
 

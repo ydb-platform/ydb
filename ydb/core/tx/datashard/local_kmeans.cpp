@@ -22,44 +22,6 @@
 namespace NKikimr::NDataShard {
 using namespace NKMeans;
 
-class TResult {
-public:
-    explicit TResult(const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvLocalKMeansResponse> response)
-        : ResponseActorId{responseActorId}
-        , Response{std::move(response)} {
-            Y_ASSERT(Response);
-        }
-
-    void SizeAdd(i64 size) {
-        if (size != 0) {
-            std::lock_guard lock{Mutex};
-            Size += size;
-        }
-    }
-
-    template<typename Func>
-    void Send(const TActorContext& ctx, Func&& func) {
-        std::unique_lock lock{Mutex};
-        if (Size <= 0) {
-            return;
-        }
-        if (func(Response->Record) && --Size > 0) {
-            return;
-        }
-        Size = 0;
-        lock.unlock();
-
-        LOG_N("Finish TLocalKMeansScan " << Response->Record.ShortDebugString());
-        ctx.Send(ResponseActorId, std::move(Response));
-    }
-
-private:
-    std::mutex Mutex;
-    i64 Size = 1;
-    TActorId ResponseActorId;
-    TAutoPtr<TEvDataShard::TEvLocalKMeansResponse> Response;
-};
-
 // This scan needed to run local (not distributed) kmeans.
 // We have this local stage because we construct kmeans tree from top to bottom.
 // And bottom kmeans can be constructed completely locally in datashards to avoid extra communication.
@@ -81,7 +43,7 @@ private:
 // NTable::IScan::Seek used to switch from current state to the next one.
 
 // If less than 1% of vectors are reassigned to new clusters we want to stop
-// TODO(mbkkt) 1% is choosed by common sense and should be adjusted in future
+// TODO(mbkkt) 1% is choosen by common sense and should be adjusted in future
 static constexpr double MinVectorsNeedsReassigned = 0.01;
 
 class TLocalKMeansScanBase: public TActor<TLocalKMeansScanBase>, public NTable::IScan {
@@ -94,6 +56,7 @@ protected:
     ui32 Round = 0;
     const ui32 MaxRounds = 0;
 
+    const ui32 InitK = 0;
     ui32 K = 0;
 
     EState State;
@@ -124,14 +87,16 @@ protected:
     std::vector<ui64> ClusterSizes;
 
     // Upload
-    std::shared_ptr<NTxProxy::TUploadTypes> TargetTypes;
-    std::shared_ptr<NTxProxy::TUploadTypes> NextTypes;
+    std::shared_ptr<NTxProxy::TUploadTypes> LevelTypes;
+    std::shared_ptr<NTxProxy::TUploadTypes> PostingTypes;
+    std::shared_ptr<NTxProxy::TUploadTypes> UploadTypes;
 
-    TString TargetTable;
-    TString NextTable;
+    const TString LevelTable;
+    const TString PostingTable;
+    TString UploadTable;
 
-    TBufferData ReadBuf;
-    TBufferData WriteBuf;
+    TBufferData PostingBuf;
+    TBufferData UploadBuf;
 
     NTable::TPos EmbeddingPos = 0;
     NTable::TPos DataPos = 1;
@@ -141,15 +106,18 @@ protected:
     TActorId Uploader;
     const TIndexBuildScanSettings ScanSettings;
 
-    NTable::TTag KMeansScan;
-    TTags UploadScan;
+    NTable::TTag EmbeddingTag;
+    TTags ScanTags;
 
     TUploadStatus UploadStatus;
 
     ui64 UploadRows = 0;
     ui64 UploadBytes = 0;
 
-    std::shared_ptr<TResult> Result;
+    TActorId ResponseActorId;
+    TAutoPtr<TEvDataShard::TEvLocalKMeansResponse> Response;
+
+    bool IsExhausted = false;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType()
@@ -157,40 +125,41 @@ public:
         return NKikimrServices::TActivity::LOCAL_KMEANS_SCAN_ACTOR;
     }
 
-    TLocalKMeansScanBase(ui64 buildId, const TUserTable& table, TLead&& lead, NTableIndex::TClusterId parent, NTableIndex::TClusterId child,
+    TLocalKMeansScanBase(const TUserTable& table,
                          const NKikimrTxDataShard::TEvLocalKMeansRequest& request,
-                         std::shared_ptr<TResult> result)
+                         const TActorId& responseActorId,
+                         TAutoPtr<TEvDataShard::TEvLocalKMeansResponse>&& response,
+                         TLead&& lead)
         : TActor{&TThis::StateWork}
-        , Parent{parent}
-        , Child{child}
+        , Parent{request.GetParentFrom()} // TODO: take from row
+        , Child{request.GetChild()} // TODO: increment
         , MaxRounds{request.GetNeedsRounds()}
         , K{request.GetK()}
         , State{EState::SAMPLE}
         , UploadState{request.GetUpload()}
         , Lead{std::move(lead)}
-        , BuildId{buildId}
         , Rng{request.GetSeed()}
-        , TargetTable{request.GetLevelName()}
-        , NextTable{request.GetPostingName()}
+        , LevelTable{request.GetLevelName()}
+        , PostingTable{request.GetPostingName()}
         , ScanSettings(request.GetScanSettings())
-        , Result{std::move(result)}
+        , ResponseActorId{responseActorId}
+        , Response{std::move(response)}
     {
         const auto& embedding = request.GetEmbeddingColumn();
         const auto& data = request.GetDataColumns();
         // scan tags
-        UploadScan = MakeUploadTags(table, embedding, data, EmbeddingPos, DataPos, KMeansScan);
+        ScanTags = MakeUploadTags(table, embedding, data, EmbeddingPos, DataPos, EmbeddingTag);
         // upload types
         {
-            TargetTypes = std::make_shared<NTxProxy::TUploadTypes>(3);
-
             Ydb::Type type;
+            LevelTypes = std::make_shared<NTxProxy::TUploadTypes>(3);
             type.set_type_id(NTableIndex::ClusterIdType);
-            (*TargetTypes)[0] = {NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type};
-            (*TargetTypes)[1] = {NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, type};
+            (*LevelTypes)[0] = {NTableIndex::NTableVectorKmeansTreeIndex::ParentColumn, type};
+            (*LevelTypes)[1] = {NTableIndex::NTableVectorKmeansTreeIndex::IdColumn, type};
             type.set_type_id(Ydb::Type::STRING);
-            (*TargetTypes)[2] = {NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn, type};
+            (*LevelTypes)[2] = {NTableIndex::NTableVectorKmeansTreeIndex::CentroidColumn, type};
         }
-        NextTypes = MakeUploadTypes(table, UploadState, embedding, data);
+        PostingTypes = MakeUploadTypes(table, UploadState, embedding, data);
     }
 
     TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme>) final
@@ -204,30 +173,27 @@ public:
 
     TAutoPtr<IDestructable> Finish(EAbort abort) final
     {
-        LOG_D("Finish " << Debug());
-
         if (Uploader) {
             Send(Uploader, new TEvents::TEvPoisonPill);
             Uploader = {};
         }
 
-        Result->Send(TActivationContext::AsActorContext(), [&] (NKikimrTxDataShard::TEvLocalKMeansResponse& response) {
-            response.SetReadRows(ReadRows);
-            response.SetReadBytes(ReadBytes);
-            response.SetUploadRows(UploadRows);
-            response.SetUploadBytes(UploadBytes);
-            NYql::IssuesToMessage(UploadStatus.Issues, response.MutableIssues());
-            if (abort != EAbort::None) {
-                response.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
-                return false;
-            } else if (UploadStatus.IsSuccess()) {
-                response.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);
-                return true;
-            } else {
-                response.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
-                return false;
-            }
-        });
+        auto& record = Response->Record;
+        record.SetReadRows(ReadRows);
+        record.SetReadBytes(ReadBytes);
+        record.SetUploadRows(UploadRows);
+        record.SetUploadBytes(UploadBytes);
+        if (abort != EAbort::None) {
+            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::ABORTED);
+        } else if (UploadStatus.IsNone() || UploadStatus.IsSuccess()) {
+            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::DONE);
+        } else {
+            record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR);
+        }
+        NYql::IssuesToMessage(UploadStatus.Issues, record.MutableIssues());
+
+        LOG_N("Finish " << Debug() << " " << Response->Record.ShortDebugString());
+        Send(ResponseActorId, Response.Release());
 
         Driver = nullptr;
         this->PassAway();
@@ -242,9 +208,9 @@ public:
     TString Debug() const
     {
         return TStringBuilder() << "TLocalKMeansScan Id: " << BuildId << " Parent: " << Parent << " Child: " << Child
-            << " Target: " << TargetTable << " K: " << K << " Clusters: " << Clusters.size()
+            << " Target: " << LevelTable << " K: " << K << " Clusters: " << Clusters.size()
             << " State: " << State << " Round: " << Round << " / " << MaxRounds
-            << " ReadBuf size: " << ReadBuf.Size() << " WriteBuf size: " << WriteBuf.Size();
+            << " ReadBuf size: " << PostingBuf.Size() << " WriteBuf size: " << UploadBuf.Size();
     }
 
     EScan PageFault() final
@@ -269,7 +235,7 @@ protected:
     {
         LOG_D("Retry upload " << Debug());
 
-        if (!WriteBuf.IsEmpty()) {
+        if (!UploadBuf.IsEmpty()) {
             Upload(true);
         }
     }
@@ -290,11 +256,11 @@ protected:
         UploadStatus.StatusCode = ev->Get()->Status;
         UploadStatus.Issues = ev->Get()->Issues;
         if (UploadStatus.IsSuccess()) {
-            UploadRows += WriteBuf.GetRows();
-            UploadBytes += WriteBuf.GetBytes();
-            WriteBuf.Clear();
-            if (HasReachedLimits(ReadBuf, ScanSettings)) {
-                ReadBuf.FlushTo(WriteBuf);
+            UploadRows += UploadBuf.GetRows();
+            UploadBytes += UploadBuf.GetBytes();
+            UploadBuf.Clear();
+            if (HasReachedLimits(PostingBuf, ScanSettings)) {
+                PostingBuf.FlushTo(UploadBuf);
                 Upload(false);
             }
 
@@ -316,13 +282,13 @@ protected:
 
     EScan FeedUpload()
     {
-        if (!HasReachedLimits(ReadBuf, ScanSettings)) {
+        if (!HasReachedLimits(PostingBuf, ScanSettings)) {
             return EScan::Feed;
         }
-        if (!WriteBuf.IsEmpty()) {
+        if (!UploadBuf.IsEmpty()) {
             return EScan::Sleep;
         }
-        ReadBuf.FlushTo(WriteBuf);
+        PostingBuf.FlushTo(UploadBuf);
         Upload(false);
         return EScan::Feed;
     }
@@ -338,14 +304,14 @@ protected:
             ++RetryCount;
         } else {
             RetryCount = 0;
-            if (State != EState::KMEANS && NextTypes) {
-                TargetTypes = std::exchange(NextTypes, {});
-                TargetTable = std::move(NextTable);
+            if (State != EState::KMEANS && PostingTypes) {
+                LevelTypes = std::exchange(PostingTypes, {});
+                LevelTable = std::move(PostingTable);
             }
         }
 
         auto actor = NTxProxy::CreateUploadRowsInternal(
-            this->SelfId(), TargetTable, TargetTypes, WriteBuf.GetRowsData(),
+            this->SelfId(), LevelTable, LevelTypes, UploadBuf.GetRowsData(),
             NTxProxy::EUploadRowsMode::WriteToTableShadow, true /*writeToPrivateTable*/);
 
         Uploader = this->Register(actor);
@@ -353,15 +319,15 @@ protected:
 
     void UploadSample()
     {
-        Y_ASSERT(ReadBuf.IsEmpty());
-        Y_ASSERT(WriteBuf.IsEmpty());
+        Y_ASSERT(PostingBuf.IsEmpty());
+        Y_ASSERT(UploadBuf.IsEmpty());
         std::array<TCell, 2> pk;
         std::array<TCell, 1> data;
         for (NTable::TPos pos = 0; const auto& row : Clusters) {
             pk[0] = TCell::Make(Parent);
             pk[1] = TCell::Make(Child + pos);
             data[0] = TCell{row};
-            WriteBuf.AddRow(TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
+            UploadBuf.AddRow(TSerializedCellVec{pk}, TSerializedCellVec::Serialize(data));
             ++pos;
         }
         Upload(false);
@@ -380,9 +346,10 @@ class TLocalKMeansScan final: public TLocalKMeansScanBase, private TCalculation<
     std::vector<TAggregatedCluster> AggregatedClusters;
 
 public:
-    TLocalKMeansScan(ui64 buildId, const TUserTable& table, TLead&& lead, NTableIndex::TClusterId parent, NTableIndex::TClusterId child, NKikimrTxDataShard::TEvLocalKMeansRequest& request,
-                     std::shared_ptr<TResult> result)
-        : TLocalKMeansScanBase{buildId, table, std::move(lead), parent, child, request, std::move(result)}
+    TLocalKMeansScan(const TUserTable& table, NKikimrTxDataShard::TEvLocalKMeansRequest& request,
+        const TActorId& responseActorId, TAutoPtr<TEvDataShard::TEvLocalKMeansResponse>&& response,
+        TLead&& lead)
+        : TLocalKMeansScanBase{table, request, responseActorId, std::move(response), std::move(lead)}
     {
         this->Dimensions = request.GetSettings().vector_dimension();
         LOG_I("Create " << Debug());
@@ -392,11 +359,11 @@ public:
     {
         LOG_D("Seek " << seq << " " << Debug());
         if (State == UploadState) {
-            if (!WriteBuf.IsEmpty()) {
+            if (!UploadBuf.IsEmpty()) {
                 return EScan::Sleep;
             }
-            if (!ReadBuf.IsEmpty()) {
-                ReadBuf.FlushTo(WriteBuf);
+            if (!PostingBuf.IsEmpty()) {
+                PostingBuf.FlushTo(UploadBuf);
                 Upload(false);
                 return EScan::Sleep;
             }
@@ -408,7 +375,7 @@ public:
 
         if (State == EState::SAMPLE) {
             lead = Lead;
-            lead.SetTags({&KMeansScan, 1});
+            lead.SetTags({&EmbeddingTag, 1});
             if (seq == 0) {
                 return EScan::Feed;
             }
@@ -428,13 +395,13 @@ public:
         Y_ASSERT(State == EState::KMEANS);
         if (RecomputeClusters()) {
             lead = std::move(Lead);
-            lead.SetTags(UploadScan);
+            lead.SetTags(ScanTags);
 
             UploadSample();
             State = UploadState;
         } else {
             lead = Lead;
-            lead.SetTags({&KMeansScan, 1});
+            lead.SetTags({&EmbeddingTag, 1});
             ++Round;
         }
         return EScan::Feed;
@@ -587,7 +554,7 @@ private:
         if (pos >= K) {
             return EScan::Feed;
         }
-        AddRowMain2Build(ReadBuf, Child + pos, key, row);
+        AddRowMain2Build(PostingBuf, Child + pos, key, row);
         return FeedUpload();
     }
 
@@ -597,7 +564,7 @@ private:
         if (pos >= K) {
             return EScan::Feed;
         }
-        AddRowMain2Posting(ReadBuf, Child + pos, key, row, DataPos);
+        AddRowMain2Posting(PostingBuf, Child + pos, key, row, DataPos);
         return FeedUpload();
     }
 
@@ -607,7 +574,7 @@ private:
         if (pos >= K) {
             return EScan::Feed;
         }
-        AddRowBuild2Build(ReadBuf, Child + pos, key, row);
+        AddRowBuild2Build(PostingBuf, Child + pos, key, row);
         return FeedUpload();
     }
 
@@ -617,7 +584,7 @@ private:
         if (pos >= K) {
             return EScan::Feed;
         }
-        AddRowBuild2Posting(ReadBuf, Child + pos, key, row, DataPos);
+        AddRowBuild2Posting(PostingBuf, Child + pos, key, row, DataPos);
         return FeedUpload();
     }
 };
@@ -673,22 +640,14 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
     TScanRecord::TSeqNo seqNo = {request.GetSeqNoGeneration(), request.GetSeqNoRound()};
     response->Record.SetRequestSeqNoGeneration(seqNo.Generation);
     response->Record.SetRequestSeqNoRound(seqNo.Round);
-    auto result = std::make_shared<TResult>(ev->Sender, std::move(response));
-    ui32 localTid = 0;
-    TScanRecord::TScanIds scanIds;
 
     auto badRequest = [&](const TString& error) {
-        for (auto scanId : scanIds) {
-            CancelScan(localTid, scanId);
-        }
-        result->Send(ctx, [&] (NKikimrTxDataShard::TEvLocalKMeansResponse& response) {
-            response.SetStatus(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
-            auto issue = response.AddIssues();
-            issue->set_severity(NYql::TSeverityIds::S_ERROR);
-            issue->set_message(error);
-            return false;
-        });
-        result.reset();
+        response->Record.SetStatus(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST);
+        auto issue = response->Record.AddIssues();
+        issue->set_severity(NYql::TSeverityIds::S_ERROR);
+        issue->set_message(error);
+        ctx.Send(ev->Sender, std::move(response));
+        response.Reset();
     };
 
     if (const ui64 shardId = request.GetTabletId(); shardId != TabletID()) {
@@ -717,8 +676,6 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
         ScanManager.Drop(id);
     }
 
-    localTid = userTable.LocalTid;
-
     if (request.HasSnapshotStep() || request.HasSnapshotTxId()) {
         const TSnapshotKey snapshotKey(pathId, rowVersion.Step, rowVersion.TxId);
         if (!SnapshotManager.FindAvailable(snapshotKey)) {
@@ -745,45 +702,44 @@ void TDataShard::HandleSafe(TEvDataShard::TEvLocalKMeansRequest::TPtr& ev, const
         badRequest(TStringBuilder() << "Parent from " << parentFrom << " should be less or equal to parent to " << parentTo);
         return;
     }
-    const i64 expectedSize = parentTo - parentFrom + 1;
-    result->SizeAdd(expectedSize);
 
-    for (auto parent = parentFrom; parent <= parentTo; ++parent) {
-        TCell from, to;
-        const auto range = CreateRangeFrom(userTable, parent, from, to);
-        if (range.IsEmptyRange(userTable.KeyColumnTypes)) {
-            LOG_D("TEvLocalKMeansRequest " << request.GetId() << " parent " << parent << " is empty");
-            continue;
-        }
-
-        TAutoPtr<NTable::IScan> scan;
-        auto createScan = [&]<typename T> {
-            scan = new TLocalKMeansScan<T>{
-                request.GetId(), userTable,
-                CreateLeadFrom(range), parent, request.GetChild() + request.GetK() * (parent - parentFrom),
-                request, result,
-            };
-        };
-        MakeScan(request, createScan, badRequest);
-        if (!scan) {
-            Y_ASSERT(!result);
+    NTable::TLead lead;
+    if (parentFrom == 0 && parentTo == 0) {
+        lead.To({}, NTable::ESeek::Lower);
+    } else {
+        TCell from = TCell::Make(parentFrom - 1);
+        TCell to = TCell::Make(parentTo);
+        TTableRange range{{&from, 1}, false, {&to, 1}, true};
+        auto scanRange = Intersect(userTable.KeyColumnTypes, range, userTable.Range.ToTableRange());
+        if (scanRange.IsEmptyRange(userTable.KeyColumnTypes)) {
+            badRequest(TStringBuilder() << " requested range doesn't intersect with table range"
+                                        << " requestedRange: " << DebugPrintRange(userTable.KeyColumnTypes, range, *AppData()->TypeRegistry)
+                                        << " tableRange: " << DebugPrintRange(userTable.KeyColumnTypes, userTable.Range.ToTableRange(), *AppData()->TypeRegistry)
+                                        << " scanRange: " << DebugPrintRange(userTable.KeyColumnTypes, scanRange, *AppData()->TypeRegistry));
             return;
         }
-
-        TScanOptions scanOpts;
-        scanOpts.SetSnapshotRowVersion(rowVersion);
-        scanOpts.SetResourceBroker("build_index", 10); // TODO(mbkkt) Should be different group?
-        const auto scanId = QueueScan(userTable.LocalTid, std::move(scan), 0, scanOpts);
-        scanIds.push_back(scanId);
+        lead.To(range.From, NTable::ESeek::Upper);
+        lead.Until(range.To, true);
     }
-
-    if (scanIds.empty()) {
-        badRequest("Requested range doesn't intersect with table range");
+    
+    TAutoPtr<NTable::IScan> scan;
+    auto createScan = [&]<typename T> {
+        scan = new TLocalKMeansScan<T>{
+            userTable, request, ev->Sender, std::move(response),
+            std::move(lead)
+        };
+    };
+    MakeScan(request, createScan, badRequest);
+    if (!scan) {
+        Y_ASSERT(!response);
         return;
     }
-    result->SizeAdd(static_cast<i64>(scanIds.size()) - expectedSize);
-    result->Send(ctx, [] (auto&) { return true; });  // decrement extra one
-    ScanManager.Set(id, seqNo) = std::move(scanIds);
+
+    TScanOptions scanOpts;
+    scanOpts.SetSnapshotRowVersion(rowVersion);
+    scanOpts.SetResourceBroker("build_index", 10); // TODO(mbkkt) Should be different group?
+    const auto scanId = QueueScan(userTable.LocalTid, std::move(scan), 0, scanOpts);
+    ScanManager.Set(id, seqNo).push_back(scanId);
 }
 
 }

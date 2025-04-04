@@ -8,6 +8,23 @@
 
 namespace NYql {
 
+struct TDummyFederatedTopicClient : public IFederatedTopicClient {
+    TDummyFederatedTopicClient(const NYdb::NTopic::TFederatedTopicClientSettings& settings = {}):
+        FederatedClientSettings_(settings) {}
+
+    NThreading::TFuture<std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo>> GetAllTopicClusters() override {
+        std::vector<NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo> dbInfo;
+        dbInfo.emplace_back(
+                "",
+                FederatedClientSettings_.DiscoveryEndpoint_.value_or(""),
+                FederatedClientSettings_.Database_.value_or(""),
+                NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo::EStatus::AVAILABLE);
+        return NThreading::MakeFuture(std::move(dbInfo));
+    }
+private:
+    NYdb::NFederatedTopic::TFederatedTopicClientSettings FederatedClientSettings_;
+};
+
 NThreading::TFuture<void> TDummyPqGateway::OpenSession(const TString& sessionId, const TString& username) {
     with_lock (Mutex) {
         Y_ENSURE(sessionId);
@@ -45,6 +62,23 @@ NPq::NConfigurationManager::TAsyncDescribePathResult TDummyPqGateway::DescribePa
     }
 }
 
+IPqGateway::TAsyncDescribeFederatedTopicResult TDummyPqGateway::DescribeFederatedTopic(const TString& sessionId, const TString& cluster, const TString& database, const TString& path, const TString& token) {
+    Y_UNUSED(database);
+    Y_UNUSED(token);
+    with_lock (Mutex) {
+        Y_ENSURE(IsIn(OpenedSessions, sessionId), "Session " << sessionId << " is not opened in pq gateway");
+        const auto key = std::make_pair(cluster, path);
+        if (const auto* topic = Topics.FindPtr(key)) {
+            IPqGateway::TDescribeFederatedTopicResult result;
+            auto& cluster = result.emplace_back();
+            cluster.PartitionsCount = topic->PartitionsCount;
+            return NThreading::MakeFuture<TDescribeFederatedTopicResult>(result);
+        }
+        return NThreading::MakeErrorFuture<IPqGateway::TDescribeFederatedTopicResult>(
+            std::make_exception_ptr(yexception() << "Topic " << path << " is not found on cluster " << cluster));
+    }
+}
+
 NThreading::TFuture<IPqGateway::TListStreams> TDummyPqGateway::ListStreams(const TString& sessionId, const TString& cluster, const TString& database, const TString& token, ui32 limit, const TString& exclusiveStartStreamName) {
     Y_UNUSED(sessionId, cluster, database, token, limit, exclusiveStartStreamName);
     return NThreading::MakeFuture<IPqGateway::TListStreams>();
@@ -66,6 +100,13 @@ IPqGateway::TPtr CreatePqFileGateway() {
 
 ITopicClient::TPtr TDummyPqGateway::GetTopicClient(const NYdb::TDriver&, const NYdb::NTopic::TTopicClientSettings&) {
     return MakeIntrusive<TFileTopicClient>(Topics);
+}
+
+IFederatedTopicClient::TPtr TDummyPqGateway::GetFederatedTopicClient(const NYdb::TDriver&, const NYdb::NFederatedTopic::TFederatedTopicClientSettings& settings) {
+    return MakeIntrusive<TDummyFederatedTopicClient>(settings);
+}
+NYdb::NFederatedTopic::TFederatedTopicClientSettings TDummyPqGateway::GetFederatedTopicClientSettings() const {
+    return {};
 }
 
 void TDummyPqGateway::UpdateClusterConfigs(

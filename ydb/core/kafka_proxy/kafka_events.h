@@ -322,7 +322,7 @@ Event sent from TKafkaTransactionRouter to TIintProducerActor to notify that new
 OK if this transactional producer was not found or older version was found
 PRODUCER_FENCED if newer version of this transactional producer was found
  */
-struct TEvSaveTxnProducerResponse : public NActors::TEventLocal<TEvSaveTxnProducerRequest, EvSaveTxnProducerResponse> {
+struct TEvSaveTxnProducerResponse : public NActors::TEventLocal<TEvSaveTxnProducerResponse, EvSaveTxnProducerResponse> {
 
     enum EStatus {
         OK,

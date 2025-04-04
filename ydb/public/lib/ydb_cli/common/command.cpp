@@ -204,7 +204,7 @@ int TClientCommand::Process(TConfig& config) {
 }
 
 void TClientCommand::SaveParseResult(TConfig& config) {
-    ParseResult = std::make_shared<TCommandOptsParseResult>(config.Opts, config.ArgC, config.ArgV);
+    ParseResult = std::make_shared<NLastGetopt::TOptsParseResult>(config.Opts, config.ArgC, config.ArgV);
 }
 
 void TClientCommand::Prepare(TConfig& config) {

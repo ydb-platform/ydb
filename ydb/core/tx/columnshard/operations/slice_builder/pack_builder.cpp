@@ -89,13 +89,14 @@ public:
         SequentialWriteId.emplace_back(data->GetWriteMeta().GetWriteId());
     }
 
-    [[nodiscard]] TConclusionStatus Finalize(const NOlap::TWritingContext& context, std::vector<TPortionWriteController::TInsertPortion>& result) {
+    [[nodiscard]] TConclusionStatus Finalize(
+        const NOlap::TWritingContext& context, std::vector<TPortionWriteController::TInsertPortion>& result) {
         if (Batches.size() == 0) {
             return TConclusionStatus::Success();
         }
         if (Batches.size() == 1) {
-            auto portionConclusion = context.GetActualSchema()->PrepareForWrite(context.GetActualSchema(), PathId, Batches.front().GetContainer(),
-                ModificationType, context.GetStoragesManager(), context.GetSplitterCounters());
+            auto portionConclusion = context.GetActualSchema()->PrepareForWrite(context.GetActualSchema(), PathId,
+                Batches.front().GetContainer(), ModificationType, context.GetStoragesManager(), context.GetSplitterCounters());
             result.emplace_back(portionConclusion.DetachResult());
         } else {
             ui32 idx = 0;
@@ -121,10 +122,12 @@ public:
                             if (defaultColumn.IsFail()) {
                                 return defaultColumn;
                             }
-                            gContainer->AddField(context.GetActualSchema()->GetFieldByIndexVerified(*itAllIndexes), defaultColumn.DetachResult()).Validate();
+                            gContainer->AddField(context.GetActualSchema()->GetFieldByIndexVerified(*itAllIndexes), defaultColumn.DetachResult())
+                                .Validate();
                         } else {
                             AFL_VERIFY(*itAllIndexes == *itBatchIndexes);
-                            gContainer->AddField(context.GetActualSchema()->GetFieldByIndexVerified(*itAllIndexes),
+                            gContainer
+                                ->AddField(context.GetActualSchema()->GetFieldByIndexVerified(*itAllIndexes),
                                     i->column(itBatchIndexes - i.GetColumnIndexes().begin()))
                                 .Validate();
                             ++itBatchIndexes;
@@ -193,7 +196,10 @@ TConclusionStatus TBuildPackSlicesTask::DoExecute(const std::shared_ptr<ITask>& 
     }
     std::vector<TPortionWriteController::TInsertPortion> portionsToWrite;
     for (auto&& i : slicesToMerge) {
-        i.Finalize(Context, portionsToWrite).Validate();
+        auto conclusion = i.Finalize(Context, portionsToWrite);
+        if (conclusion.IsFail()) {
+            return conclusion;
+        }
     }
     auto actions = WriteUnits.front().GetData()->GetBlobsAction();
     auto writeController =

@@ -15,20 +15,20 @@
 namespace NKikimr {
 namespace NMiniKQL {
 
-using T6464Samples = std::vector<std::pair<uint64_t, uint64_t>>;
-using TString64Samples = std::vector<std::pair<std::string, uint64_t>>;
+using T6464Samples = std::vector<std::pair<ui64, ui64>>;
+using TString64Samples = std::vector<std::pair<std::string, ui64>>;
 
 T6464Samples MakeKeyed6464Samples(const size_t numSamples, const unsigned int maxKey) {
     std::default_random_engine eng;
     std::uniform_int_distribution<unsigned int> keys(0, maxKey);
-    std::uniform_int_distribution<uint64_t> unif(0, 100000.0);
+    std::uniform_int_distribution<ui64> unif(0, 100000.0);
 
     T6464Samples samples(numSamples);
 
     eng.seed(std::time(nullptr));
     std::generate(samples.begin(), samples.end(),
         [&]() -> auto {
-            return std::make_pair<uint64_t, uint64_t>(keys(eng), unif(eng));
+            return std::make_pair<ui64, ui64>(keys(eng), unif(eng));
         }
     );
 
@@ -38,7 +38,7 @@ T6464Samples MakeKeyed6464Samples(const size_t numSamples, const unsigned int ma
 TString64Samples MakeKeyedString64Samples(const size_t numSamples, const unsigned int maxKey, const bool longStrings) {
     std::default_random_engine eng;
     std::uniform_int_distribution<unsigned int> keys(0, maxKey);
-    std::uniform_int_distribution<uint64_t> unif(0, 100000.0);
+    std::uniform_int_distribution<ui64> unif(0, 100000.0);
 
     TString64Samples samples(numSamples);
 
@@ -52,7 +52,7 @@ TString64Samples MakeKeyedString64Samples(const size_t numSamples, const unsigne
             } else {
                 strKey = Sprintf("%07u.%07u.%07u.", key, key, key);
             }
-            return std::make_pair<std::string, uint64_t>(std::move(strKey), unif(eng));
+            return std::make_pair<std::string, ui64>(std::move(strKey), unif(eng));
         }
     );
 
@@ -159,8 +159,8 @@ class IDataSampler
 class T6464DataSampler : public IDataSampler
 {
 public:
-    TStream<uint64_t, uint64_t, false>::TSamples Samples;
-    std::unordered_map<uint64_t, uint64_t> Expects;
+    TStream<ui64, ui64, false>::TSamples Samples;
+    std::unordered_map<ui64, ui64> Expects;
 
     size_t StreamNumIters = 0;
 
@@ -172,7 +172,7 @@ public:
 
     THolder<IWideStream> MakeStream(const THolderFactory& holderFactory) const override
     {
-        return THolder(new TStream<uint64_t, uint64_t, false>(holderFactory, Samples, StreamNumIters));
+        return THolder(new TStream<ui64, ui64, false>(holderFactory, Samples, StreamNumIters));
     }
 
     TType* GetKeyType(TProgramBuilder& pb) const override
@@ -184,7 +184,7 @@ public:
     {
         Y_ENSURE(Expects.empty());
 
-        Expects = ComputeSumReferenceResult<uint64_t, uint64_t>(referenceStream);
+        Expects = ComputeSumReferenceResult<ui64, ui64>(referenceStream);
     }
 
     void VerifyComputedValueVsReference(const NUdf::TUnboxedValue& value) const override
@@ -201,8 +201,8 @@ public:
 class TString64DataSampler : public IDataSampler
 {
 public:
-    TStream<std::string, uint64_t, false>::TSamples Samples;
-    std::unordered_map<std::string, uint64_t> Expects;
+    TStream<std::string, ui64, false>::TSamples Samples;
+    std::unordered_map<std::string, ui64> Expects;
 
     size_t StreamNumIters = 0;
     bool LongStrings = false;
@@ -217,9 +217,9 @@ public:
     THolder<IWideStream> MakeStream(const THolderFactory& holderFactory) const override
     {
         if (LongStrings) {
-            return THolder(new TStream<std::string, uint64_t, false>(holderFactory, Samples, StreamNumIters));
+            return THolder(new TStream<std::string, ui64, false>(holderFactory, Samples, StreamNumIters));
         } else {
-            return THolder(new TStream<std::string, uint64_t, true>(holderFactory, Samples, StreamNumIters));
+            return THolder(new TStream<std::string, ui64, true>(holderFactory, Samples, StreamNumIters));
         }
     }
 
@@ -232,7 +232,7 @@ public:
     {
         Y_ENSURE(Expects.empty());
 
-        Expects = ComputeSumReferenceResult<std::string, uint64_t>(referenceStream);
+        Expects = ComputeSumReferenceResult<std::string, ui64>(referenceStream);
     }
 
     void VerifyComputedValueVsReference(const NUdf::TUnboxedValue& value) const override

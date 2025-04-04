@@ -1119,9 +1119,9 @@ struct TCreateClientOptions
     /// @brief Proxy Address to be used for connection
     FLUENT_FIELD_OPTION(TString, ProxyAddress);
 
-    /// @brief Specifies the Unix socket used for connection,
-    /// typically when the RPC proxy is enabled within the job proxy.
-    FLUENT_FIELD_OPTION(TString, ProxyUnixDomainSocket);
+    /// @brief Use unix domain socket for connection.
+    /// Typically you will need this option when the RPC proxy is enabled within the job proxy.
+    FLUENT_FIELD_DEFAULT(bool, UseProxyUnixDomainSocket, false);
 };
 
 ///

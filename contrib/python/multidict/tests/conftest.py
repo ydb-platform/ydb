@@ -3,26 +3,22 @@ from __future__ import annotations
 import argparse
 import pickle
 from dataclasses import dataclass
+from functools import cached_property
 from importlib import import_module
-from sys import version_info as _version_info
 from types import ModuleType
-from typing import Callable, Type
-
-try:
-    from functools import cached_property  # Python 3.8+
-except ImportError:
-    from functools import lru_cache as _lru_cache
-
-    def cached_property(func):
-        return property(_lru_cache()(func))
-
+from typing import Callable, Type, Union
 
 import pytest
 
-from multidict import MultiMapping, MutableMultiMapping
+from multidict import (
+    CIMultiDict,
+    MultiDict,
+    MultiDictProxy,
+    MultiMapping,
+    MutableMultiMapping,
+)
 
 C_EXT_MARK = pytest.mark.c_extension
-PY_38_AND_BELOW = _version_info < (3, 9)
 
 
 @dataclass(frozen=True)
@@ -51,7 +47,7 @@ class MultidictImplementation:
         importable_module = "_multidict_py" if self.is_pure_python else "_multidict"
         return import_module(f"multidict.{importable_module}")
 
-    def __str__(self):
+    def __str__(self) -> str:
         """Render the implementation facade instance as a string."""
         return f"{self.tag}-module"
 
@@ -69,7 +65,7 @@ class MultidictImplementation:
 )
 def multidict_implementation(request: pytest.FixtureRequest) -> MultidictImplementation:
     """Return a multidict variant facade."""
-    return request.param
+    return request.param  # type: ignore[no-any-return]
 
 
 @pytest.fixture(scope="session")
@@ -87,7 +83,7 @@ def multidict_module(
 )
 def any_multidict_class_name(request: pytest.FixtureRequest) -> str:
     """Return a class name of a mutable multidict implementation."""
-    return request.param
+    return request.param  # type: ignore[no-any-return]
 
 
 @pytest.fixture(scope="session")
@@ -96,29 +92,29 @@ def any_multidict_class(
     multidict_module: ModuleType,
 ) -> Type[MutableMultiMapping[str]]:
     """Return a class object of a mutable multidict implementation."""
-    return getattr(multidict_module, any_multidict_class_name)
+    return getattr(multidict_module, any_multidict_class_name)  # type: ignore[no-any-return]
 
 
 @pytest.fixture(scope="session")
 def case_sensitive_multidict_class(
     multidict_module: ModuleType,
-) -> Type[MutableMultiMapping[str]]:
+) -> Type[MultiDict[str]]:
     """Return a case-sensitive mutable multidict class."""
-    return multidict_module.MultiDict
+    return multidict_module.MultiDict  # type: ignore[no-any-return]
 
 
 @pytest.fixture(scope="session")
 def case_insensitive_multidict_class(
     multidict_module: ModuleType,
-) -> Type[MutableMultiMapping[str]]:
+) -> Type[CIMultiDict[str]]:
     """Return a case-insensitive mutable multidict class."""
-    return multidict_module.CIMultiDict
+    return multidict_module.CIMultiDict  # type: ignore[no-any-return]
 
 
 @pytest.fixture(scope="session")
 def case_insensitive_str_class(multidict_module: ModuleType) -> Type[str]:
     """Return a case-insensitive string class."""
-    return multidict_module.istr
+    return multidict_module.istr  # type: ignore[no-any-return]
 
 
 @pytest.fixture(scope="session")
@@ -133,7 +129,7 @@ def any_multidict_proxy_class(
     multidict_module: ModuleType,
 ) -> Type[MultiMapping[str]]:
     """Return an immutable multidict implementation class object."""
-    return getattr(multidict_module, any_multidict_proxy_class_name)
+    return getattr(multidict_module, any_multidict_proxy_class_name)  # type: ignore[no-any-return]
 
 
 @pytest.fixture(scope="session")
@@ -141,7 +137,7 @@ def case_sensitive_multidict_proxy_class(
     multidict_module: ModuleType,
 ) -> Type[MutableMultiMapping[str]]:
     """Return a case-sensitive immutable multidict class."""
-    return multidict_module.MultiDictProxy
+    return multidict_module.MultiDictProxy  # type: ignore[no-any-return]
 
 
 @pytest.fixture(scope="session")
@@ -149,13 +145,15 @@ def case_insensitive_multidict_proxy_class(
     multidict_module: ModuleType,
 ) -> Type[MutableMultiMapping[str]]:
     """Return a case-insensitive immutable multidict class."""
-    return multidict_module.CIMultiDictProxy
+    return multidict_module.CIMultiDictProxy  # type: ignore[no-any-return]
 
 
 @pytest.fixture(scope="session")
-def multidict_getversion_callable(multidict_module: ModuleType) -> Callable:
+def multidict_getversion_callable(
+    multidict_module: ModuleType,
+) -> Callable[[Union[MultiDict[object], MultiDictProxy[object]]], int]:
     """Return a ``getversion()`` function for current implementation."""
-    return multidict_module.getversion
+    return multidict_module.getversion  # type: ignore[no-any-return]
 
 
 def pytest_addoption(
@@ -171,19 +169,11 @@ def pytest_addoption(
 
     parser.addoption(
         "--c-extensions",  # disabled with `--no-c-extensions`
-        action="store_true" if PY_38_AND_BELOW else argparse.BooleanOptionalAction,
+        action=argparse.BooleanOptionalAction,
         default=True,
         dest="c_extensions",
         help="Test C-extensions (on by default)",
     )
-
-    if PY_38_AND_BELOW:
-        parser.addoption(
-            "--no-c-extensions",
-            action="store_false",
-            dest="c_extensions",
-            help="Skip testing C-extensions (on by default)",
-        )
 
 
 def pytest_collection_modifyitems(
@@ -197,8 +187,8 @@ def pytest_collection_modifyitems(
     if test_c_extensions:
         return
 
-    selected_tests = []
-    deselected_tests = []
+    selected_tests: list[pytest.Item] = []
+    deselected_tests: list[pytest.Item] = []
 
     for item in items:
         c_ext = item.get_closest_marker(C_EXT_MARK.name) is not None
@@ -218,7 +208,7 @@ def pytest_configure(config: pytest.Config) -> None:
     )
 
 
-def pytest_generate_tests(metafunc):
+def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
     if "pickle_protocol" in metafunc.fixturenames:
         metafunc.parametrize(
             "pickle_protocol", list(range(pickle.HIGHEST_PROTOCOL + 1)), scope="session"

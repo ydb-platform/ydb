@@ -1436,17 +1436,18 @@ message TEvBuildIndexCreateRequest {
     optional uint64 SnapshotTxId = 8;
     optional uint64 SnapshotStep = 9;
 
-    optional uint32 MaxBatchRows = 10;
-    optional uint64 MaxBatchBytes = 11;
+    reserved 10; // MaxBatchRows
+    reserved 11; // MaxBatchBytes
 
     optional uint64 SeqNoGeneration = 12;       // monotonically increasing sequence, first part
     optional uint64 SeqNoRound = 13;            // monotonically increasing sequence, second part
-
-    optional uint64 MaxRetries = 14;
+    reserved 14; // MaxRetries
 
     repeated string DataColumns = 15;
 
     optional NKikimrIndexBuilder.TColumnBuildSettings ColumnBuildSettings = 16;
+    
+    optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 17;
 }
 
 message TEvBuildIndexProgressResponse {
@@ -1558,6 +1559,8 @@ message TEvLocalKMeansRequest {
 
     optional string EmbeddingColumn = 19;
     repeated string DataColumns = 20;
+
+    optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 22;
 }
 
 message TEvLocalKMeansResponse {
@@ -1609,6 +1612,8 @@ message TEvReshuffleKMeansRequest {
 
     optional string EmbeddingColumn = 14;
     repeated string DataColumns = 15;
+
+    optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 16;
 }
 
 message TEvReshuffleKMeansResponse {
@@ -1660,6 +1665,8 @@ message TEvPrefixKMeansRequest {
     optional string EmbeddingColumn = 15;
     repeated string DataColumns = 16;
     optional uint32 PrefixColumns = 17;
+
+    optional NKikimrIndexBuilder.TIndexBuildScanSettings ScanSettings = 18;
 }
 
 message TEvPrefixKMeansResponse {
@@ -2328,8 +2335,10 @@ message TEvForceDataCleanup {
 // Intermediate requests and corresponding TEvForceDataCleanupResult's may be skipped.
 message TEvForceDataCleanupResult {
     enum EStatus {
-        OK = 0;
-        FAILED = 1;
+        UNKNOWN = 0;
+        OK = 1;
+        WRONG_SHARD_STATE = 2;
+        BORROWED = 3;
     };
     optional uint64 DataCleanupGeneration = 1; // from corresponding request (or greater)
     optional uint64 TabletId = 2;

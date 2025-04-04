@@ -2,7 +2,6 @@
 #include "kqp_planner.h"
 #include "kqp_planner_strategy.h"
 
-#include <atomic>
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/base/appdata.h>
 
@@ -225,6 +224,7 @@ std::unique_ptr<TEvKqpNode::TEvStartKqpTasksRequest> TKqpPlanner::SerializeReque
     }
 
     request.MutableRuntimeSettings()->SetStatsMode(GetDqStatsMode(StatsMode));
+    request.MutableRuntimeSettings()->SetWithProgressStats(WithProgressStats);
     request.SetStartAllOrFail(true);
     request.MutableRuntimeSettings()->SetExecType(NYql::NDqProto::TComputeRuntimeSettings::DATA);
     request.MutableRuntimeSettings()->SetUseSpilling(TasksGraph.GetMeta().AllowWithSpilling);

@@ -342,9 +342,12 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::Write(TExprBase node, T
     auto cluster = TString{write.DataSink().Cluster().Value()};
     const auto selectionMode = State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
     const auto srcCluster = DeriveClusterFromInput(write.Content(), selectionMode);
-    if (selectionMode == ERuntimeClusterSelectionMode::Disable && cluster != srcCluster) {
+    if (!srcCluster) {
+        return node;
+    }
+    if (selectionMode == ERuntimeClusterSelectionMode::Disable && cluster != *srcCluster) {
         ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), TStringBuilder()
-            << "Result from cluster " << TString{srcCluster}.Quote()
+            << "Result from cluster " << srcCluster->Quote()
             << " cannot be written to a different destination cluster " << cluster.Quote()));
         return {};
     }
@@ -660,7 +663,11 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::ReplaceStatWriteTable(T
 
         auto section = read.Input().Item(0);
         auto scheme = section.Ptr()->GetTypeAnn()->Cast<TListExprType>()->GetItemType();
-        cluster = DeriveClusterFromInput(input, selectionMode);
+        auto srcCluster = DeriveClusterFromInput(input, selectionMode);
+        if (!srcCluster) {
+            return node;
+        }
+        cluster = *srcCluster;
 
         auto path = CopyOrTrivialMap(section.Pos(),
             GetWorld(input, {}, ctx),

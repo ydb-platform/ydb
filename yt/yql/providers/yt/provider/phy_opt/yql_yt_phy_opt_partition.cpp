@@ -40,8 +40,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
     const ERuntimeClusterSelectionMode selectionMode =
         State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
     auto cluster = DeriveClusterFromInput(input, selectionMode);
-    if (!IsYtCompleteIsolatedLambda(keySelectorLambda.Ref(), syncList, cluster, false, selectionMode)
-        || !IsYtCompleteIsolatedLambda(handlerLambda.Ref(), syncList, cluster, false, selectionMode)) {
+    if (!cluster
+        || !IsYtCompleteIsolatedLambda(keySelectorLambda.Ref(), syncList, *cluster, false, selectionMode)
+        || !IsYtCompleteIsolatedLambda(handlerLambda.Ref(), syncList, *cluster, false, selectionMode)) {
         return node;
     }
 
@@ -99,7 +100,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
         }
 
         TCoLambda sortKeySelectorLambda = partByKey.SortKeySelectorLambda().Cast<TCoLambda>();
-        if (!IsYtCompleteIsolatedLambda(sortKeySelectorLambda.Ref(), syncList, cluster, false, selectionMode)) {
+        if (!IsYtCompleteIsolatedLambda(sortKeySelectorLambda.Ref(), syncList, *cluster, false, selectionMode)) {
             return node;
         }
 
@@ -732,7 +733,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
     if (canUseReduce) {
         auto reduce = Build<TYtReduce>(ctx, node.Pos())
             .World(ApplySyncListToWorld(GetWorld(input, {}, ctx).Ptr(), syncList, ctx))
-            .DataSink(MakeDataSink(node.Pos(), cluster, ctx))
+            .DataSink(MakeDataSink(node.Pos(), *cluster, ctx))
             .Input(ConvertInputTable(input, ctx))
             .Output()
                 .Add(ConvertOutTables(node.Pos(), outItemType, ctx, State_, &partByKey.Ref().GetConstraintSet()))
@@ -783,7 +784,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
             input = Build<TYtOutput>(ctx, node.Pos())
                 .Operation<TYtMap>()
                     .World(world)
-                    .DataSink(MakeDataSink(node.Pos(), cluster, ctx))
+                    .DataSink(MakeDataSink(node.Pos(), *cluster, ctx))
                     .Input(ConvertInputTable(input, ctx, TConvertInputOpts().MakeUnordered(unordered)))
                     .Output()
                         .Add(ConvertOutTables(node.Pos(), mapOutputType ? mapOutputType : inputItemType, ctx, State_))
@@ -807,7 +808,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
             input = Build<TYtOutput>(ctx, node.Pos())
                 .Operation<TYtMerge>()
                     .World(world)
-                    .DataSink(MakeDataSink(node.Pos(), cluster, ctx))
+                    .DataSink(MakeDataSink(node.Pos(), *cluster, ctx))
                     .Input(ConvertInputTable(input, ctx, opts.MakeUnordered(unordered)))
                     .Output()
                         .Add(ConvertOutTables(node.Pos(), inputItemType, ctx, State_))
@@ -832,7 +833,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
             input = Build<TYtOutput>(ctx, node.Pos())
                 .Operation<TYtMap>()
                     .World(world)
-                    .DataSink(MakeDataSink(node.Pos(), cluster, ctx))
+                    .DataSink(MakeDataSink(node.Pos(), *cluster, ctx))
                     .Input(ConvertInputTable(input, ctx, TConvertInputOpts().MakeUnordered(unordered)))
                     .Output()
                         .Add(ConvertOutTables(node.Pos(), mapOutputType, ctx, State_))
@@ -861,7 +862,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
 
         auto result = Build<TYtMap>(ctx, node.Pos())
             .World(ApplySyncListToWorld(world.Ptr(), syncList, ctx))
-            .DataSink(MakeDataSink(node.Pos(), cluster, ctx))
+            .DataSink(MakeDataSink(node.Pos(), *cluster, ctx))
             .Input(ConvertInputTable(input, ctx, TConvertInputOpts().MakeUnordered(unordered)))
             .Output()
                 .Add(ConvertOutTables(node.Pos(), outItemType, ctx, State_, &partByKey.Ref().GetConstraintSet()))
@@ -877,7 +878,7 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::PartitionByKey(TExprBas
     }
     auto mapReduce = Build<TYtMapReduce>(ctx, node.Pos())
         .World(ApplySyncListToWorld(world.Ptr(), syncList, ctx))
-        .DataSink(MakeDataSink(node.Pos(), cluster, ctx))
+        .DataSink(MakeDataSink(node.Pos(), *cluster, ctx))
         .Input(ConvertInputTable(input, ctx, TConvertInputOpts().MakeUnordered(unordered)))
         .Output()
             .Add(ConvertOutTables(node.Pos(), outItemType, ctx, State_, &partByKey.Ref().GetConstraintSet()))

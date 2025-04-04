@@ -4,6 +4,7 @@
 #include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
 #include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
+#include <yql/essentials/core/issue/yql_issue.h>
 #include <util/string/builder.h>
 
 namespace NYql {
@@ -76,7 +77,7 @@ private:
         auto formatter = NSQLFormat::MakeSqlFormatter(lexers, parsers, settings);
         TString formattedQuery;
         res.Success = formatter->Format(request.Program, formattedQuery, res.Issues);
-        if (res.Success && formattedQuery != NormalizeEOL(request.Program)) {
+        if (res.Success && NormalizeEOL(formattedQuery) != NormalizeEOL(request.Program)) {
             res.Success = false;
             TPosition origPos(0, 1, request.File);
             TTextWalker origWalker(origPos, true);
@@ -104,8 +105,10 @@ private:
                 origSample.erase(origSample.size() - 1);
             }
 
-            res.Issues.AddIssue(TIssue(origPos, TStringBuilder() <<
-                "Format mismatch, expected:\n" << formattedSample << "\nbut got:\n" << origSample));
+            auto issue = TIssue(origPos, TStringBuilder() <<
+                "Format mismatch, expected:\n" << formattedSample << "\nbut got:\n" << origSample);
+            issue.SetCode(EYqlIssueCode::TIssuesIds_EIssueCode_WARNING, ESeverity::TSeverityIds_ESeverityId_S_WARNING);
+            res.Issues.AddIssue(issue);
         }
 
         return res;

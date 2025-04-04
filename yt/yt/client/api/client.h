@@ -84,7 +84,7 @@ struct IClient
     virtual const NChaosClient::IReplicationCardCachePtr& GetReplicationCardCache() = 0;
     virtual const NTransactionClient::ITimestampProviderPtr& GetTimestampProvider() = 0;
 
-    virtual std::optional<std::string> GetClusterName(bool fetchIfNull = true) = 0;
+    virtual TFuture<std::optional<std::string>> GetClusterName(bool fetchIfNull = true) = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IClient)
@@ -103,13 +103,13 @@ public:
     //! NB: Descendants of this class should be able to perform GetNode calls,
     //! so this cannot be used directly in tablet transactions.
     //! Use the transaction's parent client instead.
-    std::optional<std::string> GetClusterName(bool fetchIfNull) override;
+    TFuture<std::optional<std::string>> GetClusterName(bool fetchIfNull) override;
 
 private:
     YT_DECLARE_SPIN_LOCK(NThreading::TReaderWriterSpinLock, SpinLock_);
     std::optional<std::string> ClusterName_;
 
-    std::optional<std::string> FetchClusterNameFromMasterCache();
+    TFuture<std::optional<std::string>> FetchClusterNameFromMasterCache();
 };
 
 ////////////////////////////////////////////////////////////////////////////////

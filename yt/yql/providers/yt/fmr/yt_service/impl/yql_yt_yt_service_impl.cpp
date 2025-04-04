@@ -28,13 +28,13 @@ public:
     NYT::TRawTableWriterPtr MakeWriter(
         const TYtTableRef& ytTable,
         const TClusterConnection& clusterConnection,
-        const TYtWriterSettings& writerSetttings
+        const TYtWriterSettings& /*writerSetttings*/
     ) override {
         auto client = CreateClient(clusterConnection);
         auto transaction = client->AttachTransaction(GetGuid(clusterConnection.TransactionId));
-        auto path = NYT::TRichYPath(NYT::AddPathPrefix(ytTable.Path, "//"));
-        auto richPath = NYT::TRichYPath(path).Append(writerSetttings.AppendMode);
-        return transaction->CreateRawWriter(richPath, NYT::TFormat::YsonBinary());
+        TString ytPath = NYT::AddPathPrefix(ytTable.Path, "//");
+        auto richPath = NYT::TRichYPath(ytPath).Append(true);
+        return transaction->CreateRawWriter(richPath, NYT::TFormat::YsonBinary()); // TODO - support writerOptions
     }
 
 private:

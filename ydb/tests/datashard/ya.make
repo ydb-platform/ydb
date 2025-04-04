@@ -1,0 +1,4 @@
+RECURSE(
+    lib
+    s3
+)

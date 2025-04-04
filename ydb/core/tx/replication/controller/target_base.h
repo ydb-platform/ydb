@@ -56,6 +56,8 @@ public:
 
     const TString& GetStreamName() const override;
     void SetStreamName(const TString& value) override;
+    const TString& GetStreamConsumerName() const override;
+    void SetStreamConsumerName(const TString& value) override;
 
     EStreamState GetStreamState() const override;
     void SetStreamState(EStreamState value) override;
@@ -70,16 +72,19 @@ public:
 
     void Progress(const TActorContext& ctx) override;
     void Shutdown(const TActorContext& ctx) override;
+    void Reset(TActorId& actorId);
+
+    void UpdateConfig(const NKikimrReplication::TReplicationConfig&) override;
 
 private:
     TReplication* const Replication;
     const ui64 Id;
     const ETargetKind Kind;
-    const IConfig::TPtr Config;
 
     EDstState DstState = EDstState::Creating;
     TPathId DstPathId;
     TString StreamName;
+    TString StreamConsumerName;
     EStreamState StreamState = EStreamState::Ready;
     TString Issue;
 
@@ -89,6 +94,9 @@ private:
     TActorId WorkerRegistar;
     THashMap<ui64, TWorker> Workers;
     bool PendingRemoveWorkers = false;
+
+protected:
+    IConfig::TPtr Config;
 
 }; // TTargetBase
 

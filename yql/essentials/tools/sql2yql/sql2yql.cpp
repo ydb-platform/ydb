@@ -6,6 +6,12 @@
 
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_pure_ansi/lexer.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 
@@ -100,7 +106,13 @@ bool TestFormat(
 
     TString frmQuery;
     NYql::TIssues issues;
-    auto formatter = NSQLFormat::MakeSqlFormatter(settings);
+    NSQLTranslationV1::TLexers lexers;
+    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+    NSQLTranslationV1::TParsers parsers;
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+    auto formatter = NSQLFormat::MakeSqlFormatter(lexers, parsers, settings);
     if (!formatter->Format(query, frmQuery, issues)) {
         Cerr << "Failed to format query: " << issues.ToString() << Endl;
         return false;
@@ -140,6 +152,53 @@ bool TestFormat(
         out << frmQuery;
     }
     return true;
+}
+
+bool TestLexers(
+    const TString& query
+) {
+    NSQLTranslationV1::TLexers lexers;
+    NSQLTranslation::TTranslationSettings settings;
+    NYql::TIssues issues;
+    if (!NSQLTranslation::ParseTranslationSettings(query, settings, issues)) {
+        Cerr << issues.ToString();
+        return false;
+    }
+
+    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+    lexers.Antlr4Pure = NSQLTranslationV1::MakeAntlr4PureLexerFactory();
+    lexers.Antlr4PureAnsi = NSQLTranslationV1::MakeAntlr4PureAnsiLexerFactory();
+    auto lexerMain = NSQLTranslationV1::MakeLexer(lexers, settings.AnsiLexer, true, NSQLTranslationV1::ELexerFlavor::Default);
+    auto lexerPure = NSQLTranslationV1::MakeLexer(lexers, settings.AnsiLexer, true, NSQLTranslationV1::ELexerFlavor::Pure);
+    TVector<NSQLTranslation::TParsedToken> mainTokens;
+    if (!lexerMain->Tokenize(query, "", [&](auto token) { mainTokens.push_back(token);}, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
+        Cerr << issues.ToString();
+        return false;
+    }
+
+    TVector<NSQLTranslation::TParsedToken> pureTokens;
+    if (!lexerPure->Tokenize(query, "", [&](auto token) { pureTokens.push_back(token);}, issues, NSQLTranslation::SQL_MAX_PARSER_ERRORS)) {
+        Cerr << issues.ToString();
+        return false;
+    }
+
+    bool hasErrors = false;
+    if (mainTokens.size() != pureTokens.size()) {
+        hasErrors = true;
+        Cerr << "Mismatch token count, main: " << mainTokens.size() << ", pure: " << pureTokens.size() << "\n";
+    }
+
+    for (size_t i = 0; i < Min(mainTokens.size(), pureTokens.size()); ++i) {
+        if (mainTokens[i].Name != pureTokens[i].Name || mainTokens[i].Content != pureTokens[i].Content) {
+            hasErrors = true;
+            Cerr << "Mismatch token #" << i << ", main: " << mainTokens[i].Name << ":" << mainTokens[i].Content
+                << ", pure: " << pureTokens[i].Name << ":" << pureTokens[i].Content << "\n";
+            break;
+        }
+    }
+
+    return !hasErrors;
 }
 
 class TStoreMappingFunctor: public NLastGetopt::IOptHandler {
@@ -201,6 +260,7 @@ int BuildAST(int argc, char* argv[]) {
     opts.AddLongOption("test-format", "compare formatted query's AST with the original query's AST (only syntaxVersion=1 is supported).").NoArgument();
     opts.AddLongOption("test-double-format", "check if formatting already formatted query produces the same result").NoArgument();
     opts.AddLongOption("test-antlr4", "check antlr4 parser").NoArgument();
+    opts.AddLongOption("test-lexers", "check other lexers").NoArgument();
     opts.AddLongOption("format-output", "Saves formatted query to it").RequiredArgument("format-output").StoreResult(&outFileNameFormat);
     opts.SetFreeArgDefaultTitle("query file");
     opts.AddHelpOption();
@@ -219,9 +279,16 @@ int BuildAST(int argc, char* argv[]) {
         opts.PrintUsage(argv[0], Cerr);
     }
 
+    NSQLTranslationV1::TLexers lexers;
+    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+    NSQLTranslationV1::TParsers parsers;
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+
     NSQLTranslation::TTranslators translators(
         nullptr,
-        NSQLTranslationV1::MakeTranslator(),
+        NSQLTranslationV1::MakeTranslator(lexers, parsers),
         NSQLTranslationPG::MakeTranslator()
     );
 
@@ -359,6 +426,10 @@ int BuildAST(int argc, char* argv[]) {
 
             if (res.Has("test-format") && syntaxVersion == 1 && !hasError && parseRes.Root) {
                 hasError = !TestFormat(translators, query, settings, queryFile, parseRes, outFileNameFormat, res.Has("test-double-format"));
+            }
+
+            if (res.Has("test-lexers") && syntaxVersion == 1 && !hasError && parseRes.Root) {
+                hasError = !TestLexers(query);
             }
 
             if (hasError) {

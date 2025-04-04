@@ -6,7 +6,7 @@
 
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/formats/arrow/arrow_helpers.h>
-#include <ydb/library/formats/arrow/switch_type.h>
+#include <ydb/library/formats/arrow/switch/switch_type.h>
 
 namespace NKikimr::NOlap {
 

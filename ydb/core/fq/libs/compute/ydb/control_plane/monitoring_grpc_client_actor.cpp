@@ -1,3 +1,5 @@
+#include "ydb_grpc_helpers.h"
+
 #include <ydb/public/api/grpc/ydb_monitoring_v1.grpc.pb.h>
 
 #include <ydb/core/fq/libs/compute/ydb/events/events.h>
@@ -11,6 +13,8 @@
 #include <ydb/library/actors/core/event.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+
+#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [MonitoringGrpcClient]: " << stream)
 #define LOG_W(stream) LOG_WARN_S( *TlsActivationContext, NKikimrServices::FQ_RUN_ACTOR, "[ydb] [MonitoringGrpcClient]: " << stream)
@@ -64,7 +68,7 @@ public:
     void Handle(TEvYdbCompute::TEvCpuLoadRequest::TPtr& ev) {
         auto forwardRequest = std::make_unique<TEvPrivate::TEvSelfCheckRequest>();
         forwardRequest->Request.set_return_verbose_status(true);
-        forwardRequest->Token = CredentialsProvider->GetAuthInfo();
+        SetYdbRequestToken(*forwardRequest, CredentialsProvider->GetAuthInfo());
         TEvPrivate::TEvSelfCheckRequest::TPtr forwardEvent = (NActors::TEventHandle<TEvPrivate::TEvSelfCheckRequest>*)new IEventHandle(SelfId(), SelfId(), forwardRequest.release(), 0, Cookie);
         MakeCall<TSelfCheckGrpcRequest>(std::move(forwardEvent));
         Requests[Cookie++] = ev;
@@ -90,8 +94,20 @@ public:
             return;
         }
 
+        const auto& operation = ev->Get()->Response.operation();
+        if (operation.status() != Ydb::StatusIds::SUCCESS) {
+            forwardResponse->Issues.AddIssue(TStringBuilder() << "YDB operation status: " << operation.status());
+
+            NYql::TIssues operationIssues;
+            NYql::IssuesFromMessage(operation.issues(), operationIssues);
+            forwardResponse->Issues.AddIssues(std::move(operationIssues));
+
+            Send(request->Sender, forwardResponse.release(), 0, request->Cookie);
+            return;
+        }
+
         Ydb::Monitoring::SelfCheckResult response;
-        ev->Get()->Response.operation().result().UnpackTo(&response);
+        operation.result().UnpackTo(&response);
 
         double totalLoad = 0.0;
         double nodeCount = 0;

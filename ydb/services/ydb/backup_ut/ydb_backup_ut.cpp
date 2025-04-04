@@ -1,5 +1,6 @@
 #include "ydb_common_ut.h"
 
+#include <ydb/core/util/aws.h>
 #include <ydb/core/wrappers/ut_helpers/s3_mock.h>
 
 #include <ydb/public/api/protos/draft/ydb_replication.pb.h>
@@ -9,17 +10,17 @@
 #include <ydb/public/lib/ydb_cli/common/recursive_list.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
-#include <ydb-cpp-sdk/client/coordination/coordination.h>
-#include <ydb-cpp-sdk/client/draft/ydb_replication.h>
-#include <ydb-cpp-sdk/client/draft/ydb_view.h>
-#include <ydb-cpp-sdk/client/export/export.h>
-#include <ydb-cpp-sdk/client/import/import.h>
-#include <ydb-cpp-sdk/client/operation/operation.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
-#include <ydb-cpp-sdk/client/query/client.h>
-#include <ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
-#include <ydb-cpp-sdk/client/table/table.h>
-#include <ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_replication.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_view.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/export/export.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/import/import.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/rate_limiter/rate_limiter.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <ydb/library/backup/backup.h>
 
@@ -27,12 +28,12 @@
 #include <library/cpp/testing/hook/hook.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <aws/core/Aws.h>
 #include <google/protobuf/util/message_differencer.h>
 
 using namespace NYdb;
 using namespace NYdb::NOperation;
 using namespace NYdb::NRateLimiter;
+using namespace NYdb::NReplication;
 using namespace NYdb::NScheme;
 using namespace NYdb::NTable;
 using namespace NYdb::NView;
@@ -235,7 +236,7 @@ auto CreateMinPartitionsChecker(ui32 expectedMinPartitions, const TString& debug
     };
 }
 
-auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType) {
+auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType, bool prefix) {
     return [=](const TTableDescription& tableDescription) {
         for (const auto& indexDesc : tableDescription.GetIndexDescriptions()) {
             if (indexDesc.GetIndexName() != indexName) {
@@ -244,13 +245,16 @@ auto CreateHasIndexChecker(const TString& indexName, EIndexType indexType) {
             if (indexDesc.GetIndexType() != indexType) {
                 continue;
             }
-            if (indexDesc.GetIndexColumns().size() != 1) {
+            if (indexDesc.GetIndexColumns().size() != (prefix ? 2 : 1)) {
                 continue;
             }
             if (indexDesc.GetDataColumns().size() != 0) {
                 continue;
             }
-            if (indexDesc.GetIndexColumns()[0] != "Value") {
+            if (prefix && indexDesc.GetIndexColumns().front() != "Group") {
+                continue;
+            }
+            if (indexDesc.GetIndexColumns().back() != "Value") {
                 continue;
             }
             if (indexType != NYdb::NTable::EIndexType::GlobalVectorKMeansTree) {
@@ -317,6 +321,12 @@ NTopic::TTopicDescription DescribeTopic(NTopic::TTopicClient& topicClient, const
     const auto describeResult = topicClient.DescribeTopic(path).ExtractValueSync();
     UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
     return describeResult.GetTopicDescription();
+}
+
+std::vector<TChangefeedDescription> DescribeChangefeeds(TSession& session, const TString& tablePath) {
+    auto describeResult = session.DescribeTable(tablePath).ExtractValueSync();
+    UNIT_ASSERT_C(describeResult.IsSuccess(), describeResult.GetIssues().ToString());
+    return describeResult.GetTableDescription().GetChangefeedDescriptions();
 }
 
 // note: the storage pool kind must be preconfigured in the server
@@ -581,23 +591,37 @@ NYdb::NTable::EIndexType ConvertIndexTypeToAPI(NKikimrSchemeOp::EIndexType index
 }
 
 void TestRestoreTableWithIndex(
-    const char* table, const char* index, NKikimrSchemeOp::EIndexType indexType, TSession& session,
+    const char* table, const char* index, NKikimrSchemeOp::EIndexType indexType, bool prefix, TSession& session,
     TBackupFunction&& backup, TRestoreFunction&& restore
 ) {
     TString query;
     if (indexType == NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree) {
-        query = Sprintf(R"(CREATE TABLE `%s` (
-            Key Uint32,
-            Value String,
-            PRIMARY KEY (Key),
-            INDEX %s GLOBAL USING vector_kmeans_tree
-                ON (Value)
-                WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80)
-        );)", table, index);
+        if (prefix) {
+            query = Sprintf(R"(CREATE TABLE `%s` (
+                Key Uint32,
+                Group Uint32,
+                Value String,
+                PRIMARY KEY (Key),
+                INDEX %s GLOBAL USING vector_kmeans_tree
+                    ON (Group, Value)
+                    WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80)
+            );)", table, index);
+        } else {
+            query = Sprintf(R"(CREATE TABLE `%s` (
+                Key Uint32,
+                Group Uint32,
+                Value String,
+                PRIMARY KEY (Key),
+                INDEX %s GLOBAL USING vector_kmeans_tree
+                    ON (Value)
+                    WITH (similarity=inner_product, vector_type=float, vector_dimension=768, levels=2, clusters=80)
+            );)", table, index);
+        }
     } else {
         query = Sprintf(R"(
             CREATE TABLE `%s` (
                 Key Uint32,
+                Group Uint32,
                 Value Uint32,
                 PRIMARY KEY (Key),
                 INDEX %s %s ON (Value)
@@ -616,7 +640,7 @@ void TestRestoreTableWithIndex(
 
     restore();
 
-    CheckTableDescription(session, table, CreateHasIndexChecker(index, ConvertIndexTypeToAPI(indexType)));
+    CheckTableDescription(session, table, CreateHasIndexChecker(index, ConvertIndexTypeToAPI(indexType), prefix));
 }
 
 void TestRestoreDirectory(const char* directory, TSchemeClient& client, TBackupFunction&& backup, TRestoreFunction&& restore) {
@@ -786,6 +810,75 @@ void TestViewDependentOnAnotherViewIsRestored(
 
     restore();
     CompareResults(GetTableContent(session, dependentView), originalContent);
+}
+
+std::pair<std::vector<TString>, std::vector<TString>> 
+GetChangefeedAndTopicDescriptions(const char* table, TSession& session, NTopic::TTopicClient& topicClient) {
+    auto describeChangefeeds = DescribeChangefeeds(session, table);
+    const auto vectorSize = describeChangefeeds.size();
+
+    std::vector<TString> changefeedsStr(vectorSize);
+    std::transform(describeChangefeeds.begin(), describeChangefeeds.end(), changefeedsStr.begin(), [=](TChangefeedDescription changefeedDesc){
+        return changefeedDesc.ToString();
+    });
+
+    std::vector<TString> topicsStr(vectorSize);
+    std::transform(describeChangefeeds.begin(), describeChangefeeds.end(), topicsStr.begin(), [table, &topicClient](TChangefeedDescription changefeedDesc){
+        TString protoStr;
+        auto proto = TProtoAccessor::GetProto(
+            DescribeTopic(topicClient, TStringBuilder() << table << "/" << changefeedDesc.GetName())
+        );
+        proto.clear_self();
+        proto.clear_topic_stats();
+
+        google::protobuf::TextFormat::PrintToString(
+            proto, &protoStr
+        );
+        return protoStr;
+    });
+    
+    return {changefeedsStr, topicsStr};
+}
+
+void TestChangefeedAndTopicDescriptionsIsPreserved(
+    const char* table, TSession& session, NTopic::TTopicClient& topicClient,
+    TBackupFunction&& backup, TRestoreFunction&& restore, const TVector<TString>& changefeeds
+) {
+    ExecuteDataDefinitionQuery(session, Sprintf(R"(
+            CREATE TABLE `%s` (
+                Key Uint32,
+                Value Utf8,
+                PRIMARY KEY (Key)
+            );
+        )",
+        table
+    ));
+
+    for (const auto& changefeed : changefeeds) {
+        ExecuteDataDefinitionQuery(session, Sprintf(R"(
+                ALTER TABLE `%s` ADD CHANGEFEED `%s` WITH (
+                    FORMAT = 'JSON',
+                    MODE = 'UPDATES'
+                );
+            )",
+            table,
+            changefeed.c_str()
+        ));
+    }
+
+    Cerr << "GetChangefeedAndTopicDescriptions: " << Endl;
+    auto changefeedsAndTopicsBefore = GetChangefeedAndTopicDescriptions(table, session, topicClient);
+    backup();
+
+    ExecuteDataDefinitionQuery(session, Sprintf(R"(
+            DROP TABLE `%s`;
+        )", table
+    ));
+
+    restore();
+    auto changefeedsAndTopicsAfter = GetChangefeedAndTopicDescriptions(table, session, topicClient);
+
+    UNIT_ASSERT_EQUAL(changefeedsAndTopicsBefore, changefeedsAndTopicsAfter);
 }
 
 void TestTopicSettingsArePreserved(
@@ -979,10 +1072,24 @@ void TestCoordinationNodeResourcesArePreserved(
     }
 }
 
+void WaitReplicationInit(TReplicationClient& client, const TString& path) {
+    int retry = 0;
+    do {
+        auto result = client.DescribeReplication(path).ExtractValueSync();
+        const auto& desc = result.GetReplicationDescription();
+        if (desc.GetItems().empty()) {
+            Sleep(TDuration::Seconds(1));
+        } else {
+            break;
+        }
+    } while (++retry < 10);
+    UNIT_ASSERT(retry < 10);
+}
+
 void TestReplicationSettingsArePreserved(
         const TString& endpoint,
         NQuery::TSession& session,
-        NReplication::TReplicationClient& client,
+        TReplicationClient& client,
         TBackupFunction&& backup,
         TRestoreFunction&& restore)
 {
@@ -996,20 +1103,6 @@ void TestReplicationSettingsArePreserved(
             TOKEN_SECRET_NAME = 'secret'
         );)", endpoint.c_str()), true
     );
-
-    auto waitReplicationInit = [&client]() {
-        int retry = 0;
-        do {
-            auto result = client.DescribeReplication("/Root/replication").ExtractValueSync();
-            const auto& desc = result.GetReplicationDescription();
-            if (desc.GetItems().empty()) {
-                Sleep(TDuration::Seconds(1));
-            } else {
-                break;
-            }
-        } while (++retry < 10);
-        UNIT_ASSERT(retry < 10);
-    };
 
     auto checkDescription = [&client, &endpoint]() {
         auto result = client.DescribeReplication("/Root/replication").ExtractValueSync();
@@ -1026,12 +1119,12 @@ void TestReplicationSettingsArePreserved(
         UNIT_ASSERT_VALUES_EQUAL(items.at(0).DstPath, "/Root/replica");
     };
 
-    waitReplicationInit();
+    WaitReplicationInit(client, "/Root/replication");
     checkDescription();
     backup();
     ExecuteQuery(session, "DROP ASYNC REPLICATION `/Root/replication` CASCADE;", true);
     restore();
-    waitReplicationInit();
+    WaitReplicationInit(client, "/Root/replication");
     checkDescription();
 }
 
@@ -1231,7 +1324,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         }
 
         auto opts = NDump::TRestoreSettings().Mode(NDump::TRestoreSettings::EMode::ImportData);
-        using TYdbErrorException = V3::NStatusHelpers::TYdbErrorException;
+        using TYdbErrorException = ::NYdb::Dev::NStatusHelpers::TYdbErrorException;
 
         ExecuteDataDefinitionQuery(session, Sprintf(R"(
                 DROP TABLE `%s`;
@@ -1412,7 +1505,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
-    void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal) {
+    void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool prefix = false) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
         TKikimrWithGrpcAndRootSchema server{std::move(appConfig)};
@@ -1429,6 +1522,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             table,
             index,
             indexType,
+            prefix,
             session,
             CreateBackupLambda(driver, pathToBackup),
             CreateRestoreLambda(driver, pathToBackup)
@@ -1525,6 +1619,27 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
+    void TestChangefeedBackupRestore() {
+        TKikimrWithGrpcAndRootSchema server;
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        TTableClient tableClient(driver);
+        auto session = tableClient.GetSession().ExtractValueSync().GetSession();
+        NTopic::TTopicClient topicClient(driver);
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        const auto table = "/Root/table";
+
+        TestChangefeedAndTopicDescriptionsIsPreserved(
+            table,
+            session,
+            topicClient,
+            CreateBackupLambda(driver, pathToBackup),
+            CreateRestoreLambda(driver, pathToBackup),
+            {"a", "b", "c"}
+        );
+    }
+
     void TestReplicationBackupRestore() {
         TKikimrWithGrpcAndRootSchema server;
 
@@ -1533,7 +1648,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
-        NReplication::TReplicationClient replicationClient(driver);
+        TReplicationClient replicationClient(driver);
 
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
@@ -1545,8 +1660,48 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
-    void TestExternalDataSourceBackupRestore() {
+    Y_UNIT_TEST(RestoreReplicationWithoutSecret) {
         TKikimrWithGrpcAndRootSchema server;
+
+        const auto endpoint = Sprintf("localhost:%u", server.GetPort());
+        auto driver = TDriver(TDriverConfig().SetEndpoint(endpoint).SetAuthToken("root@builtin"));
+
+        NQuery::TQueryClient queryClient(driver);
+        auto session = queryClient.GetSession().ExtractValueSync().GetSession();
+        TReplicationClient replicationClient(driver);
+
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        ExecuteQuery(session, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'root@builtin');", true);
+        ExecuteQuery(session, "CREATE TABLE `/Root/table` (k Uint32, v Utf8, PRIMARY KEY (k));", true);
+        ExecuteQuery(session, Sprintf(R"(
+            CREATE ASYNC REPLICATION `/Root/replication` FOR
+                `/Root/table` AS `/Root/replica`
+            WITH (
+                CONNECTION_STRING = 'grpc://%s/?database=/Root',
+                TOKEN_SECRET_NAME = 'secret'
+            );)", endpoint.c_str()), true
+        );
+        WaitReplicationInit(replicationClient, "/Root/replication");
+
+        NDump::TClient backupClient(driver);
+        {
+            const auto result = backupClient.Dump("/Root", pathToBackup, NDump::TDumpSettings().Database("/Root"));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        ExecuteQuery(session, "DROP OBJECT `secret` (TYPE SECRET);", true);
+        ExecuteQuery(session, "DROP ASYNC REPLICATION `/Root/replication` CASCADE;", true);
+        {
+            const auto result = backupClient.Restore(pathToBackup, "/Root");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        }
+    }
+
+    void TestExternalDataSourceBackupRestore() {
+        NKikimrConfig::TAppConfig config;
+        config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        TKikimrWithGrpcAndRootSchema server(config);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
         TTableClient tableClient(driver);
@@ -1567,8 +1722,51 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
         );
     }
 
+    Y_UNIT_TEST(RestoreExternalDataSourceWithoutSecret) {
+        NKikimrConfig::TAppConfig config;
+        config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        TKikimrWithGrpcAndRootSchema server(config);
+        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
+
+        auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
+        TTableClient tableClient(driver);
+        auto tableSession = tableClient.CreateSession().ExtractValueSync().GetSession();
+
+        NQuery::TQueryClient queryClient(driver);
+        auto querySession = queryClient.GetSession().ExtractValueSync().GetSession();
+
+        TTempDir tempDir;
+        const auto& pathToBackup = tempDir.Path();
+
+        ExecuteQuery(querySession, "CREATE OBJECT `secret` (TYPE SECRET) WITH (value = 'secret');", true);
+        ExecuteQuery(querySession, R"(
+            CREATE EXTERNAL DATA SOURCE `/Root/externalDataSource` WITH (
+                SOURCE_TYPE = "PostgreSQL",
+                DATABASE_NAME = "db",
+                LOCATION = "192.168.1.1:8123",
+                AUTH_METHOD = "BASIC",
+                LOGIN = "user",
+                PASSWORD_SECRET_NAME = "secret"
+            );
+        )", true);
+
+        NDump::TClient backupClient(driver);
+        {
+            const auto result = backupClient.Dump("/Root", pathToBackup, NDump::TDumpSettings().Database("/Root"));
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+        ExecuteQuery(querySession, "DROP OBJECT `secret` (TYPE SECRET);", true);
+        ExecuteQuery(querySession, "DROP EXTERNAL DATA SOURCE `/Root/externalDataSource`;", true);
+        {
+            const auto result = backupClient.Restore(pathToBackup, "/Root");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
+        }
+    }
+
     void TestExternalTableBackupRestore() {
-        TKikimrWithGrpcAndRootSchema server;
+        NKikimrConfig::TAppConfig config;
+        config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
+        TKikimrWithGrpcAndRootSchema server(config);
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())));
         TTableClient tableClient(driver);
@@ -1611,7 +1809,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EPathTypeView:
                 return TestViewBackupRestore();
             case EPathTypeCdcStream:
-                break; // https://github.com/ydb-platform/ydb/issues/7054
+                return TestChangefeedBackupRestore();
             case EPathTypeReplication:
                 return TestReplicationBackupRestore();
             case EPathTypeTransfer:
@@ -1657,18 +1855,20 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
                 UNIT_FAIL("Client backup/restore were not implemented for this index type");
         }
     }
+
+    Y_UNIT_TEST(PrefixedVectorIndex) {
+        TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, true);
+    }
 }
 
 Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
-    Aws::SDKOptions Options;
-
     Y_TEST_HOOK_BEFORE_RUN(InitAwsAPI) {
-        Aws::InitAPI(Options);
+        NKikimr::InitAwsAPI();
     }
 
     Y_TEST_HOOK_AFTER_RUN(ShutdownAwsAPI) {
-        Aws::ShutdownAPI(Options);
+        NKikimr::ShutdownAwsAPI();
     }
 
     using NKikimr::NWrappers::NTestHelpers::TS3Mock;
@@ -2046,7 +2246,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
-    void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal) {
+    void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool prefix = false) {
         TS3TestEnv testEnv;
         constexpr const char* table = "/Root/table";
         constexpr const char* index = "value_idx";
@@ -2055,6 +2255,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             table,
             index,
             indexType,
+            prefix,
             testEnv.GetTableSession(),
             CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
             CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" })
@@ -2085,6 +2286,24 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
     }
 
+    void TestChangefeedBackupRestore() {
+        TS3TestEnv testEnv;
+        NTopic::TTopicClient topicClient(testEnv.GetDriver());
+
+        constexpr const char* table = "/Root/table";
+        testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableChangefeedsExport(true);
+        testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableChangefeedsImport(true);
+
+        TestChangefeedAndTopicDescriptionsIsPreserved(
+            table,
+            testEnv.GetTableSession(),
+            topicClient,
+            CreateBackupLambda(testEnv.GetDriver(), testEnv.GetS3Port()),
+            CreateRestoreLambda(testEnv.GetDriver(), testEnv.GetS3Port(), { "table" }),
+            {"a", "b", "c"}
+        );
+    }
+
     Y_UNIT_TEST_ALL_PROTO_ENUM_VALUES(TestAllSchemeObjectTypes, NKikimrSchemeOp::EPathType) {
         using namespace NKikimrSchemeOp;
 
@@ -2109,7 +2328,8 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                 TestViewBackupRestore();
                 break;
             case EPathTypeCdcStream:
-                break; // https://github.com/ydb-platform/ydb/issues/7054
+                TestChangefeedBackupRestore();
+                break;
             case EPathTypeReplication:
             case EPathTypeTransfer:
                 break; // https://github.com/ydb-platform/ydb/issues/10436
@@ -2154,5 +2374,9 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             default:
                 UNIT_FAIL("S3 backup/restore were not implemented for this index type");
         }
+    }
+
+    Y_UNIT_TEST(PrefixedVectorIndex) {
+        TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree, true);
     }
 }

@@ -1,11 +1,13 @@
 #include "node_warden.h"
 #include "node_warden_impl.h"
+#include "distconf.h"
 #include <ydb/core/base/statestorage_impl.h>
 #include <ydb/core/blobstorage/crypto/default.h>
 #include <ydb/core/blobstorage/incrhuge/incrhuge_keeper.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_events.h>
 #include <ydb/library/pdisk_io/file_params.h>
 #include <ydb/library/pdisk_io/wcache.h>
+#include <library/cpp/streams/zstd/zstd.h>
 #include <util/string/split.h>
 
 using namespace NKikimr;
@@ -110,6 +112,33 @@ void TNodeWarden::Handle(TEvNodeWardenStorageConfig::TPtr ev) {
 
     for (const TActorId& subscriber : StorageConfigSubscribers) {
         Send(subscriber, new TEvNodeWardenStorageConfig(StorageConfig, nullptr, SelfManagementEnabled));
+    }
+
+    if (StorageConfig.HasConfigComposite()) {
+        TString mainConfigYaml;
+        ui64 mainConfigYamlVersion;
+        auto error = DecomposeConfig(StorageConfig.GetConfigComposite(), &mainConfigYaml, &mainConfigYamlVersion, nullptr);
+        if (error) {
+            STLOG_DEBUG_FAIL(BS_NODE, NW49, "failed to decompose yaml configuration", (Error, error));
+        } else if (mainConfigYaml) {
+            std::optional<TString> storageConfigYaml;
+            std::optional<ui64> storageConfigYamlVersion;
+            if (StorageConfig.HasCompressedStorageYaml()) {
+                try {
+                    TStringInput s(StorageConfig.GetCompressedStorageYaml());
+                    storageConfigYaml.emplace(TZstdDecompress(&s).ReadAll());
+                    storageConfigYamlVersion.emplace(NYamlConfig::GetStorageMetadata(*storageConfigYaml).Version.value_or(0));
+                } catch (const std::exception& ex) {
+                    Y_ABORT("CompressedStorageYaml format incorrect: %s", ex.what());
+                }
+            }
+
+            // TODO(alexvru): make this blocker for confirmation?
+            PersistConfig(std::move(mainConfigYaml), mainConfigYamlVersion, std::move(storageConfigYaml),
+                storageConfigYamlVersion);
+        }
+    } else {
+        Y_DEBUG_ABORT_UNLESS(!StorageConfig.HasCompressedStorageYaml());
     }
 
     TActivationContext::Send(new IEventHandle(TEvBlobStorage::EvNodeWardenStorageConfigConfirm, 0, ev->Sender, SelfId(),

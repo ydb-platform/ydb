@@ -755,6 +755,10 @@ private:
             }
         }
 
+        if (resultLeft == EFetchResult::Yield || resultRight == EFetchResult::Yield) {
+            return EFetchResult::Yield;
+        }
+
         if (resultLeft == EFetchResult::Finish ) {
             *HaveMoreLeftRows = false;
         }
@@ -762,14 +766,6 @@ private:
 
         if (resultRight == EFetchResult::Finish ) {
             *HaveMoreRightRows = false;
-        }
-
-        if (!*HaveMoreLeftRows && !*HaveMoreRightRows) {
-            return EFetchResult::Finish;
-        }
-
-        if ((resultLeft == EFetchResult::Yield || !*HaveMoreLeftRows) && (resultRight == EFetchResult::Yield || !*HaveMoreRightRows)) {
-            return EFetchResult::Yield;
         }
 
         return EFetchResult::Finish;
@@ -1135,7 +1131,7 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
 
         const auto ptrType = PointerType::getUnqual(StructType::get(context));
         const auto self = CastInst::Create(Instruction::IntToPtr, ConstantInt::get(Type::getInt64Ty(context), uintptr_t(this)), ptrType, "self", block);
-        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TGraceJoinWrapper::MakeSpillingSupportState));
+        const auto makeFunc = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TGraceJoinWrapper::MakeSpillingSupportState>());
         const auto makeType = FunctionType::get(Type::getVoidTy(context), {self->getType(), ctx.Ctx->getType(), statePtr->getType()}, false);
         const auto makeFuncPtr = CastInst::Create(Instruction::IntToPtr, makeFunc, PointerType::getUnqual(makeType), "function", block);
         CallInst::Create(makeType, makeFuncPtr, {self, ctx.Ctx, statePtr}, "", block);
@@ -1153,7 +1149,7 @@ class TGraceJoinWrapper : public TStatefulWideFlowCodegeneratorNode<TGraceJoinWr
         const auto half = CastInst::Create(Instruction::Trunc, state, Type::getInt64Ty(context), "half", block);
         const auto stateArg = CastInst::Create(Instruction::IntToPtr, half, statePtrType, "state_arg", block);
 
-        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr(&TGraceJoinSpillingSupportState::FetchValues));
+        const auto func = ConstantInt::get(Type::getInt64Ty(context), GetMethodPtr<&TGraceJoinSpillingSupportState::FetchValues>());
         const auto funcType = FunctionType::get(Type::getInt32Ty(context), { statePtrType, ctx.Ctx->getType(), fields->getType() }, false);
         const auto funcPtr = CastInst::Create(Instruction::IntToPtr, func, PointerType::getUnqual(funcType), "fetch_func", block);
         const auto result = CallInst::Create(funcType, funcPtr, { stateArg, ctx.Ctx, fields }, "fetch", block);

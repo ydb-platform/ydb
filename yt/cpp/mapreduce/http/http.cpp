@@ -499,7 +499,7 @@ void TAddressCache::AddAddress(TString hostName, TAddressPtr address)
 
     {
         TWriteGuard guard(Lock_);
-        Cache_.emplace(std::move(hostName), std::move(entry));
+        Cache_[std::move(hostName)] = std::move(entry);
     }
 }
 
@@ -783,6 +783,10 @@ THttpResponse::THttpResponse(
             logAndSetError(NClusterErrorCodes::NRpc::Unavailable, ::TStringBuilder() << "internal error in proxy " << Context_.HostName);
             break;
 
+        case 503:
+            logAndSetError(NClusterErrorCodes::NBus::TransportError, "service unavailable");
+            break;
+
         default: {
             TStringStream httpHeaders;
             httpHeaders << "HTTP headers (";
@@ -801,9 +805,6 @@ THttpResponse::THttpResponse(
 
             if (auto parsedResponse = ParseError(HttpInput_->Headers())) {
                 ErrorResponse_ = parsedResponse.GetRef();
-                if (HttpCode_ == 503) {
-                    ExtendGenericError(*ErrorResponse_, NClusterErrorCodes::NBus::TransportError, "transport error");
-                }
             } else {
                 ErrorResponse_ = TErrorResponse(TYtError(errorString + " - X-YT-Error is missing in headers"), Context_.RequestId);
             }

@@ -107,15 +107,15 @@ namespace NMonitoring {
 
                     c->OnMetricBegin(metricType);
 
-                    // TODO: use it
-                    ReadFixed<ui8>(); // skip flags byte
+                    // (5.2) flags byte
+                    c->OnMemOnly(ReadFixed<ui8>() & 0x01);
 
                     auto metricNameValueIndex = std::numeric_limits<ui32>::max();
                     if (Header_.Version >= SV1_02) {
                         metricNameValueIndex = ReadVarint();
                     }
 
-                    // (5.2) labels
+                    // (5.3) labels
                     ui32 labelsCount = ReadVarint();
                     DECODE_ENSURE(Header_.Version >= SV1_02 || labelsCount > 0, "metric #" << i << " has no labels");
                     c->OnLabelsBegin();
@@ -125,7 +125,7 @@ namespace NMonitoring {
                     ReadLabels(labelNames, labelValues, labelsCount, c);
                     c->OnLabelsEnd();
 
-                    // (5.3) values
+                    // (5.4) values
                     switch (valueType) {
                         case EValueType::NONE:
                             break;

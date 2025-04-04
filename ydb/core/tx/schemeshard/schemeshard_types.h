@@ -163,4 +163,11 @@ struct TTempDirInfo {
     TActorId TempDirOwnerActorId;
 };
 
+enum class EDataErasureStatus : ui32 {
+    UNSPECIFIED = 0,
+    COMPLETED = 1,
+    IN_PROGRESS = 2,
+    IN_PROGRESS_BSC = 3,
+};
+
 }

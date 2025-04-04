@@ -9,6 +9,7 @@
 #include "init.h"
 #include "lock.h"
 #include "operation.h"
+#include "partition_reader.h"
 #include "retryful_writer.h"
 #include "transaction.h"
 #include "transaction_pinger.h"
@@ -418,6 +419,14 @@ TRawTableReaderPtr TClientBase::CreateRawReader(
     const TTableReaderOptions& options)
 {
     return CreateClientReader(path, format, options).Get();
+}
+
+TRawTableReaderPtr TClientBase::CreateRawTablePartitionReader(
+        const TString& cookie,
+        const TFormat& format,
+        const TTablePartitionReaderOptions& options)
+{
+    return NDetail::CreateTablePartitionReader(RawClient_, ClientRetryPolicy_->CreatePolicyForReaderRequest(), cookie, format, options);
 }
 
 TRawTableWriterPtr TClientBase::CreateRawWriter(
@@ -883,6 +892,45 @@ THolder<TClientWriter> TClientBase::CreateClientWriter(
         std::move(skiffOptions));
 }
 
+::TIntrusivePtr<INodeReaderImpl> TClientBase::CreateNodeTablePartitionReader(
+    const TString& cookie,
+    const TTablePartitionReaderOptions& options)
+{
+    auto format = TFormat::YsonBinary();
+    ApplyFormatHints<TNode>(&format, options.FormatHints_);
+
+    return MakeIntrusive<TNodeTableReader>(CreateRawTablePartitionReader(cookie, format, options));
+}
+
+::TIntrusivePtr<IProtoReaderImpl> TClientBase::CreateProtoTablePartitionReader(
+    const TString& cookie,
+    const TTablePartitionReaderOptions& options,
+    const Message* prototype)
+{
+    auto descriptors = TVector<const ::google::protobuf::Descriptor*>{
+        prototype->GetDescriptor(),
+    };
+    auto format = TFormat::Protobuf(descriptors, Context_.Config->ProtobufFormatWithDescriptors);
+    return MakeIntrusive<TLenvalProtoTableReader>(
+        CreateRawTablePartitionReader(cookie, format, options),
+        std::move(descriptors));
+}
+
+::TIntrusivePtr<ISkiffRowReaderImpl> TClientBase::CreateSkiffRowTablePartitionReader(
+    const TString& cookie,
+    const TTablePartitionReaderOptions& options,
+    const ISkiffRowSkipperPtr& skipper,
+    const NSkiff::TSkiffSchemaPtr& schema)
+{
+    auto skiffOptions = TCreateSkiffSchemaOptions().HasRangeIndex(true);
+    auto resultSchema = NYT::NDetail::CreateSkiffSchema(TVector{schema}, skiffOptions);
+    return new TSkiffRowTableReader(
+        CreateRawTablePartitionReader(cookie, NYT::NDetail::CreateSkiffFormat(resultSchema), options),
+        resultSchema,
+        {skipper},
+        std::move(skiffOptions));
+}
+
 ::TIntrusivePtr<INodeWriterImpl> TClientBase::CreateNodeWriter(
     const TRichYPath& path, const TTableWriterOptions& options)
 {
@@ -934,11 +982,6 @@ THolder<TClientWriter> TClientBase::CreateClientWriter(
 TBatchRequestPtr TClientBase::CreateBatchRequest()
 {
     return MakeIntrusive<TBatchRequest>(TransactionId_, GetParentClientImpl());
-}
-
-IClientPtr TClientBase::GetParentClient()
-{
-    return GetParentClientImpl();
 }
 
 IRawClientPtr TClientBase::GetRawClient() const
@@ -1054,6 +1097,11 @@ void TTransaction::Detach()
 ITransactionPingerPtr TTransaction::GetTransactionPinger()
 {
     return TransactionPinger_;
+}
+
+IClientPtr TTransaction::GetParentClient(bool ignoreGlobalTx)
+{
+    return GetParentClientImpl()->GetParentClient(ignoreGlobalTx);
 }
 
 TClientPtr TTransaction::GetParentClientImpl()
@@ -1489,6 +1537,19 @@ TClientPtr TClient::GetParentClientImpl()
     return this;
 }
 
+IClientPtr TClient::GetParentClient(bool ignoreGlobalTx)
+{
+    if (!TransactionId_.IsEmpty() && ignoreGlobalTx) {
+        return MakeIntrusive<TClient>(
+            RawClient_,
+            Context_,
+            TTransactionId(),
+            ClientRetryPolicy_);
+    } else {
+        return this;
+    }
+}
+
 void TClient::CheckShutdown() const
 {
     if (Shutdown_) {
@@ -1496,15 +1557,10 @@ void TClient::CheckShutdown() const
     }
 }
 
-TClientContext CreateClientContext(
-    const TString& serverName,
-    const TCreateClientOptions& options)
+void SetupClusterContext(
+    TClientContext& context,
+    const TString& serverName)
 {
-    TClientContext context;
-    context.Config = options.Config_ ? options.Config_ : TConfig::Get();
-    context.TvmOnly = options.TvmOnly_;
-    context.ProxyAddress = options.ProxyAddress_;
-
     context.ServerName = serverName;
     ApplyProxyUrlAliasingRules(context.ServerName);
 
@@ -1517,9 +1573,8 @@ TClientContext CreateClientContext(
 
     static constexpr char httpUrlSchema[] = "http://";
     static constexpr char httpsUrlSchema[] = "https://";
-    if (options.UseTLS_) {
-        context.UseTLS = *options.UseTLS_;
-    } else {
+
+    if (!context.UseTLS) {
         context.UseTLS = context.ServerName.StartsWith(httpsUrlSchema);
     }
 
@@ -1541,12 +1596,36 @@ TClientContext CreateClientContext(
     if (context.ServerName.find(':') == TString::npos) {
         context.ServerName = CreateHostNameWithPort(context.ServerName, context);
     }
-    if (options.TvmOnly_) {
+    if (context.TvmOnly) {
         context.ServerName = Format("tvm.%v", context.ServerName);
     }
+}
 
-    if (options.ProxyRole_) {
-        context.Config->Hosts = "hosts?role=" + *options.ProxyRole_;
+TClientContext CreateClientContext(
+    const TString& serverName,
+    const TCreateClientOptions& options)
+{
+    TClientContext context;
+    context.Config = options.Config_ ? options.Config_ : TConfig::Get();
+    context.TvmOnly = options.TvmOnly_;
+    context.ProxyAddress = options.ProxyAddress_;
+    context.UseProxyUnixDomainSocket = options.UseProxyUnixDomainSocket_;
+
+    if (options.UseTLS_) {
+        context.UseTLS = *options.UseTLS_;
+    }
+
+    if (!options.UseProxyUnixDomainSocket_) {
+        SetupClusterContext(context, serverName);
+    } else {
+        context.ServerName = serverName;
+    }
+
+    if (context.Config->HttpProxyRole && context.Config->Hosts == DefaultHosts) {
+        context.Config->Hosts = "hosts?role=" + context.Config->HttpProxyRole;
+    }
+    if (context.Config->RpcProxyRole) {
+        context.RpcProxyRole = context.Config->RpcProxyRole;
     }
 
     if (context.UseTLS || options.UseCoreHttpClient_) {

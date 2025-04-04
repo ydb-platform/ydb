@@ -197,6 +197,74 @@ void WriteSchema(const TProtobufEnumType* enumType, IYsonConsumer* consumer);
 
 ////////////////////////////////////////////////////////////////////////////////
 
+NYson::TProtobufElementType GetProtobufElementType(const TProtobufElement& protobufElement)
+{
+    return VisitProtobufElement(protobufElement,
+        [] (const TProtobufMessageElement& /*element*/) {
+            return TProtobufElementType{FieldDescriptor::TYPE_MESSAGE};
+        },
+        [] (const TProtobufScalarElement& element) {
+            return element.Type;
+        },
+        [] (const TProtobufAttributeDictionaryElement& /*element*/) {
+            return TProtobufElementType{FieldDescriptor::TYPE_MESSAGE};
+        },
+        [] (const TProtobufRepeatedElement& element) {
+            return GetProtobufElementType(element.Element);
+        },
+        [] (const TProtobufMapElement& /*element*/) {
+            // NB! Map is interpreted directly as repeated message field.
+            return TProtobufElementType{FieldDescriptor::TYPE_MESSAGE};
+        },
+        [] (const TProtobufAnyElement& /*element*/) {
+            return TProtobufElementType{FieldDescriptor::TYPE_STRING};
+        }
+    );
+}
+
+NYTree::ENodeType GetNodeTypeByProtobufScalarElement(const TProtobufScalarElement& scalarElement)
+{
+    switch (scalarElement.Type.Underlying()) {
+        case FieldDescriptor::TYPE_INT64:
+        case FieldDescriptor::TYPE_INT32:
+        case FieldDescriptor::TYPE_SINT32:
+        case FieldDescriptor::TYPE_SINT64:
+        case FieldDescriptor::TYPE_SFIXED32:
+        case FieldDescriptor::TYPE_SFIXED64:
+            return NYTree::ENodeType::Int64;
+        case FieldDescriptor::TYPE_UINT64:
+        case FieldDescriptor::TYPE_FIXED64:
+        case FieldDescriptor::TYPE_UINT32:
+        case FieldDescriptor::TYPE_FIXED32:
+            return NYTree::ENodeType::Uint64;
+        case FieldDescriptor::TYPE_BOOL:
+            return NYTree::ENodeType::Boolean;
+        case FieldDescriptor::TYPE_STRING:
+        case FieldDescriptor::TYPE_BYTES:
+            return NYTree::ENodeType::String;
+        case FieldDescriptor::TYPE_ENUM:
+            switch (scalarElement.EnumStorageType) {
+                case EEnumYsonStorageType::String:
+                    return NYTree::ENodeType::String;
+                case EEnumYsonStorageType::Int:
+                    return NYTree::ENodeType::Int64;
+            }
+            YT_ABORT();
+        case FieldDescriptor::TYPE_DOUBLE:
+        case FieldDescriptor::TYPE_FLOAT:
+            return NYTree::ENodeType::Double;
+        case FieldDescriptor::TYPE_GROUP:
+        case FieldDescriptor::TYPE_MESSAGE:
+            // NB! Scalar element cannot be of type message.
+            break;
+    }
+
+    THROW_ERROR_EXCEPTION("Encountered non-scalar field type for scalar protobuf element")
+        << TErrorAttribute("fieldType", scalarElement.Type.Underlying());
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
 class TProtobufTypeRegistry
 {
 public:
@@ -810,7 +878,8 @@ TProtobufElement TProtobufField::GetElement(bool insideRepeated) const
         return std::make_unique<TProtobufScalarElement>(TProtobufScalarElement{
             static_cast<TProtobufElementType>(GetType()),
             GetEnumYsonStorageType(),
-            EnumType_
+            GetEnumType(),
+            IsEnumValueCheckStrict(),
         });
     }
 }
@@ -3016,7 +3085,19 @@ TProtobufElementResolveResult GetProtobufElementFromField(
     };
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 } // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
+std::string_view GetProtobufElementTypeName(const NYson::TProtobufElement& element)
+{
+    return Visit(element,
+        [&] <CProtobufElement T> (const std::unique_ptr<T>&) {
+            return GetProtobufElementTypeName<T>();
+        });
+}
 
 TProtobufElementResolveResult ResolveProtobufElementByYPath(
     const TProtobufMessageType* rootType,

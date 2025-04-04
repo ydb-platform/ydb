@@ -93,6 +93,12 @@ Y_FORCE_INLINE T* TFlsSlot<T>::GetOrCreate() const
 }
 
 template <class T>
+Y_FORCE_INLINE T* TFlsSlot<T>::MaybeGet() const
+{
+    return static_cast<T*>(GetCurrentFls()->Get(Index_));
+}
+
+template <class T>
 T* TFlsSlot<T>::Create() const
 {
     auto cookie = new T();

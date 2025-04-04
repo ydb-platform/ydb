@@ -22,7 +22,7 @@ namespace {
             UdfTerminate((TStringBuilder() << GetPos() << " Invalid combination of delta/K values").data());
         }
 
-        return TUnboxedValuePod(new TDigestResource(delta, K, args[0].Get<double>()));
+        return TUnboxedValuePod(new TDigestResource(delta, K, args[0].Get<double>(), true));
     }
 
     SIMPLE_STRICT_UDF(TTDigest_AddValue, TResource<DigestResourceName>(TResource<DigestResourceName>, double)) {
@@ -46,14 +46,17 @@ namespace {
 
     SIMPLE_UDF(TTDigest_Deserialize, TResource<DigestResourceName>(char*)) {
         Y_UNUSED(valueBuilder);
-        return TUnboxedValuePod(new TDigestResource(TString(args[0].AsStringRef())));
+        return TUnboxedValuePod(new TDigestResource(TString(args[0].AsStringRef()), true));
     }
 
     SIMPLE_STRICT_UDF(TTDigest_Merge, TResource<DigestResourceName>(TResource<DigestResourceName>, TResource<DigestResourceName>)) {
         Y_UNUSED(valueBuilder);
         TDigestResource::Validate(args[0]);
         TDigestResource::Validate(args[1]);
-        return TUnboxedValuePod(new TDigestResource(static_cast<TDigestResource*>(args[0].AsBoxed().Get())->Get(), static_cast<TDigestResource*>(args[1].AsBoxed().Get())->Get()));
+        return TUnboxedValuePod(new TDigestResource(
+            static_cast<TDigestResource*>(args[0].AsBoxed().Get())->Get(),
+            static_cast<TDigestResource*>(args[1].AsBoxed().Get())->Get(),
+            true));
     }
 
     /*

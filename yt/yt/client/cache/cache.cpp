@@ -18,9 +18,9 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TStringBuf GetNormalClusterName(TStringBuf clusterName)
+std::string GetNormalClusterName(TStringBuf clusterName)
 {
-    return NNet::InferYTClusterFromClusterUrlRaw(clusterName).value_or(clusterName);
+    return std::string(NNet::InferYTClusterFromClusterUrlRaw(clusterName).value_or(clusterName));
 }
 
 // TODO(ignat): move this logic to ads/bsyeti/libs/ytex/client/

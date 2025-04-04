@@ -60,6 +60,10 @@ public:
 
     const TVector<TPhyTxResultMetadata>& GetTxResultsMeta() const { return TxResultsMeta; }
 
+    bool EnableShuffleElimination() const {
+        return Proto->GetEnableShuffleElimination();
+    }
+
     const NKqpProto::TKqpPhyStage& GetStages(size_t index) const {
         return Proto->GetStages(index);
     }

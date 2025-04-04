@@ -110,10 +110,12 @@ class Platform(object):
         self.is_arm = self.is_armv7 or self.is_armv8 or self.is_armv8m or self.is_armv7em
         self.is_armv7_neon = self.arch in ('armv7a_neon', 'armv7ahf', 'armv7a_cortex_a9', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
         self.is_armv7hf = self.arch in ('armv7ahf', 'armv7ahf_cortex_a35', 'armv7ahf_cortex_a53')
-        self.is_armv5te = self.arch in ('armv5te_arm968e_s')
+        self.is_armv5te = self.arch in ('armv5te_arm968e_s',)
 
-        self.is_rv32imc = self.arch in ('riscv32_esp',)
-        self.is_riscv32 = self.is_rv32imc
+        self.is_rv32imc = self.arch in ('riscv32_imc', 'riscv32_esp')
+        self.is_rv32imc_zicsr = self.arch in ('riscv32_imc_zicsr',)
+
+        self.is_riscv32 = self.is_rv32imc or self.is_rv32imc_zicsr
 
         self.is_nds32 = self.arch in ('nds32le_elf_mculib_v5f',)
         self.is_tc32 = self.arch in ('tc32_elf',)
@@ -584,8 +586,6 @@ class Build(object):
 
         if self.pic:
             emit('PIC', 'yes')
-
-        emit('COMPILER_ID', self.tc.type.upper())
 
         if self.is_valgrind:
             emit('WITH_VALGRIND', 'yes')
@@ -1114,12 +1114,13 @@ class Compiler(object):
         self.tc = tc
 
     def print_compiler(self):
-        # CLANG and CLANG_VER variables
+        # CLANG and CLANG{VER} variables
         emit(self.compiler_variable, 'yes')
         cv = self.tc.compiler_version
         if '.' in cv:
             cv = cv[:cv.index('.')]
-        emit('{}_VER'.format(self.compiler_variable), cv)
+        emit('COMPILER_ID', self.tc.type.upper())
+        emit('COMPILER_VERSION', cv)
         if self.tc.is_xcode:
             emit('XCODE', 'yes')
 
@@ -1275,6 +1276,9 @@ class GnuToolchain(Toolchain):
 
         if target.is_rv32imc:
             self.c_flags_platform.append('-march=rv32imc')
+
+        if target.is_rv32imc_zicsr:
+            self.c_flags_platform.append('-march=rv32imc_zicsr')
 
         if self.tc.is_clang or self.tc.is_gcc and self.tc.version_at_least(8, 2):
             target_flags = select(default=[], selectors=[
@@ -2390,7 +2394,7 @@ class Cuda(object):
             if not self.cuda_version.from_user:
                 return False
 
-        if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2', '12.6'):
+        if self.cuda_version.value in ('11.4', '11.8', '12.1', '12.2', '12.6', '12.8'):
             return True
         elif self.cuda_version.value in ('10.2', '11.4.19') and target.is_linux_armv8:
             return True
@@ -2522,10 +2526,10 @@ class CuDNN(object):
         self.cudnn_version = Setting('CUDNN_VERSION', auto=self.auto_cudnn_version)
 
     def have_cudnn(self):
-        return self.cudnn_version.value in ('7.6.5', '8.0.5')
+        return self.cudnn_version.value in ('7.6.5', '8.0.5', '8.6.0')
 
     def auto_cudnn_version(self):
-        return '8.0.5'
+        return '8.6.0'
 
     def print_(self):
         if self.cuda.have_cuda.value and self.have_cudnn():

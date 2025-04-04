@@ -1,7 +1,7 @@
 #include "ydb_common_ut.h"
 
-#include <ydb-cpp-sdk/client/coordination/coordination.h>
-#include <ydb-cpp-sdk/client/scheme/scheme.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/library/ydb_issue/proto/issue_id.pb.h>

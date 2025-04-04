@@ -38,7 +38,7 @@ TWorkloadCommandImport::TUploadParams::TUploadParams()
 
 void TWorkloadCommandImport::TUploadCommand::Config(TConfig& config) {
     TWorkloadCommandBase::Config(config);
-    Initializer->ConfigureOpts(*config.Opts);
+    Initializer->ConfigureOpts(config.Opts->GetOpts());
 }
 
 TWorkloadCommandImport::TUploadCommand::TUploadCommand(NYdbWorkload::TWorkloadParams& workloadParams, const TUploadParams& uploadParams, NYdbWorkload::TWorkloadDataInitializer::TPtr initializer)
@@ -226,8 +226,8 @@ private:
         if (auto* result = MapFindPtr(CsvOutputs, fname)) {
             return std::make_pair(result->Get(), false);
         }
-        auto result = MakeAtomicShared<TFileOutput>(Owner.UploadParams.FileOutputPath / fname);
-        CsvOutputs[fname] = result;
+        auto& result = CsvOutputs[fname];
+        result = MakeAtomicShared<TFileOutput>(Owner.UploadParams.FileOutputPath / fname);
         return std::make_pair(result.Get(), true);
     }
     TMap<TString, TAtomicSharedPtr<TFileOutput>> CsvOutputs;

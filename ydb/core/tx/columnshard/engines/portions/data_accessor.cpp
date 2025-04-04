@@ -1,7 +1,10 @@
 #include "constructor_meta.h"
 #include "data_accessor.h"
 
+#include <ydb/core/formats/arrow/accessor/abstract/accessor.h>
+#include <ydb/core/formats/arrow/accessor/composite/accessor.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
+#include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
 #include <ydb/core/formats/arrow/common/container.h>
 #include <ydb/core/tx/columnshard/blobs_reader/task.h>
 #include <ydb/core/tx/columnshard/data_sharing/protos/data.pb.h>
@@ -10,8 +13,6 @@
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/data.h>
 
-#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
-#include <ydb/library/formats/arrow/accessor/composite/accessor.h>
 #include <ydb/library/formats/arrow/simple_arrays_cache.h>
 
 namespace NKikimr::NOlap {
@@ -22,24 +23,24 @@ void FillDefaultColumn(TPortionDataAccessor::TColumnAssemblingInfo& column, cons
     if (column.GetColumnId() == (ui32)IIndexInfo::ESpecialColumn::PLAN_STEP) {
         column.AddBlobInfo(0, portionInfo.GetRecordsCount(),
             TPortionDataAccessor::TAssembleBlobInfo(
-                portionInfo.GetRecordsCount(), std::make_shared<arrow::UInt64Scalar>(defaultSnapshot.GetPlanStep()), false));
+                portionInfo.GetRecordsCount(), std::make_shared<arrow::UInt64Scalar>(defaultSnapshot.GetPlanStep())));
     }
     if (column.GetColumnId() == (ui32)IIndexInfo::ESpecialColumn::TX_ID) {
         column.AddBlobInfo(0, portionInfo.GetRecordsCount(),
             TPortionDataAccessor::TAssembleBlobInfo(
-                portionInfo.GetRecordsCount(), std::make_shared<arrow::UInt64Scalar>(defaultSnapshot.GetTxId()), false));
+                portionInfo.GetRecordsCount(), std::make_shared<arrow::UInt64Scalar>(defaultSnapshot.GetTxId())));
     }
     if (column.GetColumnId() == (ui32)IIndexInfo::ESpecialColumn::WRITE_ID) {
         column.AddBlobInfo(0, portionInfo.GetRecordsCount(),
             TPortionDataAccessor::TAssembleBlobInfo(
-                portionInfo.GetRecordsCount(), std::make_shared<arrow::UInt64Scalar>((ui64)portionInfo.GetInsertWriteIdVerified()), false));
+                portionInfo.GetRecordsCount(), std::make_shared<arrow::UInt64Scalar>((ui64)portionInfo.GetInsertWriteIdVerified())));
     }
     if (column.GetColumnId() == (ui32)IIndexInfo::ESpecialColumn::DELETE_FLAG) {
         AFL_VERIFY(portionInfo.GetRecordsCount() == portionInfo.GetMeta().GetDeletionsCount() || portionInfo.GetMeta().GetDeletionsCount() == 0)("deletes",
                                                           portionInfo.GetMeta().GetDeletionsCount())("count", portionInfo.GetRecordsCount());
         column.AddBlobInfo(0, portionInfo.GetRecordsCount(),
             TPortionDataAccessor::TAssembleBlobInfo(
-                portionInfo.GetRecordsCount(), std::make_shared<arrow::BooleanScalar>((bool)portionInfo.GetMeta().GetDeletionsCount()), true));
+                portionInfo.GetRecordsCount(), std::make_shared<arrow::BooleanScalar>((bool)portionInfo.GetMeta().GetDeletionsCount())));
     }
 }
 
@@ -370,6 +371,17 @@ ui64 TPortionDataAccessor::GetIndexRawBytes(const bool validation /*= true*/) co
     };
     AggregateIndexChunksData(aggr, GetIndexesVerified(), nullptr, validation);
     return sum;
+}
+
+std::vector<const TIndexChunk*> TPortionDataAccessor::GetIndexChunksPointers(const ui32 indexId) const {
+    std::vector<const TIndexChunk*> result;
+    for (auto&& c : GetIndexesVerified()) {
+        if (c.GetIndexId() == indexId) {
+            AFL_VERIFY(c.GetChunkIdx() == result.size());
+            result.emplace_back(&c);
+        }
+    }
+    return result;
 }
 
 std::vector<const TColumnRecord*> TPortionDataAccessor::GetColumnChunksPointers(const ui32 columnId) const {
@@ -790,13 +802,7 @@ TConclusion<std::shared_ptr<NArrow::NAccessor::IChunkedArray>> TPortionDataAcces
     const TColumnLoader& loader) const {
     if (DefaultRowsCount) {
         Y_ABORT_UNLESS(!Data);
-        if (NeedCache) {
-            return std::make_shared<NArrow::NAccessor::TTrivialArray>(
-                NArrow::TThreadSimpleArraysCache::Get(loader.GetField()->type(), DefaultValue, DefaultRowsCount));
-        } else {
-            return std::make_shared<NArrow::NAccessor::TTrivialArray>(
-                NArrow::TStatusValidator::GetValid(arrow::MakeArrayFromScalar(*DefaultValue, DefaultRowsCount)));
-        }
+        return std::make_shared<NArrow::NAccessor::TSparsedArray>(DefaultValue, loader.GetField()->type(), DefaultRowsCount);
     } else {
         AFL_VERIFY(ExpectedRowsCount);
         return loader.ApplyConclusion(Data, *ExpectedRowsCount).AddMessageInfo(::ToString(loader.GetAccessorConstructor()->GetType()));

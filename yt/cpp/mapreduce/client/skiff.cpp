@@ -279,6 +279,7 @@ TFormat CreateSkiffFormat(const NSkiff::TSkiffSchemaPtr& schema) {
 
 NSkiff::TSkiffSchemaPtr CreateSkiffSchemaIfNecessary(
     const IRawClientPtr& rawClient,
+    const TClientContext& context,
     const TTransactionId& transactionId,
     ENodeReaderFormat nodeReaderFormat,
     const TVector<TRichYPath>& tablePaths,
@@ -301,17 +302,23 @@ NSkiff::TSkiffSchemaPtr CreateSkiffSchemaIfNecessary(
         }
     }
 
-    auto nodes = NRawClient::BatchTransform(
+    auto nodes = RemoteClustersBatchTransform(
         rawClient,
-        NRawClient::CanonizeYPaths(rawClient, tablePaths),
+        context,
+        tablePaths,
         [&] (IRawBatchRequestPtr batch, const TRichYPath& path) {
             auto getOptions = TGetOptions()
                 .AttributeFilter(
                     TAttributeFilter()
                         .AddAttribute("schema")
                         .AddAttribute("dynamic")
-                        .AddAttribute("type")
-                );
+                        .AddAttribute("type"));
+            // In case of external cluster, we can't use the current transaction
+            // since it is unknown for the external cluster.
+            // Hence, we should take a global transaction.
+            if (path.Cluster_ && !path.Cluster_->empty()) {
+                return batch->Get(TTransactionId(), path.Path_, getOptions);
+            }
             return batch->Get(transactionId, path.Path_, getOptions);
         });
 

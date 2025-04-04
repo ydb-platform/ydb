@@ -83,8 +83,8 @@ public:
     { };
     static constexpr TDisableFormat DisableFormat = {};
 
-    TErrorOr(TString message, TDisableFormat);
-    TErrorOr(TErrorCode code, TString message, TDisableFormat);
+    TErrorOr(std::string message, TDisableFormat);
+    TErrorOr(TErrorCode code, std::string message, TDisableFormat);
 
     template <class... TArgs>
     explicit TErrorOr(
@@ -110,8 +110,8 @@ public:
     TErrorCode GetNonTrivialCode() const;
     THashSet<TErrorCode> GetDistinctNonTrivialErrorCodes() const;
 
-    const TString& GetMessage() const;
-    TError& SetMessage(TString message);
+    const std::string& GetMessage() const;
+    TError& SetMessage(std::string message);
 
     bool HasOriginAttributes() const;
     TProcessId GetPid() const;
@@ -197,7 +197,7 @@ public:
     //! In order to prevent core -> re2 dependency, implementation belongs to a separate library
     //! yt/yt/library/error_skeleton. Calling this method without PEERDIR'ing implementation
     //! results in an exception.
-    TString GetSkeleton() const;
+    std::string GetSkeleton() const;
 
     TError& operator <<= (const TErrorAttribute& attribute) &;
     TError& operator <<= (const std::vector<TErrorAttribute>& attributes) &;
@@ -219,6 +219,13 @@ public:
     template <CErrorNestable TValue>
     TError operator << (const std::optional<TValue>& rhs) const &;
 
+    // The |enricher| is called during TError construction and before TErrorOr<> construction. Meant
+    // to enrich the error, e.g. by setting generic attributes. The |RegisterEnricher| method is not
+    // threadsafe and is meant to be called from single-threaded bootstrapping code. Multiple
+    // enrichers are supported and will be called in order of registration.
+    using TEnricher = std::function<void(TError&)>;
+    static void RegisterEnricher(TEnricher enricher);
+
 private:
     class TImpl;
     std::unique_ptr<TImpl> Impl_;
@@ -226,8 +233,11 @@ private:
     explicit TErrorOr(std::unique_ptr<TImpl> impl);
 
     void MakeMutable();
+    void Enrich();
 
     friend class TErrorAttributes;
+
+    static TEnricher Enricher_;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -281,7 +291,7 @@ public:
     const char* what() const noexcept override;
 
 private:
-    mutable TString CachedWhat_;
+    mutable std::string CachedWhat_;
 };
 
 // Make these templates to avoid type erasure during throw.

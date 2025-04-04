@@ -13,14 +13,13 @@ using namespace NYql::NUdf;
 using namespace NKikimr::NMiniKQL;
 
 constexpr const char* DataFieldName = "_data";
+constexpr const char* MessageGroupIdFieldName = "_message_group_id";
 constexpr const char* OffsetFieldName = "_offset";
+constexpr const char* PartitionFieldName = "_partition";
+constexpr const char* ProducerIdFieldName = "_producer_id";
+constexpr const char* SeqNoFieldName = "_seq_no";
 
-constexpr const size_t FieldCount = 2; // Change it when change fields
-
-struct FieldPositions {
-    ui64 Data = 0;
-    ui64 Offset = 0;
-};
+constexpr const size_t FieldCount = 6; // Change it when change fields
 
 
 NYT::TNode CreateTypeNode(const TString& fieldType) {
@@ -41,7 +40,11 @@ void AddField(NYT::TNode& node, const TString& fieldName, const TString& fieldTy
 NYT::TNode CreateMessageScheme() {
     auto structMembers = NYT::TNode::CreateList();
     AddField(structMembers, DataFieldName, "String");
+    AddField(structMembers, MessageGroupIdFieldName, "String");
     AddField(structMembers, OffsetFieldName, "Uint64");
+    AddField(structMembers, PartitionFieldName, "Uint32");
+    AddField(structMembers, ProducerIdFieldName, "String");
+    AddField(structMembers, SeqNoFieldName, "Uint64");
 
     return NYT::TNode::CreateList()
         .Add("StructType")
@@ -57,8 +60,24 @@ struct TMessageWrapper {
         return NKikimr::NMiniKQL::MakeString(Message.Data);
     }
 
+    NYql::NUdf::TUnboxedValuePod GetMessageGroupId() const {
+        return NKikimr::NMiniKQL::MakeString(Message.MessageGroupId);
+    }
+
     NYql::NUdf::TUnboxedValuePod GetOffset() const {
         return NYql::NUdf::TUnboxedValuePod(Message.Offset);
+    }
+
+    NYql::NUdf::TUnboxedValuePod GetPartition() const {
+        return NYql::NUdf::TUnboxedValuePod(Message.Partition);
+    }
+
+    NYql::NUdf::TUnboxedValuePod GetProducerId() const {
+        return NKikimr::NMiniKQL::MakeString(Message.ProducerId);
+    }
+
+    NYql::NUdf::TUnboxedValuePod GetSeqNo() const {
+        return NYql::NUdf::TUnboxedValuePod(Message.SeqNo);
     }
 };
 
@@ -66,23 +85,11 @@ class TInputConverter {
 protected:
     IWorker* Worker_;
     TPlainContainerCache Cache_;
-    FieldPositions Position;
 
 public:
     explicit TInputConverter(IWorker* worker)
         : Worker_(worker)
     {
-        const TStructType* structType = worker->GetInputType();
-        const ui64 count = structType->GetMembersCount();
- 
-        for (ui64 i = 0; i < count; ++i) { 
-            const auto name = structType->GetMemberName(i);
-            if (name == DataFieldName) {
-                Position.Data = i;
-            } else if (name == OffsetFieldName) {
-                Position.Offset = i;
-            }
-        }
     }
 
 public:
@@ -92,8 +99,13 @@ public:
         result = Cache_.NewArray(holderFactory, static_cast<ui32>(FieldCount), items);
 
         TMessageWrapper wrap {*message};
-        items[Position.Data] = wrap.GetData();
-        items[Position.Offset] = wrap.GetOffset();
+        // lex order by field name
+        items[0] = wrap.GetData();
+        items[1] = wrap.GetMessageGroupId();
+        items[2] = wrap.GetOffset();
+        items[3] = wrap.GetPartition();
+        items[4] = wrap.GetProducerId();
+        items[5] = wrap.GetSeqNo();
     }
 
     void ClearCache() {

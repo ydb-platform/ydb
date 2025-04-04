@@ -46,9 +46,9 @@ void TStartDistributedWriteSessionCommand::DoExecute(ICommandContextPtr context)
     auto sessionAndCookies = WaitFor(context->GetClient()->StartDistributedWriteSession(Path, Options))
         .ValueOrThrow();
 
-    signatureGenerator->Sign(sessionAndCookies.Session.Underlying());
+    signatureGenerator->Resign(sessionAndCookies.Session.Underlying());
     for (const auto& cookie : sessionAndCookies.Cookies) {
-        signatureGenerator->Sign(cookie.Underlying());
+        signatureGenerator->Resign(cookie.Underlying());
     }
 
     ProduceOutput(context, [sessionAndCookies = std::move(sessionAndCookies)] (IYsonConsumer* consumer) {
@@ -117,7 +117,7 @@ NApi::ITableWriterPtr TWriteTableFragmentCommand::CreateTableWriter(
         .ValueOrThrow();
 
     if (!validationSuccessful) {
-        auto concreteCookie = ConvertTo<TWriteFragmentCookie>(signedCookie.Underlying()->Payload());
+        auto concreteCookie = ConvertTo<TWriteFragmentCookie>(TYsonStringBuf(signedCookie.Underlying()->Payload()));
 
         THROW_ERROR_EXCEPTION(
             "Signature validation failed for write table fragment")
@@ -146,7 +146,7 @@ void TWriteTableFragmentCommand::DoExecute(ICommandContextPtr context)
     auto writer = DynamicPointerCast<NApi::ITableFragmentWriter>(TableWriter);
 
     auto signedWriteResult = writer->GetWriteFragmentResult();
-    context->GetDriver()->GetSignatureGenerator()->Sign(signedWriteResult.Underlying());
+    context->GetDriver()->GetSignatureGenerator()->Resign(signedWriteResult.Underlying());
 
     ProduceOutput(context, [result = std::move(signedWriteResult)] (IYsonConsumer* consumer) {
         Serialize(

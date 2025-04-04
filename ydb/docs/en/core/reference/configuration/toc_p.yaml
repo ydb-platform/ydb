@@ -1,3 +1,5 @@
 items:
 - name: TLS
   href: tls.md
+- name: Database node authentication
+  href: node-authentication.md

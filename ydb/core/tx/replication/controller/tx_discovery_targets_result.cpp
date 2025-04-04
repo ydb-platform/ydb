@@ -1,6 +1,5 @@
 #include "controller_impl.h"
-#include "target_table.h"
-#include "util.h"
+#include "target_transfer.h"
 
 #include <util/string/join.h>
 
@@ -47,7 +46,7 @@ public:
                 const auto tid = Replication->AddTarget(target.Kind, target.Config);
                 
                 TString transformLambda;
-                if (auto p = std::dynamic_pointer_cast<TTargetTransfer::TTransferConfig>(target.Config)) {
+                if (auto p = std::dynamic_pointer_cast<const TTargetTransfer::TTransferConfig>(target.Config)) {
                     transformLambda = p->GetTransformLambda();
                 }
 

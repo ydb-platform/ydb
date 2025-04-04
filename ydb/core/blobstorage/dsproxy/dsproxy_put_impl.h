@@ -278,7 +278,7 @@ public:
     void ProcessResponse(TEvBlobStorage::TEvVPutResult& msg) {
         ++VPutResponses;
         ProcessResponseCommonPart(msg.Record);
-        ui32 orderNumber = Info->GetOrderNumber(VDiskIDFromVDiskID(msg.Record.GetVDiskID()));
+        ui32 orderNumber = Info->GetOrderNumber(TVDiskIdShort(VDiskIDFromVDiskID(msg.Record.GetVDiskID())));
         ProcessResponseBlob(orderNumber, msg.Record);
         History.AddVPutResult(orderNumber, msg.Record.GetStatus(), msg.Record.GetErrorReason());
     }
@@ -286,7 +286,7 @@ public:
     void ProcessResponse(TEvBlobStorage::TEvVMultiPutResult& msg) {
         ++VMultiPutResponses;
         ProcessResponseCommonPart(msg.Record);
-        ui32 orderNumber = Info->GetOrderNumber(VDiskIDFromVDiskID(msg.Record.GetVDiskID()));
+        ui32 orderNumber = Info->GetOrderNumber(TVDiskIdShort(VDiskIDFromVDiskID(msg.Record.GetVDiskID())));
         for (const auto& item : msg.Record.GetItems()) {
             ProcessResponseBlob(orderNumber, item);
         }

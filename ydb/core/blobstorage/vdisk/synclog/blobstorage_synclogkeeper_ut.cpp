@@ -95,7 +95,7 @@ namespace NKikimr {
         TString explanation;
         auto r = TSyncLogRepaired::Construct(std::move(params), ep.EntryPoint, ep.EntryPointLsn, explanation);
         Y_ABORT_UNLESS(r);
-        std::unique_ptr<NSyncLog::TSyncLogRecovery> recovery = std::make_unique<NSyncLog::TSyncLogRecovery>(std::move(r));
+        std::unique_ptr<NSyncLog::TSyncLogRecovery> recovery = std::make_unique<NSyncLog::TSyncLogRecovery>("", std::move(r));
         const ui64 lastLsnOfIndexRecord = recovery->GetLastLsnOfIndexRecord();
         std::unique_ptr<TSyncLogRepaired> repaired = recovery->ReleaseRepaired();
 
@@ -226,7 +226,7 @@ namespace NKikimr {
         NSyncLog::TLogEssence e;
         State->FillInSyncLogEssence(&e);
         auto reportInternals = [] () { return TString(); };
-        TWhatsNextOutcome outcome = WhatsNext(syncedLsn, dbBirthLsn, &e, reportInternals);
+        TWhatsNextOutcome outcome = WhatsNext("", syncedLsn, dbBirthLsn, &e, reportInternals);
         STR << "Sync result: outcome# " << Name2Str(outcome.WhatsNext)
             << " explanation# " << outcome.Explanation << "\n";
         UNIT_ASSERT(outcome.WhatsNext == EReadWhatsNext::EWnDiskSynced);

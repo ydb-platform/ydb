@@ -7,7 +7,8 @@ SRCS(
 PEERDIR(
     library/cpp/random_provider
     library/cpp/threading/future
-    yt/yql/providers/yt/fmr/worker/interface
+    yt/yql/providers/yt/fmr/coordinator/interface
+    yt/yql/providers/yt/fmr/job_factory/interface
     yql/essentials/utils
 )
 

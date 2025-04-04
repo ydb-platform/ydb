@@ -656,7 +656,7 @@ static const THashSet<TStringBuf> PG_SUPPORTED_PRESORT = {
 };
 
 TPgType::TPgType(ui32 typeId, const TTypeEnvironment& env)
-    : TType(EKind::Pg, env.GetTypeOfTypeLazy(), 
+    : TType(EKind::Pg, env.GetTypeOfTypeLazy(),
         NYql::NPg::HasType(typeId) && PG_SUPPORTED_PRESORT.contains(NYql::NPg::LookupType(typeId).Name))
     , TypeId(typeId)
 {
@@ -2518,7 +2518,6 @@ TArrayRef<TType* const> GetWideComponents(const TFlowType* type) {
 }
 
 TArrayRef<TType* const> GetWideComponents(const TStreamType* type) {
-    MKQL_ENSURE(RuntimeVersion > 35, "Wide stream is not supported in runtime version " << RuntimeVersion);
     return AS_TYPE(TMultiType, type->GetItemType())->GetElements();
 }
 

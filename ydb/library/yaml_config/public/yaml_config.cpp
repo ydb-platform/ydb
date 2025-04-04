@@ -692,6 +692,19 @@ TDatabaseMetadata GetDatabaseMetadata(const TString& config) {
     return {};
 }
 
+TStorageMetadata GetStorageMetadata(const TString& config) {
+    if (auto doc = GetMetadataDoc(config); doc) {
+        auto versionNode = doc->Node["version"];
+        auto clusterNode = doc->Node["cluster"];
+        return TStorageMetadata{
+            .Version = versionNode ? std::optional{FromString<ui64>(versionNode.Scalar())} : std::nullopt,
+            .Cluster = clusterNode ? std::optional{clusterNode.Scalar()} : std::nullopt,
+        };
+    }
+
+    return {};
+}
+
 TVolatileMetadata GetVolatileMetadata(const TString& config) {
     if (auto doc = GetMetadataDoc(config); doc) {
         auto versionNode = doc->Node.at("version");
@@ -759,6 +772,17 @@ TString ReplaceMetadata(const TString& config, const TDatabaseMetadata& metadata
           << "metadata:"
           << "\n  kind: DatabaseConfig"
           << "\n  database: \"" << *metadata.Database << "\""
+          << "\n  version: " << *metadata.Version;
+    };
+    return ReplaceMetadata(config, serializeMetadata);
+}
+
+TString ReplaceMetadata(const TString& config, const TStorageMetadata& metadata) {
+    auto serializeMetadata = [&](TStringStream& sstr) {
+        sstr
+          << "metadata:"
+          << "\n  kind: StorageConfig"
+          << "\n  cluster: \"" << *metadata.Cluster << "\""
           << "\n  version: " << *metadata.Version;
     };
     return ReplaceMetadata(config, serializeMetadata);
@@ -855,6 +879,20 @@ std::variant<TMainMetadata, TDatabaseMetadata, TError> GetGenericMetadata(const 
             .Error = e.what(),
         };
     }
+}
+
+TString UpgradeMainConfigVersion(const TString& config) {
+    auto metadata = GetMainMetadata(config);
+    Y_ENSURE(metadata.Version);
+    *metadata.Version = *metadata.Version + 1;
+    return ReplaceMetadata(config, metadata);
+}
+
+TString UpgradeStorageConfigVersion(const TString& config) {
+    auto metadata = GetStorageMetadata(config);
+    Y_ENSURE(metadata.Version);
+    *metadata.Version = *metadata.Version + 1;
+    return ReplaceMetadata(config, metadata);
 }
 
 } // namespace NKikimr::NYamlConfig

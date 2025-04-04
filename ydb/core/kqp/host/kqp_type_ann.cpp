@@ -609,7 +609,7 @@ TStatus AnnotateKeyTuple(const TExprNode::TPtr& node, TExprContext& ctx) {
 TStatus AnnotateUpsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData)
 {
-    if (!EnsureMinArgsCount(*node, 3, ctx)) {
+    if (!EnsureMinArgsCount(*node, 4, ctx)) {
         return TStatus::Error;
     }
 
@@ -865,7 +865,7 @@ TStatus AnnotateUpdateRows(const TExprNode::TPtr& node, TExprContext& ctx, const
 TStatus AnnotateDeleteRows(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
     const TKikimrTablesData& tablesData)
 {
-    if (!EnsureMaxArgsCount(*node, 4, ctx) && !EnsureMinArgsCount(*node, 2, ctx)) {
+    if (!EnsureMaxArgsCount(*node, 5, ctx) && !EnsureMinArgsCount(*node, 3, ctx)) {
         return TStatus::Error;
     }
 
@@ -1077,7 +1077,7 @@ TStatus AnnotateOlapFilter(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 TStatus AnnotateOlapApply(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (!EnsureArgsCount(*node, 3U, ctx)) {
+    if (!EnsureArgsCount(*node, 4U, ctx)) {
         return TStatus::Error;
     }
 
@@ -1097,7 +1097,8 @@ TStatus AnnotateOlapApply(const TExprNode::TPtr& node, TExprContext& ctx) {
     }
 
     const auto structType = argsType->Cast<TStructExprType>();
-    TTypeAnnotationNode::TListType argsTypes(columns->ChildrenSize());
+    std::vector<const NYql::TTypeAnnotationNode*> argsTypes(columns->ChildrenSize());
+
     for (auto i = 0U; i < argsTypes.size(); ++i) {
         if (const auto argType = structType->FindItemType(columns->Child(i)->Content()))
             argsTypes[i] = argType;
@@ -1107,6 +1108,22 @@ TStatus AnnotateOlapApply(const TExprNode::TPtr& node, TExprContext& ctx) {
             ));
             return TStatus::Error;
         }
+    }
+
+    TExprList parameters = TExprList(node->Child(TKqpOlapApply::idx_Parameters));
+
+    for(auto expr: parameters) {
+        if (!EnsureArgsCount(*expr.Ptr(), 2U, ctx)) {
+            return TStatus::Error;
+        }
+
+        TCoParameter param = TMaybeNode<TCoParameter>(expr.Ptr()).Cast();
+        const auto& paramType = expr.Ptr()->Child(TCoParameter::idx_Type);
+        if (!EnsureType(*paramType, ctx)) {
+            return TStatus::Error;
+        }
+
+        argsTypes.push_back(paramType->GetTypeAnn()->Cast<TTypeExprType>()->GetType());
     }
 
     if (!EnsureLambda(node->Tail(), ctx)) {
@@ -1851,7 +1868,7 @@ TStatus AnnotateKqpSinkEffect(const TExprNode::TPtr& node, TExprContext& ctx) {
 }
 
 TStatus AnnotateTableSinkSettings(const TExprNode::TPtr& input, TExprContext& ctx) {
-    if (!EnsureMinMaxArgsCount(*input, 6, 7, ctx)) {
+    if (!EnsureMinMaxArgsCount(*input, 7, 8, ctx)) {
         return TStatus::Error;
     }
     input->SetTypeAnn(ctx.MakeType<TVoidExprType>());

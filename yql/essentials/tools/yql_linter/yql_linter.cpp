@@ -18,6 +18,8 @@ int Run(int argc, char* argv[]) {
     THashMap<TString, TString> clusterMapping;
     TString modeStr = "Default";
     TString syntaxStr = "YQL";
+    TString clusterModeStr = "Many";
+    TString clusterSystem;
 
     opts.AddLongOption('i', "input", "input file").RequiredArgument("input").StoreResult(&inFileName);
     opts.AddLongOption('v', "verbose", "show lint issues").NoArgument();
@@ -33,6 +35,8 @@ int Run(int argc, char* argv[]) {
 
     opts.AddLongOption('m', "mode", "query mode, allowed values: " + GetEnumAllNames<NYql::NFastCheck::EMode>()).StoreResult(&modeStr);
     opts.AddLongOption('s', "syntax", "query syntax, allowed values: " + GetEnumAllNames<NYql::NFastCheck::ESyntax>()).StoreResult(&syntaxStr);
+    opts.AddLongOption("cluster-mode", "cluster mode, allowed values: " + GetEnumAllNames<NYql::NFastCheck::EClusterMode>()).StoreResult(&clusterModeStr);
+    opts.AddLongOption("cluster-system", "cluster system").StoreResult(&clusterSystem);
     opts.AddLongOption("ansi-lexer", "use ansi lexer").NoArgument();
     opts.AddLongOption("no-colors", "disable colors for output").NoArgument();
     opts.SetFreeArgsNum(0);
@@ -79,6 +83,8 @@ int Run(int argc, char* argv[]) {
     checkReq.ClusterMapping = clusterMapping;
     checkReq.Mode =  FromString<NYql::NFastCheck::EMode>(modeStr);
     checkReq.Syntax =  FromString<NYql::NFastCheck::ESyntax>(syntaxStr);
+    checkReq.ClusterMode = FromString<NYql::NFastCheck::EClusterMode>(clusterModeStr);
+    checkReq.ClusterSystem = clusterSystem;
     auto checkResp = NYql::NFastCheck::RunChecks(checkReq);
     for (const auto& c : checkResp.Checks) {
         if (!c.Success) {

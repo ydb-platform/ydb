@@ -1,5 +1,6 @@
 #pragma once
 
+#include <yql/essentials/public/udf/arrow/util.h>
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
 
@@ -85,8 +86,7 @@ std::unique_ptr<typename TTraits::TResult> DispatchByArrowTraits(const ITypeInfo
 
     TOptionalTypeInspector unpackedOpt(typeInfoHelper, unpacked);
     TPgTypeInspector unpackedPg(typeInfoHelper, unpacked);
-    if (unpackedOpt || typeOpt && unpackedPg) {
-        // at least 2 levels of optionals
+    if (unpackedOpt || (typeOpt && NeedWrapWithExternalOptional(typeInfoHelper, unpacked))) {
         ui32 nestLevel = 0;
         auto currentType = type;
         auto previousType = type;
@@ -103,7 +103,7 @@ std::unique_ptr<typename TTraits::TResult> DispatchByArrowTraits(const ITypeInfo
             }
         }
 
-        if (TPgTypeInspector(typeInfoHelper, currentType)) {
+        if (NeedWrapWithExternalOptional(typeInfoHelper, currentType)) {
             previousType = currentType;
             ++nestLevel;
         }
@@ -118,8 +118,7 @@ std::unique_ptr<typename TTraits::TResult> DispatchByArrowTraits(const ITypeInfo
         }
 
         return reader;
-    }
-    else {
+    } else {
         type = unpacked;
     }
 
@@ -227,6 +226,15 @@ std::unique_ptr<typename TTraits::TResult> DispatchByArrowTraits(const ITypeInfo
             return TTraits::MakePg(*desc, pgBuilder, type, std::forward<TArgs>(args)...);
         } else {
             return TTraits::MakePg(*desc, pgBuilder, std::forward<TArgs>(args)...);
+        }
+    }
+
+    if (IsSingularType(typeInfoHelper, type)) {
+        Y_ENSURE(!isOptional, "Optional data types are not supported directly for singular type. Please use TExternalOptional wrapper.");
+        if constexpr (TTraits::PassType) {
+            return TTraits::MakeSingular(type, std::forward<TArgs>(args)...);
+        } else {
+            return TTraits::MakeSingular(std::forward<TArgs>(args)...);
         }
     }
 

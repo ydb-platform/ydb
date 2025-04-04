@@ -55,7 +55,7 @@ namespace NPerf {
         }
 
     private:
-        void Apply(TSponge &aggr) noexcept
+        void Apply(TSponge &aggr)
         {
             State.Reset(Remap.CellDefaults());
 

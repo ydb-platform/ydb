@@ -14,6 +14,7 @@
 #include <ydb/core/tablet_flat/flat_database.h>
 
 #include <ydb/library/yql/dq/actors/protos/dq_stats.pb.h>
+#include <ydb/library/formats/arrow/validation/validation.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 
 #include <ydb/library/actors/core/log.h>

@@ -31,7 +31,7 @@ namespace {
         auto config = New<TReplicationLagPenaltyProviderOptions>();
 
         config->TablePath = path;
-        config->ReplicaClusters.push_back(TString(cluster));
+        config->ReplicaClusters.push_back(cluster);
         config->MaxTabletsWithLagFraction = 0.5;
         config->MaxTabletLag = maxLagInSeconds;
         config->CheckPeriod = checkPeriod;
@@ -46,7 +46,7 @@ namespace {
 TEST(TLagPenaltyProviderTest, UpdateExternalPenaltyWhenReplicaHasLag)
 {
     NYPath::TYPath path = "/test/1234";
-    TString cluster = "seneca-vla";
+    std::string cluster = "seneca-vla";
 
     NYson::TYsonString replicasResult(TStringBuf("{\"575f-131-40502c5-201b420f\" = {\"cluster_name\" = \"seneca-vla\"}}"));
     NYson::TYsonString tabletCountResult(TStringBuf("1"));
@@ -81,7 +81,7 @@ TEST(TLagPenaltyProviderTest, UpdateExternalPenaltyWhenReplicaHasLag)
 TEST(TLagPenaltyProviderTest, DoNotUpdatePenaltyWhenReplicaHasNoLag)
 {
     NYPath::TYPath path = "/test/1234";
-    TString cluster = "seneca-vla";
+    std::string cluster = "seneca-vla";
 
     NYson::TYsonString replicasResult(TStringBuf("{\"575f-131-40502c5-201b420f\" = {\"cluster_name\" = \"seneca-vla\"}}"));
     NYson::TYsonString tabletCountResult(TStringBuf("1"));
@@ -114,7 +114,7 @@ TEST(TLagPenaltyProviderTest, DoNotUpdatePenaltyWhenReplicaHasNoLag)
 TEST(TLagPenaltyProviderTest, DoNotUpdatePenaltyWhenGetReplicaIdFailed)
 {
     NYPath::TYPath path = "/test/1234";
-    TString cluster = "seneca-vla";
+    std::string cluster = "seneca-vla";
 
     auto config = GenerateReplicationLagPenaltyProviderConfig(path, cluster);
 
@@ -132,7 +132,7 @@ TEST(TLagPenaltyProviderTest, DoNotUpdatePenaltyWhenGetReplicaIdFailed)
 TEST(TLagPenaltyProviderTest, DoNotUpdatePenaltyWhenGetTabletsCountFailed)
 {
     NYPath::TYPath path = "/test/1234";
-    TString cluster = "seneca-vla";
+    std::string cluster = "seneca-vla";
 
     NYson::TYsonString replicasResult(TStringBuf("{\"575f-131-40502c5-201b420f\" = {\"cluster_name\" = \"seneca-vla\"}}"));
 
@@ -155,7 +155,7 @@ TEST(TLagPenaltyProviderTest, DoNotUpdatePenaltyWhenGetTabletsCountFailed)
 TEST(TLagPenaltyProviderTest, DoNotUpdatePenaltyWhenGetTabletsInfoFailed)
 {
     NYPath::TYPath path = "/test/1234";
-    TString cluster = "seneca-vla";
+    std::string cluster = "seneca-vla";
 
     NYson::TYsonString replicasResult(TStringBuf("{\"575f-131-40502c5-201b420f\" = {\"cluster_name\" = \"seneca-vla\"}}"));
     NYson::TYsonString tabletCountResult(TStringBuf("1"));
@@ -182,7 +182,7 @@ TEST(TLagPenaltyProviderTest, DoNotUpdatePenaltyWhenGetTabletsInfoFailed)
 TEST(TLagPenaltyProviderTest, ClearPenaltiesAfterError)
 {
     NYPath::TYPath path = "/test/1234";
-    TString cluster = "seneca-vla";
+    std::string cluster = "seneca-vla";
 
     NYson::TYsonString replicasResult(TStringBuf("{\"575f-131-40502c5-201b420f\" = {\"cluster_name\" = \"seneca-vla\"}}"));
     NYson::TYsonString tabletCountResult(TStringBuf("1"));

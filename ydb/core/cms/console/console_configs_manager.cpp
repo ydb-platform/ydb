@@ -56,7 +56,7 @@ void TConfigsManager::ReplaceMainConfigMetadata(const TString &config, bool forc
     try {
         if (!force) {
             auto metadata = NYamlConfig::GetMainMetadata(config);
-            opCtx.Cluster = metadata.Cluster.value_or(TString("unknown"));
+            opCtx.Cluster = metadata.Cluster.value_or(ClusterName);
             opCtx.Version = metadata.Version.value_or(0);
         } else {
             opCtx.Cluster = ClusterName;
@@ -112,6 +112,8 @@ void TConfigsManager::ValidateMainConfig(TUpdateConfigOpContext& opCtx) {
             }
         }
     } catch (const yexception &e) {
+        opCtx.Error = e.what();
+    } catch (const std::exception& e) {
         opCtx.Error = e.what();
     }
 }
@@ -172,15 +174,20 @@ void TConfigsManager::ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opC
             auto resolved = NYamlConfig::ResolveAll(tree);
 
             errors.clear();
+
+            auto* csk = AppData()->ConfigSwissKnife;
+
             for (auto& [_, config] : resolved.Configs) {
                 auto cfg = NYamlConfig::YamlToProto(
                     config.second,
                     true,
                     true,
                     unknownFieldsCollector);
-                NKikimr::NConfig::EValidationResult result = NKikimr::NConfig::ValidateConfig(cfg, errors);
-                if (result == NKikimr::NConfig::EValidationResult::Error) {
-                    ythrow yexception() << errors.front();
+                if (csk) {
+                    auto result = csk->ValidateConfig(cfg, errors);
+                    if (result == NYamlConfig::EValidationResult::Error) {
+                        ythrow yexception() << errors.front();
+                    }
                 }
             }
 

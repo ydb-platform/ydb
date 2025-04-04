@@ -310,6 +310,12 @@ def _build_cmd_input_paths(paths: list[str] | tuple[str], hide=False, disable_in
     return _build_directives([hide_part, disable_ip_part, "input"], paths)
 
 
+def _build_cmd_output_paths(paths: list[str] | tuple[str], hide=False):
+    hide_part = "hide" if hide else ""
+
+    return _build_directives([hide_part, "output"], paths)
+
+
 def _create_erm_json(unit: NotsUnitType):
     from lib.nots.erm_json_lite import ErmJsonLite
 
@@ -517,15 +523,14 @@ def on_setup_build_env(unit: NotsUnitType) -> None:
     unit.set(["NOTS_TOOL_BUILD_ENV", " ".join(options)])
 
 
-def __set_append(unit: NotsUnitType, var_name: str, value: UnitType.PluginArgs) -> None:
+def __set_append(unit: NotsUnitType, var_name: str, value: UnitType.PluginArgs, delimiter: str = " ") -> None:
     """
     SET_APPEND() python naive implementation - append value/values to the list of values
     """
-    previous_value = unit.get(var_name) or ""
-    value_in_str = " ".join(value) if isinstance(value, list) or isinstance(value, tuple) else value
-    new_value = previous_value + " " + value_in_str
-
-    unit.set([var_name, new_value])
+    old_str_value = unit.get(var_name)
+    old_values = [old_str_value] if old_str_value else []
+    new_values = list(value) if isinstance(value, list) or isinstance(value, tuple) else [value]
+    unit.set([var_name, delimiter.join(old_values + new_values)])
 
 
 def __strip_prefix(prefix: str, line: str) -> str:
@@ -616,17 +621,18 @@ def _setup_tsc_typecheck(unit: NotsUnitType) -> None:
     if not test_files:
         return
 
-    tsconfig_paths = unit.get("TS_CONFIG_PATH").split()
-    tsconfig_path = tsconfig_paths[0]
-
-    if len(tsconfig_paths) > 1:
-        tsconfig_path = unit.get("_TS_TYPECHECK_TSCONFIG")
-        if not tsconfig_path:
+    tsconfig_path = unit.get("_TS_TYPECHECK_TSCONFIG")
+    if not tsconfig_path:
+        tsconfig_paths = unit.get("TS_CONFIG_PATH").split()
+        if len(tsconfig_paths) > 1:
             macros = " or ".join([f"TS_TYPECHECK({p})" for p in tsconfig_paths])
             raise Exception(f"Module uses several tsconfig files, specify which one to use for typecheck: {macros}")
-        abs_tsconfig_path = unit.resolve(unit.resolve_arc_path(tsconfig_path))
-        if not abs_tsconfig_path:
-            raise Exception(f"tsconfig for typecheck not found: {tsconfig_path}")
+
+        tsconfig_path = tsconfig_paths[0]
+
+    abs_tsconfig_path = unit.resolve(unit.resolve_arc_path(tsconfig_path))
+    if not abs_tsconfig_path:
+        raise Exception(f"tsconfig for typecheck not found: {tsconfig_path}")
 
     unit.on_peerdir_ts_resource("typescript")
     user_recipes = unit.get("TEST_RECIPES_VALUE")
@@ -796,6 +802,11 @@ def on_node_modules_configure(unit: NotsUnitType) -> None:
         if not unit.get("TS_TEST_FOR"):
             __set_append(unit, "_NODE_MODULES_INOUTS", _build_directives(["hide", "output"], sorted(outs)))
 
+        lf = pm.load_lockfile_from_dir(pm.sources_path)
+
+        if hasattr(lf, "validate_importers"):
+            lf.validate_importers()
+
         if pj.get_use_prebuilder():
             unit.on_peerdir_ts_resource("@yatool/prebuilder")
             unit.set(
@@ -811,7 +822,6 @@ def on_node_modules_configure(unit: NotsUnitType) -> None:
 
             if prebuilder_major == "0":
                 # TODO: FBP-1408
-                lf = pm.load_lockfile_from_dir(pm.sources_path)
                 is_valid, invalid_keys = lf.validate_has_addons_flags()
 
                 if not is_valid:
@@ -825,7 +835,6 @@ def on_node_modules_configure(unit: NotsUnitType) -> None:
                         + "\n  - ".join(invalid_keys)
                     )
             else:
-                lf = pm.load_lockfile_from_dir(pm.sources_path)
                 requires_build_packages = lf.get_requires_build_packages()
                 is_valid, validation_messages = pj.validate_prebuilds(requires_build_packages)
 
@@ -920,13 +929,23 @@ def on_set_ts_test_for_vars(unit: NotsUnitType, for_mod: str) -> None:
     unit.set(["TS_TEST_FOR_PATH", rootrel_arc_src(for_mod, unit)])
 
 
+def __on_ts_files(unit: NotsUnitType, files_in: list[str], files_out: list[str]) -> None:
+    for f in files_in:
+        if f.startswith(".."):
+            ymake.report_configure_error(
+                "TS_FILES* macroses are only allowed to use files inside the project directory.\n"
+                f"Got path '{f}'.\n"
+                "Docs: https://docs.yandex-team.ru/frontend-in-arcadia/references/TS_PACKAGE#ts-files."
+            )
+
+    new_items = _build_cmd_input_paths(paths=files_in, hide=True, disable_include_processor=True)
+    new_items += _build_cmd_output_paths(paths=files_out, hide=True)
+    __set_append(unit, "_TS_FILES_INOUTS", new_items)
+
+
 @_with_report_configure_error
 def on_ts_files(unit: NotsUnitType, *files: str) -> None:
-    new_cmds = ['$COPY_CMD ${{context=TEXT;input:"{0}"}} ${{noauto;output:"{0}"}}'.format(f) for f in files]
-    all_cmds = unit.get("_TS_FILES_COPY_CMD")
-    if all_cmds:
-        new_cmds.insert(0, all_cmds)
-    unit.set(["_TS_FILES_COPY_CMD", " && ".join(new_cmds)])
+    __on_ts_files(unit, files, files)
 
 
 @_with_report_configure_error
@@ -943,21 +962,21 @@ def on_ts_large_files(unit: NotsUnitType, destination: str, *files: list[str]) -
         )
         return
 
+    in_files = [os.path.join('${BINDIR}', f) for f in files]
+    out_files = [os.path.join('${BINDIR}', destination, f) for f in files]
+
     # TODO: FBP-1795
     # ${BINDIR} prefix for input is important to resolve to result of LARGE_FILES and not to SOURCEDIR
-    new_cmds = [
-        '$COPY_CMD ${{context=TEXT;input:"${{BINDIR}}/{0}"}} ${{noauto;output:"{1}/{0}"}}'.format(f, destination)
-        for f in files
-    ]
-    all_cmds = unit.get("_TS_FILES_COPY_CMD")
-    if all_cmds:
-        new_cmds.insert(0, all_cmds)
-    unit.set(["_TS_FILES_COPY_CMD", " && ".join(new_cmds)])
+    new_items = [f'$COPY_CMD {i} {o}' for (i, o) in zip(in_files, out_files)]
+    __set_append(unit, "_TS_PROJECT_SETUP_CMD", new_items, " && ")
+    logger.print_vars("_TS_PROJECT_SETUP_CMD")
+
+    __on_ts_files(unit, in_files, out_files)
 
 
 @_with_report_configure_error
 def on_ts_package_check_files(unit: NotsUnitType) -> None:
-    ts_files = unit.get("_TS_FILES_COPY_CMD")
+    ts_files = unit.get("_TS_FILES_INOUTS")
     if ts_files == "":
         ymake.report_configure_error(
             "\n"

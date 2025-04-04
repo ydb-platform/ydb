@@ -7,11 +7,15 @@ class TQWriterDecorator : public IQWriter {
     public:
     TQWriterDecorator(IQWriterPtr&& underlying) : Underlying_(std::move(underlying)) {}
     NThreading::TFuture<void> Put(const TQItemKey& key, const TString& value) override final {
+        decltype(Underlying_) underlying;
+        with_lock(Mutex_) {
+            underlying = Underlying_;
+        }
         if (Closed_) {
             return NThreading::MakeFuture();
         }
         try {
-            return Underlying_->Put(key, value);
+            return underlying->Put(key, value);
         } catch (...) {
             auto message = CurrentExceptionMessage();
             with_lock(Mutex_) {
@@ -32,8 +36,14 @@ class TQWriterDecorator : public IQWriter {
         if (!Closed_.compare_exchange_strong(expected, true)) {
             throw yexception() << "QWriter closed";
         }
-        auto result = Underlying_->Commit();
-        Underlying_ = {};
+        decltype(Underlying_) underlying;
+        with_lock(Mutex_) {
+            underlying = Underlying_;
+        }
+        auto result = underlying->Commit();
+        with_lock(Mutex_) {
+            Underlying_ = {};
+        }
         return result;
     }
 
@@ -41,7 +51,9 @@ class TQWriterDecorator : public IQWriter {
     void Close() override final {
         bool expected = false;
         if (Closed_.compare_exchange_strong(expected, true)) {
-            Underlying_ = {};
+            with_lock(Mutex_) {
+                Underlying_ = {};
+            }
         }
     }
 private:

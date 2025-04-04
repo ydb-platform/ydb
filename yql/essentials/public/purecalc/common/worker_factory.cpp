@@ -6,6 +6,11 @@
 
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/sql.h>
+
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
@@ -140,6 +145,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     bool useAntlr4,
     EProcessorMode processorMode
 ) {
+    Y_ENSURE(useAntlr4, "Antlr3 support is dropped");
     if (mode == ETranslationMode::PG && processorMode != EProcessorMode::PullList) {
         ythrow TCompileError("", "") << "only PullList mode is compatible to PostgreSQL syntax";
     }
@@ -208,9 +214,16 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
             }
         }
 
+        NSQLTranslationV1::TLexers lexers;
+        lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+        lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+        NSQLTranslationV1::TParsers parsers;
+        parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+        parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+
         NSQLTranslation::TTranslators translators(
             nullptr,
-            NSQLTranslationV1::MakeTranslator(),
+            NSQLTranslationV1::MakeTranslator(lexers, parsers),
             NSQLTranslationPG::MakeTranslator()
         );
 

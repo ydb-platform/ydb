@@ -20,11 +20,11 @@
 #include "blobstorage_pdisk_writer.h"
 #include "blobstorage_pdisk_impl_metadata.h"
 
-#include <ydb/core/control/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
+#include <ydb/core/control/lib/immediate_control_board_wrapper.h>
 #include <ydb/core/base/resource_profile.h>
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
-#include <ydb/core/control/immediate_control_board_wrapper.h>
 #include <ydb/core/driver_lib/version/version.h>
 #include <ydb/library/schlab/schine/scheduler.h>
 #include <ydb/library/schlab/schine/job_kind.h>
@@ -428,7 +428,8 @@ public:
         const TKey& key, ui64 sequenceNumber, ui32 recordIndex, ui32 totalRecords);
     bool WriteMetadataSync(TRcBuf&& metadata, const TDiskFormat& format);
 
-    static std::optional<TMetadataFormatSector> CheckMetadataFormatSector(const ui8 *data, size_t len, const TMainKey& mainKey);
+    static std::optional<TMetadataFormatSector> CheckMetadataFormatSector(const ui8 *data, size_t len,
+        const TMainKey& mainKey, const TString& logPrefix);
     static void MakeMetadataFormatSector(ui8 *data, const TMainKey& mainKey, const TMetadataFormatSector& format);
 
     NMeta::TFormatted& GetFormattedMeta();
@@ -470,10 +471,10 @@ private:
 };
 
 void ParsePayloadFromSectorOffset(const TDiskFormat& format, ui64 firstSector, ui64 lastSector, ui64 currentSector,
-        ui64 *outPayloadBytes, ui64 *outPayloadOffset);
+        ui64 *outPayloadBytes, ui64 *outPayloadOffset, const TString& logPrefix);
 
 bool ParseSectorOffset(const TDiskFormat& format, TActorSystem *actorSystem, ui32 pDiskId, ui64 offset, ui64 size,
-        ui64 &outSectorIdx, ui64 &outLastSectorIdx, ui64 &outSectorOffset);
+        ui64 &outSectorIdx, ui64 &outLastSectorIdx, ui64 &outSectorOffset, const TString& logPrefix);
 
 } // NPDisk
 } // NKikimr

@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/auth.h>
+#include <ydb/core/base/local_user_token.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tx_processing.h>
@@ -9,6 +10,9 @@
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+
+#include <ydb/library/login/login.h>
+#include <ydb/library/login/protos/login.pb.h>
 
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/library/actors/core/hfunc.h>
@@ -44,7 +48,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     struct TPathToResolve {
         const NKikimrSchemeOp::TModifyScheme& ModifyScheme;
         ui32 RequireAccess = NACLib::EAccessRights::NoAccess;
-        bool AllowedByLevel = true;
 
         // Params for NSchemeCache::TSchemeCacheNavigate::TEntry
         TVector<TString> Path;
@@ -63,6 +66,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     bool CheckDatabaseAdministrator = false;
     bool IsClusterAdministrator = false;
     bool IsDatabaseAdministrator = false;
+    NACLib::TSID DatabaseOwner;
+    NLoginProto::TSecurityState DatabaseSecurityState;
 
     TBaseSchemeReq(const TTxProxyServices &services, ui64 txid, TAutoPtr<TEvTxProxyReq::TEvSchemeRequest> request, const TIntrusivePtr<TTxProxyMon> &txProxyMon)
         : Services(services)
@@ -1001,7 +1006,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
         if (resolveTask.ModifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterUserAttributes) {
             // ESchemeOpAlterUserAttributes applies on GSS when path is DB
-            // but on GSS in other cases
+            // but on TSS in other cases
             if (IsDB(resolveResult)) {
                 return resolveResult.DomainInfo->DomainKey.OwnerId;
             } else {
@@ -1018,7 +1023,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
     TString MakeAccessDeniedError(const TActorContext& ctx, const TVector<TString>& path, const TString& part) {
         const TString msg = TStringBuilder() << "Access denied for " << GetUserSID(UserToken)
-            << " on path " << JoinPath(path)
+            << " on path " << CanonizePath(JoinPath(path))
         ;
         LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
             << ", " << msg << ", " << part
@@ -1107,34 +1112,89 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
             // Check admin restrictions and special cases
             if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterLogin) {
-                // User management allowed to any user or (if configured so) to admins only
-                if (checkAdmin && !isAdmin) {
-                    const auto errString = MakeAccessDeniedError(ctx, "attempt to manage user");
-                    auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
-                    ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
-                    return false;
-                }
-                allowACLBypass = checkAdmin && isAdmin;
+                // EnableStrictUserManagement == false:
+                //   - any user can manage users|groups, but require AlterSchema right
+                //
+                // EnableStrictUserManagement == true:
+                //   - user can change password for himself, and does not require AlterSchema right
+                //   - only admins can manage users|groups, and does not require AlterSchema right
+                //   - database admin can't change other database admins
+                //   - database admin can't change database admin group
+                //   - database admin can't change database owner
+                //
+                const auto& alterLogin = modifyScheme.GetAlterLogin();
 
-                // Any user can change their own password (but nothing else)
-                auto isUserChangesOwnPassword = [](const auto& modifyScheme, const NACLib::TSID& subjectSid) {
-                    const auto& alter = modifyScheme.GetAlterLogin();
-                    if (alter.GetAlterCase() == NKikimrSchemeOp::TAlterLogin::kModifyUser) {
-                        const auto& targetUser = alter.GetModifyUser();
+                // User changes password for himself (and only password)
+                bool isUserChangesOwnPassword = [](const auto& alterLogin, const NACLib::TSID& subjectSid) {
+                    if (alterLogin.GetAlterCase() == NKikimrSchemeOp::TAlterLogin::kModifyUser) {
+                        const auto& targetUser = alterLogin.GetModifyUser();
                         if (targetUser.HasPassword() && !targetUser.HasCanLogin()) {
                             return (subjectSid == targetUser.GetUser());
                         }
                     }
                     return false;
-                };
-                allowACLBypass = allowACLBypass || isUserChangesOwnPassword(modifyScheme, UserToken->GetUserSID());
+                }(alterLogin, UserToken->GetUserSID());
+
+                bool allowManageUser = !checkAdmin || isAdmin || isUserChangesOwnPassword;
+
+                if (!allowManageUser) {
+                    const auto errString = MakeAccessDeniedError(ctx, "attempt to manage user");
+                    auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
+                    ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
+                    return false;
+                }
+
+                allowACLBypass = (checkAdmin && isAdmin) || isUserChangesOwnPassword;
+
+                // Database admin is not allowed to manage group of database admins or change other database admins
+                // (its the privilege of cluster admins).
+                if (checkAdmin && IsDatabaseAdministrator) {
+                    TString group;
+                    switch (alterLogin.GetAlterCase()) {
+                        case NKikimrSchemeOp::TAlterLogin::kAddGroupMembership:
+                            group = alterLogin.GetAddGroupMembership().GetGroup();
+                            break;
+                        case NKikimrSchemeOp::TAlterLogin::kRemoveGroupMembership:
+                            group = alterLogin.GetRemoveGroupMembership().GetGroup();
+                            break;
+                        case NKikimrSchemeOp::TAlterLogin::kRemoveGroup:
+                            group = alterLogin.GetRemoveGroup().GetGroup();
+                            break;
+                        case NKikimrSchemeOp::TAlterLogin::kRenameGroup:
+                            group = alterLogin.GetRenameGroup().GetGroup();
+                            break;
+                        default:
+                            break;
+                    }
+                    if (!group.empty() && group == DatabaseOwner) {
+                        const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
+                            << "attempt to administer database admin group by the database admin"
+                        );
+                        auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
+                        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
+                        return false;
+                    }
+                    // Database admin still can change its own password
+                    if (alterLogin.GetAlterCase() == NKikimrSchemeOp::TAlterLogin::kModifyUser && !isUserChangesOwnPassword) {
+                        const auto& targetUser = alterLogin.GetModifyUser();
+                        const auto targetUserToken = NKikimr::BuildLocalUserToken(DatabaseSecurityState, targetUser.GetUser());
+                        if (NKikimr::IsDatabaseAdministrator(&targetUserToken, DatabaseOwner)) {
+                            const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
+                                << "attempt to change other database admin by the database admin"
+                            );
+                            auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
+                            ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
+                            return false;
+                        }
+                    }
+                }
 
             } else if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpModifyACL) {
                 // Only the owner of the schema object (path) can transfer their ownership away.
                 // Or admins (if configured so).
                 const auto& newOwner = modifyScheme.GetModifyACL().GetNewOwner();
                 if (!newOwner.empty()) {
-                    // That modifyACL is changing the owner
+                    // This modifyACL is changing the owner
                     auto isObjectOwner = [](const auto& userToken, const NACLib::TSID& owner) {
                         return userToken->IsExist(owner);
                     };
@@ -1150,7 +1210,22 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                         ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
                         return false;
                     }
+
+                    // Database admin is not allowed to change ownership of its own database
+                    if (IsDatabaseAdministrator && IsDB(entry)) {
+                        const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
+                            << "attempt to change database ownership by the database admin"
+                            << " from " << owner
+                            << " to " << newOwner
+                        );
+                        auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
+                        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
+                        return false;
+                    }
                 }
+
+                // Admins can always change ACLs
+                allowACLBypass = isAdmin;
             }
 
             ui32 access = requestIt->RequireAccess;
@@ -1301,8 +1376,12 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             return Die(ctx);
         }
 
-        const auto& database = request.ResultSet.front();
-        IsDatabaseAdministrator = NKikimr::IsDatabaseAdministrator(&UserToken.value(), database.Self->Info.GetOwner());
+        const auto& entry = request.ResultSet.front();
+
+        DatabaseOwner = entry.Self->Info.GetOwner();
+        DatabaseSecurityState = entry.DomainDescription->Description.GetSecurityState();
+
+        IsDatabaseAdministrator = NKikimr::IsDatabaseAdministrator(&UserToken.value(), entry.Self->Info.GetOwner());
 
         LOG_DEBUG_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
             << " HandleResolveDatabase,"
@@ -1311,6 +1390,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             << " CheckDatabaseAdministrator: " << CheckDatabaseAdministrator
             << " IsClusterAdministrator: " << IsClusterAdministrator
             << " IsDatabaseAdministrator: " << IsDatabaseAdministrator
+            << " DatabaseOwner: " << DatabaseOwner
         );
 
         static_cast<TDerived*>(this)->Start(ctx);
@@ -1520,7 +1600,7 @@ void TFlatSchemeReq::HandleWorkingDir(TEvTxProxySchemeCache::TEvNavigateKeySetRe
     if (!workingDir || workingDir->size() >= parts.size()) {
         const TString errText = TStringBuilder()
             << "Cannot resolve working dir"
-            << " workingDir# " << (workingDir ? JoinPath(*workingDir) : "null")
+            << " workingDir# " << (workingDir ? CanonizePath(JoinPath(*workingDir)) : "null")
             << " path# " << JoinPath(parts);
         LOG_ERROR_S(ctx, NKikimrServices::TX_PROXY, "Actor# " << ctx.SelfID.ToString() << " txid# " << TxId
             << ", " << errText

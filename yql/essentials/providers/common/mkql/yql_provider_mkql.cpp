@@ -448,7 +448,9 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         {"FromFlow", &TProgramBuilder::FromFlow},
 
         {"WideToBlocks", &TProgramBuilder::WideToBlocks},
+        {"ListToBlocks", &TProgramBuilder::ListToBlocks},
         {"WideFromBlocks", &TProgramBuilder::WideFromBlocks},
+        {"ListFromBlocks", &TProgramBuilder::ListFromBlocks},
         {"AsScalar", &TProgramBuilder::AsScalar},
 
         {"Just", &TProgramBuilder::NewOptional},
@@ -2236,22 +2238,12 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
 
     AddCallable("EmptyList", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         Y_UNUSED(node);
-        if (RuntimeVersion < 11) {
-            return ctx.ProgramBuilder.NewEmptyList(ctx.ProgramBuilder.NewVoid().GetStaticType());
-        } else {
-            return TRuntimeNode(ctx.ProgramBuilder.GetTypeEnvironment().GetEmptyListLazy(), true);
-        }
+        return TRuntimeNode(ctx.ProgramBuilder.GetTypeEnvironment().GetEmptyListLazy(), true);
     });
 
     AddCallable("EmptyDict", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         Y_UNUSED(node);
-        if (RuntimeVersion < 11) {
-           auto voidType = ctx.ProgramBuilder.NewVoid().GetStaticType();
-           auto dictType = ctx.ProgramBuilder.NewDictType(voidType, voidType, false);
-           return ctx.ProgramBuilder.NewDict(dictType, {});
-        } else {
-           return TRuntimeNode(ctx.ProgramBuilder.GetTypeEnvironment().GetEmptyDictLazy(), true);
-        }
+        return TRuntimeNode(ctx.ProgramBuilder.GetTypeEnvironment().GetEmptyDictLazy(), true);
     });
 
     AddCallable("SourceOf", [](const TExprNode& node, TMkqlBuildContext& ctx) {

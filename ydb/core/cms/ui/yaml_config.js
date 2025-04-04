@@ -235,16 +235,16 @@ class YamlConfigState {
 
     onYamlLoaded(success, data) {
         if (success) {
-            this.cluster = data.Response.identity.cluster;
-            $('#yaml-cluster').text(data.Response.identity.cluster);
+            this.cluster = data.Response.identity[0].cluster;
+            $('#yaml-cluster').text(data.Response.identity[0].cluster);
 
-            this.version = data.Response.identity.version;
-            $('#yaml-version').text(data.Response.identity.version);
+            this.version = data.Response.identity[0].version;
+            $('#yaml-version').text(data.Response.identity[0].version);
 
-            if (this.config !== data.Response.config) {
-                this.codeMirror.setValue((data.Response.config !== undefined) ? data.Response.config[0] : "");
+            if (this.config !== data.Response.config[0]) {
+                this.codeMirror.setValue((data.Response.config[0] !== undefined) ? data.Response.config[0] : "");
                 this.codeMirror.trigger('fold', 'editor.foldLevel2');
-                this.config = data.Response.config;
+                this.config = data.Response.config[0];
             }
 
             if (data.Response.volatile_configs === undefined) {

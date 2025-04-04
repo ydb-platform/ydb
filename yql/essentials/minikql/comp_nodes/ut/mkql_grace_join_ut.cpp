@@ -886,7 +886,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLGraceSelfJoinTest) {
     }
 }
 
-#if !defined(MKQL_RUNTIME_VERSION) || MKQL_RUNTIME_VERSION >= 40u
 Y_UNIT_TEST_SUITE(TMiniKQLSelfJoinTest) {
 
     Y_UNIT_TEST_LLVM_SPILLING(TestInner1) {
@@ -1044,7 +1043,6 @@ Y_UNIT_TEST_SUITE(TMiniKQLSelfJoinTest) {
 
 
 }
-#endif
 
 Y_UNIT_TEST_SUITE(TMiniKQLGraceJoinTest) {
 

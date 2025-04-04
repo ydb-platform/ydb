@@ -20,6 +20,10 @@ public:
 
     bool CreateBindings(const std::vector<FederatedQuery::BindingContent>& bindings) const;
 
+    void ExecuteQueryAsync(const TRequestOptions& query) const;
+
+    void FinalizeRunner() const;
+
 private:
     class TImpl;
     std::shared_ptr<TImpl> Impl;

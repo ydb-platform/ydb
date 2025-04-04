@@ -10,6 +10,7 @@
 #include <ydb/core/blobstorage/dsproxy/dsproxy_nodemonactor.h>
 #include <ydb/core/blobstorage/pdisk/drivedata_serializer.h>
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_replbroker.h>
+#include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_broker.h>
 #include <ydb/library/pdisk_io/file_params.h>
 #include <ydb/core/mind/bscontroller/yaml_config_helpers.h>
 #include <ydb/core/base/nameservice.h>
@@ -44,6 +45,7 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , ThrottlingMaxOccupancyPerMille(950, 1, 1000)
     , ThrottlingMinLogChunkCount(100, 1, 1000)
     , ThrottlingMaxLogChunkCount(130, 1, 1000)
+    , MaxInProgressSyncCount(0, 0, 1000)
     , MaxCommonLogChunksHDD(200, 1, 1'000'000)
     , MaxCommonLogChunksSSD(200, 1, 1'000'000)
     , CostMetricsParametersByMedia({
@@ -370,6 +372,8 @@ void TNodeWarden::Bootstrap() {
         icb->RegisterSharedControl(ThrottlingMinLogChunkCount, "VDiskControls.ThrottlingMinLogChunkCount");
         icb->RegisterSharedControl(ThrottlingMaxLogChunkCount, "VDiskControls.ThrottlingMaxLogChunkCount");
 
+        icb->RegisterSharedControl(MaxInProgressSyncCount, "VDiskControls.MaxInProgressSyncCount");
+
         icb->RegisterSharedControl(MaxCommonLogChunksHDD, "PDiskControls.MaxCommonLogChunksHDD");
         icb->RegisterSharedControl(MaxCommonLogChunksSSD, "PDiskControls.MaxCommonLogChunksSSD");
 
@@ -424,6 +428,9 @@ void TNodeWarden::Bootstrap() {
     const ui64 maxBytes = replBrokerConfig.GetMaxInFlightReadBytes();
     actorSystem->RegisterLocalService(MakeBlobStorageReplBrokerID(), Register(CreateReplBrokerActor(maxBytes)));
 
+    actorSystem->RegisterLocalService(MakeBlobStorageSyncBrokerID(), Register(
+        CreateSyncBrokerActor(MaxInProgressSyncCount)));
+
     // determine if we are running in 'mock' mode
     EnableProxyMock = Cfg->BlobStorageConfig.GetServiceSet().GetEnableProxyMock();
 
@@ -441,11 +448,7 @@ void TNodeWarden::Bootstrap() {
     const bool success = DeriveStorageConfig(appConfig, &StorageConfig, &errorReason);
     Y_VERIFY_S(success, "failed to generate initial TStorageConfig: " << errorReason);
 
-    //LoadConfigVersion();
-    if (Cfg->YamlConfig) {
-        YamlConfig.emplace();
-        YamlConfig->CopyFrom(*Cfg->YamlConfig);
-    }
+    YamlConfig = std::move(Cfg->YamlConfig);
 
     // Start a statically configured set
     if (Cfg->BlobStorageConfig.HasServiceSet()) {
@@ -635,32 +638,58 @@ void TNodeWarden::ProcessShredStatus(ui64 cookie, ui64 generation, std::optional
     }
 }
 
-void TNodeWarden::PersistConfig(const TString& configYaml, ui64 version, std::optional<TString> storageYaml) {
-    if (!Cfg->ConfigStorePath) {
+void TNodeWarden::PersistConfig(std::optional<TString> mainYaml, ui64 mainYamlVersion, std::optional<TString> storageYaml,
+        std::optional<ui64> storageYamlVersion) {
+    if (!Cfg->ConfigDirPath) {
+        // no storage directory specified
+        return;
+    } else if (auto *appData = AppData(); appData->DynamicNameserviceConfig &&
+            appData->DynamicNameserviceConfig->MaxStaticNodeId < LocalNodeId) {
+        // this is a dynamic node
         return;
     }
 
+    STLOG(PRI_DEBUG, BS_NODE, NW51, "persisting new configurations",
+        (MainYaml, mainYaml), (MainYamlVersion, mainYamlVersion), (StorageYaml, storageYaml),
+        (StorageYamlVersion, storageYamlVersion), (YamlConfig, YamlConfig));
+
+    const bool updateMain = mainYaml && (!YamlConfig || !YamlConfig->HasMainConfigVersion() ||
+        YamlConfig->GetMainConfigVersion() < mainYamlVersion);
+
+    const bool updateStorage = !storageYamlVersion || // delete storage config file in single-config mode
+        storageYaml && (!YamlConfig || !YamlConfig->HasStorageConfigVersion() ||
+        YamlConfig->GetStorageConfigVersion() < storageYamlVersion);
+
+    if (!updateMain && !updateStorage) {
+        return; // nothing to do
+    }
+
     struct TSaveContext {
-        TString ConfigStorePath;
-        TString ConfigYaml;
-        ui64 Version;
+        TString ConfigDirPath;
+        std::optional<TString> MainYaml;
+        ui64 MainYamlVersion;
         std::optional<TString> StorageYaml;
-        bool Success = true;
-        TString ErrorMessage;
-        TActorId SelfId;
+        std::optional<ui64> StorageYamlVersion;
+        bool UpdateMain;
+        bool UpdateStorage;
+        bool DeleteStorage;
     };
 
-    auto saveCtx = std::make_shared<TSaveContext>();
-    saveCtx->ConfigStorePath = Cfg->ConfigStorePath;
-    saveCtx->ConfigYaml = std::move(configYaml);
-    saveCtx->StorageYaml = std::move(storageYaml);
-    saveCtx->Version = std::move(version);
-    saveCtx->SelfId = SelfId();
+    auto saveCtx = std::make_shared<TSaveContext>(TSaveContext{
+        .ConfigDirPath = Cfg->ConfigDirPath,
+        .MainYaml = std::move(mainYaml),
+        .MainYamlVersion = mainYamlVersion,
+        .StorageYaml = std::move(storageYaml),
+        .StorageYamlVersion = storageYamlVersion,
+        .UpdateMain = updateMain,
+        .UpdateStorage = updateStorage,
+        .DeleteStorage = !storageYamlVersion,
+    });
 
     EnqueueSyncOp([this, saveCtx](const TActorContext&) {
         bool success = true;
         try {
-            MakePathIfNotExist(saveCtx->ConfigStorePath.c_str());
+            MakePathIfNotExist(saveCtx->ConfigDirPath.c_str());
         } catch (const yexception& e) {
             STLOG(PRI_ERROR, BS_NODE, NW91, "Failed to create config store path", (Error, e.what()));
             success = false;
@@ -668,17 +697,22 @@ void TNodeWarden::PersistConfig(const TString& configYaml, ui64 version, std::op
 
         auto saveConfig = [&](const TString& yaml, const TString& configFileName) -> bool {
             try {
-                TString tempPath = TStringBuilder() << saveCtx->ConfigStorePath << "/temp_" << configFileName;
-                TString configPath = TStringBuilder() << saveCtx->ConfigStorePath << "/" << configFileName;
+                TString tempPath = TStringBuilder() << saveCtx->ConfigDirPath << "/temp_" << configFileName;
+                TString configPath = TStringBuilder() << saveCtx->ConfigDirPath << "/" << configFileName;
 
                 {
                     TFileOutput tempFile(tempPath);
                     tempFile << yaml;
                     tempFile.Flush();
+                    if (Chmod(tempPath.c_str(), S_IRUSR | S_IRGRP | S_IROTH) != 0) {
+                        STLOG(PRI_ERROR, BS_NODE, NW92, "Failed to set permissions for temporary file", (Error, LastSystemErrorText()));
+                        success = false;
+                        return false;
+                    }
                 }
 
                 if (!NFs::Rename(tempPath, configPath)) {
-                    STLOG(PRI_ERROR, BS_NODE, NW92, "Failed to rename temporary file", (Error, LastSystemErrorText()));
+                    STLOG(PRI_ERROR, BS_NODE, NW53, "Failed to rename temporary file", (Error, LastSystemErrorText()));
                     success = false;
                     return false;
                 }
@@ -690,14 +724,16 @@ void TNodeWarden::PersistConfig(const TString& configYaml, ui64 version, std::op
             }
         };
 
-        if (success) {
-            success = saveConfig(saveCtx->ConfigYaml, YamlConfigFileName);
+        if (success && saveCtx->UpdateMain) {
+            success = saveConfig(*saveCtx->MainYaml, YamlConfigFileName);
             if (success) {
                 STLOG(PRI_INFO, BS_NODE, NW94, "Yaml config saved");
             }
         }
 
-        if (success && saveCtx->StorageYaml) {
+        if (saveCtx->DeleteStorage) {
+            std::filesystem::remove(std::filesystem::path(saveCtx->ConfigDirPath.c_str()) / StorageConfigFileName);
+        } else if (success && saveCtx->UpdateStorage) {
             success = saveConfig(*saveCtx->StorageYaml, StorageConfigFileName);
             if (success) {
                 STLOG(PRI_INFO, BS_NODE, NW95, "Storage config saved");
@@ -709,16 +745,22 @@ void TNodeWarden::PersistConfig(const TString& configYaml, ui64 version, std::op
                 if (!YamlConfig) {
                     YamlConfig.emplace();
                 }
-                YamlConfig->SetYAML(saveCtx->ConfigYaml);
-                YamlConfig->SetConfigVersion(saveCtx->Version);
+                if (saveCtx->UpdateMain) {
+                    YamlConfig->SetMainConfig(*saveCtx->MainYaml);
+                    YamlConfig->SetMainConfigVersion(saveCtx->MainYamlVersion);
+                }
+                if (saveCtx->DeleteStorage) {
+                    YamlConfig->ClearStorageConfig();
+                    YamlConfig->ClearStorageConfigVersion();
+                } else if (saveCtx->UpdateStorage) {
+                    YamlConfig->SetStorageConfig(*saveCtx->StorageYaml);
+                    YamlConfig->SetStorageConfigVersion(*saveCtx->StorageYamlVersion);
+                }
                 ConfigSaveTimer.Reset();
             } else {
-                NKikimrBlobStorage::TYamlConfig yamlConfig;
-                yamlConfig.SetYAML(saveCtx->ConfigYaml);
-                yamlConfig.SetConfigVersion(saveCtx->Version);
-                TActivationContext::Schedule(TDuration::MilliSeconds(ConfigSaveTimer.NextBackoffMs()),
-                    new IEventHandle(SelfId(), SelfId(),
-                                     new TEvPrivate::TEvRetrySaveConfig(yamlConfig), 0, ExpectedSaveConfigCookie));
+                TActivationContext::Schedule(TDuration::MilliSeconds(ConfigSaveTimer.NextBackoffMs()), new IEventHandle(
+                    SelfId(), {}, new TEvPrivate::TEvRetrySaveConfig(std::move(saveCtx->MainYaml), saveCtx->MainYamlVersion,
+                    std::move(saveCtx->StorageYaml), saveCtx->StorageYamlVersion), 0, ExpectedSaveConfigCookie));
             }
         };
     });
@@ -729,7 +771,7 @@ void TNodeWarden::Handle(TEvRegisterPDiskLoadActor::TPtr ev) {
 }
 
 void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr ev) {
-    const auto& record = ev->Get()->Record;
+    auto& record = ev->Get()->Record;
 
     if (record.HasAvailDomain() && record.GetAvailDomain() != AvailDomainId) {
         // AvailDomain may arrive unset
@@ -810,13 +852,26 @@ void TNodeWarden::Handle(TEvBlobStorage::TEvControllerNodeServiceSetUpdate::TPtr
     }
 
     if (record.HasYamlConfig()) {
-        const auto& request = record.GetYamlConfig();
-        if (request.HasYAML()) {
-            TString yaml = NYamlConfig::DecompressYamlString(request.GetYAML());
-            ui64 version = request.GetConfigVersion();
-            PersistConfig(yaml, version);
-            ExpectedSaveConfigCookie++;
+        auto& yaml = *record.MutableYamlConfig();
+
+        if (yaml.HasCompressedMainConfig()) {
+            Y_DEBUG_ABORT_UNLESS(!yaml.HasMainConfig());
+            yaml.SetMainConfig(NYamlConfig::DecompressYamlString(yaml.GetCompressedMainConfig()));
+            yaml.ClearCompressedMainConfig();
         }
+
+        if (yaml.HasCompressedStorageConfig()) {
+            Y_DEBUG_ABORT_UNLESS(!yaml.HasStorageConfig());
+            yaml.SetStorageConfig(NYamlConfig::DecompressYamlString(yaml.GetCompressedStorageConfig()));
+            yaml.ClearCompressedStorageConfig();
+        }
+
+        PersistConfig(yaml.HasMainConfig() ? std::make_optional(yaml.GetMainConfig()) : std::nullopt,
+            yaml.GetMainConfigVersion(),
+            yaml.HasStorageConfig() ? std::make_optional(yaml.GetStorageConfig()) : std::nullopt,
+            yaml.HasStorageConfigVersion() ? std::make_optional(yaml.GetStorageConfigVersion()) : std::nullopt);
+
+        ExpectedSaveConfigCookie++;
     }
 }
 
@@ -1044,8 +1099,8 @@ void TNodeWarden::Handle(TEvPrivate::TEvUpdateNodeDrives::TPtr&) {
 void TNodeWarden::Handle(TEvPrivate::TEvRetrySaveConfig::TPtr& ev) {
     STLOG(PRI_TRACE, BS_NODE, NW97, "Handle(TEvRetrySaveConfig)");
     if (ev->Cookie == ExpectedSaveConfigCookie) {
-        const auto& yamlConfig = ev->Get()->YamlConfig;
-        PersistConfig(yamlConfig.GetYAML(), yamlConfig.GetConfigVersion());
+        auto *msg = ev->Get();
+        PersistConfig(std::move(msg->MainYaml), msg->MainYamlVersion, std::move(msg->StorageYaml), msg->StorageYamlVersion);
         ExpectedSaveConfigCookie++;
     }
 }
@@ -1266,7 +1321,6 @@ bool NKikimr::NStorage::DeriveStorageConfig(const NKikimrConfig::TAppConfig& app
             return false;
         }
         smTo->CopyFrom(smFrom);
-        smTo->ClearInitialConfigYaml(); // do not let this section into final StorageConfig
     } else {
         config->ClearSelfManagementConfig();
     }

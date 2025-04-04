@@ -118,7 +118,8 @@ namespace NKikimr {
                     }
                 }
 
-                TDefragQuantumFindRecords findRecords(std::move(*ChunksToDefrag), lockedChunks);
+                TDefragQuantumFindRecords findRecords(DCtx->VCtx->VDiskLogPrefix,
+                        std::move(*ChunksToDefrag), lockedChunks);
                 while (findRecords.Scan(NDefrag::WorkQuantum, GetSnapshot())) {
                     Yield();
                 }

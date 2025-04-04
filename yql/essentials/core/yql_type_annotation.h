@@ -8,6 +8,7 @@
 #include "yql_statistics.h"
 
 #include <yql/essentials/public/udf/udf_validate.h>
+#include <yql/essentials/public/udf/udf_log.h>
 #include <yql/essentials/core/credentials/yql_credentials.h>
 #include <yql/essentials/core/url_lister/interface/url_lister_manager.h>
 #include <yql/essentials/core/qplayer/storage/interface/yql_qstorage.h>
@@ -56,13 +57,6 @@ public:
         }
     }
 
-    //FIXME remove
-    TModuleResolver(TModulesTable&& modules,
-        ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
-        const THashSet<TString>& sqlFlags, bool optimizeLibraries = true, THolder<TExprContext> ownedCtx = {})
-        : TModuleResolver(NSQLTranslation::MakeAllTranslators(), std::move(modules), nextUniqueId, clusterMapping, sqlFlags, optimizeLibraries, std::move(ownedCtx))
-    {}
-
     TModuleResolver(const NSQLTranslation::TTranslators& translators, const TModulesTable* parentModules,
         ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
         const THashSet<TString>& sqlFlags, bool optimizeLibraries, const TSet<TString>& knownPackages, const THashMap<TString,
@@ -78,15 +72,6 @@ public:
         , FileAliasPrefix(fileAliasPrefix)
     {
     }
-
-    //FIXME remove
-    TModuleResolver(const TModulesTable* parentModules,
-        ui64 nextUniqueId, const THashMap<TString, TString>& clusterMapping,
-        const THashSet<TString>& sqlFlags, bool optimizeLibraries, const TSet<TString>& knownPackages, const THashMap<TString,
-        THashMap<int, TLibraryCohesion>>& libs, const TString& fileAliasPrefix)
-        : TModuleResolver(NSQLTranslation::MakeAllTranslators(), parentModules, nextUniqueId,
-            clusterMapping, sqlFlags, optimizeLibraries, knownPackages, libs, fileAliasPrefix)
-    {}
 
     static TString NormalizeModuleName(const TString& path);
 
@@ -108,6 +93,13 @@ public:
 
     void SetQContext(const TQContext& qContext) {
         QContext = qContext;
+    }
+
+    void SetClusterMapping(const THashMap<TString, TString>& clusterMapping) {
+        ClusterMapping = clusterMapping;
+    }
+    void SetSqlFlags(const THashSet<TString>& flags) {
+        SqlFlags = flags;
     }
 
     void RegisterPackage(const TString& package) override;
@@ -145,8 +137,8 @@ private:
     THashMap<TString, ui32> PackageVersions;
     THashMap<TString, THashMap<int, TLibraryCohesion>> Libs;
     TModulesTable Modules;
-    const THashMap<TString, TString> ClusterMapping;
-    const THashSet<TString> SqlFlags;
+    THashMap<TString, TString> ClusterMapping;
+    THashSet<TString> SqlFlags;
     const bool OptimizeLibraries;
     THolder<TExprContext::TFreezeGuard> FreezeGuard;
     TString FileAliasPrefix;
@@ -398,6 +390,7 @@ struct TTypeAnnotationContext: public TThrRefBase {
     NUdf::EValidateMode ValidateMode = NUdf::EValidateMode::None;
     bool DisableNativeUdfSupport = false;
     TMaybe<TString> OptLLVM;
+    NUdf::ELogLevel RuntimeLogLevel = NUdf::ELogLevel::Info;
     bool IsReadOnly = false;
     TAutoPtr<IGraphTransformer> CustomInstantTypeTransformer;
     bool Diagnostics = false;

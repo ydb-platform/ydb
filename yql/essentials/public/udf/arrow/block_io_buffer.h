@@ -21,6 +21,11 @@ public:
     }
 
     template <typename T>
+    void PopNumber(T& result) {
+        result = PopNumber<T>();
+    }
+
+    template <typename T>
     T PopNumber() {
         Ensure(sizeof(T));
         T t = ReadUnaligned<T>(Buf_.data() + Pos_);

@@ -4,3 +4,8 @@ items:
   include:
     mode: link
     path: performance/toc_p.yaml
+- name: Diagnostic examples
+  items:
+    - name: Overloaded shard
+      href: examples/schemas/overloaded-shard-simple-case.md
+

@@ -59,7 +59,7 @@ static int test(int nentries, int ring_flags)
 	ret = io_uring_queue_init(nentries, &ring,
 			IORING_SETUP_REGISTERED_FD_ONLY | IORING_SETUP_NO_MMAP |
 			ring_flags);
-	if (ret == -EINVAL) {
+	if (ret == -EINVAL || ret == -ENOENT) {
 		no_mmap = 1;
 		return T_EXIT_SKIP;
 	} else if (ret == -ENOMEM) {

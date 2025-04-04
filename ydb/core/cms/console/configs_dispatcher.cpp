@@ -67,6 +67,7 @@ const THashSet<ui32> DYNAMIC_KINDS({
     (ui32)NKikimrConsole::TConfigItem::BlobStorageConfigItem,
     (ui32)NKikimrConsole::TConfigItem::MetadataCacheConfigItem,
     (ui32)NKikimrConsole::TConfigItem::MemoryControllerConfigItem,
+    (ui32)NKikimrConsole::TConfigItem::HealthCheckConfigItem,
 });
 
 const THashSet<ui32> NON_YAML_KINDS({
@@ -250,6 +251,8 @@ private:
     bool StartupConfigProcessDiff = false;
     TString StartupConfigInfo;
     ::NMonitoring::TDynamicCounters::TCounterPtr StartupConfigChanged;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ConfigurationV1;
+    ::NMonitoring::TDynamicCounters::TCounterPtr ConfigurationV2;
     const std::optional<TDebugInfo> DebugInfo;
     std::shared_ptr<NConfig::TRecordedInitialConfiguratorDeps> RecordedInitialConfiguratorDeps;
     std::vector<TString> Args;
@@ -297,8 +300,18 @@ void TConfigsDispatcher::Bootstrap()
     }
     TIntrusivePtr<NMonitoring::TDynamicCounters> rootCounters = AppData()->Counters;
     TIntrusivePtr<NMonitoring::TDynamicCounters> authCounters = GetServiceCounters(rootCounters, "config");
-    NMonitoring::TDynamicCounterPtr counters = authCounters->GetSubgroup("subsystem", "ConfigsDispatcher");
+    NMonitoring::TDynamicCounterPtr counters = authCounters->GetSubgroup("subsystem", "configs_dispatcher");
     StartupConfigChanged = counters->GetCounter("StartupConfigChanged", true);
+    ConfigurationV1 = counters->GetCounter("ConfigurationV1", true);
+    ConfigurationV2 = counters->GetCounter("ConfigurationV2", false);
+
+    if (Labels.contains("configuration_version")) {
+        if (Labels.at("configuration_version") == "v1") {
+            *ConfigurationV1 = 1;
+        } else {
+            *ConfigurationV2 = 1;
+        }
+    }
 
     auto commonClient = CreateConfigsSubscriber(
         SelfId(),
@@ -521,6 +534,7 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
 
         DIV_CLASS("container") {
             DIV_CLASS("navbar navbar-expand-lg navbar-light bg-light") {
+                str << "<style>.navbar { z-index: 1030; position: relative; }</style>" << Endl;
                 DIV_CLASS("navbar-collapse") {
                     UL_CLASS("navbar-nav mr-auto") {
                         LI_CLASS("nav-item") {
@@ -533,6 +547,17 @@ void TConfigsDispatcher::Handle(TEvInterconnect::TEvNodesInfo::TPtr &ev)
                     }
                 }
             }
+
+            DIV_CLASS("alert alert-info") {
+                str << "<style>.alert-info { position: relative; z-index: 1020; }</style>" << Endl;
+                str << "<strong>Configuration version: </strong>";
+                if (Labels.contains("configuration_version")) {
+                    str << Labels.at("configuration_version");
+                } else {
+                    str << "unknown";
+                }
+            }
+
             DIV_CLASS("tab-left") {
                 COLLAPSED_REF_CONTENT("node-labels", "Node labels") {
                     PRE() {
@@ -862,7 +887,7 @@ try {
     NLastGetopt::TOptsParseResultException parseResult(&opts, argv.size(), argv.data());
 
     initCfg.ValidateOptions(opts, parseResult);
-    initCfg.Parse(parseResult.GetFreeArgs());
+    initCfg.Parse(parseResult.GetFreeArgs(), nullptr);
 
     NKikimrConfig::TAppConfig appConfig;
     ui32 nodeId;

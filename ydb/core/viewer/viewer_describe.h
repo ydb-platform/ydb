@@ -48,6 +48,9 @@ public:
     }
 
     void Bootstrap() override {
+        if (NeedToRedirect()) {
+            return;
+        }
         const auto& params(Event->Get()->Request.GetParams());
         JsonSettings.EnumAsNumbers = !FromStringWithDefault<bool>(params.Get("enums"), false);
         JsonSettings.UI64AsString = !FromStringWithDefault<bool>(params.Get("ui64"), false);
@@ -314,7 +317,7 @@ public:
             return;
         }
 
-        NExternalSource::IExternalSourceFactory::TPtr externalSourceFactory{NExternalSource::CreateExternalSourceFactory({})};
+        NExternalSource::IExternalSourceFactory::TPtr externalSourceFactory{NExternalSource::CreateExternalSourceFactory({}, nullptr, 50000, nullptr, false, false, NYql::GetAllExternalDataSourceTypes())};
         NJson::TJsonValue root;
         const auto& sourceType = DescribeResult->GetPathDescription().GetExternalTableDescription().GetSourceType();
         try {

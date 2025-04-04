@@ -12,6 +12,10 @@
 #include <yql/essentials/core/services/yql_eval_params.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 #include <yql/essentials/parser/pg_wrapper/interface/parser.h>
 #include <yql/essentials/utils/log/context.h>
 #include <yql/essentials/utils/log/profile.h>
@@ -20,6 +24,7 @@
 #include <yql/essentials/core/extract_predicate/extract_predicate_dbg.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/gateways_utils/gateways_utils.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_simple_udf_resolver.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_outproc_udf_resolver.h>
 #include <yql/essentials/providers/common/udf_resolve/yql_udf_resolver_with_index.h>
@@ -386,6 +391,14 @@ TProgram::TProgram(
                 if (GatewaysForMerge_) {
                     YQL_ENSURE(LoadedGatewaysConfig_.MergeFromString(*GatewaysForMerge_));
                 }
+                THashMap<TString, TString> clusterMapping;
+                GetClusterMappingFromGateways(LoadedGatewaysConfig_, clusterMapping);
+                auto sqlFlags = ExtractSqlFlags(LoadedGatewaysConfig_);
+                if (auto modules = dynamic_cast<TModuleResolver*>(Modules_.get())) {
+                    modules->SetClusterMapping(clusterMapping);
+                    modules->SetSqlFlags(sqlFlags);
+                }
+
                 GatewaysConfig_ = &LoadedGatewaysConfig_;
             }
         } else if (QContext_.CanWrite() && GatewaysConfig_) {
@@ -482,12 +495,34 @@ IPlanBuilder& TProgram::GetPlanBuilder() {
 
 void TProgram::SetParametersYson(const TString& parameters) {
     Y_ENSURE(!TypeCtx_, "TypeCtx_ already created");
-    auto node = NYT::NodeFromYsonString(parameters);
-    YQL_ENSURE(node.IsMap());
-    for (const auto& x : node.AsMap()) {
-        YQL_ENSURE(x.second.IsMap());
-        YQL_ENSURE(x.second.HasKey("Data"));
-        YQL_ENSURE(x.second.Size() == 1);
+    NYT::TNode node;
+    try {
+        try {
+            node = NYT::NodeFromYsonString(parameters);
+        } catch (const std::exception& e) {
+            throw TErrorException(0) << "Invalid parameters: " << e.what();
+        }
+
+        if (!node.IsMap()) {
+            throw TErrorException(0) << "Invalid parameters: expected Map at first level";
+        }
+
+        for (const auto& x : node.AsMap()) {
+            if (!x.second.IsMap()) {
+                throw TErrorException(0) << "Invalid parameters: expected Map at second level";
+            }
+
+            if (!x.second.HasKey("Data")) {
+                throw TErrorException(0) << "Invalid parameters: expected Data key";
+            }
+
+            if (x.second.Size() != 1) {
+                throw TErrorException(0) << "Invalid parameters: expected Map with single element";
+            }
+        }
+    } catch (const std::exception& e) {
+        ParametersIssue_ = ExceptionToIssue(e);
+        return;
     }
 
     OperationOptions_.ParametersYson = node;
@@ -687,12 +722,30 @@ void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& 
         loadedSettings.V0WarnAsError = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["V0WarnAsError"].AsBool());
         loadedSettings.DqDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["DqDefaultAuto"].AsBool());
         loadedSettings.BlockDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["BlockDefaultAuto"].AsBool());
+        loadedSettings.IsReplay = true;
         currentSettings = &loadedSettings;
     }
 }
 
+bool TProgram::CheckParameters() {
+    if (ParametersIssue_) {
+        if (!ExprCtx_) {
+            ExprCtx_.Reset(new TExprContext(NextUniqueId_));
+        }
+
+        ExprCtx_->AddError(*ParametersIssue_);
+        return false;
+    }
+
+    return true;
+}
+
 bool TProgram::ParseYql() {
     YQL_PROFILE_FUNC(TRACE);
+    if (!CheckParameters()) {
+        return false;
+    }
+
     YQL_ENSURE(SourceSyntax_ == ESourceSyntax::Unknown);
     SourceSyntax_ = ESourceSyntax::Yql;
     SyntaxVersion_ = 1;
@@ -716,6 +769,10 @@ bool TProgram::ParseSql() {
 bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
 {
     YQL_PROFILE_FUNC(TRACE);
+    if (!CheckParameters()) {
+        return false;
+    }
+
     YQL_ENSURE(SourceSyntax_ == ESourceSyntax::Unknown);
     SourceSyntax_ = ESourceSyntax::Sql;
     SyntaxVersion_ = settings.SyntaxVersion;
@@ -731,9 +788,16 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     }
 
     currentSettings->EmitReadsForExists = true;
+    NSQLTranslationV1::TLexers lexers;
+    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+    NSQLTranslationV1::TParsers parsers;
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+
     NSQLTranslation::TTranslators translators(
         nullptr,
-        NSQLTranslationV1::MakeTranslator(),
+        NSQLTranslationV1::MakeTranslator(lexers, parsers),
         NSQLTranslationPG::MakeTranslator()
     );
 

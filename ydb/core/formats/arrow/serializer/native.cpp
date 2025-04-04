@@ -1,15 +1,16 @@
 #include "native.h"
-#include "stream.h"
 #include "parsing.h"
+#include "stream.h"
+
 #include <ydb/core/formats/arrow/dictionary/conversion.h>
 
-#include <ydb/library/services/services.pb.h>
 #include <ydb/library/actors/core/log.h>
-#include <ydb/library/formats/arrow/common/validation.h>
+#include <ydb/library/formats/arrow/validation/validation.h>
+#include <ydb/library/services/services.pb.h>
 
-#include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/dictionary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/buffer.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/io/memory.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/dictionary.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/reader.h>
 #include <contrib/libs/apache/arrow/cpp/src/arrow/ipc/writer.h>
 
@@ -58,7 +59,8 @@ TString TNativeSerializer::DoSerializeFull(const std::shared_ptr<arrow::RecordBa
     return result;
 }
 
-arrow::Result<std::shared_ptr<arrow::RecordBatch>> TNativeSerializer::DoDeserialize(const TString& data, const std::shared_ptr<arrow::Schema>& schema) const {
+arrow::Result<std::shared_ptr<arrow::RecordBatch>> TNativeSerializer::DoDeserialize(
+    const TString& data, const std::shared_ptr<arrow::Schema>& schema) const {
     arrow::ipc::DictionaryMemo dictMemo;
     auto options = arrow::ipc::IpcReadOptions::Defaults();
     options.use_threads = false;
@@ -109,7 +111,8 @@ TString TNativeSerializer::DoSerializePayload(const std::shared_ptr<arrow::Recor
     return str;
 }
 
-NKikimr::TConclusion<std::shared_ptr<arrow::util::Codec>> TNativeSerializer::BuildCodec(const arrow::Compression::type& cType, const std::optional<ui32> level) const {
+NKikimr::TConclusion<std::shared_ptr<arrow::util::Codec>> TNativeSerializer::BuildCodec(
+    const arrow::Compression::type& cType, const std::optional<ui32> level) const {
     auto codec = NArrow::TStatusValidator::GetValid(arrow::util::Codec::Create(cType));
     if (!codec) {
         return std::shared_ptr<arrow::util::Codec>();
@@ -194,4 +197,4 @@ void TNativeSerializer::DoSerializeToProto(NKikimrSchemeOp::TOlapColumn::TSerial
     }
 }
 
-}
+}   // namespace NKikimr::NArrow::NSerialization

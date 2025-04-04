@@ -55,7 +55,7 @@ For any other JOIN types, specify the condition using one of the two methods:
 1. `USING (column_name)`. Used if both the left and right subqueries share a column whose equality of values is a join condition.
 2. `ON (equality_conditions)`. Lets you set a condition of equality for column values or expressions over columns in the left and right subqueries or use several such conditions combined by `and`.
 
-### Examples
+#### Examples
 
 ```yql
 SELECT    a.value as a_value, b.value as b_value

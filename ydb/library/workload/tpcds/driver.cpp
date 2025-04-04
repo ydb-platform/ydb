@@ -224,13 +224,13 @@ extern "C" int dist_op(void *dest, int op, char *d_name, int vset, int wset, int
         if (dest == NULL) {
             dest = (date_t *)malloc(sizeof(date_t));
         }
-        strtodt(*(date_t **)dest, char_val);
+        strtodt((date_t *)dest, char_val);
         break;
     case TKN_DECIMAL:
         if (dest == NULL) {
             dest = (decimal_t *)malloc(sizeof(decimal_t));
         }
-        strtodec(*(decimal_t **)dest,char_val);
+        strtodec((decimal_t *)dest,char_val);
         break;
     }
 

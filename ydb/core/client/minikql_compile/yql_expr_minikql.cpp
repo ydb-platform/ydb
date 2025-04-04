@@ -32,7 +32,7 @@
 #include <library/cpp/threading/future/async.h>
 
 #include <util/generic/algorithm.h>
-#include <util/generic/bt_exception.h>
+#include <util/generic/yexception.h>
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 #include <util/generic/list.h>

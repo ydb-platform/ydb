@@ -10,9 +10,10 @@ namespace NKikimr {
             NKikimrBlobStorage::TEvControllerProposeConfigRequest, EvControllerProposeConfigRequest> {
         TEvControllerProposeConfigRequest() = default;
 
-        TEvControllerProposeConfigRequest(ui64 configHash, ui64 configVersion) {
+        TEvControllerProposeConfigRequest(ui64 configHash, ui64 configVersion, bool distconf) {
             Record.SetConfigHash(configHash);
             Record.SetConfigVersion(configVersion);
+            Record.SetDistconf(distconf);
         }
         
         TString ToString() const override {
@@ -77,7 +78,8 @@ namespace NKikimr {
         TEvControllerReplaceConfigRequest() = default;
 
         TEvControllerReplaceConfigRequest(std::optional<TString> clusterYaml, std::optional<TString> storageYaml,
-                std::optional<bool> switchDedicatedStorageSection, bool dedicatedConfigMode) {
+                std::optional<bool> switchDedicatedStorageSection, bool dedicatedConfigMode, bool allowUnknownFields,
+                bool bypassMetadataChecks, bool enableConfigV2, bool disableConfigV2) {
             if (clusterYaml) {
                 Record.SetClusterYaml(*clusterYaml);
             }
@@ -88,6 +90,13 @@ namespace NKikimr {
                 Record.SetSwitchDedicatedStorageSection(*switchDedicatedStorageSection);
             }
             Record.SetDedicatedConfigMode(dedicatedConfigMode);
+            Record.SetAllowUnknownFields(allowUnknownFields);
+            Record.SetBypassMetadataChecks(bypassMetadataChecks);
+            if (enableConfigV2) {
+                Record.SetSwitchEnableConfigV2(true);
+            } else if (disableConfigV2) {
+                Record.SetSwitchEnableConfigV2(false);
+            }
         }
 
         TString ToString() const override {
@@ -115,5 +124,11 @@ namespace NKikimr {
 
     struct TEvBlobStorage::TEvControllerFetchConfigResponse : TEventPB<TEvControllerFetchConfigResponse,
         NKikimrBlobStorage::TEvControllerFetchConfigResponse, EvControllerFetchConfigResponse> {};
+
+    struct TEvBlobStorage::TEvControllerDistconfRequest : TEventPB<TEvControllerDistconfRequest,
+        NKikimrBlobStorage::TEvControllerDistconfRequest, EvControllerDistconfRequest> {};
+
+    struct TEvBlobStorage::TEvControllerDistconfResponse : TEventPB<TEvControllerDistconfResponse,
+        NKikimrBlobStorage::TEvControllerDistconfResponse, EvControllerDistconfResponse> {};
 
 }

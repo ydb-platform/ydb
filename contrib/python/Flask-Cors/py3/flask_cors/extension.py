@@ -1,37 +1,21 @@
-# -*- coding: utf-8 -*-
-"""
-    extension
-    ~~~~
-    Flask-CORS is a simple extension to Flask allowing you to support cross
-    origin resource sharing (CORS) using a simple decorator.
-
-    :copyright: (c) 2016 by Cory Dolphin.
-    :license: MIT, see LICENSE for more details.
-"""
 import logging
 from urllib.parse import unquote_plus
+
 from flask import request
 
-from .core import (
-    parse_resources,
-    get_cors_options,
-    get_regexp_pattern,
-    ACL_ORIGIN,
-    try_match,
-    set_cors_headers
-)
-
+from .core import ACL_ORIGIN, get_cors_options, get_regexp_pattern, parse_resources, set_cors_headers, try_match
 
 LOG = logging.getLogger(__name__)
 
-class CORS(object):
+
+class CORS:
     """
     Initializes Cross Origin Resource sharing for the application. The
-    arguments are identical to :py:func:`cross_origin`, with the addition of a
+    arguments are identical to `cross_origin`, with the addition of a
     `resources` parameter. The resources parameter defines a series of regular
     expressions for resource paths to match and optionally, the associated
     options to be applied to the particular resource. These options are
-    identical to the arguments to :py:func:`cross_origin`.
+    identical to the arguments to `cross_origin`.
 
     The settings for CORS are determined in the following order
 
@@ -144,7 +128,7 @@ class CORS(object):
         will be set with the value 'true' whenever the request header
         `Access-Control-Request-Private-Network` has a value 'true'.
 
-        If False, the reponse header `Access-Control-Allow-Private-Network`
+        If False, the response header `Access-Control-Allow-Private-Network`
         will be set with the value 'false' whenever the request header
         `Access-Control-Request-Private-Network` has a value of 'true'.
 
@@ -168,19 +152,16 @@ class CORS(object):
 
         # Flatten our resources into a list of the form
         # (pattern_or_regexp, dictionary_of_options)
-        resources = parse_resources(options.get('resources'))
+        resources = parse_resources(options.get("resources"))
 
         # Compute the options for each resource by combining the options from
         # the app's configuration, the constructor, the kwargs to init_app, and
         # finally the options specified in the resources dictionary.
-        resources = [
-                     (pattern, get_cors_options(app, options, opts))
-                     for (pattern, opts) in resources
-                    ]
+        resources = [(pattern, get_cors_options(app, options, opts)) for (pattern, opts) in resources]
 
         # Create a human-readable form of these resources by converting the compiled
         # regular expressions into strings.
-        resources_human = {get_regexp_pattern(pattern): opts for (pattern,opts) in resources}
+        resources_human = {get_regexp_pattern(pattern): opts for (pattern, opts) in resources}
         LOG.debug("Configuring CORS with resources: %s", resources_human)
 
         cors_after_request = make_after_request_function(resources)
@@ -188,32 +169,38 @@ class CORS(object):
 
         # Wrap exception handlers with cross_origin
         # These error handlers will still respect the behavior of the route
-        if options.get('intercept_exceptions', True):
+        if options.get("intercept_exceptions", True):
+
             def _after_request_decorator(f):
                 def wrapped_function(*args, **kwargs):
                     return cors_after_request(app.make_response(f(*args, **kwargs)))
+
                 return wrapped_function
 
-            if hasattr(app, 'handle_exception'):
-                app.handle_exception = _after_request_decorator(
-                    app.handle_exception)
-                app.handle_user_exception = _after_request_decorator(
-                    app.handle_user_exception)
+            if hasattr(app, "handle_exception"):
+                app.handle_exception = _after_request_decorator(app.handle_exception)
+                app.handle_user_exception = _after_request_decorator(app.handle_user_exception)
+
 
 def make_after_request_function(resources):
     def cors_after_request(resp):
         # If CORS headers are set in a view decorator, pass
         if resp.headers is not None and resp.headers.get(ACL_ORIGIN):
-            LOG.debug('CORS have been already evaluated, skipping')
+            LOG.debug("CORS have been already evaluated, skipping")
             return resp
         normalized_path = unquote_plus(request.path)
         for res_regex, res_options in resources:
             if try_match(normalized_path, res_regex):
-                LOG.debug("Request to '%r' matches CORS resource '%s'. Using options: %s",
-                      request.path, get_regexp_pattern(res_regex), res_options)
+                LOG.debug(
+                    "Request to '%r' matches CORS resource '%s'. Using options: %s",
+                    request.path,
+                    get_regexp_pattern(res_regex),
+                    res_options,
+                )
                 set_cors_headers(resp, res_options)
                 break
         else:
-            LOG.debug('No CORS rule matches')
+            LOG.debug("No CORS rule matches")
         return resp
+
     return cors_after_request

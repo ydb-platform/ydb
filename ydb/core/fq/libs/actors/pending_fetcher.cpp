@@ -37,10 +37,10 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <yql/essentials/public/issue/protos/issue_message.pb.h>
 
-#include <ydb-cpp-sdk/client/table/table.h>
-#include <ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb-cpp-sdk/client/value/value.h>
-#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 
 #include <ydb/core/fq/libs/common/compression.h>
 #include <ydb/core/fq/libs/common/entity_id.h>
@@ -105,6 +105,13 @@ struct TEvPrivate {
 
 constexpr auto CLEANUP_PERIOD = TDuration::Seconds(60);
 
+TDuration GetPendingFetchPeriod(const NFq::NConfig::TPendingFetcherConfig& config) {
+    if (const auto periodMs = config.GetPendingFetchPeriodMs()) {
+        return TDuration::MilliSeconds(periodMs);
+    }
+    return TDuration::Seconds(1);
+}
+
 } // namespace
 
 class TPendingFetcher : public NActors::TActorBootstrapped<TPendingFetcher> {
@@ -158,7 +165,7 @@ public:
         const TString& tenantName,
         NActors::TMon* monitoring,
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
-        NYql::IPqGateway::TPtr defaultPqGateway
+        NYql::IPqGatewayFactory::TPtr pqGatewayFactory
         )
         : YqSharedResources(yqSharedResources)
         , CredentialsProviderFactory(credentialsProviderFactory)
@@ -170,6 +177,7 @@ public:
         , ServiceCounters(serviceCounters, "pending_fetcher")
         , GetTaskCounters("GetTask", ServiceCounters.Counters)
         , FailedStatusCodeCounters(MakeIntrusive<TStatusCodeByScopeCounters>("IntermediateFailedStatusCode", ServiceCounters.RootCounters->GetSubgroup("component", "QueryDiagnostic")))
+        , PendingFetchPeriod(GetPendingFetchPeriod(config.GetPendingFetcher()))
         , CredentialsFactory(credentialsFactory)
         , S3Gateway(s3Gateway)
         , ConnectorClient(connectorClient)
@@ -181,7 +189,7 @@ public:
         , Monitoring(monitoring)
         , ComputeConfig(config.GetCompute())
         , S3ActorsFactory(std::move(s3ActorsFactory))
-        , DefaultPqGateway(std::move(defaultPqGateway))
+        , PqGatewayFactory(std::move(pqGatewayFactory))
     {
         Y_ENSURE(GetYqlDefaultModuleResolverWithContext(ModuleResolver));
     }
@@ -475,7 +483,7 @@ private:
             std::map<TString, Ydb::TypedValue>(task.parameters().begin(), task.parameters().end()),
             S3ActorsFactory,
             ComputeConfig.GetWorkloadManagerConfig(task.scope()),
-            DefaultPqGateway
+            PqGatewayFactory
             );
 
         auto runActorId =
@@ -518,7 +526,7 @@ private:
     IModuleResolver::TPtr ModuleResolver;
 
     bool HasRunningRequest = false;
-    const TDuration PendingFetchPeriod = TDuration::Seconds(1);
+    const TDuration PendingFetchPeriod;
 
     TActorId DatabaseResolver;
 
@@ -551,7 +559,7 @@ private:
     NActors::TMon* Monitoring;
     TComputeConfig ComputeConfig;
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory;
-    NYql::IPqGateway::TPtr DefaultPqGateway;
+    NYql::IPqGatewayFactory::TPtr PqGatewayFactory;
 };
 
 
@@ -572,7 +580,7 @@ NActors::IActor* CreatePendingFetcher(
     const TString& tenantName,
     NActors::TMon* monitoring,
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
-    NYql::IPqGateway::TPtr defaultPqGateway)
+    NYql::IPqGatewayFactory::TPtr pqGatewayFactory)
 {
     return new TPendingFetcher(
         yqSharedResources,
@@ -591,7 +599,7 @@ NActors::IActor* CreatePendingFetcher(
         tenantName,
         monitoring,
         std::move(s3ActorsFactory),
-        defaultPqGateway);
+        std::move(pqGatewayFactory));
 }
 
 TActorId MakePendingFetcherId(ui32 nodeId) {

@@ -1,5 +1,9 @@
 #include "accessor.h"
 
+#include <ydb/core/formats/arrow/accessor/sparsed/constructor.h>
+
+#include <ydb/library/actors/prof/tag.h>
+
 namespace NKikimr::NArrow::NAccessor {
 
 namespace {
@@ -26,7 +30,20 @@ public:
         Result = IChunkedArray::TLocalChunkedArrayAddress(Chunks[chunkIdx].GetArrayVerified(Loader), startPosition, chunkIdx);
     }
 };
+
 }   // namespace
+
+std::shared_ptr<IChunkedArray> TDeserializeChunkedArray::TChunk::GetArrayVerified(const std::shared_ptr<TColumnLoader>& loader) const {
+    if (PredefinedArray) {
+        return PredefinedArray;
+    }
+    if (!!Data) {
+        return loader->ApplyVerified(Data, RecordsCount);
+    } else {
+        AFL_VERIFY(!!DataBuffer);
+        return loader->ApplyVerified(TString(DataBuffer.data(), DataBuffer.size()), RecordsCount);
+    }
+}
 
 IChunkedArray::TLocalDataAddress TDeserializeChunkedArray::DoGetLocalData(
     const std::optional<TCommonChunkAddress>& /*chunkCurrent*/, const ui64 /*position*/) const {

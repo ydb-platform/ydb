@@ -21,7 +21,7 @@ TAuthenticationOptions TAuthenticationOptions::FromAuthenticationIdentity(const 
     return FromUser(identity.User, identity.UserTag);
 }
 
-TAuthenticationOptions TAuthenticationOptions::FromToken(const TString& token)
+TAuthenticationOptions TAuthenticationOptions::FromToken(const std::string& token)
 {
     return {
         .Token = token,
@@ -35,7 +35,7 @@ TAuthenticationOptions TAuthenticationOptions::FromServiceTicketAuth(const IServ
     };
 }
 
-TAuthenticationOptions TAuthenticationOptions::FromUserTicket(const TString& userTicket)
+TAuthenticationOptions TAuthenticationOptions::FromUserTicket(const std::string& userTicket)
 {
     return {
         .UserTicket = userTicket,

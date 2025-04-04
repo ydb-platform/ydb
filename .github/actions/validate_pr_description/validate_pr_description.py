@@ -3,9 +3,9 @@ import re
 from typing import Tuple
 
 issue_patterns = [
-    r"https://github.com/ydb-platform/ydb/issues/\d+",
+    r"https://github.com/ydb-platform/[a-z\-]+/issues/\d+",
     r"https://st.yandex-team.ru/[a-zA-Z]+-\d+",
-    r"#+d+",
+    r"#\d+",
     r"[a-zA-Z]+-\d+"
 ]
 

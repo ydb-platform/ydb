@@ -34,13 +34,17 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
 
     auto& request = *InternalScanEvent->Get();
     auto scanComputeActor = InternalScanEvent->Sender;
-    const TSnapshot snapshot = request.ReadToSnapshot.value_or(NOlap::TSnapshot(Self->LastPlannedStep, Self->LastPlannedTxId));
+    const TSnapshot snapshot = request.GetSnapshot();
     const NActors::TLogContextGuard gLogging =
         NActors::TLogContextBuilder::Build()("tablet", Self->TabletID())("snapshot", snapshot.DebugString())("task_id", request.TaskIdentifier);
     TReadMetadataPtr readMetadataRange;
-    TScannerConstructorContext context(snapshot, 0, request.GetReverse());
+    const TReadMetadataBase::ESorting sorting = [&]() {
+        return request.GetReverse() ? TReadMetadataBase::ESorting::DESC : TReadMetadataBase::ESorting::ASC;
+    }();
+
+    TScannerConstructorContext context(snapshot, 0, sorting);
     {
-        TReadDescription read(snapshot, request.GetReverse());
+        TReadDescription read(snapshot, sorting);
         read.SetScanIdentifier(request.TaskIdentifier);
         read.PathId = request.GetPathId();
         read.LockId = LockId;

@@ -153,6 +153,15 @@ Y_UNIT_TEST(ShowCreateTable) {
     setup.Run(cases);
 }
 
+Y_UNIT_TEST(ShowCreateView) {
+    TCases cases = {
+        {"use plato;show create view user;","USE plato;\n\nSHOW CREATE VIEW user;\n"},
+    };
+
+    TSetup setup;
+    setup.Run(cases);
+}
+
 Y_UNIT_TEST(Use) {
     TCases cases = {
         {"use user;","USE user;\n"},
@@ -858,6 +867,8 @@ Y_UNIT_TEST(Select) {
             "SELECT\n\t*\nWITHOUT\n\ta,\n\tb\n;\n"},
         {"select * without a,",
             "SELECT\n\t*\nWITHOUT\n\ta,\n;\n"},
+        {"select * without if exists a",
+            "SELECT\n\t*\nWITHOUT IF EXISTS\n\ta\n;\n"},
         {"select 1 from user",
             "SELECT\n\t1\nFROM\n\tuser\n;\n"},
         {"select 1 from plato.user",
@@ -1856,6 +1867,6 @@ Y_UNIT_TEST(ValueConstructor) {
             "SELECT\n\tCallable(Callable<(Int32) -> Int32>, ($x) -> ($x))(0)\n;\n"},
     };
 
-    TSetup setup(/* ansiLexer = */ true);
+    TSetup setup;
     setup.Run(cases);
 }

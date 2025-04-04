@@ -86,6 +86,9 @@ public:
     ui32 GetnScanTasks();
     ui32 GetnComputeTasks();
 
+    void PropagateChannelsUpdates(const THashMap<TActorId, THashSet<ui64>>& updates);
+    void CollectTaskChannelsUpdates(const TKqpTasksGraph::TTaskType& task, THashMap<TActorId, THashSet<ui64>>& updates);
+
 private:
 
     const IKqpGateway::TKqpSnapshot& GetSnapshot() const;

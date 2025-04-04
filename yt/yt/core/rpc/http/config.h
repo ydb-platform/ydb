@@ -8,7 +8,7 @@ namespace NYT::NRpc::NHttp {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TServerConfig
+struct TServerConfig
     : public NYT::NHttp::TServerConfig
 { };
 

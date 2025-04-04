@@ -1,10 +1,10 @@
-#include <ydb-cpp-sdk/client/federated_topic/federated_topic.h>
-#include <src/client/topic/impl/read_session.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/federated_topic/federated_topic.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/read_session.h>
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Printable specializations
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 
 using namespace NFederatedTopic;
 
@@ -135,7 +135,7 @@ void TPrintable<TDataReceivedEvent>::DebugString(TStringBuilder& ret, bool print
 
 }
 
-namespace NYdb::inline V3::NFederatedTopic {
+namespace NYdb::inline Dev::NFederatedTopic {
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // NFederatedTopic::TReadSessionEvent::TDataReceivedEvent
@@ -165,4 +165,4 @@ std::string DebugString(const TReadSessionEvent::TEvent& event) {
     return std::visit([](const auto& ev) { return ev.DebugString(); }, event);
 }
 
-} // namespace NYdb::V3::NFederatedTopic
+} // namespace NYdb::Dev::NFederatedTopic

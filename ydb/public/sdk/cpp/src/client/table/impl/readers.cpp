@@ -1,9 +1,9 @@
 #include "readers.h"
 
-#include <src/client/common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 namespace NTable {
 
 using namespace NThreading;
@@ -78,7 +78,6 @@ TAsyncScanQueryPart TScanQueryPartIterator::TReaderImpl::ReadNext(std::shared_pt
             NYdb::NIssue::TIssues issues;
             NYdb::NIssue::IssuesFromMessage(self->Response_.issues(), issues);
             EStatus clientStatus = static_cast<EStatus>(self->Response_.status());
-            // TODO: Add headers for streaming calls.
             TPlainStatus plainStatus{clientStatus, std::move(issues), self->Endpoint_, {}};
             TStatus status{std::move(plainStatus)};
             std::optional<TQueryStats> queryStats;

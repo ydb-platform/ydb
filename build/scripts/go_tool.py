@@ -32,6 +32,11 @@ COMPILE_OPTIMIZATION_FLAGS = ('-N',)
 IGNORED_FLAGS = ['-fprofile-instr-generate', '-fcoverage-mapping']
 
 
+def get_sanitizer_libs(peers):
+    MSAN='{}/{}'.format(std_lib_prefix, 'msan').replace('//', '/')
+    ASAN='{}/{}'.format(std_lib_prefix, 'asan').replace('//', '/')
+    return filter(lambda it: it.startswith(MSAN) or it.startswith(ASAN), peers)
+
 def get_trimpath_args(args):
     return ['-trimpath', args.trimpath] if args.trimpath else []
 
@@ -525,18 +530,15 @@ def do_link_exe(args):
     cmd.append('-extld={}'.format(args.extld))
 
     if args.extldflags is not None:
-        filter_musl = bool
-        if args.musl:
-            cmd.append('-linkmode=external')
-            extldflags.append('-static')
-            filter_musl = lambda x: x not in ('-lc', '-ldl', '-lm', '-lpthread', '-lrt')
-        extldflags += [x for x in args.extldflags if filter_musl(x)]
+        extldflags.extend(args.extldflags)
     cgo_peers = []
-    if args.cgo_peers is not None and len(args.cgo_peers) > 0:
+    san_peers = list(get_sanitizer_libs(args.peers))
+    if args.cgo_peers or san_peers:
         is_group = args.targ_os == 'linux'
         if is_group:
             cgo_peers.append('-Wl,--start-group')
         cgo_peers.extend(args.cgo_peers)
+        cgo_peers.extend(san_peers)
         if is_group:
             cgo_peers.append('-Wl,--end-group')
     try:
@@ -545,6 +547,10 @@ def do_link_exe(args):
     except ValueError:
         extldflags.extend(cgo_peers)
     if len(extldflags) > 0:
+        for p in args.ld_plugins:
+            res = subprocess.check_output([sys.executable, p, sys.argv[0]] + extldflags, cwd=args.build_root).decode().strip()
+            if res:
+                extldflags = json.loads(res)[1:]
         cmd.append('-extldflags={}'.format(' '.join(extldflags)))
     cmd.append(compile_args.output)
     call(cmd, args.build_root)
@@ -850,6 +856,7 @@ if __name__ == '__main__':
     parser.add_argument('++test_srcs', nargs='*')
     parser.add_argument('++xtest_srcs', nargs='*')
     parser.add_argument('++cover_info', nargs='*')
+    parser.add_argument('++ld_plugins', nargs='*')
     parser.add_argument('++output', nargs='?', default=None)
     parser.add_argument('++source-root', default=None)
     parser.add_argument('++build-root', required=True)
@@ -862,7 +869,7 @@ if __name__ == '__main__':
     parser.add_argument('++targ-arch', choices=['amd64', 'x86', 'arm64'], required=True)
     parser.add_argument('++peers', nargs='*')
     parser.add_argument('++non-local-peers', nargs='*')
-    parser.add_argument('++cgo-peers', nargs='*')
+    parser.add_argument('++cgo-peers', nargs='*', default=[])
     parser.add_argument('++asmhdr', nargs='?', default=None)
     parser.add_argument('++test-import-path', nargs='?')
     parser.add_argument('++test-miner', nargs='?')
@@ -881,7 +888,6 @@ if __name__ == '__main__':
     parser.add_argument('++vet-flags', nargs='*', default=None)
     parser.add_argument('++vet-info-ext', default=vet_info_ext)
     parser.add_argument('++vet-report-ext', default=vet_report_ext)
-    parser.add_argument('++musl', action='store_true')
     parser.add_argument('++skip-tests', nargs='*', default=None)
     parser.add_argument('++ydx-file', default='')
     parser.add_argument('++debug-root-map', default=None)

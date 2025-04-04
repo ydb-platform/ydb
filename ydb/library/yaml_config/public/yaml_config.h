@@ -186,6 +186,14 @@ struct TMainMetadata {
 };
 
 /**
+ * Represents config metadata
+ */
+struct TStorageMetadata {
+    std::optional<ui64> Version;
+    std::optional<TString> Cluster;
+};
+
+/**
  * Represents volatile config metadata
  */
 struct TVolatileMetadata {
@@ -223,6 +231,11 @@ TMainMetadata GetMainMetadata(const TString& config);
 TDatabaseMetadata GetDatabaseMetadata(const TString& config);
 
 /**
+ * Parses storage config metadata
+ */
+TStorageMetadata GetStorageMetadata(const TString& config);
+
+/**
  * Parses volatile config metadata
  */
 TVolatileMetadata GetVolatileMetadata(const TString& config);
@@ -233,9 +246,24 @@ TVolatileMetadata GetVolatileMetadata(const TString& config);
 TString ReplaceMetadata(const TString& config, const TMainMetadata& metadata);
 
 /**
+ * Takes valid MainConfig and increases version exactly by one
+ */
+ TString UpgradeMainConfigVersion(const TString& config);
+
+/**
+ * Takes valid MainConfig and increases version exactly by one
+ */
+TString UpgradeStorageConfigVersion(const TString& config);
+
+/**
  * Replaces metadata in database config
  */
 TString ReplaceMetadata(const TString& config, const TDatabaseMetadata& metadata);
+
+/**
+ * Replaces metadata in storage config
+ */
+TString ReplaceMetadata(const TString& config, const TStorageMetadata& metadata);
 
 /**
  * Replaces volatile metadata in config

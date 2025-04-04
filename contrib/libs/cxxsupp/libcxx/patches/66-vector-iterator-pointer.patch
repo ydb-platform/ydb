@@ -1,5 +1,5 @@
 diff --git a/include/vector b/include/vector
-index 8d5b846..b989a3c 100644
+index 0125901..2f714f1 100644
 --- a/include/vector
 +++ b/include/vector
 @@ -401,9 +401,14 @@ public:
@@ -17,7 +17,7 @@ index 8d5b846..b989a3c 100644
    typedef std::reverse_iterator<iterator> reverse_iterator;
    typedef std::reverse_iterator<const_iterator> const_reverse_iterator;
  
-@@ -807,12 +812,8 @@ private:
+@@ -838,12 +843,8 @@ private:
    void __append_uninitialized(size_type __n);
    _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void __append(size_type __n);
    _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void __append(size_type __n, const_reference __x);
@@ -32,7 +32,7 @@ index 8d5b846..b989a3c 100644
    _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI void
    __swap_out_circular_buffer(__split_buffer<value_type, allocator_type&>& __v);
    _LIBCPP_CONSTEXPR_SINCE_CXX20 _LIBCPP_HIDE_FROM_ABI pointer
-@@ -1389,6 +1390,28 @@ vector<_Tp, _Allocator>::__assign_with_size(_ForwardIterator __first, _Sentinel
+@@ -1379,6 +1380,28 @@ vector<_Tp, _Allocator>::__assign_with_size(_ForwardIterator __first, _Sentinel
    }
  }
  

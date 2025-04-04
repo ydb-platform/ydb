@@ -3,6 +3,7 @@
 #include <ydb/core/formats/arrow/serializer/native.h>
 
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/formats/arrow/switch/switch_type.h>
 
 namespace NKikimr::NOlap {
 
@@ -35,16 +36,9 @@ TConclusionStatus TPKRangesFilter::Add(
         return toContainerConclusion;
     }
     if (SortedRanges.size() && !FakeRanges) {
-        if (ReverseFlag) {
-            if (fromContainerConclusion->CrossRanges(SortedRanges.front().GetPredicateTo())) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "not sorted sequence");
-                return TConclusionStatus::Fail("not sorted sequence");
-            }
-        } else {
-            if (fromContainerConclusion->CrossRanges(SortedRanges.back().GetPredicateTo())) {
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "not sorted sequence");
-                return TConclusionStatus::Fail("not sorted sequence");
-            }
+        if (fromContainerConclusion->CrossRanges(SortedRanges.back().GetPredicateTo())) {
+            AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_SCAN)("event", "add_range_filter")("problem", "not sorted sequence");
+            return TConclusionStatus::Fail("not sorted sequence");
         }
     }
     auto pkRangeFilterConclusion = TPKRangeFilter::Build(fromContainerConclusion.DetachResult(), toContainerConclusion.DetachResult());
@@ -55,11 +49,7 @@ TConclusionStatus TPKRangesFilter::Add(
         FakeRanges = false;
         SortedRanges.clear();
     }
-    if (ReverseFlag) {
-        SortedRanges.emplace_front(pkRangeFilterConclusion.DetachResult());
-    } else {
-        SortedRanges.emplace_back(pkRangeFilterConclusion.DetachResult());
-    }
+    SortedRanges.emplace_back(pkRangeFilterConclusion.DetachResult());
     return TConclusionStatus::Success();
 }
 
@@ -111,8 +101,7 @@ TPKRangeFilter::EUsageClass TPKRangesFilter::GetUsageClass(const NArrow::TReplac
     return TPKRangeFilter::EUsageClass::NoUsage;
 }
 
-TPKRangesFilter::TPKRangesFilter(const bool reverse)
-    : ReverseFlag(reverse) {
+TPKRangesFilter::TPKRangesFilter() {
     auto range = TPKRangeFilter::Build(TPredicateContainer::BuildNullPredicateFrom(), TPredicateContainer::BuildNullPredicateTo());
     Y_ABORT_UNLESS(range);
     SortedRanges.emplace_back(*range);
@@ -147,8 +136,8 @@ std::shared_ptr<arrow::RecordBatch> TPKRangesFilter::SerializeToRecordBatch(cons
 }
 
 std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecordBatchLines(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const bool reverse) {
-    std::shared_ptr<TPKRangesFilter> result = std::make_shared<TPKRangesFilter>(reverse);
+    const std::shared_ptr<arrow::RecordBatch>& batch) {
+    std::shared_ptr<TPKRangesFilter> result = std::make_shared<TPKRangesFilter>();
     for (ui32 i = 0; i < batch->num_rows(); ++i) {
         auto batchRow = batch->Slice(i, 1);
         auto pFrom = std::make_shared<NOlap::TPredicate>(NKernels::EOperation::GreaterEqual, batchRow);
@@ -159,8 +148,8 @@ std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecor
 }
 
 std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecordBatchFull(
-    const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& pkSchema, const bool reverse) {
-    std::shared_ptr<TPKRangesFilter> result = std::make_shared<TPKRangesFilter>(reverse);
+    const std::shared_ptr<arrow::RecordBatch>& batch, const std::shared_ptr<arrow::Schema>& pkSchema) {
+    std::shared_ptr<TPKRangesFilter> result = std::make_shared<TPKRangesFilter>();
     auto pkBatch = NArrow::TColumnOperator().Adapt(batch, pkSchema).DetachResult();
     auto c = batch->GetColumnByName(".ydb_operation_type");
     AFL_VERIFY(c);
@@ -200,9 +189,9 @@ std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromRecor
 }
 
 std::shared_ptr<NKikimr::NOlap::TPKRangesFilter> TPKRangesFilter::BuildFromString(
-    const TString& data, const std::shared_ptr<arrow::Schema>& pkSchema, const bool reverse) {
+    const TString& data, const std::shared_ptr<arrow::Schema>& pkSchema) {
     auto batch = NArrow::TStatusValidator::GetValid(NArrow::NSerialization::TNativeSerializer().Deserialize(data));
-    return BuildFromRecordBatchFull(batch, pkSchema, reverse);
+    return BuildFromRecordBatchFull(batch, pkSchema);
 }
 
 TString TPKRangesFilter::SerializeToString(const std::shared_ptr<arrow::Schema>& pkSchema) const {

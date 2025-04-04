@@ -74,25 +74,15 @@ namespace NKikimr::NStorage {
             MainConfigFetchYamlHash = 0;
 
             if (config.HasConfigComposite()) {
-                try {
-                    // parse the composite stream
-                    TStringInput ss(config.GetConfigComposite());
-                    TZstdDecompress zstd(&ss);
-                    MainConfigYaml = TString::Uninitialized(LoadSize(&zstd));
-                    zstd.LoadOrFail(MainConfigYaml.Detach(), MainConfigYaml.size());
-                    MainConfigFetchYaml = TString::Uninitialized(LoadSize(&zstd));
-                    zstd.LoadOrFail(MainConfigFetchYaml.Detach(), MainConfigFetchYaml.size());
-
-                    // extract _current_ config version
-                    auto metadata = NYamlConfig::GetMainMetadata(MainConfigYaml);
-                    Y_DEBUG_ABORT_UNLESS(metadata.Version.has_value());
-                    MainConfigYamlVersion = metadata.Version.value_or(0);
-
-                    // and _fetched_ config hash
-                    MainConfigFetchYamlHash = NYaml::GetConfigHash(MainConfigFetchYaml);
-                } catch (const std::exception& ex) {
-                    Y_ABORT("ConfigComposite format incorrect: %s", ex.what());
+                // parse the composite stream
+                auto error = DecomposeConfig(config.GetConfigComposite(), &MainConfigYaml,
+                    &MainConfigYamlVersion.emplace(), &MainConfigFetchYaml);
+                if (error) {
+                    Y_ABORT("ConfigComposite format incorrect: %s", error->data());
                 }
+
+                // and _fetched_ config hash
+                MainConfigFetchYamlHash = NYaml::GetConfigHash(MainConfigFetchYaml);
             }
 
             // now extract the additional storage section
@@ -378,6 +368,34 @@ namespace NKikimr::NStorage {
     void TNodeWarden::ForwardToDistributedConfigKeeper(STATEFN_SIG) {
         ev->Rewrite(ev->GetTypeRewrite(), DistributedConfigKeeperId);
         TActivationContext::Send(ev.Release());
+    }
+
+
+    std::optional<TString> DecomposeConfig(const TString& configComposite, TString *mainConfigYaml,
+            ui64 *mainConfigVersion, TString *mainConfigFetchYaml) {
+        try {
+            TStringInput ss(configComposite);
+            TZstdDecompress zstd(&ss);
+
+            TString yaml = TString::Uninitialized(LoadSize(&zstd));
+            zstd.LoadOrFail(yaml.Detach(), yaml.size());
+            if (mainConfigVersion) {
+                auto metadata = NYamlConfig::GetMainMetadata(yaml);
+                Y_DEBUG_ABORT_UNLESS(metadata.Version.has_value());
+                *mainConfigVersion = metadata.Version.value_or(0);
+            }
+            if (mainConfigYaml) {
+                *mainConfigYaml = std::move(yaml);
+            }
+
+            if (mainConfigFetchYaml) {
+                *mainConfigFetchYaml = TString::Uninitialized(LoadSize(&zstd));
+                zstd.LoadOrFail(mainConfigFetchYaml->Detach(), mainConfigFetchYaml->size());
+            }
+        } catch (const std::exception& ex) {
+            return ex.what();
+        }
+        return std::nullopt;
     }
 
 } // NKikimr::NStorage

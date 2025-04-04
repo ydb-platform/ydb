@@ -6,17 +6,14 @@
 namespace NYql::NFmr {
 
 struct TFmrYtGatewaySettings {
-    TIntrusivePtr<IRandomProvider> RandomProvider;
-    TDuration TimeToSleepBetweenGetOperationRequests;
+    TIntrusivePtr<IRandomProvider> RandomProvider = CreateDefaultRandomProvider();
+    TDuration TimeToSleepBetweenGetOperationRequests = TDuration::Seconds(1);
 };
 
 IYtGateway::TPtr CreateYtFmrGateway(
     IYtGateway::TPtr slave,
     IFmrCoordinator::TPtr coordinator = nullptr,
-    const TFmrYtGatewaySettings& settings = TFmrYtGatewaySettings{
-        .RandomProvider = CreateDefaultRandomProvider(),
-        .TimeToSleepBetweenGetOperationRequests = TDuration::Seconds(1)
-    }
+    const TFmrYtGatewaySettings& settings = TFmrYtGatewaySettings{}
 );
 
 } // namespace NYql::NFmr

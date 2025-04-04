@@ -268,8 +268,8 @@ auto CalcVectorKmeansTreePostingImplTableDescImpl(
     {
         auto parentColumn = implTableDesc.AddColumns();
         parentColumn->SetName(NTableVectorKmeansTreeIndex::ParentColumn);
-        parentColumn->SetType("Uint32");
-        parentColumn->SetTypeId(NScheme::NTypeIds::Uint32);
+        parentColumn->SetType(NTableIndex::ClusterIdTypeName);
+        parentColumn->SetTypeId(NSchemeShard::ClusterIdTypeId);
         parentColumn->SetNotNull(true);
     }
     implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::ParentColumn);
@@ -304,8 +304,8 @@ auto CalcVectorKmeansTreePrefixImplTableDescImpl(
     {
         auto idColumn = implTableDesc.AddColumns();
         idColumn->SetName(NTableVectorKmeansTreeIndex::IdColumn);
-        idColumn->SetType("Uint32");
-        idColumn->SetTypeId(NScheme::NTypeIds::Uint32);
+        idColumn->SetType(NTableIndex::ClusterIdTypeName);
+        idColumn->SetTypeId(NSchemeShard::ClusterIdTypeId);
         idColumn->SetNotNull(true);
     }
     implTableDesc.AddKeyColumnNames(NTableVectorKmeansTreeIndex::IdColumn);
@@ -315,6 +315,14 @@ auto CalcVectorKmeansTreePrefixImplTableDescImpl(
     return implTableDesc;
 }
 
+}
+
+void FillIndexTableColumns(
+    const THashMap<ui32, NSchemeShard::TTableInfo::TColumn>& baseTableColumns,
+    std::span<const TString> keys,
+    const THashSet<TString>& columns,
+    NKikimrSchemeOp::TTableDescription& implTableDesc) {
+    FillIndexImplTableColumns(baseTableColumns, keys, columns, implTableDesc);
 }
 
 NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
@@ -346,15 +354,15 @@ NKikimrSchemeOp::TTableDescription CalcVectorKmeansTreeLevelImplTableDesc(
     {
         auto parentColumn = implTableDesc.AddColumns();
         parentColumn->SetName(NTableVectorKmeansTreeIndex::ParentColumn);
-        parentColumn->SetType("Uint32");
-        parentColumn->SetTypeId(NScheme::NTypeIds::Uint32);
+        parentColumn->SetType(NTableIndex::ClusterIdTypeName);
+        parentColumn->SetTypeId(NSchemeShard::ClusterIdTypeId);
         parentColumn->SetNotNull(true);
     }
     {
         auto idColumn = implTableDesc.AddColumns();
         idColumn->SetName(NTableVectorKmeansTreeIndex::IdColumn);
-        idColumn->SetType("Uint32");
-        idColumn->SetTypeId(NScheme::NTypeIds::Uint32);
+        idColumn->SetType(NTableIndex::ClusterIdTypeName);
+        idColumn->SetTypeId(NSchemeShard::ClusterIdTypeId);
         idColumn->SetNotNull(true);
     }
     {

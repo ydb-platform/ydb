@@ -12,14 +12,14 @@ namespace NYT::NSecurityClient {
 ////////////////////////////////////////////////////////////////////////////////
 
 NYPath::TYPath GetUserPath(const std::string& name);
-NYPath::TYPath GetGroupPath(const TString& name);
-NYPath::TYPath GetAccountPath(const TString& name);
+NYPath::TYPath GetGroupPath(const std::string& name);
+NYPath::TYPath GetAccountPath(const std::string& name);
 
 ////////////////////////////////////////////////////////////////////////////////
 
 ESecurityAction CheckPermissionsByAclAndSubjectClosure(
     const TSerializableAccessControlList& acl,
-    const THashSet<TString>& subjectClosure,
+    const THashSet<std::string>& subjectClosure,
     NYTree::EPermissionSet permissions);
 
 void ValidateSecurityTag(const TSecurityTag& tag);

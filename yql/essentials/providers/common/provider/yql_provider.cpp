@@ -1084,7 +1084,7 @@ bool FillUsedFilesImpl(
     return childrenOk;
 }
 
-static void GetToken(const TString& string, TString& out, const TTypeAnnotationContext& type) {
+void GetToken(const TString& string, TString& out, const TTypeAnnotationContext& type) {
     auto separator = string.find(":");
     const auto p0 = string.substr(0, separator);
     if (p0 == "api") {
@@ -1326,7 +1326,11 @@ TString SerializeExpr(TExprContext& ctx, const TExprNode& expr, bool withTypes) 
 }
 
 TString ExprToPrettyString(TExprContext& ctx, const TExprNode& expr) {
-    auto ast = ConvertToAst(expr, ctx, TExprAnnotationFlags::None, true);
+    TConvertToAstSettings settings;
+    settings.AnnotationFlags = TExprAnnotationFlags::None;
+    settings.RefAtoms = true;
+    settings.AllowFreeArgs = true;
+    auto ast = ConvertToAst(expr, ctx, settings);
     TStringStream exprStream;
     YQL_ENSURE(ast.Root);
     ast.Root->PrettyPrintTo(exprStream, NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote);

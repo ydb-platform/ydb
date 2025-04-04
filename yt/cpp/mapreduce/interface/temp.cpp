@@ -133,7 +133,7 @@ TYPath CreateTempTable(
         // we retry attempt if it was failed with path resolution error.
         const int maxAttempts = 3;
         for (int i = 0; i < maxAttempts; ++i) {
-            client->GetParentClient()->Create(resultDirectory, NT_MAP, TCreateOptions().Recursive(true).IgnoreExisting(true));
+            client->GetParentClient(/*ignoreGlobalTx=*/ true)->Create(resultDirectory, NT_MAP, TCreateOptions().Recursive(true).IgnoreExisting(true));
 
             try {
                 client->Create(result, NT_TABLE, options);

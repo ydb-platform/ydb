@@ -1,22 +1,22 @@
 #pragma once
 
-#include <src/client/impl/ydb_internal/internal_header.h>
-#include <ydb-cpp-sdk/client/common_client/ssl_credentials.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/internal_header.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/common_client/ssl_credentials.h>
 
 #include "actions.h"
 #include "params.h"
 
 #include <ydb/public/api/grpc/ydb_discovery_v1.grpc.pb.h>
-#include <src/client/impl/ydb_internal/common/client_pid.h>
-#include <src/client/impl/ydb_internal/db_driver_state/state.h>
-#include <src/client/impl/ydb_internal/rpc_request_settings/settings.h>
-#include <src/client/impl/ydb_internal/thread_pool/pool.h>
-#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
-#include <ydb-cpp-sdk/client/extension_common/extension.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/common/client_pid.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/db_driver_state/state.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/rpc_request_settings/settings.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/thread_pool/pool.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/extension_common/extension.h>
 
-#include <src/library/issue/yql_issue_message.h>
+#include <ydb/public/sdk/cpp/src/library/issue/yql_issue_message.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 constexpr TDuration GRPC_KEEP_ALIVE_TIMEOUT_FOR_DISCOVERY = TDuration::Seconds(10);
 constexpr TDuration INITIAL_DEFERRED_CALL_DELAY = TDuration::MilliSeconds(10); // The delay before first deferred service call
@@ -98,20 +98,22 @@ public:
             clientConfig.MaxOutboundMessageSize = MaxOutboundMessageSize_;
         }
 
-        if (std::is_same<TService,Ydb::Discovery::V1::DiscoveryService>()
-            || dbState->Database.empty()
-            || endpointPolicy == TRpcRequestSettings::TEndpointPolicy::UseDiscoveryEndpoint)
-        {
-            SetGrpcKeepAlive(clientConfig, GRPC_KEEP_ALIVE_TIMEOUT_FOR_DISCOVERY, GRpcKeepAlivePermitWithoutCalls_);
-        } else {
-            auto endpoint = dbState->EndpointPool.GetEndpoint(preferredEndpoint, endpointPolicy == TRpcRequestSettings::TEndpointPolicy::UsePreferredEndpointStrictly);
-            if (!endpoint) {
-                return {nullptr, TEndpointKey()};
-            }
-            clientConfig.Locator = endpoint.Endpoint;
-            clientConfig.SslTargetNameOverride = endpoint.SslTargetNameOverride;
-            if (GRpcKeepAliveTimeout_) {
-                SetGrpcKeepAlive(clientConfig, GRpcKeepAliveTimeout_, GRpcKeepAlivePermitWithoutCalls_);
+        if (dbState->DiscoveryMode != EDiscoveryMode::Off) {
+            if (std::is_same<TService,Ydb::Discovery::V1::DiscoveryService>()
+                || dbState->Database.empty()
+                || endpointPolicy == TRpcRequestSettings::TEndpointPolicy::UseDiscoveryEndpoint)
+            {
+                SetGrpcKeepAlive(clientConfig, GRPC_KEEP_ALIVE_TIMEOUT_FOR_DISCOVERY, GRpcKeepAlivePermitWithoutCalls_);
+            } else {
+                auto endpoint = dbState->EndpointPool.GetEndpoint(preferredEndpoint, endpointPolicy == TRpcRequestSettings::TEndpointPolicy::UsePreferredEndpointStrictly);
+                if (!endpoint) {
+                    return {nullptr, TEndpointKey()};
+                }
+                clientConfig.Locator = endpoint.Endpoint;
+                clientConfig.SslTargetNameOverride = endpoint.SslTargetNameOverride;
+                if (GRpcKeepAliveTimeout_) {
+                    SetGrpcKeepAlive(clientConfig, GRpcKeepAliveTimeout_, GRpcKeepAlivePermitWithoutCalls_);
+                }
             }
         }
 
@@ -459,7 +461,6 @@ public:
                                 }
                             };
                             processor->AddFinishedCallback(std::move(finishedCallback));
-                            // TODO: Add headers for streaming calls.
                             TPlainStatus status(std::move(grpcStatus), endpoint.GetEndpoint(), {});
                             responseCb(std::move(status), std::move(processor));
                         } else {
@@ -468,7 +469,6 @@ public:
                             if (grpcStatus.GRpcStatusCode != grpc::StatusCode::CANCELLED) {
                                 dbState->EndpointPool.BanEndpoint(endpoint.GetEndpoint());
                             }
-                            // TODO: Add headers for streaming calls.
                             TPlainStatus status(std::move(grpcStatus), endpoint.GetEndpoint(), {});
                             responseCb(std::move(status), nullptr);
                         }
@@ -560,7 +560,6 @@ public:
                                 }
                             };
                             processor->AddFinishedCallback(std::move(finishedCallback));
-                            // TODO: Add headers for streaming calls.
                             TPlainStatus status(std::move(grpcStatus), endpoint.GetEndpoint(), {});
                             connectedCallback(std::move(status), std::move(processor));
                         } else {
@@ -569,7 +568,6 @@ public:
                             if (grpcStatus.GRpcStatusCode != grpc::StatusCode::CANCELLED) {
                                 dbState->EndpointPool.BanEndpoint(endpoint.GetEndpoint());
                             }
-                            // TODO: Add headers for streaming calls.
                             TPlainStatus status(std::move(grpcStatus), endpoint.GetEndpoint(), {});
                             connectedCallback(std::move(status), nullptr);
                         }
@@ -613,7 +611,17 @@ private:
         TEndpointKey endpoint;
         std::tie(serviceConnection, endpoint) = GetServiceConnection<TService>(dbState, preferredEndpoint, endpointPolicy);
         if (!serviceConnection) {
-            if (dbState->DiscoveryMode == EDiscoveryMode::Sync) {
+            if (dbState->DiscoveryMode == EDiscoveryMode::Off) {
+                TStringStream errString;
+                errString << "No endpoint for database " << dbState->Database;
+                errString << ", cluster endpoint " << dbState->DiscoveryEndpoint;
+                dbState->StatCollector.IncReqFailNoEndpoint();
+                callback(
+                    TPlainStatus(EStatus::UNAVAILABLE, errString.Str()),
+                    TConnection{nullptr},
+                    TEndpointKey{ });
+
+            } else if (dbState->DiscoveryMode == EDiscoveryMode::Sync) {
                 TStringStream errString;
                 errString << "Endpoint list is empty for database " << dbState->Database;
                 errString << ", cluster endpoint " << dbState->DiscoveryEndpoint;

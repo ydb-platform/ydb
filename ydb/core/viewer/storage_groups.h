@@ -1,14 +1,10 @@
 #pragma once
-#include "json_handlers.h"
 #include "json_pipe_req.h"
 #include "log.h"
 #include "viewer_helper.h"
-#include <library/cpp/protobuf/json/proto2json.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
 
 namespace NKikimr::NViewer {
-
-using namespace NProtobufJson;
 
 using TNodeId = ui32;
 using TGroupId = ui32;
@@ -863,7 +859,7 @@ public:
 
 public:
     void Bootstrap() override {
-        if (TBase::NeedToRedirect()) {
+        if (NeedToRedirect()) {
             return;
         }
         if (Database) {
@@ -880,25 +876,26 @@ public:
             RequestWhiteboard();
         } else {
             if (FieldsNeeded(FieldsBsGroups)) {
-                GetGroupsResponse = RequestBSControllerGroups();
+                GetGroupsResponse = MakeCachedRequestBSControllerGroups();
             }
             if (FieldsNeeded(FieldsBsPools)) {
-                GetStoragePoolsResponse = RequestBSControllerPools();
+                GetStoragePoolsResponse = MakeCachedRequestBSControllerPools();
             }
             if (FieldsNeeded(FieldsBsVSlots)) {
-                GetVSlotsResponse = RequestBSControllerVSlots();
+                GetVSlotsResponse = MakeCachedRequestBSControllerVSlots();
             }
             if (FieldsNeeded(FieldsBsPDisks)) {
-                GetPDisksResponse = RequestBSControllerPDisks();
+                GetPDisksResponse = MakeCachedRequestBSControllerPDisks();
             }
         }
-
-        if (Requests == 0) {
-            return ReplyAndPassAway();
-        }
         TBase::Become(&TThis::StateWork);
-        Schedule(TDuration::MilliSeconds(Timeout * 50 / 100), new TEvents::TEvWakeup(TimeoutBSC)); // 50% timeout (for bsc)
-        Schedule(TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup(TimeoutFinal)); // timeout for the rest
+        ProcessResponses(); // to process cached data
+        if (WaitingForResponse()) {
+            Schedule(TDuration::MilliSeconds(Timeout * 50 / 100), new TEvents::TEvWakeup(TimeoutBSC)); // 50% timeout (for bsc)
+            Schedule(TDuration::MilliSeconds(Timeout), new TEvents::TEvWakeup(TimeoutFinal)); // timeout for the rest
+        } else {
+            ReplyAndPassAway();
+        }
     }
 
     void ApplyFilter() {
@@ -1983,7 +1980,9 @@ public:
                     AddProblem("wb-incomplete-disks");
                     ProcessWhiteboardDisks();
                 }
-                ReplyAndPassAway();
+                if (!ReplySent) {
+                    ReplyAndPassAway();
+                }
                 break;
         }
     }
@@ -2064,6 +2063,9 @@ public:
         }
         if (NeedLimit) {
             json.SetNeedLimit(true);
+        }
+        if (CachedDataMaxAge) {
+            json.SetCachedDataMaxAge(CachedDataMaxAge.MilliSeconds());
         }
         json.SetTotalGroups(TotalGroups);
         json.SetFoundGroups(FoundGroups);
@@ -2180,14 +2182,7 @@ public:
             }
         }
         AddEvent("RenderingResult");
-        TStringStream out;
-        Proto2Json(json, out, {
-            .EnumMode = TProto2JsonConfig::EnumValueMode::EnumName,
-            .StringifyNumbers = TProto2JsonConfig::EStringifyNumbersMode::StringifyInt64Always,
-            .WriteNanAsString = true,
-        });
-        AddEvent("ResultReady");
-        TBase::ReplyAndPassAway(GetHTTPOKJSON(out.Str()));
+        TBase::ReplyAndPassAway(GetHTTPOKJSON(json));
     }
 
     static YAML::Node GetSwagger() {

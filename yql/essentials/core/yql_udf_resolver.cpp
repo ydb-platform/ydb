@@ -2,7 +2,7 @@
 
 namespace NYql {
 
-TResolveResult LoadRichMetadata(const IUdfResolver& resolver, const TVector<TUserDataBlock>& blocks) {
+TResolveResult LoadRichMetadata(const IUdfResolver& resolver, const TVector<TUserDataBlock>& blocks, NUdf::ELogLevel logLevel) {
     TVector<IUdfResolver::TImport> imports;
     imports.reserve(blocks.size());
     std::transform(blocks.begin(), blocks.end(), std::back_inserter(imports), [](auto& b) {
@@ -13,10 +13,10 @@ TResolveResult LoadRichMetadata(const IUdfResolver& resolver, const TVector<TUse
         return import;
     });
 
-    return resolver.LoadRichMetadata(imports);
+    return resolver.LoadRichMetadata(imports, logLevel);
 }
 
-TResolveResult LoadRichMetadata(const IUdfResolver& resolver, const TVector<TString>& paths) {
+TResolveResult LoadRichMetadata(const IUdfResolver& resolver, const TVector<TString>& paths, NUdf::ELogLevel logLevel) {
     TVector<TUserDataBlock> blocks;
     blocks.reserve(paths.size());
     std::transform(paths.begin(), paths.end(), std::back_inserter(blocks), [](auto& p) {
@@ -27,7 +27,7 @@ TResolveResult LoadRichMetadata(const IUdfResolver& resolver, const TVector<TStr
         return b;
     });
 
-    return LoadRichMetadata(resolver, blocks);
+    return LoadRichMetadata(resolver, blocks, logLevel);
 }
 
 }

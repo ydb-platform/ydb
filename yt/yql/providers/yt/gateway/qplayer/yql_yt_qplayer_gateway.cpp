@@ -247,7 +247,7 @@ public:
                         }
                     }
                 }
-                data.WriteLock = options.ReadOnly() ? false : valueNode["WriteLock"].AsBool();
+                data.WriteLock = valueNode["WriteLock"].AsBool();
                 res.Data.push_back(data);
             }
 
@@ -909,8 +909,8 @@ public:
         return Inner_->GetClusterServer(cluster);
     }
 
-    NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder) const final {
-        return Inner_->GetRealTable(sessionId, cluster, table, epoch, tmpFolder);
+    NYT::TRichYPath GetRealTable(const TString& sessionId, const TString& cluster, const TString& table, ui32 epoch, const TString& tmpFolder, bool temp, bool anonymous) const final {
+        return Inner_->GetRealTable(sessionId, cluster, table, epoch, tmpFolder, temp, anonymous);
     }
 
     NYT::TRichYPath GetWriteTable(const TString& sessionId, const TString& cluster, const TString& table, const TString& tmpFolder) const final {
@@ -959,6 +959,10 @@ public:
 
     void AddCluster(const TYtClusterConfig& cluster) final {
         return Inner_->AddCluster(cluster);
+    }
+
+    TClusterConnectionResult GetClusterConnection(const TClusterConnectionOptions&& options) override {
+        return Inner_->GetClusterConnection(std::move(options));
     }
 
 private:

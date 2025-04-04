@@ -7,6 +7,9 @@
 namespace NFqRun {
 
 struct TExecutionMeta {
+    TString Ast;
+    TString Plan;
+
     FederatedQuery::QueryMeta::ComputeStatus Status;
     NYql::TIssues Issues;
     NYql::TIssues TransientIssues;
@@ -28,6 +31,14 @@ public:
     TRequestResult CreateConnection(const FederatedQuery::ConnectionContent& connection, TString& connectionId) const;
 
     TRequestResult CreateBinding(const FederatedQuery::BindingContent& binding) const;
+
+    void QueryRequestAsync(const TRequestOptions& query, TDuration pingPeriod) const;
+
+    void WaitAsyncQueries() const;
+
+    void StartTraceOpt() const;
+
+    static void StopTraceOpt();
 
 private:
     class TImpl;

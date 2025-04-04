@@ -12,7 +12,6 @@ YQL_UDF_CONTRIB(string_udf)
     
     PEERDIR(
         yql/essentials/public/udf/arrow
-        library/cpp/charset
         library/cpp/deprecated/split
         library/cpp/html/pcdata
         library/cpp/string_utils/base32

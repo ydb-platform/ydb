@@ -14,6 +14,7 @@
 * [Pcre](pcre.md)
 * [Pire](pire.md)
 * [Re2](re2.md)
+* [Roaring](roaring.md)
 * [String](string.md)
 * [Unicode](unicode.md)
 * [Url](url.md)

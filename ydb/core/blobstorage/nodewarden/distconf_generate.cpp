@@ -43,27 +43,42 @@ namespace NKikimr::NStorage {
 
         // initial config YAML is taken from the Cfg->SelfManagementConfig as it is cleared in TStorageConfig while
         // deriving it from NodeWarden configuration
-        if (!Cfg->SelfManagementConfig || !Cfg->SelfManagementConfig->HasInitialConfigYaml()) {
+        if (!Cfg->StartupConfigYaml) {
             return "missing initial config YAML";
         }
-        TStringStream ss;
-        TString yaml = Cfg->SelfManagementConfig->GetInitialConfigYaml();
-        ui32 version = 0;
+
+        ui64 version = 0;
         try {
-            auto json = NYaml::Yaml2Json(YAML::Load(yaml), true);
-            if (json.Has("metadata")) {
-                if (auto& metadata = json["metadata"]; metadata.Has("version")) {
-                    version = metadata["version"].GetUIntegerRobust();
-                }
-            }
+            version = NYamlConfig::GetMainMetadata(Cfg->StartupConfigYaml).Version.value_or(0);
         } catch (const std::exception& ex) {
-            return TStringBuilder() << "failed to parse initial config YAML: " << ex.what();
+            return TStringBuilder() << "failed to parse initial main YAML: " << ex.what();
         }
         if (version) {
-            return TStringBuilder() << "initial config version must be zero";
+            return TStringBuilder() << "initial main config version must be zero";
         }
-        if (const auto& error = UpdateConfigComposite(*config, yaml, std::nullopt)) {
+
+        if (const auto& error = UpdateConfigComposite(*config, Cfg->StartupConfigYaml, std::nullopt)) {
             return TStringBuilder() << "failed to update config yaml: " << *error;
+        }
+
+        if (Cfg->StartupStorageYaml) {
+            ui64 storageVersion = 0;
+            try {
+                storageVersion = NYamlConfig::GetStorageMetadata(*Cfg->StartupStorageYaml).Version.value_or(0);
+            } catch (const std::exception& ex) {
+                return TStringBuilder() << "failed to parse initial storage YAML: " << ex.what();
+            }
+            if (storageVersion) {
+                return TStringBuilder() << "initial storage config version must be zero";
+            }
+
+            TString s;
+            if (TStringOutput output(s); true) {
+                TZstdCompress zstd(&output);
+                zstd << *Cfg->StartupStorageYaml;
+            }
+            config->SetCompressedStorageYaml(s);
+            config->SetExpectedStorageYamlVersion(storageVersion + 1);
         }
 
         if (!Cfg->DomainsConfig) { // no automatic configuration required

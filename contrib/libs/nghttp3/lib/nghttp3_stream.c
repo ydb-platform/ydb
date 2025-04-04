@@ -336,12 +336,19 @@ int nghttp3_stream_write_settings(nghttp3_stream *stream,
   struct {
     nghttp3_frame_settings settings;
     nghttp3_settings_entry iv[15];
-  } fr;
+  } fr = {
+    .settings =
+      {
+        .hd =
+          {
+            .type = NGHTTP3_FRAME_SETTINGS,
+          },
+        .niv = 3,
+      },
+  };
   nghttp3_settings_entry *iv;
   nghttp3_settings *local_settings = frent->aux.settings.local_settings;
 
-  fr.settings.hd.type = NGHTTP3_FRAME_SETTINGS;
-  fr.settings.niv = 3;
   iv = &fr.settings.iv[0];
 
   iv[0].id = NGHTTP3_SETTINGS_ID_MAX_FIELD_SECTION_SIZE;

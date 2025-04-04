@@ -1,7 +1,9 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_utils.h"  // for PQGroupReserve
+#include "schemeshard__data_erasure_manager.h"
 
 #include <ydb/core/protos/table_stats.pb.h>  // for TStoragePoolsStats
+#include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
@@ -803,7 +805,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
         return true;
     }
 
-    typedef std::tuple<TPathId, TString, TString, TString, TString, bool, TString, ui32, bool> TBackupSettingsRec;
+    typedef std::tuple<TPathId, TString, TString, TString, TString, bool, TString, ui32, bool, bool, TString> TBackupSettingsRec;
     typedef TDeque<TBackupSettingsRec> TBackupSettingsRows;
 
     template <typename SchemaTable, typename TRowSet>
@@ -816,7 +818,9 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             rowSet.template GetValueOrDefault<typename SchemaTable::NeedToBill>(true),
             rowSet.template GetValueOrDefault<typename SchemaTable::TableDescription>(""),
             rowSet.template GetValueOrDefault<typename SchemaTable::NumberOfRetries>(0),
-            rowSet.template GetValueOrDefault<typename SchemaTable::EnableChecksums>(false)
+            rowSet.template GetValueOrDefault<typename SchemaTable::EnableChecksums>(false),
+            rowSet.template GetValueOrDefault<typename SchemaTable::EnablePermissions>(false),
+            rowSet.template GetValueOrDefault<typename SchemaTable::ChangefeedUnderlyingTopics>("")
         );
     }
 
@@ -1866,6 +1870,13 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
         }
 
+        // Read Running data erasure for tenants
+        {
+            if (!Self->DataErasureManager->Restore(db)) {
+                return false;
+            }
+        }
+
         // Read External Tables
         {
             auto rowset = db.Table<Schema::ExternalTable>().Range().Select();
@@ -2383,6 +2394,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 stats.SearchHeight = rowSet.GetValueOrDefault<Schema::TablePartitionStats::SearchHeight>();
                 stats.FullCompactionTs = rowSet.GetValueOrDefault<Schema::TablePartitionStats::FullCompactionTs>();
                 stats.MemDataSize = rowSet.GetValueOrDefault<Schema::TablePartitionStats::MemDataSize>();
+
+                stats.LocksAcquired = rowSet.GetValueOrDefault<Schema::TablePartitionStats::LocksAcquired>();
+                stats.LocksWholeShard = rowSet.GetValueOrDefault<Schema::TablePartitionStats::LocksWholeShard>();
+                stats.LocksBroken = rowSet.GetValueOrDefault<Schema::TablePartitionStats::LocksBroken>();
 
                 tableInfo->UpdateShardStats(shardIdx, stats);
 
@@ -3793,6 +3808,8 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 TString tableDesc = std::get<6>(rec);
                 ui32 nRetries = std::get<7>(rec);
                 bool enableChecksums = std::get<8>(rec);
+                bool enablePermissions = std::get<9>(rec);
+                TString changefeedUnderlyingTopics = std::get<10>(rec);
 
                 Y_ABORT_UNLESS(tableName.size() > 0);
 
@@ -3803,6 +3820,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 tableInfo->BackupSettings.SetNeedToBill(needToBill);
                 tableInfo->BackupSettings.SetNumberOfRetries(nRetries);
                 tableInfo->BackupSettings.SetEnableChecksums(enableChecksums);
+                tableInfo->BackupSettings.SetEnablePermissions(enablePermissions);
 
                 if (ytSerializedSettings) {
                     auto settings = tableInfo->BackupSettings.MutableYTSettings();
@@ -3822,6 +3840,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 if (tableDesc) {
                     auto desc = tableInfo->BackupSettings.MutableTable();
                     Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(*desc, tableDesc));
+                }
+
+                if (changefeedUnderlyingTopics) {
+                    NKikimrSchemeOp::TChangefeedUnderlyingTopics wrapperOverTopics;
+                    Y_ABORT_UNLESS(ParseFromStringNoSizeLimit(wrapperOverTopics, changefeedUnderlyingTopics));
+                    for (const auto& topic : wrapperOverTopics.GetChangefeedUnderlyingTopics()) {
+                        *tableInfo->BackupSettings.AddChangefeedUnderlyingTopics() = topic;
+                    }
                 }
 
                 LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Loaded backup settings"
@@ -4296,6 +4322,11 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     exportInfo->StartTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::Exports::StartTime>());
                     exportInfo->EndTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::Exports::EndTime>());
                     exportInfo->EnableChecksums = rowset.GetValueOrDefault<Schema::Exports::EnableChecksums>(false);
+                    exportInfo->EnablePermissions = rowset.GetValueOrDefault<Schema::Exports::EnablePermissions>(false);
+
+                    if (rowset.HaveValue<Schema::Exports::ExportMetadata>()) {
+                        exportInfo->ExportMetadata = rowset.GetValue<Schema::Exports::ExportMetadata>();
+                    }
 
                     Self->Exports[id] = exportInfo;
                     if (uid) {
@@ -4400,6 +4431,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
 
                     switch (importInfo->State) {
+                    case TImportInfo::EState::DownloadExportMetadata:
                     case TImportInfo::EState::Waiting:
                     case TImportInfo::EState::Cancellation:
                         ImportsToResume.push_back(importInfo->Id);
@@ -4476,6 +4508,10 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     item.NextIndexIdx = rowset.GetValueOrDefault<Schema::ImportItems::NextIndexIdx>(0);
                     item.NextChangefeedIdx = rowset.GetValueOrDefault<Schema::ImportItems::NextChangefeedIdx>(0);
                     item.Issue = rowset.GetValueOrDefault<Schema::ImportItems::Issue>(TString());
+                    item.SrcPrefix = rowset.GetValueOrDefault<Schema::ImportItems::SrcPrefix>(TString());
+                    if (rowset.HaveValue<Schema::ImportItems::EncryptionIV>()) {
+                        item.ExportItemIV = NBackup::TEncryptionIV::FromBinaryString(rowset.GetValue<Schema::ImportItems::EncryptionIV>());
+                    }
 
                     if (item.WaitTxId != InvalidTxId) {
                         Self->TxIdToImport[item.WaitTxId] = {importId, itemIdx};
@@ -4523,20 +4559,24 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             // read kmeans tree state
             {
-                auto rowset = db.Table<Schema::KMeansTreeState>().Range().Select();
+                auto rowset = db.Table<Schema::KMeansTreeProgress>().Range().Select();
                 if (!rowset.IsReady()) {
                     return false;
                 }
 
                 while (!rowset.EndOfSet()) {
-                    TIndexBuildId id = rowset.GetValue<Schema::KMeansTreeState::Id>();
+                    TIndexBuildId id = rowset.GetValue<Schema::KMeansTreeProgress::Id>();
                     const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(id);
                     Y_VERIFY_S(buildInfoPtr, "BuildIndex not found: id# " << id);
                     auto& buildInfo = *buildInfoPtr->Get();
                     buildInfo.KMeans.Set(
-                        rowset.GetValue<Schema::KMeansTreeState::Level>(),
-                        rowset.GetValue<Schema::KMeansTreeState::Parent>(),
-                        rowset.GetValue<Schema::KMeansTreeState::State>()
+                        rowset.GetValue<Schema::KMeansTreeProgress::Level>(),
+                        rowset.GetValue<Schema::KMeansTreeProgress::ParentBegin>(),
+                        rowset.GetValue<Schema::KMeansTreeProgress::Parent>(),
+                        rowset.GetValue<Schema::KMeansTreeProgress::ChildBegin>(),
+                        rowset.GetValue<Schema::KMeansTreeProgress::Child>(),
+                        rowset.GetValue<Schema::KMeansTreeProgress::State>(),
+                        rowset.GetValue<Schema::KMeansTreeProgress::TableSize>()
                     );
                     buildInfo.Sample.Rows.reserve(buildInfo.KMeans.K * 2);
 

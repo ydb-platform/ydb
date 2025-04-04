@@ -1388,6 +1388,7 @@ void TBlobStorageController::RenderGroupTable(IOutputStream& out, std::function<
                     TAG_ATTRS(TTableH, {{"title", "PutUserData Latency"}}) { out << "PutUserData<br/>Latency"; }
                     TAG_ATTRS(TTableH, {{"title", "GetFast Latency"}}) { out << "GetFast<br/>Latency"; }
                     TABLEH() { out << "Seen operational"; }
+                    TABLEH() { out << "Layout correct"; }
                     TABLEH() { out << "Operating<br/>status"; }
                     TABLEH() { out << "Expected<br/>status"; }
                     TABLEH() { out << "Donors"; }
@@ -1448,6 +1449,7 @@ void TBlobStorageController::RenderGroupRow(IOutputStream& out, const TGroupInfo
             renderLatency(group.LatencyStats.PutUserData);
             renderLatency(group.LatencyStats.GetFast);
             TABLED() { out << (group.SeenOperational ? "YES" : ""); }
+            TABLED() { out << (group.LayoutCorrect ? "" : "NO"); }
 
             const auto& status = group.Status;
             TABLED() { out << NKikimrBlobStorage::TGroupStatus::E_Name(status.OperatingStatus); }

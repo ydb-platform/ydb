@@ -2,10 +2,15 @@
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v1/sql.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
 #include <util/generic/map.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <library/cpp/regex/pcre/pcre.h>
 #include <util/string/split.h>
 #include <deque>
 #include <unordered_set>
@@ -45,9 +50,16 @@ inline NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslat
     settings.Antlr4Parser = true;
     settings.SyntaxVersion = 1;
 
+    NSQLTranslationV1::TLexers lexers;
+    lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+    lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+    NSQLTranslationV1::TParsers parsers;
+    parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+    parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+
     NSQLTranslation::TTranslators translators(
         nullptr,
-        NSQLTranslationV1::MakeTranslator(),
+        NSQLTranslationV1::MakeTranslator(lexers, parsers),
         nullptr
     );
 
@@ -71,6 +83,13 @@ inline void ExpectFailWithError(const TString& query, const TString& error) {
 
     UNIT_ASSERT(!res.Root);
     UNIT_ASSERT_NO_DIFF(Err2Str(res), error);
+}
+
+inline void ExpectFailWithFuzzyError(const TString& query, const TString& errorRegex) {
+    NYql::TAstParseResult res = SqlToYql(query);
+
+    UNIT_ASSERT(!res.Root);
+    UNIT_ASSERT(NPcre::TPcre<char>(errorRegex.c_str()).Matches(Err2Str(res)));
 }
 
 inline NYql::TAstParseResult SqlToYqlWithAnsiLexer(const TString& query, size_t maxErrors = 10, const TString& provider = {}, EDebugOutput debug = EDebugOutput::None) {

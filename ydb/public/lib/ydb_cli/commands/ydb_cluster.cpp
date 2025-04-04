@@ -2,7 +2,7 @@
 
 #include "ydb_dynamic_config.h"
 
-#include <ydb-cpp-sdk/client/bsconfig/storage_config.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/config/config.h>
 #include <ydb/public/lib/ydb_cli/dump/dump.h>
 
 #define INCLUDE_YDB_INTERNAL_H
@@ -17,7 +17,7 @@ TCommandCluster::TCommandCluster()
     : TClientCommandTree("cluster", {}, "Cluster-wide administration")
 {
     AddCommand(std::make_unique<TCommandClusterBootstrap>());
-    AddCommand(std::make_unique<NDynamicConfig::TCommandConfig>(true));
+    AddCommand(std::make_unique<NDynamicConfig::TCommandConfig>(false, true));
     AddCommand(std::make_unique<TCommandClusterDump>());
     AddCommand(std::make_unique<TCommandClusterRestore>());
 }
@@ -39,7 +39,7 @@ void TCommandClusterBootstrap::Parse(TConfig& config) {
 
 int TCommandClusterBootstrap::Run(TConfig& config) {
     auto driver = std::make_unique<NYdb::TDriver>(CreateDriver(config));
-    NYdb::NStorageConfig::TStorageConfigClient client(*driver);
+    NYdb::NConfig::TConfigClient client(*driver);
     auto result = client.BootstrapCluster(SelfAssemblyUUID).GetValueSync();
     NStatusHelpers::ThrowOnErrorOrPrintIssues(result);
     return EXIT_SUCCESS;

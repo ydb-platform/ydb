@@ -71,6 +71,7 @@ public:
     const char* GetError();
 
     const THashMap<TString, TString>& GetData() const { return Data; }
+    THashMap<TString, TString>& GetData() { return Data; }
 
 private:
     const TSettings Settings;

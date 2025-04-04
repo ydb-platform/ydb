@@ -9,9 +9,9 @@ TMeta::TMeta(TSharedData raw, ui32 group)
     : Raw(std::move(raw))
     , Group(group)
 {
-    Y_ABORT_UNLESS(Raw.size() >= sizeof(NPageCollection::THeader));
+    Y_ENSURE(Raw.size() >= sizeof(NPageCollection::THeader));
     Header = (const NPageCollection::THeader *)Raw.data();
-    Y_ABORT_UNLESS(Header->Magic == NPageCollection::Magic);
+    Y_ENSURE(Header->Magic == NPageCollection::Magic);
 
     if (Header->Pages == 0)
         return;
@@ -41,37 +41,36 @@ size_t TMeta::BackingSize() const noexcept
     return Steps ? Steps.back() : 0;
 }
 
-TBorder TMeta::Bounds(ui32 begin, ui32 end) const noexcept
+TBorder TMeta::Bounds(ui32 begin, ui32 end) const
 {
-    Y_ABORT_UNLESS(begin <= end && Max(begin, end) < Header->Pages);
+    Y_ENSURE(begin <= end && Max(begin, end) < Header->Pages);
 
     const ui64 offset = (begin == 0) ? 0 : Index[begin - 1].Page;
 
     return TAlign(Steps).Lookup(offset, Index[end].Page - offset);
 }
 
-TInfo TMeta::Page(ui32 page) const noexcept
+TInfo TMeta::Page(ui32 page) const
 {
-    Y_ABORT_UNLESS(page < Header->Pages,
-            "Requested page %" PRIu32 " out of %" PRIu32 " total pages",
-            page, Header->Pages);
+    Y_ENSURE(page < Header->Pages,
+            "Requested page " << page << " out of " << Header->Pages << " total pages");
 
     return { GetPageSize(page), Extra[page].Type };
 }
 
-ui32 TMeta::GetPageType(ui32 pageId) const noexcept
+ui32 TMeta::GetPageType(ui32 pageId) const
 {
     Y_DEBUG_ABORT_UNLESS(pageId < Header->Pages);
     return Extra[pageId].Type;
 }
 
-ui32 TMeta::GetPageChecksum(ui32 pageId) const noexcept
+ui32 TMeta::GetPageChecksum(ui32 pageId) const
 {
     Y_DEBUG_ABORT_UNLESS(pageId < Header->Pages);
     return Extra[pageId].Crc32;
 }
 
-ui64 TMeta::GetPageSize(ui32 pageId) const noexcept
+ui64 TMeta::GetPageSize(ui32 pageId) const
 {
     Y_DEBUG_ABORT_UNLESS(pageId < Header->Pages);
 
@@ -79,7 +78,7 @@ ui64 TMeta::GetPageSize(ui32 pageId) const noexcept
     return Index[pageId].Page - begin;
 }
 
-TStringBuf TMeta::GetPageInplaceData(ui32 pageId) const noexcept
+TStringBuf TMeta::GetPageInplaceData(ui32 pageId) const
 {
     Y_DEBUG_ABORT_UNLESS(pageId < Header->Pages);
 

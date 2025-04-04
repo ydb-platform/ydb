@@ -12,10 +12,9 @@ namespace NYT::NRpc::NGrpc {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TDispatcherConfig
+struct TDispatcherConfig
     : public NYTree::TYsonStruct
 {
-public:
     int DispatcherThreadCount;
     int GrpcThreadCount;
     int GrpcEventEngineThreadCount;
@@ -29,10 +28,9 @@ DEFINE_REFCOUNTED_TYPE(TDispatcherConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TSslPemKeyCertPairConfig
+struct TSslPemKeyCertPairConfig
     : public NYTree::TYsonStruct
 {
-public:
     NCrypto::TPemBlobConfigPtr PrivateKey;
     NCrypto::TPemBlobConfigPtr CertChain;
 
@@ -55,10 +53,9 @@ DEFINE_ENUM(EClientCertificateRequest,
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TServerCredentialsConfig
+struct TServerCredentialsConfig
     : public NYTree::TYsonStruct
 {
-public:
     NCrypto::TPemBlobConfigPtr PemRootCerts;
     std::vector<TSslPemKeyCertPairConfigPtr> PemKeyCertPairs;
     EClientCertificateRequest ClientCertificateRequest;
@@ -72,11 +69,10 @@ DEFINE_REFCOUNTED_TYPE(TServerCredentialsConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TServerAddressConfig
+struct TServerAddressConfig
     : public NYTree::TYsonStruct
 {
-public:
-    TString Address;
+    std::string Address;
     TServerCredentialsConfigPtr Credentials;
 
     REGISTER_YSON_STRUCT(TServerAddressConfig);
@@ -88,14 +84,13 @@ DEFINE_REFCOUNTED_TYPE(TServerAddressConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TServerConfig
+struct TServerConfig
     : public NYTree::TYsonStruct
 {
-public:
-    TString ProfilingName;
+    std::string ProfilingName;
 
     std::vector<TServerAddressConfigPtr> Addresses;
-    THashMap<TString, NYTree::INodePtr> GrpcArguments;
+    THashMap<std::string, NYTree::INodePtr> GrpcArguments;
 
     REGISTER_YSON_STRUCT(TServerConfig);
 
@@ -106,10 +101,9 @@ DEFINE_REFCOUNTED_TYPE(TServerConfig)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TChannelCredentialsConfig
+struct TChannelCredentialsConfig
     : public NYTree::TYsonStruct
 {
-public:
     NCrypto::TPemBlobConfigPtr PemRootCerts;
     TSslPemKeyCertPairConfigPtr PemKeyCertPair;
     bool VerifyServerCert;
@@ -128,7 +122,7 @@ class TChannelConfigTemplate
 {
 public:
     TChannelCredentialsConfigPtr Credentials;
-    THashMap<TString, NYTree::INodePtr> GrpcArguments;
+    THashMap<std::string, NYTree::INodePtr> GrpcArguments;
 
     REGISTER_YSON_STRUCT(TChannelConfigTemplate);
 
@@ -139,11 +133,10 @@ DEFINE_REFCOUNTED_TYPE(TChannelConfigTemplate)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TChannelConfig
+struct TChannelConfig
     : public TChannelConfigTemplate
 {
-public:
-    TString Address;
+    std::string Address;
 
     REGISTER_YSON_STRUCT(TChannelConfig);
 

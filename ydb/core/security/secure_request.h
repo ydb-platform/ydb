@@ -44,12 +44,9 @@ private:
                 return static_cast<TDerived*>(this)->OnAccessDenied(result.Error, ctx);
             }
         } else {
-            if (RequireAdminAccess) {
-                UserAdmin = IsTokenAllowed(result.Token.Get(), GetAdministrationAllowedSIDs());
-                if (!UserAdmin) {
-                    return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{.Message = "Administrative access denied", .Retryable = false}, ctx);
-
-                }
+            UserAdmin = IsTokenAllowed(result.Token.Get(), GetAdministrationAllowedSIDs());
+            if (RequireAdminAccess && !UserAdmin) {
+                return static_cast<TDerived*>(this)->OnAccessDenied(TEvTicketParser::TError{.Message = "Administrative access denied", .Retryable = false}, ctx);
             }
         }
         AuthorizeTicketResult = ev.Get()->Release();

@@ -57,6 +57,9 @@ TMaybe<TErrorResponse> GetErrorResponse(const TString& hostName, const TString& 
         case NHttp::EStatusCode::InternalServerError:
             return logAndSetError(NClusterErrorCodes::NRpc::Unavailable, "internal error in proxy " + hostName);
 
+        case NHttp::EStatusCode::ServiceUnavailable:
+            return logAndSetError(NClusterErrorCodes::NBus::TransportError, "service unavailable");
+
         default: {
             TStringStream httpHeaders;
             httpHeaders << "HTTP headers (";
@@ -80,9 +83,6 @@ TMaybe<TErrorResponse> GetErrorResponse(const TString& hostName, const TString& 
                 TErrorResponse errorResponse(std::move(error), requestId);
                 if (errorResponse.IsOk()) {
                     return Nothing();
-                }
-                if (httpCode == NHttp::EStatusCode::ServiceUnavailable) {
-                    ExtendGenericError(errorResponse, NClusterErrorCodes::NBus::TransportError, "transport error");
                 }
                 return errorResponse;
             }

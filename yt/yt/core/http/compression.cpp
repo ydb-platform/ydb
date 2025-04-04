@@ -5,6 +5,7 @@
 #include <yt/yt/core/ytree/serialize.h>
 
 #include <yt/yt/core/compression/dictionary_codec.h>
+#include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <library/cpp/streams/brotli/brotli.h>
 

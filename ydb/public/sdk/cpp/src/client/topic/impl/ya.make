@@ -1,7 +1,5 @@
 LIBRARY()
 
-INCLUDE(${ARCADIA_ROOT}/ydb/public/sdk/cpp/sdk_common.inc)
-
 SRCS(
     common.h
     common.cpp
@@ -9,6 +7,7 @@ SRCS(
     deferred_commit.cpp
     event_handlers.cpp
     offsets_collector.cpp
+    proto_accessor.cpp
     read_session_event.cpp
     read_session_impl.ipp
     read_session.h

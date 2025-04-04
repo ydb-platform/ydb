@@ -15,7 +15,7 @@ namespace NFwd {
             eff = Usage * [ /Fetch; /(Before + Usage + After) ];
         */
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "TFwd{"

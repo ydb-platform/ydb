@@ -1,13 +1,12 @@
 PY3TEST()
 ENV(YDB_DRIVER_BINARY="ydb/apps/ydbd/ydbd")
+ENV(YDB_ENABLE_COLUMN_TABLES="true")
 
 TEST_SRCS(
     test_workload.py
 )
 
-IF (SANITIZER_TYPE)
-    REQUIREMENTS(ram:32)
-ENDIF()
+REQUIREMENTS(ram:32)
 
 SIZE(MEDIUM)
 

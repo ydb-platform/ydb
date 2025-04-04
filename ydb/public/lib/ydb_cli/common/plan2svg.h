@@ -147,6 +147,7 @@ public:
     std::shared_ptr<TSingleMetric> SpillingChannelTime;
     std::shared_ptr<TSingleMetric> SpillingChannelBytes;
     TString IngressName;
+    bool BuiltInIngress = false;
     std::shared_ptr<TSingleMetric> IngressBytes;
     std::shared_ptr<TSingleMetric> IngressRows;
     std::vector<TOperatorInfo> Operators;
@@ -154,6 +155,7 @@ public:
     ui32 PlanNodeId = 0;
     ui32 PhysicalStageId = 0;
     ui32 Tasks = 0;
+    ui32 FinishedTasks = 0;
     const NJson::TJsonValue* StatsNode = nullptr;
     ui64 MinTime = 0;
     ui64 MaxTime = 0;

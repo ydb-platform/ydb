@@ -4,14 +4,24 @@
 
 namespace NKikimrRun {
 
+struct TAsyncQueriesSettings {
+    enum class EVerbose {
+        EachQuery,
+        Final,
+    };
+
+    ui64 InFlightLimit = 0;
+    EVerbose Verbose = EVerbose::EachQuery;
+};
+
 struct TServerSettings {
     TString DomainName = "Root";
 
     bool MonitoringEnabled = false;
-    ui16 MonitoringPortOffset = 0;
+    ui16 FirstMonitoringPort = 0;
 
     bool GrpcEnabled = false;
-    ui16 GrpcPort = 0;
+    ui16 FirstGrpcPort = 0;
 
     TString LogOutputFile;
 };

@@ -61,7 +61,7 @@ YT_DEFINE_ERROR_ENUM(
     ((Kukarek) (-2007))
 );
 
-TString TestErrorCodeFormatter(int code)
+std::string TestErrorCodeFormatter(int code)
 {
     return Format("formatted%v", code);
 }
@@ -74,7 +74,7 @@ DEFINE_ENUM(EDifferentTestErrorCode,
     ((ErrorNumberThree) (-10002))
 );
 
-TString DifferentTestErrorCodeFormatter(int code)
+std::string DifferentTestErrorCodeFormatter(int code)
 {
     return TEnumTraits<EDifferentTestErrorCode>::ToString(static_cast<EDifferentTestErrorCode>(code));
 }

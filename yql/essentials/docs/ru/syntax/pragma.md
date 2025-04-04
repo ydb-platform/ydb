@@ -76,6 +76,14 @@ SELECT * FROM test;
 При указании префикса, он добавляется перед названием всех загруженных модулей, например, CustomPrefixIp::IsIPv4 вместо Ip::IsIPv4.
 Указание префикса позволяет подгрузить одну и ту же UDF разных версий.
 
+### RuntimeLogLevel {#runtime-log-level}
+
+| Тип значения | По умолчанию | Статическая /<br/>динамическая |
+| --- | --- | --- |
+| Строка, одно из `Trace`, `Debug`, `Info`, `Notice`, `Warn`, `Error`, `Fatal` | `Info` | Статическая |
+
+Позволяет поменять уровень логирования вычислений (например, для UDF) во время выполнения запроса или на этапе декларации сигнатуры UDF.
+
 ### UseTablePrefixForEach {#use-table-prefix-for-each}
 
 | Тип значения | По умолчанию |
@@ -369,7 +377,7 @@ WarnUntypedStringLiterals является [scoped](#pragmascope) настрой
 
 Интерпретировать указанный приложенный файл как библиотеку, из которой можно делать [IMPORT](export_import.md). Тип синтаксиса библиотеки определяется по расширению файла:
 * `.sql` для YQL диалекта SQL <span style="color: green;">(рекомендуется)</span>;
-* `.yql` для [s-expressions](/docs/s_expressions).
+* `.yqls` для [s-expressions](/docs/s_expressions).
 
 Пример с приложенным файлом к запросу:
 

@@ -2,16 +2,16 @@
 
 namespace NYql::NFmr {
 
-TTask::TPtr MakeTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId) {
-    return MakeIntrusive<TTask>(taskType, taskId, taskParams, sessionId);
+TTask::TPtr MakeTask(ETaskType taskType, const TString& taskId, const TTaskParams& taskParams, const TString& sessionId, const TClusterConnection& clusterConnection, const TMaybe<NYT::TNode>& jobSettings) {
+    return MakeIntrusive<TTask>(taskType, taskId, taskParams, sessionId, clusterConnection, jobSettings);
 }
 
-TTaskState::TPtr MakeTaskState(ETaskStatus taskStatus, const TString& taskId, const TMaybe<TFmrError>& taskErrorMessage) {
-    return MakeIntrusive<TTaskState>(taskStatus, taskId, taskErrorMessage);
+TTaskState::TPtr MakeTaskState(ETaskStatus taskStatus, const TString& taskId, const TMaybe<TFmrError>& taskErrorMessage, const TStatistics& stats) {
+    return MakeIntrusive<TTaskState>(taskStatus, taskId, taskErrorMessage, stats);
 }
 
-TTaskResult::TPtr MakeTaskResult(ETaskStatus taskStatus, const TMaybe<TFmrError>& taskErrorMessage) {
-    return MakeIntrusive<TTaskResult>(taskStatus, taskErrorMessage);
+TString TFmrChunkMeta::ToString() const {
+    return TStringBuilder() << TableId << ":" << PartId << ":" << std::to_string(Chunk);
 }
 
 } // namespace NYql::NFmr
@@ -25,4 +25,9 @@ void Out<NYql::NFmr::TFmrError>(IOutputStream& out, const NYql::NFmr::TFmrError&
         out << "(OperationId: " << error.OperationId <<") ";
     }
     out << error.ErrorMessage;
+}
+
+template<>
+void Out<NYql::NFmr::TFmrChunkMeta>(IOutputStream& out, const NYql::NFmr::TFmrChunkMeta& meta) {
+    out << meta.ToString();
 }

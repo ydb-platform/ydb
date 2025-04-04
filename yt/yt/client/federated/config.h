@@ -12,10 +12,9 @@ namespace NYT::NClient::NFederated {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-class TFederationConfig
+struct TFederationConfig
     : public virtual NYTree::TYsonStruct
 {
-public:
     //! Bundle name which liveness should be checked on the background.
     std::optional<TString> BundleName;
 
@@ -38,10 +37,9 @@ public:
 
 DEFINE_REFCOUNTED_TYPE(TFederationConfig)
 
-class TConnectionConfig
+struct TConnectionConfig
     : public TFederationConfig
 {
-public:
     //! The RPC connection config for participants clusters.
     std::vector<NApi::NRpcProxy::TConnectionConfigPtr> RpcProxyConnections;
 

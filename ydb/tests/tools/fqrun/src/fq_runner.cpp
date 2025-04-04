@@ -2,15 +2,41 @@
 #include "fq_setup.h"
 
 #include <library/cpp/colorizer/colors.h>
+#include <library/cpp/json/json_prettifier.h>
+
+#include <regex>
 
 using namespace NKikimrRun;
 
 namespace NFqRun {
 
+namespace {
+
+TString CanonizeEndpoints(TString str, const NFq::NConfig::TGatewaysConfig& gatewaysConfig) {
+    // Replace endpoints.
+    for (const auto& pqCluster : gatewaysConfig.GetPq().GetClusterMapping()) {
+        TStringBuilder clusterEndpointName;
+        clusterEndpointName << "<pq_" << pqCluster.GetName() << "_endpoint>";
+        SubstGlobal(str, pqCluster.GetEndpoint(), clusterEndpointName);
+    }
+    for (const auto& solomonCluster : gatewaysConfig.GetSolomon().GetClusterMapping()) {
+        TStringBuilder clusterEndpointName;
+        clusterEndpointName << "<solomon_" << solomonCluster.GetName() << "_endpoint>";
+        SubstGlobal(str, solomonCluster.GetCluster(), clusterEndpointName);
+    }
+    return str;
+}
+
+TString CanonizeAstLogicalId(TString ast) {
+    // '('('"_logical_id" '171840)))) ---------> '('('"_logical_id" '0))))
+    std::regex re(R"foo(("_logical_id" ')(\d+))foo");
+    return std::regex_replace(ast.c_str(), re, "$010").c_str();
+}
+
+}  // anonymous namespace
+
 class TFqRunner::TImpl {
     using EVerbose = TFqSetupSettings::EVerbose;
-
-    static constexpr TDuration REFRESH_PERIOD = TDuration::Seconds(1);
 
 public:
     explicit TImpl(const TRunnerOptions& options)
@@ -22,6 +48,8 @@ public:
     {}
 
     bool ExecuteStreamQuery(const TRequestOptions& query) {
+        StartTraceOpt(query.QueryId);
+
         if (VerboseLevel >= EVerbose::QueriesText) {
             Cout << CoutColors.Cyan() << "Starting stream request:\n" << CoutColors.Default() << query.Query << Endl;
         }
@@ -114,14 +142,26 @@ public:
         return true;
     }
 
-private:
-    static bool IsFinalStatus(FederatedQuery::QueryMeta::ComputeStatus status) {
-        using EStatus = FederatedQuery::QueryMeta;
-        return IsIn({EStatus::FAILED, EStatus::COMPLETED, EStatus::ABORTED_BY_USER, EStatus::ABORTED_BY_SYSTEM}, status);
+    void ExecuteQueryAsync(const TRequestOptions& query) const {
+        StartTraceOpt(query.QueryId);
+
+        if (VerboseLevel >= EVerbose::QueriesText) {
+            Cout << CoutColors.Cyan() << "Starting async stream request:\n" << CoutColors.Default() << query.Query << Endl;
+        }
+
+        FqSetup.QueryRequestAsync(query, Options.PingPeriod);
     }
 
+    void FinalizeRunner() const {
+        FqSetup.WaitAsyncQueries();
+    }
+
+private:
     bool WaitStreamQuery() {
         StartTime = TInstant::Now();
+        Y_DEFER {
+            TFqSetup::StopTraceOpt();
+        };
 
         while (true) {
             TExecutionMeta meta;
@@ -141,9 +181,11 @@ private:
                 return false;
             }
 
-            Sleep(REFRESH_PERIOD);
+            Sleep(Options.PingPeriod);
         }
 
+        PrintQueryAst(ExecutionMeta.Ast);
+        PrintQueryPlan(ExecutionMeta.Plan);
         if (VerboseLevel >= EVerbose::Info) {
             Cout << CoutColors.Cyan() << "Query finished. Duration: " << TInstant::Now() - StartTime << CoutColors.Default() << Endl;
         }
@@ -158,6 +200,50 @@ private:
         }
 
         return true;
+    }
+
+    void StartTraceOpt(size_t queryId) const {
+        if (Options.TraceOptAll || Options.TraceOptIds.contains(queryId)) {
+            FqSetup.StartTraceOpt();
+        }
+    }
+
+    void PrintQueryAst(TString ast) const {
+        if (!Options.AstOutput) {
+            return;
+        }
+        if (VerboseLevel >= EVerbose::Info) {
+            Cout << CoutColors.Cyan() << "Writing query ast" << CoutColors.Default() << Endl;
+        }
+        if (Options.CanonicalOutput) {
+            ast = CanonizeEndpoints(ast, Options.FqSettings.FqConfig.GetGateways());
+            ast = CanonizeAstLogicalId(ast);
+        }
+        Options.AstOutput->Write(ast);
+        Options.AstOutput->Flush();
+    }
+
+    void PrintQueryPlan(TString plan) const {
+        if (!Options.PlanOutput) {
+            return;
+        }
+        if (VerboseLevel >= EVerbose::Info) {
+            Cout << CoutColors.Cyan() << "Writing query plan" << CoutColors.Default() << Endl;
+        }
+        if (!plan) {
+            return;
+        }
+
+        NJson::TJsonValue planJson;
+        NJson::ReadJsonTree(plan, &planJson, true);
+        plan = NJson::PrettifyJson(plan, false);
+
+        if (Options.CanonicalOutput) {
+            plan = CanonizeEndpoints(plan, Options.FqSettings.FqConfig.GetGateways());
+        }
+
+        Options.PlanOutput->Write(plan);
+        Options.PlanOutput->Flush();
     }
 
 private:
@@ -196,6 +282,14 @@ bool TFqRunner::CreateConnections(const std::vector<FederatedQuery::ConnectionCo
 
 bool TFqRunner::CreateBindings(const std::vector<FederatedQuery::BindingContent>& bindings) const {
     return Impl->CreateBindings(bindings);
+}
+
+void TFqRunner::ExecuteQueryAsync(const TRequestOptions& query) const {
+    Impl->ExecuteQueryAsync(query);
+}
+
+void TFqRunner::FinalizeRunner() const {
+    Impl->FinalizeRunner();
 }
 
 }  // namespace NFqRun

@@ -55,7 +55,7 @@ NActors::IActor* CreatePendingFetcher(
     const TString& tenantName,
     NActors::TMon* monitoring,
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory,
-    NYql::IPqGateway::TPtr defaultPqGateway
+    NYql::IPqGatewayFactory::TPtr pqGatewayFactory
     );
 
 NActors::IActor* CreateRunActor(

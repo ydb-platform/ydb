@@ -1,0 +1,61 @@
+{
+    "_yql_row_spec" = {
+        "Constraints" = {
+            "Sorted" = [
+                [
+                    [
+                        "key1";
+                    ];
+                    %false;
+                ];
+                [
+                    [
+                        "key2";
+                    ];
+                    %true;
+                ];
+            ];
+        };
+        "SortDirections" = [
+            0;
+            1;
+        ];
+        "SortMembers" = [
+            "key1";
+            "key2";
+        ];
+        "SortedBy" = [
+            "_yql_column_0";
+            "key2";
+        ];
+        "SortedByTypes" = [
+            [
+                "DataType";
+                "String";
+            ];
+            [
+                "DataType";
+                "Int32";
+            ];
+        ];
+        "Type" = [
+            "StructType";
+            [
+                [
+                    "key1";
+                    [
+                        "DataType";
+                        "Int32";
+                    ];
+                ];
+                [
+                    "key2";
+                    [
+                        "DataType";
+                        "Int32";
+                    ];
+                ];
+            ];
+        ];
+    };
+}

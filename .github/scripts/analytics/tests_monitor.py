@@ -227,21 +227,21 @@ def determine_state(row):
             return 'Muted Flaky'
         elif 'pass' in history_class and not 'failure' in history_class and not 'mute' in history_class :
             return 'Muted Stable'
-        elif 'skipped' in history_class or not history_class:
+        elif 'skipped' in history_class:
             return 'Skipped'
         else:
-            return history_class
+            return 'no_runs'
     else:
         if 'failure' in history_class and 'mute' not in history_class:
             return 'Flaky'
         elif 'mute' in history_class:
             return 'Muted'
-        elif 'skipped' in history_class or not history_class:
-            return 'Skipped'
         elif 'pass' in history_class:
             return 'Passed'
+        elif 'skipped' in history_class:
+            return 'Skipped'
         else:
-            return history_class
+            return 'no_runs'
 
 
 def calculate_success_rate(row):

@@ -19,10 +19,18 @@
 namespace NLogin {
 
 struct TLoginProvider::TImpl {
-
     THolder<NArgonish::IArgon2Base> ArgonHasher;
+    TLruCache SuccessPasswordsCache;
+    TLruCache WrongPasswordsCache;
+    std::function<bool()> IsCacheUsed = [] () {return false;};
 
-    TImpl() {
+    TImpl() : TImpl([] () {return false;}, {}) {}
+
+    TImpl(const std::function<bool()>& isCacheUsed, const TLoginProvider::TCacheSettings& cacheSettings)
+        : SuccessPasswordsCache(cacheSettings.SuccessPasswordsCacheCapacity)
+        , WrongPasswordsCache(cacheSettings.WrongPasswordsCacheCapacity)
+        , IsCacheUsed(isCacheUsed)
+    {
         ArgonHasher = Default<NArgonish::TArgon2Factory>().Create(
             NArgonish::EArgon2Type::Argon2id, // Mixed version of Argon2
             2, // 2-pass computation
@@ -33,6 +41,9 @@ struct TLoginProvider::TImpl {
     void GenerateKeyPair(TString& publicKey, TString& privateKey);
     TString GenerateHash(const TString& password);
     bool VerifyHash(const TString& password, const TString& hash);
+    bool VerifyHashWithCache(const TLruCache::TKey& key);
+
+    void UpdateCacheSettings(const TLoginProvider::TCacheSettings& cacheSettings);
 };
 
 TLoginProvider::TLoginProvider()
@@ -42,11 +53,14 @@ TLoginProvider::TLoginProvider()
 {}
 
 TLoginProvider::TLoginProvider(const TAccountLockout::TInitializer& accountLockoutInitializer)
-    : TLoginProvider(TPasswordComplexity(), accountLockoutInitializer)
+    : TLoginProvider(TPasswordComplexity(), accountLockoutInitializer, [] () {return false;}, {})
 {}
 
-TLoginProvider::TLoginProvider(const TPasswordComplexity& passwordComplexity, const TAccountLockout::TInitializer& accountLockoutInitializer)
-    : Impl(new TImpl())
+TLoginProvider::TLoginProvider(const TPasswordComplexity& passwordComplexity,
+    const TAccountLockout::TInitializer& accountLockoutInitializer,
+    const std::function<bool()>& isCacheUsed,
+    const TCacheSettings& cacheSettings)
+    : Impl(new TImpl(isCacheUsed, cacheSettings))
     , PasswordChecker(passwordComplexity)
     , AccountLockout(accountLockoutInitializer)
 {}
@@ -102,7 +116,6 @@ TLoginProvider::TBasicResponse TLoginProvider::CreateUser(const TCreateUserReque
     user.Name = request.User;
     user.PasswordHash = request.IsHashedPassword ? request.Password : Impl->GenerateHash(request.Password);
     user.CreatedAt = std::chrono::system_clock::now();
-    user.LastFailedLogin = std::chrono::system_clock::time_point();
     user.IsEnabled = request.CanLogin;
     return response;
 }
@@ -330,7 +343,7 @@ TLoginProvider::TRemoveGroupResponse TLoginProvider::RemoveGroup(const TString& 
     return response;
 }
 
-std::vector<TString> TLoginProvider::GetGroupsMembership(const TString& member) {
+std::vector<TString> TLoginProvider::GetGroupsMembership(const TString& member) const {
     std::vector<TString> groups;
     std::unordered_set<TString> visited;
     std::deque<TString> queue;
@@ -385,7 +398,7 @@ bool TLoginProvider::ShouldUnlockAccount(const TSidRecord& sid) const {
 
 bool TLoginProvider::IsLockedOut(const TSidRecord& user) const {
     Y_ABORT_UNLESS(user.Type == NLoginProto::ESidType::USER);
-    
+
     if (AccountLockout.AttemptThreshold == 0) {
         return false;
     }
@@ -453,7 +466,7 @@ TLoginProvider::TLoginUserResponse TLoginProvider::LoginUser(const TLoginUserReq
         }
 
         sid = &(itUser->second);
-        if (!Impl->VerifyHash(request.Password, itUser->second.PasswordHash)) {
+        if (!Impl->VerifyHashWithCache({.User = request.User, .Password = request.Password, .Hash = itUser->second.PasswordHash})) {
             response.Status = TLoginUserResponse::EStatus::INVALID_PASSWORD;
             response.Error = "Invalid password";
             sid->LastFailedLogin = now;
@@ -533,6 +546,7 @@ TLoginProvider::TValidateTokenResponse TLoginProvider::ValidateToken(const TVali
             // we check audience manually because we want an explicit error instead of wrong key id in case of databases mismatch
             auto audience = decoded_token.get_audience();
             if (audience.empty() || TString(*audience.begin()) != Audience) {
+                response.WrongAudience = true;
                 response.Error = "Wrong audience";
                 return response;
             }
@@ -733,6 +747,41 @@ bool TLoginProvider::TImpl::VerifyHash(const TString& password, const TString& p
         hash.size());
 }
 
+bool TLoginProvider::TImpl::VerifyHashWithCache(const TLruCache::TKey& key) {
+    if (!IsCacheUsed()) {
+        if (SuccessPasswordsCache.Size() > 0) {
+            SuccessPasswordsCache.Clear();
+        }
+        if (WrongPasswordsCache.Size() > 0) {
+            WrongPasswordsCache.Clear();
+        }
+        return VerifyHash(key.Password, key.Hash);
+    }
+
+    const auto successCacheIt = SuccessPasswordsCache.Find(key);
+    if (successCacheIt != SuccessPasswordsCache.End()) {
+        return true;
+    }
+
+    const auto wrongCacheIt = WrongPasswordsCache.Find(key);
+    if (wrongCacheIt != WrongPasswordsCache.End()) {
+        return false;
+    }
+
+    bool isSuccessVerifying = VerifyHash(key.Password, key.Hash);
+    if (isSuccessVerifying) {
+        SuccessPasswordsCache.Insert(key, true);
+    } else {
+        WrongPasswordsCache.Insert(key, false);
+    }
+    return isSuccessVerifying;
+}
+
+void TLoginProvider::TImpl::UpdateCacheSettings(const TCacheSettings& cacheSettings) {
+    SuccessPasswordsCache.Resize(cacheSettings.SuccessPasswordsCacheCapacity);
+    WrongPasswordsCache.Resize(cacheSettings.WrongPasswordsCacheCapacity);
+}
+
 NLoginProto::TSecurityState TLoginProvider::GetSecurityState() const {
     NLoginProto::TSecurityState state;
     state.SetAudience(Audience);
@@ -798,10 +847,10 @@ void TLoginProvider::UpdateSecurityState(const NLoginProto::TSecurityState& stat
                 sid.Members.emplace(pbSubSid);
                 ChildToParentIndex[pbSubSid].emplace(sid.Name);
             }
-            sid.CreatedAt = std::chrono::system_clock::time_point(std::chrono::milliseconds(pbSid.GetCreatedAt()));
+            sid.CreatedAt = std::chrono::system_clock::time_point(std::chrono::microseconds(pbSid.GetCreatedAt()));
             sid.FailedLoginAttemptCount = pbSid.GetFailedLoginAttemptCount();
-            sid.LastFailedLogin = std::chrono::system_clock::time_point(std::chrono::milliseconds(pbSid.GetLastFailedLogin()));
-            sid.LastSuccessfulLogin = std::chrono::system_clock::time_point(std::chrono::milliseconds(pbSid.GetLastSuccessfulLogin()));
+            sid.LastFailedLogin = std::chrono::system_clock::time_point(std::chrono::microseconds(pbSid.GetLastFailedLogin()));
+            sid.LastSuccessfulLogin = std::chrono::system_clock::time_point(std::chrono::microseconds(pbSid.GetLastSuccessfulLogin()));
         }
     }
 }
@@ -820,6 +869,10 @@ void TLoginProvider::UpdatePasswordCheckParameters(const TPasswordComplexity& pa
 
 void TLoginProvider::UpdateAccountLockout(const TAccountLockout::TInitializer& accountLockoutInitializer) {
     AccountLockout.Update(accountLockoutInitializer);
+}
+
+void TLoginProvider::UpdateCacheSettings(const TCacheSettings& settings) {
+    Impl->UpdateCacheSettings(settings);
 }
 
 }

@@ -83,5 +83,18 @@ THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
     TPathId pathId
 );
 
+THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
+    TSchemeShard* self,
+    const TActorContext& ctx,
+    const TString& path,
+    const NKikimrSchemeOp::TDescribeOptions& opts
+);
+
+THolder<TEvSchemeShard::TEvDescribeSchemeResultBuilder> DescribePath(
+    TSchemeShard* self,
+    const TActorContext& ctx,
+    const TString& path
+);
+
 } // NSchemeShard
 } // NKikimr

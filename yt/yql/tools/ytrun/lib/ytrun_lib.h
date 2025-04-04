@@ -30,10 +30,12 @@ protected:
 protected:
     TString MrJobBin_;
     TString MrJobUdfsDir_;
-    size_t NumThreads_ = 1;
+    size_t NumYtThreads_ = 1;
     bool KeepTemp_ = false;
     TString DefYtServer_;
     NFmr::IFmrWorker::TPtr FmrWorker_;
+    TString FmrCoordinatorServerUrl_;
+    bool DisableLocalFmrWorker_ = false;
 };
 
 } // NYql

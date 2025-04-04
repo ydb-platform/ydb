@@ -2,18 +2,18 @@
 
 #include "transaction.h"
 
-#include <src/client/topic/impl/common.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/common.h>
 
 #define INCLUDE_YDB_INTERNAL_H
-#include <src/client/impl/ydb_internal/make_request/make.h>
+#include <ydb/public/sdk/cpp/src/client/impl/ydb_internal/make_request/make.h>
 #undef INCLUDE_YDB_INTERNAL_H
 
-#include <src/client/common_client/impl/client.h>
-#include <ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 
 #include <ydb/public/api/grpc/ydb_topic_v1.grpc.pb.h>
 
-namespace NYdb::inline V3::NTopic {
+namespace NYdb::inline Dev::NTopic {
 struct TOffsetsRange {
     ui64 Start;
     ui64 End;
@@ -296,8 +296,8 @@ public:
     {
         auto request = MakeOperationRequest<Ydb::Topic::UpdateOffsetsInTransactionRequest>(settings);
 
-        request.mutable_tx()->set_id(TStringType{GetTxId(tx)});
-        request.mutable_tx()->set_session(TStringType{GetSessionId(tx)});
+        request.mutable_tx()->set_id(tx.TxId);
+        request.mutable_tx()->set_session(tx.SessionId);
 
         for (auto& t : topics) {
             auto* topic = request.mutable_topics()->Add();

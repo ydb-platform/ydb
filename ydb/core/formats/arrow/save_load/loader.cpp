@@ -1,6 +1,6 @@
 #include "loader.h"
 
-#include <ydb/library/formats/arrow/common/validation.h>
+#include <ydb/library/formats/arrow/validation/validation.h>
 
 namespace NKikimr::NArrow::NAccessor {
 
@@ -12,9 +12,8 @@ TString TColumnLoader::DebugString() const {
     return result;
 }
 
-TColumnLoader::TColumnLoader(const NSerialization::TSerializerContainer& serializer,
-    const TConstructorContainer& accessorConstructor, const std::shared_ptr<arrow::Field>& resultField,
-    const std::shared_ptr<arrow::Scalar>& defaultValue, const ui32 columnId)
+TColumnLoader::TColumnLoader(const NSerialization::TSerializerContainer& serializer, const TConstructorContainer& accessorConstructor,
+    const std::shared_ptr<arrow::Field>& resultField, const std::shared_ptr<arrow::Scalar>& defaultValue, const ui32 columnId)
     : Serializer(serializer)
     , AccessorConstructor(accessorConstructor)
     , ResultField(resultField)
@@ -29,19 +28,22 @@ const std::shared_ptr<arrow::Field>& TColumnLoader::GetField() const {
     return ResultField;
 }
 
-TChunkConstructionData TColumnLoader::BuildAccessorContext(const ui32 recordsCount) const {
-    return TChunkConstructionData(recordsCount, DefaultValue, ResultField->type(), Serializer.GetObjectPtr());
+TChunkConstructionData TColumnLoader::BuildAccessorContext(
+    const ui32 recordsCount, const std::optional<ui32>& notNullCount) const {
+    return TChunkConstructionData(recordsCount, DefaultValue, ResultField->type(), Serializer.GetObjectPtr(), notNullCount);
 }
 
-TConclusion<std::shared_ptr<IChunkedArray>> TColumnLoader::ApplyConclusion(const TString& dataStr, const ui32 recordsCount) const {
-    return BuildAccessor(dataStr, BuildAccessorContext(recordsCount));
+TConclusion<std::shared_ptr<IChunkedArray>> TColumnLoader::ApplyConclusion(
+    const TString& dataStr, const ui32 recordsCount, const std::optional<ui32>& notNullCount) const {
+    return BuildAccessor(dataStr, BuildAccessorContext(recordsCount, notNullCount));
 }
 
-std::shared_ptr<IChunkedArray> TColumnLoader::ApplyVerified(const TString& dataStr, const ui32 recordsCount) const {
-    return BuildAccessor(dataStr, BuildAccessorContext(recordsCount)).DetachResult();
+std::shared_ptr<IChunkedArray> TColumnLoader::ApplyVerified(const TString& dataStr, const ui32 recordsCount, const std::optional<ui32>& notNullCount) const {
+    return BuildAccessor(dataStr, BuildAccessorContext(recordsCount, notNullCount)).DetachResult();
 }
 
-TConclusion<std::shared_ptr<IChunkedArray>> TColumnLoader::BuildAccessor(const TString& originalData, const TChunkConstructionData& chunkData) const {
+TConclusion<std::shared_ptr<IChunkedArray>> TColumnLoader::BuildAccessor(
+    const TString& originalData, const TChunkConstructionData& chunkData) const {
     return AccessorConstructor->DeserializeFromString(originalData, chunkData);
 }
 

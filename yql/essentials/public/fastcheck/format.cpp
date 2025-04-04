@@ -1,5 +1,10 @@
 #include "check_runner.h"
 #include <yql/essentials/sql/v1/format/sql_format.h>
+#include <yql/essentials/sql/v1/lexer/antlr4/lexer.h>
+#include <yql/essentials/sql/v1/lexer/antlr4_ansi/lexer.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4/proto_parser.h>
+#include <yql/essentials/sql/v1/proto_parser/antlr4_ansi/proto_parser.h>
+#include <yql/essentials/core/issue/yql_issue.h>
 #include <util/string/builder.h>
 
 namespace NYql {
@@ -8,6 +13,16 @@ namespace NFastCheck {
 namespace {
 
 constexpr size_t FormatContextLimit = 100;
+
+TString NormalizeEOL(TStringBuf input) {
+    TStringBuilder res;
+    TStringBuf tok;
+    while (input.ReadLine(tok)) {
+        res << tok << '\n';
+    }
+
+    return res;
+}
 
 class TFormatRunner : public ICheckRunner {
 public:
@@ -53,10 +68,16 @@ private:
         settings.Antlr4Parser = true;
         settings.AnsiLexer = request.IsAnsiLexer;
 
-        auto formatter = NSQLFormat::MakeSqlFormatter(settings);
+        NSQLTranslationV1::TLexers lexers;
+        lexers.Antlr4 = NSQLTranslationV1::MakeAntlr4LexerFactory();
+        lexers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiLexerFactory();
+        NSQLTranslationV1::TParsers parsers;
+        parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
+        parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
+        auto formatter = NSQLFormat::MakeSqlFormatter(lexers, parsers, settings);
         TString formattedQuery;
         res.Success = formatter->Format(request.Program, formattedQuery, res.Issues);
-        if (res.Success && formattedQuery != request.Program) {
+        if (res.Success && NormalizeEOL(formattedQuery) != NormalizeEOL(request.Program)) {
             res.Success = false;
             TPosition origPos(0, 1, request.File);
             TTextWalker origWalker(origPos, true);
@@ -84,8 +105,10 @@ private:
                 origSample.erase(origSample.size() - 1);
             }
 
-            res.Issues.AddIssue(TIssue(origPos, TStringBuilder() <<
-                "Format mismatch, expected:\n" << formattedSample << "\nbut got:\n" << origSample));
+            auto issue = TIssue(origPos, TStringBuilder() <<
+                "Format mismatch, expected:\n" << formattedSample << "\nbut got:\n" << origSample);
+            issue.SetCode(EYqlIssueCode::TIssuesIds_EIssueCode_WARNING, ESeverity::TSeverityIds_ESeverityId_S_WARNING);
+            res.Issues.AddIssue(issue);
         }
 
         return res;

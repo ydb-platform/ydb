@@ -1,6 +1,7 @@
 [
     "devtools/ya",
     "library/cpp/geo",
-    "util"
+    "util",
+    "yql/essentials"
 ]
 

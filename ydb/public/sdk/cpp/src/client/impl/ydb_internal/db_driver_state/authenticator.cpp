@@ -1,9 +1,9 @@
 #define INCLUDE_YDB_INTERNAL_H
 #include "authenticator.h"
 
-#include <ydb-cpp-sdk/client/resources/ydb_resources.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/resources/ydb_resources.h>
 
-namespace NYdb::inline V3 {
+namespace NYdb::inline Dev {
 
 TYdbAuthenticator::TYdbAuthenticator(std::shared_ptr<ICredentialsProvider> credentialsProvider)
     : CredentialsProvider_(std::move(credentialsProvider))

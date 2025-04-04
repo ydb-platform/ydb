@@ -269,6 +269,8 @@ public:
             bool canHaveLimit = TYtTransientOpBase(writer).Output().Size() == 1;
             if (canHaveLimit) {
                 TString usedCluster;
+                const ERuntimeClusterSelectionMode selectionMode =
+                    State_->Configuration->RuntimeClusterSelection.Get().GetOrElse(DEFAULT_RUNTIME_CLUSTER_SELECTION);
                 for (auto item: x.second) {
                     if (!std::get<1>(item)) { // YtLength, YtPublish
                         canHaveLimit = false;
@@ -288,7 +290,7 @@ public:
                         auto kind = FromString<EYtSettingType>(setting.Name().Value());
                         if (EYtSettingType::Take == kind || EYtSettingType::Skip == kind) {
                             TSyncMap syncList;
-                            if (!IsYtCompleteIsolatedLambda(setting.Value().Ref(), syncList, usedCluster, false) || !syncList.empty()) {
+                            if (!IsYtCompleteIsolatedLambda(setting.Value().Ref(), syncList, usedCluster, false, selectionMode) || !syncList.empty()) {
                                 hasTake = false;
                                 break;
                             }
@@ -2745,22 +2747,30 @@ private:
             return ctx.ChangeChild(op.Ref(), TYtOutputOpBase::idx_Output, std::move(newOutput));
         }
         if (auto copy = op.Maybe<TYtCopy>()) {
-            TStringBuf inputColGroup;
-            const auto& path = copy.Cast().Input().Item(0).Paths().Item(0);
-            if (auto table = path.Table().Maybe<TYtTable>()) {
-                if (auto tableDesc = State_->TablesData->FindTable(copy.Cast().DataSink().Cluster().StringValue(), TString{TYtTableInfo::GetTableLabel(table.Cast())}, TEpochInfo::Parse(table.Cast().Epoch().Ref()))) {
-                    inputColGroup = tableDesc->ColumnGroupSpec;
-                }
-            } else if (auto out = path.Table().Maybe<TYtOutput>()) {
-                if (auto setting = NYql::GetSetting(GetOutputOp(out.Cast()).Output().Item(FromString<ui32>(out.Cast().OutIndex().Value())).Settings().Ref(), EYtSettingType::ColumnGroups)) {
-                    inputColGroup = setting->Tail().Content();
-                }
-            }
             TStringBuf outGroup;
             if (auto setting = GetSetting(op.Output().Item(0).Settings().Ref(), EYtSettingType::ColumnGroups)) {
                 outGroup = setting->Tail().Content();
             }
-            if (inputColGroup != outGroup) {
+            const auto& path = copy.Cast().Input().Item(0).Paths().Item(0);
+            bool diffGroups = false;
+            if (auto table = path.Table().Maybe<TYtTable>()) {
+                if (auto tableDesc = State_->TablesData->FindTable(copy.Cast().DataSink().Cluster().StringValue(), TString{TYtTableInfo::GetTableLabel(table.Cast())}, TEpochInfo::Parse(table.Cast().Epoch().Ref()))) {
+                    bool diffGroups = outGroup.empty() != tableDesc->ColumnGroupSpecAlts.empty() || (!outGroup.empty() && !tableDesc->ColumnGroupSpecAlts.contains(outGroup));
+                    if (diffGroups && !outGroup.empty() && !tableDesc->ColumnGroupSpecAlts.empty()) {
+                        TString expanded;
+                        if (ExpandDefaultColumnGroup(outGroup, *GetSeqItemType(*copy.Output().Item(0).Ref().GetTypeAnn()).Cast<TStructExprType>(), expanded)) {
+                            diffGroups = !tableDesc->ColumnGroupSpecAlts.contains(expanded);
+                        }
+                    }
+                }
+            } else if (auto out = path.Table().Maybe<TYtOutput>()) {
+                TStringBuf inGroup;
+                if (auto setting = NYql::GetSetting(GetOutputOp(out.Cast()).Output().Item(FromString<ui32>(out.Cast().OutIndex().Value())).Settings().Ref(), EYtSettingType::ColumnGroups)) {
+                    inGroup = setting->Tail().Content();
+                }
+                diffGroups = inGroup != outGroup;
+            }
+            if (diffGroups) {
                 return ctx.RenameNode(op.Ref(), TYtMerge::CallableName());
             }
         }
@@ -2862,7 +2872,12 @@ private:
 
             // Check all counsumers are known
             auto& processed = ProcessedCalculateColumnGroups[writer];
-            if (processed.size() == readers.size() && AllOf(readers, [&processed](const auto& item) { return processed.contains(std::get<0>(item)->UniqueId()); })) {
+            if (processed.size() == readers.size() &&
+                AllOf(readers, [&processed](const auto& item) {
+                    // Always reprocess ops with merge/copy readers
+                    return !TYtCopy::Match(std::get<0>(item)) && !TYtMerge::Match(std::get<0>(item)) && processed.contains(std::get<0>(item)->UniqueId());
+                })
+            ) {
                 continue;
             }
             processed.clear();

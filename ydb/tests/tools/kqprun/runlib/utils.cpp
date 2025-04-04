@@ -6,7 +6,7 @@
 #include <util/stream/file.h>
 #include <util/string/builder.h>
 
-#include <ydb-cpp-sdk/client/result/result.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <ydb/core/blob_depot/mon_main.h>
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/format.h>
@@ -93,6 +93,7 @@ void TStatsPrinter::PrintPlan(const TString& plan, IOutputStream& output) const 
 
     NYdb::NConsoleClient::TQueryPlanPrinter printer(PlanFormat, true, output);
     printer.Print(plan);
+    output.Flush();
 }
 
 void TStatsPrinter::PrintInProgressStatistics(const TString& plan, IOutputStream& output) const {
@@ -231,6 +232,20 @@ void InitLogSettings(const NKikimrConfig::TLogConfig& logConfig, NActors::TTestA
     for (const auto& setting : logConfig.get_arr_entry()) {
         runtime.SetLogPriority(GetLogService(setting.GetComponent()), NActors::NLog::EPriority(setting.GetLevel()));
     }
+}
+
+TChoices<NActors::NLog::EPriority> GetLogPrioritiesMap(const TString& optionName) {
+    return TChoices<NActors::NLog::EPriority>({
+        {"emerg", NActors::NLog::EPriority::PRI_EMERG},
+        {"alert", NActors::NLog::EPriority::PRI_ALERT},
+        {"crit", NActors::NLog::EPriority::PRI_CRIT},
+        {"error", NActors::NLog::EPriority::PRI_ERROR},
+        {"warn", NActors::NLog::EPriority::PRI_WARN},
+        {"notice", NActors::NLog::EPriority::PRI_NOTICE},
+        {"info", NActors::NLog::EPriority::PRI_INFO},
+        {"debug", NActors::NLog::EPriority::PRI_DEBUG},
+        {"trace", NActors::NLog::EPriority::PRI_TRACE},
+    }, optionName, false);
 }
 
 void SetupSignalActions() {

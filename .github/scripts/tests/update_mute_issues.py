@@ -19,6 +19,20 @@ CURRENT_TEST_HISTORY_DASHBOARD = "https://datalens.yandex/34xnbsom67hcq?"
 # admin:org
 # project
 
+
+def handle_github_errors(response):
+    if 'errors' in response:
+        for error in response['errors']:
+            if error['type'] == 'INSUFFICIENT_SCOPES':
+                print("Error: Insufficient Scopes")
+                print("Message:", error['message'])
+                raise Exception("Insufficient scopes. Please update your token's scopes.")
+            # Handle other types of errors if necessary
+            else:
+                print("Unknown error type:", error.get('type', 'No type'))
+                print("Message:", error.get('message', 'No message available'))
+                raise Exception("GraphQL Error: " + error.get('message', 'Unknown error'))
+
 def run_query(query, variables=None):
     GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
     HEADERS = {"Authorization": f"Bearer {GITHUB_TOKEN}", "Content-Type": "application/json"}
@@ -26,6 +40,7 @@ def run_query(query, variables=None):
         'https://api.github.com/graphql', json={'query': query, 'variables': variables}, headers=HEADERS
     )
     if request.status_code == 200:
+        handle_github_errors(request.json())
         return request.json()
     else:
         raise Exception(f"Query failed to run by returning code of {request.status_code}. {query}")

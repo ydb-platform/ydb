@@ -1,4 +1,5 @@
 #pragma once
+#include <ydb/core/tx/columnshard/engines/storage/indexes/portions/extractor/default.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/portions/meta.h>
 
 namespace NKikimr::NOlap::NIndexes::NCountMinSketch {
@@ -18,12 +19,11 @@ protected:
     virtual TConclusionStatus DoCheckModificationCompatibility(const IIndexMeta& newMeta) const override {
         const auto* bMeta = dynamic_cast<const TIndexMeta*>(&newMeta);
         if (!bMeta) {
-            return TConclusionStatus::Fail("cannot read meta as appropriate class: " + GetClassName() + ". Meta said that class name is " + newMeta.GetClassName());
+            return TConclusionStatus::Fail(
+                "cannot read meta as appropriate class: " + GetClassName() + ". Meta said that class name is " + newMeta.GetClassName());
         }
         return TBase::CheckSameColumnsForModification(newMeta);
     }
-
-    virtual void DoFillIndexCheckers(const std::shared_ptr<NRequest::TDataForIndexesCheckers>& info, const NSchemeShard::TOlapSchema& schema) const override;
 
     virtual TString DoBuildIndexImpl(TChunkedBatchReader& reader, const ui32 recordsCount) const override;
 
@@ -32,32 +32,27 @@ protected:
         AFL_VERIFY(proto.HasCountMinSketch());
         auto& sketch = proto.GetCountMinSketch();
         for (auto&& i : sketch.GetColumnIds()) {
-            ColumnIds.emplace(i);
+            AddColumnId(i);
         }
         return true;
     }
 
     virtual void DoSerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& proto) const override {
         auto* sketchProto = proto.MutableCountMinSketch();
-        for (auto&& i : ColumnIds) {
+        for (auto&& i : GetColumnIds()) {
             sketchProto->AddColumnIds(i);
         }
     }
 
 public:
     TIndexMeta() = default;
-    TIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const std::set<ui32>& columnIds)
-        : TBase(indexId, indexName, columnIds, storageId) {
+    TIndexMeta(const ui32 indexId, const TString& indexName, const TString& storageId, const ui32 columnId)
+        : TBase(indexId, indexName, columnId, storageId, std::make_shared<TDefaultDataExtractor>()) {
     }
 
     virtual TString GetClassName() const override {
         return GetClassNameStatic();
     }
-
-    const std::set<ui32>& GetColumnIds() const {
-        return ColumnIds;
-    }
-
 };
 
-}   // namespace NKikimr::NOlap::NIndexes
+}   // namespace NKikimr::NOlap::NIndexes::NCountMinSketch

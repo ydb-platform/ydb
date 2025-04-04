@@ -288,6 +288,8 @@ struct TWireProtocolOptions
     i64 MaxVersionedRowDataWeight = NTableClient::MaxServerVersionedRowDataWeight;
 };
 
+TWireProtocolOptions CreateUnlimitedWireProtocolOptions();
+
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Creates wire protocol reader.

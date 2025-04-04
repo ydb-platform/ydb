@@ -1,4 +1,5 @@
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
+#include <ydb/core/formats/arrow/arrow_filter.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -79,6 +80,57 @@ Y_UNIT_TEST_SUITE(SparsedArrayAccessor) {
             AFL_VERIFY(arrSlice->GetScalar(0)->ToString() == "abcd6");
             const TString arrString = PrepareToCompare(arrSlice->GetChunkedArray()->ToString());
             AFL_VERIFY(arrString == "[[\"abcd6\"],[null],[\"abcde8\"]]")("string", arrString);
+        }
+    }
+    Y_UNIT_TEST(FiltersDef) {
+        TSparsedArray::TSparsedBuilder<arrow::StringType> builder(nullptr, 10, 0);
+        builder.AddRecord(5, "abc5");
+        builder.AddRecord(6, "abcd6");
+        builder.AddRecord(8, "abcde8");
+        auto arr = builder.Finish(10);
+        {
+            TColumnFilter filter = TColumnFilter::BuildAllowFilter();
+            filter.Add(true, 1);
+            filter.Add(false, 1);
+            filter.Add(true, 1);
+            filter.Add(false, 1);
+            filter.Add(true, 1);
+            filter.Add(false, 5);
+            auto arrFiltered = filter.Apply(arr)->GetChunkedArray();
+            auto arrSlice = PrepareToCompare(arrFiltered->ToString());
+            AFL_VERIFY(PrepareToCompare(arrFiltered->ToString()) == R"([[null,null,null]])")("string", PrepareToCompare(arrFiltered->ToString()));
+        }
+        {
+            TColumnFilter filter = TColumnFilter::BuildAllowFilter();
+            filter.Add(false, 1);
+            filter.Add(true, 1);
+            filter.Add(false, 1);
+            filter.Add(true, 1);
+            filter.Add(false, 1);
+            filter.Add(true, 5);
+            auto arrFiltered = filter.Apply(arr)->GetChunkedArray();
+            auto arrSlice = PrepareToCompare(arrFiltered->ToString());
+            AFL_VERIFY(PrepareToCompare(arrFiltered->ToString()) == R"([[null,null],["abc5","abcd6"],[null],["abcde8"],[null]])")(
+                "string", PrepareToCompare(arrFiltered->ToString()));
+        }
+        {
+            TColumnFilter filter = TColumnFilter::BuildAllowFilter();
+            filter.Add(true, 6);
+            filter.Add(false, 4);
+            auto arrFiltered = filter.Apply(arr)->GetChunkedArray();
+            auto arrSlice = PrepareToCompare(arrFiltered->ToString());
+            AFL_VERIFY(PrepareToCompare(arrFiltered->ToString()) == R"([[null,null,null,null,null],["abc5"]])")(
+                "string", PrepareToCompare(arrFiltered->ToString()));
+        }
+        {
+            TColumnFilter filter = TColumnFilter::BuildAllowFilter();
+            filter.Add(false, 5);
+            filter.Add(true, 1);
+            filter.Add(false, 4);
+            auto arrFiltered = filter.Apply(arr)->GetChunkedArray();
+            auto arrSlice = PrepareToCompare(arrFiltered->ToString());
+            AFL_VERIFY(PrepareToCompare(arrFiltered->ToString()) == R"([["abc5"]])")(
+                "string", PrepareToCompare(arrFiltered->ToString()));
         }
     }
 };

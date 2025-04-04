@@ -1,15 +1,13 @@
 #pragma once
 #include "iterator.h"
 
+#include <ydb/core/formats/arrow/accessor/common/const.h>
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/settings.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction/abstract/merger.h>
 #include <ydb/core/tx/columnshard/engines/storage/chunks/column.h>
-
-#include <ydb/library/formats/arrow/accessor/abstract/accessor.h>
-#include <ydb/library/formats/arrow/accessor/common/const.h>
 
 namespace NKikimr::NOlap::NCompaction {
 

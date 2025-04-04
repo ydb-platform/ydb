@@ -3,8 +3,8 @@
 #include <ydb/public/lib/json_value/ydb_json_value.h>
 #include <ydb/public/lib/ydb_cli/common/pretty_table.h>
 #include <ydb/public/lib/ydb_cli/common/scheme_printers.h>
-#include <ydb-cpp-sdk/client/query/client.h>
-#include <ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <google/protobuf/port_def.inc>
 
@@ -87,11 +87,10 @@ int TCommandRemoveDirectory::Run(TConfig& config) {
     const auto settings = FillSettings(NScheme::TRemoveDirectorySettings());
 
     if (Recursive) {
-        NTable::TTableClient tableClient(driver);
-        NTopic::TTopicClient topicClient(driver);
-        NQuery::TQueryClient queryClient(driver);
-        const auto prompt = Prompt.GetOrElse(ERecursiveRemovePrompt::Once);
-        NStatusHelpers::ThrowOnErrorOrPrintIssues(RemoveDirectoryRecursive(schemeClient, tableClient, &topicClient, &queryClient, Path, prompt, settings));
+        const auto settings = TRemoveDirectoryRecursiveSettings()
+            .Prompt(Prompt.GetOrElse(ERecursiveRemovePrompt::Once))
+            .CreateProgressBar(true);
+        NStatusHelpers::ThrowOnErrorOrPrintIssues(RemoveDirectoryRecursive(driver, Path, settings));
     } else {
         if (Prompt) {
             if (!NConsoleClient::Prompt(*Prompt, Path, NScheme::ESchemeEntryType::Directory)) {

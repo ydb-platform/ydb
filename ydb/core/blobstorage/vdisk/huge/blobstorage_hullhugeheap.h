@@ -68,14 +68,14 @@ namespace NKikimr {
                     bool operator ==(const TSeg &s) const { return Left == s.Left && Right == s.Right; }
                 };
 
-                TChainLayoutBuilder(ui32 left, ui32 milestone, ui32 right, ui32 overhead);
+                TChainLayoutBuilder(const TString& prefix, ui32 left, ui32 milestone, ui32 right, ui32 overhead);
                 const TVector<TSeg> &GetLayout() const { return Layout; }
                 const TSeg &GetMilestoneSegment() const { return Layout.at(MilestoneId); }
                 TString ToString(ui32 appendBlockSize = 0) const;
                 void Output(IOutputStream &str, ui32 appendBlockSize = 0) const;
 
             private:
-                void Check(ui32 left, ui32 right);
+                void Check(const TString& prefix, ui32 left, ui32 right);
                 void BuildDownward(ui32 left, ui32 right, ui32 overhead);
                 void BuildUpward(ui32 left, ui32 right, ui32 overhead);
 
@@ -166,7 +166,7 @@ namespace NKikimr {
                     } else if (lockedIt->first < freeIt->first) {
                         callback(*lockedIt++);
                     } else {
-                        Y_ABORT("intersecting sets of keys for FreeSpace and LockedChunks");
+                        Y_FAIL_S(VDiskLogPrefix << "intersecting sets of keys for FreeSpace and LockedChunks");
                     }
                 }
                 std::for_each(freeIt, freeEnd, callback);

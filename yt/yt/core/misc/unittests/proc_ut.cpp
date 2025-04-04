@@ -77,7 +77,7 @@ TEST(TProcTest, TestParseMemoryMappings)
     EXPECT_EQ(smaps[1].End, 0x7fbb7b278000u);
     EXPECT_EQ(smaps[1].Permissions, EMemoryMappingPermission::Read | EMemoryMappingPermission::Execute | EMemoryMappingPermission::Private);
     EXPECT_EQ(smaps[1].Offset, 0xffu);
-    EXPECT_EQ(smaps[1].DeviceId, 1048637);
+    EXPECT_EQ(smaps[1].DeviceId, NFS::TDeviceId(0, 0x13d));
     EXPECT_EQ(*smaps[1].INode, 406536u);
     EXPECT_EQ(*smaps[1].Path, "/lib/x86_64-linux-gnu/ld-2.28.so");
     EXPECT_EQ(smaps[1].Statistics.Size, 156_KB);
@@ -126,45 +126,6 @@ TEST(TProcTest, CgroupList)
     }
 }
 
-TEST(TProcTest, DiskStat)
-{
-    {
-        auto parsed = ParseDiskStat("259       1 nvme0n1 372243 70861 50308550 175935 635314 559065 105338106 2777004 0 415304 3236956 38920 4 80436632 905059");
-        EXPECT_EQ(parsed.MajorNumber, 259);
-        EXPECT_EQ(parsed.MinorNumber, 1);
-        EXPECT_EQ(parsed.DeviceName, "nvme0n1");
-
-        EXPECT_EQ(parsed.ReadsCompleted, 372243);
-        EXPECT_EQ(parsed.ReadsMerged, 70861);
-        EXPECT_EQ(parsed.SectorsRead, 50308550);
-        EXPECT_EQ(parsed.TimeSpentReading, TDuration::MilliSeconds(175935));
-
-        EXPECT_EQ(parsed.WritesCompleted, 635314);
-
-        EXPECT_EQ(parsed.DiscardsCompleted, 38920);
-        EXPECT_EQ(parsed.DiscardsMerged, 4);
-        EXPECT_EQ(parsed.SectorsDiscarded, 80436632);
-        EXPECT_EQ(parsed.TimeSpentDiscarding, TDuration::MilliSeconds(905059));
-    }
-    {
-        auto parsed = ParseDiskStat("259       1 nvme0n1 372243 trash 50308550 trash");
-        EXPECT_EQ(parsed.MajorNumber, 259);
-        EXPECT_EQ(parsed.MinorNumber, 1);
-        EXPECT_EQ(parsed.DeviceName, "nvme0n1");
-
-        EXPECT_EQ(parsed.ReadsCompleted, 372243);
-        EXPECT_EQ(parsed.ReadsMerged, 0);
-        EXPECT_EQ(parsed.SectorsRead, 50308550);
-        EXPECT_EQ(parsed.TimeSpentReading, TDuration::MilliSeconds(0));
-    }
-    {
-        auto stats = GetDiskStats();
-        for (const TString& disk : ListDisks()) {
-            EXPECT_TRUE(IsIn(stats, disk));
-        }
-    }
-}
-
 TEST(TProcTest, BlockDeviceStat)
 {
     {
@@ -190,6 +151,12 @@ TEST(TProcTest, BlockDeviceStat)
     {
         for (const TString& disk : ListDisks()) {
             auto stat = GetBlockDeviceStat(disk);
+            EXPECT_TRUE(stat);
+            auto deviceId = GetBlockDeviceId(disk);
+            EXPECT_NE(deviceId.first, NFS::UnnamedDeviceMajor) << "disk=" << disk;
+            auto deviceName = GetBlockDeviceName(deviceId);
+            EXPECT_EQ(deviceName, disk);
+            stat = GetBlockDeviceStat(deviceId);
             EXPECT_TRUE(stat);
         }
     }

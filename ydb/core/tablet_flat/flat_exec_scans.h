@@ -66,7 +66,7 @@ namespace NTabletFlatExecutor {
             TOne& operator=(const TOne&) = delete;
             TOne& operator=(TOne&&) = delete;
 
-            void Describe(IOutputStream &out, bool full = true) const noexcept
+            void Describe(IOutputStream &out, bool full = true) const
             {
                 out << "Scan{" << Serial << " on " << Table;
 
@@ -129,7 +129,7 @@ namespace NTabletFlatExecutor {
 
         }
 
-        void Describe(IOutputStream &out) const noexcept
+        void Describe(IOutputStream &out) const
         {
             out
                 << "Scans{serial " << Serial << ", " << Tables.size() << " tbl"
@@ -182,7 +182,7 @@ namespace NTabletFlatExecutor {
             return one.Serial;
         }
 
-        TAcquired Acquired(ui64 task, TResource *cookie) noexcept
+        TAcquired Acquired(ui64 task, TResource *cookie)
         {
             auto *one = Lookup(CheckedCast<TCookie*>(cookie)->Serial, false);
 
@@ -191,7 +191,7 @@ namespace NTabletFlatExecutor {
 
                 return { };
             } else if (one->State != EState::Task) {
-                Y_Fail(NFmt::Do(*one) << " acquired an unexpected resource");
+                Y_TABLET_ERROR(NFmt::Do(*one) << " acquired an unexpected resource");
             } else {
                 // A call to Start is expected now
                 one->State = EState::Ready;
@@ -214,14 +214,14 @@ namespace NTabletFlatExecutor {
             return Start(one, conf);
         }
 
-        void Drop() noexcept
+        void Drop()
         {
             while (Tables) {
                 Drop(Tables.begin()->first);
             }
         }
 
-        TVector<THolder<TScanSnapshot>> Drop(ui32 table) noexcept
+        TVector<THolder<TScanSnapshot>> Drop(ui32 table)
         {
             TVector<THolder<TScanSnapshot>> snapshots;
 
@@ -240,12 +240,12 @@ namespace NTabletFlatExecutor {
             return snapshots;
         }
 
-        TCancelled Cancel(ui64 serial) noexcept
+        TCancelled Cancel(ui64 serial)
         {
             auto *one = Lookup(serial, false);
 
             if (serial & 0x1 /* system scan */) {
-                Y_Fail(NFmt::If(one) << " is system (" << serial << "), cannot be cancelled this way");
+                Y_TABLET_ERROR(NFmt::If(one) << " is system (" << serial << "), cannot be cancelled this way");
             }
 
             if (!one) {
@@ -261,12 +261,12 @@ namespace NTabletFlatExecutor {
             return cancelled;
         }
 
-        bool CancelSystem(ui64 serial) noexcept
+        bool CancelSystem(ui64 serial)
         {
             auto *one = Lookup(serial, false);
 
             if (!(serial & 0x1 /* system scan */)) {
-                Y_Fail(NFmt::If(one) << " is not system (" << serial << "), cannot be cancelled this way");
+                Y_TABLET_ERROR(NFmt::If(one) << " is not system (" << serial << "), cannot be cancelled this way");
             }
 
             if (!one) {
@@ -276,12 +276,12 @@ namespace NTabletFlatExecutor {
             return Cancel(*one, EState::Forget);
         }
 
-        TScanOutcome Release(ui64 serial, EAbort &code, TAutoPtr<IDestructable> &result) noexcept
+        TScanOutcome Release(ui64 serial, EAbort &code, TAutoPtr<IDestructable> &result)
         {
             auto *one = Lookup(serial, true);
 
             if (one->State < EState::Scan) {
-                Y_Fail(NFmt::Do(*one) << " got unexpected scan result");
+                Y_TABLET_ERROR(NFmt::Do(*one) << " got unexpected scan result");
             } else {
                 NUtil::SubSafe(CounterAlive, ui32(1));
 
@@ -294,7 +294,7 @@ namespace NTabletFlatExecutor {
         }
 
     private:
-        TOne& Make(ui32 table, TAutoPtr<IScan> scan, EType type, const TScanOptions& options, THolder<TScanSnapshot> snapshot) noexcept
+        TOne& Make(ui32 table, TAutoPtr<IScan> scan, EType type, const TScanOptions& options, THolder<TScanSnapshot> snapshot)
         {
             /* odd NOps used to mark compactions (system scans) */
 
@@ -305,7 +305,7 @@ namespace NTabletFlatExecutor {
                 std::make_tuple(token),
                 std::make_tuple(token, table, options, std::move(snapshot)));
 
-            Y_ABORT_UNLESS(got.second, "Failed to make new scan state entry");
+            Y_ENSURE(got.second, "Failed to make new scan state entry");
 
             auto *one = &got.first->second;
 
@@ -318,7 +318,7 @@ namespace NTabletFlatExecutor {
         ui64 Start(TOne &one, NOps::TConf conf)
         {
             if (one.State != EState::None && one.State != EState::Ready) {
-                Y_Fail(NFmt::Do(one) << " is not in start condition");
+                Y_TABLET_ERROR(NFmt::Do(one) << " is not in start condition");
             }
 
             switch (one.Options.ReadPrio) {
@@ -343,7 +343,7 @@ namespace NTabletFlatExecutor {
                 conf.AheadHi = Tables[one.Table].AheadHi;
             }
 
-            Y_ABORT_UNLESS(one.Snapshot);
+            Y_ENSURE(one.Snapshot);
             auto *actor = new NOps::TDriver(one.Serial, one.Scan, conf, std::move(one.Snapshot));
 
             if (auto logl = Logger->Log(NUtil::ELnLev::Info))
@@ -361,7 +361,7 @@ namespace NTabletFlatExecutor {
             return one.Serial;
         }
 
-        bool Cancel(TOne &one, EState state) noexcept
+        bool Cancel(TOne &one, EState state)
         {
             if (one.State == EState::Task || one.State == EState::Ready) {
                 TAutoPtr<IDestructable> result;
@@ -411,18 +411,18 @@ namespace NTabletFlatExecutor {
             return outcome;
         }
 
-        TOne* Lookup(ui64 serial, bool require) noexcept
+        TOne* Lookup(ui64 serial, bool require)
         {
             auto *one = Scans.FindPtr(serial);
 
             if (require && one == nullptr) {
-                Y_Fail("Cannot find scan serial " << serial << " in states");
+                Y_TABLET_ERROR("Cannot find scan serial " << serial << " in states");
             }
 
             return one;
         }
 
-        TString MakeLabelFor(const TOne &one) const noexcept
+        TString MakeLabelFor(const TOne &one) const
         {
             TStringStream out;
 

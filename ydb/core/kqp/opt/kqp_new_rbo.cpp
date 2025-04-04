@@ -21,7 +21,7 @@ bool TSimplifiedRule::TestAndApply(std::shared_ptr<IOperator>& input,
     }
 }
 
-void TRuleBasedOptimizer::Optimize(TOpRoot & root,  TExprContext& ctx) {
+TExprNode::TPtr TRuleBasedOptimizer::Optimize(TOpRoot & root,  TExprContext& ctx) {
     for (size_t idx=0; idx < Stages.size(); idx ++ ) {
         YQL_CLOG(TRACE, CoreDq) << "Running ruleset: " << idx;
         auto & stage = Stages[idx];
@@ -37,7 +37,7 @@ void TRuleBasedOptimizer::Optimize(TOpRoot & root,  TExprContext& ctx) {
                 for (auto rule : stage.Rules) {
                     auto op = iter.Current;
 
-                    if (rule->TestAndApply(op, ctx, KqpCtx, TypeCtx, Config, root.Props)) {
+                    if (rule->TestAndApply(op, ctx, KqpCtx, TypeCtx, Config, root.PlanProps)) {
                         YQL_CLOG(TRACE, CoreDq) << "Applied rule:" << rule->RuleName;
 
                         if (iter.Parent) {
@@ -70,8 +70,9 @@ void TRuleBasedOptimizer::Optimize(TOpRoot & root,  TExprContext& ctx) {
 
         Y_ENSURE(nMatches < 100);
     }
-    YQL_CLOG(TRACE, CoreDq) << "New RBO finished";
+    YQL_CLOG(TRACE, CoreDq) << "New RBO finished, generating physical plan";
 
+    return ConvertToPhysical(root, ctx);
 }
 
 }

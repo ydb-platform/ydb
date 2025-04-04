@@ -61,13 +61,15 @@ class TRuleBasedOptimizer {
         TypeCtx(typeCtx),
         Config(config) {}
     
-    void Optimize(TOpRoot & root,  TExprContext& ctx);
+    TExprNode::TPtr Optimize(TOpRoot & root,  TExprContext& ctx);
 
     TVector<TRuleBasedStage> Stages;
     const TIntrusivePtr<TKqpOptimizeContext>& KqpCtx;
     TTypeAnnotationContext& TypeCtx;
     const TKikimrConfiguration::TPtr& Config;
 };
+
+TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx);
 
 }
 }

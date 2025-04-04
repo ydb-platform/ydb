@@ -3,11 +3,12 @@
 #include <yql/essentials/utils/log/log.h>
 
 
-namespace NKikimr {
-namespace NKqp {
 
 using namespace NYql::NNodes;
 
+namespace {
+using namespace NKikimr;
+using namespace NKikimr::NKqp; 
 
 TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprContext& ctx) {
     if (input->IsCallable("Member")) {
@@ -23,6 +24,13 @@ TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprCont
             newChildren.push_back(ReplaceArg(c, arg, ctx));
         }
         return ctx.Builder(input->Pos()).Callable(input->Content()).Add(std::move(newChildren)).Seal().Build();
+    }
+    else if(input->IsList()){
+        TVector<TExprNode::TPtr> newChildren;
+        for (auto c : input->Children()) {
+            newChildren.push_back(ReplaceArg(c, arg, ctx));
+        }
+        return ctx.Builder(input->Pos()).List().Add(std::move(newChildren)).Seal().Build();
     }
     else {
         return input;
@@ -61,6 +69,10 @@ TExprNode::TPtr BuildFilterFromConjuncts(TExprNode::TPtr input, TVector<TExprNod
         .Lambda(lambda)
         .Done().Ptr();
 }
+}
+
+namespace NKikimr {
+namespace NKqp {
 
 std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared_ptr<IOperator> & input, TExprContext& ctx, 
     const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, 
@@ -211,9 +223,15 @@ bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprCo
         props.StageGraph.Connect(*rightStage, newStageId, "Shuffle");
         YQL_CLOG(TRACE, CoreDq) << "Assign stages join";
     }
-    else if (input->Kind == EOperator::Filter || input->Kind == EOperator::Map || input->Kind == EOperator::Limit) {
+    else if (input->Kind == EOperator::Filter || input->Kind == EOperator::Map) {
         input->Props.StageId = input->Children[0]->Props.StageId;
         YQL_CLOG(TRACE, CoreDq) << "Assign stages rest";
+    }
+    else if (input->Kind == EOperator::Limit) {
+        auto newStageId = props.StageGraph.AddStage();
+        input->Props.StageId = newStageId;
+        auto prevStageId = *(input->Children[0]->Props.StageId);
+        props.StageGraph.Connect(prevStageId, newStageId, "UnionAll");
     }
     else {
         Y_ENSURE(true, "Unknown operator encountered");

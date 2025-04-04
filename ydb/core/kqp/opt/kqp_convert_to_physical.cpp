@@ -122,6 +122,20 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx) {
             auto newFilterBody = ReplaceArg(filterBody.Ptr(), arg, ctx, true);
             newFilterBody = ctx.Builder(root.Node->Pos()).Callable("FromPg").Add(0, newFilterBody).Seal().Build();
 
+            TVector<TExprBase> items;
+
+            for (auto iu : op->GetOutputIUs()) {
+                auto tuple = Build<TCoNameValueTuple>(ctx, root.Node->Pos())
+                    .Name().Build(iu.ColumnName)
+                    .Value<TCoMember>()
+                        .Struct(arg)
+                        .Name().Build(iu.ColumnName)
+                    .Build()
+                    .Done();
+                
+                items.push_back(tuple);
+            }
+
             currentStageBody = Build<TCoFlatMap>(ctx, root.Node->Pos())
                 .Input(TExprBase(currentStageBody))
                 .Lambda<TCoLambda>()
@@ -133,7 +147,9 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx) {
                                 .Literal().Build("false")
                                 .Build()
                             .Build()
-                        .Value(currentStageBody)
+                        .Value<TCoAsStruct>()
+                            .Add(items)
+                        .Build()
                     .Build()
                 .Build()
             .Done().Ptr();
@@ -164,19 +180,14 @@ TExprNode::TPtr ConvertToPhysical(TOpRoot & root,  TExprContext& ctx) {
                 items.push_back(tuple);
             }
 
-            auto asStruct = Build<TCoAsStruct>(ctx, root.Node->Pos())
-                .Add(items)
-                .Done();
-
-            TVector<TExprBase> listElements;
-            listElements.push_back(asStruct);
-
             currentStageBody = Build<TCoFlatMap>(ctx, root.Node->Pos())
                 .Input(TExprBase(currentStageBody))
                 .Lambda<TCoLambda>()
                     .Args({arg})
-                    .Body<TCoAsList>()
-                        .Add(listElements)
+                    .Body<TCoJust>()
+                        .Input<TCoAsStruct>()
+                            .Add(items)
+                        .Build()
                     .Build()
                 .Build()
                 .Done().Ptr();

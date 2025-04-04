@@ -743,7 +743,7 @@ namespace NKikimr::NBlobDepot {
         bool IsLoaded() const { return Loaded; }
         bool IsKeyLoaded(const TKey& key) const { return Loaded || LoadedKeys[key]; }
 
-        bool EnsureKeyLoaded(const TKey& key, NTabletFlatExecutor::TTransactionContext& txc);
+        bool EnsureKeyLoaded(const TKey& key, NTabletFlatExecutor::TTransactionContext& txc, bool *progress = nullptr);
 
         template<typename TRecord>
         bool LoadMissingKeys(const TRecord& record, NTabletFlatExecutor::TTransactionContext& txc);

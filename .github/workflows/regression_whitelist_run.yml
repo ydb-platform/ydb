@@ -6,12 +6,12 @@ on:
   workflow_dispatch:
     inputs:
       branches:
-        description: 'Branches to run tests on'
-        default: ${{ env.DEFAULT_BRANCHES }}
+        description: 'Branches to run tests on, it shoud be like ["branch_name1", "branch_name2"]'
+        default:  ${{ env.DEFAULT_BRANCHES }}
         required: false
 
 env:
-  DEFAULT_BRANCHES: 'main, stable-25-1, stable-25-1-1'
+   DEFAULT_BRANCHES: '["main", "stable-25-1", "stable-25-1-1"]'
 
 jobs:
   main:
@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        branch: [ ${{ github.event_name == 'workflow_dispatch' && inputs.branches || env.DEFAULT_BRANCHES }} ]
+        branch: ${{ github.event_name == 'workflow_dispatch' && fromJson(inputs.branches || env.DEFAULT_BRANCHES) || fromJson(env.DEFAULT_BRANCHES) }}
         build_preset: ["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]
     with:
       test_targets: ydb/tests/sql/ ydb/tests/stress ydb/tests/functional/tpc ydb/tests/functional/benchmarks_init

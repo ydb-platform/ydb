@@ -8,6 +8,9 @@ namespace NKikimr::NStorage {
         if (!RunCommonChecks()) {
             return;
         }
+        if (cmd.GetFromSelfHeal() && !Self->StorageConfig->GetSelfManagementConfig().GetAutomaticStaticGroupManagement()) {
+            return FinishWithError(TResult::ERROR, "operation forbidden: automatic static group management disabled");
+        }
 
         bool found = false;
         const TVDiskID vdiskId = VDiskIDFromVDiskID(cmd.GetVDiskId());

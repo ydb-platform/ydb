@@ -249,7 +249,9 @@ private:
 
         serverSettings.SetEnableMockOnSingleNode(!Settings_.DisableDiskMock && !Settings_.PDisksPath);
         serverSettings.SetCustomDiskParams(storage);
-        serverSettings.SetStorageGeneration(StorageMeta_.GetStorageGeneration());
+
+        const auto storageGeneration = StorageMeta_.GetStorageGeneration();
+        serverSettings.SetStorageGeneration(storageGeneration, storageGeneration > 0);
     }
 
     NKikimr::Tests::TServerSettings GetServerSettings(ui32 grpcPort) {

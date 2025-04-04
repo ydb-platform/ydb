@@ -21,7 +21,6 @@
 
 namespace NFq {
 
-using TQuotaCountExecuter = TDbExecuter<THashMap<TString, THashMap<FederatedQuery::QueryContent::QueryType, ui32>>>;
 
 void TYdbControlPlaneStorageActor::Handle(TEvQuotaService::TQuotaUsageRequest::TPtr& ev) {
 
@@ -37,7 +36,7 @@ void TYdbControlPlaneStorageActor::Handle(TEvQuotaService::TQuotaUsageRequest::T
             auto queryType = ev->Get()->MetricName == QUOTA_ANALYTICS_COUNT_LIMIT
                 ? FederatedQuery::QueryContent::QueryType::QueryContent_QueryType_ANALYTICS
                 : FederatedQuery::QueryContent::QueryType::QueryContent_QueryType_STREAMING;
-            usage = quotaIt->second.Value(queryType, 0);
+            usage = quotaIt->second[queryType];
         }
         Send(ev->Sender, new TEvQuotaService::TQuotaUsageResponse(SUBJECT_TYPE_CLOUD, ev->Get()->SubjectId, ev->Get()->MetricName, usage));
     }
@@ -50,6 +49,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvQuotaService::TQuotaUsageRequest::T
 
     QuotasUpdating = true;
     QueryQuotas.clear();
+
+    using TQuotaCountExecuter = TDbExecuter<TQueryQuotasMap>;
 
     TDbExecutable::TPtr executable;
     auto& executer = TQuotaCountExecuter::Create(executable, false, [](TQuotaCountExecuter& executer) { executer.State.clear(); } );
@@ -100,8 +101,8 @@ void TYdbControlPlaneStorageActor::Handle(TEvQuotaService::TQuotaUsageRequest::T
                 ui64 streamingCount = 0;
                 auto quotaIt = this->QueryQuotas.find(it.first);
                 if (quotaIt != this->QueryQuotas.end()) {
-                    analyticCount = quotaIt->second.Value(FederatedQuery::QueryContent::QueryType::QueryContent_QueryType_ANALYTICS, 0);
-                    streamingCount = quotaIt->second.Value(FederatedQuery::QueryContent::QueryType::QueryContent_QueryType_STREAMING, 0);
+                    analyticCount = quotaIt->second[FederatedQuery::QueryContent::QueryType::QueryContent_QueryType_ANALYTICS];
+                    streamingCount = quotaIt->second[FederatedQuery::QueryContent::QueryType::QueryContent_QueryType_STREAMING];
                 }
                 this->Send(ev->Sender, new TEvQuotaService::TQuotaUsageResponse(SUBJECT_TYPE_CLOUD, it.first, QUOTA_ANALYTICS_COUNT_LIMIT, analyticCount));
                 this->Send(ev->Sender, new TEvQuotaService::TQuotaUsageResponse(SUBJECT_TYPE_CLOUD, it.first, QUOTA_STREAMING_COUNT_LIMIT, streamingCount));

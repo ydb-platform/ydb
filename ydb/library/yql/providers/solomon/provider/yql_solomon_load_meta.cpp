@@ -70,10 +70,20 @@ public:
 
             if (auto maybeSelectors = ExtractSetting(settings, "selectors")) {
                 NSo::NProto::TDqSolomonSource source;
-                source.SetEndpoint(clusterDesc->GetCluster());
                 source.SetProject(soReadObject.Object().Project().StringValue());
                 source.SetClusterType(MapClusterType(clusterDesc->GetClusterType()));
                 source.SetUseSsl(clusterDesc->GetUseSsl());
+
+                for (const auto& attr : clusterDesc->GetSettings()) {
+                    if (attr.name() == "http_endpoint"sv) {
+                        source.SetHttpEndpoint(attr.value());
+                    }
+                }
+
+                if (source.GetHttpEndpoint().empty()) {
+                    ctx.AddError(TIssue("specify `http_endpoint` to read from Solomon source"));
+                    return TStatus::Error;
+                }
 
                 auto defaultReplica = State_->Configuration->SolomonClientDefaultReplica.Get().OrElse("sas");
                 source.MutableSettings()->insert({ "solomonClientDefaultReplica", ToString(defaultReplica) });

@@ -328,7 +328,7 @@ target_sources(core-tx-schemeshard PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_xxport__helpers.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/user_attributes.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_export_uploaders.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_import_scheme_getter.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard_import_getters.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/defs.h
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/operation_queue_timer.h
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/schemeshard/schemeshard__operation.h

@@ -41,8 +41,7 @@ void TScanHead::OnSourceReady(const std::shared_ptr<IDataSource>& source, std::s
         if (table && table->num_rows()) {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "has_result")("source_id", frontSource->GetSourceId())(
                 "source_idx", frontSource->GetSourceIdx())("table", table->num_rows());
-            auto cursor =
-                std::make_shared<TSimpleScanCursor>(frontSource->GetStartPKRecordBatch(), frontSource->GetSourceId(), startIndex + recordsCount);
+            auto cursor = SourcesCollection->BuildCursor(frontSource, startIndex + recordsCount);
             reader.OnIntervalResult(std::make_shared<TPartialReadResult>(frontSource->GetResourceGuards(), frontSource->GetGroupGuard(), table,
                 cursor, Context->GetCommonContext(), sourceIdxToContinue));
         } else if (sourceIdxToContinue) {
@@ -67,22 +66,15 @@ TConclusionStatus TScanHead::Start() {
 
 TScanHead::TScanHead(std::deque<TSourceConstructor>&& sources, const std::shared_ptr<TSpecialReadContext>& context)
     : Context(context) {
-    if (context->GetCommonContext()->GetScanCursor()->IsInitialized()) {
-        for (auto&& i : sources) {
-            bool usage = false;
-            if (!context->GetCommonContext()->GetScanCursor()->CheckEntityIsBorder(i, usage)) {
-                continue;
-            }
-            if (usage) {
-                i.SetIsStartedByCursor();
-            }
-            break;
-        }
-    }
     if (Context->GetReadMetadata()->HasLimit()) {
-        SourcesCollection = std::make_unique<TScanWithLimitCollection>(Context, std::move(sources));
+        SourcesCollection =
+            std::make_unique<TScanWithLimitCollection>(Context, std::move(sources), context->GetCommonContext()->GetScanCursor());
+    } else if (Context->GetReadMetadata()->IsSorted()) {
+        SourcesCollection =
+            std::make_unique<TSortedFullScanCollection>(Context, std::move(sources), context->GetCommonContext()->GetScanCursor());
     } else {
-        SourcesCollection = std::make_unique<TFullScanCollection>(Context, std::move(sources));
+        SourcesCollection =
+            std::make_unique<TNotSortedFullScanCollection>(Context, std::move(sources), context->GetCommonContext()->GetScanCursor());
     }
 }
 

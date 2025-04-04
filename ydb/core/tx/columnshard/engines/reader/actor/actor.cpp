@@ -249,18 +249,20 @@ bool TColumnShardScan::ProduceResults() noexcept {
         ACFL_DEBUG("stage", "data_format")("batch_size", NArrow::GetTableDataSize(Result->ArrowBatch))("num_rows", numRows)(
             "batch_columns", JoinSeq(",", batch->schema()->field_names()));
     }
-    if (CurrentLastReadKey) {
+    if (CurrentLastReadKey && result.GetScanCursor()->GetPKCursor() && CurrentLastReadKey->GetPKCursor()) {
         auto pNew = NArrow::TReplaceKey::FromBatch(result.GetScanCursor()->GetPKCursor(), 0);
         auto pOld = NArrow::TReplaceKey::FromBatch(CurrentLastReadKey->GetPKCursor(), 0);
-        if (!ReadMetadataRange->IsDescSorted()) {
+        if (ReadMetadataRange->IsAscSorted()) {
             AFL_VERIFY(!(pNew < pOld))("old", pOld.DebugJson().GetStringRobust())("new", pNew.DebugJson().GetStringRobust());
-        } else {
+        } else if (ReadMetadataRange->IsDescSorted()) {
             AFL_VERIFY(!(pOld < pNew))("old", pOld.DebugJson().GetStringRobust())("new", pNew.DebugJson().GetStringRobust());
         }
     }
     CurrentLastReadKey = result.GetScanCursor();
 
-    Result->LastKey = ConvertLastKey(CurrentLastReadKey->GetPKCursor());
+    if (CurrentLastReadKey->GetPKCursor()) {
+        Result->LastKey = ConvertLastKey(CurrentLastReadKey->GetPKCursor());
+    }
     Result->LastCursorProto = CurrentLastReadKey->SerializeToProto();
     SendResult(false, false);
     ScanIterator->OnSentDataFromInterval(result.GetNotFinishedIntervalIdx());

@@ -21,7 +21,7 @@ struct TPqState : public TThrRefBase {
         bool RawFormat = true;
         TExprNode::TPtr RowSpec;
         TExprNode::TPtr ColumnOrder;
-        TMaybe<::NPq::NConfigurationManager::TTopicDescription> Description;
+        TMaybe<IPqGateway::TDescribeFederatedTopicResult> FederatedTopic;
     };
 
 public:

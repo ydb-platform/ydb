@@ -1,4 +1,18 @@
 {
+    "test.test[Blocks-ListToBlocks-default.txt-Debug]": [
+        {
+            "checksum": "a75bba410aa5a961fb719529319ca282",
+            "size": 929,
+            "uri": "https://{canondata_backend}/1130705/45dbf61264fbf40322799d506e95dda3522ed97f/resource.tar.gz#test.test_Blocks-ListToBlocks-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[Blocks-ListToBlocks-default.txt-Results]": [
+        {
+            "checksum": "86b7325d54c0a9d92f4a858c1328793d",
+            "size": 1794,
+            "uri": "https://{canondata_backend}/1130705/45dbf61264fbf40322799d506e95dda3522ed97f/resource.tar.gz#test.test_Blocks-ListToBlocks-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[Builtins-AsOptionalType-default.txt-Debug]": [
         {
             "checksum": "147133ffe72e4619d67cefcf20918941",

@@ -68,7 +68,7 @@ TVector<TString> GetTokenViews(ILexer::TPtr& lexer, const TString& query) {
 
 TString ToString(TParsedToken token) {
     TString& string = token.Name;
-    if (!AsciiEqualsIgnoreCase(token.Name, token.Content) && token.Name != "EOF") {
+    if (token.Name != token.Content && token.Name != "EOF") {
         string += "(";
         string += token.Content;
         string += ")";
@@ -306,6 +306,7 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
         UNIT_ASSERT_TOKENIZED(lexer, "SELECT", "SELECT EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "INSERT", "INSERT EOF");
         UNIT_ASSERT_TOKENIZED(lexer, "FROM", "FROM EOF");
+        UNIT_ASSERT_TOKENIZED(lexer, "from", "FROM(from) EOF");
     }
 
     Y_UNIT_TEST_ON_EACH_LEXER(Punctuation) {
@@ -418,8 +419,8 @@ Y_UNIT_TEST_SUITE(SQLv1Lexer) {
 
     Y_UNIT_TEST_ON_EACH_LEXER(SimpleQuery) {
         auto lexer = MakeLexer(Lexers, ANSI, ANTLR4, FLAVOR);
-        UNIT_ASSERT_TOKENIZED(lexer, "select 1", "SELECT WS( ) DIGITS(1) EOF");
-        UNIT_ASSERT_TOKENIZED(lexer, "SELect 1", "SELECT WS( ) DIGITS(1) EOF");
+        UNIT_ASSERT_TOKENIZED(lexer, "select 1", "SELECT(select) WS( ) DIGITS(1) EOF");
+        UNIT_ASSERT_TOKENIZED(lexer, "SELect 1", "SELECT(SELect) WS( ) DIGITS(1) EOF");
     }
 
     Y_UNIT_TEST_ON_EACH_LEXER(ComplexQuery) {

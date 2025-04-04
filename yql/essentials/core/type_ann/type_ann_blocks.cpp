@@ -76,26 +76,17 @@ IGraphTransformer::TStatus ReplicateScalarWrapper(const TExprNode::TPtr& input, 
 }
 
 IGraphTransformer::TStatus ReplicateScalarsWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
-
-    // Static assert to ensure backward compatible change: if the
-    // constant below is true, both input and output types of
-    // ReplicateScalars callable have to be WideStream; otherwise,
-    // both input and output types have to be WideFlow.
-    // FIXME: When all spots using ReplicateScalars are adjusted
-    // to work with WideStream, drop the assertion below.
-    static_assert(!NYql::NBlockStreamIO::ReplicateScalars);
-
     if (!EnsureMinArgsCount(*input, 1, ctx.Expr) || !EnsureMaxArgsCount(*input, 2, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
     TTypeAnnotationNode::TListType blockItemTypes;
-    if (!EnsureWideFlowBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
+    if (!EnsureWideStreamBlockType(input->Head(), blockItemTypes, ctx.Expr)) {
         return IGraphTransformer::TStatus::Error;
     }
 
-    auto flowItemTypes = input->Head().GetTypeAnn()->Cast<TFlowExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
-    YQL_ENSURE(flowItemTypes.size() > 0);
+    auto streamItemTypes = input->Head().GetTypeAnn()->Cast<TStreamExprType>()->GetItemType()->Cast<TMultiExprType>()->GetItems();
+    YQL_ENSURE(streamItemTypes.size() > 0);
 
     TMaybe<THashSet<ui32>> replicateIndexes;
     if (input->ChildrenSize() == 2) {
@@ -110,16 +101,16 @@ IGraphTransformer::TStatus ReplicateScalarsWrapper(const TExprNode::TPtr& input,
                     TStringBuilder() << "Expecting integer as replicate index, got: " << atom->Content()));
                 return IGraphTransformer::TStatus::Error;
             }
-            if (idx >= flowItemTypes.size() - 1) {
+            if (idx >= streamItemTypes.size() - 1) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(atom->Pos()),
-                    TStringBuilder() << "Replicate index too big: " << idx << ", should be less than " << (flowItemTypes.size() - 1)));
+                    TStringBuilder() << "Replicate index too big: " << idx << ", should be less than " << (streamItemTypes.size() - 1)));
                 return IGraphTransformer::TStatus::Error;
             }
             if (!replicateIndexes->insert(idx).second) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(atom->Pos()), TStringBuilder() << "Duplicate replicate index " << idx));
                 return IGraphTransformer::TStatus::Error;
             }
-            if (flowItemTypes[idx]->GetKind() != ETypeAnnotationKind::Scalar) {
+            if (streamItemTypes[idx]->GetKind() != ETypeAnnotationKind::Scalar) {
                 ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(atom->Pos()), TStringBuilder() << "Invalid replicate index " << idx << ": input item is not scalar"));
                 return IGraphTransformer::TStatus::Error;
             }
@@ -128,8 +119,8 @@ IGraphTransformer::TStatus ReplicateScalarsWrapper(const TExprNode::TPtr& input,
 
     bool hasScalarsToConvert = false;
     size_t inputScalarsCount = 0;
-    for (size_t i = 0; i + 1 < flowItemTypes.size(); ++i) {
-        auto& itemType = flowItemTypes[i];
+    for (size_t i = 0; i + 1 < streamItemTypes.size(); ++i) {
+        auto& itemType = streamItemTypes[i];
         if (itemType->IsScalar()) {
             ++inputScalarsCount;
             if (!replicateIndexes.Defined() || replicateIndexes->contains(i)) {
@@ -151,7 +142,7 @@ IGraphTransformer::TStatus ReplicateScalarsWrapper(const TExprNode::TPtr& input,
         return IGraphTransformer::TStatus::Repeat;
     }
 
-    input->SetTypeAnn(ctx.Expr.MakeType<TFlowExprType>(ctx.Expr.MakeType<TMultiExprType>(flowItemTypes)));
+    input->SetTypeAnn(ctx.Expr.MakeType<TStreamExprType>(ctx.Expr.MakeType<TMultiExprType>(streamItemTypes)));
     return IGraphTransformer::TStatus::Ok;
 }
 

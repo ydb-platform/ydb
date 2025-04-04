@@ -45,6 +45,8 @@ public:
             VisitUnaryCasualSubexpr(dynamic_cast<const TRule_in_unary_casual_subexpr&>(msg));
         } else if (descr == TRule_type_name_simple::GetDescriptor()) {
             VisitSimpleType(dynamic_cast<const TRule_type_name_simple&>(msg));
+        } else if (descr == TRule_pragma_stmt::GetDescriptor()) {
+            VisitPragmaStmt(dynamic_cast<const TRule_pragma_stmt&>(msg));
         }
 
         TStringBuf fullName = descr->full_name();
@@ -83,6 +85,12 @@ private:
                 Freqs[std::make_pair("USE", Id(id, Translation))] += 1;
             }
         }
+    }
+
+    void VisitPragmaStmt(const TRule_pragma_stmt& msg) {
+        const TString prefix = OptIdPrefixAsStr(msg.GetRule_opt_id_prefix_or_type2(), Translation);
+        const TString pragma(Id(msg.GetRule_an_id3(), Translation));
+        Freqs[std::make_pair("PRAGMA", prefix.empty() ? pragma : (prefix + "." + pragma))] += 1;
     }
 
     template<typename TUnaryCasualExprRule>

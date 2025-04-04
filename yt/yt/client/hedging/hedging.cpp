@@ -66,10 +66,10 @@ public:
         return Executor_->GetClient(0)->GetConnection();
     }
 
-    std::optional<std::string> GetClusterName(bool fetchIfNull = true) override
+    TFuture<std::optional<std::string>> GetClusterName(bool fetchIfNull = true) override
     {
         Y_UNUSED(fetchIfNull);
-        return {};
+        return MakeFuture<std::optional<std::string>>({});
     }
 
     RETRYABLE_METHOD(TFuture<TUnversionedLookupRowsResult>, LookupRows, (const TYPath&, NTableClient::TNameTablePtr, const TSharedRange<NTableClient::TUnversionedRow>&, const TLookupRowsOptions&));

@@ -342,7 +342,7 @@ public:
         return client->GetConnection();
     }
 
-    std::optional<std::string> GetClusterName(bool fetchIfNull) override
+    TFuture<std::optional<std::string>> GetClusterName(bool fetchIfNull) override
     {
         auto [client, _] = GetActiveClient();
         return client->GetClusterName(fetchIfNull);
@@ -637,7 +637,7 @@ void TClient::CheckClustersHealth()
         const auto& check = checks[index];
         auto error = NConcurrency::WaitFor(check);
         YT_LOG_DEBUG_UNLESS(error.IsOK(), error, "Cluster %Qv is marked as unhealthy",
-            UnderlyingClients_[index]->Client->GetClusterName(/*fetchIfNull*/ false));
+            UnderlyingClients_[index]->Client->GetConnection()->GetClusterName());
         UnderlyingClients_[index]->HasErrors = !error.IsOK()
             && !error.FindMatching(NSecurityClient::EErrorCode::AuthorizationError); // Ignore authorization errors.
     }

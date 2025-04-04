@@ -417,9 +417,9 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor<TBlobSt
 
                 TMonotonic now = TActivationContext::Monotonic();
                 TMonotonic nextAcceleration = RequestStartTime + timeToAccelerate;
-                LWTRACK(DSProxyScheduleAccelerate, Orbit,  nextAcceleration > now ? (nextAcceleration - now).MicroSeconds() / 1000.0 : 0.0);
+                LWTRACK(DSProxyScheduleAccelerate, Orbit,  nextAcceleration > now ? (nextAcceleration - now).MicroSeconds() / 1000.0 : 0.0, "Put");
                 if (nextAcceleration > now) {
-                    ui64 causeIdx = RootCauseTrack.RegisterAccelerate();
+                    ui64 causeIdx = RootCauseTrack.RegisterAccelerate("Put");
                     Schedule(nextAcceleration - now, new TEvAccelerate(causeIdx));
                     IsAccelerateScheduled = true;
                 } else {

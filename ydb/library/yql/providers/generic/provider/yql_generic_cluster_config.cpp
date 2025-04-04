@@ -321,10 +321,10 @@ namespace NYql {
         }
 
         for (auto f : NKikimr::NExternalSource::NIceberg::FieldsToConnector) {
-            auto itr = properties.find(f);
+            auto it = properties.find(f);
 
-            if (properties.end() != itr) {
-                clusterConfig.MutableDataSourceOptions()->insert({f, itr->second});
+            if (properties.end() != it) {
+                clusterConfig.MutableDataSourceOptions()->insert({f, it->second});
             }
         }
     }

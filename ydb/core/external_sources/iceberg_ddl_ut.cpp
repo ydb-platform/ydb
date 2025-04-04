@@ -14,14 +14,15 @@ namespace {
 class TTestFixture : public NUnitTest::TBaseFixture {
 public: 
     TTestFixture()
-    :  Props(*Proto.MutableProperties()->MutableProperties()) {
+    :  Props(*Proto.MutableProperties()->MutableProperties()) 
+    {
         using namespace NKikimr::NExternalSource::NIceberg;
 
-        auto s = ToString(NYql::EDatabaseType::Iceberg);
-        auto f = NExternalSource::CreateExternalSourceFactory(
-            {}, nullptr, 50000, nullptr, false, false, {s});
+        auto type = ToString(NYql::EDatabaseType::Iceberg);
+        auto factory = NExternalSource::CreateExternalSourceFactory(
+            {}, nullptr, 50000, nullptr, false, false, {type});
 
-        Source = f->GetOrCreate(s);
+        Source = factory->GetOrCreate(type);
 
         Props[WAREHOUSE_TYPE]         = VALUE_S3;
         Props[WAREHOUSE_DB]           = "db";
@@ -31,8 +32,8 @@ public:
     }
 
 public:
-    void SetUp(NUnitTest::TTestContext& ctx) override {
-        NUnitTest::TBaseFixture::SetUp(ctx);
+    void SetUp(NUnitTest::TTestContext& context) override {
+        NUnitTest::TBaseFixture::SetUp(context);
     }
 
 protected:
@@ -41,7 +42,7 @@ protected:
     ::google::protobuf::Map<TProtoStringType, TProtoStringType>& Props;
 };
 
-}
+} // unnamed
 
 Y_UNIT_TEST_SUITE(IcebergDdlTest) {
 

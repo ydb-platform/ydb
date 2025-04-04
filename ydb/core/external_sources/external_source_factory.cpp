@@ -80,7 +80,7 @@ IExternalSource::TPtr BuildIcebergSource(const std::vector<TRegExMatch>& hostnam
             GetRequiredValidator(),
             GetHasSettingCondition(CATALOG_TYPE,VALUE_HIVE)
         )
-        .HostnamePattern(hostnamePatternsRegEx)
+        .HostnamePatterns(hostnamePatternsRegEx)
         .Build();
 }
 

@@ -18,8 +18,8 @@ public:
     }
 
 public:
-    void SetUp(NUnitTest::TTestContext& ctx) override {
-        NUnitTest::TBaseFixture::SetUp(ctx);
+    void SetUp(NUnitTest::TTestContext& context) override {
+        NUnitTest::TBaseFixture::SetUp(context);
     }
 
 protected:
@@ -51,7 +51,7 @@ Y_UNIT_TEST_SUITE(ExternalSourceBuilderTest) {
     }
 
     // Test returned auth methods when conditions are set  
-    Y_UNIT_TEST_F(ValidateAuthWithCondition1, TTestFixture) {
+    Y_UNIT_TEST_F(ValidateAuthWithCondition, TTestFixture) {
         auto source = Builder
             .Auth(
                 {"auth1", "auth2"}, 
@@ -158,7 +158,7 @@ Y_UNIT_TEST_SUITE(ExternalSourceBuilderTest) {
         UNIT_ASSERT_EXCEPTION_CONTAINS(
             source->ValidateExternalDataSource(Proto.SerializeAsString()), 
             NExternalSource::TExternalSourceException,
-            "property: field has wrong value: value allowed values: v3,v2,v1"
+            "property: field has wrong value: value allowed values: v3, v2, v1"
         );
 
         // ddl with "field" equals to "v1"

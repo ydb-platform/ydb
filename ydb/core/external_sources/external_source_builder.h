@@ -18,13 +18,15 @@ public:
     struct TAuthHolder {
         TString Auth;
 
-        TCondition WhenToUseIt;
+        // When auth has to be used
+        TCondition UseCondition;
     };
 
     struct TConditionalValidator {
         TValidator Validator;
 
-        TCondition NeedToValidate;
+        // When validator has to be applied
+        TCondition ApplyCondition;
     };
 
 public: 
@@ -60,7 +62,7 @@ public:
 
     TExternalSourceBuilder& Properties(const TSet<TString>& properties, TValidator validator, TCondition condition);
 
-    TExternalSourceBuilder& HostnamePattern(const std::vector<TRegExMatch>& pattern);
+    TExternalSourceBuilder& HostnamePatterns(const std::vector<TRegExMatch>& patterns);
 
     ///
     ///  Create external data source
@@ -113,4 +115,4 @@ TValidator GetRequiredValidator();
 ///
 TValidator GetIsInListValidator(const std::unordered_set<TString>& values, bool required);
 
-}
+} // NKikimr::NExternalSource

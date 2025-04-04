@@ -456,12 +456,15 @@ namespace NYql {
             }
         }
 
-        TString GetFieldValue(const ::google::protobuf::Map<TProtoStringType,
-                                     TProtoStringType>& cfg, TString field, TString err) {
-            auto it = cfg.find(field);
+        TString GetOptionValue(const ::google::protobuf::Map<TProtoStringType,
+                                     TProtoStringType>& options, TString option) {
+            auto it = options.find(option);
 
-            if (cfg.end() == it) {
-                throw yexception() << err;
+            if (options.end() == it) {
+                throw yexception()
+                    << "Cluster config for an Iceberg data source"
+                    << " is missing option: "
+                    << option;
             }
 
             return it->second;
@@ -470,48 +473,38 @@ namespace NYql {
         ///
         /// Fill options into DatSourceOptions specific for an iceberg data type
         ///
-        void SetIcebergOptions(NYql::TIcebergDataSourceOptions& options, const TGenericClusterConfig& clusterConfig) {
+        void SetIcebergOptions(NYql::TIcebergDataSourceOptions& dataSourceOptions, const TGenericClusterConfig& clusterConfig) {
             using namespace NKikimr::NExternalSource::NIceberg;
-            const auto cfg = clusterConfig.GetDataSourceOptions();
 
-            auto wType = GetFieldValue(
-                cfg, WAREHOUSE_TYPE, "Warehouse type is a required field");
+            const auto& clusterOptions = clusterConfig.GetDataSourceOptions();
+            auto warehouseType = GetOptionValue(clusterOptions, WAREHOUSE_TYPE);
 
-            if (VALUE_S3 != wType) {
-                throw yexception() << "Unexpected warehouse type: " << wType;
+            if (VALUE_S3 != warehouseType) {
+                throw yexception() << "Unexpected warehouse type: " << warehouseType;
             }
 
-            auto endpoint = GetFieldValue(
-                cfg, WAREHOUSE_S3_ENDPOINT, "S3 endpoint is a required field");
-
-            auto region = GetFieldValue(
-                cfg, WAREHOUSE_S3_REGION, "S3 region is a required field");
-
-            auto uri = GetFieldValue(
-                cfg, WAREHOUSE_S3_URI, "S3 uri is a required field");
-
-            auto& s3 = *options.mutable_warehouse()->mutable_s3();
+            auto endpoint = GetOptionValue(clusterOptions, WAREHOUSE_S3_ENDPOINT);
+            auto region = GetOptionValue(clusterOptions, WAREHOUSE_S3_REGION);
+            auto uri = GetOptionValue(clusterOptions, WAREHOUSE_S3_URI);
+            auto& s3 = *dataSourceOptions.mutable_warehouse()->mutable_s3();
 
             s3.set_endpoint(endpoint);
             s3.set_region(region);
             s3.set_uri(uri);
 
-            auto cType = GetFieldValue(
-                cfg, CATALOG_TYPE, "Catalog type is a required field");
-
-            auto& catalog = *options.mutable_catalog();
+            auto catalogType = GetOptionValue(clusterOptions, CATALOG_TYPE);
+            auto& catalog = *dataSourceOptions.mutable_catalog();
 
             // set catalog options
-            if (VALUE_HADOOP == cType) {
+            if (VALUE_HADOOP == catalogType) {
                 // hadoop nothing yet
                 catalog.mutable_hadoop();
-            } else if (VALUE_HIVE == cType) {
-                auto hiveUri = GetFieldValue(
-                    cfg, CATALOG_HIVE_URI, "Hive uri is a required field");
+            } else if (VALUE_HIVE == catalogType) {
+                auto hiveUri = GetOptionValue(clusterOptions, CATALOG_HIVE_URI);
 
                 catalog.mutable_hive()->set_uri(hiveUri);
             } else {
-                throw yexception() << "Unexpected catalog type: " << cType;
+                throw yexception() << "Unexpected catalog type: " << catalogType;
             }
         }
 

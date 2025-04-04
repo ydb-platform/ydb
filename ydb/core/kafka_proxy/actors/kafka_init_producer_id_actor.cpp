@@ -1,7 +1,8 @@
 #include "kafka_init_producer_id_actor.h"
 #include "kafka_init_producer_id_actor_sql.cpp"
-#include "../kafka_transactional_producers_initializers.h"
-#include "../kqp_helper.h"
+#include <ydb/core/kafka_proxy/kafka_transactional_producers_initializers.h>
+#include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
+#include <ydb/core/kafka_proxy/kqp_helper.h>
 
 #include <util/random/random.h>
 #include <ydb/public/sdk/cpp/src/client/params/impl.h>
@@ -50,6 +51,7 @@ namespace NKafka {
     void TKafkaInitProducerIdActor::Bootstrap(const NActors::TActorContext& ctx) {
         if (IsTransactionalProducerInitialization()) {
             Kqp = std::make_unique<TKqpTxHelper>(Context->DatabasePath);
+            KAFKA_LOG_D("Bootstrapping actor for transactional producer. Sending init table request to KQP.");
             Kqp->SendInitTableRequest(ctx, NKikimr::NGRpcProxy::V1::TTransactionalProducersInitManager::GetInstant());
             Become(&TKafkaInitProducerIdActor::StateWork);
         } else {
@@ -71,6 +73,7 @@ namespace NKafka {
     }
 
     void TKafkaInitProducerIdActor::Handle(NMetadata::NProvider::TEvManagerPrepared::TPtr&, const TActorContext& ctx) {
+        KAFKA_LOG_D("Received TEvManagerPrepared. Sending create session request to KQP.");
         Kqp->SendCreateSessionRequest(ctx);
     }
 
@@ -119,6 +122,14 @@ namespace NKafka {
         HandleQueryResponseFromKqp(ev, ctx);
     }
 
+    void TKafkaInitProducerIdActor::Handle(NKafka::TEvKafka::TEvSaveTxnProducerResponse::TPtr& ev, const TActorContext& ctx) {
+        if (ev->Get()->Status == NKafka::TEvKafka::TEvSaveTxnProducerResponse::EStatus::PRODUCER_FENCED) {
+            SendResponseFail(EKafkaErrors::PRODUCER_FENCED, TStringBuilder() << "Failed to save producer state. Reason: " << ev->Get()->Message << ".");
+        } else {
+            SendSuccessfullResponseForTxProducer(PersistedProducerState, ctx);
+        }
+    }
+
     void TKafkaInitProducerIdActor::RequestFullRetry(const TActorContext& ctx) {
         CurrentTxAbortRetryNumber++;
         Kqp->ResetTxId();
@@ -134,6 +145,7 @@ namespace NKafka {
     }
 
     void TKafkaInitProducerIdActor::StartTxProducerInitCycle(const TActorContext& ctx) {
+        KAFKA_LOG_D("Beginning transaction");
         Kqp->BeginTransaction(++KqpReqCookie, ctx);
         LastSentToKqpRequest = EInitProducerIdKqpRequests::BEGIN_TRANSACTION;
     }
@@ -153,7 +165,7 @@ namespace NKafka {
                     break;
                 case INSERT:
                 case UPDATE:
-                    OnSuccessfullProducerStateUpdate(ev, ctx);
+                    OnSuccessfullProducerStateUpdate(ev);
                     break;
                 case DELETE_REQ:
                     SendInsertRequest(ctx);
@@ -186,10 +198,12 @@ namespace NKafka {
         }
     }
 
-    void TKafkaInitProducerIdActor::OnSuccessfullProducerStateUpdate(NKqp::TEvKqp::TEvQueryResponse::TPtr ev, const TActorContext& ctx) {
+    void TKafkaInitProducerIdActor::OnSuccessfullProducerStateUpdate(NKqp::TEvKqp::TEvQueryResponse::TPtr ev) {
         auto producerState = ParseProducerState(ev).value();
 
-        SendSuccessfullResponseForTxProducer(producerState, ctx);
+        PersistedProducerState = std::move(producerState);
+
+        SendSaveTxnProducerStateRequest(producerState);
     }
 
     // requests to producer_state table
@@ -263,6 +277,16 @@ namespace NKafka {
         
         Send(Context->ConnectionId, new TEvKafka::TEvResponse(CorrelationId, response, EKafkaErrors::NONE_ERROR));
         Die(ctx);
+    }
+
+    void TKafkaInitProducerIdActor::SendSaveTxnProducerStateRequest(const TProducerState& producerState) {
+        KAFKA_LOG_D("Sending save txn producer state request");
+
+        Send(NKafka::MakeKafkaTransactionsServiceID(), new TEvKafka::TEvSaveTxnProducerRequest(
+            producerState.TransactionalId,
+            producerState.ProducerId,
+            producerState.ProducerEpoch
+        ));
     }
 
     // helper methods

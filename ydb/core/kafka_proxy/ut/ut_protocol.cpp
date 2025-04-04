@@ -2326,7 +2326,7 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         UNIT_ASSERT_VALUES_UNEQUAL(resp1->ProducerId, resp2->ProducerId);
     }
 
-    Y_UNIT_TEST(InitProducerId_forNewTransactionalIdShouldReturnRandomInt) {
+    Y_UNIT_TEST(InitProducerId_forNewTransactionalIdShouldReturnIncrementingInt) {
         TInsecureTestServer testServer;
 
         TKafkaTestClient kafkaClient(testServer.Port);
@@ -2341,10 +2341,8 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         UNIT_ASSERT_VALUES_EQUAL(resp1->ProducerEpoch, 0);
         // validate second response
         UNIT_ASSERT_VALUES_EQUAL(resp2->ErrorCode, EKafkaErrors::NONE_ERROR);
-        UNIT_ASSERT_GT(resp2->ProducerId, 0);
+        UNIT_ASSERT_GT(resp2->ProducerId, resp1->ProducerId);
         UNIT_ASSERT_VALUES_EQUAL(resp2->ProducerEpoch, 0);
-        // validate different values for different responses
-        UNIT_ASSERT_VALUES_UNEQUAL(resp1->ProducerId, resp2->ProducerId);
     }
 
     Y_UNIT_TEST(InitProducerId_forSqlInjectionShouldReturnWithoutDropingDatabase) {

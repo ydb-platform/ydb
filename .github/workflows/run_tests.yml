@@ -132,6 +132,7 @@ jobs:
           test_size: ${{ inputs.test_size }}
           test_type: ${{ inputs.test_type }}
           test_threads: ${{ fromJson(env.threads_count) }}
+          custom_branch_name: ${{ inputs.ref || github.ref_name }}
           put_build_results_to_cache: true
           additional_ya_make_args: -DDEBUGINFO_LINES_ONLY ${{ inputs.additional_ya_make_args }}
           secs: ${{ format('{{"TESTMO_TOKEN2":"{0}","AWS_KEY_ID":"{1}","AWS_KEY_VALUE":"{2}","REMOTE_CACHE_USERNAME":"{3}","REMOTE_CACHE_PASSWORD":"{4}"}}',

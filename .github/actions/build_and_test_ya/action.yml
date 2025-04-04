@@ -51,6 +51,10 @@ inputs:
   vars:
     type: string
     default: ""
+  custom_branch_name:
+    description: "custom branch name reqeire then workflow branch != checkout branch"
+    type: string
+    required: false
 defaults:
   run:
     shell: bash
@@ -88,3 +92,4 @@ runs:
         bazel_remote_password: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_PASSWORD || '' }}
         put_build_results_to_cache: ${{ inputs.put_build_results_to_cache }}
         test_retry_count: ${{ inputs.test_retry_count }}
+        custom_branch_name: ${{ inputs.custom_branch_name }}

@@ -8,14 +8,16 @@ on:
 jobs:
   main:
     name: Whitelist-run
-    uses: ./.github/workflows/run_tests.yml
-    secrets: inherit
     strategy:
       fail-fast: false
       matrix:
         branch: ${{ github.event_name == 'workflow_dispatch' ? github.ref_name : fromJSON('["main", "stable-25-1", "stable-25-1-1"]') }}
         build_preset: ["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]
-    with:
-      test_targets: ydb/tests/sql/ ydb/tests/stress ydb/tests/functional/tpc ydb/tests/functional/benchmarks_init
-      ref: ${{ matrix.branch }}
-      build_preset: ${{ matrix.build_preset }}
+    steps:
+      - name: Run tests
+        uses: ./.github/workflows/run_tests.yml
+        secrets: inherit
+        with:
+          test_targets: ydb/tests/sql/ ydb/tests/stress ydb/tests/functional/tpc ydb/tests/functional/benchmarks_init
+          ref: ${{ matrix.branch }}
+          build_preset: ${{ matrix.build_preset }}

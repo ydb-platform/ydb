@@ -78,23 +78,6 @@ void WriteToStderr(const char* buffer)
 
 namespace NDetail {
 
-constinit NThreading::TSpinLock CrashLock;
-constinit YT_DEFINE_THREAD_LOCAL(bool, CrashLockAcquiredByCurrentThread);
-
-void AcquireCrashLock()
-{
-    if (!std::exchange(CrashLockAcquiredByCurrentThread(), true)) {
-        CrashLock.Acquire();
-    }
-}
-
-void ReleaseCrashLock()
-{
-    if (std::exchange(CrashLockAcquiredByCurrentThread(), false)) {
-        CrashLock.Release();
-    }
-}
-
 Y_NO_INLINE TStackTrace GetStackTrace(TStackTraceBuffer* buffer)
 {
 #ifdef _unix_
@@ -533,16 +516,10 @@ void AssertTrapImpl(
 
     MaybeThrowSafeAssertionException(formatter.GetBuffer());
 
-    // Prevent clashes in stderr.
-    AcquireCrashLock();
-
     WriteToStderr(formatter.GetBuffer());
 
     // This (hopefully) invokes CrashSignalHandler.
     YT_BUILTIN_TRAP();
-
-    // Not expected to get here but anyway...
-    ReleaseCrashLock();
 }
 
 } // namespace NDetail
@@ -560,9 +537,6 @@ void CrashSignalHandler(int /*signal*/, siginfo_t* si, void* uc)
     ::signal(SIGALRM, NDetail::CrashTimeoutHandler);
     ::alarm(60);
 
-    // Prevent clashes in stderr.
-    NDetail::AcquireCrashLock();
-
     NDetail::DumpTimeInfo();
 
     NDetail::DumpCodicils();
@@ -575,9 +549,6 @@ void CrashSignalHandler(int /*signal*/, siginfo_t* si, void* uc)
     DumpStackTrace([] (TStringBuf str) { WriteToStderr(str); }, NDetail::GetPC(uc));
 
     NDetail::DumpUndumpableBlocksInfo();
-
-    // Releasing the lock gives other threads a chance to yell at us.
-    NDetail::ReleaseCrashLock();
 
     WriteToStderr("*** Waiting for logger to shut down\n");
 

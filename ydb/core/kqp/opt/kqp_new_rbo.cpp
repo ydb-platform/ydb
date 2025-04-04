@@ -4,31 +4,60 @@
 namespace NKikimr {
 namespace NKqp {
 
+bool TSimplifiedRule::TestAndApply(std::shared_ptr<IOperator>& input, 
+    TExprContext& ctx,
+    const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, 
+    TTypeAnnotationContext& typeCtx, 
+    const TKikimrConfiguration::TPtr& config,
+    TPlanProps& props) {
+
+    auto output = SimpleTestAndApply(input, ctx, kqpCtx, typeCtx, config, props);
+    if (input != output) {
+        input = output;
+        return true;
+    }
+    else {
+        return false;
+    }
+}
+
 void TRuleBasedOptimizer::Optimize(TOpRoot & root,  TExprContext& ctx) {
-    for (auto & ruleSet : Stages) {
+    for (size_t idx=0; idx < Stages.size(); idx ++ ) {
+        YQL_CLOG(TRACE, CoreDq) << "Running ruleset: " << idx;
+        auto & stage = Stages[idx];
+
         bool fired = true;
 
-        while (fired) {
+        int nMatches = 0;
+
+        while (fired && nMatches < 1000) {
             fired = false;
 
             for (auto iter : root ) {
-                for (auto rule : ruleSet) {
+                for (auto rule : stage.Rules) {
                     auto op = iter.Current;
-                    auto newOp = rule->TestAndApply(op, ctx, KqpCtx, TypeCtx, Config);
 
-                    if (op != newOp) {
+                    if (rule->TestAndApply(op, ctx, KqpCtx, TypeCtx, Config, root.Props)) {
+                        YQL_CLOG(TRACE, CoreDq) << "Applied rule:" << rule->RuleName;
+
                         if (iter.Parent) {
-                            iter.Parent->Children[iter.ChildIndex] = newOp;
+                            iter.Parent->Children[iter.ChildIndex] = op;
                         }
                         else {
-                            root.Children[0] = newOp;
+                            root.Children[0] = op;
                         }
 
-                        auto newRoot = std::static_pointer_cast<TOpRoot>(root.Rebuild(ctx));
-                        root.Node = newRoot->Node;
-                        root.Children[0] = newRoot->Children[0];
                         fired = true;
-                        YQL_CLOG(TRACE, CoreDq) << "Applied rule:" << rule->RuleName;
+
+                        if (stage.RequiresRebuild) {
+                            auto newRoot = std::static_pointer_cast<TOpRoot>(root.Rebuild(ctx));
+                            YQL_CLOG(TRACE, CoreDq) << "Rebuilt tree";
+                            root.Node = newRoot->Node;
+                            root.Children[0] = newRoot->Children[0];
+                        }
+
+
+                        nMatches ++;
                         break;
                     }
                 }
@@ -38,7 +67,11 @@ void TRuleBasedOptimizer::Optimize(TOpRoot & root,  TExprContext& ctx) {
                 }
             }
         }
+
+        Y_ENSURE(nMatches < 100);
     }
+    YQL_CLOG(TRACE, CoreDq) << "New RBO finished";
+
 }
 
 }

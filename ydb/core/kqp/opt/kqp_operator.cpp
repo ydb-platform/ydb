@@ -8,7 +8,7 @@ using namespace NNodes;
 
 std::shared_ptr<IOperator> ExprNodeToOperator (TExprNode::TPtr node) {
     if (NYql::NNodes::TKqpOpEmptySource::Match(node.Get())) {
-        return std::make_shared<TOpEmptySource>();
+        return std::make_shared<TOpEmptySource>(node);
     }
     else if (NYql::NNodes::TKqpOpRead::Match(node.Get())) {
         return std::make_shared<TOpRead>(node);
@@ -21,6 +21,9 @@ std::shared_ptr<IOperator> ExprNodeToOperator (TExprNode::TPtr node) {
     }
     else if (NYql::NNodes::TKqpOpJoin::Match(node.Get())) {
         return std::make_shared<TOpJoin>(node);
+    }
+    else if (NYql::NNodes::TKqpOpLimit::Match(node.Get())) {
+        return std::make_shared<TOpLimit>(node);
     }
     else if (NYql::NNodes::TKqpOpRoot::Match(node.Get())) {
         return std::make_shared<TOpRoot>(node);
@@ -219,12 +222,27 @@ std::shared_ptr<IOperator> TOpJoin::Rebuild(TExprContext& ctx) {
     auto node = Build<TKqpOpJoin>(ctx, Node->Pos())
         .LeftInput(Children[0]->Rebuild(ctx)->Node)
         .RightInput(Children[1]->Rebuild(ctx)->Node)
-        .LeftLabel(current.LeftLabel())
-        .RightLabel(current.RightLabel())
         .JoinKind(current.JoinKind())
         .JoinKeys(current.JoinKeys())
         .Done().Ptr();
     return std::make_shared<TOpJoin>(node);
+}
+
+TOpLimit::TOpLimit(TExprNode::TPtr node) : IUnaryOperator(EOperator::Limit, node) {
+    auto opLimit = TKqpOpLimit(node);
+
+    Children.push_back(ExprNodeToOperator(opLimit.Input().Ptr()));
+
+    OutputIUs = Children[0]->GetOutputIUs();
+}
+
+std::shared_ptr<IOperator> TOpLimit::Rebuild(TExprContext& ctx) {
+    auto current = TKqpOpLimit(Node);
+    auto node = Build<TKqpOpLimit>(ctx, Node->Pos())
+        .Input(Children[0]->Rebuild(ctx)->Node)
+        .Count(current.Count())
+        .Done().Ptr();
+    return std::make_shared<TOpLimit>(node);
 }
 
 TOpRoot::TOpRoot(TExprNode::TPtr node) : IUnaryOperator(EOperator::Root, node) {

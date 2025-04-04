@@ -18,6 +18,7 @@ enum EOperator : ui32 {
     Map,
     Filter,
     Join,
+    Limit,
     Root
 };
 
@@ -45,6 +46,38 @@ struct TConjunctInfo {
     TVector<std::tuple<TExprNode::TPtr, TInfoUnit, TInfoUnit>> JoinConditions;
 };
 
+struct TPhysicalOpProps {
+    std::optional<int> StageId;
+    std::optional<TString> Algorithm;
+};
+
+struct TStageGraph {
+    TVector<int> StageIds;
+    THashMap<int, TVector<int>> StageInputs;
+    THashMap<int, TVector<int>> StageOutputs;
+    THashMap<std::pair<int,int>, TString> ConnectionType;
+
+    int AddStage() {
+        int newStageId = StageIds.size();
+        StageIds.push_back(newStageId);
+        StageInputs[newStageId] = TVector<int>();
+        StageOutputs[newStageId] = TVector<int>();
+        return newStageId;
+    }
+
+    void Connect(int from, int to, TString connType) {
+        auto & outputs = StageOutputs[from];
+        outputs.push_back(to);
+        auto & inputs = StageOutputs[to];
+        inputs.push_back(from);
+        ConnectionType[std::make_pair(from,to)] = connType;
+    }
+};
+
+struct TPlanProps {
+    TStageGraph StageGraph;
+};
+
 class IOperator {
     public:
 
@@ -67,9 +100,26 @@ class IOperator {
 
     const EOperator Kind;
     TExprNode::TPtr Node;
+    TPhysicalOpProps Props;
     TVector<std::shared_ptr<IOperator>> Children;
     TVector<TInfoUnit> OutputIUs;
 };
+
+template <class K>
+bool MatchOperator(const std::shared_ptr<IOperator> & op) {
+    auto dyn = std::dynamic_pointer_cast<K>(op);
+    if (dyn) {
+        return true;
+    }
+    else {
+        return false;
+    }
+}
+
+template <class K>
+std::shared_ptr<K> CastOperator(const std::shared_ptr<IOperator> & op) {
+    return std::static_pointer_cast<K>(op);      
+}
 
 class IUnaryOperator : public IOperator {
     public:
@@ -86,8 +136,8 @@ class IBinaryOperator : public IOperator {
 
 class TOpEmptySource : public IOperator {
     public:
-    TOpEmptySource() : IOperator(EOperator::EmptySource, nullptr) {}
-    virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override { return std::make_shared<TOpEmptySource>(); }
+    TOpEmptySource(TExprNode::TPtr node) : IOperator(EOperator::EmptySource, node) {}
+    virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override { return std::make_shared<TOpEmptySource>(Node); }
 
 };
 
@@ -121,10 +171,18 @@ class TOpJoin : public IBinaryOperator {
 
 };
 
+class TOpLimit : public IUnaryOperator {
+    public:
+    TOpLimit(TExprNode::TPtr node);
+    virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
+};
+
 class TOpRoot : public IUnaryOperator {
     public:
     TOpRoot(TExprNode::TPtr node);
     virtual std::shared_ptr<IOperator> Rebuild(TExprContext& ctx) override;
+
+    TPlanProps Props;
 
     struct Iterator
     {
@@ -144,74 +202,27 @@ class TOpRoot : public IUnaryOperator {
 
         Iterator(TOpRoot* ptr) {
             if (!ptr) {
+                CurrElement = -1;
                 return;
             }
 
             auto child = ptr->Children[0];
-
-            while (child) {
-                DfsStack.push( std::make_pair(child, 0));
-                if (child->Children.size()){
-                    ParentElement = child;
-                    child = child->Children[0];
-                    CurrElement = child;
-                }
-                else {
-                    child = nullptr;
-                }
-            }
+            BuildDfsList(child, {}, size_t(0));
+            CurrElement = 0;
         }
 
 
         IteratorItem operator*() const { 
-            return IteratorItem(CurrElement, ParentElement, ChildIndex); 
+            return DfsList[CurrElement];
         }
 
         // Prefix increment
         Iterator& operator++() {
-            DfsStack.pop();
-            if (DfsStack.empty()) {
-                CurrElement = nullptr;
+            if (CurrElement >= 0) {
+                CurrElement++;
             }
-            else {
-                auto [op, index] = DfsStack.top();
-                if (index < op->Children.size()-1) {
-                    auto ptr = op->Children[index+1];
-                    DfsStack.pop();
-                    DfsStack.push(std::make_pair(op, index+1));
-                    ParentElement = op;
-                    ChildIndex = index+1;
-
-                    while(ptr) {
-                        DfsStack.push( std::make_pair(ptr, size_t(0)));
-                        if (ptr->Children.size()){
-                            ParentElement = ptr;
-                            ChildIndex = 0;
-                            ptr = ptr->Children[0];
-                            CurrElement = ptr;
-                        }
-                        else {
-                            ptr = nullptr;
-                        }
-                    }
-                }
-                else {
-                    if (DfsStack.size() >= 2) {
-                        auto curr = DfsStack.top();
-                        DfsStack.pop();
-                        auto parent = DfsStack.top();
-                        DfsStack.pop();
-                        ParentElement = parent.first;
-                        ChildIndex = parent.second;
-                        DfsStack.push(parent);
-                        DfsStack.push(curr);
-                    }
-                    else {
-                        ParentElement = nullptr;
-                        ChildIndex = 0;
-                    }
-                    CurrElement = op;
-                }
+            if (CurrElement == DfsList.size()) {
+                CurrElement = -1;
             }
             return *this;
         }  
@@ -223,10 +234,14 @@ class TOpRoot : public IUnaryOperator {
         friend bool operator!= (const Iterator& a, const Iterator& b) { return a.CurrElement != b.CurrElement; }; 
 
         private:
-            std::stack<std::pair<std::shared_ptr<IOperator>,size_t>> DfsStack;
-            std::shared_ptr<IOperator> CurrElement = nullptr;
-            std::shared_ptr<IOperator> ParentElement = nullptr;
-            size_t ChildIndex = 0;
+            void BuildDfsList(std::shared_ptr<IOperator> current, std::shared_ptr<IOperator> parent, size_t childIdx) {
+                for (size_t idx = 0; idx < current->Children.size(); idx++) {
+                    BuildDfsList(current->Children[idx], current, idx);
+                }
+                DfsList.push_back(IteratorItem(current,parent,childIdx));
+            }
+            TVector<IteratorItem> DfsList;
+            size_t CurrElement;
     };
 
     Iterator begin() { return Iterator(this); }

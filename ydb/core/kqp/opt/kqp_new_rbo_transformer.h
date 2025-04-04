@@ -40,7 +40,7 @@ class TKqpNewRBOTransformer : public TSyncTransformerBase {
         TKqpNewRBOTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, TTypeAnnotationContext& typeCtx, const TKikimrConfiguration::TPtr& config) : 
             TypeCtx(typeCtx),
             KqpCtx(*kqpCtx),
-            RBO({RuleStage1}, kqpCtx, typeCtx, config) {}
+            RBO({RuleStage1, RuleStage2}, kqpCtx, typeCtx, config) {}
 
         // Main method of the transformer
         IGraphTransformer::TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final;

@@ -43,8 +43,6 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
                 joinExpr = Build<TKqpOpJoin>(ctx, node->Pos())
                     .LeftInput(joinExpr)
                     .RightInput(opRead)
-                    .LeftLabel(lastAlias)
-                    .RightLabel(alias)
                     .JoinKind().Value("Inner").Build()
                     .JoinKeys(joinKeys)
                     .Done().Ptr();
@@ -92,6 +90,21 @@ TExprNode::TPtr RewritePgSelect(const TExprNode::TPtr& node, TExprContext& ctx, 
             .Build()
             .Done().Ptr();
 }
+
+TExprNode::TPtr PushTakeIntoPlan(const TExprNode::TPtr& node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx) {
+    auto take = TCoTake(node);
+    if (auto root = take.Input().Maybe<TKqpOpRoot>()){
+        return Build<TKqpOpRoot>(ctx, node->Pos())
+            .Input<TKqpOpLimit>()
+                .Input(root.Cast().Input())
+                .Count(take.Count())
+            .Build()
+            .Done().Ptr();
+    }
+    else {
+        return node;
+    }
+}
 }
 
 namespace NKikimr {
@@ -104,7 +117,10 @@ IGraphTransformer::TStatus TKqpPgRewriteTransformer::DoTransform(TExprNode::TPtr
     auto status = OptimizeExpr(output, output, [this] (const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
         if (TCoPgSelect::Match(node.Get())) {
             return RewritePgSelect(node, ctx, TypeCtx);
-        } else {
+        } if (TCoTake::Match(node.Get())) {
+            return PushTakeIntoPlan(node, ctx, TypeCtx);
+        }
+        else {
             return node;
         }}, ctx, settings);
 

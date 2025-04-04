@@ -127,6 +127,9 @@ void TCommitOffsetActor::Handle(TEvPQProxy::TEvAuthResultOk::TPtr& ev, const TAc
     commit->SetClientId(ClientId);
     commit->SetOffset(client_req->offset());
     commit->SetStrict(true);
+    if (!client_req->read_session_id().empty()) {
+        commit->SetSessionId(client_req->read_session_id());
+    }
 
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, "strict CommitOffset, partition " << client_req->partition_id()
                         << " committing to position " << client_req->offset() /*<< " prev " << CommittedOffset

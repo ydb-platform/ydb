@@ -282,7 +282,7 @@ runs:
         if [ -z "${{ inputs.custom_branch_name }}" ]; then
           BRANCH_NAME="${GITHUB_REF_NAME}"
         else
-          BRANCH_NAME="${{ inputs.custom_branch_name }}_test"
+          BRANCH_NAME="${{ inputs.custom_branch_name }}"
         fi
         echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
         echo "BRANCH_NAME is set to $BRANCH_NAME"

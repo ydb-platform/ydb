@@ -58,6 +58,11 @@ private:
         : TSparsedArrayChunk(original) {
         AFL_VERIFY(!original.GetNotDefaultRecordsCount());
         RecordsCount = recordsCount;
+        AFL_VERIFY(RemapExternalToInternal.size() == 1);
+        AFL_VERIFY(RemapExternalToInternal[0].GetStartExt() == 0);
+        AFL_VERIFY(RemapExternalToInternal[0].GetStartInt() == 0);
+        AFL_VERIFY(RemapExternalToInternal[0].GetIsDefault());
+        RemapExternalToInternal[0] = TInternalChunkInfo(0, 0, recordsCount, true);
     }
 
 public:

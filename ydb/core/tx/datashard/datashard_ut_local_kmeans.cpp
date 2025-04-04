@@ -848,6 +848,24 @@ Y_UNIT_TEST_SUITE (TTxDataShardLocalKMeansScan) {
                 "__ydb_parent = 74, key = 6, embedding = vv\3, data = six\n");
             recreate();
         }
+
+        {  // ParentFrom = 30 ParentTo = 31
+            auto [level, posting] = DoLocalKMeans(server, sender, 
+                30, 31, 111, 2,
+                NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN);
+            UNIT_ASSERT_VALUES_EQUAL(level, "");
+            UNIT_ASSERT_VALUES_EQUAL(posting, "");
+            recreate();
+        }
+
+        {  // ParentFrom = 100 ParentTo = 101
+            auto [level, posting] = DoLocalKMeans(server, sender, 
+                100, 101, 111, 2,
+                NKikimrTxDataShard::EKMeansState::UPLOAD_BUILD_TO_BUILD, VectorIndexSettings::VECTOR_TYPE_UINT8, VectorIndexSettings::DISTANCE_MANHATTAN);
+            UNIT_ASSERT_VALUES_EQUAL(level, "");
+            UNIT_ASSERT_VALUES_EQUAL(posting, "");
+            recreate();
+        }
     }
 }
 

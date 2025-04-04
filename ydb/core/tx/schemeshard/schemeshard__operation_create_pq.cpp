@@ -168,9 +168,6 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
     }
 
     NKikimrPQ::TPQTabletConfig tabletConfig = op.GetPQTabletConfig();
-
-    tabletConfig.MutableMigrations()->SetLifetime(true);
-
     tabletConfig.ClearPartitionIds();
     tabletConfig.ClearPartitions();
 

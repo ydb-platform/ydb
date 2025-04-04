@@ -217,8 +217,6 @@ public:
                 TPath::Resolve(alterConfig.GetOffloadConfig().GetIncrementalBackup().GetDstPath(), context.SS).Base()->PathId.ToProto(pathId);
             }
 
-            alterConfig.MutableMigrations()->CopyFrom(tabletConfig->GetMigrations());
-
             alterConfig.MutablePartitionKeySchema()->Swap(tabletConfig->MutablePartitionKeySchema());
             Y_PROTOBUF_SUPPRESS_NODISCARD alterConfig.SerializeToString(&params->TabletConfig);
             alterConfig.Swap(tabletConfig);
@@ -559,7 +557,6 @@ public:
         }
 
         NKikimrPQ::TPQTabletConfig tabletConfig = topic->GetTabletConfig();
-        NKikimr::NPQ::Migrate(tabletConfig);
         NKikimrPQ::TPQTabletConfig newTabletConfig = tabletConfig;
 
         TTopicInfo::TPtr alterData = ParseParams(context, &newTabletConfig, alter, errStr);

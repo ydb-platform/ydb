@@ -14,19 +14,46 @@ class IRule {
     public:
     IRule(TString name) : RuleName(name) {}
 
-    virtual std::shared_ptr<IOperator> TestAndApply(std::shared_ptr<IOperator>& input, 
+    virtual bool TestAndApply(std::shared_ptr<IOperator>& input, 
         TExprContext& ctx,
         const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, 
         TTypeAnnotationContext& typeCtx, 
-        const TKikimrConfiguration::TPtr& config) = 0;
+        const TKikimrConfiguration::TPtr& config,
+        TPlanProps& props) = 0;
+
     virtual ~IRule() = default;
 
     TString RuleName;
 };
 
+class TSimplifiedRule : public IRule {
+    public:
+    TSimplifiedRule(TString name) : IRule(name) {}
+
+    virtual std::shared_ptr<IOperator> SimpleTestAndApply(const std::shared_ptr<IOperator>& input, 
+        TExprContext& ctx,
+        const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, 
+        TTypeAnnotationContext& typeCtx, 
+        const TKikimrConfiguration::TPtr& config,
+        TPlanProps& props) = 0;
+
+    virtual bool TestAndApply(std::shared_ptr<IOperator>& input, 
+        TExprContext& ctx,
+        const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, 
+        TTypeAnnotationContext& typeCtx, 
+        const TKikimrConfiguration::TPtr& config,
+        TPlanProps& props) override;
+};
+
+struct TRuleBasedStage {
+    TRuleBasedStage(TVector<std::shared_ptr<IRule>> rules, bool requiresRebuild) : Rules(rules), RequiresRebuild(requiresRebuild) {}
+    TVector<std::shared_ptr<IRule>> Rules;
+    bool RequiresRebuild;
+};
+
 class TRuleBasedOptimizer {
     public:
-    TRuleBasedOptimizer(TVector<TVector<std::shared_ptr<IRule>>> stages, 
+    TRuleBasedOptimizer(TVector<TRuleBasedStage> stages, 
         const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, 
         TTypeAnnotationContext& typeCtx, 
         const TKikimrConfiguration::TPtr& config) : Stages(stages),
@@ -36,7 +63,7 @@ class TRuleBasedOptimizer {
     
     void Optimize(TOpRoot & root,  TExprContext& ctx);
 
-    TVector<TVector<std::shared_ptr<IRule>>> Stages;
+    TVector<TRuleBasedStage> Stages;
     const TIntrusivePtr<TKqpOptimizeContext>& KqpCtx;
     TTypeAnnotationContext& TypeCtx;
     const TKikimrConfiguration::TPtr& Config;

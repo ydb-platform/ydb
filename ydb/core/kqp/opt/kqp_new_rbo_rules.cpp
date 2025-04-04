@@ -62,21 +62,22 @@ TExprNode::TPtr BuildFilterFromConjuncts(TExprNode::TPtr input, TVector<TExprNod
         .Done().Ptr();
 }
 
-std::shared_ptr<IOperator> TPushFilterRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprContext& ctx, 
+std::shared_ptr<IOperator> TPushFilterRule::SimpleTestAndApply(const std::shared_ptr<IOperator> & input, TExprContext& ctx, 
     const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, 
     TTypeAnnotationContext& typeCtx, 
-    const TKikimrConfiguration::TPtr& config) {
+    const TKikimrConfiguration::TPtr& config,
+    TPlanProps& props) {
 
     if (input->Kind != EOperator::Filter) {
         return input;
     }
 
-    auto filter = std::static_pointer_cast<TOpFilter>(input);
+    auto filter = CastOperator<TOpFilter>(input);
     if (filter->GetInput()->Kind != EOperator::Join) {
         return input;
     }
 
-    auto join = std::static_pointer_cast<TOpJoin>(filter->GetInput());
+    auto join = CastOperator<TOpJoin>(filter->GetInput());
     auto leftIUs = join->GetLeftInput()->GetOutputIUs();
     auto rightIUs = join->GetRightInput()->GetOutputIUs();
 
@@ -155,8 +156,6 @@ std::shared_ptr<IOperator> TPushFilterRule::TestAndApply(std::shared_ptr<IOperat
     auto newJoin = Build<TKqpOpJoin>(ctx, filterNode.Pos())
             .LeftInput(leftArg)
             .RightInput(rightArg)
-            .LeftLabel(joinNode.LeftLabel())
-            .RightLabel(joinNode.RightLabel())
             .JoinKind(joinNode.JoinKind())
             .JoinKeys()
                 .Add(joinConds)
@@ -171,9 +170,60 @@ std::shared_ptr<IOperator> TPushFilterRule::TestAndApply(std::shared_ptr<IOperat
     }
 }
 
-TVector<std::shared_ptr<IRule>> RuleStage1 = {
-    std::make_shared<TPushFilterRule>()
-};
+bool TAssignStagesRule::TestAndApply(std::shared_ptr<IOperator> & input, TExprContext& ctx, 
+    const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx, 
+    TTypeAnnotationContext& typeCtx, 
+    const TKikimrConfiguration::TPtr& config,
+    TPlanProps& props) {
+
+    auto nodeName = input->Node->Content();
+
+    YQL_CLOG(TRACE, CoreDq) << "Assign stages: " << nodeName;
+
+    if (input->Props.StageId.has_value()) {
+        YQL_CLOG(TRACE, CoreDq) << "Assign stages: " << nodeName << " stage assigned already";
+        return false;
+    }
+
+    for (auto & c : input->Children) {
+        if (!c->Props.StageId.has_value()) {
+            YQL_CLOG(TRACE, CoreDq) << "Assign stages: " << nodeName << " child with unassigned stage";
+            return false;
+        }
+    }
+
+    if (input->Kind == EOperator::EmptySource || input->Kind == EOperator::Source) {
+        auto newStageId = props.StageGraph.AddStage();
+        input->Props.StageId = newStageId;
+        YQL_CLOG(TRACE, CoreDq) << "Assign stages source";
+
+    }
+
+    else if (input->Kind == EOperator::Join) {
+        auto join = CastOperator<TOpJoin>(input);
+        auto leftStage = join->GetLeftInput()->Props.StageId;
+        auto rightStage = join->GetRightInput()->Props.StageId;
+
+        auto newStageId = props.StageGraph.AddStage();
+        join->Props.StageId = newStageId;
+
+        props.StageGraph.Connect(*leftStage, newStageId, "Shuffle");
+        props.StageGraph.Connect(*rightStage, newStageId, "Shuffle");
+        YQL_CLOG(TRACE, CoreDq) << "Assign stages join";
+    }
+    else if (input->Kind == EOperator::Filter || input->Kind == EOperator::Map || input->Kind == EOperator::Limit) {
+        input->Props.StageId = input->Children[0]->Props.StageId;
+        YQL_CLOG(TRACE, CoreDq) << "Assign stages rest";
+    }
+    else {
+        Y_ENSURE(true, "Unknown operator encountered");
+    }
+
+    return true;
+}
+
+TRuleBasedStage RuleStage1 = TRuleBasedStage({std::make_shared<TPushFilterRule>()}, true);
+TRuleBasedStage RuleStage2 = TRuleBasedStage({std::make_shared<TAssignStagesRule>()}, false);
 
 }
 }

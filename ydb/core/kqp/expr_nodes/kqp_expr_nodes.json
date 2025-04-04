@@ -738,7 +738,7 @@
         {
             "Name": "TKqpOpEmptySource",
             "Base": "TCallable",
-            "Match": {"Type": "Callable", "Name": "KqpOpEmpySource"}
+            "Match": {"Type": "Callable", "Name": "KqpOpEmptySource"}
         },
         {
             "Name": "TKqpOpMapElement",
@@ -779,10 +779,17 @@
             "Children": [
                 {"Index": 0, "Name": "LeftInput", "Type": "TExprBase"},
                 {"Index": 1, "Name": "RightInput", "Type": "TExprBase"},
-                {"Index": 2, "Name": "LeftLabel", "Type": "TCoAtom"},
-                {"Index": 3, "Name": "RightLabel", "Type": "TCoAtom"},
-                {"Index": 4, "Name": "JoinKind", "Type":"TCoAtom"},
-                {"Index": 5, "Name": "JoinKeys", "Type": "TDqJoinKeyTupleList"}
+                {"Index": 2, "Name": "JoinKind", "Type":"TCoAtom"},
+                {"Index": 3, "Name": "JoinKeys", "Type": "TDqJoinKeyTupleList"}
+            ]
+        },
+        {
+            "Name": "TKqpOpLimit",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "KqpOpLimit"},
+            "Children": [
+                {"Index": 0, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 1, "Name": "Count", "Type": "TExprBase"}
             ]
         },
         {

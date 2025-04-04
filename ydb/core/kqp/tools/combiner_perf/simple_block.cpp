@@ -23,10 +23,10 @@ namespace NKikimr {
 namespace NMiniKQL {
 
 template<typename K>
-void UpdateMapFromBlocks(const NUdf::TUnboxedValue& key, const NUdf::TUnboxedValue& value, std::unordered_map<K, uint64_t>& result);
+void UpdateMapFromBlocks(const NUdf::TUnboxedValue& key, const NUdf::TUnboxedValue& value, std::unordered_map<K, ui64>& result);
 
 template<>
-void UpdateMapFromBlocks(const NUdf::TUnboxedValue& key, const NUdf::TUnboxedValue& value, std::unordered_map<uint64_t, uint64_t>& result)
+void UpdateMapFromBlocks(const NUdf::TUnboxedValue& key, const NUdf::TUnboxedValue& value, std::unordered_map<ui64, ui64>& result)
 {
     auto datumKey = TArrowBlock::From(key).GetDatum();
     auto datumValue = TArrowBlock::From(value).GetDatum();
@@ -46,7 +46,7 @@ void UpdateMapFromBlocks(const NUdf::TUnboxedValue& key, const NUdf::TUnboxedVal
 }
 
 template<>
-void UpdateMapFromBlocks(const NUdf::TUnboxedValue& key, const NUdf::TUnboxedValue& value, std::unordered_map<std::string, uint64_t>& result)
+void UpdateMapFromBlocks(const NUdf::TUnboxedValue& key, const NUdf::TUnboxedValue& value, std::unordered_map<std::string, ui64>& result)
 {
     auto datumKey = TArrowBlock::From(key).GetDatum();
     auto datumValue = TArrowBlock::From(value).GetDatum();
@@ -125,7 +125,7 @@ void RunTestBlockCombineHashedSimple(const TRunParams& params, TTestResultCollec
     const auto graph = setup.BuildGraph(pgmReturn, {streamCallable});
 
     auto streamMaker = [&]() -> auto {
-        return std::unique_ptr<TBlockKVStream<std::string, uint64_t>>(new TBlockKVStream<std::string, uint64_t>(
+        return std::unique_ptr<TBlockKVStream<std::string, ui64>>(new TBlockKVStream<std::string, ui64>(
             graph->GetContext(),
             samples,
             params.NumRuns,
@@ -135,7 +135,7 @@ void RunTestBlockCombineHashedSimple(const TRunParams& params, TTestResultCollec
     };
 
     // Compute results directly from raw samples to test the input stream implementation
-    std::unordered_map<std::string, uint64_t> rawResult;
+    std::unordered_map<std::string, ui64> rawResult;
     for (const auto& tuple : samples) {
         rawResult[tuple.first] += (tuple.second * params.NumRuns);
     }
@@ -151,7 +151,7 @@ void RunTestBlockCombineHashedSimple(const TRunParams& params, TTestResultCollec
     const auto devnullTime = TInstant::Now() - devnullStart;
 
     // Reference implementation (sum via an std::unordered_map)
-    std::unordered_map<std::string, uint64_t> refResult;
+    std::unordered_map<std::string, ui64> refResult;
     const auto refStream = streamMaker();
     const auto cppStart = TInstant::Now();
     CalcRefResult(refStream, refResult);
@@ -176,7 +176,7 @@ void RunTestBlockCombineHashedSimple(const TRunParams& params, TTestResultCollec
     Cerr << "Result block count: " << numResultItems << Endl;
 
     // Verification
-    std::unordered_map<std::string, uint64_t> graphResult;
+    std::unordered_map<std::string, ui64> graphResult;
 
     const auto ptr = resultList.GetElements();
     for (size_t i = 0ULL; i < numResultItems; ++i) {

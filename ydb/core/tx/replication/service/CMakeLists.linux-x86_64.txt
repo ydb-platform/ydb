@@ -22,7 +22,6 @@ get_built_tool_path(
 add_subdirectory(ut_json_change_record)
 add_subdirectory(ut_table_writer)
 add_subdirectory(ut_topic_reader)
-add_subdirectory(ut_transfer_writer)
 add_subdirectory(ut_worker)
 
 add_library(tx-replication-service)
@@ -60,7 +59,6 @@ target_sources(tx-replication-service PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/service/service.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/service/table_writer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/service/topic_reader.cpp
-  ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/service/transfer_writer.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/tx/replication/service/worker.cpp
 )
 

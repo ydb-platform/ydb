@@ -164,11 +164,18 @@ struct MainTestCase {
         Driver.Stop(true);
     }
 
-    void ExecuteDDL(const TString& ddl, bool checkResult = true) {
+    void ExecuteDDL(const TString& ddl, bool checkResult = true, const TString& expectedMessage = "") {
         Cerr << "DDL: " << ddl << Endl << Flush;
         auto res = Session.ExecuteQuery(ddl, TTxControl::NoTx()).GetValueSync();
         if (checkResult) {
-            UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            if (expectedMessage) {
+                UNIT_ASSERT(!res.IsSuccess());
+                Cerr << ">>>>> ACTUAL: " << res.GetIssues().ToOneLineString() << Endl << Flush;
+                Cerr << ">>>>> EXPECTED: " << expectedMessage << Endl << Flush;
+                UNIT_ASSERT(res.GetIssues().ToOneLineString().contains(expectedMessage));
+            } else {
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            }
         }
     }
 

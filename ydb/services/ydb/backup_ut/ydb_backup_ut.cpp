@@ -33,6 +33,7 @@
 using namespace NYdb;
 using namespace NYdb::NOperation;
 using namespace NYdb::NRateLimiter;
+using namespace NYdb::NReplication;
 using namespace NYdb::NScheme;
 using namespace NYdb::NTable;
 using namespace NYdb::NView;
@@ -1054,7 +1055,7 @@ void TestCoordinationNodeResourcesArePreserved(
     }
 }
 
-void WaitReplicationInit(NReplication::TReplicationClient& client, const TString& path) {
+void WaitReplicationInit(TReplicationClient& client, const TString& path) {
     int retry = 0;
     do {
         auto result = client.DescribeReplication(path).ExtractValueSync();
@@ -1071,7 +1072,7 @@ void WaitReplicationInit(NReplication::TReplicationClient& client, const TString
 void TestReplicationSettingsArePreserved(
         const TString& endpoint,
         NQuery::TSession& session,
-        NReplication::TReplicationClient& client,
+        TReplicationClient& client,
         TBackupFunction&& backup,
         TRestoreFunction&& restore)
 {
@@ -1629,7 +1630,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
-        NReplication::TReplicationClient replicationClient(driver);
+        TReplicationClient replicationClient(driver);
 
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();
@@ -1649,7 +1650,7 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
         NQuery::TQueryClient queryClient(driver);
         auto session = queryClient.GetSession().ExtractValueSync().GetSession();
-        NReplication::TReplicationClient replicationClient(driver);
+        TReplicationClient replicationClient(driver);
 
         TTempDir tempDir;
         const auto& pathToBackup = tempDir.Path();

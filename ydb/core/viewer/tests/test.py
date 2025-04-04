@@ -695,23 +695,16 @@ def test_topic_data():
 def test_transfer_describe():
     grpc_port = cluster.nodes[1].grpc_port
     endpoint = "grpc://localhost:{}/?database={}".format(grpc_port, dedicated_db)
-    lambd = "($x) -> { RETURN <|Id:$x._offset|>; }"
 
     call_viewer("/viewer/query", {
         'database': dedicated_db,
-        'query': 'CREATE TABLE `TransferTargetTable` ( `Id` Uint64 NOT NULL PRIMARY KEY (Id)) WITH (STORE = COLUMN)',
-        'schema': 'multi'
-    })
-
-    call_viewer("/viewer/query", {
-        'database': dedicated_db,
-        'query': 'CREATE TRANSFER `TestTransfer` FROM `TopicNotExists` TO `Table` USING {} WITH (CONNECTION_STRING = "{}")'.format(lambd, endpoint),
+        'query': 'CREATE ASYNC REPLICATION `TestAsyncReplication` FOR `TableNotExists` AS `TargetAsyncReplicationTable` WITH (CONNECTION_STRING = "{}")'.format(endpoint),
         'schema': 'multi'
     })
 
     result = get_viewer_normalized("/viewer/describe_replication", {
         'database': dedicated_db,
-        'path': '{}/TestTransfer'.format(dedicated_db),
+        'path': '{}/TestAsyncReplication'.format(dedicated_db),
         'include_stats': 'true',
         'enums': 'true'
     })

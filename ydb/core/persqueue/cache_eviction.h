@@ -6,6 +6,7 @@
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/persqueue/events/internal.h>
 #include <ydb/core/persqueue/map_subrange.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
     struct TBlobId {
@@ -106,7 +107,8 @@ namespace NKikimr::NPQ {
             for (auto& blob : Blobs) {
                 if (blob.Value.empty()) {
                     // add reading command
-                    auto key = TKey::ForBody(TKeyPrefix::TypeData, Partition, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount);
+                    //auto key = TKey::ForBody(TKeyPrefix::TypeData, Partition, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount);
+                    const auto& key = blob.Key;
                     auto read = request->Record.AddCmdRead();
                     read->SetKey(key.Data(), key.Size());
                 }

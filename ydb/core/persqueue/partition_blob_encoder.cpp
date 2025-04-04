@@ -1,5 +1,6 @@
 #include "partition_blob_encoder.h"
 #include "partition_util.h"
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr::NPQ {
 
@@ -31,7 +32,11 @@ void TPartitionBlobEncoder::CheckHeadConsistency(const TVector<ui32>& compactLev
         Y_ABORT_UNLESS(s < DataKeysHead[j].Border());
     }
     Y_ABORT_UNLESS(DataKeysBody.empty() ||
-             Head.Offset >= DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount());
+                   Head.Offset >= DataKeysBody.back().Key.GetOffset() + DataKeysBody.back().Key.GetCount(),
+                   "DataKeysBody.size=%" PRISZT ", lastKey=%s, head.offset=%" PRIu64,
+                   DataKeysBody.size(),
+                   DataKeysBody.back().Key.ToString().data(),
+                   Head.Offset);
     Y_ABORT_UNLESS(p == HeadKeys.size());
     if (!HeadKeys.empty()) {
         Y_ABORT_UNLESS(HeadKeys.size() <= totalMaxCount);
@@ -203,7 +208,13 @@ ui64 TPartitionBlobEncoder::GetSizeLag(i64 offset) const
             --it; //point to blob with this offset
         Y_ABORT_UNLESS(it != DataKeysBody.end());
         sizeLag = it->Size + DataKeysBody.back().CumulativeSize - it->CumulativeSize;
-        Y_ABORT_UNLESS(BodySize == DataKeysBody.back().CumulativeSize + DataKeysBody.back().Size - DataKeysBody.front().CumulativeSize);
+        Y_ABORT_UNLESS(BodySize == DataKeysBody.back().CumulativeSize + DataKeysBody.back().Size - DataKeysBody.front().CumulativeSize,
+                       "BodySize=%" PRIu64
+                       ", DataKeysBody.back.CumulativeSize=%" PRIu64 ", DataKeysBody.back.Size=%" PRIu64
+                       ", DataKeysBody.front.CumulativeSize=%" PRIu64,
+                       BodySize,
+                       DataKeysBody.back().CumulativeSize, DataKeysBody.back().Size,
+                       DataKeysBody.front().CumulativeSize);
     }
     for (const auto& b : HeadKeys) {
         if ((i64)b.Key.GetOffset() >= offset)
@@ -238,11 +249,6 @@ const TDataKey* TPartitionBlobEncoder::GetLastKey() const
     return lastKey;
 }
 
-bool TPartitionBlobEncoder::IsNothingWritten() const
-{
-    return CompactedKeys.empty() && (NewHead.PackedSize == 0);
-}
-
 TString TPartitionBlobEncoder::SerializeForKey(const TKey& key, ui32 size,
                                                ui64 endOffset,
                                                TInstant& writeTimestamp) const
@@ -265,7 +271,9 @@ TString TPartitionBlobEncoder::SerializeForKey(const TKey& key, ui32 size,
     }
 
     for (const auto& b : NewHead.GetBatches()) {
-        Y_ABORT_UNLESS(b.Packed);
+        Y_ABORT_UNLESS(b.Packed,
+                       "key=%s",
+                       key.ToString().data());
         b.SerializeTo(valueD);
         writeTimestamp = std::max(writeTimestamp, b.GetEndWriteTimestamp());
     }
@@ -300,14 +308,19 @@ TString TPartitionBlobEncoder::SerializeForKey(const TKey& key, ui32 size,
     return valueD;
 }
 
-TKey TPartitionBlobEncoder::KeyFor(TKeyPrefix::EType type,
-                                   const TPartitionId& partitionId,
-                                   bool needCompaction) const
+TKey TPartitionBlobEncoder::KeyForWrite(TKeyPrefix::EType type,
+                                        const TPartitionId& partitionId,
+                                        bool needCompaction) const
 {
     if (needCompaction) {
         return TKey::ForBody(type, partitionId, NewHead.Offset, NewHead.PartNo, NewHead.GetCount(), NewHead.GetInternalPartsCount());
     }
     return TKey::ForHead(type, partitionId, NewHead.Offset, NewHead.PartNo, NewHead.GetCount(), NewHead.GetInternalPartsCount());
+}
+
+TKey TPartitionBlobEncoder::KeyForFastWrite(TKeyPrefix::EType type, const TPartitionId& partitionId) const
+{
+    return TKey::ForFastWrite(type, partitionId, NewHead.Offset, NewHead.PartNo, NewHead.GetCount(), NewHead.GetInternalPartsCount());
 }
 
 void TPartitionBlobEncoder::NewPartitionedBlob(const TPartitionId& partitionId,
@@ -445,10 +458,51 @@ void TPartitionBlobEncoder::SyncHead(ui64& startOffset, ui64& endOffset)
     endOffset = Head.GetNextOffset();
 }
 
+void TPartitionBlobEncoder::SyncHeadFastWrite(ui64& startOffset, ui64& endOffset)
+{
+    Y_ABORT_UNLESS(Head.PackedSize == 0,
+                   "Head.PackedSize=%" PRIu32, Head.PackedSize);
+
+    // если это первая запись
+    if (NewHead.PackedSize > 0 && DataKeysBody.empty()) {
+        Y_ABORT_UNLESS(Head.Offset == NewHead.Offset);
+        Y_ABORT_UNLESS(Head.PartNo == NewHead.PartNo);
+
+        startOffset = NewHead.Offset + (NewHead.PartNo > 0 ? 1 : 0);
+    }
+
+    // перенести всё записанное из головы в тело
+    for (auto& k : HeadKeys) {
+        BodySize += k.Size;
+        k.CumulativeSize = DataKeysBody.empty() ? 0 : (DataKeysBody.back().CumulativeSize + DataKeysBody.back().Size);
+        DataKeysBody.push_back(std::move(k));
+    }
+    HeadKeys.clear();
+
+    // мы только что записали, в теле должно что-то быть
+    Y_ABORT_UNLESS(!DataKeysBody.empty());
+
+    endOffset = NewHead.GetNextOffset();
+
+    // в случае быстрой записи голова пустая
+    Head.Clear();
+    Head.Offset = endOffset;
+
+    // уровни для упаковки тоже надо почистить
+    for (ui32 i = 0; i < DataKeysHead.size(); ++i) {
+        DataKeysHead[i].Clear();
+    }
+}
+
 void TPartitionBlobEncoder::ResetNewHead(ui64 endOffset)
 {
     NewHead.Clear();
     NewHead.Offset = endOffset;
+}
+
+bool TPartitionBlobEncoder::IsNothingWritten() const
+{
+    return CompactedKeys.empty() && (NewHead.PackedSize == 0);
 }
 
 bool TPartitionBlobEncoder::IsLastBatchPacked() const

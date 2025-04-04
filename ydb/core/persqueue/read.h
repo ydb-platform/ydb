@@ -6,6 +6,7 @@
 
 #include <ydb/core/keyvalue/keyvalue_flat_impl.h>
 #include <ydb/core/persqueue/events/internal.h>
+#include <ydb/library/dbgtrace/debug_trace.h>
 
 namespace NKikimr {
 namespace NPQ {
@@ -249,11 +250,20 @@ namespace NPQ {
 
             auto response = MakeHolder<TEvKeyValue::TEvResponse>();
             response->Record = std::move(resp);
-            response->Record.ClearCookie(); //cookie must not leak to Partition - it uses cookie for SetOffset requests
+            if (kvReq.CookiePQ == Max<ui64>()) {
+                response->Record.ClearCookie(); //cookie must not leak to Partition - it uses cookie for SetOffset requests
+            } else {
+                response->Record.SetCookie(kvReq.CookiePQ);
+            }
 
             ctx.Send(kvReq.Sender, response.Release()); // -> Partition
 
             UpdateCounters(ctx);
+        }
+
+        static ui64 GetKeyValueRequestCookie(const NKikimrClient::TKeyValueRequest& request)
+        {
+            return request.HasCookie() ? request.GetCookie() : Max<ui64>();
         }
 
         // Passthrough request to KV
@@ -263,7 +273,7 @@ namespace NPQ {
 
             auto& srcRequest = ev->Get()->Record;
 
-            TKvRequest kvReq(TKvRequest::TypeWrite, ev->Sender, Max<ui64>(), TPartitionId(Max<ui32>()));
+            TKvRequest kvReq(TKvRequest::TypeWrite, ev->Sender, GetKeyValueRequestCookie(srcRequest), TPartitionId(Max<ui32>()));
 
             SaveCmdWrite(srcRequest, kvReq, ctx);
             SaveCmdRename(srcRequest, kvReq, ctx);

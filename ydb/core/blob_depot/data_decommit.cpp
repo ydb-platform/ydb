@@ -33,6 +33,8 @@ namespace NKikimr::NBlobDepot {
 
         bool Finished = false;
 
+        std::vector<TAssimilatedBlobInfo> AssimilatedBlobs;
+
     public:
         TResolveDecommitActor(TBlobDepot *self, TEvBlobDepot::TEvResolve::TPtr ev)
             : Self(self)
@@ -189,7 +191,6 @@ namespace NKikimr::NBlobDepot {
 
             Y_ABORT_UNLESS(RangesInFlight);
             --RangesInFlight;
-            CheckIfDone();
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -238,9 +239,7 @@ namespace NKikimr::NBlobDepot {
                         DecommitBlobs.push_back({r.Id, r.Keep, r.DoNotKeep});
                     }
                 } else if (r.Status == NKikimrProto::NODATA) {
-                    Self->Data->ExecuteTxCommitAssimilatedBlob(NKikimrProto::NODATA, TBlobSeqId(), TData::TKey(r.Id),
-                        TEvPrivate::EvTxComplete, SelfId(), 0);
-                    ++TxInFlight;
+                    AssimilatedBlobs.push_back({TData::TKey(r.Id), TAssimilatedBlobInfo::TDrop{}});
                 } else {
                     // mark this specific key as unresolvable
                     ResolutionErrors.emplace(r.Id);
@@ -251,9 +250,7 @@ namespace NKikimr::NBlobDepot {
             Y_ABORT_UNLESS(GetBytesInFlight >= ev->Cookie);
             --GetsInFlight;
             GetBytesInFlight -= ev->Cookie;
-
             ProcessGetQueue();
-            CheckIfDone();
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -298,14 +295,13 @@ namespace NKikimr::NBlobDepot {
 
             if (msg.Status != NKikimrProto::OK) { // do not reply OK to this item
                 ResolutionErrors.insert(key.GetBlobId());
+            } else {
+                AssimilatedBlobs.push_back({std::move(key), TAssimilatedBlobInfo::TUpdate{
+                    TBlobSeqId::FromLogoBlobId(msg.Id), keep, doNotKeep}});
             }
 
             Y_ABORT_UNLESS(PutsInFlight);
             --PutsInFlight;
-
-            Self->Data->ExecuteTxCommitAssimilatedBlob(msg.Status, TBlobSeqId::FromLogoBlobId(msg.Id), std::move(key),
-                TEvPrivate::EvTxComplete, SelfId(), 0, keep, doNotKeep);
-            ++TxInFlight;
         }
 
         void HandleTxComplete() {
@@ -315,11 +311,17 @@ namespace NKikimr::NBlobDepot {
 
             Y_ABORT_UNLESS(TxInFlight);
             --TxInFlight;
-            CheckIfDone();
         }
 
         void CheckIfDone() {
             if (TxInFlight + RangesInFlight + GetsInFlight + GetQ.size() + PutsInFlight != 0) {
+                return;
+            }
+
+            if (!AssimilatedBlobs.empty()) {
+                Self->Data->ExecuteTxCommitAssimilatedBlob(std::exchange(AssimilatedBlobs, {}), TEvPrivate::EvTxComplete,
+                    SelfId(), 0);
+                ++TxInFlight;
                 return;
             }
 
@@ -377,6 +379,8 @@ namespace NKikimr::NBlobDepot {
                     STLOG(PRI_CRIT, BLOB_DEPOT, BDT90, "unexpected event", (Id, Self->GetLogId()), (Type, type));
                     break;
             }
+
+            CheckIfDone();
         }
     };
 

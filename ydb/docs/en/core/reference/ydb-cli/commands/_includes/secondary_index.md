@@ -89,9 +89,9 @@ Deleting the index-building details (use the actual operation id):
 {{ ydb-cli }} -p quickstart operation forget ydb://buildindex/7?id=2814749869
 ```
 
-## Deleting a secondary index {#drop}
+## Deleting a index {#drop}
 
-Secondary indexes are deleted by the `table index drop` command:
+Indexes are deleted by the `table index drop` command:
 
 ```bash
 {{ ydb-cli }} [connection options] table index drop <table> --index-name STR

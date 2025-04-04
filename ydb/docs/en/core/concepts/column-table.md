@@ -22,6 +22,7 @@ What's currently not supported:
 
 * Reading data from replicas
 * Secondary indexes
+* Vector indexes
 * Bloom filters
 * Change Data Capture
 * Renaming tables

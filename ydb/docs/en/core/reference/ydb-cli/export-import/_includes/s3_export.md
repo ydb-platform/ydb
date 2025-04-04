@@ -13,6 +13,7 @@ The export feature is available only for objects of the following types:
 - [Directory](../../../../concepts/datamodel/dir.md)
 - [Row-oriented table](../../../../concepts/datamodel/table.md#row-oriented-tables)
 - [Secondary index](../../../../concepts/secondary_indexes.md)
+- [Vector index](../../../../concepts/vector_indexes.md)
 
 {% endnote %}
 

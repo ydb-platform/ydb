@@ -326,36 +326,7 @@ public:
         }
     };
 
-    class TCommandOptsParseResult: public NLastGetopt::TOptsParseResult {
-    public:
-        TCommandOptsParseResult(const NLastGetopt::TOpts* options, int argc, const char* argv[]) {
-            Init(options, argc, argv);
-        }
-        TCommandOptsParseResult(const NLastGetopt::TOpts* options, int argc, char* argv[]) {
-            Init(options, argc, const_cast<const char**>(argv));
-        }
-        virtual ~TCommandOptsParseResult() = default;
-
-        void HandleError() const override {
-            if (ThrowOnParseError) {
-                throw;
-            }
-            NLastGetopt::TOptsParseResult::HandleError();
-        }
-
-    protected:
-        TCommandOptsParseResult() = default;
-
-        void Init(const NLastGetopt::TOpts* options, int argc, const char* argv[]) {
-            ThrowOnParseError = options->HasLongOption("throw-on-parse-error");
-            NLastGetopt::TOptsParseResult::Init(options, argc, argv);
-        }
-
-    private:
-        bool ThrowOnParseError = false;
-    };
-
-    class TOptsParseOneLevelResult : public TCommandOptsParseResult {
+    class TOptsParseOneLevelResult : public NLastGetopt::TOptsParseResult {
     public:
         TOptsParseOneLevelResult(TConfig& config);
     };

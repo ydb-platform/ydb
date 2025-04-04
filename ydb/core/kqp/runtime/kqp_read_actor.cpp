@@ -838,7 +838,11 @@ public:
         record.MutableTableId()->SetTableId(Settings->GetTable().GetTableId().GetTableId());
         record.MutableTableId()->SetSchemaVersion(Settings->GetTable().GetSchemaVersion());
 
-        record.SetReverse(Settings->GetReverse());
+        if (Settings->HasOptionalSorting()) {
+            record.SetReverse(Settings->GetOptionalSorting() == (ui32)ERequestSorting::DESC);
+        } else {
+            record.SetReverse(Settings->GetReverse());
+        }
         if (limit) {
             record.SetMaxRows(*limit);
             record.SetTotalRowsLimit(*limit);

@@ -108,7 +108,8 @@ Maximum CPU time:
 * `top_queries_by_cpu_time_one_minute`: Data is split into one-minute intervals, contains the history for the last 6 hours;
 * `top_queries_by_cpu_time_one_hour`: Data is split into one-hour intervals, contains the history for the last 2 weeks.
 
-Different runs of a query with the same text are deduplicated. The query with the maximum value of the corresponding metric is included in the output. There are top 5 unique queries for each time interval.
+Different runs of a query with the same text are deduplicated. The query with the maximum value of the corresponding metric is included in the output.
+Each time interval (minute or hour) contains the TOP 5 queries completed in that time interval.
 
 Fields that provide information about the used CPU time (...`CPUTime`) are expressed in microseconds.
 

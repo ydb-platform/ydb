@@ -1131,8 +1131,13 @@ protected:
             }
             case EEvWakeupTag::PeriodicStatsTag: {
                 const auto maxInterval = RuntimeSettings.ReportStatsSettings->MaxInterval;
-                if (Running && ProcessOutputsState.LastRunStatus != ERunStatus::Finished) {
-                    DoExecute();
+                if (Running && State == NDqProto::COMPUTE_STATE_EXECUTING) {
+                    if (ProcessOutputsState.LastRunStatus == ERunStatus::Finished) {
+                        // wait until all outputs are drained
+                        ReportStats();
+                    } else {
+                        DoExecute();
+                    }
                     this->Schedule(maxInterval, new NActors::TEvents::TEvWakeup(EEvWakeupTag::PeriodicStatsTag));
                 }
                 break;
@@ -1777,7 +1782,15 @@ public:
                     source->FillExtraStats(protoTask, last, GetMeteringStats());
                 }
             }
+
             FillTaskRunnerStats(Task.GetId(), Task.GetStageId(), *taskStats, protoTask, RuntimeSettings.GetCollectStatsLevel());
+            // when TR finished, use channels to detect output back pressure
+            if (taskStats->FinishTs && State != NDqProto::COMPUTE_STATE_FINISHED) {
+                auto lastOutputTime = Channels->GetLastOutputMessageTime();
+                if (lastOutputTime) {
+                    protoTask->SetCurrentWaitOutputTimeUs((TInstant::Now() - lastOutputTime).MicroSeconds());
+                }
+            }
 
             auto cpuTimeUs = taskStats->ComputeCpuTime.MicroSeconds() + taskStats->BuildCpuTime.MicroSeconds();
             if (TDerived::HasAsyncTaskRunner) {
@@ -1988,10 +2001,9 @@ public:
 protected:
     void ReportStats() {
         auto now = TInstant::Now();
-        if (!RuntimeSettings.ReportStatsSettings || now - LastSendStatsTime < RuntimeSettings.ReportStatsSettings->MinInterval) {
+        if (State != NDqProto::COMPUTE_STATE_EXECUTING || !RuntimeSettings.ReportStatsSettings || now - LastSendStatsTime < RuntimeSettings.ReportStatsSettings->MinInterval) {
             return;
         }
-
         auto evState = std::make_unique<TEvDqCompute::TEvState>();
         evState->Record.SetState(NDqProto::COMPUTE_STATE_EXECUTING);
         evState->Record.SetTaskId(Task.GetId());

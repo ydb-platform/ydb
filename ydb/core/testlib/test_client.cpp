@@ -958,8 +958,8 @@ namespace Tests {
             if (storagePool.GetNumGroups() > 0) {
                 auto* command = bsConfigureRequest->Record.MutableRequest()->AddCommand()->MutableDefineStoragePool();
                 command->CopyFrom(storagePool);
-                const auto poolGeneratonIt = poolsConfigGenerations.find(storagePool.GetName());
-                command->SetItemConfigGeneration(poolGeneratonIt == poolsConfigGenerations.end() ? Settings->StorageGeneration : poolGeneratonIt->second);
+                const auto poolGenerationIt = poolsConfigGenerations.find(storagePool.GetName());
+                command->SetItemConfigGeneration(poolGenerationIt == poolsConfigGenerations.end() ? Settings->StorageGeneration : poolGenerationIt->second);
             }
         }
 

@@ -49,6 +49,8 @@ public:
             VisitPragmaStmt(dynamic_cast<const TRule_pragma_stmt&>(msg));
         } else if (descr == TRule_into_simple_table_ref::GetDescriptor()) {
             VisitInsertTableRef(dynamic_cast<const TRule_into_simple_table_ref&>(msg));
+        } else if (descr == TRule_table_ref::GetDescriptor()) {
+            VisitReadTableRef(dynamic_cast<const TRule_table_ref&>(msg));
         }
 
         TStringBuf fullName = descr->full_name();
@@ -118,28 +120,38 @@ private:
         }
     }
 
+    void VisitHints(const TRule_table_hints& msg, const TString& parent) {
+        auto& block = msg.GetBlock2();
+        switch (block.Alt_case()) {
+        case TRule_table_hints::TBlock2::kAlt1: {
+            VisitHint(block.GetAlt1().GetRule_table_hint1(), parent);
+            break;
+        }
+        case TRule_table_hints::TBlock2::kAlt2: {
+            VisitHint(block.GetAlt2().GetRule_table_hint2(), parent);
+            for (const auto& x : block.GetAlt2().GetBlock3()) {
+                VisitHint(x.GetRule_table_hint2(), parent);
+            }
+
+            break;
+        }
+        case TRule_table_hints::TBlock2::ALT_NOT_SET:
+            return;
+        }
+    }
+
+    void VisitReadTableRef(const TRule_table_ref& msg) {
+        if (msg.HasBlock4()) {
+            const auto& hints = msg.GetBlock4().GetRule_table_hints1();
+            VisitHints(hints, "READ_HINT");
+        }
+    }
+
     void VisitInsertTableRef(const TRule_into_simple_table_ref& msg) {
-        const TString parent = "INSERT_HINT";
         const auto& tableRef = msg.GetRule_simple_table_ref1();
         if (tableRef.HasBlock2()) {
             const auto& hints = tableRef.GetBlock2().GetRule_table_hints1();
-            auto& block = hints.GetBlock2();
-            switch (block.Alt_case()) {
-            case TRule_table_hints::TBlock2::kAlt1: {
-                VisitHint(block.GetAlt1().GetRule_table_hint1(), parent);
-                break;
-            }
-            case TRule_table_hints::TBlock2::kAlt2: {
-                VisitHint(block.GetAlt2().GetRule_table_hint2(), parent);
-                for (const auto& x : block.GetAlt2().GetBlock3()) {
-                    VisitHint(x.GetRule_table_hint2(), parent);
-                }
-
-                break;
-            }
-            case TRule_table_hints::TBlock2::ALT_NOT_SET:
-                return;
-            }
+            VisitHints(hints, "INSERT_HINT");
         }
     }
 

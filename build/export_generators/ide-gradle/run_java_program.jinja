@@ -34,7 +34,7 @@ val runJav{{ loop.index }} = task<JavaExec>("runJavaProgram{{ loop.index }}") {
 {%-                        else %}
         {{ PatchRoots(arg, false, true) }},
 {%-                        endif %}
-{%-                    elif run.tool|select("in", arg)|length or run.in|select("eq", arg)|length or run.in_dir|select("eq", arg)|length %}
+{%-                    elif run.tool|select("in", arg)|length %}
         {{ PatchRoots(arg, true) }},
 {%-                    else %}
         {{ PatchRoots(arg) }},
@@ -88,27 +88,6 @@ val runJav{{ loop.index }} = task<JavaExec>("runJavaProgram{{ loop.index }}") {
     run-tool="list"
 #}
 }
-
-{%- if proto_template %}
-
-tasks.getByName("prepareMainProtos").dependsOn(runJav{{ loop.index }})
-{%- endif %}
-
-tasks.compileJava.configure {
-    dependsOn(runJav{{ loop.index }})
-}
-tasks.compileTestJava.configure {
-    dependsOn(runJav{{ loop.index }})
-}
-{%-        if with_kotlin %}
-
-tasks.compileKotlin.configure {
-    dependsOn(runJav{{ loop.index }})
-}
-
-tasks.compileTestKotlin.configure {
-    dependsOn(runJav{{ loop.index }})
-}
-{%-        endif -%}
+{{ Depends("runJav", loop.index) }}
 {%-     endfor -%}
 {%- endif -%}

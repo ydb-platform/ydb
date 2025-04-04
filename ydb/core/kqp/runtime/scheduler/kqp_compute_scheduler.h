@@ -27,8 +27,7 @@ struct TSchedulerEntity {
     TDuration MaxDelay;
 
     static constexpr double WakeupDelay = 1.1;
-    static constexpr double BatchCalcDecay = 0;
-    TDuration BatchTime;
+    TDuration LastExecutionTime;
 
     TDuration OverflowToleranceTimeout = TDuration::Seconds(1);
 
@@ -38,7 +37,7 @@ struct TSchedulerEntity {
     bool IsThrottled = false;
 
     void TrackTime(TDuration time, TMonotonic);
-    void UpdateBatchTime(TDuration time);
+    void UpdateLastExecutionTime(TDuration time);
 
     TMaybe<TDuration> Delay(TMonotonic now, TPool* pool);
     TMaybe<TDuration> Delay(TMonotonic now);
@@ -225,7 +224,7 @@ protected:
                 return;
             }
             TrackedWork += passed;
-            SelfHandle->UpdateBatchTime(passed);
+            SelfHandle->UpdateLastExecutionTime(passed);
             SelfHandle->TrackTime(passed, now);
             PoolUsage->Add(passed.MicroSeconds());
             Counters->ComputeActorExecutions->Collect(passed.MicroSeconds());

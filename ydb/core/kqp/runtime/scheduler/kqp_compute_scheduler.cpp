@@ -377,7 +377,7 @@ private:
 
 TSchedulerEntity::TSchedulerEntity(TPool* pool)
     : Pool(pool)
-    , BatchTime(AvgBatch)
+    , LastExecutionTime(AvgBatch)
 {
     ++Pool->EntitiesCount;
 }
@@ -390,15 +390,16 @@ void TSchedulerEntity::TrackTime(TDuration time, TMonotonic) {
     Pool->TrackedMicroSeconds.fetch_add(time.MicroSeconds());
 }
 
-void TSchedulerEntity::UpdateBatchTime(TDuration time) {
+void TSchedulerEntity::UpdateLastExecutionTime(TDuration time) {
     Wakeups = 0;
-    auto newBatch = BatchTime * BatchCalcDecay + time * (1 - BatchCalcDecay);
     if (IsThrottled) {
+        // TODO: how is it possible to have execution time while being throttled?
+        // resume-throttle is for proper update of |DelayedSumBatches|
         MarkResumed();
-        BatchTime = newBatch;
+        LastExecutionTime = time;
         MarkThrottled();
     } else {
-        BatchTime = newBatch;
+        LastExecutionTime = time;
     }
 }
 
@@ -413,7 +414,7 @@ TMaybe<TDuration> TSchedulerEntity::Delay(TMonotonic now, TPool* pool) {
             return MaxDelay;
         }
         return Min(MaxDelay, ToDuration((tracked - limit +
-                    Max<i64>(0, pool->DelayedSumBatches.load()) + BatchTime.MicroSeconds() +
+                    Max<i64>(0, pool->DelayedSumBatches.load()) + LastExecutionTime.MicroSeconds() +
                     ActivationPenalty.MicroSeconds() * (pool->DelayedCount.load() + 1) +
                     current.get()->MaxLimitDeviation) / current.get()->Capacity));
     }
@@ -432,13 +433,13 @@ TMaybe<TDuration> TSchedulerEntity::Delay(TMonotonic now) {
 
 void TSchedulerEntity::MarkThrottled() {
     IsThrottled = true;
-    Pool->DelayedSumBatches.fetch_add(BatchTime.MicroSeconds());
+    Pool->DelayedSumBatches.fetch_add(LastExecutionTime.MicroSeconds());
     Pool->DelayedCount.fetch_add(1);
 }
 
 void TSchedulerEntity::MarkResumed() {
     IsThrottled = false;
-    Pool->DelayedSumBatches.fetch_sub(BatchTime.MicroSeconds());
+    Pool->DelayedSumBatches.fetch_sub(LastExecutionTime.MicroSeconds());
     Pool->DelayedCount.fetch_sub(1);
 }
 

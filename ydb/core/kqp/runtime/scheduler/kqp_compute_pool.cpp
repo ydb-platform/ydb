@@ -49,8 +49,6 @@ bool TPool::IsDisabled() const {
 void TPool::AdvanceTime(TMonotonic now, TDuration smoothPeriod, TDuration forgetInterval) {
     MutableStats.Next()->Capacity = Share->GetValue();
 
-    // auto& v = MutableStats;
-
     auto* current = MutableStats.Current().get();
     auto* next = MutableStats.Next();
 

@@ -50,7 +50,7 @@ namespace NKikimr::NKqp::NScheduler {
             std::atomic<ui64> EntitiesCount = 0;
             std::atomic<i64> TrackedMicroSeconds = 0;
             std::atomic<i64> ThrottledMicroSeconds = 0;
-            std::atomic<i64> DelayedSumBatches = 0;
+            std::atomic<i64> DelayedSumBatches = 0; // sum of all LastExecutionTime for throttled tasks
             std::atomic<i64> DelayedCount = 0;
 
             THolder<IObservableValue<double>> Share;

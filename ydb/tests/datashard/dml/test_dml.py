@@ -1,7 +1,7 @@
 import pytest
 
 from ydb.tests.sql.lib.test_base import TestBase
-from ydb.tests.datashard.lib.create_table import create_table, create_ttl
+from ydb.tests.datashard.lib.create_table import create_table_sql_request, create_ttl_sql_request
 from ydb.tests.datashard.lib.types_of_variables import cleanup_type_name, pk_types, non_pk_types, index_first, index_second, ttl_types, \
     index_first_sync, index_second_sync, index_three_sync, index_three_sync_not_Bool, index_four_sync, index_zero_sync
 
@@ -64,12 +64,12 @@ class TestDML(TestBase):
         index_columns = {
             "col_index_": index.keys()
         }
-        sql_create_table = create_table(
+        sql_create_table = create_table_sql_request(
             table_name, columns, pk_columns, index_columns, unique, sync)
         self.query(sql_create_table)
         if ttl != "":
-            sql_ttl = create_ttl(f"ttl_{cleanup_type_name(ttl)}", {"P18262D": ""}, "SECONDS" if ttl ==
-                                 "Uint32" or ttl == "Uint64" or ttl == "DyNumber" else "", table_name)
+            sql_ttl = create_ttl_sql_request(f"ttl_{cleanup_type_name(ttl)}", {"P18262D": ""}, "SECONDS" if ttl ==
+                                             "Uint32" or ttl == "Uint64" or ttl == "DyNumber" else "", table_name)
             self.query(sql_ttl)
 
     def insert(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
@@ -369,6 +369,9 @@ class TestDML(TestBase):
             rows = self.query(sql_select)
             assert len(
                 rows) == 1 and rows[0].count == 0, f"Expected one rows, faild in {count} value, table {table_name}"
+        rows = self.query(f"SELECT COUNT(*) as count FROM `{table_name}`")
+        assert len(
+            rows) == 1 and rows[0].count == number_of_columns, f"Expected {number_of_columns} rows, after select all line"
 
     def create_delete(self, value: int, type_name: str, key: str, table_name: str):
         delete_sql = f"""

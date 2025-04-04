@@ -268,7 +268,7 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
         }
     }
     SysLogRecord = *sysLogRecord;
-    SysLogRecord.Version = PDISK_SYS_LOG_RECORD_VERSION_8;
+    SysLogRecord.Version = PDISK_SYS_LOG_RECORD_VERSION_7;
 
     // Set initial chunk owners
     // Use actual format info to set busy chunks mask
@@ -486,28 +486,6 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
                 return false;
             }
         }
-    }
-
-    TChunkTrimInfo *encryptedStateEnd = nullptr;
-    if (sysLogRecord->Version >= PDISK_SYS_LOG_RECORD_VERSION_8) {
-        Y_ABORT_UNLESS(compatibilityInfoEnd);
-        ui64 *encryptedInfoBytesPtr = (ui64*)compatibilityInfoEnd;
-        ui64 minSize = (ui64)((char*)(encryptedInfoBytesPtr + 1) - (char*)sysLogRecord);
-        Y_VERIFY_S(lastSysLogRecord.size() >= minSize,
-                "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
-
-        ui64 encryptedInfoBytes = ReadUnaligned<ui64>(encryptedInfoBytesPtr);
-        TChunkTrimInfo *encryptedState = (TChunkTrimInfo*)(encryptedInfoBytesPtr + 1);
-        encryptedStateEnd = encryptedState + encryptedInfoBytes / sizeof(TChunkTrimInfo);
-        minSize = (ui64)((char*)encryptedStateEnd - (char*)sysLogRecord);
-        Y_VERIFY_S(lastSysLogRecord.size() >= minSize,
-                "SysLogRecord is too small, minSize# " << minSize << " size# " << lastSysLogRecord.size());
-        Y_VERIFY_S(encryptedInfoBytes == 0 || encryptedInfoBytes == TChunkTrimInfo::SizeForChunkCount(chunkCount),
-                "SysLogRecord's ChunkTrimInfo has size# " << encryptedInfoBytes
-                << " different from expeceted #" << TChunkTrimInfo::SizeForChunkCount(chunkCount));
-        for (ui32 i = 0; i < chunkCount; i++) {
-            ChunkState[i].Encrypted = encryptedState[i / 8].IsChunkTrimmed(i % 8);
-        }
     } else if (!suppressCompatibilityCheck && sysLogRecord->Version != 0) {
         // Sys log is not empty, but it doesn't contain compatibility info record
         TString error;
@@ -520,6 +498,9 @@ bool TPDisk::ProcessChunk0(const NPDisk::TEvReadLogResult &readLogResult, TStrin
             return false;
         }
     }
+
+    // needed for further parsing
+    Y_UNUSED(compatibilityInfoEnd);
 
     PrintChunksDebugInfo();
     return true;
@@ -710,10 +691,8 @@ void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NW
     ui32 chunkOwnersSize = ui32(sizeof(TChunkInfo)) * chunkCount;
     // Must be ui64
     ui64 chunkIsTrimmedSize = TChunkTrimInfo::SizeForChunkCount(chunkCount);
-    ui64 chunkIsEncryptedSize = TChunkTrimInfo::SizeForChunkCount(chunkCount);
     TVector<TChunkInfo> chunkOwners(chunkCount);
     TVector<TChunkTrimInfo> chunkIsTrimmed(TChunkTrimInfo::RecordsForChunkCount(chunkCount), TChunkTrimInfo(0));
-    TVector<TChunkTrimInfo> chunkIsEncrypted(TChunkTrimInfo::RecordsForChunkCount(chunkCount), TChunkTrimInfo(0));
     const ui32 chunkStateSize = ChunkState.size();
     for (ui32 i = 0; i < std::min(64u, chunkCount); ++i) {
         chunkOwners[i].SetGenerationBit(ShredGeneration & (1ull << i));
@@ -734,9 +713,6 @@ void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NW
         } else {
             if (chunkStateSize > i && ChunkState[i].OwnerId == OwnerUnallocatedTrimmed) {
                 chunkIsTrimmed[i / 8].SetChunkTrimmed(i % 8);
-            }
-            if (chunkStateSize > i && ChunkState[i].Encrypted) {
-                chunkIsEncrypted[i / 8].SetChunkTrimmed(i % 8);
             }
             // Write OwnerUnallocated for forward compatibility
             info.OwnerId = OwnerUnallocated;
@@ -770,8 +746,7 @@ void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NW
     ui32 compatibilityInfoSize = SerializedCompatibilityInfo->size();
 
     ui32 recordSize = sizeof(TSysLogRecord) + chunkOwnersSize + sizeof(TSysLogFirstNoncesToKeep)
-        + sizeof(ui64) + chunkIsTrimmedSize + sizeof(ui32) + sizeof(ui32) + compatibilityInfoSize
-        + sizeof(ui64) + chunkIsEncryptedSize;
+        + sizeof(ui64) + chunkIsTrimmedSize + sizeof(ui32) + sizeof(ui32) + compatibilityInfoSize;
     ui64 beginSectorIdx = SysLogger->SectorIdx;
     *Mon.BandwidthPSysLogPayload += recordSize;
     *Mon.BandwidthPSysLogRecordHeader += sizeof(TFirstLogPageHeader);
@@ -785,8 +760,6 @@ void TPDisk::WriteSysLogRestorePoint(TCompletionAction *action, TReqId reqId, NW
     SysLogger->LogDataPart(&FirstLogChunkToParseCommits, sizeof(FirstLogChunkToParseCommits), reqId, traceId);
     SysLogger->LogDataPart(&compatibilityInfoSize, sizeof(compatibilityInfoSize), reqId, traceId);
     SysLogger->LogDataPart(SerializedCompatibilityInfo->data(), compatibilityInfoSize, reqId, traceId);
-    SysLogger->LogDataPart(&chunkIsEncryptedSize, sizeof(chunkIsEncryptedSize), reqId, traceId);
-    SysLogger->LogDataPart(&chunkIsEncrypted[0], chunkIsEncryptedSize, reqId, traceId);
     SysLogger->TerminateLog(reqId, traceId);
     SysLogger->Flush(reqId, traceId, action);
 
@@ -1396,7 +1369,7 @@ void TPDisk::OnLogCommitDone(TLogCommitDone &req) {
     // Decrement log chunk user counters and release unused log chunks
     TOwnerData &ownerData = OwnerData[req.OwnerId];
     ui64 currentFirstLsnToKeep = ownerData.CurrentFirstLsnToKeep;
-
+    
     auto it = LogChunks.begin();
     bool isChunkReleased = false;
     if (req.Lsn <= ownerData.LastWrittenCommitLsn) {

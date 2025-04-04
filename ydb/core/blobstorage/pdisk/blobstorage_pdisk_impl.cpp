@@ -53,7 +53,6 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
     , ExpectedSlotCount(cfg->ExpectedSlotCount)
     , UseHugePages(cfg->UseSpdkNvmeDriver)
 {
-
     SlowdownAddLatencyNs = TControlWrapper(0, 0, 100'000'000'000ll);
     EnableForsetiBinLog = TControlWrapper(0, 0, 1);
     ForsetiMinLogCostNsControl = TControlWrapper(ForsetiMinLogCostNs, 0, 100'000'000ull);
@@ -370,15 +369,6 @@ void TPDisk::ObliterateCommonLogSectorSet() {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Generic format-related calculations
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-ui32 TPDisk::GetUserAccessibleChunkSize() const {
-    return Format.GetUserAccessibleChunkSize();
-}
-
-ui32 TPDisk::GetChunkAppendBlockSize() const {
-    return Format.IsUnencryptedDataChunks() ? Format.SectorSize : Format.SectorPayloadSize();
-}
-
 ui32 TPDisk::SystemChunkSize(const TDiskFormat& format, ui32 userAccessibleChunkSizeBytes, ui32 sectorSizeBytes) const {
     ui32 usableSectorBytes = format.SectorPayloadSize();
     ui32 userSectors = (userAccessibleChunkSizeBytes + usableSectorBytes - 1) / usableSectorBytes;
@@ -822,7 +812,7 @@ bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pi
 
     TChunkState &state = ChunkState[chunkIdx];
     state.CurrentNonce = state.Nonce + (ui64)desiredSectorIdx;
-    bool encrypted = state.Encrypted;
+    bool encrypted = evChunkWrite->ChunkEncrypted;
 
     if (!encrypted) {
         Y_ABORT_UNLESS(evChunkWrite->BytesWritten == pieceShift);
@@ -852,7 +842,7 @@ bool TPDisk::ChunkWritePiece(TChunkWrite *evChunkWrite, ui32 pieceShift, ui32 pi
         } else {
             *Mon.WriteBufferCompactedTimes += 1;
             *Mon.WriteBufferCompactedBytes += size;
-            newSize = comp->CompactBuffer(chunkOffset % Format.SectorSize);
+            newSize = comp->CompactBuffer(chunkOffset % Format.SectorSize, Format.SectorSize);
             TStringStream str;
             str << "[";
             for (size_t i = 0; i < evChunkWrite->PartsPtr->Size(); ++i) {
@@ -1399,7 +1389,6 @@ TVector<TChunkIdx> TPDisk::AllocateChunkForOwner(const TRequestBase *req, const 
                 (NewOwnerId, req->Owner));
         state.OwnerId = req->Owner;
         state.CommitState = TChunkState::DATA_RESERVED;
-        state.Encrypted = !Format.IsUnencryptedDataChunks();
         Mon.UncommitedDataChunks->Inc();
     }
     return chunks;
@@ -1830,7 +1819,7 @@ void TPDisk::ReplyErrorYardInitResult(TYardInit &evYardInit, const TString &str,
         DriveModel.SeekTimeNs() / 1000ull, DriveModel.Speed(TDriveModel::OP_TYPE_READ),
         DriveModel.Speed(TDriveModel::OP_TYPE_WRITE), readBlockSize, writeBlockSize,
         DriveModel.BulkWriteBlockSize(),
-        GetUserAccessibleChunkSize(), GetChunkAppendBlockSize(), OwnerSystem, 0,
+        Format.GetUserAccessibleChunkSize(), Format.GetAppendBlockSize(), OwnerSystem, 0,
         GetStatusFlags(OwnerSystem, evYardInit.OwnerGroupType), TVector<TChunkIdx>(),
         Cfg->RetrieveDeviceType(), error.Str()));
     Mon.YardInit.CountResponse();
@@ -1882,7 +1871,7 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     THolder<NPDisk::TEvYardInitResult> result(new NPDisk::TEvYardInitResult(NKikimrProto::OK,
                 DriveModel.SeekTimeNs() / 1000ull, DriveModel.Speed(TDriveModel::OP_TYPE_READ),
                 DriveModel.Speed(TDriveModel::OP_TYPE_WRITE), readBlockSize, writeBlockSize,
-                DriveModel.BulkWriteBlockSize(), GetUserAccessibleChunkSize(), GetChunkAppendBlockSize(), owner,
+                DriveModel.BulkWriteBlockSize(), Format.GetUserAccessibleChunkSize(), Format.GetAppendBlockSize(), owner,
                 ownerRound, GetStatusFlags(OwnerSystem, evYardInit.OwnerGroupType), ownedChunks,
                 Cfg->RetrieveDeviceType(), ""));
     GetStartingPoints(owner, result->StartingPoints);
@@ -2041,7 +2030,7 @@ void TPDisk::YardInitFinish(TYardInit &evYardInit) {
         NKikimrProto::OK,
         DriveModel.SeekTimeNs() / 1000ull, DriveModel.Speed(TDriveModel::OP_TYPE_READ),
         DriveModel.Speed(TDriveModel::OP_TYPE_WRITE), readBlockSize, writeBlockSize,
-        DriveModel.BulkWriteBlockSize(), GetUserAccessibleChunkSize(), GetChunkAppendBlockSize(), owner, ownerRound,
+        DriveModel.BulkWriteBlockSize(), Format.GetUserAccessibleChunkSize(), Format.GetAppendBlockSize(), owner, ownerRound,
         GetStatusFlags(OwnerSystem, evYardInit.OwnerGroupType) | ui32(NKikimrBlobStorage::StatusNewOwner), TVector<TChunkIdx>(),
         Cfg->RetrieveDeviceType(), ""));
     GetStartingPoints(result->PDiskParams->Owner, result->StartingPoints);
@@ -3043,8 +3032,8 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             read->SetOwnerGroupType(ownerData.IsStaticGroupOwner());
             ownerData.ReadThroughput.Increment(read->Size, PCtx->ActorSystem->Timestamp());
             request->JobKind = NSchLab::JobKindRead;
-            read->ChunkEncrypted = state.Encrypted;
-            if (!state.Encrypted) {
+            read->ChunkEncrypted = !PlainDataChunk;
+            if (!read->ChunkEncrypted) {
                 read->FirstSector = read->Offset / Format.SectorSize;
                 read->LastSector = (read->Offset + read->Size + Format.SectorSize - 1) / Format.SectorSize - 1;
             }
@@ -3085,7 +3074,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
                 delete request;
                 return false;
             }
-            if (ev.Offset % GetChunkAppendBlockSize() != 0) {
+            if (ev.Offset % Format.GetAppendBlockSize() != 0) {
                 err << Sprintf("Can't write chunkIdx# %" PRIu32 " with not aligned offset# %" PRIu32 " ownerId# %"
                         PRIu32, ev.ChunkIdx, ev.Offset, (ui32)ev.Owner);
                 SendChunkWriteError(ev, err.Str(), NKikimrProto::ERROR);
@@ -3146,7 +3135,7 @@ bool TPDisk::PreprocessRequest(TRequestBase *request) {
             ev.SetOwnerGroupType(ownerData.IsStaticGroupOwner());
             ownerData.WriteThroughput.Increment(ev.TotalSize, PCtx->ActorSystem->Timestamp());
             request->JobKind = NSchLab::JobKindWrite;
-            ev.ChunkEncrypted = state.Encrypted;
+            ev.ChunkEncrypted = !PlainDataChunk;
 
             auto result = std::make_unique<TEvChunkWriteResult>(NKikimrProto::OK, ev.ChunkIdx, ev.Cookie,
                         GetStatusFlags(ev.Owner, ev.OwnerGroupType), TString());

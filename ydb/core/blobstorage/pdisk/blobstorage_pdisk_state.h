@@ -282,7 +282,6 @@ struct TChunkState {
     std::atomic<bool> IsDirty;
     ui64 CommitsInProgress;
     ui64 ShredGeneration;
-    bool Encrypted = true;
 
     TChunkState()
         : Nonce(0)

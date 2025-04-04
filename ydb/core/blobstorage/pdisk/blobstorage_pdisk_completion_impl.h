@@ -109,12 +109,13 @@ public:
         }
     }
 
-    size_t CompactBuffer(size_t tailroom) {
+    size_t CompactBuffer(size_t tailroom, size_t sectorSize) {
         size_t totalSize = tailroom;
         for (size_t i = 0; i < Parts->Size(); ++i) {
             totalSize += (*Parts)[i].second;
         }
-        totalSize = AlignUp<ui64>(totalSize, 4096);
+
+        totalSize = AlignUp<ui64>(totalSize, sectorSize);
         Buffer.emplace(totalSize);
 
         size_t written = 0;
@@ -230,24 +231,7 @@ class TCompletionChunkRead : public TCompletionAction {
     const ui64 DoubleFreeCanary;
 public:
     TCompletionChunkRead(TPDisk *pDisk, TIntrusivePtr<TChunkRead> &read, std::function<void()> onDestroy,
-            ui64 chunkNonce, NWilson::TSpan&& span)
-        : TCompletionAction()
-        , PDisk(pDisk)
-        , Read(read)
-        // 1 in PartsPending stands for the last part, so if any non-last part completes it will not lead to call of Exec()
-        , PartsPending(1)
-        , Deletes(0)
-        , OnDestroy(std::move(onDestroy))
-        , ChunkNonce(chunkNonce)
-        , Span(std::move(span))
-        , DoubleFreeCanary(ReferenceCanary)
-    {
-        size_t tailroom = AlignUp<size_t>(read->Size + read->Offset % 4096, 4096) - read->Size;
-        auto size = read->ChunkEncrypted ? read->Size : read->Size + read->Offset % 4096;
-        CommonBuffer = TBufferWithGaps(read->Offset, size, tailroom);
-        //Y_VERIFY(false);
-    }
-
+            ui64 chunkNonce, NWilson::TSpan&& span);
     void Exec(TActorSystem *actorSystem) override;
     ~TCompletionChunkRead();
     void ReplyError(TActorSystem *actorSystem, TString reason);
@@ -305,6 +289,8 @@ public:
     }
 
     TBuffer *GetBuffer();
+    void UnencryptData(TActorSystem *actorSystem);
+
     void Exec(TActorSystem *actorSystem) override;
     void Release(TActorSystem *actorSystem) override;
     virtual ~TCompletionChunkReadPart();

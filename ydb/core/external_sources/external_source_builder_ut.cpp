@@ -12,8 +12,8 @@ namespace {
 class TTestFixture : public NUnitTest::TBaseFixture {
 public:
     TTestFixture()
-    : Builder("Test")
-    , Props(*Proto.MutableProperties()->MutableProperties())
+        : Builder("Test")
+        , Props(*Proto.MutableProperties()->MutableProperties())
     {
     }
 

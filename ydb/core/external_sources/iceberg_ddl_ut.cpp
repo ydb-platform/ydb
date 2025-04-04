@@ -14,7 +14,7 @@ namespace {
 class TTestFixture : public NUnitTest::TBaseFixture {
 public: 
     TTestFixture()
-    :  Props(*Proto.MutableProperties()->MutableProperties()) 
+        : Props(*Proto.MutableProperties()->MutableProperties())
     {
         using namespace NKikimr::NExternalSource::NIceberg;
 

@@ -81,7 +81,7 @@ public:
         auto properties = proto.GetProperties().GetProperties();
         std::unordered_set<TString> validatedProperties;
 
-        for (const auto& [key, value]: properties) {
+        for (const auto& [key, value] : properties) {
             auto p = AvailableProperties_.find(key);
 
             if (AvailableProperties_.end() == p) {
@@ -97,7 +97,7 @@ public:
         }
 
         // validate properties that has been left 
-        for (const auto& [property, validator]: AvailableProperties_) {
+        for (const auto& [property, validator] : AvailableProperties_) {
             if (validatedProperties.contains(property)) {
                 continue;
             }

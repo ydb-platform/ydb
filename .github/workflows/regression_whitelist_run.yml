@@ -21,9 +21,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        branch: ${{ fromJSON('["' + (github.event_name == 'workflow_dispatch' ? inputs.branches : env.DEFAULT_BRANCHES) + '"]' | split(', ')) }}
+        branch: [ ${{ github.event_name == 'workflow_dispatch' && inputs.branches || env.DEFAULT_BRANCHES }} ]
         build_preset: ["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]
-
     with:
       test_targets: ydb/tests/sql/ ydb/tests/stress ydb/tests/functional/tpc ydb/tests/functional/benchmarks_init
       ref: ${{ matrix.branch }}

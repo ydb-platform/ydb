@@ -1,5 +1,5 @@
-#include "../kafka_transactions_coordinator.h"
-#include "../kafka_events.h"
+#include <ydb/core/kafka_proxy/kafka_transactions_coordinator.h>
+#include <ydb/core/kafka_proxy/kafka_events.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/fwd.h>
@@ -29,12 +29,12 @@ namespace {
                 Ctx->Finalize();
             }
 
-            void SaveTxnProducer(const TString& txnId, i64 producerId, i16 producerEpoch) {
+            THolder<NKafka::TEvKafka::TEvSaveTxnProducerResponse> SaveTxnProducer(const TString& txnId, i64 producerId, i16 producerEpoch) {
                 auto request = MakeHolder<NKafka::TEvKafka::TEvSaveTxnProducerRequest>(txnId, producerId, producerEpoch);
                 Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, request.Release()));
                 auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvSaveTxnProducerResponse>();
                 UNIT_ASSERT(response != nullptr);
-                UNIT_ASSERT_EQUAL(response->Status, NKafka::TEvKafka::TEvSaveTxnProducerResponse::EStatus::OK);
+                return response;
             }
 
             void SendAddPartitionsToTxnRequest(ui64 correlationId, const TString& txnId, i64 producerId, i16 producerEpoch, std::vector<TopicPartitions> topicPartitions) {
@@ -42,7 +42,7 @@ namespace {
                 message->TransactionalId = txnId;
                 message->ProducerId = producerId;
                 message->ProducerEpoch = producerEpoch;
-                for (auto tp : topicPartitions) {
+                for (const auto& tp : topicPartitions) {
                     NKafka::TAddPartitionsToTxnRequestData::TAddPartitionsToTxnTopic topic;
                     topic.Name = tp.Topic;
                     for (auto partitionIndex : tp.Partitions) {
@@ -59,7 +59,7 @@ namespace {
                 message->TransactionalId = txnId;
                 message->ProducerId = producerId;
                 message->ProducerEpoch = producerEpoch;
-                for (auto tp : topicPartitions) {
+                for (const auto& tp : topicPartitions) {
                     NKafka::TTxnOffsetCommitRequestData::TTxnOffsetCommitRequestTopic topic;
                     topic.Name = tp.Topic;
                     for (auto partitionIndex : tp.Partitions) {
@@ -85,48 +85,44 @@ namespace {
 
     Y_UNIT_TEST_SUITE_F(KafkaTransactionCoordinatorActor, TFixture) {
         Y_UNIT_TEST(OnProducerInitializedEvent_ShouldRespondOkIfTxnProducerWasNotFound) {
-            SaveTxnProducer("my-tn-producer-1", 123, 0);
+            auto response = SaveTxnProducer("my-tn-producer-1", 123, 0);
+
+            UNIT_ASSERT_EQUAL(response->Status, NKafka::TEvKafka::TEvSaveTxnProducerResponse::EStatus::OK);
         }
 
         Y_UNIT_TEST(OnProducerInitializedEvent_ShouldRespondOkIfTxnProducerWasFoundButEpochIsOlder) {
             TString txnId = "my-tx-id";
             i64 producerId = 123;
-            SaveTxnProducer(txnId, producerId, 0); // save old epoch
-            auto request = MakeHolder<NKafka::TEvKafka::TEvSaveTxnProducerRequest>(txnId, producerId, 1);
-            Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, request.Release()));
 
-            auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvSaveTxnProducerResponse>();
+            auto response1 = SaveTxnProducer(txnId, producerId, 0); // save old epoch
+            auto response2 = SaveTxnProducer(txnId, producerId, 1); // save old epoch
             
-            UNIT_ASSERT(response != nullptr);
-            UNIT_ASSERT_EQUAL(response->Status, NKafka::TEvKafka::TEvSaveTxnProducerResponse::EStatus::OK);
+            UNIT_ASSERT_EQUAL(response1->Status, NKafka::TEvKafka::TEvSaveTxnProducerResponse::EStatus::OK);
+            UNIT_ASSERT_EQUAL(response2->Status, NKafka::TEvKafka::TEvSaveTxnProducerResponse::EStatus::OK);
         }
 
         // epoch overflown case
         Y_UNIT_TEST(OnProducerInitializedEvent_ShouldRespondOkIfNewEpochIsLessButProducerIdIsNew) {
             TString txnId = "my-tx-id";
             i64 producerId = 123;
-            SaveTxnProducer(txnId, producerId, 10); // save old epoch
-            auto request = MakeHolder<NKafka::TEvKafka::TEvSaveTxnProducerRequest>(txnId, producerId + 1, 1);
-            Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, request.Release()));
 
-            auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvSaveTxnProducerResponse>();
+            auto response1 = SaveTxnProducer(txnId, producerId, 10); // save old epoch
+            auto response2 = SaveTxnProducer(txnId, producerId + 1, 1);
             
-            UNIT_ASSERT(response != nullptr);
-            UNIT_ASSERT_EQUAL(response->Status, NKafka::TEvKafka::TEvSaveTxnProducerResponse::EStatus::OK);
+            UNIT_ASSERT_EQUAL(response1->Status, NKafka::TEvKafka::TEvSaveTxnProducerResponse::EStatus::OK);
+            UNIT_ASSERT_EQUAL(response2->Status, NKafka::TEvKafka::TEvSaveTxnProducerResponse::EStatus::OK);
         }
 
         // two concurrent clients sequentially inited producer id case
         Y_UNIT_TEST(OnProducerInitializedEvent_ShouldRespondWithProducerFencedErrorIfNewEpochIsLessAndProducerIdIsTheSame) {
             TString txnId = "my-tx-id";
             i64 producerId = 123;
-            SaveTxnProducer(txnId, producerId, 10); 
-            auto request = MakeHolder<NKafka::TEvKafka::TEvSaveTxnProducerRequest>(txnId, producerId, 9);
-            Ctx->Runtime->SingleSys()->Send(new IEventHandle(ActorId, Ctx->Edge, request.Release()));
 
-            auto response = Ctx->Runtime->GrabEdgeEvent<NKafka::TEvKafka::TEvSaveTxnProducerResponse>();
+            auto response1 = SaveTxnProducer(txnId, producerId, 10);
+            auto response2 = SaveTxnProducer(txnId, producerId, 9); // seсond request comes with stale epoch
             
-            UNIT_ASSERT(response != nullptr);
-            UNIT_ASSERT_EQUAL(response->Status, NKafka::TEvKafka::TEvSaveTxnProducerResponse::EStatus::PRODUCER_FENCED);
+            UNIT_ASSERT_EQUAL(response1->Status, NKafka::TEvKafka::TEvSaveTxnProducerResponse::EStatus::OK);
+            UNIT_ASSERT_EQUAL(response2->Status, NKafka::TEvKafka::TEvSaveTxnProducerResponse::EStatus::PRODUCER_FENCED);
         }
 
         Y_UNIT_TEST(OnAnyTransactionalRequest_ShouldSendBack_PRODUCER_FENCED_ErrorIfThereIsNoTransactionalIdInState) {
@@ -147,7 +143,8 @@ namespace {
             TString txnId = "my-tx-id";
             i64 producerId = 1;
             i16 producerEpoch = 0;
-            SaveTxnProducer(txnId, producerId, producerEpoch + 1);
+            auto saveResponse = SaveTxnProducer(txnId, producerId, producerEpoch + 1);
+            UNIT_ASSERT_EQUAL(saveResponse->Status, NKafka::TEvKafka::TEvSaveTxnProducerResponse::EStatus::OK);
             SendEndTxnRequest(correlationId, txnId, producerId, producerEpoch);
 
             // will respond to edge, cause we provieded edge actorId as a connectionId in SendAddPartitionsToTxnRequest
@@ -164,7 +161,8 @@ namespace {
             TString txnId = "my-tx-id";
             i64 producerId = 1;
             i16 producerEpoch = 0;
-            SaveTxnProducer(txnId, producerId, producerEpoch);
+            auto saveResponse = SaveTxnProducer(txnId, producerId, producerEpoch);
+            UNIT_ASSERT_EQUAL(saveResponse->Status, NKafka::TEvKafka::TEvSaveTxnProducerResponse::EStatus::OK);
             // observe TEvAddPartitionsToTxnRequest to a different actor
             bool seenEvent = false;
             ui32 eventCounter = 0;
@@ -202,7 +200,8 @@ namespace {
             TString txnId = "my-tx-id";
             i64 producerId = 1;
             i16 producerEpoch = 0;
-            SaveTxnProducer(txnId, producerId, producerEpoch);
+            auto saveResponse = SaveTxnProducer(txnId, producerId, producerEpoch);
+            UNIT_ASSERT_EQUAL(saveResponse->Status, NKafka::TEvKafka::TEvSaveTxnProducerResponse::EStatus::OK);
             // observe TEvAddPartitionsToTxnRequest to a different actor
             bool seenEvent = false;
             ui32 eventCounter = 0;
@@ -292,9 +291,11 @@ namespace {
             i64 producerId = 1;
             i16 producerEpoch = 0;
             // first app initializes
-            SaveTxnProducer(txnId, producerId, producerEpoch);
+            auto saveResponse1 = SaveTxnProducer(txnId, producerId, producerEpoch);
+            UNIT_ASSERT_EQUAL(saveResponse1->Status, NKafka::TEvKafka::TEvSaveTxnProducerResponse::EStatus::OK);
             // other app initializes with same transactional id
-            SaveTxnProducer(txnId, producerId, producerEpoch + 1);
+            auto saveResponse2 = SaveTxnProducer(txnId, producerId, producerEpoch + 1);
+            UNIT_ASSERT_EQUAL(saveResponse2->Status, NKafka::TEvKafka::TEvSaveTxnProducerResponse::EStatus::OK);
 
             // first app sends txn request
             SendEndTxnRequest(correlationId, txnId, producerId, producerEpoch);

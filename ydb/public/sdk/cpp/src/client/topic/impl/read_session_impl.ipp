@@ -73,6 +73,9 @@ void TPartitionStreamImpl<UseMigrationProtocol>::RequestStatus() {
 template<bool UseMigrationProtocol>
 void TPartitionStreamImpl<UseMigrationProtocol>::ConfirmCreate(std::optional<ui64> readOffset, std::optional<ui64> commitOffset) {
     if (auto sessionShared = CbContext->LockShared()) {
+        if (commitOffset.has_value()) {
+            SetFirstNotReadOffset(commitOffset.value());
+        }
         sessionShared->ConfirmPartitionStreamCreate(this, readOffset, commitOffset);
     }
 }

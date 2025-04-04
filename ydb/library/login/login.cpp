@@ -343,7 +343,7 @@ TLoginProvider::TRemoveGroupResponse TLoginProvider::RemoveGroup(const TString& 
     return response;
 }
 
-std::vector<TString> TLoginProvider::GetGroupsMembership(const TString& member) {
+std::vector<TString> TLoginProvider::GetGroupsMembership(const TString& member) const {
     std::vector<TString> groups;
     std::unordered_set<TString> visited;
     std::deque<TString> queue;

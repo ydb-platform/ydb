@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     external_data_source.cpp
+    external_source_builder.cpp
     external_source_factory.cpp
     object_storage.cpp
     validation_functions.cpp

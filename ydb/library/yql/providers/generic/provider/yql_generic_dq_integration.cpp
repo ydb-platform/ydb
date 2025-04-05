@@ -38,6 +38,8 @@ namespace NYql {
                     return "OracleGeneric";
                 case NYql::EGenericDataSourceKind::LOGGING:
                     return "LoggingGeneric";
+                case NYql::EGenericDataSourceKind::ICEBERG:
+                    return "IcebergGeneric";
                 default:
                     throw yexception() << "Data source kind is unknown or not specified";
             }
@@ -217,10 +219,10 @@ namespace NYql {
                         }
                     }
 
-                    // Managed YDB (including YDB underlying Logging) supports access via IAM token.
+                    // Iceberg/Managed YDB (including YDB underlying Logging) supports access via IAM token.
                     // If exist, copy service account creds to obtain tokens during request execution phase.
                     // If exists, copy previously created token.
-                    if (IsIn({NYql::EGenericDataSourceKind::YDB, NYql::EGenericDataSourceKind::LOGGING}, clusterConfig.kind())) {
+                    if (IsIn({NYql::EGenericDataSourceKind::YDB, NYql::EGenericDataSourceKind::LOGGING, NYql::EGenericDataSourceKind::ICEBERG}, clusterConfig.kind())) {
                         source.SetServiceAccountId(clusterConfig.GetServiceAccountId());
                         source.SetServiceAccountIdSignature(clusterConfig.GetServiceAccountIdSignature());
                         source.SetToken(State_->Types->Credentials->FindCredentialContent(
@@ -276,6 +278,9 @@ namespace NYql {
                             break;
                         case NYql::EGenericDataSourceKind::LOGGING:
                             properties["SourceType"] = "Logging";
+                            break;
+                        case NYql::EGenericDataSourceKind::ICEBERG:
+                            properties["SourceType"] = "Iceberg";
                             break;
                         case NYql::EGenericDataSourceKind::DATA_SOURCE_KIND_UNSPECIFIED:
                             break;

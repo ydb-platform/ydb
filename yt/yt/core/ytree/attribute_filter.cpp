@@ -368,7 +368,7 @@ std::unique_ptr<TAttributeFilter::IFilteringConsumer> TAttributeFilter::CreateFi
             { }
 
         private:
-            IYsonConsumer* TargetConsumer_;
+            IYsonConsumer* const TargetConsumer_;
         };
 
         return std::make_unique<TBypassFilteringConsumer>(targetConsumer);

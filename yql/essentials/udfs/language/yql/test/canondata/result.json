@@ -14,9 +14,19 @@
             "uri": "file://test.test_ExtractInFuncs_/results.txt"
         }
     ],
+    "test.test[ExtractInsertHints]": [
+        {
+            "uri": "file://test.test_ExtractInsertHints_/results.txt"
+        }
+    ],
     "test.test[ExtractPragmas]": [
         {
             "uri": "file://test.test_ExtractPragmas_/results.txt"
+        }
+    ],
+    "test.test[ExtractReadHints]": [
+        {
+            "uri": "file://test.test_ExtractReadHints_/results.txt"
         }
     ],
     "test.test[ExtractTypes]": [

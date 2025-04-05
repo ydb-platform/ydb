@@ -34,6 +34,9 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
         case EOverloadStatus::OverloadMetadata:
             Counters.OnWriteOverloadMetadata(writeSize);
             break;
+        case EOverloadStatus::OverloadCompaction:
+            Counters.OnWriteOverloadCompaction(writeSize);
+            break;
         case EOverloadStatus::ShardTxInFly:
             Counters.OnWriteOverloadShardTx(writeSize);
             break;

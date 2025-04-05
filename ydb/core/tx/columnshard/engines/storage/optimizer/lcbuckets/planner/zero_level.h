@@ -40,7 +40,7 @@ private:
     };
     std::set<TOrderedPortion> Portions;
 
-    virtual bool IsOverloaded() const {
+    virtual bool IsOverloaded() const override {
         if (!PortionsCountLimit) {
             return false;
         }

@@ -61,6 +61,9 @@ TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedWait(const TInternalP
     if (TablesManager.GetPrimaryIndex() && TablesManager.GetPrimaryIndex()->IsOverloadedByMetadata(NOlap::IColumnEngine::GetMetadataLimit())) {
         return EOverloadStatus::OverloadMetadata;
     }
+    if (TablesManager.GetPrimaryIndex() && TablesManager.GetPrimaryIndex()->GetGranuleVerified(pathId)->GetOptimizerPlanner()->IsOverloaded()) {
+        return EOverloadStatus::OverloadCompaction;
+    }
     return EOverloadStatus::None;
 }
 

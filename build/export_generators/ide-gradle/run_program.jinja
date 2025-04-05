@@ -50,26 +50,6 @@ val runProg{{ loop.index }} = task<Exec>("runProgram{{ loop.index }}") {
     custom_run-env="list"
 #}
 }
-
-{%- if proto_template %}
-
-tasks.getByName("prepareMainProtos").dependsOn(runProg{{ loop.index }})
-{%- endif %}
-
-tasks.compileJava.configure {
-    dependsOn(runProg{{ loop.index }})
-}
-tasks.compileTestJava.configure {
-    dependsOn(runProg{{ loop.index }})
-}
-{%-        if with_kotlin %}
-
-tasks.compileKotlin.configure {
-    dependsOn(runProg{{ loop.index }})
-}
-tasks.compileTestKotlin.configure {
-    dependsOn(runProg{{ loop.index }})
-}
-{%         endif -%}
+{{ Depends("runProg", loop.index) }}
 {%-     endfor -%}
 {%- endif -%}

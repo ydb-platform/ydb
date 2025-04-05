@@ -12,6 +12,26 @@
 {%-     endif -%}
 {%- endmacro -%}
 
+{%- macro Depends(prefix, index) -%}
+{%-     if proto_template %}
+tasks.getByName("prepareMainProtos").dependsOn({{ prefix }}{{ index }})
+{%-     endif %}
+tasks.compileJava.configure {
+    dependsOn({{ prefix }}{{ index }})
+}
+tasks.compileTestJava.configure {
+    dependsOn({{ prefix }}{{ index }})
+}
+{%-    if with_kotlin %}
+tasks.compileKotlin.configure {
+    dependsOn({{ prefix }}{{ index }})
+}
+tasks.compileTestKotlin.configure {
+    dependsOn({{ prefix }}{{ index }})
+}
+{%     endif -%}
+{%- endmacro -%}
+
 {%- macro PatchGeneratedProto(arg, relative = false) -%}
 {%-     if relative -%}
 "{{ arg|replace(export_root + "/", "")|replace(arcadia_root + "/", "") }}"
@@ -35,6 +55,7 @@
 {%- include "[generator]/run_program.jinja" -%}
 {%- include "[generator]/run_java_program.jinja" -%}
 {%- include "[generator]/run_common.jinja" -%}
+{%- include "[generator]/copy_file.jinja" -%}
 {%- include "[generator]/javadoc.jinja" -%}
 {%- include "[generator]/proto_dependencies.jinja" -%}
 {%- include "[generator]/debug.jinja" ignore missing -%}

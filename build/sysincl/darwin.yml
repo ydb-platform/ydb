@@ -216,6 +216,7 @@
   - CoreServices/CoreServices.h
   - CoreTelephony/CTCarrier.h
   - CoreTelephony/CTTelephonyNetworkInfo.h
+  - CoreText/CTFontManager.h
   - CoreText/CoreText.h
   - CoreVideo/CoreVideo.h
   - DeviceCheck/DCAppAttestService.h

@@ -66,15 +66,17 @@ TConclusionStatus TScanHead::Start() {
 
 TScanHead::TScanHead(std::deque<TSourceConstructor>&& sources, const std::shared_ptr<TSpecialReadContext>& context)
     : Context(context) {
-    if (Context->GetReadMetadata()->HasLimit()) {
-        SourcesCollection =
-            std::make_unique<TScanWithLimitCollection>(Context, std::move(sources), context->GetCommonContext()->GetScanCursor());
-    } else if (Context->GetReadMetadata()->IsSorted()) {
-        SourcesCollection =
-            std::make_unique<TSortedFullScanCollection>(Context, std::move(sources), context->GetCommonContext()->GetScanCursor());
+    if (Context->GetReadMetadata()->IsSorted()) {
+        if (Context->GetReadMetadata()->HasLimit()) {
+            SourcesCollection =
+                std::make_unique<TScanWithLimitCollection>(Context, std::move(sources), context->GetCommonContext()->GetScanCursor());
+        } else {
+            SourcesCollection =
+                std::make_unique<TSortedFullScanCollection>(Context, std::move(sources), context->GetCommonContext()->GetScanCursor());
+        }
     } else {
-        SourcesCollection =
-            std::make_unique<TNotSortedFullScanCollection>(Context, std::move(sources), context->GetCommonContext()->GetScanCursor());
+        SourcesCollection = std::make_unique<TNotSortedCollection>(
+            Context, std::move(sources), context->GetCommonContext()->GetScanCursor(), Context->GetReadMetadata()->GetLimitRobustOptional());
     }
 }
 

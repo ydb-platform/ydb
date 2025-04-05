@@ -180,6 +180,7 @@ namespace NActors {
             nodeAppData->AwsCompatibilityConfig = app0->AwsCompatibilityConfig;
             nodeAppData->S3ProxyResolverConfig = app0->S3ProxyResolverConfig;
             nodeAppData->GraphConfig = app0->GraphConfig;
+            nodeAppData->QueryServiceConfig = app0->QueryServiceConfig;
             nodeAppData->EnableMvccSnapshotWithLegacyDomainRoot = app0->EnableMvccSnapshotWithLegacyDomainRoot;
             nodeAppData->IoContextFactory = app0->IoContextFactory;
             nodeAppData->SchemeOperationFactory = app0->SchemeOperationFactory;

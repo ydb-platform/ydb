@@ -468,6 +468,9 @@ namespace Tests {
         if (Settings->AppConfig->HasResourceBrokerConfig()) {
             app.ResourceBrokerConfig = Settings->AppConfig->GetResourceBrokerConfig();
         }
+        if (Settings->AppConfig->HasQueryServiceConfig()) {
+            app.QueryServiceConfig = Settings->AppConfig->GetQueryServiceConfig();
+        }
 
         // forcibly turn on some feature flags
         app.FeatureFlags = Settings->FeatureFlags;

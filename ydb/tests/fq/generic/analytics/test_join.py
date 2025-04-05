@@ -29,6 +29,7 @@ class TestJoinAnalytics:
         ch_conn_name = f"ch_conn_{table_name}"
         gp_conn_name = f"gp_conn_{table_name}"
         pg_conn_name = f"pg_conn_{table_name}"
+        my_conn_name = f"my_conn_{table_name}"
         ydb_conn_name = f"ydb_conn_{table_name}"
         query_name = f"query_{table_name}"
 
@@ -56,6 +57,14 @@ class TestJoinAnalytics:
             password=settings.postgresql.password,
         )
 
+        fq_client.create_mysql_connection(
+            name=my_conn_name,
+            database_name=settings.mysql.dbname,
+            database_id="mysql_cluster_id",
+            login=settings.mysql.username,
+            password=settings.mysql.password,
+        )
+
         one_time_waiter.wait()
 
         fq_client.create_ydb_connection(
@@ -64,7 +73,7 @@ class TestJoinAnalytics:
         )
 
         sql = Rf"""
-            SELECT pg.data AS data_pg, ch.data AS data_ch, ydb.data AS data_ydb, gp.data AS data_gp
+            SELECT pg.data AS data_pg, ch.data AS data_ch, ydb.data AS data_ydb, gp.data AS data_gp, my.data AS data_my
             FROM {pg_conn_name}.{table_name} AS pg
             JOIN {ch_conn_name}.{table_name} AS ch
             ON pg.id = ch.id
@@ -72,6 +81,8 @@ class TestJoinAnalytics:
             ON pg.id = ydb.id
             JOIN {gp_conn_name}.{table_name} AS gp
             ON pg.id = gp.id
+            JOIN {my_conn_name}.{table_name} AS my
+            ON pg.id = my.id
             ORDER BY data_pg;
             """
 
@@ -81,21 +92,25 @@ class TestJoinAnalytics:
         data = fq_client.get_result_data(query_id)
         result_set = data.result.result_set
         logging.debug(str(result_set))
-        assert len(result_set.columns) == 4
+        assert len(result_set.columns) == 5
         assert result_set.columns[0].name == "data_pg"
         assert result_set.columns[1].name == "data_ch"
         assert result_set.columns[2].name == "data_ydb"
         assert result_set.columns[3].name == "data_gp"
+        assert result_set.columns[4].name == "data_my"
         assert len(result_set.rows) == 3
         assert result_set.rows[0].items[0].bytes_value == b"pg10"
         assert result_set.rows[0].items[1].bytes_value == b"ch10"
         assert result_set.rows[0].items[2].bytes_value == b"ydb10"
         assert result_set.rows[0].items[3].bytes_value == b"gp10"
+        assert result_set.rows[0].items[4].bytes_value == b"my10"
         assert result_set.rows[1].items[0].bytes_value == b"pg20"
         assert result_set.rows[1].items[1].bytes_value == b"ch20"
         assert result_set.rows[1].items[2].bytes_value == b"ydb20"
         assert result_set.rows[1].items[3].bytes_value == b"gp20"
+        assert result_set.rows[1].items[4].bytes_value == b"my20"
         assert result_set.rows[2].items[0].bytes_value == b"pg30"
         assert result_set.rows[2].items[1].bytes_value == b"ch30"
         assert result_set.rows[2].items[2].bytes_value == b"ydb30"
         assert result_set.rows[2].items[3].bytes_value == b"gp30"
+        assert result_set.rows[2].items[4].bytes_value == b"my30"

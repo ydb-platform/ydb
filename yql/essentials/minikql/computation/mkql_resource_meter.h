@@ -40,6 +40,18 @@ public:
         page[id].memoryConsumptionPeak = max(page[id].memoryConsumptionPeak, memoryConsumpted);
     }
 
+    // Aggragate two pages in "to", "from" page will be removed
+    void MergeHistoryPages(TString from, TString to) {
+        using std::max;
+        auto& page = History_.back();
+        page[to].avgMemoryConsumpted.first += page[from].avgMemoryConsumpted.first;
+        page[to].avgMemoryConsumpted.second += page[from].avgMemoryConsumpted.second;
+        page[to].memoryConsumptionPeak = max(
+            page[to].memoryConsumptionPeak, page[from].memoryConsumptionPeak);
+        page[to].processedTime += page[from].processedTime;
+        page.erase(from);
+    }
+
     void Clear() {
         History_.clear();
     }

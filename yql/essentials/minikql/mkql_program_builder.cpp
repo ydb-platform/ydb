@@ -5877,7 +5877,8 @@ TRuntimeNode TProgramBuilder::BlockMapJoinCore(TRuntimeNode leftStream, TRuntime
 
 TRuntimeNode TProgramBuilder::BlockGraceJoinCore(TRuntimeNode leftStream, TRuntimeNode rightStream, EJoinKind joinKind,
     const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& leftKeyDrops,
-    const TArrayRef<const ui32>& rightKeyColumns, const TArrayRef<const ui32>& rightKeyDrops, [[maybe_unused]] bool rightAny, TType* returnType
+    const TArrayRef<const ui32>& rightKeyColumns, const TArrayRef<const ui32>& rightKeyDrops,
+    [[maybe_unused]] bool rightAny, TType* returnType, const void* untypedPolicy
 ) {
     if constexpr (RuntimeVersion < 53U) {
         THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
@@ -5928,6 +5929,7 @@ TRuntimeNode TProgramBuilder::BlockGraceJoinCore(TRuntimeNode leftStream, TRunti
     callableBuilder.Add(NewTuple(rightKeyColumnsNodes));
     callableBuilder.Add(NewTuple(rightKeyDropsNodes));
     callableBuilder.Add(NewDataLiteral((bool)rightAny));
+    callableBuilder.Add(NewDataLiteral(reinterpret_cast<ui64>(untypedPolicy))); // Idk if this is a good practice
 
     return TRuntimeNode(callableBuilder.Build(), false);
 }

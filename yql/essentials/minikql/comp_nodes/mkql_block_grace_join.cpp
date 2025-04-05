@@ -11,6 +11,7 @@
 #include <yql/essentials/minikql/invoke_builtins/mkql_builtins.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/mkql_block_grace_join_policy.h>
 
 #include <ydb/library/yql/minikql/comp_nodes/packed_tuple/robin_hood_table.h>
 #include <ydb/library/yql/minikql/comp_nodes/packed_tuple/neumann_hash_table.h>
@@ -37,6 +38,9 @@ using namespace std::chrono_literals;
 [[maybe_unused]] constexpr size_t L3_CACHE_SIZE =  16 * MB;
 
 // -------------------------------------------------------------------
+TDefaultBlockGraceJoinPolicy globalDefaultPolicy{};
+
+// -------------------------------------------------------------------
 size_t CalcMaxBlockLength(const TVector<TType*>& items, bool isBlockType = true) {
     return CalcBlockLen(std::accumulate(items.cbegin(), items.cend(), 0ULL,
         [isBlockType](size_t max, const TType* type) {
@@ -50,7 +54,6 @@ size_t CalcMaxBlockLength(const TVector<TType*>& items, bool isBlockType = true)
 }
 
 // -------------------------------------------------------------------
-
 using TRobinHoodTable = NPackedTuple::TRobinHoodHashBase<true>;
 using TNeumannTable = NPackedTuple::TNeumannHashTable<false>;
 
@@ -94,7 +97,7 @@ public:
         {}
     };
 
-    enum class TStatus {
+    enum class EStatus {
         Unknown,
         OneStreamFinished, // Only one stream is finished
         BothStreamsFinished, // Both streams are finished
@@ -110,6 +113,7 @@ public:
         const TVector<TType*>&  rightItemTypesArg,
         const TVector<ui32>&    rightKeyColumns,
         NUdf::TUnboxedValue     rightStream,
+        IBlockGraceJoinPolicy*  policy,
         arrow::MemoryPool*      pool
     )
         : TBase(memInfo)
@@ -117,6 +121,7 @@ public:
         , LeftInputs_(leftItemTypesArg.size())
         , RightStream_(rightStream)
         , RightInputs_(rightItemTypesArg.size())
+        , Policy_(policy)
     {
         TVector<TType*> leftItemTypes;
         for (size_t i = 0; i < leftItemTypesArg.size() - 1; i++) { // ignore last column, because this is block size
@@ -140,13 +145,16 @@ public:
     }
 
     NUdf::EFetchStatus FetchStreams() {
+        auto maxFetchedSize = Policy_->GetMaximumInitiallyFetchedData();
+
         auto resultLeft = NUdf::EFetchStatus::Finish;
-        if (!LeftIsFinished_ && LeftEstimatedSize_ < MEMORY_THRESHOLD) {
+        if (!LeftIsFinished_ && LeftEstimatedSize_ < maxFetchedSize) {
             resultLeft = LeftStream_.WideFetch(LeftInputs_.data(), LeftInputs_.size());
             if (resultLeft == NUdf::EFetchStatus::Ok) {
                 TBlock leftBlock;
                 ExtractBlock(LeftInputs_, leftBlock);
                 LeftEstimatedSize_ += EstimateBlockSize(leftBlock, LeftConverter_->GetTupleLayout());
+                LeftFetchedTuples_ += leftBlock.Size;
                 LeftData_.push_back(std::move(leftBlock));
             } else if (resultLeft == NUdf::EFetchStatus::Finish) {
                 LeftIsFinished_ = true;
@@ -154,12 +162,13 @@ public:
         }
         
         auto resultRight = NUdf::EFetchStatus::Finish;
-        if (!RightIsFinished_ && RightEstimatedSize_ < MEMORY_THRESHOLD) {
+        if (!RightIsFinished_ && RightEstimatedSize_ < maxFetchedSize) {
             resultRight = RightStream_.WideFetch(RightInputs_.data(), RightInputs_.size());
             if (resultRight == NUdf::EFetchStatus::Ok) {
                 TBlock rightBlock;
                 ExtractBlock(RightInputs_, rightBlock);
                 RightEstimatedSize_ += EstimateBlockSize(rightBlock, RightConverter_->GetTupleLayout());
+                RightFetchedTuples_ += rightBlock.Size;
                 RightData_.push_back(std::move(rightBlock));
             } else if (resultRight == NUdf::EFetchStatus::Finish) {
                 RightIsFinished_ = true;
@@ -172,33 +181,43 @@ public:
         return NUdf::EFetchStatus::Finish; // Finish here doesn't mean that there is nothing to fetch anymore
     }
 
-    TStatus GetStatus() {
+    EStatus GetStatus() {
+        auto maxFetchedSize = Policy_->GetMaximumInitiallyFetchedData();
+
         if (LeftIsFinished_ && RightIsFinished_) {
-            return TStatus::BothStreamsFinished;
+            return EStatus::BothStreamsFinished;
         }
-        if ((LeftIsFinished_ && RightEstimatedSize_ >= MEMORY_THRESHOLD) ||
-            (LeftEstimatedSize_ >= MEMORY_THRESHOLD && RightIsFinished_)) {
-          return TStatus::OneStreamFinished;
+        if ((LeftIsFinished_ && RightEstimatedSize_ > maxFetchedSize) ||
+            (LeftEstimatedSize_ > maxFetchedSize && RightIsFinished_)) {
+          return EStatus::OneStreamFinished;
         }
-        if (LeftEstimatedSize_ >= MEMORY_THRESHOLD && RightEstimatedSize_ >= MEMORY_THRESHOLD) {
-            return TStatus::MemoryLimitExceeded;
+        if (LeftEstimatedSize_ > maxFetchedSize && RightEstimatedSize_ > maxFetchedSize) {
+            return EStatus::MemoryLimitExceeded;
         }
-        return TStatus::Unknown;
+        return EStatus::Unknown;
     }
 
-    std::pair<ui32, ui32> GetPayloadSizes() const {
+    std::pair<size_t, size_t> GetFetchedTuples() const {
+        return {LeftFetchedTuples_, RightFetchedTuples_};
+    }
+
+    std::pair<size_t, size_t> GetFetchedSizes() const {
+        return {LeftEstimatedSize_, RightEstimatedSize_};
+    }
+
+    std::pair<size_t, size_t> GetPayloadSizes() const {
         return {
             LeftConverter_->GetTupleLayout()->PayloadSize,
             RightConverter_->GetTupleLayout()->PayloadSize};
     }
 
+    std::pair<bool, bool> IsFinished() const {
+        return {LeftIsFinished_, RightIsFinished_};
+    }
+
     // After the method is called FetchStreams cannot be called anymore
     std::pair<TDeque<TBlock>, TDeque<TBlock>> DetachData() {
         return {std::move(LeftData_), std::move(RightData_)};
-    }
-
-    std::pair<bool, bool> IsFinished() const {
-        return {LeftIsFinished_, RightIsFinished_};
     }
 
 private:
@@ -223,6 +242,7 @@ private:
     NUdf::TUnboxedValue LeftStream_;
     TUnboxedValueVector LeftInputs_;
     TDeque<TBlock>      LeftData_;
+    size_t              LeftFetchedTuples_{0}; // count of fetched tuples
     size_t              LeftEstimatedSize_{0}; // size in tuple layout represenation
     bool                LeftIsFinished_{false};
     IBlockLayoutConverter::TPtr LeftConverter_; // Converters here are used only for size estimation via info in TupleLayout class
@@ -230,11 +250,12 @@ private:
     NUdf::TUnboxedValue RightStream_;
     TUnboxedValueVector RightInputs_;
     TDeque<TBlock>      RightData_;
+    size_t              RightFetchedTuples_{0}; // count of fetched tuples
     size_t              RightEstimatedSize_{0}; // size in tuple layout represenation
     bool                RightIsFinished_{false};
     IBlockLayoutConverter::TPtr RightConverter_;
 
-    static constexpr size_t MEMORY_THRESHOLD{L3_CACHE_SIZE / 2}; // heuristic value of maximum data size for hash table
+    IBlockGraceJoinPolicy*  Policy_;
 };
 
 // -------------------------------------------------------------------
@@ -245,7 +266,7 @@ class TExternalPayloadStorage : public TComputationValue<TExternalPayloadStorage
     private:
         using TBase = TComputationValue<TExternalPayloadStorage>;
         using TBlock = TTempJoinStorage::TBlock;
-    
+
     public:
         TExternalPayloadStorage(
             TMemoryUsageInfo*       memInfo,
@@ -257,14 +278,18 @@ class TExternalPayloadStorage : public TComputationValue<TExternalPayloadStorage
             , NonClearable_(nonClearable)
         {
             const auto& pgBuilder = ctx.Builder->GetPgBuilder();
-            auto maxBlockLen = CalcMaxBlockLength(payloadItemTypes, false);
-    
+            // WARNING: we can not properly track the number of output rows due to Apply,
+            // so add some heuristic to prevent overflow in AddMany builder's method.
+            // FIXME: Add iterator in HT and remove Apply to add tuples to output one by one
+            auto maxBlockLen = CalcMaxBlockLength(payloadItemTypes, false) * 2;
+
             for (size_t i = 0; i < payloadItemTypes.size(); i++) {
-                // FIXME: monitor amount of allocated memory like in BlockMapJoin
+                Readers_.push_back(MakeBlockReader(TTypeInfoHelper(), payloadItemTypes[i]));
+                // FIXME: monitor amount of allocated memory like in BlockMapJoin to prevent overflow
                 Builders_.push_back(MakeArrayBuilder(
                     TTypeInfoHelper(), payloadItemTypes[i], ctx.ArrowMemoryPool, maxBlockLen, &pgBuilder));
             }
-    
+
             // Init indirection indexes datum only once
             auto ui64Type = ctx.TypeEnv.GetUi64Lazy();
             auto maxBufferSize = CalcBlockLen(CalcMaxBlockItemSize(ui64Type));
@@ -274,51 +299,41 @@ class TExternalPayloadStorage : public TComputationValue<TExternalPayloadStorage
             auto dataBuffer = NUdf::AllocateResizableBuffer(sizeof(ui64) * maxBufferSize, &ctx.ArrowMemoryPool);
             IndirectionIndexes = arrow::ArrayData::Make(std::move(type), maxBufferSize, {std::move(nullBitmap), std::move(dataBuffer)});
         }
-    
+
         ui32 Size() const {
             return PayloadColumnsStorage_.size();
         }
-    
+
         void AddBlock(TBlock&& block) {
             PayloadColumnsStorage_.push_back(std::move(block));
         }
-    
+
         void Clear() {
             if (NonClearable_) {
                 return;
             }
             PayloadColumnsStorage_.clear();
         }
-    
+
         TVector<arrow::Datum> RestorePayload(const arrow::Datum& indexes, ui32 length) {
             auto rawIndexes = indexes.array()->GetMutableValues<ui64>(1);
-    
-            TVector<TVector<ui64>> mapping(Size());
-            for (size_t i = 0; i < length; ++i) {
-                auto blockIndex = static_cast<ui32>(rawIndexes[i] >> 32);
-                auto elemIndex = static_cast<ui32>(rawIndexes[i] & 0xFFFFFFFF);
-    
-                mapping[blockIndex].push_back(elemIndex);
-            }
-    
+
             TVector<arrow::Datum> result;
             for (size_t i = 0; i < Builders_.size(); ++i) {
                 auto& builder = Builders_[i];
-    
-                for (size_t blockIndex = 0; blockIndex < mapping.size(); ++blockIndex) {
-                    const auto& blockIndexes = mapping[blockIndex];
-                    if (blockIndexes.empty()) {
-                        continue;
-                    }
-    
+                auto& reader = Readers_[i];
+
+                for (size_t j = 0; j < length; ++j) {
+                    auto blockIndex = static_cast<ui32>(rawIndexes[j] >> 32);
+                    auto elemIndex = static_cast<ui32>(rawIndexes[j] & 0xFFFFFFFF);
+
                     const auto& array = PayloadColumnsStorage_[blockIndex].Columns[i].array();
-                    IArrayBuilder::TArrayDataItem item = { array.get(), 0 };
-                    builder->AddMany(&item, 1, blockIndexes.data(), blockIndexes.size());
+                    builder->Add(reader->GetItem(*array, elemIndex));
                 }
-    
+
                 result.push_back(builder->Build(false));
             }
-    
+
             return result;
         }
 
@@ -339,24 +354,27 @@ class TExternalPayloadStorage : public TComputationValue<TExternalPayloadStorage
             }
             keyBlock.Size = block.Size;
             payloadBlock.Size = block.Size;
-    
+
             // Init index column
             auto* rawDataBuffer = payloadStorage.IndirectionIndexes.array()->GetMutableValues<ui64>(1);
             ui32 blockIndex = payloadStorage.Size();
             for (size_t i = 0; i < keyBlock.Size; ++i) {
                 rawDataBuffer[i] = (static_cast<ui64>(blockIndex) << 32) | i; // indirected index column has such layout: 32 higher bits for block number and 32 bits for offset in block
             }
+            payloadStorage.IndirectionIndexes.array()->length = keyBlock.Size;
+
             // Add index column to fetched key block
             keyBlock.Columns.push_back(payloadStorage.IndirectionIndexes);
-    
+
             return {std::move(keyBlock), std::move(payloadBlock)};
         }
-    
+
     public:
         arrow::Datum IndirectionIndexes;
-    
+
     private:
         TVector<TBlock> PayloadColumnsStorage_;
+        TVector<std::unique_ptr<IBlockReader>> Readers_;
         TVector<std::unique_ptr<IArrayBuilder>> Builders_;
         bool NonClearable_;
     };
@@ -454,23 +472,26 @@ public:
 
     bool IsNotFull() const {
         // WARNING: we can not properly track the number of output rows due to Apply,
-        // so add some heuristic to prevent overflow.
+        // so add some heuristic to prevent overflow in AddMany builder's method.
         // FIXME: Add iterator in HT and remove Apply to add tuples to output one by one
-        return OutputRows * 5 < MaxLength_ * 4 && HasEnoughMemory();
+        return OutputRows * 5 < MaxLength_ * 4;
+    }
+
+    bool HasEnoughMemory() const {
+        return ProbePackedInput.Overflow.capacity() == 0 ||
+               ProbePackedInput.Overflow.size() * 5 <
+                   ProbePackedInput.Overflow.capacity() * 4;
     }
 
     bool HasBlocks() const {
         return Count > 0;
     }
 
-    void Reset() {
-        OutputRows = 0;
+    void ResetInput() {
         ProbePackedInput.PackedTuples.clear();
         ProbePackedInput.Overflow.clear();
         ProbePackedInput.NTuples = 0;
         // Do not clear build input, because it is constant for all DoProbe calls
-        BuildPackedOutput.clear();
-        ProbePackedOutput.clear();
         if (LeftPayloadStorage_) {
             LeftPayloadStorage_->Clear();
         }
@@ -479,11 +500,10 @@ public:
         }
     }
 
-private:    
-    bool HasEnoughMemory() const {
-      return ProbePackedInput.Overflow.capacity() == 0 ||
-             ProbePackedInput.Overflow.size() * 5 <
-                 ProbePackedInput.Overflow.capacity() * 4;
+    void ResetOutput() {
+        OutputRows = 0;
+        BuildPackedOutput.clear();
+        ProbePackedOutput.clear();
     }
 
 public:
@@ -534,19 +554,24 @@ public:
         const TVector<TType*>*  rightItemTypesArg,
         const TVector<ui32>*    rightKeyColumns,
         const TVector<ui32>&    rightIOMap,
+        IBlockGraceJoinPolicy*  policy,
         NUdf::TUnboxedValue     tempStorageValue
     )
         : TBase(memInfo)
         , Ctx_(ctx)
         , ResultItemTypes_(resultItemTypes)
     {
+        using EJoinAlgo = IBlockGraceJoinPolicy::EJoinAlgo;
+
         auto& tempStorage = *static_cast<TTempJoinStorage*>(tempStorageValue.AsBoxed().Get());
+        auto [leftFetchedTuples, rightFetchedTuples] = tempStorage.GetFetchedTuples();
         auto [leftPSz, rightPSz] = tempStorage.GetPayloadSizes();
         auto [leftData, rightData] = tempStorage.DetachData();
-        auto [isLeftFinished, isRightFinished] = tempStorage.IsFinished(); 
+        auto [isLeftFinished, isRightFinished] = tempStorage.IsFinished();
         bool wasSwapped = false;
         // assume that finished stream has less size than unfinished
-        if ((!isLeftFinished && isRightFinished) || (isLeftFinished && isRightFinished && (leftPSz > rightPSz)))
+        if ((!isLeftFinished && isRightFinished) ||
+            (isLeftFinished && isRightFinished && (leftFetchedTuples > rightFetchedTuples)))
         {
             using std::swap;
             swap(leftStream, rightStream); // so swap them
@@ -560,16 +585,16 @@ public:
         BuildData_ = std::move(leftData);
         BuildKeyColumns_ = leftKeyColumns;
         BuildKeyColumnsSet_ = THashSet<ui32>(BuildKeyColumns_->begin(), BuildKeyColumns_->end());
-        // Build payload is so big, so we have to use indirection index and external payload storage
-        IsBuildIndirected_ = (leftPSz > PAYLOAD_SIZE_THRESHOLD);
+        // Use or not external payload depends on the policy
+        IsBuildIndirected_ = policy->UseExternalPayload(EJoinAlgo::HashJoin, leftPSz);
 
         ProbeStream_ = *rightStream;
         ProbeData_ = std::move(rightData);
         ProbeKeyColumns_ = rightKeyColumns;
         ProbeInputs_.resize(rightItemTypesArg->size());
         ProbeKeyColumnsSet_ = THashSet<ui32>(ProbeKeyColumns_->begin(), ProbeKeyColumns_->end());
-        // Probe payload is so big, so we have to use indirection index and external payload storage
-        IsProbeIndirected_ = (rightPSz > PAYLOAD_SIZE_THRESHOLD);
+        // Use or not external payload depends on the policy
+        IsProbeIndirected_ = policy->UseExternalPayload(EJoinAlgo::HashJoin, rightPSz);
 
         // Create converters
         auto pool = &Ctx_.ArrowMemoryPool;
@@ -696,7 +721,7 @@ public:
             return NUdf::EFetchStatus::Ok;
         }
 
-        while (joinState.IsNotFull()) {
+        while (joinState.IsNotFull() && joinState.HasEnoughMemory()) {
             if (!IsFinished_) {
                 status = ProbeStream_.WideFetch(ProbeInputs_.data(), ProbeInputs_.size());
             }
@@ -744,13 +769,15 @@ public:
         // Nothing to do, all work was done
         if (joinState.OutputRows == 0) {
             Y_ENSURE(status == NUdf::EFetchStatus::Finish);
-            joinState.Reset();
+            joinState.ResetInput();
+            joinState.ResetOutput();
             return NUdf::EFetchStatus::Finish;
         }
 
         // Make output
         joinState.MakeBlocks(Ctx_.HolderFactory);
-        joinState.Reset();
+        joinState.ResetInput();
+        joinState.ResetOutput();
         return NUdf::EFetchStatus::Ok;
     }
 
@@ -827,8 +854,6 @@ private:
     NUdf::TUnboxedValue         JoinState_;
     TTable                      Table_;
     bool                        IsFinished_{false};
-
-    static constexpr ui32       PAYLOAD_SIZE_THRESHOLD{64}; // if payload size of tuple bigger than PAYLOAD_SIZE_THRESHOLD bytes then BAT should be more efficient than pure TLayout
 };
 
 // -------------------------------------------------------------------
@@ -849,12 +874,15 @@ public:
         const TVector<TType*>*  rightItemTypesArg,
         const TVector<ui32>*    rightKeyColumns,
         const TVector<ui32>&    rightIOMap,
+        IBlockGraceJoinPolicy*  policy,
         NUdf::TUnboxedValue     tempStorageValue
     )
         : TBase(memInfo)
         , Ctx_(ctx)
         , ResultItemTypes_(resultItemTypes)
     {
+        using EJoinAlgo = IBlockGraceJoinPolicy::EJoinAlgo;
+
         auto& tempStorage = *static_cast<TTempJoinStorage*>(tempStorageValue.AsBoxed().Get());
         auto [leftPSz, rightPSz] = tempStorage.GetPayloadSizes();
         auto [leftData, rightData] = tempStorage.DetachData();
@@ -870,12 +898,12 @@ public:
         }
 
         THashSet<ui32> leftKeyColumnsSet(leftKeyColumns->begin(), leftKeyColumns->end());
-        // Left payload is so big, so we have to use indirection index and external payload storage
-        bool isLeftIndirected = (leftPSz > PAYLOAD_SIZE_THRESHOLD);
+        // Use or not external payload depends on the policy
+        bool isLeftIndirected = policy->UseExternalPayload(EJoinAlgo::InMemoryGraceJoin, leftPSz);
 
         THashSet<ui32> rightKeyColumnsSet(rightKeyColumns->begin(), rightKeyColumns->end());
-        // Right payload is so big, so we have to use indirection index and external payload storage
-        bool isRightIndirected = (rightPSz > PAYLOAD_SIZE_THRESHOLD);
+        // Use or not external payload depends on the policy
+        bool isRightIndirected = policy->UseExternalPayload(EJoinAlgo::InMemoryGraceJoin, rightPSz);
 
         // Create converters
         auto pool = &Ctx_.ArrowMemoryPool;
@@ -1021,7 +1049,11 @@ public:
 
         // Make output
         joinState.MakeBlocks(Ctx_.HolderFactory);
-        joinState.Reset();
+        // Reset input only if pair of buckets fully processed, or we will reset currently processing data
+        if (NeedNextBucket_) {
+            joinState.ResetInput();
+        }
+        joinState.ResetOutput();
         return NUdf::EFetchStatus::Ok;
     }
 
@@ -1064,7 +1096,10 @@ private:
         auto *tuple = joinState.ProbePackedInput.PackedTuples.data() + CurrProbeRow_ * probeLayout->TotalRowSize;
 
         /// TODO: batching
-        for (; CurrProbeRow_ < nTuples; CurrProbeRow_++, tuple += probeLayout->TotalRowSize) {
+        // WARNING: we can not properly track the number of output rows due to Apply,
+        // so add joinState.IsNotFull() check to prevent overflow in AddMany builder's method.
+        // FIXME: Add iterator in HT and remove Apply to add tuples to output one by one
+        for (; CurrProbeRow_ < nTuples && joinState.IsNotFull(); CurrProbeRow_++, tuple += probeLayout->TotalRowSize) {
             Table_.Apply(tuple, overflow, [&joinState, buildLayout, probeLayout, tuple](const ui8* foundTuple) {
                 // Copy tuple from build part into output
                 auto prevSize = joinState.BuildPackedOutput.size();
@@ -1107,17 +1142,14 @@ private:
     ui32 CurrBucket_ = 0;
     ui32 CurrProbeRow_ = 0;
     bool NeedNextBucket_{true};  // if need to get to next bucket
-
-    static constexpr ui32 PAYLOAD_SIZE_THRESHOLD{64}; // if payload size of tuple bigger than PAYLOAD_SIZE_THRESHOLD bytes then BAT should be more efficient than pure TLayout
 };
-
 
 // -------------------------------------------------------------------
 class TStreamValue : public TComputationValue<TStreamValue> {
 private:
     using TBase = TComputationValue<TStreamValue>;
 
-    enum class TMode {
+    enum class EMode {
         Start,  // trying to decide what algorithm use: hash join or grace hash join
         HashJoin,
         InMemoryGraceJoin,
@@ -1136,7 +1168,8 @@ public:
         NUdf::TUnboxedValue&&   rightStream,
         const TVector<TType*>&  rightItemTypes,
         const TVector<ui32>&    rightKeyColumns,
-        const TVector<ui32>&    rightIOMap
+        const TVector<ui32>&    rightIOMap,
+        IBlockGraceJoinPolicy*  policy
     )
         : TBase(memInfo)
         , Ctx_(ctx)
@@ -1149,6 +1182,7 @@ public:
         , RightItemTypes_(rightItemTypes)
         , RightKeyColumns_(rightKeyColumns)
         , RightIOMap_(rightIOMap)
+        , Policy_(policy)
     {
         TempStorage_ = Ctx_.HolderFactory.Create<TTempJoinStorage>(
             leftItemTypes,
@@ -1157,6 +1191,7 @@ public:
             rightItemTypes,
             rightKeyColumns,
             RightStream_,
+            Policy_,
             &Ctx_.ArrowMemoryPool
         );
     }
@@ -1174,13 +1209,14 @@ private:
 
     switch_mode:
         switch (GetMode()) {
-        case TMode::Start:
-        {
-            using TStatus = TTempJoinStorage::TStatus;
-            auto& tempStorage = *GetTempState();
-            auto status = TStatus::Unknown;
+        case EMode::Start: {
+            using EStatus = TTempJoinStorage::EStatus;
+            using EJoinAlgo = IBlockGraceJoinPolicy::EJoinAlgo;
 
-            while (status == TStatus::Unknown) {
+            auto& tempStorage = *GetTempState();
+            auto status = EStatus::Unknown;
+
+            while (status == EStatus::Unknown) {
                 if (tempStorage.FetchStreams() == NUdf::EFetchStatus::Yield) {
                     return NUdf::EFetchStatus::Yield;
                 }
@@ -1188,34 +1224,44 @@ private:
             }
 
             switch (status) {
-            case TTempJoinStorage::TStatus::BothStreamsFinished: {
-                MakeInMemoryGraceJoin();
+            case TTempJoinStorage::EStatus::BothStreamsFinished: {
+                auto [lSize, rSize] = tempStorage.GetFetchedSizes();
 
-                SwitchModeTo(TMode::InMemoryGraceJoin);
+                // The choice of algorithm depends on the policy. See default policy
+                if (Policy_->PickAlgorithm(lSize, rSize) == EJoinAlgo::HashJoin) {
+                    MakeHashJoin();
+                    auto& hashJoin = *GetHashJoin();
+                    hashJoin.BuildIndex();
+                    SwitchModeTo(EMode::HashJoin);
+                } else {
+                    MakeInMemoryGraceJoin();
+                    SwitchModeTo(EMode::InMemoryGraceJoin);
+                }
+
                 goto switch_mode;
             }
-            case TTempJoinStorage::TStatus::OneStreamFinished: {
+            case TTempJoinStorage::EStatus::OneStreamFinished: {
                 MakeHashJoin();
                 auto& hashJoin = *GetHashJoin();
                 hashJoin.BuildIndex();
 
-                SwitchModeTo(TMode::HashJoin);
+                SwitchModeTo(EMode::HashJoin);
                 goto switch_mode;
             }
-            case TTempJoinStorage::TStatus::MemoryLimitExceeded: {
+            case TTempJoinStorage::EStatus::MemoryLimitExceeded: {
                 /// TODO: not implemented
                 Y_ASSERT(false); // Grace hash join not implemented yet
 
-                SwitchModeTo(TMode::GraceHashJoin);
+                SwitchModeTo(EMode::GraceHashJoin);
                 goto switch_mode;
             }
-            case TTempJoinStorage::TStatus::Unknown:
-                Y_ASSERT(false);
+            case TTempJoinStorage::EStatus::Unknown:
+                Y_UNREACHABLE();
             }
 
             Y_UNREACHABLE();
         }
-        case TMode::HashJoin: {
+        case EMode::HashJoin: {
             auto& hashJoin = *GetHashJoin();
             auto status = hashJoin.DoProbe();
             if (status == NUdf::EFetchStatus::Ok) {
@@ -1223,7 +1269,7 @@ private:
             }
             return status;
         }
-        case TMode::InMemoryGraceJoin: {
+        case EMode::InMemoryGraceJoin: {
             auto& join = *GetInMemoryGraceJoin();
             auto status = join.DoProbe();
             if (status == NUdf::EFetchStatus::Ok) {
@@ -1231,7 +1277,7 @@ private:
             }
             return status;
         }
-        case TMode::GraceHashJoin: {
+        case EMode::GraceHashJoin: {
             /// TODO: not implemented
             Y_ASSERT(false); // Grace hash join not implemented yet
         }
@@ -1250,8 +1296,10 @@ private:
             Ctx_, &ResultItemTypes_,
             &LeftStream_, &LeftItemTypes_, &LeftKeyColumns_, LeftIOMap_,
             &RightStream_, &RightItemTypes_, &RightKeyColumns_, RightIOMap_,
-            std::move(TempStorage_));
-        JoinName_ = "BlockGraceJoin:HashJoin";
+            Policy_, std::move(TempStorage_));
+        auto newJoinName = "BlockGraceJoin::HashJoin";
+        globalResourceMeter.MergeHistoryPages(JoinName_, newJoinName);
+        JoinName_ = newJoinName;
     }
 
     THashJoin* GetHashJoin() {
@@ -1263,24 +1311,26 @@ private:
             Ctx_, &ResultItemTypes_,
             &LeftItemTypes_, &LeftKeyColumns_, LeftIOMap_,
             &RightItemTypes_, &RightKeyColumns_, RightIOMap_,
-            std::move(TempStorage_));
-        JoinName_ = "BlockGraceJoin:InMemoryGraceJoin";
+            Policy_, std::move(TempStorage_));
+        auto newJoinName = "BlockGraceJoin::InMemoryGraceJoin";
+        globalResourceMeter.MergeHistoryPages(JoinName_, newJoinName);
+        JoinName_ = newJoinName;
     }
 
     TInMemoryGraceJoin* GetInMemoryGraceJoin() {
         return static_cast<TInMemoryGraceJoin*>(Join_.AsBoxed().Get());
     }
 
-    TMode GetMode() const {
+    EMode GetMode() const {
         return Mode_;
     }
 
-    void SwitchModeTo(TMode other) {
+    void SwitchModeTo(EMode other) {
         Mode_ = other;
     }
 
 private:
-    TMode                   Mode_{TMode::Start};
+    EMode                   Mode_{EMode::Start};
     TComputationContext&    Ctx_;
     const TVector<TType*>&  ResultItemTypes_;
 
@@ -1293,6 +1343,8 @@ private:
     const TVector<TType*>&  RightItemTypes_;
     const TVector<ui32>&    RightKeyColumns_;
     const TVector<ui32>&    RightIOMap_;
+
+    IBlockGraceJoinPolicy*  Policy_;
 
     NUdf::TUnboxedValue     TempStorage_;
     NUdf::TUnboxedValue     Join_;
@@ -1315,7 +1367,8 @@ public:
         const TVector<ui32>&&   rightKeyColumns,
         const TVector<ui32>&&   rightIOMap,
         IComputationNode*       leftStream,
-        IComputationNode*       rightStream
+        IComputationNode*       rightStream,
+        IBlockGraceJoinPolicy*  policy
     )
         : TBaseComputation(mutables, EValueRepresentation::Boxed)
         , ResultItemTypes_(std::move(resultItemTypes))
@@ -1327,6 +1380,7 @@ public:
         , RightIOMap_(std::move(rightIOMap))
         , LeftStream_(std::move(leftStream))
         , RightStream_(std::move(rightStream))
+        , Policy_(policy)
         , KeyTupleCache_(mutables)
     {}
 
@@ -1341,7 +1395,8 @@ public:
             std::move(RightStream_->GetValue(ctx)),
             RightItemTypes_,
             RightKeyColumns_,
-            RightIOMap_
+            RightIOMap_,
+            Policy_
         );
     }
 
@@ -1365,13 +1420,15 @@ private:
     IComputationNode*       LeftStream_;
     IComputationNode*       RightStream_;
 
+    IBlockGraceJoinPolicy*  Policy_;
+
     const TContainerCacheOnContext KeyTupleCache_;
 };
 
 } // namespace
 
 IComputationNode* WrapBlockGraceJoinCore(TCallable& callable, const TComputationNodeFactoryContext& ctx) {
-    MKQL_ENSURE(callable.GetInputsCount() == 8, "Expected 8 args");
+    MKQL_ENSURE(callable.GetInputsCount() == 9, "Expected 9 args");
 
     const auto joinType = callable.GetType()->GetReturnType();
     MKQL_ENSURE(joinType->IsStream(), "Expected WideStream as a resulting stream");
@@ -1458,6 +1515,10 @@ IComputationNode* WrapBlockGraceJoinCore(TCallable& callable, const TComputation
 
     [[maybe_unused]] const auto rightAnyNode = callable.GetInput(7);
 
+    const auto untypedPolicyNode = callable.GetInput(8);
+    const auto untypedPolicy = AS_VALUE(TDataLiteral, untypedPolicyNode)->AsValue().Get<ui64>();
+    const auto policy = static_cast<IBlockGraceJoinPolicy*>(reinterpret_cast<void*>(untypedPolicy));
+
     // XXX: Mind the last wide item, containing block length.
     TVector<ui32> leftIOMap;
     for (size_t i = 0; i < leftStreamItems.size() - 1; i++) {
@@ -1489,7 +1550,8 @@ IComputationNode* WrapBlockGraceJoinCore(TCallable& callable, const TComputation
         std::move(rightKeyColumns),
         std::move(rightIOMap),
         leftStream,
-        rightStream
+        rightStream,
+        policy ? policy : &globalDefaultPolicy
     );
 }
 

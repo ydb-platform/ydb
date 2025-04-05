@@ -272,7 +272,8 @@ public:
     );
     TRuntimeNode BlockGraceJoinCore(TRuntimeNode leftStream, TRuntimeNode rightStream, EJoinKind joinKind,
         const TArrayRef<const ui32>& leftKeyColumns, const TArrayRef<const ui32>& leftKeyDrops,
-        const TArrayRef<const ui32>& rightKeyColumns, const TArrayRef<const ui32>& rightKeyDrops, bool rightAny, TType* returnType);
+        const TArrayRef<const ui32>& rightKeyColumns, const TArrayRef<const ui32>& rightKeyDrops,
+        bool rightAny, TType* returnType, /* IBlockGraceJoinPolicy* */ const void* untypedPolicy = nullptr);
 
     //-- logical functions
     TRuntimeNode BlockNot(TRuntimeNode data);

@@ -994,6 +994,14 @@ private:
     private:
         NUdf::EFetchStatus WideFetch(NUdf::TUnboxedValue* output, ui32 width) {
             std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
+            Y_DEFER {
+                const auto end = std::chrono::steady_clock::now();
+                const auto spent =
+                    std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
+                globalResourceMeter.UpdateSpentTime("BlockMapJoin", spent);
+                globalResourceMeter.UpdateConsumptedMemory("BlockMapJoin", TlsAllocState->GetUsed());
+            };
+
             auto& joinState = *static_cast<TJoinState*>(JoinState_.AsBoxed().Get());
             auto& indexState = *static_cast<TIndexState*>(RightBlockIndex_.GetResource());
             auto& storageState = *static_cast<TStorageState*>(indexState.GetBlockStorage().GetResource());
@@ -1003,10 +1011,6 @@ private:
                 while (fetchStatus != NUdf::EFetchStatus::Finish) {
                     fetchStatus = storageState.FetchStream();
                     if (fetchStatus == NUdf::EFetchStatus::Yield) {
-                        std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-                        ui64 spent = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                        globalResourceMeter.UpdateSpentTime("BlockMapJoin", spent);
-                        globalResourceMeter.UpdateConsumptedMemory("BlockMapJoin", TlsAllocState->GetUsed());
                         return NUdf::EFetchStatus::Yield;
                     }
                 }
@@ -1073,13 +1077,7 @@ private:
                 if (joinState.IsNotFull() && !joinState.IsFinished()) {
                     switch (LeftStream_.WideFetch(inputFields, inputWidth)) {
                     case NUdf::EFetchStatus::Yield:
-                    {
-                        std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-                        ui64 spent = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                        globalResourceMeter.UpdateSpentTime("BlockMapJoin", spent);
-                        globalResourceMeter.UpdateConsumptedMemory("BlockMapJoin", TlsAllocState->GetUsed());
                         return NUdf::EFetchStatus::Yield;
-                    }
                     case NUdf::EFetchStatus::Ok:
                         joinState.Reset();
                         continue;
@@ -1091,10 +1089,6 @@ private:
                     Y_DEBUG_ABORT_UNLESS(joinState.IsFinished());
                 }
                 if (joinState.IsEmpty()) {
-                    std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-                    ui64 spent = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-                    globalResourceMeter.UpdateSpentTime("BlockMapJoin", spent);
-                    globalResourceMeter.UpdateConsumptedMemory("BlockMapJoin", TlsAllocState->GetUsed());
                     return NUdf::EFetchStatus::Finish;
                 }
                 joinState.MakeBlocks(HolderFactory_);
@@ -1106,10 +1100,6 @@ private:
                 output[i] = joinState.Get(sliceSize, HolderFactory_, i);
             }
 
-            std::chrono::steady_clock::time_point end = std::chrono::steady_clock::now();
-            ui64 spent = std::chrono::duration_cast<std::chrono::microseconds>(end - begin).count();
-            globalResourceMeter.UpdateSpentTime("BlockMapJoin", spent);
-            globalResourceMeter.UpdateConsumptedMemory("BlockMapJoin", TlsAllocState->GetUsed());
             return NUdf::EFetchStatus::Ok;
         }
 

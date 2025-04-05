@@ -13,7 +13,7 @@ enum class ECalculationHardness {
     NotSpecified = 3,
     Equals = 5,
     StringMatching = 10,
-    Unknown = 20
+    Unknown = 8
 };
 
 class IKernelLogic {
@@ -23,8 +23,20 @@ private:
 
     virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const = 0;
     YDB_ACCESSOR_DEF(std::optional<ui32>, YqlOperationId);
-
+    virtual NJson::TJsonValue DoDebugJson() const {
+        return NJson::JSON_NULL;
+    }
 public:
+    NJson::TJsonValue DebugJson() const {
+        NJson::TJsonValue result = NJson::JSON_MAP;
+        result.InsertValue("class_name", GetClassName());
+        auto details = DoDebugJson();
+        if (details.IsDefined()) {
+            result.InsertValue("details", std::move(details));
+        }
+        return result;
+    }
+
     IKernelLogic() = default;
 
     IKernelLogic(const ui32 yqlOperationId)
@@ -66,6 +78,7 @@ private:
         return false;
     }
 
+    virtual NJson::TJsonValue DoDebugJson() const override;
     virtual std::optional<TIndexCheckOperation> DoGetIndexCheckerOperation() const override {
         return std::nullopt;
     }
@@ -110,6 +123,10 @@ private:
     const TIndexCheckOperation::EOperation Operation;
     const bool CaseSensitive;
     const bool IsSimpleFunction;
+
+    virtual NJson::TJsonValue DoDebugJson() const override {
+        return ::ToString(Operation) + "::" + ::ToString(CaseSensitive) + "::" + ::ToString(IsSimpleFunction);
+    }
 
 public:
     TLogicMatchString(const TIndexCheckOperation::EOperation operation, const bool caseSensitive, const bool isSimpleFunction)

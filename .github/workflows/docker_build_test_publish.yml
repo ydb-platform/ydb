@@ -1,8 +1,11 @@
-name: Publish docker image
+name: Docker Image
 
 on:
   schedule:
     - cron: "0 3 * * *"  # At 03:00 every day
+  pull_request:
+    branches:
+      - 'main'
   workflow_dispatch:
     inputs:
       git_ref:
@@ -21,7 +24,7 @@ on:
         default: trunk
         description: "docker image tag"
 jobs:
-  build:
+  build-test-publish:
     runs-on: [self-hosted, auto-provisioned]
     steps:
       - name: Checkout .github
@@ -102,6 +105,7 @@ jobs:
           docker stop local-ydb-test || true
 
       - name: Push docker image
+        if: ${{ github.event_name != 'pull_request' }}
         uses: docker/build-push-action@v4
         with:
           context: .

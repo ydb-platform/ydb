@@ -77,6 +77,21 @@
             ]
         },
         {
+            "Name": "TDqPqFederatedCluster",
+            "Base": "TCallable",
+            "Match": {"Type": "Callable", "Name": "DqPqFederatedCluster"},
+            "Children": [
+                {"Index": 0, "Name": "Name", "Type": "TCoAtom"},
+                {"Index": 1, "Name": "Endpoint", "Type": "TCoAtom"},
+                {"Index": 2, "Name": "Database", "Type": "TCoAtom"},
+                {"Index": 3, "Name": "PartitionsCount", "Type": "TCoAtom", "Optional": true}
+            ]
+        },
+        {
+            "Name": "TDqPqFederatedClusterList",
+            "ListBase": "TDqPqFederatedCluster"
+        },
+        {
             "Name": "TDqPqTopicSink",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "DqPqTopicSink"},

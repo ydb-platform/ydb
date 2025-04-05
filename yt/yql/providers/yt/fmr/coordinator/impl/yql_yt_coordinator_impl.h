@@ -1,6 +1,7 @@
 #pragma once
 
 #include <library/cpp/random_provider/random_provider.h>
+#include <library/cpp/yson/node/node.h>
 #include <util/system/mutex.h>
 #include <util/system/guard.h>
 #include <util/generic/queue.h>

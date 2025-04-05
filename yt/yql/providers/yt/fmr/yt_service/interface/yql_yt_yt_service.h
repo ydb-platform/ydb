@@ -11,7 +11,6 @@ struct TYtReaderSettings {
 };
 
 struct TYtWriterSettings {
-    bool AppendMode = true;
 };
 
 class IYtService: public TThrRefBase {

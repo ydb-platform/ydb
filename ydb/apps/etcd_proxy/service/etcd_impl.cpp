@@ -1067,13 +1067,23 @@ private:
     }
 
     void MakeQueryWithParams(std::ostream& sql, NYdb::TParamsBuilder& params) final {
-        sql << "delete from `content` where `modified` < " << AddParam("Revision", params, KeyRevision) << ';' << std::endl;
+        sql << "$Trash = select c.key as key, c.modified as modified from `content` as c inner join (" << std::endl;
+        sql << "select max_by((`key`, `modified`), `modified`) as pair from `content`" << std::endl;
+        sql << "where `modified` < " << AddParam("Revision", params, KeyRevision) << " and 0L = `version` group by `key`" << std::endl;
+        sql << ") as keys on keys.pair.0 = c.key where c.modified <= keys.pair.1;" << std::endl;
+        sql << "select count(*) from $Trash;" << std::endl;
+        sql << "delete from `content` on select * from $Trash;" << std::endl;
     }
 
-    void ReplyWith(const NYdb::TResultSets&, const TActorContext& ctx) final {
+    void ReplyWith(const NYdb::TResultSets& results, const TActorContext& ctx) final {
+        auto parser = NYdb::TResultSetParser(results.front());
+        const auto erased = parser.TryNextRow() ? NYdb::TValueParser(parser.GetValue(0)).GetUint64() : 0ULL;
+        if (!erased)
+            TryToRollbackRevision();
+
         etcdserverpb::CompactionResponse response;
         response.mutable_header()->set_revision(Revision);
-        Dump(std::cout) << std::endl;
+        Dump(std::cout) << '=' << erased << std::endl;
         return Reply(response, ctx);
     }
 

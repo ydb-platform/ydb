@@ -1688,14 +1688,7 @@ TTestExtEnv::~TTestExtEnv() {
 }
 
 void TTestExtEnv::CreateDatabase(const TString& databaseName) {
-    auto& runtime = *Server->GetRuntime();
     auto fullDbName = "/Root/" + databaseName;
-
-    using TEvCreateDatabaseRequest = NKikimr::NGRpcService::TGrpcRequestOperationCall
-    <
-        Ydb::Cms::CreateDatabaseRequest,
-        Ydb::Cms::CreateDatabaseResponse
-    >;
 
     Ydb::Cms::CreateDatabaseRequest request;
     request.set_path(fullDbName);
@@ -1705,12 +1698,7 @@ void TTestExtEnv::CreateDatabase(const TString& databaseName) {
     storage->set_unit_kind(EnvSettings.PoolName);
     storage->set_count(1);
 
-    auto future = NRpcService::DoLocalRpc<TEvCreateDatabaseRequest>(std::move(request), "", "", runtime.GetActorSystem(0));
-    auto response = runtime.WaitFuture(std::move(future));
-    UNIT_ASSERT(response.operation().ready());
-    UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
-
-    Tenants->Run(fullDbName, EnvSettings.DynamicNodeCount);
+    Tenants->CreateTenant(request, EnvSettings.DynamicNodeCount);
 }
 
 } // namspace NKqp

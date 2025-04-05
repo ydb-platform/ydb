@@ -366,6 +366,13 @@ TYtConfiguration::TYtConfiguration(TTypeAnnotationContext& typeCtx)
             OperationSpec[cluster] = spec;
             HybridDqExecution = false;
         });
+    REGISTER_SETTING(*this, FmrOperationSpec)
+        .Parser([](const TString& v) { return NYT::NodeFromYsonString(v, ::NYson::EYsonType::Node); })
+        .Validator([] (const TString&, const NYT::TNode& value) {
+            if (!value.IsMap()) {
+                throw yexception() << "Expected yson map, but got " << value.GetType();
+            }
+        });
     REGISTER_SETTING(*this, Annotations)
         .Parser([](const TString& v) { return NYT::NodeFromYsonString(v); })
         .Validator([] (const TString&, const NYT::TNode& value) {

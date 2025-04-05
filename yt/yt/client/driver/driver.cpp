@@ -537,8 +537,8 @@ private:
     TClientCachePtr ClientCache_;
     const IClientPtr RootClient_;
     IProxyDiscoveryCachePtr ProxyDiscoveryCache_;
-    ISignatureGeneratorPtr SignatureGenerator_;
-    ISignatureValidatorPtr SignatureValidator_;
+    const ISignatureGeneratorPtr SignatureGenerator_;
+    const ISignatureValidatorPtr SignatureValidator_;
 
     class TCommandContext;
     using TCommandContextPtr = TIntrusivePtr<TCommandContext>;

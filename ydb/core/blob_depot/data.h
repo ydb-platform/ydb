@@ -406,11 +406,16 @@ namespace NKikimr::NBlobDepot {
         };
 
         struct TAssimilatedBlobInfo {
-            NKikimrProto::EReplyStatus Status;
-            TBlobSeqId BlobSeqId;
+            struct TDrop {};
+
+            struct TUpdate {
+                TBlobSeqId BlobSeqId;
+                bool Keep = false;
+                bool DoNotKeep = false;
+            };
+
             TKey Key;
-            bool Keep = false;
-            bool DoNotKeep = false;
+            std::variant<TDrop, TUpdate> Action;
         };
 
     private:
@@ -738,7 +743,7 @@ namespace NKikimr::NBlobDepot {
         bool IsLoaded() const { return Loaded; }
         bool IsKeyLoaded(const TKey& key) const { return Loaded || LoadedKeys[key]; }
 
-        bool EnsureKeyLoaded(const TKey& key, NTabletFlatExecutor::TTransactionContext& txc);
+        bool EnsureKeyLoaded(const TKey& key, NTabletFlatExecutor::TTransactionContext& txc, bool *progress = nullptr);
 
         template<typename TRecord>
         bool LoadMissingKeys(const TRecord& record, NTabletFlatExecutor::TTransactionContext& txc);

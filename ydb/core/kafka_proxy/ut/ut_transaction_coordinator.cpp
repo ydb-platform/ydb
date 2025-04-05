@@ -306,5 +306,4 @@ namespace {
             UNIT_ASSERT_EQUAL(firstResponse->ErrorCode, NKafka::EKafkaErrors::PRODUCER_FENCED);
         }
     }
-
 } // namespace

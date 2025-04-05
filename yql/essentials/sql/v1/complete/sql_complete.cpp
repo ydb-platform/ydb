@@ -102,6 +102,7 @@ namespace NSQLComplete {
                         return {ECandidateKind::TypeName, std::move(name.Indentifier)};
                     }
                     if constexpr (std::is_base_of_v<TFunctionName, T>) {
+                        name.Indentifier += "(";
                         return {ECandidateKind::FunctionName, std::move(name.Indentifier)};
                     }
                 }, std::move(name)));
@@ -127,11 +128,11 @@ namespace NSQLComplete {
         lexers.Antlr4Pure = NSQLTranslationV1::MakeAntlr4PureLexerFactory();
         lexers.Antlr4PureAnsi = NSQLTranslationV1::MakeAntlr4PureAnsiLexerFactory();
 
-        INameService::TPtr names = MakeStaticNameService(MakeDefaultNameSet());
+        INameService::TPtr names = MakeStaticNameService(MakeDefaultNameSet(), MakeDefaultRanking());
 
         return MakeSqlCompletionEngine([lexers = std::move(lexers)](bool ansi) {
             return NSQLTranslationV1::MakeLexer(
-                lexers, ansi, /* antlr4 = */ true, 
+                lexers, ansi, /* antlr4 = */ true,
                 NSQLTranslationV1::ELexerFlavor::Pure);
         }, std::move(names));
     }

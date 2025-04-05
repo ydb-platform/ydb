@@ -1020,6 +1020,60 @@ Y_UNIT_TEST_SUITE(Etcd_KV) {
             }
         });
     }
+
+    Y_UNIT_TEST(Compact) {
+        MakeSimpleTest([](const std::unique_ptr<etcdserverpb::KV::Stub> &etcd) {
+            Put("key0", "value0", etcd);
+            Put("key3", "value1", etcd);
+            Put("key2", "value2", etcd);
+            Put("key0", "value3", etcd);
+            Put("key1", "value4", etcd);
+            Delete("key2", etcd);
+            const auto revForCompact = Put("key3", "value5", etcd);
+            Delete("key1", etcd);
+            const auto revForRequest = Put("key3", "value6", etcd);
+            Delete("key0", etcd);
+            Delete("key3", etcd);
+
+            {
+                grpc::ClientContext readRangeCtx;
+                etcdserverpb::RangeRequest rangeRequest;
+                rangeRequest.set_key("key");
+                rangeRequest.set_range_end("kez");
+                rangeRequest.set_keys_only(true);
+                etcdserverpb::RangeResponse rangeResponse;
+                UNIT_ASSERT(etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse).ok());
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.count(), 0LL);
+            }
+
+            {
+                grpc::ClientContext compactCtx;
+                etcdserverpb::CompactionRequest compactionRequest;
+                compactionRequest.set_revision(revForCompact);
+                etcdserverpb::CompactionResponse compactionResponse;
+                UNIT_ASSERT(etcd->Compact(&compactCtx, compactionRequest, &compactionResponse).ok());
+            }
+
+            {
+                grpc::ClientContext readRangeCtx;
+                etcdserverpb::RangeRequest rangeRequest;
+                rangeRequest.set_key("key");
+                rangeRequest.set_range_end("kez");
+                rangeRequest.set_revision(revForRequest);
+                rangeRequest.set_sort_target(etcdserverpb::RangeRequest_SortTarget_VALUE);
+                rangeRequest.set_sort_order(etcdserverpb::RangeRequest_SortOrder_ASCEND);
+                etcdserverpb::RangeResponse rangeResponse;
+                UNIT_ASSERT(etcd->Range(&readRangeCtx, rangeRequest, &rangeResponse).ok());
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.count(), 2LL);
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs().size(), 2U);
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).key(), "key0");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(1).key(), "key3");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(0).value(), "value3");
+                UNIT_ASSERT_VALUES_EQUAL(rangeResponse.kvs(1).value(), "value6");
+            }
+
+        });
+    }
 } // Y_UNIT_TEST_SUITE(Etcd_KV)
 
 Y_UNIT_TEST_SUITE(Etcd_Lease) {

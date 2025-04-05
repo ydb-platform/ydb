@@ -5,6 +5,8 @@ PROGRAM()
 PEERDIR(
     library/cpp/getopt
     yql/essentials/sql/v1/complete
+    yql/essentials/sql/v1/lexer/antlr4_pure
+    yql/essentials/sql/v1/lexer/antlr4_pure_ansi
 )
 
 SRCS(

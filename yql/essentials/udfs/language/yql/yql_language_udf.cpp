@@ -45,6 +45,12 @@ public:
             VisitUnaryCasualSubexpr(dynamic_cast<const TRule_in_unary_casual_subexpr&>(msg));
         } else if (descr == TRule_type_name_simple::GetDescriptor()) {
             VisitSimpleType(dynamic_cast<const TRule_type_name_simple&>(msg));
+        } else if (descr == TRule_pragma_stmt::GetDescriptor()) {
+            VisitPragmaStmt(dynamic_cast<const TRule_pragma_stmt&>(msg));
+        } else if (descr == TRule_into_simple_table_ref::GetDescriptor()) {
+            VisitInsertTableRef(dynamic_cast<const TRule_into_simple_table_ref&>(msg));
+        } else if (descr == TRule_table_ref::GetDescriptor()) {
+            VisitReadTableRef(dynamic_cast<const TRule_table_ref&>(msg));
         }
 
         TStringBuf fullName = descr->full_name();
@@ -82,6 +88,70 @@ private:
                 const auto& id = val.GetAlt_pure_column_or_named2().GetRule_an_id1();
                 Freqs[std::make_pair("USE", Id(id, Translation))] += 1;
             }
+        }
+    }
+
+    void VisitPragmaStmt(const TRule_pragma_stmt& msg) {
+        const TString prefix = OptIdPrefixAsStr(msg.GetRule_opt_id_prefix_or_type2(), Translation);
+        const TString pragma(Id(msg.GetRule_an_id3(), Translation));
+        Freqs[std::make_pair("PRAGMA", prefix.empty() ? pragma : (prefix + "." + pragma))] += 1;
+    }
+
+    void VisitHint(const TRule_table_hint& msg, const TString& parent) {
+        switch (msg.Alt_case()) {
+        case TRule_table_hint::kAltTableHint1: {
+            const auto& alt = msg.GetAlt_table_hint1();
+            const TString id = Id(alt.GetRule_an_id_hint1(), Translation);
+            Freqs[std::make_pair(parent, id)] += 1;
+            break;
+        }
+        case TRule_table_hint::kAltTableHint2: {
+            const auto& alt = msg.GetAlt_table_hint2();
+            Freqs[std::make_pair(parent, alt.GetToken1().GetValue())] += 1;
+            break;
+        }
+        case TRule_table_hint::kAltTableHint3: {
+            const auto& alt = msg.GetAlt_table_hint3();
+            Freqs[std::make_pair(parent, alt.GetToken1().GetValue())] += 1;
+            break;
+        }
+        case TRule_table_hint::ALT_NOT_SET:
+            return;
+        }
+    }
+
+    void VisitHints(const TRule_table_hints& msg, const TString& parent) {
+        auto& block = msg.GetBlock2();
+        switch (block.Alt_case()) {
+        case TRule_table_hints::TBlock2::kAlt1: {
+            VisitHint(block.GetAlt1().GetRule_table_hint1(), parent);
+            break;
+        }
+        case TRule_table_hints::TBlock2::kAlt2: {
+            VisitHint(block.GetAlt2().GetRule_table_hint2(), parent);
+            for (const auto& x : block.GetAlt2().GetBlock3()) {
+                VisitHint(x.GetRule_table_hint2(), parent);
+            }
+
+            break;
+        }
+        case TRule_table_hints::TBlock2::ALT_NOT_SET:
+            return;
+        }
+    }
+
+    void VisitReadTableRef(const TRule_table_ref& msg) {
+        if (msg.HasBlock4()) {
+            const auto& hints = msg.GetBlock4().GetRule_table_hints1();
+            VisitHints(hints, "READ_HINT");
+        }
+    }
+
+    void VisitInsertTableRef(const TRule_into_simple_table_ref& msg) {
+        const auto& tableRef = msg.GetRule_simple_table_ref1();
+        if (tableRef.HasBlock2()) {
+            const auto& hints = tableRef.GetBlock2().GetRule_table_hints1();
+            VisitHints(hints, "INSERT_HINT");
         }
     }
 

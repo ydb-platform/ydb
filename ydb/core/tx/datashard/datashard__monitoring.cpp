@@ -78,14 +78,14 @@ void TDataShard::Handle(TEvDataShard::TEvGetInfoRequest::TPtr& ev) {
         control.SetValue(ToString(value));
     };
 
-    addControl(MaxTxInFly, "DataShardControls.MaxTxInFly");
-    addControl(DisableByKeyFilter, "DataShardControls.DisableByKeyFilter");
-    addControl(MaxTxLagMilliseconds, "DataShardControls.MaxTxLagMilliseconds");
-    addControl(CanCancelROWithReadSets, "DataShardControls.CanCancelROWithReadSets");
-    addControl(DataTxProfileLogThresholdMs, "DataShardControls.DataTxProfile.LogThresholdMs");
-    addControl(DataTxProfileBufferThresholdMs, "DataShardControls.DataTxProfile.BufferThresholdMs");
-    addControl(DataTxProfileBufferSize, "DataShardControls.DataTxProfile.BufferSize");
-    addControl(PerShardReadSizeLimit, "TxLimitControls.PerShardReadSizeLimit");
+    addControl(MaxTxInFly, ToString(EStaticControlType::DataShardControlsMaxTxInFly));
+    addControl(DisableByKeyFilter, ToString(EStaticControlType::DataShardControlsDisableByKeyFilter));
+    addControl(MaxTxLagMilliseconds, ToString(EStaticControlType::DataShardControlsMaxTxLagMilliseconds));
+    addControl(CanCancelROWithReadSets, ToString(EStaticControlType::DataShardControlsCanCancelROWithReadSets));
+    addControl(DataTxProfileLogThresholdMs, ToString(EStaticControlType::DataShardControlsDataTxProfileLogThresholdMs));
+    addControl(DataTxProfileBufferThresholdMs, ToString(EStaticControlType::DataShardControlsDataTxProfileBufferThresholdMs));
+    addControl(DataTxProfileBufferSize, ToString(EStaticControlType::DataShardControlsDataTxProfileBufferSize));
+    addControl(PerShardReadSizeLimit, ToString(EStaticControlType::TxLimitControlsPerShardReadSizeLimit));
 
     auto completed = Pipeline.GetExecutionUnit(EExecutionUnitKind::CompletedOperations).GetInFly();
     auto waiting = Pipeline.GetExecutionUnit(EExecutionUnitKind::BuildAndWaitDependencies).GetInFly();

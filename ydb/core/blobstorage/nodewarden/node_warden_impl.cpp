@@ -12,6 +12,7 @@
 #include <ydb/core/blobstorage/vdisk/repl/blobstorage_replbroker.h>
 #include <ydb/core/blobstorage/vdisk/syncer/blobstorage_syncer_broker.h>
 #include <ydb/library/pdisk_io/file_params.h>
+#include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/mind/bscontroller/yaml_config_helpers.h>
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/protos/key.pb.h>
@@ -349,63 +350,63 @@ void TNodeWarden::Bootstrap() {
     if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) {
         const TIntrusivePtr<NKikimr::TControlBoard>& icb = actorSystem->AppData<TAppData>()->Icb;
 
-        icb->RegisterLocalControl(EnablePutBatching, "BlobStorage_EnablePutBatching");
-        icb->RegisterLocalControl(EnableVPatch, "BlobStorage_EnableVPatch");
-        icb->RegisterSharedControl(EnableLocalSyncLogDataCutting, "VDiskControls.EnableLocalSyncLogDataCutting");
-        icb->RegisterSharedControl(EnableSyncLogChunkCompressionHDD, "VDiskControls.EnableSyncLogChunkCompressionHDD");
-        icb->RegisterSharedControl(EnableSyncLogChunkCompressionSSD, "VDiskControls.EnableSyncLogChunkCompressionSSD");
-        icb->RegisterSharedControl(MaxSyncLogChunksInFlightHDD, "VDiskControls.MaxSyncLogChunksInFlightHDD");
-        icb->RegisterSharedControl(MaxSyncLogChunksInFlightSSD, "VDiskControls.MaxSyncLogChunksInFlightSSD");
-        icb->RegisterSharedControl(DefaultHugeGarbagePerMille, "VDiskControls.DefaultHugeGarbagePerMille");
-        icb->RegisterSharedControl(HugeDefragFreeSpaceBorderPerMille, "VDiskControls.HugeDefragFreeSpaceBorderPerMille");
-        icb->RegisterSharedControl(MaxChunksToDefragInflight, "VDiskControls.MaxChunksToDefragInflight");
+        icb->RegisterLocalControl(EnablePutBatching, EStaticControlType::BlobStorageEnablePutBatching);
+        icb->RegisterLocalControl(EnableVPatch, EStaticControlType::BlobStorageEnableVPatch);
+        icb->RegisterSharedControl(EnableLocalSyncLogDataCutting, EStaticControlType::VDiskControlsEnableLocalSyncLogDataCutting);
+        icb->RegisterSharedControl(EnableSyncLogChunkCompressionHDD, EStaticControlType::VDiskControlsEnableSyncLogChunkCompressionHDD);
+        icb->RegisterSharedControl(EnableSyncLogChunkCompressionSSD, EStaticControlType::VDiskControlsEnableSyncLogChunkCompressionSSD);
+        icb->RegisterSharedControl(MaxSyncLogChunksInFlightHDD, EStaticControlType::VDiskControlsMaxSyncLogChunksInFlightHDD);
+        icb->RegisterSharedControl(MaxSyncLogChunksInFlightSSD, EStaticControlType::VDiskControlsMaxSyncLogChunksInFlightSSD);
+        icb->RegisterSharedControl(DefaultHugeGarbagePerMille, EStaticControlType::VDiskControlsDefaultHugeGarbagePerMille);
+        icb->RegisterSharedControl(HugeDefragFreeSpaceBorderPerMille, EStaticControlType::VDiskControlsHugeDefragFreeSpaceBorderPerMille);
+        icb->RegisterSharedControl(MaxChunksToDefragInflight, EStaticControlType::VDiskControlsMaxChunksToDefragInflight);
 
-        icb->RegisterSharedControl(ThrottlingDryRun, "VDiskControls.ThrottlingDryRun");
-        icb->RegisterSharedControl(ThrottlingMinLevel0SstCount, "VDiskControls.ThrottlingMinLevel0SstCount");
-        icb->RegisterSharedControl(ThrottlingMaxLevel0SstCount, "VDiskControls.ThrottlingMaxLevel0SstCount");
-        icb->RegisterSharedControl(ThrottlingMinInplacedSizeHDD, "VDiskControls.ThrottlingMinInplacedSizeHDD");
-        icb->RegisterSharedControl(ThrottlingMaxInplacedSizeHDD, "VDiskControls.ThrottlingMaxInplacedSizeHDD");
-        icb->RegisterSharedControl(ThrottlingMinInplacedSizeSSD, "VDiskControls.ThrottlingMinInplacedSizeSSD");
-        icb->RegisterSharedControl(ThrottlingMaxInplacedSizeSSD, "VDiskControls.ThrottlingMaxInplacedSizeSSD");
-        icb->RegisterSharedControl(ThrottlingMinOccupancyPerMille, "VDiskControls.ThrottlingMinOccupancyPerMille");
-        icb->RegisterSharedControl(ThrottlingMaxOccupancyPerMille, "VDiskControls.ThrottlingMaxOccupancyPerMille");
-        icb->RegisterSharedControl(ThrottlingMinLogChunkCount, "VDiskControls.ThrottlingMinLogChunkCount");
-        icb->RegisterSharedControl(ThrottlingMaxLogChunkCount, "VDiskControls.ThrottlingMaxLogChunkCount");
+        icb->RegisterSharedControl(ThrottlingDryRun, EStaticControlType::VDiskControlsThrottlingDryRun);
+        icb->RegisterSharedControl(ThrottlingMinLevel0SstCount, EStaticControlType::VDiskControlsThrottlingMinLevel0SstCount);
+        icb->RegisterSharedControl(ThrottlingMaxLevel0SstCount, EStaticControlType::VDiskControlsThrottlingMaxLevel0SstCount);
+        icb->RegisterSharedControl(ThrottlingMinInplacedSizeHDD, EStaticControlType::VDiskControlsThrottlingMinInplacedSizeHDD);
+        icb->RegisterSharedControl(ThrottlingMaxInplacedSizeHDD, EStaticControlType::VDiskControlsThrottlingMaxInplacedSizeHDD);
+        icb->RegisterSharedControl(ThrottlingMinInplacedSizeSSD, EStaticControlType::VDiskControlsThrottlingMinInplacedSizeSSD);
+        icb->RegisterSharedControl(ThrottlingMaxInplacedSizeSSD, EStaticControlType::VDiskControlsThrottlingMaxInplacedSizeSSD);
+        icb->RegisterSharedControl(ThrottlingMinOccupancyPerMille, EStaticControlType::VDiskControlsThrottlingMinOccupancyPerMille);
+        icb->RegisterSharedControl(ThrottlingMaxOccupancyPerMille, EStaticControlType::VDiskControlsThrottlingMaxOccupancyPerMille);
+        icb->RegisterSharedControl(ThrottlingMinLogChunkCount, EStaticControlType::VDiskControlsThrottlingMinLogChunkCount);
+        icb->RegisterSharedControl(ThrottlingMaxLogChunkCount, EStaticControlType::VDiskControlsThrottlingMaxLogChunkCount);
 
-        icb->RegisterSharedControl(MaxInProgressSyncCount, "VDiskControls.MaxInProgressSyncCount");
+        icb->RegisterSharedControl(MaxInProgressSyncCount, EStaticControlType::VDiskControlsMaxInProgressSyncCount);
 
-        icb->RegisterSharedControl(MaxCommonLogChunksHDD, "PDiskControls.MaxCommonLogChunksHDD");
-        icb->RegisterSharedControl(MaxCommonLogChunksSSD, "PDiskControls.MaxCommonLogChunksSSD");
+        icb->RegisterSharedControl(MaxCommonLogChunksHDD, EStaticControlType::PDiskControlsMaxCommonLogChunksHDD);
+        icb->RegisterSharedControl(MaxCommonLogChunksSSD, EStaticControlType::PDiskControlsMaxCommonLogChunksSSD);
 
         icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_ROT].BurstThresholdNs,
-                "VDiskControls.BurstThresholdNsHDD");
+                EStaticControlType::VDiskControlsBurstThresholdNsHDD);
         icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_SSD].BurstThresholdNs,
-                "VDiskControls.BurstThresholdNsSSD");
+                EStaticControlType::VDiskControlsBurstThresholdNsSSD);
         icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_NVME].BurstThresholdNs,
-                "VDiskControls.BurstThresholdNsNVME");
+                EStaticControlType::VDiskControlsBurstThresholdNsNVME);
         icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_ROT].DiskTimeAvailableScale,
-                "VDiskControls.DiskTimeAvailableScaleHDD");
+                EStaticControlType::VDiskControlsDiskTimeAvailableScaleHDD);
         icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_SSD].DiskTimeAvailableScale,
-                "VDiskControls.DiskTimeAvailableScaleSSD");
+                EStaticControlType::VDiskControlsDiskTimeAvailableScaleSSD);
         icb->RegisterSharedControl(CostMetricsParametersByMedia[NPDisk::DEVICE_TYPE_NVME].DiskTimeAvailableScale,
-                "VDiskControls.DiskTimeAvailableScaleNVME");
+                EStaticControlType::VDiskControlsDiskTimeAvailableScaleNVME);
 
-        icb->RegisterSharedControl(SlowDiskThreshold, "DSProxyControls.SlowDiskThreshold");
-        icb->RegisterSharedControl(SlowDiskThresholdHDD, "DSProxyControls.SlowDiskThresholdHDD");
-        icb->RegisterSharedControl(SlowDiskThresholdSSD, "DSProxyControls.SlowDiskThresholdSSD");
+        icb->RegisterSharedControl(SlowDiskThreshold, EStaticControlType::DSProxyControlsSlowDiskThreshold);
+        icb->RegisterSharedControl(SlowDiskThresholdHDD, EStaticControlType::DSProxyControlsSlowDiskThresholdHDD);
+        icb->RegisterSharedControl(SlowDiskThresholdSSD, EStaticControlType::DSProxyControlsSlowDiskThresholdSSD);
 
-        icb->RegisterSharedControl(PredictedDelayMultiplier, "DSProxyControls.PredictedDelayMultiplier");
-        icb->RegisterSharedControl(PredictedDelayMultiplierHDD, "DSProxyControls.PredictedDelayMultiplierHDD");
-        icb->RegisterSharedControl(PredictedDelayMultiplierSSD, "DSProxyControls.PredictedDelayMultiplierSSD");
+        icb->RegisterSharedControl(PredictedDelayMultiplier, EStaticControlType::DSProxyControlsPredictedDelayMultiplier);
+        icb->RegisterSharedControl(PredictedDelayMultiplierHDD, EStaticControlType::DSProxyControlsPredictedDelayMultiplierHDD);
+        icb->RegisterSharedControl(PredictedDelayMultiplierSSD, EStaticControlType::DSProxyControlsPredictedDelayMultiplierSSD);
 
-        icb->RegisterSharedControl(MaxNumOfSlowDisks, "DSProxyControls.MaxNumOfSlowDisks");
-        icb->RegisterSharedControl(MaxNumOfSlowDisksHDD, "DSProxyControls.MaxNumOfSlowDisksHDD");
-        icb->RegisterSharedControl(MaxNumOfSlowDisksSSD, "DSProxyControls.MaxNumOfSlowDisksSSD");
+        icb->RegisterSharedControl(MaxNumOfSlowDisks, EStaticControlType::DSProxyControlsMaxNumOfSlowDisks);
+        icb->RegisterSharedControl(MaxNumOfSlowDisksHDD, EStaticControlType::DSProxyControlsMaxNumOfSlowDisksHDD);
+        icb->RegisterSharedControl(MaxNumOfSlowDisksSSD, EStaticControlType::DSProxyControlsMaxNumOfSlowDisksSSD);
 
-        icb->RegisterSharedControl(LongRequestThresholdMs, "DSProxyControls.LongRequestThresholdMs");
-        icb->RegisterSharedControl(ReportingControllerBucketSize, "DSProxyControls.RequestReportingSettings.BucketSize");
-        icb->RegisterSharedControl(ReportingControllerLeakDurationMs, "DSProxyControls.RequestReportingSettings.LeakDurationMs");
-        icb->RegisterSharedControl(ReportingControllerLeakRate, "DSProxyControls.RequestReportingSettings.LeakRate");
+        icb->RegisterSharedControl(LongRequestThresholdMs, EStaticControlType::DSProxyControlsLongRequestThresholdMs);
+        icb->RegisterSharedControl(ReportingControllerBucketSize, EStaticControlType::DSProxyControlsRequestReportingSettingsBucketSize);
+        icb->RegisterSharedControl(ReportingControllerLeakDurationMs, EStaticControlType::DSProxyControlsRequestReportingSettingsLeakDurationMs);
+        icb->RegisterSharedControl(ReportingControllerLeakRate, EStaticControlType::DSProxyControlsRequestReportingSettingsLeakRate);
     }
 
     // start replication broker

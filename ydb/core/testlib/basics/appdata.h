@@ -92,6 +92,8 @@ namespace NKikimr {
         void SetEnableDbCounters(bool value);
         void SetAwsRegion(const TString& value);
         void InitIcb(ui32 numNodes);
+        void InitDynamicControlBoard(ui32 numNodes);
+
 
         TIntrusivePtr<TChannelProfiles> Channels;
         NKikimrBlobStorage::TNodeWardenServiceSet BSConf;
@@ -112,6 +114,7 @@ namespace NKikimr {
         NKikimrConfig::TImmediateControlsConfig ImmediateControlsConfig;
         NKikimrResourceBroker::TResourceBrokerConfig ResourceBrokerConfig;
         std::vector<TIntrusivePtr<NKikimr::TControlBoard>> Icb;
+        std::vector<TIntrusivePtr<NKikimr::TDynamicControlBoard>> DynamicControlBoard;
 
     private:
         TAutoPtr<TMine> Mine;

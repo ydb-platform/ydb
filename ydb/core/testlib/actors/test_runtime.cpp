@@ -188,6 +188,9 @@ namespace NActors {
                 nodeAppData->Icb = std::move(egg.Icb[nodeIndex]);
                 nodeAppData->InFlightLimiterRegistry.Reset(new NKikimr::NGRpcService::TInFlightLimiterRegistry(nodeAppData->Icb));
             }
+            if (nodeIndex < egg.DynamicControlBoard.size()) {
+                nodeAppData->DynamicControlBoard = std::move(egg.DynamicControlBoard[nodeIndex]);
+            }
             if (KeyConfigGenerator) {
                 nodeAppData->KeyConfig = KeyConfigGenerator(nodeIndex);
             } else {

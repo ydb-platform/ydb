@@ -36,7 +36,7 @@ public:
 
     static TConclusion<TPKRangeFilter> Build(TPredicateContainer&& from, TPredicateContainer&& to);
 
-    NArrow::TColumnFilter BuildFilter(const arrow::Datum& data) const;
+    NArrow::TColumnFilter BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const;
 
     bool IsUsed(const TPortionInfo& info) const;
     bool CheckPoint(const NArrow::TReplaceKey& point) const;

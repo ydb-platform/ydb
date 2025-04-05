@@ -22,9 +22,10 @@ ui64 IFetchingStep::GetProcessingDataSize(const std::shared_ptr<NCommon::IDataSo
 
 TConclusion<bool> TPredicateFilter::DoExecuteInplace(const std::shared_ptr<IDataSource>& source, const TFetchingScriptCursor& /*step*/) const {
     auto filter = source->GetContext()->GetReadMetadata()->GetPKRangesFilter().BuildFilter(
-        source->GetStageData().GetTable()->ToTable(source->GetContext()->GetReadMetadata()->GetPKRangesFilter().GetColumnIds(
-                                                       source->GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo()),
-            source->GetContext()->GetCommonContext()->GetResolver(), true));
+        source->GetStageData().GetTable()->ToGeneralContainer(source->GetContext()->GetCommonContext()->GetResolver(),
+            source->GetContext()->GetReadMetadata()->GetPKRangesFilter().GetColumnIds(
+                source->GetContext()->GetReadMetadata()->GetResultSchema()->GetIndexInfo()),
+            true));
     source->MutableStageData().AddFilter(filter);
     return true;
 }

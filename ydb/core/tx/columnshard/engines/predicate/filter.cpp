@@ -7,13 +7,14 @@
 
 namespace NKikimr::NOlap {
 
-NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const arrow::Datum& data) const {
+NKikimr::NArrow::TColumnFilter TPKRangesFilter::BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const {
     if (SortedRanges.empty()) {
         return NArrow::TColumnFilter::BuildAllowFilter();
     }
-    NArrow::TColumnFilter result = SortedRanges.front().BuildFilter(data);
-    for (ui32 i = 1; i < SortedRanges.size(); ++i) {
-        result = result.Or(SortedRanges[i].BuildFilter(data));
+
+    auto result = NArrow::TColumnFilter::BuildDenyFilter();
+    for (const auto& range : SortedRanges) {
+        result = result.Or(range.BuildFilter(data));
     }
     return result;
 }

@@ -314,6 +314,15 @@ public:
         static TFoundPosition Equal(const ui32 pos) {
             return TFoundPosition(pos);
         }
+
+        TFoundPosition(const ui32 pos, const std::partial_ordering cmp)
+            : Position(pos) {
+            if (cmp == std::partial_ordering::less) {
+                GreaterIfNotEqual = false;
+            } else if (cmp == std::partial_ordering::greater) {
+                GreaterIfNotEqual = true;
+            }
+        }
     };
 
     [[nodiscard]] bool IsAvailablePosition(const i64 position) const {
@@ -605,7 +614,7 @@ public:
         return TAsymmetricPositionGuard(*this);
     }
 
-    TSortableBatchPosition::TFoundPosition SkipToLower(const TSortableBatchPosition& forFound);
+    TSortableBatchPosition::TFoundPosition SkipToBound(const TSortableBatchPosition& forFound, const bool upper);
 
     //  (-inf, it1), [it1, it2), [it2, it3), ..., [itLast, +inf)
     template <class TBordersIterator>
@@ -629,7 +638,7 @@ public:
         i64 recordsCountSplitted = 0;
         for (; it.IsValid() && !batchFinished; it.Next()) {
             const ui32 startPos = pos.GetPosition();
-            auto posFound = pos.SkipToLower(it.CurrentPosition());
+            auto posFound = pos.SkipToBound(it.CurrentPosition(), false);
             if (posFound.IsGreater() || posFound.IsEqual()) {
                 if (posFound.GetPosition() == startPos) {
                     result.emplace_back(nullptr);

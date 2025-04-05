@@ -9,9 +9,9 @@ NJson::TJsonValue TBatchIterator::DebugJson() const {
     return result;
 }
 
-NKikimr::NArrow::NMerger::TSortableBatchPosition::TFoundPosition TBatchIterator::SkipToLower(const TSortableBatchPosition& pos) {
+NKikimr::NArrow::NMerger::TSortableBatchPosition::TFoundPosition TBatchIterator::SkipToBound(const TSortableBatchPosition& pos, const bool upper) {
     const ui32 posStart = KeyColumns.GetPosition();
-    auto result = KeyColumns.SkipToLower(pos);
+    auto result = KeyColumns.SkipToBound(pos, upper);
     const i32 delta = IsReverse() ? (posStart - KeyColumns.GetPosition()) : (KeyColumns.GetPosition() - posStart);
     AFL_VERIFY(delta >= 0);
     AFL_VERIFY(VersionColumns.InitPosition(KeyColumns.GetPosition()))("pos", KeyColumns.GetPosition())

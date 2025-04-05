@@ -64,7 +64,7 @@ public:
     TPKRangeFilter::EUsageClass GetUsageClass(const NArrow::TReplaceKey& start, const NArrow::TReplaceKey& end) const;
     bool CheckPoint(const NArrow::TReplaceKey& point) const;
 
-    NArrow::TColumnFilter BuildFilter(const arrow::Datum& data) const;
+    NArrow::TColumnFilter BuildFilter(const std::shared_ptr<NArrow::TGeneralContainer>& data) const;
 
     std::set<std::string> GetColumnNames() const {
         std::set<std::string> result;

@@ -84,6 +84,10 @@ private:
     const TInternalPathId PathId;
     YDB_READONLY(TInstant, ActualizationInstant, TInstant::Zero());
 
+    virtual bool DoIsOverloaded() const {
+        return false;
+    }
+
 protected:
     virtual void DoModifyPortions(const THashMap<ui64, std::shared_ptr<TPortionInfo>>& add,
         const THashMap<ui64, std::shared_ptr<TPortionInfo>>& remove) = 0;
@@ -107,7 +111,9 @@ public:
     IOptimizerPlanner(const TInternalPathId pathId)
         : PathId(pathId) {
     }
-
+    bool IsOverloaded() const {
+        return DoIsOverloaded();
+    }
     TConclusionStatus CheckWriteData() const {
         return DoCheckWriteData();
     }

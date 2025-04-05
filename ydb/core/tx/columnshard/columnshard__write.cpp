@@ -34,6 +34,9 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
         case EOverloadStatus::OverloadMetadata:
             Counters.OnWriteOverloadMetadata(writeSize);
             break;
+        case EOverloadStatus::OverloadCompaction:
+            Counters.OnWriteOverloadCompaction(writeSize);
+            break;
         case EOverloadStatus::ShardTxInFly:
             Counters.OnWriteOverloadShardTx(writeSize);
             break;
@@ -58,8 +61,16 @@ TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedWait(const TInternalP
         return EOverloadStatus::InsertTable;
     }
     Counters.GetCSCounters().OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
-    if (TablesManager.GetPrimaryIndex() && TablesManager.GetPrimaryIndex()->IsOverloadedByMetadata(NOlap::IColumnEngine::GetMetadataLimit())) {
-        return EOverloadStatus::OverloadMetadata;
+    if (TablesManager.GetPrimaryIndex()) {
+        if (TablesManager.GetPrimaryIndex()->IsOverloadedByMetadata(NOlap::IColumnEngine::GetMetadataLimit())) {
+            return EOverloadStatus::OverloadMetadata;
+        }
+        if (TablesManager.GetPrimaryIndexAsVerified<NOlap::TColumnEngineForLogs>()
+                .GetGranuleVerified(pathId)
+                .GetOptimizerPlanner()
+                .IsOverloaded()) {
+            return EOverloadStatus::OverloadCompaction;
+        }
     }
     return EOverloadStatus::None;
 }
@@ -203,7 +214,8 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
     writeMeta.SetLongTxId(NLongTxService::TLongTxId::FromProto(record.GetLongTxId()));
     writeMeta.SetWritePartId(record.GetWritePartId());
 
-    const auto returnFail = [&](const NColumnShard::ECumulativeCounters signalIndex, const EWriteFailReason reason, NKikimrTxColumnShard::EResultStatus resultStatus) {
+    const auto returnFail = [&](const NColumnShard::ECumulativeCounters signalIndex, const EWriteFailReason reason,
+                                NKikimrTxColumnShard::EResultStatus resultStatus) {
         Counters.GetTabletCounters()->IncCounter(signalIndex);
 
         ctx.Send(source, std::make_unique<TEvColumnShard::TEvWriteResult>(TabletID(), writeMeta, resultStatus));
@@ -211,7 +223,8 @@ void TColumnShard::Handle(TEvColumnShard::TEvWrite::TPtr& ev, const TActorContex
         return;
     };
 
-    if (SpaceWatcher->SubDomainOutOfSpace && (!record.HasModificationType() || (record.GetModificationType() != NKikimrTxColumnShard::TEvWrite::OPERATION_DELETE))) {
+    if (SpaceWatcher->SubDomainOutOfSpace &&
+        (!record.HasModificationType() || (record.GetModificationType() != NKikimrTxColumnShard::TEvWrite::OPERATION_DELETE))) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_writing")("reason", "quota_exceeded");
         Counters.GetTabletCounters()->IncCounter(COUNTER_OUT_OF_SPACE);
         return returnFail(COUNTER_WRITE_FAIL, EWriteFailReason::Overload, NKikimrTxColumnShard::EResultStatus::OVERLOADED);

@@ -69,12 +69,14 @@ TInstant TZeroLevelPortions::DoGetWeightExpirationInstant() const {
 }
 
 TZeroLevelPortions::TZeroLevelPortions(const ui32 levelIdx, const std::shared_ptr<IPortionsLevel>& nextLevel,
-    const TLevelCounters& levelCounters, const TDuration durationToDrop, const ui64 expectedBlobsSize, const ui64 portionsCountAvailable)
+    const TLevelCounters& levelCounters, const TDuration durationToDrop, const ui64 expectedBlobsSize, const ui64 portionsCountAvailable,
+    const std::optional<ui64> portionsCountLimit)
     : TBase(levelIdx, nextLevel)
     , LevelCounters(levelCounters)
     , DurationToDrop(durationToDrop)
     , ExpectedBlobsSize(expectedBlobsSize)
-    , PortionsCountAvailable(portionsCountAvailable) {
+    , PortionsCountAvailable(portionsCountAvailable)
+    , PortionsCountLimit(portionsCountLimit) {
     if (DurationToDrop != TDuration::Max() && PredOptimization) {
         *PredOptimization -= TDuration::Seconds(RandomNumber<ui32>(DurationToDrop.Seconds()));
     }

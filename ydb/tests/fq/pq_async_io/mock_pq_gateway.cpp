@@ -120,6 +120,9 @@ class TMockPqGateway : public IMockPqGateway {
                     NYdb::NFederatedTopic::TFederatedTopicClient::TClusterInfo::EStatus::AVAILABLE);
             return NThreading::MakeFuture(std::move(dbInfo));
         }
+        std::shared_ptr<NYdb::NTopic::IWriteSession> CreateWriteSession(const NYdb::NFederatedTopic::TFederatedWriteSessionSettings& /*settings*/) override {
+            return nullptr;
+        }
     };
 
 public:

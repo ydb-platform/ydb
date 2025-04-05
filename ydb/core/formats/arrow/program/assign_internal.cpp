@@ -40,7 +40,7 @@ TConclusion<std::shared_ptr<TCalculationProcessor>> TCalculationProcessor::Build
 
 NJson::TJsonValue TCalculationProcessor::DoDebugJson() const {
     NJson::TJsonValue result = NJson::JSON_MAP;
-    result.InsertValue("kernel", KernelLogic->GetClassName());
+    result.InsertValue("kernel", KernelLogic->DebugJson());
     return result;
 }
 

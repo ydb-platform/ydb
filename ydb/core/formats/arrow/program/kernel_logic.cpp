@@ -110,4 +110,12 @@ bool TSimpleKernelLogic::IsBoolInResult() const {
     }
 }
 
+NJson::TJsonValue TSimpleKernelLogic::DoDebugJson() const {
+    if (YqlOperationId) {
+        return ::ToString((NYql::TKernelRequestBuilder::EBinaryOp)*YqlOperationId);
+    } else {
+        return NJson::JSON_NULL;
+    }
+}
+
 }   // namespace NKikimr::NArrow::NSSA

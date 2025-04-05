@@ -222,8 +222,8 @@ TSparsedArrayChunk TSparsedArrayChunk::ApplyFilter(const TColumnFilter& filter) 
     ui32 filteredCount = 0;
     bool currentAcceptance = filter.GetStartValue();
     TColumnFilter filterNew = TColumnFilter::BuildAllowFilter();
-    auto indexesBuilder = NArrow::MakeBuilder(arrow::uint32());
-    auto valuesBuilder = NArrow::MakeBuilder(ColValue->type());
+    auto indexesBuilder = NArrow::MakeBuilder(arrow::uint32(), filter.GetFilteredCountVerified());
+    auto valuesBuilder = NArrow::MakeBuilder(ColValue->type(), filter.GetFilteredCountVerified());
     for (auto it = filter.GetFilter().begin(); it != filter.GetFilter().end(); ++it) {
         for (; recordIndex < UI32ColIndex->length(); ++recordIndex) {
             if (UI32ColIndex->Value(recordIndex) < filterIntervalStart) {

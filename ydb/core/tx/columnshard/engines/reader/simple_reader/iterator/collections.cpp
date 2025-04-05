@@ -48,16 +48,16 @@ ui32 TScanWithLimitCollection::GetInFlightIntervalsCount(const TCompareKeyForSca
     AFL_VERIFY(from < to);
     ui32 inFlightCountLocal = 0;
     {
-        auto itUpperFinishedFrom = FinishedSources.upper_bound(from);
-        auto itUpperFinishedTo = FinishedSources.upper_bound(to);
-        for (auto&& it = itUpperFinishedFrom; it != itUpperFinishedTo; ++it) {
+        auto itFinishedFrom = FinishedSources.lower_bound(from);
+        auto itFinishedTo = FinishedSources.lower_bound(to);
+        for (auto&& it = itFinishedFrom; it != itFinishedTo; ++it) {
             ++inFlightCountLocal;
         }
     }
     {
-        auto itUpperFetchingFrom = FetchingInFlightSources.upper_bound(from);
-        auto itUpperFetchingTo = FetchingInFlightSources.upper_bound(to);
-        for (auto&& it = itUpperFetchingFrom; it != itUpperFetchingTo; ++it) {
+        auto itFetchingFrom = FetchingInFlightSources.lower_bound(from);
+        auto itFetchingTo = FetchingInFlightSources.lower_bound(to);
+        for (auto&& it = itFetchingFrom; it != itFetchingTo; ++it) {
             ++inFlightCountLocal;
         }
     }

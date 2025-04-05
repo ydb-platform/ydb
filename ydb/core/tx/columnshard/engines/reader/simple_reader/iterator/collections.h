@@ -46,6 +46,7 @@ public:
     }
 
     void OnSourceFinished(const std::shared_ptr<IDataSource>& source) {
+        AFL_VERIFY(source);
         SourcesInFlightCount.Dec();
         DoOnSourceFinished(source);
     }
@@ -61,11 +62,13 @@ public:
     ISourcesCollection(const std::shared_ptr<TSpecialReadContext>& context);
 };
 
-class TNotSortedFullScanCollection: public ISourcesCollection {
+class TNotSortedCollection: public ISourcesCollection {
 private:
     using TBase = ISourcesCollection;
+    std::optional<ui32> Limit;
     std::deque<TSourceConstructor> Sources;
     TPositiveControlInteger InFlightCount;
+    ui32 FetchedCount = 0;
     virtual void DoClear() override {
         Sources.clear();
     }
@@ -83,14 +86,21 @@ private:
     virtual bool DoCheckInFlightLimits() const override {
         return InFlightCount < GetMaxInFlight();
     }
-    virtual void DoOnSourceFinished(const std::shared_ptr<IDataSource>& /*source*/) override {
+    virtual void DoOnSourceFinished(const std::shared_ptr<IDataSource>& source) override {
+        FetchedCount += source->GetResultRecordsCount();
+        if (Limit && *Limit <= FetchedCount && Sources.size()) {
+            AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "limit_exhausted")("limit", Limit)("fetched", FetchedCount);
+            Sources.clear();
+        }
         InFlightCount.Dec();
     }
 
 public:
-    TNotSortedFullScanCollection(const std::shared_ptr<TSpecialReadContext>& context, std::deque<TSourceConstructor>&& sources,
-        const std::shared_ptr<IScanCursor>& cursor)
-        : TBase(context) {
+    TNotSortedCollection(const std::shared_ptr<TSpecialReadContext>& context, std::deque<TSourceConstructor>&& sources,
+        const std::shared_ptr<IScanCursor>& cursor, const std::optional<ui32> limit)
+        : TBase(context)
+        , Limit(limit)
+    {
         if (cursor && cursor->IsInitialized()) {
             while (sources.size()) {
                 bool usage = false;

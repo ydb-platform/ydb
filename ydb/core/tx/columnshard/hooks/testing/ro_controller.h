@@ -4,6 +4,7 @@
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
 #include <ydb/core/tx/columnshard/engines/writer/write_controller.h>
 #include <ydb/core/tx/columnshard/hooks/abstract/abstract.h>
+#include <ydb/core/testlib/basics/runtime.h>
 #include <util/string/join.h>
 
 namespace NKikimr::NYDBTest::NColumnShard {
@@ -108,7 +109,7 @@ public:
         }
     }
 
-    void WaitCleaning(const TDuration d) const {
+    void WaitCleaning(const TDuration d, NActors::TTestBasicRuntime* testRuntime = nullptr) const {
         TInstant start = TInstant::Now();
         ui32 countStart = GetCleaningStartedCounter().Val();
         while (Now() - start < d) {
@@ -117,7 +118,11 @@ public:
                 start = TInstant::Now();
             }
             Cerr << "WAIT_CLEANING: " << GetCleaningStartedCounter().Val() << Endl;
-            Sleep(TDuration::Seconds(1));
+            if (testRuntime) {
+                testRuntime->SimulateSleep(TDuration::Seconds(1));
+            } else {
+                Sleep(TDuration::Seconds(1));
+            }
         }
     }
 

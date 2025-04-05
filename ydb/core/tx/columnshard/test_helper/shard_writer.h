@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/protos/data_events.pb.h>
+#include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/testlib/basics/runtime.h>
 
 #include <ydb/library/accessor/accessor.h>
@@ -19,6 +19,9 @@ private:
     YDB_ACCESSOR(ui64, LockNodeId, 1);
     const TActorId Sender;
 
+private:
+    [[nodiscard]] NKikimr::NEvents::TDataEvents::TEvWriteResult* StartCommitImpl(const ui64 txId);
+
 public:
     TShardWriter(TTestBasicRuntime& runtime, const ui64 tabletId, const ui64 pathId, const ui64 lockId)
         : Runtime(runtime)
@@ -32,8 +35,8 @@ public:
     const TActorId& GetSender() const {
         return Sender;
     }
-
-    [[nodiscard]] NKikimrDataEvents::TEvWriteResult::EStatus StartCommit(const ui64 txId);
+    void StartCommitFail(const ui64 txId);
+    [[nodiscard]] ui64 StartCommit(const ui64 txId);
     [[nodiscard]] NKikimrDataEvents::TEvWriteResult::EStatus Abort(const ui64 txId);
 
     [[nodiscard]] NKikimrDataEvents::TEvWriteResult::EStatus Write(

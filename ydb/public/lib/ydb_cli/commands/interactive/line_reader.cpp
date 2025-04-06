@@ -67,6 +67,13 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath)
     Rx.set_completion_callback([this](const std::string& prefix, int& contextLen) {
         return YQLCompleter->Apply(prefix, contextLen);
     });
+    Rx.set_hint_callback([this](const std::string& prefix, int& contextLen, TColor&) {
+        replxx::Replxx::hints_t hints;
+        for (auto& candidate : YQLCompleter->Apply(prefix, contextLen)) {
+            hints.emplace_back(std::move(candidate.text()));
+        }
+        return hints;
+    });
     Rx.set_highlighter_callback([this](const auto& text, auto& colors) {
         YQLHighlighter->Apply(text, colors);
     });

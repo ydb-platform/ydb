@@ -278,6 +278,7 @@ private:
         serverSettings.SetDqTaskTransformFactory(NYql::CreateYtDqTaskTransformFactory(true));
         serverSettings.SetInitializeFederatedQuerySetupFactory(true);
         serverSettings.SetVerbose(Settings_.VerboseLevel >= EVerbose::InitLogs);
+        serverSettings.SetNeedStatsCollectors(true);
 
         SetLoggerSettings(serverSettings);
         SetFunctionRegistry(serverSettings);
@@ -286,7 +287,6 @@ private:
         if (Settings_.MonitoringEnabled) {
             serverSettings.InitKikimrRunConfig();
             serverSettings.SetMonitoringPortOffset(Settings_.FirstMonitoringPort, true);
-            serverSettings.SetNeedStatsCollectors(true);
         }
 
         if (Settings_.GrpcEnabled) {

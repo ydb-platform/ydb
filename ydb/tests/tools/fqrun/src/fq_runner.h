@@ -16,9 +16,9 @@ public:
 
     void PrintQueryResults() const;
 
-    bool CreateConnections(const std::vector<FederatedQuery::ConnectionContent>& connections) const;
+    bool CreateConnections(const std::vector<FederatedQuery::ConnectionContent>& connections, const TFqOptions& options) const;
 
-    bool CreateBindings(const std::vector<FederatedQuery::BindingContent>& bindings) const;
+    bool CreateBindings(const std::vector<FederatedQuery::BindingContent>& bindings, const TFqOptions& options) const;
 
     void ExecuteQueryAsync(const TRequestOptions& query) const;
 

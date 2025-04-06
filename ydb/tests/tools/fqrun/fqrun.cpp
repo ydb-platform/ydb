@@ -22,7 +22,9 @@ namespace {
 struct TExecutionOptions {
     enum class EExecutionCase {
         Stream,
-        AsyncStream
+        Analytics,
+        AsyncStream,
+        AsyncAnalytics
     };
 
     TString Query;
@@ -35,16 +37,29 @@ struct TExecutionOptions {
 
     EExecutionCase ExecutionCase = EExecutionCase::Stream;
     FederatedQuery::ExecuteMode QueryAction;
+    TString Scope;
 
     bool HasResults() const {
-        return !Query.empty();
+        return !Query.empty() && (ExecutionCase == EExecutionCase::Stream || ExecutionCase == EExecutionCase::Analytics);
+    }
+
+    bool IsAnalitycsQuery() const {
+        return ExecutionCase == EExecutionCase::Analytics || ExecutionCase == EExecutionCase::AsyncAnalytics;
+    }
+
+    TFqOptions GetFqOptions() const {
+        return {
+            .Scope = Scope
+        };
     }
 
     TRequestOptions GetQueryOptions(ui64 queryId) const {
         return {
             .Query = Query,
             .Action = QueryAction,
-            .QueryId = queryId
+            .Type = IsAnalitycsQuery() ? FederatedQuery::QueryContent::ANALYTICS : FederatedQuery::QueryContent::STREAMING,
+            .QueryId = queryId,
+            .FqOptions = GetFqOptions()
         };
     }
 
@@ -94,6 +109,7 @@ void RunArgumentQuery(ui64 queryId, const TExecutionOptions& executionOptions, T
     NColorizer::TColors colors = NColorizer::AutoColors(Cout);
 
     switch (executionOptions.ExecutionCase) {
+        case TExecutionOptions::EExecutionCase::Analytics:
         case TExecutionOptions::EExecutionCase::Stream: {
             if (!runner.ExecuteStreamQuery(executionOptions.GetQueryOptions(queryId))) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Query execution failed";
@@ -105,6 +121,7 @@ void RunArgumentQuery(ui64 queryId, const TExecutionOptions& executionOptions, T
             break;
         }
 
+        case TExecutionOptions::EExecutionCase::AsyncAnalytics:
         case TExecutionOptions::EExecutionCase::AsyncStream: {
             runner.ExecuteQueryAsync(executionOptions.GetQueryOptions(queryId));
             break;
@@ -117,14 +134,14 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TFqRunner& ru
 
     if (!executionOptions.Connections.empty()) {
         Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Creating connections..." << colors.Default() << Endl;
-        if (!runner.CreateConnections(executionOptions.Connections)) {
+        if (!runner.CreateConnections(executionOptions.Connections, executionOptions.GetFqOptions())) {
             ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Failed to create connections";
         }
     }
 
     if (!executionOptions.Bindings.empty()) {
         Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Creating bindings..." << colors.Default() << Endl;
-        if (!runner.CreateBindings(executionOptions.Bindings)) {
+        if (!runner.CreateBindings(executionOptions.Bindings, executionOptions.GetFqOptions())) {
             ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Failed to create bindings";
         }
     }
@@ -156,6 +173,7 @@ void RunArgumentQueries(const TExecutionOptions& executionOptions, TFqRunner& ru
             }
         }
     }
+    runner.FinalizeRunner();
 
     if (executionOptions.HasResults()) {
         try {
@@ -349,7 +367,9 @@ protected:
 
         TChoices<TExecutionOptions::EExecutionCase> executionCase({
             {"stream", TExecutionOptions::EExecutionCase::Stream},
-            {"async-stream", TExecutionOptions::EExecutionCase::AsyncStream}
+            {"analytics", TExecutionOptions::EExecutionCase::Analytics},
+            {"async-stream", TExecutionOptions::EExecutionCase::AsyncStream},
+            {"async-analytics", TExecutionOptions::EExecutionCase::AsyncAnalytics}
         });
         options.AddLongOption('C', "execution-case", "Type of query for -p argument")
             .RequiredArgument("query-type")
@@ -411,9 +431,13 @@ protected:
             .NoArgument()
             .SetFlag(&ExecutionOptions.ContinueAfterFail);
 
+        options.AddLongOption('S', "scope-id", "Query scope id")
+            .RequiredArgument("scope")
+            .StoreResult(&ExecutionOptions.Scope);
+
         // Cluster settings
 
-        options.AddLongOption("cp-storage", "Start real control plane storage instead of in memory (will use local database by default), token variable CP_STORAGE_TOKEN")
+        options.AddLongOption("cp-storage-db", "Start real control plane storage instead of in memory (will use local database by default), token variable CP_STORAGE_TOKEN")
             .OptionalArgument("database@endpoint")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 RunnerOptions.FqSettings.EnableCpStorage = true;
@@ -422,7 +446,7 @@ protected:
                 }
             });
 
-        options.AddLongOption("checkpoints", "Start checkpoint coordinator (will use local database by default), token variable CHECKPOINTS_TOKEN")
+        options.AddLongOption("checkpoints-db", "Start checkpoint coordinator (will use local database by default), token variable CHECKPOINTS_TOKEN")
             .OptionalArgument("database@endpoint")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 RunnerOptions.FqSettings.EnableCheckpoints = true;
@@ -431,7 +455,7 @@ protected:
                 }
             });
 
-        options.AddLongOption("quotas", "Start FQ quotas service and rate limiter (will be created local rate limiter by default), token variable QUOTAS_TOKEN")
+        options.AddLongOption("quotas-db", "Start FQ quotas service and rate limiter (will be created local rate limiter by default), token variable QUOTAS_TOKEN")
             .OptionalArgument("database@endpoint")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 RunnerOptions.FqSettings.EnableQuotas = true;
@@ -440,7 +464,7 @@ protected:
                 }
             });
 
-        options.AddLongOption("row-dispatcher", TStringBuilder() << "Use real coordinator for row dispatcher (will use local database by default), token variable ROW_DISPATCHER_TOKEN")
+        options.AddLongOption("row-dispatcher-db", "Use real coordinator for row dispatcher (will use local database by default), token variable ROW_DISPATCHER_TOKEN")
             .OptionalArgument("database@endpoint")
             .Handler1([this](const NLastGetopt::TOptsParser* option) {
                 RunnerOptions.FqSettings.EnableRemoteRd = true;
@@ -449,11 +473,32 @@ protected:
                 }
             });
 
+        options.AddLongOption("single-compute-db", "Enable single compute database for analytics queries (will use local database by default), token variable YDB_COMPUTE_TOKEN")
+            .OptionalArgument("database@endpoint")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                RunnerOptions.FqSettings.EnableYdbCompute = true;
+                if (const auto value = option->CurVal()) {
+                    RunnerOptions.FqSettings.SingleComputeDatabase = TExternalDatabase::Parse(value, "YDB_COMPUTE_TOKEN");
+                }
+            });
+
+        options.AddLongOption("shared-compute-db", "Add shared compute database for analytics queries, token variable YDB_COMPUTE_TOKEN")
+            .RequiredArgument("database@endpoint")
+            .Handler1([this](const NLastGetopt::TOptsParser* option) {
+                RunnerOptions.FqSettings.EnableYdbCompute = true;
+                RunnerOptions.FqSettings.SharedComputeDatabases.emplace_back(TExternalDatabase::Parse(option->CurVal(), "YDB_COMPUTE_TOKEN"));
+            });
+        options.MutuallyExclusive("single-compute-db", "shared-compute-db");
+
         RegisterKikimrOptions(options, RunnerOptions.FqSettings);
     }
 
     int DoRun(NLastGetopt::TOptsParseResult&&) override {
         ExecutionOptions.Validate(RunnerOptions);
+
+        if (ExecutionOptions.IsAnalitycsQuery()) {
+            RunnerOptions.FqSettings.EnableYdbCompute = true;
+        }
 
         RunnerOptions.FqSettings.YqlToken = GetEnv(YQL_TOKEN_VARIABLE);
         RunnerOptions.FqSettings.FunctionRegistry = CreateFunctionRegistry().Get();

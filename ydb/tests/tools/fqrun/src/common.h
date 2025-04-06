@@ -46,6 +46,10 @@ struct TFqSetupSettings : public NKikimrRun::TServerSettings {
     bool EnableRemoteRd = false;
     std::optional<TExternalDatabase> RowDispatcherDatabase;
 
+    bool EnableYdbCompute = false;
+    std::optional<TExternalDatabase> SingleComputeDatabase;
+    std::vector<TExternalDatabase> SharedComputeDatabases;
+
     EVerbose VerboseLevel = EVerbose::Info;
 
     TString YqlToken;
@@ -72,10 +76,16 @@ struct TRunnerOptions {
     TFqSetupSettings FqSettings;
 };
 
+struct TFqOptions {
+    TString Scope;
+};
+
 struct TRequestOptions {
     TString Query;
-    FederatedQuery::ExecuteMode Action;
-    ui64 QueryId;
+    FederatedQuery::ExecuteMode Action = FederatedQuery::ExecuteMode::RUN;
+    FederatedQuery::QueryContent::QueryType Type = FederatedQuery::QueryContent::STREAMING;
+    ui64 QueryId = 0;
+    TFqOptions FqOptions;
 };
 
 void SetupAcl(FederatedQuery::Acl* acl);

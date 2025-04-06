@@ -11,6 +11,7 @@
 #include <ydb/library/folder_service/mock/mock_folder_service_adapter.h>
 #include <ydb/library/grpc/server/actors/logger.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
+#include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 
 #include <yql/essentials/utils/log/log.h>
 
@@ -60,13 +61,25 @@ private:
 
         serverSettings.SetDomainName(Settings.DomainName);
         serverSettings.SetVerbose(Settings.VerboseLevel >= EVerbose::InitLogs);
+        serverSettings.SetNeedStatsCollectors(true);
+        serverSettings.SetInitializeFederatedQuerySetupFactory(true);
+        serverSettings.S3ActorsFactory = NYql::NDq::CreateS3ActorsFactory();
 
         NKikimrConfig::TAppConfig config;
         *config.MutableLogConfig() = Settings.LogConfig;
         if (Settings.ActorSystemConfig) {
             *config.MutableActorSystemConfig() = *Settings.ActorSystemConfig;
         }
+
+        auto& featureFlags = *config.MutableFeatureFlags();
+        featureFlags.SetEnableExternalDataSources(true);
+        featureFlags.SetEnableReplaceIfExistsForExternalEntities(true);
+
+        const auto& allExternalSources = NYql::GetAllExternalDataSourceTypes();
+        config.MutableQueryServiceConfig()->MutableAvailableExternalDataSources()->Assign(allExternalSources.begin(), allExternalSources.end());
+
         serverSettings.SetAppConfig(config);
+        serverSettings.SetFeatureFlags(config.GetFeatureFlags());
 
         SetLoggerSettings(serverSettings);
         SetFunctionRegistry(serverSettings);
@@ -74,7 +87,6 @@ private:
         if (Settings.MonitoringEnabled) {
             serverSettings.InitKikimrRunConfig();
             serverSettings.SetMonitoringPortOffset(Settings.FirstMonitoringPort, true);
-            serverSettings.SetNeedStatsCollectors(true);
         }
 
         serverSettings.SetGrpcPort(grpcPort);
@@ -155,6 +167,35 @@ private:
             fillStorageConfig(rowDispatcher.MutableDatabase(), Settings.RowDispatcherDatabase);
         }
 
+        auto& ydbCompute = *fqConfig.MutableCompute()->MutableYdb();
+        ydbCompute.SetEnable(Settings.EnableYdbCompute);
+        ydbCompute.MutableSynchronizationService()->SetEnable(Settings.EnableYdbCompute);
+
+        auto& computeControlPlane = *ydbCompute.MutableControlPlane();
+        computeControlPlane.SetEnable(Settings.EnableYdbCompute);
+
+        if (Settings.SingleComputeDatabase && !Settings.SharedComputeDatabases.empty()) {
+            ythrow yexception() << "Expected one of single compute database or shared compute databases";
+        }
+        for (size_t i = 0; const auto& database : Settings.SharedComputeDatabases) {
+            auto& databaseConfig = *computeControlPlane.MutableCms()->MutableDatabaseMapping()->AddCommon();
+            databaseConfig.SetId(TStringBuilder() << "sls" << (Settings.SharedComputeDatabases.size() > 1 ? TStringBuilder() << "_" << ++i : TStringBuilder()));
+            databaseConfig.MutableExecutionConnection()->SetEndpoint(database.Endpoint);
+            fillStorageConfig(databaseConfig.MutableControlPlaneConnection(), database);
+
+            const auto path = NKikimr::CanonizePath(database.Database);
+            const auto splitPos = path.rfind('/');
+            if (splitPos == 0 || splitPos == TString::npos) {
+                ythrow yexception() << "Unexpected shared compute database: " << database.Database << ", it should not be empty or root";
+            }
+            databaseConfig.SetTenant(path.substr(0, splitPos));
+        }
+        if (Settings.SingleComputeDatabase || computeControlPlane.GetTypeCase() == NFq::NConfig::TYdbComputeControlPlane::TYPE_NOT_SET) {
+            auto& singleCompute = *computeControlPlane.MutableSingle();
+            singleCompute.SetId("single");
+            fillStorageConfig(singleCompute.MutableConnection(), Settings.SingleComputeDatabase);
+        }
+
         return fqConfig;
     }
 
@@ -214,38 +255,38 @@ public:
 
     NFq::TEvControlPlaneProxy::TEvCreateQueryResponse::TPtr StreamRequest(const TRequestOptions& query) const {
         return RunControlPlaneProxyRequest<NFq::TEvControlPlaneProxy::TEvCreateQueryRequest, NFq::TEvControlPlaneProxy::TEvCreateQueryResponse>(
-            GetStreamRequest(query)
+            GetStreamRequest(query), query.FqOptions
         );
     }
 
-    NFq::TEvControlPlaneProxy::TEvDescribeQueryResponse::TPtr DescribeQuery(const TString& queryId) const {
+    NFq::TEvControlPlaneProxy::TEvDescribeQueryResponse::TPtr DescribeQuery(const TString& queryId, const TFqOptions& options) const {
         FederatedQuery::DescribeQueryRequest request;
         request.set_query_id(queryId);
 
-        return RunControlPlaneProxyRequest<NFq::TEvControlPlaneProxy::TEvDescribeQueryRequest, NFq::TEvControlPlaneProxy::TEvDescribeQueryResponse>(request);
+        return RunControlPlaneProxyRequest<NFq::TEvControlPlaneProxy::TEvDescribeQueryRequest, NFq::TEvControlPlaneProxy::TEvDescribeQueryResponse>(request, options);
     }
 
-    NFq::TEvControlPlaneProxy::TEvGetResultDataResponse::TPtr FetchQueryResults(const TString& queryId, i32 resultSetId) const {
+    NFq::TEvControlPlaneProxy::TEvGetResultDataResponse::TPtr FetchQueryResults(const TString& queryId, i32 resultSetId, const TFqOptions& options) const {
         FederatedQuery::GetResultDataRequest request;
         request.set_query_id(queryId);
         request.set_result_set_index(resultSetId);
         request.set_limit(MAX_RESULT_SET_ROWS);
 
-        return RunControlPlaneProxyRequest<NFq::TEvControlPlaneProxy::TEvGetResultDataRequest, NFq::TEvControlPlaneProxy::TEvGetResultDataResponse>(request);
+        return RunControlPlaneProxyRequest<NFq::TEvControlPlaneProxy::TEvGetResultDataRequest, NFq::TEvControlPlaneProxy::TEvGetResultDataResponse>(request, options);
     }
 
-    NFq::TEvControlPlaneProxy::TEvCreateConnectionResponse::TPtr CreateConnection(const FederatedQuery::ConnectionContent& connection) const {
+    NFq::TEvControlPlaneProxy::TEvCreateConnectionResponse::TPtr CreateConnection(const FederatedQuery::ConnectionContent& connection, const TFqOptions& options) const {
         FederatedQuery::CreateConnectionRequest request;
         *request.mutable_content() = connection;
 
-        return RunControlPlaneProxyRequest<NFq::TEvControlPlaneProxy::TEvCreateConnectionRequest, NFq::TEvControlPlaneProxy::TEvCreateConnectionResponse>(request);
+        return RunControlPlaneProxyRequest<NFq::TEvControlPlaneProxy::TEvCreateConnectionRequest, NFq::TEvControlPlaneProxy::TEvCreateConnectionResponse>(request, options);
     }
 
-    NFq::TEvControlPlaneProxy::TEvCreateBindingResponse::TPtr CreateBinding(const FederatedQuery::BindingContent& binding) const {
+    NFq::TEvControlPlaneProxy::TEvCreateBindingResponse::TPtr CreateBinding(const FederatedQuery::BindingContent& binding, const TFqOptions& options) const {
         FederatedQuery::CreateBindingRequest request;
         *request.mutable_content() = binding;
 
-        return RunControlPlaneProxyRequest<NFq::TEvControlPlaneProxy::TEvCreateBindingRequest, NFq::TEvControlPlaneProxy::TEvCreateBindingResponse>(request);
+        return RunControlPlaneProxyRequest<NFq::TEvControlPlaneProxy::TEvCreateBindingRequest, NFq::TEvControlPlaneProxy::TEvCreateBindingResponse>(request, options);
     }
 
     void QueryRequestAsync(const TRequestOptions& query, TDuration pingPeriod) {
@@ -254,7 +295,7 @@ public:
         }
 
         TQueryRequest request = {
-            .Event = GetControlPlaneRequest<NFq::TEvControlPlaneProxy::TEvCreateQueryRequest>(GetStreamRequest(query)),
+            .Event = GetControlPlaneRequest<NFq::TEvControlPlaneProxy::TEvCreateQueryRequest>(GetStreamRequest(query), query.FqOptions),
             .PingPeriod = pingPeriod
         };
         auto startPromise = NThreading::NewPromise();
@@ -296,7 +337,7 @@ private:
         request.set_execute_mode(query.Action);
 
         auto& content = *request.mutable_content();
-        content.set_type(FederatedQuery::QueryContent::STREAMING);
+        content.set_type(query.Type);
         content.set_text(query.Query);
         SetupAcl(content.mutable_acl());
 
@@ -304,13 +345,13 @@ private:
     }
 
     template <typename TRequest, typename TProto>
-    std::unique_ptr<TRequest> GetControlPlaneRequest(const TProto& request) const {
-        return std::make_unique<TRequest>("yandexcloud://fqrun", request, BUILTIN_ACL_ROOT, Settings.YqlToken ? Settings.YqlToken : "fqrun", TVector<TString>{});
+    std::unique_ptr<TRequest> GetControlPlaneRequest(const TProto& request, const TFqOptions& options) const {
+        return std::make_unique<TRequest>(TStringBuilder() << "yandexcloud://" << (options.Scope ? options.Scope : "fqrun"), request, BUILTIN_ACL_ROOT, Settings.YqlToken ? Settings.YqlToken : "fqrun", TVector<TString>{});
     }
 
     template <typename TRequest, typename TResponse, typename TProto>
-    typename TResponse::TPtr RunControlPlaneProxyRequest(const TProto& request) const {
-        return RunControlPlaneProxyRequest<TRequest, TResponse>(GetControlPlaneRequest<TRequest>(request));
+    typename TResponse::TPtr RunControlPlaneProxyRequest(const TProto& request, const TFqOptions& options) const {
+        return RunControlPlaneProxyRequest<TRequest, TResponse>(GetControlPlaneRequest<TRequest>(request, options));
     }
 
     template <typename TRequest, typename TResponse>
@@ -347,8 +388,8 @@ TRequestResult TFqSetup::StreamRequest(const TRequestOptions& query, TString& qu
     return GetStatus(response->Get()->Issues);
 }
 
-TRequestResult TFqSetup::DescribeQuery(const TString& queryId, TExecutionMeta& meta) const {
-    const auto response = Impl->DescribeQuery(queryId);
+TRequestResult TFqSetup::DescribeQuery(const TString& queryId, const TFqOptions& options, TExecutionMeta& meta) const {
+    const auto response = Impl->DescribeQuery(queryId, options);
 
     const auto& result = response->Get()->Result.query();
     meta.Status = result.meta().status();
@@ -366,24 +407,24 @@ TRequestResult TFqSetup::DescribeQuery(const TString& queryId, TExecutionMeta& m
     return GetStatus(response->Get()->Issues);
 }
 
-TRequestResult TFqSetup::FetchQueryResults(const TString& queryId, i32 resultSetId, Ydb::ResultSet& resultSet) const {
-    const auto response = Impl->FetchQueryResults(queryId, resultSetId);
+TRequestResult TFqSetup::FetchQueryResults(const TString& queryId, i32 resultSetId, const TFqOptions& options, Ydb::ResultSet& resultSet) const {
+    const auto response = Impl->FetchQueryResults(queryId, resultSetId, options);
 
     resultSet = response->Get()->Result.result_set();
 
     return GetStatus(response->Get()->Issues);
 }
 
-TRequestResult TFqSetup::CreateConnection(const FederatedQuery::ConnectionContent& connection, TString& connectionId) const {
-    const auto response = Impl->CreateConnection(connection);
+TRequestResult TFqSetup::CreateConnection(const FederatedQuery::ConnectionContent& connection, const TFqOptions& options, TString& connectionId) const {
+    const auto response = Impl->CreateConnection(connection, options);
 
     connectionId = response->Get()->Result.connection_id();
 
     return GetStatus(response->Get()->Issues);
 }
 
-TRequestResult TFqSetup::CreateBinding(const FederatedQuery::BindingContent& binding) const {
-    const auto response = Impl->CreateBinding(binding);
+TRequestResult TFqSetup::CreateBinding(const FederatedQuery::BindingContent& binding, const TFqOptions& options) const {
+    const auto response = Impl->CreateBinding(binding, options);
     return GetStatus(response->Get()->Issues);
 }
 

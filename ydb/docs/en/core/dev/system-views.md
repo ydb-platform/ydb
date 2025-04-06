@@ -31,6 +31,7 @@ Column | Description | Data type | Instant/Cumulative
 `IndexSize` | Partition index size in bytes. | `Uint64` | Instant
 `CPUCores` | Instantaneous value of the load on the partition (the share of the CPU core time spent by the actor of the partition). | `Double` | Instant
 `TabletId` | ID of the partition tablet. | `Uint64` | Instant
+`FollowerId` | ID of the partition tablet [follower](../concepts/glossary.md#tablet-follower). A value of 0 means the leader. | `Uint32` | Instant
 `Path` | Full path to the table. | `Utf8` | Instant
 `NodeId` | ID of the partition node. | `Uint32` | Instant
 `StartTime` | Last time of the launch of the partition tablet. | `Timestamp` | Instant
@@ -277,6 +278,7 @@ All tables have the same structure:
 | `IntervalEnd` | The end of the minute or hour interval for which statistics are collected.<br/>Type: `Timestamp`.<br/>Key: `0`. |
 | `Rank` | Partition rank within an interval (by `CPUCores`).<br/>Type: `Uint32`.<br/>Key: `1`. |
 | `TabletId` | ID of the tablet serving the partition.<br/>Type: `Uint64`. |
+| `FollowerId` | ID of the partition tablet [follower](../concepts/glossary.md#tablet-follower).A value of 0 means the leader.<br/>Type: `Uint32` |
 | `Path` | Full path to the table.<br/>Type: `Utf8`. |
 | `PeakTime` | Peak time within an interval.<br/>Type: `Timestamp`. |
 | `CPUCores` | Peak load per partition (share of the CPU core time spent by the actor of the partition).<br/>Type: `Double`. |
@@ -341,6 +343,7 @@ All tables have the same structure:
 | `IntervalEnd` | The end of the minute or hour interval for which statistics are collected.<br/>Type: `Timestamp`.<br/>Key: `0`. |
 | `Rank` | Partition rank within an interval (by `CPUCores`).<br/>Type: `Uint32`.<br/>Key: `1`. |
 | `TabletId` | ID of the tablet serving the partition.<br/>Type: `Uint64`. |
+| `FollowerId` | ID of the partition tablet [follower](../concepts/glossary.md#tablet-follower).A value of 0 means the leader.<br/>Type: `Uint32` |
 | `Path` | Full path to the table.<br/>Type: `Utf8`. |
 | `LocksAcquired` | Number of locks acquired "on a range of keys" in this interval.<br />Type: `Uint64`. |
 | `LocksWholeShard` | Number of locks acquired "on the entire partition" in this interval.<br />Type: `Uint64`. |

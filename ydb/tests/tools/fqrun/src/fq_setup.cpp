@@ -190,7 +190,7 @@ private:
             }
             databaseConfig.SetTenant(path.substr(0, splitPos));
         }
-        if (Settings.SingleComputeDatabase || Settings.EnableYdbCompute && computeControlPlane.GetTypeCase() == NFq::NConfig::TYdbComputeControlPlane::TYPE_NOT_SET) {
+        if (Settings.SingleComputeDatabase || (Settings.EnableYdbCompute && computeControlPlane.GetTypeCase() == NFq::NConfig::TYdbComputeControlPlane::TYPE_NOT_SET)) {
             auto& singleCompute = *computeControlPlane.MutableSingle();
             singleCompute.SetId("single");
             fillStorageConfig(singleCompute.MutableConnection(), Settings.SingleComputeDatabase);

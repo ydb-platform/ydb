@@ -215,10 +215,10 @@ namespace {
             NKikimrExport::TCreateExportRequest request;
             UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(requestStr, &request));
 
-            TTestEnv env(Runtime());
+            Env(); // Init test env
             Runtime().GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
 
-            Run(Runtime(), env, tables, requestStr, expectedStatus, "/MyRoot", false);
+            Run(Runtime(), Env(), tables, requestStr, expectedStatus, "/MyRoot", false);
 
             auto calcPath = [&](const TString& targetPath, const TString& file) {
                 TString canonPath = (targetPath.StartsWith("/") || targetPath.empty()) ? targetPath : TString("/") + targetPath;
@@ -265,12 +265,12 @@ namespace {
             std::vector<std::string> auditLines;
             Runtime().AuditLogBackends = std::move(CreateTestAuditLogBackends(auditLines));
 
-            TTestEnv env(Runtime());
+            Env(); // Init test env
             ui64 txId = 100;
 
             for (const auto& table : tables) {
                 TestCreateTable(Runtime(), ++txId, "/MyRoot", table);
-                env.TestWaitNotification(Runtime(), txId);
+                Env().TestWaitNotification(Runtime(), txId);
             }
 
             Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
@@ -316,7 +316,7 @@ namespace {
 
             TestCancelExport(Runtime(), ++txId, "/MyRoot", exportId);
             Runtime().Send(delayed.Release(), 0, true);
-            env.TestWaitNotification(Runtime(), exportId);
+            Env().TestWaitNotification(Runtime(), exportId);
 
             // Check audit record for export end
             //
@@ -338,7 +338,7 @@ namespace {
             TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
 
             TestForgetExport(Runtime(), ++txId, "/MyRoot", exportId);
-            env.TestWaitNotification(Runtime(), exportId);
+            Env().TestWaitNotification(Runtime(), exportId);
 
             TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
         }
@@ -375,7 +375,7 @@ namespace {
         }
 
         void DropCopiesBeforeTransferring(ui32 tablesCount) {
-            TTestEnv env(Runtime());
+            Env(); // Init test env
             ui64 txId = 100;
 
             for (ui32 i = 1; i <= tablesCount; ++i) {
@@ -385,7 +385,7 @@ namespace {
                     Columns { Name: "value" Type: "Utf8" }
                     KeyColumnNames: ["key"]
                 )", i));
-                env.TestWaitNotification(Runtime(), txId);
+                Env().TestWaitNotification(Runtime(), txId);
             }
 
             Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
@@ -444,16 +444,16 @@ namespace {
 
             for (ui32 i = 0; i < tablesCount; ++i) {
                 TestDropTable(Runtime(), ++txId, Sprintf("/MyRoot/export-%" PRIu64, exportId), ToString(i));
-                env.TestWaitNotification(Runtime(), txId);
+                Env().TestWaitNotification(Runtime(), txId);
             }
 
             Runtime().Send(delayed.Release(), 0, true);
-            env.TestWaitNotification(Runtime(), exportId);
+            Env().TestWaitNotification(Runtime(), exportId);
 
             TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
 
             TestForgetExport(Runtime(), ++txId, "/MyRoot", exportId);
-            env.TestWaitNotification(Runtime(), exportId);
+            Env().TestWaitNotification(Runtime(), exportId);
 
             TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
         }
@@ -461,7 +461,7 @@ namespace {
         void RebootDuringFinish(bool rejectUploadParts, Ydb::StatusIds::StatusCode expectedStatus) {
             S3Settings().WithRejectUploadParts(rejectUploadParts);
 
-            TTestEnv env(Runtime());
+            Env(); // Init test env
             ui64 txId = 100;
 
             TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
@@ -470,7 +470,7 @@ namespace {
                 Columns { Name: "value" Type: "Utf8" }
                 KeyColumnNames: ["key"]
             )");
-            env.TestWaitNotification(Runtime(), txId);
+            Env().TestWaitNotification(Runtime(), txId);
 
             UpdateRow(Runtime(), "Table", 1, "valueA");
             UpdateRow(Runtime(), "Table", 2, "valueB");
@@ -551,19 +551,20 @@ namespace {
             Runtime().SetObserverFunc(prevObserver);
 
             RebootTablet(Runtime(), *tabletId, Runtime().AllocateEdgeActor());
-            env.TestWaitNotification(Runtime(), exportId);
+            Env().TestWaitNotification(Runtime(), exportId);
 
             TestGetExport(Runtime(), exportId, "/MyRoot", expectedStatus);
 
             TestForgetExport(Runtime(), ++txId, "/MyRoot", exportId);
-            env.TestWaitNotification(Runtime(), exportId);
+            Env().TestWaitNotification(Runtime(), exportId);
 
             TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
         }
 
         void ShouldCheckQuotas(const TSchemeLimits& limits, Ydb::StatusIds::StatusCode expectedFailStatus) {
             const TString userSID = "user@builtin";
-            TTestEnv env(Runtime(), TTestEnvOptions().SystemBackupSIDs({userSID}));
+            EnvOptions().SystemBackupSIDs({userSID});
+            Env(); // Init test env
 
             SetSchemeshardSchemaLimits(Runtime(), limits);
 
@@ -586,8 +587,8 @@ namespace {
                 }
             )", S3Port());
 
-            Run(Runtime(), env, tables, request, expectedFailStatus);
-            Run(Runtime(), env, tables, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, userSID);
+            Run(Runtime(), Env(), tables, request, expectedFailStatus);
+            Run(Runtime(), Env(), tables, request, Ydb::StatusIds::SUCCESS, "/MyRoot", false, userSID);
         }
 
     protected:
@@ -619,12 +620,28 @@ namespace {
             return *TestRuntime;
         }
 
+        TTestEnvOptions& EnvOptions() {
+            if (!TestEnvOptions) {
+                TestEnvOptions.ConstructInPlace();
+            }
+            return *TestEnvOptions;
+        }
+
+        TTestEnv& Env() {
+            if (!TestEnv) {
+                TestEnv.ConstructInPlace(Runtime(), EnvOptions());
+            }
+            return *TestEnv;
+        }
+
     private:
         TPortManager PortManager;
         ui16 S3ServerPort = 0;
         TMaybe<TTestBasicRuntime> TestRuntime;
         TMaybe<TS3Mock::TSettings> S3ServerSettings;
         TMaybe<TS3Mock> S3ServerMock;
+        TMaybe<TTestEnvOptions> TestEnvOptions;
+        TMaybe<TTestEnv> TestEnv;
     };
 
 } // anonymous
@@ -702,8 +719,6 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
     }
 
     Y_UNIT_TEST(ShouldOmitNonStrictStorageSettings) {
-        TTestEnv env(Runtime());
-
         const TVector<TString> tables = {R"(
             Name: "Table"
             Columns {
@@ -764,7 +779,7 @@ Y_UNIT_TEST_SUITE_F(TExportToS3Tests, TExportFixture) {
             }
         )"};
 
-        Run(Runtime(), env, tables, Sprintf(R"(
+        Run(Runtime(), Env(), tables, Sprintf(R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
@@ -845,8 +860,6 @@ partitioning_settings {
     }
 
     Y_UNIT_TEST(ShouldPreserveIncrBackupFlag) {
-        TTestEnv env(Runtime());
-
         const TTablesWithAttrs tables{
             {
                 R"(
@@ -893,7 +906,7 @@ partitioning_settings {
             },
         };
 
-        Run(Runtime(), env, tables, Sprintf(R"(
+        Run(Runtime(), Env(), tables, Sprintf(R"(
             ExportToS3Settings {
               endpoint: "localhost:%d"
               scheme: HTTP
@@ -1068,7 +1081,7 @@ partitioning_settings {
     }
 
     Y_UNIT_TEST(DropSourceTableBeforeTransferring) {
-        TTestEnv env(Runtime());
+        Env(); // Init test env
         ui64 txId = 100;
 
         TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
@@ -1077,7 +1090,7 @@ partitioning_settings {
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);
         Runtime().SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
@@ -1129,15 +1142,15 @@ partitioning_settings {
         Runtime().SetObserverFunc(prevObserver);
 
         TestDropTable(Runtime(), ++txId, "/MyRoot", "Table");
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         Runtime().Send(delayed.Release(), 0, true);
-        env.TestWaitNotification(Runtime(), exportId);
+        Env().TestWaitNotification(Runtime(), exportId);
 
         TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
 
         TestForgetExport(Runtime(), ++txId, "/MyRoot", exportId);
-        env.TestWaitNotification(Runtime(), exportId);
+        Env().TestWaitNotification(Runtime(), exportId);
 
         TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
     }
@@ -1159,7 +1172,8 @@ partitioning_settings {
     }
 
     Y_UNIT_TEST(ShouldExcludeBackupTableFromStats) {
-        TTestEnv env(Runtime(), TTestEnvOptions().DisableStatsBatching(true));
+        EnvOptions().DisableStatsBatching(true);
+        Env(); // Init test env
         ui64 txId = 100;
 
         THashSet<ui64> statsCollected;
@@ -1192,7 +1206,7 @@ partitioning_settings {
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         for (int i = 1; i < 500; ++i) {
             UpdateRow(Runtime(), "Table", i, "value");
@@ -1200,9 +1214,9 @@ partitioning_settings {
 
         // trigger memtable's compaction
         TestCopyTable(Runtime(), ++txId, "/MyRoot", "CopyTable", "/MyRoot/Table");
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
         TestDropTable(Runtime(), ++txId, "/MyRoot", "Table");
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         const auto expected = waitForStats(1);
 
@@ -1217,14 +1231,14 @@ partitioning_settings {
             }
         )", S3Port()));
         const ui64 exportId = txId;
-        env.TestWaitNotification(Runtime(), exportId);
+        Env().TestWaitNotification(Runtime(), exportId);
 
         TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
         const auto afterExport = waitForStats(2);
         UNIT_ASSERT_STRINGS_EQUAL(expected.DebugString(), afterExport.DebugString());
 
         TestForgetExport(Runtime(), ++txId, "/MyRoot", exportId);
-        env.TestWaitNotification(Runtime(), exportId);
+        Env().TestWaitNotification(Runtime(), exportId);
 
         TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
         const auto afterForget = waitForStats(1);
@@ -1232,7 +1246,7 @@ partitioning_settings {
     }
 
     Y_UNIT_TEST(CheckItemProgress) {
-        TTestEnv env(Runtime());
+        Env(); // Init test env
         ui64 txId = 100;
 
         TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
@@ -1241,7 +1255,7 @@ partitioning_settings {
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
             ExportToS3Settings {
@@ -1253,7 +1267,7 @@ partitioning_settings {
               }
             }
         )", S3Port()));
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         const auto desc = TestGetExport(Runtime(), txId, "/MyRoot");
         const auto& entry = desc.GetResponse().GetEntry();
@@ -1267,7 +1281,7 @@ partitioning_settings {
     }
 
     Y_UNIT_TEST(ShouldRestartOnScanErrors) {
-        TTestEnv env(Runtime());
+        Env(); // Init test env
         ui64 txId = 100;
 
         TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
@@ -1276,7 +1290,7 @@ partitioning_settings {
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         UpdateRow(Runtime(), "Table", 1, "valueA");
 
@@ -1318,12 +1332,12 @@ partitioning_settings {
         Runtime().SetObserverFunc(prevObserver);
         Runtime().Send(injectResult.Release(), 0, true);
 
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
         TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::SUCCESS);
     }
 
     Y_UNIT_TEST(ShouldSucceedOnConcurrentTxs) {
-        TTestEnv env(Runtime());
+        Env(); // Init test env
         ui64 txId = 100;
 
         TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
@@ -1332,7 +1346,7 @@ partitioning_settings {
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         THolder<IEventHandle> copyTables;
         auto origObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
@@ -1391,14 +1405,14 @@ partitioning_settings {
         Runtime().SetObserverFunc(origObserver);
         Runtime().Send(copyTables.Release(), 0, true);
         Runtime().Send(proposeTxResult.Release(), 0, true);
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
-        env.TestWaitNotification(Runtime(), exportId);
+        Env().TestWaitNotification(Runtime(), exportId);
         TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
     }
 
     Y_UNIT_TEST(ShouldSucceedOnConcurrentExport) {
-        TTestEnv env(Runtime());
+        Env(); // Init test env
         ui64 txId = 100;
 
         TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
@@ -1407,7 +1421,7 @@ partitioning_settings {
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         TVector<THolder<IEventHandle>> copyTables;
         auto origObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
@@ -1452,13 +1466,13 @@ partitioning_settings {
         }
 
         for (ui64 exportId : exportIds) {
-            env.TestWaitNotification(Runtime(), exportId);
+            Env().TestWaitNotification(Runtime(), exportId);
             TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::SUCCESS);
         }
     }
 
     Y_UNIT_TEST(ShouldSucceedOnConcurrentImport) {
-        TTestEnv env(Runtime());
+        Env(); // Init test env
         ui64 txId = 100;
 
         TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
@@ -1467,7 +1481,7 @@ partitioning_settings {
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         // prepare backup data
         TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
@@ -1480,7 +1494,7 @@ partitioning_settings {
               }
             }
         )", S3Port()));
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
         TestGetExport(Runtime(), txId, "/MyRoot");
 
         TVector<THolder<IEventHandle>> delayed;
@@ -1543,9 +1557,9 @@ partitioning_settings {
             Runtime().Send(ev.Release(), 0, true);
         }
 
-        env.TestWaitNotification(Runtime(), importId);
+        Env().TestWaitNotification(Runtime(), importId);
         TestGetImport(Runtime(), importId, "/MyRoot");
-        env.TestWaitNotification(Runtime(), exportId);
+        Env().TestWaitNotification(Runtime(), exportId);
         TestGetExport(Runtime(), exportId, "/MyRoot");
     }
 
@@ -1558,7 +1572,7 @@ partitioning_settings {
     }
 
     Y_UNIT_TEST(ShouldRetryAtFinalStage) {
-        TTestEnv env(Runtime());
+        Env(); // Init test env
         ui64 txId = 100;
 
         TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
@@ -1567,7 +1581,7 @@ partitioning_settings {
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         UpdateRow(Runtime(), "Table", 1, "valueA");
         UpdateRow(Runtime(), "Table", 2, "valueB");
@@ -1634,12 +1648,13 @@ partitioning_settings {
         Runtime().SetObserverFunc(prevObserver);
         Runtime().Send(injectResult.Release(), 0, true);
 
-        env.TestWaitNotification(Runtime(), exportId);
+        Env().TestWaitNotification(Runtime(), exportId);
         TestGetExport(Runtime(), exportId, "/MyRoot");
     }
 
     Y_UNIT_TEST(CorruptedDyNumber) {
-        TTestEnv env(Runtime(), TTestEnvOptions().DisableStatsBatching(true));
+        EnvOptions().DisableStatsBatching(true);
+        Env(); // Init test env
         ui64 txId = 100;
 
         TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
@@ -1648,7 +1663,7 @@ partitioning_settings {
                 Columns { Name: "value" Type: "DyNumber" }
                 KeyColumnNames: ["key"]
             )");
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         // Write bad DyNumber
         UploadRow(Runtime(), "/MyRoot/Table", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
@@ -1663,13 +1678,13 @@ partitioning_settings {
                 }
                 }
             )", S3Port()));
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
     }
 
     Y_UNIT_TEST(UidAsIdempotencyKey) {
-        TTestEnv env(Runtime());
+        Env(); // Init test env
         ui64 txId = 100;
 
         TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
@@ -1678,7 +1693,7 @@ partitioning_settings {
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         const auto request = Sprintf(R"(
             OperationParams {
@@ -1706,11 +1721,11 @@ partitioning_settings {
         TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
         // check previous operation
         TestGetExport(Runtime(), exportId, "/MyRoot");
-        env.TestWaitNotification(Runtime(), exportId);
+        Env().TestWaitNotification(Runtime(), exportId);
     }
 
     Y_UNIT_TEST(ExportStartTime) {
-        TTestEnv env(Runtime());
+        Env(); // Init test env
         Runtime().UpdateCurrentTime(TInstant::Now());
         ui64 txId = 100;
 
@@ -1720,7 +1735,7 @@ partitioning_settings {
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
             ExportToS3Settings {
@@ -1741,7 +1756,7 @@ partitioning_settings {
     }
 
     Y_UNIT_TEST(CompletedExportEndTime) {
-        TTestEnv env(Runtime());
+        Env(); // Init test env
         Runtime().UpdateCurrentTime(TInstant::Now());
         ui64 txId = 100;
 
@@ -1751,7 +1766,7 @@ partitioning_settings {
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
             ExportToS3Settings {
@@ -1766,7 +1781,7 @@ partitioning_settings {
 
         Runtime().AdvanceCurrentTime(TDuration::Seconds(30)); // doing export
 
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         const auto desc = TestGetExport(Runtime(), txId, "/MyRoot");
         const auto& entry = desc.GetResponse().GetEntry();
@@ -1777,7 +1792,7 @@ partitioning_settings {
     }
 
     Y_UNIT_TEST(CancelledExportEndTime) {
-        TTestEnv env(Runtime());
+        Env(); // Init test env
         Runtime().UpdateCurrentTime(TInstant::Now());
         ui64 txId = 100;
 
@@ -1787,7 +1802,7 @@ partitioning_settings {
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         auto delayFunc = [](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
@@ -1839,7 +1854,7 @@ partitioning_settings {
         UNIT_ASSERT(!entry.HasEndTime());
 
         Runtime().Send(delayed.Release(), 0, true);
-        env.TestWaitNotification(Runtime(), exportId);
+        Env().TestWaitNotification(Runtime(), exportId);
 
         desc = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
         entry = desc.GetResponse().GetEntry();
@@ -1853,9 +1868,7 @@ partitioning_settings {
     Y_UNIT_TEST(AuditCompletedExport) {
         std::vector<std::string> auditLines;
         Runtime().AuditLogBackends = std::move(CreateTestAuditLogBackends(auditLines));
-
-        TTestEnv env(Runtime());
-
+        Env(); // Init test env
         Runtime().UpdateCurrentTime(TInstant::Now());
         ui64 txId = 100;
 
@@ -1867,7 +1880,7 @@ partitioning_settings {
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         // Start export
         //
@@ -1910,7 +1923,7 @@ partitioning_settings {
         //
         Runtime().AdvanceCurrentTime(TDuration::Seconds(30));
 
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         const auto desc = TestGetExport(Runtime(), txId, "/MyRoot");
         const auto& entry = desc.GetResponse().GetEntry();
@@ -1940,9 +1953,7 @@ partitioning_settings {
     Y_UNIT_TEST(AuditCancelledExport) {
         std::vector<std::string> auditLines;
         Runtime().AuditLogBackends = std::move(CreateTestAuditLogBackends(auditLines));
-
-        TTestEnv env(Runtime());
-
+        Env(); // Init test env
         Runtime().UpdateCurrentTime(TInstant::Now());
         ui64 txId = 100;
 
@@ -1954,7 +1965,7 @@ partitioning_settings {
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         auto delayFunc = [](TAutoPtr<IEventHandle>& ev) {
             if (ev->GetTypeRewrite() != TEvSchemeShard::EvModifySchemeTransaction) {
@@ -2036,7 +2047,7 @@ partitioning_settings {
         UNIT_ASSERT(!entry.HasEndTime());
 
         Runtime().Send(delayed.Release(), 0, true);
-        env.TestWaitNotification(Runtime(), exportId);
+        Env().TestWaitNotification(Runtime(), exportId);
 
         desc = TestGetExport(Runtime(), exportId, "/MyRoot", Ydb::StatusIds::CANCELLED);
         entry = desc.GetResponse().GetEntry();
@@ -2065,9 +2076,7 @@ partitioning_settings {
     }
 
     Y_UNIT_TEST(ExportPartitioningSettings) {
-        TTestEnv env(Runtime());
-
-        Run(Runtime(), env, TVector<TString>{
+        Run(Runtime(), Env(), TVector<TString>{
                 R"(
                     Name: "Table"
                     Columns { Name: "key" Type: "Uint32" }
@@ -2108,7 +2117,7 @@ partitioning_settings {
     }
 
     Y_UNIT_TEST(ExportIndexTablePartitioningSettings) {
-        TTestEnv env(Runtime());
+        Env(); // Init test env
         ui64 txId = 100;
 
         TestCreateIndexedTable(Runtime(), ++txId, "/MyRoot", R"(
@@ -2133,7 +2142,7 @@ partitioning_settings {
                 } ]
             }
         )");
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(
                 R"(
@@ -2149,7 +2158,7 @@ partitioning_settings {
                 S3Port()
             )
         );
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         auto* scheme = S3Mock().GetData().FindPtr("/scheme.pb");
         UNIT_ASSERT(scheme);
@@ -2161,7 +2170,7 @@ partitioning_settings {
     }
 
     Y_UNIT_TEST(UserSID) {
-        TTestEnv env(Runtime());
+        Env(); // Init test env
         ui64 txId = 100;
 
         TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
@@ -2170,7 +2179,7 @@ partitioning_settings {
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         const TString request = Sprintf(R"(
             ExportToS3Settings {
@@ -2192,7 +2201,8 @@ partitioning_settings {
     }
 
     Y_UNIT_TEST(TablePermissions) {
-        TTestEnv env(Runtime(), TTestEnvOptions().EnablePermissionsExport(true));
+        EnvOptions().EnablePermissionsExport(true);
+        Env(); // Init test env
         ui64 txId = 100;
 
         TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
@@ -2201,12 +2211,12 @@ partitioning_settings {
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         NACLib::TDiffACL diffACL;
         diffACL.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericUse, "user@builtin", NACLib::InheritNone);
         TestModifyACL(Runtime(), ++txId, "/MyRoot", "Table", diffACL.SerializeAsString(), "user@builtin");
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
             ExportToS3Settings {
@@ -2218,7 +2228,7 @@ partitioning_settings {
               }
             }
         )", S3Port()));
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         auto* permissions = S3Mock().GetData().FindPtr("/permissions.pb");
         UNIT_ASSERT(permissions);
@@ -2236,7 +2246,8 @@ partitioning_settings {
     }
 
     Y_UNIT_TEST(Checksums) {
-        TTestEnv env(Runtime(), TTestEnvOptions().EnablePermissionsExport(true).EnableChecksumsExport(true));
+        EnvOptions().EnablePermissionsExport(true).EnableChecksumsExport(true);
+        Env(); // Init test env
         ui64 txId = 100;
 
         TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
@@ -2245,7 +2256,7 @@ partitioning_settings {
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         UploadRow(Runtime(), "/MyRoot/Table", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
 
@@ -2259,7 +2270,7 @@ partitioning_settings {
               }
             }
         )", S3Port()));
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         UNIT_ASSERT_VALUES_EQUAL(S3Mock().GetData().size(), 8);
         const auto* dataChecksum = S3Mock().GetData().FindPtr("/data_00.csv.sha256");
@@ -2280,7 +2291,8 @@ partitioning_settings {
     }
 
     Y_UNIT_TEST(EnableChecksumsPersistance) {
-        TTestEnv env(Runtime(), TTestEnvOptions().EnableChecksumsExport(true));
+        EnvOptions().EnableChecksumsExport(true);
+        Env(); // Init test env
         ui64 txId = 100;
 
         // Create test table
@@ -2290,7 +2302,7 @@ partitioning_settings {
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         // Add some test data
         UploadRow(Runtime(), "/MyRoot/Table", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
@@ -2323,7 +2335,7 @@ partitioning_settings {
         RebootTablet(Runtime(), TTestTxConfig::SchemeShard, Runtime().AllocateEdgeActor());
 
         // Wait for export to complete
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         // Verify checksums are created
         UNIT_ASSERT_VALUES_EQUAL(S3Mock().GetData().size(), 6);
@@ -2342,7 +2354,8 @@ partitioning_settings {
     }
 
     Y_UNIT_TEST(ChecksumsWithCompression) {
-        TTestEnv env(Runtime(), TTestEnvOptions().EnableChecksumsExport(true));
+        EnvOptions().EnableChecksumsExport(true);
+        Env(); // Init test env
         ui64 txId = 100;
 
         TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
@@ -2351,7 +2364,7 @@ partitioning_settings {
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
         )");
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         UploadRow(Runtime(), "/MyRoot/Table", 0, {1}, {2}, {TCell::Make(1u)}, {TCell::Make(1u)});
 
@@ -2366,7 +2379,7 @@ partitioning_settings {
               compression: "zstd"
             }
         )", S3Port()));
-        env.TestWaitNotification(Runtime(), txId);
+        Env().TestWaitNotification(Runtime(), txId);
 
         const auto* dataChecksum = S3Mock().GetData().FindPtr("/data_00.csv.sha256");
         UNIT_ASSERT(dataChecksum);
@@ -2488,10 +2501,11 @@ attributes {
             }
         )", S3Port());
 
-        TTestEnv env(Runtime(), TTestEnvOptions().EnableChecksumsExport(true));
+        EnvOptions().EnableChecksumsExport(true);
+        Env(); // Init test env
         Runtime().GetAppData().FeatureFlags.SetEnableChangefeedsExport(true);
 
-        Run(Runtime(), env, TVector<TString>{
+        Run(Runtime(), Env(), TVector<TString>{
             R"(
                 Name: "Table"
                 Columns { Name: "key" Type: "Utf8" }
@@ -2687,6 +2701,7 @@ attributes {
     }
 
     Y_UNIT_TEST(RecursiveFolder) {
+        // Env(); // Init test env
         // ui64 txId = 100;
         // TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
         //     Name: "Table1"
@@ -2694,7 +2709,7 @@ attributes {
         //     Columns { Name: "value" Type: "Utf8" }
         //     KeyColumnNames: ["key"]
         // )");
-        // env.TestWaitNotification(Runtime(), txId);
+        // Env().TestWaitNotification(Runtime(), txId);
 
         // TestCreateTable();
 

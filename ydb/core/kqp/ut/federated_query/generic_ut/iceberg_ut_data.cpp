@@ -71,14 +71,14 @@ TIcebergTestData::TIcebergTestData(
 NYql::TGenericDataSourceInstance TIcebergTestData::CreateDataSourceForHadoop() {
     TTestData data(this);
     data.Catalog_.mutable_hadoop();
-    return std::move(data.Result_);    
+    return data.Result_;
 }
 
 NYql::TGenericDataSourceInstance TIcebergTestData::CreateDataSourceForHive() {
     TTestData data(this);
     auto& hive = *data.Catalog_.mutable_hive();
     hive.set_uri(VALUE_HIVE_URI);
-    return std::move(data.Result_);    
+    return data.Result_;
 }
 
 TString TIcebergTestData::CreateAuthSection() {

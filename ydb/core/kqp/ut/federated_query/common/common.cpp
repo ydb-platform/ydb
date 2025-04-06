@@ -3,6 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
+
 namespace NKikimr::NKqp::NFederatedQueryTest {
     TString GetSymbolsString(char start, char end, const TString& skip) {
         TStringBuilder result;

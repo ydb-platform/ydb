@@ -40,9 +40,29 @@ namespace NYdb::NConsoleClient {
         NSQLComplete::ISqlCompletionEngine::TPtr Engine;
     };
 
+    NSQLComplete::TLexerSupplier MakePureLexerSupplier() {
+        NSQLTranslationV1::TLexers lexers;
+        lexers.Antlr4Pure = NSQLTranslationV1::MakeAntlr4PureLexerFactory();
+        lexers.Antlr4PureAnsi = NSQLTranslationV1::MakeAntlr4PureAnsiLexerFactory();
+        return [lexers = std::move(lexers)](bool ansi) {
+            return NSQLTranslationV1::MakeLexer(
+                lexers, ansi, /* antlr4 = */ true,
+                NSQLTranslationV1::ELexerFlavor::Pure);
+        };
+    }
+
     IYQLCompleter::TPtr MakeYQLCompleter() {
+        NSQLComplete::TLexerSupplier lexer = MakePureLexerSupplier();
+
+        NSQLComplete::NameSet names = NSQLComplete::MakeDefaultNameSet();
+
+        NSQLComplete::IRanking::TPtr ranking = NSQLComplete::MakeDefaultRanking();
+
+        NSQLComplete::INameService::TPtr service =
+            MakeStaticNameService(std::move(names), std::move(ranking));
+
         return IYQLCompleter::TPtr(new TYQLCompleter(
-            NSQLComplete::MakeSqlCompletionEngine()));
+            NSQLComplete::MakeSqlCompletionEngine(std::move(lexer), std::move(service))));
     }
 
 } // namespace NYdb::NConsoleClient

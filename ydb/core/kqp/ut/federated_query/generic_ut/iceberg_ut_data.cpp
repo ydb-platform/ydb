@@ -10,7 +10,7 @@ constexpr char VALUE_S3_URI[]       = "s3_uri";
 constexpr char VALUE_S3_ENDPOINT[]  = "s3_endpoint";
 constexpr char VALUE_S3_REGION[]    = "s3_region";
 
-constexpr char VALUE_IAM[]    = "IAM";
+constexpr char VALUE_IAM[] = "IAM";
 
 struct TTestData {
     TTestData(TIcebergTestData* data) 

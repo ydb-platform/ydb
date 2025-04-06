@@ -24,7 +24,7 @@ public:
     };
 
 public:
-    explicit TIcebergTestData(TAuth auth, const TString& dataSourceName, const TString& database, bool UseTls);
+    TIcebergTestData(TAuth auth, const TString& dataSourceName, const TString& database, bool UseTls);
 
     NYql::TGenericDataSourceInstance CreateDataSourceForHadoop();
 

@@ -257,9 +257,9 @@ public:
         }
     }
 
-    NFq::TEvControlPlaneProxy::TEvCreateQueryResponse::TPtr StreamRequest(const TRequestOptions& query) const {
+    NFq::TEvControlPlaneProxy::TEvCreateQueryResponse::TPtr QueryRequest(const TRequestOptions& query) const {
         return RunControlPlaneProxyRequest<NFq::TEvControlPlaneProxy::TEvCreateQueryRequest, NFq::TEvControlPlaneProxy::TEvCreateQueryResponse>(
-            GetStreamRequest(query), query.FqOptions
+            GetQueryRequest(query), query.FqOptions
         );
     }
 
@@ -299,7 +299,7 @@ public:
         }
 
         TQueryRequest request = {
-            .Event = GetControlPlaneRequest<NFq::TEvControlPlaneProxy::TEvCreateQueryRequest>(GetStreamRequest(query), query.FqOptions),
+            .Event = GetControlPlaneRequest<NFq::TEvControlPlaneProxy::TEvCreateQueryRequest>(GetQueryRequest(query), query.FqOptions),
             .PingPeriod = pingPeriod
         };
         auto startPromise = NThreading::NewPromise();
@@ -336,7 +336,7 @@ private:
         return Server->GetRuntime();
     }
 
-    static FederatedQuery::CreateQueryRequest GetStreamRequest(const TRequestOptions& query) {
+    static FederatedQuery::CreateQueryRequest GetQueryRequest(const TRequestOptions& query) {
         FederatedQuery::CreateQueryRequest request;
         request.set_execute_mode(query.Action);
 
@@ -384,8 +384,8 @@ TFqSetup::TFqSetup(const TFqSetupSettings& settings)
     : Impl(new TImpl(settings))
 {}
 
-TRequestResult TFqSetup::StreamRequest(const TRequestOptions& query, TString& queryId) const {
-    const auto response = Impl->StreamRequest(query);
+TRequestResult TFqSetup::QueryRequest(const TRequestOptions& query, TString& queryId) const {
+    const auto response = Impl->QueryRequest(query);
 
     queryId = response->Get()->Result.query_id();
 

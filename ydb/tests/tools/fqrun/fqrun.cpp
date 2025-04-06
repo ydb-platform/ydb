@@ -111,7 +111,7 @@ void RunArgumentQuery(ui64 queryId, const TExecutionOptions& executionOptions, T
     switch (executionOptions.ExecutionCase) {
         case TExecutionOptions::EExecutionCase::Analytics:
         case TExecutionOptions::EExecutionCase::Stream: {
-            if (!runner.ExecuteStreamQuery(executionOptions.GetQueryOptions(queryId))) {
+            if (!runner.ExecuteQuery(executionOptions.GetQueryOptions(queryId))) {
                 ythrow yexception() << TInstant::Now().ToIsoStringLocal() << " Query execution failed";
             }
             Cout << colors.Yellow() << TInstant::Now().ToIsoStringLocal() << " Fetching query results..." << colors.Default() << Endl;

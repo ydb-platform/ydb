@@ -47,15 +47,15 @@ public:
         , CoutColors(NColorizer::AutoColors(Cout))
     {}
 
-    bool ExecuteStreamQuery(const TRequestOptions& query) {
+    bool ExecuteQuery(const TRequestOptions& query) {
         StartTraceOpt(query.QueryId);
 
         if (VerboseLevel >= EVerbose::QueriesText) {
-            Cout << CoutColors.Cyan() << "Starting stream request:\n" << CoutColors.Default() << query.Query << Endl;
+            Cout << CoutColors.Cyan() << "Starting " << FederatedQuery::QueryContent::QueryType_Name(query.Type) << " request:\n" << CoutColors.Default() << query.Query << Endl;
         }
 
         CurrentOptions = query.FqOptions;
-        const TRequestResult status = FqSetup.StreamRequest(query, StreamQueryId);
+        const TRequestResult status = FqSetup.QueryRequest(query, StreamQueryId);
 
         if (!status.IsSuccess()) {
             Cerr << CerrColors.Red() << "Failed to start stream request execution, reason:" << CerrColors.Default() << Endl << status.ToString() << Endl;
@@ -147,7 +147,7 @@ public:
         StartTraceOpt(query.QueryId);
 
         if (VerboseLevel >= EVerbose::QueriesText) {
-            Cout << CoutColors.Cyan() << "Starting async stream request:\n" << CoutColors.Default() << query.Query << Endl;
+            Cout << CoutColors.Cyan() << "Starting async " << FederatedQuery::QueryContent::QueryType_Name(query.Type) << " request:\n" << CoutColors.Default() << query.Query << Endl;
         }
 
         FqSetup.QueryRequestAsync(query, Options.PingPeriod);
@@ -266,8 +266,8 @@ TFqRunner::TFqRunner(const TRunnerOptions& options)
     : Impl(new TImpl(options))
 {}
 
-bool TFqRunner::ExecuteStreamQuery(const TRequestOptions& query) const {
-    return Impl->ExecuteStreamQuery(query);
+bool TFqRunner::ExecuteQuery(const TRequestOptions& query) const {
+    return Impl->ExecuteQuery(query);
 }
 
 bool TFqRunner::FetchQueryResults() const {

@@ -10,7 +10,7 @@ class TFqRunner {
 public:
     explicit TFqRunner(const TRunnerOptions& options);
 
-    bool ExecuteStreamQuery(const TRequestOptions& query) const;
+    bool ExecuteQuery(const TRequestOptions& query) const;
 
     bool FetchQueryResults() const;
 

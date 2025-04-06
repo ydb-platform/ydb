@@ -22,7 +22,7 @@ class TFqSetup {
 public:
     explicit TFqSetup(const TFqSetupSettings& settings);
 
-    TRequestResult StreamRequest(const TRequestOptions& query, TString& queryId) const;
+    TRequestResult QueryRequest(const TRequestOptions& query, TString& queryId) const;
 
     TRequestResult DescribeQuery(const TString& queryId, const TFqOptions& options, TExecutionMeta& meta) const;
 

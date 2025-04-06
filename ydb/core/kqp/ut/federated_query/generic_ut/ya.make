@@ -4,6 +4,8 @@ FORK_SUBTESTS()
 
 SRCS(
     kqp_generic_provider_ut.cpp
+    iceberg_ut_data.cpp
+    iceberg_ut_data.h
 )
 
 PEERDIR(

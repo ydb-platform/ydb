@@ -27,7 +27,11 @@ namespace NYdb::NConsoleClient {
 
             replxx::Replxx::completions_t entries;
             for (auto& candidate : completion.Candidates) {
-                candidate.Content += ' ';
+                const auto back = candidate.Content.back();
+                if (!IsLeftPunct(back) && back != '<' || IsQuotation(back)) {
+                    candidate.Content += ' ';
+                }
+
                 entries.emplace_back(
                     std::move(candidate.Content),
                     ReplxxColorOf(candidate.Kind));

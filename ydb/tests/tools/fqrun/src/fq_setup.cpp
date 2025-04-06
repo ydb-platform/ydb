@@ -201,6 +201,10 @@ private:
 
     void InitializeFqProxy(ui32 grpcPort) {
         const auto& fqConfig = GetFqProxyConfig(grpcPort);
+        if (Settings.VerboseLevel >= EVerbose::InitLogs) {
+            Cout << "FQ config:\n" << fqConfig.DebugString() << Endl;
+        }
+
         const auto counters = GetRuntime()->GetAppData().Counters->GetSubgroup("counters", "yq");
         YqSharedResources = NFq::CreateYqSharedResources(fqConfig, NKikimr::CreateYdbCredentialsProviderFactory, counters);
 

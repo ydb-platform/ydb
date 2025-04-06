@@ -28,9 +28,8 @@ For profiling memory allocations build fqrun with ya make flags `-D PROFILE_MEMO
 * Analytics query with remote compute database:
     1.  Start shared ydb tenant:
         ```(bash)
-        ./kqprun -G 12344 --shared db
+        ./kqprun -G 12345 --shared db
         ```
-        Kqprun will open port 12344 to tenant `/Root`, for tenant `/Root/db` use port 12345.
 
     1. Execute query:
         ```(bash)

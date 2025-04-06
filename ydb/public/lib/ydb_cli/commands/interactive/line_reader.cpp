@@ -59,7 +59,7 @@ TLineReader::TLineReader(std::string prompt, std::string historyFilePath)
     : Prompt(std::move(prompt))
     , HistoryFilePath(std::move(historyFilePath))
     , HistoryFileHandle(HistoryFilePath.c_str(), EOpenModeFlag::OpenAlways | EOpenModeFlag::RdWr | EOpenModeFlag::AW | EOpenModeFlag::ARUser | EOpenModeFlag::ARGroup)
-    , YQLCompleter(MakeYQLCompleter())
+    , YQLCompleter(MakeYQLCompleter(TColorSchema::Monaco()))
     , YQLHighlighter(MakeYQLHighlighter(TColorSchema::Monaco()))
 {
     Rx.install_window_change_handler();

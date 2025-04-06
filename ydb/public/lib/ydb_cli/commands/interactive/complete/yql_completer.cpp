@@ -1,5 +1,7 @@
 #include "yql_completer.h"
 
+#include <ydb/public/lib/ydb_cli/commands/interactive/highlight/color/schema.h>
+
 #include <yql/essentials/sql/v1/complete/sql_complete.h>
 #include <yql/essentials/sql/v1/complete/name/static/name_service.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
@@ -11,8 +13,9 @@ namespace NYdb::NConsoleClient {
     public:
         using TPtr = THolder<IYQLCompleter>;
 
-        explicit TYQLCompleter(NSQLComplete::ISqlCompletionEngine::TPtr engine)
+        explicit TYQLCompleter(NSQLComplete::ISqlCompletionEngine::TPtr engine, TColorSchema color)
             : Engine(std::move(engine))
+            , Color(std::move(color))
         {
         }
 
@@ -33,11 +36,21 @@ namespace NYdb::NConsoleClient {
         }
 
     private:
-        static replxx::Replxx::Color ReplxxColorOf(NSQLComplete::ECandidateKind /* kind */) {
-            return replxx::Replxx::Color::DEFAULT;
+        replxx::Replxx::Color ReplxxColorOf(NSQLComplete::ECandidateKind kind) {
+            switch (kind) {
+                case NSQLComplete::ECandidateKind::Keyword:
+                    return Color.keyword;
+                case NSQLComplete::ECandidateKind::TypeName:
+                    return Color.identifier.type;
+                case NSQLComplete::ECandidateKind::FunctionName:
+                    return Color.identifier.function;
+                default:
+                    return replxx::Replxx::Color::DEFAULT;
+            }
         }
 
         NSQLComplete::ISqlCompletionEngine::TPtr Engine;
+        TColorSchema Color;
     };
 
     NSQLComplete::TLexerSupplier MakePureLexerSupplier() {
@@ -51,7 +64,7 @@ namespace NYdb::NConsoleClient {
         };
     }
 
-    IYQLCompleter::TPtr MakeYQLCompleter() {
+    IYQLCompleter::TPtr MakeYQLCompleter(TColorSchema color) {
         NSQLComplete::TLexerSupplier lexer = MakePureLexerSupplier();
 
         NSQLComplete::NameSet names = NSQLComplete::MakeDefaultNameSet();
@@ -62,7 +75,8 @@ namespace NYdb::NConsoleClient {
             MakeStaticNameService(std::move(names), std::move(ranking));
 
         return IYQLCompleter::TPtr(new TYQLCompleter(
-            NSQLComplete::MakeSqlCompletionEngine(std::move(lexer), std::move(service))));
+            NSQLComplete::MakeSqlCompletionEngine(std::move(lexer), std::move(service)),
+            std::move(color)));
     }
 
 } // namespace NYdb::NConsoleClient

@@ -52,7 +52,7 @@ inputs:
     type: string
     default: ""
   custom_branch_name:
-    description: "custom branch name reqeire then workflow branch != checkout branch"
+    description: "Custom branch name required when workflow branch != checkout branch"
     type: string
     required: false
 defaults:

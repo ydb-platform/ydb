@@ -61,7 +61,7 @@ inputs:
     default: ""
     description: "how many times to retry failed tests"
   custom_branch_name:
-    description: "custom branch name reqeire then workflow branch != checkout branch"
+    description: "Custom branch name required when workflow branch != checkout branch"
     type: string
     required: false
 

@@ -451,9 +451,10 @@ private:
 
     ui64 GetReadOffset(ui64 offset, TMaybe<TInstant> readTimestamp) const;
 
-    TInstant GetCreateTimestamp(const TUserInfo& userInfo);
-    TInstant GetWriteTimestamp(const TUserInfo& userInfo);
-    TInstant GetReadWriteTimestamp(const TUserInfo& userInfo);
+    TInstant GetCreateTimestamp(const TUserInfo& userInfo) const;
+    TInstant GetWriteTimestamp(const TUserInfo& userInfo) const;
+    TInstant GetReadCreateTimestamp(const TUserInfo& userInfo) const;
+    TInstant GetReadWriteTimestamp(const TUserInfo& userInfo) const;
 
 public:
     static constexpr NKikimrServices::TActivity::EType ActorActivityType() {

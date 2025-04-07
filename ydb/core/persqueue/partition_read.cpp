@@ -286,7 +286,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionOffsets::TPtr& ev, const TActorContex
             result.SetCreateTimestampMS(userInfo->GetCreateTimestamp(EndOffset).MilliSeconds());
             result.SetClientReadOffset(userInfo->GetReadOffset());
             result.SetReadWriteTimestampMS(GetReadWriteTimestamp(*userInfo).MilliSeconds());
-            result.SetReadCreateTimestampMS(userInfo->GetReadCreateTimestamp(EndOffset).MilliSeconds());
+            result.SetReadCreateTimestampMS(GetReadCreateTimestamp(*userInfo).MilliSeconds());
         }
     }
     ctx.Send(ev->Get()->Sender, new TEvPQ::TEvPartitionOffsetsResponse(result, Partition));

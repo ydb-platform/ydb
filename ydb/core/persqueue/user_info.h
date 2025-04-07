@@ -54,13 +54,19 @@ struct TUserInfoBase {
 };
 
 struct TUserInfo: public TUserInfoBase {
+    // WriteTimestamp of the last committed message
     TInstant WriteTimestamp;
+    // CreateTimestamp of the last committed message
     TInstant CreateTimestamp;
+    // Timstamp of the last read
     TInstant ReadTimestamp;
     bool ActualTimestamps = false;
 
     i64 ReadOffset = -1;
+
+    // WriteTimestamp of the last read message
     TInstant ReadWriteTimestamp;
+    // CreateTimestamp of the last read message
     TInstant ReadCreateTimestamp;
     ui64 ReadOffsetRewindSum = 0;
 
@@ -174,13 +180,13 @@ struct TUserInfo: public TUserInfoBase {
     )
         : TUserInfoBase{user, readRuleGeneration, session, gen, step, offset, important,
                         readFromTimestamp, partitionSession, pipeClient}
-        , WriteTimestamp(TAppData::TimeProvider->Now())
-        , CreateTimestamp(TAppData::TimeProvider->Now())
+        , WriteTimestamp(TInstant::Zero())
+        , CreateTimestamp(TInstant::Zero())
         , ReadTimestamp(TAppData::TimeProvider->Now())
         , ActualTimestamps(false)
         , ReadOffset(-1)
-        , ReadWriteTimestamp(TAppData::TimeProvider->Now())
-        , ReadCreateTimestamp(TAppData::TimeProvider->Now())
+        , ReadWriteTimestamp(TInstant::Zero())
+        , ReadCreateTimestamp(TInstant::Zero())
         , ReadOffsetRewindSum(readOffsetRewindSum)
         , ReadScheduled(false)
         , HasReadRule(false)
@@ -334,23 +340,18 @@ struct TUserInfo: public TUserInfoBase {
     }
 
     TInstant GetWriteTimestamp(i64 endOffset) const {
-        if (!ActualTimestamps) {
-            return TInstant::Zero();
-        }
         return Offset == endOffset ? TAppData::TimeProvider->Now() : WriteTimestamp;
     }
 
     TInstant GetCreateTimestamp(i64 endOffset) const {
-        if (!ActualTimestamps) {
-            return TInstant::Zero();
-        }
         return Offset == endOffset ? TAppData::TimeProvider->Now() : CreateTimestamp;
     }
 
     TInstant GetReadWriteTimestamp(i64 endOffset) const {
-        TInstant ts =  ReadOffset == -1 ? WriteTimestamp : ReadWriteTimestamp;
-        ts = GetReadOffset() >= endOffset ? TAppData::TimeProvider->Now() : ts;
-        return ts;
+        if (GetReadOffset() >= endOffset) {
+            return TAppData::TimeProvider->Now();
+        }
+        return ReadOffset == -1 ? WriteTimestamp : ReadWriteTimestamp;
     }
 
     ui64 GetWriteLagMs() const {
@@ -358,9 +359,10 @@ struct TUserInfo: public TUserInfoBase {
     }
 
     TInstant GetReadCreateTimestamp(i64 endOffset) const {
-        TInstant ts = ReadOffset == -1 ? CreateTimestamp : ReadCreateTimestamp;
-        ts = GetReadOffset() >= endOffset ? TAppData::TimeProvider->Now() : ts;
-        return ts;
+        if (GetReadOffset() >= endOffset) {
+            return TAppData::TimeProvider->Now();
+        }
+        return ReadOffset == -1 ? CreateTimestamp : ReadCreateTimestamp;
     }
 
 };

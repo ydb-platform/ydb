@@ -297,7 +297,7 @@ TTxController::EPlanResult TTxController::PlanTx(const ui64 planStep, const ui64
         }
         return EPlanResult::Planned;
     } else {
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "skip_plan_tx_plan_step_is_not_zero")("tx_id", txId)("plan_step", txInfo.PlanStep);
+        AFL_INFO(NKikimrServices::TX_COLUMNSHARD_TX)("event", "skip_plan_tx_plan_step_is_not_zero")("tx_id", txId)("plan_step", txInfo.PlanStep);
     }
     return EPlanResult::AlreadyPlanned;
 }

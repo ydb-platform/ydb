@@ -1247,15 +1247,26 @@ partitioning_settings {
 
     Y_UNIT_TEST(CheckItemProgress) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        auto options = TTestEnvOptions();
+        TTestEnv env(runtime, options);
         ui64 txId = 100;
+
+        TBlockEvents<NKikimr::NWrappers::NExternalStorage::TEvPutObjectRequest> blockPartition0(runtime, [](auto&& ev) {
+            return ev->Get()->Request.GetKey() == "/data_01.csv";
+        });
 
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
-            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "key" Type: "Uint32" }
             Columns { Name: "value" Type: "Utf8" }
             KeyColumnNames: ["key"]
+            SplitBoundary { KeyPrefix { Tuple { Optional { Uint32: 10 } }}}
         )");
+        env.TestWaitNotification(runtime, txId);
+        
+        WriteRow(runtime, ++txId, "/MyRoot/Table", 0, 1, "v1");
+        env.TestWaitNotification(runtime, txId);
+        WriteRow(runtime, ++txId, "/MyRoot/Table", 1, 100, "v100");
         env.TestWaitNotification(runtime, txId);
 
         TPortManager portManager;
@@ -1274,17 +1285,35 @@ partitioning_settings {
               }
             }
         )", port));
+        
+
+        runtime.WaitFor("put object request from 01 partition", [&]{ return blockPartition0.size() >= 1; });
+        bool isCompleted = false;
+
+        while (!isCompleted) {
+            const auto desc = TestGetExport(runtime, txId, "/MyRoot");
+            const auto entry = desc.GetResponse().GetEntry();
+            const auto& item = entry.GetItemsProgress(0);
+
+            if (item.parts_completed() > 0) {
+                isCompleted = true;
+                UNIT_ASSERT_VALUES_EQUAL(item.parts_total(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(item.parts_completed(), 1);
+                UNIT_ASSERT(item.has_start_time());
+            } else {
+                runtime.SimulateSleep(TDuration::Seconds(1));
+            }
+        }
+
+        blockPartition0.Stop();
+        blockPartition0.Unblock();
+        
         env.TestWaitNotification(runtime, txId);
 
         const auto desc = TestGetExport(runtime, txId, "/MyRoot");
-        const auto& entry = desc.GetResponse().GetEntry();
-        UNIT_ASSERT_VALUES_EQUAL(entry.ItemsProgressSize(), 1);
+        const auto entry = desc.GetResponse().GetEntry();
 
-        const auto& item = entry.GetItemsProgress(0);
-        UNIT_ASSERT_VALUES_EQUAL(item.parts_total(), 1);
-        UNIT_ASSERT_VALUES_EQUAL(item.parts_completed(), 1);
-        UNIT_ASSERT(item.has_start_time());
-        UNIT_ASSERT(item.has_end_time());
+        UNIT_ASSERT_VALUES_EQUAL(entry.ItemsProgressSize(), 1);
     }
 
     Y_UNIT_TEST(ShouldRestartOnScanErrors) {

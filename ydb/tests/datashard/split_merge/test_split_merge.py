@@ -77,7 +77,7 @@ class TestSplitMerge(TestBase):
     )
     def test_merge_split(self, table_name: str, pk_types: dict[str, str], all_types: dict[str, str], index: dict[str, str], ttl: str, unique: str, sync: str):
         big_line = "a" * 100_000
-        all_types["big_line"] = "'String " + big_line +  "{}'"
+        all_types["String"] = "'String " + big_line +  "{}'"
         self.create_table(table_name, pk_types, all_types,
                           index, ttl, unique, sync)
         self.query(f"alter table {table_name} set(AUTO_PARTITIONING_PARTITION_SIZE_MB = 1)")
@@ -133,6 +133,23 @@ class TestSplitMerge(TestBase):
         for count in range(1, number_of_columns + 1):
             self.create_insert(table_name, count, all_types,
                                pk_types, index, ttl)
+            
+    def create_insert(self, table_name: str, value: int, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
+        insert_sql = f"""
+            INSERT INTO {table_name}(
+                {", ".join(["pk_" + cleanup_type_name(type_name) for type_name in pk_types.keys()])}{", " if len(all_types) != 0 else ""}
+                {", ".join(["col_" + cleanup_type_name(type_name) for type_name in all_types.keys()])}{", " if len(index) != 0 else ""}
+                {", ".join(["col_index_" + cleanup_type_name(type_name) for type_name in index.keys()])}{", " if len(ttl) != 0 else ""}
+                {f"ttl_{ttl}" if ttl != "" else ""}
+            )
+            VALUES(
+                {", ".join([pk_types[type_name].format(value) for type_name in pk_types.keys()])}{", " if len(all_types) != 0 else ""}
+                {", ".join([all_types[type_name].format(value) for type_name in all_types.keys()])}{", " if len(index) != 0 else ""}
+                {", ".join([index[type_name].format(value) for type_name in index.keys()])}{", " if len(ttl) != 0 else ""}
+                {ttl_types[ttl].format(value) if ttl != "" else ""}
+            );
+        """
+        self.query(insert_sql)
     
     def select_after_insert(self, table_name: str, all_types: dict[str, str], pk_types: dict[str, str], index: dict[str, str], ttl: str):
 

@@ -16,6 +16,7 @@ TEST_SRCS(
 
 PEERDIR(
     ydb/tests/sql/lib
+    ydb/tests/datashard/lib
 )
 
 DEPENDS(

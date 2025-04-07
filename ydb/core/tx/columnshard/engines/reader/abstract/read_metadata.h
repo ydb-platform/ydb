@@ -30,6 +30,11 @@ public:
         const std::optional<ui64> lockId, const TSnapshot& reqSnapshot) const;
 };
 
+enum class EDeduplicationPolicy {
+    ALLOW_DUPLICATES = 0,
+    NO_DUPLICATES,
+};
+
 // Holds all metadata that is needed to perform read/scan
 class TReadMetadataBase {
 public:
@@ -47,6 +52,7 @@ private:
     std::optional<TGranuleShardingInfo> RequestShardingInfo;
     std::shared_ptr<IScanCursor> ScanCursor;
     const ui64 TabletId;
+    YDB_ACCESSOR(EDeduplicationPolicy, DeduplicationPolicy, EDeduplicationPolicy::NO_DUPLICATES);
     virtual void DoOnReadFinished(NColumnShard::TColumnShard& /*owner*/) const {
     }
     virtual void DoOnBeforeStartReading(NColumnShard::TColumnShard& /*owner*/) const {

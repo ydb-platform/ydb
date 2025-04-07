@@ -45,6 +45,7 @@ target_link_libraries(ydb-core-external_sources PUBLIC
 
 target_sources(ydb-core-external_sources PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/external_sources/external_data_source.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/external_sources/external_source_builder.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/external_sources/external_source_factory.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/external_sources/object_storage.cpp
   ${PROJECT_SOURCE_DIR}/ydb/core/external_sources/validation_functions.cpp

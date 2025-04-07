@@ -52,6 +52,8 @@ target_link_options(ydb-core-kqp-ut-federated_query-generic_ut PRIVATE
 
 target_sources(ydb-core-kqp-ut-federated_query-generic_ut PRIVATE
   ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/federated_query/generic_ut/kqp_generic_provider_ut.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/federated_query/generic_ut/iceberg_ut_data.cpp
+  ${PROJECT_SOURCE_DIR}/ydb/core/kqp/ut/federated_query/generic_ut/iceberg_ut_data.h
 )
 
 

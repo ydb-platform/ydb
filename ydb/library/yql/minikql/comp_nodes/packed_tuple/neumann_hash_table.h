@@ -301,6 +301,7 @@ class TNeumannHashTable {
                     it += BufferSlotSize_;
                     break;
                 }
+                result = nullptr;
             }
         }
 

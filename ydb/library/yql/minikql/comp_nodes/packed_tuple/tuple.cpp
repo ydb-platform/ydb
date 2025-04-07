@@ -95,9 +95,17 @@ bool TTupleLayout::KeysEqual(const ui8 *lhsRow, const ui8 *lhsOverflow,
     if (std::memcmp(lhsRow, rhsRow, KeyColumnsFixedEnd)) {
         return false;
     }
-    if (std::memcmp(lhsRow + BitmaskOffset, rhsRow + BitmaskOffset,
-                    BitmaskSize)) {
-        return false;
+
+    // TODO: better nulls detection??
+    const ui8 rem = KeyColumnsNum % 8;
+    const ui8 masks[2] = {static_cast<ui8>((1 << rem) - 1), 0xFF};
+    for (i32 i = KeyColumnsNum, byteN = 0; i > 0; i -= 8, byteN++) {
+        const ui8 lhsBits = ReadUnaligned<ui8>(lhsRow + BitmaskOffset + byteN);
+        const ui8 rhsBits = ReadUnaligned<ui8>(rhsRow + BitmaskOffset + byteN);
+        const ui8 midx = (i >= 8);
+        if (((lhsBits & masks[midx]) != masks[midx]) || (rhsBits & masks[midx]) != masks[midx]) { // if there is at least one null in key cols
+            return false;
+        }
     }
 
     for (auto colInd = KeyColumnsFixedNum; colInd != KeyColumnsNum; ++colInd) {

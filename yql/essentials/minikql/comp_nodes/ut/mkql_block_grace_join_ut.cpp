@@ -193,7 +193,7 @@ Y_UNIT_TEST_SUITE(TMiniKQLBlockGraceJoinTestBasic) {
     static const TString hugeString(128, '1');
 
     Y_UNIT_TEST(TestInnerJoin) {
-        for (auto policy: {gpTAlwaysInMemGraceJoinPolicy}) {
+        for (auto policy: {gpDefaultPolicy, gpTAlwaysHashJoinPolicy, gpTAlwaysInMemGraceJoinPolicy}) {
             TSetup<false> setup(GetNodeFactory());
 
             // 1. Make input for the "left" stream.

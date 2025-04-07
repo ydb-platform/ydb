@@ -479,7 +479,7 @@ public:
         auto tuplesToPack = columns.front().array()->length;
         nTuples += tuplesToPack;
         auto newSize = (TupleLayout_->TotalRowSize) * nTuples;
-        packedTuples.resize(newSize);
+        packedTuples.resize(newSize, 0);
 
         TupleLayout_->Pack(
             columnsData.data(), columnsNullBitmap.data(),

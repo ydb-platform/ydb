@@ -97,35 +97,19 @@ NKikimr::NArrow::NMerger::TRWSortableBatchPosition TSortableBatchPosition::Build
 TSortableBatchPosition::TFoundPosition TRWSortableBatchPosition::SkipToLower(const TSortableBatchPosition& forFound) {
     AFL_VERIFY(RecordsCount);
     const ui32 posStart = Position;
-    auto pos = [&]() {
-        if (ReverseSort) {
-            auto pos = FindBound(*this, 0, posStart, forFound, true);
-            if (!pos) {
-                auto guard = CreateAsymmetricAccessGuard();
-                AFL_VERIFY(guard.InitSortingPosition(posStart));
-                return TFoundPosition(posStart, Compare(forFound));
-            } else if (pos->GetPosition()) {
-                auto guard = CreateAsymmetricAccessGuard();
-                AFL_VERIFY(guard.InitSortingPosition(pos->GetPosition() - 1));
-                return TFoundPosition(pos->GetPosition() - 1, Compare(forFound));
-            }
-            return *pos;
-        } else {
-            auto pos = FindBound(*this, posStart, RecordsCount - 1, forFound, false);
-            if (!pos) {
-                auto guard = CreateAsymmetricAccessGuard();
-                AFL_VERIFY(guard.InitSortingPosition(RecordsCount - 1));
-                return TFoundPosition(RecordsCount - 1, Compare(forFound));
-            }
-            return *pos;
-        }
-    }();
-    if (ReverseSort) {
-        AFL_VERIFY(Position <= posStart)("pos", Position)("pos_skip", pos.GetPosition())("reverse", true);
-    } else {
-        AFL_VERIFY(posStart <= Position)("pos", Position)("pos_skip", pos.GetPosition())("reverse", false);
+    AFL_VERIFY(!ReverseSort)("reason", "unimplemented");
+    auto pos = FindBound(*this, posStart, RecordsCount - 1, forFound, false);
+    if (!pos) {
+        auto guard = CreateAsymmetricAccessGuard();
+        AFL_VERIFY(guard.InitSortingPosition(RecordsCount - 1));
+        return TFoundPosition(RecordsCount - 1, Compare(forFound));
     }
-    return pos;
+    if (ReverseSort) {
+        AFL_VERIFY(Position <= posStart)("pos", Position)("pos_skip", pos->GetPosition())("reverse", true);
+    } else {
+        AFL_VERIFY(posStart <= Position)("pos", Position)("pos_skip", pos->GetPosition())("reverse", false);
+    }
+    return *pos;
 }
 
 TSortableScanData::TSortableScanData(

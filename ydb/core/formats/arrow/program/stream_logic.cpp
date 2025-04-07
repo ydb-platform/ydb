@@ -43,24 +43,24 @@ TConclusion<bool> TStreamLogicProcessor::OnInputReady(
             if (monoValue) {
                 if (!accResult) {
                     context.GetResources()->AddVerified(GetOutputColumnIdOnce(),
-                        NAccessor::TSparsedArray::BuildTrueArrayUI8(context.GetResources()->GetRecordsCountActualVerified()), false);
+                        NAccessor::TSparsedArray::BuildTrueArrayUI8(context.GetResources()->GetRecordsCountRobustVerified()), false);
                 }
                 return false;
             } else {
                 context.GetResources()->Upsert(GetOutputColumnIdOnce(),
-                    NAccessor::TSparsedArray::BuildFalseArrayUI8(context.GetResources()->GetRecordsCountActualVerified()), false);
+                    NAccessor::TSparsedArray::BuildFalseArrayUI8(context.GetResources()->GetRecordsCountRobustVerified()), false);
                 return true;
             }
         } else if (Operation == NKernels::EOperation::Or) {
             if (!monoValue) {
                 if (!accResult) {
                     context.GetResources()->AddVerified(GetOutputColumnIdOnce(),
-                        NAccessor::TSparsedArray::BuildFalseArrayUI8(context.GetResources()->GetRecordsCountActualVerified()), false);
+                        NAccessor::TSparsedArray::BuildFalseArrayUI8(context.GetResources()->GetRecordsCountRobustVerified()), false);
                 }
                 return false;
             } else {
                 context.GetResources()->Upsert(GetOutputColumnIdOnce(),
-                    NAccessor::TSparsedArray::BuildTrueArrayUI8(context.GetResources()->GetRecordsCountActualVerified()), false);
+                    NAccessor::TSparsedArray::BuildTrueArrayUI8(context.GetResources()->GetRecordsCountRobustVerified()), false);
                 return true;
             }
         }

@@ -86,11 +86,9 @@ public:
         return Columns[idx];
     }
 
-    class TTableConstructionContext {
+    class TTableConstructionContext: public NAccessor::TColumnConstructionContext {
     private:
         YDB_ACCESSOR_DEF(std::optional<std::set<std::string>>, ColumnNames);
-        YDB_ACCESSOR_DEF(std::optional<ui32>, StartIndex);
-        YDB_ACCESSOR_DEF(std::optional<ui32>, RecordsCount);
 
     public:
         TTableConstructionContext() = default;

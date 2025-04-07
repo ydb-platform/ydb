@@ -65,6 +65,10 @@ public:
         CSCounters.OnWriteOverloadMetadata(size);
     }
 
+    void OnWriteOverloadCompaction(const ui64 size) const {
+        CSCounters.OnWriteOverloadCompaction(size);
+    }
+
     void OnWriteOverloadShardTx(const ui64 size) const {
         TabletCounters->IncCounter(COUNTER_WRITE_OVERLOAD);
         CSCounters.OnWriteOverloadShardTx(size);

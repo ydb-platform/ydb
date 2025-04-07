@@ -20,7 +20,7 @@ private:
     THashMap<TChunkAddress, TString> Blobs;
     bool IsDone = false;
     YDB_READONLY_DEF(std::shared_ptr<NCommon::IDataSource>, Source);
-    std::shared_ptr<NGroupedMemoryManager::TGroupGuard> MemoryGroupGuard;
+    YDB_READONLY_DEF(std::shared_ptr<NGroupedMemoryManager::TGroupGuard>, MemoryGroupGuard);
 
     void OnDone() {
         AFL_VERIFY(!IsDone);
@@ -182,7 +182,6 @@ public:
 class TPortionAccessorFetchingSubscriber: public IDataAccessorRequestsSubscriber {
 private:
     std::shared_ptr<TColumnFetchingContext> Context;
-    ui64 MemoryGroupId;
 
     virtual const std::shared_ptr<const TAtomicCounter>& DoGetAbortionFlag() const override {
         return Context->GetSource()->GetContext()->GetCommonContext()->GetAbortionFlag();
@@ -225,14 +224,13 @@ private:
         const ui64 mem = portionAccessor.GetColumnRawBytes(columnIds, false);
         auto allocationTask = std::make_shared<TColumnsMemoryAllocation>(mem, fetchingTask, Context);
         NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(Context->GetSource()->GetContext()->GetProcessMemoryControlId(),
-            Context->GetSource()->GetContext()->GetCommonContext()->GetScanId(), MemoryGroupId, { allocationTask },
-            (ui32)NCommon::EStageFeaturesIndexes::Filter);
+            Context->GetSource()->GetContext()->GetCommonContext()->GetScanId(), Context->GetMemoryGroupGuard()->GetGroupId(),
+            { allocationTask }, (ui32)NCommon::EStageFeaturesIndexes::Filter);
     }
 
 public:
-    TPortionAccessorFetchingSubscriber(const std::shared_ptr<TColumnFetchingContext>& context, const ui64 memoryGroupId)
-        : Context(context)
-        , MemoryGroupId(memoryGroupId) {
+    TPortionAccessorFetchingSubscriber(const std::shared_ptr<TColumnFetchingContext>& context)
+        : Context(context) {
     }
 };
 }   // namespace NKikimr::NOlap::NReader

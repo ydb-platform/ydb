@@ -18,6 +18,8 @@
 #include <util/generic/xrange.h>
 #include <util/string/builder.h>
 
+#include <algorithm>
+
 namespace {
 
 ui32 PopFront(TDeque<ui32>& pendingItems) {
@@ -217,16 +219,125 @@ private:
         return {};
     }
 
+    THashSet<TString> GetExcludeRootChildrenList() {
+        THashSet<TString> result;
+        const TString root = CanonizePath(Self->RootPathElements);
+        auto addChild = [&](const auto& name) {
+            result.emplace(TStringBuilder() << root << '/' << name);
+        };
+        addChild(".sys");
+        addChild(".metadata");
+        // Add all existing exports' dirs
+        for (auto&& [_, exportInfo] : Self->Exports) {
+            addChild(Sprintf("export-%" PRIu64, exportInfo->Id));
+        }
+        return result;
+    }
+
     template <typename TSettings>
-    bool FillItems(TExportInfo::TPtr exportInfo, const TSettings& settings, TString& explain) {
+    ui64 GetExportItemsLimit(const TSettings& settings) const {
+        const TSchemeLimits* limits = nullptr;
+        if (settings.items().size() > 0 && settings.items(0).source_path()) {
+            TPath firstPath = TPath::Resolve(settings.items(0).source_path(), Self);
+            if (firstPath.IsResolved()) { // All items later will be checked that they are resolved
+                limits = &firstPath.DomainInfo()->GetSchemeLimits();
+            }
+        }
+        if (!limits) {
+            TPath rootPath = TPath::Resolve(CanonizePath(Self->RootPathElements), Self);
+            if (rootPath.IsResolved()) {
+                limits = &rootPath.DomainInfo()->GetSchemeLimits();
+            }
+        }
+        ui64 limit = 0;
+        if (limits) {
+            limit = Max(limits->MaxObjectsInBackup, limits->MaxConsistentCopyTargets);
+        }
+        return limit;
+    }
+
+    template <typename TSettings>
+    bool FillItems(TExportInfo::TPtr exportInfo, const TSettings& srcSettings, TString& explain) {
+        TSettings settings = srcSettings;
         TString commonSourcePath = GetCommonSourcePath(settings);
         if (commonSourcePath && commonSourcePath.back() != '/') {
             commonSourcePath.push_back('/');
         }
+
+        const TString rootPath = CanonizePath(Self->RootPathElements);
+        if (settings.items().size() == 0) { // Add database root
+            auto* rootItem = settings.add_items();
+            if (commonSourcePath.empty()) {
+                rootItem->set_source_path(rootPath);
+            }
+        }
+
+        THashSet<TString> itemsInExport;
+        for (ui32 itemIdx : xrange(settings.items().size())) {
+            auto& item = *settings.mutable_items(itemIdx);
+            const TString srcPath = CanonizePath(commonSourcePath + item.source_path());
+            if (!itemsInExport.insert(srcPath).second) {
+                explain = TStringBuilder() << "Duplicate export item: \"" << TStringBuf(srcPath).Skip(1) << "\"";
+                return false;
+            }
+            item.set_source_path(srcPath); // Make full canonized path in all items
+        }
+
+        // Expand all directories to their objects
+        int expandingItemIdx = 0;
+        THashSet<TString> toRemove;
+        const ui64 itemsLimit = GetExportItemsLimit(settings);
+        while (expandingItemIdx < settings.items().size()) {
+            const auto& item = settings.items(expandingItemIdx);
+            const TString srcPath = item.source_path();
+            const TPath path = TPath::Resolve(srcPath, Self);
+            if (path.IsResolved() && path.Base()->IsLikeDirectory()) {
+                if (!path.IsSupportedInExports()) { // Directories can be yet not supported in export themselves (sooner or later they will be supported). In this case they are still treated recursively, but then we don't export them.
+                    toRemove.insert(srcPath);
+                }
+
+                THashSet<TString> excludePath;
+                if (srcPath == rootPath) {
+                    excludePath = GetExcludeRootChildrenList();
+                }
+                for (auto&& [name, _] : path.Base()->GetChildren()) {
+                    const TPath childPath = path.Child(name);
+                    if (childPath.IsResolved() &&
+                        !childPath.IsDeleted() && !childPath.IsUnderDeleting() && !childPath.Base()->IsTemporary() &&
+                        (childPath.IsSupportedInExports() || childPath.Base()->IsLikeDirectory()))
+                    {
+                        const TString newPath = childPath.PathString();
+                        const bool exclude = !excludePath.empty() && childPath.Base()->IsDirectory() && (excludePath.contains(newPath) || newPath.StartsWith("~")); // exclude only for root children: only there can be system directories
+                        if (!exclude && itemsInExport.insert(newPath).second) {
+                            auto* newItem = settings.add_items();
+                            newItem->set_source_path(newPath);
+                        }
+                    }
+                }
+            }
+            ++expandingItemIdx;
+
+            if (static_cast<ui64>(expandingItemIdx) - toRemove.size() > itemsLimit) {
+                explain = TStringBuilder() << "Too many export items. Maximum allowed export items count: " << itemsLimit;
+                return false;
+            }
+        }
+
+        if (!toRemove.empty()) {
+            auto end = std::remove_if(settings.mutable_items()->begin(), settings.mutable_items()->end(), [&](const auto& item) {
+                return toRemove.contains(item.source_path());
+            });
+            int removeCount = settings.items().end() - end;
+            Y_VERIFY(removeCount > 0);
+            while (removeCount--) {
+                settings.mutable_items()->RemoveLast();
+            }
+        }
+
         exportInfo->Items.reserve(settings.items().size());
         for (ui32 itemIdx : xrange(settings.items().size())) {
             const auto& item = settings.items(itemIdx);
-            const TString srcPath = commonSourcePath + item.source_path();
+            const TString& srcPath = item.source_path();
             const TPath path = TPath::Resolve(srcPath, Self);
             {
                 TPath::TChecker checks = path.Check();
@@ -247,6 +358,12 @@ private:
             exportInfo->PendingItems.push_back(itemIdx);
         }
 
+        if (settings.items().size() == 0) {
+            explain = "Nothing to export";
+            return false;
+        }
+
+        exportInfo->SetSettings(settings);
         return true;
     }
 

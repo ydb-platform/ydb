@@ -11,35 +11,25 @@ std::shared_ptr<IDataSource> TScanWithLimitCollection::DoExtractNext() {
     AFL_VERIFY(FetchingInFlightSources.emplace(TCompareKeyForScanSequence::FromFinish(result)).second);
     auto predPosition = std::move(HeapSources.back());
     HeapSources.pop_back();
-    if (HeapSources.size()) {
-        FullIntervalsFetchingCount.Add(GetInFlightIntervalsCount(predPosition.GetStart(), HeapSources.front().GetStart()));
-    } else {
-        FullIntervalsFetchingCount = FetchingInFlightSources.size() + FinishedSources.size();
-    }
     FetchingInFlightCount.Inc();
     return result;
 }
 
 void TScanWithLimitCollection::DoOnSourceFinished(const std::shared_ptr<IDataSource>& source) {
+    if (!source->GetResultRecordsCount() && InFlightLimit < GetMaxInFlight()) {
+        InFlightLimit = 2 * InFlightLimit;
+    }
     FetchingInFlightCount.Dec();
     AFL_VERIFY(FetchingInFlightSources.erase(TCompareKeyForScanSequence::FromFinish(source)));
-    AFL_VERIFY(FinishedSources.emplace(TCompareKeyForScanSequence::FromFinish(source), TFinishedDataSource(source)).second);
     while (FinishedSources.size() && (HeapSources.empty() || FinishedSources.begin()->first < HeapSources.front().GetStart())) {
         auto finishedSource = FinishedSources.begin()->second;
-        if (!finishedSource.GetRecordsCount() && InFlightLimit < GetMaxInFlight()) {
-            InFlightLimit = 2 * InFlightLimit;
-        }
         FetchedCount += finishedSource.GetRecordsCount();
         FinishedSources.erase(FinishedSources.begin());
-        if (Context->IsActive()) {
-            --FullIntervalsFetchingCount;
-        }
         AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("event", "source_finished")("source_id", finishedSource.GetSourceId())(
             "source_idx", finishedSource.GetSourceIdx())("limit", Limit)("fetched", finishedSource.GetRecordsCount());
         if (Limit <= FetchedCount && HeapSources.size()) {
             AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("event", "limit_exhausted")("limit", Limit)("fetched", FetchedCount);
             HeapSources.clear();
-            FullIntervalsFetchingCount = FinishedSources.size() + FetchingInFlightSources.size();
         }
     }
 }
@@ -83,6 +73,31 @@ TScanWithLimitCollection::TScanWithLimitCollection(
 
     HeapSources = std::move(sources);
     std::make_heap(HeapSources.begin(), HeapSources.end());
+}
+
+void TScanWithLimitCollection::DoOnIntervalResult(const std::shared_ptr<arrow::Table>& table, const std::shared_ptr<IDataSource>& source) {
+    std::vector<std::shared_ptr<arrow::ChunkedArray>> pkArrays;
+    for (auto&& f : Context->GetReadMetadata()->GetResultSchema()->GetIndexInfo().GetReplaceKey()->fields()) {
+        pkArrays.emplace_back(table->GetColumnByName(f->name()));
+        if (!pkArrays.back()) {
+            pkArrays.pop_back();
+            break;
+        }
+    }
+    AFL_VERIFY(pkArrays.size());
+    const ui32 partsCount = std::min<ui32>(10, table->num_rows());
+    std::optional<i32> lastPosition;
+    for (ui32 i = 0; i < partsCount; ++i) {
+        const i32 currentPosition = (i + 1) * (table->num_rows() - 1) / partsCount;
+        if (lastPosition) {
+            AFL_VERIFY(*lastPosition < currentPosition);
+        }
+        const i64 size = lastPosition ? (currentPosition - *lastPosition) : currentPosition;
+        lastPosition = currentPosition;
+        TReplaceKeyAdapter key(NArrow::TComparablePosition(pkArrays, currentPosition), Context->GetReadMetadata()->IsDescSorted());
+        TCompareKeyForScanSequence finishPos(key, source->GetSourceId());
+        AFL_VERIFY(FinishedSources.emplace(finishPos, TFinishedDataSource(source, size)).second);
+    }
 }
 
 ISourcesCollection::ISourcesCollection(const std::shared_ptr<TSpecialReadContext>& context)

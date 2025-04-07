@@ -25,6 +25,8 @@ struct TIndexInfo;
 
 namespace NKikimr::NTxUT {
 
+using TPlanStep = TPositiveIncreasingControlInteger;
+
 // Private events of different actors reuse the same ES_PRIVATE range
 // So in order to capture the right private event we need to check its type via dynamic_cast
 template <class TPrivateEvent>
@@ -396,11 +398,11 @@ struct TTestSchema {
 void RefreshTiering(TTestBasicRuntime& runtime, const TActorId& sender);
 
 void ProposeSchemaTxFail(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId);
-[[nodiscard]] ui64 ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId);
+[[nodiscard]] TPlanStep ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId);
 
-void PlanSchemaTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap);
+void PlanSchemaTx(TTestBasicRuntime& runtime, const TActorId& sender, const ui64 txId, const TPlanStep planTx);
 
-void PlanWriteTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap, bool waitResult = true);
+void PlanWriteTx(TTestBasicRuntime& runtime, const TActorId& sender, const ui64 txId, const TPlanStep planTx, bool waitResult = true);
 
 bool WriteData(TTestBasicRuntime& runtime, TActorId& sender, const ui64 shardId, const ui64 writeId, const ui64 tableId, const TString& data,
     const std::vector<NArrow::NTest::TTestColumn>& ydbSchema, std::vector<ui64>* writeIds,
@@ -416,21 +418,19 @@ std::optional<ui64> WriteData(TTestBasicRuntime& runtime, TActorId& sender, cons
 
 ui32 WaitWriteResult(TTestBasicRuntime& runtime, ui64 shardId, std::vector<ui64>* writeIds = nullptr);
 
-void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vector<ui64>& pathIds, NOlap::TSnapshot snap, ui64 scanId = 0);
+void ScanIndexStats(TTestBasicRuntime& runtime, TActorId& sender, const std::vector<ui64>& pathIds, const TPlanStep planStep, const ui64 txId, ui64 scanId = 0);
 
 void ProposeCommitFail(
      TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId = 1);
-[[nodiscard]] ui64 ProposeCommit(
+[[nodiscard]] TPlanStep ProposeCommit(
     TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId = 1);
-[[nodiscard]] ui64 ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId = 1);
+[[nodiscard]] TPlanStep ProposeCommit(TTestBasicRuntime& runtime, TActorId& sender, const ui64 txId, const std::vector<ui64>& writeIds, const ui64 lockId = 1);
 
-void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, ui64 planStep, const TSet<ui64>& txIds);
-void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 planStep, const TSet<ui64>& txIds);
+void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 shardId, const TSet<ui64>& txIds, TPlanStep planStep);
+void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, const TSet<ui64>& txIds, const TPlanStep planStep);
 
-inline void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, ui64 planStep, ui64 txId) {
-    TSet<ui64> ids;
-    ids.insert(txId);
-    PlanCommit(runtime, sender, planStep, ids);
+inline void PlanCommit(TTestBasicRuntime& runtime, TActorId& sender, const ui64 txId, const TPlanStep planStep) {
+    PlanCommit(runtime, sender, TSet<ui64>{txId}, planStep);
 }
 
 void Wakeup(TTestBasicRuntime& runtime, const TActorId& sender, const ui64 shardId);
@@ -559,12 +559,12 @@ struct TestTableDescription {
     }
 };
 
-[[nodiscard]] ui64 SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId, const TestTableDescription& table = {}, TString codec = "none");
-[[nodiscard]] ui64 SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId);
+[[nodiscard]] NTxUT::TPlanStep SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, ui64 pathId, const TestTableDescription& table = {}, TString codec = "none");
+[[nodiscard]] NTxUT::TPlanStep SetupSchema(TTestBasicRuntime& runtime, TActorId& sender, const TString& txBody, const ui64 txId);
 
-[[nodiscard]] ui64 PrepareTablet(
+[[nodiscard]] NTxUT::TPlanStep PrepareTablet(
     TTestBasicRuntime& runtime, const ui64 tableId, const std::vector<NArrow::NTest::TTestColumn>& schema, const ui32 keySize = 1);
 
 std::shared_ptr<arrow::RecordBatch> ReadAllAsBatch(
-    TTestBasicRuntime& runtime, const ui64 tableId, const NOlap::TSnapshot& snapshot, const std::vector<NArrow::NTest::TTestColumn>& schema);
+    TTestBasicRuntime& runtime, const ui64 tableId, const NTxUT::TPlanStep planStep, const ui64 txId, const std::vector<NArrow::NTest::TTestColumn>& schema);
 }   // namespace NKikimr::NColumnShard

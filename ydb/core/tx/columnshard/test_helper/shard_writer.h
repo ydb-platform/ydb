@@ -1,6 +1,7 @@
 #pragma once
 #include <ydb/core/tx/data_events/events.h>
 #include <ydb/core/testlib/basics/runtime.h>
+#include <ydb/core/tx/columnshard/test_helper/columnshard_ut_common.h>
 
 #include <ydb/library/accessor/accessor.h>
 
@@ -36,7 +37,7 @@ public:
         return Sender;
     }
     void StartCommitFail(const ui64 txId);
-    [[nodiscard]] ui64 StartCommit(const ui64 txId);
+    [[nodiscard]] NTxUT::TPlanStep StartCommit(const ui64 txId);
     [[nodiscard]] NKikimrDataEvents::TEvWriteResult::EStatus Abort(const ui64 txId);
 
     [[nodiscard]] NKikimrDataEvents::TEvWriteResult::EStatus Write(

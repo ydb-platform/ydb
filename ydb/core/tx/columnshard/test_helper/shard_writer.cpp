@@ -27,15 +27,14 @@ void TShardWriter::StartCommitFail(const ui64 txId) {
     AFL_VERIFY(event->Record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST);
 }
 
-ui64 TShardWriter::StartCommit(const ui64 txId) {
+TPlanStep TShardWriter::StartCommit(const ui64 txId) {
     const auto now = Runtime.GetTimeProvider()->Now();
     auto event = StartCommitImpl(txId);
     AFL_VERIFY(event->Record.GetStatus() == NKikimrDataEvents::TEvWriteResult::STATUS_PREPARED);
     AFL_VERIFY(now.MilliSeconds() <= event->Record.GetMinStep());
     AFL_VERIFY(event->Record.GetMinStep() <= event->Record.GetMaxStep());
     AFL_VERIFY(event->Record.GetMaxStep() < Max<ui64>());
-    return event->Record.GetMinStep();
->>>>>>> abcaf2ce94f (nodiscard)
+    return TPlanStep{event->Record.GetMinStep()};
 }
 
 NKikimrDataEvents::TEvWriteResult::EStatus TShardWriter::Abort(const ui64 txId) {

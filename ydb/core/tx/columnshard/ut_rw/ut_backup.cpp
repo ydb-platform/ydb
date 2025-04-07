@@ -17,7 +17,7 @@ using namespace NTxUT;
 
 Y_UNIT_TEST_SUITE(Backup) {
 
-    [[nodiscard]] ui64 ProposeTx(TTestBasicRuntime& runtime, TActorId& sender, NKikimrTxColumnShard::ETransactionKind txKind, const TString& txBody, const ui64 txId) {
+    [[nodiscard]] TPlanStep ProposeTx(TTestBasicRuntime& runtime, TActorId& sender, NKikimrTxColumnShard::ETransactionKind txKind, const TString& txBody, const ui64 txId) {
         auto event = std::make_unique<TEvColumnShard::TEvProposeTransaction>(
             txKind, sender, txId, txBody);
 
@@ -27,13 +27,13 @@ Y_UNIT_TEST_SUITE(Backup) {
         UNIT_ASSERT_EQUAL(res.GetTxId(), txId);
         UNIT_ASSERT_EQUAL(res.GetTxKind(), txKind);
         UNIT_ASSERT_EQUAL(res.GetStatus(),  NKikimrTxColumnShard::PREPARED);
-        return res.GetMinStep();
+        return TPlanStep{res.GetMinStep()};
     }
 
-    void PlanTx(TTestBasicRuntime& runtime, TActorId& sender, NKikimrTxColumnShard::ETransactionKind txKind, NOlap::TSnapshot snap, bool waitResult = true) {
-        auto plan = std::make_unique<TEvTxProcessing::TEvPlanStep>(snap.GetPlanStep(), 0, TTestTxConfig::TxTablet0);
+    void PlanTx(TTestBasicRuntime& runtime, TActorId& sender, NKikimrTxColumnShard::ETransactionKind txKind, const ui64 txId, const TPlanStep planStep, bool waitResult = true) {
+        auto plan = std::make_unique<TEvTxProcessing::TEvPlanStep>(planStep.Val(), 0, TTestTxConfig::TxTablet0);
         auto tx = plan->Record.AddTransactions();
-        tx->SetTxId(snap.GetTxId());
+        tx->SetTxId(txId);
         ActorIdToProto(sender, tx->MutableAckTo());
         ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, plan.release());
 
@@ -41,7 +41,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         if (waitResult) {
             auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvProposeTransactionResult>(sender);
             const auto& res = ev->Get()->Record;
-            UNIT_ASSERT_EQUAL(res.GetTxId(), snap.GetTxId());
+            UNIT_ASSERT_EQUAL(res.GetTxId(), txId);
             UNIT_ASSERT_EQUAL(res.GetTxKind(), txKind);
             UNIT_ASSERT_EQUAL(res.GetStatus(), NKikimrTxColumnShard::SUCCESS);
         }
@@ -78,7 +78,7 @@ Y_UNIT_TEST_SUITE(Backup) {
             std::vector<ui64> writeIds;
             UNIT_ASSERT(WriteData(runtime, sender, writeId++, tableId, MakeTestBlob({0, 100}, schema), schema, true, &writeIds));
             planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
-            PlanCommit(runtime, sender, planStep, txId);
+            PlanCommit(runtime, sender, txId, planStep);
         }
 
         TestWaitCondition(runtime, "insert compacted",
@@ -87,12 +87,12 @@ Y_UNIT_TEST_SUITE(Backup) {
             std::vector<ui64> writeIds;
             WriteData(runtime, sender, writeId, tableId, MakeTestBlob({writeId * 100, (writeId + 1) * 100}, schema), schema, true, &writeIds);
             planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
-            PlanCommit(runtime, sender, planStep, txId);
+            PlanCommit(runtime, sender, txId, planStep);
             return true;
         }, TDuration::Seconds(1000));
 
         NKikimrTxColumnShard::TBackupTxBody txBody;
-        NOlap::TSnapshot backupSnapshot(planStep, txId);
+        NOlap::TSnapshot backupSnapshot(planStep.Val(), txId);
         txBody.MutableBackupTask()->SetTableName("abcde");
         txBody.MutableBackupTask()->SetTableId(tableId);
         txBody.MutableBackupTask()->SetSnapshotStep(backupSnapshot.GetPlanStep());
@@ -102,7 +102,7 @@ Y_UNIT_TEST_SUITE(Backup) {
         AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 0);
         planStep = ProposeTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txBody.SerializeAsString(), ++txId);
         AFL_VERIFY(csControllerGuard->GetFinishedExportsCount() == 1);
-        PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, NOlap::TSnapshot(planStep, txId), false);
+        PlanTx(runtime, sender, NKikimrTxColumnShard::TX_KIND_BACKUP, txId, planStep, false);
         TestWaitCondition(runtime, "export",
             []() {return Singleton<NKikimr::NWrappers::NExternalStorage::TFakeExternalStorage>()->GetSize(); });
     }

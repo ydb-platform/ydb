@@ -51,7 +51,7 @@ std::shared_ptr<TFetchingScript> TSpecialReadContext::DoGetColumnsFetchingPlan(c
             TGuard<TMutex> g(Mutex);
             if (auto gInit = result.StartInitialization()) {
                 gInit->InitializationFinished(
-                    BuildColumnsFetchingPlan(needSnapshots, partialUsageByPK, useIndexes, needShardingFilter, hasDeletions, preventDuplicates));
+                    BuildColumnsFetchingPlan(needSnapshots, partialUsageByPK, useIndexes, needShardingFilter, hasDeletions, needDeduplication));
             }
             AFL_VERIFY(!result.NeedInitialization());
         }

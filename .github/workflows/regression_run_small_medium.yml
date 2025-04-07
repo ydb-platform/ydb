@@ -4,6 +4,14 @@ on:
   schedule:
     - cron: "30 23 * * *"  # At 23:30 every day
   workflow_dispatch:
+    inputs:
+      branches:
+        description: 'Branches to test (JSON array or single branch name)'
+        required: false
+        default: ''
+
+env:
+  DEFAULT_BRANCHES: '["main", "stable-25-1", "stable-25-1-1"]'
 
 jobs:
   main:
@@ -13,10 +21,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix: 
-        branch: [main, stable-25-1, stable-25-1-1] 
         build_preset: ["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]
     with:
       test_targets: ydb/
       test_size: small,medium
-      ref: ${{ matrix.branch }}
+      branches: ${{ github.event.inputs.branches != '' && github.event.inputs.branches || github.env.DEFAULT_BRANCHES }}
       build_preset: ${{ matrix.build_preset }}

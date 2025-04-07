@@ -417,9 +417,9 @@ TAnonymousAuthMethodOption::TAnonymousAuthMethodOption(TClientCommandOptions* cl
 }
 
 
-TOptionsParseResult::TOptionsParseResult(const TClientCommandOptions* options, int argc, const char** argv)
+TOptionsParseResult::TOptionsParseResult(const TClientCommandOptions* options, int argc, const char** argv, bool throwOnParseError)
     : ClientOptions(options)
-    , ParseFromCommandLineResult(&options->GetOpts(), argc, argv)
+    , ParseFromCommandLineResult(&options->GetOpts(), argc, argv, throwOnParseError)
 {
     for (const auto& clientOption : ClientOptions->ClientOpts) {
         if (const auto* optResult = ParseFromCommandLineResult.FindOptParseResult(&clientOption->GetOpt())) {
